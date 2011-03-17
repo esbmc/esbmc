@@ -1,0 +1,24 @@
+#!/bin/bash
+make
+strip cbmc
+
+VERSION=`./cbmc --version`
+VERSION_FILE=`echo $VERSION | sed "y/./-/"`
+
+echo $VERSION_FILE
+
+cd ../hw-cbmc
+make
+strip hw-cbmc
+
+mkdir /tmp/cbmc-dist
+cp hw-cbmc ../cbmc/cbmc /tmp/cbmc-dist/
+cp ../../LICENSE /tmp/cbmc-dist/
+cd /tmp/cbmc-dist
+tar cfz cbmc-${VERSION_FILE}-linux.tgz hw-cbmc cbmc LICENSE
+
+echo Copying.
+scp cbmc-${VERSION_FILE}-linux.tgz /www/cprover.org/cbmc/download/
+
+cd /tmp
+rm -R /tmp/cbmc-dist

@@ -1,0 +1,13 @@
+Class hierarchy:
+
+  prop_convt
+   |
+  equalityt
+   |
+  congruence_closuret
+   |
+  arrayst
+   |
+  boolbvt
+   |
+  bv_pointerst

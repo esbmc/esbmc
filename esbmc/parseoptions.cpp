@@ -1,0 +1,972 @@
+/*******************************************************************\
+
+Module: Main Module
+
+Author: Daniel Kroening, kroening@kroening.com
+
+\*******************************************************************/
+
+#include <fstream>
+#include <memory>
+
+#include <config.h>
+#include <expr_util.h>
+
+#include <goto-programs/goto_convert_functions.h>
+#include <goto-programs/goto_check.h>
+#include <goto-programs/goto_inline.h>
+#include <goto-programs/show_claims.h>
+#include <goto-programs/set_claims.h>
+#include <goto-programs/read_goto_binary.h>
+#include <goto-programs/interpreter.h>
+#include <goto-programs/goto_threads.h>
+#include <goto-programs/string_abstraction.h>
+#include <goto-programs/string_instrumentation.h>
+#include <goto-programs/loop_numbers.h>
+
+#include <goto-programs/add_race_assertions.h>
+
+#include <pointer-analysis/value_set_analysis.h>
+#include <pointer-analysis/goto_program_dereference.h>
+#include <pointer-analysis/add_failed_symbols.h>
+#include <pointer-analysis/show_value_sets.h>
+
+#include <langapi/mode.h>
+
+#include "parseoptions.h"
+#include "bmc.h"
+#include "version.h"
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::set_verbosity
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cbmc_parseoptionst::set_verbosity(messaget &message)
+{
+  int v=8;
+
+  if(cmdline.isset("verbosity"))
+  {
+    v=atoi(cmdline.getval("verbosity"));
+    if(v<0)
+      v=0;
+    else if(v>9)
+      v=9;
+  }
+
+  message.set_verbosity(v);
+}
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::get_command_line_options
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cbmc_parseoptionst::get_command_line_options(optionst &options)
+{
+  if(config.set(cmdline))
+  {
+    usage_error();
+    exit(1);
+  }
+
+  if(cmdline.isset("program-only"))
+    options.set_option("program-only", true);
+
+  if(cmdline.isset("show-vcc"))
+    options.set_option("show-vcc", true);
+
+  if(cmdline.isset("no-simplify"))
+    options.set_option("simplify", false);
+  else
+    options.set_option("simplify", true);
+
+  if(cmdline.isset("all-claims"))
+    options.set_option("all-claims", true);
+  else
+    options.set_option("all-claims", false);
+
+  if(cmdline.isset("unwind"))
+    options.set_option("unwind", cmdline.getval("unwind"));
+
+  if(cmdline.isset("depth"))
+    options.set_option("depth", cmdline.getval("depth"));
+
+  if(cmdline.isset("debug-level"))
+    options.set_option("debug-level", cmdline.getval("debug-level"));
+
+  if(cmdline.isset("slice-by-trace"))
+    options.set_option("slice-by-trace", cmdline.getval("slice-by-trace"));
+
+  if(cmdline.isset("unwindset"))
+    options.set_option("unwindset", cmdline.getval("unwindset"));
+
+  // substitution previous expressions
+  if(cmdline.isset("no-substitution"))
+    options.set_option("substitution", false);
+  else
+    options.set_option("substitution", true);
+
+  // check array bounds
+  if(cmdline.isset("no-bounds-check"))
+    options.set_option("bounds-check", false);
+  else
+    options.set_option("bounds-check", true);
+
+  // check division by zero
+  if(cmdline.isset("no-div-by-zero-check"))
+    options.set_option("div-by-zero-check", false);
+  else
+    options.set_option("div-by-zero-check", true);
+
+  // check overflow/underflow
+  if(cmdline.isset("overflow-check"))
+    options.set_option("overflow-check", true);
+  else
+    options.set_option("overflow-check", false);
+
+  // check memory leak
+  if(cmdline.isset("memory-leak-check"))
+    options.set_option("memory-leak-check", true);
+  else
+    options.set_option("memory-leak-check", false);
+
+  // check for NaN (not a number)
+  if(cmdline.isset("nan-check"))
+    options.set_option("nan-check", true);
+  else
+    options.set_option("nan-check", false);
+
+  // check pointers
+  if(cmdline.isset("no-pointer-check"))
+    options.set_option("pointer-check", false);
+  else
+    options.set_option("pointer-check", true);
+
+  // check assertions
+  if(cmdline.isset("no-assertions"))
+    options.set_option("assertions", false);
+  else
+    options.set_option("assertions", true);
+
+  // magic error label
+  if(cmdline.isset("error-label"))
+    options.set_option("error-label", cmdline.getval("error-label"));
+
+  // generate unwinding assertions
+  options.set_option("unwinding-assertions",
+   !cmdline.isset("no-unwinding-assertions"));
+
+  // generate unwinding assumptions otherwise
+  options.set_option("partial-loops",
+   cmdline.isset("partial-loops"));
+
+  // remove unused equations
+  options.set_option("slice-formula",
+       cmdline.isset("slice-formula"));
+
+  // simplify if conditions and branches
+  if(cmdline.isset("no-simplify-if"))
+    options.set_option("simplify-if", false);
+  else
+    options.set_option("simplify-if", true);
+
+  //break global statements
+  if(cmdline.isset("atomicity-check"))
+      options.set_option("atomicity-check", true);
+  else
+      options.set_option("atomicity-check", false);
+
+  if(cmdline.isset("arrays-uf-always"))
+    options.set_option("arrays-uf", "always");
+  else if(cmdline.isset("arrays-uf-never"))
+    options.set_option("arrays-uf", "never");
+  else
+    options.set_option("arrays-uf", "auto");
+
+  if(cmdline.isset("minisat"))
+    options.set_option("minisat", true);
+
+  if(cmdline.isset("dimacs"))
+    options.set_option("dimacs", true);
+
+  if(cmdline.isset("refine"))
+    options.set_option("refine", true);
+
+  if(cmdline.isset("beautify-pbs"))
+    options.set_option("beautify-pbs", true);
+
+  if(cmdline.isset("beautify-greedy"))
+    options.set_option("beautify-greedy", true);
+
+  if(cmdline.isset("document-subgoals"))
+    options.set_option("document-subgoals", true);
+
+  options.set_option("pretty-names",
+                     !cmdline.isset("no-pretty-names"));
+
+  if(cmdline.isset("cvc"))
+    options.set_option("cvc", true);
+
+  if(cmdline.isset("boolector-bv"))
+  {
+    options.set_option("bl", true);
+    options.set_option("boolector-bv", true);
+  }
+
+  //options.set_option("bl", true);
+
+  if(cmdline.isset("z3-bv"))
+  {
+    options.set_option("z3", true);
+    options.set_option("z3-bv", true);
+    options.set_option("int-encoding", false);
+    options.set_option("bl", false);
+  }
+
+  if (cmdline.isset("lazy"))
+    options.set_option("no-assume-guarantee", false);
+  else
+	options.set_option("no-assume-guarantee", true);
+
+  if (cmdline.isset("eager"))
+    options.set_option("no-assume-guarantee", true);
+  else
+  	options.set_option("no-assume-guarantee", false);
+
+  if(cmdline.isset("z3-ir"))
+  {
+    options.set_option("z3", true);
+    options.set_option("z3-ir", true);
+    options.set_option("int-encoding", true);
+    options.set_option("bl", false);
+  }
+
+  if(cmdline.isset("no-slice"))
+  {
+	options.set_option("slice-formula", false);
+    options.set_option("no-assume-guarantee", false);
+  }
+  else
+    options.set_option("slice-formula", true);
+
+  options.set_option("string-abstraction", true);
+  options.set_option("fixedbv", true);
+
+  if (!options.get_bool_option("z3") && !options.get_bool_option("bl"))
+  {
+    options.set_option("z3", true);
+    options.set_option("int-encoding", true);
+  }
+
+  if(cmdline.isset("qf_aufbv"))
+  {
+	options.set_option("qf_aufbv", true);
+    options.set_option("smt", true);
+    options.set_option("z3", true);
+  }
+
+  if(cmdline.isset("qf_auflira"))
+  {
+	options.set_option("qf_auflira", true);
+	options.set_option("smt", true);
+    options.set_option("z3", true);
+    options.set_option("int-encoding", true);
+  }
+
+  if(cmdline.isset("btor"))
+  {
+	options.set_option("btor", true);
+    options.set_option("bl", true);
+    options.set_option("boolector-bv", true);
+  }
+
+  if(cmdline.isset("outfile"))
+    options.set_option("outfile", cmdline.getval("outfile"));
+
+  if(cmdline.isset("int-encoding"))
+    options.set_option("int-encoding", true);
+
+  if(cmdline.isset("ecp"))
+    options.set_option("ecp", true);
+
+  if(cmdline.isset("show-features"))
+    options.set_option("show-features", true);
+
+   if(cmdline.isset("core-size"))
+     options.set_option("core-size", cmdline.getval("core-size"));
+
+   if(cmdline.isset("control-flow-test"))
+     options.set_option("control-flow-test", true);
+   else
+     options.set_option("control-flow-test", false);
+
+   if(cmdline.isset("no-por"))
+     options.set_option("no-por", false);
+   else
+     options.set_option("no-por", true);
+
+   if(cmdline.isset("schedule"))
+     options.set_option("schedule", true);
+   else
+     options.set_option("schedule", false);
+
+   if(cmdline.isset("all-runs"))
+       options.set_option("all-runs", true);
+   else
+       options.set_option("all-runs", false);
+
+   if(cmdline.isset("context-switch"))
+     options.set_option("context-switch", cmdline.getval("context-switch"));
+   else
+     options.set_option("context-switch", -1);
+
+   //if (cmdline.isset("claim"))
+     //options.set_option("schedule", true);
+
+   if(cmdline.isset("uw-model"))
+   {
+     options.set_option("uw-model", true);
+     options.set_option("schedule", true);
+     options.set_option("minisat", false);
+   }
+   else
+     options.set_option("uw-model", false);
+
+   if(cmdline.isset("no-lock-check"))
+     options.set_option("no-lock-check", true);
+   else
+     options.set_option("no-lock-check", false);
+
+   //options.set_option("data-races-check", true);
+
+   if(cmdline.isset("deadlock-check"))
+   {
+     options.set_option("deadlock-check", true);
+     options.set_option("atomicity-check", false);
+     //disable all other checks
+     //options.set_option("bounds-check", false);
+     //options.set_option("div-by-zero-check", false);
+     //options.set_option("overflow-check", false);
+     //options.set_option("pointer-check", false);
+     options.set_option("assertions", false);
+     //options.set_option("no-lock-check", true);
+   }
+   else
+     options.set_option("deadlock-check", false);
+
+}
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::doit
+
+  Inputs:
+
+ Outputs:
+
+ Purpose: invoke main modules
+
+\*******************************************************************/
+
+int cbmc_parseoptionst::doit()
+{
+  if(cmdline.isset("version"))
+  {
+    std::cout << ESBMC_VERSION << std::endl;
+    return 0;
+  }
+
+  //
+  // unwinding of transition systems
+  //
+
+  if(cmdline.isset("module") ||
+    cmdline.isset("gen-interface"))
+
+  {
+    error("This version of CBMC has no support for "
+          " hardware modules. Please use hw-cbmc.");
+    return 1;
+  }
+
+  bmct bmc(context, ui_message_handler);
+
+  //
+  // command line options
+  //
+
+  get_command_line_options(bmc.options);
+  set_verbosity(bmc);
+  set_verbosity(*this);
+
+  if(cmdline.isset("preprocess"))
+  {
+    preprocessing();
+    return 0;
+  }
+
+  goto_functionst goto_functions;
+
+  if(get_goto_program(bmc, goto_functions))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions);
+    return 0;
+  }
+
+  if(set_claims(goto_functions))
+    return 7;
+
+  // slice according to property
+
+  // do actual BMC
+  return do_bmc(bmc, goto_functions);
+}
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::set_claims
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
+{
+  try
+  {
+    if(cmdline.isset("claim"))
+      ::set_claims(goto_functions, cmdline.get_values("claim"));
+  }
+
+  catch(const char *e)
+  {
+    error(e);
+    return true;
+  }
+
+  catch(const std::string e)
+  {
+    error(e);
+    return true;
+  }
+
+  catch(int)
+  {
+    return true;
+  }
+
+  return false;
+}
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::get_goto_program
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool cbmc_parseoptionst::get_goto_program(
+  bmc_baset &bmc,
+  goto_functionst &goto_functions)
+{
+  try
+  {
+    if(cmdline.isset("binary"))
+    {
+      status("Reading GOTO program from file");
+
+      if(read_goto_binary(goto_functions))
+        return true;
+
+      if(cmdline.isset("show-symbol-table"))
+      {
+        show_symbol_table();
+        return true;
+      }
+    }
+    else
+    {
+      if(cmdline.args.size()==0)
+      {
+        error("Please provide a program to verify");
+        return true;
+      }
+
+      if(parse()) return true;
+      if(typecheck()) return true;
+      //if(get_modules()) return true;
+      if(final()) return true;
+
+      if(cmdline.isset("show-symbol-table"))
+      {
+        show_symbol_table();
+        return true;
+      }
+
+      // we no longer need any parse trees or language files
+      clear_parse();
+
+      status("Generating GOTO Program");
+
+      goto_convert(
+        context, bmc.options, goto_functions,
+        ui_message_handler);
+    }
+
+    if(cmdline.isset("interpreter"))
+    {
+      status("Starting interpeter");
+      interpreter(context, goto_functions);
+      return true;
+    }
+
+    if(process_goto_program(bmc, goto_functions))
+      return true;
+  }
+
+  catch(const char *e)
+  {
+    error(e);
+    return true;
+  }
+
+  catch(const std::string e)
+  {
+    error(e);
+    return true;
+  }
+
+  catch(int)
+  {
+    return true;
+  }
+
+  catch(std::bad_alloc)
+  {
+    error("Out of memory");
+    return true;
+  }
+
+  return false;
+}
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::preprocessing
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cbmc_parseoptionst::preprocessing()
+{
+  try
+  {
+    if(cmdline.args.size()!=1)
+    {
+      error("Please provide one program to preprocess");
+      return;
+    }
+
+    std::string filename=cmdline.args[0];
+
+    int mode=get_mode_filename(filename);
+
+    if(mode<0)
+    {
+      error("failed to figure out type of file");
+      return;
+    }
+
+    std::ifstream infile(filename.c_str());
+
+    if(!infile)
+    {
+      error("failed to open input file");
+      return;
+    }
+
+    std::auto_ptr<languaget> language(new_language(mode));
+
+    //if(language->preprocess(
+      //infile, filename, std::cout, *get_message_handler()))
+      //error("PREPROCESSING ERROR");
+  }
+
+  catch(const char *e)
+  {
+    error(e);
+  }
+
+  catch(const std::string e)
+  {
+    error(e);
+  }
+
+  catch(int)
+  {
+  }
+
+  catch(std::bad_alloc)
+  {
+    error("Out of memory");
+  }
+}
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::read_goto_binary
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool cbmc_parseoptionst::read_goto_binary(
+  goto_functionst &goto_functions)
+{
+  std::ifstream in(cmdline.getval("binary"), std::ios::binary);
+
+  if(!in)
+  {
+    error(
+      std::string("Failed to open `")+
+      cmdline.getval("binary")+
+      "'");
+    return true;
+  }
+
+  ::read_goto_binary(
+    in, context, goto_functions, *get_message_handler());
+
+  return false;
+}
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::process_goto_program
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool cbmc_parseoptionst::process_goto_program(
+  bmc_baset &bmc,
+  goto_functionst &goto_functions)
+{
+  try
+  {
+    if(cmdline.isset("string-abstraction"))
+    {
+      string_instrumentation(
+        context, *get_message_handler(), goto_functions);
+    }
+
+    remove_function_pointers(
+      context, bmc.options, goto_functions,
+      ui_message_handler);
+
+    namespacet ns(context);
+
+    // do partial inlining
+    goto_partial_inline(goto_functions, ns, ui_message_handler);
+
+    if(!cmdline.isset("show-features"))
+    {
+      // add generic checks
+      goto_check(ns, bmc.options, goto_functions);
+    }
+
+    if(cmdline.isset("string-abstraction"))
+    {
+      status("String Abstraction");
+      string_abstraction(context,
+        *get_message_handler(), goto_functions);
+    }
+
+    status("Pointer Analysis");
+    value_set_analysist value_set_analysis(ns);
+    value_set_analysis(goto_functions);
+
+    // show it?
+    if(cmdline.isset("show-value-sets"))
+    {
+      show_value_sets(get_ui(), goto_functions, value_set_analysis);
+      return true;
+    }
+
+    status("Adding Pointer Checks");
+
+    // add pointer checks
+    pointer_checks(
+      goto_functions, ns, bmc.options, value_set_analysis);
+
+    // add failed symbols
+    add_failed_symbols(context);
+
+    // recalculate numbers, etc.
+    goto_functions.update();
+
+    // add loop ids
+    goto_functions.compute_loop_numbers();
+
+    if(cmdline.isset("data-races-check"))
+    {
+      status("Adding Data Race Checks");
+
+      add_race_assertions(
+        value_set_analysis,
+        context,
+        goto_functions);
+
+      value_set_analysis.
+        update(goto_functions);
+    }
+
+    // show it?
+    if(cmdline.isset("show-loops"))
+    {
+      show_loop_numbers(get_ui(), goto_functions);
+      return true;
+    }
+
+    // show it?
+    if(cmdline.isset("show-goto-functions"))
+    {
+      goto_functions.output(ns, std::cout);
+      return true;
+    }
+
+    if(cmdline.isset("show-features"))
+    {
+      // add generic checks
+      goto_check(ns, bmc.options, goto_functions);
+      return true;
+    }
+
+  }
+
+  catch(const char *e)
+  {
+    error(e);
+    return true;
+  }
+
+  catch(const std::string e)
+  {
+    error(e);
+    return true;
+  }
+
+  catch(int)
+  {
+    return true;
+  }
+
+  catch(std::bad_alloc)
+  {
+    error("Out of memory");
+    return true;
+  }
+
+  return false;
+}
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::do_bmc
+
+  Inputs:
+
+ Outputs:
+
+ Purpose: invoke main modules
+
+\*******************************************************************/
+
+int cbmc_parseoptionst::do_bmc(
+  bmc_baset &bmc1,
+  const goto_functionst &goto_functions)
+{
+  bmc1.set_ui(get_ui());
+
+  // do actual BMC
+
+  status("Starting Bounded Model Checking");
+
+  bmc1.run(goto_functions);
+
+  return 0;
+}
+
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::help
+
+  Inputs:
+
+ Outputs:
+
+ Purpose: display command line help
+
+\*******************************************************************/
+
+void cbmc_parseoptionst::help()
+{
+  std::cout <<
+    "\n"
+    "* * *           ESBMC " ESBMC_VERSION "          * * *\n"
+    "\n"
+    "Usage:                       Purpose:\n"
+    "\n"
+    " esbmc [-?] [-h] [--help]      show help\n"
+    " esbmc file.c ...              source file names\n"
+    "\n"
+    "Additonal options:\n\n"
+    " --- front-end options ------------------------------------------------------------------\n\n"
+    " -I path                      set include path\n"
+    " -D macro                     define preprocessor macro\n"
+    " --preprocess                 stop after preprocessing\n"
+    " --program-only               only show program expression\n"
+    " --all-claims                 keep all claims\n"
+    " --show-loops                 show the loops in the program\n"
+    " --show-claims                only show claims\n"
+    " --show-vcc                   show the verification conditions\n"
+    " --show-features              only show features\n"
+    " --document-subgoals          generate subgoals documentation\n"
+    " --no-library                 disable built-in abstract C library\n"
+    " --binary                     read goto program instead of source code\n"
+    " --little-endian              allow little-endian word-byte conversions\n"
+    " --big-endian                 allow big-endian word-byte conversions\n"
+    " --16, --32, --64             set width of machine word\n"
+    " --version                    show current ESBMC version and exit\n"
+    " --- BMC options ------------------------------------------------------------------------\n\n"
+    " --function name              set main function name\n"
+    " --claim nr                   only check specific claim\n"
+    " --depth nr                   limit search depth\n"
+    " --unwind nr                  unwind nr times\n"
+    " --unwindset nr               unwind given loop nr times\n"
+    " --no-unwinding-assertions    do not generate unwinding assertions\n"
+    " --no-slice                   do not remove unused equations\n\n"
+    " --- solver configuration ---------------------------------------------------------------\n\n"
+    //" --minisat                    use the SAT solver MiniSat\n"
+    " --boolector-bv               use BOOLECTOR with bit-vector arithmetic (experimental)\n"
+    " --z3-bv                      use Z3 with bit-vector arithmetic\n"
+    " --z3-ir                      use Z3 with integer/real arithmetic\n"
+    " --eager                      use eager instantiation with Z3\n"
+    " --lazy                       use lazy instantiation with Z3 (default)\n"
+    " --btor                       output verification conditions in BTOR format (experimental)\n"
+    " --qf_aufbv                   output verification conditions in QF_AUFBV format (experimental)\n"
+    " --qf_auflira                 output verification conditions in QF_AUFLIRA format (experimental)\n"
+    " --outfile Filename           output verification conditions in SMT lib format to given file\n\n"
+    " --- property checking ------------------------------------------------------------------\n\n"
+    " --no-assertions              ignore assertions\n"
+    " --no-bounds-check            do not do array bounds check\n"
+    " --no-div-by-zero-check       do not do division by zero check\n"
+    " --no-pointer-check           do not do pointer check\n"
+    " --memory-leak-check          enable memory leak check check\n"
+    " --overflow-check             enable arithmetic over- and underflow check\n\n"
+    " --- concurrency checking ---------------------------------------------------------------\n\n"
+    " --schedule                   use schedule recording approach \n"
+    " --context-switch nr          limit the number of context switches for each thread \n"
+    " --uw-model                   use under-approximation and widening approach\n"
+    " --core-size nr               limit the number of assumptions in the UW approach (experimental)\n"
+    " --control-flow-test          enable context switch before control flow tests\n"
+    " --deadlock-check             enable global and local deadlock check with mutex\n"
+    " --data-races-check           enable data races check\n"
+    " --atomicity-check            enable atomicity violation check at visible assignments\n"
+    " --no-lock-check              do not do lock acquisition ordering check\n"
+    " --no-por                     do not do partial order reduction\n"
+#if 0
+    " --unsigned-char              make \"char\" unsigned by default\n"
+    " --show-symbol-table          show symbol table\n"
+    " --show-goto-functions        show goto program\n"
+    " --ppc-macos                  set MACOS/PPC architecture\n"
+#endif
+    #ifdef _WIN32
+    " --i386-macos                 set MACOS/I386 architecture\n"
+    " --i386-linux                 set Linux/I386 architecture\n"
+    " --i386-win32                 set Windows/I386 architecture (default)\n"
+    #else
+    #ifdef __APPLE__
+    " --i386-macos                 set MACOS/I386 architecture (default)\n"
+    " --i386-linux                 set Linux/I386 architecture\n"
+    " --i386-win32                 set Windows/I386 architecture\n"
+    #else
+#if 0
+    " --i386-macos                 set MACOS/I386 architecture\n"
+    " --i386-linux                 set Linux/I386 architecture (default)\n"
+    " --i386-win32                 set Windows/I386 architecture\n"
+#endif
+    #endif
+    #endif
+//    " --no-arch                    don't set up an architecture\n"
+#if 0
+    " --arrays-uf-never            never turn arrays into uninterpreted functions\n"
+    " --arrays-uf-always           always turn arrays into uninterpreted functions\n"
+    " --interpreter                do concrete execution\n"
+#endif
+#if 0
+    " --xml-ui                     use XML-formatted output\n"
+    " --int-encoding               encode variables as integers\n"
+    " --round-to-nearest           IEEE floating point rounding mode (default)\n"
+    " --round-to-plus-inf          IEEE floating point rounding mode\n"
+    " --round-to-minus-inf         IEEE floating point rounding mode\n"
+    " --round-to-zero              IEEE floating point rounding mode\n"
+
+    " --ecp                        perform equivalence checking of programs\n"
+#endif
+#if 0
+    " ---------------  concurrency checking  -------------------------\n"
+    " --data-races-check           enable data race check\n"
+    " --no-deadlock-check          do not do deadlock check\n"
+    " --no-vi-por                     no partial-order-reduction\n"
+    " --no-rw-por                  no read write analysis partial-order-reduction\n"
+    " --context-siwtch nr          set the number of context switches allowed for each thread\n"
+    " --DFS                        Depth first exploration\n"
+    " --schedule             schedule mode (experimental)\n"
+    " --all-runs                   Run all executions (do not stop at error)\n"
+#endif
+    "\n";
+}

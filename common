@@ -1,0 +1,34 @@
+CFLAGS=	$(GCCFLAGS) $(INCLUDES)
+CPLUSFLAGS= $(GCCFLAGS) $(INCLUDES)
+
+.SUFFIXES:	.C .d .cpp
+
+.C.o:
+	$(CPLUS) -c $(CPLUSFLAGS) -o $@ $<
+
+.cpp.o:
+	$(CPLUS) -c $(CPLUSFLAGS) -o $@ $<
+
+.c.o:
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# this one is for Visual Studio's compiler:
+#%.obj:%.cpp
+#	cl $(INCLUDES) -nologo -c -GF -EHsc $<
+#
+#%.obj:%.c
+#	cl $(INCLUDES) -nologo -c -GF -EHsc $<
+
+#
+# include a dependency file if one exists
+#
+
+# ifeq (.depend,$(wildcard .depend))
+# include .depend
+# endif
+
+D_FILES1 = $(SRC:.c=.d)
+D_FILES = $(D_FILES1:.cpp=.d)
+
+-include $(D_FILES)
+
