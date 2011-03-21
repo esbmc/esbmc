@@ -1,3 +1,6 @@
+#ifndef _CPROVER_SRC_GOTO-SYMEX_CRYPTO_HASH_H_
+#define _CPROVER_SRC_GOTO-SYMEX_CRYPTO_HASH_H_
+
 extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,3 +25,5 @@ class crypto_hash {
   protected:
   void init(const uint8_t *data, int sz);
 };
+
+#endif /* _CPROVER_SRC_GOTO-SYMEX_CRYPTO_HASH_H_ */
