@@ -134,6 +134,8 @@ public:
     void output(
       const namespacet &ns,
       std::ostream &out) const;
+
+    bool operator<(const SSA_stept s2) const;
   };
   
   unsigned count_ignored_SSA_steps() const
