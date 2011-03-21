@@ -148,6 +148,8 @@ public:
     typedef std::map<irep_idt, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
 
+    crypto_hash generate_l2_state_hash();
+
     void rename(const irep_idt &identifier, unsigned count, unsigned node_id)
     {
       valuet &entry=current_names[identifier];

@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <assert.h>
+#include <alloca.h>
 #include <map>
 #include <sstream>
 
@@ -488,6 +489,23 @@ goto_symex_statet::serialise_expr(const exprt &rhs)
   }
 
   return str;
+}
+
+crypto_hash
+goto_symex_statet::level2t::generate_l2_state_hash()
+{
+  uint8_t *data;
+  int idx;
+
+  data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE);
+
+  idx = 0;
+  for (current_state_hashest::const_iterator it = current_hashes.begin();
+        it != current_hashes.end(); it++, idx++) {
+    memcpy(&data[idx * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
+  }
+
+  return crypto_hash(data, current_hashes.size() * CRYPTO_HASH_SIZE);
 }
 
 /*******************************************************************\
