@@ -49,7 +49,7 @@ public:
   reachability_treet & art);
 
   // these bypass the target maps
-  virtual void symex_step_return(statet &state,unsigned node_id);
+  virtual void symex_step_return(statet &state, execution_statet &ex_state, unsigned node_id);
   virtual void symex_step_goto(statet &state, bool taken, unsigned node_id);
 
 protected:
@@ -88,7 +88,7 @@ protected:
   virtual void symex_goto(statet &state, unsigned node_id);
 
   //virtual void symex_return(statet &state);
-  virtual void symex_return(statet &state,unsigned node_id);
+  virtual void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
 
   //virtual void symex_other(
   //  const goto_functionst &goto_functions,
@@ -123,7 +123,7 @@ protected:
   // function calls
 
   void pop_frame(statet &state);
-  void return_assignment(statet &state,unsigned node_id);
+  void return_assignment(statet &state, execution_statet &ex_state, unsigned node_id);
   //void return_assignment(statet &state);
 
   virtual void no_body(const irep_idt &identifier __attribute__((unused)))

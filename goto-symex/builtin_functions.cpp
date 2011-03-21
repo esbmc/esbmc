@@ -34,6 +34,7 @@ void basic_symext::symex_malloc(
   statet &state,
   const exprt &lhs,
   const side_effect_exprt &code,
+  execution_statet &ex_state,
         unsigned node_id)
 {
   if(code.operands().size()!=1)
@@ -107,7 +108,7 @@ void basic_symext::symex_malloc(
   state.rename(rhs, ns,node_id);
   
   guardt guard;
-  symex_assign_rec(state, lhs, rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
 }
 
 /*******************************************************************\
@@ -172,6 +173,7 @@ void basic_symext::symex_cpp_new(
   statet &state,
   const exprt &lhs,
   const side_effect_exprt &code,
+  execution_statet &ex_state,
         unsigned node_id)
 {
   bool do_array;
@@ -225,7 +227,7 @@ void basic_symext::symex_cpp_new(
   state.rename(rhs, ns,node_id);
 
   guardt guard;
-  symex_assign_rec(state, lhs, rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
 }
 
 /*******************************************************************\

@@ -92,14 +92,14 @@ Function: basic_symext::symex
 
 \*******************************************************************/
 
-void basic_symext::symex(statet &state, const codet &code,unsigned node_id)
+void basic_symext::symex(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
 {
   const irep_idt &statement=code.get("statement");
 
   if(statement=="block")
-    symex_block(state, code,node_id);
+    symex_block(state, ex_state, code, node_id);
   else if(statement=="assign")
-    symex_assign(state, code,node_id);
+    symex_assign(state, ex_state, code, node_id);
   else if(statement=="decl")
   {
     // behaves like non-deterministic assignment
@@ -114,7 +114,7 @@ void basic_symext::symex(statet &state, const codet &code,unsigned node_id)
     read(new_lhs);
 
     guardt guard; // NOT the state guard!
-    symex_assign_rec(state, new_lhs, rhs, guard,node_id);
+    symex_assign_rec(state, ex_state, new_lhs, rhs, guard,node_id);
   }
   else if(statement=="expression")
   {
@@ -152,10 +152,10 @@ Function: basic_symext::symex_block
 
 \*******************************************************************/
 
-void basic_symext::symex_block(statet &state, const codet &code,unsigned node_id)
+void basic_symext::symex_block(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
 {
   forall_operands(it, code)
-    symex(state, to_code(*it),node_id);
+    symex(state, ex_state, to_code(*it),node_id);
 }
 
 /*******************************************************************\
@@ -170,7 +170,7 @@ Function: basic_symext::symex_assign
 
 \*******************************************************************/
 
-void basic_symext::symex_assign(statet &state, const codet &code,unsigned node_id)
+void basic_symext::symex_assign(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
 {
   if(code.operands().size()!=2)
     throw "assignment expects two operands";
@@ -203,9 +203,9 @@ void basic_symext::symex_assign(statet &state, const codet &code,unsigned node_i
     }
     else if(statement=="cpp_new" ||
             statement=="cpp_new[]")
-      symex_cpp_new(state, lhs, side_effect_expr,node_id);
+      symex_cpp_new(state, lhs, side_effect_expr, ex_state, node_id);
     else if(statement=="malloc")
-      symex_malloc(state, lhs, side_effect_expr,node_id);
+      symex_malloc(state, lhs, side_effect_expr, ex_state, node_id);
     else if(statement=="printf")
       symex_printf(state, lhs, side_effect_expr,node_id);
     else
@@ -216,7 +216,7 @@ void basic_symext::symex_assign(statet &state, const codet &code,unsigned node_i
   else
   {
     guardt guard; // NOT the state guard!
-    symex_assign_rec(state, lhs, rhs, guard,node_id);
+    symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
   }
 }
 
@@ -250,21 +250,22 @@ Function: basic_symext::symex_assign_rec
 
 void basic_symext::symex_assign_rec(
   statet &state,
+  execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
   guardt &guard,
         unsigned node_id)
 {
   if(lhs.id()=="symbol")
-    symex_assign_symbol(state, lhs, rhs, guard,node_id);
+    symex_assign_symbol(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="index" || lhs.id()=="memory-leak")
-    symex_assign_array(state, lhs, rhs, guard,node_id);
+    symex_assign_array(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="member")
-    symex_assign_member(state, lhs, rhs, guard,node_id);
+    symex_assign_member(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="if")
-    symex_assign_if(state, lhs, rhs, guard,node_id);
+    symex_assign_if(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="typecast")
-    symex_assign_typecast(state, lhs, rhs, guard,node_id);
+    symex_assign_typecast(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="string-constant" ||
           lhs.id()=="NULL-object" ||
           lhs.id()=="zero_string")
@@ -273,7 +274,7 @@ void basic_symext::symex_assign_rec(
   }
   else if(lhs.id()=="byte_extract_little_endian" ||
           lhs.id()=="byte_extract_big_endian")
-    symex_assign_byte_extract(state, lhs, rhs, guard,node_id);
+    symex_assign_byte_extract(state, ex_state, lhs, rhs, guard,node_id);
   else
     throw "assignment to "+lhs.id_string()+" not handled";
 }
@@ -292,6 +293,7 @@ Function: basic_symext::symex_assign_symbol
 
 void basic_symext::symex_assign_symbol(
   statet &state,
+  execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
   guardt &guard,
@@ -343,6 +345,7 @@ Function: basic_symext::symex_assign_typecast
 
 void basic_symext::symex_assign_typecast(
   statet &state,
+  execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
   guardt &guard,
@@ -356,7 +359,7 @@ void basic_symext::symex_assign_typecast(
 
   rhs_typecasted.make_typecast(lhs.op0().type());
 
-  symex_assign_rec(state, lhs.op0(), rhs_typecasted, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs.op0(), rhs_typecasted, guard,node_id);
 }
 
 /*******************************************************************\
@@ -373,6 +376,7 @@ Function: basic_symext::symex_assign_array
 
 void basic_symext::symex_assign_array(
   statet &state,
+  execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
   guardt &guard,
@@ -404,7 +408,7 @@ void basic_symext::symex_assign_array(
   new_rhs.copy_to_operands(lhs_index);
   new_rhs.move_to_operands(rhs);
 
-  symex_assign_rec(state, lhs_array, new_rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs_array, new_rhs, guard,node_id);
 }
 
 /*******************************************************************\
@@ -421,6 +425,7 @@ Function: basic_symext::symex_assign_member
 
 void basic_symext::symex_assign_member(
   statet &state,
+  execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
   guardt &guard,
@@ -477,7 +482,7 @@ void basic_symext::symex_assign_member(
 
   new_rhs.op1().set("component_name", component_name);
 
-  symex_assign_rec(state, lhs_struct, new_rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs_struct, new_rhs, guard,node_id);
 }
 
 /*******************************************************************\
@@ -494,6 +499,7 @@ Function: basic_symext::symex_assign_if
 
 void basic_symext::symex_assign_if(
   statet &state,
+  execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
   guardt &guard,
@@ -512,13 +518,13 @@ void basic_symext::symex_assign_if(
   exprt condition(lhs.op0());
 
   guard.add(condition);
-  symex_assign_rec(state, lhs.op1(), rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs.op1(), rhs, guard,node_id);
   guard.resize(old_guard_size);
 
   condition.make_not();
 
   guard.add(condition);
-  symex_assign_rec(state, lhs.op2(), rhs_copy, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs.op2(), rhs_copy, guard,node_id);
   guard.resize(old_guard_size);
 }
 
@@ -536,6 +542,7 @@ Function: basic_symext::symex_assign_byte_extract
 
 void basic_symext::symex_assign_byte_extract(
   statet &state,
+  execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
   guardt &guard,
@@ -559,7 +566,7 @@ void basic_symext::symex_assign_byte_extract(
   new_rhs.copy_to_operands(lhs.op0(), lhs.op1(), rhs);
   new_rhs.type()=lhs.op0().type();
 
-  symex_assign_rec(state, lhs.op0(), new_rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs.op0(), new_rhs, guard,node_id);
 }
 
 /*******************************************************************\
@@ -623,12 +630,13 @@ void basic_symex(
   const codet &code,
   const namespacet &ns,
   symex_targett &target,
+  execution_statet &ex_state,
   goto_symex_statet &state,
   unsigned node_id)
 {
   contextt new_context;
   basic_symext basic_symex(ns, new_context, target);
-  basic_symex.symex(state, code,node_id);
+  basic_symex.symex(state, ex_state, code, node_id);
 }
 
 /*******************************************************************\
@@ -647,10 +655,11 @@ void basic_symex(
   const codet &code,
   const namespacet &ns,
   symex_targett &target,
+  execution_statet &ex_state,
         unsigned node_id)
 {
   contextt new_context;
   basic_symext basic_symex(ns, new_context, target);
   goto_symex_statet state;
-  basic_symex.symex(state, code,node_id);
+  basic_symex.symex(state, ex_state, code, node_id);
 }
