@@ -1156,7 +1156,7 @@ execution_statet::serialise_expr(const exprt &rhs)
       str += "field(" + serialise_expr(rec.op1()) + "),";
       str += "val(" + serialise_expr(rec.op2()) + "))";
     } else {
-      throw "Unrecognised type of with expression: " + rhs.op0().type().id().as_string();
+      throw "Unrecognised type of with expression: " + rec.op0().type().id().as_string();
     }
   } else if (rhs.id() == "address_of") {
     str = "addressof(" + serialise_expr(rhs.op0()) + ")";
