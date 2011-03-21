@@ -1080,7 +1080,18 @@ execution_statet::serialise_expr(const exprt &rhs)
       if (str.find(state_to_ignore[i]) != std::string::npos)
         return "(ignore)";
 
-    return unmunge_SSA_name(rhs.get("identifier").as_string());
+    // If this is something we've already encountered, use the hash of its
+    // value.
+    exprt tmp = rhs;
+    get_active_state().get_original_name(tmp);
+    if (_state_level2->current_hashes.find(tmp.get("identifier").as_string()) != _state_level2->current_hashes.end()) {
+      crypto_hash h = _state_level2->current_hashes.find(tmp.get("identifier").as_string())->second;
+      return "hash(" + h.to_string() + ")";
+    }
+
+    /* Otherwise, it's something that's been assumed, or some form of
+     * nondeterminism. Just return its name. */
+    return rhs.get("identifier").as_string();
   } else if (rhs.id() == "array_of") {
     /* An array of the same set of values: generate all of them. */
     str = "array(";
