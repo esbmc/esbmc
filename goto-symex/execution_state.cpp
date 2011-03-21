@@ -1240,7 +1240,9 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m["not"] = serialise_normal_operation;
   m["notequal"] = serialise_normal_operation;
   m["unary-"] = serialise_normal_operation;
+  m["unary+"] = serialise_normal_operation;
   m["abs"] = serialise_normal_operation;
+  m["isnan"] = serialise_normal_operation;
   m[">="] = serialise_normal_operation;
   m[">"] = serialise_normal_operation;
   m["<="] = serialise_normal_operation;
@@ -1255,6 +1257,7 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m["typecast"] = serialise_normal_operation;
   m["address_of"] = serialise_normal_operation;
   m["pointer_obj"] = serialise_normal_operation;
+  m["pointer_object"] = serialise_normal_operation;
 
   return m;
 }
