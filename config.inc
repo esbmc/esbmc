@@ -11,7 +11,7 @@ LEX    = flex
 
 # Linux etc.
 #GCCFLAGS = -Wall -MMD -O2 -Wno-deprecated # -ggdb -O0
-GCCFLAGS = -Wall -MMD -Wextra -O3 -fomit-frame-pointer -finline-limit=1000000 -Wno-deprecated
+GCCFLAGS = -Wall -MMD -Wextra -O0 -ggdb3 -fomit-frame-pointer -finline-limit=1000000 -Wno-deprecated
 LINKFLAGS = #-ggdb
 #-L../../z3/lib -lz3-gmp 
 
