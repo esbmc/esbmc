@@ -1023,5 +1023,17 @@ crypto_hash
 execution_statet::generate_hash(void) const
 {
 
-  return _state_level2->generate_l2_state_hash();
+  crypto_hash state = _state_level2->generate_l2_state_hash();
+  std::string str = state.to_string();
+
+  for (std::vector<goto_symex_statet>::const_iterator it=_threads_state.begin();
+        it != _threads_state.end(); it++) {
+    goto_programt::const_targett pc = it->source.pc;
+    int id = pc->location_number;
+    str += "!" + id;
+  }
+
+  crypto_hash h = crypto_hash(str);
+
+  return h;
 }
