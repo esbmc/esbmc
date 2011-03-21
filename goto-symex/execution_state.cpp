@@ -1198,21 +1198,23 @@ execution_statet::serialise_expr(const exprt &rhs)
     std::stringstream tmp;
     tmp << val;
     str = "const(" + tmp.str() + ")";
-
-  // If we have a normal expression, either arithmatic, binary, comparision,
-  // or whatever, just take the operator and append its operands.
-  } else if (rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" || rhs.id() == "/" || rhs.id() == "mod" || rhs.id() == "=" || rhs.id() == "and" || rhs.id() == "=>" || rhs.id() == "or" || rhs.id() == "not" || rhs.id() == "notequal" || rhs.id() ==  "unary-" || rhs.id() == "abs" || rhs.id() == ">=" || rhs.id() == ">" || rhs.id() == "<=" || rhs.id() == "<" || rhs.id() == "bitor" || rhs.id() == "bitxor" || rhs.id() == "bitand" || rhs.id() == "bitnot" || rhs.id() == "shl" || rhs.id() == "lshr" || rhs.id() == "ashr") {
-    str = rhs.id().as_string();
-    forall_operands(it, rhs) {
-      str = str + "(" + serialise_expr(*it) + ")";
-    }
   } else if (rhs.id() == "pointer_offset") {
     str = "pointer_offset(" + serialise_expr(rhs.op0()) + ")";
   } else if (rhs.id() == "string-constant") {
     exprt tmp;
     string2array(rhs, tmp);
     return serialise_expr(tmp);
+  } else if (rhs.id() == "same-object") {
+  } else if (rhs.id() == "byte_update_little_endian") {
+  } else if (rhs.id() == "byte_update_big_endian") {
+  } else if (rhs.id() == "byte_extract_little_endian") {
+  } else if (rhs.id() == "byte_extract_big_endian") {
   } else {
+    execution_statet::expr_id_map_t::const_iterator it;
+    it = expr_id_map.find(rhs.id());
+    if (it != expr_id_map.end())
+     return it->second(*this, rhs);
+
     std::cout << "Unrecognized expression when generating state hash:\n";
     std::cout << rhs.pretty(0) << std::endl;
     abort();
@@ -1221,9 +1223,59 @@ execution_statet::serialise_expr(const exprt &rhs)
   return str;
 }
 
+// If we have a normal expression, either arithmatic, binary, comparision,
+// or whatever, just take the operator and append its operands.
+std::string
+serialise_normal_operation(execution_statet &ex_state, const exprt &rhs)
+{
+  std::string str;
+
+  str = rhs.id().as_string();
+  forall_operands(it, rhs) {
+    str = str + "(" + ex_state.serialise_expr(*it) + ")";
+  }
+
+  return str;
+}
+
+
 crypto_hash
 execution_statet::update_hash_for_assignment(const exprt &rhs)
 {
 
   return crypto_hash(serialise_expr(rhs));
+}
+
+const execution_statet::expr_id_map_t execution_statet::expr_id_map = execution_statet::init_expr_id_map();
+
+
+execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
+{
+  execution_statet::expr_id_map_t m;
+  m["+"] = serialise_normal_operation;
+  m["-"] = serialise_normal_operation;
+  m["*"] = serialise_normal_operation;
+  m["/"] = serialise_normal_operation;
+  m["mod"] = serialise_normal_operation;
+  m["="] = serialise_normal_operation;
+  m["and"] = serialise_normal_operation;
+  m["=>"] = serialise_normal_operation;
+  m["or"] = serialise_normal_operation;
+  m["not"] = serialise_normal_operation;
+  m["notequal"] = serialise_normal_operation;
+  m["unary-"] = serialise_normal_operation;
+  m["abs"] = serialise_normal_operation;
+  m[">="] = serialise_normal_operation;
+  m[">"] = serialise_normal_operation;
+  m["<="] = serialise_normal_operation;
+  m["<"] = serialise_normal_operation;
+  m["bitor"] = serialise_normal_operation;
+  m["bitxor"] = serialise_normal_operation;
+  m["bitand"] = serialise_normal_operation;
+  m["bitnot"] = serialise_normal_operation;
+  m["shl"] = serialise_normal_operation;
+  m["lshr"] = serialise_normal_operation;
+  m["ashr"] = serialise_normal_operation;
+
+  return m;
 }

@@ -157,6 +157,11 @@ public:
 
     crypto_hash generate_hash(void) const;
 
+    typedef std::string (*serialise_fxn)(execution_statet &ex_state, const exprt &rhs);
+    typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
+    static expr_id_map_t init_expr_id_map();
+    static const expr_id_map_t expr_id_map;
+
     crypto_hash update_hash_for_assignment(const exprt &rhs);
     std::string serialise_expr(const exprt &rhs);
     void extract_elems_from_array_expr(exprt array,
