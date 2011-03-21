@@ -1134,6 +1134,16 @@ execution_statet::serialise_expr(const exprt &rhs)
       std::map<std::string,std::string>::const_iterator it;
       for (it = m.begin(); it != m.end(); it++)
         str += "(member(" + it->first + "),val(" + it->second + ")),";
+    } else if (rhs.op0().type().id() ==  "union") {
+      /* We don't care about previous assignments to this union, because
+       * they're overwritten by this one, and leads to undefined side effects
+       * anyway. So, just serialise the identifier, the member assigned to,
+       * and the value assigned */
+      assert(rhs.op0().id() == "symbol");
+      str = "union_set(";
+      str += "union_sym(" + rhs.op0().get("identifier").as_string() + "),";
+      str += "field(" + serialise_expr(rhs.op1()) + "),";
+      str += "val(" + serialise_expr(rhs.op2()) + "))";
     } else {
       throw "Unrecognised type of with expression: " + rhs.op0().type().id().as_string();
     }
