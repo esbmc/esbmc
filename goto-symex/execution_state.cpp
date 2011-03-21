@@ -1147,6 +1147,8 @@ execution_statet::serialise_expr(const exprt &rhs)
     str = "typecast(" + serialise_expr(rhs.op0()) + ")";
   } else if (rhs.id() == "pointer_object") {
     str = "pointer_obj(" + serialise_expr(rhs.op0()) + ")";
+  } else if (rhs.id() == "member_name") {
+    str = "component(" + rhs.get("component_name").as_string() + ")";
 #if 0
   } else if (rhs.id() == "dereference") {
   } else if (rhs.id() == "if") {
