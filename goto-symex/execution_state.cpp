@@ -1109,8 +1109,9 @@ execution_statet::serialise_expr(const exprt &rhs)
     std::map<std::string,std::string>::const_iterator it;
     for (it = m.begin(); it != m.end(); it++)
       str += "(idx(" + it->first + "),val(" + it->second + ")),";
-#if 0
   } else if (rhs.id() == "address_of") {
+    str = "addressof(" + serialise_expr(rhs.op0()) + ")";
+#if 0
   } else if (rhs.id() == "index") {
   } else if (rhs.id() == "typecast") {
   } else if (rhs.id() == "dereference") {
