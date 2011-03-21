@@ -592,7 +592,14 @@ symex_target_equationt::reconstruct_expr_from_SSA(std::string name)
       break;
   }
 
-  assert(it != SSA_steps.end() && "Attempted to find nonexistant SSA step");
+  if (it == SSA_steps.end()) {
+    /* there's an unpleasent situation where we can reference variables that
+     * were assigned via an ASSUME instruction: that means that their value is
+     * convoluted and nondeterministic, we can't extract anything worthwhile
+     * from it, and we may as well just use the symbol as the state
+     * representation. Ugh. */
+    return symbol_exprt("nonexist(" + name + ")");
+  }
 
   /* Duplicate its rhs, and for each symbol in there, recurse */
   expr = it->rhs;
