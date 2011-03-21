@@ -1058,7 +1058,7 @@ unmunge_SSA_name(std::string str)
 }
 
 static std::string state_to_ignore[8] =
-{"\\guard_exec", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
+{"\\guard", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
 "count_lock", "count_wait", "unlocked"};
 
 std::string
