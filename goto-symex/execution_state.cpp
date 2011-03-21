@@ -1149,6 +1149,9 @@ execution_statet::serialise_expr(const exprt &rhs)
     str = "pointer_obj(" + serialise_expr(rhs.op0()) + ")";
   } else if (rhs.id() == "member_name") {
     str = "component(" + rhs.get("component_name").as_string() + ")";
+  } else if (rhs.id() == "member") {
+    str = "member(entity(" + serialise_expr(rhs.op0()) + "),";
+    str += "member_name(" + rhs.get("component_name").as_string() + "))";
 #if 0
   } else if (rhs.id() == "dereference") {
   } else if (rhs.id() == "if") {
