@@ -1124,11 +1124,9 @@ execution_statet::serialise_expr(const exprt &rhs)
     /* An array of the same set of values: generate all of them. */
     str = "array(";
     irept array = rhs.find("type");
-    irept size = array.find("size");
-    std::string sz = size.get("value").as_string();
-    val = strtol(sz.c_str(), NULL, 2);
-    for (i = 0; i < val; i++)
-      str += "elem(" + serialise_expr(rhs.op0()) + "),";
+    exprt size = (exprt&)array.find("size");
+    str += "sz(" + serialise_expr(size) + "),";
+    str += "elem(" + serialise_expr(rhs.op0()) + "))";
   } else if (rhs.id() == "with") {
     exprt bees = _target.reconstruct_expr_from_SSA(rhs);
     if (rhs.op0().type().id() == "array") {
