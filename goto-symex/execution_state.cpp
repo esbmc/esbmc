@@ -1119,7 +1119,7 @@ execution_statet::serialise_expr(const exprt &rhs)
       if (str.find(state_to_ignore[i]) != std::string::npos)
         return "(ignore)";
 
-    return unmunge_SSA_name(bees.get("identifier").as_string());
+    return unmunge_SSA_name(rhs.get("identifier").as_string());
   } else if (rhs.id() == "array_of") {
     /* An array of the same set of values: generate all of them. */
     str = "array(";
