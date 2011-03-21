@@ -348,8 +348,8 @@ Function: ansi_c_languaget::to_expr
 \*******************************************************************/
 
 bool ansi_c_languaget::to_expr(
-  const std::string &code,
-  const std::string &module,
+  const std::string &code __attribute__((unused)),
+  const std::string &module __attribute__((unused)),
   exprt &expr,
   message_handlert &message_handler,
   const namespacet &ns)

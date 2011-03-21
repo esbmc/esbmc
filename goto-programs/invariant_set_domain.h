@@ -25,14 +25,14 @@ public:
   }
 
   virtual void output(
-    const namespacet &ns,
+    const namespacet &ns __attribute__((unused)),
     std::ostream &out) const
   {
     invariant_set.output("", out);
   }
     
   virtual void initialize(
-    const namespacet &ns,
+    const namespacet &ns __attribute__((unused)),
     locationt l)
   {
     invariant_set.make_true();

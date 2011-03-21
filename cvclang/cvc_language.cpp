@@ -25,8 +25,8 @@ Function: cvc_languaget::parse
 \*******************************************************************/
 
 bool cvc_languaget::parse(
-  std::istream &instream,
-  const std::string &path,
+  std::istream &instream __attribute__((unused)),
+  const std::string &path __attribute__((unused)),
   message_handlert &message_handler)
 {
   message_handler.print(1, "not implemented");
@@ -46,8 +46,8 @@ Function: cvc_languaget::typecheck
 \*******************************************************************/
 
 bool cvc_languaget::typecheck(
-  contextt &context,
-  const std::string &module,
+  contextt &context __attribute__((unused)),
+  const std::string &module __attribute__((unused)),
   message_handlert &message_handler)
 {
   message_handler.print(1, "not implemented");
@@ -66,7 +66,7 @@ Function: cvc_languaget::show_parse
 
 \*******************************************************************/
   
-void cvc_languaget::show_parse(std::ostream &out)
+void cvc_languaget::show_parse(std::ostream &out __attribute__((unused)))
 {
 
 }
@@ -84,7 +84,7 @@ Function: cvc_languaget::from_expr
 \*******************************************************************/
 
 bool cvc_languaget::from_expr(const exprt &expr, std::string &code,
-                              const namespacet &ns)
+                              const namespacet &ns __attribute__((unused)))
 {
   return expr2cvc(expr, code);
 }
@@ -104,7 +104,7 @@ Function: cvc_languaget::from_type
 bool cvc_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns __attribute__((unused)))
 {
   return type2cvc(type, code);
 }
@@ -122,11 +122,11 @@ Function: cvc_languaget::to_expr
 \*******************************************************************/
 
 bool cvc_languaget::to_expr(
-  const std::string &code,
-  const std::string &module,
-  exprt &expr,
+  const std::string &code __attribute__((unused)),
+  const std::string &module __attribute__((unused)),
+  exprt &expr __attribute__((unused)),
   message_handlert &message_handler,
-  const namespacet &ns)
+  const namespacet &ns __attribute__((unused)))
 {
   messaget message(message_handler);
   message.error("not yet implemented");

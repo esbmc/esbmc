@@ -171,7 +171,7 @@ Function: ui_message_handlert::xml_ui_msg
 void ui_message_handlert::xml_ui_msg(
   const std::string &type,
   const std::string &msg1,
-  const std::string &msg2,
+  const std::string &msg2 __attribute__((unused)),
   const locationt &location)
 {
   xmlt xml;

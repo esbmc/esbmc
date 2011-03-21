@@ -808,7 +808,7 @@ Function: expr2ct::convert_function
 std::string expr2ct::convert_function(
   const exprt &src,
   const std::string &name,
-  unsigned precedence)
+  unsigned precedence __attribute__((unused)))
 {
   std::string dest=name;
   dest+='(';
@@ -1137,7 +1137,7 @@ Function: expr2ct::convert_symbol
 
 std::string expr2ct::convert_symbol(
   const exprt &src,
-  unsigned &precedence)
+  unsigned &precedence __attribute__((unused)))
 {
   const irep_idt &id=src.get("identifier");
   std::string dest;
@@ -1167,7 +1167,7 @@ Function: expr2ct::convert_nondet_symbol
 
 std::string expr2ct::convert_nondet_symbol(
   const exprt &src,
-  unsigned &precedence)
+  unsigned &precedence __attribute__((unused)))
 {
   const std::string &id=src.get_string("identifier");
   return "nondet_symbol("+id+")";
@@ -1187,7 +1187,7 @@ Function: expr2ct::convert_predicate_symbol
 
 std::string expr2ct::convert_predicate_symbol(
   const exprt &src,
-  unsigned &precedence)
+  unsigned &precedence __attribute__((unused)))
 {
   const std::string &id=src.get_string("identifier");
   return "ps("+id+")";
@@ -1207,7 +1207,7 @@ Function: expr2ct::convert_predicate_next_symbol
 
 std::string expr2ct::convert_predicate_next_symbol(
   const exprt &src,
-  unsigned &precedence)
+  unsigned &precedence __attribute__((unused)))
 {
   const std::string &id=src.get_string("identifier");
   return "pns("+id+")";
@@ -1227,7 +1227,7 @@ Function: expr2ct::convert_quantified_symbol
 
 std::string expr2ct::convert_quantified_symbol(
   const exprt &src,
-  unsigned &precedence)
+  unsigned &precedence __attribute__((unused)))
 {
   const std::string &id=src.get_string("identifier");
   return id;
@@ -1247,7 +1247,7 @@ Function: expr2ct::convert_nondet_bool
 
 std::string expr2ct::convert_nondet_bool(
   const exprt &src,
-  unsigned &precedence)
+  unsigned &precedence __attribute__((unused)))
 {
   return "nondet_bool()";
 }
@@ -1541,7 +1541,7 @@ Function: expr2ct::convert_array
 
 std::string expr2ct::convert_array(
   const exprt &src,
-  unsigned &precedence)
+  unsigned &precedence __attribute__((unused)))
 {
   std::string dest="{ ";
 
@@ -1625,7 +1625,7 @@ Function: expr2ct::convert_function_call
 
 std::string expr2ct::convert_function_call(
   const exprt &src,
-  unsigned &precedence)
+  unsigned &precedence __attribute__((unused)))
 {
   if(src.operands().size()!=2)
   {
@@ -1731,7 +1731,7 @@ Function: expr2ct::convert_code_while
 \*******************************************************************/
 
 std::string expr2ct::convert_code_asm(
-  const codet &src,
+  const codet &src __attribute__((unused)),
   unsigned indent)
 {
   std::string dest=indent_str(indent);
@@ -1935,7 +1935,7 @@ Function: expr2ct::convert_code_break
 \*******************************************************************/
 
 std::string expr2ct::convert_code_break(
-  const codet &src,
+  const codet &src __attribute__((unused)),
   unsigned indent)
 {
   std::string dest=indent_str(indent);
@@ -2010,7 +2010,7 @@ Function: expr2ct::convert_code_continue
 \*******************************************************************/
 
 std::string expr2ct::convert_code_continue(
-  const codet &src,
+  const codet &src __attribute__((unused)),
   unsigned indent)
 {
   std::string dest=indent_str(indent);
@@ -2401,7 +2401,7 @@ Function: expr2ct::convert_code_function_call
 \*******************************************************************/
 
 std::string expr2ct::convert_code_function_call(
-  const code_function_callt &src,
+  const code_function_callt &src __attribute__((unused)),
   unsigned indent)
 {
   if(src.operands().size()!=3)

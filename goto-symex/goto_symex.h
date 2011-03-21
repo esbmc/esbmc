@@ -126,7 +126,7 @@ protected:
   void return_assignment(statet &state,unsigned node_id);
   //void return_assignment(statet &state);
 
-  virtual void no_body(const irep_idt &identifier)
+  virtual void no_body(const irep_idt &identifier __attribute__((unused)))
   {
   }
 

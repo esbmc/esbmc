@@ -214,7 +214,7 @@ Function: language_filest::interfaces
 \*******************************************************************/
 
 bool language_filest::interfaces(
-  contextt &context)
+  contextt &context __attribute__((unused)))
 {
 #if 0
   for(filemapt::iterator it=filemap.begin();

@@ -105,7 +105,7 @@ Function: c_typecheck_baset::typecheck_asm
 
 \*******************************************************************/
 
-void c_typecheck_baset::typecheck_asm(codet &code)
+void c_typecheck_baset::typecheck_asm(codet &code __attribute__((unused)))
 {
 }
 
@@ -534,7 +534,7 @@ Function: c_typecheck_baset::typecheck_goto
 
 \*******************************************************************/
 
-void c_typecheck_baset::typecheck_goto(codet &code)
+void c_typecheck_baset::typecheck_goto(codet &code __attribute__((unused)))
 {
 }
 

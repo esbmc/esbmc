@@ -197,7 +197,7 @@ Function: smv_languaget::from_expr
 \*******************************************************************/
 
 bool smv_languaget::from_expr(const exprt &expr, std::string &code,
-                              const namespacet &ns)
+                              const namespacet &ns __attribute__((unused)))
 {
   return expr2smv(expr, code);
 }
@@ -217,7 +217,7 @@ Function: smv_languaget::from_type
 bool smv_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns __attribute__((unused)))
 {
   return type2smv(type, code);
 }
@@ -235,11 +235,11 @@ Function: smv_languaget::to_expr
 \*******************************************************************/
 
 bool smv_languaget::to_expr(
-  const std::string &code,
-  const std::string &module,
-  exprt &expr,
+  const std::string &code __attribute__((unused)),
+  const std::string &module __attribute__((unused)),
+  exprt &expr __attribute__((unused)),
   message_handlert &message_handler,
-  const namespacet &ns)
+  const namespacet &ns __attribute__((unused)))
 {
   messaget message(message_handler);
   message.error("not yet implemented");

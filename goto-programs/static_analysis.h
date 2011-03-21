@@ -47,16 +47,16 @@ public:
   }
   
   virtual void output(
-    const namespacet &ns,
-    std::ostream &out) const
+    const namespacet &ns __attribute__((unused)),
+    std::ostream &out __attribute__((unused))) const
   {
   }
   
   typedef hash_set_cont<exprt, irep_hash> expr_sett;
   
   virtual void get_reference_set(
-    const namespacet &ns,
-    const exprt &expr,
+    const namespacet &ns __attribute__((unused)),
+    const exprt &expr __attribute__((unused)),
     std::list<exprt> &dest)
   {
     // dummy, overload me!

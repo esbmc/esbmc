@@ -2351,6 +2351,6 @@ Function: c_typecheck_baset::make_constant_rec
 
 \*******************************************************************/
 
-void c_typecheck_baset::make_constant_rec(exprt &expr)
+void c_typecheck_baset::make_constant_rec(exprt &expr __attribute__((unused)))
 {
 }
