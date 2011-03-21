@@ -26,7 +26,7 @@ Function: goto_symext::symex_goto
 
 \*******************************************************************/
 
-void goto_symext::symex_goto(statet &state,unsigned node_id)
+void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned node_id)
 {
   const goto_programt::instructiont &instruction=*state.source.pc;
 
@@ -146,7 +146,7 @@ void goto_symext::symex_goto(statet &state,unsigned node_id)
 
       exprt new_lhs=guard_expr;
 
-      state.assignment(new_lhs, new_rhs, ns, false,node_id);
+      state.assignment(new_lhs, new_rhs, ns, false, ex_state, node_id);
 
       guardt guard;
 
@@ -232,7 +232,7 @@ Function: goto_symext::merge_gotos
 
 \*******************************************************************/
 
-void goto_symext::merge_gotos(statet &state, unsigned node_id)
+void goto_symext::merge_gotos(statet &state, execution_statet &ex_state, unsigned node_id)
 {
   statet::framet &frame=state.top();
 
@@ -254,7 +254,7 @@ void goto_symext::merge_gotos(statet &state, unsigned node_id)
     statet::goto_statet &goto_state=*list_it;
 
     // do SSA phi functions
-    phi_function(goto_state, state, node_id);
+    phi_function(goto_state, state, ex_state, node_id);
 
     merge_value_sets(goto_state, state);
 
@@ -346,6 +346,7 @@ Function: goto_symext::phi_function
 void goto_symext::phi_function(
   const statet::goto_statet &goto_state,
   statet &state,
+  execution_statet &ex_state,
    unsigned node_id)
 {
   // go over all variables to see what changed
@@ -405,7 +406,7 @@ void goto_symext::phi_function(
 		exprt lhs(symbol_expr(symbol));
 		exprt new_lhs(lhs);
 
-		state.assignment(new_lhs, rhs, ns, false,node_id);
+		state.assignment(new_lhs, rhs, ns, false, ex_state, node_id);
 
 		guardt true_guard;
 

@@ -49,7 +49,7 @@ void basic_symext::assignment(
   //replace_dynamic_allocation(state, rhs);
   //replace_nondet(rhs);
 
-  state.assignment(new_lhs, rhs, ns, constant_propagation,ex_state.node_id);
+  state.assignment(new_lhs, rhs, ns, constant_propagation, ex_state, ex_state.node_id);
 
   target->assignment(
     state.guard,
@@ -316,7 +316,7 @@ void basic_symext::symex_assign_symbol(
 
   exprt new_lhs=lhs;
 
-  state.assignment(new_lhs, rhs, ns, constant_propagation,node_id);
+  state.assignment(new_lhs, rhs, ns, constant_propagation, ex_state, node_id);
 
   guardt tmp_guard(state.guard);
   tmp_guard.append(guard);

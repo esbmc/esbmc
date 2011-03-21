@@ -14,6 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <i2string.h>
 #include "../util/expr_util.h"
 
+#include "execution_state.h"
 #include "goto_symex_state.h"
 #include "crypto_hash.h"
 
@@ -371,6 +372,7 @@ void goto_symex_statet::assignment(
   const exprt &rhs,
   const namespacet &ns,
   bool record_value,
+  execution_statet &ex_state,
   unsigned exec_node_id)
 {
   assert(lhs.id()=="symbol");

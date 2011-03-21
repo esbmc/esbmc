@@ -24,6 +24,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "crypto_hash.h"
 
 #include <i2string.h>
+
+class execution_statet; // foward dec
+
 // central data structure: state
 class goto_symex_statet
 {
@@ -199,6 +202,7 @@ public:
     const exprt &rhs,
     const namespacet &ns,
     bool record_value,
+    execution_statet &ex_state,
     unsigned exec_node_id);
 
   // what to propagate

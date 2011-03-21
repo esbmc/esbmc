@@ -85,7 +85,7 @@ protected:
   // symex
 
   //virtual void symex_goto(statet &state);
-  virtual void symex_goto(statet &state, unsigned node_id);
+  virtual void symex_goto(statet &state, execution_statet &ex_state, unsigned node_id);
 
   //virtual void symex_return(statet &state);
   virtual void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
@@ -104,7 +104,7 @@ protected:
     statet &state, unsigned node_id);
 
   // gotos
-  void merge_gotos(statet &state, unsigned node_id);
+  void merge_gotos(statet &state, execution_statet &ex_state, unsigned node_id);
 
   void merge_value_sets(
     const statet::goto_statet &goto_state,
@@ -112,7 +112,7 @@ protected:
 
   void phi_function(
     const statet::goto_statet &goto_state,
-    statet &state, unsigned node_id);
+    statet &state, execution_statet &ex_state, unsigned node_id);
 
   virtual bool get_unwind(
     const symex_targett::sourcet &source,

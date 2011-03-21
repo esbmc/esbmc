@@ -236,7 +236,7 @@ void execution_statet::decreament_trds_in_run(const namespacet &ns, symex_target
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
   target.assignment(
 		  get_active_state().guard,
@@ -285,7 +285,7 @@ void execution_statet::end_thread(const namespacet &ns, symex_targett &target)
 
     exprt new_lhs = lhs_expr;
 
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true, node_id);
+    get_active_state().assignment(new_lhs, rhs_expr, ns, true, this, node_id);
 
     target.assignment(
             get_active_state().guard,
@@ -322,7 +322,7 @@ void execution_statet::increament_trds_in_run(const namespacet &ns, symex_target
     constant_exprt rhs_expr(int_t);
     rhs_expr.set_value(integer2binary(1,config.ansi_c.int_width));
 
-    get_active_state().assignment(lhs_expr, rhs_expr, ns, true, node_id);
+    get_active_state().assignment(lhs_expr, rhs_expr, ns, true, *this, node_id);
 
     thrds_in_run_flag=0;
   }
@@ -338,7 +338,7 @@ void execution_statet::increament_trds_in_run(const namespacet &ns, symex_target
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
   target.assignment(
           get_active_state().guard,
@@ -388,7 +388,7 @@ void execution_statet::deadlock_detection(const namespacet &ns, symex_targett &t
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, this, node_id);
 
   target.assignment(
           get_active_state().guard,
@@ -430,7 +430,7 @@ void execution_statet::update_trds_count(const namespacet &ns, symex_targett &ta
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
   target.assignment(
           get_active_state().guard,
@@ -474,7 +474,7 @@ void execution_statet::update_trds_status(const namespacet &ns, symex_targett &t
 
     exprt new_lhs = lhs_expr;
 
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+    get_active_state().assignment(new_lhs, rhs_expr, ns, true, this, node_id);
 
     target.assignment(
             get_active_state().guard,
@@ -679,7 +679,7 @@ void execution_statet::execute_guard(const namespacet &ns, symex_targett &target
       new_rhs = cur_rhs; //gen_and(parent_guard, cur_rhs);
     }
 
-    get_active_state().assignment(new_lhs, new_rhs, ns, false, node_id);
+    get_active_state().assignment(new_lhs, new_rhs, ns, false, *this, node_id);
 
     assert(new_lhs.get("identifier") == get_guard_identifier());
 

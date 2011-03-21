@@ -265,7 +265,7 @@ void goto_symext::symex_step(
 
   const goto_programt::instructiont &instruction = *state.source.pc;
 
-  merge_gotos(state, ex_state.node_id);
+  merge_gotos(state, ex_state, ex_state.node_id);
 
   // depth exceeded?
   {
@@ -318,7 +318,7 @@ void goto_symext::symex_step(
                   return;
             }
 
-            symex_goto(art.get_cur_state().get_active_state(), ex_state.node_id);
+            symex_goto(art.get_cur_state().get_active_state(), ex_state, ex_state.node_id);
         }
             break;
         case ASSUME:
