@@ -1115,8 +1115,9 @@ execution_statet::serialise_expr(const exprt &rhs)
     str = "index(";
     str += serialise_expr(rhs.op0());
     str += ",idx(" + serialise_expr(rhs.op1()) + ")";
-#if 0
   } else if (rhs.id() == "typecast") {
+    str = "typecast(" + serialise_expr(rhs.op0()) + ")";
+#if 0
   } else if (rhs.id() == "dereference") {
   } else if (rhs.id() == "if") {
   } else if (rhs.id() == "member") {
