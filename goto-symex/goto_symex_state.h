@@ -185,7 +185,7 @@ public:
 
     unsigned current_number(const irep_idt &identifier) const;
 
-    level2t() { }
+    level2t() { };
     virtual ~level2t() { }
 
     virtual void print(std::ostream &out, unsigned node_id) const;
@@ -226,8 +226,6 @@ public:
     irep_idt temp = top().level1(identifier,node_id);
     return plevel2->stupid_operator(temp,node_id);
   }
-
-  std::string serialise_expr(const exprt &e);
 
   bool use_value_set;
 

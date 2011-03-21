@@ -157,6 +157,11 @@ public:
 
     crypto_hash generate_hash(void) const;
 
+    crypto_hash update_hash_for_assignment(const exprt &rhs);
+    std::string serialise_expr(const exprt &rhs);
+    void extract_elems_from_array_expr(exprt array,
+                std::map<std::string,std::string> &m);
+
 private:
     void decreament_trds_in_run(const namespacet &ns, symex_targett &target);
     const symbolt& lookup(const namespacet &ns, const irep_idt &identifier)  const;

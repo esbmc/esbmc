@@ -7,6 +7,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 \*******************************************************************/
 
 #include "execution_state.h"
+#include <string>
+#include <sstream>
 #include <i2string.h>
 #include <std_expr.h>
 #include <expr_util.h>
@@ -1036,4 +1038,116 @@ execution_statet::generate_hash(void) const
   crypto_hash h = crypto_hash(str);
 
   return h;
+}
+
+void
+execution_statet::extract_elems_from_array_expr(exprt array,
+                        std::map<std::string,std::string> &m)
+{
+
+  if (array.op0().id() == "with") {
+    extract_elems_from_array_expr(array.op0(), m);
+  } else {
+    m["__ESBMC_hash_array_base"] = serialise_expr(array.op0());
+  }
+
+  std::string idx = serialise_expr(array.op1());
+  std::string val = serialise_expr(array.op2());
+  m[idx] = val;
+  return;
+}
+
+static std::string state_to_ignore[8] =
+{"\\guard_exec", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
+"count_lock", "count_wait", "unlocked"};
+
+std::string
+execution_statet::serialise_expr(const exprt &rhs)
+{
+  std::string str;
+  uint64_t val;
+  int i;
+
+  // FIXME: some way to disambiguate what's part of a hash / const /whatever,
+  // and what's part of an operator
+
+  // The plan: serialise this expression into the identifiers of its operations,
+  // replacing symbol names with the hash of their value.
+  if (rhs.id() == "symbol") {
+
+    str = rhs.get("identifier").as_string();
+    for (i = 0 ; i < 8; i++)
+      if (str.find(state_to_ignore[i]) != std::string::npos)
+        return "(ignore)";
+
+    exprt bees = _target.reconstruct_expr_from_SSA(rhs);
+    /* Now then, is this a reconstructed expr, or could we get no further? */
+    if (bees.id() == "symbol") {
+      /* Reached something assumed or nondeterministic: just return the symbol
+       * name */
+      return bees.get("identifier").as_string();
+    }
+
+    /* Otherwise, we can continue munging */
+    return serialise_expr(bees);
+  } else if (rhs.id() == "array_of") {
+    /* An array of the same set of values: generate all of them. */
+    str = "array(";
+    irept array = rhs.find("type");
+    irept size = array.find("size");
+    std::string sz = size.get("value").as_string();
+    val = strtol(sz.c_str(), NULL, 2);
+    for (i = 0; i < val; i++)
+      str += "elem(" + serialise_expr(rhs.op0()) + "),";
+  } else if (rhs.id() == "with") {
+    std::cout << "With expr:\n" << rhs.pretty(0) << std::endl;
+    exprt bees = _target.reconstruct_expr_from_SSA(rhs);
+    std::map<std::string,std::string> m;
+    extract_elems_from_array_expr(bees, m);
+#if 0
+  } else if (rhs.id() == "address_of") {
+  } else if (rhs.id() == "index") {
+  } else if (rhs.id() == "typecast") {
+  } else if (rhs.id() == "dereference") {
+  } else if (rhs.id() == "if") {
+  } else if (rhs.id() == "member") {
+#endif
+  } else if (rhs.id() == "constant") {
+    // It appears constants can be "true", "false", or a bit vector. Parse that,
+    // and then print the value as a base 10 integer.
+
+    irep_idt idt_val = rhs.get("value");
+    if (idt_val == "true") {
+      val = 1;
+    } else if (idt_val == "false") {
+      val = 0;
+    } else {
+      val = strtol(idt_val.c_str(), NULL, 2);
+    }
+
+    std::stringstream tmp;
+    tmp << val;
+    str = "const(" + tmp.str() + ")";
+
+  // If we have a normal expression, either arithmatic, binary, comparision,
+  // or whatever, just take the operator and append its operands.
+  } else if (rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" || rhs.id() == "/" || rhs.id() == "mod" || rhs.id() == "=" || rhs.id() == "and" || rhs.id() == "=>" || rhs.id() == "or" || rhs.id() == "not" ) {
+    str = rhs.id().as_string();
+    forall_operands(it, rhs) {
+      str = str + "(" + serialise_expr(*it) + ")";
+    }
+  } else {
+    std::cout << "Unrecognized expression when generating state hash:\n";
+    std::cout << rhs.pretty(0) << std::endl;
+    abort();
+  }
+
+  return str;
+}
+
+crypto_hash
+execution_statet::update_hash_for_assignment(const exprt &rhs)
+{
+
+  return crypto_hash(serialise_expr(rhs));
 }
