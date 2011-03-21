@@ -1177,6 +1177,12 @@ execution_statet::serialise_expr(const exprt &rhs)
       str = str + "(" + serialise_expr(*it) + "),";
     }
     str += ")";
+  } else if (rhs.id() == "union") {
+    str = rhs.type().get("tag").as_string();
+    str = "union(tag(" + str + "),";
+    forall_operands(it, rhs) {
+      str = str + "(" + serialise_expr(*it) + "),";
+    }
   } else if (rhs.id() == "constant") {
     // It appears constants can be "true", "false", or a bit vector. Parse that,
     // and then print the value as a base 10 integer.
