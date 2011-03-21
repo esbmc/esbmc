@@ -1166,10 +1166,12 @@ execution_statet::serialise_expr(const exprt &rhs)
     /* Just return the identifier: it'll be unique to this particular piece
      * of entropy */
     str = "nondet_symbol(" + rhs.get("identifier").as_string() + ")";
+  } else if (rhs.id() == "if") {
+    str = "cond(if(" + serialise_expr(rhs.op0()) + "),";
+    str += "then(" + serialise_expr(rhs.op1()) + "),";
+    str += "else(" + serialise_expr(rhs.op2()) + "))";
 #if 0
   } else if (rhs.id() == "dereference") {
-  } else if (rhs.id() == "if") {
-  } else if (rhs.id() == "member") {
 #endif
   } else if (rhs.id() == "constant") {
     // It appears constants can be "true", "false", or a bit vector. Parse that,
