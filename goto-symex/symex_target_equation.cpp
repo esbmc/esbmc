@@ -557,7 +557,6 @@ static std::string state_to_ignore[8] =
 symex_target_equationt::equation_hash symex_target_equationt::generate_hash(namespacet ns) const
 {
   std::set<symex_target_equationt::SSA_stept> steps;
-  std::string serialised;
 
   languagest languages(ns, MODE_C);
 
@@ -571,9 +570,11 @@ symex_target_equationt::equation_hash symex_target_equationt::generate_hash(name
     if (!it->is_assignment())
       continue;
 
-//    languages.from_expr(it->cond, string_value);
     steps.insert(*it);
   }
+
+  SHA256_CTX c;
+  SHA256_Init(&c);
 
   for(std::set<symex_target_equationt::SSA_stept>::const_iterator it=steps.begin();
       it!=steps.end(); it++)
@@ -590,15 +591,10 @@ symex_target_equationt::equation_hash symex_target_equationt::generate_hash(name
     if (i != 8)
       continue;
 
-    serialised +=string_value;
-    serialised += "\n";
+    SHA256_Update(&c, string_value.data(), string_value.length());
   }
 
   uint8_t out[32];
-  const char *str = serialised.c_str();
-  SHA256_CTX c;
-  SHA256_Init(&c);
-  SHA256_Update(&c, str, strlen(str));
   SHA256_Final(out, &c);
   equation_hash e(out);
   return e;
