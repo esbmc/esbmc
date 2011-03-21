@@ -1136,7 +1136,9 @@ execution_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == "nondet_symbol") {
     /* Just return the identifier: it'll be unique to this particular piece
      * of entropy */
-    str = "nondet_symbol(" + rhs.get("identifier").as_string() + ")";
+    exprt tmp = rhs;
+    get_active_state().get_original_name(tmp);
+    str = "nondet_symbol(" + tmp.get("identifier").as_string() + ")";
   } else if (rhs.id() == "if") {
     str = "cond(if(" + serialise_expr(rhs.op0()) + "),";
     str += "then(" + serialise_expr(rhs.op1()) + "),";
