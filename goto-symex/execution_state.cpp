@@ -1139,7 +1139,6 @@ execution_statet::serialise_expr(const exprt &rhs)
        * they're overwritten by this one, and leads to undefined side effects
        * anyway. So, just serialise the identifier, the member assigned to,
        * and the value assigned */
-      assert(rhs.op0().id() == "symbol");
       str = "union_set(";
       str += "union_sym(" + rhs.op0().get("identifier").as_string() + "),";
       str += "field(" + serialise_expr(rhs.op1()) + "),";
