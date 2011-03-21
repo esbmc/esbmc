@@ -1169,9 +1169,13 @@ execution_statet::serialise_expr(const exprt &rhs)
     str = "cond(if(" + serialise_expr(rhs.op0()) + "),";
     str += "then(" + serialise_expr(rhs.op1()) + "),";
     str += "else(" + serialise_expr(rhs.op2()) + "))";
-#if 0
-  } else if (rhs.id() == "dereference") {
-#endif
+  } else if (rhs.id() == "struct") {
+    str = rhs.type().get("tag").as_string();
+    str = "struct(tag(" + str + "),";
+    forall_operands(it, rhs) {
+      str = str + "(" + serialise_expr(*it) + "),";
+    }
+    str += ")";
   } else if (rhs.id() == "constant") {
     // It appears constants can be "true", "false", or a bit vector. Parse that,
     // and then print the value as a base 10 integer.
