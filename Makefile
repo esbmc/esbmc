@@ -1,13 +1,9 @@
-DIRS = ansi-c big-int esbmc csp hoare \
-       infrules intrep solvers pvs separate smvlang util \
-       langapi cpp pascal symex \
-       satqe satmc explain specc \
-       goto-programs bplang simplifylang vcegar vsynth \
-       cvclang pointer-analysis \
-       goto-symex ipp prover trans bv_refinement mcp \
-       smtlang php cemc interpolation scoot floatbv
+DIRS = ansi-c big-int esbmc hoare infrules intrep solvers separate smvlang \
+	util langapi cpp symex satqe goto-programs bplang cvclang \
+	pointer-analysis goto-symex trans bv_refinement smtlang \
+	interpolation
 
-all: esbmc.dir \
+all: esbmc.dir
 
 include config.inc
 include common
