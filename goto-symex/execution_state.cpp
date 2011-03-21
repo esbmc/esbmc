@@ -1041,45 +1041,6 @@ execution_statet::generate_hash(void) const
   return h;
 }
 
-void
-execution_statet::extract_elems_from_array_expr(exprt array,
-                        std::map<std::string,std::string> &m)
-{
-
-  if (array.operands().size() == 0)
-    return;
-
-  if (array.op0().id() == "with") {
-    extract_elems_from_array_expr(array.op0(), m);
-  } else {
-    m["__ESBMC_hash_array_base"] = serialise_expr(array.op0());
-  }
-
-  std::string idx = serialise_expr(array.op1());
-  std::string val = serialise_expr(array.op2());
-  m[idx] = val;
-  return;
-}
-
-void
-execution_statet::extract_struct_members_from_expr(exprt st,
-                        std::map<std::string,std::string> &m)
-{
-
-  if (st.operands().size() == 0)
-    return;
-
-  if (st.op0().id() == "with") {
-    extract_struct_members_from_expr(st.op0(), m);
-  } else {
-    m["__ESBMC_hash_struct_base"] = serialise_expr(st.op0());
-  }
-
-  std::string member = serialise_expr(st.op1());
-  std::string val = serialise_expr(st.op2());
-  m[member] = val;
-}
-
 std::string
 unmunge_SSA_name(std::string str)
 {
@@ -1131,21 +1092,15 @@ execution_statet::serialise_expr(const exprt &rhs)
     exprt rec = rhs;
 
     if (rec.type().id() == "array") {
-      std::map<std::string,std::string> m;
-      extract_elems_from_array_expr(rec, m);
-
       str = "array(";
-      std::map<std::string,std::string>::const_iterator it;
-      for (it = m.begin(); it != m.end(); it++)
-        str += "(idx(" + it->first + "),val(" + it->second + ")),";
+      str += "prev(" + serialise_expr(rec.op0()) + "),";
+      str += "idx(" + serialise_expr(rec.op1()) + "),";
+      str += "val(" + serialise_expr(rec.op2()) + "))";
     } else if (rec.type().id() == "struct") {
-      std::map<std::string,std::string> m;
-      extract_struct_members_from_expr(rec, m);
-
       str = "struct(";
-      std::map<std::string,std::string>::const_iterator it;
-      for (it = m.begin(); it != m.end(); it++)
-        str += "(member(" + it->first + "),val(" + it->second + ")),";
+      str += "prev(" + serialise_expr(rec.op0()) + "),";
+      str += "member(" + serialise_expr(rec.op1()) + "),";
+      str += "val(" + serialise_expr(rec.op2()) + "),";
     } else if (rec.type().id() ==  "union") {
       /* We don't care about previous assignments to this union, because
        * they're overwritten by this one, and leads to undefined side effects
