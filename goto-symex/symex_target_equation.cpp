@@ -556,7 +556,7 @@ static std::string state_to_ignore[8] =
 
 symex_target_equationt::equation_hash symex_target_equationt::generate_hash(namespacet ns) const
 {
-  std::set<SSA_stept> steps;
+  std::set<std::string> steps;
   std::string serialised;
 
   languagest languages(ns, MODE_C);
@@ -565,37 +565,37 @@ symex_target_equationt::equation_hash symex_target_equationt::generate_hash(name
   for(symex_target_equationt::SSA_stepst::const_iterator
       it=SSA_steps.begin();
       it!=SSA_steps.end(); it++) {
+    std::string string_value;
+
     if (it->is_assignment() && it->assignment_type == HIDDEN)
       continue;
 
-    steps.insert(*it);
+    if (!it->is_assignment())
+      continue;
+
+    languages.from_expr(it->cond, string_value);
+    steps.insert(string_value);
   }
 
-  for(std::set<SSA_stept>::const_iterator
+  for(std::set<std::string>::const_iterator
       it=steps.begin();
       it!=steps.end(); it++)
   {
-    if(it->is_assignment())
-    {
-      int i;
-      std::string string_value;
+    int i;
 
-      languages.from_expr(it->cond, string_value);
-
-      for (i = 0; i < 8; i++) {
-        if (string_value.find(state_to_ignore[i]) != std::string::npos)
-          break;
-      }
-
-      if (i != 8)
-        continue;
-
-      serialised += string_value;
-      serialised += "\n";
+    for (i = 0; i < 8; i++) {
+      if (it->find(state_to_ignore[i]) != std::string::npos)
+        break;
     }
+
+    if (i != 8)
+      continue;
+
+    serialised += *it;
+    serialised += "\n";
   }
 
-  std::cout << "ohai:\n" << serialised << std::endl;
+//  std::cout << "ohai:\n" << serialised << std::endl;
 
   uint8_t out[32];
   const char *str = serialised.c_str();
@@ -604,6 +604,6 @@ symex_target_equationt::equation_hash symex_target_equationt::generate_hash(name
   SHA256_Update(&c, str, strlen(str));
   SHA256_Final(out, &c);
   equation_hash e(out);
-  std::cout << "with hash:\n" << e.to_string();
+//  std::cout << "with hash:\n" << e.to_string();
   return e;
 }
