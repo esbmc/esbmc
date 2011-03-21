@@ -556,8 +556,8 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     execution_states.rbegin()->reset_DFS_traversed();
 
     goto_programt::const_targett pc = execution_states.rbegin()->get_active_state().source.pc;
-    pc_hits[*pc]++;
-    pc_hit_iters[*pc] = pc;
+    symex_target_equationt::equation_hash hash = execution_states.rbegin()->_target.generate_hash(_ns);
+    pc_hits[*pc][hash]++;
 
     generated = true;
     break;
@@ -697,12 +697,28 @@ void reachability_treet::go_next_state()
   _go_next = false;
 }
 
+extern "C" {
+#include <stdio.h>
+}
 void reachability_treet::print_hits()
 {
-  std::map<goto_programt::instructiont, int>::const_iterator it;
+  char hex[65];
+  std::map<goto_programt::instructiont, hash_hitst>::const_iterator it;
+  hash_hitst::const_iterator it2;
+  int i;
 
   for (it = pc_hits.begin(); it != pc_hits.end(); it++) {
-    std::cout << "Location " << (*it).first.location.as_string() << " hit " << (*it).second << " times\n";
+    for (it2 = (*it).second.begin(); it2 != (*it).second.end(); it2++) {
+      //snprintf(buffer, 32, "%s", (*it2).first.c_str());
+      //buffer[32] = '\0';
+      const unsigned char *hash = (*it2).first.hash;
+
+      for (i = 0; i < 32; i++)
+        sprintf(&hex[i*2], "%02X", (unsigned char)hash[i]);
+      hex[64] = '\0';
+
+      std::cout << "Location " << std::string(hex) << " hit " << (*it2).second << " times\n";
+    }
   }
 
   return;

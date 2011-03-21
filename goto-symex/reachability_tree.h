@@ -94,8 +94,8 @@ private:
     const namespacet &_ns;
 
     /* jmorse */
-    std::map<goto_programt::instructiont, int>pc_hits;
-    std::map<goto_programt::instructiont, goto_programt::const_targett>pc_hit_iters;
+    typedef std::map<symex_target_equationt::equation_hash, int>hash_hitst;
+    std::map<goto_programt::instructiont, hash_hitst>pc_hits;
 };
 
 #endif /* REACHABILITY_TREE_H_ */
