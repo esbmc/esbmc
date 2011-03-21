@@ -431,6 +431,8 @@ std::string
 goto_symex_statet::serialise_expr(const exprt &rhs)
 {
   std::string str;
+  uint64_t val;
+  int i;
 
   // FIXME: some way to disambiguate what's part of a hash / const /whatever,
   // and what's part of an operator
@@ -438,7 +440,6 @@ goto_symex_statet::serialise_expr(const exprt &rhs)
   // The plan: serialise this expression into the identifiers of its operations,
   // replacing symbol names with the hash of their value.
   if (rhs.id() == "symbol") {
-    int i;
 
     str = rhs.get("identifier").as_string();
     for (i = 0 ; i < 8; i++)
@@ -447,9 +448,17 @@ goto_symex_statet::serialise_expr(const exprt &rhs)
 
     std::cout << "Unhandled symbol name when hasing: " << str << std::endl;
     abort();
-#if 0
   } else if (rhs.id() == "index") {
   } else if (rhs.id() == "array_of") {
+    /* An array of the same set of values: generate all of them. */
+    str = "array(";
+    irept array = rhs.find("type");
+    irept size = array.find("size");
+    std::string sz = size.get("value").as_string();
+    val = strtol(sz.c_str(), NULL, 2);
+    for (i = 0; i < val; i++)
+      str += "elem(" + serialise_expr(rhs.op0()) + "),";
+#if 0
   } else if (rhs.id() == "typecast") {
   } else if (rhs.id() == "address_of") {
   } else if (rhs.id() == "dereference") {
@@ -460,7 +469,6 @@ goto_symex_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == "constant") {
     // It appears constants can be "true", "false", or a bit vector. Parse that,
     // and then print the value as a base 10 integer.
-    uint64_t val;
 
     irep_idt idt_val = rhs.get("value");
     if (idt_val == "true") {
