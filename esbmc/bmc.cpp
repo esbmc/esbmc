@@ -575,6 +575,8 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
     }
   }
 
+  symex.art1->print_hits();
+
   if (symex.options.get_bool_option("all-runs"))
   {
     std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
