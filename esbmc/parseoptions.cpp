@@ -9,6 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <memory>
 
+extern "C" {
+#include <ctype.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+}
+
 #include <config.h>
 #include <expr_util.h>
 
@@ -36,6 +43,16 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "parseoptions.h"
 #include "bmc.h"
 #include "version.h"
+
+// jmorse - could be somewhere better
+
+void
+timeout_handler(int dummy __attribute__((unused)))
+{
+
+  std::cout << "Timed out" << std::endl;
+  exit(1);
+}
 
 /*******************************************************************\
 
@@ -370,6 +387,38 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    else
      options.set_option("deadlock-check", false);
 
+  // jmorse
+  if(cmdline.isset("timeout")) {
+    int len, mult, timeout;
+
+    const char *time = cmdline.getval("timeout");
+    len = strlen(time);
+    if (!isdigit(time[len-1])) {
+      switch (time[len-1]) {
+      case 's':
+        mult = 1;
+        break;
+      case 'm':
+        mult = 60;
+        break;
+      case 'h':
+        mult = 3600;
+        break;
+      case 'd':
+        mult = 86400;
+        break;
+      default:
+        throw "Unrecognized timeout suffix";
+      }
+    } else {
+      mult = 1;
+    }
+
+    timeout = strtol(time, NULL, 10);
+    timeout *= mult;
+    signal(SIGALRM, timeout_handler);
+    alarm(timeout);
+  }
 }
 
 /*******************************************************************\
