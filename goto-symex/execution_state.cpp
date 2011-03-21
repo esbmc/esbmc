@@ -288,7 +288,7 @@ void execution_statet::end_thread(const namespacet &ns, symex_targett &target)
 
     exprt new_lhs = lhs_expr;
 
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true, this, node_id);
+    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
     target.assignment(
             get_active_state().guard,
@@ -477,7 +477,7 @@ void execution_statet::update_trds_status(const namespacet &ns, symex_targett &t
 
     exprt new_lhs = lhs_expr;
 
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true, this, node_id);
+    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
     target.assignment(
             get_active_state().guard,
@@ -517,7 +517,7 @@ void execution_statet::set_active_trd_zero(const namespacet &ns, symex_targett &
 
     exprt new_lhs = lhs_expr;
 
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
     target.assignment(
             get_active_state().guard,
@@ -556,7 +556,7 @@ void execution_statet::set_active_trd_one(const namespacet &ns, symex_targett &t
 
     exprt new_lhs = lhs_expr;
 
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
     target.assignment(
             get_active_state().guard,
@@ -593,7 +593,7 @@ void execution_statet::set_trd_status_to_one(const namespacet &ns, symex_targett
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
   target.assignment(
           get_active_state().guard,
@@ -630,7 +630,7 @@ void execution_statet::set_trd_status_to_zero(const namespacet &ns, symex_target
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
   target.assignment(
           get_active_state().guard,
