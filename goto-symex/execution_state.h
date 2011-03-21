@@ -116,6 +116,8 @@ public:
 
 	/* jmorse - Set of current thread states, indexed by threads id number*/
 	std::vector<goto_symex_statet> _threads_state;
+	/* jmorse - appears to just be a flag indicating whether we're currently
+	 * in an atomic section */
 	std::vector<unsigned int> _atomic_numbers;
 	/* jmorse - Depth first search? */
 	std::vector<bool> _DFS_traversed;
