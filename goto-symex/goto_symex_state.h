@@ -11,6 +11,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
 #include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <guard.h>
 #include <pointer-analysis/value_set.h>
 #include <goto-programs/goto_functions.h>
@@ -214,6 +217,32 @@ public:
     irep_idt temp = top().level1(identifier,node_id);
     return plevel2->stupid_operator(temp,node_id);
   }
+
+  class state_hash {
+    public:
+    uint8_t hash[32];
+
+    bool operator<(const state_hash h2) const {
+      if (memcmp(hash, h2.hash, 32) < 0)
+        return true;
+      return false;
+    }
+
+    std::string to_string() const {
+      int i;
+      char hex[65];
+
+      for (i = 0; i < 32; i++)
+        sprintf(&hex[i*2], "%02X", (unsigned char)hash[i]);
+
+      hex[64] = '\0';
+      return std::string(hex);
+    }
+
+    state_hash(uint8_t *h) {
+      memcpy(hash, h, 32);
+    }
+  };
 
   bool use_value_set;
 
