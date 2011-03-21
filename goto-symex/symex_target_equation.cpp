@@ -541,3 +541,49 @@ std::ostream &operator<<(
   equation.output(out);
   return out;
 }
+
+exprt
+symex_target_equationt::reconstruct_expr_from_SSA(const exprt expr)
+{
+  exprt tmp;
+
+  if (expr.id() == "symbol")
+    return reconstruct_expr_from_SSA(expr.get("identifier").as_string());
+
+  tmp = expr;
+
+  Forall_operands(it, tmp) {
+    exprt ex = reconstruct_expr_from_SSA(*it);
+    *it = ex;
+  }
+
+  return tmp;
+}
+
+exprt
+symex_target_equationt::reconstruct_expr_from_SSA(std::string step_name)
+{
+  exprt expr;
+
+  /* First, find this SSA step */
+  SSA_stepst::iterator it = SSA_steps.begin();
+  for (; it != SSA_steps.end(); it++) {
+    if (it->type != goto_trace_stept::ASSIGNMENT)
+      continue;
+
+    assert(it->lhs.id() == "symbol");
+    if (it->lhs.get("identifier").as_string() == step_name)
+      break;
+  }
+
+  assert(it != SSA_steps.end() && "Attempted to find nonexistant SSA step");
+
+  /* Duplicate its rhs, and for each symbol in there, recurse */
+  expr = it->rhs;
+  Forall_operands(op_iter, expr) {
+    exprt ex = reconstruct_expr_from_SSA(*op_iter);
+    *op_iter = ex;
+  }
+
+  return expr;
+}

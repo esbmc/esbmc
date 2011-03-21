@@ -137,6 +137,9 @@ public:
 
   typedef std::list<SSA_stept> SSA_stepst;
   SSA_stepst SSA_steps;
+
+  exprt reconstruct_expr_from_SSA(std::string step_name);
+  exprt reconstruct_expr_from_SSA(exprt e);
   
   SSA_stepst::iterator get_SSA_step(unsigned s)
   {
