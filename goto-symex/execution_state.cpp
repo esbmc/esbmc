@@ -1113,16 +1113,10 @@ execution_statet::serialise_expr(const exprt &rhs)
     } else {
       throw "Unrecognised type of with expression: " + rec.op0().type().id().as_string();
     }
-  } else if (rhs.id() == "address_of") {
-    str = "addressof(" + serialise_expr(rhs.op0()) + ")";
   } else if (rhs.id() == "index") {
     str = "index(";
     str += serialise_expr(rhs.op0());
     str += ",idx(" + serialise_expr(rhs.op1()) + ")";
-  } else if (rhs.id() == "typecast") {
-    str = "typecast(" + serialise_expr(rhs.op0()) + ")";
-  } else if (rhs.id() == "pointer_object") {
-    str = "pointer_obj(" + serialise_expr(rhs.op0()) + ")";
   } else if (rhs.id() == "member_name") {
     str = "component(" + rhs.get("component_name").as_string() + ")";
   } else if (rhs.id() == "member") {
@@ -1245,6 +1239,9 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m["shl"] = serialise_normal_operation;
   m["lshr"] = serialise_normal_operation;
   m["ashr"] = serialise_normal_operation;
+  m["typecast"] = serialise_normal_operation;
+  m["address_of"] = serialise_normal_operation;
+  m["pointer_obj"] = serialise_normal_operation;
 
   return m;
 }
