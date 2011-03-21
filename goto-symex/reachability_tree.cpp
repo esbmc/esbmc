@@ -485,6 +485,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   // force the new threads continue execute to visible instruction
   if(ex_state.generating_new_threads > 0)
   {
+    /* jmorse - just sets some internal fields, last active, etc */
     ex_state.set_active_state(ex_state.generating_new_threads);
     ex_state.generating_new_threads = -1;
     ex_state.reexecute_instruction = false;
@@ -519,15 +520,19 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
   for(unsigned int i = 0; i < ex_state._threads_state.size(); i++)
   {
+    /* For all threads: */
 
+    /* DFS -> depth first search? Check whether we've searched this... thing? */
     if(ex_state._DFS_traversed.at(i))
       continue;
 
     ex_state._DFS_traversed.at(i) = true;
 
+    /* Presumably checks whether this thread isn't in user code yet? */
     if(ex_state._threads_state.at(i).call_stack.empty())
       continue;
 
+    /* Is it even still running? */
     if(ex_state._threads_state.at(i).thread_ended)
       continue;
 
@@ -535,15 +540,19 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     if(!apply_static_por(ex_state, expr, i))
       continue;
 
+    /* Generate a new execution state, duplicate of previous? */
     execution_statet new_state(ex_state);
     execution_states.push_back(new_state);
 
+    /* Make it active, make it follow on from previous state... */
     execution_states.rbegin()->set_active_state(i);
     execution_states.rbegin()->set_parent_guard(ex_state.get_guard_identifier());
     execution_states.rbegin()->reexecute_instruction = true;
 
     execution_states.rbegin()->increment_context_switch();
+    /* ^^^ What if there /wasn't/ a switch though? */
     execution_states.rbegin()->copy_level2_from(ex_state);
+    /* Reset interleavings (?) investigated in this new state */
     execution_states.rbegin()->reset_DFS_traversed();
 
     generated = true;

@@ -57,6 +57,7 @@ public:
 
 	virtual ~execution_statet()	{};
 
+    /* number of context switches we've performed to reach this state */
     void increment_context_switch()
     {
       _CS_number++;
@@ -105,16 +106,30 @@ public:
 	void add_thread(goto_programt::const_targett start, goto_programt::const_targett end);
 	void add_thread(goto_symex_statet & state);
     void end_thread(const namespacet &ns, symex_targett &target);
+    /* Presumably this does the same as read_globals, see below */
     unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
+    /* This takes the given expression, and for all constituent parts looks
+     * through the identifiers that it touches and checks to see whether or
+     * not they're globals. Counts them; also puts them in the
+     * _exprs_read_write implicitly as reads: my eyes are on fire. */
     unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
 
+	/* jmorse - Set of current thread states, indexed by threads id number*/
 	std::vector<goto_symex_statet> _threads_state;
 	std::vector<unsigned int> _atomic_numbers;
+	/* jmorse - Depth first search? */
 	std::vector<bool> _DFS_traversed;
+	/* jmorse - a set of expressions, one for each active thread, showing
+	 * where each thread is at? generate_states_base. */
 	std::vector<exprt> _exprs;
     int generating_new_threads;
+    /* jmorse - Presumably the last expr to be executed */
     exprt last_global_expr;
+    /* jmorse - a set of operations (irep_idts; identifiers?) that presumably
+     * occur at the top of each state. indexed by thread id no. So, it's the
+     * set of most recent reads/writes of thread? */
     std::vector<read_write_set> _exprs_read_write;
+    /* jmorse - what the name says */
     read_write_set last_global_read_write;
 
     unsigned int _last_active_thread;
