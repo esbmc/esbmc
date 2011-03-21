@@ -1057,6 +1057,22 @@ execution_statet::extract_elems_from_array_expr(exprt array,
   return;
 }
 
+void
+execution_statet::extract_struct_members_from_expr(exprt st,
+                        std::map<std::string,std::string> &m)
+{
+
+  if (st.op0().id() == "with") {
+    extract_struct_members_from_expr(st.op0(), m);
+  } else {
+    m["__ESBMC_hash_struct_base"] = serialise_expr(st.op0());
+  }
+
+  std::string member = serialise_expr(st.op1());
+  std::string val = serialise_expr(st.op2());
+  m[member] = val;
+}
+
 static std::string state_to_ignore[8] =
 {"\\guard_exec", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
 "count_lock", "count_wait", "unlocked"};
@@ -1102,13 +1118,25 @@ execution_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == "with") {
     std::cout << "With expr:\n" << rhs.pretty(0) << std::endl;
     exprt bees = _target.reconstruct_expr_from_SSA(rhs);
-    std::map<std::string,std::string> m;
-    extract_elems_from_array_expr(bees, m);
+    if (rhs.op0().type().id() == "array") {
+      std::map<std::string,std::string> m;
+      extract_elems_from_array_expr(bees, m);
 
-    str = "array(";
-    std::map<std::string,std::string>::const_iterator it;
-    for (it = m.begin(); it != m.end(); it++)
-      str += "(idx(" + it->first + "),val(" + it->second + ")),";
+      str = "array(";
+      std::map<std::string,std::string>::const_iterator it;
+      for (it = m.begin(); it != m.end(); it++)
+        str += "(idx(" + it->first + "),val(" + it->second + ")),";
+    } else if (rhs.op0().type().id() == "struct") {
+      std::map<std::string,std::string> m;
+      extract_struct_members_from_expr(bees, m);
+
+      str = "struct(";
+      std::map<std::string,std::string>::const_iterator it;
+      for (it = m.begin(); it != m.end(); it++)
+        str += "(member(" + it->first + "),val(" + it->second + ")),";
+    } else {
+      throw "Unrecognised type of with expression: " + rhs.op0().type().id().as_string();
+    }
   } else if (rhs.id() == "address_of") {
     str = "addressof(" + serialise_expr(rhs.op0()) + ")";
   } else if (rhs.id() == "index") {

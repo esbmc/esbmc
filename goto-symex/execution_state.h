@@ -161,6 +161,8 @@ public:
     std::string serialise_expr(const exprt &rhs);
     void extract_elems_from_array_expr(exprt array,
                 std::map<std::string,std::string> &m);
+    void extract_struct_members_from_expr(exprt st,
+                std::map<std::string,std::string> &m);
 
 private:
     void decreament_trds_in_run(const namespacet &ns, symex_targett &target);
