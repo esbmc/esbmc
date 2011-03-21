@@ -135,7 +135,7 @@ protected:
     const exprt::operandst &arguments,
     goto_programt &dest);
 
-  virtual void do_function_call_symbol(const symbolt &symbol)
+  virtual void do_function_call_symbol(const symbolt &symbol __attribute__((unused)))
   {
   }
 
