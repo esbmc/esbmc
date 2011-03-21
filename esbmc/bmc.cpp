@@ -718,7 +718,8 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
   catch(std::bad_alloc)
   {
     error("Out of memory");
-    return true;
+    abort();
+    //return true; jmorse
   }
 }
 
