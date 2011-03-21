@@ -550,26 +550,52 @@ extern "C" {
 #include <stdint.h>
 };
 
+static std::string state_to_ignore[8] = 
+{"\\guard_exec", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
+"count_lock", "count_wait", "unlocked"};
+
 symex_target_equationt::equation_hash symex_target_equationt::generate_hash(namespacet ns) const
 {
+  std::set<SSA_stept> steps;
   std::string serialised;
 
   languagest languages(ns, MODE_C);
 
+  /* Put all steps in a set: IE, order them */
   for(symex_target_equationt::SSA_stepst::const_iterator
       it=SSA_steps.begin();
-      it!=SSA_steps.end(); it++)
+      it!=SSA_steps.end(); it++) {
+    if (it->is_assignment() && it->assignment_type == HIDDEN)
+      continue;
+
+    steps.insert(*it);
+  }
+
+  for(std::set<SSA_stept>::const_iterator
+      it=steps.begin();
+      it!=steps.end(); it++)
   {
     if(it->is_assignment())
     {
+      int i;
       std::string string_value;
+
       languages.from_expr(it->cond, string_value);
-      if (string_value.find("\\guard_exec") != std::string::npos)
+
+      for (i = 0; i < 8; i++) {
+        if (string_value.find(state_to_ignore[i]) != std::string::npos)
+          break;
+      }
+
+      if (i != 8)
         continue;
+
       serialised += string_value;
       serialised += "\n";
     }
   }
+
+  std::cout << "ohai:\n" << serialised << std::endl;
 
   uint8_t out[32];
   const char *str = serialised.c_str();
@@ -578,5 +604,6 @@ symex_target_equationt::equation_hash symex_target_equationt::generate_hash(name
   SHA256_Update(&c, str, strlen(str));
   SHA256_Final(out, &c);
   equation_hash e(out);
+  std::cout << "with hash:\n" << e.to_string();
   return e;
 }
