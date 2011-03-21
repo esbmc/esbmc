@@ -1221,6 +1221,8 @@ execution_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == "byte_update_big_endian") {
   } else if (rhs.id() == "byte_extract_little_endian") {
   } else if (rhs.id() == "byte_extract_big_endian") {
+  } else if (rhs.id() == "infinity") {
+    return "inf";
   } else {
     execution_statet::expr_id_map_t::const_iterator it;
     it = expr_id_map.find(rhs.id());
