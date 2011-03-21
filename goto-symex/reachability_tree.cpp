@@ -555,6 +555,10 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     /* Reset interleavings (?) investigated in this new state */
     execution_states.rbegin()->reset_DFS_traversed();
 
+    goto_programt::const_targett pc = execution_states.rbegin()->get_active_state().source.pc;
+    pc_hits[*pc]++;
+    pc_hit_iters[*pc] = pc;
+
     generated = true;
     break;
 
@@ -691,4 +695,15 @@ void reachability_treet::go_next_state()
   }
 
   _go_next = false;
+}
+
+void reachability_treet::print_hits()
+{
+  std::map<goto_programt::instructiont, int>::const_iterator it;
+
+  for (it = pc_hits.begin(); it != pc_hits.end(); it++) {
+    std::cout << "Location " << (*it).first.location.as_string() << " hit " << (*it).second << " times\n";
+  }
+
+  return;
 }

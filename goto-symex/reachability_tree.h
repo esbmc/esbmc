@@ -16,6 +16,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "execution_state.h"
 #include "basic_symex.h"
 
+#include <goto-programs/goto_program.h>
+
 class reachability_treet
 {
 public:
@@ -75,16 +77,25 @@ public:
     {
       _go_next = true;
     }
+
+    void print_hits();
+
 	const goto_functionst &_goto_functions;
     execution_statet* _cur_target_state;
 	bool _go_next_formula;
 private:
 	std::list<execution_statet> execution_states;
+    /* This is derefed and returned by get_current_state */
     std::list<execution_statet>::iterator _cur_state_it;
     int _CS_bound, _actual_CS_bound;
-	bool _go_next, _DFS, _multi_formulae, _is_same_mutex,
+	bool _go_next;
+	bool _DFS, _multi_formulae, _is_same_mutex,
 		 _deadlock_detection, _por;
     const namespacet &_ns;
+
+    /* jmorse */
+    std::map<goto_programt::instructiont, int>pc_hits;
+    std::map<goto_programt::instructiont, goto_programt::const_targett>pc_hit_iters;
 };
 
 #endif /* REACHABILITY_TREE_H_ */
