@@ -430,7 +430,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 
   if(cmdline.isset("memlimit")) {
-    int len, mult, size;
+    unsigned long len, mult, size;
 
     const char *limit = cmdline.getval("memlimit");
     len = strlen(limit);
