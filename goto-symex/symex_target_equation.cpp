@@ -561,9 +561,25 @@ symex_target_equationt::reconstruct_expr_from_SSA(const exprt expr)
 }
 
 exprt
-symex_target_equationt::reconstruct_expr_from_SSA(std::string step_name)
+symex_target_equationt::reconstruct_expr_from_SSA(std::string name)
 {
   exprt expr;
+  size_t pos;
+  std::string step_name;
+
+  /* Unfortunately we need to sanitise the name */
+  pos = name.find("'");
+  if (pos == std::string::npos)
+    pos = name.find("&");
+
+  std::string tmp = name.substr(0, pos);
+
+  /* Do we have a trailing # character? */
+  pos = name.rfind("#");
+  if (pos != std::string::npos)
+    tmp = tmp + "#" + name[pos+1];
+
+  step_name = tmp;
 
   /* First, find this SSA step */
   SSA_stepst::iterator it = SSA_steps.begin();
