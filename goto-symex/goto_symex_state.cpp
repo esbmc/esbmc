@@ -387,6 +387,7 @@ void goto_symex_statet::assignment(
   // identifier should be l0 or l1, make sure it's l1
 
   const std::string l1_identifier=top().level1(identifier,exec_node_id);
+  std::string orig_name = get_original_name(l1_identifier).as_string();
 
   // do the l2 renaming
   level2t::valuet &entry=level2->current_names[l1_identifier];
@@ -397,7 +398,7 @@ void goto_symex_statet::assignment(
 
   lhs.set("identifier", level2->name(l1_identifier, entry.count));
 
-  level2->current_hashes[l1_identifier] = hash;
+  level2->current_hashes[orig_name] = hash;
 
   if(record_value)
   {
