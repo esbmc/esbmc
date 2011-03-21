@@ -1,5 +1,5 @@
-#ifndef _CPROVER_SRC_GOTO-SYMEX_CRYPTO_HASH_H_
-#define _CPROVER_SRC_GOTO-SYMEX_CRYPTO_HASH_H_
+#ifndef _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
+#define _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 
 extern "C" {
 #include <stdio.h>
@@ -8,6 +8,8 @@ extern "C" {
 }
 
 #include <string>
+
+#define CRYPTO_HASH_SIZE	32
 
 class crypto_hash {
   public:
@@ -26,4 +28,4 @@ class crypto_hash {
   void init(const uint8_t *data, int sz);
 };
 
-#endif /* _CPROVER_SRC_GOTO-SYMEX_CRYPTO_HASH_H_ */
+#endif /* _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_ */
