@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 #include <map>
+#include <sstream>
 
 #include <i2string.h>
 #include "../util/expr_util.h"
@@ -423,6 +424,10 @@ void goto_symex_statet::assignment(
   }
 }
 
+static std::string state_to_ignore[8] =
+{"\\guard_exec", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
+"count_lock", "count_wait", "unlocked"};
+
 std::string
 goto_symex_statet::serialise_expr(const exprt &rhs)
 {
@@ -434,6 +439,15 @@ goto_symex_statet::serialise_expr(const exprt &rhs)
   // The plan: serialise this expression into the identifiers of its operations,
   // replacing symbol names with the hash of their value.
   if (rhs.id() == "symbol") {
+    int i;
+
+    str = rhs.get("identifier").as_string();
+    for (i = 0 ; i < 8; i++)
+      if (str.find(state_to_ignore[i]) != std::string::npos)
+        return "(ignore)";
+
+    std::cout << "Unhandled symbol name when hasing: " << str << std::endl;
+    abort();
 #if 0
   } else if (rhs.id() == "index") {
   } else if (rhs.id() == "array_of") {
@@ -445,6 +459,25 @@ goto_symex_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == "member") {
 #endif
   } else if (rhs.id() == "constant") {
+    // It appears constants can be "true", "false", or a bit vector. Parse that,
+    // and then print the value as a base 10 integer.
+    uint64_t val;
+
+    irep_idt idt_val = rhs.get("value");
+    if (idt_val == "true") {
+      val = 1;
+    } else if (idt_val == "false") {
+      val = 0;
+    } else {
+      val = strtol(idt_val.c_str(), NULL, 2);
+    }
+
+    std::stringstream tmp;
+    tmp << val;
+    str = "const(" + tmp.str() + ")";
+
+  // If we have a normal expression, either arithmatic, binary, comparision,
+  // or whatever, just take the operator and append its operands.
   } else if (rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" || rhs.id() == "/" || rhs.id() == "mod" || rhs.id() == "=" || rhs.id() == "and" || rhs.id() == "=>" || rhs.id() == "or" || rhs.id() == "not" ) {
     str = rhs.id().as_string();
     forall_operands(it, rhs) {
