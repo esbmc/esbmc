@@ -1111,8 +1111,11 @@ execution_statet::serialise_expr(const exprt &rhs)
       str += "(idx(" + it->first + "),val(" + it->second + ")),";
   } else if (rhs.id() == "address_of") {
     str = "addressof(" + serialise_expr(rhs.op0()) + ")";
-#if 0
   } else if (rhs.id() == "index") {
+    str = "index(";
+    str += serialise_expr(rhs.op0());
+    str += ",idx(" + serialise_expr(rhs.op1()) + ")";
+#if 0
   } else if (rhs.id() == "typecast") {
   } else if (rhs.id() == "dereference") {
   } else if (rhs.id() == "if") {
