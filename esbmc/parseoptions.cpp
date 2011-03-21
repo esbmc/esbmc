@@ -14,6 +14,9 @@ extern "C" {
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
+
+#include <sys/time.h>
+#include <sys/resource.h>
 }
 
 #include <config.h>
@@ -424,6 +427,45 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     timeout *= mult;
     signal(SIGALRM, timeout_handler);
     alarm(timeout);
+  }
+
+  if(cmdline.isset("memlimit")) {
+    int len, mult, size;
+
+    const char *limit = cmdline.getval("memlimit");
+    len = strlen(limit);
+    if (!isdigit(limit[len-1])) {
+      switch (limit[len-1]) {
+      case 'b':
+        mult = 1;
+        break;
+      case 'k':
+        mult = 1024;
+        break;
+      case 'm':
+        mult = 1024*1024;
+        break;
+      case 'g':
+        mult = 1024*1024*1024;
+        break;
+      default:
+        std::cerr << "Unrecognized memlimit suffix" << std::endl;
+        abort();
+      }
+    } else {
+      mult = 1024*1024;
+    }
+
+    size = strtol(limit, NULL, 10);
+    size *= mult;
+
+    struct rlimit lim;
+    lim.rlim_cur = size;
+    lim.rlim_max = size;
+    if (setrlimit(RLIMIT_AS, &lim) != 0) {
+      perror("Couldn't set memory limit");
+      abort();
+    }
   }
 }
 
