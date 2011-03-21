@@ -28,6 +28,7 @@ Function: goto_symext::symex_other
 void goto_symext::symex_other(
   const goto_functionst &goto_functions,
   statet &state,
+  execution_statet &ex_state,
         unsigned node_id)
 {
   const goto_programt::instructiont &instruction=*state.source.pc;
@@ -46,7 +47,7 @@ void goto_symext::symex_other(
     codet deref_code(code);
 
     replace_dynamic_allocation(state, deref_code);
-    replace_nondet(deref_code);
+    replace_nondet(deref_code, ex_state);
     dereference(deref_code, state, false,node_id);
 
     symex_cpp_delete(state, deref_code);
@@ -60,7 +61,7 @@ void goto_symext::symex_other(
     codet deref_code(code);
 
     replace_dynamic_allocation(state, deref_code);
-    replace_nondet(deref_code);
+    replace_nondet(deref_code, ex_state);
     dereference(deref_code, state, false,node_id);
 
     symex_printf(state, static_cast<const exprt &>(get_nil_irep()), deref_code,node_id);
@@ -70,7 +71,7 @@ void goto_symext::symex_other(
     codet deref_code(code);
 
     replace_dynamic_allocation(state, deref_code);
-    replace_nondet(deref_code);
+    replace_nondet(deref_code, ex_state);
     dereference(deref_code, state, false,node_id);
 
     if(deref_code.operands().size()==2)

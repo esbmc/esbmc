@@ -21,9 +21,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "dynamic_allocation.h"
 #include "execution_state.h"
 
-unsigned basic_symext::nondet_count=0;
-unsigned basic_symext::dynamic_counter=0;
-
 /*******************************************************************\
 
 Function: basic_symext::assignment
@@ -107,7 +104,7 @@ void basic_symext::symex(statet &state, execution_statet &ex_state, const codet 
       throw "decl expected to have one operand";
 
     exprt rhs("nondet_symbol", code.op0().type());
-    rhs.set("identifier", "symex::nondet"+i2string(nondet_count++));
+    rhs.set("identifier", "symex::nondet"+i2string(ex_state.nondet_count++));
     rhs.location()=code.location();
 
     exprt new_lhs(code.op0());
@@ -181,8 +178,8 @@ void basic_symext::symex_assign(statet &state, execution_statet &ex_state, const
   //replace_dynamic_allocation(state, lhs);
   //replace_dynamic_allocation(state, rhs);
 
-  replace_nondet(lhs);
-  replace_nondet(rhs);
+  replace_nondet(lhs, ex_state);
+  replace_nondet(rhs, ex_state);
 
   if(rhs.id()=="sideeffect")
   {
@@ -600,18 +597,18 @@ Function: basic_symext::replace_nondet
 
 \*******************************************************************/
 
-void basic_symext::replace_nondet(exprt &expr)
+void basic_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
 {
   if(expr.id()=="sideeffect" && expr.get("statement")=="nondet")
   {
     exprt new_expr("nondet_symbol", expr.type());
-    new_expr.set("identifier", "symex::nondet"+i2string(nondet_count++));
+    new_expr.set("identifier", "symex::nondet"+i2string(ex_state.nondet_count++));
     new_expr.location()=expr.location();
     expr.swap(new_expr);
   }
   else
     Forall_operands(it, expr)
-      replace_nondet(*it);
+      replace_nondet(*it, ex_state);
 }
 
 /*******************************************************************\

@@ -71,12 +71,9 @@ protected:
   virtual void symex_trace         (statet &state, const code_function_callt &code,unsigned node_id);
   virtual void symex_printf        (statet &state, const exprt &lhs, const exprt &code,unsigned node_id);
 
-  static unsigned nondet_count;
-  static unsigned dynamic_counter;
-
   void read(exprt &expr);
   virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
-  void replace_nondet(exprt &expr);
+  void replace_nondet(exprt &expr, execution_statet &ex_state);
 
   void assignment(
     execution_statet &ex_state,

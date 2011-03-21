@@ -96,6 +96,7 @@ protected:
   virtual void symex_other(
     const goto_functionst &goto_functions,
     statet &state,
+    execution_statet &ex_state,
     unsigned node_id);
 
   virtual void claim(
