@@ -78,34 +78,6 @@ public:
   void convert_guards(prop_convt &prop_conv);
   void convert_output(decision_proceduret &decision_procedure);
 
-  class equation_hash {
-    public:
-    uint8_t hash[32];
-
-    bool operator<(const equation_hash h2) const {
-      if (memcmp(hash, h2.hash, 32) < 0)
-        return true;
-      return false;
-    }
-
-    std::string to_string() const {
-      int i;
-      char hex[65];
-
-      for (i = 0; i < 32; i++)
-        sprintf(&hex[i*2], "%02X", (unsigned char)hash[i]);
-      hex[64] = '\0';
-
-      return std::string(hex);
-    }
-
-    equation_hash(uint8_t *h) {
-      memcpy(hash, h, 32);
-    }
-  };
-
-  equation_hash generate_hash(namespacet ns) const;
-  
   class SSA_stept
   {
   public:
