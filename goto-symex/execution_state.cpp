@@ -1162,6 +1162,10 @@ execution_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == "member") {
     str = "member(entity(" + serialise_expr(rhs.op0()) + "),";
     str += "member_name(" + rhs.get("component_name").as_string() + "))";
+  } else if (rhs.id() == "nondet_symbol") {
+    /* Just return the identifier: it'll be unique to this particular piece
+     * of entropy */
+    str = "nondet_symbol(" + rhs.get("identifier").as_string() + ")";
 #if 0
   } else if (rhs.id() == "dereference") {
   } else if (rhs.id() == "if") {
