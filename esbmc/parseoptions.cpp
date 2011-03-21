@@ -51,7 +51,12 @@ timeout_handler(int dummy __attribute__((unused)))
 {
 
   std::cout << "Timed out" << std::endl;
-  exit(1);
+
+  // Unfortunately some highly useful pieces of code hook themselves into
+  // aexit and attempt to free some memory. That doesn't really make sense to
+  // occur on exit, but more importantly doesn't mix well with signal handlers,
+  // and results in the allocator locking against itself. So use _exit instead
+  _exit(1);
 }
 
 /*******************************************************************\
