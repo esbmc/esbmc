@@ -1119,16 +1119,7 @@ execution_statet::serialise_expr(const exprt &rhs)
       if (str.find(state_to_ignore[i]) != std::string::npos)
         return "(ignore)";
 
-    exprt bees = _target.reconstruct_expr_from_SSA(rhs);
-    /* Now then, is this a reconstructed expr, or could we get no further? */
-    if (bees.id() == "symbol") {
-      /* Reached something assumed or nondeterministic: just return the symbol
-       * name */
-      return bees.get("identifier").as_string();
-    }
-
-    /* Otherwise, we can continue munging */
-    return serialise_expr(bees);
+    return unmunge_SSA_name(bees.get("identifier").as_string());
   } else if (rhs.id() == "array_of") {
     /* An array of the same set of values: generate all of them. */
     str = "array(";
