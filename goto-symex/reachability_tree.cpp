@@ -697,9 +697,6 @@ void reachability_treet::go_next_state()
   _go_next = false;
 }
 
-extern "C" {
-#include <stdio.h>
-}
 void reachability_treet::print_hits()
 {
   char hex[65];
@@ -709,15 +706,7 @@ void reachability_treet::print_hits()
 
   for (it = pc_hits.begin(); it != pc_hits.end(); it++) {
     for (it2 = (*it).second.begin(); it2 != (*it).second.end(); it2++) {
-      //snprintf(buffer, 32, "%s", (*it2).first.c_str());
-      //buffer[32] = '\0';
-      const unsigned char *hash = (*it2).first.hash;
-
-      for (i = 0; i < 32; i++)
-        sprintf(&hex[i*2], "%02X", (unsigned char)hash[i]);
-      hex[64] = '\0';
-
-      std::cout << "Location " << std::string(hex) << " hit " << (*it2).second << " times\n";
+      std::cout << "Location " << (*it2).first.to_string() << " hit " << (*it2).second << " times\n";
     }
   }
 

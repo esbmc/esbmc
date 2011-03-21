@@ -9,6 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_BASIC_SYMEX_EQUATION_H
 #define CPROVER_BASIC_SYMEX_EQUATION_H
 
+extern "C" {
+#include <stdio.h>
+}
+
 #include <list>
 #include <map>
 
@@ -82,6 +86,17 @@ public:
       if (memcmp(hash, h2.hash, 32) < 0)
         return true;
       return false;
+    }
+
+    std::string to_string() const {
+      int i;
+      char hex[65];
+
+      for (i = 0; i < 32; i++)
+        sprintf(&hex[i*2], "%02X", (unsigned char)hash[i]);
+      hex[64] = '\0';
+
+      return std::string(hex);
     }
 
     equation_hash(uint8_t *h) {
