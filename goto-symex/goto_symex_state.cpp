@@ -14,6 +14,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_symex_state.h"
 
+extern "C" {
+#include <openssl/sha.h>
+};
+
+
 /*******************************************************************\
 
 Function: goto_symex_statet::goto_symex_statet
@@ -372,6 +377,8 @@ void goto_symex_statet::assignment(
 {
   assert(lhs.id()=="symbol");
 
+  goto_symex_statet::state_hash hash = generate_hash(rhs);
+
   // the type might need renaming
   rename(lhs.type(), ns, exec_node_id);
 
@@ -416,6 +423,56 @@ void goto_symex_statet::assignment(
   }
 }
 
+std::string
+goto_symex_statet::serialise_expr(const exprt &rhs)
+{
+  std::string str;
+
+  // FIXME: some way to disambiguate what's part of a hash / const /whatever,
+  // and what's part of an operator
+
+  // The plan: serialise this expression into the identifiers of its operations,
+  // replacing symbol names with the hash of their value.
+  if (rhs.id() == "symbol") {
+#if 0
+  } else if (rhs.id() == "index") {
+  } else if (rhs.id() == "array_of") {
+  } else if (rhs.id() == "typecast") {
+  } else if (rhs.id() == "address_of") {
+  } else if (rhs.id() == "dereference") {
+  } else if (rhs.id() == "if") {
+  } else if (rhs.id() == "with") {
+  } else if (rhs.id() == "member") {
+#endif
+  } else if (rhs.id() == "constant") {
+  } else if (rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" || rhs.id() == "/" || rhs.id() == "mod" || rhs.id() == "=" || rhs.id() == "and" || rhs.id() == "=>" || rhs.id() == "or" || rhs.id() == "not" ) {
+    str = rhs.id().as_string();
+    forall_operands(it, rhs) {
+      str = str + "(" + serialise_expr(*it) + ")";
+    }
+  } else {
+    std::cout << "Unrecognized expression when generating state hash:\n";
+    std::cout << rhs.pretty(0) << std::endl;
+    abort();
+  }
+
+  return str;
+}
+
+goto_symex_statet::state_hash
+goto_symex_statet::generate_hash(const exprt &rhs)
+{
+  uint8_t out[32];
+  SHA256_CTX c;
+  std::string str;
+
+  str = serialise_expr(rhs);
+
+  SHA256_Init(&c);
+  SHA256_Update(&c, str.data(), str.length());
+  SHA256_Final(out, &c);
+  return state_hash(out);
+}
 /*******************************************************************\
 
 Function: goto_symex_statet::rename

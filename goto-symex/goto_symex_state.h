@@ -244,6 +244,9 @@ public:
     }
   };
 
+  state_hash generate_hash(const exprt &rhs);
+  std::string serialise_expr(const exprt &e);
+
   bool use_value_set;
 
   // uses level 1 names
