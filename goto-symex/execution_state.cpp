@@ -142,7 +142,7 @@ irep_idt execution_statet::get_guard_identifier()
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
 #endif
 
-  return id2string(guard_execution) + '@' + i2string(_CS_number) + '_' + i2string(_last_active_thread) + '_' + i2string(node_id) + '&' + i2string(node_id) + "#1";
+  return id2string(guard_execution) + '@' + i2string(_CS_number) + '_' + i2string(_last_active_thread) + '_' + i2string(node_id) + /*XXXjmorse '&' + i2string(node_id) + */ "#1";
 }
 
 /*******************************************************************
