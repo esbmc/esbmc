@@ -14,11 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "../util/expr_util.h"
 
 #include "goto_symex_state.h"
-
-extern "C" {
-#include <openssl/sha.h>
-};
-
+#include "crypto_hash.h"
 
 /*******************************************************************\
 
@@ -378,7 +374,7 @@ void goto_symex_statet::assignment(
 {
   assert(lhs.id()=="symbol");
 
-  goto_symex_statet::state_hash hash = generate_hash(rhs);
+  crypto_hash hash = crypto_hash(serialise_expr(rhs));
 
   // the type might need renaming
   rename(lhs.type(), ns, exec_node_id);
@@ -398,7 +394,7 @@ void goto_symex_statet::assignment(
 
   lhs.set("identifier", level2->name(l1_identifier, entry.count));
 
-  level2->current_hashes[l1_identifier] = hash;
+ level2->current_hashes[l1_identifier] = hash;
 
   if(record_value)
   {
@@ -494,20 +490,6 @@ goto_symex_statet::serialise_expr(const exprt &rhs)
   return str;
 }
 
-goto_symex_statet::state_hash
-goto_symex_statet::generate_hash(const exprt &rhs)
-{
-  uint8_t out[32];
-  SHA256_CTX c;
-  std::string str;
-
-  str = serialise_expr(rhs);
-
-  SHA256_Init(&c);
-  SHA256_Update(&c, str.data(), str.length());
-  SHA256_Final(out, &c);
-  return state_hash(out);
-}
 /*******************************************************************\
 
 Function: goto_symex_statet::rename

@@ -21,6 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <stack>
 
 #include "symex_target.h"
+#include "crypto_hash.h"
 
 #include <i2string.h>
 // central data structure: state
@@ -44,8 +45,6 @@ public:
   bool waiting;
   unsigned int join_count;
   bool thread_ended;
-
-  class state_hash; // Forward dec
 
   guardt guard;
   symex_targett::sourcet source;
@@ -146,8 +145,7 @@ public:
     current_namest current_names;
     //current_names_nodest current_names_nodes;
     //std::map<irep_idt, unsigned int> thread_ids;
-    typedef std::map<irep_idt, goto_symex_statet::state_hash>
-                                        current_state_hashest;
+    typedef std::map<irep_idt, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
 
     void rename(const irep_idt &identifier, unsigned count, unsigned node_id)
@@ -223,33 +221,6 @@ public:
     return plevel2->stupid_operator(temp,node_id);
   }
 
-  class state_hash {
-    public:
-    uint8_t hash[32];
-
-    bool operator<(const state_hash h2) const {
-      if (memcmp(hash, h2.hash, 32) < 0)
-        return true;
-      return false;
-    }
-
-    std::string to_string() const {
-      int i;
-      char hex[65];
-
-      for (i = 0; i < 32; i++)
-        sprintf(&hex[i*2], "%02X", (unsigned char)hash[i]);
-
-      hex[64] = '\0';
-      return std::string(hex);
-    }
-
-    state_hash(uint8_t *h) {
-      memcpy(hash, h, 32);
-    }
-  };
-
-  state_hash generate_hash(const exprt &rhs);
   std::string serialise_expr(const exprt &e);
 
   bool use_value_set;
