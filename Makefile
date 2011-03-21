@@ -88,10 +88,12 @@ $(patsubst %, %.dir, $(DIRS)):
 	## Entering $(basename $@)
 	$(MAKE) $(MAKEARGS) -C $(basename $@)
 
-clean: $(patsubst %, %_clean, $(DIRS))
-	rm -f *.o
-	find . -name *.o | xargs rm -f
-	find . -name *.d | xargs rm -f
+.PHONY: clean
+
+clean:
+	for dir in $(DIRS); do \
+		$(MAKE) -C $$dir clean; \
+	done
 
 dep: $(patsubst %, %_dep, $(DIRS))
 
