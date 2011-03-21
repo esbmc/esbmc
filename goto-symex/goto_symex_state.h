@@ -45,6 +45,8 @@ public:
   unsigned int join_count;
   bool thread_ended;
 
+  class state_hash; // Forward dec
+
   guardt guard;
   symex_targett::sourcet source;
   typedef std::stack<guardt> if_guard_stackt;
@@ -144,6 +146,9 @@ public:
     current_namest current_names;
     //current_names_nodest current_names_nodes;
     //std::map<irep_idt, unsigned int> thread_ids;
+    typedef std::map<irep_idt, goto_symex_statet::state_hash>
+                                        current_state_hashest;
+    current_state_hashest current_hashes;
 
     void rename(const irep_idt &identifier, unsigned count, unsigned node_id)
     {

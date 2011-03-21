@@ -398,6 +398,8 @@ void goto_symex_statet::assignment(
 
   lhs.set("identifier", level2->name(l1_identifier, entry.count));
 
+  level2->current_hashes[l1_identifier] = hash;
+
   if(record_value)
   {
     // for constant propagation
