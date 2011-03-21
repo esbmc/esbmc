@@ -551,10 +551,11 @@ symex_target_equationt::reconstruct_expr_from_SSA(const exprt expr)
     return reconstruct_expr_from_SSA(expr.get("identifier").as_string());
 
   tmp = expr;
+  tmp.operands().clear();
 
-  Forall_operands(it, tmp) {
+  forall_operands(it, expr) {
     exprt ex = reconstruct_expr_from_SSA(*it);
-    *it = ex;
+    tmp.move_to_operands(ex);
   }
 
   return tmp;
@@ -603,9 +604,10 @@ symex_target_equationt::reconstruct_expr_from_SSA(std::string name)
 
   /* Duplicate its rhs, and for each symbol in there, recurse */
   expr = it->rhs;
-  Forall_operands(op_iter, expr) {
+  expr.operands().clear();
+  forall_operands(op_iter, it->rhs) {
     exprt ex = reconstruct_expr_from_SSA(*op_iter);
-    *op_iter = ex;
+    expr.move_to_operands(ex);
   }
 
   return expr;
