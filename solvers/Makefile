@@ -59,6 +59,7 @@ Z3_INCLUDE=-I ../$(Z3)/include
 Z3_LIB=../$(Z3)/lib
 endif
 
+
 SRC = $(CHAFF_SRC) $(BOOLEFORCE_SRC) $(MINISAT_SRC) $(MINISAT2_SRC) \
       $(SMVSAT_SRC) $(SQUOLEM2_SRC) $(CUDD_SRC) \
       sat/cnf.cpp sat/dimacs_cnf.cpp sat/cnf_clause_list.cpp \
@@ -125,5 +126,4 @@ solvers.o: $(OBJ)
         $(SMVSAT_LIB) $(SQUOLEM2_LIB) $(CUDD_LIB)
 
 clean:
-	rm -f *.o
-	rm -f *.d
+	rm -rf $(OBJ)
