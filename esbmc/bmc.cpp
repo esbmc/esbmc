@@ -6,6 +6,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+extern "C" {
+#include <fcntl.h>
+#include <stdio.h>
+#include <unistd.h>
+
+#include <sys/sendfile.h>
+}
+
 #include <sstream>
 #include <fstream>
 
@@ -582,6 +590,12 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
     std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
     std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
   }
+
+  std::cout << "ohai:" << std::endl;
+  int fd = open("/proc/self/status", O_RDONLY, 0);
+  sendfile(STDOUT_FILENO, fd, NULL, 4096);
+  close(fd);
+
   return false;
 }
 
