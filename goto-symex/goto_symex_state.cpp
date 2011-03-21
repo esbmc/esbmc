@@ -426,7 +426,7 @@ void goto_symex_statet::assignment(
 }
 
 static std::string state_to_ignore[8] =
-{"\\guard_exec", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
+{"\\guard", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
 "count_lock", "count_wait", "unlocked"};
 
 crypto_hash
