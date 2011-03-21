@@ -20,6 +20,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "symex_target.h"
 #include "goto_trace.h"
 
+extern "C" {
+#include <stdint.h>
+#include <string.h>
+}
+
 class symex_target_equationt:public symex_targett
 {
 public:
@@ -68,6 +73,23 @@ public:
   void convert_assertions(prop_convt &prop_conv);
   void convert_guards(prop_convt &prop_conv);
   void convert_output(decision_proceduret &decision_procedure);
+
+  class equation_hash {
+    public:
+    uint8_t hash[32];
+
+    bool operator<(const equation_hash h2) const {
+      if (memcmp(hash, h2.hash, 32) < 0)
+        return true;
+      return false;
+    }
+
+    equation_hash(uint8_t *h) {
+      memcpy(hash, h, 32);
+    }
+  };
+
+  equation_hash generate_hash(namespacet ns) const;
   
   class SSA_stept
   {

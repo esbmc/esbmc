@@ -467,3 +467,42 @@ std::ostream &operator<<(
   equation.output(out);
   return out;
 }
+
+#include <langapi/mode.h>
+#include <langapi/languages.h>
+extern "C" {
+#include <openssl/sha.h>
+#include <string.h>
+#include <stdint.h>
+};
+
+symex_target_equationt::equation_hash symex_target_equationt::generate_hash(namespacet ns) const
+{
+  std::string serialised;
+
+  languagest languages(ns, MODE_C);
+
+  for(symex_target_equationt::SSA_stepst::const_iterator
+      it=SSA_steps.begin();
+      it!=SSA_steps.end(); it++)
+  {
+    if(it->is_assignment())
+    {
+      std::string string_value;
+      languages.from_expr(it->cond, string_value);
+      if (string_value.find("\\guard_exec") != std::string::npos)
+        continue;
+      serialised += string_value;
+      serialised += "\n";
+    }
+  }
+
+  uint8_t out[32];
+  const char *str = serialised.c_str();
+  SHA256_CTX c;
+  SHA256_Init(&c);
+  SHA256_Update(&c, str, strlen(str));
+  SHA256_Final(out, &c);
+  equation_hash e(out);
+  return e;
+}
