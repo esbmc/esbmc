@@ -703,16 +703,21 @@ void reachability_treet::go_next_state()
   _go_next = false;
 }
 
-void reachability_treet::print_hits()
+void reachability_treet::print_hits(std::ostream &out)
 {
-  char hex[65];
   std::map<goto_programt::instructiont, hash_hitst>::const_iterator it;
   hash_hitst::const_iterator it2;
-  int i;
 
   for (it = pc_hits.begin(); it != pc_hits.end(); it++) {
     for (it2 = (*it).second.begin(); it2 != (*it).second.end(); it2++) {
-      std::cout << "Location " << (*it2).first.to_string() << " hit " << (*it2).second << " times\n";
+      out << "Location " << (*it2).first.to_string() << " hit " << (*it2).second << " times\n";
+    }
+  }
+
+  out << "And now, as a set of values:\n";
+  for (it = pc_hits.begin(); it != pc_hits.end(); it++) {
+    for (it2 = (*it).second.begin(); it2 != (*it).second.end(); it2++) {
+      out << (*it2).second << ",";
     }
   }
 

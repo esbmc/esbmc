@@ -78,7 +78,7 @@ public:
       _go_next = true;
     }
 
-    void print_hits();
+    void print_hits(std::ostream &out);
 
 	const goto_functionst &_goto_functions;
     execution_statet* _cur_target_state;
