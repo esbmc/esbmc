@@ -1018,3 +1018,10 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 
   return globals;
 }
+
+crypto_hash
+execution_statet::generate_hash(void) const
+{
+
+  return _state_level2->generate_l2_state_hash();
+}

@@ -155,6 +155,8 @@ public:
     void set_active_trd_zero(const namespacet &ns, symex_targett &target);
     void update_trds_status(const namespacet &ns, symex_targett &target);
 
+    crypto_hash generate_hash(void) const;
+
 private:
     void decreament_trds_in_run(const namespacet &ns, symex_targett &target);
     const symbolt& lookup(const namespacet &ns, const irep_idt &identifier)  const;
