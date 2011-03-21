@@ -507,6 +507,11 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     return false;
   }
 
+  goto_programt::const_targett pc = ex_state.get_active_state().source.pc;
+  symex_target_equationt::equation_hash hash = ex_state._target.generate_hash(_ns);
+  if (pc_hits[*pc][hash] != 0)
+    return false;
+
   //new
 #if 1
   if(expr.is_not_nil())
@@ -555,14 +560,15 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     /* Reset interleavings (?) investigated in this new state */
     execution_states.rbegin()->reset_DFS_traversed();
 
-    goto_programt::const_targett pc = execution_states.rbegin()->get_active_state().source.pc;
-    symex_target_equationt::equation_hash hash = execution_states.rbegin()->_target.generate_hash(_ns);
-    pc_hits[*pc][hash]++;
-
     generated = true;
     break;
 
   }
+
+  /* Once we've generated all interleavings from this state, increment hit count
+   * so that we don't come back here again */
+  if (generated == false)
+    pc_hits[*pc][hash]++;
 
   _go_next = true;
 
