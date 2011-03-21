@@ -1128,10 +1128,11 @@ execution_statet::serialise_expr(const exprt &rhs)
     str += "sz(" + serialise_expr(size) + "),";
     str += "elem(" + serialise_expr(rhs.op0()) + "))";
   } else if (rhs.id() == "with") {
-    exprt bees = _target.reconstruct_expr_from_SSA(rhs);
+    exprt rec = rhs;
+
     if (rhs.op0().type().id() == "array") {
       std::map<std::string,std::string> m;
-      extract_elems_from_array_expr(bees, m);
+      extract_elems_from_array_expr(rec, m);
 
       str = "array(";
       std::map<std::string,std::string>::const_iterator it;
@@ -1139,7 +1140,7 @@ execution_statet::serialise_expr(const exprt &rhs)
         str += "(idx(" + it->first + "),val(" + it->second + ")),";
     } else if (rhs.op0().type().id() == "struct") {
       std::map<std::string,std::string> m;
-      extract_struct_members_from_expr(bees, m);
+      extract_struct_members_from_expr(rec, m);
 
       str = "struct(";
       std::map<std::string,std::string>::const_iterator it;
