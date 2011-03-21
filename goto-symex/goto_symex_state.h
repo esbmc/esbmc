@@ -166,7 +166,7 @@ public:
       current_namest::const_iterator it =current_names.find(identifier);
       if(it != current_names.end())
           n_id = it->second.node_id;
-      return id2string(identifier)+/* XXX jmorse "&"+i2string(n_id)+*/"#"+i2string(count);
+      return id2string(identifier)+"&"+i2string(n_id)+"#"+i2string(count);
 
     }
 
