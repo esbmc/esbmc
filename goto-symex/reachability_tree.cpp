@@ -12,6 +12,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <expr_util.h>
 #include <std_expr.h>
 
+#include "crypto_hash.h"
+
 //#define DEBUG
 
 /*******************************************************************
@@ -508,7 +510,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   }
 
   goto_programt::const_targett pc = ex_state.get_active_state().source.pc;
-  symex_target_equationt::equation_hash hash = ex_state._target.generate_hash(_ns);
+  crypto_hash hash = ex_state.generate_hash();
   if (pc_hits[*pc][hash] != 0)
     return false;
 

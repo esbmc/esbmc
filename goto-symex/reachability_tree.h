@@ -16,6 +16,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "execution_state.h"
 #include "basic_symex.h"
 
+#include "crypto_hash.h"
+
 #include <goto-programs/goto_program.h>
 
 class reachability_treet
@@ -94,7 +96,7 @@ private:
     const namespacet &_ns;
 
     /* jmorse */
-    typedef std::map<symex_target_equationt::equation_hash, int>hash_hitst;
+    typedef std::map<crypto_hash, int>hash_hitst;
     std::map<goto_programt::instructiont, hash_hitst>pc_hits;
 };
 
