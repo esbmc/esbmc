@@ -1116,7 +1116,6 @@ execution_statet::serialise_expr(const exprt &rhs)
     for (i = 0; i < val; i++)
       str += "elem(" + serialise_expr(rhs.op0()) + "),";
   } else if (rhs.id() == "with") {
-    std::cout << "With expr:\n" << rhs.pretty(0) << std::endl;
     exprt bees = _target.reconstruct_expr_from_SSA(rhs);
     if (rhs.op0().type().id() == "array") {
       std::map<std::string,std::string> m;
