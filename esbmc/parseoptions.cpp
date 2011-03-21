@@ -413,7 +413,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
         mult = 86400;
         break;
       default:
-        throw "Unrecognized timeout suffix";
+        std::cerr << "Unrecognized timeout suffix" << std::endl;
+        abort();
       }
     } else {
       mult = 1;
