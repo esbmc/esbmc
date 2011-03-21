@@ -1104,6 +1104,11 @@ execution_statet::serialise_expr(const exprt &rhs)
     exprt bees = _target.reconstruct_expr_from_SSA(rhs);
     std::map<std::string,std::string> m;
     extract_elems_from_array_expr(bees, m);
+
+    str = "array(";
+    std::map<std::string,std::string>::const_iterator it;
+    for (it = m.begin(); it != m.end(); it++)
+      str += "(idx(" + it->first + "),val(" + it->second + ")),";
 #if 0
   } else if (rhs.id() == "address_of") {
   } else if (rhs.id() == "index") {
