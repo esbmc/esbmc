@@ -1152,9 +1152,9 @@ execution_statet::serialise_expr(const exprt &rhs)
        * anyway. So, just serialise the identifier, the member assigned to,
        * and the value assigned */
       str = "union_set(";
-      str += "union_sym(" + rhs.op0().get("identifier").as_string() + "),";
-      str += "field(" + serialise_expr(rhs.op1()) + "),";
-      str += "val(" + serialise_expr(rhs.op2()) + "))";
+      str += "union_sym(" + rec.op0().get("identifier").as_string() + "),";
+      str += "field(" + serialise_expr(rec.op1()) + "),";
+      str += "val(" + serialise_expr(rec.op2()) + "))";
     } else {
       throw "Unrecognised type of with expression: " + rhs.op0().type().id().as_string();
     }
