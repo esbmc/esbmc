@@ -1130,7 +1130,7 @@ execution_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == "with") {
     exprt rec = rhs;
 
-    if (rhs.op0().type().id() == "array") {
+    if (rec.type().id() == "array") {
       std::map<std::string,std::string> m;
       extract_elems_from_array_expr(rec, m);
 
@@ -1138,7 +1138,7 @@ execution_statet::serialise_expr(const exprt &rhs)
       std::map<std::string,std::string>::const_iterator it;
       for (it = m.begin(); it != m.end(); it++)
         str += "(idx(" + it->first + "),val(" + it->second + ")),";
-    } else if (rhs.op0().type().id() == "struct") {
+    } else if (rec.type().id() == "struct") {
       std::map<std::string,std::string> m;
       extract_struct_members_from_expr(rec, m);
 
@@ -1146,7 +1146,7 @@ execution_statet::serialise_expr(const exprt &rhs)
       std::map<std::string,std::string>::const_iterator it;
       for (it = m.begin(); it != m.end(); it++)
         str += "(member(" + it->first + "),val(" + it->second + ")),";
-    } else if (rhs.op0().type().id() ==  "union") {
+    } else if (rec.type().id() ==  "union") {
       /* We don't care about previous assignments to this union, because
        * they're overwritten by this one, and leads to undefined side effects
        * anyway. So, just serialise the identifier, the member assigned to,
