@@ -10,6 +10,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <string>
 #include <sstream>
 #include <i2string.h>
+#include <string2array.h>
 #include <std_expr.h>
 #include <expr_util.h>
 #include "../ansi-c/c_types.h"
@@ -1200,6 +1201,12 @@ execution_statet::serialise_expr(const exprt &rhs)
     forall_operands(it, rhs) {
       str = str + "(" + serialise_expr(*it) + ")";
     }
+  } else if (rhs.id() == "pointer_offset") {
+    str = "pointer_offset(" + serialise_expr(rhs.op0()) + ")";
+  } else if (rhs.id() == "string-constant") {
+    exprt tmp;
+    string2array(rhs, tmp);
+    return serialise_expr(tmp);
   } else {
     std::cout << "Unrecognized expression when generating state hash:\n";
     std::cout << rhs.pretty(0) << std::endl;
