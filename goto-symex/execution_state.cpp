@@ -1202,7 +1202,7 @@ execution_statet::serialise_expr(const exprt &rhs)
 
   // If we have a normal expression, either arithmatic, binary, comparision,
   // or whatever, just take the operator and append its operands.
-  } else if (rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" || rhs.id() == "/" || rhs.id() == "mod" || rhs.id() == "=" || rhs.id() == "and" || rhs.id() == "=>" || rhs.id() == "or" || rhs.id() == "not" || rhs.id() == "notequal") {
+  } else if (rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" || rhs.id() == "/" || rhs.id() == "mod" || rhs.id() == "=" || rhs.id() == "and" || rhs.id() == "=>" || rhs.id() == "or" || rhs.id() == "not" || rhs.id() == "notequal" || rhs.id() ==  "unary-" || rhs.id() == "abs" || rhs.id() == ">=" || rhs.id() == ">" || rhs.id() == "<=" || rhs.id() == "<" || rhs.id() == "bitor" || rhs.id() == "bitxor" || rhs.id() == "bitand" || rhs.id() == "bitnot" || rhs.id() == "shl" || rhs.id() == "lshr" || rhs.id() == "ashr") {
     str = rhs.id().as_string();
     forall_operands(it, rhs) {
       str = str + "(" + serialise_expr(*it) + ")";
