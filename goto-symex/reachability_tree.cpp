@@ -511,7 +511,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
   goto_programt::const_targett pc = ex_state.get_active_state().source.pc;
   crypto_hash hash = ex_state.generate_hash();
-  if (pc_hits[*pc][hash] != 0)
+  if (hit_hashes.find(hash) != hit_hashes.end())
     return false;
 
   //new
@@ -570,7 +570,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   /* Once we've generated all interleavings from this state, increment hit count
    * so that we don't come back here again */
   if (generated == false)
-    pc_hits[*pc][hash]++;
+    hit_hashes.insert(hash);
 
   _go_next = true;
 
@@ -703,25 +703,4 @@ void reachability_treet::go_next_state()
   }
 
   _go_next = false;
-}
-
-void reachability_treet::print_hits(std::ostream &out)
-{
-  std::map<goto_programt::instructiont, hash_hitst>::const_iterator it;
-  hash_hitst::const_iterator it2;
-
-  for (it = pc_hits.begin(); it != pc_hits.end(); it++) {
-    for (it2 = (*it).second.begin(); it2 != (*it).second.end(); it2++) {
-      out << "Location " << (*it2).first.to_string() << " hit " << (*it2).second << " times\n";
-    }
-  }
-
-  out << "And now, as a set of values:\n";
-  for (it = pc_hits.begin(); it != pc_hits.end(); it++) {
-    for (it2 = (*it).second.begin(); it2 != (*it).second.end(); it2++) {
-      out << (*it2).second << ",";
-    }
-  }
-
-  return;
 }

@@ -80,8 +80,6 @@ public:
       _go_next = true;
     }
 
-    void print_hits(std::ostream &out);
-
 	const goto_functionst &_goto_functions;
     execution_statet* _cur_target_state;
 	bool _go_next_formula;
@@ -96,8 +94,7 @@ private:
     const namespacet &_ns;
 
     /* jmorse */
-    typedef std::map<crypto_hash, int>hash_hitst;
-    std::map<goto_programt::instructiont, hash_hitst>pc_hits;
+    std::set<crypto_hash>hit_hashes;
 };
 
 #endif /* REACHABILITY_TREE_H_ */
