@@ -1046,6 +1046,9 @@ execution_statet::extract_elems_from_array_expr(exprt array,
                         std::map<std::string,std::string> &m)
 {
 
+  if (array.operands().size() == 0)
+    return;
+
   if (array.op0().id() == "with") {
     extract_elems_from_array_expr(array.op0(), m);
   } else {
@@ -1062,6 +1065,9 @@ void
 execution_statet::extract_struct_members_from_expr(exprt st,
                         std::map<std::string,std::string> &m)
 {
+
+  if (st.operands().size() == 0)
+    return;
 
   if (st.op0().id() == "with") {
     extract_struct_members_from_expr(st.op0(), m);
