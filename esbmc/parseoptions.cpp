@@ -767,7 +767,8 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
 
   std::map<std::string, std::string>::const_iterator str_it;
   for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
-    if (str_it->first.find("_expr") != std::string::npos) {
+    if (str_it->first.find("_expr") != std::string::npos &&
+        str_it->first.find("$type") == std::string::npos) {
       int expr_pos = str_it->first.find("_expr");
       std::string prefix = str_it->first.substr(0, expr_pos);
       add_a_property_monitor(prefix, strings);
