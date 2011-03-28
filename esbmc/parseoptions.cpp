@@ -774,6 +774,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
       int expr_pos = str_it->first.find("_expr");
       std::string prefix = str_it->first.substr(0, expr_pos);
       main_expr = calculate_a_property_monitor(prefix, strings, used_syms);
+      add_monitor_exprs(prefix, strings, goto_functions, main_expr, used_syms);
     }
   }
 
@@ -822,6 +823,47 @@ exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string prefix, std::
 
   return main_expr;
 }
+
+void cbmc_parseoptionst::add_monitor_exprs(std::string prefix, std::map<std::string, std::string>strings, goto_functionst &goto_functions, exprt main_expr, std::set<std::string>&used_syms)
+{
+  std::string prop_name = prefix + "_status";
+
+  // So the plan: go through all the instructions available, looking for
+  // assignments to a symbol we're looking for. When we find one, append a
+  // goto instruction that re-evaluates the proposition expression.
+
+  Forall_goto_functions(f_it, goto_functions) {
+    goto_functions_templatet<goto_programt>::goto_functiont &func = f_it->second;
+    goto_programt &prog = func.body;
+    Forall_goto_program_instructions(p_it, prog) {
+      if (!p_it->is_assign())
+        continue;
+
+      exprt sym = p_it->code.op0();
+      if (sym.id() != "symbol")
+        continue;
+      // XXX - this means that we can't make propositions about things like
+      // the contents of an array and suchlike.
+
+      // Is this actually an assignment that we're interested in?
+      std::string sym_name = sym.get("identifier").as_string();
+      if (used_syms.find(sym_name) == used_syms.end())
+        continue;
+
+      goto_programt::instructiont new_insn;
+      new_insn.type = ASSIGN;
+      new_insn.code = code_assignt(symbol_exprt(prop_name), main_expr);
+      // new_insn location field not set - I believe it gets numbered later.
+      p_it++;
+      prog.instructions.insert(p_it, new_insn);
+      p_it--;
+    }
+  }
+
+  return;
+}
+
+
 
 /*******************************************************************\
 
