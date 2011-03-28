@@ -42,6 +42,7 @@ extern "C" {
 #include <pointer-analysis/show_value_sets.h>
 
 #include <langapi/mode.h>
+#include <langapi/languages.h>
 
 #include "parseoptions.h"
 #include "bmc.h"
@@ -743,6 +744,41 @@ void cbmc_parseoptionst::preprocessing()
   }
 }
 
+void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
+{
+  std::map<std::string, std::string> strings;
+
+  symbolst::const_iterator it;
+  namespacet ns(context);
+  languagest languages(ns, MODE_C);
+  for (it = context.symbols.begin(); it != context.symbols.end(); it++) {
+    if (it->first.as_string().find("__ESBMC_property") != std::string::npos) {
+      // Munge back into the shape of an actual string
+      std::string str = "";
+      forall_operands(iter2, it->second.value) {
+        char c = (char)strtol(iter2->get("value").as_string().c_str(), NULL, 2);
+        if (c != 0)
+          str += c;
+        else
+          break;
+      }
+
+      strings[it->first.as_string()] = str;
+    }
+  }
+
+  std::map<std::string, std::string>::const_iterator str_it;
+  for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
+    if (str_it->first.find("_expr") != std::string::npos) {
+      int expr_pos = str_it->first.find("_expr");
+      std::string prefix = str_it->first.substr(0, expr_pos);
+      add_a_property_monitor(prefix, strings);
+    }
+  }
+
+  return;
+}
+
 /*******************************************************************\
 
 Function: cbmc_parseoptionst::read_goto_binary
@@ -840,6 +876,9 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // add failed symbols
     add_failed_symbols(context);
+
+    // add re-evaluations of monitored properties
+    add_property_monitors(goto_functions);
 
     // recalculate numbers, etc.
     goto_functions.update();
