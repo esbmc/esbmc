@@ -778,6 +778,49 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
   return;
 }
 
+static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings)
+{
+
+  if (e.id() ==  "symbol") {
+    std::string sym = e.get("identifier").as_string();
+
+    // Remove leading "c::"
+    sym = sym.substr(3, sym.size() - 3);
+
+    sym = prefix + "_" + sym;
+    if (strings.find(sym) == strings.end())
+      assert(0 && "Missing symbol mapping for property monitor");
+
+    sym = strings[sym];
+    e.set("identifier", sym);
+  } else {
+    Forall_operands(it, e)
+      replace_symbol_names(*it, prefix, strings);
+  }
+
+  return;
+}
+
+void cbmc_parseoptionst::add_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings)
+{
+  exprt main_expr;
+  std::map<std::string, std::string>::const_iterator it;
+
+  namespacet ns(context);
+  languagest languages(ns, MODE_C);
+
+  std::string expr_str = strings[prefix + "_expr"];
+  std::string dummy_str = "";
+  languages.to_expr(expr_str, dummy_str, main_expr, ui_message_handler);
+
+  Forall_operands(it, main_expr)
+    replace_symbol_names(*it, prefix, strings);
+
+std::cout << main_expr.pretty(0) << std::endl;
+
+  // And do some other stuff
+}
+
 /*******************************************************************\
 
 Function: cbmc_parseoptionst::read_goto_binary

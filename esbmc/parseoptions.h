@@ -87,6 +87,9 @@ protected:
   }
 
   void preprocessing();
+
+  void add_property_monitors(goto_functionst &goto_functions);
+  void add_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings);
 };
 
 #endif
