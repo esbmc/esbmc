@@ -749,8 +749,6 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
   std::map<std::string, std::string> strings;
 
   symbolst::const_iterator it;
-  namespacet ns(context);
-  languagest languages(ns, MODE_C);
   for (it = context.symbols.begin(); it != context.symbols.end(); it++) {
     if (it->first.as_string().find("__ESBMC_property") != std::string::npos) {
       // Munge back into the shape of an actual string
