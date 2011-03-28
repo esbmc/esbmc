@@ -769,16 +769,18 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
   for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
     if (str_it->first.find("_expr") != std::string::npos &&
         str_it->first.find("$type") == std::string::npos) {
+      std::set<std::string> used_syms;
+      exprt main_expr;
       int expr_pos = str_it->first.find("_expr");
       std::string prefix = str_it->first.substr(0, expr_pos);
-      add_a_property_monitor(prefix, strings);
+      main_expr = calculate_a_property_monitor(prefix, strings, used_syms);
     }
   }
 
   return;
 }
 
-static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings)
+static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
 
   if (e.id() ==  "symbol") {
@@ -793,15 +795,17 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
 
     sym = strings[sym];
     e.set("identifier", sym);
+
+    used_syms.insert(sym);
   } else {
     Forall_operands(it, e)
-      replace_symbol_names(*it, prefix, strings);
+      replace_symbol_names(*it, prefix, strings, used_syms);
   }
 
   return;
 }
 
-void cbmc_parseoptionst::add_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings)
+exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
   exprt main_expr;
   std::map<std::string, std::string>::const_iterator it;
@@ -814,11 +818,9 @@ void cbmc_parseoptionst::add_a_property_monitor(std::string prefix, std::map<std
   languages.to_expr(expr_str, dummy_str, main_expr, ui_message_handler);
 
   Forall_operands(it, main_expr)
-    replace_symbol_names(*it, prefix, strings);
+    replace_symbol_names(*it, prefix, strings, used_syms);
 
-std::cout << main_expr.pretty(0) << std::endl;
-
-  // And do some other stuff
+  return main_expr;
 }
 
 /*******************************************************************\

@@ -89,7 +89,8 @@ protected:
   void preprocessing();
 
   void add_property_monitors(goto_functionst &goto_functions);
-  void add_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings);
+  exprt calculate_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms);
+  void add_monitor_exprs(std::string prefix, std::map<std::string, std::string>strings, goto_functionst &goto_functions, exprt main_expr, std::set<std::string>&used_syms);
 };
 
 #endif
