@@ -842,7 +842,6 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   // symbol we're looking for. When we find one, append a goto instruction that
   // re-evaluates a proposition expression. Because there can be more than one,
   // we put re-evaluations in atomic blocks.
-goto_programt::instructiont face_insn = *insn;
 
   if (!insn->is_assign())
     return;
