@@ -765,6 +765,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
     }
   }
 
+  std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
   std::map<std::string, std::string>::const_iterator str_it;
   for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
     if (str_it->first.find("_expr") != std::string::npos &&
@@ -774,7 +775,17 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
       int expr_pos = str_it->first.find("_expr");
       std::string prefix = str_it->first.substr(0, expr_pos);
       main_expr = calculate_a_property_monitor(prefix, strings, used_syms);
-      add_monitor_exprs(prefix, strings, goto_functions, main_expr, used_syms);
+      monitors[prefix] = std::pair<std::set<std::string>, exprt>
+                                      (used_syms, main_expr);
+    }
+  }
+
+
+  Forall_goto_functions(f_it, goto_functions) {
+    goto_functions_templatet<goto_programt>::goto_functiont &func = f_it->second;
+    goto_programt &prog = func.body;
+    Forall_goto_program_instructions(p_it, prog) {
+      add_monitor_exprs(p_it, prog.instructions, monitors);
     }
   }
 
@@ -824,40 +835,58 @@ exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string prefix, std::
   return main_expr;
 }
 
-void cbmc_parseoptionst::add_monitor_exprs(std::string prefix, std::map<std::string, std::string>strings, goto_functionst &goto_functions, exprt main_expr, std::set<std::string>&used_syms)
+void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, exprt> >monitors)
 {
-  std::string prop_name = prefix + "_status";
 
-  // So the plan: go through all the instructions available, looking for
-  // assignments to a symbol we're looking for. When we find one, append a
-  // goto instruction that re-evaluates the proposition expression.
+  // So the plan: we've been handed an instruction, look for assignments to a
+  // symbol we're looking for. When we find one, append a goto instruction that
+  // re-evaluates a proposition expression. Because there can be more than one,
+  // we put re-evaluations in atomic blocks.
+goto_programt::instructiont face_insn = *insn;
 
-  Forall_goto_functions(f_it, goto_functions) {
-    goto_functions_templatet<goto_programt>::goto_functiont &func = f_it->second;
-    goto_programt &prog = func.body;
-    Forall_goto_program_instructions(p_it, prog) {
-      if (!p_it->is_assign())
-        continue;
+  if (!insn->is_assign())
+    return;
 
-      exprt sym = p_it->code.op0();
-      if (sym.id() != "symbol")
-        continue;
-      // XXX - this means that we can't make propositions about things like
-      // the contents of an array and suchlike.
+  exprt sym = insn->code.op0();
+  if (sym.id() != "symbol")
+    return;
+  // XXX - this means that we can't make propositions about things like
+  // the contents of an array and suchlike.
 
-      // Is this actually an assignment that we're interested in?
-      std::string sym_name = sym.get("identifier").as_string();
-      if (used_syms.find(sym_name) == used_syms.end())
-        continue;
+  // Is this actually an assignment that we're interested in?
+  std::map<std::string, std::pair<std::set<std::string>, exprt> >::const_iterator it;
+  std::string sym_name = sym.get("identifier").as_string();
+  std::set<std::pair<std::string, exprt> > triggered;
+  for (it = monitors.begin(); it != monitors.end(); it++) {
+    if (it->second.first.find(sym_name) == it->second.first.end())
+      continue;
 
-      goto_programt::instructiont new_insn;
-      new_insn.type = ASSIGN;
-      new_insn.code = code_assignt(symbol_exprt(prop_name), main_expr);
-      // new_insn location field not set - I believe it gets numbered later.
-      p_it++;
-      prog.instructions.insert(p_it, new_insn);
-      p_it--;
-    }
+    triggered.insert(std::pair<std::string, exprt>(it->first, it->second.second));
+  }
+
+  if (triggered.empty())
+    return;
+
+  insn++;
+  goto_programt::instructiont new_insn;
+
+  if (triggered.size() > 1) {
+    new_insn.type = ATOMIC_BEGIN;
+    insn_list.insert(insn, new_insn);
+  }
+
+  new_insn.type = ASSIGN;
+  std::set<std::pair<std::string, exprt> >::const_iterator trig_it;
+  for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
+    std::string prop_name = trig_it->first + "_status";
+    new_insn.code = code_assignt(symbol_exprt(prop_name), trig_it->second);
+    // new_insn location field not set - I believe it gets numbered later.
+    insn_list.insert(insn, new_insn);
+  }
+
+  if (triggered.size() > 1) {
+    new_insn.type = ATOMIC_END;
+    insn_list.insert(insn, new_insn);
   }
 
   return;
