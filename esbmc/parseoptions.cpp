@@ -798,6 +798,11 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
   if (e.id() ==  "symbol") {
     std::string sym = e.get("identifier").as_string();
 
+// Originally this piece of code renamed all the symbols in the property
+// expression to ones specified by the user. However, there's no easy way of
+// working out what the full name of a particular symbol you're looking for
+// is, so it's unused for the moment.
+#if 0
     // Remove leading "c::"
     sym = sym.substr(3, sym.size() - 3);
 
@@ -807,6 +812,7 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
 
     sym = strings[sym];
     e.set("identifier", sym);
+#endif
 
     used_syms.insert(sym);
   } else {
