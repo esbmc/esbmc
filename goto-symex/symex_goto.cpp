@@ -68,15 +68,22 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
 
   if(!forward) // backwards?
   {
-    unsigned &unwind=state.unwind_map[state.source];
-    unwind++;
+    std::map<symex_targett::sourcet, unsigned>::iterator it;
+    unsigned unwind;
+
+    std::pair<std::map<symex_targett::sourcet, unsigned>::iterator, bool> p;
+    p = state.unwind_map.insert(std::pair<symex_targett::sourcet, unsigned>
+                                            (state.source, 0U));
+    it = p.first;
+    it->second++;
+    unwind = it->second;
 
     if(get_unwind(state.source, unwind))
     {
       loop_bound_exceeded(state, new_guard, node_id);
 
       // reset unwinding
-      state.unwind_map[state.source]=0;
+      it->second = 0;
 
       // next instruction
       state.source.pc++;
