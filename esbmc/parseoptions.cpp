@@ -872,13 +872,12 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   if (triggered.empty())
     return;
 
-  insn++;
   goto_programt::instructiont new_insn;
 
-  if (triggered.size() > 1) {
-    new_insn.type = ATOMIC_BEGIN;
-    insn_list.insert(insn, new_insn);
-  }
+  new_insn.type = ATOMIC_BEGIN;
+  insn_list.insert(insn, new_insn);
+
+  insn++;
 
   new_insn.type = ASSIGN;
   std::set<std::pair<std::string, exprt> >::const_iterator trig_it;
@@ -890,10 +889,24 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
     insn_list.insert(insn, new_insn);
   }
 
-  if (triggered.size() > 1) {
-    new_insn.type = ATOMIC_END;
-    insn_list.insert(insn, new_insn);
-  }
+  typet uint32 = typet("unsignedbv");
+  uint32.set("width", 32);
+  new_insn.type = ASSIGN;
+  constant_exprt c_expr = constant_exprt(uint32);
+  c_expr.set_value("1");
+  exprt e = plus_exprt(symbol_exprt("c::_ltl2ba_transition_count", uint32), c_expr);
+  e.type() = uint32;
+  symbol_exprt sym_expr = symbol_exprt("c::_ltl2ba_transition_count", uint32);
+  new_insn.code = code_assignt(sym_expr, e);
+  insn_list.insert(insn, new_insn);
+
+  new_insn.type = ATOMIC_END;
+  insn_list.insert(insn, new_insn);
+
+  new_insn.type = FUNCTION_CALL;
+  new_insn.code = code_function_callt();
+  new_insn.code.op1() = symbol_exprt("c::__ESBMC_yield");
+  insn_list.insert(insn, new_insn);
 
   return;
 }
