@@ -836,8 +836,7 @@ exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::ma
 
   languages.to_expr(expr_str, dummy_str, main_expr, ui_message_handler);
 
-  Forall_operands(it, main_expr)
-    replace_symbol_names(*it, prefix, strings, used_syms);
+  replace_symbol_names(main_expr, name, strings, used_syms);
 
   return main_expr;
 }
