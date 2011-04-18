@@ -3769,13 +3769,17 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
   std::string value;
   unsigned width;
 
-  if (is_signed(expr.type()))
-  {
+  if (expr.type().id() == "c_enum") {
+    // jmorse: value field of C enum type is in fact base 10, wheras everything
+    // else is base 2. A fact I believe to violate the geneva convention on war
+    // crimes.
+    value = expr.get_string("value");
+  } else if (is_signed(expr.type())) {
+
     value = integer2string(binary2integer(expr.get_string("value"), true),10);
-  }
-  else
-  {
-	value = integer2string(binary2integer(expr.get_string("value"), false),10);
+  } else {
+
+    value = integer2string(binary2integer(expr.get_string("value"), false),10);
     //if (value.find("4294967295") != std::string::npos)
 	  //value="0";
 
