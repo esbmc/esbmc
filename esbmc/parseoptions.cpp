@@ -768,14 +768,12 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
   std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
   std::map<std::string, std::string>::const_iterator str_it;
   for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
-    if (str_it->first.find("_expr") != std::string::npos &&
-        str_it->first.find("$type") == std::string::npos) {
+    if (str_it->first.find("$type") == std::string::npos) {
       std::set<std::string> used_syms;
       exprt main_expr;
-      int expr_pos = str_it->first.find("_expr");
-      std::string prefix = str_it->first.substr(0, expr_pos);
-      main_expr = calculate_a_property_monitor(prefix, strings, used_syms);
-      monitors[prefix] = std::pair<std::set<std::string>, exprt>
+      std::string prop_name = str_it->first.substr(20, std::string::npos);
+      main_expr = calculate_a_property_monitor(prop_name, strings, used_syms);
+      monitors[prop_name] = std::pair<std::set<std::string>, exprt>
                                       (used_syms, main_expr);
     }
   }
