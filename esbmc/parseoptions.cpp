@@ -823,7 +823,7 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
   return;
 }
 
-exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
   exprt main_expr;
   std::map<std::string, std::string>::const_iterator it;
@@ -831,8 +831,9 @@ exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string prefix, std::
   namespacet ns(context);
   languagest languages(ns, MODE_C);
 
-  std::string expr_str = strings[prefix + "_expr"];
+  std::string expr_str = strings["c::__ESBMC_property_" + name];
   std::string dummy_str = "";
+
   languages.to_expr(expr_str, dummy_str, main_expr, ui_message_handler);
 
   Forall_operands(it, main_expr)
