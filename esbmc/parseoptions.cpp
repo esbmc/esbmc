@@ -750,7 +750,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
 
   symbolst::const_iterator it;
   for (it = context.symbols.begin(); it != context.symbols.end(); it++) {
-    if (it->first.as_string().find("__ESBMC_property") != std::string::npos) {
+    if (it->first.as_string().find("__ESBMC_property_") != std::string::npos) {
       // Munge back into the shape of an actual string
       std::string str = "";
       forall_operands(iter2, it->second.value) {
