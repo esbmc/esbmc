@@ -778,6 +778,8 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
     }
   }
 
+  if (monitors.size() == 0)
+    return;
 
   Forall_goto_functions(f_it, goto_functions) {
     goto_functions_templatet<goto_programt>::goto_functiont &func = f_it->second;
