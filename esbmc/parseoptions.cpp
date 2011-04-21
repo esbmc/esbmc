@@ -875,6 +875,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   goto_programt::instructiont new_insn;
 
   new_insn.type = ATOMIC_BEGIN;
+  new_insn.function = insn->function;
   insn_list.insert(insn, new_insn);
 
   insn++;
@@ -884,6 +885,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
     std::string prop_name = "c::" + trig_it->first + "_status";
     new_insn.code = code_assignt(symbol_exprt(prop_name, typet("bool")), trig_it->second);
+    new_insn.function = insn->function;
 
     // new_insn location field not set - I believe it gets numbered later.
     insn_list.insert(insn, new_insn);
@@ -892,6 +894,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   typet uint32 = typet("unsignedbv");
   uint32.set("width", 32);
   new_insn.type = ASSIGN;
+  new_insn.function = insn->function;
   constant_exprt c_expr = constant_exprt(uint32);
   c_expr.set_value("1");
   exprt e = plus_exprt(symbol_exprt("c::_ltl2ba_transition_count", uint32), c_expr);
@@ -901,10 +904,12 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   insn_list.insert(insn, new_insn);
 
   new_insn.type = ATOMIC_END;
+  new_insn.function = insn->function;
   insn_list.insert(insn, new_insn);
 
   new_insn.type = FUNCTION_CALL;
   new_insn.code = code_function_callt();
+  new_insn.function = insn->function;
   new_insn.code.op1() = symbol_exprt("c::__ESBMC_yield");
   insn_list.insert(insn, new_insn);
 
