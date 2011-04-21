@@ -53,6 +53,7 @@ public:
       _last_active_thread = 0;
       generating_new_threads = 0;
 	  node_count=0;
+          nondet_count = 0;
 	};
 
 	virtual ~execution_statet()	{};
