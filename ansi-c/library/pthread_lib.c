@@ -204,35 +204,25 @@ inline int pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 #include <pthread.h>
 #define __ESBMC_PTHREAD_H_INCLUDED
 #endif
-
+#if 0
 inline int pthread_join(pthread_t __th, void **__thread_return)
 {
-#if 1
-  extern unsigned int trd_nr, trds_status;
-  __ESBMC_assume((trds_status & trd_nr) == 0);
-
-#endif
 #if 0
-  extern unsigned int trd_nr, exit0, exit1, exit2, exit3, exit4, exit5,
-	  				  exit6, exit7, exit8, exit9;
-
-  if (trd_nr==0)      __ESBMC_assume(exit0 == 1);
-  else if (trd_nr==1) __ESBMC_assume(exit1 == 1);
-  else if (trd_nr==2) __ESBMC_assume(exit2 == 1);
-  else if (trd_nr==3) __ESBMC_assume(exit3 == 1);
-  else if (trd_nr==4) __ESBMC_assume(exit4 == 1);
-  else if (trd_nr==5) __ESBMC_assume(exit5 == 1);
-  else if (trd_nr==6) __ESBMC_assume(exit6 == 1);
-  else if (trd_nr==7) __ESBMC_assume(exit7 == 1);
-  else if (trd_nr==8) __ESBMC_assume(exit8 == 1);
-  else if (trd_nr==9) __ESBMC_assume(exit9 == 1);
-  else __ESBMC_assert(0, "unexpected number of threads in pthread_join");
-
-  return 0; // we never fail
+	extern unsigned int trds_in_join=0;
+    __ESBMC_atomic_begin();
+    trds_in_join++;
+    __ESBMC_atomic_end();
+    __ESBMC_yield();
+    __ESBMC_atomic_begin();
+//    __ESBMC_assume((trds_status & (__th << 1)) == 0);
+    trds_in_join--;
+    __ESBMC_atomic_end();
+    return 0;
 #endif
+  /* TODO */
+  return 0; // we never fail
 }
-
-
+#endif
 #if 0
 /* FUNCTION: pthread_cond_broadcast */
 
