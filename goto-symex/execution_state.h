@@ -85,6 +85,7 @@ public:
 		_DFS_traversed.at(i) = false;
     }
 
+    void recover_global_state(const namespacet &ns, symex_targett &target);
     static unsigned int node_count;
     unsigned int node_id;
     unsigned int parent_node_id;
@@ -132,11 +133,7 @@ public:
     //void deadlock_detection(const namespacet &ns, symex_targett &target);
     void increament_trds_in_run(const namespacet &ns, symex_targett &target);
     void update_trds_count(const namespacet &ns, symex_targett &target);
-    void set_trd_status_to_one(const namespacet &ns, symex_targett &target);
-    void set_trd_status_to_zero(const namespacet &ns, symex_targett &target);
-    void set_active_trd_one(const namespacet &ns, symex_targett &target);
-    void set_active_trd_zero(const namespacet &ns, symex_targett &target);
-    void update_trds_status(const namespacet &ns, symex_targett &target);
+    //void update_trds_status(const namespacet &ns, symex_targett &target);
 
 private:
     void decreament_trds_in_run(const namespacet &ns, symex_targett &target);
