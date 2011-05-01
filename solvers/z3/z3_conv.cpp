@@ -2629,13 +2629,13 @@ bool z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 
   if (int_encoding)
   {
-    if(expr.id()=="<=")
+    if(expr.id()==exprt::i_le)
    	  bv = Z3_mk_le(z3_ctx,operand0,operand1);
-    else if(expr.id()=="<")
+    else if(expr.id()==exprt::i_lt)
       bv = Z3_mk_lt(z3_ctx,operand0,operand1);
-    else if(expr.id()==">=")
+    else if(expr.id()==exprt::i_ge)
       bv = Z3_mk_ge(z3_ctx,operand0,operand1);
-    else if(expr.id()==">")
+    else if(expr.id()==exprt::i_gt)
       bv = Z3_mk_gt(z3_ctx,operand0,operand1);
   }
   else
@@ -2643,13 +2643,13 @@ bool z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
     if (op_type.id()=="unsignedbv" || op_type.subtype().id()=="unsignedbv"
     	|| op_type.subtype().subtype().id()=="unsignedbv" || op_type.subtype().id()=="symbol")
     {
-      if(expr.id()=="<=")
+      if(expr.id()==exprt::i_le)
    	    bv = Z3_mk_bvule(z3_ctx,operand0,operand1);
-      else if(expr.id()=="<")
+      else if(expr.id()==exprt::i_lt)
         bv = Z3_mk_bvult(z3_ctx,operand0,operand1);
-      else if(expr.id()==">=")
+      else if(expr.id()==exprt::i_ge)
         bv = Z3_mk_bvuge(z3_ctx,operand0,operand1);
-      else if(expr.id()==">")
+      else if(expr.id()==exprt::i_gt)
         bv = Z3_mk_bvugt(z3_ctx,operand0,operand1);
     }
     else if (op_type.id()=="signedbv" || op_type.id()=="fixedbv" || op_type.id()=="pointer" ||
@@ -2657,13 +2657,13 @@ bool z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 			 op_type.subtype().id()=="pointer" ||
 			 op_type.subtype().subtype().id()=="signedbv" ||  op_type.subtype().subtype().id()=="fixedbv")
     {
-      if(expr.id()=="<=")
+      if(expr.id()==exprt::i_le)
         bv = Z3_mk_bvsle(z3_ctx,operand0,operand1);
-      else if(expr.id()=="<")
+      else if(expr.id()==exprt::i_lt)
         bv = Z3_mk_bvslt(z3_ctx,operand0,operand1);
-      else if(expr.id()==">=")
+      else if(expr.id()==exprt::i_ge)
         bv = Z3_mk_bvsge(z3_ctx,operand0,operand1);
-      else if(expr.id()==">")
+      else if(expr.id()==exprt::i_gt)
         bv = Z3_mk_bvsgt(z3_ctx,operand0,operand1);
     }
   }
@@ -3161,7 +3161,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
     	  return true;
     	if (op.operands().size()>0)
     	{
-    	  if (op.op0().id() == "address_of")
+	  if (op.op0().id() == exprt::addrof)
     	    bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
     	}
 
@@ -3193,7 +3193,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
       }
 
       type_var = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 2, proj_names, proj_types, &mk_tuple_decl, proj_decls);
-      pointer_var = z3_api.mk_var(z3_ctx, expr.op0().get_string("identifier").c_str(), type_var);
+      pointer_var = z3_api.mk_var(z3_ctx, expr.op0().get_string(exprt::a_identifier).c_str(), type_var);
 
       bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, bv);
       bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, z3_api.mk_tuple_select(z3_ctx, args[0], 1));
@@ -3219,9 +3219,9 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   	  //std::cout << "op.op0().type().id(): " << op.op0().type().id() << std::endl;
   	  //std::cout << "op.op0().id(): " << op.op0().id() << std::endl;
   	  //print_data_types(args[0], args[0]);
-  	  if (op.id()=="constant")
+	  if (op.id()==exprt::constant)
   	  {
-  	    if (op.get("value").compare("NULL") == 0)
+	    if (op.get(exprt::a_value).compare("NULL") == 0)
   		  bv = convert_number(0, config.ansi_c.int_width, true);
   	  }
   	  else if (op.operands().size()==0)
@@ -3232,7 +3232,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   	  }
   	  else if (expr.type().subtype().id()!="empty" &&
   		 (op.type().id()=="pointer" && op.type().subtype().id()=="symbol") &&
-  		 op.op0().id()!="index" && expr.type().id()!="pointer"
+  		 op.op0().id()!=exprt::index && expr.type().id()!="pointer"
   		 /*&& op.op0().type().id()!="struct"*/)
   	  {
   	    bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -3329,7 +3329,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 	}
 	exprt new_struct("symbol", s);
     new_struct.type().set("tag", expr.type().get_string("tag"));
-	new_struct.set("identifier", "typecast_" + expr.op0().get_string("identifier"));
+	new_struct.set(exprt::a_identifier, "typecast_" + expr.op0().get_string(exprt::a_identifier));
 
 	if (convert_bv(new_struct,operand))
 	  return true;
