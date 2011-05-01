@@ -3544,7 +3544,7 @@ bool z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast 
 
   bv = z3_api.mk_var(z3_ctx, identifier.c_str(), tuple_type);
 
-  if (expr.get("value").compare("NULL") == 0)
+  if (expr.get(exprt::a_value).compare("NULL") == 0)
   {
     if (int_encoding)
       bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, z3_api.mk_int(z3_ctx, -1));
@@ -3697,7 +3697,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 	  array_type  = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
   }
 
-  value_cte = expr.get_string("identifier") + expr.type().subtype().get("width").c_str();
+  value_cte = expr.get_string(exprt::a_identifier) + expr.type().subtype().get("width").c_str();
   bv = z3_api.mk_var(z3_ctx, value_cte.c_str(), array_type);
 
   i=0;
@@ -3717,9 +3717,9 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 	else
 	{
 	  if (is_signed(it->type()))
-	    value_cte = integer2string(binary2integer(it->get("value").c_str(), true),10);
+	    value_cte = integer2string(binary2integer(it->get(exprt::a_value).c_str(), true),10);
 	  else
-	    value_cte = integer2string(binary2integer(it->get("value").c_str(), false),10);
+	    value_cte = integer2string(binary2integer(it->get(exprt::a_value).c_str(), false),10);
 
 	  if (int_encoding)
 	  {
@@ -3773,14 +3773,14 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
   {
     // jmorse: value field of C enum type is in fact base 10, wheras everything
     // else is base 2.
-    value = expr.get_string("value");
+    value = expr.get_string(exprt::a_value);
   }
   else if (is_signed(expr.type()))
   {
-    value = integer2string(binary2integer(expr.get_string("value"), true),10);
+    value = integer2string(binary2integer(expr.get_string(exprt::a_value), true),10);
   } else {
 
-    value = integer2string(binary2integer(expr.get_string("value"), false),10);
+    value = integer2string(binary2integer(expr.get_string(exprt::a_value), false),10);
   }
 
 #ifdef DEBUG
@@ -3815,15 +3815,15 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
     if (int_encoding)
     {
       std::string result;
-      result = fixed_point(expr.get_string("value"), width);
+      result = fixed_point(expr.get_string(exprt::a_value), width);
 	  bv = Z3_mk_numeral(z3_ctx, result.c_str(), Z3_mk_real_type(z3_ctx));
     }
 	else
 	{
 	  Z3_ast magnitude, fraction;
 	  std::string m, f, c;
-	  m = extract_magnitude(expr.get_string("value"), width);
-	  f = extract_fraction(expr.get_string("value"), width);
+	  m = extract_magnitude(expr.get_string(exprt::a_value), width);
+	  f = extract_fraction(expr.get_string(exprt::a_value), width);
 	  magnitude = Z3_mk_int(z3_ctx, atoi(m.c_str()), Z3_mk_bv_type(z3_ctx, width/2));
 	  fraction = Z3_mk_int(z3_ctx, atoi(f.c_str()), Z3_mk_bv_type(z3_ctx, width/2));
 	  bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
@@ -3907,17 +3907,17 @@ bool z3_convt::convert_bitwise(const exprt &expr, Z3_ast &bv)
 
     if (i>=1)
     {
-      if(expr.id()=="bitand")
+      if(expr.id()==exprt::i_bitand)
         args[i+1] = Z3_mk_bvand(z3_ctx, args[i-1], args[i]);
-      else if(expr.id()=="bitor")
+      else if(expr.id()==exprt::i_bitor)
         args[i+1] = Z3_mk_bvor(z3_ctx, args[i-1], args[i]);
-  	  else if(expr.id()=="bitxor")
+  	  else if(expr.id()==exprt::i_bitxor)
     	args[i+1] = Z3_mk_bvxor(z3_ctx, args[i-1], args[i]);
-      else if (expr.id()=="bitnand")
+      else if (expr.id()==exprt::i_bitnand)
     	args[i+1] = Z3_mk_bvnand(z3_ctx, args[i-1], args[i]);
-      else if (expr.id()=="bitnor")
+      else if (expr.id()==exprt::i_bitnor)
         args[i+1] = Z3_mk_bvnor(z3_ctx, args[i-1], args[i]);
-      else if (expr.id()=="bitnxor")
+      else if (expr.id()==exprt::i_bitnxor)
     	args[i+1] = Z3_mk_bvxnor(z3_ctx, args[i-1], args[i]);
     }
     ++i;
