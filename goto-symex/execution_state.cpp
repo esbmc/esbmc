@@ -1001,7 +1001,7 @@ execution_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == exprt::with) {
     exprt rec = rhs;
 
-    if (rec.type().id() == "array") {
+    if (rec.type().id() == typet::t_array) {
       str = "array(";
       str += "prev(" + serialise_expr(rec.op0()) + "),";
       str += "idx(" + serialise_expr(rec.op1()) + "),";

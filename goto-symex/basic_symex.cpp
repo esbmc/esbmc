@@ -390,7 +390,7 @@ void basic_symext::symex_assign_array(
   const exprt &lhs_index=lhs.op1();
   const typet &lhs_type=ns.follow(lhs_array.type());
 
-  if(lhs_type.id()!="array")
+  if(lhs_type.id()!=typet::t_array)
     throw "index must take array type operand";
 
   // turn

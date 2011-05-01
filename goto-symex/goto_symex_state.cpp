@@ -660,7 +660,7 @@ void goto_symex_statet::rename(
 {
   // rename all the symbols with their last known value
 
-  if(type.id()=="array")
+  if(type.id()==typet::t_array)
   {
     rename(type.subtype(), ns,node_id);
     rename(static_cast<exprt &>(type.add("size")), ns,node_id);
@@ -700,7 +700,7 @@ void goto_symex_statet::renaming_levelt::rename(typet &type, unsigned node_id)
 {
   // rename all the symbols with their last known value
 
-  if(type.id()=="array")
+  if(type.id()==typet::t_array)
   {
     rename(type.subtype(),node_id);
     rename((exprt &)type.add("size"),node_id);

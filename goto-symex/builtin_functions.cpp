@@ -76,7 +76,7 @@ void basic_symext::symex_malloc(
     symbol.type=type;
   else
   {
-    symbol.type=typet("array");
+    symbol.type=typet(typet::t_array);
     symbol.type.subtype()=type;
     symbol.type.set("size", size);
   }

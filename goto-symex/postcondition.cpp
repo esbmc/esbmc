@@ -204,7 +204,7 @@ void postconditiont::strengthen(exprt &dest)
   if(!is_used(SSA_step.rhs, lhs_identifier))
   {
     // we don't do arrays or structs
-    if(SSA_step.lhs.type().id()=="array" ||
+    if(SSA_step.lhs.type().id()==typet::t_array ||
        SSA_step.lhs.type().id()==typet::t_struct) return;
   
     exprt equality(exprt::equality, typet(typet::t_bool));
