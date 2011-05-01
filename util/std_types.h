@@ -315,12 +315,12 @@ class pointer_typet:public typet
 public:
   pointer_typet()
   {
-    id("pointer");
+    id(t_pointer);
   }
 
   explicit pointer_typet(const typet &_subtype)
   {
-    id("pointer");
+    id(t_pointer);
     subtype()=_subtype;
   }
 };
@@ -330,7 +330,7 @@ class reference_typet:public pointer_typet
 public:
   reference_typet()
   {
-    set("#reference", true);
+    set(t_reference, true);
   }
 };
 
@@ -341,12 +341,12 @@ class bv_typet:public typet
 public:
   bv_typet()
   {
-    id("bv");
+    id(t_bv);
   }
 
   explicit bv_typet(unsigned width)
   {
-    id("bv");
+    id(t_bv);
     set_width(width);
   }
 
@@ -354,7 +354,7 @@ public:
 
   void set_width(unsigned width)
   {
-    set("width", width);
+    set(t_width, width);
   }
 };
 
@@ -363,12 +363,12 @@ class unsignedbv_typet:public bv_typet
 public:
   unsignedbv_typet()
   {
-    id("unsignedbv");
+    id(t_unsignedbv);
   }
 
   explicit unsignedbv_typet(unsigned width)
   {
-    id("unsignedbv");
+    id(t_unsignedbv);
     set_width(width);
   }
 };
@@ -378,12 +378,12 @@ class signedbv_typet:public bv_typet
 public:
   signedbv_typet()
   {
-    id("signedbv");
+    id(t_signedbv);
   }
 
   explicit signedbv_typet(unsigned width)
   {
-    id("signedbv");
+    id(t_signedbv);
     set_width(width);
   }
 };
@@ -393,7 +393,7 @@ class fixedbv_typet:public bv_typet
 public:
   fixedbv_typet()
   {
-    id("fixedbv");
+    id(t_fixedbv);
   }
 
   unsigned get_fraction_bits() const
@@ -405,12 +405,12 @@ public:
 
   void set_integer_bits(unsigned b)
   {
-    set("integer_bits", b);
+    set(a_integer_bits, b);
   }
 
   friend const fixedbv_typet &to_fixedbv_type(const typet &type)
   {
-    assert(type.id()=="fixedbv");
+    assert(type.id()==t_fixedbv);
     return static_cast<const fixedbv_typet &>(type);
   }
 };

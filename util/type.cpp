@@ -87,6 +87,12 @@ irep_idt typet::t_union = dstring("union");
 irep_idt typet::t_class = dstring("class");
 irep_idt typet::t_code = dstring("code");
 irep_idt typet::t_array = dstring("array");
+irep_idt typet::t_pointer = dstring("pointer");
+irep_idt typet::t_reference = dstring("#reference");
+irep_idt typet::t_bv = dstring("bv");
+irep_idt typet::t_unsignedbv = dstring("unsignedbv");
+irep_idt typet::t_signedbv = dstring("signedbv");
+irep_idt typet::t_fixedbv = dstring("fixedbv");
 
 irep_idt typet::a_identifier = dstring("identifier");
 irep_idt typet::a_name = dstring("name");
@@ -95,6 +101,8 @@ irep_idt typet::a_methods = dstring("methods");
 irep_idt typet::a_arguments = dstring("arguments");
 irep_idt typet::a_return_type = dstring("return_type");
 irep_idt typet::a_size = dstring("size");
+irep_idt typet::a_width = dstring("width");
+irep_idt typet::a_integer_bits = dstring("integer_bits");
 
 irep_idt typet::f_subtype = dstring("subtype");
 irep_idt typet::f_subtypes = dstring("subtypes");

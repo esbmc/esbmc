@@ -83,6 +83,12 @@ class typet:public irept
   static irep_idt t_class;
   static irep_idt t_code;
   static irep_idt t_array;
+  static irep_idt t_pointer;
+  static irep_idt t_reference;
+  static irep_idt t_bv;
+  static irep_idt t_unsignedbv;
+  static irep_idt t_signedbv;
+  static irep_idt t_fixedbv;
 
   static irep_idt a_identifier;
   static irep_idt a_name;
@@ -91,6 +97,8 @@ class typet:public irept
   static irep_idt a_arguments;
   static irep_idt a_return_type;
   static irep_idt a_size;
+  static irep_idt a_width;
+  static irep_idt a_integer_bits;
 
 protected:
   static irep_idt f_subtype;
