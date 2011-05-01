@@ -1129,9 +1129,9 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   execution_statet::expr_id_map_t m;
   m[exprt::plus] = serialise_normal_operation;
   m[exprt::minus] = serialise_normal_operation;
-  m["*"] = serialise_normal_operation;
-  m["/"] = serialise_normal_operation;
-  m["mod"] = serialise_normal_operation;
+  m[exprt::mult] = serialise_normal_operation;
+  m[exprt::div] = serialise_normal_operation;
+  m[exprt::mod] = serialise_normal_operation;
   m["="] = serialise_normal_operation;
   m["and"] = serialise_normal_operation;
   m["=>"] = serialise_normal_operation;
