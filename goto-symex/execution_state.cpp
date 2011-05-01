@@ -1141,7 +1141,7 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m[exprt::notequal] = serialise_normal_operation;
   m["unary-"] = serialise_normal_operation;
   m["unary+"] = serialise_normal_operation;
-  m["abs"] = serialise_normal_operation;
+  m[exprt::abs] = serialise_normal_operation;
   m[exprt::isnan] = serialise_normal_operation;
   m[exprt::i_ge] = serialise_normal_operation;
   m[exprt::i_gt] = serialise_normal_operation;
@@ -1153,6 +1153,7 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m[exprt::i_bitnand] = serialise_normal_operation;
   m[exprt::i_bitnor] = serialise_normal_operation;
   m[exprt::i_bitnxor] = serialise_normal_operation;
+  m[exprt::i_bitnot] = serialise_normal_operation;
   m[exprt::i_shl] = serialise_normal_operation;
   m[exprt::i_lshr] = serialise_normal_operation;
   m[exprt::i_ashr] = serialise_normal_operation;
