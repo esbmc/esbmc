@@ -398,7 +398,7 @@ void basic_symext::symex_assign_array(
   // into
   //   a'==a WITH [i:=e]
 
-  exprt new_rhs("with", lhs_type);
+  exprt new_rhs(exprt::with, lhs_type);
 
   new_rhs.reserve_operands(3);
   new_rhs.copy_to_operands(lhs_array);
@@ -470,7 +470,7 @@ void basic_symext::symex_assign_member(
   // into
   //   a'==a WITH [c:=e]
 
-  exprt new_rhs("with", struct_type);
+  exprt new_rhs(exprt::with, struct_type);
 
   new_rhs.reserve_operands(3);
   new_rhs.copy_to_operands(lhs_struct);

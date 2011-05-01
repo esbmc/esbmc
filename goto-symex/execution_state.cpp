@@ -998,7 +998,7 @@ execution_statet::serialise_expr(const exprt &rhs)
     exprt size = (exprt&)array.find("size");
     str += "sz(" + serialise_expr(size) + "),";
     str += "elem(" + serialise_expr(rhs.op0()) + "))";
-  } else if (rhs.id() == "with") {
+  } else if (rhs.id() == exprt::with) {
     exprt rec = rhs;
 
     if (rec.type().id() == "array") {

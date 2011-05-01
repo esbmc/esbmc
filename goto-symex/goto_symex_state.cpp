@@ -253,7 +253,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
   }
 #endif
 #if 1
-  else if(expr.id()=="with")
+  else if(expr.id()==exprt::with)
   {
 	with_counter++;
 
