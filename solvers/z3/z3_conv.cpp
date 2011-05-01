@@ -666,8 +666,8 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
   std::cout << "type.pretty(): " << type.pretty() << std::endl;
   std::cout << "type.id(): " << type.id() << std::endl;
   std::cout << "type.subtype().id(): " << type.subtype().id() << std::endl;
-  //std::cout << "type.get_string: " << type.get_string("identifier") << std::endl;
-  //std::cout << "type.subtype().get_string: " << type.subtype().get_string("identifier") << std::endl;
+  //std::cout << "type.get_string: " << type.get_string(typet::a_identifier) << std::endl;
+  //std::cout << "type.subtype().get_string: " << type.subtype().get_string(typet::a_identifier) << std::endl;
 #endif
 
   unsigned width=config.ansi_c.int_width;
@@ -4822,10 +4822,10 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 	std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
 	std::cout << "expr.type().subtype().id(): " << expr.type().subtype().id() << std::endl;
-	std::cout << "identifier: " << expr.op0().get_string("identifier") << std::endl;
+	std::cout << "identifier: " << expr.op0().get_string(exprt::a_identifier) << std::endl;
 	print_data_types(pointer_var,pointer);
 	std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-	std::cout << "identifier: " << expr.op0().get_string("identifier") << std::endl;
+	std::cout << "identifier: " << expr.op0().get_string(exprt::a_identifier) << std::endl;
 #endif
 
 	if (expr.type().subtype().id()==typet::t_symbol
