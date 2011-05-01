@@ -70,6 +70,19 @@ bool is_number(const typet &type)
          id=="fixedbv";
 }
 
+irep_idt typet::t_integer = dstring("integer");
+irep_idt typet::t_signedbv = dstring("signedbv");
+irep_idt typet::t_unsignedbv = dstring("unsignedbv");
+irep_idt typet::t_rational = dstring("rational");
+irep_idt typet::t_real = dstring("real");
+irep_idt typet::t_natural = dstring("natural");
+irep_idt typet::t_complex = dstring("complex");
+irep_idt typet::t_floatbv = dstring("floatbv");
+irep_idt typet::t_fixedbv = dstring("fixedbv");
+irep_idt typet::t_bool = dstring("bool");
+irep_idt typet::t_empty = dstring("empty");
+irep_idt typet::t_symbol = dstring("symbol");
+
 irep_idt typet::f_subtype = dstring("subtype");
 irep_idt typet::f_subtypes = dstring("subtypes");
 irep_idt typet::f_location = dstring("#location");

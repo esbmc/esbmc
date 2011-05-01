@@ -19,7 +19,7 @@ class bool_typet:public typet
 public:
   bool_typet()
   {
-    id("bool");
+    id(t_bool);
   }
 };
 
@@ -28,18 +28,18 @@ class empty_typet:public typet
 public:
   empty_typet()
   {
-    id("empty");
+    id(t_empty);
   }
 };
 
 class symbol_typet:public typet
 {
 public:
-  symbol_typet():typet("symbol")
+  symbol_typet():typet(t_symbol)
   {
   }
   
-  explicit symbol_typet(const irep_idt &identifier):typet("symbol")
+  explicit symbol_typet(const irep_idt &identifier):typet(t_symbol)
   {
     set_identifier(identifier);
   }

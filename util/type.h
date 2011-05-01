@@ -65,6 +65,20 @@ class typet:public irept
     return (const typet &)find(name);
   }
 
+  static irep_idt t_integer;
+  static irep_idt t_signedbv;
+  static irep_idt t_unsignedbv;
+  static irep_idt t_rational;
+  static irep_idt t_real;
+  static irep_idt t_natural;
+  static irep_idt t_complex;
+  static irep_idt t_floatbv;
+  static irep_idt t_fixedbv;
+  static irep_idt t_bool;
+  static irep_idt t_empty;
+  static irep_idt t_symbol; // So there're expressions of id "symbol" and types
+                            // of id "symbol". Great.
+
 protected:
   static irep_idt f_subtype;
   static irep_idt f_subtypes;
