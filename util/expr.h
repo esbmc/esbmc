@@ -170,6 +170,7 @@ public:
     return static_cast<const exprt &>(find(name));
   }
 
+  // Actual expression nodes
   static irep_idt trans;
   static irep_idt symbol;
   static irep_idt plus;
@@ -198,6 +199,10 @@ public:
   static irep_idt constant;
   static irep_idt i_true;
   static irep_idt i_false;
+
+  // Expression attributes
+  static irep_idt a_identifier;
+  static irep_idt a_value;
 };
 
 typedef std::list<exprt> expr_listt;

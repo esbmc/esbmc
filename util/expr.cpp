@@ -680,3 +680,6 @@ irep_idt exprt::i_type = dstring("type");
 irep_idt exprt::constant = dstring("constant");
 irep_idt exprt::i_true = dstring("true");
 irep_idt exprt::i_false = dstring("false");
+
+irep_idt exprt::a_identifier = dstring("identifier");
+irep_idt exprt::a_value = dstring("value");
