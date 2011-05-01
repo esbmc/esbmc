@@ -23,13 +23,16 @@ Author: Ben YIU, yspb1g08@ecs.soton.ac.uk
 #include "goto_symex_state.h"
 #include "read_write_set.h"
 
+class reachability_treet;
+
 class execution_statet
 {
 
 public:
 	execution_statet(const goto_functionst &goto_functions,
-                const namespacet &ns):
+                const namespacet &ns, const reachability_treet *art):
                 _target(ns),
+		owning_rt(art),
                 _goto_functions(goto_functions)
 	{
 	  reexecute_instruction = true;
@@ -114,6 +117,8 @@ public:
      * not they're globals. Counts them; also puts them in the
      * _exprs_read_write implicitly as reads: my eyes are on fire. */
     unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
+
+    const reachability_treet *owning_rt;
 
 	/* jmorse - Set of current thread states, indexed by threads id number*/
 	std::vector<goto_symex_statet> _threads_state;

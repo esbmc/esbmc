@@ -509,10 +509,13 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     return false;
   }
 
-  goto_programt::const_targett pc = ex_state.get_active_state().source.pc;
-  crypto_hash hash = ex_state.generate_hash();
-  if (hit_hashes.find(hash) != hit_hashes.end())
-    return false;
+  crypto_hash hash;
+  if (state_hashing) {
+    goto_programt::const_targett pc = ex_state.get_active_state().source.pc;
+    hash = ex_state.generate_hash();
+    if (hit_hashes.find(hash) != hit_hashes.end())
+      return false;
+  }
 
   //new
 #if 1
@@ -569,7 +572,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
   /* Once we've generated all interleavings from this state, increment hit count
    * so that we don't come back here again */
-  if (generated == false)
+  if (generated == false && state_hashing)
     hit_hashes.insert(hash);
 
   _go_next = true;

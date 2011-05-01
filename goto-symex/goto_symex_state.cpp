@@ -14,6 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <i2string.h>
 #include "../util/expr_util.h"
 
+#include "reachability_tree.h"
 #include "execution_state.h"
 #include "goto_symex_state.h"
 #include "crypto_hash.h"
@@ -375,9 +376,11 @@ void goto_symex_statet::assignment(
   execution_statet &ex_state,
   unsigned exec_node_id)
 {
+  crypto_hash hash;
   assert(lhs.id()=="symbol");
 
-  crypto_hash hash = ex_state.update_hash_for_assignment(rhs);
+  if (ex_state.owning_rt->state_hashing)
+    hash = ex_state.update_hash_for_assignment(rhs);
 
   // the type might need renaming
   rename(lhs.type(), ns, exec_node_id);
@@ -398,7 +401,8 @@ void goto_symex_statet::assignment(
 
   lhs.set("identifier", level2->name(l1_identifier, entry.count));
 
-  level2->current_hashes[orig_name] = hash;
+  if (ex_state.owning_rt->state_hashing)
+    level2->current_hashes[orig_name] = hash;
 
   if(record_value)
   {

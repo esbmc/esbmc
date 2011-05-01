@@ -48,7 +48,7 @@ public:
 	  _go_next_formula = false;
       _actual_CS_bound = _CS_bound;
       _is_same_mutex=false;
-      execution_statet ex_state(goto_functions, ns);
+      execution_statet ex_state(goto_functions, ns, this);
 	  execution_states.push_back(ex_state);
       _cur_state_it = execution_states.begin();
     };
@@ -90,6 +90,7 @@ public:
 	const goto_functionst &_goto_functions;
     execution_statet* _cur_target_state;
 	bool _go_next_formula;
+    bool state_hashing;
 private:
 	std::list<execution_statet> execution_states;
     /* This is derefed and returned by get_current_state */
@@ -98,7 +99,6 @@ private:
 	bool _go_next;
 	bool _DFS, _multi_formulae, _is_same_mutex,
 		 _deadlock_detection, _por;
-    bool state_hashing;
     const namespacet &_ns;
 
     /* jmorse */
