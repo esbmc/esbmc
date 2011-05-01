@@ -73,10 +73,16 @@ void
 crypto_hash::setup_pointers()
 {
   void *ssl_lib;
+  long (*ssleay)(void);
 
   ssl_lib = dlopen("libcrypto.so", RTLD_LAZY);
   if (ssl_lib == NULL)
     throw "Couldn't open OpenSSL crypto library - can't hash state";
+
+  ssleay = (long (*)(void)) dlsym(ssl_lib, "SSLeay");
+  // Check for version 0.9.8 - I believe this is the first release with SHA256.
+  if (ssleay() < 0x000908000)
+    throw "OpenSSL >= 0.9.8 required for state hashing";
 
   sha_init = (int (*) (SHA256_CTX *c)) dlsym(ssl_lib, "SHA256_Init");
   sha_update = (int (*) (SHA256_CTX *c, const void *data, size_t len))
