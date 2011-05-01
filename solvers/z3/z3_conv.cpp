@@ -2530,15 +2530,15 @@ literalt z3_convt::convert_rest(const exprt &expr)
   if (!assign_z3_expr(expr) && !ignoring_expr)
 	return l;
 
-  if (expr.id() == "<")
+  if (expr.id() == exprt::i_lt)
 	constraint = convert_lt(expr);
-  else if (expr.id() == ">")
+  else if (expr.id() == exprt::i_gt)
 	constraint = convert_gt(expr);
-  else if (expr.id() == "<=")
+  else if (expr.id() == exprt::i_le)
 	constraint = convert_le(expr);
-  else if (expr.id() == ">=")
+  else if (expr.id() == exprt::i_ge)
     constraint = convert_ge(expr);
-  else if (expr.id() == "=" || expr.id() == "notequal")
+  else if (expr.id() == exprt::equality || expr.id() == exprt::notequal)
 	constraint = convert_eq(expr);
   else if (expr.id() == "invalid-pointer")
 	constraint = convert_invalid(expr);
@@ -2556,9 +2556,9 @@ literalt z3_convt::convert_rest(const exprt &expr)
 	constraint = convert_overflow_unary(expr);
   else if(has_prefix(expr.id_string(), "overflow-typecast-"))
 	constraint = convert_overflow_typecast(expr);
-  else if (expr.id() == "member")
+  else if (expr.id() == exprt::member)
 	constraint = convert_rest_member(expr);
-  else if (expr.id() == "index")
+  else if (expr.id() == exprt::index)
 	constraint = convert_rest_index(expr);
   else if (expr.id() == "memory-leak")
 	constraint = convert_memory_leak(expr);
