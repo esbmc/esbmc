@@ -94,6 +94,7 @@ irep_idt typet::t_unsignedbv = dstring("unsignedbv");
 irep_idt typet::t_signedbv = dstring("signedbv");
 irep_idt typet::t_fixedbv = dstring("fixedbv");
 irep_idt typet::t_floatbv = dstring("floatbv");
+irep_idt typet::t_string = dstring("string");
 
 irep_idt typet::a_identifier = dstring("identifier");
 irep_idt typet::a_name = dstring("name");
