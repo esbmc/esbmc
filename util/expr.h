@@ -169,6 +169,35 @@ public:
   {
     return static_cast<const exprt &>(find(name));
   }
+
+  static irep_idt trans;
+  static irep_idt symbol;
+  static irep_idt plus;
+  static irep_idt minus;
+  static irep_idt mult;
+  static irep_idt div;
+  static irep_idt mod;
+  static irep_idt equality;
+  static irep_idt index;
+  static irep_idt arrayof;
+  static irep_idt objdesc;
+  static irep_idt dynobj;
+  static irep_idt typecast;
+  static irep_idt i_and;
+  static irep_idt implies;
+  static irep_idt i_or;
+  static irep_idt addrof;
+  static irep_idt i_not;
+  static irep_idt deref;
+  static irep_idt i_if;
+  static irep_idt with;
+  static irep_idt member;
+  static irep_idt isnan;
+  static irep_idt ieee_floateq;
+  static irep_idt i_type;
+  static irep_idt constant;
+  static irep_idt i_true;
+  static irep_idt i_false;
 };
 
 typedef std::list<exprt> expr_listt;

@@ -651,3 +651,32 @@ const locationt &exprt::find_location() const
 
   return static_cast<const locationt &>(get_nil_irep());
 }
+
+irep_idt exprt::trans = dstring("trans");
+irep_idt exprt::symbol = dstring("trans");
+irep_idt exprt::plus = dstring("+");
+irep_idt exprt::minus = dstring("-");
+irep_idt exprt::mult = dstring("*");
+irep_idt exprt::div = dstring("/");
+irep_idt exprt::mod = dstring("mod");
+irep_idt exprt::equality = dstring("=");
+irep_idt exprt::index = dstring("index");
+irep_idt exprt::arrayof = dstring("array_of");
+irep_idt exprt::objdesc = dstring("object_descriptor");
+irep_idt exprt::dynobj = dstring("dynobj");
+irep_idt exprt::typecast = dstring("typecast");
+irep_idt exprt::i_and = dstring("and");
+irep_idt exprt::implies = dstring("=>");
+irep_idt exprt::i_or = dstring("or");
+irep_idt exprt::addrof = dstring("address_of");
+irep_idt exprt::i_not = dstring("not");
+irep_idt exprt::deref = dstring("dereference");
+irep_idt exprt::i_if = dstring("if");
+irep_idt exprt::with = dstring("with");
+irep_idt exprt::member = dstring("member");
+irep_idt exprt::isnan = dstring("isnan");
+irep_idt exprt::ieee_floateq = dstring("ieee_float_equal");
+irep_idt exprt::i_type = dstring("type");
+irep_idt exprt::constant = dstring("constant");
+irep_idt exprt::i_true = dstring("true");
+irep_idt exprt::i_false = dstring("false");
