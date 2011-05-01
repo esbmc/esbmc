@@ -68,7 +68,7 @@ void goto_symext::replace_dynamic_allocation(
     assert(expr.op0().type().id()=="pointer");
     
     // check what we have
-    if(expr.op0().id()=="address_of" ||
+    if(expr.op0().id()==exprt::addrof ||
        expr.op0().id()=="implicit_address_of")
     {
       assert(expr.op0().operands().size()==1);

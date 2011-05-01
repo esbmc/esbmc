@@ -156,7 +156,7 @@ Function: preconditiont::compute_rec
 
 void preconditiont::compute_rec(exprt &dest)
 {
-  if(dest.id()=="address_of" ||
+  if(dest.id()==exprt::addrof ||
      dest.id()=="reference_to" ||
      dest.id()=="implicit_address_of")
   {

@@ -735,7 +735,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 
   std::string identifier = expr.get_string("identifier");
 
-  if (expr.id() == "address_of" ||
+  if (expr.id() == exprt::addrof ||
       expr.id() == "valid_object" ||
       expr.id() == "dynamic_size" ||
       expr.id() == "dynamic_type" ||
@@ -835,7 +835,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 
   std::string identifier = expr.get_string("identifier");
 
-  if (expr.id() == "address_of" ||
+  if (expr.id() == exprt::addrof ||
             expr.type().id() == "pointer" ||
             expr.id() == "valid_object" ||
             expr.id() == "dynamic_size" ||
@@ -1154,7 +1154,7 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m["lshr"] = serialise_normal_operation;
   m["ashr"] = serialise_normal_operation;
   m[exprt::typecast] = serialise_normal_operation;
-  m["address_of"] = serialise_normal_operation;
+  m[exprt::addrof] = serialise_normal_operation;
   m["pointer_obj"] = serialise_normal_operation;
   m["pointer_object"] = serialise_normal_operation;
 

@@ -87,7 +87,7 @@ void basic_symext::symex_malloc(
 
   new_context.add(symbol);
   
-  exprt rhs("address_of", typet("pointer"));
+  exprt rhs(exprt::addrof, typet("pointer"));
   
   if(size_is_one)
   {
@@ -143,7 +143,7 @@ void basic_symext::symex_printf(
 
   const exprt &format=operands[0];
   
-  if(format.id()=="address_of" &&
+  if(format.id()==exprt::addrof &&
      format.operands().size()==1 &&
      format.op0().id()==exprt::index &&
      format.op0().operands().size()==2 &&
@@ -212,7 +212,7 @@ void basic_symext::symex_cpp_new(
 
   // make symbol expression
 
-  exprt rhs("address_of", typet("pointer"));
+  exprt rhs(exprt::addrof, typet("pointer"));
   rhs.type().subtype()=code.type().subtype();
   
   if(do_array)

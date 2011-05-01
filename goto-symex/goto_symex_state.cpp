@@ -222,7 +222,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
   //std::cout << "constant_propagation: " << expr.pretty() << std::endl;
   if(expr.is_constant()) return true;
 
-  if(expr.id()=="address_of")
+  if(expr.id()==exprt::addrof)
   {
     if(expr.operands().size()!=1)
       throw "address_of expects one operand";
@@ -481,7 +481,7 @@ void goto_symex_statet::rename(exprt &expr, const namespacet &ns,unsigned node_i
     top().level1.rename(expr,node_id);
     level2->rename(expr,node_id);
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.id()==exprt::addrof ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {
@@ -569,7 +569,7 @@ void goto_symex_statet::level1t::rename(exprt &expr,unsigned node_id)
     if(it!=current_names.end())
       expr.set("identifier", name(identifier, it->second,node_id));
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.id()==exprt::addrof ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {
@@ -628,7 +628,7 @@ void goto_symex_statet::level2t::rename(exprt &expr, unsigned node_id)
       expr.set("identifier", new_identifier);
     }
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.id()==exprt::addrof ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {

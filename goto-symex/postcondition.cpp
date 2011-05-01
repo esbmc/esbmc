@@ -234,7 +234,7 @@ bool postconditiont::is_used(
   const exprt &expr,
   const irep_idt &identifier)
 {
-  if(expr.id()=="address_of" ||
+  if(expr.id()==exprt::addrof ||
      expr.id()=="reference_to" ||
      expr.id()=="implicit_address_of")
   {
