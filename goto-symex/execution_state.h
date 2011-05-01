@@ -60,6 +60,42 @@ public:
 		nondet_count = 0;
 	};
 
+	execution_statet(const execution_statet &ex) :
+		_target(ex._target),
+		_state_level2(ex._state_level2),
+		_goto_functions(ex._goto_functions)
+	{
+	}
+
+	execution_statet& operator=(const execution_statet &ex)
+	{
+		_threads_state = ex._threads_state;
+		_atomic_numbers = ex._atomic_numbers;
+		_DFS_traversed = ex._DFS_traversed;
+		_exprs = ex._exprs;
+		generating_new_threads = ex.generating_new_threads;
+		last_global_expr = ex.last_global_expr;
+		_exprs_read_write = ex._exprs_read_write;
+		last_global_read_write = ex.last_global_read_write;
+		_last_active_thread = ex._last_active_thread;
+		_state_level2 = ex._state_level2;
+		_active_thread = ex._active_thread;
+		guard_execution = ex.guard_execution;
+		guard_thread = ex.guard_thread;
+		_parent_guard_identifier = ex._parent_guard_identifier;
+		reexecute_instruction = ex.reexecute_instruction;
+		reexecute_atomic = ex.reexecute_atomic;
+		_actual_CS_number = ex._actual_CS_number;
+		nondet_count = ex.nondet_count;
+		dynamic_counter = ex.dynamic_counter;
+		node_id = ex.node_id;
+		parent_node_id = ex.parent_node_id;
+
+		_goto_program = ex._goto_program;
+		_CS_number = ex._CS_number;
+		return *this;
+	}
+
 	virtual ~execution_statet()	{};
 
     // Types
