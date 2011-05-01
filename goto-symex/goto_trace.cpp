@@ -156,7 +156,7 @@ void counterexample_value(
     	 value.type().id()=="unsignedbv" ||
     	 value.type().id()=="fixedbv" ||
     	 value.type().id()=="floatbv")
-        value_string+= " ("+value.get_string("value")+")";
+        value_string+= " ("+value.get_string(exprt::a_value)+")";
     }
 #if 0
     else if (lhs.type().id()=="pointer")

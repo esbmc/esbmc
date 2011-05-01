@@ -337,7 +337,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	      exprt constant_value = exprt(exprt::constant,(*pvi).type());
 	      std::string bit_string = 
 		integer2binary(atoi(k->c_str()), bv_width((*pvi).type()));
-	      constant_value.set("value", bit_string);
+	      constant_value.set(exprt::a_value, bit_string);
 	      equal_cond.move_to_operands(constant_value);
 	      eq_conds.push_back(equal_cond);
 	      pvi++;

@@ -151,7 +151,7 @@ void basic_symext::symex_printf(
      format.op0().op1().is_zero())
   {
     const exprt &fmt_str=format.op0().op0();
-    const std::string &fmt=fmt_str.get_string("value");
+    const std::string &fmt=fmt_str.get_string(exprt::a_value);
 
     target->output(state.guard, state.source, fmt, args);
   }
@@ -286,7 +286,7 @@ void basic_symext::symex_trace(
     std::list<exprt> vars;
     
     exprt trace_event("trave_event");
-    trace_event.set("event", code.arguments()[1].op0().get("value"));
+    trace_event.set("event", code.arguments()[1].op0().get(exprt::a_value));
     
     vars.push_back(trace_event);
 

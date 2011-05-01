@@ -253,7 +253,7 @@ void reachability_treet::check_mutex(const exprt &code, const execution_statet &
 	    is_first_assign=false;
 	  }
 
-	  val = integer2string(binary2integer(value.get_string("value"), true),10);
+	  val = integer2string(binary2integer(value.get_string(exprt::a_value), true),10);
 
 	  if (identifier.find(object.op0().op0().get_string(exprt::a_identifier)) != std::string::npos)
 	    _is_same_mutex=true;
