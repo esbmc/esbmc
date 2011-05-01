@@ -571,8 +571,8 @@ void execution_statet::add_thread(goto_programt::const_targett thread_start, got
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
 #endif
 
-  goto_symex_statet state;
-  state.initialize(_state_level2, thread_start, thread_end, _threads_state.size());
+  goto_symex_statet state(_state_level2);
+  state.initialize(thread_start, thread_end, _threads_state.size());
 
   _threads_state.push_back(state);
   _atomic_numbers.push_back(0);

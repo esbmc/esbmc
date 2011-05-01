@@ -335,7 +335,7 @@ void goto_symext::pop_frame(statet &state)
       it=frame.local_variables.begin();
       it!=frame.local_variables.end();
       it++)
-    state.level2->remove(*it);
+    state.level2.remove(*it);
 
 //  std::cout << "executing end function afer remove locals 1" << std::endl;
 

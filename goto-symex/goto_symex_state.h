@@ -31,7 +31,9 @@ class execution_statet; // foward dec
 class goto_symex_statet
 {
 public:
-	goto_symex_statet()
+	struct level2t;
+	goto_symex_statet(struct level2t &l2)
+		: level2(l2)
 	{
 	    use_value_set=true;
 	    depth=0;
@@ -40,7 +42,31 @@ public:
 	    join_count = 0;
 	    thread_ended = false;
 	}
-//	goto_symex_statet(const goto_symex_statet &state);
+
+	goto_symex_statet& operator=(const goto_symex_statet &state)
+	{
+		level2 = state.level2;
+		depth = state.depth;
+		sleeping = state.sleeping;
+		waiting = state.waiting;
+		waiting = state.waiting;
+		join_count = state.join_count;
+		thread_ended = state.thread_ended;
+		guard = state.guard;
+		source = state.source;
+		if_guard_stack = state.if_guard_stack;
+		function_frame = state.function_frame;
+		unwind_map = state.unwind_map;
+		function_unwind = state.function_unwind;
+		declaration_history = state.declaration_history;
+		use_value_set = state.use_value_set;
+		value_set = state.value_set;
+		call_stack = state.call_stack;
+		return *this;
+	}
+
+
+
   // distance from entry
   unsigned depth;
 
@@ -189,9 +215,11 @@ public:
     virtual ~level2t() { }
 
     virtual void print(std::ostream &out, unsigned node_id) const;
-  } * level2;
+  };
 
-  void initialize(goto_symex_statet::level2t * pl, const goto_programt::const_targett & start,const goto_programt::const_targett & end, unsigned int thread_id);
+  level2t &level2;
+
+  void initialize(const goto_programt::const_targett & start,const goto_programt::const_targett & end, unsigned int thread_id);
 
   void rename(exprt &expr, const namespacet &ns, unsigned node_id);
   void rename_address(exprt &expr, const namespacet &ns, unsigned node_id);
@@ -220,11 +248,11 @@ public:
   }
 
   std::string current_name(
-    const level2t * plevel2,
+    const level2t &plevel2,
     const irep_idt &identifier,unsigned node_id) const
   {
     irep_idt temp = top().level1(identifier,node_id);
-    return plevel2->stupid_operator(temp,node_id);
+    return plevel2.stupid_operator(temp,node_id);
   }
 
   bool use_value_set;
@@ -243,7 +271,7 @@ public:
 
     explicit goto_statet(const goto_symex_statet &s):
       depth(s.depth),
-      level2(*(s.level2)),
+      level2(s.level2),
       value_set(s.value_set),
       guard(s.guard),
       thread_id(s.source.thread_nr)
@@ -255,7 +283,7 @@ public:
     const goto_statet &goto_state,
     const irep_idt &identifier, unsigned node_id) const
   {
-    return current_name(&(goto_state.level2), identifier, node_id);
+    return current_name(goto_state.level2, identifier, node_id);
   }
 
   // gotos
