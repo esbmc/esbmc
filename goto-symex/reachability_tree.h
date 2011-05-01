@@ -41,7 +41,10 @@ public:
       // XXX - in one location (goto_symext::operator()) por depends on whether
       // control-flow-test is set, while in another
       // (goto_symext::multi_formulas_init) it does not.
-      _por = (options.get_bool_option("no-por") && !(options.get_bool_option("control-flow-test")));
+      if (options.get_bool_option("no-por"))
+        _por = false;
+      else
+        _por = true;
 
       _DFS=true;
 	  _go_next = false;
