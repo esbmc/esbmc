@@ -434,7 +434,7 @@ static std::string state_to_ignore[8] =
 "count_lock", "count_wait", "unlocked"};
 
 crypto_hash
-goto_symex_statet::level2t::generate_l2_state_hash()
+goto_symex_statet::level2t::generate_l2_state_hash() const
 {
   uint8_t *data;
   int idx;
