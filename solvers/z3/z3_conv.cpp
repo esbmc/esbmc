@@ -622,7 +622,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 	{
       if (boolbv_get_width(type.subtype().subtype(), width))
       {
-    	if (type.subtype().subtype().id()=="empty"
+    	if (type.subtype().subtype().id()==typet::t_empty
     		|| type.subtype().subtype().id()=="symbol")
     	  width = config.ansi_c.int_width;
     	else
@@ -735,7 +735,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	{
       if (boolbv_get_width(type.subtype().subtype(), width))
       {
-    	if (type.subtype().subtype().id()=="empty" ||
+    	if (type.subtype().subtype().id()==typet::t_empty ||
     		type.subtype().subtype().id()=="symbol")
     		width = config.ansi_c.int_width;
     	else
@@ -790,7 +790,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
       return true;
     }
   }
-  else if (type.id()=="symbol" || type.id() == "empty")
+  else if (type.id()=="symbol" || type.id() == typet::t_empty)
   {
     if (int_encoding)
 	  bv = Z3_mk_int_type(z3_ctx);
@@ -1753,7 +1753,7 @@ Z3_ast z3_convt::convert_invalid(const exprt &expr)
 
   if (!is_in_cache(expr.op0()))
   {
-	if (expr.op0().id()==exprt::plus && expr.op0().type().subtype().id()!="empty")
+	if (expr.op0().id()==exprt::plus && expr.op0().type().subtype().id()!=typet::t_empty)
       return Z3_mk_true(z3_ctx);
 	else
 	  return Z3_mk_false(z3_ctx);
@@ -1782,8 +1782,7 @@ Z3_ast z3_convt::convert_invalid(const exprt &expr)
     std::cout << "not_in_cache" << std::endl;
 #endif
 
-  if (expr.op0().type().id()=="pointer" && (expr.op0().type().subtype().id()==typet::t_signedbv
-		  || expr.op0().type().subtype().id()=="empty"))
+  if (expr.op0().type().id()=="pointer" && (expr.op0().type().subtype().id()==typet::t_signedbv || expr.op0().type().subtype().id()==typet::t_empty))
   {
 	  operand[1] = convert_number(-1, config.ansi_c.int_width, true);
 	  return Z3_mk_not(z3_ctx, Z3_mk_distinct(z3_ctx, 2, operand));
@@ -1886,7 +1885,7 @@ Z3_ast z3_convt::convert_same_object(const exprt &expr)
 	  width_op0 = config.ansi_c.int_width;
 
 	if (!int_encoding)
-	  if (op0.type().subtype().id()!="pointer" && op1.type().subtype().id()=="empty")
+	  if (op0.type().subtype().id()!="pointer" && op1.type().subtype().id()==typet::t_empty)
 	  operand[1] = Z3_mk_extract(z3_ctx, width_op0-1, 0, operand[1]);
 
     formula[0] = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
@@ -2873,12 +2872,12 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
         //return true;
       to_width=config.ansi_c.int_width;
     }
-    else if (expr.type().id()=="pointer" && expr.type().subtype().id()!="empty")
+    else if (expr.type().id()=="pointer" && expr.type().subtype().id()!=typet::t_empty)
     {
    	  if (boolbv_get_width(expr.type().subtype(), to_width))
         return true;
     }
-    else if (expr.type().id()=="pointer" && expr.type().subtype().id()=="empty")
+    else if (expr.type().id()=="pointer" && expr.type().subtype().id()==typet::t_empty)
     {
       to_width=config.ansi_c.int_width;
     }
@@ -3091,7 +3090,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
       }
 	  bv = Z3_mk_ite(z3_ctx, bv, one, zero);
 	}
-    else if(op.type().subtype().id()=="empty")
+    else if(op.type().subtype().id()==typet::t_empty)
     {
       unsigned from_width=config.ansi_c.int_width;
       Z3_ast object, pointer_var;
@@ -3218,11 +3217,11 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   	  }
   	  else if (op.operands().size()==0)
   	  {
-   	    if (expr.type().subtype().id()!="empty" &&
+   	    if (expr.type().subtype().id()!=typet::t_empty &&
    	       (op.type().id()=="pointer" && op.type().subtype().id()=="symbol"))
       	  bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
   	  }
-  	  else if (expr.type().subtype().id()!="empty" &&
+  	  else if (expr.type().subtype().id()!=typet::t_empty &&
   		 (op.type().id()=="pointer" && op.type().subtype().id()=="symbol") &&
   		 op.op0().id()!=exprt::index && expr.type().id()!="pointer"
   		 /*&& op.op0().type().id()!="struct"*/)
@@ -3247,7 +3246,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   	  //std::cout << "op.pretty(): " << op.pretty() << std::endl;
   	  //std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
   	  //print_data_types(bv,bv);
-  	  if (op.type().subtype().subtype().id()!="empty" &&
+  	  if (op.type().subtype().subtype().id()!=typet::t_empty &&
   			  expr.type().id()!="pointer")
   	    bv = z3_api.mk_tuple_select(z3_ctx, bv, 0);
   	  //std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
@@ -3496,7 +3495,7 @@ bool z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast 
 	{
       if (boolbv_get_width(expr.type().subtype().subtype(), width))
       {
-    	if (expr.type().subtype().subtype().id()=="empty"
+    	if (expr.type().subtype().subtype().id()==typet::t_empty
     		|| expr.type().subtype().subtype().id()=="symbol")
     	  width=config.ansi_c.int_width;
     	else
@@ -3531,7 +3530,7 @@ bool z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast 
   identifier = symbol;
   identifier += val;
 
-  if (expr.type().subtype().id()=="empty")
+  if (expr.type().subtype().id()==typet::t_empty)
     identifier += "empty";
 
   bv = z3_api.mk_var(z3_ctx, identifier.c_str(), tuple_type);
@@ -4235,7 +4234,7 @@ bool z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
 
   		//std::cout << "offset.type().id(): " << offset.type().id() << std::endl;
   		//std::cout << "offset.type().subtype().id(): " << offset.type().subtype().id() << std::endl;
-  		if (offset.type().id()=="pointer" && offset.type().subtype().id()!="empty" /*&& offset.type().subtype().id()!=typet::t_signedbv*/)
+  		if (offset.type().id()=="pointer" && offset.type().subtype().id()!=typet::t_empty /*&& offset.type().subtype().id()!=typet::t_signedbv*/)
   	      args[i] = z3_api.mk_tuple_select(z3_ctx, args[i], 1); //select pointer index
   	  }
 
@@ -5613,7 +5612,7 @@ bool z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 
     if (expr.op0().type().id()=="pointer")
     {
-      if (expr.op0().type().subtype().id()=="empty" || expr.op0().type().subtype().id()=="symbol")
+      if (expr.op0().type().subtype().id()==typet::t_empty || expr.op0().type().subtype().id()=="symbol")
       {
         object_width = config.ansi_c.int_width;
       }
@@ -5787,7 +5786,7 @@ bool z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
           if (boolbv_get_width(expr.op0().type().subtype().subtype(), object_width))
             return true;
         }
-        else if (expr.op0().type().subtype().id()=="empty" || expr.op0().type().subtype().id()=="pointer")
+        else if (expr.op0().type().subtype().id()==typet::t_empty || expr.op0().type().subtype().id()=="pointer")
         {
           object_width = config.ansi_c.int_width;
         }
