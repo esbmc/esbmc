@@ -1006,12 +1006,12 @@ execution_statet::serialise_expr(const exprt &rhs)
       str += "prev(" + serialise_expr(rec.op0()) + "),";
       str += "idx(" + serialise_expr(rec.op1()) + "),";
       str += "val(" + serialise_expr(rec.op2()) + "))";
-    } else if (rec.type().id() == "struct") {
+    } else if (rec.type().id() == typet::t_struct) {
       str = "struct(";
       str += "prev(" + serialise_expr(rec.op0()) + "),";
       str += "member(" + serialise_expr(rec.op1()) + "),";
       str += "val(" + serialise_expr(rec.op2()) + "),";
-    } else if (rec.type().id() ==  "union") {
+    } else if (rec.type().id() ==  typet::t_union) {
       /* We don't care about previous assignments to this union, because
        * they're overwritten by this one, and leads to undefined side effects
        * anyway. So, just serialise the identifier, the member assigned to,

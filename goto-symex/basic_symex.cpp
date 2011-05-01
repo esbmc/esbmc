@@ -439,8 +439,8 @@ void basic_symext::symex_assign_member(
   exprt lhs_struct=lhs.op0();
   typet struct_type=ns.follow(lhs_struct.type());
 
-  if(struct_type.id()!="struct" &&
-     struct_type.id()!="union")
+  if(struct_type.id()!=typet::t_struct &&
+     struct_type.id()!=typet::t_union)
     throw "member must take struct/union type operand but got "
           +struct_type.pretty();
 
@@ -460,7 +460,7 @@ void basic_symext::symex_assign_member(
       // remove the type cast, we assume that the member is there
       exprt tmp(lhs_struct.op0());
       struct_type=ns.follow(tmp.type());
-      assert(struct_type.id()=="struct" || struct_type.id()=="union");
+      assert(struct_type.id()==typet::t_struct || struct_type.id()==typet::t_union);
       lhs_struct=tmp;
     }
   }

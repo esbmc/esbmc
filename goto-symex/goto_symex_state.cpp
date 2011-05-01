@@ -665,9 +665,9 @@ void goto_symex_statet::rename(
     rename(type.subtype(), ns,node_id);
     rename(static_cast<exprt &>(type.add("size")), ns,node_id);
   }
-  else if(type.id()=="struct" ||
-          type.id()=="union" ||
-          type.id()=="class")
+  else if(type.id()==typet::t_struct ||
+          type.id()==typet::t_union ||
+          type.id()==typet::t_class)
   {
     // TODO
   }
@@ -705,9 +705,9 @@ void goto_symex_statet::renaming_levelt::rename(typet &type, unsigned node_id)
     rename(type.subtype(),node_id);
     rename((exprt &)type.add("size"),node_id);
   }
-  else if(type.id()=="struct" ||
-          type.id()=="union" ||
-          type.id()=="class")
+  else if(type.id()==typet::t_struct ||
+          type.id()==typet::t_union ||
+          type.id()==typet::t_class)
   {
     // TODO
   }
