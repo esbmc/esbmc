@@ -90,10 +90,6 @@ irep_idt typet::t_array = dstring("array");
 irep_idt typet::t_pointer = dstring("pointer");
 irep_idt typet::t_reference = dstring("#reference");
 irep_idt typet::t_bv = dstring("bv");
-irep_idt typet::t_unsignedbv = dstring("unsignedbv");
-irep_idt typet::t_signedbv = dstring("signedbv");
-irep_idt typet::t_fixedbv = dstring("fixedbv");
-irep_idt typet::t_floatbv = dstring("floatbv");
 irep_idt typet::t_string = dstring("string");
 
 irep_idt typet::a_identifier = dstring("identifier");
