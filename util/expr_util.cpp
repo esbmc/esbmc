@@ -178,6 +178,13 @@ exprt gen_binary(const std::string &id, const typet &type, const exprt &op1, con
   return result;
 }
 
+exprt gen_binary(irep_idt &id, const typet &type, const exprt &op1, const exprt &op2)
+{
+  exprt result(id, type);
+  result.copy_to_operands(op1, op2);
+  return result;
+}
+
 /*******************************************************************\
 
 Function: gen_and
