@@ -1038,7 +1038,7 @@ execution_statet::serialise_expr(const exprt &rhs)
     exprt tmp = rhs;
     get_active_state().get_original_name(tmp);
     str = "nondet_symbol(" + tmp.get("identifier").as_string() + ")";
-  } else if (rhs.id() == "if") {
+  } else if (rhs.id() == exprt::i_if) {
     str = "cond(if(" + serialise_expr(rhs.op0()) + "),";
     str += "then(" + serialise_expr(rhs.op1()) + "),";
     str += "else(" + serialise_expr(rhs.op2()) + "))";

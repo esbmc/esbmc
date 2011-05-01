@@ -259,7 +259,7 @@ void basic_symext::symex_assign_rec(
     symex_assign_array(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="member")
     symex_assign_member(state, ex_state, lhs, rhs, guard,node_id);
-  else if(lhs.id()=="if")
+  else if(lhs.id()==exprt::i_if)
     symex_assign_if(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()==exprt::typecast)
     symex_assign_typecast(state, ex_state, lhs, rhs, guard,node_id);
@@ -299,7 +299,7 @@ void basic_symext::symex_assign_symbol(
   // put assignment guard in rhs
   if(!guard.empty())
   {
-    exprt new_rhs("if", rhs.type());
+    exprt new_rhs(exprt::i_if, rhs.type());
     new_rhs.operands().resize(3);
     new_rhs.op0()=guard.as_expr();
     new_rhs.op1().swap(rhs);

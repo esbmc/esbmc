@@ -483,7 +483,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
     }
 
     if (!sliced_SSA_step && it->is_assignment()) {
-      if (it->rhs.id() == "if") {
+      if (it->rhs.id() == exprt::i_if) {
 	conds_seen++;
 	exprt cond_copy (it->rhs.op0());
 	simplify(cond_copy);
