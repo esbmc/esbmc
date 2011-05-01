@@ -283,30 +283,30 @@ class array_typet:public typet
 public:
   array_typet()
   {
-    id("array");
+    id(t_array);
   }
   
   const exprt &size() const
   {
-    return (const exprt &)find("size");
+    return (const exprt &)find(a_size);
   }
   
   exprt &size()
   {
-    return (exprt &)add("size");
+    return (exprt &)add(a_size);
   }
 
 };
 
 extern inline const array_typet &to_array_type(const typet &type)
 {
-  assert(type.id()=="array");
+  assert(type.id()==typet::t_array);
   return static_cast<const array_typet &>(type);
 }
 
 extern inline array_typet &to_array_type(typet &type)
 {
-  assert(type.id()=="array");
+  assert(type.id()==typet::t_array);
   return static_cast<array_typet &>(type);
 }
 
