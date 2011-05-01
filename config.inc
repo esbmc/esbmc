@@ -11,9 +11,9 @@ LEX    = flex
 
 # Linux etc.
 #GCCFLAGS = -Wall -MMD -O2 -Wno-deprecated # -ggdb -O0
-GCCFLAGS = -Wall -MMD -Wextra -O3 -fomit-frame-pointer -finline-limit=1000000 -Wno-deprecated
+GCCFLAGS = -Wall -MMD -Wextra -fomit-frame-pointer -finline-limit=1000000 -Wno-deprecated -O3
 LINKFLAGS = #-ggdb
-#-L../../z3/lib -lz3-gmp 
+#-L../../z3/lib -lz3
 
 # use these for Cygwin:
 # GCCFLAGS = -Wall -MMD -O2 -mno-cygwin
