@@ -100,7 +100,7 @@ bool symex_dereference_statet::has_failed_symbol(
   if(expr.id()==exprt::symbol)
   {
     const symbolt &ptr_symbol=
-      renaming_ns.lookup(expr.get("identifier"));
+      renaming_ns.lookup(expr.get(exprt::a_identifier));
 
     const irep_idt &failed_symbol=
       ptr_symbol.type.get("#failed_symbol");

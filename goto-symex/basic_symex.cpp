@@ -104,7 +104,7 @@ void basic_symext::symex(statet &state, execution_statet &ex_state, const codet 
       throw "decl expected to have one operand";
 
     exprt rhs("nondet_symbol", code.op0().type());
-    rhs.set("identifier", "symex::nondet"+i2string(ex_state.nondet_count++));
+    rhs.set(exprt::a_identifier, "symex::nondet"+i2string(ex_state.nondet_count++));
     rhs.location()=code.location();
 
     exprt new_lhs(code.op0());
@@ -602,7 +602,7 @@ void basic_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
   if(expr.id()=="sideeffect" && expr.get("statement")=="nondet")
   {
     exprt new_expr("nondet_symbol", expr.type());
-    new_expr.set("identifier", "symex::nondet"+i2string(ex_state.nondet_count++));
+    new_expr.set(exprt::a_identifier, "symex::nondet"+i2string(ex_state.nondet_count++));
     new_expr.location()=expr.location();
     expr.swap(new_expr);
   }

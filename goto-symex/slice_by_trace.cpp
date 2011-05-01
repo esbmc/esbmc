@@ -42,7 +42,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
 
   merge_identifier = "goto_symex::\\merge";
   merge_symbol=exprt(exprt::symbol, typet("bool"));
-  merge_symbol.set("identifier", merge_identifier);
+  merge_symbol.set(exprt::a_identifier, merge_identifier);
 
   std::vector<exprt> trace_conditions;
 
@@ -308,7 +308,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	  merge.push_back(t[j]);
 	} else {
 	  exprt merge_sym =exprt(exprt::symbol, typet("bool"));
-	  merge_sym.set("identifier", id2string(merge_identifier)+"#"+
+	  merge_sym.set(exprt::a_identifier, id2string(merge_identifier)+"#"+
 			i2string(merge_count++));
 	  exprt t_copy (t[j]);
 	  merge_map_back.push_back(t_copy);
@@ -557,7 +557,7 @@ void symex_slice_by_tracet::assign_merges(
   for (std::vector<exprt>::reverse_iterator i = merge_map_back.rbegin();
        i != merge_map_back.rend(); i++) {
     exprt merge_sym =exprt(exprt::symbol, typet("bool"));
-    merge_sym.set("identifier", id2string(merge_identifier)+"#"+i2string(merge_count));
+    merge_sym.set(exprt::a_identifier, id2string(merge_identifier)+"#"+i2string(merge_count));
     merge_count--;
     guardt t_guard;
     t_guard.make_true();
@@ -597,7 +597,7 @@ std::set<exprt> symex_slice_by_tracet::implied_guards(exprt e)
   std::set<exprt> s;
 
   if (e.id() == exprt::symbol) { // Guard or merge
-    const char* merge_loc = strstr(e.get("identifier").c_str(),"merge#");
+    const char* merge_loc = strstr(e.get(exprt::a_identifier).c_str(),"merge#");
     if (merge_loc == NULL) {
       exprt e_copy (e);
       simplify(e_copy);

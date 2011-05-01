@@ -55,7 +55,7 @@ void symex_slicet::get_symbols(const exprt &expr)
     get_symbols(*it);
 
   if(expr.id()==exprt::symbol)
-    depends.insert(expr.get("identifier"));
+    depends.insert(expr.get(exprt::a_identifier));
 }
 
 /*******************************************************************\
@@ -156,7 +156,7 @@ void symex_slicet::slice_assignment(
 {
   assert(SSA_step.lhs.id()==exprt::symbol);
 
-  if(depends.find(SSA_step.lhs.get("identifier"))==
+  if(depends.find(SSA_step.lhs.get(exprt::a_identifier))==
      depends.end())
   {
     // we don't really need it
