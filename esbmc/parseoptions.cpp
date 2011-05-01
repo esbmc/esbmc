@@ -343,9 +343,9 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
      options.set_option("control-flow-test", false);
 
    if(cmdline.isset("no-por"))
-     options.set_option("no-por", false);
-   else
      options.set_option("no-por", true);
+   else
+     options.set_option("no-por", false);
 
    if(cmdline.isset("schedule"))
      options.set_option("schedule", true);
