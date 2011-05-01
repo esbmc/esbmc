@@ -186,7 +186,7 @@ void goto_symext::dereference_rec(
     dereference.dereference(tmp, guard, write?dereferencet::WRITE:dereferencet::READ);
     expr.swap(tmp);
   }
-  else if(expr.id()=="index" &&
+  else if(expr.id()==exprt::index &&
           expr.operands().size()==2 &&
           expr.op0().type().id()=="pointer")
   {

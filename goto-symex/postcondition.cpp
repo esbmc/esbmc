@@ -105,7 +105,7 @@ bool postconditiont::is_used_address_of(
   {
     // leave alone
   }
-  else if(expr.id()=="index")
+  else if(expr.id()==exprt::index)
   {
     assert(expr.operands().size()==2);
 

@@ -106,7 +106,7 @@ void preconditiont::compute_address_of(exprt &dest)
   {
     // leave alone
   }
-  else if(dest.id()=="index")
+  else if(dest.id()==exprt::index)
   {
     assert(dest.operands().size()==2);
     compute_address_of(dest.op0());

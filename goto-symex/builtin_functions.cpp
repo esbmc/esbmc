@@ -96,7 +96,7 @@ void basic_symext::symex_malloc(
   }
   else
   {
-    exprt index_expr("index", symbol.type.subtype());
+    exprt index_expr(exprt::index, symbol.type.subtype());
     index_expr.copy_to_operands(symbol_expr(symbol), gen_zero(int_type()));
     rhs.type().subtype()=symbol.type.subtype();
     rhs.move_to_operands(index_expr);
@@ -145,7 +145,7 @@ void basic_symext::symex_printf(
   
   if(format.id()=="address_of" &&
      format.operands().size()==1 &&
-     format.op0().id()=="index" &&
+     format.op0().id()==exprt::index &&
      format.op0().operands().size()==2 &&
      format.op0().op0().id()=="string-constant" &&
      format.op0().op1().is_zero())
@@ -217,7 +217,7 @@ void basic_symext::symex_cpp_new(
   
   if(do_array)
   {
-    exprt index_expr("index", code.type().subtype());
+    exprt index_expr(exprt::index, code.type().subtype());
     index_expr.copy_to_operands(symbol_expr(symbol), gen_zero(int_type()));
     rhs.move_to_operands(index_expr);
   }

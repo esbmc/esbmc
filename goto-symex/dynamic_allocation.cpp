@@ -46,7 +46,7 @@ void replace_dynamic_allocation(
 
     exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "alloc"));
 
-    exprt index_expr("index", typet("bool"));
+    exprt index_expr(exprt::index, typet("bool"));
     index_expr.move_to_operands(alloc_array, object_expr);
 
     expr.swap(index_expr);
@@ -80,7 +80,7 @@ void replace_dynamic_allocation(
 
     exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "alloc_size"));
 
-    exprt index_expr("index", ns.follow(alloc_array.type()).subtype());
+    exprt index_expr(exprt::index, ns.follow(alloc_array.type()).subtype());
     index_expr.move_to_operands(alloc_array, object_expr);
 
     expr.swap(index_expr);

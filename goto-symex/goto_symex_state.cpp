@@ -329,7 +329,7 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
   //std::cout << "constant_propagation_reference: " << expr.pretty() << std::endl;
   if(expr.id()==exprt::symbol)
     return true;
-  else if(expr.id()=="index")
+  else if(expr.id()==exprt::index)
   {
     if(expr.operands().size()!=2)
       throw "index expects two operands";
@@ -521,7 +521,7 @@ void goto_symex_statet::rename_address(
     // only do L1
     top().level1.rename(expr,node_id);
   }
-  else if(expr.id()=="index")
+  else if(expr.id()==exprt::index)
   {
     assert(expr.operands().size()==2);
     rename_address(expr.op0(), ns,node_id);

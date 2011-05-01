@@ -762,7 +762,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
       return 0;
   }
 #if 0
-  else if (expr.id() == "index")
+  else if (expr.id() == exprt::index)
   {
 	if (expr.op0().id() == exprt::symbol && expr.op1().id()=="constant")
 	{
@@ -869,7 +869,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
       return 0;
   }
 #if 0
-  else if (expr.id() == "index")
+  else if (expr.id() == exprt::index)
   {
 	if (expr.op0().id() == exprt::symbol && expr.op1().id()=="constant")
 	{
@@ -1023,7 +1023,7 @@ execution_statet::serialise_expr(const exprt &rhs)
     } else {
       throw "Unrecognised type of with expression: " + rec.op0().type().id().as_string();
     }
-  } else if (rhs.id() == "index") {
+  } else if (rhs.id() == exprt::index) {
     str = "index(";
     str += serialise_expr(rhs.op0());
     str += ",idx(" + serialise_expr(rhs.op1()) + ")";
