@@ -93,6 +93,7 @@ irep_idt typet::t_bv = dstring("bv");
 irep_idt typet::t_unsignedbv = dstring("unsignedbv");
 irep_idt typet::t_signedbv = dstring("signedbv");
 irep_idt typet::t_fixedbv = dstring("fixedbv");
+irep_idt typet::t_floatbv = dstring("floatbv");
 
 irep_idt typet::a_identifier = dstring("identifier");
 irep_idt typet::a_name = dstring("name");
@@ -103,6 +104,7 @@ irep_idt typet::a_return_type = dstring("return_type");
 irep_idt typet::a_size = dstring("size");
 irep_idt typet::a_width = dstring("width");
 irep_idt typet::a_integer_bits = dstring("integer_bits");
+irep_idt typet::a_f = dstring("f");
 
 irep_idt typet::f_subtype = dstring("subtype");
 irep_idt typet::f_subtypes = dstring("subtypes");

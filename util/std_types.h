@@ -422,7 +422,7 @@ class floatbv_typet:public bv_typet
 public:
   floatbv_typet()
   {
-    id("floatbv");
+    id(t_floatbv);
   }
 
   unsigned get_e() const
@@ -434,12 +434,12 @@ public:
 
   void set_f(unsigned b)
   {
-    set("f", b);
+    set(a_f, b);
   }
 
   friend const floatbv_typet &to_floatbv_type(const typet &type)
   {
-    assert(type.id()=="floatbv");
+    assert(type.id()==t_floatbv);
     return static_cast<const floatbv_typet &>(type);
   }
 };

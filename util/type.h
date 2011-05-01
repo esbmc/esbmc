@@ -89,6 +89,7 @@ class typet:public irept
   static irep_idt t_unsignedbv;
   static irep_idt t_signedbv;
   static irep_idt t_fixedbv;
+  static irep_idt t_floatbv;
 
   static irep_idt a_identifier;
   static irep_idt a_name;
@@ -99,6 +100,7 @@ class typet:public irept
   static irep_idt a_size;
   static irep_idt a_width;
   static irep_idt a_integer_bits;
+  static irep_idt a_f;
 
 protected:
   static irep_idt f_subtype;
