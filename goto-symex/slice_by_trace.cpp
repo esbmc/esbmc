@@ -82,7 +82,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
   for(std::set<exprt>::iterator i = sliced_guards.begin(); i !=
 	sliced_guards.end(); i++) {
     exprt g_copy (*i);
-    if (g_copy.id() == exprt::symbol || g_copy.id() == "not") {
+    if (g_copy.id() == exprt::symbol || g_copy.id() == exprt::i_not) {
       g_copy.make_not();
       simplify(g_copy);
       implications.insert(g_copy);
@@ -370,7 +370,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	} else {
 	  u_rhs.swap(merge[j]);
 	}
-	exprt u_j = exprt ("or", typet("bool"));
+	exprt u_j = exprt (exprt::i_or, typet("bool"));
 	u_j.operands().reserve(2);
 	u_j.copy_to_operands(u_lhs);
 	u_j.copy_to_operands(u_rhs);
@@ -450,7 +450,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
       potential_SSA_steps++;
     //it->output(ns,std::cout);
     //std::cout << "-----------------" << std::endl;
-    if ((guard.id() == exprt::symbol) || (guard.id() == "not")) {
+    if ((guard.id() == exprt::symbol) || (guard.id() == exprt::i_not)) {
       guard.make_not();
       simplify(guard);
       if (implications.count(guard) != 0) {
@@ -477,7 +477,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
 	  sliced_SSA_step = true;
 	  break; // Sliced, so no need to consider the rest
 	}
-      } else if (guard.id() == "or") {
+      } else if (guard.id() == exprt::i_or) {
 	std::cout << "Guarded by an OR." << std::endl;
       }
     }
@@ -614,7 +614,7 @@ std::set<exprt> symex_slice_by_tracet::implied_guards(exprt e)
 	return merge_impl_cache_back[i].second;
       }
     }
-  } else if (e.id() == "not") { // Definitely a guard
+  } else if (e.id() == exprt::i_not) { // Definitely a guard
     exprt e_copy(e);
     simplify(e_copy);
     s.insert(e_copy);
@@ -628,7 +628,7 @@ std::set<exprt> symex_slice_by_tracet::implied_guards(exprt e)
       }
     }
     return s;
-  } else if (e.id() == "or") { // Descend into or
+  } else if (e.id() == exprt::i_or) { // Descend into or
     std::vector<std::set<exprt> > rs;
     Forall_operands(it,e) {
       rs.push_back(implied_guards(*it));

@@ -1134,9 +1134,9 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m[exprt::mod] = serialise_normal_operation;
   m[exprt::equality] = serialise_normal_operation;
   m[exprt::i_and] = serialise_normal_operation;
-  m["=>"] = serialise_normal_operation;
-  m["or"] = serialise_normal_operation;
-  m["not"] = serialise_normal_operation;
+  m[exprt::implies] = serialise_normal_operation;
+  m[exprt::i_or] = serialise_normal_operation;
+  m[exprt::i_not] = serialise_normal_operation;
   m["notequal"] = serialise_normal_operation;
   m["unary-"] = serialise_normal_operation;
   m["unary+"] = serialise_normal_operation;
