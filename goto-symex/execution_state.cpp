@@ -630,9 +630,9 @@ void execution_statet::recover_global_state(const namespacet &ns, symex_targett 
 #endif
 
   std::set<irep_idt> variables;
-  _state_level2->get_variables(variables);
+  _state_level2.get_variables(variables);
 
-  _state_level2->print(std::cout,parent_node_id);
+  _state_level2.print(std::cout,parent_node_id);
 
   for (std::set<irep_idt>::const_iterator
        it = variables.begin();

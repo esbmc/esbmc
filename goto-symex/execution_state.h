@@ -61,8 +61,9 @@ public:
 	};
 
 	execution_statet(const execution_statet &ex) :
-		_target(ex._target),
+		owning_rt(ex.owning_rt),
 		_state_level2(ex._state_level2),
+		_target(ex._target),
 		_goto_functions(ex._goto_functions)
 	{
 		*this = ex;
