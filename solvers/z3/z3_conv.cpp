@@ -2117,7 +2117,7 @@ Z3_ast z3_convt::convert_overflow_sub(const exprt &expr)
       return Z3_mk_false(z3_ctx);
   }
   //new change
-  if (expr.op0().id()=="symbol" && expr.op1().id()=="address_of")
+  if (expr.op0().id()==exprt::symbol && expr.op1().id()==exprt::addrof)
 	return Z3_mk_false(z3_ctx);
 
   if (convert_bv(expr.op0(), operand[0]))
@@ -2303,9 +2303,9 @@ Z3_ast z3_convt::convert_overflow_typecast(const exprt &expr)
   }
 
   if (is_signed(expr.op0().type()))
-    value = integer2string(binary2integer(expr.op0().get_string("value"), true),10);
+    value = integer2string(binary2integer(expr.op0().get_string(exprt::a_value), true),10);
   else
-	value = integer2string(binary2integer(expr.op0().get_string("value"), false),10);
+	value = integer2string(binary2integer(expr.op0().get_string(exprt::a_value), false),10);
 
   if (convert_bv(expr.op0(), operand[0]))
 	return Z3_mk_false(z3_ctx);
@@ -2448,8 +2448,8 @@ Z3_ast z3_convt::convert_rest_index(const exprt &expr)
   {
 	bv = Z3_mk_select(z3_ctx, operand0, convert_number(0, config.ansi_c.int_width, true));
   }
-  else if ((expr.op0().get_string("identifier").find("__ESBMC_alloc") != std::string::npos
-	  && expr.op1().operands()[0].op0().id()!="index"))
+  else if ((expr.op0().get_string(exprt::a_identifier).find("__ESBMC_alloc") != std::string::npos
+	  && expr.op1().operands()[0].op0().id()!=exprt::index))
   {
     bv = Z3_mk_select(z3_ctx, operand0, convert_number(0, config.ansi_c.int_width, true));
   }
