@@ -32,9 +32,9 @@ public:
 	execution_statet(const goto_functionst &goto_functions,
                 const namespacet &ns, const reachability_treet *art,
                 goto_symex_statet::level2t &l2):
-                _target(ns),
 		owning_rt(art),
 		_state_level2(l2),
+                _target(ns),
                 _goto_functions(goto_functions)
 	{
 		reexecute_instruction = true;
@@ -62,6 +62,13 @@ public:
 
 	virtual ~execution_statet()	{};
 
+    // Types
+
+    typedef std::string (*serialise_fxn)(execution_statet &ex_state, const exprt &rhs);
+    typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
+
+    // Methods
+
     /* number of context switches we've performed to reach this state */
     void increment_context_switch()
     {
@@ -80,10 +87,6 @@ public:
     }
 
     void recover_global_state(const namespacet &ns, symex_targett &target);
-    static unsigned int node_count;
-    unsigned int node_id;
-    unsigned int parent_node_id;
-    symex_target_equationt _target;
 
     irep_idt get_guard_identifier();
     irep_idt get_guard_identifier_base();
@@ -108,25 +111,49 @@ public:
      * _exprs_read_write implicitly as reads: my eyes are on fire. */
     unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
 
+    //void deadlock_detection(const namespacet &ns, symex_targett &target);
+    void increament_trds_in_run(const namespacet &ns, symex_targett &target);
+    void update_trds_count(const namespacet &ns, symex_targett &target);
+    //void update_trds_status(const namespacet &ns, symex_targett &target);
+
+    crypto_hash generate_hash(void) const;
+    crypto_hash update_hash_for_assignment(const exprt &rhs);
+    std::string serialise_expr(const exprt &rhs);
+
+private:
+    void decreament_trds_in_run(const namespacet &ns, symex_targett &target);
+    const symbolt& lookup(const namespacet &ns, const irep_idt &identifier)  const;
+    bool is_in_lookup(const namespacet &ns, const irep_idt &identifier) const;
+
+    // Object state
+
+public:
+
     const reachability_treet *owning_rt;
 
-	/* jmorse - Set of current thread states, indexed by threads id number*/
-	std::vector<goto_symex_statet> _threads_state;
-	/* jmorse - appears to just be a flag indicating whether we're currently
-	 * in an atomic section */
-	std::vector<unsigned int> _atomic_numbers;
-	/* jmorse - Depth first search? */
-	std::vector<bool> _DFS_traversed;
-	/* jmorse - a set of expressions, one for each active thread, showing
-	 * where each thread is at? generate_states_base. */
-	std::vector<exprt> _exprs;
+    /* jmorse - Set of current thread states, indexed by threads id number*/
+    std::vector<goto_symex_statet> _threads_state;
+
+    /* jmorse - appears to just be a flag indicating whether we're currently
+     * in an atomic section */
+    std::vector<unsigned int> _atomic_numbers;
+
+    /* jmorse - Depth first search? */
+    std::vector<bool> _DFS_traversed;
+
+    /* jmorse - a set of expressions, one for each active thread, showing
+     * where each thread is at? generate_states_base. */
+    std::vector<exprt> _exprs;
+
     int generating_new_threads;
     /* jmorse - Presumably the last expr to be executed */
     exprt last_global_expr;
+
     /* jmorse - a set of operations (irep_idts; identifiers?) that presumably
      * occur at the top of each state. indexed by thread id no. So, it's the
      * set of most recent reads/writes of thread? */
     std::vector<read_write_set> _exprs_read_write;
+
     /* jmorse - what the name says */
     read_write_set last_global_read_write;
 
@@ -142,31 +169,24 @@ public:
     bool reexecute_atomic; // temporarily disable context switch for the thread inherited from the last active thread
     int _actual_CS_number; //count the actual number of context switches
 
-    //void deadlock_detection(const namespacet &ns, symex_targett &target);
-    void increament_trds_in_run(const namespacet &ns, symex_targett &target);
-    void update_trds_count(const namespacet &ns, symex_targett &target);
-    //void update_trds_status(const namespacet &ns, symex_targett &target);
-
-    crypto_hash generate_hash(void) const;
-
-    typedef std::string (*serialise_fxn)(execution_statet &ex_state, const exprt &rhs);
-    typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
-    static expr_id_map_t init_expr_id_map();
-    static const expr_id_map_t expr_id_map;
-
-    crypto_hash update_hash_for_assignment(const exprt &rhs);
-    std::string serialise_expr(const exprt &rhs);
-
     unsigned nondet_count;
     unsigned dynamic_counter;
 
+    unsigned int node_id;
+    unsigned int parent_node_id;
+    symex_target_equationt _target;
+
 private:
-    void decreament_trds_in_run(const namespacet &ns, symex_targett &target);
-    const symbolt& lookup(const namespacet &ns, const irep_idt &identifier)  const;
-    bool is_in_lookup(const namespacet &ns, const irep_idt &identifier) const;
-	const goto_functionst &_goto_functions;
+    const goto_functionst &_goto_functions;
     const goto_programt *_goto_program;
     int _CS_number;
+
+    // Static stuff:
+
+public:
+    static expr_id_map_t init_expr_id_map();
+    static const expr_id_map_t expr_id_map;
+    static unsigned int node_count;
 };
 
 #endif /* EXECUTION_STATE_H_ */
