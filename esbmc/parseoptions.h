@@ -35,7 +35,7 @@ Author: Daniel Kroening, kroening@kroening.com
   "(round-to-nearest)(round-to-plus-inf)(round-to-minus-inf)(round-to-zero)" \
   "(qf_aufbv)(qf_auflira)(btor)" \
   "(context-switch):(no-por)(data-races-check)(DFS)(schedule)(all-runs)" \
-  "(timeout):(memlimit):" \
+  "(timeout):(memlimit):(state-hashing)" \
   "(core-size):" \
   "(decide)" // legacy, and will eventually disappear
 
