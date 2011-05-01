@@ -764,7 +764,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 #if 0
   else if (expr.id() == exprt::index)
   {
-	if (expr.op0().id() == exprt::symbol && expr.op1().id()=="constant")
+	if (expr.op0().id() == exprt::symbol && expr.op1().id()==exprt::constant)
 	{
       const irep_idt &id = expr.op0().get("identifier");
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
@@ -871,7 +871,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 #if 0
   else if (expr.id() == exprt::index)
   {
-	if (expr.op0().id() == exprt::symbol && expr.op1().id()=="constant")
+	if (expr.op0().id() == exprt::symbol && expr.op1().id()==exprt::constant)
 	{
       const irep_idt &id = expr.op0().get("identifier");
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
@@ -1055,7 +1055,7 @@ execution_statet::serialise_expr(const exprt &rhs)
     forall_operands(it, rhs) {
       str = str + "(" + serialise_expr(*it) + "),";
     }
-  } else if (rhs.id() == "constant") {
+  } else if (rhs.id() == exprt::constant) {
     // It appears constants can be "true", "false", or a bit vector. Parse that,
     // and then print the value as a base 10 integer.
 

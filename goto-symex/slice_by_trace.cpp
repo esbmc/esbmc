@@ -93,7 +93,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
       simplify(copy_last);
       implications.insert(copy_last);
     }
-    else if (!(g_copy.id() == "constant")) {
+    else if (!(g_copy.id() == exprt::constant)) {
       throw "Guards should only be and, symbol, constant, or not.";
     }
   }
@@ -334,7 +334,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	      equal_cond.operands().reserve(2);
 	      equal_cond.copy_to_operands(*pvi);
 	      // Should eventually change to handle non-bv types!
-	      exprt constant_value = exprt("constant",(*pvi).type());
+	      exprt constant_value = exprt(exprt::constant,(*pvi).type());
 	      std::string bit_string = 
 		integer2binary(atoi(k->c_str()), bv_width((*pvi).type()));
 	      constant_value.set("value", bit_string);
