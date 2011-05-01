@@ -83,6 +83,10 @@ irep_idt typet::t_bool = dstring("bool");
 irep_idt typet::t_empty = dstring("empty");
 irep_idt typet::t_symbol = dstring("symbol");
 
+irep_idt typet::a_identifier = dstring("identifier");
+irep_idt typet::a_name = dstring("name");
+irep_idt typet::a_components = dstring("components");
+
 irep_idt typet::f_subtype = dstring("subtype");
 irep_idt typet::f_subtypes = dstring("subtypes");
 irep_idt typet::f_location = dstring("#location");

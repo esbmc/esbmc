@@ -46,12 +46,12 @@ public:
 
   void set_identifier(const irep_idt &identifier)
   {
-    set("identifier", identifier);
+    set(a_identifier, identifier);
   }
 
   const irep_idt &get_identifier() const
   {
-    return get("identifier");
+    return get(a_identifier);
   }  
 };
 
@@ -69,12 +69,12 @@ public:
   public:
     const irep_idt &get_name() const
     {
-      return get("name");
+      return get(a_name);
     }
 
     void set_name(const irep_idt &name)
     {
-      return set("name", name);
+      return set(a_name, name);
     }
   };
 
@@ -82,12 +82,12 @@ public:
   
   const componentst &components() const
   {
-    return (const componentst &)(find("components").get_sub());
+    return (const componentst &)(find(a_components).get_sub());
   }
   
   componentst &components()
   {
-    return (componentst &)(add("components").get_sub());
+    return (componentst &)(add(a_components).get_sub());
   }
   
   bool has_component(const irep_idt &component_name) const
