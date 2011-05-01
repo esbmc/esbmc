@@ -37,27 +37,27 @@ public:
 		_state_level2(l2),
                 _goto_functions(goto_functions)
 	{
-	  reexecute_instruction = true;
-	  reexecute_atomic = false;
-      _CS_number = 0;
-      _actual_CS_number=0;
-      node_id = 0;
-      guard_execution = "execution_statet::\\guard_exec";
-      guard_thread = "execution_statet::\\trdsel";
+		reexecute_instruction = true;
+		reexecute_atomic = false;
+		_CS_number = 0;
+		_actual_CS_number=0;
+		node_id = 0;
+		guard_execution = "execution_statet::\\guard_exec";
+		guard_thread = "execution_statet::\\trdsel";
 
-	  goto_functionst::function_mapt::const_iterator it=
-		    goto_functions.function_map.find("main");
-	  if(it==goto_functions.function_map.end())
-		    throw "main symbol not found; please set an entry point";
+		goto_functionst::function_mapt::const_iterator it=
+				goto_functions.function_map.find("main");
+		if(it==goto_functions.function_map.end())
+			throw "main symbol not found; please set an entry point";
 
-	  _goto_program =&(it->second.body);
+		_goto_program =&(it->second.body);
 
-	  add_thread((*_goto_program).instructions.begin(),(*_goto_program).instructions.end());
-	  _active_thread = 0;
-      _last_active_thread = 0;
-      generating_new_threads = 0;
-	  node_count=0;
-          nondet_count = 0;
+		add_thread((*_goto_program).instructions.begin(),(*_goto_program).instructions.end());
+		_active_thread = 0;
+		_last_active_thread = 0;
+		generating_new_threads = 0;
+		node_count=0;
+		nondet_count = 0;
 	};
 
 	virtual ~execution_statet()	{};
