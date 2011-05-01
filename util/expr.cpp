@@ -685,6 +685,12 @@ irep_idt exprt::i_lt = dstring("<");
 irep_idt exprt::i_gt = dstring(">");
 irep_idt exprt::i_le = dstring("<=");
 irep_idt exprt::i_ge = dstring(">=");
+irep_idt exprt::i_bitand = dstring("bitand");
+irep_idt exprt::i_bitor = dstring("bitor");
+irep_idt exprt::i_bitxor = dstring("bitxor");
+irep_idt exprt::i_bitnand = dstring("bitnand");
+irep_idt exprt::i_bitnor = dstring("bitnor");
+irep_idt exprt::i_bitnxor = dstring("bitnxor");
 
 irep_idt exprt::a_identifier = dstring("identifier");
 irep_idt exprt::a_value = dstring("value");

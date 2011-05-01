@@ -1146,10 +1146,12 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m[exprt::i_gt] = serialise_normal_operation;
   m[exprt::i_le] = serialise_normal_operation;
   m[exprt::i_lt] = serialise_normal_operation;
-  m["bitor"] = serialise_normal_operation;
-  m["bitxor"] = serialise_normal_operation;
-  m["bitand"] = serialise_normal_operation;
-  m["bitnot"] = serialise_normal_operation;
+  m[exprt::i_bitand] = serialise_normal_operation;
+  m[exprt::i_bitor] = serialise_normal_operation;
+  m[exprt::i_bitxor] = serialise_normal_operation;
+  m[exprt::i_bitnand] = serialise_normal_operation;
+  m[exprt::i_bitnor] = serialise_normal_operation;
+  m[exprt::i_bitnxor] = serialise_normal_operation;
   m["shl"] = serialise_normal_operation;
   m["lshr"] = serialise_normal_operation;
   m["ashr"] = serialise_normal_operation;

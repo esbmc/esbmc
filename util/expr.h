@@ -204,6 +204,12 @@ public:
   static irep_idt i_gt;
   static irep_idt i_le;
   static irep_idt i_ge;
+  static irep_idt i_bitand;
+  static irep_idt i_bitor;
+  static irep_idt i_bitxor;
+  static irep_idt i_bitnand;
+  static irep_idt i_bitnor;
+  static irep_idt i_bitnxor;
 
   // Expression attributes
   static irep_idt a_identifier;
