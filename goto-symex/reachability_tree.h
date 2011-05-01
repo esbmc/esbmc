@@ -51,7 +51,7 @@ public:
 	  _go_next_formula = false;
       _actual_CS_bound = _CS_bound;
       _is_same_mutex=false;
-      execution_statet ex_state(goto_functions, ns, this);
+      execution_statet ex_state(goto_functions, ns, this, initial_level2);
 	  execution_states.push_back(ex_state);
       _cur_state_it = execution_states.begin();
     };
@@ -108,6 +108,7 @@ private:
     std::set<crypto_hash>hit_hashes;
 
     optionst options;
+    goto_symex_statet::level2t initial_level2;
 };
 
 #endif /* REACHABILITY_TREE_H_ */

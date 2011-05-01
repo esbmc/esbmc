@@ -561,7 +561,8 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
     execution_states.rbegin()->increment_context_switch();
     /* ^^^ What if there /wasn't/ a switch though? */
-    execution_states.rbegin()->copy_level2_from(ex_state);
+//    execution_states.rbegin()->copy_level2_from(ex_state);
+//    Copy constructor should duplicate level2 object
     /* Reset interleavings (?) investigated in this new state */
     execution_states.rbegin()->reset_DFS_traversed();
 

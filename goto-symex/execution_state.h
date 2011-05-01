@@ -30,9 +30,11 @@ class execution_statet
 
 public:
 	execution_statet(const goto_functionst &goto_functions,
-                const namespacet &ns, const reachability_treet *art):
+                const namespacet &ns, const reachability_treet *art,
+                goto_symex_statet::level2t &l2):
                 _target(ns),
 		owning_rt(art),
+		_state_level2(l2),
                 _goto_functions(goto_functions)
 	{
 	  reexecute_instruction = true;
@@ -50,7 +52,6 @@ public:
 
 	  _goto_program =&(it->second.body);
 
-	  _state_level2 = new goto_symex_statet::level2t();
 	  add_thread((*_goto_program).instructions.begin(),(*_goto_program).instructions.end());
 	  _active_thread = 0;
       _last_active_thread = 0;
@@ -71,18 +72,6 @@ public:
     {
       return _CS_number;
     }
-
-	void free_level2()
-	{
-      delete _state_level2;
-	}
-
-	void copy_level2_from(execution_statet & ex_state)
-	{
-	  _state_level2 = new goto_symex_statet::level2t(*ex_state._state_level2);
-	  for(unsigned int i=0;i<_threads_state.size();i++)
-	    _threads_state.at(i).level2 = _state_level2;
-	}
 
     void reset_DFS_traversed()
     {
@@ -142,8 +131,8 @@ public:
     read_write_set last_global_read_write;
 
     unsigned int _last_active_thread;
-	goto_symex_statet::level2t *_state_level2;
-	unsigned int _active_thread;
+    goto_symex_statet::level2t _state_level2;
+    unsigned int _active_thread;
 
     irep_idt guard_execution;
     irep_idt guard_thread;

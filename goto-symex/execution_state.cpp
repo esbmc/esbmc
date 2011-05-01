@@ -925,7 +925,7 @@ crypto_hash
 execution_statet::generate_hash(void) const
 {
 
-  crypto_hash state = _state_level2->generate_l2_state_hash();
+  crypto_hash state = _state_level2.generate_l2_state_hash();
   std::string str = state.to_string();
 
   for (std::vector<goto_symex_statet>::const_iterator it=_threads_state.begin();
@@ -983,8 +983,8 @@ execution_statet::serialise_expr(const exprt &rhs)
     // value.
     exprt tmp = rhs;
     get_active_state().get_original_name(tmp);
-    if (_state_level2->current_hashes.find(tmp.get("identifier").as_string()) != _state_level2->current_hashes.end()) {
-      crypto_hash h = _state_level2->current_hashes.find(tmp.get("identifier").as_string())->second;
+    if (_state_level2.current_hashes.find(tmp.get("identifier").as_string()) != _state_level2.current_hashes.end()) {
+      crypto_hash h = _state_level2.current_hashes.find(tmp.get("identifier").as_string())->second;
       return "hash(" + h.to_string() + ")";
     }
 
