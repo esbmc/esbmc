@@ -117,7 +117,7 @@ void preconditiont::compute_address_of(exprt &dest)
     assert(dest.operands().size()==1);
     compute_address_of(dest.op0());
   }
-  else if(dest.id()=="dereference" || 
+  else if(dest.id()==exprt::deref || 
           dest.id()=="implicit_dereference")
   {
     assert(dest.operands().size()==1);
@@ -173,7 +173,7 @@ void preconditiont::compute_rec(exprt &dest)
       s.get_original_name(dest);
     }
   }
-  else if(dest.id()=="dereference" ||
+  else if(dest.id()==exprt::deref ||
           dest.id()=="implicit_dereference")
   {
     assert(dest.operands().size()==1);

@@ -171,7 +171,7 @@ void goto_symext::dereference_rec(
   dereferencet &dereference,
   const bool write)
 {
-  if(expr.id()=="dereference" ||
+  if(expr.id()==exprt::deref ||
      expr.id()=="implicit_dereference")
   {
     if(expr.operands().size()!=1)

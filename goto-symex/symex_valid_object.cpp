@@ -108,7 +108,7 @@ void goto_symext::replace_dynamic_allocation(
   else if(expr.id()=="object_value")
   {
     assert(expr.operands().size()==1);
-    expr.id("dereference");
+    expr.id(exprt::deref);
   }
 }
 

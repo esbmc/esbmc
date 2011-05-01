@@ -118,7 +118,7 @@ bool postconditiont::is_used_address_of(
     assert(expr.operands().size()==1);
     return is_used_address_of(expr.op0(), identifier);
   }
-  else if(expr.id()=="dereference" || 
+  else if(expr.id()==exprt::deref || 
           expr.id()=="implicit_dereference")
   {
     assert(expr.operands().size()==1);
@@ -246,7 +246,7 @@ bool postconditiont::is_used(
   {
     return s.get_original_name(expr.get("identifier"))==identifier;
   }
-  else if(expr.id()=="dereference" ||
+  else if(expr.id()==exprt::deref ||
           expr.id()=="implicit_dereference")
   {
     assert(expr.operands().size()==1);
