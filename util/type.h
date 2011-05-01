@@ -78,10 +78,14 @@ class typet:public irept
   static irep_idt t_empty;
   static irep_idt t_symbol; // So there're expressions of id "symbol" and types
                             // of id "symbol". Great.
+  static irep_idt t_struct;
+  static irep_idt t_union;
+  static irep_idt t_class;
 
   static irep_idt a_identifier;
   static irep_idt a_name;
   static irep_idt a_components;
+  static irep_idt a_methods;
 
 protected:
   static irep_idt f_subtype;

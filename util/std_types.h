@@ -104,17 +104,17 @@ public:
 
 extern inline const struct_union_typet &to_struct_union_type(const typet &type)
 {
-  assert(type.id()=="struct" ||
-         type.id()=="union" ||
-         type.id()=="class");
+  assert(type.id()==typet::t_struct ||
+         type.id()==typet::t_union ||
+         type.id()==typet::t_class);
   return static_cast<const struct_union_typet &>(type);
 }
 
 extern inline struct_union_typet &to_struct_union_type(typet &type)
 {
-  assert(type.id()=="struct" ||
-         type.id()=="union" ||
-         type.id()=="class");
+  assert(type.id()==typet::t_struct ||
+         type.id()==typet::t_union ||
+         type.id()==typet::t_class);
   return static_cast<struct_union_typet &>(type);
 }
 
@@ -123,35 +123,35 @@ class struct_typet:public struct_union_typet
 public:
   struct_typet()
   {
-    id("struct");
+    id(t_struct);
   }
     
   bool is_prefix_of(const struct_typet &other) const;
 
   const componentst &methods() const
   {
-    return (const componentst &)(find("methods").get_sub());
+    return (const componentst &)(find(a_methods).get_sub());
   }
      
   componentst &methods()
   {
-    return (componentst &)(add("methods").get_sub());
+    return (componentst &)(add(a_methods).get_sub());
   }
 };
 
 extern inline const struct_typet &to_struct_type(const typet &type)
 {
-  assert(type.id()=="struct" ||
-         type.id()=="union" ||
-         type.id()=="class");
+  assert(type.id()==typet::t_struct ||
+         type.id()==typet::t_union ||
+         type.id()==typet::t_class);
   return static_cast<const struct_typet &>(type);
 }
 
 extern inline struct_typet &to_struct_type(typet &type)
 {
-  assert(type.id()=="struct" ||
-         type.id()=="union" ||
-         type.id()=="class");
+  assert(type.id()==typet::t_struct ||
+         type.id()==typet::t_union ||
+         type.id()==typet::t_class);
   return static_cast<struct_typet &>(type);
 }
 
@@ -160,19 +160,19 @@ class union_typet:public struct_union_typet
 public:
   union_typet()
   {
-    id("union");
+    id(t_union);
   }
 };
 
 extern inline const union_typet &to_union_type(const typet &type)
 {
-  assert(type.id()=="union");
+  assert(type.id()==typet::t_union);
   return static_cast<const union_typet &>(type);
 }
 
 extern inline union_typet &to_union_type(typet &type)
 {
-  assert(type.id()=="union");
+  assert(type.id()==typet::t_union);
   return static_cast<union_typet &>(type);
 }
 
