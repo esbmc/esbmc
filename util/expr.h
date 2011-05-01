@@ -54,17 +54,17 @@ public:
   explicit exprt(const irep_idt &_id):irept(_id) { }
   exprt(const irep_idt &_id, const typet &_type):irept(_id) { type()=_type; }
  
-  typet &type() { return static_cast<typet &>(add("type")); }
-  const typet &type() const { return static_cast<const typet &>(find("type")); }
+  typet &type() { return static_cast<typet &>(add(i_type)); }
+  const typet &type() const { return static_cast<const typet &>(find(i_type)); }
 
   bool has_operands() const
-  { return !find("operands").is_nil(); }
+  { return !find(o_operands).is_nil(); }
 
   operandst &operands()
-  { return (operandst &)(add("operands").get_sub()); }
+  { return (operandst &)(add(o_operands).get_sub()); }
   
   const operandst &operands() const
-  { return (const operandst &)(find("operands").get_sub()); }
+  { return (const operandst &)(find(o_operands).get_sub()); }
    
   exprt &op0()
   { return operands().front(); }
@@ -152,12 +152,12 @@ public:
 
   const locationt &location() const
   {
-    return static_cast<const locationt &>(find("#location"));
+    return static_cast<const locationt &>(find(o_location));
   }
 
   locationt &location()
   {
-    return static_cast<locationt &>(add("#location"));
+    return static_cast<locationt &>(add(o_location));
   }
   
   exprt &add_expr(const std::string &name)
@@ -220,6 +220,11 @@ public:
   // Expression attributes
   static irep_idt a_identifier;
   static irep_idt a_value;
+
+  // Other foo
+protected:
+  static irep_idt o_operands;
+  static irep_idt o_location;
 };
 
 typedef std::list<exprt> expr_listt;

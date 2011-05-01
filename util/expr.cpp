@@ -700,3 +700,6 @@ irep_idt exprt::abs = dstring("abs");
 
 irep_idt exprt::a_identifier = dstring("identifier");
 irep_idt exprt::a_value = dstring("value");
+
+irep_idt exprt::o_operands = dstring("operands");
+irep_idt exprt::o_location = dstring("#location");
