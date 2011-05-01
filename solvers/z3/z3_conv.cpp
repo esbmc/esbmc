@@ -586,7 +586,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     else
       bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
   }
-  else if (type.subtype().id() == "struct")
+  else if (type.subtype().id() == typet::t_struct)
   {
     if (create_struct_type(type.subtype(), tuple_type))
       return true;
@@ -596,7 +596,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     else
       bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), tuple_type);
   }
-  else if (type.subtype().id() == "union")
+  else if (type.subtype().id() == typet::t_union)
   {
     if (create_union_type(type.subtype(), tuple_type))
       return true;
@@ -699,7 +699,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
   }
   else if (type.id()=="array")
   {
-	if (type.subtype().id()=="struct")
+	if (type.subtype().id()==typet::t_struct)
 	{
 	  if (create_struct_type(type.subtype(), bv))
 		return true;
@@ -763,12 +763,12 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	else
 	  bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
   }
-  else if (type.id()=="struct")
+  else if (type.id()==typet::t_struct)
   {
 	if (create_struct_type(type, bv))
 	  return true;
   }
-  else if (type.id()=="union")
+  else if (type.id()==typet::t_union)
   {
 	if (create_union_type(type, bv))
 	  return true;
@@ -1050,7 +1050,7 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 #endif
 	if (type.id()!=typet::t_bool && type.subtype().id()!=typet::t_bool)
 	{
-	  if (type.subtype().id()=="struct")
+	  if (type.subtype().id()==typet::t_struct)
 		  s << "struct";
 	  else
 	    s << Z3_get_bv_type_size(z3_ctx, proj_types[0]);
@@ -1161,14 +1161,14 @@ bool z3_convt::convert_identifier(const std::string &identifier, const typet &ty
 
 	bv = z3_api.mk_var(z3_ctx, identifier.c_str(), type_var);
   }
-  else if (type.id()=="struct")
+  else if (type.id()==typet::t_struct)
   {
 	if (create_struct_type(type, type_var))
 	  return true;
 
 	bv = z3_api.mk_var(z3_ctx, identifier.c_str(), type_var);
   }
-  else if (type.id()=="union")
+  else if (type.id()==typet::t_union)
   {
 	if (create_union_type(type, type_var))
 	  return true;
@@ -1846,7 +1846,7 @@ Z3_ast z3_convt::convert_same_object(const exprt &expr)
 	if (convert_bv(op1, pointer[1]))
 	  return Z3_mk_false(z3_ctx);
 
-	if (op1.type().id()=="pointer" && op1.type().subtype().id()=="union")
+	if (op1.type().id()=="pointer" && op1.type().subtype().id()==typet::t_union)
 	  return Z3_mk_false(z3_ctx);
 
 	operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 0);
@@ -3224,7 +3224,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   	  else if (expr.type().subtype().id()!=typet::t_empty &&
   		 (op.type().id()=="pointer" && op.type().subtype().id()==typet::t_symbol) &&
   		 op.op0().id()!=exprt::index && expr.type().id()!="pointer"
-  		 /*&& op.op0().type().id()!="struct"*/)
+  		 /*&& op.op0().type().id()!=typet::t_struct*/)
   	  {
   	    bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
   	  }
@@ -3268,7 +3268,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
       bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, bv);
     }
   }
-  else if (expr.type().id()=="struct")
+  else if (expr.type().id()==typet::t_struct)
   {
     const struct_typet &struct_type=to_struct_type(expr.op0().type());
 	const struct_typet::componentst &components=struct_type.components();
@@ -3447,7 +3447,7 @@ bool z3_convt::convert_union(const exprt &expr, Z3_ast &bv)
     it++, i++)
   {
 
-	if (expr.type().get_string("tag").find("__align'") != std::string::npos && expr.type().id() == "union" && i==1)
+	if (expr.type().get_string("tag").find("__align'") != std::string::npos && expr.type().id() == typet::t_union && i==1)
 	  return false;
 
 	if (convert_bv(expr.operands()[i], value))
@@ -3630,7 +3630,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     else
       array_type  = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
   }
-  else if (expr.type().subtype().id() == "struct")
+  else if (expr.type().subtype().id() == typet::t_struct)
   {
     if (create_struct_type(expr.op0().type(), tuple_type))
       return true;
@@ -3837,12 +3837,12 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 	if (convert_array(expr, bv))
 	  return true;
   }
-  else if (expr.type().id()=="struct")
+  else if (expr.type().id()==typet::t_struct)
   {
 	if (convert_struct(expr, bv))
 	  return true;
   }
-  else if (expr.type().id()=="union")
+  else if (expr.type().id()==typet::t_union)
   {
 	if (convert_union(expr, bv))
 	  return true;
@@ -4728,7 +4728,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 		return true;
 	}
 	else if (object.type().id() == "array" && object.id() != "member"
-			&& object.type().subtype().id() != "struct")
+			&& object.type().subtype().id() != typet::t_struct)
 	{
 	  if (read_cache(object, po))
 		return true;
@@ -4757,7 +4757,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-	if (expr.op0().type().id()!="struct" && expr.op0().type().id()!="union")
+	if (expr.op0().type().id()!=typet::t_struct && expr.op0().type().id()!=typet::t_union)
 	{
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
@@ -4794,8 +4794,8 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	  if (convert_z3_pointer(expr, expr.op0().get_string(exprt::a_identifier), pointer_var))
 	    return true;
 	}
-	else if (expr.op0().type().id() == "struct"
-		     || expr.op0().type().id() == "union")
+	else if (expr.op0().type().id() == typet::t_struct
+		     || expr.op0().type().id() == typet::t_union)
 	{
 #ifdef DEBUG
 	std::cout << "convert_pointer expr.type().subtype().id(): " << expr.type().subtype().id() << std::endl;
@@ -4808,7 +4808,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	  identifier = "address_of_struct_";
 	  identifier += val;
 
-	  if (expr.op0().type().id() == "struct")
+	  if (expr.op0().type().id() == typet::t_struct)
 	    symbol_name = identifier + expr.op0().get_string(exprt::a_identifier);
 	  else
 		symbol_name = "address_of_union" + expr.op0().get_string(exprt::a_identifier);
@@ -4838,7 +4838,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	std::cout << "expr.type().subtype().id(): " << expr.type().subtype().id() << std::endl;
 #endif
 
-	if (expr.type().subtype().id()!="struct")
+	if (expr.type().subtype().id()!=typet::t_struct)
 	{
       const struct_typet &struct_type=to_struct_type(expr.op0().type());
 	  const struct_typet::componentst &components=struct_type.components();
@@ -5001,13 +5001,13 @@ bool z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
 	bv = z3_api.mk_var(z3_ctx, identifier.c_str(), array_type);
 	value = z3_api.mk_tuple_select(z3_ctx, value, 0);
   }
-  else if (expr.type().id()=="array" && expr.type().subtype().id()=="struct")
+  else if (expr.type().id()=="array" && expr.type().subtype().id()==typet::t_struct)
   {
 	std::string identifier;
 	identifier = "array_of_" + expr.op0().type().get_string("tag");
     bv = z3_api.mk_var(z3_ctx, identifier.c_str(), array_type);
   }
-  else if (expr.type().id()=="array" && expr.type().subtype().id()=="union")
+  else if (expr.type().id()=="array" && expr.type().subtype().id()==typet::t_union)
   {
 	std::string identifier;
 	identifier = "array_of_" + expr.op0().type().get_string("tag");
@@ -5292,7 +5292,7 @@ bool z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size()==3);
   Z3_ast array_var, array_val, operand0, operand1, operand2;
 
-  if (expr.type().id() == "struct")
+  if (expr.type().id() == typet::t_struct)
   {
 	if (convert_bv(expr.op0(), array_var))
 	  return true;
@@ -5303,7 +5303,7 @@ bool z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 	bv = z3_api.mk_tuple_update(z3_ctx, array_var,
 			convert_member_name(expr.op0(), expr.op1()), array_val);
   }
-  else if (expr.type().id() == "union")
+  else if (expr.type().id() == typet::t_union)
   {
 	if (convert_bv(expr.op0(), array_var))
 	  return true;
@@ -5556,7 +5556,7 @@ bool z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 #endif
 
 #if 1
-  if (expr.op0().type().id()=="union")
+  if (expr.op0().type().id()==typet::t_union)
   {
     union_varst::const_iterator cache_result=union_vars.find(expr.op0().get_string(exprt::a_identifier).c_str());
 	if(cache_result!=union_vars.end())
@@ -5637,7 +5637,7 @@ bool z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 
     return false;
   }
-  else if (object.id()==exprt::index && object.type().id() == "struct")
+  else if (object.id()==exprt::index && object.type().id() == typet::t_struct)
   {
 	const exprt &symbol=object.operands()[0];
 	const exprt &index=object.operands()[1];
@@ -5812,14 +5812,14 @@ bool z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
         return false;
       }
     }
-    else if (object.type().id()=="struct" || object.type().id()=="union")
+    else if (object.type().id()==typet::t_struct || object.type().id()==typet::t_union)
     {
    	  const struct_typet &struct_type=to_struct_type(object.type());
       const struct_typet::componentst &components=struct_type.components();
 
       pointer_object = z3_api.mk_tuple_select(z3_ctx, pointer_object, 0);
 
-      if (object.type().id()=="union")
+      if (object.type().id()==typet::t_union)
         pointer_object = z3_api.mk_tuple_select(z3_ctx, pointer_object, components.size());
 
 	  for(struct_typet::componentst::const_iterator
@@ -6034,7 +6034,7 @@ bool z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  if (expr.op0().type().id()=="struct")
+  if (expr.op0().type().id()==typet::t_struct)
   {
     const struct_typet &struct_type=to_struct_type(expr.op0().type());
     const struct_typet::componentst &components=struct_type.components();
@@ -6210,7 +6210,7 @@ bool z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	  return false;
 	}
 #endif
-	if (expr.op0().type().id()=="struct")
+	if (expr.op0().type().id()==typet::t_struct)
 	{
 	  const struct_typet &struct_type=to_struct_type(expr.op0().type());
 	  const struct_typet::componentst &components=struct_type.components();
@@ -6639,7 +6639,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
 	  else
 	  {
 #if 1
-   	    if (op0.type().id()=="union" && op1.id()==exprt::with)
+   	    if (op0.type().id()==typet::t_union && op1.id()==exprt::with)
    	    {
 		  union_vars.insert(std::pair<std::string, unsigned int>(op0.get_string(exprt::a_identifier),
 				  convert_member_name(op1.op0(), op1.op1())));
