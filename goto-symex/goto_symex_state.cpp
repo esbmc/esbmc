@@ -291,7 +291,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
   }
 
   /* No difference
-  else if(expr.id()=="=")
+  else if(expr.id()==exprt::equality)
   {
     if(expr.operands().size()!=2)
 	  throw "equality expects two operands";

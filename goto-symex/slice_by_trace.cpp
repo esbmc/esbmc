@@ -330,7 +330,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	    for (std::vector<irep_idt>::iterator k = sigma_vals[j].begin();
 		 k != sigma_vals[j].end(); k++) {
 	      
-	      exprt equal_cond=exprt("=", typet("bool"));
+	      exprt equal_cond=exprt(exprt::equality, typet("bool"));
 	      equal_cond.operands().reserve(2);
 	      equal_cond.copy_to_operands(*pvi);
 	      // Should eventually change to handle non-bv types!

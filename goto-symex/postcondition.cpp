@@ -207,7 +207,7 @@ void postconditiont::strengthen(exprt &dest)
     if(SSA_step.lhs.type().id()=="array" ||
        SSA_step.lhs.type().id()=="struct") return;
   
-    exprt equality("=", typet("bool"));
+    exprt equality(exprt::equality, typet("bool"));
     equality.copy_to_operands(SSA_step.lhs, SSA_step.rhs);
     s.get_original_name(equality);
 
