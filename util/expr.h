@@ -185,11 +185,12 @@ public:
   static irep_idt objdesc;
   static irep_idt dynobj;
   static irep_idt typecast;
-  static irep_idt i_and;
   static irep_idt implies;
+  static irep_idt i_and;
+  static irep_idt i_xor;
   static irep_idt i_or;
-  static irep_idt addrof;
   static irep_idt i_not;
+  static irep_idt addrof;
   static irep_idt deref;
   static irep_idt i_if;
   static irep_idt with;
