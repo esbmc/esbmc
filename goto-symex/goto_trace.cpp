@@ -154,8 +154,8 @@ void counterexample_value(
     {
       if(value.type().id()==typet::t_signedbv ||
 	 value.type().id()==typet::t_unsignedbv ||
-    	 value.type().id()=="fixedbv" ||
-    	 value.type().id()=="floatbv")
+    	 value.type().id()==typet::t_fixedbv ||
+    	 value.type().id()==typet::t_floatbv)
         value_string+= " ("+value.get_string(exprt::a_value)+")";
     }
 #if 0
