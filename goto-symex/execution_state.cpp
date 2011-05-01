@@ -269,7 +269,7 @@ void execution_statet::end_thread(const namespacet &ns, symex_targett &target)
     get_active_state().thread_ended = true;
 
     decreament_trds_in_run(ns,target);
-#if 1
+#if 0
     typet uint_t = uint_type();
 
 
@@ -453,7 +453,7 @@ void execution_statet::update_trds_count(const namespacet &ns, symex_targett &ta
  Purpose:
 
  \*******************************************************************/
-#if 1
+#if 0
 void execution_statet::update_trds_status(const namespacet &ns, symex_targett &target)
 {
 #ifdef DEBUG
@@ -488,159 +488,6 @@ void execution_statet::update_trds_status(const namespacet &ns, symex_targett &t
 
 }
 #endif
-
-/*******************************************************************
- Function: execution_statet::set_trd_number
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void execution_statet::set_active_trd_zero(const namespacet &ns, symex_targett &target)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-	typet uint_t = uint_type();
-
-	//std::cout << "set_active_trd _active_thread: " << _active_thread << std::endl;
-	//std::cout << "_active_thread: " << _threads_state.size()-1 << std::endl;
-
-	exprt lhs_expr = symbol_exprt("c::trd_nr", uint_t);
-    constant_exprt rhs_expr = constant_exprt(uint_t);
-    rhs_expr.set_value(integer2binary(_threads_state.size()-1, config.ansi_c.int_width));
-
-    exprt new_lhs = lhs_expr;
-
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
-
-    target.assignment(
-            get_active_state().guard,
-            new_lhs, lhs_expr,
-            rhs_expr,
-            get_active_state().source,
-            symex_targett::STATE);
-
-}
-
-/*******************************************************************
- Function: execution_statet::set_trd_number
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void execution_statet::set_active_trd_one(const namespacet &ns, symex_targett &target)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-	typet uint_t = uint_type();
-
-	//std::cout << "set_active_trd _active_thread: " << _active_thread << std::endl;
-	std::cout << "_active_thread: " << _active_thread << std::endl;
-
-	exprt lhs_expr = symbol_exprt("c::trd_nr", uint_t);
-    constant_exprt rhs_expr = constant_exprt(uint_t);
-    rhs_expr.set_value(integer2binary(_active_thread, config.ansi_c.int_width));
-
-    exprt new_lhs = lhs_expr;
-
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
-
-    target.assignment(
-            get_active_state().guard,
-            new_lhs, lhs_expr,
-            rhs_expr,
-            get_active_state().source,
-            symex_targett::STATE);
-
-}
-
-/*******************************************************************
- Function: execution_statet::set_trd_status_to_one
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void execution_statet::set_trd_status_to_one(const namespacet &ns, symex_targett &target)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-#if 1
-  typet uint_t = uint_type();
-
-  irep_idt tmp = "c::exit" + i2string(_active_thread);
-  exprt lhs_expr = symbol_exprt(tmp, uint_t);
-  exprt rhs_expr = gen_one(uint_t);
-
-  exprt new_lhs = lhs_expr;
-
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
-
-  target.assignment(
-          get_active_state().guard,
-          new_lhs, lhs_expr,
-          rhs_expr,
-          get_active_state().source,
-          symex_targett::STATE);
-#endif
-}
-
-/*******************************************************************
- Function: execution_statet::set_trd_status_to_zero
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void execution_statet::set_trd_status_to_zero(const namespacet &ns, symex_targett &target)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-#if 1
-  typet uint_t = uint_type();
-
-  irep_idt tmp = "c::exit" + i2string(_threads_state.size()-1);
-  exprt lhs_expr = symbol_exprt(tmp, uint_t);
-  exprt rhs_expr = gen_zero(uint_t);
-
-  exprt new_lhs = lhs_expr;
-
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
-
-  target.assignment(
-          get_active_state().guard,
-          new_lhs, lhs_expr,
-          rhs_expr,
-          get_active_state().source,
-          symex_targett::STATE);
-#endif
-}
-
 
 /*******************************************************************
  Function: execution_statet::execute_guard
@@ -765,6 +612,58 @@ void execution_statet::add_thread(goto_symex_statet & state)
   _exprs_read_write.push_back(read_write_set());
 }
 
+/*******************************************************************
+ Function: execution_statet::recover_global_state
+
+ Inputs:
+
+ Outputs:
+
+ Purpose:
+
+ \*******************************************************************/
+
+void execution_statet::recover_global_state(const namespacet &ns, symex_targett &target)
+{
+#ifdef DEBUG
+  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
+#endif
+
+  std::set<irep_idt> variables;
+  _state_level2->get_variables(variables);
+
+  _state_level2->print(std::cout,parent_node_id);
+
+  for (std::set<irep_idt>::const_iterator
+       it = variables.begin();
+       it != variables.end();
+       it++)
+  {
+    irep_idt original_identifier = get_active_state().get_original_name(*it);
+    try {
+      // changed!
+      const symbolt &symbol = ns.lookup(original_identifier);
+      typet type(symbol.type);
+      // type may need renaming
+      get_active_state().rename(type, ns,node_id);
+
+      exprt rhs = symbol_exprt(get_active_state().current_name(original_identifier,parent_node_id), type);
+      exprt lhs = symbol_exprt(original_identifier, type);
+
+      exprt new_lhs = symbol_exprt(get_active_state().current_name(original_identifier,node_id), type);
+
+      guardt true_guard;
+
+      target.assignment(true_guard,
+                        new_lhs, lhs,
+                        rhs,
+                        get_active_state().source,
+                        symex_targett::STATE);
+      } catch (const std::string e) {
+        continue;
+    }
+  }
+}
 
 /*******************************************************************
  Function: execution_statet::is_in_lookup

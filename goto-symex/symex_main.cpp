@@ -486,10 +486,6 @@ void goto_symext::symex_step(
               //ex_state.deadlock_detection(ns,*target);
               ex_state.update_trds_count(ns,*target);
               ex_state.increament_trds_in_run(ns,*target);
-              ex_state.set_active_trd_zero(ns,*target);
-              //ex_state.set_trd_status_to_zero(ns,*target);
-              ex_state.update_trds_status(ns,*target);
-
 
               ex_state.generating_new_threads = ex_state._threads_state.size() - 1;
             }
@@ -505,9 +501,6 @@ void goto_symext::symex_step(
             ex_state.end_thread(ns, *target);
             ex_state.reexecute_instruction = false;
             art.generate_states();
-            ex_state.set_active_trd_one(ns,*target);
-            //ex_state.set_trd_status_to_one(ns,*target);
-
             //if (art.generate_states_base(exprt()))
               //return;
             break;
