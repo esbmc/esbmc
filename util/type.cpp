@@ -69,3 +69,7 @@ bool is_number(const typet &type)
          id=="floatbv" ||
          id=="fixedbv";
 }
+
+irep_idt typet::f_subtype = dstring("subtype");
+irep_idt typet::f_subtypes = dstring("subtypes");
+irep_idt typet::f_location = dstring("#location");

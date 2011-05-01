@@ -22,24 +22,24 @@ class typet:public irept
   explicit typet(const irep_idt &_id):irept(_id) { }
   
   const typet &subtype() const
-  { return (typet &)find("subtype"); }
+  { return (typet &)find(f_subtype); }
    
   typet &subtype()
-  { return (typet &)add("subtype"); }
+  { return (typet &)add(f_subtype); }
    
   typedef std::vector<typet> subtypest;
 
   subtypest &subtypes()
-  { return (subtypest &)add("subtypes").get_sub(); }
+  { return (subtypest &)add(f_subtypes).get_sub(); }
   
   const subtypest &subtypes() const
-  { return (const subtypest &)find("subtypes").get_sub(); }
+  { return (const subtypest &)find(f_subtypes).get_sub(); }
    
   bool has_subtypes() const
-  { return !find("subtypes").is_nil(); }
+  { return !find(f_subtypes).is_nil(); }
    
   bool has_subtype() const
-  { return !find("subtype").is_nil(); }
+  { return !find(f_subtype).is_nil(); }
 
   void move_to_subtypes(typet &type); // destroys expr
 
@@ -47,12 +47,12 @@ class typet:public irept
 
   const locationt &location() const
   {
-    return (const locationt &)find("#location");
+    return (const locationt &)find(f_location);
   }
 
   locationt &location()
   {
-    return (locationt &)add("#location");
+    return (locationt &)add(f_location);
   }
   
   typet &add_type(const std::string &name)
@@ -64,6 +64,11 @@ class typet:public irept
   {
     return (const typet &)find(name);
   }
+
+protected:
+  static irep_idt f_subtype;
+  static irep_idt f_subtypes;
+  static irep_idt f_location;
 };
 
 typedef std::list<typet> type_listt;
