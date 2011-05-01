@@ -1060,9 +1060,9 @@ execution_statet::serialise_expr(const exprt &rhs)
     // and then print the value as a base 10 integer.
 
     irep_idt idt_val = rhs.get("value");
-    if (idt_val == "true") {
+    if (idt_val == exprt::i_true) {
       val = 1;
-    } else if (idt_val == "false") {
+    } else if (idt_val == exprt::i_false) {
       val = 0;
     } else {
       val = strtol(idt_val.c_str(), NULL, 2);
@@ -1141,7 +1141,7 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m["unary-"] = serialise_normal_operation;
   m["unary+"] = serialise_normal_operation;
   m["abs"] = serialise_normal_operation;
-  m["isnan"] = serialise_normal_operation;
+  m[exprt::isnan] = serialise_normal_operation;
   m[">="] = serialise_normal_operation;
   m[">"] = serialise_normal_operation;
   m["<="] = serialise_normal_operation;
