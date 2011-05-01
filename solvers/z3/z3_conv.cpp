@@ -4702,7 +4702,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     pointer_logic.add_object(expr);
   }
 
-  if (expr.op0().id() == "index")
+  if (expr.op0().id() == exprt::index)
   {
     const exprt &object=expr.op0().operands()[0];
 	const exprt &index=expr.op0().operands()[1];
@@ -4727,7 +4727,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	  if (convert_bv(object, po))
 		return true;
 	}
-	else if (object.type().id() == typet::t_array && object.id() != "member"
+	else if (object.type().id() == typet::t_array && object.id() != exprt::member
 			&& object.type().subtype().id() != typet::t_struct)
 	{
 	  if (read_cache(object, po))
