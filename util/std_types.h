@@ -183,17 +183,17 @@ class code_typet:public typet
 public:
   code_typet()
   {
-    id("code");
+    id(t_code);
   }
   
   class argumentt:public exprt
   {
   public:
-    argumentt():exprt("argument")
+    argumentt():exprt(argument)
     {
     }
     
-    argumentt(const typet &type):exprt("argument", type)
+    argumentt(const typet &type):exprt(argument, type)
     {
     }
     
@@ -235,12 +235,12 @@ public:
   
   bool has_ellipsis() const
   {
-    return find("arguments").get_bool("ellipsis");
+    return find(a_arguments).get_bool("ellipsis");
   }
 
   void make_ellipsis()
   {
-    add("arguments").set("ellipsis", true);
+    add(a_arguments).set("ellipsis", true);
   }
 
   typedef std::vector<argumentt> argumentst;
@@ -257,24 +257,24 @@ public:
 
   const argumentst &arguments() const
   {
-    return (const argumentst &)find("arguments").get_sub();
+    return (const argumentst &)find(a_arguments).get_sub();
   }
 
   argumentst &arguments()
   {
-    return (argumentst &)add("arguments").get_sub();
+    return (argumentst &)add(a_arguments).get_sub();
   }
 };
 
 extern inline const code_typet &to_code_type(const typet &type)
 {
-  assert(type.id()=="code");
+  assert(type.id()==typet::t_code);
   return static_cast<const code_typet &>(type);
 }
 
 extern inline code_typet &to_code_type(typet &type)
 {
-  assert(type.id()=="code");
+  assert(type.id()==typet::t_code);
   return static_cast<code_typet &>(type);
 }
 

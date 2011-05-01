@@ -85,11 +85,14 @@ irep_idt typet::t_symbol = dstring("symbol");
 irep_idt typet::t_struct = dstring("struct");
 irep_idt typet::t_union = dstring("union");
 irep_idt typet::t_class = dstring("class");
+irep_idt typet::t_code = dstring("code");
 
 irep_idt typet::a_identifier = dstring("identifier");
 irep_idt typet::a_name = dstring("name");
 irep_idt typet::a_components = dstring("components");
 irep_idt typet::a_methods = dstring("methods");
+irep_idt typet::a_arguments = dstring("arguments");
+irep_idt typet::a_return_type = dstring("return_type");
 
 irep_idt typet::f_subtype = dstring("subtype");
 irep_idt typet::f_subtypes = dstring("subtypes");

@@ -81,11 +81,14 @@ class typet:public irept
   static irep_idt t_struct;
   static irep_idt t_union;
   static irep_idt t_class;
+  static irep_idt t_code;
 
   static irep_idt a_identifier;
   static irep_idt a_name;
   static irep_idt a_components;
   static irep_idt a_methods;
+  static irep_idt a_arguments;
+  static irep_idt a_return_type;
 
 protected:
   static irep_idt f_subtype;

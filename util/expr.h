@@ -216,6 +216,7 @@ public:
   static irep_idt i_lshr;
   static irep_idt i_shl;
   static irep_idt abs;
+  static irep_idt argument;
 
   // Expression attributes
   static irep_idt a_identifier;
