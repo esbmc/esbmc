@@ -114,11 +114,8 @@ Function: goto_symext::operator()
 
 void goto_symext::multi_formulas_init(const goto_functionst &goto_functions)
 {
-  int cs = atoi(options.get_option("context-switch").c_str());
-  bool deadlock_detection  = options.get_bool_option("deadlock-check");
-  bool por = options.get_bool_option("no-por");
 
-  art1 = new reachability_treet(goto_functions,ns,cs,deadlock_detection,por);
+  art1 = new reachability_treet(goto_functions, ns, options);
 }
 
 /*******************************************************************\
@@ -190,15 +187,8 @@ Function: goto_symext::operator()
 
 void goto_symext::operator()(const goto_functionst &goto_functions)
 {
-  int cs = atoi(options.get_option("context-switch").c_str());
-  bool deadlock_detection  = options.get_bool_option("deadlock-check");
-  bool por;
-  if (options.get_bool_option("control-flow-test"))
-	por=false;
-  else
-    por = options.get_bool_option("no-por");
 
-  reachability_treet art(goto_functions,ns,cs,deadlock_detection,por);
+  reachability_treet art(goto_functions, ns, options);
 
   int total_states = 0;
   while (art.has_more_states())
