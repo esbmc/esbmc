@@ -41,7 +41,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
   std::cout << "Slicing by trace..." << std::endl;
 
   merge_identifier = "goto_symex::\\merge";
-  merge_symbol=exprt(exprt::symbol, typet("bool"));
+  merge_symbol=exprt(exprt::symbol, typet(typet::t_bool));
   merge_symbol.set(exprt::a_identifier, merge_identifier);
 
   std::vector<exprt> trace_conditions;
@@ -67,7 +67,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
   if (trace_conditions.size() == 1) {
     trace_condition = trace_conditions[0];
   } else {
-    trace_condition = exprt(exprt::i_and,typet("bool"));
+    trace_condition = exprt(exprt::i_and,typet(typet::t_bool));
     trace_condition.operands().reserve(trace_conditions.size());
     for (std::vector<exprt>::iterator i = trace_conditions.begin();
 	 i != trace_conditions.end(); i++) {
@@ -307,7 +307,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	if ((t[j].is_true()) || (t[j].is_false())) {
 	  merge.push_back(t[j]);
 	} else {
-	  exprt merge_sym =exprt(exprt::symbol, typet("bool"));
+	  exprt merge_sym =exprt(exprt::symbol, typet(typet::t_bool));
 	  merge_sym.set(exprt::a_identifier, id2string(merge_identifier)+"#"+
 			i2string(merge_count++));
 	  exprt t_copy (t[j]);
@@ -320,7 +320,7 @@ void symex_slice_by_tracet::compute_ts_back(
       }
 
       for(size_t j = 0; j < t.size(); j++) {
-	exprt u_lhs = exprt(exprt::i_and, typet("bool"));
+	exprt u_lhs = exprt(exprt::i_and, typet(typet::t_bool));
 	if ((j < sigma.size()) && (matches(sigma[j],event))) {
 	  u_lhs.operands().reserve(2);
 	  u_lhs.copy_to_operands(guard);
@@ -330,7 +330,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	    for (std::vector<irep_idt>::iterator k = sigma_vals[j].begin();
 		 k != sigma_vals[j].end(); k++) {
 	      
-	      exprt equal_cond=exprt(exprt::equality, typet("bool"));
+	      exprt equal_cond=exprt(exprt::equality, typet(typet::t_bool));
 	      equal_cond.operands().reserve(2);
 	      equal_cond.copy_to_operands(*pvi);
 	      // Should eventually change to handle non-bv types!
@@ -342,7 +342,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	      eq_conds.push_back(equal_cond);
 	      pvi++;
 	    }
-	    exprt val_merge = exprt(exprt::i_and, typet("bool"));
+	    exprt val_merge = exprt(exprt::i_and, typet(typet::t_bool));
 	    val_merge.operands().reserve(eq_conds.size()+1);
 	    val_merge.copy_to_operands(merge[j+1]);
 	    for (std::list<exprt>::iterator k = eq_conds.begin(); 
@@ -361,7 +361,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	} else {
 	  u_lhs.make_false();
 	}
-	exprt u_rhs = exprt (exprt::i_and, typet("bool"));
+	exprt u_rhs = exprt (exprt::i_and, typet(typet::t_bool));
 	if ((semantics != ":suffix") || (j != 0)) {
 	  u_rhs.operands().reserve(2);
 	  u_rhs.copy_to_operands(guard);
@@ -370,7 +370,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	} else {
 	  u_rhs.swap(merge[j]);
 	}
-	exprt u_j = exprt (exprt::i_or, typet("bool"));
+	exprt u_j = exprt (exprt::i_or, typet(typet::t_bool));
 	u_j.operands().reserve(2);
 	u_j.copy_to_operands(u_lhs);
 	u_j.copy_to_operands(u_rhs);
@@ -556,7 +556,7 @@ void symex_slice_by_tracet::assign_merges(
   size_t merge_count = (merge_map_back.size()) - 1;
   for (std::vector<exprt>::reverse_iterator i = merge_map_back.rbegin();
        i != merge_map_back.rend(); i++) {
-    exprt merge_sym =exprt(exprt::symbol, typet("bool"));
+    exprt merge_sym =exprt(exprt::symbol, typet(typet::t_bool));
     merge_sym.set(exprt::a_identifier, id2string(merge_identifier)+"#"+i2string(merge_count));
     merge_count--;
     guardt t_guard;

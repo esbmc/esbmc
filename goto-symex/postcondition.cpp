@@ -164,7 +164,7 @@ Function: postconditiont::strengthen
 void postconditiont::weaken(exprt &dest)
 {
   if(dest.id()==exprt::i_and &&
-     dest.type().id()=="bool") // this distributes over "and"
+     dest.type().id()==typet::t_bool) // this distributes over "and"
   {
     Forall_operands(it, dest)
       weaken(*it);
@@ -207,7 +207,7 @@ void postconditiont::strengthen(exprt &dest)
     if(SSA_step.lhs.type().id()=="array" ||
        SSA_step.lhs.type().id()=="struct") return;
   
-    exprt equality(exprt::equality, typet("bool"));
+    exprt equality(exprt::equality, typet(typet::t_bool));
     equality.copy_to_operands(SSA_step.lhs, SSA_step.rhs);
     s.get_original_name(equality);
 

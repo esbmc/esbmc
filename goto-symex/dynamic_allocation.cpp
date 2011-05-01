@@ -46,7 +46,7 @@ void replace_dynamic_allocation(
 
     exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "alloc"));
 
-    exprt index_expr(exprt::index, typet("bool"));
+    exprt index_expr(exprt::index, typet(typet::t_bool));
     index_expr.move_to_operands(alloc_array, object_expr);
 
     expr.swap(index_expr);
@@ -63,7 +63,7 @@ void replace_dynamic_allocation(
 
     exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "alloc"));
 
-    exprt index_expr("memory-leak", typet("bool"));
+    exprt index_expr("memory-leak", typet(typet::t_bool));
     index_expr.move_to_operands(alloc_array, object_expr);
 
     expr.swap(index_expr);

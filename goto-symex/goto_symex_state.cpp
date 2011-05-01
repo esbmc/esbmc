@@ -248,7 +248,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
   else if(expr.id()==exprt::arrayof)
   {
     if(expr.operands().size()==1)
-      if (expr.op0().id()==exprt::constant && expr.op0().type().id()!="bool")
+      if (expr.op0().id()==exprt::constant && expr.op0().type().id()!=typet::t_bool)
         return true;
   }
 #endif
