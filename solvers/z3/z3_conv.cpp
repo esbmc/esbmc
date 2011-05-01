@@ -345,7 +345,7 @@ void z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
   std::string literal;
   static bool is_first_literal=true;
 
-  literal = expr.op0().get_string("identifier").c_str();
+  literal = expr.op0().get_string(exprt::a_identifier).c_str();
   int pos=0;
 
   for(u_int i=0; i<literal.size(); i++)
@@ -485,7 +485,7 @@ Z3_lbool z3_convt::check2_z3_properties(void)
     for (i = 0; i < unsat_core_size; ++i)
     {
   	  std::string id = Z3_ast_to_string(z3_ctx, core[i]);
-  	  if (id.find("false") != std::string::npos)
+	  if (id.find("false") != std::string::npos)
   	  {
   		result = z3_api.check2(z3_ctx, Z3_L_TRUE);
   	    if (result == Z3_L_TRUE)
@@ -1273,7 +1273,7 @@ bool z3_convt::read_cache(const exprt &expr, Z3_ast &bv)
 {
   std::string symbol;
 
-  symbol = expr.get_string("identifier");
+  symbol = expr.get_string(exprt::a_identifier);
 
   for(z3_cachet::const_iterator it = z3_cache.begin();
   it != z3_cache.end(); it++)
@@ -1309,7 +1309,7 @@ bool z3_convt::write_cache(const exprt &expr)
 {
   std::string symbol, identifier;
 
-  identifier = expr.get_string("identifier");
+  identifier = expr.get_string(exprt::a_identifier);
 
   for (std::string::const_iterator it = identifier.begin(); it
 		!= identifier.end(); it++)
@@ -1364,15 +1364,15 @@ Z3_ast z3_convt::convert_lt(const exprt &expr)
   if (op1.type().id() == "pointer")
     operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
-  if (op0.id() == "typecast" && op0.type().id()=="signedbv")
+  if (op0.id() == exprt::typecast && op0.type().id()=="signedbv")
   {
 	const exprt &object=expr.op0().operands()[0];
 	std::string value;
 	unsigned width;
 
-	if (op1.id()=="constant" && object.type().id()=="unsignedbv")
+	if (op1.id()==exprt::constant && object.type().id()=="unsignedbv")
 	{
-	  value = integer2string(binary2integer(expr.op1().get_string("value"), false),10);
+	  value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
 	    return Z3_mk_false(z3_ctx);
@@ -1445,9 +1445,9 @@ Z3_ast z3_convt::convert_gt(const exprt &expr)
 	std::string value;
 	unsigned width;
 
-	if (expr.op1().id()=="constant" && object.type().id()=="unsignedbv")
+	if (expr.op1().id()==exprt::constant && object.type().id()=="unsignedbv")
 	{
-	  value = integer2string(binary2integer(expr.op1().get_string("value"), false),10);
+	  value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
 	    return Z3_mk_false(z3_ctx);
@@ -1515,15 +1515,15 @@ Z3_ast z3_convt::convert_le(const exprt &expr)
   if (expr.op1().type().id() == "pointer")
     operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
-  if (expr.op0().id() == "typecast" && expr.op0().type().id()=="signedbv")
+  if (expr.op0().id() == exprt::typecast && expr.op0().type().id()=="signedbv")
   {
 	const exprt &object=expr.op0().operands()[0];
 	std::string value;
 	unsigned width;
 
-	if (expr.op1().id()=="constant" && object.type().id()=="unsignedbv")
+	if (expr.op1().id()==exprt::constant && object.type().id()=="unsignedbv")
 	{
-	  value = integer2string(binary2integer(expr.op1().get_string("value"), false),10);
+	  value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
 	    return Z3_mk_false(z3_ctx);
@@ -1592,15 +1592,15 @@ Z3_ast z3_convt::convert_ge(const exprt &expr)
   if (expr.op1().type().id() == "pointer")
     operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
-  if (expr.op0().id() == "typecast" && expr.op0().type().id()=="signedbv")
+  if (expr.op0().id() == exprt::typecast && expr.op0().type().id()=="signedbv")
   {
 	const exprt &object=expr.op0().operands()[0];
 	std::string value;
 	unsigned width;
 
-	if (expr.op1().id()=="constant" && object.type().id()=="unsignedbv")
+	if (expr.op1().id()==exprt::constant && object.type().id()=="unsignedbv")
 	{
-	  value = integer2string(binary2integer(expr.op1().get_string("value"), false),10);
+	  value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
 	    return Z3_mk_false(z3_ctx);
@@ -1676,16 +1676,16 @@ Z3_ast z3_convt::convert_eq(const exprt &expr)
   {
     static Z3_ast pointer[2], formula[2];
 
-    if (op1.id()=="address_of")
-      z3_cache.insert(std::pair<const exprt, std::string>(op1.op0(), op0.get_string("identifier")));
+    if (op1.id()==exprt::addrof)
+      z3_cache.insert(std::pair<const exprt, std::string>(op1.op0(), op0.get_string(exprt::a_identifier)));
     else
-      z3_cache.insert(std::pair<const exprt, std::string>(op1, op0.get_string("identifier")));
+      z3_cache.insert(std::pair<const exprt, std::string>(op1, op0.get_string(exprt::a_identifier)));
 
 
 	pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 0);
     pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 0);
 
-    if (expr.id() == "=")
+    if (expr.id() == exprt::equality)
 	  formula[0] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
     else
       formula[0] = Z3_mk_distinct(z3_ctx, 2, pointer);
@@ -1693,7 +1693,7 @@ Z3_ast z3_convt::convert_eq(const exprt &expr)
     pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
     pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
-	if (expr.id() == "=")
+	if (expr.id() == exprt::equality)
 	  formula[1] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
 	else
 	  formula[1] = Z3_mk_distinct(z3_ctx, 2, pointer);
@@ -1704,7 +1704,7 @@ Z3_ast z3_convt::convert_eq(const exprt &expr)
   }
   else
   {
-    if (expr.id() == "=")
+    if (expr.id() == exprt::equality)
       bv = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
     else
 	  bv = Z3_mk_distinct(z3_ctx, 2, operand);
@@ -1747,30 +1747,30 @@ Z3_ast z3_convt::convert_invalid(const exprt &expr)
   std::cout << "expr.op0().id(): " << expr.op0().id() << std::endl;
 #endif
 
-  if (expr.op0().id()=="address_of" ||
+  if (expr.op0().id()==exprt::addrof ||
 	 (expr.op0().type().id()=="pointer" && expr.op0().type().subtype().id()=="symbol"))
 	return Z3_mk_false(z3_ctx);
 
-  if (!is_in_cache(expr.op0()) && expr.op0().id()=="typecast")
+  if (!is_in_cache(expr.op0()) && expr.op0().id()==exprt::typecast)
 	return Z3_mk_true(z3_ctx);
 
   if (!is_in_cache(expr.op0()))
   {
-	if (expr.op0().id()=="+" && expr.op0().type().subtype().id()!="empty")
+	if (expr.op0().id()==exprt::plus && expr.op0().type().subtype().id()!="empty")
       return Z3_mk_true(z3_ctx);
 	else
 	  return Z3_mk_false(z3_ctx);
   }
 
   //the subtype field of index is empty and generates seg. fault
-  if (!is_in_cache(expr.op0()) && expr.op0().id()=="index")
+  if (!is_in_cache(expr.op0()) && expr.op0().id()==exprt::index)
 	return Z3_mk_false(z3_ctx);
 
   if (convert_bv(expr.op0(), pointer)) //return pointer tuple
     return Z3_mk_false(z3_ctx);
 
   //@TODO
-  if (expr.op0().id()=="member" && expr.op0().type().id()=="pointer" && expr.op0().type().subtype().id()=="signedbv")
+  if (expr.op0().id()==exprt::member && expr.op0().type().id()=="pointer" && expr.op0().type().subtype().id()=="signedbv")
 	return Z3_mk_false(z3_ctx);
 
   if (expr.op0().type().id()=="pointer")
@@ -1835,11 +1835,11 @@ Z3_ast z3_convt::convert_same_object(const exprt &expr)
 	//object is not in the cache and generates spurious counter-example
     return Z3_mk_false(z3_ctx);
   }
-  else if (op0.id()=="address_of" && op1.id()=="constant")
+  else if (op0.id()==exprt::addrof && op1.id()==exprt::constant)
   {
 	return Z3_mk_false(z3_ctx); //TODO
   }
-  else if (op0.id()=="symbol" && op1.id()=="address_of")
+  else if (op0.id()==exprt::symbol && op1.id()==exprt::addrof)
   {
     const exprt &object=op1.operands()[0];
     const exprt &index=object.operands()[0];
