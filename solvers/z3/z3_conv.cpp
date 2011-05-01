@@ -4067,16 +4067,16 @@ bool z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
 	  if (convert_bv(*it, args[i]))
 	    return true;
 
-	  if (i>=1 && expr.id()=="xor")
+	  if (i>=1 && expr.id()==exprt::i_xor)
 	    args[i] = Z3_mk_xor(z3_ctx, args[i-1], args[i]);
 	  ++i;
 	}
 
-	if(expr.id()=="and")
+	if(expr.id()==exprt::i_and)
 	  bv = Z3_mk_and(z3_ctx, i, args);
-	else if(expr.id()=="or")
+	else if(expr.id()==exprt::i_or)
 	  bv = Z3_mk_or(z3_ctx, i, args);
-	else if (expr.id()=="xor")
+	else if (expr.id()==exprt::i_xor)
 	  bv=args[size-1];
   }
 
@@ -4151,7 +4151,7 @@ bool z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
   if (convert_bv(expr.op1(), args[1]))
 	return true;
 
-  if (expr.id()=="=")
+  if (expr.id()==exprt::equality)
     bv = Z3_mk_eq(z3_ctx, args[0], args[1]);
   else
 	bv = Z3_mk_distinct(z3_ctx,2,args);
@@ -4593,14 +4593,14 @@ bool z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
 
     bv = z3_api.mk_tuple_update(z3_ctx, pointer, 1, args[i]);
   }
-  else if (expr.op0().id()=="typecast" || expr.op1().id()=="typecast")
+  else if (expr.op0().id()==exprt::typecast || expr.op1().id()==exprt::typecast)
   {
     forall_operands(it, expr)
     {
       if (convert_bv(*it, args[i]))
         return true;
 
-	  if (it->id()=="typecast")
+	  if (it->id()==exprt::typecast)
 	  {
 	    const exprt &offset=it->operands()[0];
 	    if (offset.type().id()=="pointer")
@@ -4704,8 +4704,8 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 
   offset = convert_number(0, config.ansi_c.int_width, true);
 
-  if(expr.id()=="symbol" ||
-     expr.id()=="constant" ||
+  if(expr.id()==exprt::symbol ||
+     expr.id()==exprt::constant ||
      expr.id()=="string-constant")
   {
     pointer_logic.add_object(expr);
@@ -4781,7 +4781,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 #endif
 
   }
-  else if (expr.op0().id() == "symbol")
+  else if (expr.op0().id() == exprt::symbol)
   {
 #ifdef DEBUG
 	std::cout << "convert_pointer expr.op0().type().id(): " << expr.op0().type().id() << std::endl;
@@ -4790,7 +4790,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	if (expr.op0().type().id() == "signedbv" || expr.op0().type().id() == "fixedbv"
 		|| expr.op0().type().id() == "unsignedbv")
 	{
-	  if (convert_z3_pointer(expr, expr.op0().get_string("identifier"), pointer_var))
+	  if (convert_z3_pointer(expr, expr.op0().get_string(exprt::a_identifier), pointer_var))
 		return true;
 	}
 	else if (expr.op0().type().id() == "pointer")
@@ -4800,7 +4800,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	}
 	else if (expr.op0().type().id() == "bool")
 	{
-	  if (convert_z3_pointer(expr, expr.op0().get_string("identifier"), pointer_var))
+	  if (convert_z3_pointer(expr, expr.op0().get_string(exprt::a_identifier), pointer_var))
 	    return true;
 	}
 	else if (expr.op0().type().id() == "struct"
@@ -4818,9 +4818,9 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	  identifier += val;
 
 	  if (expr.op0().type().id() == "struct")
-	    symbol_name = identifier + expr.op0().get_string("identifier");
+	    symbol_name = identifier + expr.op0().get_string(exprt::a_identifier);
 	  else
-		symbol_name = "address_of_union" + expr.op0().get_string("identifier");
+		symbol_name = "address_of_union" + expr.op0().get_string(exprt::a_identifier);
 
 	  pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
 
@@ -4838,7 +4838,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 #endif
 
 	if (expr.type().subtype().id()=="symbol"
-		&& expr.op0().get_string("identifier").find("symex_dynamic") == std::string::npos)
+		&& expr.op0().get_string(exprt::a_identifier).find("symex_dynamic") == std::string::npos)
 	{
 	  pointer = z3_api.mk_tuple_select(z3_ctx, pointer, 0);
 	}
@@ -4872,15 +4872,15 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     }
 	else if (expr.op0().type().id() == "code")
 	{
-	  if (convert_z3_pointer(expr, expr.op0().get_string("identifier"), pointer_var))
+	  if (convert_z3_pointer(expr, expr.op0().get_string(exprt::a_identifier), pointer_var))
 		return true;
 	}
   }
-  else if (expr.op0().id() == "member")
+  else if (expr.op0().id() == exprt::member)
   {
 	const exprt &object=expr.op0().operands()[0];
 
-    symbol_name = "address_of_member" + object.get_string("identifier");
+    symbol_name = "address_of_member" + object.get_string(exprt::a_identifier);
 	pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
 
 	if (convert_bv(expr.op0(), pointer))
@@ -4956,7 +4956,7 @@ bool z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  tmp = integer2string(binary2integer(array_type_size.size().get_string("value"), false),10);
+  tmp = integer2string(binary2integer(array_type_size.size().get_string(exprt::a_value), false),10);
   size = atoi(tmp.c_str());
 
 #ifdef DEBUG
@@ -5159,11 +5159,11 @@ bool z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
 //	throw "bitshift operations are not supported yet";
 //  else
 //  {
-    if(expr.id()=="ashr")
+    if(expr.id()==exprt::i_ashr)
       bv = Z3_mk_bvashr(z3_ctx, operand0, operand1);
-    else if (expr.id()=="lshr")
+    else if (expr.id()==exprt::i_lshr)
       bv = Z3_mk_bvlshr(z3_ctx, operand0, operand1);
-    else if(expr.id()=="shl")
+    else if(expr.id()==exprt::i_shl)
       bv = Z3_mk_bvshl(z3_ctx, operand0, operand1);
     else
       assert(false);
@@ -5380,7 +5380,7 @@ bool z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
   if (convert_bv(expr.op0(), operand0))
 	return true;
 
-  if (int_encoding && expr.op0().id()=="member")
+  if (int_encoding && expr.op0().id()==exprt::member)
   {
     bv = operand0;
     return false;
@@ -5476,7 +5476,7 @@ bool z3_convt::convert_object(const exprt &expr, Z3_ast &bv)
 
   //@Lucas
   if (expr.op0().type().id()=="pointer" && expr.op0().type().subtype().id()=="symbol"
-		  && expr.op1().id()=="address_of")
+		  && expr.op1().id()==exprt::addrof)
   {
     args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 1); //compare the offset
 	args[1] = z3_api.mk_tuple_select(z3_ctx, args[1], 1); //compare the offset
@@ -5567,7 +5567,7 @@ bool z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 #if 1
   if (expr.op0().type().id()=="union")
   {
-    union_varst::const_iterator cache_result=union_vars.find(expr.op0().get_string("identifier").c_str());
+    union_varst::const_iterator cache_result=union_vars.find(expr.op0().get_string(exprt::a_identifier).c_str());
 	if(cache_result!=union_vars.end())
 	{
 	  //std::cout << "Cache hit on " << cache_result->first << "\n";
@@ -5613,7 +5613,7 @@ bool z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
   if (boolbv_get_width(expr.type(), width))
 	return true;
 
-  if (expr.op0().id()=="symbol" || expr.op0().id()=="constant")
+  if (expr.op0().id()==exprt::symbol || expr.op0().id()==exprt::constant)
   {
     if (convert_bv(expr.op0(), pointer_object))
       return true;
@@ -5646,7 +5646,7 @@ bool z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 
     return false;
   }
-  else if (object.id()=="index" && object.type().id() == "struct")
+  else if (object.id()==exprt::index && object.type().id() == "struct")
   {
 	const exprt &symbol=object.operands()[0];
 	const exprt &index=object.operands()[1];
@@ -6250,7 +6250,7 @@ bool z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 
     bv = Z3_mk_extract(z3_ctx, atoi(s_upper.str().c_str()), atoi(s_lower.str().c_str()), op0);
 
-    if (expr.op0().id()=="index")
+    if (expr.op0().id()==exprt::index)
     {
       Z3_ast args[2];
 
@@ -6349,60 +6349,58 @@ bool z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  if (expr.id() == "symbol")
-	return convert_identifier(expr.get_string("identifier"), expr.type(), bv);
+  if (expr.id() == exprt::symbol)
+	return convert_identifier(expr.get_string(exprt::a_identifier), expr.type(), bv);
   else if (expr.id() == "nondet_symbol")
-	return convert_identifier("nondet$"+expr.get_string("identifier"), expr.type(), bv);
-  else if (expr.id() == "typecast")
+	return convert_identifier("nondet$"+expr.get_string(exprt::a_identifier), expr.type(), bv);
+  else if (expr.id() == exprt::typecast)
     return convert_typecast(expr, bv);
   else if (expr.id() == "struct")
 	return convert_struct(expr, bv);
   else if (expr.id() == "union")
 	return convert_union(expr, bv);
-  else if (expr.id() == "constant")
+  else if (expr.id() == exprt::constant)
 	return convert_constant(expr, bv);
-  else if (expr.id() == "bitand" || expr.id() == "bitor" || expr.id() == "bitxor"
-		|| expr.id() == "bitnand" || expr.id() == "bitnor" || expr.id() == "bitnxor")
+  else if (expr.id() == exprt::i_bitand || expr.id() == exprt::i_bitor || expr.id() == exprt::i_bitxor || expr.id() == exprt::i_bitnand || expr.id() == exprt::i_bitnor || expr.id() == exprt::i_bitnxor)
     return convert_bitwise(expr, bv);
-  else if (expr.id() == "bitnot")
+  else if (expr.id() == exprt::i_bitnot)
 	return convert_bitnot(expr, bv);
   else if (expr.id() == "unary-")
     return convert_unary_minus(expr, bv);
-  else if (expr.id() == "if")
+  else if (expr.id() == exprt::i_if)
     return convert_if(expr, bv);
-  else if (expr.id() == "and" || expr.id() == "or" || expr.id() == "xor")
+  else if (expr.id() == exprt::i_and || expr.id() == exprt::i_or || expr.id() == exprt::i_xor)
 	return convert_logical_ops(expr, bv);
-  else if (expr.id() == "not")
+  else if (expr.id() == exprt::i_not)
 	return convert_logical_not(expr, bv);
-  else if (expr.id() == "=" || expr.id() == "notequal")
+  else if (expr.id() == exprt::equality || expr.id() == exprt::notequal)
 	return convert_equality(expr, bv);
-  else if (expr.id() == "<=" || expr.id() == "<" || expr.id() == ">="
-		|| expr.id() == ">")
+  else if (expr.id() == exprt::i_le || expr.id() == exprt::i_lt || expr.id() == exprt::i_ge || expr.id() == exprt::i_gt)
 	return convert_rel(expr, bv);
-  else if (expr.id() == "+")
+  else if (expr.id() == exprt::plus)
 	return convert_add(expr, bv);
-  else if (expr.id() == "-")
+  else if (expr.id() == exprt::minus)
 	return convert_sub(expr, bv);
-  else if (expr.id() == "/")
+  else if (expr.id() == exprt::div)
 	return convert_div(expr, bv);
-  else if (expr.id() == "mod")
+  else if (expr.id() == exprt::mod)
 	return convert_mod(expr, bv);
-  else if (expr.id() == "*")
+  else if (expr.id() == exprt::mult)
 	return convert_mul(expr, bv);
-  else if (expr.id() == "address_of" || expr.id() == "implicit_address_of"
+  else if (expr.id() == exprt::addrof || expr.id() == "implicit_address_of"
 		|| expr.id() == "reference_to")
 	return convert_pointer(expr, bv);
-  else if (expr.id() == "array_of")
+  else if (expr.id() == exprt::arrayof)
 	return convert_array_of(expr, bv);
-  else if (expr.id() == "index")
+  else if (expr.id() == exprt::index)
 	return convert_index(expr, bv);
-  else if (expr.id() == "ashr" || expr.id() == "lshr" || expr.id() == "shl")
+  else if (expr.id() == exprt::i_ashr || expr.id() == exprt::i_lshr || expr.id() == exprt::i_shl)
 	return convert_shift(expr, bv);
-  else if(expr.id()=="abs")
+  else if(expr.id()==exprt::abs)
     return convert_abs(expr, bv);
-  else if (expr.id() == "with")
+  else if (expr.id() == exprt::with)
 	return convert_with(expr, bv);
-  else if (expr.id() == "member")
+  else if (expr.id() == exprt::member)
 	return convert_member(expr, bv);
   else if (expr.id()=="zero_string")
 	return convert_zero_string(expr, bv);
@@ -6429,7 +6427,7 @@ bool z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 		  expr.id()=="byte_extract_big_endian")
     return convert_byte_extract(expr, bv);
 #if 1
-  else if(expr.id()=="isnan")
+  else if(expr.id()==exprt::isnan)
 	return convert_isnan(expr, bv);
 #endif
 
@@ -6504,7 +6502,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
   if(boolean)
   {
 	//std::cout << "expr.id(): " << expr.id() << std::endl;
-    if(expr.id()=="not")
+    if(expr.id()==exprt::i_not)
     {
       if(expr.operands().size()==1)
       {
@@ -6518,14 +6516,14 @@ void z3_convt::set_to(const exprt &expr, bool value)
       if(value)
       {
         // set_to_true
-        if(expr.id()=="and")
+        if(expr.id()==exprt::i_and)
         {
           forall_operands(it, expr)
             set_to_true(*it);
 
           return;
         }
-        else if(expr.id()=="or")
+        else if(expr.id()==exprt::i_or)
         {
           if(expr.operands().size()>0)
           {
@@ -6538,7 +6536,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
             return;
           }
         }
-        else if(expr.id()=="=>")
+        else if(expr.id()==exprt::implies)
         {
           if(expr.operands().size()==2)
           {
@@ -6562,7 +6560,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
       else
       {
         // set_to_false
-        if(expr.id()=="=>") // !(a=>b)  ==  (a && !b)
+        if(expr.id()==exprt::implies) // !(a=>b)  ==  (a && !b)
         {
           if(expr.operands().size()==2)
           {
@@ -6570,7 +6568,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
             set_to_false(expr.op1());
           }
         }
-        else if(expr.id()=="or") // !(a || b)  ==  (!a && !b)
+        else if(expr.id()==exprt::i_or) // !(a || b)  ==  (!a && !b)
         {
           forall_operands(it, expr)
             set_to_false(*it);
@@ -6580,12 +6578,12 @@ void z3_convt::set_to(const exprt &expr, bool value)
   }
 
   // fall back to convert
-  if (expr.op1().id()!="with")
+  if (expr.op1().id()!=exprt::with)
     prop.l_set_to(convert(expr), value);
 
 #endif
 
-  if (value && expr.id() == "and")
+  if (value && expr.id() == exprt::i_and)
   {
 	forall_operands(it, expr)
 	  set_to(*it, true);
@@ -6597,7 +6595,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
 
 
 
-  if (expr.id() == "=" && value)
+  if (expr.id() == exprt::equality && value)
   {
     assert(expr.operands().size()==2);
 
@@ -6650,9 +6648,9 @@ void z3_convt::set_to(const exprt &expr, bool value)
 	  else
 	  {
 #if 1
-   	    if (op0.type().id()=="union" && op1.id()=="with")
+   	    if (op0.type().id()=="union" && op1.id()==exprt::with)
    	    {
-		  union_vars.insert(std::pair<std::string, unsigned int>(op0.get_string("identifier"),
+		  union_vars.insert(std::pair<std::string, unsigned int>(op0.get_string(exprt::a_identifier),
 				  convert_member_name(op1.op0(), op1.op1())));
    	    }
 #endif
@@ -6667,7 +6665,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
 	    if (z3_prop.smtlib)
 	      z3_prop.assumpt.push_back(result);
 
-	    if (uw && expr.op0().get_string("identifier").find("guard_exec") != std::string::npos
+	    if (uw && expr.op0().get_string(exprt::a_identifier).find("guard_exec") != std::string::npos
 	    	&& number_of_assumptions < max_core_size)
 	    {
 	      if (!op1.is_true())
