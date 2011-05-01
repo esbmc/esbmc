@@ -211,6 +211,9 @@ public:
   static irep_idt i_bitnand;
   static irep_idt i_bitnor;
   static irep_idt i_bitnxor;
+  static irep_idt i_ashr;
+  static irep_idt i_lshr;
+  static irep_idt i_shl;
 
   // Expression attributes
   static irep_idt a_identifier;

@@ -692,6 +692,9 @@ irep_idt exprt::i_bitxor = dstring("bitxor");
 irep_idt exprt::i_bitnand = dstring("bitnand");
 irep_idt exprt::i_bitnor = dstring("bitnor");
 irep_idt exprt::i_bitnxor = dstring("bitnxor");
+irep_idt exprt::i_ashr = dstring("ashr");
+irep_idt exprt::i_lshr = dstring("lshr");
+irep_idt exprt::i_shl = dstring("shl");
 
 irep_idt exprt::a_identifier = dstring("identifier");
 irep_idt exprt::a_value = dstring("value");

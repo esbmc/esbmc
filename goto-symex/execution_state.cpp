@@ -1153,9 +1153,9 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m[exprt::i_bitnand] = serialise_normal_operation;
   m[exprt::i_bitnor] = serialise_normal_operation;
   m[exprt::i_bitnxor] = serialise_normal_operation;
-  m["shl"] = serialise_normal_operation;
-  m["lshr"] = serialise_normal_operation;
-  m["ashr"] = serialise_normal_operation;
+  m[exprt::i_shl] = serialise_normal_operation;
+  m[exprt::i_lshr] = serialise_normal_operation;
+  m[exprt::i_ashr] = serialise_normal_operation;
   m[exprt::typecast] = serialise_normal_operation;
   m[exprt::addrof] = serialise_normal_operation;
   m["pointer_obj"] = serialise_normal_operation;
