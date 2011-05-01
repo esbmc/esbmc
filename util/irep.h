@@ -19,20 +19,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #define USE_DSTRING
 #define SHARING
 
-#ifdef USE_DSTRING
 #include "dstring.h"
-#endif
 
-#ifdef USE_DSTRING
 typedef dstring irep_idt;
 typedef dstring irep_namet;
 typedef dstring_hash irep_id_hash;
-#else
-#include "string_hash.h"
-typedef std::string irep_idt;
-typedef std::string irep_namet;
-typedef string_hash irep_id_hash;
-#endif
 
 #define forall_irep(it, irep) \
   for(irept::subt::const_iterator it=(irep).begin(); \
@@ -110,13 +101,8 @@ public:
   inline const irep_idt &id() const
   { return read().data; }
   
-  #ifdef USE_DSTRING
   inline const std::string &id_string() const
   { return read().data.as_string(); }
-  #else
-  inline const std::string &id_string() const
-  { return read().data; }
-  #endif
 
   inline void id(const irep_idt &_data)
   { write().data=_data; }
@@ -126,11 +112,7 @@ public:
 
   const std::string &get_string(const irep_namet &name) const
   {
-    #ifdef USE_DSTRING
     return get(name).as_string();
-    #else
-    return get(name);
-    #endif
   }
   
   const irep_idt &get(const irep_namet &name) const;
@@ -194,11 +176,7 @@ public:
     unsigned ref_count;
     #endif
 
-    #ifdef USE_DSTRING
     dstring data;
-    #else
-    std::string data;
-    #endif
 
     named_subt named_sub;
     named_subt comments;
@@ -206,11 +184,7 @@ public:
 
     void clear()
     {
-      #ifdef USE_DSTRING
       data.clear();
-      #else
-      data="";
-      #endif
       sub.clear();
       named_sub.clear();
       comments.clear();
@@ -267,20 +241,12 @@ protected:
 
 extern inline const std::string &id2string(const irep_idt &d)
 {
-  #ifdef USE_DSTRING
   return d.as_string();
-  #else
-  return d;
-  #endif
 }
 
 extern inline const std::string &name2string(const irep_namet &n)
 {
-  #ifdef USE_DSTRING
   return n.as_string();
-  #else
-  return n;
-  #endif
 }
 
 struct irep_hash
