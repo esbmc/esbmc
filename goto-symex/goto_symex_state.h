@@ -43,6 +43,13 @@ public:
 	    thread_ended = false;
 	}
 
+	goto_symex_statet(const goto_symex_statet &state, struct level2t &l2)
+		: level2(l2)
+	{
+		*this = state;
+		level2 = l2;
+	}
+
 	goto_symex_statet& operator=(const goto_symex_statet &state)
 	{
 		level2 = state.level2;

@@ -65,6 +65,16 @@ public:
 		_state_level2(ex._state_level2),
 		_goto_functions(ex._goto_functions)
 	{
+		*this = ex;
+
+		// Regenerate threads state using new objects _state_level2 ref
+		_threads_state.clear();
+		std::vector<goto_symex_statet>::const_iterator it;
+		for(it = ex._threads_state.begin(); it != ex._threads_state.end(); it++) {
+			goto_symex_statet state(*it, _state_level2);
+			_threads_state.push_back(state);
+		}
+
 	}
 
 	execution_statet& operator=(const execution_statet &ex)
