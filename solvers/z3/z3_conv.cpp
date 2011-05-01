@@ -2074,9 +2074,9 @@ Z3_ast z3_convt::convert_overflow_sum(const exprt &expr)
 	operand[1] = Z3_mk_int2bv(z3_ctx, width_op1, operand[1]);
   }
 
-  if (expr.op0().type().id()==typet::t_signedbv && expr.op1().type().id()=="signedbv")
+  if (expr.op0().type().id()==typet::t_signedbv && expr.op1().type().id()==typet::t_signedbv)
     result[0] = Z3_mk_bvadd_no_overflow(z3_ctx, operand[0], operand[1], 1);
-  else if (expr.op0().type().id()==typet::t_unsignedbv && expr.op1().type().id()=="unsignedbv")
+  else if (expr.op0().type().id()==typet::t_unsignedbv && expr.op1().type().id()==typet::t_unsignedbv)
 	result[0] = Z3_mk_bvadd_no_overflow(z3_ctx, operand[0], operand[1], 0);
 
   result[1] = Z3_mk_bvadd_no_underflow(z3_ctx, operand[0], operand[1]);
@@ -2141,9 +2141,9 @@ Z3_ast z3_convt::convert_overflow_sub(const exprt &expr)
 	operand[1] = Z3_mk_int2bv(z3_ctx, width_op1, operand[1]);
   }
 
-  if (expr.op0().type().id()==typet::t_signedbv && expr.op1().type().id()=="signedbv")
+  if (expr.op0().type().id()==typet::t_signedbv && expr.op1().type().id()==typet::t_signedbv)
     result[1] = Z3_mk_bvsub_no_underflow(z3_ctx, operand[0], operand[1], 1);
-  else if (expr.op0().type().id()==typet::t_unsignedbv && expr.op1().type().id()=="unsignedbv")
+  else if (expr.op0().type().id()==typet::t_unsignedbv && expr.op1().type().id()==typet::t_unsignedbv)
 	result[1] = Z3_mk_bvsub_no_underflow(z3_ctx, operand[0], operand[1], 0);
 
   result[0] = Z3_mk_bvsub_no_overflow(z3_ctx, operand[0], operand[1]);
@@ -2204,9 +2204,9 @@ Z3_ast z3_convt::convert_overflow_mul(const exprt &expr)
 	operand[1] = Z3_mk_int2bv(z3_ctx, width_op1, operand[1]);
   }
 
-  if (expr.op0().type().id()==typet::t_signedbv && expr.op1().type().id()=="signedbv")
+  if (expr.op0().type().id()==typet::t_signedbv && expr.op1().type().id()==typet::t_signedbv)
 	result[1] = Z3_mk_bvmul_no_overflow(z3_ctx, operand[0], operand[1], 1);
-  else if (expr.op0().type().id()==typet::t_unsignedbv && expr.op1().type().id()=="unsignedbv")
+  else if (expr.op0().type().id()==typet::t_unsignedbv && expr.op1().type().id()==typet::t_unsignedbv)
 	result[1] = Z3_mk_bvmul_no_overflow(z3_ctx, operand[0], operand[1], 0);
 
   result[0] = Z3_mk_bvmul_no_underflow(z3_ctx, operand[0], operand[1]);
@@ -2637,8 +2637,7 @@ bool z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
   }
   else
   {
-    if (op_type.id()==typet::t_unsignedbv || op_type.subtype().id()=="unsignedbv"
-    	|| op_type.subtype().subtype().id()==typet::t_unsignedbv || op_type.subtype().id()=="symbol")
+    if (op_type.id()==typet::t_unsignedbv || op_type.subtype().id()==typet::t_unsignedbv || op_type.subtype().subtype().id()==typet::t_unsignedbv || op_type.subtype().id()=="symbol")
     {
       if(expr.id()==exprt::i_le)
    	    bv = Z3_mk_bvule(z3_ctx,operand0,operand1);
@@ -2993,7 +2992,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 
       }
     }
-    else if (op.type().id()==typet::t_unsignedbv || op.type().subtype().id()=="unsignedbv")
+    else if (op.type().id()==typet::t_unsignedbv || op.type().subtype().id()==typet::t_unsignedbv)
     {
       unsigned from_width;
 
