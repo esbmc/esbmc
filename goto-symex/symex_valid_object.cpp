@@ -28,7 +28,7 @@ static irep_idt get_object(const exprt &expr)
   {
     return to_symbol_expr(expr).get_identifier();
   }
-  else if(expr.id()=="member")
+  else if(expr.id()==exprt::member)
   {
     assert(expr.operands().size()==1);
     return get_object(expr.op0());

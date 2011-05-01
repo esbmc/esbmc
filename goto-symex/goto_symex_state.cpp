@@ -337,7 +337,7 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
     return constant_propagation_reference(expr.op0()) &&
            constant_propagation(expr.op1());
   }
-  else if(expr.id()=="member")
+  else if(expr.id()==exprt::member)
   {
     if(expr.operands().size()!=1)
       throw "member expects one operand";

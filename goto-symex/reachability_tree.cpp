@@ -241,7 +241,7 @@ void reachability_treet::check_mutex(const exprt &code, const execution_statet &
   const exprt &value=code.op1();
   std::string val;
 
-  if (object.id() == "member")
+  if (object.id() == exprt::member)
   {
 	if (object.op0().type().get_string("identifier").find("pthread_mutex") != std::string::npos)
 	{

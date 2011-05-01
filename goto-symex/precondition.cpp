@@ -112,7 +112,7 @@ void preconditiont::compute_address_of(exprt &dest)
     compute_address_of(dest.op0());
     compute(dest.op1());
   }
-  else if(dest.id()=="member")
+  else if(dest.id()==exprt::member)
   {
     assert(dest.operands().size()==1);
     compute_address_of(dest.op0());

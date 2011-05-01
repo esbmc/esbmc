@@ -785,7 +785,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 	}
   }
 
-  else if (expr.id() == "member")
+  else if (expr.id() == exprt::member)
   {
       const irep_idt &id = expr.op0().get("identifier");
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
@@ -892,7 +892,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 	}
   }
 
-  else if (expr.id() == "member")
+  else if (expr.id() == exprt::member)
   {
       const irep_idt &id = expr.op0().get("identifier");
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
@@ -1029,7 +1029,7 @@ execution_statet::serialise_expr(const exprt &rhs)
     str += ",idx(" + serialise_expr(rhs.op1()) + ")";
   } else if (rhs.id() == "member_name") {
     str = "component(" + rhs.get("component_name").as_string() + ")";
-  } else if (rhs.id() == "member") {
+  } else if (rhs.id() == exprt::member) {
     str = "member(entity(" + serialise_expr(rhs.op0()) + "),";
     str += "member_name(" + rhs.get("component_name").as_string() + "))";
   } else if (rhs.id() == "nondet_symbol") {

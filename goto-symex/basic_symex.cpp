@@ -257,7 +257,7 @@ void basic_symext::symex_assign_rec(
     symex_assign_symbol(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()==exprt::index || lhs.id()=="memory-leak")
     symex_assign_array(state, ex_state, lhs, rhs, guard,node_id);
-  else if(lhs.id()=="member")
+  else if(lhs.id()==exprt::member)
     symex_assign_member(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()==exprt::i_if)
     symex_assign_if(state, ex_state, lhs, rhs, guard,node_id);

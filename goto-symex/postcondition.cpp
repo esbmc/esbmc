@@ -113,7 +113,7 @@ bool postconditiont::is_used_address_of(
       is_used_address_of(expr.op0(), identifier) ||
       is_used(expr.op1(), identifier);
   }
-  else if(expr.id()=="member")
+  else if(expr.id()==exprt::member)
   {
     assert(expr.operands().size()==1);
     return is_used_address_of(expr.op0(), identifier);
