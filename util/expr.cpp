@@ -664,7 +664,7 @@ irep_idt exprt::notequal = dstring("notequal");
 irep_idt exprt::index = dstring("index");
 irep_idt exprt::arrayof = dstring("array_of");
 irep_idt exprt::objdesc = dstring("object_descriptor");
-irep_idt exprt::dynobj = dstring("dynobj");
+irep_idt exprt::dynobj = dstring("dynamic_object");
 irep_idt exprt::typecast = dstring("typecast");
 irep_idt exprt::implies = dstring("=>");
 irep_idt exprt::i_and = dstring("and");
