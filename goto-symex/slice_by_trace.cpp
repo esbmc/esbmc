@@ -67,7 +67,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
   if (trace_conditions.size() == 1) {
     trace_condition = trace_conditions[0];
   } else {
-    trace_condition = exprt("and",typet("bool"));
+    trace_condition = exprt(exprt::i_and,typet("bool"));
     trace_condition.operands().reserve(trace_conditions.size());
     for (std::vector<exprt>::iterator i = trace_conditions.begin();
 	 i != trace_conditions.end(); i++) {
@@ -87,7 +87,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
       simplify(g_copy);
       implications.insert(g_copy);
     }
-    else if (g_copy.id() == "and") {
+    else if (g_copy.id() == exprt::i_and) {
       exprt copy_last (g_copy.operands().back());
       copy_last.make_not();
       simplify(copy_last);
@@ -320,7 +320,7 @@ void symex_slice_by_tracet::compute_ts_back(
       }
 
       for(size_t j = 0; j < t.size(); j++) {
-	exprt u_lhs = exprt("and", typet("bool"));
+	exprt u_lhs = exprt(exprt::i_and, typet("bool"));
 	if ((j < sigma.size()) && (matches(sigma[j],event))) {
 	  u_lhs.operands().reserve(2);
 	  u_lhs.copy_to_operands(guard);
@@ -342,7 +342,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	      eq_conds.push_back(equal_cond);
 	      pvi++;
 	    }
-	    exprt val_merge = exprt("and", typet("bool"));
+	    exprt val_merge = exprt(exprt::i_and, typet("bool"));
 	    val_merge.operands().reserve(eq_conds.size()+1);
 	    val_merge.copy_to_operands(merge[j+1]);
 	    for (std::list<exprt>::iterator k = eq_conds.begin(); 
@@ -361,7 +361,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	} else {
 	  u_lhs.make_false();
 	}
-	exprt u_rhs = exprt ("and", typet("bool"));
+	exprt u_rhs = exprt (exprt::i_and, typet("bool"));
 	if ((semantics != ":suffix") || (j != 0)) {
 	  u_rhs.operands().reserve(2);
 	  u_rhs.copy_to_operands(guard);
@@ -462,7 +462,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
 	  trace_loc_sliced++;
 	sliced_SSA_step = true;
       }
-    } else if (guard.id() == "and") {
+    } else if (guard.id() == exprt::i_and) {
       Forall_operands(git,guard) {
 	exprt neg_expr (*git);
 	neg_expr.make_not();
@@ -619,7 +619,7 @@ std::set<exprt> symex_slice_by_tracet::implied_guards(exprt e)
     simplify(e_copy);
     s.insert(e_copy);
     return s;
-  } else if (e.id() == "and") { // Descend into and
+  } else if (e.id() == exprt::i_and) { // Descend into and
     Forall_operands(it,e) {
       std::set<exprt> r = implied_guards(*it);
       for (std::set<exprt>::iterator i = r.begin();

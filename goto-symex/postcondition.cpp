@@ -163,7 +163,7 @@ Function: postconditiont::strengthen
 
 void postconditiont::weaken(exprt &dest)
 {
-  if(dest.id()=="and" &&
+  if(dest.id()==exprt::i_and &&
      dest.type().id()=="bool") // this distributes over "and"
   {
     Forall_operands(it, dest)
