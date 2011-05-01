@@ -65,7 +65,7 @@ void goto_symext::replace_dynamic_allocation(
   {
 	//std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
     assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()=="pointer");
+    assert(expr.op0().type().id()==typet::t_pointer);
     
     // check what we have
     if(expr.op0().id()==exprt::addrof ||

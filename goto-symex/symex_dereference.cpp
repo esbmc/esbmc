@@ -188,7 +188,7 @@ void goto_symext::dereference_rec(
   }
   else if(expr.id()==exprt::index &&
           expr.operands().size()==2 &&
-          expr.op0().type().id()=="pointer")
+          expr.op0().type().id()==typet::t_pointer)
   {
     exprt tmp(exprt::plus, expr.op0().type());
     tmp.operands().swap(expr.operands());

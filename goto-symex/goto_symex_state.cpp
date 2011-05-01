@@ -671,7 +671,7 @@ void goto_symex_statet::rename(
   {
     // TODO
   }
-  else if(type.id()=="pointer")
+  else if(type.id()==typet::t_pointer)
   {
     // rename(type.subtype(), ns);
     // don't do this, or it might get cyclic
@@ -711,7 +711,7 @@ void goto_symex_statet::renaming_levelt::rename(typet &type, unsigned node_id)
   {
     // TODO
   }
-  else if(type.id()=="pointer")
+  else if(type.id()==typet::t_pointer)
   {
     rename(type.subtype(),node_id);
   }

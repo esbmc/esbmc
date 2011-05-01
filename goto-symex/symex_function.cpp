@@ -103,12 +103,12 @@ void goto_symext::argument_assignments(
         if((f_arg_type.id()==typet::t_signedbv ||
             f_arg_type.id()==typet::t_unsignedbv ||
             f_arg_type.id()==typet::t_bool ||
-            f_arg_type.id()=="pointer" ||
+            f_arg_type.id()==typet::t_pointer ||
             f_arg_type.id()==typet::t_fixedbv) &&
            (f_rhs_type.id()==typet::t_signedbv ||
             f_rhs_type.id()==typet::t_unsignedbv ||
             f_rhs_type.id()==typet::t_bool ||
-            f_rhs_type.id()=="pointer" ||
+            f_rhs_type.id()==typet::t_pointer ||
             f_rhs_type.id()==typet::t_fixedbv))
         {
           rhs.make_typecast(arg_type);

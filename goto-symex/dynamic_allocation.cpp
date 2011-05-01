@@ -37,7 +37,7 @@ void replace_dynamic_allocation(
   if(expr.id()=="valid_object")
   {
     assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()=="pointer");
+    assert(expr.op0().type().id()==typet::t_pointer);
 
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
 
@@ -54,7 +54,7 @@ void replace_dynamic_allocation(
   if(expr.id()=="deallocated_object")
   {
     assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()=="pointer");
+    assert(expr.op0().type().id()==typet::t_pointer);
 
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
 
@@ -71,7 +71,7 @@ void replace_dynamic_allocation(
   else if(expr.id()=="dynamic_size")
   {
     assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()=="pointer");
+    assert(expr.op0().type().id()==typet::t_pointer);
 
     // replace with CPROVER_alloc_size[POINTER_OBJECT(...)]
     //nec: ex37.c
@@ -88,7 +88,7 @@ void replace_dynamic_allocation(
   else if(expr.id()=="pointer_object_has_type")
   {
     assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()=="pointer");
+    assert(expr.op0().type().id()==typet::t_pointer);
 
   }
 }

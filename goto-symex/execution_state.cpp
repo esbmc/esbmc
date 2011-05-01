@@ -836,7 +836,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
   std::string identifier = expr.get_string(exprt::a_identifier);
 
   if (expr.id() == exprt::addrof ||
-            expr.type().id() == "pointer" ||
+            expr.type().id() == typet::t_pointer ||
             expr.id() == "valid_object" ||
             expr.id() == "dynamic_size" ||
             expr.id() == "dynamic_type" ||

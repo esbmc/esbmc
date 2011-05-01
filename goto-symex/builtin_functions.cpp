@@ -87,7 +87,7 @@ void basic_symext::symex_malloc(
 
   new_context.add(symbol);
   
-  exprt rhs(exprt::addrof, typet("pointer"));
+  exprt rhs(exprt::addrof, typet(typet::t_pointer));
   
   if(size_is_one)
   {
@@ -178,7 +178,7 @@ void basic_symext::symex_cpp_new(
 {
   bool do_array;
 
-  if(code.type().id()!="pointer")
+  if(code.type().id()!=typet::t_pointer)
     throw "new expected to return pointer";
 
   do_array=(code.get("statement")=="cpp_new[]");
@@ -212,7 +212,7 @@ void basic_symext::symex_cpp_new(
 
   // make symbol expression
 
-  exprt rhs(exprt::addrof, typet("pointer"));
+  exprt rhs(exprt::addrof, typet(typet::t_pointer));
   rhs.type().subtype()=code.type().subtype();
   
   if(do_array)

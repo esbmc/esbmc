@@ -159,7 +159,7 @@ void counterexample_value(
         value_string+= " ("+value.get_string(exprt::a_value)+")";
     }
 #if 0
-    else if (lhs.type().id()=="pointer")
+    else if (lhs.type().id()==typet::t_pointer)
     {
       size_t found;
       found=value_string.find_first_of("@");
