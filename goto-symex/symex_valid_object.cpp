@@ -24,7 +24,7 @@ Function: get_object
 
 static irep_idt get_object(const exprt &expr)
 {
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     return to_symbol_expr(expr).get_identifier();
   }

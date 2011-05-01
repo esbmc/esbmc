@@ -101,7 +101,7 @@ bool postconditiont::is_used_address_of(
   const exprt &expr,
   const irep_idt &identifier)
 {
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     // leave alone
   }
@@ -242,7 +242,7 @@ bool postconditiont::is_used(
     assert(expr.operands().size()==1);
     return is_used_address_of(expr.op0(), identifier);
   }
-  else if(expr.id()=="symbol")
+  else if(expr.id()==exprt::symbol)
   {
     return s.get_original_name(expr.get("identifier"))==identifier;
   }

@@ -221,7 +221,7 @@ Function: goto_symext::get_symbol
 \*******************************************************************/
 
 irep_idt goto_symext::get_symbol(const exprt & expr) {
-  if (expr.id() != "symbol") {
+  if (expr.id() != exprt::symbol) {
     forall_operands(it, expr) {
       return get_symbol(*it);
     }

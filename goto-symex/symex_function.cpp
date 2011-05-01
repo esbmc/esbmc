@@ -164,7 +164,7 @@ void goto_symext::symex_function_call(
 {
   const exprt &function=code.function();
 
-  if(function.id()=="symbol")
+  if(function.id()==exprt::symbol)
     symex_function_call_symbol(goto_functions, ex_state, code);
   else
     throw "unexpected function for symex_function_call: "+code.id_string();
@@ -190,7 +190,7 @@ void goto_symext::symex_function_call_symbol(
     statet & state = ex_state.get_active_state();
   target->location(state.guard, state.source);
 
-  assert(code.function().id()=="symbol");
+  assert(code.function().id()==exprt::symbol);
 
   const irep_idt &identifier=
     code.function().get("identifier");

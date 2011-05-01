@@ -190,7 +190,7 @@ void basic_symext::symex_assign(statet &state, execution_statet &ex_state, const
     {
       assert(side_effect_expr.operands().size()!=0);
 
-      if(side_effect_expr.op0().id()!="symbol")
+      if(side_effect_expr.op0().id()!=exprt::symbol)
         throw "symex_assign: expected symbol as function";
 
       const irep_idt &identifier=
@@ -253,7 +253,7 @@ void basic_symext::symex_assign_rec(
   guardt &guard,
         unsigned node_id)
 {
-  if(lhs.id()=="symbol")
+  if(lhs.id()==exprt::symbol)
     symex_assign_symbol(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="index" || lhs.id()=="memory-leak")
     symex_assign_array(state, ex_state, lhs, rhs, guard,node_id);

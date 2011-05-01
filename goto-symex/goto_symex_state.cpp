@@ -327,7 +327,7 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
 {
   //std::cout << "constant_propagation_reference: " << expr.id() << std::endl;
   //std::cout << "constant_propagation_reference: " << expr.pretty() << std::endl;
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
     return true;
   else if(expr.id()=="index")
   {
@@ -378,6 +378,7 @@ void goto_symex_statet::assignment(
 {
   crypto_hash hash;
   assert(lhs.id()=="symbol");
+  assert(lhs.id()==exprt::symbol);
 
   if (ex_state.owning_rt->state_hashing)
     hash = ex_state.update_hash_for_assignment(rhs);
@@ -423,7 +424,7 @@ void goto_symex_statet::assignment(
     exprt l1_rhs(rhs);
     level2->get_original_name(l1_rhs);
 
-    exprt l1_lhs("symbol", lhs.type());
+    exprt l1_lhs(exprt::symbol, lhs.type());
     l1_lhs.set("identifier", l1_identifier);
 
     value_set.assign(l1_lhs, l1_rhs, ns);
@@ -475,7 +476,7 @@ void goto_symex_statet::rename(exprt &expr, const namespacet &ns,unsigned node_i
 
   rename(expr.type(), ns,node_id);
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     top().level1.rename(expr,node_id);
     level2->rename(expr,node_id);
@@ -515,7 +516,7 @@ void goto_symex_statet::rename_address(
 
   rename(expr.type(), ns,node_id);
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     // only do L1
     top().level1.rename(expr,node_id);
@@ -552,7 +553,7 @@ void goto_symex_statet::level1t::rename(exprt &expr,unsigned node_id)
 
   rename(expr.type(),node_id);
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     const irep_idt &identifier=expr.get("identifier");
 
@@ -600,7 +601,7 @@ void goto_symex_statet::level2t::rename(exprt &expr, unsigned node_id)
 
   rename(expr.type(),node_id);
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     const irep_idt &identifier=expr.get("identifier");
 
@@ -675,7 +676,7 @@ void goto_symex_statet::rename(
     // rename(type.subtype(), ns);
     // don't do this, or it might get cyclic
   }
-  else if(type.id()=="symbol")
+  else if(type.id()==exprt::symbol)
   {
 	const symbolt &symbol=ns.lookup(type.get("identifier"));
 	type=symbol.type;
@@ -735,7 +736,7 @@ void goto_symex_statet::get_original_name(exprt &expr) const
     get_original_name(*it);
  //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 1" << std::endl;
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
 //	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 2" << std::endl;
 //	  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-1 : " << expr.get("identifier") << std::endl;
@@ -765,7 +766,7 @@ void goto_symex_statet::renaming_levelt::get_original_name(exprt &expr) const
     get_original_name(*it);
 //	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::renaming_levelt::get_original_name 1" << std::endl;
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     original_identifierst::const_iterator it=
       original_identifiers.find(expr.get("identifier"));

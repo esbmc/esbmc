@@ -102,7 +102,7 @@ Function: preconditiont::compute_address_of
 
 void preconditiont::compute_address_of(exprt &dest)
 {
-  if(dest.id()=="symbol")
+  if(dest.id()==exprt::symbol)
   {
     // leave alone
   }
@@ -164,7 +164,7 @@ void preconditiont::compute_rec(exprt &dest)
     assert(dest.operands().size()==1);
     compute_address_of(dest.op0());
   }
-  else if(dest.id()=="symbol")
+  else if(dest.id()==exprt::symbol)
   {
     if(dest.get("identifier")==
        s.get_original_name(SSA_step.lhs.get("identifier")))

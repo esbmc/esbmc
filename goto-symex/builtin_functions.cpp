@@ -363,7 +363,7 @@ void basic_symext::symex_macro(
     exprt &bound=fc.op2();
     exprt &predicate=fc.op3();
 
-    if(cycle_var.id()!="symbol")
+    if(cycle_var.id()!=exprt::symbol)
       throw "waitfor expects symbol as first operand but got "+
             cycle_var.id();
 

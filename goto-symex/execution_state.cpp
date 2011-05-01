@@ -743,7 +743,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
       expr.id() == "zero_string" ||
       expr.id() == "zero_string_length")
       return 0;
-  else if (expr.id() == "symbol")
+  else if (expr.id() == exprt::symbol)
   {
     const irep_idt &id = expr.get("identifier");
     const irep_idt &identifier = get_active_state().get_original_name(id);
@@ -764,7 +764,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 #if 0
   else if (expr.id() == "index")
   {
-	if (expr.op0().id() == "symbol" && expr.op1().id()=="constant")
+	if (expr.op0().id() == exprt::symbol && expr.op1().id()=="constant")
 	{
       const irep_idt &id = expr.op0().get("identifier");
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
@@ -844,7 +844,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
             expr.id() == "zero_string" ||
             expr.id() == "zero_string_length")
     return 0;
-  else if (expr.id() == "symbol")
+  else if (expr.id() == exprt::symbol)
   {
     const irep_idt &id = expr.get("identifier");
     const irep_idt &identifier = get_active_state().get_original_name(id);
@@ -871,7 +871,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 #if 0
   else if (expr.id() == "index")
   {
-	if (expr.op0().id() == "symbol" && expr.op1().id()=="constant")
+	if (expr.op0().id() == exprt::symbol && expr.op1().id()=="constant")
 	{
       const irep_idt &id = expr.op0().get("identifier");
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
@@ -972,7 +972,7 @@ execution_statet::serialise_expr(const exprt &rhs)
 
   // The plan: serialise this expression into the identifiers of its operations,
   // replacing symbol names with the hash of their value.
-  if (rhs.id() == "symbol") {
+  if (rhs.id() == exprt::symbol) {
 
     str = rhs.get("identifier").as_string();
     for (i = 0 ; i < 8; i++)

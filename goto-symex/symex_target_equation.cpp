@@ -547,7 +547,7 @@ symex_target_equationt::reconstruct_expr_from_SSA(const exprt expr)
 {
   exprt tmp;
 
-  if (expr.id() == "symbol")
+  if (expr.id() == exprt::symbol)
     return reconstruct_expr_from_SSA(expr.get("identifier").as_string());
 
   tmp = expr;
@@ -588,7 +588,7 @@ symex_target_equationt::reconstruct_expr_from_SSA(std::string name)
     if (it->type != goto_trace_stept::ASSIGNMENT)
       continue;
 
-    assert(it->lhs.id() == "symbol");
+    assert(it->lhs.id() == exprt::symbol);
     if (it->lhs.get("identifier").as_string() == step_name)
       break;
   }

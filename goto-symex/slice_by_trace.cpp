@@ -41,7 +41,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
   std::cout << "Slicing by trace..." << std::endl;
 
   merge_identifier = "goto_symex::\\merge";
-  merge_symbol=exprt("symbol", typet("bool"));
+  merge_symbol=exprt(exprt::symbol, typet("bool"));
   merge_symbol.set("identifier", merge_identifier);
 
   std::vector<exprt> trace_conditions;
@@ -82,7 +82,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
   for(std::set<exprt>::iterator i = sliced_guards.begin(); i !=
 	sliced_guards.end(); i++) {
     exprt g_copy (*i);
-    if (g_copy.id() == "symbol" || g_copy.id() == "not") {
+    if (g_copy.id() == exprt::symbol || g_copy.id() == "not") {
       g_copy.make_not();
       simplify(g_copy);
       implications.insert(g_copy);
@@ -307,7 +307,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	if ((t[j].is_true()) || (t[j].is_false())) {
 	  merge.push_back(t[j]);
 	} else {
-	  exprt merge_sym =exprt("symbol", typet("bool"));
+	  exprt merge_sym =exprt(exprt::symbol, typet("bool"));
 	  merge_sym.set("identifier", id2string(merge_identifier)+"#"+
 			i2string(merge_count++));
 	  exprt t_copy (t[j]);
@@ -450,7 +450,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
       potential_SSA_steps++;
     //it->output(ns,std::cout);
     //std::cout << "-----------------" << std::endl;
-    if ((guard.id() == "symbol") || (guard.id() == "not")) {
+    if ((guard.id() == exprt::symbol) || (guard.id() == "not")) {
       guard.make_not();
       simplify(guard);
       if (implications.count(guard) != 0) {
@@ -556,7 +556,7 @@ void symex_slice_by_tracet::assign_merges(
   size_t merge_count = (merge_map_back.size()) - 1;
   for (std::vector<exprt>::reverse_iterator i = merge_map_back.rbegin();
        i != merge_map_back.rend(); i++) {
-    exprt merge_sym =exprt("symbol", typet("bool"));
+    exprt merge_sym =exprt(exprt::symbol, typet("bool"));
     merge_sym.set("identifier", id2string(merge_identifier)+"#"+i2string(merge_count));
     merge_count--;
     guardt t_guard;
@@ -596,7 +596,7 @@ std::set<exprt> symex_slice_by_tracet::implied_guards(exprt e)
 {
   std::set<exprt> s;
 
-  if (e.id() == "symbol") { // Guard or merge
+  if (e.id() == exprt::symbol) { // Guard or merge
     const char* merge_loc = strstr(e.get("identifier").c_str(),"merge#");
     if (merge_loc == NULL) {
       exprt e_copy (e);
