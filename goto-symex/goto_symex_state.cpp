@@ -229,7 +229,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
 
     return constant_propagation_reference(expr.op0());
   }
-  else if(expr.id()=="typecast")
+  else if(expr.id()==exprt::typecast)
   {
     if(expr.operands().size()!=1)
       throw "typecast expects one operand";
@@ -245,7 +245,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
     return true;
   }
 #if 1
-  else if(expr.id()=="array_of")
+  else if(expr.id()==exprt::arrayof)
   {
     if(expr.operands().size()==1)
       if (expr.op0().id()=="constant" && expr.op0().type().id()!="bool")

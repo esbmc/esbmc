@@ -991,7 +991,7 @@ execution_statet::serialise_expr(const exprt &rhs)
     /* Otherwise, it's something that's been assumed, or some form of
      * nondeterminism. Just return its name. */
     return rhs.get("identifier").as_string();
-  } else if (rhs.id() == "array_of") {
+  } else if (rhs.id() == exprt::arrayof) {
     /* An array of the same set of values: generate all of them. */
     str = "array(";
     irept array = rhs.find("type");
@@ -1153,7 +1153,7 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m["shl"] = serialise_normal_operation;
   m["lshr"] = serialise_normal_operation;
   m["ashr"] = serialise_normal_operation;
-  m["typecast"] = serialise_normal_operation;
+  m[exprt::typecast] = serialise_normal_operation;
   m["address_of"] = serialise_normal_operation;
   m["pointer_obj"] = serialise_normal_operation;
   m["pointer_object"] = serialise_normal_operation;

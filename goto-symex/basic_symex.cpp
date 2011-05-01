@@ -261,7 +261,7 @@ void basic_symext::symex_assign_rec(
     symex_assign_member(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="if")
     symex_assign_if(state, ex_state, lhs, rhs, guard,node_id);
-  else if(lhs.id()=="typecast")
+  else if(lhs.id()==exprt::typecast)
     symex_assign_typecast(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="string-constant" ||
           lhs.id()=="NULL-object" ||
@@ -447,7 +447,7 @@ void basic_symext::symex_assign_member(
   const irep_idt &component_name=lhs.get("component_name");
 
   // typecasts involved? C++ does that for inheritance.
-  if(lhs_struct.id()=="typecast")
+  if(lhs_struct.id()==exprt::typecast)
   {
     assert(lhs_struct.operands().size()==1);
 
