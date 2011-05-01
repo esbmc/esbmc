@@ -179,6 +179,7 @@ public:
   static irep_idt div;
   static irep_idt mod;
   static irep_idt equality;
+  static irep_idt notequal;
   static irep_idt index;
   static irep_idt arrayof;
   static irep_idt objdesc;
@@ -199,6 +200,10 @@ public:
   static irep_idt constant;
   static irep_idt i_true;
   static irep_idt i_false;
+  static irep_idt i_lt;
+  static irep_idt i_gt;
+  static irep_idt i_le;
+  static irep_idt i_ge;
 
   // Expression attributes
   static irep_idt a_identifier;

@@ -660,6 +660,7 @@ irep_idt exprt::mult = dstring("*");
 irep_idt exprt::div = dstring("/");
 irep_idt exprt::mod = dstring("mod");
 irep_idt exprt::equality = dstring("=");
+irep_idt exprt::notequal = dstring("notequal");
 irep_idt exprt::index = dstring("index");
 irep_idt exprt::arrayof = dstring("array_of");
 irep_idt exprt::objdesc = dstring("object_descriptor");
@@ -680,6 +681,10 @@ irep_idt exprt::i_type = dstring("type");
 irep_idt exprt::constant = dstring("constant");
 irep_idt exprt::i_true = dstring("true");
 irep_idt exprt::i_false = dstring("false");
+irep_idt exprt::i_lt = dstring("<");
+irep_idt exprt::i_gt = dstring(">");
+irep_idt exprt::i_le = dstring("<=");
+irep_idt exprt::i_ge = dstring(">=");
 
 irep_idt exprt::a_identifier = dstring("identifier");
 irep_idt exprt::a_value = dstring("value");
