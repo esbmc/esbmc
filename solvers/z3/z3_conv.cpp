@@ -565,7 +565,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
   Z3_type_ast tuple_type, array_of_array_type;
   unsigned width;
 
-  if (type.subtype().id() == "bool")
+  if (type.subtype().id() == typet::t_bool)
   {
 	if (int_encoding)
 	  bv = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx), Z3_mk_bool_type(z3_ctx));
@@ -672,7 +672,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 
   unsigned width=config.ansi_c.int_width;
 
-  if (type.id()=="bool")
+  if (type.id()==typet::t_bool)
   {
 	bv = Z3_mk_bool_type(z3_ctx);
   }
@@ -743,7 +743,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
       }
       if (!width) width = config.ansi_c.int_width;
 	}
-	else if (type.subtype().id()=="bool")
+	else if (type.subtype().id()==typet::t_bool)
 	{
 	  if (int_encoding)
 	    bv = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx), Z3_mk_bool_type(z3_ctx));
@@ -1048,7 +1048,7 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 #ifdef DEBUG
   std::cout << "type.pretty(): " << type.pretty() << std::endl;
 #endif
-	if (type.id()!="bool" && type.subtype().id()!="bool")
+	if (type.id()!=typet::t_bool && type.subtype().id()!=typet::t_bool)
 	{
 	  if (type.subtype().id()=="struct")
 		  s << "struct";
@@ -1106,7 +1106,7 @@ bool z3_convt::convert_identifier(const std::string &identifier, const typet &ty
   std::cout << "identifier: " << identifier.c_str() << std::endl;
 #endif
 
-  if (type.id()=="bool")
+  if (type.id()==typet::t_bool)
   {
 	bv = z3_api.mk_bool_var(z3_ctx, identifier.c_str());
   }
@@ -2700,7 +2700,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   if (convert_bv(op, bv))
 	return true;
 
-  if(expr.type().id()=="bool")
+  if(expr.type().id()==typet::t_bool)
   {
     if(op.type().id()==typet::t_signedbv ||
        op.type().id()==typet::t_unsignedbv ||
@@ -2783,7 +2783,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 
    	  bv = Z3_mk_concat(z3_ctx, bv, convert_number(0, to_fraction_bits, true));
     }
-    else if(op.type().id()=="bool")
+    else if(op.type().id()==typet::t_bool)
     {
       Z3_ast zero, one;
       unsigned width;
@@ -3043,7 +3043,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
           bv = Z3_mk_extract(z3_ctx, (to_width-1), 0, args[0]);
       }
     }
-    else if (op.type().id()=="bool")
+    else if (op.type().id()==typet::t_bool)
 	{
       Z3_ast zero=0, one=0;
       unsigned width;
@@ -3307,7 +3307,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 			s.components()[j].set_name(it->get("name"));
 			s.components()[j].type()=unsignedbv_typet(width);
 		  }
-		  else if (it->type().id()=="bool")
+		  else if (it->type().id()==typet::t_bool)
 		  {
 			s.components()[j].set_name(it->get("name"));
 			s.components()[j].type()=bool_typet();
@@ -3350,7 +3350,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 	Z3_ast zero, one;
 	unsigned width;
 
-	if (op.type().id()=="bool")
+	if (op.type().id()==typet::t_bool)
 	{
       if (boolbv_get_width(expr.type(), width))
         return true;
@@ -3827,7 +3827,7 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 	if (convert_z3_pointer(expr, value, bv))
 	  return true;
   }
-  else if (expr.type().id()=="bool")
+  else if (expr.type().id()==typet::t_bool)
   {
 	if (expr.is_false())
 	  bv = Z3_mk_false(z3_ctx);
@@ -4039,7 +4039,7 @@ bool z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
   std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
-  assert(expr.type().id()=="bool");
+  assert(expr.type().id()==typet::t_bool);
   assert(expr.operands().size()>=1);
 
   Z3_ast *args;
@@ -4791,7 +4791,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	  if (convert_bv(expr.op0(), pointer_var))
 		return true;
 	}
-	else if (expr.op0().type().id() == "bool")
+	else if (expr.op0().type().id() == typet::t_bool)
 	{
 	  if (convert_z3_pointer(expr, expr.op0().get_string(exprt::a_identifier), pointer_var))
 	    return true;
@@ -4975,7 +4975,7 @@ bool z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   if (boolbv_get_width(expr.op0().type(), width))
     return true;
 
-  if (expr.type().subtype().id()=="bool")
+  if (expr.type().subtype().id()==typet::t_bool)
   {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
@@ -6475,7 +6475,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
 #endif
 
 #if 1
-  if(expr.type().id()!="bool")
+  if(expr.type().id()!=typet::t_bool)
   {
     std::string msg="prop_convt::set_to got "
                     "non-boolean expression:\n";
@@ -6486,7 +6486,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
   bool boolean=true;
 
   forall_operands(it, expr)
-    if(it->type().id()!="bool")
+    if(it->type().id()!=typet::t_bool)
     {
       boolean=false;
       break;
@@ -6628,7 +6628,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
 		pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 		formula[1] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
 
-		if (expr.op0().type().id()=="bool")
+		if (expr.op0().type().id()==typet::t_bool)
 		  result = Z3_mk_iff(z3_ctx, formula[0], formula[1]);
 		else
 		  result = Z3_mk_and(z3_ctx, 2, formula);
@@ -6648,7 +6648,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
    	    }
 #endif
 
-		if (op0.type().id()=="bool")
+		if (op0.type().id()==typet::t_bool)
 		  result = Z3_mk_iff(z3_ctx, operand[0], operand[1]);
 		else
 	      result = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
