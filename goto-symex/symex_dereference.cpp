@@ -190,7 +190,7 @@ void goto_symext::dereference_rec(
           expr.operands().size()==2 &&
           expr.op0().type().id()=="pointer")
   {
-    exprt tmp("+", expr.op0().type());
+    exprt tmp(exprt::plus, expr.op0().type());
     tmp.operands().swap(expr.operands());
 
     // first make sure there are no dereferences in there

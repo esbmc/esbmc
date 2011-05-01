@@ -231,7 +231,7 @@ void execution_statet::decreament_trds_in_run(const namespacet &ns, symex_target
   exprt one_expr = gen_one(int_t);
   exprt lhs_expr = symbol_exprt("c::trds_in_run", int_t);
   exprt op1 = lhs_expr;
-  exprt rhs_expr = gen_binary("-", int_t, op1, one_expr);
+  exprt rhs_expr = gen_binary(exprt::minus, int_t, op1, one_expr);
 
   get_active_state().rename(rhs_expr, ns,node_id);
   base_type(rhs_expr, ns);
@@ -333,7 +333,7 @@ void execution_statet::increament_trds_in_run(const namespacet &ns, symex_target
   exprt one_expr = gen_one(int_t);
   exprt lhs_expr = symbol_exprt("c::trds_in_run", int_t);
   exprt op1 = lhs_expr;
-  exprt rhs_expr = gen_binary("+", int_t, op1, one_expr);
+  exprt rhs_expr = gen_binary(exprt::plus, int_t, op1, one_expr);
 
   get_active_state().rename(rhs_expr, ns, node_id);
   base_type(rhs_expr, ns);
@@ -1127,8 +1127,8 @@ const execution_statet::expr_id_map_t execution_statet::expr_id_map = execution_
 execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
 {
   execution_statet::expr_id_map_t m;
-  m["+"] = serialise_normal_operation;
-  m["-"] = serialise_normal_operation;
+  m[exprt::plus] = serialise_normal_operation;
+  m[exprt::minus] = serialise_normal_operation;
   m["*"] = serialise_normal_operation;
   m["/"] = serialise_normal_operation;
   m["mod"] = serialise_normal_operation;

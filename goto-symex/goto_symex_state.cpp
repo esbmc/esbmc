@@ -236,7 +236,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
 
     return constant_propagation(expr.op0());
   }
-  else if(expr.id()=="+")
+  else if(expr.id()==exprt::plus)
   {
     forall_operands(it, expr)
       if(!constant_propagation(*it))
