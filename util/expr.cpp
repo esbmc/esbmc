@@ -653,7 +653,7 @@ const locationt &exprt::find_location() const
 }
 
 irep_idt exprt::trans = dstring("trans");
-irep_idt exprt::symbol = dstring("trans");
+irep_idt exprt::symbol = dstring("symbol");
 irep_idt exprt::plus = dstring("+");
 irep_idt exprt::minus = dstring("-");
 irep_idt exprt::mult = dstring("*");
