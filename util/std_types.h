@@ -354,7 +354,7 @@ public:
 
   void set_width(unsigned width)
   {
-    set(t_width, width);
+    set(a_width, width);
   }
 };
 
