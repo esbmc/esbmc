@@ -160,10 +160,10 @@ Function: exprt::make_typecast
 
 void exprt::make_typecast(const typet &_type)
 {
-  exprt new_expr("typecast");
+  exprt new_expr(exprt::typecast);
 
   new_expr.move_to_operands(*this);
-  new_expr.set("type", _type);
+  new_expr.set(i_type, _type);
 
   swap(new_expr);
 }
@@ -195,13 +195,13 @@ void exprt::make_not()
 
   exprt new_expr;
 
-  if(id()=="not" && operands().size()==1)
+  if(id()==i_not && operands().size()==1)
   {
     new_expr.swap(operands().front());
   }
   else
   {
-    new_expr=exprt("not", type());
+    new_expr=exprt(i_not, type());
     new_expr.move_to_operands(*this);
   }
 
@@ -222,7 +222,7 @@ Function: exprt::is_constant
 
 bool exprt::is_constant() const
 {
-  return id()=="constant";
+  return id()==constant;
 }
 
 /*******************************************************************\
@@ -241,7 +241,7 @@ bool exprt::is_true() const
 {
   return is_constant() &&
          type().id()=="bool" &&
-         get("value")!="false";
+         get(a_value)!="false";
 }
 
 /*******************************************************************\
@@ -260,7 +260,7 @@ bool exprt::is_false() const
 {
   return is_constant() &&
          type().id()=="bool" &&
-         get("value")=="false";
+         get(a_value)=="false";
 }
 
 /*******************************************************************\
@@ -277,8 +277,8 @@ Function: exprt::make_bool
 
 void exprt::make_bool(bool value)
 {
-  *this=exprt("constant", typet("bool"));
-  set("value", value?"true":"false");
+  *this=exprt(constant, typet("bool"));
+  set(a_value, value?i_true:i_false);
 }
 
 /*******************************************************************\
@@ -295,8 +295,8 @@ Function: exprt::make_true
 
 void exprt::make_true()
 {
-  *this=exprt("constant", typet("bool"));
-  set("value", "true");
+  *this=exprt(constant, typet("bool"));
+  set(a_value, i_true);
 }
 
 /*******************************************************************\
@@ -313,8 +313,8 @@ Function: exprt::make_false
 
 void exprt::make_false()
 {
-  *this=exprt("constant", typet("bool"));
-  set("value", "false");
+  *this=exprt(constant, typet("bool"));
+  set(a_value, i_false);
 }
 
 /*******************************************************************\
@@ -355,7 +355,7 @@ void exprt::negate()
   else if(type_id=="integer")
   {
     if(is_constant())
-      set("value", integer2string(-string2integer(get_string("value"))));
+      set(a_value, integer2string(-string2integer(get_string(a_value))));
     else if(id()=="unary-")
     {
       exprt tmp;
@@ -407,7 +407,7 @@ bool exprt::is_zero() const
 {
   if(is_constant())
   {
-    const std::string &value=get_string("value");
+    const std::string &value=get_string(a_value);
     const irep_idt &type_id=type().id_string();
 
     if(type_id=="integer" || type_id=="natural")
@@ -453,7 +453,7 @@ bool exprt::is_one() const
 {
   if(is_constant())
   {
-    const std::string &value=get_string("value");
+    const std::string &value=get_string(a_value);
     const irep_idt &type_id=type().id_string();
 
     if(type_id=="integer" || type_id=="natural")
@@ -502,24 +502,24 @@ bool exprt::sum(const exprt &expr)
 
   if(type_id=="integer" || type_id=="natural")
   {
-    set("value", integer2string(
-      string2integer(get_string("value"))+
-      string2integer(expr.get_string("value"))));
+    set(a_value, integer2string(
+      string2integer(get_string(a_value))+
+      string2integer(expr.get_string(a_value))));
     return false;
   }
   else if(type_id=="unsignedbv" || type_id=="signedbv")
   {
-    set("value", integer2binary(
-      binary2integer(get_string("value"), false)+
-      binary2integer(expr.get_string("value"), false),
+    set(a_value, integer2binary(
+      binary2integer(get_string(a_value), false)+
+      binary2integer(expr.get_string(a_value), false),
       atoi(type().get("width").c_str())));
     return false;
   }
   else if(type_id=="fixedbv")
   {
-    set("value", integer2binary(
-      binary2integer(get_string("value"), false)+
-      binary2integer(expr.get_string("value"), false),
+    set(a_value, integer2binary(
+      binary2integer(get_string(a_value), false)+
+      binary2integer(expr.get_string(a_value), false),
       atoi(type().get("width").c_str())));
     return false;
   }
@@ -555,16 +555,16 @@ bool exprt::mul(const exprt &expr)
 
   if(type_id=="integer" || type_id=="natural")
   {
-    set("value", integer2string(
-      string2integer(get_string("value"))*
-      string2integer(expr.get_string("value"))));
+    set(a_value, integer2string(
+      string2integer(get_string(a_value))*
+      string2integer(expr.get_string(a_value))));
     return false;
   }
   else if(type_id=="unsignedbv" || type_id=="signedbv")
   {
-    set("value", integer2binary(
-      binary2integer(get_string("value"), false)*
-      binary2integer(expr.get_string("value"), false),
+    set(a_value, integer2binary(
+      binary2integer(get_string(a_value), false)*
+      binary2integer(expr.get_string(a_value), false),
       atoi(type().get("width").c_str())));
     return false;
   }
@@ -608,16 +608,16 @@ bool exprt::subtract(const exprt &expr)
 
   if(type_id=="integer" || type_id=="natural")
   {
-    set("value", integer2string(
-      string2integer(get_string("value"))-
-      string2integer(expr.get_string("value"))));
+    set(a_value, integer2string(
+      string2integer(get_string(a_value))-
+      string2integer(expr.get_string(a_value))));
     return false;
   }
   else if(type_id=="unsignedbv" || type_id=="signedbv")
   {
-    set("value", integer2binary(
-      binary2integer(get_string("value"), false)-
-      binary2integer(expr.get_string("value"), false),
+    set(a_value, integer2binary(
+      binary2integer(get_string(a_value), false)-
+      binary2integer(expr.get_string(a_value), false),
       atoi(type().get("width").c_str())));
     return false;
   }
