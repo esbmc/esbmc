@@ -152,8 +152,8 @@ void counterexample_value(
     value_string=from_expr(ns, identifier, value);
     if(value.is_constant())
     {
-      if(value.type().id()=="signedbv" ||
-    	 value.type().id()=="unsignedbv" ||
+      if(value.type().id()==typet::t_signedbv ||
+	 value.type().id()==typet::t_unsignedbv ||
     	 value.type().id()=="fixedbv" ||
     	 value.type().id()=="floatbv")
         value_string+= " ("+value.get_string(exprt::a_value)+")";
