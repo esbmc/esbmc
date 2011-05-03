@@ -589,10 +589,12 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
     std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
   }
 
+#if 0
   std::cout << "ohai:" << std::endl;
   int fd = open("/proc/self/status", O_RDONLY, 0);
   sendfile(STDOUT_FILENO, fd, NULL, 4096);
   close(fd);
+#endif
 
   return false;
 }
