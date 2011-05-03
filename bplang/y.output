@@ -1,0 +1,2076 @@
+Terminals unused in grammar
+
+   WHILE_Token
+   DO_Token
+   OD_Token
+   EQUIV_Token
+
+
+Gramática
+
+    0 $accept: start $end
+
+    1 start: declarations
+
+    2 declarations: declaration
+    3             | declarations declaration
+
+    4 declaration: variable_declaration ';'
+    5            | function_definition
+
+    6 variable_declaration: DECL_Token variable_list
+
+    7 variable_list: variable_name
+    8              | variable_list ',' variable_name
+
+    9 expression_list: expression
+   10                | expression_list ',' expression
+
+   11 variable_list_opt: /* vazio */
+   12                  | variable_list
+
+   13 expression_list_opt: /* vazio */
+   14                    | expression_list
+
+   15 argument_list: '(' variable_list_opt ')'
+
+   16 type: VOID_Token
+   17     | BOOL_Token
+   18     | BOOL_Token '<' NUMBER_Token '>'
+
+   19 $@1: /* vazio */
+
+   20 $@2: /* vazio */
+
+   21 function_definition: dfs_opt type function_name $@1 argument_list function_body $@2
+
+   22 dfs_opt: /* vazio */
+   23        | DFS_Token
+
+   24 function_body: block_statement
+
+   25 block_statement: BEGIN_Token statement_list END_Token
+
+   26 statement_list: /* vazio */
+   27               | statement_list_rec ';'
+   28               | statement_list_rec
+
+   29 statement_list_rec: statement_list_rec ';' statement
+   30                   | statement
+
+   31 if_statement: IF_Token expression THEN_Token statement_list FI_Token
+   32             | IF_Token expression THEN_Token statement_list ELSE_Token statement_list FI_Token
+
+   33 goto_statement: GOTO_Token label_list
+
+   34 label_list: label
+   35           | label_list ',' label
+
+   36 function_call: function_name '(' expression_list_opt ')'
+
+   37 function_call_statement: function_call
+
+   38 return_statement: RETURN_Token expression_list
+   39                 | RETURN_Token
+
+   40 enforce_statement: ENFORCE_Token expression
+
+   41 skip_statement: SKIP_Token
+
+   42 abortif_statement: ABORTIF_Token expression
+
+   43 start_thread_statement: START_THREAD_Token statement
+
+   44 end_thread_statement: END_THREAD_Token
+
+   45 sync_statement: SYNC_Token IDENTIFIER_Token
+
+   46 atomic_begin_statement: ATOMIC_BEGIN_Token
+
+   47 atomic_end_statement: ATOMIC_END_Token
+
+   48 dead_statement: DEAD_Token expression_list
+
+   49 statement: enforce_statement
+   50          | abortif_statement
+   51          | skip_statement
+   52          | dead_statement
+   53          | goto_statement
+   54          | function_call_statement
+   55          | return_statement
+   56          | if_statement
+   57          | labeled_statement
+   58          | assignment_statement
+   59          | decl_statement
+   60          | start_thread_statement
+   61          | end_thread_statement
+   62          | sync_statement
+   63          | atomic_begin_statement
+   64          | atomic_end_statement
+
+   65 decl_statement: variable_declaration
+
+   66 constrain_opt: /* vazio */
+   67              | constrain
+
+   68 constrain: CONSTRAIN_Token expression
+
+   69 assignment_statement: expression_list ASSIGN_Token expression_list constrain_opt
+   70                     | expression_list ASSIGN_Token function_call
+
+   71 labeled_statement: label ':' statement
+
+   72 label: IDENTIFIER_Token
+
+   73 function_name: IDENTIFIER_Token
+
+   74 variable_name: IDENTIFIER_Token
+
+   75 expression: unary_expression
+   76           | expression IMPLIES_Token expression
+   77           | expression AND_Token expression
+   78           | expression OR_Token expression
+   79           | expression XOR_Token expression
+   80           | expression EQ_Token expression
+   81           | expression NEQ_Token expression
+
+   82 primary_expression: '(' expression ')'
+   83                   | '*'
+   84                   | variable_name
+   85                   | SCHOOSE_Token '[' expression_list ']'
+   86                   | NUMBER_Token
+
+   87 unary_expression: primary_expression
+   88                 | '!' unary_expression
+   89                 | '~' unary_expression
+   90                 | TICK_Token unary_expression
+
+
+Terminais, com as regras onde eles aparecem
+
+$end (0) 0
+'!' (33) 88
+'(' (40) 15 36 82
+')' (41) 15 36 82
+'*' (42) 83
+',' (44) 8 10 35
+':' (58) 71
+';' (59) 4 27 29
+'<' (60) 18
+'>' (62) 18
+'[' (91) 85
+']' (93) 85
+'~' (126) 89
+error (256)
+BEGIN_Token (258) 25
+END_Token (259) 25
+DECL_Token (260) 6
+VOID_Token (261) 16
+BOOL_Token (262) 17 18
+GOTO_Token (263) 33
+ENFORCE_Token (264) 40
+IF_Token (265) 31 32
+THEN_Token (266) 31 32
+ELSE_Token (267) 32
+FI_Token (268) 31 32
+SKIP_Token (269) 41
+WHILE_Token (270)
+DO_Token (271)
+OD_Token (272)
+ABORTIF_Token (273) 42
+START_THREAD_Token (274) 43
+END_THREAD_Token (275) 44
+SYNC_Token (276) 45
+ATOMIC_BEGIN_Token (277) 46
+ATOMIC_END_Token (278) 47
+DEAD_Token (279) 48
+RETURN_Token (280) 38 39
+SCHOOSE_Token (281) 85
+IDENTIFIER_Token (282) 45 72 73 74
+NUMBER_Token (283) 18 86
+DFS_Token (284) 23
+ASSIGN_Token (285) 69 70
+CONSTRAIN_Token (286) 68
+NEQ_Token (287) 81
+EQ_Token (288) 80
+IMPLIES_Token (289) 76
+EQUIV_Token (290)
+XOR_Token (291) 79
+OR_Token (292) 78
+AND_Token (293) 77
+TICK_Token (294) 90
+
+
+Não-terminais com as regras onde eles aparecem
+
+$accept (52)
+    à esquerda: 0
+start (53)
+    à esquerda: 1, à direita: 0
+declarations (54)
+    à esquerda: 2 3, à direita: 1 3
+declaration (55)
+    à esquerda: 4 5, à direita: 2 3
+variable_declaration (56)
+    à esquerda: 6, à direita: 4 65
+variable_list (57)
+    à esquerda: 7 8, à direita: 6 8 12
+expression_list (58)
+    à esquerda: 9 10, à direita: 10 14 38 48 69 70 85
+variable_list_opt (59)
+    à esquerda: 11 12, à direita: 15
+expression_list_opt (60)
+    à esquerda: 13 14, à direita: 36
+argument_list (61)
+    à esquerda: 15, à direita: 21
+type (62)
+    à esquerda: 16 17 18, à direita: 21
+function_definition (63)
+    à esquerda: 21, à direita: 5
+$@1 (64)
+    à esquerda: 19, à direita: 21
+$@2 (65)
+    à esquerda: 20, à direita: 21
+dfs_opt (66)
+    à esquerda: 22 23, à direita: 21
+function_body (67)
+    à esquerda: 24, à direita: 21
+block_statement (68)
+    à esquerda: 25, à direita: 24
+statement_list (69)
+    à esquerda: 26 27 28, à direita: 25 31 32
+statement_list_rec (70)
+    à esquerda: 29 30, à direita: 27 28 29
+if_statement (71)
+    à esquerda: 31 32, à direita: 56
+goto_statement (72)
+    à esquerda: 33, à direita: 53
+label_list (73)
+    à esquerda: 34 35, à direita: 33 35
+function_call (74)
+    à esquerda: 36, à direita: 37 70
+function_call_statement (75)
+    à esquerda: 37, à direita: 54
+return_statement (76)
+    à esquerda: 38 39, à direita: 55
+enforce_statement (77)
+    à esquerda: 40, à direita: 49
+skip_statement (78)
+    à esquerda: 41, à direita: 51
+abortif_statement (79)
+    à esquerda: 42, à direita: 50
+start_thread_statement (80)
+    à esquerda: 43, à direita: 60
+end_thread_statement (81)
+    à esquerda: 44, à direita: 61
+sync_statement (82)
+    à esquerda: 45, à direita: 62
+atomic_begin_statement (83)
+    à esquerda: 46, à direita: 63
+atomic_end_statement (84)
+    à esquerda: 47, à direita: 64
+dead_statement (85)
+    à esquerda: 48, à direita: 52
+statement (86)
+    à esquerda: 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64, à direita:
+    29 30 43 71
+decl_statement (87)
+    à esquerda: 65, à direita: 59
+constrain_opt (88)
+    à esquerda: 66 67, à direita: 69
+constrain (89)
+    à esquerda: 68, à direita: 67
+assignment_statement (90)
+    à esquerda: 69 70, à direita: 58
+labeled_statement (91)
+    à esquerda: 71, à direita: 57
+label (92)
+    à esquerda: 72, à direita: 34 35 71
+function_name (93)
+    à esquerda: 73, à direita: 21 36
+variable_name (94)
+    à esquerda: 74, à direita: 7 8 84
+expression (95)
+    à esquerda: 75 76 77 78 79 80 81, à direita: 9 10 31 32 40 42
+    68 76 77 78 79 80 81 82
+primary_expression (96)
+    à esquerda: 82 83 84 85 86, à direita: 87
+unary_expression (97)
+    à esquerda: 87 88 89 90, à direita: 75 88 89 90
+
+
+estado 0
+
+    0 $accept: . start $end
+
+    DECL_Token  deslocar, e ir ao estado 1
+    DFS_Token   deslocar, e ir ao estado 2
+
+    $padrão  reduzir usando a regra 22 (dfs_opt)
+
+    start                 ir ao estado 3
+    declarations          ir ao estado 4
+    declaration           ir ao estado 5
+    variable_declaration  ir ao estado 6
+    function_definition   ir ao estado 7
+    dfs_opt               ir ao estado 8
+
+
+estado 1
+
+    6 variable_declaration: DECL_Token . variable_list
+
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+
+    variable_list  ir ao estado 10
+    variable_name  ir ao estado 11
+
+
+estado 2
+
+   23 dfs_opt: DFS_Token .
+
+    $padrão  reduzir usando a regra 23 (dfs_opt)
+
+
+estado 3
+
+    0 $accept: start . $end
+
+    $end  deslocar, e ir ao estado 12
+
+
+estado 4
+
+    1 start: declarations .
+    3 declarations: declarations . declaration
+
+    DECL_Token  deslocar, e ir ao estado 1
+    DFS_Token   deslocar, e ir ao estado 2
+
+    $end      reduzir usando a regra 1 (start)
+    $padrão  reduzir usando a regra 22 (dfs_opt)
+
+    declaration           ir ao estado 13
+    variable_declaration  ir ao estado 6
+    function_definition   ir ao estado 7
+    dfs_opt               ir ao estado 8
+
+
+estado 5
+
+    2 declarations: declaration .
+
+    $padrão  reduzir usando a regra 2 (declarations)
+
+
+estado 6
+
+    4 declaration: variable_declaration . ';'
+
+    ';'  deslocar, e ir ao estado 14
+
+
+estado 7
+
+    5 declaration: function_definition .
+
+    $padrão  reduzir usando a regra 5 (declaration)
+
+
+estado 8
+
+   21 function_definition: dfs_opt . type function_name $@1 argument_list function_body $@2
+
+    VOID_Token  deslocar, e ir ao estado 15
+    BOOL_Token  deslocar, e ir ao estado 16
+
+    type  ir ao estado 17
+
+
+estado 9
+
+   74 variable_name: IDENTIFIER_Token .
+
+    $padrão  reduzir usando a regra 74 (variable_name)
+
+
+estado 10
+
+    6 variable_declaration: DECL_Token variable_list .
+    8 variable_list: variable_list . ',' variable_name
+
+    ','  deslocar, e ir ao estado 18
+
+    $padrão  reduzir usando a regra 6 (variable_declaration)
+
+
+estado 11
+
+    7 variable_list: variable_name .
+
+    $padrão  reduzir usando a regra 7 (variable_list)
+
+
+estado 12
+
+    0 $accept: start $end .
+
+    $padrão  aceitar
+
+
+estado 13
+
+    3 declarations: declarations declaration .
+
+    $padrão  reduzir usando a regra 3 (declarations)
+
+
+estado 14
+
+    4 declaration: variable_declaration ';' .
+
+    $padrão  reduzir usando a regra 4 (declaration)
+
+
+estado 15
+
+   16 type: VOID_Token .
+
+    $padrão  reduzir usando a regra 16 (type)
+
+
+estado 16
+
+   17 type: BOOL_Token .
+   18     | BOOL_Token . '<' NUMBER_Token '>'
+
+    '<'  deslocar, e ir ao estado 19
+
+    $padrão  reduzir usando a regra 17 (type)
+
+
+estado 17
+
+   21 function_definition: dfs_opt type . function_name $@1 argument_list function_body $@2
+
+    IDENTIFIER_Token  deslocar, e ir ao estado 20
+
+    function_name  ir ao estado 21
+
+
+estado 18
+
+    8 variable_list: variable_list ',' . variable_name
+
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+
+    variable_name  ir ao estado 22
+
+
+estado 19
+
+   18 type: BOOL_Token '<' . NUMBER_Token '>'
+
+    NUMBER_Token  deslocar, e ir ao estado 23
+
+
+estado 20
+
+   73 function_name: IDENTIFIER_Token .
+
+    $padrão  reduzir usando a regra 73 (function_name)
+
+
+estado 21
+
+   21 function_definition: dfs_opt type function_name . $@1 argument_list function_body $@2
+
+    $padrão  reduzir usando a regra 19 ($@1)
+
+    $@1  ir ao estado 24
+
+
+estado 22
+
+    8 variable_list: variable_list ',' variable_name .
+
+    $padrão  reduzir usando a regra 8 (variable_list)
+
+
+estado 23
+
+   18 type: BOOL_Token '<' NUMBER_Token . '>'
+
+    '>'  deslocar, e ir ao estado 25
+
+
+estado 24
+
+   21 function_definition: dfs_opt type function_name $@1 . argument_list function_body $@2
+
+    '('  deslocar, e ir ao estado 26
+
+    argument_list  ir ao estado 27
+
+
+estado 25
+
+   18 type: BOOL_Token '<' NUMBER_Token '>' .
+
+    $padrão  reduzir usando a regra 18 (type)
+
+
+estado 26
+
+   15 argument_list: '(' . variable_list_opt ')'
+
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+
+    $padrão  reduzir usando a regra 11 (variable_list_opt)
+
+    variable_list      ir ao estado 28
+    variable_list_opt  ir ao estado 29
+    variable_name      ir ao estado 11
+
+
+estado 27
+
+   21 function_definition: dfs_opt type function_name $@1 argument_list . function_body $@2
+
+    BEGIN_Token  deslocar, e ir ao estado 30
+
+    function_body    ir ao estado 31
+    block_statement  ir ao estado 32
+
+
+estado 28
+
+    8 variable_list: variable_list . ',' variable_name
+   12 variable_list_opt: variable_list .
+
+    ','  deslocar, e ir ao estado 18
+
+    $padrão  reduzir usando a regra 12 (variable_list_opt)
+
+
+estado 29
+
+   15 argument_list: '(' variable_list_opt . ')'
+
+    ')'  deslocar, e ir ao estado 33
+
+
+estado 30
+
+   25 block_statement: BEGIN_Token . statement_list END_Token
+
+    DECL_Token          deslocar, e ir ao estado 1
+    GOTO_Token          deslocar, e ir ao estado 34
+    ENFORCE_Token       deslocar, e ir ao estado 35
+    IF_Token            deslocar, e ir ao estado 36
+    SKIP_Token          deslocar, e ir ao estado 37
+    ABORTIF_Token       deslocar, e ir ao estado 38
+    START_THREAD_Token  deslocar, e ir ao estado 39
+    END_THREAD_Token    deslocar, e ir ao estado 40
+    SYNC_Token          deslocar, e ir ao estado 41
+    ATOMIC_BEGIN_Token  deslocar, e ir ao estado 42
+    ATOMIC_END_Token    deslocar, e ir ao estado 43
+    DEAD_Token          deslocar, e ir ao estado 44
+    RETURN_Token        deslocar, e ir ao estado 45
+    SCHOOSE_Token       deslocar, e ir ao estado 46
+    IDENTIFIER_Token    deslocar, e ir ao estado 47
+    NUMBER_Token        deslocar, e ir ao estado 48
+    TICK_Token          deslocar, e ir ao estado 49
+    '('                 deslocar, e ir ao estado 50
+    '*'                 deslocar, e ir ao estado 51
+    '!'                 deslocar, e ir ao estado 52
+    '~'                 deslocar, e ir ao estado 53
+
+    $padrão  reduzir usando a regra 26 (statement_list)
+
+    variable_declaration     ir ao estado 54
+    expression_list          ir ao estado 55
+    statement_list           ir ao estado 56
+    statement_list_rec       ir ao estado 57
+    if_statement             ir ao estado 58
+    goto_statement           ir ao estado 59
+    function_call            ir ao estado 60
+    function_call_statement  ir ao estado 61
+    return_statement         ir ao estado 62
+    enforce_statement        ir ao estado 63
+    skip_statement           ir ao estado 64
+    abortif_statement        ir ao estado 65
+    start_thread_statement   ir ao estado 66
+    end_thread_statement     ir ao estado 67
+    sync_statement           ir ao estado 68
+    atomic_begin_statement   ir ao estado 69
+    atomic_end_statement     ir ao estado 70
+    dead_statement           ir ao estado 71
+    statement                ir ao estado 72
+    decl_statement           ir ao estado 73
+    assignment_statement     ir ao estado 74
+    labeled_statement        ir ao estado 75
+    label                    ir ao estado 76
+    function_name            ir ao estado 77
+    variable_name            ir ao estado 78
+    expression               ir ao estado 79
+    primary_expression       ir ao estado 80
+    unary_expression         ir ao estado 81
+
+
+estado 31
+
+   21 function_definition: dfs_opt type function_name $@1 argument_list function_body . $@2
+
+    $padrão  reduzir usando a regra 20 ($@2)
+
+    $@2  ir ao estado 82
+
+
+estado 32
+
+   24 function_body: block_statement .
+
+    $padrão  reduzir usando a regra 24 (function_body)
+
+
+estado 33
+
+   15 argument_list: '(' variable_list_opt ')' .
+
+    $padrão  reduzir usando a regra 15 (argument_list)
+
+
+estado 34
+
+   33 goto_statement: GOTO_Token . label_list
+
+    IDENTIFIER_Token  deslocar, e ir ao estado 83
+
+    label_list  ir ao estado 84
+    label       ir ao estado 85
+
+
+estado 35
+
+   40 enforce_statement: ENFORCE_Token . expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 86
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 36
+
+   31 if_statement: IF_Token . expression THEN_Token statement_list FI_Token
+   32             | IF_Token . expression THEN_Token statement_list ELSE_Token statement_list FI_Token
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 87
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 37
+
+   41 skip_statement: SKIP_Token .
+
+    $padrão  reduzir usando a regra 41 (skip_statement)
+
+
+estado 38
+
+   42 abortif_statement: ABORTIF_Token . expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 88
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 39
+
+   43 start_thread_statement: START_THREAD_Token . statement
+
+    DECL_Token          deslocar, e ir ao estado 1
+    GOTO_Token          deslocar, e ir ao estado 34
+    ENFORCE_Token       deslocar, e ir ao estado 35
+    IF_Token            deslocar, e ir ao estado 36
+    SKIP_Token          deslocar, e ir ao estado 37
+    ABORTIF_Token       deslocar, e ir ao estado 38
+    START_THREAD_Token  deslocar, e ir ao estado 39
+    END_THREAD_Token    deslocar, e ir ao estado 40
+    SYNC_Token          deslocar, e ir ao estado 41
+    ATOMIC_BEGIN_Token  deslocar, e ir ao estado 42
+    ATOMIC_END_Token    deslocar, e ir ao estado 43
+    DEAD_Token          deslocar, e ir ao estado 44
+    RETURN_Token        deslocar, e ir ao estado 45
+    SCHOOSE_Token       deslocar, e ir ao estado 46
+    IDENTIFIER_Token    deslocar, e ir ao estado 47
+    NUMBER_Token        deslocar, e ir ao estado 48
+    TICK_Token          deslocar, e ir ao estado 49
+    '('                 deslocar, e ir ao estado 50
+    '*'                 deslocar, e ir ao estado 51
+    '!'                 deslocar, e ir ao estado 52
+    '~'                 deslocar, e ir ao estado 53
+
+    variable_declaration     ir ao estado 54
+    expression_list          ir ao estado 55
+    if_statement             ir ao estado 58
+    goto_statement           ir ao estado 59
+    function_call            ir ao estado 60
+    function_call_statement  ir ao estado 61
+    return_statement         ir ao estado 62
+    enforce_statement        ir ao estado 63
+    skip_statement           ir ao estado 64
+    abortif_statement        ir ao estado 65
+    start_thread_statement   ir ao estado 66
+    end_thread_statement     ir ao estado 67
+    sync_statement           ir ao estado 68
+    atomic_begin_statement   ir ao estado 69
+    atomic_end_statement     ir ao estado 70
+    dead_statement           ir ao estado 71
+    statement                ir ao estado 89
+    decl_statement           ir ao estado 73
+    assignment_statement     ir ao estado 74
+    labeled_statement        ir ao estado 75
+    label                    ir ao estado 76
+    function_name            ir ao estado 77
+    variable_name            ir ao estado 78
+    expression               ir ao estado 79
+    primary_expression       ir ao estado 80
+    unary_expression         ir ao estado 81
+
+
+estado 40
+
+   44 end_thread_statement: END_THREAD_Token .
+
+    $padrão  reduzir usando a regra 44 (end_thread_statement)
+
+
+estado 41
+
+   45 sync_statement: SYNC_Token . IDENTIFIER_Token
+
+    IDENTIFIER_Token  deslocar, e ir ao estado 90
+
+
+estado 42
+
+   46 atomic_begin_statement: ATOMIC_BEGIN_Token .
+
+    $padrão  reduzir usando a regra 46 (atomic_begin_statement)
+
+
+estado 43
+
+   47 atomic_end_statement: ATOMIC_END_Token .
+
+    $padrão  reduzir usando a regra 47 (atomic_end_statement)
+
+
+estado 44
+
+   48 dead_statement: DEAD_Token . expression_list
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    expression_list     ir ao estado 91
+    variable_name       ir ao estado 78
+    expression          ir ao estado 79
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 45
+
+   38 return_statement: RETURN_Token . expression_list
+   39                 | RETURN_Token .
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    $padrão  reduzir usando a regra 39 (return_statement)
+
+    expression_list     ir ao estado 92
+    variable_name       ir ao estado 78
+    expression          ir ao estado 79
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 46
+
+   85 primary_expression: SCHOOSE_Token . '[' expression_list ']'
+
+    '['  deslocar, e ir ao estado 93
+
+
+estado 47
+
+   72 label: IDENTIFIER_Token .
+   73 function_name: IDENTIFIER_Token .
+   74 variable_name: IDENTIFIER_Token .
+
+    '('       reduzir usando a regra 73 (function_name)
+    ':'       reduzir usando a regra 72 (label)
+    $padrão  reduzir usando a regra 74 (variable_name)
+
+
+estado 48
+
+   86 primary_expression: NUMBER_Token .
+
+    $padrão  reduzir usando a regra 86 (primary_expression)
+
+
+estado 49
+
+   90 unary_expression: TICK_Token . unary_expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 94
+
+
+estado 50
+
+   82 primary_expression: '(' . expression ')'
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 95
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 51
+
+   83 primary_expression: '*' .
+
+    $padrão  reduzir usando a regra 83 (primary_expression)
+
+
+estado 52
+
+   88 unary_expression: '!' . unary_expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 96
+
+
+estado 53
+
+   89 unary_expression: '~' . unary_expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 97
+
+
+estado 54
+
+   65 decl_statement: variable_declaration .
+
+    $padrão  reduzir usando a regra 65 (decl_statement)
+
+
+estado 55
+
+   10 expression_list: expression_list . ',' expression
+   69 assignment_statement: expression_list . ASSIGN_Token expression_list constrain_opt
+   70                     | expression_list . ASSIGN_Token function_call
+
+    ASSIGN_Token  deslocar, e ir ao estado 98
+    ','           deslocar, e ir ao estado 99
+
+
+estado 56
+
+   25 block_statement: BEGIN_Token statement_list . END_Token
+
+    END_Token  deslocar, e ir ao estado 100
+
+
+estado 57
+
+   27 statement_list: statement_list_rec . ';'
+   28               | statement_list_rec .
+   29 statement_list_rec: statement_list_rec . ';' statement
+
+    ';'  deslocar, e ir ao estado 101
+
+    $padrão  reduzir usando a regra 28 (statement_list)
+
+
+estado 58
+
+   56 statement: if_statement .
+
+    $padrão  reduzir usando a regra 56 (statement)
+
+
+estado 59
+
+   53 statement: goto_statement .
+
+    $padrão  reduzir usando a regra 53 (statement)
+
+
+estado 60
+
+   37 function_call_statement: function_call .
+
+    $padrão  reduzir usando a regra 37 (function_call_statement)
+
+
+estado 61
+
+   54 statement: function_call_statement .
+
+    $padrão  reduzir usando a regra 54 (statement)
+
+
+estado 62
+
+   55 statement: return_statement .
+
+    $padrão  reduzir usando a regra 55 (statement)
+
+
+estado 63
+
+   49 statement: enforce_statement .
+
+    $padrão  reduzir usando a regra 49 (statement)
+
+
+estado 64
+
+   51 statement: skip_statement .
+
+    $padrão  reduzir usando a regra 51 (statement)
+
+
+estado 65
+
+   50 statement: abortif_statement .
+
+    $padrão  reduzir usando a regra 50 (statement)
+
+
+estado 66
+
+   60 statement: start_thread_statement .
+
+    $padrão  reduzir usando a regra 60 (statement)
+
+
+estado 67
+
+   61 statement: end_thread_statement .
+
+    $padrão  reduzir usando a regra 61 (statement)
+
+
+estado 68
+
+   62 statement: sync_statement .
+
+    $padrão  reduzir usando a regra 62 (statement)
+
+
+estado 69
+
+   63 statement: atomic_begin_statement .
+
+    $padrão  reduzir usando a regra 63 (statement)
+
+
+estado 70
+
+   64 statement: atomic_end_statement .
+
+    $padrão  reduzir usando a regra 64 (statement)
+
+
+estado 71
+
+   52 statement: dead_statement .
+
+    $padrão  reduzir usando a regra 52 (statement)
+
+
+estado 72
+
+   30 statement_list_rec: statement .
+
+    $padrão  reduzir usando a regra 30 (statement_list_rec)
+
+
+estado 73
+
+   59 statement: decl_statement .
+
+    $padrão  reduzir usando a regra 59 (statement)
+
+
+estado 74
+
+   58 statement: assignment_statement .
+
+    $padrão  reduzir usando a regra 58 (statement)
+
+
+estado 75
+
+   57 statement: labeled_statement .
+
+    $padrão  reduzir usando a regra 57 (statement)
+
+
+estado 76
+
+   71 labeled_statement: label . ':' statement
+
+    ':'  deslocar, e ir ao estado 102
+
+
+estado 77
+
+   36 function_call: function_name . '(' expression_list_opt ')'
+
+    '('  deslocar, e ir ao estado 103
+
+
+estado 78
+
+   84 primary_expression: variable_name .
+
+    $padrão  reduzir usando a regra 84 (primary_expression)
+
+
+estado 79
+
+    9 expression_list: expression .
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+
+    NEQ_Token      deslocar, e ir ao estado 104
+    EQ_Token       deslocar, e ir ao estado 105
+    IMPLIES_Token  deslocar, e ir ao estado 106
+    XOR_Token      deslocar, e ir ao estado 107
+    OR_Token       deslocar, e ir ao estado 108
+    AND_Token      deslocar, e ir ao estado 109
+
+    $padrão  reduzir usando a regra 9 (expression_list)
+
+
+estado 80
+
+   87 unary_expression: primary_expression .
+
+    $padrão  reduzir usando a regra 87 (unary_expression)
+
+
+estado 81
+
+   75 expression: unary_expression .
+
+    $padrão  reduzir usando a regra 75 (expression)
+
+
+estado 82
+
+   21 function_definition: dfs_opt type function_name $@1 argument_list function_body $@2 .
+
+    $padrão  reduzir usando a regra 21 (function_definition)
+
+
+estado 83
+
+   72 label: IDENTIFIER_Token .
+
+    $padrão  reduzir usando a regra 72 (label)
+
+
+estado 84
+
+   33 goto_statement: GOTO_Token label_list .
+   35 label_list: label_list . ',' label
+
+    ','  deslocar, e ir ao estado 110
+
+    $padrão  reduzir usando a regra 33 (goto_statement)
+
+
+estado 85
+
+   34 label_list: label .
+
+    $padrão  reduzir usando a regra 34 (label_list)
+
+
+estado 86
+
+   40 enforce_statement: ENFORCE_Token expression .
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+
+    NEQ_Token      deslocar, e ir ao estado 104
+    EQ_Token       deslocar, e ir ao estado 105
+    IMPLIES_Token  deslocar, e ir ao estado 106
+    XOR_Token      deslocar, e ir ao estado 107
+    OR_Token       deslocar, e ir ao estado 108
+    AND_Token      deslocar, e ir ao estado 109
+
+    $padrão  reduzir usando a regra 40 (enforce_statement)
+
+
+estado 87
+
+   31 if_statement: IF_Token expression . THEN_Token statement_list FI_Token
+   32             | IF_Token expression . THEN_Token statement_list ELSE_Token statement_list FI_Token
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+
+    THEN_Token     deslocar, e ir ao estado 111
+    NEQ_Token      deslocar, e ir ao estado 104
+    EQ_Token       deslocar, e ir ao estado 105
+    IMPLIES_Token  deslocar, e ir ao estado 106
+    XOR_Token      deslocar, e ir ao estado 107
+    OR_Token       deslocar, e ir ao estado 108
+    AND_Token      deslocar, e ir ao estado 109
+
+
+estado 88
+
+   42 abortif_statement: ABORTIF_Token expression .
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+
+    NEQ_Token      deslocar, e ir ao estado 104
+    EQ_Token       deslocar, e ir ao estado 105
+    IMPLIES_Token  deslocar, e ir ao estado 106
+    XOR_Token      deslocar, e ir ao estado 107
+    OR_Token       deslocar, e ir ao estado 108
+    AND_Token      deslocar, e ir ao estado 109
+
+    $padrão  reduzir usando a regra 42 (abortif_statement)
+
+
+estado 89
+
+   43 start_thread_statement: START_THREAD_Token statement .
+
+    $padrão  reduzir usando a regra 43 (start_thread_statement)
+
+
+estado 90
+
+   45 sync_statement: SYNC_Token IDENTIFIER_Token .
+
+    $padrão  reduzir usando a regra 45 (sync_statement)
+
+
+estado 91
+
+   10 expression_list: expression_list . ',' expression
+   48 dead_statement: DEAD_Token expression_list .
+
+    ','  deslocar, e ir ao estado 99
+
+    $padrão  reduzir usando a regra 48 (dead_statement)
+
+
+estado 92
+
+   10 expression_list: expression_list . ',' expression
+   38 return_statement: RETURN_Token expression_list .
+
+    ','  deslocar, e ir ao estado 99
+
+    $padrão  reduzir usando a regra 38 (return_statement)
+
+
+estado 93
+
+   85 primary_expression: SCHOOSE_Token '[' . expression_list ']'
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    expression_list     ir ao estado 112
+    variable_name       ir ao estado 78
+    expression          ir ao estado 79
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 94
+
+   90 unary_expression: TICK_Token unary_expression .
+
+    $padrão  reduzir usando a regra 90 (unary_expression)
+
+
+estado 95
+
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+   82 primary_expression: '(' expression . ')'
+
+    NEQ_Token      deslocar, e ir ao estado 104
+    EQ_Token       deslocar, e ir ao estado 105
+    IMPLIES_Token  deslocar, e ir ao estado 106
+    XOR_Token      deslocar, e ir ao estado 107
+    OR_Token       deslocar, e ir ao estado 108
+    AND_Token      deslocar, e ir ao estado 109
+    ')'            deslocar, e ir ao estado 113
+
+
+estado 96
+
+   88 unary_expression: '!' unary_expression .
+
+    $padrão  reduzir usando a regra 88 (unary_expression)
+
+
+estado 97
+
+   89 unary_expression: '~' unary_expression .
+
+    $padrão  reduzir usando a regra 89 (unary_expression)
+
+
+estado 98
+
+   69 assignment_statement: expression_list ASSIGN_Token . expression_list constrain_opt
+   70                     | expression_list ASSIGN_Token . function_call
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 114
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    expression_list     ir ao estado 115
+    function_call       ir ao estado 116
+    function_name       ir ao estado 77
+    variable_name       ir ao estado 78
+    expression          ir ao estado 79
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 99
+
+   10 expression_list: expression_list ',' . expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 117
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 100
+
+   25 block_statement: BEGIN_Token statement_list END_Token .
+
+    $padrão  reduzir usando a regra 25 (block_statement)
+
+
+estado 101
+
+   27 statement_list: statement_list_rec ';' .
+   29 statement_list_rec: statement_list_rec ';' . statement
+
+    DECL_Token          deslocar, e ir ao estado 1
+    GOTO_Token          deslocar, e ir ao estado 34
+    ENFORCE_Token       deslocar, e ir ao estado 35
+    IF_Token            deslocar, e ir ao estado 36
+    SKIP_Token          deslocar, e ir ao estado 37
+    ABORTIF_Token       deslocar, e ir ao estado 38
+    START_THREAD_Token  deslocar, e ir ao estado 39
+    END_THREAD_Token    deslocar, e ir ao estado 40
+    SYNC_Token          deslocar, e ir ao estado 41
+    ATOMIC_BEGIN_Token  deslocar, e ir ao estado 42
+    ATOMIC_END_Token    deslocar, e ir ao estado 43
+    DEAD_Token          deslocar, e ir ao estado 44
+    RETURN_Token        deslocar, e ir ao estado 45
+    SCHOOSE_Token       deslocar, e ir ao estado 46
+    IDENTIFIER_Token    deslocar, e ir ao estado 47
+    NUMBER_Token        deslocar, e ir ao estado 48
+    TICK_Token          deslocar, e ir ao estado 49
+    '('                 deslocar, e ir ao estado 50
+    '*'                 deslocar, e ir ao estado 51
+    '!'                 deslocar, e ir ao estado 52
+    '~'                 deslocar, e ir ao estado 53
+
+    $padrão  reduzir usando a regra 27 (statement_list)
+
+    variable_declaration     ir ao estado 54
+    expression_list          ir ao estado 55
+    if_statement             ir ao estado 58
+    goto_statement           ir ao estado 59
+    function_call            ir ao estado 60
+    function_call_statement  ir ao estado 61
+    return_statement         ir ao estado 62
+    enforce_statement        ir ao estado 63
+    skip_statement           ir ao estado 64
+    abortif_statement        ir ao estado 65
+    start_thread_statement   ir ao estado 66
+    end_thread_statement     ir ao estado 67
+    sync_statement           ir ao estado 68
+    atomic_begin_statement   ir ao estado 69
+    atomic_end_statement     ir ao estado 70
+    dead_statement           ir ao estado 71
+    statement                ir ao estado 118
+    decl_statement           ir ao estado 73
+    assignment_statement     ir ao estado 74
+    labeled_statement        ir ao estado 75
+    label                    ir ao estado 76
+    function_name            ir ao estado 77
+    variable_name            ir ao estado 78
+    expression               ir ao estado 79
+    primary_expression       ir ao estado 80
+    unary_expression         ir ao estado 81
+
+
+estado 102
+
+   71 labeled_statement: label ':' . statement
+
+    DECL_Token          deslocar, e ir ao estado 1
+    GOTO_Token          deslocar, e ir ao estado 34
+    ENFORCE_Token       deslocar, e ir ao estado 35
+    IF_Token            deslocar, e ir ao estado 36
+    SKIP_Token          deslocar, e ir ao estado 37
+    ABORTIF_Token       deslocar, e ir ao estado 38
+    START_THREAD_Token  deslocar, e ir ao estado 39
+    END_THREAD_Token    deslocar, e ir ao estado 40
+    SYNC_Token          deslocar, e ir ao estado 41
+    ATOMIC_BEGIN_Token  deslocar, e ir ao estado 42
+    ATOMIC_END_Token    deslocar, e ir ao estado 43
+    DEAD_Token          deslocar, e ir ao estado 44
+    RETURN_Token        deslocar, e ir ao estado 45
+    SCHOOSE_Token       deslocar, e ir ao estado 46
+    IDENTIFIER_Token    deslocar, e ir ao estado 47
+    NUMBER_Token        deslocar, e ir ao estado 48
+    TICK_Token          deslocar, e ir ao estado 49
+    '('                 deslocar, e ir ao estado 50
+    '*'                 deslocar, e ir ao estado 51
+    '!'                 deslocar, e ir ao estado 52
+    '~'                 deslocar, e ir ao estado 53
+
+    variable_declaration     ir ao estado 54
+    expression_list          ir ao estado 55
+    if_statement             ir ao estado 58
+    goto_statement           ir ao estado 59
+    function_call            ir ao estado 60
+    function_call_statement  ir ao estado 61
+    return_statement         ir ao estado 62
+    enforce_statement        ir ao estado 63
+    skip_statement           ir ao estado 64
+    abortif_statement        ir ao estado 65
+    start_thread_statement   ir ao estado 66
+    end_thread_statement     ir ao estado 67
+    sync_statement           ir ao estado 68
+    atomic_begin_statement   ir ao estado 69
+    atomic_end_statement     ir ao estado 70
+    dead_statement           ir ao estado 71
+    statement                ir ao estado 119
+    decl_statement           ir ao estado 73
+    assignment_statement     ir ao estado 74
+    labeled_statement        ir ao estado 75
+    label                    ir ao estado 76
+    function_name            ir ao estado 77
+    variable_name            ir ao estado 78
+    expression               ir ao estado 79
+    primary_expression       ir ao estado 80
+    unary_expression         ir ao estado 81
+
+
+estado 103
+
+   36 function_call: function_name '(' . expression_list_opt ')'
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    $padrão  reduzir usando a regra 13 (expression_list_opt)
+
+    expression_list      ir ao estado 120
+    expression_list_opt  ir ao estado 121
+    variable_name        ir ao estado 78
+    expression           ir ao estado 79
+    primary_expression   ir ao estado 80
+    unary_expression     ir ao estado 81
+
+
+estado 104
+
+   81 expression: expression NEQ_Token . expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 122
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 105
+
+   80 expression: expression EQ_Token . expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 123
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 106
+
+   76 expression: expression IMPLIES_Token . expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 124
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 107
+
+   79 expression: expression XOR_Token . expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 125
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 108
+
+   78 expression: expression OR_Token . expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 126
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 109
+
+   77 expression: expression AND_Token . expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 127
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 110
+
+   35 label_list: label_list ',' . label
+
+    IDENTIFIER_Token  deslocar, e ir ao estado 83
+
+    label  ir ao estado 128
+
+
+estado 111
+
+   31 if_statement: IF_Token expression THEN_Token . statement_list FI_Token
+   32             | IF_Token expression THEN_Token . statement_list ELSE_Token statement_list FI_Token
+
+    DECL_Token          deslocar, e ir ao estado 1
+    GOTO_Token          deslocar, e ir ao estado 34
+    ENFORCE_Token       deslocar, e ir ao estado 35
+    IF_Token            deslocar, e ir ao estado 36
+    SKIP_Token          deslocar, e ir ao estado 37
+    ABORTIF_Token       deslocar, e ir ao estado 38
+    START_THREAD_Token  deslocar, e ir ao estado 39
+    END_THREAD_Token    deslocar, e ir ao estado 40
+    SYNC_Token          deslocar, e ir ao estado 41
+    ATOMIC_BEGIN_Token  deslocar, e ir ao estado 42
+    ATOMIC_END_Token    deslocar, e ir ao estado 43
+    DEAD_Token          deslocar, e ir ao estado 44
+    RETURN_Token        deslocar, e ir ao estado 45
+    SCHOOSE_Token       deslocar, e ir ao estado 46
+    IDENTIFIER_Token    deslocar, e ir ao estado 47
+    NUMBER_Token        deslocar, e ir ao estado 48
+    TICK_Token          deslocar, e ir ao estado 49
+    '('                 deslocar, e ir ao estado 50
+    '*'                 deslocar, e ir ao estado 51
+    '!'                 deslocar, e ir ao estado 52
+    '~'                 deslocar, e ir ao estado 53
+
+    $padrão  reduzir usando a regra 26 (statement_list)
+
+    variable_declaration     ir ao estado 54
+    expression_list          ir ao estado 55
+    statement_list           ir ao estado 129
+    statement_list_rec       ir ao estado 57
+    if_statement             ir ao estado 58
+    goto_statement           ir ao estado 59
+    function_call            ir ao estado 60
+    function_call_statement  ir ao estado 61
+    return_statement         ir ao estado 62
+    enforce_statement        ir ao estado 63
+    skip_statement           ir ao estado 64
+    abortif_statement        ir ao estado 65
+    start_thread_statement   ir ao estado 66
+    end_thread_statement     ir ao estado 67
+    sync_statement           ir ao estado 68
+    atomic_begin_statement   ir ao estado 69
+    atomic_end_statement     ir ao estado 70
+    dead_statement           ir ao estado 71
+    statement                ir ao estado 72
+    decl_statement           ir ao estado 73
+    assignment_statement     ir ao estado 74
+    labeled_statement        ir ao estado 75
+    label                    ir ao estado 76
+    function_name            ir ao estado 77
+    variable_name            ir ao estado 78
+    expression               ir ao estado 79
+    primary_expression       ir ao estado 80
+    unary_expression         ir ao estado 81
+
+
+estado 112
+
+   10 expression_list: expression_list . ',' expression
+   85 primary_expression: SCHOOSE_Token '[' expression_list . ']'
+
+    ','  deslocar, e ir ao estado 99
+    ']'  deslocar, e ir ao estado 130
+
+
+estado 113
+
+   82 primary_expression: '(' expression ')' .
+
+    $padrão  reduzir usando a regra 82 (primary_expression)
+
+
+estado 114
+
+   73 function_name: IDENTIFIER_Token .
+   74 variable_name: IDENTIFIER_Token .
+
+    '('       reduzir usando a regra 73 (function_name)
+    $padrão  reduzir usando a regra 74 (variable_name)
+
+
+estado 115
+
+   10 expression_list: expression_list . ',' expression
+   69 assignment_statement: expression_list ASSIGN_Token expression_list . constrain_opt
+
+    CONSTRAIN_Token  deslocar, e ir ao estado 131
+    ','              deslocar, e ir ao estado 99
+
+    $padrão  reduzir usando a regra 66 (constrain_opt)
+
+    constrain_opt  ir ao estado 132
+    constrain      ir ao estado 133
+
+
+estado 116
+
+   70 assignment_statement: expression_list ASSIGN_Token function_call .
+
+    $padrão  reduzir usando a regra 70 (assignment_statement)
+
+
+estado 117
+
+   10 expression_list: expression_list ',' expression .
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+
+    NEQ_Token      deslocar, e ir ao estado 104
+    EQ_Token       deslocar, e ir ao estado 105
+    IMPLIES_Token  deslocar, e ir ao estado 106
+    XOR_Token      deslocar, e ir ao estado 107
+    OR_Token       deslocar, e ir ao estado 108
+    AND_Token      deslocar, e ir ao estado 109
+
+    $padrão  reduzir usando a regra 10 (expression_list)
+
+
+estado 118
+
+   29 statement_list_rec: statement_list_rec ';' statement .
+
+    $padrão  reduzir usando a regra 29 (statement_list_rec)
+
+
+estado 119
+
+   71 labeled_statement: label ':' statement .
+
+    $padrão  reduzir usando a regra 71 (labeled_statement)
+
+
+estado 120
+
+   10 expression_list: expression_list . ',' expression
+   14 expression_list_opt: expression_list .
+
+    ','  deslocar, e ir ao estado 99
+
+    $padrão  reduzir usando a regra 14 (expression_list_opt)
+
+
+estado 121
+
+   36 function_call: function_name '(' expression_list_opt . ')'
+
+    ')'  deslocar, e ir ao estado 134
+
+
+estado 122
+
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+   81           | expression NEQ_Token expression .
+
+    NEQ_Token      deslocar, e ir ao estado 104
+    EQ_Token       deslocar, e ir ao estado 105
+    IMPLIES_Token  deslocar, e ir ao estado 106
+    XOR_Token      deslocar, e ir ao estado 107
+    OR_Token       deslocar, e ir ao estado 108
+    AND_Token      deslocar, e ir ao estado 109
+
+    $padrão  reduzir usando a regra 81 (expression)
+
+
+estado 123
+
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   80           | expression EQ_Token expression .
+   81           | expression . NEQ_Token expression
+
+    NEQ_Token      deslocar, e ir ao estado 104
+    EQ_Token       deslocar, e ir ao estado 105
+    IMPLIES_Token  deslocar, e ir ao estado 106
+    XOR_Token      deslocar, e ir ao estado 107
+    OR_Token       deslocar, e ir ao estado 108
+    AND_Token      deslocar, e ir ao estado 109
+
+    $padrão  reduzir usando a regra 80 (expression)
+
+
+estado 124
+
+   76 expression: expression . IMPLIES_Token expression
+   76           | expression IMPLIES_Token expression .
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+
+    NEQ_Token      deslocar, e ir ao estado 104
+    EQ_Token       deslocar, e ir ao estado 105
+    IMPLIES_Token  deslocar, e ir ao estado 106
+    XOR_Token      deslocar, e ir ao estado 107
+    OR_Token       deslocar, e ir ao estado 108
+    AND_Token      deslocar, e ir ao estado 109
+
+    $padrão  reduzir usando a regra 76 (expression)
+
+
+estado 125
+
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   79           | expression XOR_Token expression .
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+
+    OR_Token   deslocar, e ir ao estado 108
+    AND_Token  deslocar, e ir ao estado 109
+
+    $padrão  reduzir usando a regra 79 (expression)
+
+
+estado 126
+
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   78           | expression OR_Token expression .
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+
+    AND_Token  deslocar, e ir ao estado 109
+
+    $padrão  reduzir usando a regra 78 (expression)
+
+
+estado 127
+
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   77           | expression AND_Token expression .
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+
+    $padrão  reduzir usando a regra 77 (expression)
+
+
+estado 128
+
+   35 label_list: label_list ',' label .
+
+    $padrão  reduzir usando a regra 35 (label_list)
+
+
+estado 129
+
+   31 if_statement: IF_Token expression THEN_Token statement_list . FI_Token
+   32             | IF_Token expression THEN_Token statement_list . ELSE_Token statement_list FI_Token
+
+    ELSE_Token  deslocar, e ir ao estado 135
+    FI_Token    deslocar, e ir ao estado 136
+
+
+estado 130
+
+   85 primary_expression: SCHOOSE_Token '[' expression_list ']' .
+
+    $padrão  reduzir usando a regra 85 (primary_expression)
+
+
+estado 131
+
+   68 constrain: CONSTRAIN_Token . expression
+
+    SCHOOSE_Token     deslocar, e ir ao estado 46
+    IDENTIFIER_Token  deslocar, e ir ao estado 9
+    NUMBER_Token      deslocar, e ir ao estado 48
+    TICK_Token        deslocar, e ir ao estado 49
+    '('               deslocar, e ir ao estado 50
+    '*'               deslocar, e ir ao estado 51
+    '!'               deslocar, e ir ao estado 52
+    '~'               deslocar, e ir ao estado 53
+
+    variable_name       ir ao estado 78
+    expression          ir ao estado 137
+    primary_expression  ir ao estado 80
+    unary_expression    ir ao estado 81
+
+
+estado 132
+
+   69 assignment_statement: expression_list ASSIGN_Token expression_list constrain_opt .
+
+    $padrão  reduzir usando a regra 69 (assignment_statement)
+
+
+estado 133
+
+   67 constrain_opt: constrain .
+
+    $padrão  reduzir usando a regra 67 (constrain_opt)
+
+
+estado 134
+
+   36 function_call: function_name '(' expression_list_opt ')' .
+
+    $padrão  reduzir usando a regra 36 (function_call)
+
+
+estado 135
+
+   32 if_statement: IF_Token expression THEN_Token statement_list ELSE_Token . statement_list FI_Token
+
+    DECL_Token          deslocar, e ir ao estado 1
+    GOTO_Token          deslocar, e ir ao estado 34
+    ENFORCE_Token       deslocar, e ir ao estado 35
+    IF_Token            deslocar, e ir ao estado 36
+    SKIP_Token          deslocar, e ir ao estado 37
+    ABORTIF_Token       deslocar, e ir ao estado 38
+    START_THREAD_Token  deslocar, e ir ao estado 39
+    END_THREAD_Token    deslocar, e ir ao estado 40
+    SYNC_Token          deslocar, e ir ao estado 41
+    ATOMIC_BEGIN_Token  deslocar, e ir ao estado 42
+    ATOMIC_END_Token    deslocar, e ir ao estado 43
+    DEAD_Token          deslocar, e ir ao estado 44
+    RETURN_Token        deslocar, e ir ao estado 45
+    SCHOOSE_Token       deslocar, e ir ao estado 46
+    IDENTIFIER_Token    deslocar, e ir ao estado 47
+    NUMBER_Token        deslocar, e ir ao estado 48
+    TICK_Token          deslocar, e ir ao estado 49
+    '('                 deslocar, e ir ao estado 50
+    '*'                 deslocar, e ir ao estado 51
+    '!'                 deslocar, e ir ao estado 52
+    '~'                 deslocar, e ir ao estado 53
+
+    $padrão  reduzir usando a regra 26 (statement_list)
+
+    variable_declaration     ir ao estado 54
+    expression_list          ir ao estado 55
+    statement_list           ir ao estado 138
+    statement_list_rec       ir ao estado 57
+    if_statement             ir ao estado 58
+    goto_statement           ir ao estado 59
+    function_call            ir ao estado 60
+    function_call_statement  ir ao estado 61
+    return_statement         ir ao estado 62
+    enforce_statement        ir ao estado 63
+    skip_statement           ir ao estado 64
+    abortif_statement        ir ao estado 65
+    start_thread_statement   ir ao estado 66
+    end_thread_statement     ir ao estado 67
+    sync_statement           ir ao estado 68
+    atomic_begin_statement   ir ao estado 69
+    atomic_end_statement     ir ao estado 70
+    dead_statement           ir ao estado 71
+    statement                ir ao estado 72
+    decl_statement           ir ao estado 73
+    assignment_statement     ir ao estado 74
+    labeled_statement        ir ao estado 75
+    label                    ir ao estado 76
+    function_name            ir ao estado 77
+    variable_name            ir ao estado 78
+    expression               ir ao estado 79
+    primary_expression       ir ao estado 80
+    unary_expression         ir ao estado 81
+
+
+estado 136
+
+   31 if_statement: IF_Token expression THEN_Token statement_list FI_Token .
+
+    $padrão  reduzir usando a regra 31 (if_statement)
+
+
+estado 137
+
+   68 constrain: CONSTRAIN_Token expression .
+   76 expression: expression . IMPLIES_Token expression
+   77           | expression . AND_Token expression
+   78           | expression . OR_Token expression
+   79           | expression . XOR_Token expression
+   80           | expression . EQ_Token expression
+   81           | expression . NEQ_Token expression
+
+    NEQ_Token      deslocar, e ir ao estado 104
+    EQ_Token       deslocar, e ir ao estado 105
+    IMPLIES_Token  deslocar, e ir ao estado 106
+    XOR_Token      deslocar, e ir ao estado 107
+    OR_Token       deslocar, e ir ao estado 108
+    AND_Token      deslocar, e ir ao estado 109
+
+    $padrão  reduzir usando a regra 68 (constrain)
+
+
+estado 138
+
+   32 if_statement: IF_Token expression THEN_Token statement_list ELSE_Token statement_list . FI_Token
+
+    FI_Token  deslocar, e ir ao estado 139
+
+
+estado 139
+
+   32 if_statement: IF_Token expression THEN_Token statement_list ELSE_Token statement_list FI_Token .
+
+    $padrão  reduzir usando a regra 32 (if_statement)
