@@ -79,7 +79,7 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
       loop_bound_exceeded(state, new_guard, node_id);
 
       // reset unwinding
-      state.unwind_map[state.source] = unwind;
+      state.unwind_map[state.source] = 0;
 
       // next instruction
       state.source.pc++;
