@@ -1,0 +1,103 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 9 iteration 1 file main.c line 5 function f
+Unwinding loop 9 iteration 2 file main.c line 5 function f
+Unwinding loop 9 iteration 3 file main.c line 5 function f
+Unwinding loop 10 iteration 1 file main.c line 13 function main
+Unwinding loop 10 iteration 2 file main.c line 13 function main
+Unwinding loop 10 iteration 3 file main.c line 13 function main
+Unwinding loop 10 iteration 4 file main.c line 13 function main
+Unwinding loop 10 iteration 5 file main.c line 13 function main
+Unwinding loop 10 iteration 6 file main.c line 13 function main
+Unwinding loop 10 iteration 7 file main.c line 13 function main
+Unwinding loop 10 iteration 8 file main.c line 13 function main
+Unwinding loop 10 iteration 9 file main.c line 13 function main
+Unwinding loop 10 iteration 10 file main.c line 13 function main
+Unwinding loop 11 iteration 1 file main.c line 16 function main
+Unwinding loop 11 iteration 2 file main.c line 16 function main
+Unwinding loop 11 iteration 3 file main.c line 16 function main
+Unwinding loop 11 iteration 4 file main.c line 16 function main
+Unwinding loop 11 iteration 5 file main.c line 16 function main
+Unwinding loop 11 iteration 6 file main.c line 16 function main
+Unwinding loop 11 iteration 7 file main.c line 16 function main
+Unwinding loop 11 iteration 8 file main.c line 16 function main
+Unwinding loop 11 iteration 9 file main.c line 16 function main
+Unwinding loop 11 iteration 10 file main.c line 16 function main
+Unwinding loop 9 iteration 1 file main.c line 5 function f
+Unwinding loop 9 iteration 2 file main.c line 5 function f
+Unwinding loop 9 iteration 3 file main.c line 5 function f
+Unwinding loop 9 iteration 4 file main.c line 5 function f
+Unwinding loop 9 iteration 5 file main.c line 5 function f
+Unwinding loop 9 iteration 6 file main.c line 5 function f
+Unwinding loop 9 iteration 7 file main.c line 5 function f
+Unwinding loop 9 iteration 8 file main.c line 5 function f
+Unwinding loop 9 iteration 9 file main.c line 5 function f
+Unwinding loop 9 iteration 10 file main.c line 5 function f
+Unwinding loop 12 iteration 1 file main.c line 19 function main
+Unwinding loop 12 iteration 2 file main.c line 19 function main
+Unwinding loop 12 iteration 3 file main.c line 19 function main
+Unwinding loop 12 iteration 4 file main.c line 19 function main
+Unwinding loop 12 iteration 5 file main.c line 19 function main
+Unwinding loop 12 iteration 6 file main.c line 19 function main
+Unwinding loop 12 iteration 7 file main.c line 19 function main
+Unwinding loop 12 iteration 8 file main.c line 19 function main
+Unwinding loop 12 iteration 9 file main.c line 19 function main
+Unwinding loop 12 iteration 10 file main.c line 19 function main
+size of program expression: 315 assignments
+Generated 227 VCC(s), 19 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.038s
+Building error trace
+
+Counterexample:
+
+State 5 file main.c line 5 function f thread 0
+----------------------------------------------------
+  main::main::1::a={ 97, 0, 0, 10, 0, 11, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+
+State 8 file main.c line 5 function f thread 0
+----------------------------------------------------
+  main::main::1::a={ 97, 115, 0, 10, 0, 11, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+
+State 11 file main.c line 5 function f thread 0
+----------------------------------------------------
+  main::main::1::a={ 97, 115, 100, 10, 0, 11, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+
+State 16 file main.c line 13 function main thread 0
+----------------------------------------------------
+  <built-in-library>::strlen::1::len=0 (00000000000000000000000000000000)
+
+State 18 file main.c line 13 function main thread 0
+----------------------------------------------------
+  <built-in-library>::strlen::1::len=1 (00000000000000000000000000000001)
+
+State 21 file main.c line 13 function main thread 0
+----------------------------------------------------
+  <built-in-library>::strlen::1::len=2 (00000000000000000000000000000010)
+
+State 24 file main.c line 13 function main thread 0
+----------------------------------------------------
+  <built-in-library>::strlen::1::len=3 (00000000000000000000000000000011)
+
+State 27 file main.c line 13 function main thread 0
+----------------------------------------------------
+  <built-in-library>::strlen::1::len=4 (00000000000000000000000000000100)
+
+State 30 file main.c line 13 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_strlen$1=4 (00000000000000000000000000000100)
+
+Violated property:
+  file main.c line 13 function main
+  assertion
+  return_value_strlen$1 == 3
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

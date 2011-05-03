@@ -1,0 +1,31 @@
+file app.c: Parsing
+file picosat.c: Parsing
+file main.c: Parsing
+Converting
+Type-checking app
+file app.c line 633 function picosat_main: warning: assignment in if condition
+file app.c line 706 function picosat_main: warning: assignment in if condition
+Type-checking main
+Type-checking picosat
+file picosat.c line 936 function resize: warning: assignment in if condition
+file picosat.c line 944 function resize: warning: assignment in if condition
+file picosat.c line 4535 function collect_clauses: warning: assignment in if condition
+file picosat.c line 4541 function collect_clauses: warning: assignment in if condition
+file picosat.c line 6807 function picosat_message: warning: conversion from `const signed char *' to `void *': disregarding const
+Generating GOTO Program
+Function Pointer Removal
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 15 iteration 1 file picosat.c line 6731 function picosat_print
+Unwinding loop 16 iteration 1 file picosat.c line 6727 function picosat_print
+Unwinding loop 19 iteration 1 file picosat.c line 6766 function picosat_print
+Unwinding loop 20 iteration 1 file picosat.c line 6762 function picosat_print
+size of program expression: 325 assignments
+Generated 23 VCC(s), 20 remaining after simplification
+Encoding remaining VCC(s) using bit-vector arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.005s
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

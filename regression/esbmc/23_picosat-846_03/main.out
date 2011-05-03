@@ -1,0 +1,36 @@
+file app.c: Parsing
+file picosat.c: Parsing
+file main.c: Parsing
+Converting
+Type-checking app
+file app.c line 633 function picosat_main: warning: assignment in if condition
+file app.c line 706 function picosat_main: warning: assignment in if condition
+Type-checking main
+Type-checking picosat
+file picosat.c line 936 function resize: warning: assignment in if condition
+file picosat.c line 944 function resize: warning: assignment in if condition
+file picosat.c line 4535 function collect_clauses: warning: assignment in if condition
+file picosat.c line 4541 function collect_clauses: warning: assignment in if condition
+file picosat.c line 6807 function picosat_message: warning: conversion from `const signed char *' to `void *': disregarding const
+Generating GOTO Program
+Function Pointer Removal
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 211 assignments
+Generated 6 VCC(s), 6 remaining after simplification
+Encoding remaining VCC(s) using bit-vector arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.006s
+Building error trace
+
+Counterexample:
+
+Violated property:
+  file <builtin-library> line 344 function fputs
+  dereference failure: NULL pointer
+  !(SAME-OBJECT(stream, NULL))
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

@@ -1,0 +1,226 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 0 iteration 1 file main.c line 16 function main
+Unwinding loop 1 iteration 1 file main.c line 21 function main
+size of program expression: 38 assignments
+Generated 8 VCC(s), 6 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+warning: ignoring with
+  * type: array
+      * subtype: signedbv
+          * width: 8
+      * size: *
+          * type: unsignedbv
+              * width: 32
+          * operands: 
+            0: typecast
+                * type: unsignedbv
+                    * width: 32
+                * operands: 
+                  0: constant
+                      * type: signedbv
+                          * width: 32
+                      * value: 00000000000000000000000000000010
+                      * #location: 
+                        * file: main.c
+                        * line: 7
+                        * function: main
+            1: constant
+                * type: unsignedbv
+                    * width: 32
+                * value: 00000000000000000000000000000100
+                * #c_sizeof_type: signedbv
+                    * width: 32
+      * #dynamic: 1
+  * operands: 
+    0: symbol
+        * identifier: symex_dynamic::dynamic_178759361_array&0#0
+        * type: array
+            * subtype: signedbv
+                * width: 8
+            * size: *
+                * type: unsignedbv
+                    * width: 32
+                * operands: 
+                  0: typecast
+                      * type: unsignedbv
+                          * width: 32
+                      * operands: 
+                        0: constant
+                            * type: signedbv
+                                * width: 32
+                            * value: 00000000000000000000000000000010
+                            * #location: 
+                              * file: main.c
+                              * line: 7
+                              * function: main
+                  1: constant
+                      * type: unsignedbv
+                          * width: 32
+                      * value: 00000000000000000000000000000100
+                      * #c_sizeof_type: signedbv
+                          * width: 32
+            * #dynamic: 1
+    1: constant
+        * type: signedbv
+            * width: 32
+        * value: 00000000000000000000000000000000
+    2: byte_update_little_endian
+        * type: signedbv
+            * width: 8
+        * operands: 
+          0: index
+              * type: signedbv
+                  * width: 8
+              * operands: 
+                0: symbol
+                    * identifier: symex_dynamic::dynamic_178759361_array&0#0
+                    * type: array
+                        * subtype: signedbv
+                            * width: 8
+                        * size: *
+                            * type: unsignedbv
+                                * width: 32
+                            * operands: 
+                              0: typecast
+                                  * type: unsignedbv
+                                      * width: 32
+                                  * operands: 
+                                    0: constant
+                                        * type: signedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000000010
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 7
+                                          * function: main
+                              1: constant
+                                  * type: unsignedbv
+                                      * width: 32
+                                  * value: 00000000000000000000000000000100
+                                  * #c_sizeof_type: signedbv
+                                      * width: 32
+                        * #dynamic: 1
+                1: constant
+                    * type: signedbv
+                        * width: 32
+                    * value: 00000000000000000000000000000000
+          1: constant
+              * type: signedbv
+                  * width: 32
+              * value: 00000000000000000000000000000000
+          2: byte_extract_little_endian
+              * type: signedbv
+                  * width: 32
+              * operands: 
+                0: index
+                    * type: signedbv
+                        * width: 8
+                    * operands: 
+                      0: symbol
+                          * identifier: symex_dynamic::dynamic_178759361_array&0#0
+                          * type: array
+                              * subtype: signedbv
+                                  * width: 8
+                              * size: *
+                                  * type: unsignedbv
+                                      * width: 32
+                                  * operands: 
+                                    0: typecast
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * operands: 
+                                          0: constant
+                                              * type: signedbv
+                                                  * width: 32
+                                              * value: 00000000000000000000000000000010
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 7
+                                                * function: main
+                                    1: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000000100
+                                        * #c_sizeof_type: signedbv
+                                            * width: 32
+                              * #dynamic: 1
+                      1: constant
+                          * type: signedbv
+                              * width: 32
+                          * value: 00000000000000000000000000000000
+                1: symbol
+                    * identifier: c::main::main::1::i@1!0&0#4
+                    * type: signedbv
+                        * width: 32
+                    * #location: 
+                      * file: main.c
+                      * line: 22
+                      * function: main
+                    * #lvalue: 1
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.006s
+Building error trace
+
+Counterexample:
+
+State 1 file <built-in> line 12 thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 2 file <built-in> line 13 thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 3 file <built-in> line 19 thread 0
+----------------------------------------------------
+  __ESBMC_rounding_mode=0 (00000000000000000000000000000000)
+
+State 5 file main.c line 7 function main thread 0
+----------------------------------------------------
+  main::main::1::k=2 (00000000000000000000000000000010)
+
+State 7 file main.c line 11 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_malloc$1=(assignment removed)
+
+State 8 file main.c line 11 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 9 file main.c line 11 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 10 file main.c line 11 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 11 file main.c line 11 function main thread 0
+----------------------------------------------------
+  main::main::1::a=(assignment removed)
+
+State 12 file main.c line 16 function main thread 0
+----------------------------------------------------
+  main::main::1::i=0 (00000000000000000000000000000000)
+
+State 16  thread 0
+----------------------------------------------------
+  c::main::$tmp::tmp$2=0 (00000000000000000000000000000000)
+
+State 17 file main.c line 16 function main thread 0
+----------------------------------------------------
+  main::main::1::i=1 (00000000000000000000000000000001)
+
+Violated property:
+  file main.c line 16 function main
+  unwinding assertion loop 
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

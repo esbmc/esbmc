@@ -1,0 +1,19 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 0 iteration 1 file main.c line 78 function binary_search
+Unwinding loop 0 iteration 2 file main.c line 78 function binary_search
+Unwinding loop 0 iteration 3 file main.c line 78 function binary_search
+Unwinding loop 0 iteration 4 file main.c line 78 function binary_search
+size of program expression: 62 assignments
+Generated 25 VCC(s), 9 remaining after simplification
+Encoding remaining VCC(s) using bit-vector arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.001s
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

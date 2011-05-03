@@ -1,0 +1,650 @@
+file main.c: Parsing
+Converting
+Type-checking main
+file main.c line 21 function newAccount: function `c::malloc' is not declared
+file main.c line 27 function newAccount: function `c::exit' is not declared
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 1 iteration 1 file main.c line 36 function main
+Unwinding loop 1 iteration 2 file main.c line 36 function main
+Unwinding loop 1 iteration 3 file main.c line 36 function main
+Unwinding loop 1 iteration 4 file main.c line 36 function main
+Unwinding loop 1 iteration 5 file main.c line 36 function main
+size of program expression: 271 assignments
+Generated 60 VCC(s), 40 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.09s
+Building error trace
+
+Counterexample:
+
+State 1 file /usr/include/time.h line 276 thread 0
+----------------------------------------------------
+  __tzname=__tzname&0#1
+
+State 2 file /usr/include/time.h line 277 thread 0
+----------------------------------------------------
+  __daylight=0 (00000000000000000000000000000000)
+
+State 3 file /usr/include/time.h line 278 thread 0
+----------------------------------------------------
+  __timezone=0 (00000000000000000000000000000000)
+
+State 4 file /usr/include/time.h line 283 thread 0
+----------------------------------------------------
+  tzname=tzname&0#1
+
+State 5 file main.c line 16 thread 0
+----------------------------------------------------
+  main::accounts=accounts&0#1
+
+State 6 file <builtin-library> line 373 function pthread_mutex_lock thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_lock::1::unlocked=TRUE
+
+State 7 file <builtin-library> line 374 function pthread_mutex_lock thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_lock::1::deadlock_mutex=FALSE
+
+State 8 file <builtin-library> line 375 function pthread_mutex_lock thread 0
+----------------------------------------------------
+  trds_in_run=0 (00000000000000000000000000000000)
+
+State 9 file <builtin-library> line 375 function pthread_mutex_lock thread 0
+----------------------------------------------------
+  trds_count=0 (00000000000000000000000000000000)
+
+State 10 file <builtin-library> line 375 function pthread_mutex_lock thread 0
+----------------------------------------------------
+  count_lock=0 (00000000000000000000000000000000)
+
+State 11 file <builtin-library> line 648 function pthread_cond_wait thread 0
+----------------------------------------------------
+  count_wait=0 (00000000000000000000000000000000)
+
+State 12 file <builtin-library> line 649 function pthread_cond_wait thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_cond_wait::1::deadlock_wait=FALSE
+
+State 13 file <built-in> line 12 thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 14 file <built-in> line 13 thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 15 file <built-in> line 19 thread 0
+----------------------------------------------------
+  __ESBMC_rounding_mode=0 (00000000000000000000000000000000)
+
+State 16 file /usr/include/stdio.h line 165 thread 0
+----------------------------------------------------
+  stdin=NULL
+
+State 17 file /usr/include/stdio.h line 166 thread 0
+----------------------------------------------------
+  stdout=(assignment removed)
+
+State 18 file /usr/include/stdio.h line 167 thread 0
+----------------------------------------------------
+  stderr=(assignment removed)
+
+State 20 file main.c line 35 function main thread 0
+----------------------------------------------------
+  main::main::1::names={ 65, 66, 67, 68, 69 }
+
+State 21 file main.c line 36 function main thread 0
+----------------------------------------------------
+  main::main::1::i=0 (00000000000000000000000000000000)
+
+State 23 file main.c line 37 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_malloc$2=2 (00000000000000000000000000000010)
+
+State 25 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 26 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 27 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 28 file main.c line 37 function main thread 0
+----------------------------------------------------
+  main::accounts=accounts&0#2
+
+State 32 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_malloc$1=4 (00000000000000000000000000000100)
+
+State 34 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 35 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 36 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 37 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  main::newAccount::1::tmp=(assignment removed)
+
+State 38 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_malloc$2=6 (00000000000000000000000000000110)
+
+State 40 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 41 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 42 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 44 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466138_value={ .name=16, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+State 46 file main.c line 23 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466138_value={ .name=65, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+State 48 file main.c line 24 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466138_value={ .name=65, .amount=1l, .lock=irep("(\"nil\")") }
+
+State 51 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_init::mutex=(assignment removed)
+
+State 52 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_init::mutexattr=NULL
+
+State 54 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466139_value={ .__data={ .__lock=0, .__count=16, .__owner=16, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 56 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466139_value={ .__data={ .__lock=0, .__count=0, .__owner=16, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 58 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466139_value={ .__data={ .__lock=0, .__count=0, .__owner=0, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 59 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_pthread_mutex_init$3=0 (00000000000000000000000000000000)
+
+State 61 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  main::newAccount::1::err=0 (00000000000000000000000000000000)
+
+State 65  thread 0
+----------------------------------------------------
+  c::main::$tmp::tmp$1=0 (00000000000000000000000000000000)
+
+State 66 file main.c line 36 function main thread 0
+----------------------------------------------------
+  main::main::1::i=1 (00000000000000000000000000000001)
+
+State 69 file main.c line 37 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_malloc$2=8 (00000000000000000000000000001000)
+
+State 71 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 72 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 73 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 74 file main.c line 37 function main thread 0
+----------------------------------------------------
+  main::accounts=accounts&0#4
+
+State 78 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_malloc$1=10 (00000000000000000000000000001010)
+
+State 80 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 81 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 82 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 83 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  main::newAccount::1::tmp=(assignment removed)
+
+State 84 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_malloc$2=12 (00000000000000000000000000001100)
+
+State 86 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 87 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 88 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 90 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466141_value={ .name=16, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+State 92 file main.c line 23 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466141_value={ .name=66, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+State 94 file main.c line 24 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466141_value={ .name=66, .amount=1l, .lock=irep("(\"nil\")") }
+
+State 97 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_init::mutex=(assignment removed)
+
+State 98 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_init::mutexattr=(assignment removed)
+
+State 100 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466142_value={ .__data={ .__lock=0, .__count=16, .__owner=16, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 102 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466142_value={ .__data={ .__lock=0, .__count=0, .__owner=16, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 104 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466142_value={ .__data={ .__lock=0, .__count=0, .__owner=0, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 105 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_pthread_mutex_init$3=0 (00000000000000000000000000000000)
+
+State 107 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  main::newAccount::1::err=0 (00000000000000000000000000000000)
+
+State 111  thread 0
+----------------------------------------------------
+  c::main::$tmp::tmp$1=1 (00000000000000000000000000000001)
+
+State 112 file main.c line 36 function main thread 0
+----------------------------------------------------
+  main::main::1::i=2 (00000000000000000000000000000010)
+
+State 115 file main.c line 37 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_malloc$2=14 (00000000000000000000000000001110)
+
+State 117 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 118 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 119 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 120 file main.c line 37 function main thread 0
+----------------------------------------------------
+  main::accounts=accounts&0#6
+
+State 124 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_malloc$1=16 (00000000000000000000000000010000)
+
+State 126 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 127 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 128 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 129 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  main::newAccount::1::tmp=(assignment removed)
+
+State 130 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_malloc$2=18 (00000000000000000000000000010010)
+
+State 132 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 133 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 134 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 136 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466144_value={ .name=16, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+State 138 file main.c line 23 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466144_value={ .name=67, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+State 140 file main.c line 24 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466144_value={ .name=67, .amount=1l, .lock=irep("(\"nil\")") }
+
+State 143 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_init::mutex=(assignment removed)
+
+State 144 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_init::mutexattr=(assignment removed)
+
+State 146 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466145_value={ .__data={ .__lock=0, .__count=16, .__owner=16, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 148 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466145_value={ .__data={ .__lock=0, .__count=0, .__owner=16, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 150 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466145_value={ .__data={ .__lock=0, .__count=0, .__owner=0, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 151 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_pthread_mutex_init$3=0 (00000000000000000000000000000000)
+
+State 153 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  main::newAccount::1::err=0 (00000000000000000000000000000000)
+
+State 157  thread 0
+----------------------------------------------------
+  c::main::$tmp::tmp$1=2 (00000000000000000000000000000010)
+
+State 158 file main.c line 36 function main thread 0
+----------------------------------------------------
+  main::main::1::i=3 (00000000000000000000000000000011)
+
+State 161 file main.c line 37 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_malloc$2=20 (00000000000000000000000000010100)
+
+State 163 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 164 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 165 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 166 file main.c line 37 function main thread 0
+----------------------------------------------------
+  main::accounts=accounts&0#8
+
+State 170 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_malloc$1=22 (00000000000000000000000000010110)
+
+State 172 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 173 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 174 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 175 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  main::newAccount::1::tmp=(assignment removed)
+
+State 176 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_malloc$2=24 (00000000000000000000000000011000)
+
+State 178 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 179 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 180 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 182 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466147_value={ .name=16, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+State 184 file main.c line 23 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466147_value={ .name=68, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+State 186 file main.c line 24 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466147_value={ .name=68, .amount=1l, .lock=irep("(\"nil\")") }
+
+State 189 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_init::mutex=(assignment removed)
+
+State 190 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_init::mutexattr=(assignment removed)
+
+State 192 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466148_value={ .__data={ .__lock=0, .__count=16, .__owner=16, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 194 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466148_value={ .__data={ .__lock=0, .__count=0, .__owner=16, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 196 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466148_value={ .__data={ .__lock=0, .__count=0, .__owner=0, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 197 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_pthread_mutex_init$3=0 (00000000000000000000000000000000)
+
+State 199 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  main::newAccount::1::err=0 (00000000000000000000000000000000)
+
+State 203  thread 0
+----------------------------------------------------
+  c::main::$tmp::tmp$1=3 (00000000000000000000000000000011)
+
+State 204 file main.c line 36 function main thread 0
+----------------------------------------------------
+  main::main::1::i=4 (00000000000000000000000000000100)
+
+State 207 file main.c line 37 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_malloc$2=26 (00000000000000000000000000011010)
+
+State 209 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 210 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 211 file main.c line 37 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 212 file main.c line 37 function main thread 0
+----------------------------------------------------
+  main::accounts=accounts&0#10
+
+State 216 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_malloc$1=28 (00000000000000000000000000011100)
+
+State 218 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 219 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 220 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 221 file main.c line 21 function newAccount thread 0
+----------------------------------------------------
+  main::newAccount::1::tmp=(assignment removed)
+
+State 222 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_malloc$2=30 (00000000000000000000000000011110)
+
+State 224 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 225 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 226 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 228 file main.c line 22 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466150_value={ .name=16, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+State 230 file main.c line 23 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466150_value={ .name=69, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+State 232 file main.c line 24 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466150_value={ .name=69, .amount=1l, .lock=irep("(\"nil\")") }
+
+State 235 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_init::mutex=(assignment removed)
+
+State 236 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  <built-in-library>::pthread_mutex_init::mutexattr=(assignment removed)
+
+State 238 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466151_value={ .__data={ .__lock=0, .__count=16, .__owner=16, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 240 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466151_value={ .__data={ .__lock=0, .__count=0, .__owner=16, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 242 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466151_value={ .__data={ .__lock=0, .__count=0, .__owner=0, .__kind=16, .__nusers=16,
+    .__list={ .__next=irep("(\"nil\")") }, .__spins=16 } }
+
+State 243 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  c::newAccount::$tmp::return_value_pthread_mutex_init$3=0 (00000000000000000000000000000000)
+
+State 245 file main.c line 25 function newAccount thread 0
+----------------------------------------------------
+  main::newAccount::1::err=0 (00000000000000000000000000000000)
+
+State 249  thread 0
+----------------------------------------------------
+  c::main::$tmp::tmp$1=4 (00000000000000000000000000000100)
+
+State 250 file main.c line 36 function main thread 0
+----------------------------------------------------
+  main::main::1::i=5 (00000000000000000000000000000101)
+
+State 255 file main.c line 41 function main thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_181466137_value={ .name=99, .amount=-2147483647.000000000931322574615478515625l, .lock=irep("(\"nil\")") }
+
+Violated property:
+  file main.c line 42 function main
+  assertion
+  accounts[0]->name != 99
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

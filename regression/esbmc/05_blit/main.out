@@ -1,0 +1,25 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 11 iteration 1 file main.c line 54 function blit
+size of program expression: 49 assignments
+Generated 5 VCC(s), 5 remaining after simplification
+Encoding remaining VCC(s) using bit-vector arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.001s
+Building error trace
+
+Counterexample:
+
+Violated property:
+  file main.c line 52 function blit
+  dereference failure: invalid pointer
+  !(INVALID-POINTER(d))
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

@@ -1,0 +1,31 @@
+file main.c: Parsing
+Converting
+Type-checking main
+file exStbKey.c line 463 function getRCInput: function `c::__CPROVER_assume' is not declared
+Generating GOTO Program
+Function Pointer Removal
+file exStbKey.c line 560 function main: no target candidate for function call `*dfb->Release'
+file exStbKey.c line 467 function getRCInput: no target candidate for function call `*dfb->CreateInputEventBuffer'
+file exStbKey.c line 478 function getRCInput: no target candidate for function call `*eventBuffer->WaitForEvent'
+file exStbKey.c line 480 function getRCInput: no target candidate for function call `*eventBuffer->GetEvent'
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 14 iteration 1 file exStbKey.c line 515 function main
+**** WARNING: no body for function c::DirectFBInit
+**** WARNING: no body for function c::DirectFBError
+**** WARNING: no body for function c::DirectFBCreate
+**** WARNING: no body for function c::__CPROVER_assume
+Unwinding loop 12 iteration 1 file exStbKey.c line 435 function getKeyName
+Unwinding loop 13 iteration 1 file exStbKey.c line 447 function getKeyName
+Unwinding loop 12 iteration 1 file exStbKey.c line 435 function getKeyName
+Unwinding loop 13 iteration 1 file exStbKey.c line 447 function getKeyName
+Unwinding loop 15 iteration 1 file exStbKey.c line 474 function getRCInput
+size of program expression: 185 assignments
+Generated 24 VCC(s), 7 remaining after simplification
+Encoding remaining VCC(s) using bit-vector arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.021s
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

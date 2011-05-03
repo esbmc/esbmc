@@ -1,0 +1,53 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 0 iteration 1 file main.c line 16 function really
+size of program expression: 35 assignments
+Generated 7 VCC(s), 4 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.003s
+Building error trace
+
+Counterexample:
+
+State 1 file <built-in> line 12 thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 3 file main.c line 8 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 4 file main.c line 8 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 10 file main.c line 18 function really thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 11 file main.c line 18 function really thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 12 file main.c line 19 function really thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 13 file main.c line 19 function really thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+Violated property:
+  file main.c line 19 function really
+  dereference failure: forgotten memory
+  DEALLOCATED_OBJECT(return_value_malloc$2) == TRUE
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

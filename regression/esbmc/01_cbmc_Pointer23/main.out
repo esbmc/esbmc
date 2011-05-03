@@ -1,0 +1,28 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 10 assignments
+Generated 1 VCC(s), 1 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.001s
+Building error trace
+
+Counterexample:
+
+State 2 file main.c line 4 function main thread 0
+----------------------------------------------------
+  main::main::1::p=p@1!0&0#0
+
+Violated property:
+  file main.c line 5 function main
+  dereference failure: invalid pointer
+  !(INVALID-POINTER(p))
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

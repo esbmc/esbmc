@@ -1,0 +1,12 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 9 assignments
+Generated 0 VCC(s), 0 remaining after simplification
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

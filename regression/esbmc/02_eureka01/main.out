@@ -1,0 +1,150 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 0 iteration 1 file main.c line 13 function main
+Unwinding loop 0 iteration 2 file main.c line 13 function main
+Unwinding loop 0 iteration 3 file main.c line 13 function main
+Unwinding loop 0 iteration 4 file main.c line 13 function main
+Unwinding loop 0 iteration 5 file main.c line 13 function main
+Unwinding loop 1 iteration 1 file main.c line 24 function main
+Unwinding loop 1 iteration 2 file main.c line 24 function main
+Unwinding loop 1 iteration 3 file main.c line 24 function main
+Unwinding loop 1 iteration 4 file main.c line 24 function main
+Unwinding loop 1 iteration 5 file main.c line 24 function main
+Unwinding loop 1 iteration 6 file main.c line 24 function main
+Unwinding loop 1 iteration 7 file main.c line 24 function main
+Unwinding loop 1 iteration 8 file main.c line 24 function main
+Unwinding loop 1 iteration 9 file main.c line 24 function main
+Unwinding loop 1 iteration 10 file main.c line 24 function main
+Unwinding loop 1 iteration 11 file main.c line 24 function main
+Unwinding loop 1 iteration 12 file main.c line 24 function main
+Unwinding loop 1 iteration 13 file main.c line 24 function main
+Unwinding loop 1 iteration 14 file main.c line 24 function main
+Unwinding loop 1 iteration 15 file main.c line 24 function main
+Unwinding loop 1 iteration 16 file main.c line 24 function main
+Unwinding loop 1 iteration 17 file main.c line 24 function main
+Unwinding loop 1 iteration 18 file main.c line 24 function main
+Unwinding loop 1 iteration 19 file main.c line 24 function main
+Unwinding loop 1 iteration 20 file main.c line 24 function main
+Unwinding loop 2 iteration 1 file main.c line 22 function main
+Unwinding loop 1 iteration 1 file main.c line 24 function main
+Unwinding loop 1 iteration 2 file main.c line 24 function main
+Unwinding loop 1 iteration 3 file main.c line 24 function main
+Unwinding loop 1 iteration 4 file main.c line 24 function main
+Unwinding loop 1 iteration 5 file main.c line 24 function main
+Unwinding loop 1 iteration 6 file main.c line 24 function main
+Unwinding loop 1 iteration 7 file main.c line 24 function main
+Unwinding loop 1 iteration 8 file main.c line 24 function main
+Unwinding loop 1 iteration 9 file main.c line 24 function main
+Unwinding loop 1 iteration 10 file main.c line 24 function main
+Unwinding loop 1 iteration 11 file main.c line 24 function main
+Unwinding loop 1 iteration 12 file main.c line 24 function main
+Unwinding loop 1 iteration 13 file main.c line 24 function main
+Unwinding loop 1 iteration 14 file main.c line 24 function main
+Unwinding loop 1 iteration 15 file main.c line 24 function main
+Unwinding loop 1 iteration 16 file main.c line 24 function main
+Unwinding loop 1 iteration 17 file main.c line 24 function main
+Unwinding loop 1 iteration 18 file main.c line 24 function main
+Unwinding loop 1 iteration 19 file main.c line 24 function main
+Unwinding loop 1 iteration 20 file main.c line 24 function main
+Unwinding loop 2 iteration 2 file main.c line 22 function main
+Unwinding loop 1 iteration 1 file main.c line 24 function main
+Unwinding loop 1 iteration 2 file main.c line 24 function main
+Unwinding loop 1 iteration 3 file main.c line 24 function main
+Unwinding loop 1 iteration 4 file main.c line 24 function main
+Unwinding loop 1 iteration 5 file main.c line 24 function main
+Unwinding loop 1 iteration 6 file main.c line 24 function main
+Unwinding loop 1 iteration 7 file main.c line 24 function main
+Unwinding loop 1 iteration 8 file main.c line 24 function main
+Unwinding loop 1 iteration 9 file main.c line 24 function main
+Unwinding loop 1 iteration 10 file main.c line 24 function main
+Unwinding loop 1 iteration 11 file main.c line 24 function main
+Unwinding loop 1 iteration 12 file main.c line 24 function main
+Unwinding loop 1 iteration 13 file main.c line 24 function main
+Unwinding loop 1 iteration 14 file main.c line 24 function main
+Unwinding loop 1 iteration 15 file main.c line 24 function main
+Unwinding loop 1 iteration 16 file main.c line 24 function main
+Unwinding loop 1 iteration 17 file main.c line 24 function main
+Unwinding loop 1 iteration 18 file main.c line 24 function main
+Unwinding loop 1 iteration 19 file main.c line 24 function main
+Unwinding loop 1 iteration 20 file main.c line 24 function main
+Unwinding loop 2 iteration 3 file main.c line 22 function main
+Unwinding loop 1 iteration 1 file main.c line 24 function main
+Unwinding loop 1 iteration 2 file main.c line 24 function main
+Unwinding loop 1 iteration 3 file main.c line 24 function main
+Unwinding loop 1 iteration 4 file main.c line 24 function main
+Unwinding loop 1 iteration 5 file main.c line 24 function main
+Unwinding loop 1 iteration 6 file main.c line 24 function main
+Unwinding loop 1 iteration 7 file main.c line 24 function main
+Unwinding loop 1 iteration 8 file main.c line 24 function main
+Unwinding loop 1 iteration 9 file main.c line 24 function main
+Unwinding loop 1 iteration 10 file main.c line 24 function main
+Unwinding loop 1 iteration 11 file main.c line 24 function main
+Unwinding loop 1 iteration 12 file main.c line 24 function main
+Unwinding loop 1 iteration 13 file main.c line 24 function main
+Unwinding loop 1 iteration 14 file main.c line 24 function main
+Unwinding loop 1 iteration 15 file main.c line 24 function main
+Unwinding loop 1 iteration 16 file main.c line 24 function main
+Unwinding loop 1 iteration 17 file main.c line 24 function main
+Unwinding loop 1 iteration 18 file main.c line 24 function main
+Unwinding loop 1 iteration 19 file main.c line 24 function main
+Unwinding loop 1 iteration 20 file main.c line 24 function main
+Unwinding loop 2 iteration 4 file main.c line 22 function main
+Unwinding loop 1 iteration 1 file main.c line 24 function main
+Unwinding loop 1 iteration 2 file main.c line 24 function main
+Unwinding loop 1 iteration 3 file main.c line 24 function main
+Unwinding loop 1 iteration 4 file main.c line 24 function main
+Unwinding loop 1 iteration 5 file main.c line 24 function main
+Unwinding loop 1 iteration 6 file main.c line 24 function main
+Unwinding loop 1 iteration 7 file main.c line 24 function main
+Unwinding loop 1 iteration 8 file main.c line 24 function main
+Unwinding loop 1 iteration 9 file main.c line 24 function main
+Unwinding loop 1 iteration 10 file main.c line 24 function main
+Unwinding loop 1 iteration 11 file main.c line 24 function main
+Unwinding loop 1 iteration 12 file main.c line 24 function main
+Unwinding loop 1 iteration 13 file main.c line 24 function main
+Unwinding loop 1 iteration 14 file main.c line 24 function main
+Unwinding loop 1 iteration 15 file main.c line 24 function main
+Unwinding loop 1 iteration 16 file main.c line 24 function main
+Unwinding loop 1 iteration 17 file main.c line 24 function main
+Unwinding loop 1 iteration 18 file main.c line 24 function main
+Unwinding loop 1 iteration 19 file main.c line 24 function main
+Unwinding loop 1 iteration 20 file main.c line 24 function main
+Unwinding loop 2 iteration 5 file main.c line 22 function main
+Unwinding loop 3 iteration 1 file main.c line 34 function main
+Unwinding loop 3 iteration 2 file main.c line 34 function main
+Unwinding loop 3 iteration 3 file main.c line 34 function main
+Unwinding loop 3 iteration 4 file main.c line 34 function main
+Unwinding loop 3 iteration 5 file main.c line 34 function main
+Unwinding loop 3 iteration 6 file main.c line 34 function main
+Unwinding loop 3 iteration 7 file main.c line 34 function main
+Unwinding loop 3 iteration 8 file main.c line 34 function main
+Unwinding loop 3 iteration 9 file main.c line 34 function main
+Unwinding loop 3 iteration 10 file main.c line 34 function main
+Unwinding loop 3 iteration 11 file main.c line 34 function main
+Unwinding loop 3 iteration 12 file main.c line 34 function main
+Unwinding loop 3 iteration 13 file main.c line 34 function main
+Unwinding loop 3 iteration 14 file main.c line 34 function main
+Unwinding loop 3 iteration 15 file main.c line 34 function main
+Unwinding loop 3 iteration 16 file main.c line 34 function main
+Unwinding loop 3 iteration 17 file main.c line 34 function main
+Unwinding loop 3 iteration 18 file main.c line 34 function main
+Unwinding loop 3 iteration 19 file main.c line 34 function main
+Unwinding loop 3 iteration 20 file main.c line 34 function main
+Unwinding loop 4 iteration 1 file main.c line 44 function main
+Unwinding loop 4 iteration 2 file main.c line 44 function main
+Unwinding loop 4 iteration 3 file main.c line 44 function main
+Unwinding loop 4 iteration 4 file main.c line 44 function main
+Unwinding loop 4 iteration 5 file main.c line 44 function main
+size of program expression: 1409 assignments
+Generated 1825 VCC(s), 5 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.037s
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

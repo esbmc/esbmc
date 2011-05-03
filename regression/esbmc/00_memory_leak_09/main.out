@@ -1,0 +1,101 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 1 iteration 1 file main.c line 17 function main
+size of program expression: 38 assignments
+Generated 3 VCC(s), 3 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.009s
+Building error trace
+
+Counterexample:
+
+State 1 file /usr/include/stdio.h line 165 thread 0
+----------------------------------------------------
+  stdin=NULL
+
+State 2 file /usr/include/stdio.h line 166 thread 0
+----------------------------------------------------
+  stdout=(assignment removed)
+
+State 3 file /usr/include/stdio.h line 167 thread 0
+----------------------------------------------------
+  stderr=(assignment removed)
+
+State 4 file <built-in> line 12 thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 5 file <built-in> line 13 thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 6 file <built-in> line 19 thread 0
+----------------------------------------------------
+  __ESBMC_rounding_mode=0 (00000000000000000000000000000000)
+
+State 8 file main.c line 12 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_malloc$1=(assignment removed)
+
+State 9 file main.c line 12 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 10 file main.c line 12 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 11 file main.c line 12 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 12 file main.c line 12 function main thread 0
+----------------------------------------------------
+  main::main::1::ptr1=(assignment removed)
+
+State 13 file main.c line 13 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_malloc$2=(assignment removed)
+
+State 14 file main.c line 13 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 15 file main.c line 13 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 16 file main.c line 13 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 17 file main.c line 13 function main thread 0
+----------------------------------------------------
+  main::main::1::ptr2=(assignment removed)
+
+State 18 file main.c line 14 function main thread 0
+----------------------------------------------------
+  main::main::1::ptr2=(assignment removed)
+
+State 19 file main.c line 15 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 20 file main.c line 15 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+Violated property:
+  file main.c line 16 function main
+  dereference failure: invalidated dynamic object
+  !(IS_DYNAMIC_OBJECT(ptr1)) || VALID_OBJECT(ptr1)
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

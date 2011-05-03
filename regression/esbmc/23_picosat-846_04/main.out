@@ -1,0 +1,61 @@
+file app.c: Parsing
+file picosat.c: Parsing
+file main.c: Parsing
+Converting
+Type-checking app
+file app.c line 633 function picosat_main: warning: assignment in if condition
+file app.c line 706 function picosat_main: warning: assignment in if condition
+Type-checking main
+Type-checking picosat
+file picosat.c line 936 function resize: warning: assignment in if condition
+file picosat.c line 944 function resize: warning: assignment in if condition
+file picosat.c line 4535 function collect_clauses: warning: assignment in if condition
+file picosat.c line 4541 function collect_clauses: warning: assignment in if condition
+file picosat.c line 6807 function picosat_message: warning: conversion from `const signed char *' to `void *': disregarding const
+Generating GOTO Program
+Function Pointer Removal
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 234 iteration 1 file picosat.c line 4255 function inc_max_var
+Unwinding loop 235 iteration 1 file picosat.c line 4257 function inc_max_var
+Unwinding loop 236 iteration 1 file picosat.c line 4259 function inc_max_var
+Unwinding loop 237 iteration 1 file picosat.c line 4260 function inc_max_var
+Unwinding loop 238 iteration 1 file picosat.c line 4263 function inc_max_var
+Unwinding loop 239 iteration 1 file picosat.c line 4266 function inc_max_var
+**** WARNING: no body for function c::realloc
+Unwinding loop 87 iteration 1 file picosat.c line 1794 function hup
+Unwinding loop 240 iteration 1 file picosat.c line 6012 function import_lit
+size of program expression: 648 assignments
+Generated 68 VCC(s), 68 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.027s
+Building error trace
+
+Counterexample:
+
+State 1 file picosat.c line 514 thread 0
+----------------------------------------------------
+  picosat::current_bytes=0 (00000000000000000000000000000000)
+
+State 2 file picosat.c line 515 thread 0
+----------------------------------------------------
+  picosat::max_bytes=0 (00000000000000000000000000000000)
+
+State 12 file <builtin-library> line 494 function abs thread 0
+----------------------------------------------------
+  <built-in-library>::abs::i=2147483647 (01111111111111111111111111111111)
+
+State 13 file <builtin-library> line 494 function abs thread 0
+----------------------------------------------------
+  c::picosat::import_lit::$tmp::return_value_abs$1=-2147483647 (10000000000000000000000000000001)
+
+Violated property:
+  file picosat.c line 4253 function inc_max_var
+  dereference failure: NULL pointer
+  !(SAME-OBJECT(lit, NULL))
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

@@ -1,0 +1,24 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 28 iteration 1 file main.c line 264 function main
+size of program expression: 341 assignments
+Generated 7 VCC(s), 1 remaining after simplification
+Encoding remaining VCC(s) using bit-vector arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.006s
+Building error trace
+
+Counterexample:
+
+Violated property:
+  file main.c line 264 function main
+  unwinding assertion loop 
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

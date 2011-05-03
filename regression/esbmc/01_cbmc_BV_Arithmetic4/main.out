@@ -1,0 +1,41 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 0 iteration 1 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 2 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 3 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 4 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 5 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 6 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 7 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 8 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 9 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 10 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 11 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 12 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 13 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 14 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 15 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 16 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 17 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 18 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 19 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 20 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 21 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 22 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 23 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 24 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 25 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 26 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 27 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 28 file main.c line 7 function test_extend2
+Unwinding loop 0 iteration 29 file main.c line 7 function test_extend2
+size of program expression: 162 assignments
+Generated 1 VCC(s), 0 remaining after simplification
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

@@ -1,0 +1,17 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 0 iteration 1 file main.c line 7 function findmax
+Unwinding loop 0 iteration 2 file main.c line 7 function findmax
+Unwinding loop 0 iteration 3 file main.c line 7 function findmax
+Unwinding loop 0 iteration 4 file main.c line 7 function findmax
+Unwinding loop 0 iteration 5 file main.c line 7 function findmax
+size of program expression: 47 assignments
+Generated 20 VCC(s), 0 remaining after simplification
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

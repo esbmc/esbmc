@@ -1,0 +1,31 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 13 iteration 1 file main.c line 32 function main
+Unwinding loop 10 iteration 1 file main.c line 162 function get_token
+Unwinding loop 11 iteration 1 file main.c line 167 function get_token
+Unwinding loop 12 iteration 1 file main.c line 179 function get_token
+**** WARNING: no body for function c::ungetc
+**** WARNING: no body for function c::__ctype_b_loc
+Unwinding loop 17 iteration 1 file main.c line 418 function is_identifier
+Unwinding loop 15 iteration 1 file main.c line 371 function is_num_constant
+Unwinding loop 16 iteration 1 file main.c line 395 function is_str_constant
+Unwinding loop 10 iteration 1 file main.c line 162 function get_token
+Unwinding loop 11 iteration 1 file main.c line 167 function get_token
+Unwinding loop 12 iteration 1 file main.c line 179 function get_token
+Unwinding loop 14 iteration 1 file main.c line 49 function main
+Unwinding loop 17 iteration 1 file main.c line 418 function is_identifier
+Unwinding loop 15 iteration 1 file main.c line 371 function is_num_constant
+Unwinding loop 16 iteration 1 file main.c line 395 function is_str_constant
+size of program expression: 3182 assignments
+Generated 9 VCC(s), 9 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.382s
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

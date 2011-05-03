@@ -1,0 +1,40 @@
+file main.c: Parsing
+Converting
+Type-checking main
+file main.c line 17 function main: function `c::malloc' is not declared
+file main.c line 22 function main: function `c::free' is not declared
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 29 assignments
+Generated 7 VCC(s), 7 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.002s
+Building error trace
+
+Counterexample:
+
+State 4 file main.c line 18 function main thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_169658553_value={ .i=10, .f=0.99993896484375f, .c=0 }
+
+State 6 file main.c line 19 function main thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_169658553_value={ .i=10, .f=3.1399993896484375f, .c=0 }
+
+State 8 file main.c line 20 function main thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_169658553_value={ .i=10, .f=3.1399993896484375f, .c=97 }
+10 3.1399993896484375 %c
+
+
+Violated property:
+  file main.c line 23 function main
+  assertion
+  p->i != 10
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

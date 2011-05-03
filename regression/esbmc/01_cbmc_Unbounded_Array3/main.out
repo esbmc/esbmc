@@ -1,0 +1,36 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 16 assignments
+Generated 5 VCC(s), 5 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.002s
+Building error trace
+
+Counterexample:
+
+State 4 file main.c line 8 function main thread 0
+----------------------------------------------------
+  main::main::1::a=(assignment removed)
+
+State 6 file main.c line 9 function main thread 0
+----------------------------------------------------
+  main::main::1::a=(assignment removed)
+
+State 8 file main.c line 10 function main thread 0
+----------------------------------------------------
+  main::main::1::a=(assignment removed)
+
+Violated property:
+  file main.c line 12 function main
+  assertion
+  a[0] == 1
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

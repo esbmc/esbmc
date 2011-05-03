@@ -1,0 +1,44 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 20 assignments
+Generated 1 VCC(s), 1 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.011s
+Building error trace
+
+Counterexample:
+
+State 1 file <built-in> line 12 thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 3 file main.c line 6 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 4 file main.c line 6 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 6 file main.c line 10 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 7 file main.c line 10 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+Violated property:
+  file main.c line 13 function main
+  dereference failure: invalidated dynamic object
+  !(IS_DYNAMIC_OBJECT(p)) || VALID_OBJECT(p)
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

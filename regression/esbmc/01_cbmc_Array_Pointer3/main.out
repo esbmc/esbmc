@@ -1,0 +1,57 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 2 iteration 1 file main.c line 35 function g
+Unwinding loop 2 iteration 2 file main.c line 35 function g
+Unwinding loop 2 iteration 3 file main.c line 35 function g
+Unwinding loop 2 iteration 4 file main.c line 35 function g
+Unwinding loop 2 iteration 5 file main.c line 35 function g
+Unwinding loop 2 iteration 6 file main.c line 35 function g
+Unwinding loop 2 iteration 7 file main.c line 35 function g
+Unwinding loop 2 iteration 8 file main.c line 35 function g
+Unwinding loop 2 iteration 9 file main.c line 35 function g
+Unwinding loop 2 iteration 10 file main.c line 35 function g
+Unwinding loop 0 iteration 1 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 2 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 3 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 4 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 5 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 6 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 7 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 8 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 9 file main.c line 12 function strict_sorted
+Unwinding loop 2 iteration 1 file main.c line 35 function g
+Unwinding loop 2 iteration 2 file main.c line 35 function g
+Unwinding loop 2 iteration 3 file main.c line 35 function g
+Unwinding loop 2 iteration 4 file main.c line 35 function g
+Unwinding loop 2 iteration 5 file main.c line 35 function g
+Unwinding loop 2 iteration 6 file main.c line 35 function g
+Unwinding loop 2 iteration 7 file main.c line 35 function g
+Unwinding loop 2 iteration 8 file main.c line 35 function g
+Unwinding loop 2 iteration 9 file main.c line 35 function g
+Unwinding loop 2 iteration 10 file main.c line 35 function g
+Unwinding loop 0 iteration 1 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 2 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 3 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 4 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 5 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 6 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 7 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 8 file main.c line 12 function strict_sorted
+Unwinding loop 0 iteration 9 file main.c line 12 function strict_sorted
+Unwinding loop 1 iteration 1 file main.c line 21 function sorted
+Unwinding loop 1 iteration 2 file main.c line 21 function sorted
+Unwinding loop 1 iteration 3 file main.c line 21 function sorted
+Unwinding loop 1 iteration 4 file main.c line 21 function sorted
+size of program expression: 447 assignments
+Generated 139 VCC(s), 11 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.016s
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

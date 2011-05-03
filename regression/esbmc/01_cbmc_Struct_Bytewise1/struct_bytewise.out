@@ -1,0 +1,16 @@
+file struct_bytewise.c: Parsing
+Converting
+Type-checking struct_bytewise
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 1 iteration 1 file struct_bytewise.c line 15 function CopyBuffer
+size of program expression: 28 assignments
+Generated 5 VCC(s), 2 remaining after simplification
+Encoding remaining VCC(s) using bit-vector arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.001s
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

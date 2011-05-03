@@ -1,0 +1,29 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Function Pointer Removal
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 13 assignments
+Generated 2 VCC(s), 2 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.001s
+Building error trace
+
+Counterexample:
+
+State 2 file main.c line 22 function main thread 0
+----------------------------------------------------
+  main::main::1::mydisk={ .gd={ .request_fn=irep("(\"nil\")") } }
+
+Violated property:
+  file main.c line 13 function test_func
+  assertion 0
+  FALSE
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

@@ -1,0 +1,30 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 21 assignments
+Generated 4 VCC(s), 4 remaining after simplification
+Encoding remaining VCC(s) using bit-vector arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.001s
+Building error trace
+
+Counterexample:
+Bytes of i: 1, 2
+
+
+State 4  thread 0
+----------------------------------------------------
+  c::main::$tmp::tmp$1=FALSE
+
+Violated property:
+  file main.c line 11 function main
+  assertion p[0]==0
+  FALSE
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

@@ -1,0 +1,72 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 12 assignments
+Generated 1 VCC(s), 1 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+warning: ignoring member
+  * type: signedbv
+      * width: 32
+  * operands: 
+    0: constant
+        * type: union
+            * tag: #anon0
+            * components: 
+              0: component
+                  * type: signedbv
+                      * width: 32
+                  * name: __in
+                  * pretty_name: __in
+                  * #location: 
+                    * file: main.c
+                    * line: 4
+                    * function: my_func
+              1: component
+                  * type: signedbv
+                      * width: 32
+                  * name: __i
+                  * pretty_name: __i
+                  * #location: 
+                    * file: main.c
+                    * line: 4
+                    * function: my_func
+            * #location: 
+              * file: main.c
+              * line: 4
+              * function: my_func
+        * operands: 
+          0: designated_initializer
+              * type: empty
+              * operands: 
+                0: symbol
+                    * identifier: c::main::my_func::stat_loc@1!0&0#1
+                    * type: signedbv
+                        * width: 32
+                    * #location: 
+                      * file: main.c
+                      * line: 5
+                      * function: my_func
+                    * #lvalue: 1
+              * component_name: __in
+              * #location: 
+                * file: main.c
+                * line: 5
+                * function: my_func
+        * #location: 
+          * file: main.c
+          * line: 4
+          * function: my_func
+  * component_name: __i
+  * #location: 
+    * file: main.c
+    * line: 5
+    * function: my_func
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.001s
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

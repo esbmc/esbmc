@@ -1,0 +1,28 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 13 assignments
+Generated 1 VCC(s), 1 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0s
+Building error trace
+
+Counterexample:
+
+State 2 file main.c line 17 function main thread 0
+----------------------------------------------------
+  main::main::1::y={ .i=0 }
+
+Violated property:
+  file main.c line 19 function main
+  assertion
+  x->i == 2
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

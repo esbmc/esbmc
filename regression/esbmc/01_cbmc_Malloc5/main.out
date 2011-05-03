@@ -1,0 +1,65 @@
+file main.c: Parsing
+Converting
+Type-checking main
+file main.c line 13 function analyze_this: function `c::free' is not declared
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 27 assignments
+Generated 1 VCC(s), 1 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.003s
+Building error trace
+
+Counterexample:
+
+State 1 file <built-in> line 12 thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 4 file main.c line 6 function analyze_this thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 5 file main.c line 6 function analyze_this thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 6 file main.c line 7 function analyze_this thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 7 file main.c line 7 function analyze_this thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 8 file main.c line 10 function analyze_this thread 0
+----------------------------------------------------
+  c::analyze_this::$tmp::return_value_nondet_bool$3=TRUE
+
+State 9 file main.c line 10 function analyze_this thread 0
+----------------------------------------------------
+  main::analyze_this::1::p=(assignment removed)
+
+State 10 file main.c line 12 function analyze_this thread 0
+----------------------------------------------------
+  main::analyze_this::1::p_int=(assignment removed)
+
+State 11 file main.c line 13 function analyze_this thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 12 file main.c line 13 function analyze_this thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+Violated property:
+  file main.c line 15 function analyze_this
+  dereference failure: invalidated dynamic object
+  !(IS_DYNAMIC_OBJECT(p_int)) || VALID_OBJECT(p_int)
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

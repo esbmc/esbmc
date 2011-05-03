@@ -1,0 +1,77 @@
+file main.c: Parsing
+Converting
+Type-checking main
+file main.c line 18 function main: function `c::malloc' is not declared
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 23 assignments
+Generated 5 VCC(s), 5 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.006s
+Building error trace
+
+Counterexample:
+
+State 1 file main.c line 14 thread 0
+----------------------------------------------------
+  main::accounts=accounts&0#1
+
+State 2 file <built-in> line 12 thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 3 file <built-in> line 13 thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 4 file <built-in> line 19 thread 0
+----------------------------------------------------
+  __ESBMC_rounding_mode=0 (00000000000000000000000000000000)
+
+State 5 file /usr/include/stdio.h line 165 thread 0
+----------------------------------------------------
+  stdin=NULL
+
+State 6 file /usr/include/stdio.h line 166 thread 0
+----------------------------------------------------
+  stdout=(assignment removed)
+
+State 7 file /usr/include/stdio.h line 167 thread 0
+----------------------------------------------------
+  stderr=(assignment removed)
+
+State 9 file main.c line 18 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_malloc$1=2 (00000000000000000000000000000010)
+
+State 11 file main.c line 18 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc_size=(assignment removed)
+
+State 12 file main.c line 18 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 13 file main.c line 18 function main thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 14 file main.c line 18 function main thread 0
+----------------------------------------------------
+  main::accounts=accounts&0#2
+
+State 17 file main.c line 19 function main thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_167339657_value={ .name=1, .amount=-2147483647.000000000931322574615478515625l }
+
+Violated property:
+  file main.c line 20 function main
+  assertion
+  accounts[0]->name != 1
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

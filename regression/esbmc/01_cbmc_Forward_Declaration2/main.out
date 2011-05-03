@@ -1,0 +1,7 @@
+file main.c: Parsing
+Converting
+Type-checking main
+file main.c line 4 function main: incomplete type not permitted here
+CONVERSION ERROR
+EXIT=6
+SIGNAL=0

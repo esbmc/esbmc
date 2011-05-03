@@ -1,0 +1,163 @@
+file main.c: Parsing
+Converting
+Type-checking main
+file flex.c line 430 function flexend: function `c::exit' is not declared
+file flex.c line 6495 function addsym: warning: assignment in if condition
+file flex.c line 8389 function yyparse: function `c::free' is not declared
+file flex.c line 10855 function flexscan: warning: assignment in if condition
+file flex.c line 11717 function yy_init_buffer: function `c::isatty' is not declared
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+**** WARNING: no body for function c::yy_flex_alloc
+**** WARNING: no body for function c::yy_strlen
+Unwinding loop 81 iteration 1 file flex.c line 522 function flexinit
+Unwinding loop 82 iteration 1 file flex.c line 486 function flexinit
+Unwinding loop 83 iteration 1 file flex.c line 479 function flexinit
+**** WARNING: no body for function c::_IO_putc
+**** WARNING: no body for function c::yy_strcmp
+**** WARNING: no body for function c::freopen
+**** WARNING: no body for function c::unlink
+Unwinding loop 84 iteration 1 file flex.c line 807 function flexinit
+Unwinding loop 85 iteration 1 file flex.c line 819 function flexinit
+Unwinding loop 37 iteration 1 file flex.c line 4583 function skelout
+**** WARNING: no body for function c::yy_flex_realloc
+Unwinding loop 29 iteration 1 file flex.c line 3955 function add_action
+**** WARNING: no body for function c::yy_strcpy
+**** WARNING: no body for function c::__builtin_alloca
+**** WARNING: no body for function c::__builtin_memcpy
+Unwinding loop 132 iteration 1 file flex.c line 4091 function copy_string
+size of program expression: 4316 assignments
+Generated 114 VCC(s), 94 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.508s
+Building error trace
+
+Counterexample:
+
+State 1 file <built-in> line 12 thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 2 file flex.c line 115 thread 0
+----------------------------------------------------
+  main::outfile_created=0 (00000000000000000000000000000000)
+
+State 3 file flex.c line 117 thread 0
+----------------------------------------------------
+  main::skelname=NULL
+
+State 4 file flexdef.h line 340 thread 0
+----------------------------------------------------
+  interactive=0 (00000000000000000000000000000000)
+
+State 5 file flexdef.h line 342 thread 0
+----------------------------------------------------
+  csize=0 (00000000000000000000000000000000)
+
+State 6 file flexdef.h line 377 thread 0
+----------------------------------------------------
+  skelfile=NULL
+
+State 9  thread 0
+----------------------------------------------------
+  c::argv'=argv'&0#1
+
+State 13 file flex.c line 128 function main thread 0
+----------------------------------------------------
+  main::main::argc=0 (00000000000000000000000000000000)
+
+State 18 file flex.c line 447 function flexinit thread 0
+----------------------------------------------------
+  caseins=0 (00000000000000000000000000000000)
+
+State 19 file flex.c line 447 function flexinit thread 0
+----------------------------------------------------
+  spprdflt=0 (00000000000000000000000000000000)
+
+State 20 file flex.c line 447 function flexinit thread 0
+----------------------------------------------------
+  trace=0 (00000000000000000000000000000000)
+
+State 21 file flex.c line 447 function flexinit thread 0
+----------------------------------------------------
+  printstats=0 (00000000000000000000000000000000)
+
+State 22 file flex.c line 448 function flexinit thread 0
+----------------------------------------------------
+  lex_compat=0 (00000000000000000000000000000000)
+
+State 23 file flex.c line 449 function flexinit thread 0
+----------------------------------------------------
+  fullspd=0 (00000000000000000000000000000000)
+
+State 24 file flex.c line 449 function flexinit thread 0
+----------------------------------------------------
+  fulltbl=0 (00000000000000000000000000000000)
+
+State 25 file flex.c line 449 function flexinit thread 0
+----------------------------------------------------
+  ddebug=0 (00000000000000000000000000000000)
+
+State 26 file flex.c line 449 function flexinit thread 0
+----------------------------------------------------
+  backing_up_report=0 (00000000000000000000000000000000)
+
+State 27 file flex.c line 449 function flexinit thread 0
+----------------------------------------------------
+  C_plus_plus=0 (00000000000000000000000000000000)
+
+State 28 file flex.c line 450 function flexinit thread 0
+----------------------------------------------------
+  nowarn=0 (00000000000000000000000000000000)
+
+State 29 file flex.c line 450 function flexinit thread 0
+----------------------------------------------------
+  long_align=0 (00000000000000000000000000000000)
+
+State 30 file flex.c line 452 function flexinit thread 0
+----------------------------------------------------
+  useecs=1 (00000000000000000000000000000001)
+
+State 31 file flex.c line 452 function flexinit thread 0
+----------------------------------------------------
+  usemecs=1 (00000000000000000000000000000001)
+
+State 32 file flex.c line 452 function flexinit thread 0
+----------------------------------------------------
+  gen_line_dirs=1 (00000000000000000000000000000001)
+
+State 33 file flex.c line 453 function flexinit thread 0
+----------------------------------------------------
+  performance_report=0 (00000000000000000000000000000000)
+
+State 34 file flex.c line 456 function flexinit thread 0
+----------------------------------------------------
+  main::use_stdout=0 (00000000000000000000000000000000)
+
+State 35 file flex.c line 456 function flexinit thread 0
+----------------------------------------------------
+  use_read=0 (00000000000000000000000000000000)
+
+State 36 file flex.c line 457 function flexinit thread 0
+----------------------------------------------------
+  main::flexinit::1::csize_given=0 (00000000000000000000000000000000)
+
+State 37 file flex.c line 458 function flexinit thread 0
+----------------------------------------------------
+  main::flexinit::1::interactive_given=0 (00000000000000000000000000000000)
+
+State 45 file flex.c line 462 function flexinit thread 0
+----------------------------------------------------
+  action_array=(assignment removed)
+
+Violated property:
+  file flex.c line 464 function flexinit
+  dereference failure: invalid pointer
+  !(INVALID-POINTER(action_array))
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

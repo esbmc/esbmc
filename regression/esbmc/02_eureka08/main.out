@@ -1,0 +1,16 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 0 iteration 1 file main.c line 5 function main
+Unwinding loop 0 iteration 2 file main.c line 5 function main
+Unwinding loop 1 iteration 1 file main.c line 10 function main
+Unwinding loop 1 iteration 2 file main.c line 10 function main
+size of program expression: 32 assignments
+Generated 8 VCC(s), 0 remaining after simplification
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

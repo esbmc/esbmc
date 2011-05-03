@@ -1,0 +1,15 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 11 assignments
+Generated 3 VCC(s), 3 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.001s
+VERIFICATION SUCCESSFUL
+EXIT=0
+SIGNAL=0

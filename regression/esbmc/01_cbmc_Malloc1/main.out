@@ -1,0 +1,36 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 22 assignments
+Generated 2 VCC(s), 2 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.002s
+Building error trace
+
+Counterexample:
+
+State 2 file main.c line 8 function main thread 0
+----------------------------------------------------
+  c::main::$tmp::return_value_nondet_uint$1=1 (00000000000000000000000000000001)
+
+State 3 file main.c line 8 function main thread 0
+----------------------------------------------------
+  main::main::1::n=1 (00000000000000000000000000000001)
+
+State 6 file main.c line 15 function main thread 0
+----------------------------------------------------
+  main::main::1::o=2147483648 (10000000000000000000000000000000)
+
+Violated property:
+  file main.c line 17 function main
+  dereference failure: dynamic object upper bound
+  !(POINTER_OFFSET(p) + (int)o >= DYNAMIC_SIZE(p)) || !(IS_DYNAMIC_OBJECT(p))
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0

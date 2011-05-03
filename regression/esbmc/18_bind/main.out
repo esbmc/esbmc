@@ -1,0 +1,29 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 5 iteration 1 file main.c line 13 function dn_expand
+size of program expression: 32 assignments
+Generated 3 VCC(s), 3 remaining after simplification
+Encoding remaining VCC(s) using bit-vector arithmetic
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 0.002s
+Building error trace
+
+Counterexample:
+
+State 2 file main.c line 8 function dn_expand thread 0
+----------------------------------------------------
+  c::dn_expand::$tmp::return_value_nondet_int$1=0 (00000000000000000000000000000000)
+
+Violated property:
+  file main.c line 11 function dn_expand
+  dereference failure: invalid pointer
+  !(INVALID-POINTER(-1 + exp_dn + length))
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0
