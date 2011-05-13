@@ -2,7 +2,7 @@ include ../../config.inc
 include ../../common
 include ../../local.inc
 
-CPLUSFLAGS+= -I../.. -I../../util
+CXXFLAGS+= -I../.. -I../../util
 
 OBJS = smt_dec.o smt_prop.o smt_conv.o
 

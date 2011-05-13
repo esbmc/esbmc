@@ -2,7 +2,7 @@ include ../../config.inc
 include ../../common
 include ../../local.inc
 
-CPLUSFLAGS+= -I../.. -I../../util
+CXXFLAGS+= -I../.. -I../../util
 
 OBJS = cvc_prop.o cvc_conv.o cvc_dec.o
 

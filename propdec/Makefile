@@ -25,7 +25,7 @@ include ../config.inc
 include ../common
 
 ifdef MODULE_FLOATBV
-  CPLUSFLAGS += -DHAVE_FLOATBV
+  CXXFLAGS += -DHAVE_FLOATBV
   OBJ += ../floatbv/floatbv.o
 endif
 

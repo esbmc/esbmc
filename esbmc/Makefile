@@ -42,7 +42,7 @@ include ../local.inc
 
 ifdef MODULE_BV_REFINEMENT
   OBJ += ../bv_refinement/bv_refinement.o
-  CPLUSFLAGS += -DHAVE_BV_REFINEMENT
+  CXXFLAGS += -DHAVE_BV_REFINEMENT
 endif
 
 ifdef MODULE_CPP
@@ -66,10 +66,10 @@ endif
 ###############################################################################
 
 esbmc: $(OBJ)
-	$(CPLUS) $(LINKFLAGS) -o esbmc $(OBJ) $(LIBS)
+	$(CXX) $(LINKFLAGS) -o esbmc $(OBJ) $(LIBS)
 
 #cbmc-static: $(OBJ)
-#	$(CPLUS) $(LINKFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJ) $(LIBS)
+#	$(CXX) $(LINKFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJ) $(LIBS)
 
 clean:
 	rm -f *.o *.d esbmc

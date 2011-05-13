@@ -1,12 +1,12 @@
 CC     = gcc
-CPLUS  = g++
+CXX    = g++
 LD     = ld
 AR     = ar
 YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
 #CC     = icc
-#CPLUS  = icpc
+#CXX  = icpc
 #USE_AR = 1
 
 # Linux etc.

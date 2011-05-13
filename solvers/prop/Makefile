@@ -2,7 +2,7 @@ include ../../config.inc
 include ../../common
 include ../../local.inc
 
-CPLUSFLAGS+= -I../.. -I ../../util
+CXXFLAGS+= -I../.. -I ../../util
 
 OBJS= prop.o prop_conv.o prop_conv_store.o aig_formula.o aig.o aig_prop.o
 

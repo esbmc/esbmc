@@ -27,7 +27,7 @@ include ../config.inc
 include ../common
 
 ifdef MODULE_FLOATBV
-  CPLUSFLAGS += -DHAVE_FLOATBV
+  CXXFLAGS += -DHAVE_FLOATBV
 endif
 
 ###############################################################################
@@ -39,4 +39,4 @@ clean:
 	rm -f *.o ieee_float_test
 
 ieee_float_test: ieee_float_test.o ieee_float.o util.o
-	$(CPLUS) $(LINKFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o
+	$(CXX) $(LINKFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o

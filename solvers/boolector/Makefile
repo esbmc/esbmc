@@ -2,7 +2,7 @@ include ../../config.inc
 include ../../common
 include ../../local.inc
 
-CPLUSFLAGS+= -I../.. -I../../util -I$(BOOLECTOR)/include
+CXXFLAGS+= -I../.. -I../../util -I$(BOOLECTOR)/include
 
 OBJS= boolector_dec.o boolector_prop.o boolector_conv.o boolector_get.o
 

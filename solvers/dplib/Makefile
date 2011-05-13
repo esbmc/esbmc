@@ -2,7 +2,7 @@ include ../../config.inc
 include ../../common
 include ../../local.inc
 
-CPLUSFLAGS+= -I../.. -I../../util
+CXXFLAGS+= -I../.. -I../../util
 
 OBJS = dplib_dec.o dplib_prop.o dplib_conv.o
 
