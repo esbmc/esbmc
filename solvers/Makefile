@@ -32,9 +32,6 @@ endif
 
 
 SRC = \
-      sat/cnf.cpp sat/dimacs_cnf.cpp sat/cnf_clause_list.cpp \
-      sat/pbs_dimacs_cnf.cpp sat/read_dimacs_cnf.cpp \
-      sat/resolution_proof.cpp sat/satcheck.cpp \
       qbf/qdimacs_cnf.cpp qbf/qbf_quantor.cpp \
       qbf/qbf_skizzo.cpp qbf/qdimacs_core.cpp qbf/qbf_qube.cpp \
       qbf/qbf_qube_core.cpp \

@@ -3,6 +3,9 @@ include ../../common
 
 CPLUSFLAGS+= -I../../util -I../../
 
+OBJS= cnf.o dimacs_cnf.o cnf_clause_list.o pbs_dimacs_cnf.o \
+	read_dimacs_cnf.o resolution_proof.o satcheck.o
+
 ifneq ($(CHAFF),)
 TARGETS+= chaff.o
 endif
@@ -27,7 +30,7 @@ endif
 
 all: satsolvers.o
 
-satsolvers.o: $(TARGETS)
+satsolvers.o: $(TARGETS) $(OBJS)
 	$(LD) -r -o $@ $^ $(LDFLAGS)
 
 chaff.o: satcheck_zchaff.cpp satcheck_zcore.cpp
