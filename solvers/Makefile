@@ -11,18 +11,13 @@ ifneq ($(MINISAT2),)
 CPLUSFLAGS += -DHAVE_MINISAT2
 endif
 
+QBFOBJ=
 ifneq ($(SQUOLEM2),)
-  SQUOLEM2_SRC=qbf/qbf_squolem.cpp qbf/qbf_squolem_core.cpp
-  SQUOLEM2_INCLUDE=-I $(SQUOLEM2)
-  SQUOLEM2_LIB=-L $(SQUOLEM2) -lsquolem2
-endif
-
+QBFOBJ= qbf/qbfsolvers.o
+else
 ifneq ($(CUDD),)
-  CUDD_SRC=qbf/qbf_bdd_core.cpp qbf/qbf_skizzo_core.cpp
-  CUDD_INCLUDE=-I $(CUDD)/include
-  CUDD_LIB=-L $(CUDD)/cudd -L $(CUDD)/util -L $(CUDD)/mtr \
-           -L $(CUDD)/st -L $(CUDD)/obj -L $(CUDD)/dddmp \
-           -L $(CUDD)/epd -lobj -lcudd -lmtr -lst -lutil -lepd -ldddmp
+QBFOBJ= qbf/qbfsolvers.o
+endif
 endif
 
 ifneq ($(BOOLECTOR),)
@@ -36,8 +31,7 @@ Z3_LIB=$(Z3)/lib
 endif
 
 
-SRC = $(CHAFF_SRC) $(BOOLEFORCE_SRC) $(MINISAT_SRC) $(MINISAT2_SRC) \
-      $(SMVSAT_SRC) $(SQUOLEM2_SRC) $(CUDD_SRC) \
+SRC = \
       sat/cnf.cpp sat/dimacs_cnf.cpp sat/cnf_clause_list.cpp \
       sat/pbs_dimacs_cnf.cpp sat/read_dimacs_cnf.cpp \
       sat/resolution_proof.cpp sat/satcheck.cpp \
@@ -90,17 +84,15 @@ ifdef MODULE_FLOATBV
   OBJ += ../floatbv/floatbv.o
 endif
 
-INCLUDES= -I .. \
- $(CHAFF_INCLUDE) $(BOOLEFORCE_INCLUDE) $(MINISAT_INCLUDE) $(MINISAT2_INCLUDE) \
- $(SMVSAT_INCLUDE) $(SQUOLEM2_INC) $(CUDD_INCLUDE) $(Z3_INCLUDE) \
- $(BOOLECTOR_INCLUDE) -I ../util
+INCLUDES= -I .. $(Z3_INCLUDE) $(BOOLECTOR_INCLUDE) -I ../util
 
 ###############################################################################
 
 solvers.o: $(OBJ)
 	$(MAKE) -C ./sat
+	$(MAKE) -C ./qbf
 	$(LD) -r -o solvers.o $(OBJ) -L$(BOOLECTOR_LIB) -lboolector \
-	sat/satsolvers.o $(SQUOLEM2_LIB) $(CUDD_LIB)
+	sat/satsolvers.o $(QBFOBJ) $(SQUOLEM2_LIB) $(CUDD_LIB)
 
 clean:
 	rm -rf $(OBJ)
