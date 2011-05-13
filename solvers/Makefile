@@ -23,9 +23,6 @@ endif
 
 
 SRC = \
-      prop/prop.cpp prop/prop_conv.cpp prop/prop_conv_store.cpp \
-      prop/aig_formula.cpp \
-      prop/aig.cpp prop/aig_prop.cpp \
       boolector/boolector_dec.cpp boolector/boolector_prop.cpp boolector/boolector_conv.cpp boolector/boolector_get.cpp \
       z3/z3_dec.cpp z3/z3_prop.cpp z3/z3_conv.cpp z3/z3_get.cpp z3/z3_capi.cpp z3/z3_util.cpp \
       cvc/cvc_prop.cpp cvc/cvc_conv.cpp cvc/cvc_dec.cpp \
@@ -55,9 +52,10 @@ solvers.o: $(OBJ)
 	$(MAKE) -C ./sat
 	$(MAKE) -C ./qbf
 	$(MAKE) -C ./flattening
+	$(MAKE) -C ./prop
 	$(LD) -r -o solvers.o $(OBJ) -L$(BOOLECTOR_LIB) -lboolector \
 	sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
-	 $(SQUOLEM2_LIB) $(CUDD_LIB)
+	prop/propobj.o $(SQUOLEM2_LIB) $(CUDD_LIB)
 
 clean:
 	rm -rf $(OBJ)
