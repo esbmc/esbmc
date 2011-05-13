@@ -11,11 +11,6 @@ ifneq ($(MINISAT2),)
 CPLUSFLAGS += -DHAVE_MINISAT2
 endif
 
-ifneq ($(BOOLECTOR),)
-BOOLECTOR_INCLUDE=-I $(BOOLECTOR)/include
-BOOLECTOR_LIB=$(BOOLECTOR)/lib
-endif
-
 ifneq ($(Z3),)
 Z3_INCLUDE=-I $(Z3)/include
 Z3_LIB=$(Z3)/lib
@@ -23,7 +18,6 @@ endif
 
 
 SRC = \
-      boolector/boolector_dec.cpp boolector/boolector_prop.cpp boolector/boolector_conv.cpp boolector/boolector_get.cpp \
       z3/z3_dec.cpp z3/z3_prop.cpp z3/z3_conv.cpp z3/z3_get.cpp z3/z3_capi.cpp z3/z3_util.cpp \
       cvc/cvc_prop.cpp cvc/cvc_conv.cpp cvc/cvc_dec.cpp \
       smt/smt_dec.cpp smt/smt_prop.cpp smt/smt_conv.cpp \
@@ -44,7 +38,7 @@ ifdef MODULE_FLOATBV
   OBJ += ../floatbv/floatbv.o
 endif
 
-INCLUDES= -I .. $(Z3_INCLUDE) $(BOOLECTOR_INCLUDE) -I ../util
+INCLUDES= -I .. $(Z3_INCLUDE) -I ../util
 
 ###############################################################################
 
@@ -53,9 +47,10 @@ solvers.o: $(OBJ)
 	$(MAKE) -C ./qbf
 	$(MAKE) -C ./flattening
 	$(MAKE) -C ./prop
-	$(LD) -r -o solvers.o $(OBJ) -L$(BOOLECTOR_LIB) -lboolector \
+	$(MAKE) -C ./boolector
+	$(LD) -r -o solvers.o $(OBJ) \
 	sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
-	prop/propobj.o $(SQUOLEM2_LIB) $(CUDD_LIB)
+	prop/propobj.o boolector/boolector.o $(SQUOLEM2_LIB) $(CUDD_LIB)
 
 clean:
 	rm -rf $(OBJ)
