@@ -11,15 +11,6 @@ ifneq ($(MINISAT2),)
 CPLUSFLAGS += -DHAVE_MINISAT2
 endif
 
-QBFOBJ=
-ifneq ($(SQUOLEM2),)
-QBFOBJ= qbf/qbfsolvers.o
-else
-ifneq ($(CUDD),)
-QBFOBJ= qbf/qbfsolvers.o
-endif
-endif
-
 ifneq ($(BOOLECTOR),)
 BOOLECTOR_INCLUDE=-I $(BOOLECTOR)/include
 BOOLECTOR_LIB=$(BOOLECTOR)/lib
@@ -32,9 +23,6 @@ endif
 
 
 SRC = \
-      qbf/qdimacs_cnf.cpp qbf/qbf_quantor.cpp \
-      qbf/qbf_skizzo.cpp qbf/qdimacs_core.cpp qbf/qbf_qube.cpp \
-      qbf/qbf_qube_core.cpp \
       prop/prop.cpp prop/prop_conv.cpp prop/prop_conv_store.cpp \
       prop/aig_formula.cpp \
       prop/aig.cpp prop/aig_prop.cpp \
@@ -68,7 +56,8 @@ solvers.o: $(OBJ)
 	$(MAKE) -C ./qbf
 	$(MAKE) -C ./flattening
 	$(LD) -r -o solvers.o $(OBJ) -L$(BOOLECTOR_LIB) -lboolector \
-	sat/satsolvers.o flattening/flattening.o$(QBFOBJ) $(SQUOLEM2_LIB) $(CUDD_LIB)
+	sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
+	 $(SQUOLEM2_LIB) $(CUDD_LIB)
 
 clean:
 	rm -rf $(OBJ)
