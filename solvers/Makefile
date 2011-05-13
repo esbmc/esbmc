@@ -12,7 +12,6 @@ CPLUSFLAGS += -DHAVE_MINISAT2
 endif
 
 SRC = \
-      smt/smt_dec.cpp smt/smt_prop.cpp smt/smt_conv.cpp \
       dplib/dplib_conv.cpp dplib/dplib_dec.cpp dplib/dplib_prop.cpp
 
 OBJ = $(SRC:.cpp=.o)
@@ -42,9 +41,10 @@ solvers.o: $(OBJ)
 	$(MAKE) -C ./boolector
 	$(MAKE) -C ./z3
 	$(MAKE) -C ./cvc
+	$(MAKE) -C ./smt
 	$(LD) -r -o solvers.o $(OBJ) \
 	sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
-	prop/propobj.o boolector/boolector.o z3/z3.o cvc/cvc.o \
+	prop/propobj.o boolector/boolector.o z3/z3.o cvc/cvc.o smt/smt.o \
 	$(SQUOLEM2_LIB) $(CUDD_LIB)
 
 clean:
