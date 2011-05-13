@@ -3,34 +3,12 @@ all: solvers.o
 include ../config.inc
 include ../common
 
-SATTARGETS=
-SATOBJS=
-
-ifneq ($(CHAFF),)
-SATTARGETS += chaff.o
-SATOBJS += sat/chaff.o
-endif
-
-ifneq ($(BOOLEFORCE),)
-SATTARGETS += booleforce.o
-SATOBJS += sat/booleforce.o
-endif
-
 ifneq ($(MINISAT),)
-SATTARGETS += minisat.o
-SATOBJS += sat/minisat.o
 CPLUSFLAGS += -DHAVE_MINISAT
 endif
 
 ifneq ($(MINISAT2),)
-SATTARGETS += minisat2.o
-SATOBJS += sat/minisat2.o
 CPLUSFLAGS += -DHAVE_MINISAT2
-endif
-
-ifneq ($(SMVSAT),)
-SATTARGETS += smvsat.o
-SATOBJS += sat/smvsat.o
 endif
 
 ifneq ($(SQUOLEM2),)
@@ -120,9 +98,9 @@ INCLUDES= -I .. \
 ###############################################################################
 
 solvers.o: $(OBJ)
-	$(MAKE) -C ./sat $(SATTARGETS)
-	$(LD) -r -o solvers.o $(OBJ) -L$(BOOLECTOR_LIB) -lboolector\
-	$(SATOBJS) $(SQUOLEM2_LIB) $(CUDD_LIB)
+	$(MAKE) -C ./sat
+	$(LD) -r -o solvers.o $(OBJ) -L$(BOOLECTOR_LIB) -lboolector \
+	sat/satsolvers.o $(SQUOLEM2_LIB) $(CUDD_LIB)
 
 clean:
 	rm -rf $(OBJ)
