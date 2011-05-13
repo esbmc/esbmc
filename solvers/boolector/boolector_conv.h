@@ -14,7 +14,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/flattening/pointer_logic.h>
 
 #include "boolector_prop.h"
-#include "../../../boolector/include/boolector.h"
 
 class boolector_prop_wrappert
 {

@@ -12,7 +12,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <iostream>
 #include <solvers/prop/prop.h>
 
-#include "../../../boolector/include/boolector.h"
+#include <boolector.h>
 
 class boolector_propt:virtual public propt
 {

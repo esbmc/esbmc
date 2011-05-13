@@ -5,58 +5,58 @@ include ../common
 
 ifneq ($(CHAFF),)
   CHAFF_SRC=sat/satcheck_zchaff.cpp sat/satcheck_zcore.cpp
-  CHAFF_INCLUDE=-I ../$(CHAFF)
-  CHAFF_LIB=../$(CHAFF)/libsat.a
+  CHAFF_INCLUDE=-I $(CHAFF)
+  CHAFF_LIB=$(CHAFF)/libsat.a
 endif
 
 ifneq ($(BOOLEFORCE),)
   BOOLEFORCE_SRC=sat/satcheck_booleforce.cpp
-  BOOLEFORCE_INCLUDE=-I ../$(BOOLEFORCE)
-  BOOLEFORCE_LIB=../$(BOOLEFORCE)/libbooleforce.a
+  BOOLEFORCE_INCLUDE=-I $(BOOLEFORCE)
+  BOOLEFORCE_LIB=$(BOOLEFORCE)/libbooleforce.a
 endif
 
 ifneq ($(MINISAT),)
   MINISAT_SRC=sat/satcheck_minisat.cpp 
-  MINISAT_INCLUDE=-I ../$(MINISAT)
-  MINISAT_LIB=../$(MINISAT)/Solver.o ../$(MINISAT)/Proof.o ../$(MINISAT)/File.o
+  MINISAT_INCLUDE=-I $(MINISAT)
+  MINISAT_LIB=$(MINISAT)/Solver.o $(MINISAT)/Proof.o $(MINISAT)/File.o
   CPLUSFLAGS += -DHAVE_MINISAT
 endif
 
 ifneq ($(MINISAT2),)
   MINISAT2_SRC=sat/satcheck_minisat2.cpp
-  MINISAT2_INCLUDE=-I ../$(MINISAT2)/core -I ../$(MINISAT2)/mtl -I ../$(MINISAT2)/simp
-  MINISAT2_LIB=../$(MINISAT2)/simp/SimpSolver.o ../$(MINISAT2)/core/Solver.o
+  MINISAT2_INCLUDE=-I $(MINISAT2)/core -I $(MINISAT2)/mtl -I $(MINISAT2)/simp
+  MINISAT2_LIB=$(MINISAT2)/simp/SimpSolver.o $(MINISAT2)/core/Solver.o
   CPLUSFLAGS += -DHAVE_MINISAT2
 endif
 
 ifneq ($(SMVSAT),)
   SMVSAT_SRC=sat/satcheck_smvsat.cpp
-  SMVSAT_INCLUDE=-I ../$(SMVSAT)/include
-  SMVSAT_LIB=../$(SMVSAT)/lib/libsmvsat.a
+  SMVSAT_INCLUDE=-I $(SMVSAT)/include
+  SMVSAT_LIB=$(SMVSAT)/lib/libsmvsat.a
 endif
 
 ifneq ($(SQUOLEM2),)
   SQUOLEM2_SRC=qbf/qbf_squolem.cpp qbf/qbf_squolem_core.cpp
-  SQUOLEM2_INCLUDE=-I ../$(SQUOLEM2)
-  SQUOLEM2_LIB=-L ../$(SQUOLEM2) -lsquolem2
+  SQUOLEM2_INCLUDE=-I $(SQUOLEM2)
+  SQUOLEM2_LIB=-L $(SQUOLEM2) -lsquolem2
 endif
 
 ifneq ($(CUDD),)
   CUDD_SRC=qbf/qbf_bdd_core.cpp qbf/qbf_skizzo_core.cpp
-  CUDD_INCLUDE=-I ../$(CUDD)/include
-  CUDD_LIB=-L ../$(CUDD)/cudd -L ../$(CUDD)/util -L ../$(CUDD)/mtr \
-           -L ../$(CUDD)/st -L ../$(CUDD)/obj -L ../$(CUDD)/dddmp \
-           -L ../$(CUDD)/epd -lobj -lcudd -lmtr -lst -lutil -lepd -ldddmp
+  CUDD_INCLUDE=-I $(CUDD)/include
+  CUDD_LIB=-L $(CUDD)/cudd -L $(CUDD)/util -L $(CUDD)/mtr \
+           -L $(CUDD)/st -L $(CUDD)/obj -L $(CUDD)/dddmp \
+           -L $(CUDD)/epd -lobj -lcudd -lmtr -lst -lutil -lepd -ldddmp
 endif
 
 ifneq ($(BOOLECTOR),)
-BOOLECTOR_INCLUDE=-I ../$(BOOLECTOR)/include
-BOOLECTOR_LIB=../$(BOOLECTOR)/lib
+BOOLECTOR_INCLUDE=-I $(BOOLECTOR)/include
+BOOLECTOR_LIB=$(BOOLECTOR)/lib
 endif
 
 ifneq ($(Z3),)
-Z3_INCLUDE=-I ../$(Z3)/include
-Z3_LIB=../$(Z3)/lib
+Z3_INCLUDE=-I $(Z3)/include
+Z3_LIB=$(Z3)/lib
 endif
 
 
@@ -116,7 +116,8 @@ endif
 
 INCLUDES= -I .. \
  $(CHAFF_INCLUDE) $(BOOLEFORCE_INCLUDE) $(MINISAT_INCLUDE) $(MINISAT2_INCLUDE) \
- $(SMVSAT_INCLUDE) $(SQUOLEM2_INC) $(CUDD_INCLUDE) -I ../util 
+ $(SMVSAT_INCLUDE) $(SQUOLEM2_INC) $(CUDD_INCLUDE) $(Z3_INCLUDE) \
+ $(BOOLECTOR_INCLUDE) -I ../util
 
 ###############################################################################
 
