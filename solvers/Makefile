@@ -3,36 +3,34 @@ all: solvers.o
 include ../config.inc
 include ../common
 
+SATTARGETS=
+SATOBJS=
+
 ifneq ($(CHAFF),)
-  CHAFF_SRC=sat/satcheck_zchaff.cpp sat/satcheck_zcore.cpp
-  CHAFF_INCLUDE=-I $(CHAFF)
-  CHAFF_LIB=$(CHAFF)/libsat.a
+SATTARGETS += chaff.o
+SATOBJS += sat/chaff.o
 endif
 
 ifneq ($(BOOLEFORCE),)
-  BOOLEFORCE_SRC=sat/satcheck_booleforce.cpp
-  BOOLEFORCE_INCLUDE=-I $(BOOLEFORCE)
-  BOOLEFORCE_LIB=$(BOOLEFORCE)/libbooleforce.a
+SATTARGETS += booleforce.o
+SATOBJS += sat/booleforce.o
 endif
 
 ifneq ($(MINISAT),)
-  MINISAT_SRC=sat/satcheck_minisat.cpp 
-  MINISAT_INCLUDE=-I $(MINISAT)
-  MINISAT_LIB=$(MINISAT)/Solver.o $(MINISAT)/Proof.o $(MINISAT)/File.o
-  CPLUSFLAGS += -DHAVE_MINISAT
+SATTARGETS += minisat.o
+SATOBJS += sat/minisat.o
+CPLUSFLAGS += -DHAVE_MINISAT
 endif
 
 ifneq ($(MINISAT2),)
-  MINISAT2_SRC=sat/satcheck_minisat2.cpp
-  MINISAT2_INCLUDE=-I $(MINISAT2)/core -I $(MINISAT2)/mtl -I $(MINISAT2)/simp
-  MINISAT2_LIB=$(MINISAT2)/simp/SimpSolver.o $(MINISAT2)/core/Solver.o
-  CPLUSFLAGS += -DHAVE_MINISAT2
+SATTARGETS += minisat2.o
+SATOBJS += sat/minisat2.o
+CPLUSFLAGS += -DHAVE_MINISAT2
 endif
 
 ifneq ($(SMVSAT),)
-  SMVSAT_SRC=sat/satcheck_smvsat.cpp
-  SMVSAT_INCLUDE=-I $(SMVSAT)/include
-  SMVSAT_LIB=$(SMVSAT)/lib/libsmvsat.a
+SATTARGETS += smvsat.o
+SATOBJS += sat/smvsat.o
 endif
 
 ifneq ($(SQUOLEM2),)
@@ -122,9 +120,9 @@ INCLUDES= -I .. \
 ###############################################################################
 
 solvers.o: $(OBJ)
+	$(MAKE) -C ./sat $(SATTARGETS)
 	$(LD) -r -o solvers.o $(OBJ) -L$(BOOLECTOR_LIB) -lboolector\
-	$(CHAFF_LIB) $(BOOLEFORCE_LIB) $(MINISAT_LIB) $(MINISAT2_LIB) \
-        $(SMVSAT_LIB) $(SQUOLEM2_LIB) $(CUDD_LIB)
+	$(SATOBJS) $(SQUOLEM2_LIB) $(CUDD_LIB)
 
 clean:
 	rm -rf $(OBJ)
