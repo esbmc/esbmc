@@ -12,11 +12,11 @@ LEX    = flex
 # Linux etc.
 #GCCFLAGS = -Wall -MMD -O2 -Wno-deprecated # -ggdb -O0
 GCCFLAGS = -Wall -MMD -Wextra -O3 -finline-limit=1000000 -Wno-deprecated -pg
-LINKFLAGS = -L../../z3/lib -lz3 #-L/usr/local/lib #-ggdb
+LDFLAGS = -L../../z3/lib -lz3 #-L/usr/local/lib #-ggdb
 
 # use these for Cygwin:
 # GCCFLAGS = -Wall -MMD -O2 -mno-cygwin
-# LINKFLAGS = -mno-cygwin
+# LDFLAGS = -mno-cygwin
 
 # SMT and SAT solver locations. Put your own machine-specific absolute paths to
 # these in "local.inc". Z3, BOOLECTOR and MINISAT are currently required.

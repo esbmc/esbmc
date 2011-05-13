@@ -66,10 +66,10 @@ endif
 ###############################################################################
 
 esbmc: $(OBJ)
-	$(CXX) $(LINKFLAGS) -o esbmc $(OBJ) $(LIBS)
+	$(CXX) $(LDFLAGS) -o esbmc $(OBJ) $(LIBS)
 
 #cbmc-static: $(OBJ)
-#	$(CXX) $(LINKFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJ) $(LIBS)
+#	$(CXX) $(LDFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJ) $(LIBS)
 
 clean:
 	rm -f *.o *.d esbmc

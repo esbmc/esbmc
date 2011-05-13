@@ -39,4 +39,4 @@ clean:
 	rm -f *.o ieee_float_test
 
 ieee_float_test: ieee_float_test.o ieee_float.o util.o
-	$(CXX) $(LINKFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o
+	$(CXX) $(LDFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o
