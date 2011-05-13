@@ -30,9 +30,9 @@ OBJ = $(SRC:.cpp=.o) \
       ../langapi/nsf_dummy.o \
       ../langapi/mdllang_dummy.o
 
-INCLUDES= -I .. -I ../util
+INCLUDES= -I .. -I ../util -I$(Z3)/include
 
-LIBS=-L$(BOOLECTOR)/lib -lboolector -L../$(Z3)/lib -lz3 -lgmp -ldl
+LIBS=-L$(BOOLECTOR)/lib -lboolector -L $(Z3)/lib -lz3 -lgmp -ldl
 
 all: esbmc
 
