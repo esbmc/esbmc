@@ -27,34 +27,9 @@ protected:
 class boolector_convt:protected boolector_prop_wrappert, public prop_convt
 {
 public:
-  boolector_convt(std::ostream &_out):boolector_prop_wrappert(_out),
-                                prop_convt(boolector_prop)
-                                {
-								  number_variables_boolector=0;
-                                  set_to_counter=0;
-                                  boolector_prop.boolector_ctx = boolector_new();
-                                  boolector_ctx = boolector_prop.boolector_ctx;
-								  boolector_enable_model_gen(boolector_ctx);
-                                  //boolector_enable_inc_usage(boolector_ctx);
-                                  //btorFile = fopen ( "btor.txt" , "wb" );
-                                  //smtFile = fopen ( "smt.txt" , "wb" );
-                                }
+  boolector_convt(std::ostream &_out);
+  ~boolector_convt();
 
-  ~boolector_convt()
-  {
-	//fclose (btorFile);
-	//fclose (smtFile);
-
-	if (boolector_prop.btor && boolector_prop.assumpt.size()>0)
-	{
-	  btorFile = fopen ( filename.c_str() , "wb" );
-
-      for(unsigned i=0; i<boolector_prop.assumpt.size(); i++)
-    	boolector_dump_smt(boolector_ctx, btorFile, boolector_prop.assumpt.at(i));
-
-      fclose (btorFile);
-	}
-  }
   void set_filename(std::string file);
   unsigned int get_number_variables_boolector(void);
   int check_boolector_properties(void);

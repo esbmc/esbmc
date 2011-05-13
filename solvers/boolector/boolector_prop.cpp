@@ -12,6 +12,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include <i2string.h>
 
+#include <boolector.h>
+
 #include "boolector_prop.h"
 
 //#define DEBUG

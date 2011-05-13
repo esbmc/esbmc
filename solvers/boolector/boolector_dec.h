@@ -27,9 +27,7 @@ protected:
 class boolector_dect:protected boolector_temp_filet, public boolector_convt
 {
 public:
-  boolector_dect():boolector_convt(temp_out)
-  {
-  }
+  boolector_dect();
 
   virtual resultt dec_solve();
 
