@@ -1,2 +1,3 @@
 *.d
 *.o
+local.inc

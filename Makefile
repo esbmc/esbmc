@@ -5,6 +5,7 @@ DIRS = ansi-c big-int esbmc hoare infrules intrep solvers separate smvlang \
 all: esbmc.dir
 
 include config.inc
+include local.inc
 include common
 
 ###############################################################################
