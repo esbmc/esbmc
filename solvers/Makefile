@@ -11,11 +11,6 @@ ifneq ($(MINISAT2),)
 CPLUSFLAGS += -DHAVE_MINISAT2
 endif
 
-SRC = \
-      dplib/dplib_conv.cpp dplib/dplib_dec.cpp dplib/dplib_prop.cpp
-
-OBJ = $(SRC:.cpp=.o)
-
 ifneq ($(SQUOLEM2),)
   CPLUSFLAGS += -DHAVE_QBF_CORE
 else
@@ -33,7 +28,7 @@ INCLUDES= -I .. -I ../util
 
 ###############################################################################
 
-solvers.o: $(OBJ)
+solvers.o:
 	$(MAKE) -C ./sat
 	$(MAKE) -C ./qbf
 	$(MAKE) -C ./flattening
@@ -42,10 +37,11 @@ solvers.o: $(OBJ)
 	$(MAKE) -C ./z3
 	$(MAKE) -C ./cvc
 	$(MAKE) -C ./smt
+	$(MAKE) -C ./dplib
 	$(LD) -r -o solvers.o $(OBJ) \
 	sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
 	prop/propobj.o boolector/boolector.o z3/z3.o cvc/cvc.o smt/smt.o \
-	$(SQUOLEM2_LIB) $(CUDD_LIB)
+	dplib/dplib.o
 
 clean:
 	rm -rf $(OBJ)
