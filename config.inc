@@ -11,7 +11,7 @@ LEX    = flex
 
 # Linux etc.
 #GCCFLAGS = -Wall -MMD -O2 -Wno-deprecated # -ggdb -O0
-GCCFLAGS = -Wall -MMD -Wextra -O3 -finline-limit=1000000 -Wno-deprecated -pg
+GCCFLAGS = -Wall -MMD -Wextra -O3 -finline-limit=1000000 -Wno-deprecated
 LDFLAGS=
 
 # use these for Cygwin:
