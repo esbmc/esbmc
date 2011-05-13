@@ -8,6 +8,8 @@ include config.inc
 include local.inc
 include common
 
+export Z3 BOOLECTOR CHAFF BOOLEFORCE MINISAT MINISAT2 SMVSAT
+
 ###############################################################################
 
 util.dir: big-int.dir
