@@ -8,10 +8,12 @@ OBJS= qdimacs_cnf.o qbf_quantor.o qbf_skizzo.o qdimacs_core.o qbf_qube.o \
 
 ifneq ($(SQUOLEM2),)
 TARGETS+= qbf_squolem.o
+CPLUSPLUSFLAGS+= -DHAVE_QBF_CORE
 endif
 
 ifneq ($(CUDD),)
 TARGETS+= qbf_cudd.o
+CPLUSPLUSFLAGS+= -DHAVE_QBF_CORE
 endif
 
 qbfsolvers.o: $(TARGETS) $(OBJS)

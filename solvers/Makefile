@@ -3,29 +3,6 @@ all: solvers.o
 include ../config.inc
 include ../common
 
-ifneq ($(MINISAT),)
-CPLUSFLAGS += -DHAVE_MINISAT
-endif
-
-ifneq ($(MINISAT2),)
-CPLUSFLAGS += -DHAVE_MINISAT2
-endif
-
-ifneq ($(SQUOLEM2),)
-  CPLUSFLAGS += -DHAVE_QBF_CORE
-else
-ifneq ($(CUDD),)
-  CPLUSFLAGS += -DHAVE_QBF_CORE
-endif
-endif
-
-ifdef MODULE_FLOATBV
-  CPLUSFLAGS += -DHAVE_FLOATBV
-  OBJ += ../floatbv/floatbv.o
-endif
-
-INCLUDES= -I .. -I ../util
-
 ###############################################################################
 
 solvers.o:

@@ -16,10 +16,15 @@ OBJS= equality.o arrays.o functions.o sat_minimizer.o boolbv_width.o \
 	pointer_logic.o boolbv_quantifier.o boolbv_byte_update.o \
 	boolbv_array_of.o boolbv_map.o boolbv_type.o boolbv_union.o
 
+ifdef MODULE_FLOATBV
+CPLUSFLAGS += -DHAVE_FLOATBV
+FLOATBVOBJ = ../../floatbv/floatbv.o
+endif
+
 all: flattening.o
 
 flattening.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
+	$(LD) -r -o $@ $^ $(LDFLAGS) $(FLOATBVOBJ)
 
 clean:
 	-rm *.o
