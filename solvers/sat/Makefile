@@ -1,5 +1,6 @@
 include ../../config.inc
 include ../../common
+include ../../local.inc
 
 CPLUSFLAGS+= -I../../util -I../../
 

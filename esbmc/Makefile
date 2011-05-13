@@ -38,6 +38,7 @@ all: esbmc
 
 include ../config.inc
 include ../common
+include ../local.inc
 
 ifdef MODULE_BV_REFINEMENT
   OBJ += ../bv_refinement/bv_refinement.o
