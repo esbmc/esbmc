@@ -13,7 +13,9 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <str_getline.h>
 #include <prefix.h>
 
+extern "C" {
 #include <boolector.h>
+}
 
 #include "boolector_dec.h"
 

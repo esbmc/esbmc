@@ -14,7 +14,9 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/flattening/boolbv_width.h>
 #include <solvers/flattening/boolbv.h>
 
+extern "C" {
 #include <boolector.h>
+}
 
 #include "boolector_conv.h"
 

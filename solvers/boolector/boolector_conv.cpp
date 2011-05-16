@@ -24,7 +24,9 @@
 #include "boolector_conv.h"
 #include "../ansi-c/c_types.h"
 
+extern "C" {
 #include <boolector.h>
+}
 
 //#define DEBUG
 
