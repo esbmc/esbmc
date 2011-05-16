@@ -70,16 +70,19 @@ protected:
   // use gui format
   language_uit::uit ui;
 
-  virtual bool decide_default();
+#ifdef BOOLECTOR
   virtual bool decide_solver_boolector();
+  virtual bool boolector();
+  virtual bool boolector_conv(std::ostream &out);
+#endif
   virtual bool decide_solver_z3();
+  virtual bool z3();
+  virtual bool z3_conv(std::ostream &out);
+
+  virtual bool decide_default();
   virtual bool bv_refinement();
   virtual decision_proceduret::resultt
     run_decision_procedure(prop_convt &prop_conv);
-  virtual bool boolector();
-  virtual bool boolector_conv(std::ostream &out);
-  virtual bool z3();
-  virtual bool z3_conv(std::ostream &out);
   virtual bool cvc();
   virtual bool cvc_conv(std::ostream &out);
   virtual bool smt();
