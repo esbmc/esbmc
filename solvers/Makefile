@@ -3,6 +3,10 @@ all: solvers.o
 include ../config.inc
 include ../common
 
+ifdef $(BOOLECTOR)
+BOOLBUILD= boolector/boolector.o
+endif
+
 ###############################################################################
 
 sat/satsolvers.o:
@@ -33,8 +37,8 @@ dplib/dplib.o:
 	$(MAKE) -C dplib
 
 OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
-	prop/propobj.o boolector/boolector.o z3/z3.o cvc/cvc.o smt/smt.o \
-	dplib/dplib.o
+	prop/propobj.o z3/z3.o cvc/cvc.o smt/smt.o  dplib/dplib.o \
+	$(BOOLBUILD)
 
 solvers.o: $(OBJS)
 	$(LD) $(LDFLAGS) -r -o solvers.o $(OBJS)
