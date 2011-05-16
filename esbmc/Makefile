@@ -1,4 +1,4 @@
-SRC = main.cpp parseoptions.cpp bmc.cpp smt.cpp z3.cpp boolector.cpp \
+SRC = main.cpp parseoptions.cpp bmc.cpp smt.cpp z3.cpp \
       bv_cbmc.cpp document_subgoals.cpp dimacs.cpp \
       symex_bmc.cpp cvc.cpp show_vcc.cpp \
       counterexample_beautification.cpp \
@@ -32,7 +32,7 @@ OBJ = $(SRC:.cpp=.o) \
 
 INCLUDES= -I .. -I ../util -I$(Z3)/include
 
-LIBS=-L$(BOOLECTOR)/lib -lboolector -L $(Z3)/lib -lz3 -lgmp -ldl
+LIBS= -L $(Z3)/lib -lz3 -lgmp -ldl
 
 all: esbmc
 
@@ -61,6 +61,12 @@ ifdef MODULE_PHP
   OBJ += ../php/php.o
 else
   OBJ += ../langapi/php_dummy.o
+endif
+
+ifdef BOOLECTOR
+CXXFLAGS+= -DBOOLECTOR
+SRC+= boolector.cpp
+LIBS+= -L$(BOOLECTOR)/lib -lboolector
 endif
 
 ###############################################################################
