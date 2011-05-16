@@ -12,7 +12,7 @@ include ../common
 ###############################################################################
 
 langapi.o: $(OBJ)
-	$(LD) -r -o langapi.o $(OBJ)
+	$(LD) $(LDFLAGS) -r -o langapi.o $(OBJ)
 	
 OBJ_DUMMY = $(patsubst %, %_dummy.o, $(LANGUAGES))
 	

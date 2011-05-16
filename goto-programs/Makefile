@@ -24,7 +24,7 @@ include ../common
 ###############################################################################
 
 goto-programs.o: $(OBJ)
-	$(LD) -r -o goto-programs.o $(OBJ)
+	$(LD) $(LDFLAGS) -r -o goto-programs.o $(OBJ)
 
 clean:
 	rm -f *.o

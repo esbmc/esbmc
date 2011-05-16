@@ -12,7 +12,7 @@ include ../common
 ###############################################################################
 
 smvlang.o: $(OBJ)
-	$(LD) -r -o smvlang.o $(OBJ)
+	$(LD) $(LDFLAGS) -r -o smvlang.o $(OBJ)
 
 y.tab.cpp: parser.y
 	$(YACC) $(YFLAGS) $$flags -pyysmv -d parser.y -o y.tab.cpp

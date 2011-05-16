@@ -13,7 +13,7 @@ include ../common
 ###############################################################################
 
 bplang.o: $(OBJ)
-	$(LD) -r -o bplang.o $(OBJ)
+	$(LD) $(LDFLAGS) -r -o bplang.o $(OBJ)
 
 y.tab.cpp: parser.y
 	$(YACC) $(YFLAGS) $$flags -pyybp -d parser.y -o y.tab.cpp

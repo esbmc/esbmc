@@ -50,7 +50,7 @@ cprover_library.inc: library/converter library/*.c
 ###############################################################################
 
 ansi-c.o: cprover_library.inc $(OBJ) 
-	$(LD) -r -o $@ $(OBJ)
+	$(LD) $(LDFLAGS) -r -o $@ $(OBJ)
 
 clean:
 	rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output

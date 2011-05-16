@@ -33,7 +33,7 @@ endif
 ###############################################################################
 
 util.o: $(OBJ)
-	$(LD) -r -o util.o $(OBJ)
+	$(LD) $(LDFLAGS) -r -o util.o $(OBJ)
 
 clean:
 	rm -f *.o ieee_float_test

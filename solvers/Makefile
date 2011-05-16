@@ -37,7 +37,7 @@ OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
 	dplib/dplib.o
 
 solvers.o: $(OBJS)
-	$(LD) -r -o solvers.o $(OBJS)
+	$(LD) $(LDFLAGS) -r -o solvers.o $(OBJS)
 
 clean:
 	-rm solvers.o

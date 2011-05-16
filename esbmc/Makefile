@@ -66,7 +66,7 @@ endif
 ###############################################################################
 
 esbmc: $(OBJ)
-	$(CXX) $(LDFLAGS) -o esbmc $(OBJ) $(LIBS)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o esbmc $(OBJ) $(LIBS)
 
 #cbmc-static: $(OBJ)
 #	$(CXX) $(LDFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJ) $(LIBS)
