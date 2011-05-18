@@ -1,3 +1,12 @@
+#include <math.h>
+#undef fpclassify
+#undef isfinite
+#undef isfinite
+#undef isnormal
+#undef isnan
+#undef isinf
+#undef signbit
+
 #include "intrinsics.h"
 
 inline int abs(int i) { return __ESBMC_abs(i); }
