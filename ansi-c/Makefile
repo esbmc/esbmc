@@ -17,7 +17,7 @@ OBJ = $(SRC:.cpp=.o)
 
 INCLUDES= -I .. -I ../util
 
-all: ansi-c.o library/converter
+all: ansi-c.o
 
 include ../config.inc
 include ../common
@@ -37,19 +37,10 @@ lex.yy.cpp: scanner.l
 # extra dependencies
 y.tab.o: y.tab.cpp y.tab.h
 lex.yy.o: y.tab.cpp lex.yy.cpp y.tab.h
-cprover_library.o: cprover_library.inc
 
 ###############################################################################
 
-libarary/converter:
-	$(CXX) $(LDFLAGS) -o library/converter library/converter.cpp
-	
-cprover_library.inc: library/converter library/*.c
-	cat library/*.c | library/converter > cprover_library.inc
-
-###############################################################################
-
-ansi-c.o: cprover_library.inc $(OBJ) 
+ansi-c.o: $(OBJ) 
 	$(LD) $(LDFLAGS) -r -o $@ $(OBJ)
 
 clean:
