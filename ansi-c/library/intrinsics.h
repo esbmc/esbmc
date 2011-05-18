@@ -1,12 +1,12 @@
-void __ESBMC_assert(bool x, char *msg);
-void __ESBMC_assume(bool x);
+void __ESBMC_assert(_Bool x, char *msg);
+void __ESBMC_assume(_Bool x);
 void __ESBMC_atomic_begin(void);
 void __ESBMC_atomic_end(void);
 void __ESBMC_yield(void);
 
-bool __ESBMC_is_zero_string(char *s);
+_Bool __ESBMC_is_zero_string(char *s);
 int __ESBMC_buffer_size(void *b);
-bool __ESBMC_is_zero_string(char *s);
+_Bool __ESBMC_is_zero_string(char *s);
 int __ESBMC_zero_string_length(char *s);
 
 int __ESBMC_abs(int x);
