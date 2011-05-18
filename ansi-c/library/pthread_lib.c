@@ -19,7 +19,21 @@ int pthread_mutex_lock(pthread_mutex_t *mutex)
   static _Bool deadlock_mutex=0;
   extern int trds_in_run, trds_count, count_lock=0;
 
-#ifdef __ESBMC_DEADLOCK_DETECTION
+  __ESBMC_yield();
+  __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
+  __ESBMC_atomic_begin();
+  __ESBMC_mutex_lock_field(*mutex)=1;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_mutex_lock_check(pthread_mutex_t *mutex)
+{
+  __ESBMC_HIDE:
+  static _Bool unlocked = 1;
+  static _Bool deadlock_mutex=0;
+  extern int trds_in_run, trds_count, count_lock=0;
+
   __ESBMC_yield();
   __ESBMC_atomic_begin();
   unlocked = (__ESBMC_mutex_lock_field(*mutex)==0);
@@ -39,17 +53,8 @@ int pthread_mutex_lock(pthread_mutex_t *mutex)
 	__ESBMC_assert(!deadlock_mutex,"deadlock detected with mutex lock");
     __ESBMC_assume(deadlock_mutex);
   }
-#endif
 
-#ifndef __ESBMC_DEADLOCK_DETECTION
-  __ESBMC_yield();
-  __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
-  __ESBMC_atomic_begin();
-  __ESBMC_mutex_lock_field(*mutex)=1;
-  __ESBMC_atomic_end();
-#endif
-
-  return 0; // we never fail
+  return 0;
 }
 
 int pthread_mutex_trylock(pthread_mutex_t *mutex)
@@ -57,18 +62,27 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex)
   return 0; // we never fail
 }
 
-int pthread_mutex_unlock(pthread_mutex_t *mutex)
+static void do_pthread_mutex_unlock(pthread_mutex_t *mutex, _Bool assrt)
 {
   __ESBMC_HIDE:
   __ESBMC_atomic_begin();
-#ifndef __ESBMC_DEADLOCK_DETECTION
-#ifdef __ESBMC_LOCK_DETECTION
-  __ESBMC_assert(__ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
-#endif
-#endif
+  if (assrt)
+    __ESBMC_assert(__ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
   __ESBMC_mutex_lock_field(*mutex)=0;
   __ESBMC_atomic_end();
-  return 0; // we never fail
+  return;
+}
+
+int pthread_mutex_unlock(pthread_mutex_t *mutex)
+{
+  do_pthread_mutex_unlock(mutex, 0);
+  return 0;
+}
+
+int pthread_mutex_unlock_check(pthread_mutex_t *mutex)
+{
+  do_pthread_mutex_unlock(mutex, 1);
+  return 0;
 }
 
 int pthread_mutex_destroy(pthread_mutex_t *mutex)
@@ -176,7 +190,8 @@ extern int pthread_cond_signal(pthread_cond_t *__cond)
   return 0;
 }
 
-int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
+static void do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex,
+			_Bool assrt)
 {
   __ESBMC_HIDE:
   extern int trds_in_run, trds_count;
@@ -184,26 +199,35 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
   extern static _Bool deadlock_wait=0;
   __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*cond)=1;
-#ifndef __ESBMC_DEADLOCK_DETECTION
-#ifdef __ESBMC_LOCK_DETECTION
-  __ESBMC_assert(__ESBMC_mutex_lock_field(*mutex),"pthread_cond_wait must hold lock upon unlock");
-#endif
-#endif
+  if (assrt)
+    __ESBMC_assert(__ESBMC_mutex_lock_field(*mutex),"pthread_cond_wait must hold lock upon unlock");
   __ESBMC_mutex_lock_field(*mutex)=0;
   ++count_wait;
   __ESBMC_atomic_end();
 
   __ESBMC_atomic_begin();
-#ifndef __ESBMC_DEADLOCK_DETECTION
-#ifdef __ESBMC_LOCK_DETECTION
-  deadlock_wait = (count_wait == trds_in_run);
-  __ESBMC_assert(!deadlock_wait,"deadlock detected with pthread_cond_wait");
-#endif
-#endif
+  if (assrt) {
+    deadlock_wait = (count_wait == trds_in_run);
+    __ESBMC_assert(!deadlock_wait,"deadlock detected with pthread_cond_wait");
+  }
   __ESBMC_assume(/*deadlock_wait ||*/ __ESBMC_cond_lock_field(*cond)==0);
   --count_wait;
   __ESBMC_atomic_end();
   __ESBMC_mutex_lock_field(*mutex)=1;
 
-  return 0; // we never fail
+  return;
+}
+
+int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
+{
+
+  do_pthread_cond_wait(cond, mutex, 0);
+  return;
+}
+
+int pthread_cond_wait_check(pthread_cond_t *cond, pthread_mutex_t *mutex)
+{
+
+  do_pthread_cond_wait(cond, mutex, 1);
+  return;
 }
