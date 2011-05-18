@@ -232,6 +232,21 @@ bool c_preprocess(
   command+=" 2> \""+stderr_file+"\"";
   #endif
 
+  // Additional cruft: Depending on what locking detection is enabled, we may
+  // want to switch the behavior of pthread functions on the fly. Rather than
+  // hacking that in elsewhere, we instead preprocess relevant symbol names to
+  // whatever it should be.
+
+  #ifndef _WIN32
+  if (config.ansi_c.deadlock_check) {
+    command+=" -Dpthread_mutex_lock=pthread_mutex_lock_check ";
+  }
+  if (!config.ansi_c.deadlock_check && config.ansi_c.lock_check) {
+    command+=" -Dpthread_mutex_unlock=pthread_mutex_unlock_check ";
+    command+=" -Dpthread_cond_wait=pthread_cond_wait_check ";
+  }
+  #endif
+
   FILE *stream=popen(command.c_str(), "r");
 
   if(stream!=NULL)

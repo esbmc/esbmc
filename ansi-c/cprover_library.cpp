@@ -74,12 +74,6 @@ void add_cprover_library(
   if(config.ansi_c.string_abstraction)
     library_text << "#define __ESBMC_STRING_ABSTRACTION\n";
 
-  if(config.ansi_c.lock_check)
-    library_text << "#define __ESBMC_LOCK_DETECTION\n";
-
-  if(config.ansi_c.deadlock_check)
-    library_text << "#define __ESBMC_DEADLOCK_DETECTION\n";
-
   unsigned count=0;
 
   for(cprover_library_entryt *e=cprover_library;
