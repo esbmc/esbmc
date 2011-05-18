@@ -4,7 +4,6 @@ void __ESBMC_atomic_begin(void);
 void __ESBMC_atomic_end(void);
 void __ESBMC_yield(void);
 
-_Bool __ESBMC_is_zero_string(char *s);
 int __ESBMC_buffer_size(void *b);
 _Bool __ESBMC_is_zero_string(char *s);
 int __ESBMC_zero_string_length(char *s);
