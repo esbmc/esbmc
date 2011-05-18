@@ -1,5 +1,3 @@
-#include <math.h>
-
 inline int abs(int i) { return __ESBMC_abs(i); }
 inline long int labs(long int i) { return __ESBMC_labs(i); }
 inline double fabs(double d) { return __ESBMC_fabs(d); }
