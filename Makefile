@@ -1,6 +1,6 @@
-DIRS = ansi-c big-int esbmc hoare infrules intrep solvers separate smvlang \
+DIRS = big-int esbmc hoare infrules intrep solvers separate smvlang \
 	util langapi cpp symex satqe goto-programs bplang cvclang \
-	pointer-analysis goto-symex trans smtlang
+	pointer-analysis goto-symex trans smtlang ansi-c
 
 all: esbmc.dir
 
