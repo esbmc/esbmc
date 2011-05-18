@@ -30,7 +30,8 @@ struct cprover_library_entryt
   const char *function;
   const char *model;
 } cprover_library[]=
-#include "cprover_library.inc"
+//#include "cprover_library.inc"
+{};
 
 void add_cprover_library(
   contextt &context,
