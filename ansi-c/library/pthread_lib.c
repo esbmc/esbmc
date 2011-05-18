@@ -1,9 +1,4 @@
-/* FUNCTION: pthread_mutex_init */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
 #include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 
 inline int pthread_mutex_init(
   pthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr)
@@ -14,13 +9,6 @@ inline int pthread_mutex_init(
   __ESBMC_mutex_owner_field(*mutex)=0;
   return 0;
 }
-
-/* FUNCTION: pthread_mutex_lock */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 
 inline int pthread_mutex_lock(pthread_mutex_t *mutex)
 {
@@ -62,24 +50,10 @@ inline int pthread_mutex_lock(pthread_mutex_t *mutex)
   return 0; // we never fail
 }
 
-/* FUNCTION: pthread_mutex_trylock */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
-
 inline int pthread_mutex_trylock(pthread_mutex_t *mutex)
 {
   return 0; // we never fail
 }
-
-/* FUNCTION: pthread_mutex_unlock */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 
 inline int pthread_mutex_unlock(pthread_mutex_t *mutex)
 {
@@ -95,73 +69,24 @@ inline int pthread_mutex_unlock(pthread_mutex_t *mutex)
   return 0; // we never fail
 }
 
-/* FUNCTION: pthread_mutex_destroy */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
-
 inline int pthread_mutex_destroy(pthread_mutex_t *mutex)
 { }
-
-/* FUNCTION: pthread_exit */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 
 void pthread_exit(void *value_ptr)
 { __ESBMC_assume(0); }
 
-/* FUNCTION: pthread_rwlock_destroy */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
-
 inline int pthread_rwlock_destroy(pthread_rwlock_t *lock)
 { }
-
-/* FUNCTION: pthread_rwlock_init */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 
 inline int pthread_rwlock_init(pthread_rwlock_t *lock,
   const pthread_rwlockattr_t *attr)
 { __ESBMC_HIDE: __ESBMC_rwlock_field(*lock)=0; }
 
-/* FUNCTION: pthread_rwlock_rdlock */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
-
 inline int pthread_rwlock_rdlock(pthread_rwlock_t *lock)
 { /* TODO */ }
 
-/* FUNCTION: pthread_rwlock_tryrdlock */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
-
 inline int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
 { /* TODO */ }
-
-/* FUNCTION: pthread_rwlock_trywrlock */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 
 inline int pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 { __ESBMC_HIDE:
@@ -172,22 +97,8 @@ inline int pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
   return 0;
 }
 
-/* FUNCTION: pthread_rwlock_unlock */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
-
 inline int pthread_rwlock_unlock(pthread_rwlock_t *lock)
 { __ESBMC_HIDE: __ESBMC_rwlock_field(*lock)=0; }
-
-/* FUNCTION: pthread_rwlock_wrlock */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 
 inline int pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 { __ESBMC_HIDE:
@@ -198,12 +109,6 @@ inline int pthread_rwlock_wrlock(pthread_rwlock_t *lock)
   return 0; // we never fail
 }
 
-/* FUNCTION: pthread_join */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 #if 0
 inline int pthread_join(pthread_t __th, void **__thread_return)
 {
@@ -242,12 +147,6 @@ inline int pthread_cond_broadcast(pthread_cond_t *cond)
   return 0; // we never fail
 }
 #endif
-/* FUNCTION: pthread_cond_init */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 
 inline int pthread_cond_init(
   pthread_cond_t *cond,
@@ -260,26 +159,12 @@ inline int pthread_cond_init(
   return 0;
 }
 
-/* FUNCTION: pthread_cond_destroy */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
-
 inline int pthread_cond_destroy(pthread_cond_t *__cond)
 {
   __ESBMC_HIDE:
   __ESBMC_cond_lock_field(*__cond)=0;
   return 0;
 }
-
-/* FUNCTION: pthread_cond_signal */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 
 extern inline int pthread_cond_signal(pthread_cond_t *__cond)
 {
@@ -288,13 +173,6 @@ extern inline int pthread_cond_signal(pthread_cond_t *__cond)
 
   return 0;
 }
-
-/* FUNCTION: pthread_cond_wait */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
 
 inline int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {

@@ -1,29 +1,20 @@
-/* FUNCTION: exit */
-
+#include <stdlib.h>
 #undef exit
+#undef abort
+#undef calloc
+#undef atoi
+#undef atol
+#undef getenv
 
 inline void exit(int status)
 {
   __ESBMC_assume(0);
 }
 
-/* FUNCTION: abort */
-
-#undef abort
-
 inline void abort(void)
 {
   __ESBMC_assume(0);
 }
-
-/* FUNCTION: calloc */
-
-#ifndef __ESBMC_STDLIB_H_INCLUDED
-#include <stdlib.h>
-#define __ESBMC_STDLIB_H_INCLUDED
-#endif
-
-#undef calloc
 
 inline void *calloc(size_t nmemb, size_t size)
 {
@@ -42,15 +33,6 @@ inline void *calloc(size_t nmemb, size_t size)
   return res;
 }
 
-/* FUNCTION: atoi */
-
-#ifndef __ESBMC_STDLIB_H_INCLUDED
-#include <stdlib.h>
-#define __ESBMC_STDLIB_H_INCLUDED
-#endif
-
-#undef atoi
-
 inline int atoi(const char *nptr)
 {
   __ESBMC_HIDE:;
@@ -62,15 +44,6 @@ inline int atoi(const char *nptr)
   return res;
 }
 
-/* FUNCTION: atol */
-
-#ifndef __ESBMC_STDLIB_H_INCLUDED
-#include <stdlib.h>
-#define __ESBMC_STDLIB_H_INCLUDED
-#endif
-
-#undef atol
-
 inline long atol(const char *nptr)
 {
   __ESBMC_HIDE:;
@@ -81,10 +54,6 @@ inline long atol(const char *nptr)
   #endif
   return res;
 }
-
-/* FUNCTION: getenv */
-
-#undef getenv
 
 inline char *getenv(const char *name)
 {

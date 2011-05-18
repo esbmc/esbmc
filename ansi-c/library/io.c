@@ -1,10 +1,5 @@
-
-/* FUNCTION: putchar */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
 #include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
+#include <stdlib.h>
 
 inline int putchar(int c)
 {
@@ -12,13 +7,6 @@ inline int putchar(int c)
   __ESBMC_HIDE: printf("%c", c);
   return (error?-1:c);
 }
-
-/* FUNCTION: puts */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
 
 inline int puts(const char *s)
 {
@@ -28,18 +16,6 @@ inline int puts(const char *s)
   if(error) ret=-1; else __ESBMC_assume(ret>=0);
   return ret;
 }
-
-/* FUNCTION: fopen */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
-#ifndef __ESBMC_STDLIB_H_INCLUDED
-#include <stdlib.h>
-#define __ESBMC_STDLIB_H_INCLUDED
-#endif
 
 inline FILE *fopen(const char *filename, const char *m)
 {
@@ -54,13 +30,6 @@ inline FILE *fopen(const char *filename, const char *m)
   return f;
 }
 
-/* FUNCTION: fclose */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
 inline int fclose(FILE *stream)
 {
   __ESBMC_HIDE:;
@@ -68,18 +37,6 @@ inline int fclose(FILE *stream)
   free(stream);
   return return_value;
 }
-
-/* FUNCTION: fdopen */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
-#ifndef __ESBMC_STDLIB_H_INCLUDED
-#include <stdlib.h>
-#define __ESBMC_STDLIB_H_INCLUDED
-#endif
 
 inline FILE *fdopen(int handle, const char *m)
 {
@@ -93,13 +50,6 @@ inline FILE *fdopen(int handle, const char *m)
 
   return f;
 }
-
-/* FUNCTION: fgets */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
 
 inline char *fgets(char *str, int size, FILE *stream)
 {
@@ -119,13 +69,6 @@ inline char *fgets(char *str, int size, FILE *stream)
 
   return error?0:str;
 }
-
-/* FUNCTION: fread */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
 
 inline size_t fread(
   void *ptr,
@@ -148,13 +91,6 @@ inline size_t fread(
   return nread;
 }
 
-/* FUNCTION: feof */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
 inline int feof(FILE *stream)
 {
   // just return nondet
@@ -162,13 +98,6 @@ inline int feof(FILE *stream)
   *stream;
   return return_value;
 }
-
-/* FUNCTION: ferror */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
 
 inline int ferror(FILE *stream)
 {
@@ -178,13 +107,6 @@ inline int ferror(FILE *stream)
   return return_value;
 }
 
-/* FUNCTION: fileno */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
 inline int fileno(FILE *stream)
 {
   // just return nondet
@@ -192,13 +114,6 @@ inline int fileno(FILE *stream)
   *stream;
   return return_value;
 }
-
-/* FUNCTION: fputs */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
 
 inline int fputs(const char *s, FILE *stream)
 {
@@ -211,13 +126,6 @@ inline int fputs(const char *s, FILE *stream)
   return return_value;
 }
 
-/* FUNCTION: fflush */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
 inline int fflush(FILE *stream)
 {
   // just return nondet
@@ -226,13 +134,6 @@ inline int fflush(FILE *stream)
   return return_value;
 }
 
-/* FUNCTION: fpurge */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
 int fpurge(FILE *stream)
 {
   // just return nondet
@@ -240,13 +141,6 @@ int fpurge(FILE *stream)
   *stream;
   return return_value;
 }
-
-/* FUNCTION: read */
-
-#ifndef __ESBMC_UNISTD_H_INCLUDED
-#include <unistd.h>
-#define __ESBMC_UNISTD_H_INCLUDED
-#endif
 
 inline ssize_t read(int fildes, void *buf, size_t nbyte)
 {
@@ -264,13 +158,6 @@ inline ssize_t read(int fildes, void *buf, size_t nbyte)
   return nread;
 }
 
-/* FUNCTION: fgetc */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
 inline int fgetc(FILE *stream)
 {
   __ESBMC_HIDE:;
@@ -278,13 +165,6 @@ inline int fgetc(FILE *stream)
   *stream;
   return return_value;
 }
-
-/* FUNCTION: getc */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
 
 inline int getc(FILE *stream)
 {
@@ -294,26 +174,12 @@ inline int getc(FILE *stream)
   return return_value;
 }
 
-/* FUNCTION: getchar */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
 inline int getchar()
 {
   __ESBMC_HIDE:;
   int return_value;
   return return_value;
 }
-
-/* FUNCTION: getw */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
 
 inline int getw(FILE *stream)
 {
@@ -323,13 +189,6 @@ inline int getw(FILE *stream)
   return return_value;
 }
 
-/* FUNCTION: fseek */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
 inline int fseek(FILE *stream, long offset, int whence)
 {
   __ESBMC_HIDE:;
@@ -337,13 +196,6 @@ inline int fseek(FILE *stream, long offset, int whence)
   *stream;
   return return_value;
 }
-
-/* FUNCTION: ftell */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
 
 inline long ftell(FILE *stream)
 {
@@ -353,25 +205,11 @@ inline long ftell(FILE *stream)
   return return_value;
 }
 
-/* FUNCTION: rewind */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
-
 inline void rewind(FILE *stream)
 {
   __ESBMC_HIDE:
   *stream;
 }
-
-/* FUNCTION: fwrite */
-
-#ifndef __ESBMC_STDIO_H_INCLUDED
-#include <stdio.h>
-#define __ESBMC_STDIO_H_INCLUDED
-#endif
 
 size_t fwrite(
   const void *ptr,
@@ -384,4 +222,3 @@ size_t fwrite(
   __ESBMC_assume(nwrite<=nitems);
   return nwrite;
 }
-

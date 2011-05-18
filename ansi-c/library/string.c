@@ -1,9 +1,5 @@
-/* FUNCTION: strcpy */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
 #include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
+#include <stdlib.h>
 
 inline char *strcpy(char *dst, const char *src)
 {
@@ -22,13 +18,6 @@ inline char *strcpy(char *dst, const char *src)
   return dst;
 }
 
-/* FUNCTION: strncpy */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
-
 inline char *strncpy(char *dst, const char *src, size_t n)
 {
   __ESBMC_HIDE:;
@@ -46,13 +35,6 @@ inline char *strncpy(char *dst, const char *src, size_t n)
   #endif
   return dst;
 }
-
-/* FUNCTION: strcat */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
 
 inline char *strcat(char *dst, const char *src)
 {
@@ -74,13 +56,6 @@ inline char *strcat(char *dst, const char *src)
   #endif
   return dst;
 }
-
-/* FUNCTION: strncat */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
 
 inline char *strncat(char *dst, const char *src, size_t n)
 {
@@ -104,13 +79,6 @@ inline char *strncat(char *dst, const char *src, size_t n)
   return dst;
 }
 
-/* FUNCTION: strcmp */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
-
 inline int strcmp(const char *s1, const char *s2)
 {
   __ESBMC_HIDE:;
@@ -124,13 +92,6 @@ inline int strcmp(const char *s1, const char *s2)
   return retval;
 }
 
-/* FUNCTION: strncmp */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
-
 inline int strncmp(const char *s1, const char *s2, size_t n)
 {
   __ESBMC_HIDE:
@@ -141,13 +102,6 @@ inline int strncmp(const char *s1, const char *s2, size_t n)
   #else
   #endif
 }
-
-/* FUNCTION: strlen */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
 
 inline size_t strlen(const char *s)
 {
@@ -162,18 +116,6 @@ inline size_t strlen(const char *s)
   #endif
 }
 
-/* FUNCTION: strdup */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
-
-#ifndef __ESBMC_STDLIB_H_INCLUDED
-#include <stdlib.h>
-#define __ESBMC_STDLIB_H_INCLUDED
-#endif
-
 inline char *strdup(const char *str)
 {
   __ESBMC_HIDE:;
@@ -187,13 +129,6 @@ inline char *strdup(const char *str)
   cpy=strcpy(cpy, str);
   return cpy;
 }
-
-/* FUNCTION: memcpy */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
 
 inline void *memcpy(void *dst, const void *src, size_t n)
 {
@@ -216,13 +151,6 @@ inline void *memcpy(void *dst, const void *src, size_t n)
   #endif
   return dst;
 }
-
-/* FUNCTION: memset */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
 
 inline void *memset(void *s, int c, size_t n)
 {
@@ -254,13 +182,6 @@ inline void *memset(void *s, int c, size_t n)
   return s;
 }
 
-/* FUNCTION: memmove */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
-
 inline void *memmove(void *dest, const void *src, size_t n)
 {
   __ESBMC_HIDE:
@@ -287,13 +208,6 @@ inline void *memmove(void *dest, const void *src, size_t n)
   #endif
   return dest;
 }
-
-/* FUNCTION: memcmp */
-
-#ifndef __ESBMC_STRING_H_INCLUDED
-#include <string.h>
-#define __ESBMC_STRING_H_INCLUDED
-#endif
 
 int memcmp(const void *s1, const void *s2, size_t n)
 {
