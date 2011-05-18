@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "intrinsics.h"
+
 inline int putchar(int c)
 {
   _Bool error;

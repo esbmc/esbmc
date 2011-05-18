@@ -1,3 +1,5 @@
+#include "intrinsics.h"
+
 extern char *optarg;
 
 inline int getopt(int argc, char * const argv[],

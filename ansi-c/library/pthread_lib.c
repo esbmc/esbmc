@@ -1,5 +1,7 @@
 #include <pthread.h>
 
+#include "intrinsics.h"
+
 inline int pthread_mutex_init(
   pthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr)
 {
