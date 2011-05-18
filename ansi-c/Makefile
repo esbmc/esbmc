@@ -40,6 +40,34 @@ lex.yy.o: y.tab.cpp lex.yy.cpp y.tab.h
 
 ###############################################################################
 
+c2goto: $(OBJ) c2goto.cpp ../util/util.o ../langapi/langapi.o \
+		../big-int/bigint.o \
+		../langapi/csp_dummy.o \
+		../langapi/intrep_dummy.o \
+		../langapi/pvs_dummy.o \
+		../langapi/smvlang_dummy.o \
+		../langapi/promela_dummy.o \
+		../langapi/verilog_dummy.o \
+		../langapi/vhdl_dummy.o \
+		../langapi/smtlang_dummy.o \
+		../langapi/netlist_dummy.o \
+		../langapi/pascal_dummy.o \
+		../langapi/bplang_dummy.o \
+		../langapi/simplifylang_dummy.o \
+		../langapi/csharp_dummy.o \
+		../langapi/nsf_dummy.o \
+		../langapi/mdllang_dummy.o \
+		../langapi/specc_dummy.o \
+		../langapi/cpp_dummy.o \
+		../langapi/php_dummy.o \
+		../cvclang/cvclang.o \
+		../goto-programs/goto-programs.o \
+		../pointer-analysis/pointer-analysis.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+clib.o: library/*.c
+	./c2goto library/*.c -o clib.o
+
 ansi-c.o: $(OBJ) 
 	$(LD) $(LDFLAGS) -r -o $@ $(OBJ)
 
