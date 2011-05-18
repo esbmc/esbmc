@@ -6,6 +6,8 @@
 #undef atol
 #undef getenv
 
+#include "intrinsics.h"
+
 inline void exit(int status)
 {
   __ESBMC_assume(0);
