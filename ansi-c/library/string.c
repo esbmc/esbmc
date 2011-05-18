@@ -1,7 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-inline char *strcpy(char *dst, const char *src)
+char *strcpy(char *dst, const char *src)
 {
   __ESBMC_HIDE:;
   #ifdef __ESBMC_STRING_ABSTRACTION
@@ -18,7 +18,7 @@ inline char *strcpy(char *dst, const char *src)
   return dst;
 }
 
-inline char *strncpy(char *dst, const char *src, size_t n)
+char *strncpy(char *dst, const char *src, size_t n)
 {
   __ESBMC_HIDE:;
   #ifdef __ESBMC_STRING_ABSTRACTION
@@ -36,7 +36,7 @@ inline char *strncpy(char *dst, const char *src, size_t n)
   return dst;
 }
 
-inline char *strcat(char *dst, const char *src)
+char *strcat(char *dst, const char *src)
 {
   __ESBMC_HIDE:
   #ifdef __ESBMC_STRING_ABSTRACTION
@@ -57,7 +57,7 @@ inline char *strcat(char *dst, const char *src)
   return dst;
 }
 
-inline char *strncat(char *dst, const char *src, size_t n)
+char *strncat(char *dst, const char *src, size_t n)
 {
   __ESBMC_HIDE:
   #ifdef __ESBMC_STRING_ABSTRACTION
@@ -79,7 +79,7 @@ inline char *strncat(char *dst, const char *src, size_t n)
   return dst;
 }
 
-inline int strcmp(const char *s1, const char *s2)
+int strcmp(const char *s1, const char *s2)
 {
   __ESBMC_HIDE:;
   int retval;
@@ -92,7 +92,7 @@ inline int strcmp(const char *s1, const char *s2)
   return retval;
 }
 
-inline int strncmp(const char *s1, const char *s2, size_t n)
+int strncmp(const char *s1, const char *s2, size_t n)
 {
   __ESBMC_HIDE:
   if(s1!=0 && s1==s2) return 0;
@@ -103,7 +103,7 @@ inline int strncmp(const char *s1, const char *s2, size_t n)
   #endif
 }
 
-inline size_t strlen(const char *s)
+size_t strlen(const char *s)
 {
   __ESBMC_HIDE:
   #ifdef __ESBMC_STRING_ABSTRACTION
@@ -116,7 +116,7 @@ inline size_t strlen(const char *s)
   #endif
 }
 
-inline char *strdup(const char *str)
+char *strdup(const char *str)
 {
   __ESBMC_HIDE:;
   size_t bufsz;
@@ -130,7 +130,7 @@ inline char *strdup(const char *str)
   return cpy;
 }
 
-inline void *memcpy(void *dst, const void *src, size_t n)
+void *memcpy(void *dst, const void *src, size_t n)
 {
   __ESBMC_HIDE:
   #ifdef __ESBMC_STRING_ABSTRACTION
@@ -152,7 +152,7 @@ inline void *memcpy(void *dst, const void *src, size_t n)
   return dst;
 }
 
-inline void *memset(void *s, int c, size_t n)
+void *memset(void *s, int c, size_t n)
 {
   __ESBMC_HIDE:
   #ifdef __ESBMC_STRING_ABSTRACTION
@@ -182,7 +182,7 @@ inline void *memset(void *s, int c, size_t n)
   return s;
 }
 
-inline void *memmove(void *dest, const void *src, size_t n)
+void *memmove(void *dest, const void *src, size_t n)
 {
   __ESBMC_HIDE:
   #ifdef __ESBMC_STRING_ABSTRACTION

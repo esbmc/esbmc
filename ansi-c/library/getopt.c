@@ -2,7 +2,7 @@
 
 extern char *optarg;
 
-inline int getopt(int argc, char * const argv[],
+int getopt(int argc, char * const argv[],
                   const char *optstring)
 {
   __ESBMC_HIDE:;

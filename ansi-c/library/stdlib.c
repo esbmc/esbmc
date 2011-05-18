@@ -8,17 +8,17 @@
 
 #include "intrinsics.h"
 
-inline void exit(int status)
+void exit(int status)
 {
   __ESBMC_assume(0);
 }
 
-inline void abort(void)
+void abort(void)
 {
   __ESBMC_assume(0);
 }
 
-inline void *calloc(size_t nmemb, size_t size)
+void *calloc(size_t nmemb, size_t size)
 {
   __ESBMC_HIDE:;
   size_t total_size=nmemb*size;
@@ -35,7 +35,7 @@ inline void *calloc(size_t nmemb, size_t size)
   return res;
 }
 
-inline int atoi(const char *nptr)
+int atoi(const char *nptr)
 {
   __ESBMC_HIDE:;
   int res;
@@ -46,7 +46,7 @@ inline int atoi(const char *nptr)
   return res;
 }
 
-inline long atol(const char *nptr)
+long atol(const char *nptr)
 {
   __ESBMC_HIDE:;
   long res;
@@ -57,7 +57,7 @@ inline long atol(const char *nptr)
   return res;
 }
 
-inline char *getenv(const char *name)
+char *getenv(const char *name)
 {
   __ESBMC_HIDE:;
 
@@ -86,7 +86,7 @@ inline char *getenv(const char *name)
 #define __ESBMC_STDLIB_H_INCLUDED
 #endif
 
-inline void* calloc(size_t nmemb, size_t size)
+void* calloc(size_t nmemb, size_t size)
 {
   __ESBMC_HIDE:;
   void *res = malloc(nmemb*size);
