@@ -65,14 +65,21 @@ c2goto: $(OBJ) c2goto.cpp ../util/util.o ../langapi/langapi.o \
 		../pointer-analysis/pointer-analysis.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-clib16.goto: library/*.c
+clib16.goto: library
 	./c2goto library/*.i --16 --output clib16.goto
 
-clib32.goto: library/*.c
+clib32.goto: library
 	./c2goto library/*.i --32 --output clib32.goto
 
-clib64.goto: library/*.c
+clib64.goto: library
 	./c2goto library/*.i --64 --output clib64.goto
+
+library:
+	$(MAKE) -C library
+
+.PHONY: library
+
+###############################################################################
 
 ansi-c.o: $(OBJ) 
 	$(LD) $(LDFLAGS) -r -o $@ $(OBJ)
