@@ -49,29 +49,6 @@ void add_cprover_library(
     "void __ESBMC_atomic_end();\n"
     "void __ESBMC_yield();\n";
 
-  // this is for the pthread locks
-  switch(config.ansi_c.os)
-  {
-  case configt::ansi_ct::OS_I386_MACOS:
-  case configt::ansi_ct::OS_PPC_MACOS:
-    library_text << "#define __ESBMC_mutex_lock_field(a) ((a).__opaque[0])\n";
-    library_text << "#define __ESBMC_rwlock_field(a) ((a).__opaque[0])\n";
-    break;
-
-  case configt::ansi_ct::OS_I386_LINUX:
-    library_text << "#define __ESBMC_mutex_lock_field(a) ((a).__data.__lock)\n";
-    library_text << "#define __ESBMC_mutex_count_field(a) ((a).__data.__count)\n";
-    library_text << "#define __ESBMC_mutex_owner_field(a) ((a).__data.__owner)\n";
-    library_text << "#define __ESBMC_cond_lock_field(a) ((a).__data.__lock)\n";
-    library_text << "#define __ESBMC_cond_futex_field(a) ((a).__data.__futex)\n";
-    library_text << "#define __ESBMC_cond_nwaiters_field(a) ((a).__data.__nwaiters)\n";
-    library_text << "#define __ESBMC_cond_broadcast_seq_field(a) ((a).__data.__broadcast_seq)\n";
-    library_text << "#define __ESBMC_rwlock_field(a) ((a).__data.__lock)\n";
-    break;
-
-  default:;
-  }
-
   if(config.ansi_c.string_abstraction)
     library_text << "#define __ESBMC_STRING_ABSTRACTION\n";
 

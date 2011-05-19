@@ -2,6 +2,15 @@
 
 #include "intrinsics.h"
 
+#define __ESBMC_mutex_lock_field(a) ((a).__data.__lock)
+#define __ESBMC_mutex_count_field(a) ((a).__data.__count)
+#define __ESBMC_mutex_owner_field(a) ((a).__data.__owner)
+#define __ESBMC_cond_lock_field(a) ((a).__data.__lock)
+#define __ESBMC_cond_futex_field(a) ((a).__data.__futex)
+#define __ESBMC_cond_nwaiters_field(a) ((a).__data.__nwaiters)
+#define __ESBMC_cond_broadcast_seq_field(a) ((a).__data.__broadcast_seq)
+#define __ESBMC_rwlock_field(a) ((a).__data.__lock)
+
 int pthread_mutex_init(
   pthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr)
 {
