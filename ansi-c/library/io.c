@@ -153,8 +153,6 @@ int fputs_strabs(const char *s, FILE *stream)
 }
 
 int fflush(FILE *stream)
-
-int fflush(FILE *stream)
 {
   // just return nondet
   int return_value;
