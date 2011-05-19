@@ -26,7 +26,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex)
   __ESBMC_HIDE:
   static _Bool unlocked = 1;
   static _Bool deadlock_mutex=0;
-  extern int trds_in_run, trds_count, count_lock=0;
+  extern int trds_in_run, trds_count, count_lock;
 
   __ESBMC_yield();
   __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
@@ -41,7 +41,7 @@ int pthread_mutex_lock_check(pthread_mutex_t *mutex)
   __ESBMC_HIDE:
   static _Bool unlocked = 1;
   static _Bool deadlock_mutex=0;
-  extern int trds_in_run, trds_count, count_lock=0;
+  extern int trds_in_run, trds_count, count_lock;
 
   __ESBMC_yield();
   __ESBMC_atomic_begin();
