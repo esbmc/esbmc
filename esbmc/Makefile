@@ -32,20 +32,17 @@ endif
 
 ifdef MODULE_CPP
   OBJ += ../cpp/cpp.o
-else
-  OBJ += ../langapi/cpp_dummy.o
+  CXXFLAGS += -DUSE_CPP
 endif
 
 ifdef MODULE_SPECC
   OBJ += ../specc/specc.o
-else
-  OBJ += ../langapi/specc_dummy.o
+  CXXFLAGS += -DUSE_SPECC
 endif
 
 ifdef MODULE_PHP
   OBJ += ../php/php.o
-else
-  OBJ += ../langapi/php_dummy.o
+  CXXFLAGS += -DUSE_PHP
 endif
 
 ifdef BOOLECTOR
