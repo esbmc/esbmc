@@ -49,7 +49,7 @@ std::string from_expr(
     }
   }
 
-  std::auto_ptr<languaget> p(new_language(mode));
+  std::auto_ptr<languaget> p(mode_table[mode].new_language());
   std::string result;
   p->from_expr(expr, result, ns);
   return result;
@@ -93,7 +93,7 @@ std::string from_type(
     }
   }
 
-  std::auto_ptr<languaget> p(new_language(mode));
+  std::auto_ptr<languaget> p(mode_table[mode].new_language());
   std::string result;
   p->from_type(type, result, ns);
   return result;
