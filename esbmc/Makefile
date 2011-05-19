@@ -7,28 +7,13 @@ SRC = main.cpp parseoptions.cpp bmc.cpp smt.cpp z3.cpp \
 OBJ = $(SRC:.cpp=.o) \
       ../ansi-c/ansi-c.o \
       ../big-int/bigint.o \
-      ../langapi/csp_dummy.o \
       ../goto-programs/goto-programs.o \
       ../goto-symex/goto-symex.o \
       ../pointer-analysis/pointer-analysis.o \
-      ../langapi/intrep_dummy.o \
       ../langapi/langapi.o \
       ../solvers/solvers.o \
-      ../langapi/pvs_dummy.o \
-      ../langapi/smvlang_dummy.o \
-      ../langapi/promela_dummy.o \
       ../util/util.o \
-      ../langapi/verilog_dummy.o \
-      ../langapi/vhdl_dummy.o \
-      ../langapi/smtlang_dummy.o \
-      ../langapi/netlist_dummy.o \
-      ../langapi/pascal_dummy.o \
-      ../langapi/bplang_dummy.o \
-      ../langapi/simplifylang_dummy.o \
-      ../langapi/csharp_dummy.o \
-      ../cvclang/cvclang.o \
-      ../langapi/nsf_dummy.o \
-      ../langapi/mdllang_dummy.o
+      ../cvclang/cvclang.o
 
 INCLUDES= -I .. -I ../util -I$(Z3)/include
 
