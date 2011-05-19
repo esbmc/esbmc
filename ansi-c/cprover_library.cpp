@@ -49,9 +49,6 @@ void add_cprover_library(
     "void __ESBMC_atomic_end();\n"
     "void __ESBMC_yield();\n";
 
-  if(config.ansi_c.string_abstraction)
-    library_text << "#define __ESBMC_STRING_ABSTRACTION\n";
-
   unsigned count=0;
 
   for(cprover_library_entryt *e=cprover_library;
