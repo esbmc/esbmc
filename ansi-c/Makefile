@@ -66,7 +66,7 @@ c2goto: $(OBJ) c2goto.cpp ../util/util.o ../langapi/langapi.o \
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 clib16.o: library/*.c
-	./c2goto library/*.i --32
+	./c2goto library/*.i --16
 
 clib32.o: library/*.c
 	./c2goto library/*.i --32
