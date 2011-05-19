@@ -41,8 +41,8 @@ cprover_library.o: cprover_library.inc
 
 ###############################################################################
 
-libarary/converter:
-	$(CXX) $(LDFLAGS) -o library/converter library/converter.cpp
+library/converter:
+	$(CXX) $(CXXFLAGS) -o library/converter library/converter.cpp
 	
 cprover_library.inc: library/converter library/*.c
 	cat library/*.c | library/converter > cprover_library.inc
