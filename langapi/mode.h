@@ -25,6 +25,29 @@ struct mode_table_et
  
 extern const mode_table_et mode_table[];
 
+extern const char *extensions_ansi_c;
+extern const char *extensions_intrep;
+extern const char *extensions_pvs;
+extern const char *extensions_vhdl;
+extern const char *extensions_verilog;
+extern const char *extensions_smv;
+extern const char *extensions_csp;
+extern const char *extensions_netlist;
+extern const char *extensions_conf;
+extern const char *extensions_specc;
+extern const char *extensions_promela;
+extern const char *extensions_xml;
+extern const char *extensions_pascal;
+extern const char *extensions_cpp;
+extern const char *extensions_simplify;
+extern const char *extensions_bp;
+extern const char *extensions_cvc;
+extern const char *extensions_csharp;
+extern const char *extensions_smt;
+extern const char *extensions_nsf;
+extern const char *extensions_php;
+extern const char *extensions_mdl;
+
 languaget *new_ansi_c_language();
 languaget *new_bp_language();
 languaget *new_cpp_language();
