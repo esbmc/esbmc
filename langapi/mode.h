@@ -103,7 +103,7 @@ languaget *new_mdl_language();
   { "CVC",      &new_cvc_language,      extensions_cvc      }
 #define LANGAPI_HAVE_MODE_CSHARP \
   { "C#",       &new_csharp_language,   extensions_csharp   }
-#define LANGAPI_HAVE-MODE_SMT \
+#define LANGAPI_HAVE_MODE_SMT \
   { "SMT",      &new_smt_language,      extensions_smt      }
 #define LANGAPI_HAVE_MODE_NSF \
   { "NSF",      &new_nsf_language,      extensions_nsf      }
