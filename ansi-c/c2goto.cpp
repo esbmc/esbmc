@@ -1,3 +1,6 @@
+#include <ostream>
+#include <fstream>
+
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/write_goto_binary.h>
 #include <langapi/language_ui.h>
@@ -9,7 +12,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
   public:
   c2goto_parseopt(int argc, const char **argv):
-    parseoptions_baset("(16)(32)(64)", argc, argv),
+    parseoptions_baset("(16)(32)(64)(output):", argc, argv),
     language_uit(cmdline)
   {
   }
@@ -19,6 +22,11 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 
     config.set(cmdline);
 
+    if (!cmdline.isset("output")) {
+      std::cerr << "Must set output file" << std::endl;
+      return 1;
+    }
+
     if (parse()) return 1;
     if (typecheck()) return 1;
     if (final()) return 1;
@@ -27,7 +35,9 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 
     goto_convert(context, optionst(), goto_functions, ui_message_handler);
 
-    if (write_goto_binary(std::cout, context, goto_functions)) {
+    std::ofstream out(cmdline.getval("output"));
+
+    if (write_goto_binary(out, context, goto_functions)) {
       std::cerr << "Failed to write C library to binary obj";
       return 1;
     }

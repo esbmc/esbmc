@@ -66,13 +66,13 @@ c2goto: $(OBJ) c2goto.cpp ../util/util.o ../langapi/langapi.o \
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 clib16.goto: library/*.c
-	./c2goto library/*.i --16 > clib16.goto
+	./c2goto library/*.i --16 --output clib16.goto
 
 clib32.goto: library/*.c
-	./c2goto library/*.i --32 > clib32.goto
+	./c2goto library/*.i --32 --output clib32.goto
 
 clib64.goto: library/*.c
-	./c2goto library/*.i --64> clib64.goto
+	./c2goto library/*.i --64 --output clib64.goto
 
 ansi-c.o: $(OBJ) 
 	$(LD) $(LDFLAGS) -r -o $@ $(OBJ)
