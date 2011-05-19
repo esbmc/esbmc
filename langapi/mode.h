@@ -116,7 +116,7 @@ languaget *new_mdl_language();
 int get_mode(const std::string &str);
 int get_mode_filename(const std::string &filename);
 
-languaget *new_language(int mode);
+languaget *new_language(const char *mode);
 
 #define MODE_C        "C"
 #define MODE_IREP     "intrep"

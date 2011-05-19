@@ -114,8 +114,8 @@ Function: new_language
 
 \*******************************************************************/
 
-languaget *new_language(int mode)
+languaget *new_language(const char *mode)
 {
-  return (*mode_table[mode].new_language)();
+  return (*mode_table[get_mode(mode)].new_language)();
 }
 

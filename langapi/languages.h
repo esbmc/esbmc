@@ -37,7 +37,7 @@ public:
   
   // constructor / destructor
   
-  languagest(const namespacet &_ns, unsigned mode);
+  languagest(const namespacet &_ns, const char *mode);
   virtual ~languagest();
   
  protected:

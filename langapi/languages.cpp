@@ -21,7 +21,7 @@ Function: languagest::languagest
 
 \*******************************************************************/
 
-languagest::languagest(const namespacet &_ns, unsigned mode):ns(_ns)
+languagest::languagest(const namespacet &_ns, const char* mode):ns(_ns)
 {
   language=new_language(mode);
 }
