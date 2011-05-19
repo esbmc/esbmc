@@ -1,5 +1,5 @@
 include ../config.inc
-include ../config.inc
+include ../common
 
 RM = rm -f
 OBJ = bigint-test.o bigint-func.o bigint.o
