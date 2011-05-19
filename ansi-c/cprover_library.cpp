@@ -6,9 +6,19 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+extern "C" {
+#include <stdio.h>
+#include <stdlib.h>
+#include <dlfcn.h>
+}
+
 #include <sstream>
+#include <istream>
+#include <fstream>
 
 #include <config.h>
+
+#include <goto-programs/read_goto_binary.h>
 
 #include "cprover_library.h"
 #include "ansi_c_language.h"
@@ -25,45 +35,52 @@ Function: add_cprover_library
 
 \*******************************************************************/
 
-struct cprover_library_entryt
-{
-  const char *function;
-  const char *model;
-} cprover_library[]=
-//#include "cprover_library.inc"
-{};
-
 void add_cprover_library(
   contextt &context,
   message_handlert &message_handler)
 {
+  char symname_buffer[256];
+  void *self, *start;
+  FILE *f;
+  char *filename;
+  unsigned long size;
+
   if(config.ansi_c.lib==configt::ansi_ct::LIB_NONE)
     return;
 
-  std::ostringstream library_text;
-
-  library_text <<
-    "#line 1 \"<builtin-library>\"\n"
-    "#undef inline\n";
-
-  unsigned count=0;
-
-  for(cprover_library_entryt *e=cprover_library;
-      e->function!=NULL;
-      e++)
-  {
-    irep_idt id=e->function;
-
-    symbolst::const_iterator old=
-      context.symbols.find(id);
-
-    if(old!=context.symbols.end() &&
-       old->second.value.is_nil())
-    {
-      count++;
-      library_text << e->model << std::endl;
-    }
+  self = dlopen(NULL, 0);
+  if (self == NULL) {
+    std::cerr << "Could not open self linker handle with dlopen" << std::endl;
+    abort();
   }
+
+  sprintf(symname_buffer, "_binary_clib%d_goto_start", config.ansi_c.int_width);
+  start = dlsym(self, symname_buffer);
+  if (start == NULL) {
+    std::cerr << "Could not locate internal C library" << std::endl;
+    abort();
+  }
+
+  sprintf(symname_buffer, "_binary_clib%d_goto_size", config.ansi_c.int_width);
+  size = (unsigned long)dlsym(self, symname_buffer);
+  if (size == 0) {
+    std::cerr << "error: Zero-lengthed internal C library" << std::endl;
+    abort();
+  }
+
+  dlclose(self);
+
+  sprintf(symname_buffer, "ESBMC_XXXXXX");
+  filename = mktemp(symname_buffer);
+  f = fopen(filename, "w");
+  if (fwrite(start, size, 1, f) != 1) {
+    std::cerr << "Couldn't manipulate internal C library" << std::endl;
+    abort();
+  }
+  fclose(f);
+
+  std::ifstream infile(filename);
+  read_goto_binary(infile, context, blah, message_handler);
 
   if(count>0)
   {
