@@ -263,6 +263,7 @@ void *memmove_strabs(void *dest, const void *src, size_t n)
 int memcmp(const void *s1, const void *s2, size_t n)
 {
   __ESBMC_HIDE:;
+  int res;
   const unsigned char *sc1=s1, *sc2=s2;
   for(; n!=0; n--)
   {
