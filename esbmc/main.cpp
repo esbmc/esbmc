@@ -14,6 +14,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 */
 
+#include <langapi/mode.h>
+
 #include "parseoptions.h"
 
 /*******************************************************************\
@@ -33,3 +35,6 @@ int main(int argc, const char **argv)
   cbmc_parseoptionst parseoptions(argc, argv);
   return parseoptions.main();
 }
+
+const mode_table_et mode_table[] =
+{ LANGAPI_HAVE_MODE_C, LANGAPI_HAVE_MODE_CVC, LANGAPI_HAVE_MODE_END };
