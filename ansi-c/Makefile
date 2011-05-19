@@ -67,15 +67,15 @@ c2goto: $(OBJ) c2goto.cpp ../util/util.o ../langapi/langapi.o \
 
 clib16.o: c2goto library
 	./c2goto library/*.i --16 --output clib16.goto
-	$(LD) -b binary clib16.goto -o clib16.o --defsym=clib16=0 -Tdata=0 -r
+	$(LD) -b binary clib16.goto -o clib16.o -r
 
 clib32.o: c2goto library
 	./c2goto library/*.i --32 --output clib32.goto
-	$(LD) -b binary clib32.goto -o clib32.o --defsym=clib32=0 -Tdata=0 -r
+	$(LD) -b binary clib32.goto -o clib32.o -r
 
 clib64.o: c2goto library
 	./c2goto library/*.i --64 --output clib64.goto
-	$(LD) -b binary clib64.goto -o clib64.o --defsym=clib64=0 -Tdata=0 -r
+	$(LD) -b binary clib64.goto -o clib64.o -r
 
 library:
 	$(MAKE) -C library
