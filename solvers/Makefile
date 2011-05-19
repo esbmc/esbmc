@@ -4,7 +4,7 @@ include ../config.inc
 include ../common
 include ../local.inc
 
-ifdef $(BOOLECTOR)
+ifdef BOOLECTOR
 BOOLBUILD= boolector/boolector.o
 endif
 
