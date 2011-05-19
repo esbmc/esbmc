@@ -23,15 +23,19 @@ void *calloc(size_t nmemb, size_t size)
   __ESBMC_HIDE:;
   size_t total_size=nmemb*size;
   void *res = malloc(total_size);
-  #ifdef __ESBMC_STRING_ABSTRACTION
-  __ESBMC_is_zero_string(res);
-  __ESBMC_zero_string_length(res)=0;
-  //for(int i=0; i<nmemb*size; i++) res[i]=0;
-  #else
   // there should be memset here
   //char *p=res;
   //for(int i=0; i<total_size; i++) p[i]=0;
-  #endif
+  return res;
+}
+
+void *calloc_strabs(size_t nmemb, size_t size)
+{
+  __ESBMC_HIDE:;
+  size_t total_size=nmemb*size;
+  void *res = malloc(total_size);
+  __ESBMC_is_zero_string(res);
+  __ESBMC_zero_string_length(res)=0;
   return res;
 }
 
@@ -39,10 +43,16 @@ int atoi(const char *nptr)
 {
   __ESBMC_HIDE:;
   int res;
-  #ifdef __ESBMC_STRING_ABSTRACTION
+  /* XXX - does nothing without strabs */
+  return res;
+}
+
+int atoi_strabs(const char *nptr)
+{
+  __ESBMC_HIDE:;
+  int res;
   __ESBMC_assert(__ESBMC_is_zero_string(nptr),
     "zero-termination of argument of atoi");
-  #endif
   return res;
 }
 
@@ -50,10 +60,16 @@ long atol(const char *nptr)
 {
   __ESBMC_HIDE:;
   long res;
-  #ifdef __ESBMC_STRING_ABSTRACTION
+  /* XXX - does nothing without strabs */
+  return res;
+}
+
+long atol_strabs(const char *nptr)
+{
+  __ESBMC_HIDE:;
+  long res;
   __ESBMC_assert(__ESBMC_is_zero_string(nptr),
     "zero-termination of argument of atol");
-  #endif
   return res;
 }
 
@@ -61,10 +77,24 @@ char *getenv(const char *name)
 {
   __ESBMC_HIDE:;
 
-  #ifdef __ESBMC_STRING_ABSTRACTION
+  _Bool found;
+  if(!found) return 0;
+
+  char *buffer;
+  size_t buf_size;
+
+  __ESBMC_assume(buf_size>=1);
+  buffer=(char *)malloc(buf_size);
+  buffer[buf_size-1]=0;
+  return buffer;
+}
+
+char *getenv_strabs(const char *name)
+{
+  __ESBMC_HIDE:;
+
   __ESBMC_assert(__ESBMC_is_zero_string(name),
     "zero-termination of argument of getenv");
-  #endif
 
   _Bool found;
   if(!found) return 0;
