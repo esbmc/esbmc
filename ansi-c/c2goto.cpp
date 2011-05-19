@@ -18,9 +18,9 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 
     config.set(cmdline);
 
-    if (parse()) return true;
-    if (typecheck()) return true;
-    if (final()) return true;
+    if (parse()) return 1;
+    if (typecheck()) return 1;
+    if (final()) return 1;
 
     clear_parse();
 
