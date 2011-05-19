@@ -66,7 +66,7 @@ c2goto: $(OBJ) c2goto.cpp ../util/util.o ../langapi/langapi.o \
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 clib.o: library/*.c
-	./c2goto library/*.c -o clib.o
+	./c2goto library/*.i
 
 ansi-c.o: $(OBJ) 
 	$(LD) $(LDFLAGS) -r -o $@ $(OBJ)

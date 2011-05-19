@@ -1,11 +1,17 @@
-CC=	./goto-cc
+CC=	gcc
+SRCS= ctype.i getopt.i io.i math.i pthread_lib.i stdlib.i string.i time.i
 
-OBJS= ctype.o getopt.o io.o math.o pthread_lib.o stdlib.o string.o time.o
+all: clibrary
+.SUFFIXES: .i
 
-clibrary.o: $(OBJS)
-	$(CC) $(OBJS) -o $@ -c
+.c.i:
+	$(CC) $(CFLAGS) -E $< -o $@
+
+FILES= $(SRCS:.c=.i)
+
+clibrary: $(FILES)
 
 clean:
-	-rm *.o
+	-rm *.i
 
-.PHONY: clean
+.PHONY: clean clibrary
