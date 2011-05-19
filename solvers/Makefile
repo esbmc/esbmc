@@ -2,6 +2,7 @@ all: solvers.o
 
 include ../config.inc
 include ../common
+include ../local.inc
 
 ifdef $(BOOLECTOR)
 BOOLBUILD= boolector/boolector.o
