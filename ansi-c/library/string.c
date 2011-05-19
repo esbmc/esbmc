@@ -58,7 +58,6 @@ char *strcat_strabs(char *dst, const char *src)
   __ESBMC_assert(__ESBMC_is_zero_string(dst), "strcat zero-termination of 1st argument");
   __ESBMC_assert(__ESBMC_is_zero_string(src), "strcat zero-termination of 2nd argument");
   new_size=__ESBMC_zero_string_length(dst)+__ESBMC_zero_string_length(src);
-  printf("new_size: %d", new_size);
   __ESBMC_assert(__ESBMC_buffer_size(dst)>=new_size,
                    "strcat buffer overflow");
   size_t old_size=__ESBMC_zero_string_length(dst);
