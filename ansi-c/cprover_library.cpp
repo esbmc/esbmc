@@ -44,10 +44,7 @@ void add_cprover_library(
 
   library_text <<
     "#line 1 \"<builtin-library>\"\n"
-    "#undef inline\n"
-    "void __ESBMC_atomic_begin();\n"
-    "void __ESBMC_atomic_end();\n"
-    "void __ESBMC_yield();\n";
+    "#undef inline\n";
 
   unsigned count=0;
 
