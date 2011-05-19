@@ -231,12 +231,12 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
 
   do_pthread_cond_wait(cond, mutex, 0);
-  return;
+  return 0;
 }
 
 int pthread_cond_wait_check(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
 
   do_pthread_cond_wait(cond, mutex, 1);
-  return;
+  return 0;
 }
