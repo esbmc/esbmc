@@ -719,7 +719,7 @@ void cbmc_parseoptionst::preprocessing()
       return;
     }
 
-    std::auto_ptr<languaget> language(new_language(mode));
+    //std::auto_ptr<languaget> language(new_language(mode));
 
     //if(language->preprocess(
       //infile, filename, std::cout, *get_message_handler()))
