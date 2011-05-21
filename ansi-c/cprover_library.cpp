@@ -74,7 +74,7 @@ void add_cprover_library(
     abort();
   }
 
-  sprintf(symname_buffer, "ESBMC_XXXXXX");
+  sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
   fd = mkstemp(symname_buffer);
   close(fd);
   f = fopen(symname_buffer, "w");
