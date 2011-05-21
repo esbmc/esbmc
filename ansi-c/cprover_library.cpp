@@ -39,6 +39,9 @@ void add_cprover_library(
   contextt &context,
   message_handlert &message_handler)
 {
+  contextt new_ctx;
+  goto_functionst goto_functions;
+  ansi_c_languaget ansi_c_language;
   char symname_buffer[256];
   void *self, *start;
   FILE *f;
@@ -80,21 +83,8 @@ void add_cprover_library(
   fclose(f);
 
   std::ifstream infile(filename);
-  read_goto_binary(infile, context, blah, message_handler);
+  read_goto_binary(infile, new_ctx, goto_functions, message_handler);
 
-  if(count>0)
-  {
-    std::istringstream in(library_text.str());
-    ansi_c_languaget ansi_c_language;
-    ansi_c_language.parse(in, "", message_handler);
-
-    contextt new_context;
-    ansi_c_language.typecheck(
-      new_context, "<built-in-library>", message_handler);
-
-    ansi_c_language.merge_context(
-      context, new_context,
-      message_handler, "<built-in-library>");
-  }
+  ansi_c_language.merge_context(
+        context, new_ctx, message_handler, "<built-in-library>");
 }
-
