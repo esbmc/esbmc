@@ -10,8 +10,7 @@ SRC = c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
       c_typecheck_argc_argv.cpp ansi_c_parse_tree.cpp \
       preprocessor_line.cpp convert_character_literal.cpp \
       convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp \
-      type2name.cpp cprover_library.cpp fix_symbol.cpp \
-      printf_formatter.cpp
+      type2name.cpp fix_symbol.cpp printf_formatter.cpp \
 
 OBJ = $(SRC:.cpp=.o)
 
@@ -40,7 +39,14 @@ lex.yy.o: y.tab.cpp lex.yy.cpp y.tab.h
 
 ###############################################################################
 
-c2goto: $(OBJ) c2goto.cpp ../util/util.o ../langapi/langapi.o \
+cprover_library.o: cprover_library.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@ -c
+
+cprover_blank_library.o: cprover_library.cpp
+	$(CXX) $(CXXFLAGS) -DNO_CPROVER_LIBRARY $^ -o $@ -c
+
+c2goto: $(OBJ) c2goto.cpp cprover_blank_library.o ../util/util.o \
+		../langapi/langapi.o \
 		../big-int/bigint.o \
 		../langapi/csp_dummy.o \
 		../langapi/intrep_dummy.o \
@@ -87,7 +93,7 @@ clib.o: c2goto clib16.o clib32.o clib64.o
 
 ###############################################################################
 
-ansi-c.o: $(OBJ) 
+ansi-c.o: $(OBJ) cprover_library.o clib.o
 	$(LD) $(LDFLAGS) -r -o $@ $(OBJ)
 
 clean:
