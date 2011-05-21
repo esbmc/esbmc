@@ -83,10 +83,8 @@ clib64.o: c2goto library
 	./c2goto library/*.i --64 --output clib64.goto
 	$(LD) -b binary clib64.goto -o clib64.o -r
 
-library:
+library: library/*.c
 	$(MAKE) -C library
-
-.PHONY: library
 
 clib.o: c2goto clib16.o clib32.o clib64.o
 	$(LD) clib16.o clib32.o clib64.o -o clib.o -r
