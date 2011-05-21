@@ -22,6 +22,7 @@ extern "C" {
 #include "cprover_library.h"
 #include "ansi_c_language.h"
 
+#ifndef NO_CPROVER_LIBRARY
 extern void *_binary_clib16_goto_size;
 extern void *_binary_clib32_goto_size;
 extern void *_binary_clib64_goto_size;
@@ -38,10 +39,15 @@ void *clib_ptrs[3][3] = {
 { _binary_clib64_goto_size, _binary_clib64_goto_start, _binary_clib64_goto_end},
 };
 
+#endif
+
 void add_cprover_library(
   contextt &context,
   message_handlert &message_handler)
 {
+#ifdef NO_CPROVER_LIBRARY
+  return;
+#else
   contextt new_ctx;
   goto_functionst goto_functions;
   ansi_c_languaget ansi_c_language;
@@ -86,4 +92,5 @@ void add_cprover_library(
 
   ansi_c_language.merge_context(
         context, new_ctx, message_handler, "<built-in-library>");
+#endif
 }
