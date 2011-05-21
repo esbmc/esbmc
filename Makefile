@@ -14,12 +14,13 @@ export Z3 BOOLECTOR CHAFF BOOLEFORCE MINISAT MINISAT2 SMVSAT
 
 util.dir: big-int.dir
 
-languages: util.dir langapi.dir \
-           ansi-c.dir intrep.dir cvclang.dir smvlang.dir \
-           bplang.dir
-
-esbmc.dir: languages solvers.dir goto-symex.dir \
+lump.dir: util.dir langapi.dir solvers.dir goto-symex.dir \
           pointer-analysis.dir goto-programs.dir goto-symex.dir
+
+languages: lump.dir intrep.dir cvclang.dir smvlang.dir \
+           bplang.dir ansi-c.dir
+
+esbmc.dir: lump.dir languages
 
 cemc.dir: esbmc.dir
 
