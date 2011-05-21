@@ -71,19 +71,19 @@ c2goto: $(OBJ) c2goto.cpp cprover_blank_library.o ../util/util.o \
 		../pointer-analysis/pointer-analysis.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-clib16.o: c2goto library
+clib16.o: c2goto library/*.i
 	./c2goto library/*.i --16 --output clib16.goto
 	$(LD) -b binary clib16.goto -o clib16.o -r
 
-clib32.o: c2goto library
+clib32.o: c2goto library/*.i
 	./c2goto library/*.i --32 --output clib32.goto
 	$(LD) -b binary clib32.goto -o clib32.o -r
 
-clib64.o: c2goto library
+clib64.o: c2goto library/*.i
 	./c2goto library/*.i --64 --output clib64.goto
 	$(LD) -b binary clib64.goto -o clib64.o -r
 
-library: library/*.c
+library/*.i: library/*.c
 	$(MAKE) -C library
 
 clib.o: c2goto clib16.o clib32.o clib64.o
