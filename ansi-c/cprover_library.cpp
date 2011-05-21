@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 }
 
 #include <sstream>
@@ -23,22 +24,18 @@ extern "C" {
 #include "ansi_c_language.h"
 
 #ifndef NO_CPROVER_LIBRARY
-extern void *_binary_clib16_goto_size;
-extern void *_binary_clib32_goto_size;
-extern void *_binary_clib64_goto_size;
-extern void *_binary_clib16_goto_start;
-extern void *_binary_clib32_goto_start;
-extern void *_binary_clib64_goto_start;
-extern void *_binary_clib16_goto_end;
-extern void *_binary_clib32_goto_end;
-extern void *_binary_clib64_goto_end;
+extern uint8_t _binary_clib16_goto_start;
+extern uint8_t _binary_clib32_goto_start;
+extern uint8_t _binary_clib64_goto_start;
+extern uint8_t _binary_clib16_goto_end;
+extern uint8_t _binary_clib32_goto_end;
+extern uint8_t _binary_clib64_goto_end;
 
-void *clib_ptrs[3][3] = {
-{ _binary_clib16_goto_size, _binary_clib16_goto_start, _binary_clib16_goto_end},
-{ _binary_clib32_goto_size, _binary_clib32_goto_start, _binary_clib32_goto_end},
-{ _binary_clib64_goto_size, _binary_clib64_goto_start, _binary_clib64_goto_end},
+uint8_t *clib_ptrs[3][2] = {
+{ &_binary_clib16_goto_start, &_binary_clib16_goto_end},
+{ &_binary_clib32_goto_start, &_binary_clib32_goto_end},
+{ &_binary_clib64_goto_start, &_binary_clib64_goto_end},
 };
-
 #endif
 
 void add_cprover_library(
@@ -53,7 +50,7 @@ void add_cprover_library(
   ansi_c_languaget ansi_c_language;
   char symname_buffer[256];
   FILE *f;
-  void **this_clib_ptrs;
+  uint8_t **this_clib_ptrs;
   unsigned long size;
   int fd;
 
@@ -71,7 +68,7 @@ void add_cprover_library(
     abort();
   }
 
-  size = (unsigned long)this_clib_ptrs[0];
+  size = (unsigned long)this_clib_ptrs[1] - (unsigned long)this_clib_ptrs[0];
   if (size == 0) {
     std::cerr << "error: Zero-lengthed internal C library" << std::endl;
     abort();
@@ -81,7 +78,7 @@ void add_cprover_library(
   fd = mkstemp(symname_buffer);
   close(fd);
   f = fopen(symname_buffer, "w");
-  if (fwrite(this_clib_ptrs[1], size, 1, f) != 1) {
+  if (fwrite(this_clib_ptrs[0], size, 1, f) != 1) {
     std::cerr << "Couldn't manipulate internal C library" << std::endl;
     abort();
   }
