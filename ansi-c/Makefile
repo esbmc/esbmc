@@ -92,7 +92,7 @@ clib.o: c2goto clib16.o clib32.o clib64.o
 ###############################################################################
 
 ansi-c.o: $(OBJ) cprover_library.o clib.o
-	$(LD) $(LDFLAGS) -r -o $@ $(OBJ)
+	$(LD) $(LDFLAGS) -r -o $@ $^
 
 clean:
 	$(MAKE) -C library clean
