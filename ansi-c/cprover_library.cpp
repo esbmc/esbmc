@@ -86,6 +86,7 @@ void add_cprover_library(
 
   std::ifstream infile(symname_buffer);
   read_goto_binary(infile, new_ctx, goto_functions, message_handler);
+  unlink(symname_buffer);
 
   ansi_c_language.merge_context(
         context, new_ctx, message_handler, "<built-in-library>");
