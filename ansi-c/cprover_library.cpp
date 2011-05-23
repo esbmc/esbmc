@@ -45,7 +45,7 @@ void add_cprover_library(
 #ifdef NO_CPROVER_LIBRARY
   return;
 #else
-  contextt new_ctx, store_ctx;
+  contextt new_ctx, store_ctx, remain_ctx;
   goto_functionst goto_functions;
   ansi_c_languaget ansi_c_language;
   char symname_buffer[256];
@@ -88,14 +88,34 @@ void add_cprover_library(
   read_goto_binary(infile, new_ctx, goto_functions, message_handler);
   unlink(symname_buffer);
 
-  forall_symbols(it, new_ctx.symbols) {
-    symbolst::const_iterator used_sym = context.symbols.find(it->second.name);
-    if (used_sym != context.symbols.end() && used_sym->second.value.is_nil()) {
-      store_ctx.add(used_sym->second);
-    }
-  }
+  /* The code just pulled into store_ctx might use other symbols in the C
+   * library. So, repeatedly search for new C library symbols that we use but
+   * haven't pulled in, then pull them in. We finish when we've made a pass
+   * that adds no new symbols. */
+  remain_ctx.clear();
+  do {
 
-  ansi_c_language.merge_context(
+    forall_symbols(it, new_ctx.symbols) {
+      symbolst::const_iterator used_sym = context.symbols.find(it->second.name);
+
+      if (used_sym != context.symbols.end() && used_sym->second.value.is_nil()){
+        store_ctx.add(it->second);
+      } else {
+        remain_ctx.add(it->second);
+      }
+    }
+
+    ansi_c_language.merge_context(
         context, store_ctx, message_handler, "<built-in-library>");
+
+    if (store_ctx.symbols.size() == 0)
+      break;
+
+    store_ctx.clear();
+    new_ctx = remain_ctx;
+    remain_ctx.clear();
+
+  } while (1);
+
 #endif
 }
