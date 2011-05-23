@@ -29,11 +29,6 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 
     if (parse()) return 1;
     if (typecheck()) return 1;
-    if (final()) return 1;
-
-    clear_parse();
-
-    goto_convert(context, optionst(), goto_functions, ui_message_handler);
 
     std::ofstream out(cmdline.getval("output"));
 
