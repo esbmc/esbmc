@@ -5,7 +5,7 @@ all: clibrary
 .SUFFIXES: .i
 
 .c.i:
-	$(CC) $(CFLAGS) -E $< -o $@
+	$(CC) $(CFLAGS) -E $< -o $@ -fno-builtin
 
 FILES= $(SRCS:.c=.i)
 
