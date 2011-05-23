@@ -38,6 +38,29 @@ uint8_t *clib_ptrs[3][2] = {
 };
 #endif
 
+void
+fetch_list_of_contained_symbols(irept irep, std::set<irep_idt> &names)
+{
+
+  forall_irep(irep_it, irep.get_sub()) {
+    if (irep_it->id() == "symbol") {
+      names.insert(irep_it->get("identifier"));
+    } else {
+      fetch_list_of_contained_symbols(*irep_it, names);
+    }
+  }
+
+  forall_named_irep(irep_it, irep.get_named_sub()) {
+    if (irep_it->second.id() == "symbol") {
+      names.insert(irep_it->second.get("identifier"));
+    } else {
+     fetch_list_of_contained_symbols(irep_it->second, names);
+    }
+  }
+
+  return;
+}
+
 void add_cprover_library(
   contextt &context,
   message_handlert &message_handler)
@@ -103,6 +126,12 @@ void add_cprover_library(
       } else {
         remain_ctx.add(it->second);
       }
+    }
+
+    std::set<irep_idt> names;
+    forall_symbols(it, store_ctx.symbols) {
+      fetch_list_of_contained_symbols(it->second.value, names);
+      fetch_list_of_contained_symbols(it->second.type, names);
     }
 
     ansi_c_language.merge_context(
