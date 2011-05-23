@@ -54,17 +54,20 @@ void
 fetch_list_of_contained_symbols(irept irep, std::list<irep_idt> &names,
                                 std::list<irep_idt> &moved)
 {
+  irep_idt ident;
 
   forall_irep(irep_it, irep.get_sub()) {
     if (irep_it->id() == "symbol") {
-      if (!is_in_list(moved, irep_it->get("identifier"))) {
-        names.push_back(irep_it->get("identifier"));
-        moved.push_back(irep_it->get("identifier"));
+      ident = irep_it->get("identifier");
+      if (!is_in_list(moved, ident)) {
+        names.push_back(ident);
+        moved.push_back(ident);
       }
     } else if (irep_it->id() == "argument") {
-      if (!is_in_list(moved, irep_it->get("#identifier"))) {
-        names.push_back(irep_it->get("#identifier"));
-        moved.push_back(irep_it->get("#identifier"));
+      ident = irep_it->get("#identifier");
+      if (!is_in_list(moved, ident)) {
+        names.push_back(ident);
+        moved.push_back(ident);
       }
     } else {
       fetch_list_of_contained_symbols(*irep_it, names, moved);
@@ -73,15 +76,17 @@ fetch_list_of_contained_symbols(irept irep, std::list<irep_idt> &names,
 
   forall_named_irep(irep_it, irep.get_named_sub()) {
     if (irep_it->second.id() == "symbol") {
-      if (!is_in_list(moved, irep_it->second.get("identifier"))) {
-        names.push_back(irep_it->second.get("identifier"));
-        moved.push_back(irep_it->second.get("identifier"));
+      ident = irep_it->second.get("identifier");
+      if (!is_in_list(moved, ident)) {
+        names.push_back(ident);
+        moved.push_back(ident);
       }
     } else if (irep_it->second.id() == "argument") {
-      if (!is_in_list(moved, irep_it->second.get("#identifier"))) {
-        names.push_back(irep_it->second.get("#identifier"));
-        moved.push_back(irep_it->second.get("#identifier"));
-    }
+      ident = irep_it->second.get("#identifier");
+      if (!is_in_list(moved, ident)) {
+        names.push_back(ident);
+        moved.push_back(ident);
+      }
     } else {
      fetch_list_of_contained_symbols(irep_it->second, names, moved);
     }
