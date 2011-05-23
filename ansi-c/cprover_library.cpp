@@ -135,8 +135,10 @@ void add_cprover_library(
 
       for (std::set<irep_idt>::const_iterator nameit = names.begin();
             nameit != names.end(); nameit++) {
+
         symbolst::const_iterator used_sym = new_ctx.symbols.find(*nameit);
-        store_ctx.add(used_sym->second);
+        if (used_sym != new_ctx.symbols.end())
+          store_ctx.add(used_sym->second);
       }
     }
   } while (num_syms != store_ctx.symbols.size());
