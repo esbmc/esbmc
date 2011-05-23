@@ -45,6 +45,8 @@ fetch_list_of_contained_symbols(irept irep, std::set<irep_idt> &names)
   forall_irep(irep_it, irep.get_sub()) {
     if (irep_it->id() == "symbol") {
       names.insert(irep_it->get("identifier"));
+    } else if (irep_it->id() == "argument") {
+      names.insert(irep_it->get("#identifier"));
     } else {
       fetch_list_of_contained_symbols(*irep_it, names);
     }
@@ -53,6 +55,8 @@ fetch_list_of_contained_symbols(irept irep, std::set<irep_idt> &names)
   forall_named_irep(irep_it, irep.get_named_sub()) {
     if (irep_it->second.id() == "symbol") {
       names.insert(irep_it->second.get("identifier"));
+    } else if (irep_it->second.id() == "argument") {
+      names.insert(irep_it->second.get("#identifier"));
     } else {
      fetch_list_of_contained_symbols(irep_it->second, names);
     }
