@@ -38,27 +38,52 @@ uint8_t *clib_ptrs[3][2] = {
 };
 #endif
 
+bool
+is_in_list(std::list<irep_idt> &list, irep_idt item)
+{
+
+  for(std::list<irep_idt>::const_iterator it = list.begin(); it != list.end();
+      it++)
+    if (*it == item)
+      return true;
+
+  return false;
+}
+
 void
-fetch_list_of_contained_symbols(irept irep, std::set<irep_idt> &names)
+fetch_list_of_contained_symbols(irept irep, std::list<irep_idt> &names,
+                                std::list<irep_idt> &moved)
 {
 
   forall_irep(irep_it, irep.get_sub()) {
     if (irep_it->id() == "symbol") {
-      names.insert(irep_it->get("identifier"));
+      if (!is_in_list(moved, irep_it->get("identifier"))) {
+        names.push_back(irep_it->get("identifier"));
+        moved.push_back(irep_it->get("identifier"));
+      }
     } else if (irep_it->id() == "argument") {
-      names.insert(irep_it->get("#identifier"));
+      if (!is_in_list(moved, irep_it->get("#identifier"))) {
+        names.push_back(irep_it->get("#identifier"));
+        moved.push_back(irep_it->get("#identifier"));
+      }
     } else {
-      fetch_list_of_contained_symbols(*irep_it, names);
+      fetch_list_of_contained_symbols(*irep_it, names, moved);
     }
   }
 
   forall_named_irep(irep_it, irep.get_named_sub()) {
     if (irep_it->second.id() == "symbol") {
-      names.insert(irep_it->second.get("identifier"));
+      if (!is_in_list(moved, irep_it->second.get("identifier"))) {
+        names.push_back(irep_it->second.get("identifier"));
+        moved.push_back(irep_it->second.get("identifier"));
+      }
     } else if (irep_it->second.id() == "argument") {
-      names.insert(irep_it->second.get("#identifier"));
+      if (!is_in_list(moved, irep_it->second.get("#identifier"))) {
+        names.push_back(irep_it->second.get("#identifier"));
+        moved.push_back(irep_it->second.get("#identifier"));
+    }
     } else {
-     fetch_list_of_contained_symbols(irep_it->second, names);
+     fetch_list_of_contained_symbols(irep_it->second, names, moved);
     }
   }
 
@@ -74,12 +99,12 @@ void add_cprover_library(
 #else
   contextt new_ctx, store_ctx, remain_ctx;
   goto_functionst goto_functions;
+  std::list<irep_idt> names, moved;
   ansi_c_languaget ansi_c_language;
   char symname_buffer[256];
   FILE *f;
   uint8_t **this_clib_ptrs;
   unsigned long size;
-  unsigned int num_syms;
   int fd;
 
   if(config.ansi_c.lib==configt::ansi_ct::LIB_NONE)
@@ -124,28 +149,29 @@ void add_cprover_library(
     symbolst::const_iterator used_sym = context.symbols.find(it->second.name);
 
     if (used_sym != context.symbols.end() && used_sym->second.value.is_nil()){
+      moved.push_back(it->first);
       store_ctx.add(it->second);
     } else {
       remain_ctx.add(it->second);
     }
   }
 
-  std::set<irep_idt> names;
-  do {
-    num_syms = store_ctx.symbols.size();
-    forall_symbols(it, store_ctx.symbols) {
-      fetch_list_of_contained_symbols(it->second.value, names);
-      fetch_list_of_contained_symbols(it->second.type, names);
+  forall_symbols(it, store_ctx.symbols) {
+    fetch_list_of_contained_symbols(it->second.value, names, moved);
+    fetch_list_of_contained_symbols(it->second.type, names, moved);
+  }
 
-      for (std::set<irep_idt>::const_iterator nameit = names.begin();
+  for (std::list<irep_idt>::const_iterator nameit = names.begin();
             nameit != names.end(); nameit++) {
 
-        symbolst::const_iterator used_sym = new_ctx.symbols.find(*nameit);
-        if (used_sym != new_ctx.symbols.end())
-          store_ctx.add(used_sym->second);
-      }
+    symbolst::const_iterator used_sym = new_ctx.symbols.find(*nameit);
+    if (used_sym != new_ctx.symbols.end()) {
+      moved.push_back(used_sym->first);
+      fetch_list_of_contained_symbols(used_sym->second.value, names, moved);
+      fetch_list_of_contained_symbols(used_sym->second.type, names, moved);
+      store_ctx.add(used_sym->second);
     }
-  } while (num_syms != store_ctx.symbols.size());
+  }
 
   ansi_c_language.merge_context(
       context, store_ctx, message_handler, "<built-in-library>");
