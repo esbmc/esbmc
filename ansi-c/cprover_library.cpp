@@ -97,7 +97,7 @@ void add_cprover_library(
 #ifdef NO_CPROVER_LIBRARY
   return;
 #else
-  contextt new_ctx, store_ctx, remain_ctx;
+  contextt new_ctx, store_ctx;
   goto_functionst goto_functions;
   std::list<irep_idt> names, moved;
   ansi_c_languaget ansi_c_language;
@@ -151,8 +151,6 @@ void add_cprover_library(
     if (used_sym != context.symbols.end() && used_sym->second.value.is_nil()){
       moved.push_back(it->first);
       store_ctx.add(it->second);
-    } else {
-      remain_ctx.add(it->second);
     }
   }
 
