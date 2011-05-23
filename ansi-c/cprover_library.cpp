@@ -75,6 +75,7 @@ void add_cprover_library(
   FILE *f;
   uint8_t **this_clib_ptrs;
   unsigned long size;
+  unsigned int num_syms;
   int fd;
 
   if(config.ansi_c.lib==configt::ansi_ct::LIB_NONE)
@@ -115,36 +116,33 @@ void add_cprover_library(
    * library. So, repeatedly search for new C library symbols that we use but
    * haven't pulled in, then pull them in. We finish when we've made a pass
    * that adds no new symbols. */
-  remain_ctx.clear();
-  do {
+  forall_symbols(it, new_ctx.symbols) {
+    symbolst::const_iterator used_sym = context.symbols.find(it->second.name);
 
-    forall_symbols(it, new_ctx.symbols) {
-      symbolst::const_iterator used_sym = context.symbols.find(it->second.name);
-
-      if (used_sym != context.symbols.end() && used_sym->second.value.is_nil()){
-        store_ctx.add(it->second);
-      } else {
-        remain_ctx.add(it->second);
-      }
+    if (used_sym != context.symbols.end() && used_sym->second.value.is_nil()){
+      store_ctx.add(it->second);
+    } else {
+      remain_ctx.add(it->second);
     }
+  }
 
-    std::set<irep_idt> names;
+  std::set<irep_idt> names;
+  do {
+    num_syms = store_ctx.symbols.size();
     forall_symbols(it, store_ctx.symbols) {
       fetch_list_of_contained_symbols(it->second.value, names);
       fetch_list_of_contained_symbols(it->second.type, names);
+
+      for (std::set<irep_idt>::const_iterator nameit = names.begin();
+            nameit != names.end(); nameit++) {
+        symbolst::const_iterator used_sym = new_ctx.symbols.find(*nameit);
+        store_ctx.add(used_sym->second);
+      }
     }
+  } while (num_syms != store_ctx.symbols.size());
 
-    ansi_c_language.merge_context(
-        context, store_ctx, message_handler, "<built-in-library>");
-
-    if (store_ctx.symbols.size() == 0)
-      break;
-
-    store_ctx.clear();
-    new_ctx = remain_ctx;
-    remain_ctx.clear();
-
-  } while (1);
+  ansi_c_language.merge_context(
+      context, store_ctx, message_handler, "<built-in-library>");
 
 #endif
 }
