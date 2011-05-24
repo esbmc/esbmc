@@ -83,21 +83,18 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
 }
 
 void
-ingest_symbol(irep_idt name, std::multimap<irep_idt, irep_idt> &deps, std::list<irep_idt> to_include)
+ingest_symbol(irep_idt name, std::multimap<irep_idt, irep_idt> &deps, std::list<irep_idt> &to_include)
 {
   std::pair<std::multimap<irep_idt,irep_idt>::const_iterator,
             std::multimap<irep_idt,irep_idt>::const_iterator> range;
   std::multimap<irep_idt, irep_idt>::const_iterator it;
 
   range = deps.equal_range(name);
-  if (range.first == deps.end())
+  if (range.first == range.second)
     return;
 
   for (it = range.first; it != range.second; it++)
     to_include.push_back(it->second);
-
-  // And final entry,
-  to_include.push_back(it->second);
 
   deps.erase(name);
 
