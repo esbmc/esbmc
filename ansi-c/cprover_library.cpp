@@ -51,46 +51,55 @@ is_in_list(std::list<irep_idt> &list, irep_idt item)
 }
 
 void
-fetch_list_of_contained_symbols(irept irep, std::list<irep_idt> &names,
-                                std::list<irep_idt> &moved)
+generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt> &deps)
 {
-  irep_idt ident;
+  std::pair<irep_idt, irep_idt> type;
 
   forall_irep(irep_it, irep.get_sub()) {
     if (irep_it->id() == "symbol") {
-      ident = irep_it->get("identifier");
-      if (!is_in_list(moved, ident)) {
-        names.push_back(ident);
-        moved.push_back(ident);
-      }
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->get("identifier"));
+      deps.insert(type);
     } else if (irep_it->id() == "argument") {
-      ident = irep_it->get("#identifier");
-      if (!is_in_list(moved, ident)) {
-        names.push_back(ident);
-        moved.push_back(ident);
-      }
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->get("#identifier"));
+      deps.insert(type);
     } else {
-      fetch_list_of_contained_symbols(*irep_it, names, moved);
+      generate_symbol_deps(name, *irep_it, deps);
     }
   }
 
   forall_named_irep(irep_it, irep.get_named_sub()) {
     if (irep_it->second.id() == "symbol") {
-      ident = irep_it->second.get("identifier");
-      if (!is_in_list(moved, ident)) {
-        names.push_back(ident);
-        moved.push_back(ident);
-      }
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.get("identifier"));
+      deps.insert(type);
     } else if (irep_it->second.id() == "argument") {
-      ident = irep_it->second.get("#identifier");
-      if (!is_in_list(moved, ident)) {
-        names.push_back(ident);
-        moved.push_back(ident);
-      }
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.get("#identifier"));
+      deps.insert(type);
     } else {
-     fetch_list_of_contained_symbols(irep_it->second, names, moved);
+      generate_symbol_deps(name, irep_it->second, deps);
     }
   }
+
+  return;
+}
+
+void
+ingest_symbol(irep_idt name, std::multimap<irep_idt, irep_idt> &deps, std::list<irep_idt> to_include)
+{
+  std::pair<std::multimap<irep_idt,irep_idt>::const_iterator,
+            std::multimap<irep_idt,irep_idt>::const_iterator> range;
+  std::multimap<irep_idt, irep_idt>::const_iterator it;
+
+  range = deps.equal_range(name);
+  if (range.first == deps.end())
+    return;
+
+  for (it = range.first; it != range.second; it++)
+    to_include.push_back(it->second);
+
+  // And final entry,
+  to_include.push_back(it->second);
+
+  deps.erase(name);
 
   return;
 }
@@ -104,7 +113,8 @@ void add_cprover_library(
 #else
   contextt new_ctx, store_ctx;
   goto_functionst goto_functions;
-  std::list<irep_idt> names, moved;
+  std::multimap<irep_idt, irep_idt> symbol_deps;
+  std::list<irep_idt> to_include;
   ansi_c_languaget ansi_c_language;
   char symname_buffer[256];
   FILE *f;
@@ -146,33 +156,31 @@ void add_cprover_library(
   read_goto_binary(infile, new_ctx, goto_functions, message_handler);
   unlink(symname_buffer);
 
+  forall_symbols(it, new_ctx.symbols) {
+    generate_symbol_deps(it->first, it->second.value, symbol_deps);
+    generate_symbol_deps(it->first, it->second.type, symbol_deps);
+  }
+
   /* The code just pulled into store_ctx might use other symbols in the C
    * library. So, repeatedly search for new C library symbols that we use but
    * haven't pulled in, then pull them in. We finish when we've made a pass
    * that adds no new symbols. */
+
   forall_symbols(it, new_ctx.symbols) {
     symbolst::const_iterator used_sym = context.symbols.find(it->second.name);
-
     if (used_sym != context.symbols.end() && used_sym->second.value.is_nil()){
-      moved.push_back(it->first);
       store_ctx.add(it->second);
+      ingest_symbol(it->first, symbol_deps, to_include);
     }
   }
 
-  forall_symbols(it, store_ctx.symbols) {
-    fetch_list_of_contained_symbols(it->second.value, names, moved);
-    fetch_list_of_contained_symbols(it->second.type, names, moved);
-  }
-
-  for (std::list<irep_idt>::const_iterator nameit = names.begin();
-            nameit != names.end(); nameit++) {
+  for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
+            nameit != to_include.end(); nameit++) {
 
     symbolst::const_iterator used_sym = new_ctx.symbols.find(*nameit);
     if (used_sym != new_ctx.symbols.end()) {
-      moved.push_back(used_sym->first);
-      fetch_list_of_contained_symbols(used_sym->second.value, names, moved);
-      fetch_list_of_contained_symbols(used_sym->second.type, names, moved);
       store_ctx.add(used_sym->second);
+      ingest_symbol(used_sym->first, symbol_deps, to_include);
     }
   }
 
