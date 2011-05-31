@@ -122,11 +122,11 @@ void add_cprover_library(
   if(config.ansi_c.lib==configt::ansi_ct::LIB_NONE)
     return;
 
-  if (config.ansi_c.int_width == 16) {
+  if (config.ansi_c.word_size == 16) {
     this_clib_ptrs = &clib_ptrs[0][0];
-  } else if (config.ansi_c.int_width == 32) {
+  } else if (config.ansi_c.word_size == 32) {
     this_clib_ptrs = &clib_ptrs[1][0];
-  } else if (config.ansi_c.int_width == 64) {
+  } else if (config.ansi_c.word_size == 64) {
     this_clib_ptrs = &clib_ptrs[2][0];
   } else {
     std::cerr << "No c library for bitwidth " << config.ansi_c.int_width << std::endl;
