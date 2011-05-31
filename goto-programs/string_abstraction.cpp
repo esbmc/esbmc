@@ -164,7 +164,7 @@ protected:
   typedef std::map<irep_idt, irep_idt> localst;
   localst locals;
   
-  void abstract(goto_programt &dest);
+  void abstract(goto_function_templatet<goto_programt> &dest);
 };
 
 /*******************************************************************\
@@ -227,7 +227,7 @@ void string_abstractiont::operator()(goto_functionst &dest)
       it=dest.function_map.begin();
       it!=dest.function_map.end();
       it++)
-    abstract(it->second.body);
+    abstract(it->second);
 
   // do we have a main?
   goto_functionst::function_mapt::iterator
@@ -278,17 +278,17 @@ Function: string_abstractiont::abstract
 
 \*******************************************************************/
 
-void string_abstractiont::abstract(goto_programt &dest)
+void string_abstractiont::abstract(goto_function_templatet<goto_programt> &dest)
 {
   locals.clear();
 
-  Forall_goto_program_instructions(it, dest)
-    abstract(dest, it);
+  Forall_goto_program_instructions(it, dest.body)
+    abstract(dest.body, it);
 
   // do it again for the locals
   if(!locals.empty())
   {
-    Forall_goto_program_instructions(it, dest)
+    Forall_goto_program_instructions(it, dest.body)
     {
       for(localst::const_iterator
           l_it=locals.begin();
@@ -332,7 +332,7 @@ void string_abstractiont::abstract(goto_programt &dest)
               goto_programt::targett it_next=it;
               it_next++;
 
-              dest.destructive_insert(it_next, tmp);
+              dest.body.destructive_insert(it_next, tmp);
             }
           }
         }
