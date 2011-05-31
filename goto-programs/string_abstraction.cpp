@@ -59,7 +59,6 @@ public:
     string_struct=s;
   }
   
-  void operator()(goto_programt &dest);
   void operator()(goto_functionst &dest);
 
   exprt is_zero_string(
@@ -182,27 +181,6 @@ Function: string_abstraction
 void string_abstraction(
   contextt &context,
   message_handlert &message_handler,
-  goto_programt &dest)
-{
-  string_abstractiont string_abstraction(context, message_handler);
-  string_abstraction(dest);
-}
-
-/*******************************************************************\
-
-Function: string_abstraction
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void string_abstraction(
-  contextt &context,
-  message_handlert &message_handler,
   goto_functionst &dest)
 {
   string_abstractiont string_abstraction(context, message_handler);
@@ -242,28 +220,6 @@ void string_abstractiont::operator()(goto_functionst &dest)
     main.swap(initialization);
     initialization.clear();
   }
-}
-
-/*******************************************************************\
-
-Function: string_abstractiont::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void string_abstractiont::operator()(goto_programt &dest)
-{
-  abstract(dest);
-
-  // do initialization
-  initialization.destructive_append(dest);
-  dest.swap(initialization);
-  initialization.clear();
 }
 
 /*******************************************************************\
