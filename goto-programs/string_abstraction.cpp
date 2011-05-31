@@ -163,7 +163,7 @@ protected:
   typedef std::map<irep_idt, irep_idt> localst;
   localst locals;
   
-  void abstract(goto_function_templatet<goto_programt> &dest);
+  void abstract(irep_idt name, goto_function_templatet<goto_programt> &dest);
 };
 
 /*******************************************************************\
@@ -205,7 +205,7 @@ void string_abstractiont::operator()(goto_functionst &dest)
       it=dest.function_map.begin();
       it!=dest.function_map.end();
       it++)
-    abstract(it->second);
+    abstract(it->first, it->second);
 
   // do we have a main?
   goto_functionst::function_mapt::iterator
@@ -234,7 +234,8 @@ Function: string_abstractiont::abstract
 
 \*******************************************************************/
 
-void string_abstractiont::abstract(goto_function_templatet<goto_programt> &dest)
+void string_abstractiont::abstract(irep_idt name,
+                                   goto_function_templatet<goto_programt> &dest)
 {
   locals.clear();
 
@@ -263,6 +264,11 @@ void string_abstractiont::abstract(goto_function_templatet<goto_programt> &dest)
   }
 
   func_type.arguments() = new_args;
+
+  // Additionally, update the type of our symbol
+  symbolst::iterator it = context.symbols.find(name);
+  assert(it != context.symbols.end());
+  it->second.type = func_type;
 
   Forall_goto_program_instructions(it, dest.body)
     abstract(dest.body, it);
