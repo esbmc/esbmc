@@ -238,6 +238,32 @@ void string_abstractiont::abstract(goto_function_templatet<goto_programt> &dest)
 {
   locals.clear();
 
+  code_typet &func_type = static_cast<code_typet &>(dest.type);
+  code_typet::argumentst &arg_types=func_type.arguments();
+  code_typet::argumentst new_args;
+
+  for(code_typet::argumentst::const_iterator it=arg_types.begin();
+      it!=arg_types.end(); it++)
+  {
+    const code_typet::argumentt &argument=
+                static_cast<const code_typet::argumentt &>(*it);
+    const typet &type = argument.type();
+
+    new_args.push_back(argument);
+
+    if(type.id()=="pointer" && is_char_type(type.subtype()))
+    {
+      code_typet::argumentt new_arg;
+
+      new_arg.type() = string_struct;
+      new_arg.set_identifier(it->get_identifier().as_string() + "#str");
+      new_arg.set_base_name(it->get_base_name().as_string() + "#str");
+      new_args.push_back(new_arg);
+    }
+  }
+
+  func_type.arguments() = new_args;
+
   Forall_goto_program_instructions(it, dest.body)
     abstract(dest.body, it);
 
