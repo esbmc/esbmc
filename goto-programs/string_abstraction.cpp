@@ -1196,7 +1196,9 @@ void string_abstractiont::abstract_function_call(
   goto_programt &dest,
   goto_programt::targett target)
 {
-  const code_function_callt &call=to_code_function_call(target->code);
+  code_function_callt::argumentst new_args;
+
+  code_function_callt &call=to_code_function_call(target->code);
   const code_function_callt::argumentst &arguments=call.arguments();
   
   symbolst::const_iterator f_it = 
@@ -1208,21 +1210,11 @@ void string_abstractiont::abstract_function_call(
     static_cast<const code_typet &>(f_it->second.type);
   const code_typet::argumentst &argument_types=fnc_type.arguments();
   
-  exprt::operandst::const_iterator it1=arguments.begin();
-
-  for(code_typet::argumentst::const_iterator it2=argument_types.begin();
-      it2!=argument_types.end();
-      it2++)
-  {
-    if(it1==arguments.end())
-    {
-      err_location(target->location);
-      throw "function call: not enough arguments";
-    }
-    
-    const exprt &argument=static_cast<const exprt &>(*it2);
-    
+  for(exprt::operandst::const_iterator it1=arguments.begin();
+      it1 != arguments.end(); it1++) {
     const exprt actual(*it1);
+
+    new_args.push_back(actual);
     
     const exprt *tcfree = &actual;
     while(tcfree->id()=="typecast")
@@ -1231,24 +1223,14 @@ void string_abstractiont::abstract_function_call(
     if(tcfree->type().id()=="pointer" &&
        is_char_type(tcfree->type().subtype()))
     {
-      const irep_idt &identifier=argument.get("#identifier");
-      
-      if(identifier=="") continue; // just forget it
-      
-      goto_programt tmp;
-      
-      goto_programt::targett assignment=tmp.add_instruction(ASSIGN);
-      assignment->code=code_assignt(
-                         build(symbol_exprt(identifier, argument.type()), true), 
-                         build(actual, false));
-      assignment->location=target->location;
-      assignment->local_variables=target->local_variables;
-      assignment->function=call.function().get("identifier");
-
-      // inserts _before_ the call
-      dest.destructive_insert(target, tmp);
+      new_args.push_back(build(actual, false));
     }
-    
-    it1++;
   }
+
+  // XXX - previously had a test to ensure that we have the same number of
+  // arguments as the function being called. However as we're now changing
+  // that number, and we can't guarentee the order these functions are processed
+  // in, it's not inpractical.
+
+  call.arguments() = new_args;
 }
