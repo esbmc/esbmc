@@ -272,6 +272,28 @@ void string_abstractiont::abstract(irep_idt name,
     }
   }
 
+  // Additionally, if the return type is a char *, then the func needs to be
+  // able to provide related information about the returned string. To implement
+  // this, another pointer to a string struct is tacked onto the end of the
+  // function arguments.
+  const typet ret_type = func_type.return_type();
+  if(ret_type.id()=="pointer" && is_char_type(ret_type.subtype())) {
+    code_typet::argumentt new_arg;
+
+    new_arg.type() = pointer_typet(string_struct);
+    new_arg.set_identifier(name.as_string() + "::returned_str#str");
+    new_arg.set_base_name(name.as_string() + "::returned_str#str");
+    new_args.push_back(new_arg);
+
+    symbolt new_sym;
+    new_sym.type = new_arg.type();
+    new_sym.value = exprt();
+    new_sym.location = locationt();
+    new_sym.location.set_file("<added_by_string_abstraction>");
+    new_sym.name = new_arg.get_identifier();
+    context.add(new_sym);
+  }
+
   func_type.arguments() = new_args;
 
   // Additionally, update the type of our symbol
@@ -1240,6 +1262,13 @@ void string_abstractiont::abstract_function_call(
     {
       new_args.push_back(build(actual, false));
     }
+  }
+
+  // If we have a char return type, receive a returned string struct by passing
+  // a string struct pointer as the last argument.
+  typet fnc_ret_type = fnc_type.return_type();
+  if (fnc_ret_type.id() == "pointer" && is_char_type(fnc_ret_type.subtype())) {
+    new_args.push_back(build(call.lhs(), false));
   }
 
   // XXX - previously had a test to ensure that we have the same number of
