@@ -260,6 +260,15 @@ void string_abstractiont::abstract(irep_idt name,
       new_arg.set_identifier(it->get_identifier().as_string() + "#str");
       new_arg.set_base_name(it->get_base_name().as_string() + "#str");
       new_args.push_back(new_arg);
+
+      // We also need to put this new argument into the symbol table.
+      symbolt new_sym;
+      new_sym.type = new_arg.type();
+      new_sym.value = exprt();
+      new_sym.location = locationt();
+      new_sym.location.set_file("<added_by_string_abstraction>");
+      new_sym.name = new_arg.get_identifier();
+      context.add(new_sym);
     }
   }
 
