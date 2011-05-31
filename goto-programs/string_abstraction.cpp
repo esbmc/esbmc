@@ -255,7 +255,7 @@ void string_abstractiont::abstract(goto_function_templatet<goto_programt> &dest)
     {
       code_typet::argumentt new_arg;
 
-      new_arg.type() = string_struct;
+      new_arg.type() = pointer_typet(string_struct);
       new_arg.set_identifier(it->get_identifier().as_string() + "#str");
       new_arg.set_base_name(it->get_base_name().as_string() + "#str");
       new_args.push_back(new_arg);
