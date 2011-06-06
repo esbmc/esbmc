@@ -439,23 +439,6 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   exprt ret_sym = symbol_exprt(name.as_string() + "::__strabs::returned_str#str", rtype2);
   exprt guard = not_exprt(equality_exprt(ret_sym, nil_exprt()));
 
-#if 0
-  exprt derefed_ret_struct = dereference_exprt(string_struct);
-  derefed_ret_struct.op0() = ret_sym;
-
-  assignment = tmp.add_instruction(ASSIGN);
-  assignment->code = code_assignt(derefed_ret_struct, build(ret_val, false));
-  assignment->location = it->location;
-  assignment->local_variables = it->local_variables;
-  dest.destructive_insert(it, tmp);
-#endif
-
-#if 0
-  exprt lhs = zero_string_length(ret_sym, true, it->location);
-  exprt rhs = zero_string_length(ret_val, false, it->location);
-  move_lhs_arithmetic(lhs, rhs);
-#endif
-
   exprt lhs = dereference_exprt(pointer_typet(string_struct));
   lhs.op0() = ret_sym;
   exprt rhs = build(ret_val, false);
@@ -466,30 +449,6 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   assignment->guard = guard;
   dest.destructive_insert(it, tmp);
 
-//__asm__("int $3");
-#if 0
-  lhs = is_zero_string(ret_sym, true, it->location);
-  rhs = is_zero_string(ret_val, false, it->location);
-  move_lhs_arithmetic(lhs, rhs);
-
-  assignment = tmp.add_instruction(ASSIGN);
-  assignment->code = code_assignt(lhs, rhs);
-  assignment->location = it->location;
-  assignment->local_variables = it->local_variables;
-  assignment->guard = guard;
-  dest.destructive_insert(it, tmp);
-
-  lhs = build(ret_sym, SIZE, true, it->location);
-  rhs = buffer_size(ret_val, it->location);
-  move_lhs_arithmetic(lhs, rhs);
-
-  assignment = tmp.add_instruction(ASSIGN);
-  assignment->code = code_assignt(lhs, rhs);
-  assignment->location = it->location;
-  assignment->local_variables = it->local_variables;
-  assignment->guard = guard;
-  dest.destructive_insert(it, tmp);
-#endif
   return;
 }
 
