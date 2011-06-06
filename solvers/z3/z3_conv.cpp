@@ -977,13 +977,14 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
   std::cout << "type.subtype().pretty(): " << type.subtype().pretty() << std::endl;
 #endif
 
-
+  typet actual_type = type.subtype();;
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_type_ast proj_types[2];
   Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
 
   if (is_ptr(type.subtype()))
   {
+	actual_type = select_pointer(type.subtype());
 	if (create_type(select_pointer(type.subtype()), proj_types[0]))
 	  return true;
   }
@@ -1048,9 +1049,9 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 #ifdef DEBUG
   std::cout << "type.pretty(): " << type.pretty() << std::endl;
 #endif
-	if (type.id()!="bool" && type.subtype().id()!="bool")
+	if (actual_type.id()!="bool")
 	{
-	  if (type.subtype().id()=="struct")
+	  if (actual_type.id()=="struct")
 		  s << "struct";
 	  else
 	    s << Z3_get_bv_type_size(z3_ctx, proj_types[0]);
