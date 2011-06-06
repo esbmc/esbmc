@@ -1361,7 +1361,10 @@ void string_abstractiont::abstract_function_call(
   // a string struct pointer as the last argument.
   typet fnc_ret_type = fnc_type.return_type();
   if (fnc_ret_type.id() == "pointer" && is_char_type(fnc_ret_type.subtype())) {
-    new_args.push_back(address_of_exprt(build(call.lhs(), false)));
+    if (call.lhs().is_nil())
+      new_args.push_back(nil_exprt());
+    else
+      new_args.push_back(address_of_exprt(build(call.lhs(), false)));
   }
 
   // XXX - previously had a test to ensure that we have the same number of
