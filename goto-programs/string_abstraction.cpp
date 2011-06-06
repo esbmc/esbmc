@@ -283,9 +283,9 @@ void string_abstractiont::abstract(irep_idt name,
   if(ret_type.id()=="pointer" && is_char_type(ret_type.subtype())) {
     code_typet::argumentt new_arg;
 
-    new_arg.type() = pointer_typet(string_struct);
+    new_arg.type() = pointer_typet(pointer_typet(string_struct));
     new_arg.set_identifier(name.as_string() + "::returned_str#str");
-    new_arg.set_base_name(name.as_string() + "::returned_str#str");
+    new_arg.set_base_name("returned_str#str");
     new_args.push_back(new_arg);
 
     symbolt new_sym;
@@ -294,10 +294,12 @@ void string_abstractiont::abstract(irep_idt name,
     new_sym.location = locationt();
     new_sym.location.set_file("<added_by_string_abstraction>");
     new_sym.name = new_arg.get_identifier();
+    new_sym.base_name = new_arg.get_base_name();
     context.add(new_sym);
 
     new_sym.name = name.as_string() + "::returned_str";
-    new_sym.type = signedbv_typet(8);
+    new_sym.base_name = "returned_str";
+    new_sym.type = pointer_typet(signedbv_typet(8));
     context.add(new_sym);
   }
 
@@ -430,8 +432,9 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   // struct. Insert some assignments that perform this.
   goto_programt tmp;
   goto_programt::targett assignment;
-  exprt ret_sym = symbol_exprt(name.as_string() + "::returned_str",
-                               pointer_typet(string_struct));
+  typet rtype = pointer_typet(pointer_typet(string_struct));
+  typet rtype2 = pointer_typet(rtype);
+  exprt ret_sym = symbol_exprt(name.as_string() + "::returned_str#str", rtype2);
   exprt guard = not_exprt(equality_exprt(build(ret_sym, false), nil_exprt()));
 
 #if 0
@@ -445,10 +448,15 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   dest.destructive_insert(it, tmp);
 #endif
 
+#if 0
   exprt lhs = zero_string_length(ret_sym, true, it->location);
   exprt rhs = zero_string_length(ret_val, false, it->location);
   move_lhs_arithmetic(lhs, rhs);
+#endif
 
+  exprt lhs = dereference_exprt(pointer_typet(string_struct));
+  lhs.op0() = ret_sym;
+  exprt rhs = build(ret_val, false);
   assignment = tmp.add_instruction(ASSIGN);
   assignment->code = code_assignt(lhs, rhs);
   assignment->location = it->location;
@@ -456,6 +464,8 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   assignment->guard = guard;
   dest.destructive_insert(it, tmp);
 
+//__asm__("int $3");
+#if 0
   lhs = is_zero_string(ret_sym, true, it->location);
   rhs = is_zero_string(ret_val, false, it->location);
   move_lhs_arithmetic(lhs, rhs);
@@ -477,6 +487,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   assignment->local_variables = it->local_variables;
   assignment->guard = guard;
   dest.destructive_insert(it, tmp);
+#endif
   return;
 }
 
