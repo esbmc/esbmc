@@ -270,6 +270,7 @@ void string_abstractiont::abstract(irep_idt name,
       new_sym.location = locationt();
       new_sym.location.set_file("<added_by_string_abstraction>");
       new_sym.name = new_arg.get_identifier();
+      new_sym.base_name = new_arg.get_base_name();
       context.add(new_sym);
     }
   }
