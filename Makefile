@@ -2,7 +2,7 @@ DIRS = big-int esbmc hoare infrules intrep solvers separate smvlang \
 	util langapi cpp symex satqe goto-programs bplang cvclang \
 	pointer-analysis goto-symex trans smtlang ansi-c
 
-all: esbmc.dir
+all: esbmc
 
 include config.inc
 include local.inc
@@ -12,28 +12,22 @@ export Z3 BOOLECTOR CHAFF BOOLEFORCE MINISAT MINISAT2 SMVSAT
 
 ###############################################################################
 
-util.dir: big-int.dir
+$(DIRS):
+	$(MAKE) -C $@
 
-lump.dir: util.dir langapi.dir solvers.dir goto-symex.dir \
-          pointer-analysis.dir goto-programs.dir goto-symex.dir
+.PHONY: $(DIRS) infrastructure langauges
 
-languages: lump.dir intrep.dir cvclang.dir smvlang.dir \
-           bplang.dir ansi-c.dir
+util: big-int
 
-esbmc.dir: lump.dir languages
+infrastructure: util langapi solvers goto-symex pointer-analysis \
+		goto-programs goto-symex
 
-cemc.dir: esbmc.dir
+languages: intrep cvclang smvlang bplang ansi-c
 
-scoot.dir: languages
+# Ansi-c builds its library using infrastructure facilities.
+ansi-c: infrastructure
 
-explain.dir: esbmc.dir
-
-vcegar.dir: languages satqe.dir solvers.dir
-
-vsynth.dir: langapi.dir util.dir 
-
-satmc.dir: solvers.dir smvlang.dir util.dir languages \
-           intrep.dir trans.dir satqe.dir
+esbmc: infrastructure languages
 
 ifdef MODULE_INTERPOLATION
 interpolation.dir: solvers.dir langapi.dir util.dir
@@ -87,25 +81,9 @@ ifdef MODULE_FLOATBV
 solvers.dir: floatbv.dir
 endif
 
-$(patsubst %, %.dir, $(DIRS)):
-	## Entering $(basename $@)
-	$(MAKE) $(MAKEARGS) -C $(basename $@)
-
 .PHONY: clean
 
 clean:
 	for dir in $(DIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
-
-dep: $(patsubst %, %_dep, $(DIRS))
-
-$(patsubst %, %_clean, $(DIRS)):
-	if [ -e $(patsubst %_clean, %, $@)/. ] ; then \
-		$(MAKE) $(MAKEARGS) -C $(patsubst %_clean, %, $@) clean ; \
-	fi
-
-$(patsubst %, %_dep, $(DIRS)):
-	if [ -e $(patsubst %_dep, %, $@)/. ] ; then \
-		$(MAKE) $(MAKEARGS) -C $(patsubst %_dep, %, $@) dep ; \
-	fi
