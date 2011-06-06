@@ -164,6 +164,12 @@ protected:
 
   typedef std::map<irep_idt, irep_idt> localst;
   localst locals;
+
+  // Counter numbering the returns in a function. Required for distinguishing
+  // labels we may add when altering control flow around returns. Specifically,
+  // when assigning string struct pointer of a returned string pointer back to
+  // the calling function.
+  unsigned int func_return_num;
   
   void abstract(irep_idt name, goto_function_templatet<goto_programt> &dest);
 };
@@ -240,6 +246,7 @@ void string_abstractiont::abstract(irep_idt name,
                                    goto_function_templatet<goto_programt> &dest)
 {
   locals.clear();
+  func_return_num = 0;
 
   code_typet &func_type = static_cast<code_typet &>(dest.type);
   code_typet::argumentst &arg_types=func_type.arguments();
@@ -419,6 +426,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
                                           goto_programt::targett it)
 {
   exprt ret_val;
+  irep_idt label;
 
   if(it->code.operands().size()!=0)
     replace_string_macros(it->code.op0(), false, it->location);
@@ -432,12 +440,36 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
 
   // We have a return type that needs to also write to the callers string
   // struct. Insert some assignments that perform this.
+
+  // However, don't assign to NULL - which will have been passed in if the
+  // caller discards the return value
+  label = irep_idt("strabs_ret_str_" + func_return_num++);
+  it->labels.push_back(label);
+
   goto_programt tmp;
-  goto_programt::targett assignment;
+  goto_programt::targett branch, assignment;
+
   typet rtype = pointer_typet(pointer_typet(string_struct));
   typet rtype2 = pointer_typet(rtype);
   exprt ret_sym = symbol_exprt(name.as_string() + "::__strabs::returned_str#str", rtype2);
-  exprt guard = not_exprt(equality_exprt(ret_sym, nil_exprt()));
+
+  // For the purposes of comparing the pointer against NULL, we need to typecast
+  // it: other goto convert functions rewrite the returned_str#str pointer to
+  // be a particular pointer (value set foo). Upon which it becomes another type
+  typecast_exprt cast(rtype);
+  cast.op0() = ret_sym;
+  constant_exprt null(typet("pointer"));
+  null.type() = rtype;
+  null.set_value("NULL");
+  exprt guard = equality_exprt(cast, null);
+
+  branch = tmp.add_instruction(GOTO);
+  branch->make_goto();
+  branch->guard = guard;
+  branch->targets.push_back(it);
+  branch->location = it->location;
+  branch->local_variables = it->local_variables;
+  dest.destructive_insert(it, tmp);
 
   exprt lhs = dereference_exprt(pointer_typet(string_struct));
   lhs.op0() = ret_sym;
@@ -446,7 +478,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   assignment->code = code_assignt(lhs, rhs);
   assignment->location = it->location;
   assignment->local_variables = it->local_variables;
-  assignment->guard = guard;
+  assignment->guard.make_true();
   dest.destructive_insert(it, tmp);
 
   return;
