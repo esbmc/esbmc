@@ -109,11 +109,13 @@ protected:
       dest.make_typecast(type);
   }
 
-  void abstract(goto_programt &dest, goto_programt::targett it);
+  void abstract(irep_idt name, goto_programt &dest, goto_programt::targett it);
   void abstract_assign(goto_programt &dest, goto_programt::targett it);
   void abstract_pointer_assign(goto_programt &dest, goto_programt::targett it);
   void abstract_char_assign(goto_programt &dest, goto_programt::targett it);
   void abstract_function_call(goto_programt &dest, goto_programt::targett it);
+  void abstract_return(irep_idt name, goto_programt &dest,
+                       goto_programt::targett it);
 
   typedef enum { IS_ZERO, LENGTH, SIZE } whatt;
 
@@ -292,6 +294,9 @@ void string_abstractiont::abstract(irep_idt name,
     new_sym.location.set_file("<added_by_string_abstraction>");
     new_sym.name = new_arg.get_identifier();
     context.add(new_sym);
+
+    new_sym.name = name.as_string() + "::returned_str";
+    context.add(new_sym);
   }
 
   func_type.arguments() = new_args;
@@ -302,7 +307,7 @@ void string_abstractiont::abstract(irep_idt name,
   it->second.type = func_type;
 
   Forall_goto_program_instructions(it, dest.body)
-    abstract(dest.body, it);
+    abstract(name, dest.body, it);
 
   // do it again for the locals
   if(!locals.empty())
@@ -375,6 +380,7 @@ Function: string_abstractiont::abstract
 \*******************************************************************/
 
 void string_abstractiont::abstract(
+  irep_idt name,
   goto_programt &dest,
   goto_programt::targett it)
 {
@@ -396,12 +402,76 @@ void string_abstractiont::abstract(
     break;
     
   case RETURN:
-    if(it->code.operands().size()!=0)
-      replace_string_macros(it->code.op0(), false, it->location);
+    abstract_return(name, dest, it);
     break;
     
   default:;  
   }
+}
+
+void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
+                                          goto_programt::targett it)
+{
+  exprt ret_val;
+
+  if(it->code.operands().size()!=0)
+    replace_string_macros(it->code.op0(), false, it->location);
+
+  ret_val = it->code.op0();
+  while(ret_val.id()=="typecast")
+    ret_val = ret_val.op0();
+
+  if (ret_val.type().id() != "pointer" || !is_char_type(ret_val.type().subtype()))
+    return;
+
+  // We have a return type that needs to also write to the callers string
+  // struct. Insert some assignments that perform this.
+  goto_programt tmp;
+  goto_programt::targett assignment;
+  exprt ret_sym = symbol_exprt(name.as_string() + "::returned_str",
+                               string_struct);
+
+#if 0
+  exprt derefed_ret_struct = dereference_exprt(string_struct);
+  derefed_ret_struct.op0() = ret_sym;
+
+  assignment = tmp.add_instruction(ASSIGN);
+  assignment->code = code_assignt(derefed_ret_struct, build(ret_val, false));
+  assignment->location = it->location;
+  assignment->local_variables = it->local_variables;
+  dest.destructive_insert(it, tmp);
+#endif
+
+  exprt lhs = zero_string_length(ret_sym, true, it->location);
+  exprt rhs = zero_string_length(ret_val, false, it->location);
+  move_lhs_arithmetic(lhs, rhs);
+
+  assignment = tmp.add_instruction(ASSIGN);
+  assignment->code = code_assignt(lhs, rhs);
+  assignment->location = it->location;
+  assignment->local_variables = it->local_variables;
+  dest.destructive_insert(it, tmp);
+
+  lhs = is_zero_string(ret_sym, true, it->location);
+  rhs = is_zero_string(ret_val, false, it->location);
+  move_lhs_arithmetic(lhs, rhs);
+
+  assignment = tmp.add_instruction(ASSIGN);
+  assignment->code = code_assignt(lhs, rhs);
+  assignment->location = it->location;
+  assignment->local_variables = it->local_variables;
+  dest.destructive_insert(it, tmp);
+
+  lhs = build(ret_sym, SIZE, true, it->location);
+  rhs = buffer_size(ret_val, it->location);
+  move_lhs_arithmetic(lhs, rhs);
+
+  assignment = tmp.add_instruction(ASSIGN);
+  assignment->code = code_assignt(lhs, rhs);
+  assignment->location = it->location;
+  assignment->local_variables = it->local_variables;
+  dest.destructive_insert(it, tmp);
+  return;
 }
 
 /*******************************************************************\
@@ -1268,7 +1338,7 @@ void string_abstractiont::abstract_function_call(
   // a string struct pointer as the last argument.
   typet fnc_ret_type = fnc_type.return_type();
   if (fnc_ret_type.id() == "pointer" && is_char_type(fnc_ret_type.subtype())) {
-    new_args.push_back(build(call.lhs(), false));
+    new_args.push_back(address_of_exprt(build(call.lhs(), false)));
   }
 
   // XXX - previously had a test to ensure that we have the same number of
