@@ -284,7 +284,7 @@ void string_abstractiont::abstract(irep_idt name,
     code_typet::argumentt new_arg;
 
     new_arg.type() = pointer_typet(pointer_typet(string_struct));
-    new_arg.set_identifier(name.as_string() + "::returned_str#str");
+    new_arg.set_identifier(name.as_string() + "::__strabs::returned_str#str");
     new_arg.set_base_name("returned_str#str");
     new_args.push_back(new_arg);
 
@@ -297,7 +297,7 @@ void string_abstractiont::abstract(irep_idt name,
     new_sym.base_name = new_arg.get_base_name();
     context.add(new_sym);
 
-    new_sym.name = name.as_string() + "::returned_str";
+    new_sym.name = name.as_string() + "::__strabs::returned_str";
     new_sym.base_name = "returned_str";
     new_sym.type = pointer_typet(signedbv_typet(8));
     context.add(new_sym);
@@ -434,7 +434,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   goto_programt::targett assignment;
   typet rtype = pointer_typet(pointer_typet(string_struct));
   typet rtype2 = pointer_typet(rtype);
-  exprt ret_sym = symbol_exprt(name.as_string() + "::returned_str#str", rtype2);
+  exprt ret_sym = symbol_exprt(name.as_string() + "::__strabs::returned_str#str", rtype2);
   exprt guard = not_exprt(equality_exprt(build(ret_sym, false), nil_exprt()));
 
 #if 0
