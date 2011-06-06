@@ -301,6 +301,8 @@ void string_abstractiont::abstract(irep_idt name,
     new_sym.base_name = "returned_str";
     new_sym.type = pointer_typet(signedbv_typet(8));
     context.add(new_sym);
+
+    locals[new_sym.name] = new_arg.get_identifier();
   }
 
   func_type.arguments() = new_args;
