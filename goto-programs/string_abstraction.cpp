@@ -370,6 +370,30 @@ void string_abstractiont::abstract(irep_idt name,
               it_next++;
 
               dest.body.destructive_insert(it_next, tmp);
+            } else if (symbol.type.id() == "pointer" &&
+                       symbol.type.subtype() == string_struct) {
+              goto_programt tmp;
+
+              constant_exprt null(typet("pointer"));
+              null.type() = symbol.type;
+              null.set_value("NULL");
+
+              goto_programt::targett decl1=tmp.add_instruction();
+              decl1->make_other();
+              decl1->code=code_declt();
+              decl1->code.copy_to_operands(symbol_expr(symbol));
+              decl1->location=it->location;
+              decl1->local_variables=it->local_variables;
+
+              goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
+              assignment1->code=code_assignt(symbol_expr(symbol), null);
+              assignment1->location=it->location;
+              assignment1->local_variables=it->local_variables;
+
+              goto_programt::targett it_next=it;
+              it_next++;
+
+              dest.body.destructive_insert(it_next, tmp);
             }
           }
         }
