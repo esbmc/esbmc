@@ -435,7 +435,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   typet rtype = pointer_typet(pointer_typet(string_struct));
   typet rtype2 = pointer_typet(rtype);
   exprt ret_sym = symbol_exprt(name.as_string() + "::__strabs::returned_str#str", rtype2);
-  exprt guard = not_exprt(equality_exprt(build(ret_sym, false), nil_exprt()));
+  exprt guard = not_exprt(equality_exprt(ret_sym, nil_exprt()));
 
 #if 0
   exprt derefed_ret_struct = dereference_exprt(string_struct);
