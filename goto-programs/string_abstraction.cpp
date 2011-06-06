@@ -430,7 +430,8 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   goto_programt tmp;
   goto_programt::targett assignment;
   exprt ret_sym = symbol_exprt(name.as_string() + "::returned_str",
-                               string_struct);
+                               pointer_typet(string_struct));
+  exprt guard = not_exprt(equality_exprt(build(ret_sym, false), nil_exprt()));
 
 #if 0
   exprt derefed_ret_struct = dereference_exprt(string_struct);
@@ -451,6 +452,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   assignment->code = code_assignt(lhs, rhs);
   assignment->location = it->location;
   assignment->local_variables = it->local_variables;
+  assignment->guard = guard;
   dest.destructive_insert(it, tmp);
 
   lhs = is_zero_string(ret_sym, true, it->location);
@@ -461,6 +463,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   assignment->code = code_assignt(lhs, rhs);
   assignment->location = it->location;
   assignment->local_variables = it->local_variables;
+  assignment->guard = guard;
   dest.destructive_insert(it, tmp);
 
   lhs = build(ret_sym, SIZE, true, it->location);
@@ -471,6 +474,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   assignment->code = code_assignt(lhs, rhs);
   assignment->location = it->location;
   assignment->local_variables = it->local_variables;
+  assignment->guard = guard;
   dest.destructive_insert(it, tmp);
   return;
 }
