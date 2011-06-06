@@ -296,6 +296,7 @@ void string_abstractiont::abstract(irep_idt name,
     context.add(new_sym);
 
     new_sym.name = name.as_string() + "::returned_str";
+    new_sym.type = signedbv_typet(8);
     context.add(new_sym);
   }
 
