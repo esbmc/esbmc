@@ -422,6 +422,9 @@ void goto_program_dereferencet::dereference_instruction(
   else if (i.is_return())
   {
     assert(i.code.get("statement") == "return");
+    if (i.code.operands().size() == 0)
+      return;
+
     assert(i.code.operands().size() == 1);
 
     exprt &ret = i.code.op0();
