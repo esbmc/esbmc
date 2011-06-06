@@ -1347,7 +1347,11 @@ void string_abstractiont::abstract_function_call(
     if(tcfree->type().id()=="pointer" &&
        is_char_type(tcfree->type().subtype()))
     {
-      new_args.push_back(build(actual, false));
+      if (actual.type().id() == "pointer")
+        new_args.push_back(build(actual, false));
+      else
+        new_args.push_back(address_of_exprt(build(actual, false)));
+
     }
   }
 
