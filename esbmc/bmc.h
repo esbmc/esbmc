@@ -79,7 +79,7 @@ protected:
   virtual bool z3();
   virtual bool z3_conv(std::ostream &out);
 
-  virtual bool decide_default();
+  virtual bool decide_minisat();
   virtual bool bv_refinement();
   virtual decision_proceduret::resultt
     run_decision_procedure(prop_convt &prop_conv);

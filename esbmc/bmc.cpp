@@ -137,7 +137,7 @@ Function: bmc_baset::decide_default
 
 \*******************************************************************/
 
-bool bmc_baset::decide_default()
+bool bmc_baset::decide_minisat()
 {
   sat_minimizert satcheck;
   satcheck.set_message_handler(message_handler);
@@ -700,7 +700,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     }
 
     if(options.get_bool_option("minisat"))
-      return decide_default();
+      return decide_minisat();
     if(options.get_bool_option("dimacs"))
       return write_dimacs();
     else if(options.get_bool_option("bl"))
@@ -718,7 +718,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     else if(options.get_bool_option("refine"))
       return bv_refinement();
     else
-      return decide_default();
+      return decide_minisat();
   }
 
   catch(std::string &error_str)
