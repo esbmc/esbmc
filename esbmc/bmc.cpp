@@ -2,7 +2,8 @@
 
 Module: Symbolic Execution of ANSI-C
 
-Author: Daniel Kroening, kroening@kroening.com
+Authors: Daniel Kroening, kroening@kroening.com
+         Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
