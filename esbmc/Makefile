@@ -50,6 +50,10 @@ CXXFLAGS+= -DBOOLECTOR
 LIBS+= -L$(BOOLECTOR)/lib -lboolector
 endif
 
+ifdef MINISAT
+CXXFLAGS += -DMINISAT
+endif
+
 ###############################################################################
 
 esbmc: $(OBJ)
