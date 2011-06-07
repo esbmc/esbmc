@@ -490,7 +490,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       return write_dimacs();
     else if(options.get_bool_option("bl"))
 #ifdef BOOLECTOR
-      return boolector();
+      return decide_solver_boolector();
 #else
       throw "This version of ESBMC was not compiled with boolector support";
 #endif
@@ -499,7 +499,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     //else if(options.get_bool_option("smt"))
       //return smt();
     else if(options.get_bool_option("z3"))
-      return z3();
+      return decide_solver_z3();
     else if(options.get_bool_option("refine"))
       return bv_refinement();
     else
@@ -878,24 +878,6 @@ bool bmc_baset::cvc_conv(std::ostream &out)
 }
 
 #ifdef BOOLECTOR
-/*******************************************************************\
-
-Function: bmc_baset::boolector
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool bmc_baset::boolector()
-{
-  boolector_dect boolector_dec;
-  decide_solver_boolector();
-  return true;
-}
 
 /*******************************************************************\
 
@@ -922,23 +904,6 @@ bool bmc_baset::boolector_conv(std::ostream &out)
   return false;
 }
 #endif
-
-/*******************************************************************\
-
-Function: bmc_baset::z3
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool bmc_baset::z3()
-{
-  return decide_solver_z3();
-}
 
 /*******************************************************************\
 
