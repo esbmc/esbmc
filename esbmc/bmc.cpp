@@ -718,7 +718,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     else if(options.get_bool_option("refine"))
       return bv_refinement();
     else
-      return decide_minisat();
+      throw "Please specify a SAT/SMT solver to use";
   }
 
   catch(std::string &error_str)
