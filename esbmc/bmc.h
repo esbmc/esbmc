@@ -72,7 +72,6 @@ protected:
 
 #ifdef BOOLECTOR
   virtual bool decide_solver_boolector();
-  virtual bool boolector_conv(std::ostream &out);
 #endif
   virtual bool decide_solver_z3();
 

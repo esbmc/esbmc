@@ -877,34 +877,6 @@ bool bmc_baset::cvc_conv(std::ostream &out)
   return false;
 }
 
-#ifdef BOOLECTOR
-
-/*******************************************************************\
-
-Function: bmc_baset::boolector_conv
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool bmc_baset::boolector_conv(std::ostream &out)
-{
-  boolector_convt boolector_conv(out);
-  boolector_conv.set_message_handler(message_handler);
-
-  do_unwind_module(boolector_conv);
-  do_cbmc(boolector_conv);
-
-  boolector_conv.dec_solve();
-
-  return false;
-}
-#endif
-
 /*******************************************************************\
 
 Function: bmc_baset::smt
