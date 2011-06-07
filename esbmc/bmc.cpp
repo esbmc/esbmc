@@ -267,9 +267,6 @@ bool bmc_baset::decide_solver_z3()
   _unsat_core = z3_dec.get_z3_core_size();
   _number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
 
-  //std::cout << "_unsat_core: " << _unsat_core << std::endl;
-  //std::cout << "result: " << result << std::endl;
-
   return result;
 }
 
@@ -341,8 +338,8 @@ decision_proceduret::resultt
 bmc_baset::run_decision_procedure(prop_convt &prop_conv)
 {
   static bool first_uw=false;
-//  status("Passing problem to "+prop_conv.decision_procedure_text());
   std::string logic;
+
   if (options.get_bool_option("bl-bv") || options.get_bool_option("z3-bv") ||
       options.get_bool_option("bl") || !options.get_bool_option("int-encoding"))
     logic = "bit-vector arithmetic";
@@ -361,8 +358,6 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
 
   do_unwind_module(prop_conv);
   do_cbmc(prop_conv);
-
-//  status("Running "+prop_conv.decision_procedure_text());
 
   decision_proceduret::resultt dec_result=prop_conv.dec_solve();
 
@@ -528,7 +523,6 @@ Function: bmc_baset::run
 
 bool bmc_baset::run(const goto_functionst &goto_functions)
 {
-  //symex.total_claims=0;
   static bool resp;
   static unsigned int interleaving_number=0, interleaving_failed=0, uw_loop=0;
   symex.set_message_handler(message_handler);
@@ -590,13 +584,6 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
     std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
   }
 
-#if 0
-  std::cout << "ohai:" << std::endl;
-  int fd = open("/proc/self/status", O_RDONLY, 0);
-  sendfile(STDOUT_FILENO, fd, NULL, 4096);
-  close(fd);
-#endif
-
   return false;
 }
 
@@ -654,18 +641,10 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     if(options.get_bool_option("slice-formula"))
     {
       slice(*equation);
-#if 0
-      print(8, "slicing removed "+
-        i2string(equation.count_ignored_SSA_steps())+" assignments");
-#endif
     }
     else
     {
       simple_slice(*equation);
-#if 0
-      print(8, "simple slicing removed "+
-        i2string(equation.count_ignored_SSA_steps())+" assignments");
-#endif
     }
 
     if(options.get_bool_option("program-only"))
@@ -738,7 +717,6 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
   {
     error("Out of memory");
     abort();
-    //return true; jmorse
   }
 }
 
