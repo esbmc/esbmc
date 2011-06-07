@@ -626,49 +626,6 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 
 /*******************************************************************\
 
-Function: bmc_baset::decide_solver_boolector
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-#ifdef BOOLECTOR
-bool bmc_baset::decide_solver_boolector()
-{
-  bool result=true;
-  boolector_dect boolector_dec;
-
-  boolector_dec.set_file(options.get_option("outfile"));
-  boolector_dec.set_btor(options.get_bool_option("btor"));
-
-  switch(run_decision_procedure(boolector_dec))
-  {
-    case decision_proceduret::D_UNSATISFIABLE:
-      result=false;
-      report_success();
-      break;
-
-    case decision_proceduret::D_SATISFIABLE:
-      error_trace(boolector_dec);
-      report_failure();
-      break;
-
-    case decision_proceduret::D_SMTLIB:
-      break;
-
-    default:
-      error("decision procedure failed");
-  }
-
-  return result;
-}
-#endif
-
-/*******************************************************************\
-
 Function: bmc_baset::decide_solver_z3
 
   Inputs:
