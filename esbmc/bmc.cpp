@@ -625,6 +625,27 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
   conv = &boolector_dec;
 }
 
+bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
+  : solver_base(bmc), z3_dec()
+{
+  z3_dec.set_encoding(bmc.options.get_bool_option("int-encoding"));
+  z3_dec.set_file(bmc.options.get_option("outfile"));
+  z3_dec.set_smt(bmc.options.get_bool_option("smt"));
+  z3_dec.set_unsat_core(atol(bmc.options.get_option("core-size").c_str()));
+  z3_dec.set_uw_models(bmc.options.get_bool_option("uw-model"));
+  z3_dec.set_ecp(bmc.options.get_bool_option("ecp"));
+  z3_dec.set_relevancy(bmc.options.get_bool_option("no-assume-guarantee"));
+  conv = &z3_dec;
+}
+
+bool bmc_baset::z3_solver::run_solver()
+{
+  bool result = bmc_baset::solver_base::run_solver();
+  bmc._unsat_core = z3_dec.get_z3_core_size();
+  bmc._number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
+  return result;
+}
+
 /*******************************************************************\
 
 Function: bmc_baset::decide_solver_z3

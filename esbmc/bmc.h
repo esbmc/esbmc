@@ -99,6 +99,14 @@ protected:
     boolector_dect boolector_dec;
   };
 
+  class z3_solver : public solver_base {
+  public:
+    z3_solver(bmc_baset &bmc);
+    bool run_solver();
+  protected:
+    z3_dect z3_dec;
+  };
+
   virtual bool decide_solver_z3();
 
   virtual bool bv_refinement();
