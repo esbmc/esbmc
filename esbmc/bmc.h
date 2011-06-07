@@ -69,10 +69,12 @@ protected:
   language_uit::uit ui;
 
   class solver_base {
+  public:
+    virtual bool run_solver();
+
+  protected:
     solver_base(bmc_baset &_bmc) : bmc(_bmc)
     { }
-
-    virtual bool run_solver();
 
     prop_convt *conv;
     bmc_baset &bmc;
