@@ -58,6 +58,7 @@ public:
 		generating_new_threads = 0;
 		node_count=0;
 		nondet_count = 0;
+		dynamic_counter = 0;
 	};
 
 	execution_statet(const execution_statet &ex) :
