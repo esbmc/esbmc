@@ -497,7 +497,10 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       return write_dimacs();
     else if(options.get_bool_option("bl"))
 #ifdef BOOLECTOR
-      return decide_solver_boolector();
+    {
+      boolector_solver solver(*this);
+      return solver.run_solver();
+    }
 #else
       throw "This version of ESBMC was not compiled with boolector support";
 #endif
