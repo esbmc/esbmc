@@ -82,7 +82,7 @@ protected:
     bmc_baset &bmc;
   };
 
-  class minisat_solver : solver_base {
+  class minisat_solver : public solver_base {
   public:
     minisat_solver(bmc_baset &bmc);
     bool run_solver();
@@ -92,7 +92,7 @@ protected:
     bv_cbmct bv_cbmc;
   };
 
-  class boolector_solver : solver_base {
+  class boolector_solver : public solver_base {
   public:
     boolector_solver(bmc_baset &bmc);
   protected:
