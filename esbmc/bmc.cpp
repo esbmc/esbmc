@@ -587,6 +587,7 @@ bool bmc_baset::solver_base::run_solver()
   }
 }
 
+#ifdef MINISAT
 bmc_baset::minisat_solver::minisat_solver(bmc_baset &bmc)
   : solver_base(bmc), satcheck(), bv_cbmc(satcheck)
 {
@@ -611,6 +612,7 @@ bool bmc_baset::minisat_solver::run_solver()
 
   return result;
 }
+#endif
 
 /*******************************************************************\
 
