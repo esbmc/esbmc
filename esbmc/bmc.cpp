@@ -591,9 +591,7 @@ bool bmc_baset::decide_minisat()
     break;
 
   case decision_proceduret::D_SATISFIABLE:
-    if(options.get_bool_option("beautify-pbs"))
-      throw "beautify-pbs is no longer supported";
-    else if(options.get_bool_option("beautify-greedy"))
+    if(options.get_bool_option("beautify-greedy"))
       counterexample_beautification_greedyt()(
         satcheck, bv_cbmc, *equation, symex.ns);
 
@@ -735,9 +733,7 @@ bool bmc_baset::bv_refinement()
     break;
 
   case decision_proceduret::D_SATISFIABLE:
-    if(options.get_bool_option("beautify-pbs"))
-      throw "beautify-pbs is no longer supported";
-    else if(options.get_bool_option("beautify-greedy"))
+    if(options.get_bool_option("beautify-greedy"))
       throw "refinement doesn't support greedy beautification";
 
     error_trace(bv_refinement_loop);
