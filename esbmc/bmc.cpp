@@ -613,6 +613,7 @@ bool bmc_baset::minisat_solver::run_solver()
 }
 #endif
 
+#ifdef BOOLECTOR
 bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
   : solver_base(bmc), boolector_dec()
 {
@@ -620,6 +621,7 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
   boolector_dec.set_btor(bmc.options.get_bool_option("btor"));
   conv = &boolector_dec;
 }
+#endif
 
 bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
   : solver_base(bmc), z3_dec()
