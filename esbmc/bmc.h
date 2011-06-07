@@ -107,7 +107,6 @@ protected:
     z3_dect z3_dec;
   };
 
-  virtual bool bv_refinement();
   virtual decision_proceduret::resultt
     run_decision_procedure(prop_convt &prop_conv);
   virtual bool cvc();

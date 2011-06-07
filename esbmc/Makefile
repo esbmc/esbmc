@@ -25,11 +25,6 @@ include ../config.inc
 include ../common
 include ../local.inc
 
-ifdef MODULE_BV_REFINEMENT
-  OBJ += ../bv_refinement/bv_refinement.o
-  CXXFLAGS += -DHAVE_BV_REFINEMENT
-endif
-
 ifdef MODULE_CPP
   OBJ += ../cpp/cpp.o
   CXXFLAGS += -DUSE_CPP

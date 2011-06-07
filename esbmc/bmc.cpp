@@ -35,10 +35,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/slice_by_trace.h>
 #include <goto-symex/xml_goto_trace.h>
 
-#ifdef HAVE_BV_REFINEMENT
-#include <bv_refinement/bv_refinement_loop.h>
-#endif
-
 #include "bmc.h"
 #include "bv_cbmc.h"
 #include "counterexample_beautification_greedy.h"
@@ -512,8 +508,6 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       z3_solver solver(*this);
       return solver.run_solver();
     }
-    else if(options.get_bool_option("refine"))
-      return bv_refinement();
     else
       throw "Please specify a SAT/SMT solver to use";
   }
@@ -646,56 +640,6 @@ bool bmc_baset::z3_solver::run_solver()
   bmc._unsat_core = z3_dec.get_z3_core_size();
   bmc._number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
   return result;
-}
-
-/*******************************************************************\
-
-Function: bmc_baset::bv_refinement
-
-  Inputs:
-
- Outputs:
-
- Purpose: Decide using refinement decision procedure
-
-\*******************************************************************/
-
-bool bmc_baset::bv_refinement()
-{
-  #ifdef HAVE_BV_REFINEMENT
-  satcheckt satcheck;
-  satcheck.set_message_handler(message_handler);
-  satcheck.set_verbosity(get_verbosity());
-
-  bv_refinement_loopt bv_refinement_loop(satcheck);
-  bv_refinement_loop.set_message_handler(message_handler);
-  bv_refinement_loop.set_verbosity(get_verbosity());
-
-  bool result=true;
-
-  switch(run_decision_procedure(bv_refinement_loop))
-  {
-  case decision_proceduret::D_UNSATISFIABLE:
-    result=false;
-    report_success();
-    break;
-
-  case decision_proceduret::D_SATISFIABLE:
-    if(options.get_bool_option("beautify-greedy"))
-      throw "refinement doesn't support greedy beautification";
-
-    error_trace(bv_refinement_loop);
-    report_failure();
-    break;
-
-  default:
-    error("decision procedure failed");
-  }
-
-  return result;
-  #else
-  throw "bv refinement not linked in";
-  #endif
 }
 
 /*******************************************************************\

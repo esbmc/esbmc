@@ -36,7 +36,6 @@ LANGUAGES = ansi-c csp intrep pvs smvlang verilog vhdl netlist cpp specc \
 ##MODULE_PROVER = 1
 ##MODULE_IPP = 1
 #MODULE_INTERPOLATION = 1
-#MODULE_BV_REFINEMENT = 1
 ##MODULE_SATQE = 1
 ##MODULE_CPP = 1
 ##MODULE_SMTLANG = 1

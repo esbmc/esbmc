@@ -25,7 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
   "(partial-loops)(int-encoding)(ecp)(show-features)(memory-leak-check)" \
   "(no-pretty-names)(overflow-check)(beautify-greedy)" \
   "(floatbv)(fixedbv)(no-assertions)(gui)(nan-check)" \
-  "(dimacs)(minisat)(16)(32)(64)(little-endian)(big-endian)(refine)" \
+  "(dimacs)(minisat)(16)(32)(64)(little-endian)(big-endian)" \
   "(show-goto-functions)(show-value-sets)(xml-ui)(show-loops)" \
   "(show-symbol-table)(show-vcc)(show-claims)(claim):" \
   "(atomicity-check)(error-label):(verbosity):(binary):(no-library)" \
