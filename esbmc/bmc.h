@@ -39,7 +39,6 @@ public:
     context(_context),
     symex(_symex),
     equation(&_equation),
-    //equation(_equation),
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
@@ -65,7 +64,6 @@ protected:
   const contextt &context;
   symex_bmct &symex;
   symex_target_equationt *equation;
-  //symex_target_equationt &equation;
 
   // use gui format
   language_uit::uit ui;
