@@ -99,14 +99,7 @@ protected:
     boolector_dect boolector_dec;
   };
 
-#ifdef BOOLECTOR
-  virtual bool decide_solver_boolector();
-#endif
   virtual bool decide_solver_z3();
-
-#ifdef MINISAT
-  virtual bool decide_minisat();
-#endif
 
   virtual bool bv_refinement();
   virtual decision_proceduret::resultt
