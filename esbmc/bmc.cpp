@@ -127,203 +127,6 @@ void bmc_baset::error_trace(const prop_convt &prop_conv)
 
 /*******************************************************************\
 
-Function: bmc_baset::decide_default
-
-  Inputs:
-
- Outputs:
-
- Purpose: Decide using "default" decision procedure
-
-\*******************************************************************/
-
-bool bmc_baset::decide_minisat()
-{
-  sat_minimizert satcheck;
-  satcheck.set_message_handler(message_handler);
-  satcheck.set_verbosity(get_verbosity());
-
-  bv_cbmct bv_cbmc(satcheck);
-
-  if(options.get_option("arrays-uf")=="never")
-    bv_cbmc.unbounded_array=bv_cbmct::U_NONE;
-  else if(options.get_option("arrays-uf")=="always")
-    bv_cbmc.unbounded_array=bv_cbmct::U_ALL;
-
-  bool result=true;
-
-  switch(run_decision_procedure(bv_cbmc))
-  {
-  case decision_proceduret::D_UNSATISFIABLE:
-    result=false;
-    report_success();
-    break;
-
-  case decision_proceduret::D_SATISFIABLE:
-    if(options.get_bool_option("beautify-pbs"))
-      throw "beautify-pbs is no longer supported";
-    else if(options.get_bool_option("beautify-greedy"))
-      counterexample_beautification_greedyt()(
-        satcheck, bv_cbmc, *equation, symex.ns);
-
-    error_trace(bv_cbmc);
-    report_failure();
-    break;
-
-  default:
-    error("decision procedure failed");
-  }
-
-  return result;
-}
-
-/*******************************************************************\
-
-Function: bmc_baset::decide_solver_boolector
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-#ifdef BOOLECTOR
-bool bmc_baset::decide_solver_boolector()
-{
-  bool result=true;
-  boolector_dect boolector_dec;
-
-  boolector_dec.set_file(options.get_option("outfile"));
-  boolector_dec.set_btor(options.get_bool_option("btor"));
-
-  switch(run_decision_procedure(boolector_dec))
-  {
-    case decision_proceduret::D_UNSATISFIABLE:
-      result=false;
-      report_success();
-      break;
-
-    case decision_proceduret::D_SATISFIABLE:
-      error_trace(boolector_dec);
-      report_failure();
-      break;
-
-    case decision_proceduret::D_SMTLIB:
-      break;
-
-    default:
-      error("decision procedure failed");
-  }
-
-  return result;
-}
-#endif
-/*******************************************************************\
-
-Function: bmc_baset::decide_solver_z3
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool bmc_baset::decide_solver_z3()
-{
-  bool result=true;
-  z3_dect z3_dec;
-
-  z3_dec.set_encoding(options.get_bool_option("int-encoding"));
-  z3_dec.set_file(options.get_option("outfile"));
-  z3_dec.set_smt(options.get_bool_option("smt"));
-  z3_dec.set_unsat_core(atol(options.get_option("core-size").c_str()));
-  z3_dec.set_uw_models(options.get_bool_option("uw-model"));
-  z3_dec.set_ecp(options.get_bool_option("ecp"));
-  z3_dec.set_relevancy(options.get_bool_option("no-assume-guarantee"));
-
-  switch(run_decision_procedure(z3_dec))
-  {
-    case decision_proceduret::D_UNSATISFIABLE:
-      result=false;
-      report_success();
-      break;
-    case decision_proceduret::D_SATISFIABLE:
-      result=true;
-      if (!options.get_bool_option("ecp"))
-      {
-        error_trace(z3_dec);
-        report_failure();
-      }
-      break;
-    case decision_proceduret::D_SMTLIB:
-      break;
-    default:
-      error("decision procedure failed");
-  }
-
-  _unsat_core = z3_dec.get_z3_core_size();
-  _number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
-
-  return result;
-}
-
-/*******************************************************************\
-
-Function: bmc_baset::bv_refinement
-
-  Inputs:
-
- Outputs:
-
- Purpose: Decide using refinement decision procedure
-
-\*******************************************************************/
-
-bool bmc_baset::bv_refinement()
-{
-  #ifdef HAVE_BV_REFINEMENT
-  satcheckt satcheck;
-  satcheck.set_message_handler(message_handler);
-  satcheck.set_verbosity(get_verbosity());
-
-  bv_refinement_loopt bv_refinement_loop(satcheck);
-  bv_refinement_loop.set_message_handler(message_handler);
-  bv_refinement_loop.set_verbosity(get_verbosity());
-
-  bool result=true;
-
-  switch(run_decision_procedure(bv_refinement_loop))
-  {
-  case decision_proceduret::D_UNSATISFIABLE:
-    result=false;
-    report_success();
-    break;
-
-  case decision_proceduret::D_SATISFIABLE:
-    if(options.get_bool_option("beautify-pbs"))
-      throw "beautify-pbs is no longer supported";
-    else if(options.get_bool_option("beautify-greedy"))
-      throw "refinement doesn't support greedy beautification";
-
-    error_trace(bv_refinement_loop);
-    report_failure();
-    break;
-
-  default:
-    error("decision procedure failed");
-  }
-
-  return result;
-  #else
-  throw "bv refinement not linked in";
-  #endif
-}
-
-/*******************************************************************\
-
 Function: bmc_baset::run_decision_procedure
 
   Inputs:
@@ -749,4 +552,202 @@ void bmc_baset::setup_unwind()
   }
 
   symex.max_unwind=atol(options.get_option("unwind").c_str());
+}
+
+/*******************************************************************\
+
+Function: bmc_baset::decide_default
+
+  Inputs:
+
+ Outputs:
+
+ Purpose: Decide using "default" decision procedure
+
+\*******************************************************************/
+
+bool bmc_baset::decide_minisat()
+{
+  sat_minimizert satcheck;
+  satcheck.set_message_handler(message_handler);
+  satcheck.set_verbosity(get_verbosity());
+
+  bv_cbmct bv_cbmc(satcheck);
+
+  if(options.get_option("arrays-uf")=="never")
+    bv_cbmc.unbounded_array=bv_cbmct::U_NONE;
+  else if(options.get_option("arrays-uf")=="always")
+    bv_cbmc.unbounded_array=bv_cbmct::U_ALL;
+
+  bool result=true;
+
+  switch(run_decision_procedure(bv_cbmc))
+  {
+  case decision_proceduret::D_UNSATISFIABLE:
+    result=false;
+    report_success();
+    break;
+
+  case decision_proceduret::D_SATISFIABLE:
+    if(options.get_bool_option("beautify-pbs"))
+      throw "beautify-pbs is no longer supported";
+    else if(options.get_bool_option("beautify-greedy"))
+      counterexample_beautification_greedyt()(
+        satcheck, bv_cbmc, *equation, symex.ns);
+
+    error_trace(bv_cbmc);
+    report_failure();
+    break;
+
+  default:
+    error("decision procedure failed");
+  }
+
+  return result;
+}
+
+/*******************************************************************\
+
+Function: bmc_baset::decide_solver_boolector
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+#ifdef BOOLECTOR
+bool bmc_baset::decide_solver_boolector()
+{
+  bool result=true;
+  boolector_dect boolector_dec;
+
+  boolector_dec.set_file(options.get_option("outfile"));
+  boolector_dec.set_btor(options.get_bool_option("btor"));
+
+  switch(run_decision_procedure(boolector_dec))
+  {
+    case decision_proceduret::D_UNSATISFIABLE:
+      result=false;
+      report_success();
+      break;
+
+    case decision_proceduret::D_SATISFIABLE:
+      error_trace(boolector_dec);
+      report_failure();
+      break;
+
+    case decision_proceduret::D_SMTLIB:
+      break;
+
+    default:
+      error("decision procedure failed");
+  }
+
+  return result;
+}
+#endif
+
+/*******************************************************************\
+
+Function: bmc_baset::decide_solver_z3
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool bmc_baset::decide_solver_z3()
+{
+  bool result=true;
+  z3_dect z3_dec;
+
+  z3_dec.set_encoding(options.get_bool_option("int-encoding"));
+  z3_dec.set_file(options.get_option("outfile"));
+  z3_dec.set_smt(options.get_bool_option("smt"));
+  z3_dec.set_unsat_core(atol(options.get_option("core-size").c_str()));
+  z3_dec.set_uw_models(options.get_bool_option("uw-model"));
+  z3_dec.set_ecp(options.get_bool_option("ecp"));
+  z3_dec.set_relevancy(options.get_bool_option("no-assume-guarantee"));
+
+  switch(run_decision_procedure(z3_dec))
+  {
+    case decision_proceduret::D_UNSATISFIABLE:
+      result=false;
+      report_success();
+      break;
+    case decision_proceduret::D_SATISFIABLE:
+      result=true;
+      if (!options.get_bool_option("ecp"))
+      {
+        error_trace(z3_dec);
+        report_failure();
+      }
+      break;
+    case decision_proceduret::D_SMTLIB:
+      break;
+    default:
+      error("decision procedure failed");
+  }
+
+  _unsat_core = z3_dec.get_z3_core_size();
+  _number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
+
+  return result;
+}
+
+/*******************************************************************\
+
+Function: bmc_baset::bv_refinement
+
+  Inputs:
+
+ Outputs:
+
+ Purpose: Decide using refinement decision procedure
+
+\*******************************************************************/
+
+bool bmc_baset::bv_refinement()
+{
+  #ifdef HAVE_BV_REFINEMENT
+  satcheckt satcheck;
+  satcheck.set_message_handler(message_handler);
+  satcheck.set_verbosity(get_verbosity());
+
+  bv_refinement_loopt bv_refinement_loop(satcheck);
+  bv_refinement_loop.set_message_handler(message_handler);
+  bv_refinement_loop.set_verbosity(get_verbosity());
+
+  bool result=true;
+
+  switch(run_decision_procedure(bv_refinement_loop))
+  {
+  case decision_proceduret::D_UNSATISFIABLE:
+    result=false;
+    report_success();
+    break;
+
+  case decision_proceduret::D_SATISFIABLE:
+    if(options.get_bool_option("beautify-pbs"))
+      throw "beautify-pbs is no longer supported";
+    else if(options.get_bool_option("beautify-greedy"))
+      throw "refinement doesn't support greedy beautification";
+
+    error_trace(bv_refinement_loop);
+    report_failure();
+    break;
+
+  default:
+    error("decision procedure failed");
+  }
+
+  return result;
+  #else
+  throw "bv refinement not linked in";
+  #endif
 }
