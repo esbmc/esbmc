@@ -7,14 +7,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-extern "C" {
-#include <fcntl.h>
-#include <stdio.h>
-#include <unistd.h>
-
-#include <sys/sendfile.h>
-}
-
 #include <sstream>
 #include <fstream>
 
