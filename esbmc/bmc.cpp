@@ -484,12 +484,15 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       return false;
     }
 
+    if(options.get_bool_option("minisat")) {
 #ifdef MINISAT
-    if(options.get_bool_option("minisat"))
-      return decide_minisat();
+      minisat_solver solver(this);
+      return solver.run_solver();
 #else
       throw "This version of ESBMC was not compiled with minisat support";
 #endif
+    }
+
     if(options.get_bool_option("dimacs"))
       return write_dimacs();
     else if(options.get_bool_option("bl"))
