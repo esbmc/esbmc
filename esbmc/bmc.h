@@ -68,6 +68,16 @@ protected:
   // use gui format
   language_uit::uit ui;
 
+  class solver_base {
+    solver_base(bmc_baset &_bmc) : bmc(_bmc)
+    { }
+
+    virtual bool run_solver();
+
+    prop_convt *conv;
+    bmc_baset &bmc;
+  };
+
 #ifdef BOOLECTOR
   virtual bool decide_solver_boolector();
 #endif

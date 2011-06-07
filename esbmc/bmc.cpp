@@ -560,6 +560,30 @@ void bmc_baset::setup_unwind()
   symex.max_unwind=atol(options.get_option("unwind").c_str());
 }
 
+bool bmc_baset::solver_base::run_solver()
+{
+
+  switch(bmc.run_decision_procedure(*conv))
+  {
+  case decision_proceduret::D_UNSATISFIABLE:
+    bmc.report_success();
+    return false;
+
+  case decision_proceduret::D_SATISFIABLE:
+    bmc.error_trace(*conv);
+    bmc.report_failure();
+    return true;
+
+  // XXX - and the use of this is...?
+  case decision_proceduret::D_SMTLIB:
+    return true;
+
+  default:
+    bmc.error("decision procedure failed");
+    return true;
+  }
+}
+
 #ifdef MINISAT
 /*******************************************************************\
 
