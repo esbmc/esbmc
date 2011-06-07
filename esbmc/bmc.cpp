@@ -205,7 +205,7 @@ bool bmc_baset::decide_solver_boolector()
       break;
 
     case decision_proceduret::D_SATISFIABLE:
-	  error_trace(boolector_dec);
+      error_trace(boolector_dec);
       report_failure();
       break;
 
@@ -254,7 +254,7 @@ bool bmc_baset::decide_solver_z3()
       result=true;
       if (!options.get_bool_option("ecp"))
       {
-	    error_trace(z3_dec);
+        error_trace(z3_dec);
         report_failure();
       }
       break;
@@ -536,21 +536,21 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
   if(symex.options.get_bool_option("schedule"))
   {
-	if(symex.options.get_bool_option("uw-model"))
-	  std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
+    if(symex.options.get_bool_option("uw-model"))
+        std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
 
-	resp = run_thread(goto_functions);
+    resp = run_thread(goto_functions);
 
 
-	//underapproximation-widening model
-	while (_unsat_core)
-	{
-	  equation->clear();
-	  symex.total_claims=0;
-	  symex.remaining_claims=0;
-	  std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
-	  resp = run_thread(goto_functions);
-	}
+    //underapproximation-widening model
+    while (_unsat_core)
+    {
+      equation->clear();
+      symex.total_claims=0;
+      symex.remaining_claims=0;
+      std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
+      resp = run_thread(goto_functions);
+    }
 
     return resp;
   }
@@ -560,16 +560,16 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
     while(symex.multi_formulas_has_more_formula())
     {
-  	  equation->clear();
-  	  symex.total_claims=0;
-  	  symex.remaining_claims=0;
+      equation->clear();
+      symex.total_claims=0;
+      symex.remaining_claims=0;
 
       if (++interleaving_number>1)
         std::cout << "*** Thread interleavings " << interleaving_number << " ***" << std::endl;
 
       if(run_thread(goto_functions))
       {
-    	++interleaving_failed;
+        ++interleaving_failed;
         if(!symex.options.get_bool_option("all-runs"))
         {
           return true;
@@ -635,7 +635,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     {
       symex_slice_by_tracet symex_slice_by_trace;
       symex_slice_by_trace.slice_by_trace
-	(options.get_option("slice-by-trace"), *equation, symex.ns);
+      (options.get_option("slice-by-trace"), *equation, symex.ns);
     }
 
     if(options.get_bool_option("slice-formula"))
@@ -687,7 +687,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #ifdef BOOLECTOR
       return boolector();
 #else
-	throw "This version of ESBMC was not compiled with boolector support";
+      throw "This version of ESBMC was not compiled with boolector support";
 #endif
     else if(options.get_bool_option("cvc"))
       return cvc();
