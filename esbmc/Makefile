@@ -1,6 +1,6 @@
-SRC = main.cpp parseoptions.cpp bmc.cpp smt.cpp z3.cpp \
-      bv_cbmc.cpp document_subgoals.cpp dimacs.cpp \
-      symex_bmc.cpp cvc.cpp show_vcc.cpp \
+SRC = main.cpp parseoptions.cpp bmc.cpp  \
+      bv_cbmc.cpp document_subgoals.cpp \
+      symex_bmc.cpp show_vcc.cpp \
       counterexample_beautification.cpp \
       counterexample_beautification_greedy.cpp \
       counterexample_beautification_pbs.cpp
@@ -47,7 +47,6 @@ endif
 
 ifdef BOOLECTOR
 CXXFLAGS+= -DBOOLECTOR
-SRC+= boolector.cpp
 LIBS+= -L$(BOOLECTOR)/lib -lboolector
 endif
 
