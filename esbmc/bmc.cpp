@@ -584,6 +584,31 @@ bool bmc_baset::solver_base::run_solver()
   }
 }
 
+bmc_baset::minisat_solver::minisat_solver(bmc_baset &bmc)
+  : solver_base(bmc), satcheck(), bv_cbmc(satcheck)
+{
+  satcheck.set_message_handler(bmc.message_handler);
+  satcheck.set_verbosity(bmc.get_verbosity());
+
+  if(bmc.options.get_option("arrays-uf")=="never")
+    bv_cbmc.unbounded_array=bv_cbmct::U_NONE;
+  else if(bmc.options.get_option("arrays-uf")=="always")
+    bv_cbmc.unbounded_array=bv_cbmct::U_ALL;
+
+  conv = &bv_cbmc;
+}
+
+bool bmc_baset::minisat_solver::run_solver()
+{
+  bool result = bmc_baset::solver_base::run_solver();
+
+  if (result && bmc.options.get_bool_option("beautify-greedy"))
+      counterexample_beautification_greedyt()(
+        satcheck, bv_cbmc, *bmc.equation, bmc.symex.ns);
+
+  return result;
+}
+
 #ifdef MINISAT
 /*******************************************************************\
 

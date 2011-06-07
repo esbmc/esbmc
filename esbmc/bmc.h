@@ -21,11 +21,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/z3/z3_dec.h>
 #include <solvers/sat/cnf.h>
 #include <solvers/sat/satcheck.h>
+#include <solvers/flattening/sat_minimizer.h>
 #include <solvers/sat/cnf_clause_list.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
 
 #include "symex_bmc.h"
+#include "bv_cbmc.h"
 
 class bmc_baset:public messaget
 {
@@ -78,6 +80,16 @@ protected:
 
     prop_convt *conv;
     bmc_baset &bmc;
+  };
+
+  class minisat_solver : solver_base {
+  public:
+    minisat_solver(bmc_baset &bmc);
+    bool run_solver();
+
+  protected:
+    sat_minimizert satcheck;
+    bv_cbmct bv_cbmc;
   };
 
 #ifdef BOOLECTOR
