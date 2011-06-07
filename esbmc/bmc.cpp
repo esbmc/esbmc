@@ -650,57 +650,6 @@ bool bmc_baset::z3_solver::run_solver()
 
 /*******************************************************************\
 
-Function: bmc_baset::decide_solver_z3
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool bmc_baset::decide_solver_z3()
-{
-  bool result=true;
-  z3_dect z3_dec;
-
-  z3_dec.set_encoding(options.get_bool_option("int-encoding"));
-  z3_dec.set_file(options.get_option("outfile"));
-  z3_dec.set_smt(options.get_bool_option("smt"));
-  z3_dec.set_unsat_core(atol(options.get_option("core-size").c_str()));
-  z3_dec.set_uw_models(options.get_bool_option("uw-model"));
-  z3_dec.set_ecp(options.get_bool_option("ecp"));
-  z3_dec.set_relevancy(options.get_bool_option("no-assume-guarantee"));
-
-  switch(run_decision_procedure(z3_dec))
-  {
-    case decision_proceduret::D_UNSATISFIABLE:
-      result=false;
-      report_success();
-      break;
-    case decision_proceduret::D_SATISFIABLE:
-      result=true;
-      if (!options.get_bool_option("ecp"))
-      {
-        error_trace(z3_dec);
-        report_failure();
-      }
-      break;
-    case decision_proceduret::D_SMTLIB:
-      break;
-    default:
-      error("decision procedure failed");
-  }
-
-  _unsat_core = z3_dec.get_z3_core_size();
-  _number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
-
-  return result;
-}
-
-/*******************************************************************\
-
 Function: bmc_baset::bv_refinement
 
   Inputs:
