@@ -614,6 +614,13 @@ bool bmc_baset::minisat_solver::run_solver()
 }
 #endif
 
+bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
+  : solver_base(bmc), boolector_dec()
+{
+  boolector_dec.set_file(bmc.options.get_option("outfile"));
+  boolector_dec.set_btor(bmc.options.get_bool_option("btor"));
+}
+
 /*******************************************************************\
 
 Function: bmc_baset::decide_solver_boolector

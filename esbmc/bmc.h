@@ -92,6 +92,13 @@ protected:
     bv_cbmct bv_cbmc;
   };
 
+  class boolector_solver : solver_base {
+  public:
+    boolector_solver(bmc_baset &bmc);
+  protected:
+    boolector_dect boolector_dec;
+  };
+
 #ifdef BOOLECTOR
   virtual bool decide_solver_boolector();
 #endif
