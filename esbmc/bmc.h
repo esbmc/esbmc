@@ -77,7 +77,6 @@ protected:
 #endif
   virtual bool decide_solver_z3();
   virtual bool z3();
-  virtual bool z3_conv(std::ostream &out);
 
   virtual bool decide_minisat();
   virtual bool bv_refinement();
