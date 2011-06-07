@@ -48,9 +48,9 @@ public:
 	  _go_next_formula = false;
       _actual_CS_bound = _CS_bound;
       _is_same_mutex=false;
-      execution_statet ex_state(goto_functions, ns, this, initial_level2);
-	  execution_states.push_back(ex_state);
-      _cur_state_it = execution_states.begin();
+      execution_statet *s = new execution_statet(goto_functions, ns, this, initial_level2);
+	execution_states.push_back(s);
+	_cur_state_it = execution_states.begin();
     };
 
 	virtual ~reachability_treet() {};
@@ -92,9 +92,9 @@ public:
 	bool _go_next_formula;
     bool state_hashing;
 private:
-	std::list<execution_statet> execution_states;
+	std::list<execution_statet*> execution_states;
     /* This is derefed and returned by get_current_state */
-    std::list<execution_statet>::iterator _cur_state_it;
+    std::list<execution_statet*>::iterator _cur_state_it;
     int _CS_bound, _actual_CS_bound;
 	bool _go_next;
 	bool _DFS, _multi_formulae, _is_same_mutex,

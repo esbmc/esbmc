@@ -33,7 +33,7 @@ execution_statet & reachability_treet::get_cur_state()
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  return *_cur_state_it;
+  return **_cur_state_it;
 }
 
 /*******************************************************************
@@ -551,20 +551,20 @@ bool reachability_treet::generate_states_base(const exprt &expr)
       continue;
 
     /* Generate a new execution state, duplicate of previous? */
-    execution_statet new_state(ex_state);
+    execution_statet *new_state = new execution_statet(ex_state);
     execution_states.push_back(new_state);
 
     /* Make it active, make it follow on from previous state... */
-    execution_states.rbegin()->set_active_state(i);
-    execution_states.rbegin()->set_parent_guard(ex_state.get_guard_identifier());
-    execution_states.rbegin()->reexecute_instruction = true;
+    new_state->set_active_state(i);
+    new_state->set_parent_guard(ex_state.get_guard_identifier());
+    new_state->reexecute_instruction = true;
 
-    execution_states.rbegin()->increment_context_switch();
+    new_state->increment_context_switch();
     /* ^^^ What if there /wasn't/ a switch though? */
 //    execution_states.rbegin()->copy_level2_from(ex_state);
 //    Copy constructor should duplicate level2 object
     /* Reset interleavings (?) investigated in this new state */
-    execution_states.rbegin()->reset_DFS_traversed();
+    new_state->reset_DFS_traversed();
 
     generated = true;
     break;
@@ -642,7 +642,7 @@ void reachability_treet::multi_formulae_go_next_state()
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  std::list<execution_statet>::iterator it = _cur_state_it;
+  std::list<execution_statet*>::iterator it = _cur_state_it;
   it++;
 
   if(it != execution_states.end())
@@ -659,7 +659,7 @@ void reachability_treet::multi_formulae_go_next_state()
       {
         if(_cur_target_state != NULL)
         delete _cur_target_state;
-        _cur_target_state = new execution_statet(*it);
+        _cur_target_state = *it;
         last_state = false;
       }
       execution_states.erase(it);
@@ -689,7 +689,7 @@ void reachability_treet::go_next_state()
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  std::list<execution_statet>::iterator it = _cur_state_it;
+  std::list<execution_statet*>::iterator it = _cur_state_it;
   it++;
   if(it != execution_states.end())
     _cur_state_it++;
