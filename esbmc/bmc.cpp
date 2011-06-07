@@ -508,8 +508,10 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       return cvc();
     //else if(options.get_bool_option("smt"))
       //return smt();
-    else if(options.get_bool_option("z3"))
-      return decide_solver_z3();
+    else if(options.get_bool_option("z3")) {
+      z3_solver solver(*this);
+      return solver.run_solver();
+    }
     else if(options.get_bool_option("refine"))
       return bv_refinement();
     else
