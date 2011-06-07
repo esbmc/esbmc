@@ -622,6 +622,7 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 {
   boolector_dec.set_file(bmc.options.get_option("outfile"));
   boolector_dec.set_btor(bmc.options.get_bool_option("btor"));
+  conv = &boolector_dec;
 }
 
 /*******************************************************************\
