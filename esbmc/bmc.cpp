@@ -344,14 +344,15 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
 //  status("Passing problem to "+prop_conv.decision_procedure_text());
   std::string logic;
   if (options.get_bool_option("bl-bv") || options.get_bool_option("z3-bv") ||
-	  options.get_bool_option("bl") || !options.get_bool_option("int-encoding"))
-	logic = "bit-vector arithmetic";
+      options.get_bool_option("bl") || !options.get_bool_option("int-encoding"))
+    logic = "bit-vector arithmetic";
   else
-	logic = "integer/real arithmetic";
+    logic = "integer/real arithmetic";
 
   if (!(options.get_bool_option("minisat")) && !options.get_bool_option("smt")
-		  && !options.get_bool_option("btor"))
+        && !options.get_bool_option("btor"))
     std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
+
   prop_conv.set_message_handler(message_handler);
   prop_conv.set_verbosity(get_verbosity());
 
@@ -382,7 +383,7 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
     std::cout << "size of the unsatisfiable core: " << _unsat_core << " literal(s)"<< std::endl;
   }
   else
-	first_uw=true;
+    first_uw=true;
 
   return dec_result;
 }
