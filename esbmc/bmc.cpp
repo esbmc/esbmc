@@ -612,58 +612,6 @@ bool bmc_baset::minisat_solver::run_solver()
   return result;
 }
 
-#ifdef MINISAT
-/*******************************************************************\
-
-Function: bmc_baset::decide_default
-
-  Inputs:
-
- Outputs:
-
- Purpose: Decide using "default" decision procedure
-
-\*******************************************************************/
-
-bool bmc_baset::decide_minisat()
-{
-  sat_minimizert satcheck;
-  satcheck.set_message_handler(message_handler);
-  satcheck.set_verbosity(get_verbosity());
-
-  bv_cbmct bv_cbmc(satcheck);
-
-  if(options.get_option("arrays-uf")=="never")
-    bv_cbmc.unbounded_array=bv_cbmct::U_NONE;
-  else if(options.get_option("arrays-uf")=="always")
-    bv_cbmc.unbounded_array=bv_cbmct::U_ALL;
-
-  bool result=true;
-
-  switch(run_decision_procedure(bv_cbmc))
-  {
-  case decision_proceduret::D_UNSATISFIABLE:
-    result=false;
-    report_success();
-    break;
-
-  case decision_proceduret::D_SATISFIABLE:
-    if(options.get_bool_option("beautify-greedy"))
-      counterexample_beautification_greedyt()(
-        satcheck, bv_cbmc, *equation, symex.ns);
-
-    error_trace(bv_cbmc);
-    report_failure();
-    break;
-
-  default:
-    error("decision procedure failed");
-  }
-
-  return result;
-}
-#endif
-
 /*******************************************************************\
 
 Function: bmc_baset::decide_solver_boolector
