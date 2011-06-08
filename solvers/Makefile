@@ -41,6 +41,8 @@ OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
 	prop/propobj.o z3/z3.o cvc/cvc.o smt/smt.o  dplib/dplib.o \
 	$(BOOLBUILD)
 
+.PHONY: $(OBJS)
+
 solvers.o: $(OBJS)
 	$(LD) $(LDFLAGS) -r -o solvers.o $(OBJS)
 
