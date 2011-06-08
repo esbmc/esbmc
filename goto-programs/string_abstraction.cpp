@@ -452,8 +452,10 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   exprt ret_val;
   irep_idt label;
 
-  if(it->code.operands().size()!=0)
-    replace_string_macros(it->code.op0(), false, it->location);
+  if (it->code.operands().size() == 0)
+    return; // We're not interested at all.
+
+  replace_string_macros(it->code.op0(), false, it->location);
 
   ret_val = it->code.op0();
   while(ret_val.id()=="typecast")
