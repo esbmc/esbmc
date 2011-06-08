@@ -977,7 +977,7 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
   std::cout << "type.subtype().pretty(): " << type.subtype().pretty() << std::endl;
 #endif
 
-  typet actual_type = type.subtype();;
+  typet actual_type;
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_type_ast proj_types[2];
   Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
@@ -990,6 +990,7 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
   }
   else if (type.subtype().id()=="code")
   {
+    actual_type = type.subtype();
     if (int_encoding)
 	  proj_types[0] = Z3_mk_int_type(z3_ctx);
 	else
@@ -997,6 +998,7 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
   }
   else if (check_all_types(type.subtype()))
   {
+    actual_type = type.subtype();
 	if (create_type(type.subtype(), proj_types[0]))
 	{
 	  if (type.subtype().id()=="symbol")
@@ -1012,6 +1014,7 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
   }
   else if (check_all_types(type))
   {
+    actual_type = type;
 	if (create_type(type, proj_types[0]))
 	{
 	  if (type.id()=="symbol")
