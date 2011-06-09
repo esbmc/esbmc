@@ -36,7 +36,7 @@ Author: Daniel Kroening, kroening@kroening.com
   "(qf_aufbv)(qf_auflira)(btor)" \
   "(context-switch):(no-por)(data-races-check)(DFS)(schedule)(all-runs)" \
   "(timeout):(memlimit):(state-hashing)" \
-  "(core-size):" \
+  "(core-size):(smtlib-ileave-num):" \
   "(decide)" // legacy, and will eventually disappear
 
 class cbmc_parseoptionst:

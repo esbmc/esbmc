@@ -396,6 +396,9 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    else
      options.set_option("deadlock-check", false);
 
+  if (cmdline.isset("smtlib-ileave-num"))
+    options.set_option("smtlib-ileave-num", cmdline.getval("smtlib-ileave-num"));
+
   options.set_option("state-hashing", cmdline.isset("state-hashing"));
 
   // jmorse
