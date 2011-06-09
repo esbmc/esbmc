@@ -576,7 +576,9 @@ bool bmc_baset::solver_base::run_solver()
     bmc.report_failure();
     return true;
 
-  // XXX - and the use of this is...?
+  // Return failure if we didn't actually check anything, we just emitted the
+  // test information to an SMTLIB formatted file. Causes esbmc to quit
+  // immediately (with no error reported)
   case decision_proceduret::D_SMTLIB:
     return true;
 
