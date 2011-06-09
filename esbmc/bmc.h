@@ -43,11 +43,18 @@ public:
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
+    interleaving_number = 0;
+    interleaving_failed = 0;
+    uw_loop = 0;
   }
 
   uint _unsat_core;
   uint _number_of_assumptions;
   optionst options;
+
+  unsigned int interleaving_number;
+  unsigned int interleaving_failed;
+  unsigned int uw_loop;
 
   virtual bool run(const goto_functionst &goto_functions);
   virtual ~bmc_baset() { }

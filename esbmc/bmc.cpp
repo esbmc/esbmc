@@ -529,7 +529,6 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 {
   //symex.total_claims=0;
   static bool resp;
-  static unsigned int interleaving_number=0, interleaving_failed=0, uw_loop=0;
   symex.set_message_handler(message_handler);
   symex.set_verbosity(get_verbosity());
   symex.options=options;
