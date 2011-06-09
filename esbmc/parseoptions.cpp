@@ -398,6 +398,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("smtlib-ileave-num"))
     options.set_option("smtlib-ileave-num", cmdline.getval("smtlib-ileave-num"));
+  else
+    options.set_option("smtlib-ileave-num", "1");
 
   options.set_option("state-hashing", cmdline.isset("state-hashing"));
 
