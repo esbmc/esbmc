@@ -31,6 +31,12 @@ sub run($$$) {
     }
   }
 
+  if ($signal_num == 2) {
+    # Interrupted by ^C: we should exit too
+    print "Halting tests on interrupt";
+    exit 1;
+  }
+
   system "echo EXIT=$exit_value >>$output";
   system "echo SIGNAL=$signal_num >>$output";
 
