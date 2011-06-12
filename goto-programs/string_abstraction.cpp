@@ -1352,14 +1352,15 @@ void string_abstractiont::abstract_function_call(
   const code_typet &fnc_type = 
     static_cast<const code_typet &>(f_it->second.type);
   const code_typet::argumentst &argument_types=fnc_type.arguments();
-  
+
+  code_typet::argumentst::const_iterator arg = argument_types.begin();
   for(exprt::operandst::const_iterator it1=arguments.begin();
       it1 != arguments.end(); it1++) {
     const exprt actual(*it1);
 
     new_args.push_back(actual);
-    
-    const exprt *tcfree = &actual;
+
+    const exprt *tcfree = &*arg;
     while(tcfree->id()=="typecast")
       tcfree=&tcfree->op0();
     
@@ -1372,6 +1373,12 @@ void string_abstractiont::abstract_function_call(
         new_args.push_back(address_of_exprt(build(actual, false)));
 
     }
+
+    arg++;
+
+    // Don't continue through var-args
+    if (arg == argument_types.end())
+      break;
   }
 
   // If we have a char return type, receive a returned string struct by passing
