@@ -213,44 +213,6 @@ main(int argc, char **argv)
 	struct symtab *nl;
 	register int ch;
 
-	while ((ch = getopt(argc, argv, "CD:I:MS:U:d:i:tvV?")) != -1)
-		switch (ch) {
-		case 'C': /* Do not discard comments */
-			Cflag++;
-			break;
-
-		case 'M': /* Generate dependencies for make */
-			Mflag++;
-			break;
-
-#ifdef CPP_DEBUG
-		case 'V':
-			dflag++;
-			break;
-#endif
-		case 'v':
-			printf("cpp: %s\n", VERSSTR);
-			break;
-		case 'd':
-			if (optarg[0] == 'M') {
-				dMflag = 1;
-				Mflag = 1;
-			}
-			/* ignore others */
-			break;
-
-		case 't':
-			tflag = 1;
-			break;
-
-		case '?':
-			usage();
-		default:
-			error("bad arg %c\n", ch);
-		}
-	argc -= optind;
-	argv += optind;
-
 	filloc = lookup((usch *)"__FILE__", ENTER);
 	linloc = lookup((usch *)"__LINE__", ENTER);
 	pragloc = lookup((usch *)"_Pragma", ENTER);
