@@ -489,8 +489,10 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #endif
     }
 
-    if(options.get_bool_option("dimacs"))
-      return write_dimacs();
+    if(options.get_bool_option("dimacs")) {
+      dimacs_solver solver(*this);
+      return solver.run_solver();
+    }
     else if(options.get_bool_option("bl"))
 #ifdef BOOLECTOR
     {
@@ -686,61 +688,16 @@ bool bmc_baset::output_solver::run_solver()
   return write_output();
 }
 
-/*******************************************************************\
-
-Function: bmc_baset::write_dimacs
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool bmc_baset::write_dimacs()
+bmc_baset::dimacs_solver::dimacs_solver(bmc_baset &bmc)
+  : output_solver(bmc), conv_wrap(dimacs_cnf)
 {
-  const std::string &filename=options.get_option("outfile");
-  
-  if(filename.empty() || filename=="-")
-    return write_dimacs(std::cout);
-
-  std::ofstream out(filename.c_str());
-  if(!out)
-  {
-    std::cerr << "failed to open " << filename << std::endl;
-    return false;
-  }
-
-  return write_dimacs(out);
+  dimacs_cnf.set_message_handler(bmc.message_handler);
+  conv = &conv_wrap;
 }
 
-/*******************************************************************\
-
-Function: bmc_baset::write_dimacs
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool bmc_baset::write_dimacs(std::ostream &out)
+bool bmc_baset::dimacs_solver::write_output()
 {
-  dimacs_cnft dimacs_cnf;
-  dimacs_cnf.set_message_handler(message_handler);
-
-  bv_cbmct bv_cbmc(dimacs_cnf);
-
-  do_unwind_module(bv_cbmc);
-  do_cbmc(bv_cbmc);
-
-  bv_cbmc.dec_solve();
-
-  dimacs_cnf.write_dimacs_cnf(out);
-  
+  dimacs_cnf.write_dimacs_cnf(*out_file);
   return false;
 }
 

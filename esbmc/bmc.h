@@ -23,6 +23,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/sat/satcheck.h>
 #include <solvers/flattening/sat_minimizer.h>
 #include <solvers/sat/cnf_clause_list.h>
+#include <solvers/sat/dimacs_cnf.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
 
@@ -117,14 +118,21 @@ protected:
     std::ostream *out_file;
   };
 
+  class dimacs_solver : public output_solver {
+  public:
+    dimacs_solver(bmc_baset &bmc);
+    virtual bool write_output();
+  protected:
+    dimacs_cnft dimacs_cnf;
+    prop_convt conv_wrap;
+  };
+
   virtual decision_proceduret::resultt
     run_decision_procedure(prop_convt &prop_conv);
   virtual bool cvc();
   virtual bool cvc_conv(std::ostream &out);
   virtual bool smt();
   virtual bool smt_conv(std::ostream &out);
-  virtual bool write_dimacs();
-  virtual bool write_dimacs(std::ostream &out);
 
   // unwinding
   virtual void setup_unwind();
