@@ -34,7 +34,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#include "../../mip/compat.h"
+#include "compat.h"
 #include "cpp.h"
 #include "y.tab.h"
 %}
