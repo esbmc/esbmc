@@ -32,16 +32,18 @@ std::ostream& goto_programt::output_instruction(
 {
   target_numberst::const_iterator t_it=target_numbers.find(it);
 
-  out << "        // " << it->location_number << " ";
+  if (show_location) {
+    out << "        // " << it->location_number << " ";
 
-  if(!it->location.is_nil())
-    out << it->location.as_string();
-  else
-    out << "no location";
+    if(!it->location.is_nil())
+      out << it->location.as_string();
+    else
+      out << "no location";
 
-  out << "\n";
+    out << "\n";
+  }
 
-  if(!it->local_variables.empty())
+  if(show_variables && !it->local_variables.empty())
   {
     out << "        // Variables:";
     for(local_variablest::const_iterator
