@@ -4,6 +4,7 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/write_goto_binary.h>
 #include <langapi/language_ui.h>
+#include <langapi/mode.h>
 #include <ui_message.h>
 #include <parseoptions.h>
 #include <util/config.h>
@@ -46,3 +47,9 @@ int main(int argc, const char **argv)
   c2goto_parseopt parseopt(argc, argv);
   return parseopt.main();
 }
+
+const mode_table_et mode_table[] =
+{
+  LANGAPI_HAVE_MODE_C,
+  LANGAPI_HAVE_MODE_END
+};
