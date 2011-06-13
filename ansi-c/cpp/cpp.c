@@ -205,13 +205,11 @@ record_include(const char *fname)
 	return;
 }
 
-int
-main(int argc, char **argv)
+void
+record_builtin_macros()
 {
-	struct initar *it;
-	struct incs *w, *w2;
+	time_t t;
 	struct symtab *nl;
-	register int ch;
 
 	filloc = lookup((usch *)"__FILE__", ENTER);
 	linloc = lookup((usch *)"__LINE__", ENTER);
@@ -219,31 +217,39 @@ main(int argc, char **argv)
 	filloc->value = linloc->value = (usch *)""; /* Just something */
 	pragloc->value = (usch *)"";
 
-	if (tflag == 0) {
-		time_t t = time(NULL);
-		usch *n = (usch *)ctime(&t);
+	t = time(NULL);
+	usch *n = (usch *)ctime(&t);
 
-		/*
-		 * Manually move in the predefined macros.
-		 */
-		nl = lookup((usch *)"__TIME__", ENTER);
-		savch(0); savch('"');  n[19] = 0; savstr(&n[11]); savch('"');
-		savch(OBJCT);
-		nl->value = stringbuf-1;
+	/*
+	 * Manually move in the predefined macros.
+	 */
+	nl = lookup((usch *)"__TIME__", ENTER);
+	savch(0); savch('"');  n[19] = 0; savstr(&n[11]); savch('"');
+	savch(OBJCT);
+	nl->value = stringbuf-1;
 
-		nl = lookup((usch *)"__DATE__", ENTER);
-		savch(0); savch('"'); n[24] = n[11] = 0; savstr(&n[4]);
-		savstr(&n[20]); savch('"'); savch(OBJCT);
-		nl->value = stringbuf-1;
+	nl = lookup((usch *)"__DATE__", ENTER);
+	savch(0); savch('"'); n[24] = n[11] = 0; savstr(&n[4]);
+	savstr(&n[20]); savch('"'); savch(OBJCT);
+	nl->value = stringbuf-1;
 
-		nl = lookup((usch *)"__STDC__", ENTER);
-		savch(0); savch('1'); savch(OBJCT);
-		nl->value = stringbuf-1;
+	nl = lookup((usch *)"__STDC__", ENTER);
+	savch(0); savch('1'); savch(OBJCT);
+	nl->value = stringbuf-1;
 
-		nl = lookup((usch *)"__STDC_VERSION__", ENTER);
-		savch(0); savstr((usch *)"199901L"); savch(OBJCT);
-		nl->value = stringbuf-1;
-	}
+	nl = lookup((usch *)"__STDC_VERSION__", ENTER);
+	savch(0); savstr((usch *)"199901L"); savch(OBJCT);
+	nl->value = stringbuf-1;
+
+	return;
+}
+
+int
+main(int argc, char **argv)
+{
+	struct initar *it;
+	struct incs *w, *w2;
+	register int ch;
 
 	if (Mflag && !dMflag) {
 		usch *c;
