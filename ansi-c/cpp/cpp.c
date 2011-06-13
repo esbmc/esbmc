@@ -70,6 +70,9 @@
 
 #include <sys/wait.h>
 
+#include <stdbool.h>
+
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -245,25 +248,26 @@ record_builtin_macros()
 }
 
 int
-main(int argc, char **argv)
+open_output_file(const char *name)
 {
-	struct initar *it;
-	struct incs *w, *w2;
-	register int ch;
 
-	if (argc == 2) {
-		if ((ofd = open(argv[1], O_WRONLY|O_CREAT, 0600)) < 0)
-			error("Can't creat %s", argv[1]);
-	} else
-		ofd = 1; /* stdout */
-	istty = isatty(ofd);
+	ofd = open(name, O_WRONLY|O_CREAT, 0600);
+	if (ofd < 0) {
+		perror("Can't open preprocessing output file");
+		return errno;
+	}
 
-	if (pushfile((usch *)(argc && strcmp(argv[0], "-") ? argv[0] : NULL)))
-		error("cannot open %s", argv[0]);
+	istty = false;
+	return 0;
+}
+
+void
+fin()
+{
 
 	flbuf();
 	close(ofd);
-	return 0;
+	return;
 }
 
 /*
