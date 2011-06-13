@@ -1,9 +1,9 @@
 SRC = main.cpp parseoptions.cpp bmc.cpp  \
       bv_cbmc.cpp document_subgoals.cpp \
       symex_bmc.cpp show_vcc.cpp \
-      counterexample_beautification.cpp \
-      counterexample_beautification_greedy.cpp \
-      counterexample_beautification_pbs.cpp
+      counterex_pretty.cpp \
+      counterex_pretty_greedy.cpp \
+      counterex_pretty_pbs.cpp
 OBJ = $(SRC:.cpp=.o) \
       ../ansi-c/ansi-c.o \
       ../big-int/bigint.o \
