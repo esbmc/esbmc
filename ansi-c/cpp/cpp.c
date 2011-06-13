@@ -251,23 +251,6 @@ main(int argc, char **argv)
 	struct incs *w, *w2;
 	register int ch;
 
-	if (Mflag && !dMflag) {
-		usch *c;
-
-		if (argc < 1)
-			error("-M and no infile");
-		if ((c = (usch *)strrchr(argv[0], '/')) == NULL)
-			c = (usch *)argv[0];
-		else
-			c++;
-		Mfile = stringbuf;
-		savstr(c); savch(0);
-		if ((c = (usch *)strrchr((char *)Mfile, '.')) == NULL)
-			error("-M and no extension: ");
-		c[1] = 'o';
-		c[2] = 0;
-	}
-
 	if (argc == 2) {
 		if ((ofd = open(argv[1], O_WRONLY|O_CREAT, 0600)) < 0)
 			error("Can't creat %s", argv[1]);
