@@ -8,6 +8,10 @@ ifdef BOOLECTOR
 BOOLBUILD= boolector/boolector.o
 endif
 
+ifdef Z3
+Z3BUILD= z3/z3.o
+endif
+
 ###############################################################################
 
 sat/satsolvers.o:
@@ -38,8 +42,8 @@ dplib/dplib.o:
 	$(MAKE) -C dplib
 
 OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
-	prop/propobj.o z3/z3.o cvc/cvc.o smt/smt.o  dplib/dplib.o \
-	$(BOOLBUILD)
+	prop/propobj.o cvc/cvc.o smt/smt.o  dplib/dplib.o \
+	$(BOOLBUILD) $(Z3BUILD)
 
 solvers.o: $(OBJS)
 	$(LD) $(LDFLAGS) -r -o solvers.o $(OBJS)

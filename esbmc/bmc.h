@@ -18,7 +18,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/prop/prop.h>
 #include <solvers/prop/prop_conv.h>
 #include <solvers/boolector/boolector_dec.h>
+#ifdef Z3
 #include <solvers/z3/z3_dec.h>
+#endif
 #include <solvers/sat/cnf.h>
 #include <solvers/sat/satcheck.h>
 #include <solvers/flattening/sat_minimizer.h>
@@ -102,6 +104,7 @@ protected:
     boolector_dect boolector_dec;
   };
 
+#ifdef Z3
   class z3_solver : public solver_base {
   public:
     z3_solver(bmc_baset &bmc);
@@ -109,6 +112,7 @@ protected:
   protected:
     z3_dect z3_dec;
   };
+#endif
 
   class output_solver : public solver_base {
   public:

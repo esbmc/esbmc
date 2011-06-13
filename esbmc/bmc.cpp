@@ -503,7 +503,11 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     else if(options.get_bool_option("smt"))
       solver = new smt_solver(*this);
     else if(options.get_bool_option("z3"))
+#ifdef Z3
       solver = new z3_solver(*this);
+#else
+      throw "This version of ESBMC was not compiled with Z3 support";
+#endif
     else
       throw "Please specify a SAT/SMT solver to use";
 
@@ -625,6 +629,7 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 }
 #endif
 
+#ifdef Z3
 bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
   : solver_base(bmc), z3_dec()
 {
@@ -645,6 +650,7 @@ bool bmc_baset::z3_solver::run_solver()
   bmc._number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
   return result;
 }
+#endif
 
 bmc_baset::output_solver::output_solver(bmc_baset &bmc)
   : solver_base(bmc)

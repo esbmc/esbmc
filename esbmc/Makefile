@@ -17,7 +17,7 @@ OBJ = $(SRC:.cpp=.o) \
 
 INCLUDES= -I .. -I ../util -I$(Z3)/include
 
-LIBS= -L $(Z3)/lib -lz3 -lgmp -ldl
+LIBS= -lgmp -ldl
 
 all: esbmc
 
@@ -43,6 +43,11 @@ endif
 ifdef BOOLECTOR
 CXXFLAGS+= -DBOOLECTOR
 LIBS+= -L$(BOOLECTOR)/lib -lboolector
+endif
+
+ifdef Z3
+CXXFLAGS+= -DZ3
+LIBS+= -L$(Z3)/lib -lz3
 endif
 
 ifdef MINISAT
