@@ -24,6 +24,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/flattening/sat_minimizer.h>
 #include <solvers/sat/cnf_clause_list.h>
 #include <solvers/sat/dimacs_cnf.h>
+#include <solvers/cvc/cvc_dec.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
 
@@ -127,10 +128,16 @@ protected:
     prop_convt conv_wrap;
   };
 
+  class cvc_solver : public output_solver {
+  public:
+    cvc_solver(bmc_baset &bmc);
+    virtual bool write_output();
+  protected:
+    cvc_convt cvc;
+  };
+
   virtual decision_proceduret::resultt
     run_decision_procedure(prop_convt &prop_conv);
-  virtual bool cvc();
-  virtual bool cvc_conv(std::ostream &out);
   virtual bool smt();
   virtual bool smt_conv(std::ostream &out);
 
