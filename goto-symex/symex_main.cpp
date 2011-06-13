@@ -267,7 +267,7 @@ void goto_symext::symex_step(
 
   if (options.get_bool_option("symex-trace")) {
     const goto_programt p;// = goto_functions.function_map.find(instruction.function)->second.body;
-    p.output_instruction(ns, "", std::cout, state.source.pc);
+    p.output_instruction(ns, "", std::cout, state.source.pc, false, false);
   }
 
     // actually do instruction

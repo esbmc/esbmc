@@ -20,7 +20,9 @@ public:
     const class namespacet &ns,
     const irep_idt &identifier,
     std::ostream& out,
-    instructionst::const_iterator it) const;
+    instructionst::const_iterator it,
+    bool show_location=true,
+    bool show_variables=true) const;
 
   goto_programt() { }  
 };

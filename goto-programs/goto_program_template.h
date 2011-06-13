@@ -418,7 +418,8 @@ public:
     const class namespacet &ns,
     const irep_idt &identifier,
     std::ostream &out,
-    typename instructionst::const_iterator it) const=0;
+    typename instructionst::const_iterator it,
+    bool show_location = true, bool show_variables = true) const=0;
 
   // keep a list of the targets
   typedef typename std::map<const_targett, unsigned> target_numberst;

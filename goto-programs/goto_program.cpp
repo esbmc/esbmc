@@ -26,7 +26,9 @@ std::ostream& goto_programt::output_instruction(
   const class namespacet &ns,
   const irep_idt &identifier,
   std::ostream& out,
-  instructionst::const_iterator it) const
+  instructionst::const_iterator it,
+  bool show_location,
+  bool show_variables) const
 {
   target_numberst::const_iterator t_it=target_numbers.find(it);
 
