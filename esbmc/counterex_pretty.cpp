@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "counterexample_beautification.h"
+#include "counterex_pretty.h"
 
 /*******************************************************************\
 

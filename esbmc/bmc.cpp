@@ -37,7 +37,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include "bmc.h"
 #include "bv_cbmc.h"
-#include "counterexample_beautification_greedy.h"
+#include "counterex_pretty_greedy.h"
 #include "document_subgoals.h"
 #include "version.h"
 

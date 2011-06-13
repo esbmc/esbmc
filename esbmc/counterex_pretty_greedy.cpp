@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <expr_util.h>
 #include <arith_tools.h>
 
-#include "counterexample_beautification_greedy.h"
+#include "counterex_pretty_greedy.h"
 
 /*******************************************************************\
 
