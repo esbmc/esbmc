@@ -265,8 +265,10 @@ void goto_symext::symex_step(
       state.depth++;
   }
 
-    //std::cout << "instruction.type: " << instruction.type << "\n";
-    //std::cout << "instruction.code.pretty(): " << instruction.code.pretty() << "\n";
+  if (options.get_bool_option("symex-trace")) {
+    const goto_programt p;// = goto_functions.function_map.find(instruction.function)->second.body;
+    p.output_instruction(ns, "", std::cout, state.source.pc);
+  }
 
     // actually do instruction
     switch (instruction.type) {

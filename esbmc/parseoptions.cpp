@@ -401,6 +401,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("smtlib-ileave-num", "1");
 
+  options.set_option("symex-trace", cmdline.isset("symex-trace"));
+
   options.set_option("state-hashing", cmdline.isset("state-hashing"));
 
   // jmorse
