@@ -83,6 +83,8 @@
 #include <unistd.h>
 #include <ctype.h>
 
+#include "iface.h"
+
 #ifdef HAVE_ALLOCA_H
 #include <alloca.h>
 #endif
