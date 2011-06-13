@@ -390,6 +390,9 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
 bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 {
+  solver_base *solver;
+  bool ret;
+
   try
   {
     if(symex.options.get_bool_option("schedule"))
@@ -480,42 +483,33 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       return false;
     }
 
-    if(options.get_bool_option("minisat")) {
+    if(options.get_bool_option("minisat"))
 #ifdef MINISAT
-      minisat_solver solver(*this);
-      return solver.run_solver();
+      solver = new minisat_solver(*this);
 #else
       throw "This version of ESBMC was not compiled with minisat support";
 #endif
-    }
 
-    if(options.get_bool_option("dimacs")) {
-      dimacs_solver solver(*this);
-      return solver.run_solver();
-    }
+    if(options.get_bool_option("dimacs"))
+      solver = new dimacs_solver(*this);
     else if(options.get_bool_option("bl"))
 #ifdef BOOLECTOR
-    {
-      boolector_solver solver(*this);
-      return solver.run_solver();
-    }
+      solver = new boolector_solver(*this);
 #else
       throw "This version of ESBMC was not compiled with boolector support";
 #endif
-    else if(options.get_bool_option("cvc")) {
-      cvc_solver solver(*this);
-      return solver.run_solver();
-    }
-    else if(options.get_bool_option("smt")) {
-      smt_solver solver(*this);
-      return solver.run_solver();
-    }
-    else if(options.get_bool_option("z3")) {
-      z3_solver solver(*this);
-      return solver.run_solver();
-    }
+    else if(options.get_bool_option("cvc"))
+      solver = new cvc_solver(*this);
+    else if(options.get_bool_option("smt"))
+      solver = new smt_solver(*this);
+    else if(options.get_bool_option("z3"))
+      solver = new z3_solver(*this);
     else
       throw "Please specify a SAT/SMT solver to use";
+
+    ret = solver->run_solver();
+    delete solver;
+    return ret;
   }
 
   catch(std::string &error_str)
