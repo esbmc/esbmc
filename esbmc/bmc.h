@@ -107,6 +107,16 @@ protected:
     z3_dect z3_dec;
   };
 
+  class output_solver : public solver_base {
+  public:
+    output_solver(bmc_baset &bmc);
+    ~output_solver();
+    virtual bool run_solver();
+  protected:
+    virtual bool write_output() = 0;
+    std::ostream *out_file;
+  };
+
   virtual decision_proceduret::resultt
     run_decision_procedure(prop_convt &prop_conv);
   virtual bool cvc();

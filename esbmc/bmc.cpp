@@ -646,6 +646,46 @@ bool bmc_baset::z3_solver::run_solver()
   return result;
 }
 
+bmc_baset::output_solver::output_solver(bmc_baset &bmc)
+  : solver_base(bmc)
+{
+
+  const std::string &filename = bmc.options.get_option("outfile");
+
+  if (filename.empty() || filename=="-") {
+    out_file = &std::cout;
+  } else {
+    std::ofstream *out = new std::ofstream(filename.c_str());
+    out_file = out;
+
+    if (!out_file)
+    {
+      std::cerr << "failed to open " << filename << std::endl;
+      delete out_file;
+      return;
+    }
+  }
+
+  return;
+}
+
+bmc_baset::output_solver::~output_solver()
+{
+
+  if (out_file != &std::cout)
+    delete out_file;
+  return;
+}
+
+bool bmc_baset::output_solver::run_solver()
+{
+
+  bmc.do_unwind_module(*conv);
+  bmc.do_cbmc(*conv);
+  conv->dec_solve();
+  return write_output();
+}
+
 /*******************************************************************\
 
 Function: bmc_baset::write_dimacs
