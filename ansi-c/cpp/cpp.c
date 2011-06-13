@@ -170,6 +170,41 @@ void line(void);
 void flbuf(void);
 void usage(void);
 
+void
+record_define(const char *value)
+{
+	struct initar *it;
+
+	if ((it = malloc(sizeof(struct initar))) == NULL)
+		error("couldn't apply -D %s", optarg);
+	it->type = 'D';
+	it->str = strdup(value);
+	it->next = initar;
+	initar = it;
+	return;
+}
+
+void
+record_include(const char *fname)
+{
+	struct incs *w, *w2;
+
+	if ((w = calloc(sizeof(struct incs), 1)) == NULL)
+		error("couldn't apply -I %s", optarg);
+	w->dir = strdup(fname);
+	w2 = incdir[INCINC];
+
+	if (w2 != NULL) {
+		while (w2->next)
+			w2 = w2->next;
+		w2->next = w;
+	} else {
+		incdir[INCINC] = w;
+	}
+
+	return;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -184,34 +219,8 @@ main(int argc, char **argv)
 			Cflag++;
 			break;
 
-		case 'i': /* include */
-		case 'U': /* undef */
-		case 'D': /* define something */
-			/* XXX should not need malloc() here */
-			if ((it = malloc(sizeof(struct initar))) == NULL)
-				error("couldn't apply -%c %s", ch, optarg);
-			it->type = ch;
-			it->str = optarg;
-			it->next = initar;
-			initar = it;
-			break;
-
 		case 'M': /* Generate dependencies for make */
 			Mflag++;
-			break;
-
-		case 'S':
-		case 'I':
-			if ((w = calloc(sizeof(struct incs), 1)) == NULL)
-				error("couldn't apply -%c %s", ch, optarg);
-			w->dir = (usch *)optarg;
-			w2 = incdir[ch == 'I' ? INCINC : SYSINC];
-			if (w2 != NULL) {
-				while (w2->next)
-					w2 = w2->next;
-				w2->next = w;
-			} else
-				incdir[ch == 'I' ? INCINC : SYSINC] = w;
 			break;
 
 #ifdef CPP_DEBUG
