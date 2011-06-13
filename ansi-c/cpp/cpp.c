@@ -858,9 +858,7 @@ bad:	error("bad pragma operator");
  * substitute namep for sp->value.
  */
 int
-subst(sp, rp)
-struct symtab *sp;
-struct recur *rp;
+subst(struct symtab *sp, struct recur *rp)
 {
 	struct recur rp2;
 	register usch *vp, *cp;
@@ -1101,9 +1099,7 @@ def:		default:
  * result is written on top of heap
  */
 void
-expdef(vp, rp, gotwarn)
-	usch *vp;
-	struct recur *rp;
+expdef(usch *vp, struct recur *rp, gotwarn)
 {
 	usch **args, *sptr, *ap, *bp, *sp;
 	int narg, c, i, plev, snuff, instr;
