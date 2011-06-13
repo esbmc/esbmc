@@ -1099,7 +1099,7 @@ def:		default:
  * result is written on top of heap
  */
 void
-expdef(usch *vp, struct recur *rp, gotwarn)
+expdef(usch *vp, struct recur *rp, int gotwarn)
 {
 	usch **args, *sptr, *ap, *bp, *sp;
 	int narg, c, i, plev, snuff, instr;
