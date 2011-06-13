@@ -1,10 +1,10 @@
-OBJS=cpp.o cpy.o scanner.o compat.o
+OBJS=cpy.o cpp.o scanner.o compat.o
 HEADERS=cpp.h
 
-all: cpp
+all: preproc.o
 
-cpp: $(OBJS) $(HEADERS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@
+preproc.o: $(OBJS) $(HEADERS)
+	$(LD) $(LDFLAGS) $(OBJS) -r -o $@
 
 .c.o:
 	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c $<
@@ -21,8 +21,6 @@ compat.o: compat.c
 	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ compat.c
 
 $(OBJS): $(HEADERS)
-
-cpp.o: cpy.o
 
 clean:
 	-rm *.o
