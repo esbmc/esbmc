@@ -1375,8 +1375,16 @@ void string_abstractiont::abstract_function_call(
     }
 
     arg++;
-
     // Don't continue through var-args
+    if (arg == argument_types.end())
+      break;
+
+    // Uuugh. Arg we're pointing at may (or may not) now be a string struct ptr.
+    // Ultimately the fix to this horror is not rewriting program code and
+    // signature in the same pass.
+    if (arg->type().id() == "pointer" && arg->type().subtype() == string_struct)
+      arg++;
+
     if (arg == argument_types.end())
       break;
   }
