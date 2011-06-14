@@ -235,6 +235,20 @@ static const char cpp_normal_defines[] = {
 NULL
 };
 
+static const char cpp_linux_defs[] = {
+"i386",
+"__i386",
+"__i386__",
+"linux",
+"__linux",
+"__linux__",
+"__gnu_linux__",
+"unix",
+"__unix",
+"__unix__",
+NULL
+};
+
 void setup_cpp_defs(const char **defs)
 {
 
@@ -319,41 +333,12 @@ bool c_preprocess(
     setup_cpp_defs(cpp_defines_strabs);
 
   setup_cpp_defs(cpp_normal_defs);
+  setup_cpp_defs(cpp_linux_defs);
 
   return false;
 }
 
 #if 0
-  if(config.ansi_c.os==configt::ansi_ct::OS_I386_LINUX)
-  { // assume we're running i386-linux
-    command+=" -Di386 -D__i386 -D__i386__";
-    command+=" -Dlinux -D__linux -D__linux__ -D__gnu_linux__";
-    command+=" -Dunix -D__unix -D__unix__";
-  }
-  else if(config.ansi_c.os==configt::ansi_ct::OS_I386_MACOS)
-  {
-    command+=" -Di386 -D__i386 -D__i386__";
-    command+=" -D__APPLE__ -D__MACH__ -D__LITTLE_ENDIAN__";
-  }
-  else if(config.ansi_c.os==configt::ansi_ct::OS_PPC_MACOS)
-  {
-    command+=" -D__APPLE__ -D__MACH__ -D__BIG_ENDIAN__";
-  }
-  else if(config.ansi_c.os==configt::ansi_ct::OS_WIN32)
-  {
-    command+=" -D _MSC_VER=1400";
-    command+=" -D _WIN32";
-    command+=" -D _M_IX86=Blend";
-
-    if(config.ansi_c.char_is_unsigned)
-      command+=" -D _CHAR_UNSIGNED";
-  }
-  else
-  {
-    command+=" -nostdinc"; // make sure we don't mess with the system library
-  }
-  #endif  
-  
   // Standard Defines, ANSI9899 6.10.8
   std::string pre;
   #ifdef _WIN32
