@@ -119,6 +119,99 @@ Author: Daniel Kroening, kroening@kroening.com
   " -Dmemmove=memmove_strabs " \
   " -Dmemcmp=memcmp_strabs "
 
+static const char *cpp_defines_16[] ={
+"__INT_MAX__=32767",
+"__CHAR_BIT__=8",
+"__WCHAR_MAX__=32767",
+"__SCHAR_MAX__=127",
+"__SHRT_MAX__=32767",
+"__LONG_LONG_MAX__=2147483647L",
+"__LONG_MAX__=2147483647",
+"__FLT_MIN__=1.17549435e-38F",
+"__FLT_MAX__=3.40282347e+38F",
+"__LDBL_MIN__=3.36210314311209350626e-4932L",
+"__LDBL_MAX__=1.18973149535723176502e+4932L",
+"__DBL_MIN__=2.2250738585072014e-308",
+"__DBL_MAX__=1.7976931348623157e+308",
+"__SIZE_TYPE__=\"unsigned int\"",
+"__PTRDIFF_TYPE__=int",
+"__WCHAR_TYPE__=int",
+"__WINT_TYPE__=int",
+"__INTMAX_TYPE__=\"long long int\"",
+"__UINTMAX_TYPE__=\"long long unsigned int\""
+};
+
+static const char *cpp_defines_32[] ={
+"__INT_MAX__=2147483647",
+"__CHAR_BIT__=8",
+"__WCHAR_MAX__=2147483647",
+"__SCHAR_MAX__=127",
+"__SHRT_MAX__=32767",
+"__LONG_LONG_MAX__=9223372036854775807LL",
+"__LONG_MAX__=2147483647L",
+"__FLT_MIN__=1.17549435e-38F",
+"__FLT_MAX__=3.40282347e+38F",
+"__LDBL_MIN__=3.36210314311209350626e-4932L",
+"__LDBL_MAX__=1.18973149535723176502e+4932L",
+"__DBL_MIN__=2.2250738585072014e-308",
+"__DBL_MAX__=1.7976931348623157e+308",
+" __SIZE_TYPE__=\"long unsigned int\"",
+"__PTRDIFF_TYPE__=int",
+"__WCHAR_TYPE__=int",
+"__WINT_TYPE__=int",
+"__INTMAX_TYPE__=\"long long int\"",
+"__UINTMAX_TYPE__=\"long long unsigned int\""
+};
+
+static const char *cpp_defines_64[] ={
+"__INT_MAX__=2147483647",
+"__CHAR_BIT__=8",
+"__WCHAR_MAX__=2147483647",
+"__SCHAR_MAX__=127",
+"__SHRT_MAX__=32767",
+"__LONG_LONG_MAX__=9223372036854775807LL",
+"__LONG_MAX__=9223372036854775807L",
+"__FLT_MIN__=1.17549435e-38F",
+"__FLT_MAX__=3.40282347e+38F",
+"__LDBL_MIN__=3.36210314311209350626e-4932L",
+"__LDBL_MAX__=1.18973149535723176502e+4932L",
+"__DBL_MIN__=2.2250738585072014e-308",
+"__DBL_MAX__=1.7976931348623157e+308",
+"__x86_64=1",
+"__LP64__=1",
+"__x86_64__=1",
+"_LP64=1",
+"__SIZE_TYPE__=\"long unsigned int\"",
+"__PTRDIFF_TYPE__=int",
+"__WCHAR_TYPE__=int",
+"__WINT_TYPE__=int",
+"__INTMAX_TYPE__=\"long long int\"",
+"__UINTMAX_TYPE__=\"long long unsigned int\""
+};
+
+static const char *cpp_defines_strabs[] ={
+"getopt=getopt_strabs",
+"fopen=fopen_strabs",
+"fgets=fgets_strabs",
+"fputs=fputs_strabs",
+"calloc=calloc_strabs",
+"atoi=atoi_strabs",
+"atol=atol_strabs",
+"getenv=getenv_strabs",
+"strcpy=strcpy_strabs",
+"strncpy=strncpy_strabs",
+"strcat=strcat_strabs",
+"strncat=strncat_strnabs",
+"strcmp=strcmp_strabs",
+"strncmp=strncmp_strabs",
+"strlen=strlen_strabs",
+"strdup=strdup_strabs",
+"memcpy=memcpy_strabs",
+"memset=memset_strabs",
+"memmove=memmove_strabs",
+"memcmp=memcmp_strabs"
+};
+
 /*******************************************************************\
 
 Function: c_preprocess
