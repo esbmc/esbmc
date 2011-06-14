@@ -21,6 +21,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "c_preprocess.h"
 
+extern "C" {
+#include "cpp/iface.h"
+}
+
 #define GCC_DEFINES_16 \
   " -D__INT_MAX__=32767"\
   " -D__CHAR_BIT__=8"\
@@ -206,6 +210,15 @@ static const char *cpp_defines_strabs[] ={
 "memcmp=memcmp_strabs",
 NULL
 };
+
+void setup_cpp_defs(const char **defs)
+{
+
+  while (*defs != NULL)
+    record_define(*defs);
+
+  return;
+}
 
 bool c_preprocess(
   std::istream &instream,
