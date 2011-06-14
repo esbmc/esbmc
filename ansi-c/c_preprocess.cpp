@@ -203,24 +203,63 @@ static const char *cpp_defines_strabs[] ={
 "memcmp=memcmp_strabs"
 };
 
-/*******************************************************************\
-
-Function: c_preprocess
-
-  Inputs:
-
- Outputs:
-
- Purpose: ANSI-C preprocessing
-
-\*******************************************************************/
-
 bool c_preprocess(
   std::istream &instream,
   const std::string &path,
   std::ostream &outstream,
   message_handlert &message_handler)
 {
+  char out_file_buf[32], stderr_file_buf[32];
+  pid_t pid;
+  int fd, status;
+
+  message_streamt message_stream(message_handler);
+
+  sprintf(out_file_buf, "/tmp/ESBMC_XXXXXX");
+  fd = mkstemp(out_file_buf);
+  if (fd < 0) {
+    message_stream.error("Couldn't open preprocessing output file");
+    return true;
+  }
+  close(fd);
+
+  sprintf(stderr_file_buf, "/tmp/ESBMC_XXXXXX");
+  fd = mkstemp(stderr_file_buf);
+  if (fd < 0) {
+    message_stream.error("Couldn't open preprocessing stderr file");
+    return true;
+  }
+  close(fd);
+
+  pid = fork();
+  if (pid != 0) {
+    if (waitpid(pid, &status, 0) < 0) {
+      message_stream.error("Failed to wait for preprocessing process");
+      return true;
+    }
+
+    std::ifstream stderr_input(stderr_file_buf);
+    message_stream.str << stderr_input;
+
+    std::ifstream output_input(out_file_buf);
+    outstream << output_input;
+
+    unlink(stderr_file_buf);
+    unlink(out_file_buf);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+      message_stream.error("Preprocessing failed");
+      return true;
+    }
+
+    return false;
+  }
+
+  // Insert here: code to setup cpp on forked side.
+  return false;
+}
+
+
+#if 0
   // preprocessing
   message_streamt message_stream(message_handler);
 
@@ -393,3 +432,4 @@ bool c_preprocess(
 
   return false;
 }
+#endif
