@@ -271,6 +271,8 @@ bool c_preprocess(
       it++)
     record_include(it->c_str());
 
+  record_include("/usr/include");
+
   if (open_output_file(out_file_buf) < 0) {
     perror("cpp couldn't open output file");
     exit(1);
