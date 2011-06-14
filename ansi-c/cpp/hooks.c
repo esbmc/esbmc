@@ -1,6 +1,8 @@
+#include <string.h>
+
 #include "cpp.h"
 
-#include <string.h>
+#include "../headers.h"
 
 struct hooked_header {
 	const char *basename;
@@ -9,7 +11,7 @@ struct hooked_header {
 };
 
 struct hooked_header headers[] = {
-{ "stddef.h",		NULL,		NULL }
+{ "stddef.h",		&_binary_stddef_c_start,	&_binary_stddef_c_end }
 /* stddef.h contains a variety of compiler-specific functions */
 };
 
