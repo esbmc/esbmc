@@ -261,8 +261,10 @@ NULL
 void setup_cpp_defs(const char **defs)
 {
 
-  while (*defs != NULL)
+  while (*defs != NULL) {
     record_define(*defs);
+    defs++;
+  }
 
   return;
 }
