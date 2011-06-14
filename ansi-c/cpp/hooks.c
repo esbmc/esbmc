@@ -19,7 +19,16 @@ struct hooked_header headers[] = {
 int
 handle_hooked_header(usch *name)
 {
+	struct hooked_header *h;
 
 	fprintf(stderr, "Including file %s\n", name);
+
+	for (h = &headers[0]; h->basename != NULL; h++) {
+		if (!strcmp((char *)name, h->basename)) {
+			/* This is to be hooked */
+			fprintf(stderr, "Hooking...\n");
+		}
+	}
+
 	return 0;
 }
