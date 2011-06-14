@@ -109,7 +109,6 @@ struct symtab *lookup(usch *namep, int enterf);
 usch *gotident(struct symtab *nl);
 int slow;	/* scan slowly for new tokens */
 
-int pushfile(usch *fname);
 void popfile(void);
 void prtline(void);
 int yylex(void);
