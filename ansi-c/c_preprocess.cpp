@@ -165,7 +165,7 @@ static const char *cpp_ansic_defs[] = {
 "__STDC_VERSION__=199901L",
 "__STDC_IEC_559__=1",
 "__STDC_IEC_559_COMPLEX__=1",
-"__STDC_ISO_10646__=1",
+"__STDC__",
 NULL
 };
 
