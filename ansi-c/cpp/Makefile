@@ -9,9 +9,6 @@ all: preproc.o
 preproc.o: $(OBJS) $(HEADERS)
 	$(LD) $(LDFLAGS) $(OBJS) -r -o $@
 
-.c.o:
-	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c $<
-
 .l.o:
 	$(LEX) $(LFLAGS) $<
 	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ lex.yy.c
