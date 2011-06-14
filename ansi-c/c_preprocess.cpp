@@ -218,10 +218,11 @@ bool c_preprocess(
     }
 
     std::ifstream stderr_input(stderr_file_buf);
-    message_stream.str << stderr_input;
+    message_stream.str << stderr_input.rdbuf();
+    message_stream.status();
 
     std::ifstream output_input(out_file_buf);
-    outstream << output_input;
+    outstream << output_input.rdbuf();
 
     unlink(stderr_file_buf);
     unlink(out_file_buf);
