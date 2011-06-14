@@ -129,7 +129,8 @@ static const char *cpp_defines_16[] ={
 "__WCHAR_TYPE__=int",
 "__WINT_TYPE__=int",
 "__INTMAX_TYPE__=\"long long int\"",
-"__UINTMAX_TYPE__=\"long long unsigned int\""
+"__UINTMAX_TYPE__=\"long long unsigned int\"",
+NULL
 };
 
 static const char *cpp_defines_32[] ={
@@ -151,7 +152,8 @@ static const char *cpp_defines_32[] ={
 "__WCHAR_TYPE__=int",
 "__WINT_TYPE__=int",
 "__INTMAX_TYPE__=\"long long int\"",
-"__UINTMAX_TYPE__=\"long long unsigned int\""
+"__UINTMAX_TYPE__=\"long long unsigned int\"",
+NULL
 };
 
 static const char *cpp_defines_64[] ={
@@ -177,7 +179,8 @@ static const char *cpp_defines_64[] ={
 "__WCHAR_TYPE__=int",
 "__WINT_TYPE__=int",
 "__INTMAX_TYPE__=\"long long int\"",
-"__UINTMAX_TYPE__=\"long long unsigned int\""
+"__UINTMAX_TYPE__=\"long long unsigned int\"",
+NULL
 };
 
 static const char *cpp_defines_strabs[] ={
@@ -200,7 +203,8 @@ static const char *cpp_defines_strabs[] ={
 "memcpy=memcpy_strabs",
 "memset=memset_strabs",
 "memmove=memmove_strabs",
-"memcmp=memcmp_strabs"
+"memcmp=memcmp_strabs",
+NULL
 };
 
 bool c_preprocess(
