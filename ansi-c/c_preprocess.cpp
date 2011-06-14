@@ -225,7 +225,7 @@ static const char *cpp_defines_lock_check[] ={
 NULL
 };
 
-static const char cpp_normal_defines[] = {
+static const char *cpp_normal_defs[] = {
 "__ESBMC__",
 "__null=0",
 "__GNUC__=4",
@@ -235,7 +235,7 @@ static const char cpp_normal_defines[] = {
 NULL
 };
 
-static const char cpp_linux_defs[] = {
+static const char *cpp_linux_defs[] = {
 "i386",
 "__i386",
 "__i386__",
@@ -249,7 +249,7 @@ static const char cpp_linux_defs[] = {
 NULL
 };
 
-static const char cpp_ansic_defs[] = {
+static const char *cpp_ansic_defs[] = {
 "__STDC_VERSION__=199901L",
 "__STDC_IEC_559__=1",
 "__STDC_IEC_559_COMPLEX__=1",
