@@ -495,13 +495,12 @@ again:
 		for (w = incdir[i]; w; w = w->next) {
 			usch *nm = stringbuf;
 
-			savstr(w->dir); savch('/');
-			savstr(safefn); savch(0);
-
 			/* ESBMC: Hook some headers that would pull in system
 			 * environment info that we don't want */
-			if (it == SYSINC && handle_hooked_header(nm))
+			if (it == SYSINC && handle_hooked_header(safefn))
 				return;
+			savstr(w->dir); savch('/');
+			savstr(safefn); savch(0);
 
 			if (pushfile(nm) == 0)
 				return;
