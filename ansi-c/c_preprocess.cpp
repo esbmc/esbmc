@@ -134,6 +134,7 @@ static const char *cpp_defines_16[] ={
 "__WINT_TYPE__=int",
 "__INTMAX_TYPE__=\"long long int\"",
 "__UINTMAX_TYPE__=\"long long unsigned int\"",
+"__WORDSIZE=16",
 NULL
 };
 
@@ -157,6 +158,7 @@ static const char *cpp_defines_32[] ={
 "__WINT_TYPE__=int",
 "__INTMAX_TYPE__=\"long long int\"",
 "__UINTMAX_TYPE__=\"long long unsigned int\"",
+"__WORDSIZE=32",
 NULL
 };
 
@@ -184,6 +186,7 @@ static const char *cpp_defines_64[] ={
 "__WINT_TYPE__=int",
 "__INTMAX_TYPE__=\"long long int\"",
 "__UINTMAX_TYPE__=\"long long unsigned int\"",
+"__WORDSIZE=64",
 NULL
 };
 
