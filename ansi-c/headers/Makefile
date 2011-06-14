@@ -1,6 +1,3 @@
-include ../../common
-include ../../config.inc
-
 OBJS= stddef.o
 
 all: headers.o
