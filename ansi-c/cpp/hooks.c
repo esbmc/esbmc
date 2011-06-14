@@ -10,6 +10,7 @@ struct hooked_header {
 
 struct hooked_header headers[] = {
 { "stddef.h",		NULL,		NULL }
+/* stddef.h contains a variety of compiler-specific functions */
 };
 
 int
