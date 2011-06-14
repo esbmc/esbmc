@@ -71,11 +71,19 @@ clib.o: c2goto clib16.o clib32.o clib64.o
 
 ###############################################################################
 
-ansi-c.o: $(OBJ) cprover_library.o clib.o
+cpp/preproc.o:
+	$(MAKE) -C cpp
+
+.PHONY: cpp/preproc.o
+
+###############################################################################
+
+ansi-c.o: $(OBJ) cprover_library.o clib.o cpp/preproc.o
 	$(LD) $(LDFLAGS) -r -o $@ $^
 
 clean:
 	$(MAKE) -C library clean
+	$(MAKE) -C cpp clean
 	-rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
 	-rm -f c2goto
 	-rm -f *.goto
