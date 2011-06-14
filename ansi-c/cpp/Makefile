@@ -1,3 +1,6 @@
+include ../../common
+include ../../config.inc
+
 OBJS=cpy.o cpp.o scanner.o compat.o
 HEADERS=cpp.h
 
