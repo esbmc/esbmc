@@ -344,31 +344,22 @@ bool c_preprocess(
   setup_cpp_defs(cpp_linux_defs);
   setup_cpp_defs(cpp_ansic_defs);
 
-  return false;
-}
-
-#if 0
-  
   for(std::list<std::string>::const_iterator
       it=config.ansi_c.defines.begin();
       it!=config.ansi_c.defines.end();
       it++)
-    #ifdef _WIN32
-    command+=" /D \""+*it+"\"";
-    #else
-    command+=" -D'"+*it+"'";
-    #endif
+    record_define(it->c_str());
 
   for(std::list<std::string>::const_iterator
       it=config.ansi_c.include_paths.begin();
       it!=config.ansi_c.include_paths.end();
       it++)
-    #ifdef _WIN32
-    command+=" /I \""+*it+"\"";
-    #else
-    command+=" -I'"+*it+"'";
-    #endif
+    record_include(it->c_str());
 
+  return false;
+}
+
+#if 0
   #ifdef _WIN32
   command+=" \""+file+"\"";
   command+=" 2> \""+stderr_file+"\"";
