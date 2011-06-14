@@ -20,6 +20,7 @@ int
 handle_hooked_header(usch *name)
 {
 	struct hooked_header *h;
+	unsigned long int i, length;
 
 	fprintf(stderr, "Including file %s\n", name);
 
@@ -27,6 +28,11 @@ handle_hooked_header(usch *name)
 		if (!strcmp((char *)name, h->basename)) {
 			/* This is to be hooked */
 			fprintf(stderr, "Hooking...\n");
+
+			length = h->textend - h->textstart;
+			for (i = 0; i < length; i++) {
+				putch(h->textstart[i]);
+			}
 		}
 	}
 
