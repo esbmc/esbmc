@@ -196,7 +196,7 @@ record_include(const char *fname)
 
 	if ((w = calloc(sizeof(struct incs), 1)) == NULL)
 		error("couldn't apply -I %s", optarg);
-	w->dir = strdup(fname);
+	w->dir = (usch*)strdup(fname);
 	w2 = incdir[SYSINC];
 
 	if (w2 != NULL) {
@@ -753,7 +753,7 @@ xerror(usch *s)
  * store a character into the "define" buffer.
  */
 void
-savch(c)
+savch(int c)
 {
 	if (stringbuf-sbf < SBSIZE) {
 		*stringbuf++ = c;

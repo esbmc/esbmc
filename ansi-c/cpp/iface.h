@@ -7,4 +7,4 @@ void record_include(const char *value); /* Similar, include path name */
 void record_builtin_macros(); /* Insert builtin macros into sym table */
 int open_output_file(const char *name); /* Obvious */
 void fin(); /* Flushes buffers and closes file */
-int pushfile(char *name);
+int pushfile(unsigned char *name);
