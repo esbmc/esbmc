@@ -197,14 +197,14 @@ record_include(const char *fname)
 	if ((w = calloc(sizeof(struct incs), 1)) == NULL)
 		error("couldn't apply -I %s", optarg);
 	w->dir = strdup(fname);
-	w2 = incdir[INCINC];
+	w2 = incdir[SYSINC];
 
 	if (w2 != NULL) {
 		while (w2->next)
 			w2 = w2->next;
 		w2->next = w;
 	} else {
-		incdir[INCINC] = w;
+		incdir[SYSINC] = w;
 	}
 
 	return;
