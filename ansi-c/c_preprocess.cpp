@@ -249,6 +249,14 @@ static const char cpp_linux_defs[] = {
 NULL
 };
 
+static const char cpp_ansic_defs[] = {
+"__STDC_VERSION__=199901L",
+"__STDC_IEC_559__=1",
+"__STDC_IEC_559_COMPLEX__=1",
+"__STDC_ISO_10646__=1",
+NULL
+};
+
 void setup_cpp_defs(const char **defs)
 {
 
@@ -334,22 +342,12 @@ bool c_preprocess(
 
   setup_cpp_defs(cpp_normal_defs);
   setup_cpp_defs(cpp_linux_defs);
+  setup_cpp_defs(cpp_ansic_defs);
 
   return false;
 }
 
 #if 0
-  // Standard Defines, ANSI9899 6.10.8
-  std::string pre;
-  #ifdef _WIN32
-    pre = " /D";
-  #else
-    pre = " -D";
-  #endif    
-  command += pre + "__STDC_VERSION__=199901L";
-  command += pre + "__STDC_IEC_559__=1";
-  command += pre + "__STDC_IEC_559_COMPLEX__=1";
-  command += pre + "__STDC_ISO_10646__=1";
   
   for(std::list<std::string>::const_iterator
       it=config.ansi_c.defines.begin();
