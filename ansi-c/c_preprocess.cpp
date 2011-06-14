@@ -225,6 +225,16 @@ static const char *cpp_defines_lock_check[] ={
 NULL
 };
 
+static const char cpp_normal_defines[] = {
+"__ESBMC__",
+"__null=0",
+"__GNUC__=4",
+"__STRICT_ANSI__=1",
+"_POSIX_SOURCE=1",
+"_POSIX_C_SOURCE=200112L",
+NULL
+};
+
 void setup_cpp_defs(const char **defs)
 {
 
@@ -308,34 +318,12 @@ bool c_preprocess(
   if (config.ansi_c.string_abstraction)
     setup_cpp_defs(cpp_defines_strabs);
 
+  setup_cpp_defs(cpp_normal_defs);
+
   return false;
 }
 
 #if 0
-  #ifdef _WIN32
-  command="CL /nologo /E /D__ESBMC__";
-  command+=" /D__WORDSIZE="+i2string(config.ansi_c.word_size);
-  command+=" /D__PTRDIFF_TYPE__=int";
-  #else
-  command="gcc -E -undef -D__ESBMC__";
-
-  if(config.ansi_c.os!=configt::ansi_ct::OS_WIN32)
-  {
-    command+=" -D__null=0";
-    command+=" -D__WORDSIZE="+i2string(config.ansi_c.word_size);
-    command+=" -D__GNUC__=4";
-    
-    // Tell the system library which standards we support.
-    command+=" -D__STRICT_ANSI__=1 -D_POSIX_SOURCE=1 -D_POSIX_C_SOURCE=200112L";
-
-    if(config.ansi_c.word_size==16)
-      command+=GCC_DEFINES_16;
-    else if(config.ansi_c.word_size==32)
-      command+=GCC_DEFINES_32;
-    else if(config.ansi_c.word_size==64)
-      command+=GCC_DEFINES_64;
-  }
-    
   if(config.ansi_c.os==configt::ansi_ct::OS_I386_LINUX)
   { // assume we're running i386-linux
     command+=" -Di386 -D__i386 -D__i386__";
