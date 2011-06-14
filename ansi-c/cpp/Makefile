@@ -1,7 +1,7 @@
 include ../../common
 include ../../config.inc
 
-OBJS=cpy.o cpp.o scanner.o compat.o
+OBJS=cpy.o cpp.o scanner.o compat.o hooks.o
 HEADERS=cpp.h
 
 all: preproc.o

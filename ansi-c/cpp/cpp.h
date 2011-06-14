@@ -132,3 +132,6 @@ void xerror(usch *);
 #define warning(...) xwarning(sheap(__VA_ARGS__))
 #define error(...) xerror(sheap(__VA_ARGS__))
 void expmac(struct recur *);
+
+/* ESBMC */
+int handle_hooked_header(usch *name);

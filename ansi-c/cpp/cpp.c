@@ -497,6 +497,12 @@ again:
 
 			savstr(w->dir); savch('/');
 			savstr(safefn); savch(0);
+
+			/* ESBMC: Hook some headers that would pull in system
+			 * environment info that we don't want */
+			if (it == SYSINC && handle_hooked_header(nm))
+				return;
+
 			if (pushfile(nm) == 0)
 				return;
 			stringbuf = nm;
