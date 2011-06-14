@@ -278,7 +278,7 @@ bool c_preprocess(
     exit(1);
   }
 
-  ret = pushfile(strdup(path.c_str()));
+  ret = pushfile((unsigned char *)strdup(path.c_str()));
   fin();
 
   exit(ret);
