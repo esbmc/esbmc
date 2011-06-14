@@ -47,7 +47,7 @@ cprover_blank_library.o: cprover_library.cpp
 
 C2GOTO_DEPS= $(OBJ) ../util/util.o ../langapi/langapi.o ../big-int/bigint.o \
 	../goto-programs/goto-programs.o ../pointer-analysis/pointer-analysis.o\
-	cpp/preproc.o
+	cpp/preproc.o headers/headers.o
 
 c2goto: c2goto.cpp cprover_blank_library.o | $(C2GOTO_DEPS)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(C2GOTO_DEPS)
@@ -79,9 +79,16 @@ cpp_dir:
 
 .PHONY: cpp_dir
 
+headers/headers.o: headers_dir
+
+headers_dir:
+	$(MAKE) -C headers
+
+.PHONY: headers_dir
+
 ###############################################################################
 
-ansi-c.o: $(OBJ) cprover_library.o clib.o cpp/preproc.o
+ansi-c.o: $(OBJ) cprover_library.o clib.o cpp/preproc.o headers/headers.o
 	$(LD) $(LDFLAGS) -r -o $@ $^
 
 clean:
