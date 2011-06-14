@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -356,5 +357,12 @@ bool c_preprocess(
       it++)
     record_include(it->c_str());
 
-  return false;
+  if (open_output_file(out_file_buf) < 0) {
+    perror("cpp couldn't open output file");
+    exit(1);
+  }
+
+  pushfile(strdup(path.c_str()));
+
+  exit(0);
 }
