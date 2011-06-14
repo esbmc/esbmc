@@ -72,10 +72,12 @@ clib.o: c2goto clib16.o clib32.o clib64.o
 
 ###############################################################################
 
-cpp/preproc.o:
+cpp/preproc.o: cpp_dir
+
+cpp_dir:
 	$(MAKE) -C cpp
 
-.PHONY: cpp/preproc.o
+.PHONY: cpp_dir
 
 ###############################################################################
 
