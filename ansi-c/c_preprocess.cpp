@@ -211,6 +211,17 @@ static const char *cpp_defines_strabs[] ={
 NULL
 };
 
+static const char *cpp_defines_deadlock_check[] ={
+"pthread_mutex_lock=pthread_mutex_lock_check",
+NULL
+};
+
+static const char *cpp_defines_lock_check[] ={
+"pthread_mutex_unlock=pthread_mutex_unlock_check",
+"pthread_cond_wait=pthread_cond_wait_check",
+NULL
+};
+
 void setup_cpp_defs(const char **defs)
 {
 
@@ -276,6 +287,23 @@ bool c_preprocess(
   close(STDERR_FILENO);
   dup2(fd, STDERR_FILENO);
   close(fd);
+
+  if(config.ansi_c.word_size==16)
+    setup_cpp_defs(cpp_defines_16);
+  else if(config.ansi_c.word_size==32)
+    setup_cpp_defs(cpp_defines_32);
+  else if(config.ansi_c.word_size==64)
+    setup_cpp_defs(cpp_defines_64);
+  else
+    std::cerr << "Bad word size " << config.ansi_c.word_size << std::endl;
+
+  if (config.ansi_c.deadlock_check)
+    setup_cpp_defs(cpp_defines_deadlock_check);
+  else if (!config.ansi_c.deadlock_check && config.ansi_c.lock_check)
+    setup_cpp_defs(cpp_defines_lock_check);
+
+  if (config.ansi_c.string_abstraction)
+    setup_cpp_defs(cpp_defines_strabs);
 
   return false;
 }
