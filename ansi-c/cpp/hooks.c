@@ -33,6 +33,8 @@ handle_hooked_header(usch *name)
 			for (i = 0; i < length; i++) {
 				putch(h->textstart[i]);
 			}
+
+			return 1;
 		}
 	}
 
