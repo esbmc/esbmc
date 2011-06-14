@@ -6,8 +6,8 @@
 
 struct hooked_header {
 	const char *basename;
-	void *textstart;
-	void *textend;
+	char *textstart;
+	char *textend;
 };
 
 struct hooked_header headers[] = {
