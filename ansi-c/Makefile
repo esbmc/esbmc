@@ -46,7 +46,8 @@ cprover_blank_library.o: cprover_library.cpp
 	$(CXX) $(CXXFLAGS) -DNO_CPROVER_LIBRARY $^ -o $@ -c
 
 C2GOTO_DEPS= $(OBJ) ../util/util.o ../langapi/langapi.o ../big-int/bigint.o \
-	../goto-programs/goto-programs.o ../pointer-analysis/pointer-analysis.o
+	../goto-programs/goto-programs.o ../pointer-analysis/pointer-analysis.o\
+	cpp/preproc.o
 
 c2goto: c2goto.cpp cprover_blank_library.o | $(C2GOTO_DEPS)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(C2GOTO_DEPS)
