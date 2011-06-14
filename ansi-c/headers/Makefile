@@ -9,9 +9,11 @@ headers.o: $(OBJS)
 	$(LD) $^ -o $@ -r
 
 .h.o:
-	$(LD) -b binary $< -o $@ -r
+	$(CC) -E $< -o $<.i
+	$(LD) -b binary $<.i -o $@ -r
 
 clean:
 	-rm *.o
+	-rm *.i
 
 .PHONY: clean
