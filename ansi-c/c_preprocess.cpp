@@ -275,7 +275,7 @@ bool c_preprocess(
 {
   char out_file_buf[32], stderr_file_buf[32];
   pid_t pid;
-  int fd, status;
+  int fd, status, ret;
 
   message_streamt message_stream(message_handler);
 
@@ -362,7 +362,8 @@ bool c_preprocess(
     exit(1);
   }
 
-  pushfile(strdup(path.c_str()));
+  ret = pushfile(strdup(path.c_str()));
+  fin();
 
-  exit(0);
+  exit(ret);
 }
