@@ -9,18 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef __LINUX__
 #include <unistd.h>
-#endif
-
-#ifdef __APPLE__
-#include <unistd.h>
-#endif
-
-#ifdef _WIN32
-#define popen _popen
-#define pclose _pclose
-#endif
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include <fstream>
 
