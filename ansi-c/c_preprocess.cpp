@@ -229,10 +229,12 @@ bool c_preprocess(
     message_stream.error("Couldn't open preprocessing stderr file");
     return true;
   }
-  close(fd);
 
   pid = fork();
   if (pid != 0) {
+
+    close(fd);
+
     if (waitpid(pid, &status, 0) < 0) {
       message_stream.error("Failed to wait for preprocessing process");
       return true;
@@ -254,7 +256,10 @@ bool c_preprocess(
     return false;
   }
 
-  // Insert here: code to setup cpp on forked side.
+  close(STDERR_FILENO);
+  dup2(fd, STDERR_FILENO);
+  close(fd);
+
   return false;
 }
 
