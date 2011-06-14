@@ -11,8 +11,9 @@ struct hooked_header {
 };
 
 struct hooked_header headers[] = {
-{ "stddef.h",		&_binary_stddef_c_start,	&_binary_stddef_c_end }
+{ "stddef.h",		&_binary_stddef_c_start,	&_binary_stddef_c_end },
 /* stddef.h contains a variety of compiler-specific functions */
+{ NULL, NULL, NULL}
 };
 
 int
