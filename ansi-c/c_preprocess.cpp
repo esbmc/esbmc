@@ -280,31 +280,7 @@ bool c_preprocess(
   return false;
 }
 
-
 #if 0
-  // preprocessing
-  message_streamt message_stream(message_handler);
-
-  std::string file=path,
-              stderr_file="tmp.stderr.txt";
-
-  if(path=="") // stdin
-  {
-    char ch;
-
-    file="tmp.stdin.c";
-    FILE *tmp=fopen(file.c_str(), "wt");
-
-    while(instream.read(&ch, 1)!=NULL)
-      fputc(ch, tmp);
-
-    fclose(tmp);
-  }
-
-  std::string command;
-  
-  // use VC98 CL in case of WIN32
-  
   #ifdef _WIN32
   command="CL /nologo /E /D__ESBMC__";
   command+=" /D__WORDSIZE="+i2string(config.ansi_c.word_size);
