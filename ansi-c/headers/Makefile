@@ -10,3 +10,8 @@ headers.o: $(OBJS)
 
 .h.o:
 	$(LD) -b binary $< -o $@ -r
+
+clean:
+	-rm *.o
+
+.PHONY: clean
