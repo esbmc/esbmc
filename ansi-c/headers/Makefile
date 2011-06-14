@@ -3,7 +3,10 @@ include ../../config.inc
 
 OBJS= stddef.o
 
-all: $(OBJS)
+all: headers.o
+
+headers.o: $(OBJS)
+	$(LD) $^ -o $@ -r
 
 .h.o:
 	$(LD) -b binary $< -o $@ -r
