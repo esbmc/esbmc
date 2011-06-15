@@ -121,9 +121,11 @@ FS	(f|F|l|L)
 IS	(u|U|l|L)*
 WS	[\t ]
 
-%s IFR CONTR DEF
+%s IFR CONTR DEF LINEINFO
 
 %%
+
+<CONTR>[0-9]+		{ contr = 1; putstr((usch*)"# "); putstr((usch*)yytext); BEGIN LINEINFO; }
 
 "\n"			{	int os = YYSTATE;
 				if (os != IFR)
@@ -296,6 +298,8 @@ L?\"(\\.|[^\\"])*\"	{ PRTOUT(STRING); }
 			}
 
 .			{ PRTOUT(yytext[0]); }
+
+<LINEINFO>.*$		{ putstr((usch *)yytext); BEGIN 0; }
 
 %%
 
