@@ -3,7 +3,13 @@
 
 typedef long int ptrdiff_t;
 
-typedef uint16_t wchar_t;
+typedef short wchar_t;
+
+#if __WORDSIZE == 64
+typedef unsigned long int size_t;
+#else
+typedef unsigned long long int size_t;
+#endif
 
 #define NULL ((void *)0)
 
