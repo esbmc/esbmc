@@ -110,9 +110,7 @@ int yylex_destroy  (void);
 #define unput(ch) unch(ch)
 #endif
 #define PRTOUT(x) if (YYSTATE || slow) return x; if (!flslvl) putstr((usch *)yytext);
-/* protection against recursion in #include */
-#define MAX_INCLEVEL	100
-static int inclevel;
+int inclevel;
 %}
 
 D	[0-9]
@@ -313,6 +311,10 @@ inpch(void)
 
 	if (ifiles->curptr < ifiles->maxread)
 		return *ifiles->curptr++;
+
+	if (ifiles->infil == -1)
+		/* Invalid fd indicates not-a-file */
+		return -1;
 
 	if ((len = read(ifiles->infil, ifiles->buffer, CPPBUF)) < 0)
 		error("read error on file %s", ifiles->orgfn);

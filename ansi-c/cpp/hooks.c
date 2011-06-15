@@ -21,8 +21,9 @@ struct hooked_header headers[] = {
 int
 handle_hooked_header(usch *name)
 {
+	struct includ buf;
 	struct hooked_header *h;
-	unsigned long int i, length;
+	int otrulvl, c;
 
 	fprintf(stderr, "Including file %s\n", name);
 
@@ -31,11 +32,31 @@ handle_hooked_header(usch *name)
 			/* This is to be hooked */
 			fprintf(stderr, "Hooking...\n");
 
-			length = h->textend - h->textstart;
-			for (i = 0; i < length; i++) {
-				putch(h->textstart[i]);
-			}
+			buf.curptr = (usch*)h->textstart;
+			buf.maxread = (usch*)h->textend;
+			buf.buffer = (usch*)h->textstart;
+			buf.infil = -1;
+			buf.fname = (usch*)h->basename;
+			buf.orgfn = (usch*)h->basename;
+			buf.lineno = 0;
+			buf.next = ifiles;
+			ifiles = &buf;
 
+			/* Largely copied from pushfile */
+			if (++inclevel > MAX_INCLEVEL)
+				error("Limit for nested includes exceeded");
+
+			prtline(); /* Output file loc */
+
+			otrulvl = trulvl;
+			if ((c = yylex()) != 0)
+				error("yylex returned %d", c);
+
+			if (otrulvl != trulvl || flslvl)
+				error("Unterminated conditional");
+
+			ifiles = buf.next;
+			inclevel--;
 			return 1;
 		}
 	}

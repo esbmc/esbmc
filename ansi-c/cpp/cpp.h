@@ -31,6 +31,9 @@
 
 #include "config.h"
 
+/* protection against recursion in #include */
+#define MAX_INCLEVEL    100
+
 typedef unsigned char usch;
 extern char *yytext;
 extern usch *stringbuf;
@@ -43,6 +46,7 @@ extern	int	tflag, Cflag;
 extern	int	Mflag, dMflag;
 extern	usch	*Mfile;
 extern	int	ofd;
+extern  int	inclevel;
 
 /* args for lookup() */
 #define FIND    0
