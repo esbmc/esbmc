@@ -1,14 +1,11 @@
-OBJS= stddef.o
+OBJS= stddef.o stdarg.o
 
 all: headers.o
 
 headers.o: $(OBJS)
 	$(LD) $^ -o $@ -r
 
-.h.c:
-	$(CC) -E $< -o $@
-
-.c.o:
+.h.o:
 	$(LD) -b binary $< -o $@ -r
 
 clean:
