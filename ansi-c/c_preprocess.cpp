@@ -140,7 +140,6 @@ NULL
 static const char *cpp_normal_defs[] = {
 "__ESBMC__",
 "__null=0",
-"__GNUC__=4",
 "__STRICT_ANSI__=1",
 "_POSIX_SOURCE=1",
 "_POSIX_C_SOURCE=200112L",
