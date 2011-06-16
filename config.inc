@@ -5,12 +5,8 @@ AR     = ar
 YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
-#CC     = icc
-#CXX  = icpc
-#USE_AR = 1
 
 # Linux etc.
-#GCCFLAGS = -Wall -MMD -O2 -Wno-deprecated # -ggdb -O0
 GCCFLAGS = -Wall -MMD -Wextra -O3 -finline-limit=1000000 -Wno-deprecated
 LDFLAGS=
 
