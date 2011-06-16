@@ -15,6 +15,8 @@ struct hooked_header headers[] = {
 /* stddef.h contains a variety of compiler-specific functions */
 { "stdarg.h",		&_binary_stdarg_h_start,	&_binary_stdarg_h_end},
 /* contains va_start and similar functionality */
+{ "bits/wordsize.h",	NULL,				NULL},
+/* Defines __WORDSIZE, which we define ourselves */
 { NULL, NULL, NULL}
 };
 
@@ -31,6 +33,9 @@ handle_hooked_header(usch *name)
 		if (!strcmp((char *)name, h->basename)) {
 			/* This is to be hooked */
 			fprintf(stderr, "Hooking...\n");
+
+			if (h->textstart == NULL)
+				return 1;
 
 			buf.curptr = (usch*)h->textstart;
 			buf.maxread = (usch*)h->textend;
