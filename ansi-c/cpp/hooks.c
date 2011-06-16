@@ -27,12 +27,9 @@ handle_hooked_header(usch *name)
 	struct hooked_header *h;
 	int otrulvl, c;
 
-	fprintf(stderr, "Including file %s\n", name);
-
 	for (h = &headers[0]; h->basename != NULL; h++) {
 		if (!strcmp((char *)name, h->basename)) {
 			/* This is to be hooked */
-			fprintf(stderr, "Hooking...\n");
 
 			if (h->textstart == NULL)
 				return 1;
