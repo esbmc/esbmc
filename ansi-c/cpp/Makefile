@@ -22,6 +22,8 @@ compat.o: compat.c
 
 $(OBJS): $(HEADERS)
 
+cpp.o: cpy.o
+
 clean:
 	-rm *.o
 	-rm lex.yy.c
