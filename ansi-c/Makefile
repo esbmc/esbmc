@@ -52,20 +52,17 @@ C2GOTO_DEPS= $(OBJ) ../util/util.o ../langapi/langapi.o ../big-int/bigint.o \
 c2goto: c2goto.cpp cprover_blank_library.o | $(C2GOTO_DEPS)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(C2GOTO_DEPS)
 
-clib16.o: c2goto library/*.i
-	./c2goto library/*.i --16 --output clib16.goto
+clib16.o: c2goto library/*.c
+	./c2goto library/*.c --16 --output clib16.goto
 	$(LD) -b binary clib16.goto -o clib16.o -r
 
-clib32.o: c2goto library/*.i
-	./c2goto library/*.i --32 --output clib32.goto
+clib32.o: c2goto library/*.c
+	./c2goto library/*.c --32 --output clib32.goto
 	$(LD) -b binary clib32.goto -o clib32.o -r
 
-clib64.o: c2goto library/*.i
-	./c2goto library/*.i --64 --output clib64.goto
+clib64.o: c2goto library/*.c
+	./c2goto library/*.c --64 --output clib64.goto
 	$(LD) -b binary clib64.goto -o clib64.o -r
-
-library/*.i: library/*.c
-	$(MAKE) -C library
 
 clib.o: c2goto clib16.o clib32.o clib64.o
 	$(LD) clib16.o clib32.o clib64.o -o clib.o -r
@@ -92,7 +89,6 @@ ansi-c.o: $(OBJ) cprover_library.o clib.o cpp/preproc.o headers/headers.o
 	$(LD) $(LDFLAGS) -r -o $@ $^
 
 clean:
-	$(MAKE) -C library clean
 	$(MAKE) -C cpp clean
 	-rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
 	-rm -f c2goto
