@@ -44,6 +44,8 @@ extern "C" {
 #include <langapi/mode.h>
 #include <langapi/languages.h>
 
+#include <ansi-c/c_preprocess.h>
+
 #include "parseoptions.h"
 #include "bmc.h"
 #include "version.h"
@@ -704,14 +706,6 @@ void cbmc_parseoptionst::preprocessing()
 
     std::string filename=cmdline.args[0];
 
-    int mode=get_mode_filename(filename);
-
-    if(mode<0)
-    {
-      error("failed to figure out type of file");
-      return;
-    }
-
     std::ifstream infile(filename.c_str());
 
     if(!infile)
@@ -720,11 +714,8 @@ void cbmc_parseoptionst::preprocessing()
       return;
     }
 
-    //std::auto_ptr<languaget> language(new_language(mode));
-
-    //if(language->preprocess(
-      //infile, filename, std::cout, *get_message_handler()))
-      //error("PREPROCESSING ERROR");
+    if (c_preprocess(infile, filename, std::cout, *get_message_handler()))
+      error("PREPROCESSING ERROR");
   }
 
   catch(const char *e)
