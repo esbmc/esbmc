@@ -16,7 +16,7 @@ OBJ = $(SRC:.cpp=.o)
 
 INCLUDES= -I .. -I ../util
 
-all: ansi-c.o
+all: cpp_dir headers_dir ansi-c.o
 
 include ../config.inc
 include ../common
