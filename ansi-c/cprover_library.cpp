@@ -24,15 +24,12 @@ extern "C" {
 #include "ansi_c_language.h"
 
 #ifndef NO_CPROVER_LIBRARY
-extern uint8_t _binary_clib16_goto_start;
 extern uint8_t _binary_clib32_goto_start;
 extern uint8_t _binary_clib64_goto_start;
-extern uint8_t _binary_clib16_goto_end;
 extern uint8_t _binary_clib32_goto_end;
 extern uint8_t _binary_clib64_goto_end;
 
-uint8_t *clib_ptrs[3][2] = {
-{ &_binary_clib16_goto_start, &_binary_clib16_goto_end},
+uint8_t *clib_ptrs[2][2] = {
 { &_binary_clib32_goto_start, &_binary_clib32_goto_end},
 { &_binary_clib64_goto_start, &_binary_clib64_goto_end},
 };
@@ -122,13 +119,17 @@ void add_cprover_library(
   if(config.ansi_c.lib==configt::ansi_ct::LIB_NONE)
     return;
 
-  if (config.ansi_c.word_size == 16) {
+  if (config.ansi_c.word_size == 32) {
     this_clib_ptrs = &clib_ptrs[0][0];
-  } else if (config.ansi_c.word_size == 32) {
-    this_clib_ptrs = &clib_ptrs[1][0];
   } else if (config.ansi_c.word_size == 64) {
-    this_clib_ptrs = &clib_ptrs[2][0];
+    this_clib_ptrs = &clib_ptrs[1][0];
   } else {
+    if (config.ansi_c.word_size == 16) {
+      std::cerr << "Warning: this version of ESBMC does not have a C library ";
+      std::cerr << "for 16 bit machines";
+      return;
+    }
+
     std::cerr << "No c library for bitwidth " << config.ansi_c.int_width << std::endl;
     abort();
   }
