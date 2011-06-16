@@ -16,4 +16,5 @@ langapi.o: $(OBJ)
 	
 clean:
 	rm -f *.o
+	rm -f *.d
 

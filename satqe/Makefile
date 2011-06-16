@@ -21,3 +21,4 @@ satqe.a: $(OBJ)
 
 clean:
 	rm -f $(OBJ) *.o satqe.a
+	-rm *.d

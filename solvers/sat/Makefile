@@ -56,5 +56,6 @@ smvsat.o: satcheck_smvsat.cpp
 
 clean:
 	-rm *.o
+	-rm *.d
 
 .PHONY: clean

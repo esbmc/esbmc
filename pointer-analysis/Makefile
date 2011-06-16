@@ -20,5 +20,5 @@ pointer-analysis.o: $(OBJ)
 	$(LD) $(LDFLAGS) -r -o pointer-analysis.o $(OBJ)
 
 clean:
-	rm -f *.o
+	rm -f *.o *.d
 

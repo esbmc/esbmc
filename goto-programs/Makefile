@@ -28,4 +28,4 @@ goto-programs.o: $(OBJ)
 
 clean:
 	rm -f *.o
-
+	-rm *.d

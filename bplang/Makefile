@@ -32,5 +32,6 @@ lex.yy.o: y.tab.cpp lex.yy.cpp y.tab.h
 clean:
 	rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output \
               y.output
+	-rm *.d
 
 dep: y.tab.cpp y.tab.h lex.yy.cpp

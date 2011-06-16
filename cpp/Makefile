@@ -39,7 +39,7 @@ lex.yy.cpp: scanner.l
 lex.yy.o: lex.yy.cpp
 
 clean:
-	rm -f $(OBJ) *.o lex.yy.cpp y.tab.cpp.output
+	rm -f $(OBJ) *.o lex.yy.cpp y.tab.cpp.output *.d
 
 dep: lex.yy.cpp
 

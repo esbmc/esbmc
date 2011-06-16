@@ -14,4 +14,4 @@ intrep.o: $(OBJ)
 	$(LD) $(LDFLAGS) -r -o intrep.o $(OBJ)
 
 clean:
-	rm -f *.o
+	rm -f *.o *.d

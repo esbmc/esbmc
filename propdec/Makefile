@@ -36,3 +36,4 @@ propdec.o: $(OBJ)
 
 clean:
 	rm -f *.o
+	-rm *.d

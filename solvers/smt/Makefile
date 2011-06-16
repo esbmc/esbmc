@@ -13,5 +13,6 @@ smt.o: $(OBJS)
 
 clean:
 	-rm *.o
+	-rm *.d
 
 .PHONY: clean

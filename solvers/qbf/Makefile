@@ -33,5 +33,6 @@ qbf_cudd.o: qbf_bdd_core.cpp qbf_skizzo_core.cpp
 
 clean:
 	-rm *.o
+	-rm *.d
 
 .PHONY: clean
