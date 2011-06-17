@@ -261,6 +261,8 @@ bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
 
     if (option.optchar == 0)
       option.islong = true;
+    else
+      option.islong = false;
 
     option.isset = false;
 
