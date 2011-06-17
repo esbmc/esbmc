@@ -212,8 +212,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    else
      options.set_option("no-lock-check", false);
 
-   //options.set_option("data-races-check", true);
-
    if(cmdline.isset("deadlock-check"))
    {
      options.set_option("deadlock-check", true);
