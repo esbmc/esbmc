@@ -115,107 +115,12 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   options.cmdline(cmdline);
 
-  if(cmdline.isset("program-only"))
-    options.set_option("program-only", true);
-
-  if(cmdline.isset("show-vcc"))
-    options.set_option("show-vcc", true);
-
-  options.set_option("no-simplify", cmdline.isset("no-simplify"));
-
-  if(cmdline.isset("all-claims"))
-    options.set_option("all-claims", true);
-  else
-    options.set_option("all-claims", false);
-
-  if(cmdline.isset("unwind"))
-    options.set_option("unwind", cmdline.getval("unwind"));
-
-  if(cmdline.isset("depth"))
-    options.set_option("depth", cmdline.getval("depth"));
-
-  if(cmdline.isset("debug-level"))
-    options.set_option("debug-level", cmdline.getval("debug-level"));
-
-  if(cmdline.isset("slice-by-trace"))
-    options.set_option("slice-by-trace", cmdline.getval("slice-by-trace"));
-
-  if(cmdline.isset("unwindset"))
-    options.set_option("unwindset", cmdline.getval("unwindset"));
-
-  // check array bounds
-  options.set_option("no-bounds-check", cmdline.isset("no-bounds-check"));
-
-  // check division by zero
-  options.set_option("no-div-by-zero-check", cmdline.isset("no-div-by-zero-check"));
-
-  // check overflow/underflow
-  if(cmdline.isset("overflow-check"))
-    options.set_option("overflow-check", true);
-  else
-    options.set_option("overflow-check", false);
-
-  // check memory leak
-  if(cmdline.isset("memory-leak-check"))
-    options.set_option("memory-leak-check", true);
-  else
-    options.set_option("memory-leak-check", false);
-
-  // check for NaN (not a number)
-  if(cmdline.isset("nan-check"))
-    options.set_option("nan-check", true);
-  else
-    options.set_option("nan-check", false);
-
-  // check pointers
-  options.set_option("no-pointer-check", cmdline.isset("no-pointer-check"));
-
-  // check assertions
-  options.set_option("no-assertions", cmdline.isset("no-assertions"));
-
-  // magic error label
-  if(cmdline.isset("error-label"))
-    options.set_option("error-label", cmdline.getval("error-label"));
-
-  // generate unwinding assertions
-  options.set_option("no-unwinding-assertions",
-    cmdline.isset("no-unwinding-assertions"));
-
-  // generate unwinding assumptions otherwise
-  options.set_option("partial-loops",
-   cmdline.isset("partial-loops"));
-
-  // remove unused equations
-  options.set_option("slice-formula",
-       cmdline.isset("slice-formula"));
-
-  //break global statements
-  if(cmdline.isset("atomicity-check"))
-      options.set_option("atomicity-check", true);
-  else
-      options.set_option("atomicity-check", false);
-
   if(cmdline.isset("arrays-uf-always"))
     options.set_option("arrays-uf", "always");
   else if(cmdline.isset("arrays-uf-never"))
     options.set_option("arrays-uf", "never");
   else
     options.set_option("arrays-uf", "auto");
-
-  if(cmdline.isset("minisat"))
-    options.set_option("minisat", true);
-
-  if(cmdline.isset("dimacs"))
-    options.set_option("dimacs", true);
-
-  if(cmdline.isset("beautify-greedy"))
-    options.set_option("beautify-greedy", true);
-
-  if(cmdline.isset("document-subgoals"))
-    options.set_option("document-subgoals", true);
-
-  if(cmdline.isset("cvc"))
-    options.set_option("cvc", true);
 
   if(cmdline.isset("boolector-bv"))
   {
@@ -251,8 +156,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("bl", false);
   }
 
-  options.set_option("no-slice", cmdline.isset("no-slice"));
-
   if(cmdline.isset("no-slice"))
     options.set_option("no-assume-guarantee", false);
 
@@ -286,41 +189,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("bl", true);
     options.set_option("boolector-bv", true);
   }
-
-  if(cmdline.isset("outfile"))
-    options.set_option("outfile", cmdline.getval("outfile"));
-
-  if(cmdline.isset("int-encoding"))
-    options.set_option("int-encoding", true);
-
-  if(cmdline.isset("ecp"))
-    options.set_option("ecp", true);
-
-  if(cmdline.isset("show-features"))
-    options.set_option("show-features", true);
-
-   if(cmdline.isset("core-size"))
-     options.set_option("core-size", cmdline.getval("core-size"));
-
-   if(cmdline.isset("control-flow-test"))
-     options.set_option("control-flow-test", true);
-   else
-     options.set_option("control-flow-test", false);
-
-   if(cmdline.isset("no-por"))
-     options.set_option("no-por", true);
-   else
-     options.set_option("no-por", false);
-
-   if(cmdline.isset("schedule"))
-     options.set_option("schedule", true);
-   else
-     options.set_option("schedule", false);
-
-   if(cmdline.isset("all-runs"))
-       options.set_option("all-runs", true);
-   else
-       options.set_option("all-runs", false);
 
    if(cmdline.isset("context-switch"))
      options.set_option("context-switch", cmdline.getval("context-switch"));
@@ -365,10 +233,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("smtlib-ileave-num", cmdline.getval("smtlib-ileave-num"));
   else
     options.set_option("smtlib-ileave-num", "1");
-
-  options.set_option("symex-trace", cmdline.isset("symex-trace"));
-
-  options.set_option("state-hashing", cmdline.isset("state-hashing"));
 
   // jmorse
   if(cmdline.isset("timeout")) {
