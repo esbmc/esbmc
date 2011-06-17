@@ -212,9 +212,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("document-subgoals"))
     options.set_option("document-subgoals", true);
 
-  options.set_option("pretty-names",
-                     !cmdline.isset("no-pretty-names"));
-
   if(cmdline.isset("cvc"))
     options.set_option("cvc", true);
 

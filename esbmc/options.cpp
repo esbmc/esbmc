@@ -35,7 +35,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"ecp",			switc,		""	},
 { 0,	"show-features",	switc,		""	},
 { 0,	"memory-leak-check",	switc,		""	},
-{ 0,	"no-pretty-names",	switc,		""	},
 { 0,	"overflow-check",	switc,		""	},
 { 0,	"beautify-greedy",	switc,		""	},
 { 0,	"floatbv",		switc,		""	},
