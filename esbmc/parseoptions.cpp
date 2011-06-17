@@ -194,9 +194,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    else
      options.set_option("context-switch", -1);
 
-   //if (cmdline.isset("claim"))
-     //options.set_option("schedule", true);
-
    if(cmdline.isset("uw-model"))
    {
      options.set_option("uw-model", true);
