@@ -87,7 +87,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"qf_aufbf",		switc,		""	},
 { 0,	"qf_auflira",		switc,		""	},
 { 0,	"btor",			switc,		""	},
-{ 0,	"context-switch",	number,		""	},
+{ 0,	"context-switch",	number,		"-1"	},
 { 0,	"no-por",		switc,		""	},
 { 0,	"data-races-check",	switc,		""	},
 { 0,	"DFS",			switc,		""	},
