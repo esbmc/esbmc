@@ -13,6 +13,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <list>
 #include <string>
 
+enum opt_types {
+  switc, number, string
+};
+
+struct opt_templ
+{
+  char optchar;
+  std::string optstring;
+  opt_types type;
+  std::string init;
+};
+
 class cmdlinet
 {
 public:
