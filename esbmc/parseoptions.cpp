@@ -221,7 +221,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
      //options.set_option("no-div-by-zero-check", true);
      //options.set_option("overflow-check", false);
      //options.set_option("no-pointer-check", true);
-     options.set_option("assertions", false);
+     options.set_option("no-assertions", true);
      //options.set_option("no-lock-check", true);
    }
    else
