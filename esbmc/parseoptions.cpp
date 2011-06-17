@@ -109,7 +109,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 {
   if(config.set(cmdline))
   {
-    usage_error();
     exit(1);
   }
 

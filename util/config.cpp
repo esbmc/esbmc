@@ -239,8 +239,10 @@ bool configt::set(const cmdlinet &cmdline)
     ansi_c.endianess=configt::ansi_ct::IS_BIG_ENDIAN;
 
   if(cmdline.isset("little-endian") &&
-     cmdline.isset("big-endian"))
-    return true;
+     cmdline.isset("big-endian")) {
+      std::cerr << "Can't set both little and big endian modes" << std::endl;
+      return true;
+  }
 
   if(cmdline.isset("unsigned-char"))
     ansi_c.char_is_unsigned=true;
