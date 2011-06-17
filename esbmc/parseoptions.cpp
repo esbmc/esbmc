@@ -141,12 +141,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("unwindset"))
     options.set_option("unwindset", cmdline.getval("unwindset"));
 
-  // substitution previous expressions
-  if(cmdline.isset("no-substitution"))
-    options.set_option("substitution", false);
-  else
-    options.set_option("substitution", true);
-
   // check array bounds
   if(cmdline.isset("no-bounds-check"))
     options.set_option("bounds-check", false);
