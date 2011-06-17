@@ -272,7 +272,7 @@ void goto_checkt::bounds_check(
   const exprt &expr,
   const guardt &guard)
 {
-  if(!options.get_bool_option("bounds-check"))
+  if(options.get_bool_option("no-bounds-check"))
     return;
 
   if(expr.id()!="index")

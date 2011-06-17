@@ -413,7 +413,7 @@ void dereferencet::build_reference_to(
       }
 
 #if 1
-      if(options.get_bool_option("bounds-check") &&
+      if(!options.get_bool_option("no-bounds-check") &&
          !o.offset().is_zero())
       {
         {
@@ -661,7 +661,7 @@ void dereferencet::bounds_check(
   const index_exprt &expr,
   const guardt &guard)
 {
-  if(!options.get_bool_option("bounds-check"))
+  if(options.get_bool_option("no-bounds-check"))
     return;
   //std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
   const typet &array_type=ns.follow(expr.op0().type());

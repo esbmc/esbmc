@@ -142,10 +142,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("unwindset", cmdline.getval("unwindset"));
 
   // check array bounds
-  if(cmdline.isset("no-bounds-check"))
-    options.set_option("bounds-check", false);
-  else
-    options.set_option("bounds-check", true);
+  options.set_option("no-bounds-check", cmdline.isset("no-bounds-check"));
 
   // check division by zero
   if(cmdline.isset("no-div-by-zero-check"))
@@ -373,7 +370,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
      options.set_option("deadlock-check", true);
      options.set_option("atomicity-check", false);
      //disable all other checks
-     //options.set_option("bounds-check", false);
+     //options.set_option("no-bounds-check", true);
      //options.set_option("div-by-zero-check", false);
      //options.set_option("overflow-check", false);
      //options.set_option("pointer-check", false);
