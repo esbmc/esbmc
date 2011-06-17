@@ -348,7 +348,7 @@ void goto_symext::symex_step(
 
         case ASSERT:
             if (!state.guard.is_false()) {
-                if (options.get_bool_option("assertions") ||
+                if (!options.get_bool_option("no-assertions") ||
                         !state.source.pc->location.get_bool("user-provided")
                         || options.get_bool_option("deadlock-check")) {
 

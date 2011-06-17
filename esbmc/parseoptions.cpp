@@ -169,10 +169,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.set_option("no-pointer-check", cmdline.isset("no-pointer-check"));
 
   // check assertions
-  if(cmdline.isset("no-assertions"))
-    options.set_option("assertions", false);
-  else
-    options.set_option("assertions", true);
+  options.set_option("no-assertions", cmdline.isset("no-assertions"));
 
   // magic error label
   if(cmdline.isset("error-label"))

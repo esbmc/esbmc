@@ -1270,7 +1270,7 @@ void goto_convertt::convert_assert(
 
   remove_sideeffects(cond, dest);
 
-  if(!options.get_bool_option("assertions"))
+  if(options.get_bool_option("no-assertions"))
     return;
 
   if(options.get_bool_option("atomicity-check"))

@@ -29,7 +29,7 @@ public:
     remaining_claims(0),
     guard_identifier_s("goto_symex::\\guard")
   {
-    options.set_option("assertions", true);
+    options.set_option("no-assertions", false);
   }
 
     irep_idt get_symbol(const exprt & expr);

@@ -927,7 +927,7 @@ void goto_convertt::do_function_call_symbol(
       throw "`"+id2string(identifier)+"' expected to have one argument";
     }
 
-    if(!options.get_bool_option("assertions") && !is_assume)
+    if(options.get_bool_option("no-assertions") && !is_assume)
       return;
 
     goto_programt::targett t=dest.add_instruction(
@@ -956,7 +956,7 @@ void goto_convertt::do_function_call_symbol(
     const std::string &description=
       get_string_constant(arguments[1]);
 
-    if(!options.get_bool_option("assertions") &&
+    if(options.get_bool_option("no-assertions") &&
    	   !(description.find("deadlock detected") != std::string::npos))
       return;
 
@@ -1051,7 +1051,7 @@ void goto_convertt::do_function_call_symbol(
     const std::string description=
       "assertion "+get_string_constant(arguments[0]);
 
-    if(!options.get_bool_option("assertions"))
+    if(options.get_bool_option("no-assertions"))
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
@@ -1075,7 +1075,7 @@ void goto_convertt::do_function_call_symbol(
     const std::string description=
       "assertion "+get_string_constant(arguments[3]);
 
-    if(!options.get_bool_option("assertions"))
+    if(options.get_bool_option("no-assertions"))
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
@@ -1099,7 +1099,7 @@ void goto_convertt::do_function_call_symbol(
     const std::string description=
       "assertion "+get_string_constant(arguments[0]);
 
-    if(!options.get_bool_option("assertions"))
+    if(options.get_bool_option("no-assertions"))
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
