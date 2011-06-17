@@ -187,12 +187,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.set_option("slice-formula",
        cmdline.isset("slice-formula"));
 
-  // simplify if conditions and branches
-  if(cmdline.isset("no-simplify-if"))
-    options.set_option("simplify-if", false);
-  else
-    options.set_option("simplify-if", true);
-
   //break global statements
   if(cmdline.isset("atomicity-check"))
       options.set_option("atomicity-check", true);

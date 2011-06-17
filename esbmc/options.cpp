@@ -12,7 +12,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"unwindset",		string,		""	},
 { 0,	"slice-formula",	switc,		""	},
 { 0,	"debug-level",		number,		""	},
-{ 0,	"no-simplify-if",	switc,		""	},
 { 0,	"no-bounds-check",	switc,		""	},
 { 0,	"cvc",			switc,		""	},
 { 0,	"z3-bv",		switc,		""	},
