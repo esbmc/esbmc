@@ -71,7 +71,7 @@ void goto_checkt::div_by_zero_check(
   const exprt &expr,
   const guardt &guard)
 {
-  if(!options.get_bool_option("div-by-zero-check"))
+  if(options.get_bool_option("no-div-by-zero-check"))
     return;
 
   if(expr.operands().size()!=2)
