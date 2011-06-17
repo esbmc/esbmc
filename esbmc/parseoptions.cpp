@@ -249,13 +249,10 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("bl", false);
   }
 
+  options.set_option("no-slice", cmdline.isset("no-slice"));
+
   if(cmdline.isset("no-slice"))
-  {
-	options.set_option("slice-formula", false);
     options.set_option("no-assume-guarantee", false);
-  }
-  else
-    options.set_option("slice-formula", true);
 
   options.set_option("string-abstraction", true);
   options.set_option("fixedbv", true);

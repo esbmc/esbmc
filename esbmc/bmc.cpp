@@ -441,7 +441,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       (options.get_option("slice-by-trace"), *equation, symex.ns);
     }
 
-    if(options.get_bool_option("slice-formula"))
+    if(!options.get_bool_option("no-slice"))
     {
       slice(*equation);
     }
