@@ -55,24 +55,6 @@ void parseoptions_baset::help()
 
 /*******************************************************************\
 
-Function: parseoptions_baset::usage_error
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void parseoptions_baset::usage_error()
-{
-  std::cerr << "Usage error!\n\n";
-  help();
-}
-
-/*******************************************************************\
-
 Function: parseoptions_baset::main
 
   Inputs:
@@ -89,7 +71,6 @@ int parseoptions_baset::main()
   {
     std::cerr << "Unrecognized option \"" << cmdline.failing_option << "\"";
     std::cerr << std::endl;
-    usage_error();
     return EX_USAGE;
   }
 

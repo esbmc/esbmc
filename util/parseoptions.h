@@ -21,7 +21,6 @@ public:
   cmdlinet cmdline;
   
   virtual void help();
-  virtual void usage_error();
   
   virtual int doit()=0;
   
