@@ -252,7 +252,7 @@ bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
 
   clear();
 
-  for (i = 0; opts[i].optchar != 0 && opts[i].optstring != ""; i++)
+  for (i = 0; opts[i].optchar != 0 || opts[i].optstring != ""; i++)
   {
     optiont option;
 
