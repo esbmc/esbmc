@@ -145,7 +145,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.set_option("no-bounds-check", cmdline.isset("no-bounds-check"));
 
   // check division by zero
-  options.set_option("no-div-by-zero-check", cmdline.isset("no-div-by-zero-check");
+  options.set_option("no-div-by-zero-check", cmdline.isset("no-div-by-zero-check"));
 
   // check overflow/underflow
   if(cmdline.isset("overflow-check"))
