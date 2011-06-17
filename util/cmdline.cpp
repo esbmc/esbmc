@@ -287,7 +287,12 @@ bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
       else
         optnr=getoptnr(argv[i][1]);
    
-      if(optnr<0) return true;
+      if(optnr<0)
+      {
+        failing_option = std::string(argv[i]);
+        return true;
+      }
+
       options[optnr].isset=true;
       if(options[optnr].hasval)
       {

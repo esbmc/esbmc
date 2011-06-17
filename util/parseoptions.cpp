@@ -87,6 +87,8 @@ int parseoptions_baset::main()
 {
   if(parse_result)
   {
+    std::cerr << "Unrecognized option \"" << cmdline.failing_option << "\"";
+    std::cerr << std::endl;
     usage_error();
     return EX_USAGE;
   }

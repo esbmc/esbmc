@@ -40,6 +40,7 @@ public:
 
   typedef std::vector<std::string> argst;
   argst args;
+  std::string failing_option;
   
   cmdlinet();
   ~cmdlinet();
