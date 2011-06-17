@@ -113,6 +113,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     exit(1);
   }
 
+  options.cmdline(cmdline);
+
   if(cmdline.isset("program-only"))
     options.set_option("program-only", true);
 

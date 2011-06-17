@@ -57,6 +57,8 @@ protected:
 
   int getoptnr(char option) const;
   int getoptnr(const char *option) const;
+
+  friend class optionst;
 };
 
 #endif

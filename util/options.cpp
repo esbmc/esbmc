@@ -125,3 +125,31 @@ const std::string optionst::get_option(const std::string &option) const
   return "";
 }
 
+void optionst::cmdline(cmdlinet &cmds)
+{
+
+  // Pump command line options into options list
+
+  for (std::vector<cmdlinet::optiont>::const_iterator it = cmds.options.begin();
+        it != cmds.options.end(); it++) {
+    if (it->isset) {
+      if (it->hasval) {
+        if (it->islong) {
+          set_option(it->optstring, cmds.getval(it->optstring.c_str()));
+        } else {
+          std::string str(&it->optchar, 1);
+          set_option(str, cmds.getval(it->optchar));
+        }
+      } else {
+        if (it->islong) {
+          set_option(it->optstring, true);
+        } else {
+          std::string str(&it->optchar, 1);
+          set_option(str, true);
+        }
+      }
+    }
+  }
+
+  return;
+}
