@@ -224,7 +224,7 @@ void goto_checkt::pointer_rel_check(
   {
     // add same-object subgoal
 
-    if(options.get_bool_option("pointer-check"))
+    if(!options.get_bool_option("no-pointer-check"))
     {
       exprt same_object("same-object", bool_typet());
       same_object.copy_to_operands(expr.op0(), expr.op1());

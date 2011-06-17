@@ -125,7 +125,7 @@ void dereferencet::dereference(
 #if 0
   if(points_to_set.empty())
   {
-    if(options.get_bool_option("pointer-check"))
+    if(!options.get_bool_option("no-pointer-check"))
     {
       dereference_callback.dereference_failure(
         "pointer dereference",
@@ -231,7 +231,7 @@ void dereferencet::add_checks(
   // if it's empty, we have a problem
   if(points_to_set.empty())
   {
-    if(options.get_bool_option("pointer-check"))
+    if(!options.get_bool_option("no-pointer-check"))
     {
       dereference_callback.dereference_failure(
         "pointer dereference",
@@ -334,7 +334,7 @@ void dereferencet::build_reference_to(
   if(what.id()=="unknown" ||
      what.id()=="invalid")
   {
-    if(options.get_bool_option("pointer-check"))
+    if(!options.get_bool_option("no-pointer-check"))
     {
       // constraint that it actually is an invalid pointer
 
@@ -364,7 +364,7 @@ void dereferencet::build_reference_to(
 
   if(root_object.id()=="NULL-object")
   {
-    if(options.get_bool_option("pointer-check"))
+    if(!options.get_bool_option("no-pointer-check"))
     {
       constant_exprt pointer(typet("pointer"));
       pointer.type().subtype()=type;
@@ -389,7 +389,7 @@ void dereferencet::build_reference_to(
     value=exprt("dereference", type);
     value.copy_to_operands(deref_expr);
 
-    if(options.get_bool_option("pointer-check"))
+    if(!options.get_bool_option("no-pointer-check"))
     {
       // constraint that it actually is a dynamic object
 
@@ -533,7 +533,7 @@ void dereferencet::build_reference_to(
       }
       else
       {
-        if(options.get_bool_option("pointer-check"))
+        if(!options.get_bool_option("no-pointer-check"))
         {
           //nec: ex29
           if (value.type().subtype().id()=="empty" ||
@@ -569,7 +569,7 @@ void dereferencet::build_reference_to(
       }
       else if(!offset.is_zero())
       {
-        if(options.get_bool_option("pointer-check"))
+        if(!options.get_bool_option("no-pointer-check"))
         {
           equality_exprt
             offset_not_zero(offset, gen_zero(offset.type()));
@@ -604,7 +604,7 @@ void dereferencet::valid_check(
   const guardt &guard,
   const modet mode)
 {
-  if(!options.get_bool_option("pointer-check"))
+  if(options.get_bool_option("no-pointer-check"))
     return;
 
   if(mode==FREE)
@@ -830,7 +830,7 @@ bool dereferencet::memory_model_conversion(
 
   // also assert that offset is zero
 
-  if(options.get_bool_option("pointer-check"))
+  if(!options.get_bool_option("no-pointer-check"))
   {
     equality_exprt offset_not_zero(new_offset, gen_zero(new_offset.type()));
     offset_not_zero.make_not();
@@ -902,7 +902,7 @@ bool dereferencet::memory_model_bytes(
 
     if(!new_offset.is_zero())
     {
-      if(options.get_bool_option("pointer-check"))
+      if(!options.get_bool_option("no-pointer-check"))
       {
         exprt bound=exprt("width", new_offset.type());
         bound.copy_to_operands(value.op0());
@@ -917,7 +917,7 @@ bool dereferencet::memory_model_bytes(
           "word offset upper bound", tmp_guard);
       }
 
-      if(options.get_bool_option("pointer-check"))
+      if(!options.get_bool_option("no-pointer-check"))
       {
         binary_relation_exprt
           offset_lower_bound(new_offset, "<",

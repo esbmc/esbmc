@@ -166,10 +166,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("nan-check", false);
 
   // check pointers
-  if(cmdline.isset("no-pointer-check"))
-    options.set_option("pointer-check", false);
-  else
-    options.set_option("pointer-check", true);
+  options.set_option("no-pointer-check", cmdline.isset("no-pointer-check"));
 
   // check assertions
   if(cmdline.isset("no-assertions"))
@@ -370,7 +367,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
      //options.set_option("no-bounds-check", true);
      //options.set_option("no-div-by-zero-check", true);
      //options.set_option("overflow-check", false);
-     //options.set_option("pointer-check", false);
+     //options.set_option("no-pointer-check", true);
      options.set_option("assertions", false);
      //options.set_option("no-lock-check", true);
    }
