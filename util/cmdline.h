@@ -28,7 +28,7 @@ struct opt_templ
 class cmdlinet
 {
 public:
-  bool parse(int argc, const char **argv, const char *optstring);
+  bool parse(int argc, const char **argv, const struct opt_templ *opts);
   const char *getval(char option) const;
   const char *getval(const char *option) const;
   const std::list<std::string> &get_values(const char *option) const;

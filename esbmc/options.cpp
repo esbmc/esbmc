@@ -1,5 +1,7 @@
 #include <cmdline.h>
 
+#include "parseoptions.h"
+
 const struct opt_templ esbmc_options[] = {
 { 0,	"program-only",		switc,		""	},
 { 0,	"function",		string,		""	},

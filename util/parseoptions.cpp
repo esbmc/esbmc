@@ -32,10 +32,9 @@ Function: parseoptions_baset::parseoptions_baset
 \*******************************************************************/
 
 parseoptions_baset::parseoptions_baset(
-  const std::string &_optstring, int argc, const char **argv)
+  const struct opt_templ *opts, int argc, const char **argv)
 {
-  std::string optstring=std::string("?hb:(help)")+_optstring;
-  parse_result=cmdline.parse(argc, argv, optstring.c_str());
+  parse_result = cmdline.parse(argc, argv, opts);
 }
 
 /*******************************************************************\

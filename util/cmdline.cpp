@@ -246,49 +246,28 @@ Function: cmdlinet::parse
 
 \*******************************************************************/
 
-bool cmdlinet::parse(int argc, const char **argv, const char *optstring)
+bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
 {
+  unsigned int i;
+
   clear();
 
-  while(optstring[0]!=0)
+  for (i = 0; opts[i].optchar != 0 && opts[i].optstring != ""; i++)
   {
     optiont option;
 
-    if(optstring[0]==':')
-    {
-      std::cerr << "cmdlinet::parse: Invalid option string" << std::endl;
-      abort();
-    }
+    option.optchar = opts[i].optchar;
+    option.optstring = opts[i].optstring;
 
-    if(optstring[0]=='(')
-    {
-      option.islong=true;
-      option.optchar=0;
-      option.isset=false;
-      option.optstring="";
+    if (option.optchar == 0)
+      option.islong = true;
 
-      for(optstring++; optstring[0]!=')' && optstring[0]!=0; optstring++)
-        option.optstring+=optstring[0];
+    option.isset = false;
 
-      if(optstring[0]==')') optstring++;
-    }
+    if (opts[i].type != switc)
+      option.hasval = true;
     else
-    {
-      option.islong=false;
-      option.optchar=optstring[0];
-      option.optstring="";
-      option.isset=false;
-
-      optstring++;
-    }
-
-    if(optstring[0]==':')
-    {
-      option.hasval=true;
-      optstring++;
-    }
-    else
-      option.hasval=false;
+      option.hasval = false;
 
     options.push_back(option);
   }

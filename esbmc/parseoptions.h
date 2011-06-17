@@ -13,6 +13,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ui_message.h>
 #include <parseoptions.h>
 
+#include <options.h>
+#include <cmdline.h>
+
 #include "bmc.h"
 
 #define CBMC_OPTIONS \
@@ -39,6 +42,8 @@ Author: Daniel Kroening, kroening@kroening.com
   "(core-size):(smtlib-ileave-num):" \
   "(decide)" // legacy, and will eventually disappear
 
+extern const struct opt_templ esbmc_options[];
+
 class cbmc_parseoptionst:
   public parseoptions_baset,
   public language_uit
@@ -48,16 +53,7 @@ public:
   virtual void help();
 
   cbmc_parseoptionst(int argc, const char **argv):
-    parseoptions_baset(CBMC_OPTIONS, argc, argv),
-    language_uit(cmdline)
-  {
-  }
-
-  cbmc_parseoptionst(
-    int argc,
-    const char **argv,
-    const std::string &extra_options):
-    parseoptions_baset(CBMC_OPTIONS+extra_options, argc, argv),
+    parseoptions_baset(esbmc_options, argc, argv),
     language_uit(cmdline)
   {
   }
