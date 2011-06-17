@@ -271,9 +271,6 @@ bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
     else
       option.hasval = false;
 
-    if (opts[i].init != "")
-      option.values.push_back(opts[i].init);
-
     options.push_back(option);
   }
 
@@ -305,6 +302,24 @@ bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
           options[optnr].values.push_back(argv[i]+2);
       }
     }
+  }
+
+  for (i = 0; opts[i].optchar != 0 || opts[i].optstring != ""; i++)
+  {
+    int optnr;
+
+    if (opts[i].init == "")
+      continue;
+
+    if (opts[i].optchar != 0)
+      optnr = getoptnr(opts[i].optchar);
+    else
+      optnr = getoptnr(opts[i].optstring.c_str());
+
+    if (options[optnr].values.size() != 0)
+      continue;
+
+    options[optnr].values.push_back(opts[i].init);
   }
 
   return false;
