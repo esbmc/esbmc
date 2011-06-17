@@ -9,11 +9,22 @@
 #include <parseoptions.h>
 #include <util/config.h>
 
+#include <cmdline.h>
+
+const struct opt_templ c2goto_options[] = {
+{ 0,	"16",		switc,		"" },
+{ 0,	"32",		switc,		"" },
+{ 0,	"64",		switc,		"" },
+{ 0,	"output",	string,		"" },
+{ 0,	"no-lock-check",switc,		"" },
+{ 0,	"",		switc,		"" }
+};
+
 class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
   public:
   c2goto_parseopt(int argc, const char **argv):
-    parseoptions_baset("(16)(32)(64)(output):(no-lock-check)", argc, argv),
+    parseoptions_baset(c2goto_options, argc, argv),
     language_uit(cmdline)
   {
   }
