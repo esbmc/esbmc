@@ -269,6 +269,9 @@ bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
     else
       option.hasval = false;
 
+    if (opts[i].init != "")
+      option.values.push_back(opts[i].init);
+
     options.push_back(option);
   }
 
