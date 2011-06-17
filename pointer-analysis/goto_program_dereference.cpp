@@ -100,7 +100,7 @@ void goto_program_dereferencet::dereference_failure(
     guard_expr.make_not();
 
     // first try simplifier on it
-    if(options.get_bool_option("simplify"))
+    if(!options.get_bool_option("no-simplify"))
     {
       base_type(guard_expr, ns);
       //std::cout << "before guard_expr: " << guard_expr.pretty() << std::endl;

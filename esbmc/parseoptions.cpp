@@ -119,10 +119,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("show-vcc"))
     options.set_option("show-vcc", true);
 
-  if(cmdline.isset("no-simplify"))
-    options.set_option("simplify", false);
-  else
-    options.set_option("simplify", true);
+  options.set_option("no-simplify", cmdline.isset("no-simplify"));
 
   if(cmdline.isset("all-claims"))
     options.set_option("all-claims", true);

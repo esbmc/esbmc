@@ -434,7 +434,7 @@ void goto_checkt::add_guarded_claim(
   exprt expr(_expr);
 
   // first try simplifier on it
-  if(options.get_bool_option("simplify"))
+  if(!options.get_bool_option("no-simplify"))
   {
     base_type(expr, ns);
     simplify(expr);
