@@ -456,7 +456,7 @@ void goto_symext::loop_bound_exceeded(
     negated_cond=gen_not(guard);
 
   bool unwinding_assertions=
-    options.get_bool_option("unwinding-assertions");
+    !options.get_bool_option("no-unwinding-assertions");
 
   bool partial_loops=
     options.get_bool_option("partial-loops");
