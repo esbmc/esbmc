@@ -330,7 +330,8 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
        expr_width<=op_width)
     {
       exprt tmp;
-      tmp.swap((irept &)expr.op0().op0());
+      exprt tmp2 = to_expr(expr.op0().op0());
+      tmp.swap(tmp2);
       expr.op0().swap(tmp);
       return false;
     }
