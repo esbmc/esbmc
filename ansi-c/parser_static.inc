@@ -57,10 +57,6 @@ Function: merge_types
 
 static void merge_types(exprt &dest, exprt &src)
 {
-  #if 0
-  std::cout << "D: " << dest.pretty() << std::endl;
-  std::cout << "S: " << src.pretty() << std::endl;
-  #endif
 
   if(dest.id()!="merged_type")
   {
@@ -93,12 +89,6 @@ static void make_subtype(typet &dest, typet &src)
   // dest is a symbol or type
   
   // find spot where to insert this
-  
-  #if 0
-  std::cout << "D: " << dest.pretty() << std::endl;
-  std::cout << "S: " << src.pretty() << std::endl;
-  std::cout << "src.id(): " << src.id() << std::endl;
-  #endif
   
   assert(src.id()=="array" ||
          src.id()=="incomplete_array" ||
