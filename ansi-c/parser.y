@@ -251,7 +251,7 @@ postfix_expression:
 	{ binary($$.expr, $1.expr, $2.expr, "index", $3.expr); }
 	| postfix_expression '(' ')'
 	{ $$.expr=$2.expr;
-	  set($$.expr, "sideeffect");
+	  $$.expr.id("sideeffect");
 	  $$.expr.operands().resize(2);
 	  $$.expr.op0().swap($1.expr);
 	  $$.expr.op1().clear();
@@ -269,13 +269,13 @@ postfix_expression:
 	}
 	| postfix_expression '.' member_name
 	{ $$.expr=$2.expr;
-	  set($$.expr, "member");
+	  $$.expr.id("member");
 	  mto($$.expr, $1.expr);
 	  $$.expr.set("component_name", $3.expr.get("#base_name"));
 	}
 	| postfix_expression TOK_ARROW member_name
 	{ $$.expr=$2.expr;
-	  set($$.expr, "ptrmember");
+	  $$.expr.id("ptrmember");
 	  mto($$.expr, $1.expr);
 	  $$.expr.set("component_name", $3.expr.get("#base_name"));
 	}
@@ -315,54 +315,54 @@ unary_expression:
 	postfix_expression
 	| TOK_INCR unary_expression
 	{ $$.expr=$1.expr;
-	  set($$.expr, "sideeffect");
+	  $$.expr.id("sideeffect");
 	  $$.expr.set("statement", "preincrement");
 	  mto($$.expr, $2.expr);
 	}
 	| TOK_DECR unary_expression
 	{ $$.expr=$1.expr;
-	  set($$.expr, "sideeffect");
+	  $$.expr.id("sideeffect");
 	  $$.expr.set("statement", "predecrement");
 	  mto($$.expr, $2.expr);
 	}
 	| '&' cast_expression
 	{ $$.expr=$1.expr;
-	  set($$.expr, "address_of");
+	  $$.expr.id("address_of");
 	  mto($$.expr, $2.expr);
 	}
 	| '*' cast_expression
 	{ $$.expr=$1.expr;
-	  set($$.expr, "dereference");
+	  $$.expr.id("dereference");
 	  mto($$.expr, $2.expr);
 	}
 	| '+' cast_expression
 	{ $$.expr=$1.expr;
-	  set($$.expr, "unary+");
+	  $$.expr.id("unary+");
 	  mto($$.expr, $2.expr);
 	}
 	| '-' cast_expression
 	{ $$.expr=$1.expr;
-	  set($$.expr, "unary-");
+	  $$.expr.id("unary-");
 	  mto($$.expr, $2.expr);
 	}
 	| '~' cast_expression
 	{ $$.expr=$1.expr;
-	  set($$.expr, "bitnot");
+	  $$.expr.id("bitnot");
 	  mto($$.expr, $2.expr);
 	}
 	| '!' cast_expression
 	{ $$.expr=$1.expr;
-	  set($$.expr, "not");
+	  $$.expr.id("not");
 	  mto($$.expr, $2.expr);
 	}
 	| TOK_SIZEOF unary_expression
 	{ $$.expr=$1.expr;
-	  set($$.expr, "sizeof");
+	  $$.expr.id("sizeof");
 	  mto($$.expr, $2.expr);
 	}
 	| TOK_SIZEOF '(' type_name ')'
 	{ $$.expr=$1.expr;
-	  set($$.expr, "sizeof");
+	  $$.expr.id("sizeof");
 	  $$.expr.add("sizeof-type").swap($3.expr);
 	}
 	;
@@ -372,7 +372,7 @@ cast_expression:
 	| '(' type_name ')' cast_expression
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "typecast");
+	  $$.expr.id("typecast");
 	  mto($$.expr, $4.expr);
 	  $$.expr.type().swap($2.expr);
 	}
@@ -383,7 +383,7 @@ cast_expression:
 	  exprt tmp("designated_list");
 	  tmp.operands().swap($5.expr).operands();
 	  $$.expr=$1.expr;
-	  set($$.expr, "typecast");
+	  $$.expr.id("typecast");
 	  $$.expr.move_to_operands(tmp);
 	  $$.expr.type().swap($2.expr);
 	}
@@ -645,8 +645,8 @@ declaration_qualifier:
 	;
 
 type_qualifier:
-	TOK_CONST      { $$.expr=$1.expr; set($$.expr, "const"); }
-	| TOK_VOLATILE { $$.expr=$1.expr; set($$.expr, "volatile"); }
+	TOK_CONST      { $$.expr=$1.expr; $$.expr.id("const"); }
+	| TOK_VOLATILE { $$.expr=$1.expr; $$.expr.id("volatile"); }
 	;
 
 basic_declaration_specifier:
@@ -787,31 +787,31 @@ ptr_type_specifier:
 	;
 
 storage_class:
-	TOK_TYPEDEF    { $$.expr=$1.expr; set($$.expr, "typedef"); }
-	| TOK_EXTERN   { $$.expr=$1.expr; set($$.expr, "extern"); }
-	| TOK_STATIC   { $$.expr=$1.expr; set($$.expr, "static"); }
-	| TOK_AUTO     { $$.expr=$1.expr; set($$.expr, "auto"); }
-	| TOK_REGISTER { $$.expr=$1.expr; set($$.expr, "register"); }
-	| TOK_INLINE   { $$.expr=$1.expr; set($$.expr, "inline"); }
+	TOK_TYPEDEF    { $$.expr=$1.expr; $$.expr.id("typedef"); }
+	| TOK_EXTERN   { $$.expr=$1.expr; $$.expr.id("extern"); }
+	| TOK_STATIC   { $$.expr=$1.expr; $$.expr.id("static"); }
+	| TOK_AUTO     { $$.expr=$1.expr; $$.expr.id("auto"); }
+	| TOK_REGISTER { $$.expr=$1.expr; $$.expr.id("register"); }
+	| TOK_INLINE   { $$.expr=$1.expr; $$.expr.id("inline"); }
 	;
 
 basic_type_name:
-	TOK_INT        { $$.expr=$1.expr; set($$.expr, "int"); }
-	| TOK_INT8     { $$.expr=$1.expr; set($$.expr, "int8"); }
-	| TOK_INT16    { $$.expr=$1.expr; set($$.expr, "int16"); }
-	| TOK_INT32    { $$.expr=$1.expr; set($$.expr, "int32"); }
-	| TOK_INT64    { $$.expr=$1.expr; set($$.expr, "int64"); }
-	| TOK_PTR32    { $$.expr=$1.expr; set($$.expr, "ptr32"); }
-	| TOK_PTR64    { $$.expr=$1.expr; set($$.expr, "ptr64"); }
-	| TOK_CHAR     { $$.expr=$1.expr; set($$.expr, "char"); }
-	| TOK_SHORT    { $$.expr=$1.expr; set($$.expr, "short"); }
-	| TOK_LONG     { $$.expr=$1.expr; set($$.expr, "long"); }
-	| TOK_FLOAT    { $$.expr=$1.expr; set($$.expr, "float"); }
-	| TOK_DOUBLE   { $$.expr=$1.expr; set($$.expr, "double"); }
-	| TOK_SIGNED   { $$.expr=$1.expr; set($$.expr, "signed"); }
-	| TOK_UNSIGNED { $$.expr=$1.expr; set($$.expr, "unsigned"); }
-	| TOK_VOID     { $$.expr=$1.expr; set($$.expr, "empty"); }
-	| TOK_BOOL     { $$.expr=$1.expr; set($$.expr, "bool"); }
+	TOK_INT        { $$.expr=$1.expr; $$.expr.id("int"); }
+	| TOK_INT8     { $$.expr=$1.expr; $$.expr.id("int8"); }
+	| TOK_INT16    { $$.expr=$1.expr; $$.expr.id("int16"); }
+	| TOK_INT32    { $$.expr=$1.expr; $$.expr.id("int32"); }
+	| TOK_INT64    { $$.expr=$1.expr; $$.expr.id("int64"); }
+	| TOK_PTR32    { $$.expr=$1.expr; $$.expr.id("ptr32"); }
+	| TOK_PTR64    { $$.expr=$1.expr; $$.expr.id("ptr64"); }
+	| TOK_CHAR     { $$.expr=$1.expr; $$.expr.id("char"); }
+	| TOK_SHORT    { $$.expr=$1.expr; $$.expr.id("short"); }
+	| TOK_LONG     { $$.expr=$1.expr; $$.expr.id("long"); }
+	| TOK_FLOAT    { $$.expr=$1.expr; $$.expr.id("float"); }
+	| TOK_DOUBLE   { $$.expr=$1.expr; $$.expr.id("double"); }
+	| TOK_SIGNED   { $$.expr=$1.expr; $$.expr.id("signed"); }
+	| TOK_UNSIGNED { $$.expr=$1.expr; $$.expr.id("unsigned"); }
+	| TOK_VOID     { $$.expr=$1.expr; $$.expr.id("empty"); }
+	| TOK_BOOL     { $$.expr=$1.expr; $$.expr.id("bool"); }
 	;
 
 elaborated_type_name:
@@ -870,9 +870,9 @@ aggregate_name:
 
 aggregate_key:
 	TOK_STRUCT
-	{ $$.expr=$1.expr; set($$.expr, "struct"); }
+	{ $$.expr=$1.expr; $$.expr.id("struct"); }
 	| TOK_UNION
-	{ $$.expr=$1.expr; set($$.expr, "union"); }
+	{ $$.expr=$1.expr; $$.expr.id("union"); }
 	;
 
 member_declaration_list_opt:
@@ -1008,7 +1008,7 @@ bit_field_size_opt:
 bit_field_size:			/* Expression */
 	':' constant_expression
 	{
-	  $$.expr=$1.expr; set($$.expr, "c_bitfield");
+	  $$.expr=$1.expr; $$.expr.id("c_bitfield");
 	  $$.expr.set("size", $2.expr);
 	}
 	;
@@ -1066,7 +1066,7 @@ enum_name:			/* Type */
 enum_key: TOK_ENUM
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "c_enum");
+	  $$.expr.id("c_enum");
 	}
 	;
 
@@ -1260,14 +1260,14 @@ initializer:
 	'{' initializer_list '}'
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "constant");
+	  $$.expr.id("constant");
 	  $$.expr.type().id("incomplete_array");
 	  $$.expr.operands().swap($2.expr.operands());
 	}
 	| '{' initializer_list ',' '}'
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "constant");
+	  $$.expr.id("constant");
 	  $$.expr.type().id("incomplete_array");
 	  $$.expr.operands().swap($2.expr.operands());
 	}
@@ -1275,7 +1275,7 @@ initializer:
 	| '{' designated_initializer_list '}'
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "designated_list");
+	  $$.expr.id("designated_list");
 	  $$.expr.operands().swap($2.expr.operands());
 	}
 	;
@@ -1823,7 +1823,7 @@ postfixing_abstract_declarator:	/* AbstrDeclarator */
 	| '(' ')'
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "code");
+	  $$.expr.id("code");
 	  $$.expr.add("arguments");
 	  $$.expr.add("subtype").make_nil();
 	}
@@ -1835,7 +1835,7 @@ postfixing_abstract_declarator:	/* AbstrDeclarator */
 	  parameter_type_list ')'
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "code");
+	  $$.expr.id("code");
 	  $$.expr.add("subtype").make_nil();
 	  $$.expr.add("arguments").get_sub().
 	    swap($3.expr.add("subtypes").get_sub());
@@ -1848,7 +1848,7 @@ parameter_postfixing_abstract_declarator:
 	| '(' ')'
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "code");
+	  $$.expr.id("code");
 	  $$.expr.add("arguments");
 	  $$.expr.add("subtype").make_nil();
 	}
@@ -1860,7 +1860,7 @@ parameter_postfixing_abstract_declarator:
 	  parameter_type_list ')'
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "code");
+	  $$.expr.id("code");
 	  $$.expr.add("subtype").make_nil();
 	  $$.expr.add("arguments").get_sub().
 	    swap($3.expr.add("subtypes").get_sub());
@@ -1872,13 +1872,13 @@ array_abstract_declarator:
 	'[' ']'
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "incomplete_array");
+	  $$.expr.id("incomplete_array");
 	  $$.expr.add("subtype").make_nil();
 	}
 	| '[' constant_expression ']'
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "array");
+	  $$.expr.id("array");
 	  $$.expr.add("size").swap($2.expr);
 	  $$.expr.add("subtype").make_nil();
 	}
@@ -1886,7 +1886,7 @@ array_abstract_declarator:
 	{
 	  // we need to push this down
 	  $$.expr=$1.expr;
-	  set($2.expr, "array");
+	  $2.expr.id("array");
 	  $2.expr.add("size").swap($3.expr);
 	  $2.expr.add("subtype").make_nil();
 	  make_subtype($1.expr, $2.expr);
@@ -1897,7 +1897,7 @@ unary_abstract_declarator:
 	'*'
 	{
 	  $$.expr=$1.expr;
-	  set($$.expr, "pointer");
+	  $$.expr.id("pointer");
 	  $$.expr.add("subtype").make_nil();
 	}
 	| '*' type_qualifier_list
@@ -1924,7 +1924,7 @@ parameter_unary_abstract_declarator:
 	'*'
 	{
           $$.expr=$1.expr;
-          set($$.expr, "pointer");
+          $$.expr.id("pointer");
           $$.expr.add("subtype").make_nil();
 	}
 	| '*' type_qualifier_list

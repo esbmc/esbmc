@@ -16,23 +16,6 @@
 
 /*******************************************************************\
 
-Function: set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void set(YYSTYPE expr, const std::string &id)
-{
-  stack(expr).id(id);
-}
-
-/*******************************************************************\
-
 Function: statement
 
   Inputs:
@@ -45,7 +28,7 @@ Function: statement
 
 static void statement(YYSTYPE &expr, const std::string &id)
 {
-  set(expr, "code");
+  expr.id("code");
   stack(expr).set("statement", id);
 }
 
@@ -256,7 +239,7 @@ Function: do_pointer
 
 static void do_pointer(const YYSTYPE ptr, const YYSTYPE dest)
 {  
-  set(ptr, "pointer");
+  ptr.id("pointer");
   stack(ptr).add("subtype").make_nil();
   make_subtype(dest, ptr);
 }
