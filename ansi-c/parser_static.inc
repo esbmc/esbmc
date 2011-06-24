@@ -8,11 +8,11 @@
 
 #define YYSTYPE parsert::parse_data
 
-#define mto(x, y) stack(x).move_to_operands(stack(y))
-#define mts(x, y) ((typet &)stack(x)).move_to_subtypes((typet &)stack(y))
-#define binary(x, y, l, id, z) { init(x, id); \
-  stack(x).location()=stack(l).location(); \
-  stack(x).reserve_operands(2); mto(x, y); mto(x, z); }
+#define mto(x, y) (x).move_to_operands((y))
+#define mts(x, y) ((typet &)(x)).move_to_subtypes((typet &)(y))
+#define binary(x, y, l, _id, z) { (x).id(_id); \
+  (x).location()=(l).location(); \
+  (x).reserve_operands(2); mto(x, y); mto(x, z); }
 
 static void statement(exprt &expr, const std::string &id)
 {
