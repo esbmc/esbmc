@@ -28,14 +28,14 @@ Function: _newstack
 
 \*******************************************************************/
 
-exprt &_newstack(parsert &parser, unsigned &x)
+parsert::parse_data &_newstack(parsert &parser, unsigned &x)
 {
   x=parser.stack.size();
 
   if(x>=parser.stack.capacity())
     parser.stack.reserve(x*2);
 
-  parser.stack.push_back(static_cast<const exprt &>(get_nil_irep()));
+  parser.stack.push_back(parsert::parse_data());
   return parser.stack.back();
 }
 
