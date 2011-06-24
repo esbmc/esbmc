@@ -140,18 +140,6 @@ static void do_pointer(exprt &ptr, exprt &dest)
   make_subtype(dest, ptr);
 }
 
-/*******************************************************************\
-
-Function: do_enum_members
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void do_enum_members(
   const typet &enum_type,
   exprt &members)
