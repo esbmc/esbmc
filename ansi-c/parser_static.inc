@@ -43,19 +43,19 @@ static void decl_statement(
   dest.move_to_operands(decl_statement);
 }
 
-static void merge_types(exprt &dest, exprt &src)
+static void merge_types(typet &dest, typet &src)
 {
 
   if(dest.id()!="merged_type")
   {
     locationt location=dest.location();
     typet new_type("merged_type");
-    new_type.move_to_subtypes((typet &)(dest));
+    new_type.move_to_subtypes(dest);
     dest.swap(new_type);
     dest.location()=location;
   }
 
-  ((typet &)dest).move_to_subtypes((typet &)(src));
+  move_to_subtypes(src);
 }
 
 static void make_subtype(typet &dest, typet &src)
