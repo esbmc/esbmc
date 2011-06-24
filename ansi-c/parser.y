@@ -239,7 +239,7 @@ offsetof_member_designator:
         ;                  
 
 statement_expression: '(' compound_statement ')'
-	{ init($$.expr, "sideeffect");
+	{ $$.expr.id("sideeffect");
 	  stack($$.expr).set("statement", "statement_expression");
           mto($$.expr, $2.expr);
 	}
@@ -260,7 +260,7 @@ postfix_expression:
 	}
 	| postfix_expression '(' argument_expression_list ')'
 	{ $$.expr=$2.expr;
-	  init($$.expr, "sideeffect");
+	  $$.expr.id("sideeffect");
 	  stack($$.expr).set("statement", "function_call");
 	  stack($$.expr).operands().resize(2);
 	  stack($$.expr).op0().swap(stack($1.expr));
@@ -281,13 +281,13 @@ postfix_expression:
 	}
 	| postfix_expression TOK_INCR
 	{ $$.expr=$2.expr;
-	  init($$.expr, "sideeffect");
+	  $$.expr.id("sideeffect");
 	  mto($$.expr, $1.expr);
 	  stack($$.expr).set("statement", "postincrement");
 	}
 	| postfix_expression TOK_DECR
 	{ $$.expr=$2.expr;
-	  init($$.expr, "sideeffect");
+	  $$.expr.id("sideeffect");
 	  mto($$.expr, $1.expr);
 	  stack($$.expr).set("statement", "postdecrement");
 	}
@@ -301,7 +301,7 @@ member_name:
 argument_expression_list:
 	assignment_expression
 	{
-	  init($$.expr, "expression_list");
+	  $$.expr.id("expression_list");
 	  mto($$.expr, $1.expr);
 	}
 	| argument_expression_list ',' assignment_expression
@@ -469,14 +469,14 @@ conditional_expression:
 	logical_or_expression
 	| logical_or_expression '?' comma_expression ':' conditional_expression
 	{ $$.expr=$2.expr;
-	  init($$.expr, "if");
+	  $$.expr.id("if");
 	  mto($$.expr, $1.expr);
 	  mto($$.expr, $3.expr);
 	  mto($$.expr, $5.expr);
 	}
 	| logical_or_expression '?' ':' conditional_expression
 	{ $$.expr=$2.expr;
-	  init($$.expr, "sideeffect");
+	  $$.expr.id("sideeffect");
 	  stack($$.expr).set("statement", "gcc_conditional_expression");
 	  mto($$.expr, $1.expr);
 	  mto($$.expr, $4.expr);
@@ -521,7 +521,7 @@ constant_expression:
 
 comma_expression_opt:
 	/* nothing */
-	{ init($$.expr); stack($$.expr).make_nil(); }
+	{ stack($$.expr).make_nil(); }
 	| comma_expression
 	;
 
@@ -531,11 +531,9 @@ comma_expression_opt:
 declaration:
 	declaration_specifier ';'
 	{
-	  init($$.expr);
 	}
 	| type_specifier ';'
 	{
-	  init($$.expr);
 	}
 	| declaring_list ';'
 	| default_declaring_list ';'
@@ -544,29 +542,24 @@ declaration:
 default_declaring_list:
 	declaration_qualifier_list identifier_declarator
 		{
-		  init($$.expr);
 		  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 		}
 	initializer_opt
 		{
-		  init($$.expr);
 		  stack($$.expr).add("type")=stack($1.expr);
 		  decl_statement($$.expr, $3.expr, $4.expr);
 		}
 	| type_qualifier_list identifier_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	initializer_opt
 	{
-	  init($$.expr);
 	  stack($$.expr).add("type")=stack($1.expr);
 	  decl_statement($$.expr, $3.expr, $4.expr);
 	}
 	| default_declaring_list ',' identifier_declarator
 		{
-		  init($$.expr);
 		  const irept &t=stack($1.expr).find("type");
 		  PARSER.new_declaration(t, stack($3.expr), stack($$.expr));
 		}
@@ -581,30 +574,25 @@ declaring_list:			/* DeclarationSpec */
 	declaration_specifier declarator
 		{
 		  // the symbol has to be visible during initialization
-		  init($$.expr);
 		  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 		}
 		initializer_opt
 	{
-	  init($$.expr);
 	  stack($$.expr).add("type")=stack($1.expr);
 	  decl_statement($$.expr, $3.expr, $4.expr);
 	}
 	| type_specifier declarator
 		{
 		  // the symbol has to be visible during initialization
-		  init($$.expr);
 		  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 		}
 		initializer_opt
 	{
-	  init($$.expr);
 	  stack($$.expr).add("type")=stack($1.expr);
 	  decl_statement($$.expr, $3.expr, $4.expr);
 	}
 	| declaring_list ',' declarator
 		{
-		  init($$.expr);
 		  const irept &t=stack($1.expr).find("type");
 		  PARSER.new_declaration(t, stack($3.expr), stack($$.expr));
 		}
@@ -839,7 +827,6 @@ aggregate_name:
 
 		  symbol.set("#base_name", PARSER.get_anon_name());
 
-		  init($$.expr);
 		  PARSER.new_declaration(stack($1.expr), symbol, stack($$.expr), true);
 		}
 		'{' member_declaration_list_opt '}'
@@ -848,7 +835,7 @@ aggregate_name:
 	  type.add("components").get_sub().swap(stack($4.expr).add("operands").get_sub());
 
 	  // grab symbol
-	  init($$.expr, "symbol");
+	  $$.expr.id("symbol");
 	  stack($$.expr).set("identifier", stack($2.expr).get("name"));
 	  stack($$.expr).location()=stack($2.expr).location();
 
@@ -868,7 +855,7 @@ aggregate_name:
 	  type.add("components").get_sub().swap(stack($5.expr).add("operands").get_sub());
 
 	  // grab symbol
-	  init($$.expr, "symbol");
+	  $$.expr.id("symbol");
 	  stack($$.expr).set("identifier", stack($3.expr).get("name"));
 	  stack($$.expr).location()=stack($3.expr).location();
 
@@ -891,7 +878,7 @@ aggregate_key:
 member_declaration_list_opt:
 		  /* Nothing */
 	{
-	  init($$.expr, "declaration_list");
+	  $$.expr.id("declaration_list");
 	}
 	| member_declaration_list
 	;
@@ -914,14 +901,14 @@ member_declaration:
 	| member_default_declaring_list ';'
 	| ';' /* empty declaration */
 	{
-	  init($$.expr, "declaration_list");
+	  $$.expr.id("declaration_list");
 	}
 	;
 
 member_default_declaring_list:
 	type_qualifier_list member_identifier_declarator
 	{
-	  init($$.expr, "declaration_list");
+	  $$.expr.id("declaration_list");
 
 	  exprt declaration;
 
@@ -944,7 +931,7 @@ member_default_declaring_list:
 member_declaring_list:
 	type_specifier member_declarator
 	{
-	  init($$.expr, "declaration_list");
+	  $$.expr.id("declaration_list");
 
 	  // save the type_specifier
 	  stack($$.expr).add("declaration_type")=stack($1.expr);
@@ -979,7 +966,6 @@ member_declarator:
 	}
 	| /* empty */
 	{
-	  init($$.expr);
 	  stack($$.expr).make_nil();
 	}
 	| bit_field_size
@@ -1014,7 +1000,6 @@ member_identifier_declarator:
 bit_field_size_opt:
 	/* nothing */
 	{
-	  init($$.expr);
 	  stack($$.expr).make_nil();
 	}
 	| bit_field_size
@@ -1045,7 +1030,7 @@ enum_name:			/* Type */
 		'{' enumerator_list '}'
 	{
 	  // grab symbol
-	  init($$.expr, "symbol");
+	  $$.expr.id("symbol");
 	  stack($$.expr).set("identifier", stack($2.expr).get("name"));
 	  stack($$.expr).location()=stack($2.expr).location();
 
@@ -1063,7 +1048,7 @@ enum_name:			/* Type */
 		'{' enumerator_list '}'
 	{
 	  // grab symbol
-	  init($$.expr, "symbol");
+	  $$.expr.id("symbol");
 	  stack($$.expr).set("identifier", stack($3.expr).get("name"));
 	  stack($$.expr).location()=stack($3.expr).location();
 
@@ -1088,7 +1073,6 @@ enum_key: TOK_ENUM
 enumerator_list:		/* MemberList */
 	enumerator_declaration
 	{
-	  init($$.expr);
 	  mto($$.expr, $1.expr);
 	}
 	| enumerator_list ',' enumerator_declaration
@@ -1105,7 +1089,6 @@ enumerator_list:		/* MemberList */
 enumerator_declaration:
 	  identifier_or_typedef_name enumerator_value_opt
 	{
-	  init($$.expr);
 	  irept type("enum");
 	  PARSER.new_declaration(type, stack($1.expr), stack($$.expr));
 	  stack($$.expr).set("is_macro", true);
@@ -1116,7 +1099,6 @@ enumerator_declaration:
 enumerator_value_opt:		/* Expression */
 	/* nothing */
 	{
-	  init($$.expr);
 	  stack($$.expr).make_nil();
 	}
 	| '=' constant_expression
@@ -1139,7 +1121,7 @@ parameter_type_list:		/* ParameterList */
 KnR_parameter_list:
 	KnR_parameter
 	{
-          init($$.expr, "arguments");
+          $$.expr.id("arguments");
           mts($$.expr, $1.expr);
 	}
 	| KnR_parameter_list ',' KnR_parameter
@@ -1151,7 +1133,6 @@ KnR_parameter_list:
 
 KnR_parameter: identifier
 	{
-          init($$.expr);
 	  irept type("KnR");
 	  PARSER.new_declaration(type, stack($1.expr), stack($$.expr));
 	}
@@ -1160,7 +1141,7 @@ KnR_parameter: identifier
 parameter_list:
 	parameter_declaration
 	{
-	  init($$.expr, "arguments");
+	  $$.expr.id("arguments");
 	  mts($$.expr, $1.expr);
 	}
 	| parameter_list ',' parameter_declaration
@@ -1173,84 +1154,70 @@ parameter_list:
 parameter_declaration:
 	declaration_specifier
 	{
-	  init($$.expr);
 	  exprt nil;
 	  nil.make_nil();
 	  PARSER.new_declaration(stack($1.expr), nil, stack($$.expr));
 	}
 	| declaration_specifier parameter_abstract_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	| declaration_specifier identifier_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	| declaration_specifier parameter_typedef_declarator
 	{
           // the second tree is really the argument -- not part
           // of the type!
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	| declaration_qualifier_list
 	{
-	  init($$.expr);
 	  exprt nil;
 	  nil.make_nil();
 	  PARSER.new_declaration(stack($1.expr), nil, stack($$.expr));
 	}
 	| declaration_qualifier_list parameter_abstract_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	| declaration_qualifier_list identifier_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	| type_specifier
 	{
-	  init($$.expr);
 	  exprt nil;
 	  nil.make_nil();
 	  PARSER.new_declaration(stack($1.expr), nil, stack($$.expr));
 	}
 	| type_specifier parameter_abstract_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	| type_specifier identifier_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	| type_specifier parameter_typedef_declarator
 	{
           // the second tree is really the argument -- not part
           // of the type!
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	| type_qualifier_list
 	{
-	  init($$.expr);
 	  exprt nil;
 	  nil.make_nil();
 	  PARSER.new_declaration(stack($1.expr), nil, stack($$.expr));
 	}
 	| type_qualifier_list parameter_abstract_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	| type_qualifier_list identifier_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	}
 	;
@@ -1382,7 +1349,6 @@ statement:
 declaration_statement:
 	declaration
 	{
-	  init($$.expr);
 	  statement($$.expr, "decl-block");
 	  stack($$.expr).operands().swap(stack($1.expr).operands());
 	}
@@ -1674,32 +1640,27 @@ KnR_parameter_declaration: declaring_list ';'
 function_head:
 	identifier_declarator /* void */
 	{
-	  init($$.expr);
 	  irept type("int");
 	  PARSER.new_declaration(type, stack($1.expr), stack($$.expr));
 	  create_function_scope(stack($$.expr));
 	}
 	| declaration_specifier declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	  create_function_scope(stack($$.expr));
 	}
 	| type_specifier declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	  create_function_scope(stack($$.expr));
 	}
 	| declaration_qualifier_list identifier_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	  create_function_scope(stack($$.expr));
 	}
 	| type_qualifier_list identifier_declarator
 	{
-	  init($$.expr);
 	  PARSER.new_declaration(stack($1.expr), stack($2.expr), stack($$.expr));
 	  create_function_scope(stack($$.expr));
 	}
