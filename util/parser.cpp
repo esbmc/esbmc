@@ -18,29 +18,6 @@ int isatty(int f)
 
 /*******************************************************************\
 
-Function: _newstack
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-parsert::parse_data &_newstack(parsert &parser, unsigned &x)
-{
-  x=parser.stack.size();
-
-  if(x>=parser.stack.capacity())
-    parser.stack.reserve(x*2);
-
-  parser.stack.push_back(parsert::parse_data());
-  return parser.stack.back();
-}
-
-/*******************************************************************\
-
 Function:
 
   Inputs:

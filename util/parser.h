@@ -23,12 +23,9 @@ public:
     typet type;
   };
 
-  std::vector<parse_data> stack;
-  
   virtual void clear()
   {
     line_no=0;
-    stack.clear();
     filename.clear();
     char_buffer.clear();
   }
@@ -107,12 +104,6 @@ private:
   std::list<char> char_buffer;
 };
  
-parsert::parse_data &_newstack(parsert &parser, unsigned &x);
-
-#define newstack(x) _newstack(PARSER, (x))
-
-#define stack(x) (PARSER.stack[x])
-
 #define YY_INPUT(buf,result,max_size) \
     do { \
         for(result=0; result<max_size;) \
