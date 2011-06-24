@@ -133,22 +133,10 @@ static void make_subtype(typet &dest, typet &src)
   }
 }
 
-/*******************************************************************\
-
-Function: do_pointer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void do_pointer(const YYSTYPE ptr, const YYSTYPE dest)
+static void do_pointer(exprt &ptr, exprt &dest)
 {  
   ptr.id("pointer");
-  stack(ptr).add("subtype").make_nil();
+  ptr.add("subtype").make_nil();
   make_subtype(dest, ptr);
 }
 
