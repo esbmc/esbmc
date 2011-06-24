@@ -190,18 +190,6 @@ static void do_tag(exprt &key, exprt &tag)
   PARSER.move_declaration(declaration);                    
 }
 
-/*******************************************************************\
-
-Function: create_function_scope
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void create_function_scope(exprt &expr)
 {
   ansi_c_declarationt &declaration=to_ansi_c_declaration(expr);
