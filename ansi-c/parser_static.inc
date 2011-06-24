@@ -6,8 +6,7 @@
 
 #include <ansi-c/c_types.h>
 
-#define YYSTYPE unsigned
-#define YYSTYPE_IS_TRIVIAL 1
+#define YYSTYPE parsert::parse_data
 
 #define mto(x, y) stack(x).move_to_operands(stack(y))
 #define mts(x, y) ((typet &)stack(x)).move_to_subtypes((typet &)stack(y))
