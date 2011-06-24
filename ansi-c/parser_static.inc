@@ -20,39 +20,27 @@ static void statement(exprt &expr, const std::string &id)
   expr.set("statement", id);
 }
 
-/*******************************************************************\
-
-Function: decl_statement
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void decl_statement(
-  YYSTYPE &dest,
-  YYSTYPE &decl,
-  YYSTYPE &initializer)
+  exprt &dest,
+  exprt &decl,
+  exprt &initializer)
 {
   codet decl_statement("decl");
   
   symbol_exprt symbol;
-  symbol.set_identifier(stack(decl).get("name"));
+  symbol.set_identifier(decl.get("name"));
   
   decl_statement.move_to_operands(symbol);
   
-  if(stack(initializer).is_not_nil())
+  if(initializer.is_not_nil())
   {
-    stack(decl).add("value")=stack(initializer);
-    decl_statement.move_to_operands(stack(initializer));
+    decl.add("value")=initializer;
+    decl_statement.move_to_operands(initializer);
   }
   
-  PARSER.move_declaration(stack(decl));
+  PARSER.move_declaration(decl);
   
-  stack(dest).move_to_operands(decl_statement);
+  dest.move_to_operands(decl_statement);
 }
 
 /*******************************************************************\
