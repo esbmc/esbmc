@@ -159,23 +159,6 @@ static void make_subtype(typet &dest, typet &src)
 
 /*******************************************************************\
 
-Function: make_subtype
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void make_subtype(YYSTYPE dest, YYSTYPE src)
-{
-  make_subtype((typet &)stack(dest), (typet &)stack(src));
-}
-    
-/*******************************************************************\
-
 Function: do_pointer
 
   Inputs:
