@@ -76,23 +76,6 @@ static void merge_types(exprt &dest, exprt &src)
 
 /*******************************************************************\
 
-Function: merge_types
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void merge_types(const YYSTYPE dest, const YYSTYPE src)
-{
-  merge_types(stack(dest), stack(src));
-}
-
-/*******************************************************************\
-
 Function: make_subtype
 
   Inputs:
