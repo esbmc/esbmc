@@ -167,21 +167,9 @@ static void do_enum_members(
   }
 }
 
-/*******************************************************************\
-
-Function: do_tag
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void do_tag(YYSTYPE &key, YYSTYPE &tag)
+static void do_tag(exprt &key, exprt &tag)
 {
-  irep_idt id_class_str=stack(tag).get("#id_class");
+  irep_idt id_class_str=tag.get("#id_class");
 
   ansi_c_id_classt id_class=
     (ansi_c_id_classt)atoi(id_class_str.c_str());
@@ -191,12 +179,12 @@ static void do_tag(YYSTYPE &key, YYSTYPE &tag)
 
   // it's new
   ansi_c_declarationt declaration;
-  PARSER.new_declaration(stack(key), stack(tag), declaration, true);
+  PARSER.new_declaration(key, tag, declaration, true);
 
   // grab symbol
-  stack(tag).id("symbol");
-  stack(tag).set("identifier", declaration.get_name());
-  stack(tag).location()=declaration.location();
+  tag.id("symbol");
+  tag.set("identifier", declaration.get_name());
+  tag.location()=declaration.location();
 
   declaration.type().id("incomplete_"+declaration.type().id_string());
   PARSER.move_declaration(declaration);                    
