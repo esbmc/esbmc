@@ -14,22 +14,10 @@
   stack(x).location()=stack(l).location(); \
   stack(x).reserve_operands(2); mto(x, y); mto(x, z); }
 
-/*******************************************************************\
-
-Function: statement
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void statement(YYSTYPE &expr, const std::string &id)
+static void statement(exprt &expr, const std::string &id)
 {
   expr.id("code");
-  stack(expr).set("statement", id);
+  expr.set("statement", id);
 }
 
 /*******************************************************************\
