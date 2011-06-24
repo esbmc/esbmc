@@ -43,18 +43,6 @@ static void decl_statement(
   dest.move_to_operands(decl_statement);
 }
 
-/*******************************************************************\
-
-Function: merge_types
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void merge_types(exprt &dest, exprt &src)
 {
 
@@ -69,18 +57,6 @@ static void merge_types(exprt &dest, exprt &src)
 
   ((typet &)dest).move_to_subtypes((typet &)(src));
 }
-
-/*******************************************************************\
-
-Function: make_subtype
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void make_subtype(typet &dest, typet &src)
 {  
