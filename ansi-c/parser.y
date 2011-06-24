@@ -1245,7 +1245,6 @@ type_name:
 initializer_opt:
 	/* nothing */
 	{
-	  newstack($$.expr);
 	  stack($$.expr).make_nil();
 	}
 	| '=' initializer
@@ -1301,7 +1300,6 @@ initializer_list:
 designated_initializer:
           /* empty */
         {
-	  newstack($$.expr);
 	  stack($$.expr).make_nil();          
         }
         | '.' identifier '=' initializer
