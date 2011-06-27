@@ -37,7 +37,7 @@ public:
       _CS_bound = atoi(options.get_option("context-switch").c_str());
       _deadlock_detection = options.get_bool_option("deadlock-check");
       state_hashing = options.get_bool_option("state-hashing");
-      directed_interleavings = options.get_bool_option("direct_interleavings");
+      directed_interleavings = options.get_bool_option("direct-interleavings");
 
       if (options.get_bool_option("no-por") || options.get_bool_option("control-flow-test"))
         _por = false;

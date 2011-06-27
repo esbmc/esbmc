@@ -99,7 +99,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"symex-trace",		switc,		""	},
 { 0,	"core-size",		number,		""	},
 { 0,	"smtlib-ileave-num",	number,		""	},
-{ 0,	"direct_interleavings",	switc,		""	},
+{ 0,	"direct-interleavings",	switc,		""	},
 { 0,	"decide",		switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
