@@ -15,6 +15,8 @@ struct hooked_header headers[] = {
 /* stddef.h contains a variety of compiler-specific functions */
 { "stdarg.h",		&_binary_stdarg_h_start,	&_binary_stdarg_h_end},
 /* contains va_start and similar functionality */
+{ "stdbool.h",		&_binary_stdbool_h_start,	&_binary_stdbool_h_end},
+/* Fairly self explanatory */
 { "bits/wordsize.h",	NULL,				NULL},
 /* Defines __WORDSIZE, which we define ourselves */
 { NULL, NULL, NULL}
