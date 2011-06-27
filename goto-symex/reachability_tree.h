@@ -37,6 +37,7 @@ public:
       _CS_bound = atoi(options.get_option("context-switch").c_str());
       _deadlock_detection = options.get_bool_option("deadlock-check");
       state_hashing = options.get_bool_option("state-hashing");
+      directed_interleavings = options.get_bool_option("direct_interleavings");
 
       if (options.get_bool_option("no-por") || options.get_bool_option("control-flow-test"))
         _por = false;
@@ -99,6 +100,7 @@ private:
 	bool _go_next;
 	bool _DFS, _multi_formulae, _is_same_mutex,
 		 _deadlock_detection, _por;
+    bool directed_interleavings;
     const namespacet &_ns;
 
     /* jmorse */
