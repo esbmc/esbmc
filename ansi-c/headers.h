@@ -5,3 +5,5 @@ extern char _binary_stddef_h_start;
 extern char _binary_stddef_h_end;
 extern char _binary_stdarg_h_start;
 extern char _binary_stdarg_h_end;
+extern char _binary_stdbool_h_start;
+extern char _binary_stdbool_h_end;
