@@ -124,13 +124,7 @@ void ansi_c_parsert::convert_declarator(
   if (declarator.find("declarator").id() != "nil") {
     identifier = declarator.find("declarator");
     declarator.remove("declarator");
-
-    typet &atype = (typet &)declarator.find("subtype");
-    typet *wheretoadd = &atype;
-    while (wheretoadd->id() != "nil")
-      wheretoadd = (typet *)&wheretoadd->find("subtype");
-
-    *wheretoadd = type;
+    insert_subtype(declarator, type);
     return;
   }
 
