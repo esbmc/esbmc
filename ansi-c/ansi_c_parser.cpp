@@ -90,7 +90,7 @@ static void insert_subtype(irept &target, const typet &type)
 {
 
   const irept &atype = target.find("subtype");
-  if (atype.id() == "nil" || !atype.is_nil()) {
+  if (atype.id() == "nil" || atype.is_nil()) {
     target.add("subtype") = type;
   } else {
     typet *wheretoadd = &(typet&)target.add("subtype");
