@@ -3779,6 +3779,11 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
     // else is base 2.
     value = expr.get_string("value");
   }
+  else if (expr.type().id() == "bool")
+  {
+    // value will not actually be interpreted as number by below code
+    value = expr.get_string("value");
+  }
   else if (is_signed(expr.type()))
   {
     value = integer2string(binary2integer(expr.get_string("value"), true),10);
