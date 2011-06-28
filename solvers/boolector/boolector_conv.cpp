@@ -1439,7 +1439,19 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
   std::string value;
   unsigned int width;
 
-  if (is_signed(expr.type()))
+  if (expr.type().id() == "c_enum")
+  {
+    value = expr.get_string("value");
+  }
+  else if (expr.type().id() == "bool")
+  {
+    value = expr.get_string("value");
+  }
+  else if (expr.type().id() == "pointer" && expr.get_string("value") == "NULL")
+  {
+    value = "0";
+  }
+  else if (is_signed(expr.type()))
     value = integer2string(binary2integer(expr.get_string("value"), true),10);
   else
 	value = integer2string(binary2integer(expr.get_string("value"), false),10);
