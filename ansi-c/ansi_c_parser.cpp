@@ -117,37 +117,6 @@ if (declarator.find("declarator").id() != "nil") {
   *wheretoadd = type;
   return;
 }
-  
-  // walk down subtype until we hit nil or symbol
-  while(true)
-  {
-    typet &t=*p;
-
-    if(t.id()=="symbol")
-    {
-      identifier=t;
-      t=type;
-      break;
-    }
-    else if(t.id()=="")
-    {
-      std::cout << "D: " << declarator.pretty() << std::endl;
-      assert(0);
-    }
-    else if(t.is_nil())
-    {
-      identifier.make_nil();
-      t=type;
-      break;
-    }
-    else if(t.id()=="merged_type")
-    {
-      assert(!t.subtypes().empty());
-      p=&(t.subtypes().back());
-    }
-    else
-      p=&t.subtype();
-  }
 }
 
 /*******************************************************************\
