@@ -104,6 +104,19 @@ void ansi_c_parsert::convert_declarator(
   irept &identifier)
 {
   typet *p=(typet *)&declarator;
+
+if (declarator.find("declarator").id() != "nil") {
+  identifier = declarator.find("declarator");
+  declarator.remove("declarator");
+
+  typet &atype = (typet &)declarator.add("subtype");
+  typet *wheretoadd = &atype;
+  while (wheretoadd->find("subtype").id() != "nil")
+    wheretoadd = (typet *)&wheretoadd->find("subtype");
+
+  wheretoadd->add("subtype") = type;
+  return;
+}
   
   // walk down subtype until we hit nil or symbol
   while(true)
