@@ -105,18 +105,18 @@ void ansi_c_parsert::convert_declarator(
 {
   typet *p=(typet *)&declarator;
 
-if (declarator.find("declarator").id() != "nil") {
-  identifier = declarator.find("declarator");
-  declarator.remove("declarator");
+  if (declarator.find("declarator").id() != "nil") {
+    identifier = declarator.find("declarator");
+    declarator.remove("declarator");
 
-  typet &atype = (typet &)declarator.find("subtype");
-  typet *wheretoadd = &atype;
-  while (wheretoadd->id() != "nil")
-    wheretoadd = (typet *)&wheretoadd->find("subtype");
+    typet &atype = (typet &)declarator.find("subtype");
+    typet *wheretoadd = &atype;
+    while (wheretoadd->id() != "nil")
+      wheretoadd = (typet *)&wheretoadd->find("subtype");
 
-  *wheretoadd = type;
-  return;
-}
+    *wheretoadd = type;
+    return;
+  }
 }
 
 /*******************************************************************\
