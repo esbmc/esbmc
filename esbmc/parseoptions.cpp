@@ -764,7 +764,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
 }
 
 void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
-                                             goto_functionst &goto_functions)
+                             goto_functionst &goto_functions)
 {
 
   forall_goto_functions(fit, goto_functions) {
