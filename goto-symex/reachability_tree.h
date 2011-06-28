@@ -76,9 +76,6 @@ public:
     bool is_global_assign(const exprt &code);
 
     const symbolt &lookup(const namespacet &ns, const irep_idt &identifier) const;
-    unsigned int get_write_globals(const namespacet &ns, const exprt & expr);
-    unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
-
 	bool is_go_next_state();
 	bool is_go_next_formula();
 	void go_next_state();
