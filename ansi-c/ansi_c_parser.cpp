@@ -109,12 +109,12 @@ if (declarator.find("declarator").id() != "nil") {
   identifier = declarator.find("declarator");
   declarator.remove("declarator");
 
-  typet &atype = (typet &)declarator.add("subtype");
+  typet &atype = (typet &)declarator.find("subtype");
   typet *wheretoadd = &atype;
-  while (wheretoadd->find("subtype").id() != "nil")
+  while (wheretoadd->id() != "nil")
     wheretoadd = (typet *)&wheretoadd->find("subtype");
 
-  wheretoadd->add("subtype") = type;
+  *wheretoadd = type;
   return;
 }
   
