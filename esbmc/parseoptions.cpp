@@ -766,20 +766,28 @@ static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
 void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
                              goto_functionst &goto_functions)
 {
+  bool print_insn;
 
   forall_goto_functions(fit, goto_functions) {
     forall_goto_program_instructions(pit, fit->second.body) {
+      print_insn = false;
       switch (pit->type) {
         case GOTO:
         case ASSUME:
         case ASSERT:
-          // switch on reads in guard
+          if (calc_globals_used(ns, pit->guard) > 0)
+            print_insn = true;
           break;
         case ASSIGN:
-          // switch on read/writes
+          if (calc_globals_used(ns, pit->code) > 0)
+            print_insn = true;
           break;
         case FUNCTION_CALL:
-          // switch on yield
+          {
+            code_function_callt deref_code = to_code_function_call(pit->code);
+            if (deref_code.function().get("identifier") == "c::__ESBMC_yield")
+              print_insn = true;
+          }
           break;
         default:
           break;
