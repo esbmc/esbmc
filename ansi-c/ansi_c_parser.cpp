@@ -129,6 +129,10 @@ void ansi_c_parsert::convert_declarator(
   } else if (declarator.id() == "symbol") {
     insert_subtype(declarator, type);
     identifier = declarator;
+  } else {
+    // Some un-named value: a prototype parameter perhaps.
+    identifier.make_nil();
+    insert_subtype(declarator, type);
   }
 
   return;
