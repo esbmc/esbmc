@@ -126,14 +126,11 @@ void ansi_c_parsert::convert_declarator(
     declarator.remove("declarator");
     insert_subtype(declarator, type);
     return;
+  } else if (declarator.id() == "symbol") {
+    insert_subtype(declarator, type);
+    identifier = declarator;
   }
 
-  // Otherwise, this is not a normal symbol def, it's a stuct member perhaps
-  assert(declarator.id() == "symbol");
-
-  insert_subtype(declarator, type);
-
-  identifier = declarator;
   return;
 }
 
