@@ -86,6 +86,22 @@ int yyansi_cerror(const std::string &error)
   return 0;
 }
 
+static void insert_subtype(irept &target, const typet &type)
+{
+
+  const irept &atype = target.find("subtype");
+  if (atype.id() == "nil" || !atype.is_nil()) {
+    target.add("subtype") = type;
+  } else {
+    typet *wheretoadd = &(typet&)target.add("subtype");
+    while (wheretoadd->id() != "nil" && !wheretoadd->is_nil())
+      wheretoadd = (typet *)&wheretoadd->find("subtype");
+    *wheretoadd = type;
+  }
+
+  return;
+}
+
 /*******************************************************************\
 
 Function: ansi_c_parsert::convert_declarator
@@ -120,17 +136,8 @@ void ansi_c_parsert::convert_declarator(
 
   // Otherwise, this is not a normal symbol def, it's a stuct member perhaps
   assert(declarator.id() == "symbol");
-  identifier = declarator;
 
-  const irept &atype = declarator.find("subtype");
-  if (atype.id() == "nil" || !atype.is_nil()) {
-    declarator.add("subtype") = type;
-  } else {
-    typet *wheretoadd = &(typet&)declarator.add("subtype");
-    while (wheretoadd->id() != "nil" && !wheretoadd->is_nil())
-      wheretoadd = (typet *)&wheretoadd->find("subtype");
-    *wheretoadd = type;
-  }
+  insert_subtype(declarator, type);
 
   identifier = declarator;
   return;
