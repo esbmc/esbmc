@@ -792,6 +792,9 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
         default:
           break;
       }
+
+      if (print_insn)
+        fit->second.body.output_instruction(ns, pit->function, std::cout, pit, true, false);
     }
   }
 
