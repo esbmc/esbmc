@@ -737,7 +737,32 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   return;
 }
 
+void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
+                                             goto_functionst &goto_functions)
+{
 
+  forall_goto_functions(fit, goto_functions) {
+    forall_goto_program_instructions(pit, fit->second.body) {
+      switch (pit->type) {
+        case GOTO:
+        case ASSUME:
+        case ASSERT:
+          // switch on reads in guard
+          break;
+        case ASSIGN:
+          // switch on read/writes
+          break;
+        case FUNCTION_CALL:
+          // switch on yield
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  return;
+}
 
 /*******************************************************************\
 
@@ -877,6 +902,12 @@ bool cbmc_parseoptionst::process_goto_program(
     {
       // add generic checks
       goto_check(ns, bmc.options, goto_functions);
+      return true;
+    }
+
+    if (cmdline.isset("show-ileave-points"))
+    {
+      print_ileave_points(ns, goto_functions);
       return true;
     }
 
