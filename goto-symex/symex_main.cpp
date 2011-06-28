@@ -444,14 +444,7 @@ void goto_symext::symex_step(
                   state.source.pc++;
                   ex_state.reexecute_instruction = false;
 
-                  // Context switch can be guarded. If the guard isn't explicit
-                  // state however, this defeats the object of directing
-                  // interleavings. So, only switches with explicitly true
-                  // guards are honoured.
-                  assert(deref_code.arguments().size() == 2);
-                  exprt &g = deref_code.arguments()[0];
-                  if (!g.is_true())
-                    return;
+                  assert(deref_code.arguments().size() == 1);
 
                   // Switch to other thread.
                   exprt &num = deref_code.arguments()[1];
