@@ -125,7 +125,6 @@ void ansi_c_parsert::convert_declarator(
     identifier = declarator.find("declarator");
     declarator.remove("declarator");
     insert_subtype(declarator, type);
-    return;
   } else if (declarator.id() == "symbol") {
     insert_subtype(declarator, type);
     identifier = declarator;
