@@ -293,8 +293,8 @@ Function: do_pointer
 static void do_pointer(const YYSTYPE ptr, const YYSTYPE dest)
 {  
   set(ptr, "pointer");
-  stack(ptr).add("subtype").make_nil();
-  make_subtype(dest, ptr);
+  stack(ptr).add("subtype") = stack(dest).find("subtype");
+  stack(dest).add("subtype") = stack(ptr);
 }
 
 /*******************************************************************\
