@@ -447,7 +447,7 @@ void goto_symext::symex_step(
                   assert(deref_code.arguments().size() == 1);
 
                   // Switch to other thread.
-                  exprt &num = deref_code.arguments()[1];
+                  exprt &num = deref_code.arguments()[0];
                   if (num.id() != "constant")
                     throw "Can't switch to non-constant thread id no";
 
