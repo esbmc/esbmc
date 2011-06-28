@@ -737,6 +737,32 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   return;
 }
 
+#include <symbol.h>
+
+static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
+{
+  std::string identifier = expr.get_string("identifier");
+
+  if (expr.id() != "symbol") {
+    unsigned int globals = 0;
+
+    forall_operands(it, expr)
+      globals += calc_globals_used(ns, *it);
+
+    return globals;
+  }
+
+  const symbolt &sym = ns.lookup(identifier);
+
+  if (identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
+    return 0;
+
+  if (sym.static_lifetime || sym.type.get("#dynamic") != "")
+    return 1;
+
+  return 0;
+}
+
 void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
                                              goto_functionst &goto_functions)
 {
