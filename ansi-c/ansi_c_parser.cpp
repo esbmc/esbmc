@@ -129,6 +129,9 @@ void ansi_c_parsert::convert_declarator(
     insert_subtype(declarator, type);
     identifier = declarator;
     declarator = declarator.add("subtype");
+  } else if (declarator.is_nil()) {
+    identifier.make_nil();
+    declarator = type;
   } else {
     // Some un-named value: a prototype parameter perhaps.
     identifier.make_nil();
