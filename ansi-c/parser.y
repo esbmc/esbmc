@@ -1929,7 +1929,7 @@ array_abstract_declarator:
 	  set($2, "array");
 	  stack($2).add("size").swap(stack($3));
 	  stack($2).add("subtype").make_nil();
-          stack($2).set("declarator", stack($1));
+          stack($2).set("subtype", stack($1));
           $$ = $2;
 	}
 	;
