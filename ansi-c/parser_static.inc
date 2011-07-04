@@ -10,10 +10,28 @@
 #define YYSTYPE_IS_TRIVIAL 1
 
 #define mto(x, y) stack(x).move_to_operands(stack(y))
-#define mts(x, y) ((typet &)stack(x)).move_to_subtypes((typet &)stack(y))
 #define binary(x, y, l, id, z) { init(x, id); \
   stack(x).location()=stack(l).location(); \
   stack(x).reserve_operands(2); mto(x, y); mto(x, z); }
+
+static void mts(typet &x, typet &t)
+{
+
+  if (t.find("declarator").id() != "nil" && !t.find("declarator").is_nil()) {
+    x.add("declarator") = t.find("declarator");
+    t.remove("declarator");
+  }
+
+  x.move_to_subtypes(t);
+  return;
+}
+
+static void mts(YYSTYPE x, YYSTYPE t)
+{
+
+  mts((typet&)stack(x),(typet&)stack(t));
+  return;
+}
 
 /*******************************************************************\
 
