@@ -161,12 +161,12 @@ static void merge_types(exprt &dest, exprt &src)
   {
     locationt location=dest.location();
     typet new_type("merged_type");
-    new_type.move_to_subtypes((typet &)(dest));
+    mts(new_type, (typet&)dest);
     dest.swap(new_type);
     dest.location()=location;
   }
 
-  ((typet &)dest).move_to_subtypes((typet &)(src));
+  mts((typet&)dest, (typet&)src);
 }
 
 /*******************************************************************\
