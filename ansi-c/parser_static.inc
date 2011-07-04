@@ -308,11 +308,31 @@ Function: do_pointer
 
 \*******************************************************************/
 
+static typet & find_sub_merged_type(typet &t)
+{
+
+  assert(t.id() == "merged_type");
+  assert(t.subtypes().size() != 0);
+  typet &end = t.subtypes().back();
+  if (end.id() == "merged_type")
+    return find_sub_merged_type(end);
+
+  return end;
+}
+
 static void do_pointer(const YYSTYPE ptr, const YYSTYPE dest)
-{  
+{
+  typet *target;
+
   set(ptr, "pointer");
-  stack(ptr).add("subtype") = stack(dest).find("subtype");
-  stack(dest).add("subtype") = stack(ptr);
+
+  if (stack(dest).id() == "merged_type")
+    target = &find_sub_merged_type((typet&)stack(dest));
+  else
+    target = (typet*) &stack(dest);
+
+  stack(ptr).add("subtype") = target->find("subtype");
+  target->add("subtype") = stack(ptr);
 }
 
 /*******************************************************************\
