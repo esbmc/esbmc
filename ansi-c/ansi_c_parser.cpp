@@ -99,10 +99,10 @@ static void insert_subtype(irept &target, const typet &type)
     target.add("subtype") = type;
   } else {
     typet *wheretoadd = &(typet&)target.add("subtype");
-    while (wheretoadd->id() != "nil" && !wheretoadd->is_nil()) {
+    while (wheretoadd->find("subtye").id() != "nil" && !wheretoadd->find("subtye").is_nil()) {
       wheretoadd = (typet *)&wheretoadd->find("subtype");
     }
-    *wheretoadd = type;
+    wheretoadd->add("subtype") = type;
   }
 
   return;
