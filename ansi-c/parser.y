@@ -1265,13 +1265,13 @@ type_name:
 	| type_specifier abstract_declarator
 	{
 	  $$=$2;
-          stack($$).set("declarator", stack($1));
+          stack($$).set("subtype", stack($1));
 	}
 	| type_qualifier_list
 	| type_qualifier_list abstract_declarator
 	{
 	  $$=$2;
-          stack($$).set("declarator", stack($1));
+          stack($$).set("subtype", stack($1));
 	}
 	;
 
