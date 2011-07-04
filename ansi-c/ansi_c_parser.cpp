@@ -89,13 +89,19 @@ int yyansi_cerror(const std::string &error)
 static void insert_subtype(irept &target, const typet &type)
 {
 
+  if (target.id() == "merged_type") {
+    insert_subtype(((typet&)target).subtypes().back(), type);
+    return;
+  }
+
   const irept &atype = target.find("subtype");
   if (atype.id() == "nil" || atype.is_nil()) {
     target.add("subtype") = type;
   } else {
     typet *wheretoadd = &(typet&)target.add("subtype");
-    while (wheretoadd->id() != "nil" && !wheretoadd->is_nil())
+    while (wheretoadd->id() != "nil" && !wheretoadd->is_nil()) {
       wheretoadd = (typet *)&wheretoadd->find("subtype");
+    }
     *wheretoadd = type;
   }
 
