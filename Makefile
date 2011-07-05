@@ -20,7 +20,7 @@ util: big-int
 infrastructure: util langapi solvers goto-symex pointer-analysis \
 		goto-programs goto-symex
 
-languages: cvclang smvlang bplang ansi-c
+languages: smvlang bplang ansi-c
 
 # Ansi-c builds its library using infrastructure facilities.
 ansi-c: infrastructure
