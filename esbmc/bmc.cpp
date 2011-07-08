@@ -493,8 +493,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #else
       throw "This version of ESBMC was not compiled with minisat support";
 #endif
-
-    if(options.get_bool_option("dimacs"))
+    else if(options.get_bool_option("dimacs"))
       solver = new dimacs_solver(*this);
     else if(options.get_bool_option("bl"))
 #ifdef BOOLECTOR
