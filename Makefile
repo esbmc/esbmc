@@ -14,7 +14,7 @@ util: big-int
 infrastructure: util langapi solvers goto-symex pointer-analysis \
 		goto-programs goto-symex
 
-languages: ansi-c
+languages: ansi-c cpp
 
 # Ansi-c builds its library using infrastructure facilities.
 ansi-c: infrastructure
@@ -22,7 +22,7 @@ ansi-c: infrastructure
 ###############################################################################
 
 DIRS= big-int util langapi solvers goto-symex pointer-analysis goto-programs \
-      goto-symex ansi-c esbmc
+      goto-symex ansi-c esbmc cpp
 
 $(DIRS):
 	$(MAKE) -C $@
@@ -51,7 +51,7 @@ languages: smtlang.dir
 endif
 
 ifdef MODULE_CPP
-languages: cpp.dir
+languages: cpp
 endif
 
 ifdef MODULE_PHP
