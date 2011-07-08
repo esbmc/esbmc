@@ -1,5 +1,8 @@
 all: esbmc
 
+SATDIR= $(shell pwd)
+export SATDIR
+
 include config.inc
 include local.inc
 include common
