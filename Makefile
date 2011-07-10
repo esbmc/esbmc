@@ -1,6 +1,9 @@
 all: esbmc
 
+ifndef SATDIR
 SATDIR= $(shell pwd)
+endif
+
 export SATDIR
 
 include config.inc
