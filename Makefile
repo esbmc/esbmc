@@ -15,7 +15,7 @@ include common
 util: big-int
 
 infrastructure: util langapi solvers goto-symex pointer-analysis \
-		goto-programs goto-symex
+		goto-programs
 
 languages: ansi-c cpp
 
