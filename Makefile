@@ -17,7 +17,7 @@ util: big-int
 infrastructure: util langapi solvers goto-symex pointer-analysis \
 		goto-programs
 
-languages: ansi-c cpp
+languages: ansi-c
 
 # Ansi-c builds its library using infrastructure facilities.
 ansi-c: infrastructure
