@@ -664,7 +664,7 @@ void reachability_treet::multi_formulae_go_next_state()
       if(last_state)
       {
         if(_cur_target_state != NULL)
-        delete _cur_target_state;
+          delete _cur_target_state;
         _cur_target_state = *it;
         last_state = false;
       }
