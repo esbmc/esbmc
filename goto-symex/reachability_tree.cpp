@@ -668,6 +668,10 @@ void reachability_treet::multi_formulae_go_next_state()
         _cur_target_state = *it;
         last_state = false;
       }
+      else
+      {
+        delete *it;
+      }
       execution_states.erase(it);
     }
 
