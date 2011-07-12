@@ -54,7 +54,9 @@ public:
 	_cur_state_it = execution_states.begin();
     };
 
-	virtual ~reachability_treet() {};
+	virtual ~reachability_treet() {
+		assert(execution_states.size() == 0);
+	};
 
 	execution_statet & get_cur_state();
 	bool has_more_states();

@@ -30,6 +30,12 @@ public:
     guard_identifier_s("goto_symex::\\guard")
   {
     options.set_option("no-assertions", false);
+    art1 = NULL;
+  }
+
+  ~goto_symext() {
+    if (art1 != NULL)
+      delete art1;
   }
 
     irep_idt get_symbol(const exprt & expr);
