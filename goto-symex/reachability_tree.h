@@ -56,6 +56,8 @@ public:
 
 	virtual ~reachability_treet() {
 		assert(execution_states.size() == 0);
+		if (_cur_target_state != NULL)
+			delete _cur_target_state;
 	};
 
 	execution_statet & get_cur_state();
