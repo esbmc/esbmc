@@ -25,7 +25,7 @@ ansi-c: infrastructure
 ###############################################################################
 
 DIRS= big-int util langapi solvers goto-symex pointer-analysis goto-programs \
-      goto-symex ansi-c esbmc cpp
+      ansi-c esbmc cpp
 
 $(DIRS):
 	$(MAKE) -C $@
