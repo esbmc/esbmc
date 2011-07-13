@@ -57,7 +57,7 @@ clib32.o: c2goto library/*.c
 	$(LD) -b binary clib32.goto -o clib32.o -r
 
 clib64.o: c2goto library/*.c
-	./c2goto library/*.c --64 --output clib64.goto --no-lock-check
+	./c2goto library/*.c --32 --output clib64.goto --no-lock-check
 	$(LD) -b binary clib64.goto -o clib64.o -r
 
 clib.o: c2goto clib32.o clib64.o
