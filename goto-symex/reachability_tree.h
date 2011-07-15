@@ -49,7 +49,7 @@ public:
 	  _go_next_formula = false;
       _actual_CS_bound = _CS_bound;
       _is_same_mutex=false;
-      execution_statet *s = new execution_statet(goto_functions, ns, this, initial_level2);
+      execution_statet *s = new execution_statet(goto_functions, ns, this, initial_level2, options.get_bool_option("schedule"));
 	execution_states.push_back(s);
 	_cur_state_it = execution_states.begin();
     };

@@ -31,12 +31,13 @@ class execution_statet
 public:
 	execution_statet(const goto_functionst &goto_functions,
                 const namespacet &ns, const reachability_treet *art,
-                goto_symex_statet::level2t &l2):
+                goto_symex_statet::level2t &l2, bool _is_schedule):
 		owning_rt(art),
 		_state_level2(l2),
                 _target(ns),
                 _goto_functions(goto_functions)
 	{
+		is_schedule = _is_schedule;
 		reexecute_instruction = true;
 		reexecute_atomic = false;
 		_CS_number = 0;
@@ -89,6 +90,7 @@ public:
 
 	execution_statet& operator=(const execution_statet &ex)
 	{
+		is_schedule = ex.is_schedule;
 		_threads_state = ex._threads_state;
 		_atomic_numbers = ex._atomic_numbers;
 		_DFS_traversed = ex._DFS_traversed;
@@ -119,7 +121,10 @@ public:
 	virtual ~execution_statet() {
 		// Free all name strings and suchlike we generated on this run
 		// and no longer require
-		string_container.restore_state_snapshot(str_state);
+		// But, not if we're running with --schedule, as we'll need all
+		// that information later.
+		if (!is_schedule)
+			string_container.restore_state_snapshot(str_state);
 	};
 
     // Types
@@ -224,6 +229,9 @@ public:
     irep_idt guard_execution;
     irep_idt guard_thread;
     irep_idt _parent_guard_identifier;
+
+    // Is the "--schedule" option enabled?
+    bool is_schedule;
 
     bool reexecute_instruction; // temporarily disable context switch for the thread inherited from the last active thread
     bool reexecute_atomic; // temporarily disable context switch for the thread inherited from the last active thread
