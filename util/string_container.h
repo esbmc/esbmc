@@ -83,6 +83,10 @@ public:
   // option.
   class str_snapshot {
   public:
+    str_snapshot() {
+      idx = 0;
+    }
+
     str_snapshot(unsigned long i) {
       idx = i;
     }
