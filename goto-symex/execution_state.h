@@ -59,6 +59,8 @@ public:
 		node_count=0;
 		nondet_count = 0;
 		dynamic_counter = 0;
+
+		str_state = string_container.take_state_snapshot();
 	};
 
 	execution_statet(const execution_statet &ex) :
@@ -68,6 +70,12 @@ public:
 		_goto_functions(ex._goto_functions)
 	{
 		*this = ex;
+
+		// Don't copy string state in this copy constructor - instead
+		// take another snapshot to represent what string state was
+		// like when we began the exploration this execution_statet will
+		// perform.
+		str_state = string_container.take_state_snapshot();
 
 		// Regenerate threads state using new objects _state_level2 ref
 		_threads_state.clear();
@@ -228,6 +236,7 @@ private:
     const goto_functionst &_goto_functions;
     const goto_programt *_goto_program;
     int _CS_number;
+    string_containert::str_snapshot str_state;
 
     // Static stuff:
 
