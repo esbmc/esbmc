@@ -137,6 +137,7 @@ void string_containert::restore_state_snapshot(str_snapshot &state)
 
   // Resize string vector to remove all string ptrs too
   string_vector.erase(string_vector.begin() + state.idx, string_vector.end());
+  assert(string_vector.size() == state.idx);
 
   // Finally, pop all string records themselves from the string list.
   // It might be more efficient to use the erase method.

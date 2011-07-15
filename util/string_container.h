@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef STRING_CONTAINER_H
 #define STRING_CONTAINER_H
 
+#include <assert.h>
+
 #include <list>
 #include <vector>
 
@@ -63,11 +65,13 @@ public:
   
   const char *c_str(unsigned no) const
   {
+    assert(no < string_vector.size());
     return string_vector[no]->c_str();
   }
   
   const std::string &get_string(unsigned no) const
   {
+    assert(no < string_vector.size());
     return *string_vector[no];
   }
 
