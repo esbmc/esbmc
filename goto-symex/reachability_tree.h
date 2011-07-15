@@ -58,7 +58,7 @@ public:
 	};
 
 	execution_statet & get_cur_state();
-	void clear_terminal_state();
+	bool reset_to_unexplored_state();
 	bool has_more_states();
 	bool check_CS_bound();
 	int get_CS_bound();

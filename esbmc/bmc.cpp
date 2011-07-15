@@ -358,7 +358,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   {
     symex.multi_formulas_init(goto_functions);
 
-    while(symex.multi_formulas_has_more_formula())
+    do
     {
       equation->clear();
       symex.total_claims=0;
@@ -375,7 +375,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
           return true;
         }
       }
-    }
+    } while(symex.multi_formulas_setup_next());
   }
 
   if (symex.options.get_bool_option("all-runs"))
