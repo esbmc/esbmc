@@ -70,6 +70,31 @@ public:
   {
     return *string_vector[no];
   }
+
+  // A class recording the state of the string table at a particular point in
+  // time. Currently just wraps an integer describing the size of the string
+  // vector.
+  // The purpose of this class is so that we can explore the reachability tree
+  // of some problem, and when we're done with a portion of it we can reset the
+  // string table and eradicate strings generated during that exploration.
+  //
+  // Assumes that string identifiers have all been discarded by the time we
+  // reset the string container state, so can't be used with, say, the schedule
+  // option.
+  class str_snapshot {
+  public:
+    str_snapshot(unsigned long i) {
+      idx = i;
+    }
+
+    unsigned long idx;
+  };
+
+  str_snapshot take_state_snapshot(void) {
+    return str_snapshot(string_vector.size());
+  }
+
+  void restore_state_snapshot(str_snapshot &state);
   
 protected:
   typedef hash_map_cont<string_ptrt, unsigned, string_ptr_hash> hash_tablet;
