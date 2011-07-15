@@ -116,7 +116,11 @@ public:
 		return *this;
 	}
 
-	virtual ~execution_statet()	{};
+	virtual ~execution_statet() {
+		// Free all name strings and suchlike we generated on this run
+		// and no longer require
+		string_container.restore_state_snapshot(str_state);
+	};
 
     // Types
 
