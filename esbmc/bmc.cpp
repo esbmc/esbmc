@@ -360,7 +360,6 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
     do
     {
-      equation->clear();
       symex.total_claims=0;
       symex.remaining_claims=0;
 
