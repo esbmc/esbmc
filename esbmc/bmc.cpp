@@ -400,8 +400,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     }
     else
     {
-      symex.multi_formulas_get_next_formula();
-      equation = &symex.art1->_cur_target_state->_target;
+      equation = symex.multi_formulas_get_next_formula();
     }
   }
 

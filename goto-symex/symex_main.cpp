@@ -148,11 +148,12 @@ Function: goto_symext::multi_formulas_get_next_formula
 
 \*******************************************************************/
 
-bool goto_symext::multi_formulas_get_next_formula()
+symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
 {
   static unsigned int total_formulae = 0;
   static int total_states = 0;
 
+  art1->clear_terminal_state();
   target = &art1->get_cur_state()._target;
   art1->get_cur_state().execute_guard(ns, *target);
   while(!art1->is_go_next_formula())
@@ -170,7 +171,7 @@ bool goto_symext::multi_formulas_get_next_formula()
 //  if (art1->get_actual_CS_bound() > art1->get_CS_bound())
 //    std::cout << "**** WARNING: need to increase the number of context switches" << std::endl;
 
-  return true;
+  return &art1->reached_terminal_state->_target;
 }
 
 /*******************************************************************\

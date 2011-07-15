@@ -29,7 +29,7 @@ public:
     const namespacet &ns,
     optionst opts):
     _goto_functions(goto_functions),
-    _cur_target_state(NULL),
+    reached_terminal_state(NULL),
     _ns(ns),
     options(opts)
 	{
@@ -55,12 +55,10 @@ public:
     };
 
 	virtual ~reachability_treet() {
-		assert(execution_states.size() == 0);
-		if (_cur_target_state != NULL)
-			delete _cur_target_state;
 	};
 
 	execution_statet & get_cur_state();
+	void clear_terminal_state();
 	bool has_more_states();
 	bool check_CS_bound();
 	int get_CS_bound();
@@ -90,7 +88,8 @@ public:
     }
 
 	const goto_functionst &_goto_functions;
-    execution_statet* _cur_target_state;
+    // The current terminating execution state that we've reached
+    execution_statet* reached_terminal_state;
 	bool _go_next_formula;
     bool state_hashing;
 private:
