@@ -160,43 +160,6 @@ void z3_convt::set_smtlib(bool smt)
 }
 
 /*******************************************************************
- Function: z3_convt::set_z3_uw_models
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void z3_convt::set_z3_uw_models(bool uw_model)
-{
-  uw = uw_model;
-}
-
-/*******************************************************************
- Function: z3_convt::set_z3_relevancy
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void z3_convt::set_z3_relevancy(bool rel)
-{
-  if (rel)
-    z3_ctx = z3_api.mk_proof_context("false", uw);
-  else
-  	z3_ctx = z3_api.mk_proof_context("true", uw);
-
-  z3_prop.z3_ctx = z3_ctx;
-}
-
-/*******************************************************************
  Function: z3_convt::get_z3_encoding
 
  Inputs:

@@ -36,19 +36,27 @@ protected:
 class z3_convt:protected z3_prop_wrappert, public prop_convt
 {
 public:
-  z3_convt(std::ostream &_out):z3_prop_wrappert(_out),
+  z3_convt(std::ostream &_out, bool relevancy, bool uw):z3_prop_wrappert(_out),
                                 prop_convt(z3_prop)
-                                {
-                                  ignoring_expr=true;
-                                  max_core_size=Z3_UNSAT_CORE_LIMIT;
-                                }
+  {
+    if (z3_ctx == NULL) {
+      if (relevancy) {
+        z3_ctx = z3_api.mk_proof_context(false, uw);
+      } else {
+        z3_ctx = z3_api.mk_proof_context(true, uw);
+      }
+    }
+
+    z3_prop.z3_ctx = z3_ctx;
+    this->uw = uw;
+    ignoring_expr=true;
+    max_core_size=Z3_UNSAT_CORE_LIMIT;
+  }
 
   virtual ~z3_convt();
   Z3_lbool check2_z3_properties(void);
   void set_z3_encoding(bool enc);
   void set_smtlib(bool smt);
-  void set_z3_uw_models(bool uw_model);
-  void set_z3_relevancy(bool rel);
   bool get_z3_encoding(void) const;
   void set_filename(std::string file);
   void set_z3_ecp(bool ecp);

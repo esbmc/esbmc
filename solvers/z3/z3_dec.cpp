@@ -83,23 +83,6 @@ decision_proceduret::resultt z3_dect::dec_solve()
 
 /*******************************************************************\
 
-Function: z3_dect::set_uw_models
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void z3_dect::set_uw_models(bool uw_models)
-{
-  set_z3_uw_models(uw_models);
-}
-
-/*******************************************************************\
-
 Function: z3_dect::set_encoding
 
   Inputs:
@@ -148,23 +131,6 @@ Function: z3_dect::set_file
 void z3_dect::set_file(std::string file)
 {
   set_filename(file);
-}
-
-/*******************************************************************\
-
-Function: z3_dect::set_relevancy
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void z3_dect::set_relevancy(bool enc)
-{
-  set_z3_relevancy(enc);
 }
 
 /*******************************************************************\
