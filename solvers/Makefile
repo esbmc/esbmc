@@ -14,43 +14,20 @@ endif
 
 ###############################################################################
 
-satdir:
-	$(MAKE) -C sat
-
-qbfdir:
-	$(MAKE) -C qbf
-
-flatteningdir:
-	$(MAKE) -C flattening
-
-propdir:
-	$(MAKE) -C prop
-
-boolectordir:
-	$(MAKE) -C boolector
-
-z3dir:
-	$(MAKE) -C z3
-
-cvcdir:
-	$(MAKE) -C cvc
-
-smtdir:
-	$(MAKE) -C smt
-
-dplibdir:
-	$(MAKE) -C dplib
-
 OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
 	prop/propobj.o cvc/cvc.o smt/smt.o  dplib/dplib.o \
 	$(BOOLBUILD) $(Z3BUILD)
 
-DIRS= satdir flatteningdir qbfdir propdir cvcdir smtdir dplibdir boolectordir \
-	z3dir
+DIRS= sat flattening qbf prop cvc smt dplib boolector z3
+
+$(DIRS):
+	$(MAKE) -C $@
+
+$(OBJS): $(DIRS)
 
 .PHONY: $(DIRS)
 
-solvers.o: $(DIRS) $(OBJS)
+solvers.o: $(OBJS)
 	$(LD) $(LDFLAGS) -r -o solvers.o $(OBJS)
 
 clean:
