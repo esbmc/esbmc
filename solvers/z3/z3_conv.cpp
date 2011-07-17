@@ -32,6 +32,8 @@ static std::vector<Z3_ast> core_vector;
 static u_int unsat_core_size=0;
 static u_int number_of_assumptions=0, assumptions_status=0;
 
+extern void finalize_symbols(void);
+
 //#define DEBUG
 
 /*******************************************************************
@@ -82,6 +84,8 @@ z3_convt::~z3_convt()
   if (num_ctx_ileaves == 10000) {
     num_ctx_ileaves = 0;
     Z3_del_context(z3_ctx);
+    finalize_symbols();
+    Z3_reset_memory();
     z3_ctx = z3_api.mk_proof_context(!s_relevancy, s_is_uw);
   }
 }
