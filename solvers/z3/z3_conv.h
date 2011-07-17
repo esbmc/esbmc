@@ -47,6 +47,7 @@ public:
       }
     }
 
+    Z3_push(z3_ctx);
     z3_prop.z3_ctx = z3_ctx;
     this->uw = uw;
     ignoring_expr=true;

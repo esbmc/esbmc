@@ -73,10 +73,8 @@ z3_convt::~z3_convt()
     temp_out << smt_lib_str << std::endl;
   }
 
-  if (!uw) {
-	  Z3_del_context(z3_ctx);
-          z3_ctx = NULL;
-  }
+  if (!uw)
+	  Z3_pop(z3_ctx, 1);
 
 }
 
