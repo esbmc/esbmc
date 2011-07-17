@@ -47,6 +47,9 @@ public:
       }
     }
 
+   s_is_uw = uw;
+   s_relevancy = relevancy;
+
     Z3_push(z3_ctx);
     z3_prop.z3_ctx = z3_ctx;
     this->uw = uw;
@@ -209,7 +212,9 @@ private:
 
 public:
   static Z3_context z3_ctx;
-
+  static bool s_is_uw;
+  static bool s_relevancy;
+  static unsigned int num_ctx_ileaves; // Number of ileaves z3_ctx has handled
 };
 
 #endif
