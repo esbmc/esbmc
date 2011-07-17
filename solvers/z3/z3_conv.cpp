@@ -73,8 +73,10 @@ z3_convt::~z3_convt()
     temp_out << smt_lib_str << std::endl;
   }
 
-  if (!uw)
+  if (!uw) {
 	  Z3_del_context(z3_ctx);
+          z3_ctx = NULL;
+  }
 
 }
 
@@ -6692,3 +6694,5 @@ u_int z3_convt::get_number_variables_z3(void)
 {
   return number_variables_z3;
 }
+
+Z3_context z3_convt::z3_ctx = NULL;

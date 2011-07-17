@@ -199,13 +199,15 @@ private:
 	    max_core_size;
   z3_capi z3_api;
   bool int_encoding, ignoring_expr, equivalence_checking, uw;
-  Z3_context z3_ctx;
   //Z3_ast assumptions[Z3_UNSAT_CORE_LIMIT];
   std::vector<Z3_ast> assumptions;
   std::string filename;
 
   typedef std::map<std::string, unsigned int> union_varst;
   union_varst union_vars;
+
+public:
+  static Z3_context z3_ctx;
 
 };
 
