@@ -131,7 +131,7 @@ void ansi_c_parsert::convert_declarator(
 {
   typet *p=(typet *)&declarator;
 
-  if (declarator.id() == "declarator") {
+  if (!declarator.find("identifier").is_nil() && declarator.id() != "symbol") {
     identifier = declarator.add("identifier");
     insert_base_type((typet&)declarator.add("subtype"), type);
     declarator = declarator.add("subtype");
