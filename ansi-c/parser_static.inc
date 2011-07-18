@@ -10,28 +10,10 @@
 #define YYSTYPE_IS_TRIVIAL 1
 
 #define mto(x, y) stack(x).move_to_operands(stack(y))
+#define mts(x, y) ((typet &)stack(x)).move_to_subtypes((typet &)stack(y))
 #define binary(x, y, l, id, z) { init(x, id); \
   stack(x).location()=stack(l).location(); \
   stack(x).reserve_operands(2); mto(x, y); mto(x, z); }
-
-static void mts(typet &x, typet &t)
-{
-
-  if (t.find("declarator").id() != "nil" && !t.find("declarator").is_nil()) {
-    x.add("declarator") = t.find("declarator");
-    t.remove("declarator");
-  }
-
-  x.move_to_subtypes(t);
-  return;
-}
-
-static void mts(YYSTYPE x, YYSTYPE t)
-{
-
-  mts((typet&)stack(x),(typet&)stack(t));
-  return;
-}
 
 /*******************************************************************\
 
@@ -161,12 +143,12 @@ static void merge_types(exprt &dest, exprt &src)
   {
     locationt location=dest.location();
     typet new_type("merged_type");
-    mts(new_type, (typet&)dest);
+    new_type.move_to_subtypes((typet &)(dest));
     dest.swap(new_type);
     dest.location()=location;
   }
 
-  mts((typet&)dest, (typet&)src);
+  ((typet &)dest).move_to_subtypes((typet &)(src));
 }
 
 /*******************************************************************\
@@ -308,79 +290,11 @@ Function: do_pointer
 
 \*******************************************************************/
 
-static typet & find_sub_merged_type(typet &t)
-{
-
-  assert(t.id() == "merged_type");
-  assert(t.subtypes().size() != 0);
-  typet &end = t.subtypes().back();
-  if (end.id() == "merged_type")
-    return find_sub_merged_type(end);
-
-  return end;
-}
-
 static void do_pointer(const YYSTYPE ptr, const YYSTYPE dest)
-{
-  typet *target;
-
+{  
   set(ptr, "pointer");
-
-  if (stack(dest).id() == "merged_type")
-    target = &find_sub_merged_type((typet&)stack(dest));
-  else
-    target = (typet*) &stack(dest);
-
-  stack(ptr).add("subtype") = target->find("subtype");
-  target->add("subtype") = stack(ptr);
-
-}
-
-static void insert_subtype(irept &target, const typet &type)
-{
-
-  if (target.id() == "merged_type") {
-    insert_subtype(((typet&)target).subtypes().back(), type);
-    return;
-  }
-
-  const irept &atype = target.find("subtype");
-  if (atype.id() == "nil" || atype.is_nil()) {
-    target.add("subtype") = type;
-  } else {
-    typet *wheretoadd = &(typet&)target.add("subtype");
-    while (wheretoadd->find("subtype").id() != "nil" && !wheretoadd->find("subtype").is_nil()) {
-      wheretoadd = (typet *)&wheretoadd->find("subtype");
-    }
-    wheretoadd->add("subtype") = type;
-  }
-
-  return;
-}
-
-
-static void insert_declarator(exprt& dest, exprt& src)
-{
-
-  irept *t = &src.add("subtype");
-  if (t->is_nil() || t->id() == "") {
-    t = &dest;
-    t->add("declarator") = src;
-  } else {
-    insert_subtype(*t, (typet&)dest);
-    t->add("declarator") = src;
-    t->add("declarator").remove("subtype");
-    dest = *(exprt*&)t;
-  }
-
-  return;
-}
-
-static void insert_declarator(YYSTYPE dest, YYSTYPE src)
-{
-
-  insert_declarator(stack(dest), stack(src));
-  return;
+  stack(ptr).add("subtype").make_nil();
+  make_subtype(dest, ptr);
 }
 
 /*******************************************************************\

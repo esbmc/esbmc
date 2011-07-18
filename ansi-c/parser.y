@@ -972,7 +972,7 @@ member_declarator:
 	  if(!stack($2).is_nil())
 	  {
 	    $$=$2;
-            insert_declarator($$, $1);
+	    stack($$).add("subtype").swap(stack($1));
 	  }
 	  else
 	    $$=$1;
@@ -1264,14 +1264,14 @@ type_name:
 	type_specifier
 	| type_specifier abstract_declarator
 	{
-	  $$=$2;
-          stack($$).set("subtype", stack($1));
+	  $$=$1;
+	  make_subtype($$, $2);
 	}
 	| type_qualifier_list
 	| type_qualifier_list abstract_declarator
 	{
-	  $$=$2;
-          stack($$).set("subtype", stack($1));
+	  $$=$1;
+	  make_subtype($$, $2);
 	}
 	;
 
@@ -1719,8 +1719,8 @@ parameter_typedef_declarator:
 	typedef_name
 	| typedef_name postfixing_abstract_declarator
 	{
-	  $$=$2;
-          insert_declarator($$, $1);
+	  $$=$1;
+	  make_subtype($$, $2);
 	}
 	| clean_typedef_declarator
 	;
@@ -1747,8 +1747,8 @@ clean_postfix_typedef_declarator:	/* Declarator */
 	{
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4)! */
-	  $$=$4;
-          insert_declarator($$, $2);
+	  $$=$2;
+	  make_subtype($$, $4);
 	}
 	;
 
@@ -1784,15 +1784,15 @@ paren_postfix_typedef_declarator:	/* Declarator */
 	{ $$ = $2; }
 	| '(' simple_paren_typedef_declarator postfixing_abstract_declarator ')'
 	{	/* note: this is a function ($3) with a typedef name ($2) */
-	  $$=$3;
-          insert_declarator($$, $2);
+	  $$=$2;
+	  make_subtype($$, $3);
 	}
 	| '(' paren_typedef_declarator ')' postfixing_abstract_declarator
 	{
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4)! */
-	  $$=$4;
-          insert_declarator($$, $2);
+	  $$=$2;
+	  make_subtype($$, $4);
 	}
 	;
 
@@ -1829,8 +1829,8 @@ postfix_identifier_declarator:
         paren_identifier_declarator postfixing_abstract_declarator
 	{
 	  /* note: this is a function or array ($2) with name ($1) */
-          $$ = $2;
-          insert_declarator($$, $1);
+	  $$=$1;
+	  make_subtype($$, $2);
 	}
 	| '(' unary_identifier_declarator ')'
 	{ $$ = $2; }
@@ -1838,8 +1838,8 @@ postfix_identifier_declarator:
 	{
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4)! */
-	  $$=$4;
-          insert_declarator($$, $2);
+	  $$=$2;
+	  make_subtype($$, $4);
 	}
 	;
 
@@ -1926,11 +1926,11 @@ array_abstract_declarator:
 	| array_abstract_declarator '[' constant_expression ']'
 	{
 	  // we need to push this down
+	  $$=$1;
 	  set($2, "array");
 	  stack($2).add("size").swap(stack($3));
 	  stack($2).add("subtype").make_nil();
-          stack($2).set("subtype", stack($1));
-          $$ = $2;
+	  make_subtype($1, $2);
 	}
 	;
 
@@ -1999,8 +1999,8 @@ postfix_abstract_declarator:
 	{
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4) of pointers with name ($2)! */
-	  $$=$4;
-          insert_declarator($$, $2);
+	  $$=$2;
+	  make_subtype($$, $4);
 	}
 	;
 
@@ -2014,8 +2014,8 @@ parameter_postfix_abstract_declarator:
 	{
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4) of pointers with name ($2)! */
-	  $$=$4;
-          insert_declarator($$, $2);
+	  $$=$2;
+	  make_subtype($$, $4);
 	}
 	;
 

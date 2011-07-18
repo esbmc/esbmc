@@ -86,28 +86,6 @@ int yyansi_cerror(const std::string &error)
   return 0;
 }
 
-static void insert_subtype(irept &target, const typet &type)
-{
-
-  if (target.id() == "merged_type") {
-    insert_subtype(((typet&)target).subtypes().back(), type);
-    return;
-  }
-
-  const irept &atype = target.find("subtype");
-  if (atype.id() == "nil" || atype.is_nil()) {
-    target.add("subtype") = type;
-  } else {
-    typet *wheretoadd = &(typet&)target.add("subtype");
-    while (wheretoadd->find("subtype").id() != "nil" && !wheretoadd->find("subtype").is_nil()) {
-      wheretoadd = (typet *)&wheretoadd->find("subtype");
-    }
-    wheretoadd->add("subtype") = type;
-  }
-
-  return;
-}
-
 /*******************************************************************\
 
 Function: ansi_c_parsert::convert_declarator
@@ -126,25 +104,37 @@ void ansi_c_parsert::convert_declarator(
   irept &identifier)
 {
   typet *p=(typet *)&declarator;
+  
+  // walk down subtype until we hit nil or symbol
+  while(true)
+  {
+    typet &t=*p;
 
-  if (declarator.find("declarator").id() != "nil") {
-    identifier = declarator.find("declarator");
-    declarator.remove("declarator");
-    insert_subtype(declarator, type);
-  } else if (declarator.id() == "symbol") {
-    insert_subtype(declarator, type);
-    identifier = declarator;
-    declarator = declarator.add("subtype");
-  } else if (declarator.is_nil()) {
-    identifier.make_nil();
-    declarator = type;
-  } else {
-    // Some un-named value: a prototype parameter perhaps.
-    identifier.make_nil();
-    insert_subtype(declarator, type);
+    if(t.id()=="symbol")
+    {
+      identifier=t;
+      t=type;
+      break;
+    }
+    else if(t.id()=="")
+    {
+      std::cout << "D: " << declarator.pretty() << std::endl;
+      assert(0);
+    }
+    else if(t.is_nil())
+    {
+      identifier.make_nil();
+      t=type;
+      break;
+    }
+    else if(t.id()=="merged_type")
+    {
+      assert(!t.subtypes().empty());
+      p=&(t.subtypes().back());
+    }
+    else
+      p=&t.subtype();
   }
-
-  return;
 }
 
 /*******************************************************************\
