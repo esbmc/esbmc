@@ -1826,18 +1826,18 @@ pointer_identifier_declarator:
 	| '*' type_qualifier_list
 	{
 	  do_pointer($1, $2);
-	  $$ = $1;
+	  $$ = $2;
 	}
 	| '*' type_qualifier_list pointer_identifier_declarator
 	{
 	  do_pointer($1, $3);
-	  merge_types($1, $2);
-	  $$ = $1;
+	  merge_types($2, $3);
+	  $$ = $3;
 	}
 	| '*' pointer_identifier_declarator
 	{
 	  do_pointer($1, $2);
-	  $$ = $1;
+	  $$ = $2;
 	}
 	;
 
