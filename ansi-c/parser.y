@@ -972,7 +972,7 @@ member_declarator:
 	  if(!stack($2).is_nil())
 	  {
 	    $$=$2;
-	    stack($$).add("subtype").swap(stack($1));
+	    stack($$).add("declarator").swap(stack($1));
 	  }
 	  else
 	    $$=$1;
