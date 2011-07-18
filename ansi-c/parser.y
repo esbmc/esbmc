@@ -1705,11 +1705,6 @@ function_head:
 	}
 	;
 
-declarator:
-	identifier_declarator
-	| typedef_declarator
-	;
-
 typedef_declarator:
 	paren_typedef_declarator
 	| parameter_typedef_declarator
@@ -1803,6 +1798,11 @@ simple_paren_typedef_declarator:
 	}
 	| '(' simple_paren_typedef_declarator ')'
 	{ $$ = $2; }
+	;
+
+declarator:
+	identifier_declarator
+	| typedef_declarator
 	;
 
 identifier_declarator:
