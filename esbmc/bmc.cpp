@@ -504,8 +504,10 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #endif
     else if(options.get_bool_option("cvc"))
       solver = new cvc_solver(*this);
+#if 0
     else if(options.get_bool_option("smt"))
       solver = new smt_solver(*this);
+#endif
     else if(options.get_bool_option("z3"))
 #ifdef Z3
       solver = new z3_solver(*this);
