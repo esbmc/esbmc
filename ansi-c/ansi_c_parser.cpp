@@ -98,12 +98,45 @@ Function: ansi_c_parsert::convert_declarator
 
 \*******************************************************************/
 
+static void
+insert_base_type(typet &dest, const typet &base_type)
+{
+  typet *p = &dest;
+
+  while(true)
+  {
+    typet &t=*p;
+
+    if(t.is_nil() || t.id() == "")
+    {
+      t=base_type;
+      break;
+    }
+    else if(t.id()=="merged_type")
+    {
+      assert(!t.subtypes().empty());
+      p=&(t.subtypes().back());
+    }
+    else
+      p=&t.subtype();
+  }
+
+  return;
+}
+
 void ansi_c_parsert::convert_declarator(
   irept &declarator,
   const typet &type,
   irept &identifier)
 {
   typet *p=(typet *)&declarator;
+
+  if (declarator.id() == "declarator") {
+    identifier = declarator.add("identifier");
+    insert_base_type((typet&)declarator.add("subtype"), type);
+    declarator = declarator.add("subtype");
+    return;
+  }
   
   // walk down subtype until we hit nil or symbol
   while(true)
