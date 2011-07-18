@@ -333,7 +333,31 @@ static void do_pointer(const YYSTYPE ptr, const YYSTYPE dest)
 
   stack(ptr).add("subtype") = target->find("subtype");
   target->add("subtype") = stack(ptr);
+
 }
+
+static void insert_subtype(irept &target, const typet &type)
+{
+
+  if (target.id() == "merged_type") {
+    insert_subtype(((typet&)target).subtypes().back(), type);
+    return;
+  }
+
+  const irept &atype = target.find("subtype");
+  if (atype.id() == "nil" || atype.is_nil()) {
+    target.add("subtype") = type;
+  } else {
+    typet *wheretoadd = &(typet&)target.add("subtype");
+    while (wheretoadd->find("subtype").id() != "nil" && !wheretoadd->find("subtype").is_nil()) {
+      wheretoadd = (typet *)&wheretoadd->find("subtype");
+    }
+    wheretoadd->add("subtype") = type;
+  }
+
+  return;
+}
+
 
 static void insert_declarator(exprt& dest, exprt& src)
 {
@@ -343,7 +367,7 @@ static void insert_declarator(exprt& dest, exprt& src)
     t = &dest;
     t->add("declarator") = src;
   } else {
-    t->add("subtype") = dest;
+    insert_subtype(*t, (typet&)dest);
     t->add("declarator") = src;
     t->add("declarator").remove("subtype");
     dest = *(exprt*&)t;

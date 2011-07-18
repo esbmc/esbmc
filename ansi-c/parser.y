@@ -972,7 +972,7 @@ member_declarator:
 	  if(!stack($2).is_nil())
 	  {
 	    $$=$2;
-	    stack($$).add("declarator").swap(stack($1));
+            insert_declarator($$, $1);
 	  }
 	  else
 	    $$=$1;
@@ -1720,7 +1720,7 @@ parameter_typedef_declarator:
 	| typedef_name postfixing_abstract_declarator
 	{
 	  $$=$2;
-          stack($$).set("declarator", stack($1));
+          insert_declarator($$, $1);
 	}
 	| clean_typedef_declarator
 	;
@@ -1748,7 +1748,7 @@ clean_postfix_typedef_declarator:	/* Declarator */
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4)! */
 	  $$=$4;
-          stack($$).set("declarator", stack($2));
+          insert_declarator($$, $2);
 	}
 	;
 
@@ -1785,14 +1785,14 @@ paren_postfix_typedef_declarator:	/* Declarator */
 	| '(' simple_paren_typedef_declarator postfixing_abstract_declarator ')'
 	{	/* note: this is a function ($3) with a typedef name ($2) */
 	  $$=$3;
-          stack($$).set("declarator", stack($2));
+          insert_declarator($$, $2);
 	}
 	| '(' paren_typedef_declarator ')' postfixing_abstract_declarator
 	{
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4)! */
 	  $$=$4;
-          stack($$).set("declarator", stack($2));
+          insert_declarator($$, $2);
 	}
 	;
 
@@ -1830,7 +1830,7 @@ postfix_identifier_declarator:
 	{
 	  /* note: this is a function or array ($2) with name ($1) */
           $$ = $2;
-          stack($$).set("declarator", stack($1));
+          insert_declarator($$, $1);
 	}
 	| '(' unary_identifier_declarator ')'
 	{ $$ = $2; }
@@ -1839,7 +1839,7 @@ postfix_identifier_declarator:
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4)! */
 	  $$=$4;
-          stack($$).set("declarator", stack($2));
+          insert_declarator($$, $2);
 	}
 	;
 
@@ -2000,7 +2000,7 @@ postfix_abstract_declarator:
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4) of pointers with name ($2)! */
 	  $$=$4;
-          stack($$).set("declarator", stack($2));
+          insert_declarator($$, $2);
 	}
 	;
 
@@ -2015,7 +2015,7 @@ parameter_postfix_abstract_declarator:
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4) of pointers with name ($2)! */
 	  $$=$4;
-          stack($$).set("declarator", stack($2));
+          insert_declarator($$, $2);
 	}
 	;
 
