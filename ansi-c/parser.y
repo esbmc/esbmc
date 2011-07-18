@@ -1843,6 +1843,7 @@ direct_identifier_declarator:
 	  newstack($$);
 	  stack($$).id("declarator");
 	  stack($$).add("identifier") = stack($1);
+	  stack($$).add("subtype").make_nil();
 	}
 	| '(' identifier_declarator ')'
 	{
