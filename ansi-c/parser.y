@@ -1808,7 +1808,10 @@ simple_paren_typedef_declarator:
 identifier_declarator:
 	pointer_identifier_declarator direct_identifier_declarator
 	{
-	  assert(0);
+	  // Merge some types picked up in pointer_... with the direct_ident...
+	  // generated declarator. It may already have a type.
+	  make_subtype($2, $1);
+	  $$ = $2;
 	}
 	| direct_identifier_declarator
 	;
