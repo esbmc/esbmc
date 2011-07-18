@@ -1835,6 +1835,12 @@ pointer_identifier_declarator:
 
 direct_identifier_declarator:
 	identifier
+	{
+	  // All identifier_declarators are based from this.
+	  newstack($$);
+	  stack($$).id("declarator");
+	  stack($$).add("identifier") = stack($1);
+	}
 	| '(' identifier_declarator ')'
 	{
 		$$ = $2;
