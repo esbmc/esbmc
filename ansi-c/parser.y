@@ -1834,6 +1834,11 @@ pointer_identifier_declarator:
 	  merge_types($1, $2);
 	  $$ = $1;
 	}
+	| '*' pointer_identifier_declarator
+	{
+	  do_pointer($1, $2);
+	  $$ = $1;
+	}
 	;
 
 direct_identifier_declarator:
