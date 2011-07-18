@@ -1851,8 +1851,12 @@ direct_identifier_declarator:
 	}
 	| direct_identifier_declarator postfixing_abstract_declarator
 	{
-		$$ = $1;
-		make_subtype($$, $2);
+		// postfix will be {code,array,incomplete-array}, which we
+		// wish to preserve. So discard the existing "declarator" name
+		// and move its contents into $2.
+		$$ = $2;
+		stack($$).add("identifier") = stack($1).add("identifier");
+		make_subtype($$, $1);
 	}
 
 abstract_declarator:
