@@ -335,6 +335,30 @@ static void do_pointer(const YYSTYPE ptr, const YYSTYPE dest)
   target->add("subtype") = stack(ptr);
 }
 
+static void insert_declarator(exprt& dest, exprt& src)
+{
+
+  irept *t = &src.add("subtype");
+  if (t->is_nil() || t->id() == "") {
+    t = &dest;
+    t->add("declarator") = src;
+  } else {
+    t->add("subtype") = dest;
+    t->add("declarator") = src;
+    t->add("declarator").remove("subtype");
+    dest = *(exprt*&)t;
+  }
+
+  return;
+}
+
+static void insert_declarator(YYSTYPE dest, YYSTYPE src)
+{
+
+  insert_declarator(stack(dest), stack(src));
+  return;
+}
+
 /*******************************************************************\
 
 Function: do_enum_members
