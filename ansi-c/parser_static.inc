@@ -198,7 +198,8 @@ static void make_subtype(typet &dest, typet &src)
          src.id()=="incomplete_array" ||
          src.id()=="pointer" ||
          src.id()=="code" ||
-         src.id()=="merged_type");
+         src.id()=="merged_type" ||
+         src.id()=="declarator");
 
   typet *p=&dest;
 
