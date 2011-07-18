@@ -1856,7 +1856,10 @@ direct_identifier_declarator:
 		// and move its contents into $2.
 		$$ = $2;
 		stack($$).add("identifier") = stack($1).add("identifier");
-		make_subtype($$, $1);
+		if (stack($1).id() == "declarator")
+			make_subtype((typet&)stack($$), (typet&)stack($1).add("subtype"));
+		else
+			make_subtype($$, $1);
 	}
 
 abstract_declarator:

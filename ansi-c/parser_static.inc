@@ -193,6 +193,10 @@ static void make_subtype(typet &dest, typet &src)
   std::cout << "S: " << src.pretty() << std::endl;
   std::cout << "src.id(): " << src.id() << std::endl;
   #endif
+
+  // Inserting a nil type makes precisely no change.
+  if (src.is_nil())
+    return;
   
   assert(src.id()=="array" ||
          src.id()=="incomplete_array" ||
