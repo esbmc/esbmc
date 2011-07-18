@@ -1820,8 +1820,8 @@ pointer_identifier_declarator:
 	'*'
 	{
 	  newstack($$);
+	  stack($$).add("subtype").make_nil();
 	  do_pointer($1, $$);
-	  $$ = $1;
 	}
 	| '*' type_qualifier_list
 	{
