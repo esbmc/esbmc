@@ -1830,8 +1830,8 @@ pointer_identifier_declarator:
 	}
 	| '*' type_qualifier_list pointer_identifier_declarator
 	{
-	  merge_types($2, $3);
-	  do_pointer($1, $2);
+	  do_pointer($1, $3);
+	  merge_types($1, $2);
 	  $$ = $1;
 	}
 	;
