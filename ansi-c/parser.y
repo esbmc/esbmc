@@ -1861,10 +1861,19 @@ direct_identifier_declarator:
 		// and move its contents into $2.
 		$$ = $2;
 		stack($$).add("identifier") = stack($1).add("identifier");
-		if (stack($1).id() == "declarator")
+
+		// Complexity: if direct_identifier already has a type, then
+		// it's been declared and then bracketed. It's existing type
+		// needs to take precedence to make things like function ptrs
+		// work.
+		if (!stack($1).find("subtype").is_nil()) {
+			make_subtype($1, $$);
+			$$ = $1;
+		} else if (stack($1).id() == "declarator") {
 			make_subtype((typet&)stack($$), (typet&)stack($1).add("subtype"));
-		else
+		} else {
 			make_subtype($$, $1);
+		}
 	}
 
 abstract_declarator:
