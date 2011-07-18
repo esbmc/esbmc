@@ -218,7 +218,8 @@ static void make_subtype(typet &dest, typet &src)
     if(sub->id()=="pointer" ||
        sub->id()=="array" ||
        sub->id()=="incomplete_array" ||
-       sub->id()=="code")
+       sub->id()=="code" ||
+       sub->id()=="declarator")
     {
       // walk down
       p=&sub->subtype();    
