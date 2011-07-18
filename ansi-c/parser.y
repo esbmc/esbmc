@@ -128,7 +128,7 @@ extern char *yyansi_ctext;
 
 %start	grammar
 
-%expect 3	/* the famous "dangling `else'" ambiguity */
+%expect 10	/* the famous "dangling `else'" ambiguity */
 		/* results in one shift/reduce conflict   */
 		/* that we don't want to be reported      */
 		/* PLUS +2: KnR ambiguity */
@@ -1806,47 +1806,44 @@ simple_paren_typedef_declarator:
 	;
 
 identifier_declarator:
-	  unary_identifier_declarator
-	| paren_identifier_declarator
+	pointer_identifier_declarator direct_identifier_declarator
+	{
+	  assert(0);
+	}
+	| direct_identifier_declarator
 	;
 
-unary_identifier_declarator:
-	postfix_identifier_declarator
-	| '*' identifier_declarator
+pointer_identifier_declarator:
+	'*'
 	{
-	  $$=$2;
-	  do_pointer($1, $2);
+	  newstack($$);
+	  do_pointer($1, $$);
+	  $$ = $1;
 	}
-	| '*' type_qualifier_list identifier_declarator
+	| '*' type_qualifier_list
+	{
+	  do_pointer($1, $2);
+	  $$ = $1;
+	}
+	| '*' type_qualifier_list pointer_identifier_declarator
 	{
 	  merge_types($2, $3);
-	  $$=$2;
 	  do_pointer($1, $2);
+	  $$ = $1;
 	}
 	;
 
-postfix_identifier_declarator:
-        paren_identifier_declarator postfixing_abstract_declarator
-	{
-	  /* note: this is a function or array ($2) with name ($1) */
-	  $$=$1;
-	  make_subtype($$, $2);
-	}
-	| '(' unary_identifier_declarator ')'
-	{ $$ = $2; }
-	| '(' unary_identifier_declarator ')' postfixing_abstract_declarator
-	{
-	  /* note: this is a pointer ($2) to a function ($4) */
-	  /* or an array ($4)! */
-	  $$=$2;
-	  make_subtype($$, $4);
-	}
-	;
-
-paren_identifier_declarator:
+direct_identifier_declarator:
 	identifier
-	| '(' paren_identifier_declarator ')'
-	{ $$=$2; };
+	| '(' identifier_declarator ')'
+	{
+		$$ = $2;
+	}
+	| direct_identifier_declarator postfixing_abstract_declarator
+	{
+		$$ = $1;
+		make_subtype($$, $2);
+	}
 
 abstract_declarator:
 	unary_abstract_declarator
