@@ -1867,11 +1867,14 @@ direct_identifier_declarator:
 		// needs to take precedence to make things like function ptrs
 		// work.
 		if (!stack($1).find("subtype").is_nil()) {
+			stack($$).remove("identifier");
 			make_subtype($1, $$);
 			$$ = $1;
 		} else if (stack($1).id() == "declarator") {
+			stack($1).remove("identifier");
 			make_subtype((typet&)stack($$), (typet&)stack($1).add("subtype"));
 		} else {
+			stack($1).remove("identifier");
 			make_subtype($$, $1);
 		}
 	}
