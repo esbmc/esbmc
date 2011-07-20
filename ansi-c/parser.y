@@ -173,6 +173,8 @@ extern char *yyansi_ctext;
 %type <expr> asm_clobbered_registers asm_clobbered_registers_list
 %type <expr> KnR_parameter_header_opt KnR_parameter_header
 %type <expr> KnR_parameter_declaration function_head
+%type <expr> declarator identifier_declarator unary_identifier_declarator
+%type <expr> postfix_identifier_declarator paren_identifier_declarator
 
 %type <type> declaration_specifier type_specifier declaration_qualifier_list
 %type <type> type_qualifier_list declaration_qualifier type_qualifier
@@ -181,6 +183,14 @@ extern char *yyansi_ctext;
 %type <type> typedef_declaration_specifier typedef_type_specifier
 %type <type> typeof_type_specifier ptr_type_specifier storage_class
 %type <type> basic_type_name elaborated_type_name type_name
+%type <type> typedef_declarator paremeter_typedef_declarator
+%type <type> clean_typedef_declarator clean_postfix_typedef_declarator
+%type <type> paren_typedef_declarator paren_postfix_typedef_declarator
+%type <type> simple_paren_typedef_declarator abstract_declarator
+%type <type> parameter_abstract_declarator postfixing_abstract_declarator
+%type <type> paramter_postfixing_abstract_declarator array_abstract_declarator
+%type <type> unary_abstract_declarator parameter_unary_abstract_declarator
+%type <type> postfix_abstract_declarator parameter_postfix_abstract_declarator
 
 %{
 /************************************************************************/
