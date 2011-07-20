@@ -99,12 +99,12 @@ extern char *yyansi_ctext;
 
 /*** scanner parsed tokens (these have a value!) ***/
 
-%token	TOK_IDENTIFIER
-%token	TOK_TYPEDEFNAME
-%token	TOK_INTEGER
-%token	TOK_FLOATING
-%token	TOK_CHARACTER
-%token	TOK_STRING
+%token <expr> TOK_IDENTIFIER
+%token <type> TOK_TYPEDEFNAME
+%token <expr> TOK_INTEGER
+%token <expr> TOK_FLOATING
+%token <expr> TOK_CHARACTER
+%token <expr> TOK_STRING
 
 /*** extensions ***/
 
