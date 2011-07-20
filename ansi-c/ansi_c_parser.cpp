@@ -131,6 +131,10 @@ void ansi_c_parsert::convert_declarator(
 {
   typet *p=(typet *)&declarator;
 
+  // In aid of making ireps type safe, declarations with identifiers come in the
+  // form of ireps named {declarator,code,array,incomplete_array} with
+  // identifier subtypes.
+
   if (!declarator.find("identifier").is_nil() && declarator.id() != "symbol") {
     identifier = declarator.add("identifier");
     insert_base_type((typet&)declarator.add("subtype"), type);
