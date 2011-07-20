@@ -159,6 +159,8 @@ extern char *yyansi_ctext;
 %type <expr> enum_name enum_key enumerator_list enumerator_declaration
 %type <expr> enumerator_value_opt parameter_type_list KnR_parameter_list
 %type <expr> KnR_parameter parameter_list parameter_declaration
+%type <expr> identifier_or_typedef_name initializer_opt initializer
+%type <expr> initializer_list designated_initializer designated_initializer_list
 
 %type <type> declaration_specifier type_specifier declaration_qualifier_list
 %type <type> type_qualifier_list declaration_qualifier type_qualifier
@@ -166,7 +168,7 @@ extern char *yyansi_ctext;
 %type <type> sue_declaration_specifier sue_type_specifier
 %type <type> typedef_declaration_specifier typedef_type_specifier
 %type <type> typeof_type_specifier ptr_type_specifier storage_class
-%type <type> basic_type_name elaborated_type_name
+%type <type> basic_type_name elaborated_type_name type_name
 
 %{
 /************************************************************************/
