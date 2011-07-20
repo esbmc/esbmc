@@ -128,7 +128,7 @@ extern char *yyansi_ctext;
 
 %start	grammar
 
-%expect 98	/* the famous "dangling `else'" ambiguity */
+%expect 10	/* the famous "dangling `else'" ambiguity */
 		/* results in one shift/reduce conflict   */
 		/* that we don't want to be reported      */
 		/* PLUS +2: KnR ambiguity */
@@ -533,7 +533,7 @@ declaration:
 	{
 	  init($$);
 	}
-	| type_specifier_list ';'
+	| type_specifier ';'
 	{
 	  init($$);
 	}
@@ -590,7 +590,7 @@ declaring_list:			/* DeclarationSpec */
 	  stack($$).add("type")=stack($1);
 	  decl_statement($$, $3, $4);
 	}
-	| type_specifier_list declarator
+	| type_specifier declarator
 		{
 		  // the symbol has to be visible during initialization
 		  init($$);
@@ -616,51 +616,26 @@ declaring_list:			/* DeclarationSpec */
 	;
 
 declaration_specifier:
-	type_specifier_list
-	| declaration_qualifier_list declaration_specifier
-	{
-		$$ = $1;
-		merge_types($$, $2);
-	}
-	;
-
-type_specifier_list_w_typeof:
-	type_specifier_list typeof_type_specifier
-	{
-		$$ = $1;
-		merge_types($$, $2);
-	}
-
-type_specifier_list:
-	type_specifier
-	| type_specifier_list type_specifier
-	{
-		$$ = $1;
-		merge_types($$, $2);
-	}
-	| type_qualifier type_specifier_list
-	{
-		$$ = $1;
-		merge_types($$, $2);
-	}
+	basic_declaration_specifier
+	| sue_declaration_specifier
+	| typedef_declaration_specifier
 	;
 
 type_specifier:
-	basic_type_name
-	| elaborated_type_name
-	| typedef_name /* Had typeof_type_specifier */
+	basic_type_specifier
+	| sue_type_specifier
+	| typedef_type_specifier
+	| typeof_type_specifier
 	;
-
 
 declaration_qualifier_list:
 	storage_class
-	| type_qualifier_list
-	| storage_class declaration_qualifier_list
+	| type_qualifier_list storage_class
 	{
 	  $$=$1;
 	  merge_types($$, $2);
 	}
-	| type_qualifier_list declaration_qualifier_list
+	| declaration_qualifier_list declaration_qualifier
 	{
 	  $$=$1;
 	  merge_types($$, $2);
@@ -669,16 +644,125 @@ declaration_qualifier_list:
 
 type_qualifier_list:
 	type_qualifier
-	| type_qualifier type_qualifier_list
+	| type_qualifier_list type_qualifier
 	{
 	  $$=$1;
 	  merge_types($$, $2);
 	}
 	;
 
+declaration_qualifier:
+	storage_class
+	| type_qualifier
+	;
+
 type_qualifier:
 	TOK_CONST      { $$=$1; set($$, "const"); }
 	| TOK_VOLATILE { $$=$1; set($$, "volatile"); }
+	;
+
+basic_declaration_specifier:
+	declaration_qualifier_list basic_type_name
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| basic_type_specifier storage_class
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| basic_declaration_specifier declaration_qualifier
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| basic_declaration_specifier basic_type_name
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	};
+
+basic_type_specifier:
+	basic_type_name
+	| type_qualifier_list basic_type_name
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| basic_type_specifier type_qualifier
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| basic_type_specifier basic_type_name
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	};
+
+sue_declaration_specifier:
+	declaration_qualifier_list elaborated_type_name
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| sue_type_specifier storage_class
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| sue_declaration_specifier declaration_qualifier
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	;
+
+sue_type_specifier:
+	elaborated_type_name
+	| type_qualifier_list elaborated_type_name
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| sue_type_specifier type_qualifier
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	;
+
+typedef_declaration_specifier:	/* DeclarationSpec */
+	typedef_type_specifier storage_class
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| declaration_qualifier_list typedef_name
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| typedef_declaration_specifier declaration_qualifier
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	;
+
+typedef_type_specifier:		/* Type */
+	typedef_name
+	| type_qualifier_list typedef_name
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
+	| typedef_type_specifier type_qualifier
+	{
+	  $$=$1;
+	  merge_types($$, $2);
+	}
 	;
 
 typeof_type_specifier:
@@ -858,7 +942,7 @@ member_default_declaring_list:
 	;
 
 member_declaring_list:
-	type_specifier_list member_declarator
+	type_specifier member_declarator
 	{
 	  init($$, "declaration_list");
 
@@ -1104,6 +1188,13 @@ parameter_declaration:
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
 	}
+	| declaration_specifier parameter_typedef_declarator
+	{
+          // the second tree is really the argument -- not part
+          // of the type!
+	  init($$);
+	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	}
 	| declaration_qualifier_list
 	{
 	  init($$);
@@ -1121,19 +1212,43 @@ parameter_declaration:
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
 	}
-	type_specifier_list_w_typeof
+	| type_specifier
 	{
 	  init($$);
 	  exprt nil;
 	  nil.make_nil();
 	  PARSER.new_declaration(stack($1), nil, stack($$));
 	}
-	| type_specifier_list_w_typeof parameter_abstract_declarator
+	| type_specifier parameter_abstract_declarator
 	{
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
 	}
-	| type_specifier_list_w_typeof identifier_declarator
+	| type_specifier identifier_declarator
+	{
+	  init($$);
+	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	}
+	| type_specifier parameter_typedef_declarator
+	{
+          // the second tree is really the argument -- not part
+          // of the type!
+	  init($$);
+	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	}
+	| type_qualifier_list
+	{
+	  init($$);
+	  exprt nil;
+	  nil.make_nil();
+	  PARSER.new_declaration(stack($1), nil, stack($$));
+	}
+	| type_qualifier_list parameter_abstract_declarator
+	{
+	  init($$);
+	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	}
+	| type_qualifier_list identifier_declarator
 	{
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
@@ -1146,8 +1261,8 @@ identifier_or_typedef_name:
 	;
 
 type_name:
-	type_specifier_list
-	| type_specifier_list abstract_declarator
+	type_specifier
+	| type_specifier abstract_declarator
 	{
 	  $$=$1;
 	  make_subtype($$, $2);
@@ -1570,7 +1685,7 @@ function_head:
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
 	  create_function_scope(stack($$));
 	}
-	| type_specifier_list declarator
+	| type_specifier declarator
 	{
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
@@ -1592,8 +1707,103 @@ function_head:
 
 declarator:
 	identifier_declarator
+	| typedef_declarator
 	;
 
+typedef_declarator:
+	paren_typedef_declarator
+	| parameter_typedef_declarator
+	;
+
+parameter_typedef_declarator:
+	typedef_name
+	| typedef_name postfixing_abstract_declarator
+	{
+	  $$=$1;
+	  make_subtype($$, $2);
+	}
+	| clean_typedef_declarator
+	;
+
+clean_typedef_declarator:	/* Declarator */
+	clean_postfix_typedef_declarator
+	| '*' parameter_typedef_declarator
+	{
+	  $$=$2;
+	  do_pointer($1, $2);
+	}
+	| '*' type_qualifier_list parameter_typedef_declarator
+	{
+	  merge_types($2, $3);
+	  $$=$2;
+	  do_pointer($1, $2);
+	}
+	;
+
+clean_postfix_typedef_declarator:	/* Declarator */
+	'(' clean_typedef_declarator ')'
+	{ $$ = $2; }
+	| '(' clean_typedef_declarator ')' postfixing_abstract_declarator
+	{
+	  /* note: this is a pointer ($2) to a function ($4) */
+	  /* or an array ($4)! */
+	  $$=$2;
+	  make_subtype($$, $4);
+	}
+	;
+
+paren_typedef_declarator:	/* Declarator */
+	paren_postfix_typedef_declarator
+	| '*' '(' simple_paren_typedef_declarator ')'
+	{
+	  $$=$3;
+	  do_pointer($1, $3);
+	}
+	| '*' type_qualifier_list '(' simple_paren_typedef_declarator ')'
+	{
+	  // not sure where the type qualifiers belong
+	  merge_types($2, $4);
+	  $$=$2;
+	  do_pointer($1, $2);
+	}
+	| '*' paren_typedef_declarator
+	{
+	  $$=$2;
+	  do_pointer($1, $2);
+	}
+	| '*' type_qualifier_list paren_typedef_declarator
+	{
+	  merge_types($2, $3);
+	  $$=$2;
+	  do_pointer($1, $2);
+	}
+	;
+
+paren_postfix_typedef_declarator:	/* Declarator */
+	'(' paren_typedef_declarator ')'
+	{ $$ = $2; }
+	| '(' simple_paren_typedef_declarator postfixing_abstract_declarator ')'
+	{	/* note: this is a function ($3) with a typedef name ($2) */
+	  $$=$2;
+	  make_subtype($$, $3);
+	}
+	| '(' paren_typedef_declarator ')' postfixing_abstract_declarator
+	{
+	  /* note: this is a pointer ($2) to a function ($4) */
+	  /* or an array ($4)! */
+	  $$=$2;
+	  make_subtype($$, $4);
+	}
+	;
+
+simple_paren_typedef_declarator:
+	typedef_name
+	{
+	  assert(0);
+	}
+	| '(' simple_paren_typedef_declarator ')'
+	{ $$ = $2; }
+	;
 
 identifier_declarator:
 	pointer_identifier_declarator direct_identifier_declarator
