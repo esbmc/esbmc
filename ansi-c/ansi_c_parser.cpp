@@ -115,7 +115,16 @@ insert_base_type(typet &dest, const typet &base_type)
     else if(t.id()=="merged_type")
     {
       assert(!t.subtypes().empty());
+      // Is this the final point in this chain of types? It could be either a
+      // further {pointer,array,incomplete_array} or some qualifier. If the
+      // former, descend further; if not, insert type here.
       p=&(t.subtypes().back());
+      if (p->id() != "pointer" && p->id() != "merged_type" &&
+          p->id() != "array" && p->id() !=  "incomplete_array") {
+        t.subtypes().push_back(typet());
+        p=&(t.subtypes().back());
+        p->make_nil();
+      }
     }
     else
       p=&t.subtype();
