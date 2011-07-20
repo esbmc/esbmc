@@ -175,6 +175,7 @@ extern char *yyansi_ctext;
 %type <expr> KnR_parameter_declaration function_head
 %type <expr> declarator identifier_declarator unary_identifier_declarator
 %type <expr> postfix_identifier_declarator paren_identifier_declarator
+%type <expr> identifier integer floating character string constant
 
 %type <type> declaration_specifier type_specifier declaration_qualifier_list
 %type <type> type_qualifier_list declaration_qualifier type_qualifier
@@ -191,6 +192,7 @@ extern char *yyansi_ctext;
 %type <type> paramter_postfixing_abstract_declarator array_abstract_declarator
 %type <type> unary_abstract_declarator parameter_unary_abstract_declarator
 %type <type> postfix_abstract_declarator parameter_postfix_abstract_declarator
+%type <type> typedef_name
 
 %{
 /************************************************************************/
