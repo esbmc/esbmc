@@ -140,6 +140,10 @@ extern char *yyansi_ctext;
 		/* that we don't want to be reported      */
 		/* PLUS +2: KnR ambiguity */
 
+/* Types */
+%type <fake> grammar
+%type <expr> string_literal_list primary_expression builtin_va_arg_expression
+
 %{
 /************************************************************************/
 /*** rules **************************************************************/
