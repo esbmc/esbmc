@@ -18,6 +18,29 @@ int isatty(int f)
 
 /*******************************************************************\
 
+Function: _newstack
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+exprt &_newstack(parsert &parser, unsigned &x)
+{
+  x=parser.stack.size();
+
+  if(x>=parser.stack.capacity())
+    parser.stack.reserve(x*2);
+
+  parser.stack.push_back(static_cast<const exprt &>(get_nil_irep()));
+  return parser.stack.back();
+}
+
+/*******************************************************************\
+
 Function:
 
   Inputs:

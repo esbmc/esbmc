@@ -17,15 +17,12 @@ public:
   unsigned line_no;
   std::string last_line;
   
-  // Would like to make this a union; C++ is deficient, however.
-  struct parse_data {
-    exprt expr;
-    typet type;
-  };
-
+  std::vector<exprt> stack;
+  
   virtual void clear()
   {
     line_no=0;
+    stack.clear();
     filename.clear();
     char_buffer.clear();
   }
@@ -104,6 +101,12 @@ private:
   std::list<char> char_buffer;
 };
  
+exprt &_newstack(parsert &parser, unsigned &x);
+
+#define newstack(x) _newstack(PARSER, (x))
+
+#define stack(x) (PARSER.stack[x])
+
 #define YY_INPUT(buf,result,max_size) \
     do { \
         for(result=0; result<max_size;) \

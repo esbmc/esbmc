@@ -27,7 +27,7 @@ int isatty(int) { return 0; }
 #include <config.h>
 
 #define PARSER ansi_c_parser
-#define YYSTYPE parsert::parse_data
+#define YYSTYPE unsigned
 #undef	ECHO
 #define ECHO
 
