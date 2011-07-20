@@ -143,6 +143,14 @@ extern char *yyansi_ctext;
 /* Types */
 %type <fake> grammar
 %type <expr> string_literal_list primary_expression builtin_va_arg_expression
+%type <expr> builtin_offsetof offsetof_member_designator statement_expression
+%type <expr> postfix_expression member_name argument_expression_list
+%type <expr> unary_expression cast_expression multiplicative_expression
+%type <expr> additive_expression shift_expression relational_expression
+%type <expr> equality_expression and_expression exclusive_or_expression
+%type <expr> inclusive_or_expression logical_and_expression logica_or_expression
+%type <expr> conditional_expression assignment_expression comma_expression
+%type <expr> constant_expression comma_expression_opt
 
 %{
 /************************************************************************/
