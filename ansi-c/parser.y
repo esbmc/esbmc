@@ -131,6 +131,10 @@ extern char *yyansi_ctext;
 %token <loc> TOK_PARSE_EXPRESSION
 %token <loc> TOK_PARSE_TYPE
 
+/* Other single char terminals */
+%token <loc> '(' ')' '[' ']' '.' '*' ',' '!' '~' '-' '+' '&' '/' '%' '>' '<'
+%token <loc> '^' '|' '?' ':' '=' ';'
+
 /*** priority, associativity, etc. definitions **************************/
 
 
