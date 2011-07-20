@@ -1631,6 +1631,7 @@ msc_asm_statement:
 	;
 
 volatile_opt:
+	{ $$ = NULL }
           /* nothing */
         | TOK_VOLATILE
         ;
@@ -1692,7 +1693,7 @@ asm_clobbered_registers_list:
 /* note: the following has been changed from the ANSI-C grammar:	*/
 /*	- translation unit is allowed to be empty!			*/
 
-translation_unit:
+translation_unit: { }
 	/* nothing */
 	| external_definition_list
 	;
@@ -1729,6 +1730,7 @@ function_definition:
 
 KnR_parameter_header_opt:
           /* empty */
+	{ $$ = NULL; }
 	| KnR_parameter_header
 	;
 
