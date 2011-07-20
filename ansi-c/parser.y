@@ -1828,15 +1828,6 @@ unary_identifier_declarator:
 postfix_identifier_declarator:
 	paren_identifier_declarator postfixing_abstract_declarator
 	{
-	  $$ = $1;
-	  make_subtype($$, $2);
-	}
-	| '(' unary_identifier_declarator ')'
-	{
-		$$ = $2;
-	}
-	| '(' unary_identifier_declarator ')' postfixing_abstract_declarator
-	{
 		// postfix will be {code,array,incomplete-array}, which we
 		// wish to preserve. So discard the existing "declarator" name
 		// and move its contents into $2.
@@ -1857,6 +1848,34 @@ postfix_identifier_declarator:
 		} else {
 			stack($1).remove("identifier");
 			make_subtype($$, $1);
+		}
+	}
+	| '(' unary_identifier_declarator ')'
+	{
+		$$ = $2;
+	}
+	| '(' unary_identifier_declarator ')' postfixing_abstract_declarator
+	{
+		// postfix will be {code,array,incomplete-array}, which we
+		// wish to preserve. So discard the existing "declarator" name
+		// and move its contents into $2.
+		$$ = $4;
+		stack($$).add("identifier") = stack($2).add("identifier");
+
+		// Complexity: if direct_identifier already has a type, then
+		// it's been declared and then bracketed. It's existing type
+		// needs to take precedence to make things like function ptrs
+		// work.
+		if (!stack($2).find("subtype").is_nil()) {
+			stack($$).remove("identifier");
+			make_subtype($2, $$);
+			$$ = $2;
+		} else if (stack($2).id() == "declarator") {
+			stack($2).remove("identifier");
+			make_subtype((typet&)stack($$), (typet&)stack($2).add("subtype"));
+		} else {
+			stack($2).remove("identifier");
+			make_subtype($$, $2);
 		}
 	}
 
