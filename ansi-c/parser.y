@@ -610,36 +610,36 @@ declaration:
 default_declaring_list:
 	declaration_qualifier_list identifier_declarator
 		{
-		  init($$);
-		  PARSER.new_declaration(stack($1), stack($2), stack($$));
+		  init($<expr>$);
+		  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$));
 		}
 	initializer_opt
 		{
-		  init($$);
-		  stack($$).add("type")=stack($1);
-		  decl_statement($$, $3, $4);
+		  init($<expr>$);
+		  stack($<expr>$).add("type")=stack($1);
+		  decl_statement($<expr>$, $<expr>3, $4);
 		}
 	| type_qualifier_list identifier_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init($<expr>$);
+	  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$));
 	}
 	initializer_opt
 	{
-	  init($$);
-	  stack($$).add("type")=stack($1);
-	  decl_statement($$, $3, $4);
+	  init($<expr>$);
+	  stack($<expr>$).add("type")=stack($1);
+	  decl_statement($<expr>$, $<expr>3, $4);
 	}
 	| default_declaring_list ',' identifier_declarator
 		{
-		  init($$);
+		  init($<expr>$);
 		  const irept &t=stack($1).find("type");
-		  PARSER.new_declaration(t, stack($3), stack($$));
+		  PARSER.new_declaration(t, stack($3), stack($<expr>$));
 		}
 		initializer_opt
 	{
-	  $$=$1;
-	  decl_statement($$, $4, $5);
+	  $<expr>$=$1;
+	  decl_statement($<expr>$, $<expr>4, $5);
 	}
 	;
 
@@ -647,37 +647,37 @@ declaring_list:			/* DeclarationSpec */
 	declaration_specifier declarator
 		{
 		  // the symbol has to be visible during initialization
-		  init($$);
-		  PARSER.new_declaration(stack($1), stack($2), stack($$));
+		  init($<expr>$);
+		  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$));
 		}
 		initializer_opt
 	{
-	  init($$);
-	  stack($$).add("type")=stack($1);
-	  decl_statement($$, $3, $4);
+	  init($<expr>$);
+	  stack($<expr>$).add("type")=stack($1);
+	  decl_statement($<expr>$, $<expr>3, $4);
 	}
 	| type_specifier declarator
 		{
 		  // the symbol has to be visible during initialization
-		  init($$);
-		  PARSER.new_declaration(stack($1), stack($2), stack($$));
+		  init($<expr>$);
+		  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$));
 		}
 		initializer_opt
 	{
-	  init($$);
-	  stack($$).add("type")=stack($1);
-	  decl_statement($$, $3, $4);
+	  init($<expr>$);
+	  stack($<expr>$).add("type")=stack($1);
+	  decl_statement($<expr>$, $<expr>3, $4);
 	}
 	| declaring_list ',' declarator
 		{
-		  init($$);
+		  init($<expr>$);
 		  const irept &t=stack($1).find("type");
-		  PARSER.new_declaration(t, stack($3), stack($$));
+		  PARSER.new_declaration(t, stack($3), stack($<expr>$));
 		}
 		initializer_opt
 	{
-	  $$=$1;
-	  decl_statement($$, $4, $5);
+	  $<expr>$=$1;
+	  decl_statement($<expr>$, $<expr>4, $5);
 	}
 	;
 
@@ -905,8 +905,8 @@ aggregate_name:
 
 		  symbol.set("#base_name", PARSER.get_anon_name());
 
-		  init($$);
-		  PARSER.new_declaration(stack($1), symbol, stack($$), true);
+		  init($<expr>$);
+		  PARSER.new_declaration(stack($1), symbol, stack($<expr>$), true);
 		}
 		'{' member_declaration_list_opt '}'
 	{
@@ -922,9 +922,9 @@ aggregate_name:
 	}
 	| aggregate_key identifier_or_typedef_name
 		{
-		  PARSER.new_declaration(stack($1), stack($2), stack($$), true);
+		  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$), true);
 
-		  exprt tmp(stack($$));
+		  exprt tmp(stack($<expr>$));
 		  tmp.type().id("incomplete_"+tmp.type().id_string());
 		  PARSER.move_declaration(tmp);
 		}
@@ -1106,9 +1106,9 @@ enum_name:			/* Type */
 		  exprt symbol("symbol");
 		  symbol.set("#base_name", PARSER.get_anon_name());
 
-		  PARSER.new_declaration(stack($1), symbol, stack($$), true);
+		  PARSER.new_declaration(stack($1), symbol, stack($<expr>$), true);
 
-		  exprt tmp(stack($$));
+		  exprt tmp(stack($<expr>$));
 		  PARSER.move_declaration(tmp);
 		}
 		'{' enumerator_list '}'
@@ -1124,9 +1124,9 @@ enum_name:			/* Type */
 	}
 	| enum_key identifier_or_typedef_name
 		{ /* !!! mid-rule action !!! */
-		  PARSER.new_declaration(stack($1), stack($2), stack($$), true);
+		  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$), true);
 
-		  exprt tmp(stack($$));
+		  exprt tmp(stack($<expr>$));
 		  PARSER.move_declaration(tmp);
 		}
 		'{' enumerator_list '}'
