@@ -172,10 +172,8 @@ extern char *yyansi_ctext;
 %type <expr> compound_statement compound_scope statement_list
 %type <expr> expression_statement selection_statement
 %type <expr> declaration_or_expression_statement iteration_statement
-%type <expr> jump_statement gcc_asm_statement msc_asm_statement volatile_opt
-%type <expr> asm_commands asm_assembler_template asm_outputs asm_output
-%type <expr> asm_output_list asm_inputs asm_input asm_input_list
-%type <expr> asm_clobbered_registers asm_clobbered_registers_list
+%type <expr> jump_statement gcc_asm_statement msc_asm_statement
+%type <expr> asm_commands asm_assembler_template
 %type <expr> KnR_parameter_header_opt KnR_parameter_header
 %type <expr> KnR_parameter_declaration function_head
 %type <expr> declarator identifier_declarator unary_identifier_declarator
@@ -198,6 +196,10 @@ extern char *yyansi_ctext;
 %type <type> unary_abstract_declarator parameter_unary_abstract_declarator
 %type <type> postfix_abstract_declarator parameter_postfix_abstract_declarator
 %type <type> typedef_name aggregate_name enum_name
+
+%type <loc> volatile_opt asm_outputs asm_output
+%type <loc> asm_output_list asm_inputs asm_input asm_input_list
+%type <loc> asm_clobbered_registers asm_clobbered_registers_list
 
 %{
 /************************************************************************/
@@ -1659,6 +1661,7 @@ asm_outputs:
 
 asm_output:
           string '(' comma_expression ')'
+	{ }
         ;
 
 asm_output_list:
@@ -1672,6 +1675,7 @@ asm_inputs:
 
 asm_input:
           string '(' comma_expression ')'
+	{ }
         ;
 
 asm_input_list:
@@ -1684,6 +1688,7 @@ asm_clobbered_registers:
 
 asm_clobbered_registers_list:
           string
+	{ }
         | asm_clobbered_registers_list ',' string
         ;
 
