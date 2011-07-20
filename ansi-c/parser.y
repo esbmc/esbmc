@@ -25,6 +25,7 @@ extern char *yyansi_ctext;
 
 %union {
   exprt *expr;
+  exprt *loc;  // Might not be an exprt far in the future.
   typet *type;
   void *fake;
 };
@@ -33,68 +34,68 @@ extern char *yyansi_ctext;
 
 /*** ANSI-C keywords ***/
 
-%token	TOK_AUTO      "auto"
-%token  TOK_BOOL      "bool"
-%token	TOK_BREAK     "break"
-%token	TOK_CASE      "case"
-%token	TOK_CHAR      "char"
-%token	TOK_CONST     "const"
-%token	TOK_CONTINUE  "continue"
-%token	TOK_DEFAULT   "default"
-%token	TOK_DO        "do"
-%token	TOK_DOUBLE    "double"
-%token	TOK_ELSE      "else"
-%token	TOK_ENUM      "enum"
-%token	TOK_EXTERN    "extern"
-%token	TOK_FLOAT     "float"
-%token	TOK_FOR       "for"
-%token	TOK_GOTO      "goto"
-%token	TOK_IF        "if"
-%token  TOK_INLINE    "inline"
-%token	TOK_INT       "int"
-%token	TOK_LONG      "long"
-%token	TOK_REGISTER  "register"
-%token	TOK_RETURN    "return"
-%token	TOK_SHORT     "short"
-%token	TOK_SIGNED    "signed"
-%token	TOK_SIZEOF    "sizeof"
-%token	TOK_STATIC    "static"
-%token	TOK_STRUCT    "struct"
-%token	TOK_SWITCH    "switch"
-%token	TOK_TYPEDEF   "typedef"
-%token	TOK_UNION     "union"
-%token	TOK_UNSIGNED  "unsigned"
-%token	TOK_VOID      "void"
-%token	TOK_VOLATILE  "volatile"
-%token	TOK_WHILE     "while"
+%token <loc> TOK_AUTO      "auto"
+%token <loc> TOK_BOOL      "bool"
+%token <loc> TOK_BREAK     "break"
+%token <loc> TOK_CASE      "case"
+%token <loc> TOK_CHAR      "char"
+%token <loc> TOK_CONST     "const"
+%token <loc> TOK_CONTINUE  "continue"
+%token <loc> TOK_DEFAULT   "default"
+%token <loc> TOK_DO        "do"
+%token <loc> TOK_DOUBLE    "double"
+%token <loc> TOK_ELSE      "else"
+%token <loc> TOK_ENUM      "enum"
+%token <loc> TOK_EXTERN    "extern"
+%token <loc> TOK_FLOAT     "float"
+%token <loc> TOK_FOR       "for"
+%token <loc> TOK_GOTO      "goto"
+%token <loc> TOK_IF        "if"
+%token <loc> TOK_INLINE    "inline"
+%token <loc> TOK_INT       "int"
+%token <loc> TOK_LONG      "long"
+%token <loc> TOK_REGISTER  "register"
+%token <loc> TOK_RETURN    "return"
+%token <loc> TOK_SHORT     "short"
+%token <loc> TOK_SIGNED    "signed"
+%token <loc> TOK_SIZEOF    "sizeof"
+%token <loc> TOK_STATIC    "static"
+%token <loc> TOK_STRUCT    "struct"
+%token <loc> TOK_SWITCH    "switch"
+%token <loc> TOK_TYPEDEF   "typedef"
+%token <loc> TOK_UNION     "union"
+%token <loc> TOK_UNSIGNED  "unsigned"
+%token <loc> TOK_VOID      "void"
+%token <loc> TOK_VOLATILE  "volatile"
+%token <loc> TOK_WHILE     "while"
 
 /*** multi-character operators ***/
 
-%token	TOK_ARROW
-%token	TOK_INCR
-%token	TOK_DECR
-%token	TOK_SHIFTLEFT
-%token	TOK_SHIFTRIGHT
-%token	TOK_LE
-%token	TOK_GE
-%token	TOK_EQ
-%token	TOK_NE
-%token	TOK_ANDAND
-%token	TOK_OROR
-%token	TOK_ELLIPSIS
+%token <loc> TOK_ARROW
+%token <loc> TOK_INCR
+%token <loc> TOK_DECR
+%token <loc> TOK_SHIFTLEFT
+%token <loc> TOK_SHIFTRIGHT
+%token <loc> TOK_LE
+%token <loc> TOK_GE
+%token <loc> TOK_EQ
+%token <loc> TOK_NE
+%token <loc> TOK_ANDAND
+%token <loc> TOK_OROR
+%token <loc> TOK_ELLIPSIS
 
 /*** modifying assignment operators ***/
 
-%token	TOK_MULTASSIGN
-%token	TOK_DIVASSIGN
-%token	TOK_MODASSIGN
-%token	TOK_PLUSASSIGN
-%token	TOK_MINUSASSIGN
-%token	TOK_SLASSIGN
-%token	TOK_SRASSIGN
-%token	TOK_ANDASSIGN
-%token	TOK_EORASSIGN
-%token	TOK_ORASSIGN
+%token <loc> TOK_MULTASSIGN
+%token <loc> TOK_DIVASSIGN
+%token <loc> TOK_MODASSIGN
+%token <loc> TOK_PLUSASSIGN
+%token <loc> TOK_MINUSASSIGN
+%token <loc> TOK_SLASSIGN
+%token <loc> TOK_SRASSIGN
+%token <loc> TOK_ANDASSIGN
+%token <loc> TOK_EORASSIGN
+%token <loc> TOK_ORASSIGN
 
 /*** scanner parsed tokens (these have a value!) ***/
 
@@ -107,28 +108,28 @@ extern char *yyansi_ctext;
 
 /*** extensions ***/
 
-%token	TOK_INT8
-%token	TOK_INT16
-%token	TOK_INT32
-%token	TOK_INT64
-%token	TOK_PTR32
-%token	TOK_PTR64
-%token  TOK_TYPEOF
-%token  TOK_GCC_ASM
-%token  TOK_MSC_ASM
-%token	TOK_BUILTIN_VA_ARG
-%token	TOK_BUILTIN_OFFSETOF
+%token <loc> TOK_INT8
+%token <loc> TOK_INT16
+%token <loc> TOK_INT32
+%token <loc> TOK_INT64
+%token <loc> TOK_PTR32
+%token <loc> TOK_PTR64
+%token <loc> TOK_TYPEOF
+%token <loc> TOK_GCC_ASM
+%token <loc> TOK_MSC_ASM
+%token <loc> TOK_BUILTIN_VA_ARG
+%token <loc> TOK_BUILTIN_OFFSETOF
 
 /*** special scanner reports ***/
 
-%token	TOK_SCANNER_ERROR	/* used by scanner to report errors */
-%token	TOK_SCANNER_EOF		/* used by scanner to report end of import */
+%token <loc> TOK_SCANNER_ERROR	/* used by scanner to report errors */
+%token <loc> TOK_SCANNER_EOF	/* used by scanner to report end of import */
 
 /*** grammar selection ***/
 
-%token	TOK_PARSE_LANGUAGE
-%token	TOK_PARSE_EXPRESSION
-%token	TOK_PARSE_TYPE
+%token <loc> TOK_PARSE_LANGUAGE
+%token <loc> TOK_PARSE_EXPRESSION
+%token <loc> TOK_PARSE_TYPE
 
 /*** priority, associativity, etc. definitions **************************/
 
