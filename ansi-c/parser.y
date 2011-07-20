@@ -21,8 +21,15 @@ extern char *yyansi_ctext;
 
 #include "y.tab.h"
 
-/*** token declaration **************************************************/
 %}
+
+%union {
+  exprt *expr;
+  typet *type;
+  void *fake;
+};
+
+/*** token declaration **************************************************/
 
 /*** ANSI-C keywords ***/
 

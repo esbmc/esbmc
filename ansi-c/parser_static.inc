@@ -6,9 +6,6 @@
 
 #include <ansi-c/c_types.h>
 
-#define YYSTYPE unsigned
-#define YYSTYPE_IS_TRIVIAL 1
-
 #define mto(x, y) stack(x).move_to_operands(stack(y))
 #define mts(x, y) ((typet &)stack(x)).move_to_subtypes((typet &)stack(y))
 #define binary(x, y, l, id, z) { init(x, id); \
