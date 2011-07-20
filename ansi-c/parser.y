@@ -151,7 +151,14 @@ extern char *yyansi_ctext;
 %type <expr> inclusive_or_expression logical_and_expression logica_or_expression
 %type <expr> conditional_expression assignment_expression comma_expression
 %type <expr> constant_expression comma_expression_opt default_declaring_list
-%type <expr> declaring_list
+%type <expr> declaring_list aggregate_name aggregate_key
+%type <expr> member_declaration_list_opt member_declaration_list
+%type <expr> member_declaration member_default_declararing_list
+%type <expr> member_declaring_list member_declarator
+%type <expr> member_identifier_declarator bit_field_size_opt bit_field_size
+%type <expr> enum_name enum_key enumerator_list enumerator_declaration
+%type <expr> enumerator_value_opt parameter_type_list KnR_parameter_list
+%type <expr> KnR_parameter parameter_list parameter_declaration
 
 %type <type> declaration_specifier type_specifier declaration_qualifier_list
 %type <type> type_qualifier_list declaration_qualifier type_qualifier
