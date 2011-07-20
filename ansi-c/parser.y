@@ -910,15 +910,15 @@ aggregate_name:
 		}
 		'{' member_declaration_list_opt '}'
 	{
-	  typet &type=stack($2).type();
+	  typet &type=stack($<expr>2).type();
 	  type.add("components").get_sub().swap(stack($4).add("operands").get_sub());
 
 	  // grab symbol
 	  init($$, "symbol");
-	  stack($$).set("identifier", stack($2).get("name"));
-	  stack($$).location()=stack($2).location();
+	  stack($$).set("identifier", stack($<expr>2).get("name"));
+	  stack($$).location()=stack($<expr>2).location();
 
-	  PARSER.move_declaration(stack($2));
+	  PARSER.move_declaration(stack($<expr>2));
 	}
 	| aggregate_key identifier_or_typedef_name
 		{
@@ -930,15 +930,15 @@ aggregate_name:
 		}
 		'{' member_declaration_list_opt '}'
 	{
-	  typet &type=stack($3).type();
+	  typet &type=stack($<expr>3).type();
 	  type.add("components").get_sub().swap(stack($5).add("operands").get_sub());
 
 	  // grab symbol
 	  init($$, "symbol");
-	  stack($$).set("identifier", stack($3).get("name"));
-	  stack($$).location()=stack($3).location();
+	  stack($$).set("identifier", stack($<expr>3).get("name"));
+	  stack($$).location()=stack($<expr>3).location();
 
-	  PARSER.move_declaration(stack($3));
+	  PARSER.move_declaration(stack($<expr>3));
 	}
 	| aggregate_key identifier_or_typedef_name
 	{
@@ -1115,12 +1115,12 @@ enum_name:			/* Type */
 	{
 	  // grab symbol
 	  init($$, "symbol");
-	  stack($$).set("identifier", stack($2).get("name"));
-	  stack($$).location()=stack($2).location();
+	  stack($$).set("identifier", stack($<expr>2).get("name"));
+	  stack($$).location()=stack($<expr>2).location();
 
 	  do_enum_members((const typet &)stack($$), stack($4));
 
-	  PARSER.move_declaration(stack($2));
+	  PARSER.move_declaration(stack($<expr>2));
 	}
 	| enum_key identifier_or_typedef_name
 		{ /* !!! mid-rule action !!! */
@@ -1133,12 +1133,12 @@ enum_name:			/* Type */
 	{
 	  // grab symbol
 	  init($$, "symbol");
-	  stack($$).set("identifier", stack($3).get("name"));
-	  stack($$).location()=stack($3).location();
+	  stack($$).set("identifier", stack($<expr>3).get("name"));
+	  stack($$).location()=stack($<expr>3).location();
 
 	  do_enum_members((const typet &)stack($$), stack($5));
 
-	  PARSER.move_declaration(stack($3));
+	  PARSER.move_declaration(stack($<expr>3));
 	}
 	| enum_key identifier_or_typedef_name
 	{
