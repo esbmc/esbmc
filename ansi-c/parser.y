@@ -128,7 +128,7 @@ extern char *yyansi_ctext;
 
 %start	grammar
 
-%expect 10	/* the famous "dangling `else'" ambiguity */
+%expect 3	/* the famous "dangling `else'" ambiguity */
 		/* results in one shift/reduce conflict   */
 		/* that we don't want to be reported      */
 		/* PLUS +2: KnR ambiguity */
@@ -1806,55 +1806,36 @@ simple_paren_typedef_declarator:
 	;
 
 identifier_declarator:
-	pointer_identifier_declarator direct_identifier_declarator
-	{
-	  // Merge some types picked up in pointer_... with the direct_ident...
-	  // generated declarator. It may already have a type.
-	  make_subtype($2, $1);
-	  $$ = $2;
-	}
-	| direct_identifier_declarator
+	unary_identifier_declarator
+	| paren_identifier_declarator
 	;
 
-pointer_identifier_declarator:
-	'*'
-	{
-	  newstack($$);
-	  stack($$).add("subtype").make_nil();
-	  do_pointer($1, $$);
-	}
-	| '*' type_qualifier_list
+unary_identifier_declarator:
+	postfix_identifier_declarator
+	| '*' identifier_declarator
 	{
 	  do_pointer($1, $2);
 	  $$ = $2;
 	}
-	| '*' type_qualifier_list pointer_identifier_declarator
+	| '*' type_qualifier_list identifier_declarator
 	{
-	  do_pointer($1, $3);
 	  merge_types($2, $3);
-	  $$ = $3;
-	}
-	| '*' pointer_identifier_declarator
-	{
 	  do_pointer($1, $2);
 	  $$ = $2;
 	}
 	;
 
-direct_identifier_declarator:
-	identifier
+postfix_identifier_declarator:
+	paren_identifier_declarator postfixing_abstract_declarator
 	{
-	  // All identifier_declarators are based from this.
-	  newstack($$);
-	  stack($$).id("declarator");
-	  stack($$).add("identifier") = stack($1);
-	  stack($$).add("subtype").make_nil();
+	  $$ = $1;
+	  make_subtype($$, $2);
 	}
-	| '(' identifier_declarator ')'
+	| '(' unary_identifier_declarator ')'
 	{
 		$$ = $2;
 	}
-	| direct_identifier_declarator postfixing_abstract_declarator
+	| '(' unary_identifier_declarator ')' postfixing_abstract_declarator
 	{
 		// postfix will be {code,array,incomplete-array}, which we
 		// wish to preserve. So discard the existing "declarator" name
@@ -1878,6 +1859,21 @@ direct_identifier_declarator:
 			make_subtype($$, $1);
 		}
 	}
+
+paren_identifier_declarator:
+	identifier
+	{
+	  // All identifier_declarators are based from this.
+	  newstack($$);
+	  stack($$).id("declarator");
+	  stack($$).add("identifier") = stack($1);
+	  stack($$).add("subtype").make_nil();
+	}
+	| '(' paren_identifier_declarator ')'
+	{
+	  $$ = $2;
+	}
+	;
 
 abstract_declarator:
 	unary_abstract_declarator
