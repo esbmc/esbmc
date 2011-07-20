@@ -208,13 +208,13 @@ extern char *yyansi_ctext;
 
 /*** Grammar selection **************************************************/
 
-grammar: TOK_PARSE_LANGUAGE translation_unit
+grammar: TOK_PARSE_LANGUAGE translation_unit {}
 	| TOK_PARSE_EXPRESSION comma_expression
 	{
 	  PARSER.parse_tree.declarations.push_back(ansi_c_declarationt());
 	  PARSER.parse_tree.declarations.back().swap(stack($2));
 	}
-	| TOK_PARSE_TYPE type_name
+	| TOK_PARSE_TYPE type_name {}
 	;
 
 /*** Token with values **************************************************/
@@ -603,8 +603,8 @@ declaration:
 	{
 	  init($$);
 	}
-	| declaring_list ';'
-	| default_declaring_list ';'
+	| declaring_list ';' {}
+	| default_declaring_list ';' {}
 	;
 
 default_declaring_list:
@@ -1705,7 +1705,7 @@ external_definition_list:
 external_definition:
 	function_definition
 	| declaration
-	| ';' // empty declaration
+	| ';' {} // empty declaration
 	;
 
 function_definition:
