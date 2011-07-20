@@ -133,7 +133,7 @@ extern char *yyansi_ctext;
 
 /* Other single char terminals */
 %token <loc> '(' ')' '[' ']' '.' '*' ',' '!' '~' '-' '+' '&' '/' '%' '>' '<'
-%token <loc> '^' '|' '?' ':' '=' ';'
+%token <loc> '^' '|' '?' ':' '=' ';' '{' '}'
 
 /*** priority, associativity, etc. definitions **************************/
 
