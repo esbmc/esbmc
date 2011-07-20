@@ -1852,19 +1852,11 @@ postfix_identifier_declarator:
 	}
 	| '(' unary_identifier_declarator ')' postfixing_abstract_declarator
 	{
-		// postfix will be {code,array,incomplete-array}, which we
-		// wish to preserve. So discard the existing "declarator" name
-		// and move its contents into $2.
-		$$ = $4;
-		stack($$).add("identifier") = stack($2).add("identifier");
+		// Given the bracketing, we preserve the existing irep id and
+		// just make $4 a subtype.
 
-		if (stack($2).id() == "declarator") {
-			stack($2).remove("identifier");
-			make_subtype((typet&)stack($$), (typet&)stack($2).add("subtype"));
-		} else {
-			stack($2).remove("identifier");
-			make_subtype($$, $2);
-		}
+		$$ = $2;
+		make_subtype($$, $4);
 	}
 
 paren_identifier_declarator:
