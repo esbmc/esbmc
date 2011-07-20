@@ -1819,9 +1819,11 @@ unary_identifier_declarator:
 	}
 	| '*' type_qualifier_list identifier_declarator
 	{
-	  merge_types($2, $3);
-	  do_pointer($1, $2);
-	  $$ = $2;
+	  typet t("pointer");
+	  t.add("subtype") = (typet&)stack($3).add("subtype");
+	  merge_types((exprt&)stack($2), (exprt&)t);
+	  stack($3).add("subtype") = t;
+	  $$ = $3;
 	}
 	;
 
