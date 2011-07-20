@@ -137,8 +137,12 @@ void ansi_c_parsert::convert_declarator(
 
   if (!declarator.find("identifier").is_nil() && declarator.id() != "symbol") {
     identifier = declarator.add("identifier");
-    insert_base_type((typet&)declarator.add("subtype"), type);
     declarator.remove("identifier");
+
+    if (declarator.id() == "merged_type")
+      insert_base_type((typet&)declarator, type);
+    else
+      insert_base_type((typet&)declarator.add("subtype"), type);
 
     // Plain variables type is the "declarator" subtype. For code/arrays etc,
     // the fact that it's "code" or an array makes a difference.
