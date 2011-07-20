@@ -440,3 +440,15 @@ static void create_function_scope(exprt &expr)
     }
   }
 }
+
+void
+move_decl_info_upwards(typet &dest, typet &src)
+{
+
+  if (src.find("identifier").is_nil())
+    return;
+
+  dest.add("identifier") = src.add("identifier");
+  src.remove("identifier");
+  return;
+}

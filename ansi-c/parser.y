@@ -1817,18 +1817,15 @@ unary_identifier_declarator:
 	postfix_identifier_declarator
 	| '*' identifier_declarator
 	{
-	  typet t("pointer");
-	  t.add("subtype") = stack($2).add("subtype");
-	  stack($2).add("subtype") = t;
 	  $$ = $2;
+	  do_pointer($1, $2);
 	}
 	| '*' type_qualifier_list identifier_declarator
 	{
-	  typet t("pointer");
-	  t.add("subtype") = (typet&)stack($3).add("subtype");
-	  merge_types((exprt&)stack($2), (exprt&)t);
-	  stack($3).add("subtype") = t;
-	  $$ = $3;
+	  merge_types($2, $3);
+	  move_decl_info_upwards((typet&)stack($2), ((typet&)stack($2)).subtypes().back());
+	  $$ = $2;
+	  do_pointer($1, $2);
 	}
 	;
 
@@ -1841,15 +1838,7 @@ postfix_identifier_declarator:
 		$$ = $2;
 		stack($$).add("identifier") = stack($1).add("identifier");
 
-		// Complexity: if direct_identifier already has a type, then
-		// it's been declared and then bracketed. It's existing type
-		// needs to take precedence to make things like function ptrs
-		// work.
-		if (!stack($1).find("subtype").is_nil()) {
-			stack($$).remove("identifier");
-			make_subtype($1, $$);
-			$$ = $1;
-		} else if (stack($1).id() == "declarator") {
+		if (stack($1).id() == "declarator") {
 			stack($1).remove("identifier");
 			make_subtype((typet&)stack($$), (typet&)stack($1).add("subtype"));
 		} else {
@@ -1869,15 +1858,7 @@ postfix_identifier_declarator:
 		$$ = $4;
 		stack($$).add("identifier") = stack($2).add("identifier");
 
-		// Complexity: if direct_identifier already has a type, then
-		// it's been declared and then bracketed. It's existing type
-		// needs to take precedence to make things like function ptrs
-		// work.
-		if (!stack($2).find("subtype").is_nil()) {
-			stack($$).remove("identifier");
-			make_subtype($2, $$);
-			$$ = $2;
-		} else if (stack($2).id() == "declarator") {
+		if (stack($2).id() == "declarator") {
 			stack($2).remove("identifier");
 			make_subtype((typet&)stack($$), (typet&)stack($2).add("subtype"));
 		} else {
