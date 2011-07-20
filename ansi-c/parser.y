@@ -150,7 +150,9 @@ extern char *yyansi_ctext;
 %type <expr> equality_expression and_expression exclusive_or_expression
 %type <expr> inclusive_or_expression logical_and_expression logica_or_expression
 %type <expr> conditional_expression assignment_expression comma_expression
-%type <expr> constant_expression comma_expression_opt
+%type <expr> constant_expression comma_expression_opt default_declaring_list
+%type <expr> declaring_list
+
 
 %{
 /************************************************************************/
