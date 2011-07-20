@@ -158,12 +158,12 @@ extern char *yyansi_ctext;
 %type <expr> inclusive_or_expression logical_and_expression
 %type <expr> logical_or_expression conditional_expression assignment_expression
 %type <expr> comma_expression constant_expression comma_expression_opt
-%type <expr> default_declaring_list declaring_list aggregate_name aggregate_key
+%type <expr> default_declaring_list declaring_list aggregate_key
 %type <expr> member_declaration_list_opt member_declaration_list
 %type <expr> member_declaration member_default_declaring_list
 %type <expr> member_declaring_list member_declarator
 %type <expr> member_identifier_declarator bit_field_size_opt bit_field_size
-%type <expr> enum_name enum_key enumerator_list enumerator_declaration
+%type <expr> enum_key enumerator_list enumerator_declaration
 %type <expr> enumerator_value_opt parameter_type_list KnR_parameter_list
 %type <expr> KnR_parameter parameter_list parameter_declaration
 %type <expr> identifier_or_typedef_name initializer_opt initializer
@@ -197,7 +197,7 @@ extern char *yyansi_ctext;
 %type <type> parameter_postfixing_abstract_declarator array_abstract_declarator
 %type <type> unary_abstract_declarator parameter_unary_abstract_declarator
 %type <type> postfix_abstract_declarator parameter_postfix_abstract_declarator
-%type <type> typedef_name
+%type <type> typedef_name aggregate_name enum_name
 
 %{
 /************************************************************************/
@@ -905,40 +905,40 @@ aggregate_name:
 
 		  symbol.set("#base_name", PARSER.get_anon_name());
 
-		  init($<expr>$);
-		  PARSER.new_declaration(stack($1), symbol, stack($<expr>$), true);
+		  init($<type>$);
+		  PARSER.new_declaration(stack($1), symbol, stack($<type>$), true);
 		}
 		'{' member_declaration_list_opt '}'
 	{
-	  typet &type=stack($<expr>2).type();
+	  typet &type=stack($<type>2).type();
 	  type.add("components").get_sub().swap(stack($4).add("operands").get_sub());
 
 	  // grab symbol
 	  init($$, "symbol");
-	  stack($$).set("identifier", stack($<expr>2).get("name"));
-	  stack($$).location()=stack($<expr>2).location();
+	  stack($$).set("identifier", stack($<type>2).get("name"));
+	  stack($$).location()=stack($<type>2).location();
 
-	  PARSER.move_declaration(stack($<expr>2));
+	  PARSER.move_declaration(stack($<type>2));
 	}
 	| aggregate_key identifier_or_typedef_name
 		{
-		  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$), true);
+		  PARSER.new_declaration(stack($1), stack($2), stack($<type>$), true);
 
-		  exprt tmp(stack($<expr>$));
+		  exprt tmp(stack($<type>$));
 		  tmp.type().id("incomplete_"+tmp.type().id_string());
 		  PARSER.move_declaration(tmp);
 		}
 		'{' member_declaration_list_opt '}'
 	{
-	  typet &type=stack($<expr>3).type();
+	  typet &type=stack($<type>3).type();
 	  type.add("components").get_sub().swap(stack($5).add("operands").get_sub());
 
 	  // grab symbol
 	  init($$, "symbol");
-	  stack($$).set("identifier", stack($<expr>3).get("name"));
-	  stack($$).location()=stack($<expr>3).location();
+	  stack($$).set("identifier", stack($<type>3).get("name"));
+	  stack($$).location()=stack($<type>3).location();
 
-	  PARSER.move_declaration(stack($<expr>3));
+	  PARSER.move_declaration(stack($<type>3));
 	}
 	| aggregate_key identifier_or_typedef_name
 	{
@@ -1106,39 +1106,39 @@ enum_name:			/* Type */
 		  exprt symbol("symbol");
 		  symbol.set("#base_name", PARSER.get_anon_name());
 
-		  PARSER.new_declaration(stack($1), symbol, stack($<expr>$), true);
+		  PARSER.new_declaration(stack($1), symbol, stack($<type>$), true);
 
-		  exprt tmp(stack($<expr>$));
+		  exprt tmp(stack($<type>$));
 		  PARSER.move_declaration(tmp);
 		}
 		'{' enumerator_list '}'
 	{
 	  // grab symbol
 	  init($$, "symbol");
-	  stack($$).set("identifier", stack($<expr>2).get("name"));
-	  stack($$).location()=stack($<expr>2).location();
+	  stack($$).set("identifier", stack($<type>2).get("name"));
+	  stack($$).location()=stack($<type>2).location();
 
 	  do_enum_members((const typet &)stack($$), stack($4));
 
-	  PARSER.move_declaration(stack($<expr>2));
+	  PARSER.move_declaration(stack($<type>2));
 	}
 	| enum_key identifier_or_typedef_name
 		{ /* !!! mid-rule action !!! */
-		  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$), true);
+		  PARSER.new_declaration(stack($1), stack($2), stack($<type>$), true);
 
-		  exprt tmp(stack($<expr>$));
+		  exprt tmp(stack($<type>$));
 		  PARSER.move_declaration(tmp);
 		}
 		'{' enumerator_list '}'
 	{
 	  // grab symbol
 	  init($$, "symbol");
-	  stack($$).set("identifier", stack($<expr>3).get("name"));
-	  stack($$).location()=stack($<expr>3).location();
+	  stack($$).set("identifier", stack($<type>3).get("name"));
+	  stack($$).location()=stack($<type>3).location();
 
 	  do_enum_members((const typet &)stack($$), stack($5));
 
-	  PARSER.move_declaration(stack($<expr>3));
+	  PARSER.move_declaration(stack($<type>3));
 	}
 	| enum_key identifier_or_typedef_name
 	{
