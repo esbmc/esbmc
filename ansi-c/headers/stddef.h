@@ -1,3 +1,5 @@
+#ifndef __ESBMC_HEADERS_STDDEF_H_
+#define __ESBMC_HEADERS_STDDEF_H_
 /* stddef.h is supposed to contain various compiler specific types and
  * facilities: */
 
@@ -11,3 +13,5 @@ typedef unsigned long int size_t;
 
 /* ESBMC's ANSI-C parser handles this natively */
 #define offsetof(type, member) __builtin_offsetof(type, member)
+
+#endif /* __ESBMC_HEADERS_STDDEF_H_ */
