@@ -153,6 +153,13 @@ extern char *yyansi_ctext;
 %type <expr> constant_expression comma_expression_opt default_declaring_list
 %type <expr> declaring_list
 
+%type <type> declaration_specifier type_specifier declaration_qualifier_list
+%type <type> type_qualifier_list declaration_qualifier type_qualifier
+%type <type> basic_declaration_specifier basic_type_specifier
+%type <type> sue_declaration_specifier sue_type_specifier
+%type <type> typedef_declaration_specifier typedef_type_specifier
+%type <type> typeof_type_specifier ptr_type_specifier storage_class
+%type <type> basic_type_name elaborated_type_name
 
 %{
 /************************************************************************/
