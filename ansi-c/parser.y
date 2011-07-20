@@ -141,7 +141,9 @@ extern char *yyansi_ctext;
 		/* PLUS +2: KnR ambiguity */
 
 /* Types */
-%type <fake> grammar
+%type <fake> grammar translation_unit external_definition_list
+%type <fake> external_definition function_definition
+
 %type <expr> string_literal_list primary_expression builtin_va_arg_expression
 %type <expr> builtin_offsetof offsetof_member_designator statement_expression
 %type <expr> postfix_expression member_name argument_expression_list
