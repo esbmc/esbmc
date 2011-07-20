@@ -147,7 +147,7 @@ extern char *yyansi_ctext;
 
 /* Types */
 %type <fake> grammar translation_unit external_definition_list
-%type <fake> external_definition function_definition
+%type <fake> external_definition function_definition declaration
 
 %type <expr> string_literal_list primary_expression builtin_va_arg_expression
 %type <expr> builtin_offsetof offsetof_member_designator statement_expression
