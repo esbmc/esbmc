@@ -151,7 +151,7 @@ extern char *yyansi_ctext;
 %type <expr> additive_expression shift_expression relational_expression
 %type <expr> equality_expression and_expression exclusive_or_expression
 %type <expr> inclusive_or_expression logical_and_expression
-%type <expr> logical_or_expressionconditional_expression assignment_expression
+%type <expr> logical_or_expression conditional_expression assignment_expression
 %type <expr> comma_expression constant_expression comma_expression_opt
 %type <expr> default_declaring_list declaring_list aggregate_name aggregate_key
 %type <expr> member_declaration_list_opt member_declaration_list
@@ -184,12 +184,12 @@ extern char *yyansi_ctext;
 %type <type> typedef_declaration_specifier typedef_type_specifier
 %type <type> typeof_type_specifier ptr_type_specifier storage_class
 %type <type> basic_type_name elaborated_type_name type_name
-%type <type> typedef_declarator paremeter_typedef_declarator
+%type <type> typedef_declarator parameter_typedef_declarator
 %type <type> clean_typedef_declarator clean_postfix_typedef_declarator
 %type <type> paren_typedef_declarator paren_postfix_typedef_declarator
 %type <type> simple_paren_typedef_declarator abstract_declarator
 %type <type> parameter_abstract_declarator postfixing_abstract_declarator
-%type <type> paramter_postfixing_abstract_declarator array_abstract_declarator
+%type <type> parameter_postfixing_abstract_declarator array_abstract_declarator
 %type <type> unary_abstract_declarator parameter_unary_abstract_declarator
 %type <type> postfix_abstract_declarator parameter_postfix_abstract_declarator
 %type <type> typedef_name
