@@ -128,7 +128,7 @@ extern char *yyansi_ctext;
 
 %start	grammar
 
-%expect 10	/* the famous "dangling `else'" ambiguity */
+%expect 98	/* the famous "dangling `else'" ambiguity */
 		/* results in one shift/reduce conflict   */
 		/* that we don't want to be reported      */
 		/* PLUS +2: KnR ambiguity */
@@ -533,7 +533,7 @@ declaration:
 	{
 	  init($$);
 	}
-	| type_specifier ';'
+	| type_specifier_list ';'
 	{
 	  init($$);
 	}
@@ -590,7 +590,7 @@ declaring_list:			/* DeclarationSpec */
 	  stack($$).add("type")=stack($1);
 	  decl_statement($$, $3, $4);
 	}
-	| type_specifier declarator
+	| type_specifier_list declarator
 		{
 		  // the symbol has to be visible during initialization
 		  init($$);
@@ -616,26 +616,51 @@ declaring_list:			/* DeclarationSpec */
 	;
 
 declaration_specifier:
-	basic_declaration_specifier
-	| sue_declaration_specifier
-	| typedef_declaration_specifier
+	type_specifier_list
+	| declaration_qualifier_list declaration_specifier
+	{
+		$$ = $1;
+		merge_types($$, $2);
+	}
+	;
+
+type_specifier_list_w_typeof:
+	type_specifier_list typeof_type_specifier
+	{
+		$$ = $1;
+		merge_types($$, $2);
+	}
+
+type_specifier_list:
+	type_specifier
+	| type_specifier_list type_specifier
+	{
+		$$ = $1;
+		merge_types($$, $2);
+	}
+	| type_qualifier type_specifier_list
+	{
+		$$ = $1;
+		merge_types($$, $2);
+	}
 	;
 
 type_specifier:
-	basic_type_specifier
-	| sue_type_specifier
-	| typedef_type_specifier
-	| typeof_type_specifier
+	basic_type_name
+	| elaborated_type_name
+	| typedef_name /* Had typeof_type_specifier */
 	;
+
 
 declaration_qualifier_list:
 	storage_class
-	| type_qualifier_list storage_class
+	| type_qualifier_list
+	| storage_class declaration_qualifier_list
 	{
 	  $$=$1;
 	  merge_types($$, $2);
 	}
-	| declaration_qualifier_list declaration_qualifier
+	| type_qualifier_list declaration_qualifier_list
 	{
 	  $$=$1;
 	  merge_types($$, $2);
@@ -644,125 +669,16 @@ declaration_qualifier_list:
 
 type_qualifier_list:
 	type_qualifier
-	| type_qualifier_list type_qualifier
+	| type_qualifier type_qualifier_list
 	{
 	  $$=$1;
 	  merge_types($$, $2);
 	}
-	;
-
-declaration_qualifier:
-	storage_class
-	| type_qualifier
 	;
 
 type_qualifier:
 	TOK_CONST      { $$=$1; set($$, "const"); }
 	| TOK_VOLATILE { $$=$1; set($$, "volatile"); }
-	;
-
-basic_declaration_specifier:
-	declaration_qualifier_list basic_type_name
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| basic_type_specifier storage_class
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| basic_declaration_specifier declaration_qualifier
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| basic_declaration_specifier basic_type_name
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	};
-
-basic_type_specifier:
-	basic_type_name
-	| type_qualifier_list basic_type_name
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| basic_type_specifier type_qualifier
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| basic_type_specifier basic_type_name
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	};
-
-sue_declaration_specifier:
-	declaration_qualifier_list elaborated_type_name
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| sue_type_specifier storage_class
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| sue_declaration_specifier declaration_qualifier
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	;
-
-sue_type_specifier:
-	elaborated_type_name
-	| type_qualifier_list elaborated_type_name
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| sue_type_specifier type_qualifier
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	;
-
-typedef_declaration_specifier:	/* DeclarationSpec */
-	typedef_type_specifier storage_class
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| declaration_qualifier_list typedef_name
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| typedef_declaration_specifier declaration_qualifier
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	;
-
-typedef_type_specifier:		/* Type */
-	typedef_name
-	| type_qualifier_list typedef_name
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
-	| typedef_type_specifier type_qualifier
-	{
-	  $$=$1;
-	  merge_types($$, $2);
-	}
 	;
 
 typeof_type_specifier:
@@ -942,7 +858,7 @@ member_default_declaring_list:
 	;
 
 member_declaring_list:
-	type_specifier member_declarator
+	type_specifier_list member_declarator
 	{
 	  init($$, "declaration_list");
 
@@ -1205,36 +1121,19 @@ parameter_declaration:
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
 	}
-	| type_specifier
+	type_specifier_list_w_typeof
 	{
 	  init($$);
 	  exprt nil;
 	  nil.make_nil();
 	  PARSER.new_declaration(stack($1), nil, stack($$));
 	}
-	| type_specifier parameter_abstract_declarator
+	| type_specifier_list_w_typeof parameter_abstract_declarator
 	{
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
 	}
-	| type_specifier identifier_declarator
-	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
-	}
-	| type_qualifier_list
-	{
-	  init($$);
-	  exprt nil;
-	  nil.make_nil();
-	  PARSER.new_declaration(stack($1), nil, stack($$));
-	}
-	| type_qualifier_list parameter_abstract_declarator
-	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
-	}
-	| type_qualifier_list identifier_declarator
+	| type_specifier_list_w_typeof identifier_declarator
 	{
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
@@ -1247,8 +1146,8 @@ identifier_or_typedef_name:
 	;
 
 type_name:
-	type_specifier
-	| type_specifier abstract_declarator
+	type_specifier_list
+	| type_specifier_list abstract_declarator
 	{
 	  $$=$1;
 	  make_subtype($$, $2);
@@ -1671,7 +1570,7 @@ function_head:
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
 	  create_function_scope(stack($$));
 	}
-	| type_specifier declarator
+	| type_specifier_list declarator
 	{
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
