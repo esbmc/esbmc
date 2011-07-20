@@ -1188,13 +1188,6 @@ parameter_declaration:
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
 	}
-	| declaration_specifier parameter_typedef_declarator
-	{
-          // the second tree is really the argument -- not part
-          // of the type!
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
-	}
 	| declaration_qualifier_list
 	{
 	  init($$);
@@ -1226,13 +1219,6 @@ parameter_declaration:
 	}
 	| type_specifier identifier_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
-	}
-	| type_specifier parameter_typedef_declarator
-	{
-          // the second tree is really the argument -- not part
-          // of the type!
 	  init($$);
 	  PARSER.new_declaration(stack($1), stack($2), stack($$));
 	}
@@ -1707,103 +1693,8 @@ function_head:
 
 declarator:
 	identifier_declarator
-	| typedef_declarator
 	;
 
-typedef_declarator:
-	paren_typedef_declarator
-	| parameter_typedef_declarator
-	;
-
-parameter_typedef_declarator:
-	typedef_name
-	| typedef_name postfixing_abstract_declarator
-	{
-	  $$=$1;
-	  make_subtype($$, $2);
-	}
-	| clean_typedef_declarator
-	;
-
-clean_typedef_declarator:	/* Declarator */
-	clean_postfix_typedef_declarator
-	| '*' parameter_typedef_declarator
-	{
-	  $$=$2;
-	  do_pointer($1, $2);
-	}
-	| '*' type_qualifier_list parameter_typedef_declarator
-	{
-	  merge_types($2, $3);
-	  $$=$2;
-	  do_pointer($1, $2);
-	}
-	;
-
-clean_postfix_typedef_declarator:	/* Declarator */
-	'(' clean_typedef_declarator ')'
-	{ $$ = $2; }
-	| '(' clean_typedef_declarator ')' postfixing_abstract_declarator
-	{
-	  /* note: this is a pointer ($2) to a function ($4) */
-	  /* or an array ($4)! */
-	  $$=$2;
-	  make_subtype($$, $4);
-	}
-	;
-
-paren_typedef_declarator:	/* Declarator */
-	paren_postfix_typedef_declarator
-	| '*' '(' simple_paren_typedef_declarator ')'
-	{
-	  $$=$3;
-	  do_pointer($1, $3);
-	}
-	| '*' type_qualifier_list '(' simple_paren_typedef_declarator ')'
-	{
-	  // not sure where the type qualifiers belong
-	  merge_types($2, $4);
-	  $$=$2;
-	  do_pointer($1, $2);
-	}
-	| '*' paren_typedef_declarator
-	{
-	  $$=$2;
-	  do_pointer($1, $2);
-	}
-	| '*' type_qualifier_list paren_typedef_declarator
-	{
-	  merge_types($2, $3);
-	  $$=$2;
-	  do_pointer($1, $2);
-	}
-	;
-
-paren_postfix_typedef_declarator:	/* Declarator */
-	'(' paren_typedef_declarator ')'
-	{ $$ = $2; }
-	| '(' simple_paren_typedef_declarator postfixing_abstract_declarator ')'
-	{	/* note: this is a function ($3) with a typedef name ($2) */
-	  $$=$2;
-	  make_subtype($$, $3);
-	}
-	| '(' paren_typedef_declarator ')' postfixing_abstract_declarator
-	{
-	  /* note: this is a pointer ($2) to a function ($4) */
-	  /* or an array ($4)! */
-	  $$=$2;
-	  make_subtype($$, $4);
-	}
-	;
-
-simple_paren_typedef_declarator:
-	typedef_name
-	{
-	  assert(0);
-	}
-	| '(' simple_paren_typedef_declarator ')'
-	{ $$ = $2; }
-	;
 
 identifier_declarator:
 	pointer_identifier_declarator direct_identifier_declarator
