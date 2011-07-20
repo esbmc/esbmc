@@ -1814,7 +1814,9 @@ unary_identifier_declarator:
 	postfix_identifier_declarator
 	| '*' identifier_declarator
 	{
-	  do_pointer($1, $2);
+	  typet t("pointer");
+	  t.add("subtype") = stack($2).add("subtype");
+	  stack($2).add("subtype") = t;
 	  $$ = $2;
 	}
 	| '*' type_qualifier_list identifier_declarator
