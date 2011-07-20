@@ -1822,8 +1822,16 @@ unary_identifier_declarator:
 	}
 	| '*' type_qualifier_list identifier_declarator
 	{
-	  merge_types($2, $3);
-	  move_decl_info_upwards((typet&)stack($2), ((typet&)stack($2)).subtypes().back());
+	  if (stack($3).id() == "declarator") {
+	    exprt d = stack($3);
+	    stack($3) = (exprt&)d.add("subtype");
+	    merge_types($2, $3);
+	    d.add("subtype") = stack($2);
+	    stack($2) = d;
+	  } else  {
+	    merge_types($2, $3);
+	    move_decl_info_upwards((typet&)stack($2), ((typet&)stack($2)).subtypes().back());
+	  }
 	  $$ = $2;
 	  do_pointer($1, $2);
 	}
