@@ -972,7 +972,10 @@ member_declarator:
 	  if(!stack($2).is_nil())
 	  {
 	    $$=$2;
-	    stack($$).add("subtype").swap(stack($1));
+	    // Shift name of member upwards
+	    stack($$).add("identifier") = stack($1).add("identifier");
+	    stack($1).remove("identifier");
+	    stack($$).add("subtype") = stack($1).add("subtype");
 	  }
 	  else
 	    $$=$1;
