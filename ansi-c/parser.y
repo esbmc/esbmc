@@ -1526,7 +1526,7 @@ statement_list:
 	statement
 	{
 	  $$=$1;
-	  to_code(stack($$)).make_block();
+	  to_code(*$$).make_block();
 	}
 	| statement_list statement
 	{
@@ -1539,11 +1539,11 @@ expression_statement:
 	{
 	  $$=$2;
 
-	  if(stack($1).is_nil())
-	    statement($$, "skip");
+	  if($1->is_nil())
+	    statement(*$$, "skip");
 	  else
 	  {
-	    statement($$, "expression");
+	    statement(*$$, "expression");
 	    mto($$, $1);
 	  }
 	}
@@ -1553,14 +1553,14 @@ selection_statement:
 	  TOK_IF '(' comma_expression ')' statement
 	{
 	  $$=$1;
-	  statement($$, "ifthenelse");
+	  statement(*$$, "ifthenelse");
 	  mto($$, $3);
 	  mto($$, $5);
 	}
 	| TOK_IF '(' comma_expression ')' statement TOK_ELSE statement
 	{
 	  $$=$1;
-	  statement($$, "ifthenelse");
+	  statement(*$$, "ifthenelse");
 	  mto($$, $3);
 	  mto($$, $5);
 	  mto($$, $7);
@@ -1568,7 +1568,7 @@ selection_statement:
 	| TOK_SWITCH '(' comma_expression ')' statement
 	{
 	  $$=$1;
-	  statement($$, "switch");
+	  statement(*$$, "switch");
 	  mto($$, $3);
 	  mto($$, $5);
 	}
@@ -1583,14 +1583,14 @@ iteration_statement:
 	TOK_WHILE '(' comma_expression_opt ')' statement
 	{
 	  $$=$1;
-	  statement($$, "while");
+	  statement(*$$, "while");
 	  mto($$, $3);
 	  mto($$, $5);
 	}
 	| TOK_DO statement TOK_WHILE '(' comma_expression ')' ';'
 	{
 	  $$=$1;
-	  statement($$, "dowhile");
+	  statement(*$$, "dowhile");
 	  mto($$, $5);
 	  mto($$, $2);
 	}
@@ -1598,7 +1598,7 @@ iteration_statement:
 		comma_expression_opt ';' comma_expression_opt ')' statement
 	{
 	  $$=$1;
-	  statement($$, "for");
+	  statement(*$$, "for");
 	  mto($$, $3);
 	  mto($$, $4);
 	  mto($$, $6);
@@ -1610,39 +1610,39 @@ jump_statement:
 	TOK_GOTO identifier_or_typedef_name ';'
 	{
 	  $$=$1;
-	  statement($$, "goto");
-	  stack($$).set("destination", stack($2).get("#base_name"));
+	  statement(*$$, "goto");
+	  $$->set("destination", $2->get("#base_name"));
 	}
 	| TOK_CONTINUE ';'
-	{ $$=$1; statement($$, "continue"); }
+	{ $$=$1; statement(*$$, "continue"); }
 	| TOK_BREAK ';'
-	{ $$=$1; statement($$, "break"); }
+	{ $$=$1; statement(*$$, "break"); }
 	| TOK_RETURN ';'
-	{ $$=$1; statement($$, "return"); }
+	{ $$=$1; statement(*$$, "return"); }
 	| TOK_RETURN comma_expression ';'
-	{ $$=$1; statement($$, "return"); mto($$, $2); }
+	{ $$=$1; statement(*$$, "return"); mto($$, $2); }
 	;
 
 gcc_asm_statement:
 	TOK_GCC_ASM volatile_opt '(' asm_commands ')' ';'
 	{ $$=$1;
-	  statement($$, "asm");
-	  stack($$).set("flavor", "gcc"); }
+	  statement(*$$, "asm");
+	  $$->set("flavor", "gcc"); }
 	;
 
 msc_asm_statement:
 	TOK_MSC_ASM '{' TOK_STRING '}'
 	{ $$=$1;
-	  statement($$, "asm"); 
-	  stack($$).set("flavor", "msc"); }
+	  statement(*$$, "asm");
+	  $$->set("flavor", "msc"); }
 	| TOK_MSC_ASM TOK_STRING
 	{ $$=$1;
-	  statement($$, "asm"); 
-	  stack($$).set("flavor", "msc"); }
+	  statement(*$$, "asm");
+	  $$->set("flavor", "msc"); }
 	;
 
 volatile_opt:
-	{ $$ = NULL }
+	{ $$ = NULL; }
           /* nothing */
         | TOK_VOLATILE
         ;
@@ -1726,18 +1726,18 @@ external_definition:
 function_definition:
 	function_head KnR_parameter_header_opt compound_statement
 	{ 
-          stack($1).add("value").swap(stack($3));
+          $1->add("value").swap(*$3);
           PARSER.pop_scope();
-          PARSER.move_declaration(stack($1));
+          PARSER.move_declaration(*$1);
           PARSER.function="";
 	}
 	/* This is a GCC extension */
 	| function_head KnR_parameter_header_opt gcc_asm_statement
 	{ 
           // we ignore the value for now
-          //stack($1).add("value").swap(stack($3));
+          //$1->add("value").swap(*$3);
           PARSER.pop_scope();
-          PARSER.move_declaration(stack($1));
+          PARSER.move_declaration(*$1);
           PARSER.function="";
 	}
 	;
@@ -1759,41 +1759,41 @@ KnR_parameter_declaration: declaring_list ';'
 function_head:
 	identifier_declarator /* void */
 	{
-	  init($$);
+	  init(&$$);
 	  irept type("int");
-	  PARSER.new_declaration(type, stack($1), stack($$));
-	  create_function_scope(stack($$));
+	  PARSER.new_declaration(type, *$1, *$$);
+	  create_function_scope(*$$);
 	}
 	| declaration_specifier declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
-	  create_function_scope(stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
+	  create_function_scope(*$$);
 	}
 	| type_specifier declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
-	  create_function_scope(stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
+	  create_function_scope(*$$);
 	}
 	| declaration_qualifier_list identifier_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
-	  create_function_scope(stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
+	  create_function_scope(*$$);
 	}
 	| type_qualifier_list identifier_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
-	  create_function_scope(stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
+	  create_function_scope(*$$);
 	}
 	;
 
 declarator:
 	identifier_declarator
 	| typedef_declarator
-	{ $$ = $1; /* XXX typing */ }
+	{ $$ = (exprt*)$1; /* XXX typing */ }
 	;
 
 typedef_declarator:
