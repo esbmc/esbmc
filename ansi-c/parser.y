@@ -147,7 +147,7 @@ extern char *yyansi_ctext;
 
 /* Types */
 %type <fake> grammar translation_unit external_definition_list
-%type <fake> external_definition function_definition declaration
+%type <fake> external_definition function_definition
 
 %type <expr> string_literal_list primary_expression builtin_va_arg_expression
 %type <expr> builtin_offsetof offsetof_member_designator statement_expression
@@ -179,6 +179,7 @@ extern char *yyansi_ctext;
 %type <expr> declarator identifier_declarator unary_identifier_declarator
 %type <expr> postfix_identifier_declarator paren_identifier_declarator
 %type <expr> identifier integer floating character string constant
+%type <expr> declaration
 
 %type <type> declaration_specifier type_specifier declaration_qualifier_list
 %type <type> type_qualifier_list declaration_qualifier type_qualifier
@@ -599,12 +600,20 @@ comma_expression_opt:
 declaration:
 	declaration_specifier ';'
 	{
+	  $$ = (exprt*)$1;
 	}
 	| type_specifier ';'
 	{
+	  $$ = (exprt*)$1;
 	}
-	| declaring_list ';' {}
-	| default_declaring_list ';' {}
+	| declaring_list ';'
+	{
+	  $$ = $1;
+	}
+	| default_declaring_list ';'
+	{
+	  $$ = $1;
+	}
 	;
 
 default_declaring_list:
