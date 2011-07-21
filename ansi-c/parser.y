@@ -369,7 +369,7 @@ member_name:
 argument_expression_list:
 	assignment_expression
 	{
-	  init($$, "expression_list");
+	  init(*$$, "expression_list");
 	  mto($$, $1);
 	}
 	| argument_expression_list ',' assignment_expression
@@ -383,55 +383,55 @@ unary_expression:
 	postfix_expression
 	| TOK_INCR unary_expression
 	{ $$=$1;
-	  set($$, "sideeffect");
-	  stack($$).set("statement", "preincrement");
+	  set(*$$, "sideeffect");
+	  $$->set("statement", "preincrement");
 	  mto($$, $2);
 	}
 	| TOK_DECR unary_expression
 	{ $$=$1;
-	  set($$, "sideeffect");
-	  stack($$).set("statement", "predecrement");
+	  set(*$$, "sideeffect");
+	  $$->set("statement", "predecrement");
 	  mto($$, $2);
 	}
 	| '&' cast_expression
 	{ $$=$1;
-	  set($$, "address_of");
+	  set(*$$, "address_of");
 	  mto($$, $2);
 	}
 	| '*' cast_expression
 	{ $$=$1;
-	  set($$, "dereference");
+	  set(*$$, "dereference");
 	  mto($$, $2);
 	}
 	| '+' cast_expression
 	{ $$=$1;
-	  set($$, "unary+");
+	  set(*$$, "unary+");
 	  mto($$, $2);
 	}
 	| '-' cast_expression
 	{ $$=$1;
-	  set($$, "unary-");
+	  set(*$$, "unary-");
 	  mto($$, $2);
 	}
 	| '~' cast_expression
 	{ $$=$1;
-	  set($$, "bitnot");
+	  set(*$$, "bitnot");
 	  mto($$, $2);
 	}
 	| '!' cast_expression
 	{ $$=$1;
-	  set($$, "not");
+	  set(*$$, "not");
 	  mto($$, $2);
 	}
 	| TOK_SIZEOF unary_expression
 	{ $$=$1;
-	  set($$, "sizeof");
+	  set(*$$, "sizeof");
 	  mto($$, $2);
 	}
 	| TOK_SIZEOF '(' type_name ')'
 	{ $$=$1;
-	  set($$, "sizeof");
-	  stack($$).add("sizeof-type").swap(stack($3));
+	  set(*$$, "sizeof");
+	  $$->add("sizeof-type").swap(*$3);
 	}
 	;
 
@@ -440,20 +440,20 @@ cast_expression:
 	| '(' type_name ')' cast_expression
 	{
 	  $$=$1;
-	  set($$, "typecast");
+	  set(*$$, "typecast");
 	  mto($$, $4);
-	  stack($$).type().swap(stack($2));
+	  $$->type().swap(*$2);
 	}
 	/* The following is a GCC extension
 	   to allow a 'temporary union' */
 	| '(' type_name ')' '{' designated_initializer_list '}'
 	{
 	  exprt tmp("designated_list");
-	  tmp.operands().swap(stack($5).operands());
+	  tmp.operands().swap($5->operands());
 	  $$=$1;
-	  set($$, "typecast");
-	  stack($$).move_to_operands(tmp);
-	  stack($$).type().swap(stack($2));
+	  set(*$$, "typecast");
+	  $$->move_to_operands(tmp);
+	  $$->type().swap(*$2);
 	}
 	;
 
