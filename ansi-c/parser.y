@@ -318,45 +318,45 @@ postfix_expression:
 	{ binary($$, $1, $2, "index", $3); }
 	| postfix_expression '(' ')'
 	{ $$=$2;
-	  set($$, "sideeffect");
-	  stack($$).operands().resize(2);
-	  stack($$).op0().swap(stack($1));
-	  stack($$).op1().clear();
-	  stack($$).op1().id("arguments");
-	  stack($$).set("statement", "function_call");
+	  set(*$$, "sideeffect");
+	  $$->operands().resize(2);
+	  $$->op0().swap(*$1);
+	  $$->op1().clear();
+	  $$->op1().id("arguments");
+	  $$->set("statement", "function_call");
 	}
 	| postfix_expression '(' argument_expression_list ')'
 	{ $$=$2;
-	  init($$, "sideeffect");
-	  stack($$).set("statement", "function_call");
-	  stack($$).operands().resize(2);
-	  stack($$).op0().swap(stack($1));
-	  stack($$).op1().swap(stack($3));
-	  stack($$).op1().id("arguments");
+	  init(*$$, "sideeffect");
+	  $$->set("statement", "function_call");
+	  $$->operands().resize(2);
+	  $$->op0().swap(*$1);
+	  $$->op1().swap(*$3);
+	  $$->op1().id("arguments");
 	}
 	| postfix_expression '.' member_name
 	{ $$=$2;
-	  set($$, "member");
+	  set(*$$, "member");
 	  mto($$, $1);
-	  stack($$).set("component_name", stack($3).get("#base_name"));
+	  $$->set("component_name", $3->get("#base_name"));
 	}
 	| postfix_expression TOK_ARROW member_name
 	{ $$=$2;
-	  set($$, "ptrmember");
+	  set(*$$, "ptrmember");
 	  mto($$, $1);
-	  stack($$).set("component_name", stack($3).get("#base_name"));
+	  $$->set("component_name", $3->get("#base_name"));
 	}
 	| postfix_expression TOK_INCR
 	{ $$=$2;
-	  init($$, "sideeffect");
+	  init(*$$, "sideeffect");
 	  mto($$, $1);
-	  stack($$).set("statement", "postincrement");
+	  $$->set("statement", "postincrement");
 	}
 	| postfix_expression TOK_DECR
 	{ $$=$2;
-	  init($$, "sideeffect");
+	  init(*$$, "sideeffect");
 	  mto($$, $1);
-	  stack($$).set("statement", "postdecrement");
+	  $$->set("statement", "postdecrement");
 	}
 	;
 
