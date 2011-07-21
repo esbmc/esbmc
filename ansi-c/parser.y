@@ -307,7 +307,7 @@ offsetof_member_designator:
         ;                  
 
 statement_expression: '(' compound_statement ')'
-	{ init(*$$, "sideeffect");
+	{ init(&$$, "sideeffect");
 	  $$->set("statement", "statement_expression");
           mto($$, $2);
 	}
@@ -328,7 +328,7 @@ postfix_expression:
 	}
 	| postfix_expression '(' argument_expression_list ')'
 	{ $$=$2;
-	  init(*$$, "sideeffect");
+	  init(&$$, "sideeffect");
 	  $$->set("statement", "function_call");
 	  $$->operands().resize(2);
 	  $$->op0().swap(*$1);
@@ -349,13 +349,13 @@ postfix_expression:
 	}
 	| postfix_expression TOK_INCR
 	{ $$=$2;
-	  init(*$$, "sideeffect");
+	  init(&$$, "sideeffect");
 	  mto($$, $1);
 	  $$->set("statement", "postincrement");
 	}
 	| postfix_expression TOK_DECR
 	{ $$=$2;
-	  init(*$$, "sideeffect");
+	  init(&$$, "sideeffect");
 	  mto($$, $1);
 	  $$->set("statement", "postdecrement");
 	}
@@ -370,7 +370,7 @@ member_name:
 argument_expression_list:
 	assignment_expression
 	{
-	  init(*$$, "expression_list");
+	  init(&$$, "expression_list");
 	  mto($$, $1);
 	}
 	| argument_expression_list ',' assignment_expression
@@ -538,14 +538,14 @@ conditional_expression:
 	logical_or_expression
 	| logical_or_expression '?' comma_expression ':' conditional_expression
 	{ $$=$2;
-	  init(*$$, "if");
+	  init(&$$, "if");
 	  mto($$, $1);
 	  mto($$, $3);
 	  mto($$, $5);
 	}
 	| logical_or_expression '?' ':' conditional_expression
 	{ $$=$2;
-	  init(*$$, "sideeffect");
+	  init(&$$, "sideeffect");
 	  $$->set("statement", "gcc_conditional_expression");
 	  mto($$, $1);
 	  mto($$, $4);
@@ -923,7 +923,7 @@ aggregate_name:
 	  type.add("components").get_sub().swap($4->add("operands").get_sub());
 
 	  // grab symbol
-	  init(*$$, "symbol");
+	  init(&$$, "symbol");
 	  $$->set("identifier", $<expr>2->get("name"));
 	  $$->location()=$<expr>2->location();
 
@@ -943,7 +943,7 @@ aggregate_name:
 	  type.add("components").get_sub().swap($5->add("operands").get_sub());
 
 	  // grab symbol
-	  init(*$$, "symbol");
+	  init(&$$, "symbol");
 	  $$->set("identifier", $<expr>3->get("name"));
 	  $$->location()=$<expr>3->location();
 
@@ -966,7 +966,7 @@ aggregate_key:
 member_declaration_list_opt:
 		  /* Nothing */
 	{
-	  init(*$$, "declaration_list");
+	  init(&$$, "declaration_list");
 	}
 	| member_declaration_list
 	;
@@ -989,14 +989,14 @@ member_declaration:
 	| member_default_declaring_list ';'
 	| ';' /* empty declaration */
 	{
-	  init(*$$, "declaration_list");
+	  init(&$$, "declaration_list");
 	}
 	;
 
 member_default_declaring_list:
 	type_qualifier_list member_identifier_declarator
 	{
-	  init(*$$, "declaration_list");
+	  init(&$$, "declaration_list");
 
 	  exprt declaration;
 
@@ -1019,7 +1019,7 @@ member_default_declaring_list:
 member_declaring_list:
 	type_specifier member_declarator
 	{
-	  init(*$$, "declaration_list");
+	  init(&$$, "declaration_list");
 
 	  // save the type_specifier
 	  $$->add("declaration_type")=*$1;
@@ -1124,7 +1124,7 @@ enum_name:			/* Type */
 		'{' enumerator_list '}'
 	{
 	  // grab symbol
-	  init(*$$, "symbol");
+	  init(&$$, "symbol");
 	  $$->set("identifier", $<expr>2->get("name"));
 	  $$->location()=$<expr>2->location();
 
@@ -1143,7 +1143,7 @@ enum_name:			/* Type */
 		'{' enumerator_list '}'
 	{
 	  // grab symbol
-	  init(*$$, "symbol");
+	  init(&$$, "symbol");
 	  $$->set("identifier", $<expr>3->get("name"));
 	  $$->location()=$<expr>3->location();
 
@@ -1219,7 +1219,7 @@ parameter_type_list:		/* ParameterList */
 KnR_parameter_list:
 	KnR_parameter
 	{
-          init(*$$, "arguments");
+          init(&$$, "arguments");
           mts((typet*)$$, (typet*)$1);
 	}
 	| KnR_parameter_list ',' KnR_parameter
@@ -1240,7 +1240,7 @@ KnR_parameter: identifier
 parameter_list:
 	parameter_declaration
 	{
-	  init(*$$, "arguments");
+	  init(&$$, "arguments");
 	  mts((typet*)$$, (typet*)$1);
 	}
 	| parameter_list ',' parameter_declaration

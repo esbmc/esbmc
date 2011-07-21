@@ -8,7 +8,7 @@
 
 #define mto(x, y) (x)->move_to_operands(*(y))
 #define mts(x, y) (x)->move_to_subtypes(*(y))
-#define binary(x, y, l, id, z) { init(*(x), (id)); \
+#define binary(x, y, l, id, z) { init(&(x), (id)); \
   (x)->location()=(l)->location(); \
   (x)->reserve_operands(2); mto((x), (y)); mto((x), (z)); }
 
@@ -22,14 +22,16 @@ static void init(typet **e)
   *e = new typet();
 }
 
-static void init(exprt &expr, const std::string &id)
+static void init(exprt **expr, const std::string &id)
 {
-  expr.id(id);
+  init(expr);
+  (*expr)->id(id);
 }
 
-static void init(typet &type, const std::string &id)
+static void init(typet **type, const std::string &id)
 {
-  type.id(id);
+  init(type);
+  (*type)->id(id);
 }
 
 static void set(irept &expr, const std::string &id)
