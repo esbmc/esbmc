@@ -27,14 +27,14 @@ int isatty(int) { return 0; }
 #include <config.h>
 
 #define PARSER ansi_c_parser
-#define YYSTYPE unsigned
 #undef	ECHO
 #define ECHO
 
 #include "ansi_c_parser.h"
+#include "parser_static.inc"
 #include "y.tab.h"
 
-#define loc() { newstack(yyansi_clval); PARSER.set_location(stack(yyansi_clval)); }
+#define loc() { init(&yyansi_clval.loc); PARSER.set_location(*yyansi_clval.loc); }
 
 /*** macros for easier rule definition **********************************/
 %}
