@@ -214,7 +214,7 @@ grammar: TOK_PARSE_LANGUAGE translation_unit {}
 	| TOK_PARSE_EXPRESSION comma_expression
 	{
 	  PARSER.parse_tree.declarations.push_back(ansi_c_declarationt());
-	  PARSER.parse_tree.declarations.back().swap(stack($2));
+	  PARSER.parse_tree.declarations.back().swap(*$2);
 	}
 	| TOK_PARSE_TYPE type_name {}
 	;
@@ -263,8 +263,7 @@ string_literal_list:
 	| string_literal_list string
 	{ $$ = $1;
 	  // do concatenation
-	  stack($$).set("value", stack($$).get_string("value")+
-	    stack($2).get_string("value"));
+	  $$->set("value", $$->get_string("value")+$2->get_string("value"));
 	}
 	;
 
@@ -284,9 +283,9 @@ builtin_va_arg_expression:
 	TOK_BUILTIN_VA_ARG '(' assignment_expression ',' type_name ')'
 	{
 	  $$=$1;
-	  stack($$).id("builtin_va_arg");
+	  $$->id("builtin_va_arg");
 	  mto($$, $3);
-	  stack($$).type().swap(stack($5));
+	  $$->type().swap(*$5);
 	}
 	;
 
@@ -294,9 +293,9 @@ builtin_offsetof:
 	TOK_BUILTIN_OFFSETOF '(' type_name ',' offsetof_member_designator ')'
 	{
 	  $$=$1;
-	  stack($$).id("builtin_offsetof");
-	  stack($$).add("offsetof_type").swap(stack($3));
-	  stack($$).add("member").swap(stack($5));
+	  $$->id("builtin_offsetof");
+	  $$->add("offsetof_type").swap(*$3);
+	  $$->add("member").swap(*$5);
 	}
 	;
 
@@ -307,8 +306,8 @@ offsetof_member_designator:
         ;                  
 
 statement_expression: '(' compound_statement ')'
-	{ init($$, "sideeffect");
-	  stack($$).set("statement", "statement_expression");
+	{ init(*$$, "sideeffect");
+	  $$->set("statement", "statement_expression");
           mto($$, $2);
 	}
 	;
