@@ -6,11 +6,11 @@
 
 #include <ansi-c/c_types.h>
 
-#define mto(x, y) x->move_to_operands(*y)
-#define mts(x, y) (x->move_to_subtypes(*y)
-#define binary(x, y, l, id, z) { init(*x, id); \
-  x->location()=l->location(); \
-  x->reserve_operands(2); mto(x, y); mto(x, z); }
+#define mto(x, y) (x)->move_to_operands(*(y))
+#define mts(x, y) (x)->move_to_subtypes(*(y))
+#define binary(x, y, l, id, z) { init(*(x), (id)); \
+  (x)->location()=(l)->location(); \
+  (x)->reserve_operands(2); mto((x), (y)); mto((x), (z)); }
 
 static void init(exprt **e)
 {
