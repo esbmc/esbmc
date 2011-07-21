@@ -12,6 +12,11 @@
   x->location()=l->location(); \
   x->reserve_operands(2); mto(x, y); mto(x, z); }
 
+static void init(exprt **e)
+{
+  *e = new exprt();
+}
+
 static void init(exprt &expr, const std::string &id)
 {
   expr.id(id);
