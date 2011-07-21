@@ -151,16 +151,16 @@ void ansi_c_scanner_init()
 	}
 
 <GRAMMAR>"L"?[']{c_char}+['] {
-                  loc();
-                  convert_character_literal(yytext, stack(yyansi_clval));
-                  PARSER.set_location(stack(yyansi_clval));
+                  init(&yyansi_clval.expr);
+                  convert_character_literal(yytext, *yyansi_clval.expr);
+                  PARSER.set_location(*yyansi_clval.expr);
                   return TOK_CHARACTER;
                 }
 
 <GRAMMAR>"L"?["]{s_char}*["] {
-                  loc();
-                  convert_string_literal(yytext, stack(yyansi_clval));
-                  PARSER.set_location(stack(yyansi_clval));
+                  init(&yyansi_clval.expr);
+                  convert_string_literal(yytext, *yyansi_clval.expr);
+                  PARSER.set_location(*yyansi_clval.expr);
                   return TOK_STRING;
                 }
 
@@ -296,13 +296,15 @@ void ansi_c_scanner_init()
 }
 
 <MSC_ASM1>{ws}"{" { BEGIN(MSC_ASM2); return '{'; }
-<MSC_ASM1>.*    { loc();
-                  stack(yyansi_clval).set("value", yytext);
+<MSC_ASM1>.*    {
+                  init(&yyansi_clval.expr);
+                  yyansi_clval.expr->set("value", yytext);
                   BEGIN(GRAMMAR);
 		  return(TOK_STRING); }
 
-<MSC_ASM2>[^}]* { loc();
-                  stack(yyansi_clval).set("value", yytext);
+<MSC_ASM2>[^}]* {
+                  init(&yyansi_clval.expr);
+                  yyansi_clval.expr->set("value", yytext);
 		  return(TOK_STRING); }
 <MSC_ASM2>"}"   { BEGIN(GRAMMAR); return '}'; }
 
@@ -346,8 +348,9 @@ void ansi_c_scanner_init()
 }
 
 <GRAMMAR>{
-{identifier}	{ loc();
-
+{identifier}	{
+                  int token;
+                  irept *i;
                   std::string base_name(yytext);
                   std::string identifier(base_name);
 
@@ -355,21 +358,29 @@ void ansi_c_scanner_init()
                     PARSER.lookup(identifier, PARSER.tag_following);
                   PARSER.tag_following=false;
 
-                  stack(yyansi_clval).id("symbol");
-                  stack(yyansi_clval).set("#base_name", base_name);
-                  stack(yyansi_clval).set("identifier", identifier);
-                  stack(yyansi_clval).set("#id_class", result);
+                  if(result==ANSI_C_TYPEDEF) {
+                    token = TOK_TYPEDEFNAME;
+                    init(&yyansi_clval.type);
+                    i = yyansi_clval.type;
+                  } else {
+                    token = TOK_IDENTIFIER;
+                    init(&yyansi_clval.expr);
+                    i = yyansi_clval.expr;
+                  }
 
-                  if(result==ANSI_C_TYPEDEF)
-                    return TOK_TYPEDEFNAME;
-                  else
-                    return TOK_IDENTIFIER;
+                  PARSER.set_location((exprt&)*i);
+                  i->id("symbol");
+                  i->set("#base_name", base_name);
+                  i->set("identifier", identifier);
+                  i->set("#id_class", result);
+                  return token;
 		}
 
-{decinteger}	{ loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).set("value", yytext);
+{decinteger}	{
+                  init(&yyansi_clval.expr);
+                  yyansi_clval.expr->id("constant");
+                  yyansi_clval.expr->type()=typet("integer");
+                  yyansi_clval.expr->set("value", yytext);
 		  return(TOK_INTEGER);
 		}
 {decinteger_w}  { loc();
