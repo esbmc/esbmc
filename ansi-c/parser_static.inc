@@ -129,7 +129,7 @@ Function: merge_types
 
 \*******************************************************************/
 
-static void merge_types(exprt &dest, exprt &src)
+static void merge_types(typet &dest, typet &src)
 {
 
   if(dest.id()!="merged_type")
@@ -142,11 +142,6 @@ static void merge_types(exprt &dest, exprt &src)
   }
 
   ((typet &)dest).move_to_subtypes((typet &)(src));
-}
-
-static void merge_types(const YYSTYPE dest, const YYSTYPE src)
-{
-  merge_types(stack(dest), stack(src));
 }
 
 static void make_subtype(typet &dest, typet &src)
