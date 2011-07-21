@@ -723,8 +723,8 @@ declaration_qualifier:
 	;
 
 type_qualifier:
-	TOK_CONST      { $$=$1; set($$, "const"); }
-	| TOK_VOLATILE { $$=$1; set($$, "volatile"); }
+	TOK_CONST      { $$=(typet*)$1; set(*$$, "const"); }
+	| TOK_VOLATILE { $$=(typet*)$1; set(*$$, "volatile"); }
 	;
 
 basic_declaration_specifier:
@@ -833,22 +833,22 @@ typedef_type_specifier:		/* Type */
 
 typeof_type_specifier:
 	TOK_TYPEOF '(' comma_expression ')'
-	{ $$ = $3;
-	  locationt location=stack($$).location();
+	{ $$ = (typet*)$3;
+	  locationt location=$$->location();
 	  typet new_type("type_of");
-	  new_type.subtype() = (typet &)(stack($$));
-	  stack($$).swap(new_type);
-	  stack($$).location()=location;
-	  stack($$).set("#is_expression", true);
+	  new_type.subtype() = (typet &)*$$;
+	  $$->swap(new_type);
+	  $$->location()=location;
+	  $$->set("#is_expression", true);
 	}
 	| TOK_TYPEOF '(' ptr_type_specifier  ')'
 	{ $$ = $3;
-	  locationt location=stack($$).location();
+	  locationt location=$$->location();
 	  typet new_type("type_of");
-	  new_type.subtype() = (typet &)(stack($$));
-	  stack($$).swap(new_type);
-	  stack($$).location()=location;
-	  stack($$).set("#is_expression", false);
+	  new_type.subtype() = (typet &)*$$;
+	  $$->swap(new_type);
+	  $$->location()=location;
+	  $$->set("#is_expression", false);
 	}
 	;
 
@@ -856,9 +856,9 @@ ptr_type_specifier:
 	type_specifier
 	| ptr_type_specifier '*'
 	{ $$ = $1;
-	  locationt location=stack($$).location();
+	  locationt location=$$->location();
 	  typet new_type("pointer");
-	  new_type.subtype() = (typet&) stack($$);
+	  new_type.subtype() = *$$;
 	  stack($$).swap(new_type);
 	  stack($$).location()=location;
 	}
