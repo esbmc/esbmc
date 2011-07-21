@@ -599,11 +599,9 @@ comma_expression_opt:
 declaration:
 	declaration_specifier ';'
 	{
-	  init($$);
 	}
 	| type_specifier ';'
 	{
-	  init($$);
 	}
 	| declaring_list ';' {}
 	| default_declaring_list ';' {}
