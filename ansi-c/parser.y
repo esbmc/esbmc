@@ -610,36 +610,36 @@ declaration:
 default_declaring_list:
 	declaration_qualifier_list identifier_declarator
 		{
-		  init($<expr>$);
-		  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$));
+		  init(&($<expr>$));
+		  PARSER.new_declaration(*$1, *$2, *$<expr>$);
 		}
 	initializer_opt
 		{
-		  init($<expr>$);
-		  stack($<expr>$).add("type")=stack($1);
-		  decl_statement($<expr>$, $<expr>3, $4);
+		  init(&($<expr>$));
+		  $<expr>$->add("type")=*$1;
+		  decl_statement(*$<expr>$, *$<expr>3, *$4);
 		}
 	| type_qualifier_list identifier_declarator
 	{
-	  init($<expr>$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$));
+	  init(&$<expr>$);
+	  PARSER.new_declaration(*$1, *$2, *$<expr>$);
 	}
 	initializer_opt
 	{
-	  init($<expr>$);
-	  stack($<expr>$).add("type")=stack($1);
-	  decl_statement($<expr>$, $<expr>3, $4);
+	  init(&$<expr>$);
+	  $<expr>$->add("type")=*$1;
+	  decl_statement(*$<expr>$, *$<expr>3, *$4);
 	}
 	| default_declaring_list ',' identifier_declarator
 		{
-		  init($<expr>$);
-		  const irept &t=stack($1).find("type");
-		  PARSER.new_declaration(t, stack($3), stack($<expr>$));
+		  init(&$<expr>$);
+		  const irept &t=$1->find("type");
+		  PARSER.new_declaration(t, *$3, *$<expr>$);
 		}
 		initializer_opt
 	{
 	  $<expr>$=$1;
-	  decl_statement($<expr>$, $<expr>4, $5);
+	  decl_statement(*$<expr>$, *$<expr>4, *$5);
 	}
 	;
 
@@ -647,37 +647,37 @@ declaring_list:			/* DeclarationSpec */
 	declaration_specifier declarator
 		{
 		  // the symbol has to be visible during initialization
-		  init($<expr>$);
-		  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$));
+		  init(&$<expr>$);
+		  PARSER.new_declaration(*$1, *$2, *$<expr>$);
 		}
 		initializer_opt
 	{
-	  init($<expr>$);
-	  stack($<expr>$).add("type")=stack($1);
-	  decl_statement($<expr>$, $<expr>3, $4);
+	  init(&$<expr>$);
+	  $<expr>$->add("type")=*$1;
+	  decl_statement(*$<expr>$, *$<expr>3, *$4);
 	}
 	| type_specifier declarator
 		{
 		  // the symbol has to be visible during initialization
-		  init($<expr>$);
-		  PARSER.new_declaration(stack($1), stack($2), stack($<expr>$));
+		  init(&$<expr>$);
+		  PARSER.new_declaration(*$1, *$2, *$<expr>$);
 		}
 		initializer_opt
 	{
-	  init($<expr>$);
-	  stack($<expr>$).add("type")=stack($1);
-	  decl_statement($<expr>$, $<expr>3, $4);
+	  init(&$<expr>$);
+	  $<expr>$->add("type")=*$1;
+	  decl_statement(*$<expr>$, *$<expr>3, *$4);
 	}
 	| declaring_list ',' declarator
 		{
-		  init($<expr>$);
-		  const irept &t=stack($1).find("type");
-		  PARSER.new_declaration(t, stack($3), stack($<expr>$));
+		  init(&$<expr>$);
+		  const irept &t=$1->find("type");
+		  PARSER.new_declaration(t, *$3, *$<expr>$);
 		}
 		initializer_opt
 	{
 	  $<expr>$=$1;
-	  decl_statement($<expr>$, $<expr>4, $5);
+	  decl_statement(*$<expr>$, *$<expr>4, *$5);
 	}
 	;
 
