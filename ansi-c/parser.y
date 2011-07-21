@@ -859,37 +859,37 @@ ptr_type_specifier:
 	  locationt location=$$->location();
 	  typet new_type("pointer");
 	  new_type.subtype() = *$$;
-	  stack($$).swap(new_type);
-	  stack($$).location()=location;
+	  $$->swap(new_type);
+	  $$->location()=location;
 	}
 	;
 
 storage_class:
-	TOK_TYPEDEF    { $$=$1; set($$, "typedef"); }
-	| TOK_EXTERN   { $$=$1; set($$, "extern"); }
-	| TOK_STATIC   { $$=$1; set($$, "static"); }
-	| TOK_AUTO     { $$=$1; set($$, "auto"); }
-	| TOK_REGISTER { $$=$1; set($$, "register"); }
-	| TOK_INLINE   { $$=$1; set($$, "inline"); }
+	TOK_TYPEDEF    { $$=(typet*)$1; set(*$$, "typedef"); }
+	| TOK_EXTERN   { $$=(typet*)$1; set(*$$, "extern"); }
+	| TOK_STATIC   { $$=(typet*)$1; set(*$$, "static"); }
+	| TOK_AUTO     { $$=(typet*)$1; set(*$$, "auto"); }
+	| TOK_REGISTER { $$=(typet*)$1; set(*$$, "register"); }
+	| TOK_INLINE   { $$=(typet*)$1; set(*$$, "inline"); }
 	;
 
 basic_type_name:
-	TOK_INT        { $$=$1; set($$, "int"); }
-	| TOK_INT8     { $$=$1; set($$, "int8"); }
-	| TOK_INT16    { $$=$1; set($$, "int16"); }
-	| TOK_INT32    { $$=$1; set($$, "int32"); }
-	| TOK_INT64    { $$=$1; set($$, "int64"); }
-	| TOK_PTR32    { $$=$1; set($$, "ptr32"); }
-	| TOK_PTR64    { $$=$1; set($$, "ptr64"); }
-	| TOK_CHAR     { $$=$1; set($$, "char"); }
-	| TOK_SHORT    { $$=$1; set($$, "short"); }
-	| TOK_LONG     { $$=$1; set($$, "long"); }
-	| TOK_FLOAT    { $$=$1; set($$, "float"); }
-	| TOK_DOUBLE   { $$=$1; set($$, "double"); }
-	| TOK_SIGNED   { $$=$1; set($$, "signed"); }
-	| TOK_UNSIGNED { $$=$1; set($$, "unsigned"); }
-	| TOK_VOID     { $$=$1; set($$, "empty"); }
-	| TOK_BOOL     { $$=$1; set($$, "bool"); }
+	TOK_INT        { $$=(typet*)$1; set(*$$, "int"); }
+	| TOK_INT8     { $$=(typet*)$1; set(*$$, "int8"); }
+	| TOK_INT16    { $$=(typet*)$1; set(*$$, "int16"); }
+	| TOK_INT32    { $$=(typet*)$1; set(*$$, "int32"); }
+	| TOK_INT64    { $$=(typet*)$1; set(*$$, "int64"); }
+	| TOK_PTR32    { $$=(typet*)$1; set(*$$, "ptr32"); }
+	| TOK_PTR64    { $$=(typet*)$1; set(*$$, "ptr64"); }
+	| TOK_CHAR     { $$=(typet*)$1; set(*$$, "char"); }
+	| TOK_SHORT    { $$=(typet*)$1; set(*$$, "short"); }
+	| TOK_LONG     { $$=(typet*)$1; set(*$$, "long"); }
+	| TOK_FLOAT    { $$=(typet*)$1; set(*$$, "float"); }
+	| TOK_DOUBLE   { $$=(typet*)$1; set(*$$, "double"); }
+	| TOK_SIGNED   { $$=(typet*)$1; set(*$$, "signed"); }
+	| TOK_UNSIGNED { $$=(typet*)$1; set(*$$, "unsigned"); }
+	| TOK_VOID     { $$=(typet*)$1; set(*$$, "empty"); }
+	| TOK_BOOL     { $$=(typet*)$1; set(*$$, "bool"); }
 	;
 
 elaborated_type_name:
@@ -905,40 +905,40 @@ aggregate_name:
 
 		  symbol.set("#base_name", PARSER.get_anon_name());
 
-		  init($<type>$);
-		  PARSER.new_declaration(stack($1), symbol, stack($<type>$), true);
+		  init(&$<expr>$);
+		  PARSER.new_declaration(*$1, symbol, *$<expr>$, true);
 		}
 		'{' member_declaration_list_opt '}'
 	{
-	  typet &type=stack($<type>2).type();
-	  type.add("components").get_sub().swap(stack($4).add("operands").get_sub());
+	  typet &type=$<expr>2->type();
+	  type.add("components").get_sub().swap($4->add("operands").get_sub());
 
 	  // grab symbol
-	  init($$, "symbol");
-	  stack($$).set("identifier", stack($<type>2).get("name"));
-	  stack($$).location()=stack($<type>2).location();
+	  init(*$$, "symbol");
+	  $$->set("identifier", $<expr>2->get("name"));
+	  $$->location()=$<expr>2->location();
 
-	  PARSER.move_declaration(stack($<type>2));
+	  PARSER.move_declaration(*$<expr>2);
 	}
 	| aggregate_key identifier_or_typedef_name
 		{
-		  PARSER.new_declaration(stack($1), stack($2), stack($<type>$), true);
+		  PARSER.new_declaration(*$1, *$2, *$<expr>$, true);
 
-		  exprt tmp(stack($<type>$));
+		  exprt tmp(*$<expr>$);
 		  tmp.type().id("incomplete_"+tmp.type().id_string());
 		  PARSER.move_declaration(tmp);
 		}
 		'{' member_declaration_list_opt '}'
 	{
-	  typet &type=stack($<type>3).type();
-	  type.add("components").get_sub().swap(stack($5).add("operands").get_sub());
+	  typet &type=$<expr>3->type();
+	  type.add("components").get_sub().swap($5->add("operands").get_sub());
 
 	  // grab symbol
-	  init($$, "symbol");
-	  stack($$).set("identifier", stack($<type>3).get("name"));
-	  stack($$).location()=stack($<type>3).location();
+	  init(*$$, "symbol");
+	  $$->set("identifier", $<expr>3->get("name"));
+	  $$->location()=$<expr>3->location();
 
-	  PARSER.move_declaration(stack($<type>3));
+	  PARSER.move_declaration(*$<expr>3);
 	}
 	| aggregate_key identifier_or_typedef_name
 	{
