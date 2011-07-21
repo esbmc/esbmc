@@ -131,10 +131,6 @@ Function: merge_types
 
 static void merge_types(exprt &dest, exprt &src)
 {
-  #if 0
-  std::cout << "D: " << dest.pretty() << std::endl;
-  std::cout << "S: " << src.pretty() << std::endl;
-  #endif
 
   if(dest.id()!="merged_type")
   {
@@ -148,34 +144,10 @@ static void merge_types(exprt &dest, exprt &src)
   ((typet &)dest).move_to_subtypes((typet &)(src));
 }
 
-/*******************************************************************\
-
-Function: merge_types
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void merge_types(const YYSTYPE dest, const YYSTYPE src)
 {
   merge_types(stack(dest), stack(src));
 }
-
-/*******************************************************************\
-
-Function: make_subtype
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void make_subtype(typet &dest, typet &src)
 {  
@@ -185,12 +157,6 @@ static void make_subtype(typet &dest, typet &src)
   
   // find spot where to insert this
   
-  #if 0
-  std::cout << "D: " << dest.pretty() << std::endl;
-  std::cout << "S: " << src.pretty() << std::endl;
-  std::cout << "src.id(): " << src.id() << std::endl;
-  #endif
-
   // Inserting a nil type makes precisely no change.
   if (src.is_nil())
     return;
@@ -264,53 +230,17 @@ static void make_subtype(typet &dest, typet &src)
   }
 }
 
-/*******************************************************************\
-
-Function: make_subtype
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void make_subtype(YYSTYPE dest, YYSTYPE src)
 {
   make_subtype((typet &)stack(dest), (typet &)stack(src));
 }
     
-/*******************************************************************\
-
-Function: do_pointer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void do_pointer(const YYSTYPE ptr, const YYSTYPE dest)
 {  
   set(ptr, "pointer");
   stack(ptr).add("subtype").make_nil();
   make_subtype(dest, ptr);
 }
-
-/*******************************************************************\
-
-Function: do_enum_members
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void do_enum_members(
   const typet &enum_type,
@@ -339,18 +269,6 @@ static void do_enum_members(
   }
 }
 
-/*******************************************************************\
-
-Function: do_tag
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void do_tag(YYSTYPE &key, YYSTYPE &tag)
 {
   irep_idt id_class_str=stack(tag).get("#id_class");
@@ -373,18 +291,6 @@ static void do_tag(YYSTYPE &key, YYSTYPE &tag)
   declaration.type().id("incomplete_"+declaration.type().id_string());
   PARSER.move_declaration(declaration);                    
 }
-
-/*******************************************************************\
-
-Function: create_function_scope
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void create_function_scope(exprt &expr)
 {
