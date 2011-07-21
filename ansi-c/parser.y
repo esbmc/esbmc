@@ -949,15 +949,15 @@ aggregate_name:
 
 aggregate_key:
 	TOK_STRUCT
-	{ $$=$1; set($$, "struct"); }
+	{ $$=$1; set(*$$, "struct"); }
 	| TOK_UNION
-	{ $$=$1; set($$, "union"); }
+	{ $$=$1; set(*$$, "union"); }
 	;
 
 member_declaration_list_opt:
 		  /* Nothing */
 	{
-	  init($$, "declaration_list");
+	  init(*$$, "declaration_list");
 	}
 	| member_declaration_list
 	;
@@ -966,12 +966,12 @@ member_declaration_list:
 	  member_declaration
 	| member_declaration_list member_declaration
 	{
-	  assert(stack($1).id()=="declaration_list");
-	  assert(stack($2).id()=="declaration_list");
+	  assert($1->id()=="declaration_list");
+	  assert($2->id()=="declaration_list");
 	  $$=$1;
-	  Forall_operands(it, stack($2))
-	    stack($$).move_to_operands(*it);
-	  stack($2).clear();
+	  Forall_operands(it, *$2)
+	    $$->move_to_operands(*it);
+	  $2->clear();
 	}
 	;
 
@@ -980,81 +980,81 @@ member_declaration:
 	| member_default_declaring_list ';'
 	| ';' /* empty declaration */
 	{
-	  init($$, "declaration_list");
+	  init(*$$, "declaration_list");
 	}
 	;
 
 member_default_declaring_list:
 	type_qualifier_list member_identifier_declarator
 	{
-	  init($$, "declaration_list");
+	  init(*$$, "declaration_list");
 
 	  exprt declaration;
 
-	  PARSER.new_declaration(stack($1), stack($2), declaration, false, false);
+	  PARSER.new_declaration(*$1, *$2, declaration, false, false);
 
-	  stack($$).move_to_operands(declaration);
+	  $$->move_to_operands(declaration);
 	}
 	| member_default_declaring_list ',' member_identifier_declarator
 	{
 	  exprt declaration;
 
 	  typet type;
-	  PARSER.new_declaration(stack($1), stack($3), declaration, false, false);
+	  PARSER.new_declaration(*$1, *$3, declaration, false, false);
 
 	  $$=$1;
-	  stack($$).move_to_operands(declaration);
+	  $$->move_to_operands(declaration);
 	}
 	;
 
 member_declaring_list:
 	type_specifier member_declarator
 	{
-	  init($$, "declaration_list");
+	  init(*$$, "declaration_list");
 
 	  // save the type_specifier
-	  stack($$).add("declaration_type")=stack($1);
+	  $$->add("declaration_type")=*$1;
 
 	  exprt declaration;
-	  PARSER.new_declaration(stack($1), stack($2), declaration, false, false);
+	  PARSER.new_declaration(*$1, *$2, declaration, false, false);
 
-	  stack($$).move_to_operands(declaration);
+	  $$->move_to_operands(declaration);
 	}
 	| member_declaring_list ',' member_declarator
 	{
 	  exprt declaration;
 
-	  irept declaration_type(stack($1).find("declaration_type"));
-	  PARSER.new_declaration(declaration_type, stack($3), declaration, false, false);
+	  irept declaration_type($1->find("declaration_type"));
+	  PARSER.new_declaration(declaration_type, *$3, declaration, false, false);
 
 	  $$=$1;
-	  stack($$).move_to_operands(declaration);
+	  $$->move_to_operands(declaration);
 	}
 	;
 
 member_declarator:
 	declarator bit_field_size_opt
 	{
-	  if(!stack($2).is_nil())
+	  if(!$2->is_nil())
 	  {
 	    $$=$2;
 	    // Shift name of member upwards
-	    stack($$).add("identifier") = stack($1).add("identifier");
-	    stack($1).remove("identifier");
-	    stack($$).add("subtype") = stack($1).add("subtype");
+	    $$->add("identifier") = $1->add("identifier");
+	    $1->remove("identifier");
+	    $$->add("subtype") = $1->add("subtype");
 	  }
 	  else
 	    $$=$1;
 	}
 	| /* empty */
 	{
-	  init($$);
-	  stack($$).make_nil();
+	  init(&$$);
+	  $$->make_nil();
 	}
 	| bit_field_size
 	{
 	  $$=$1;
-	  stack($$).add("subtype").make_nil();
+	  $$->add("subtype").make_nil();
 	}
 	;
 
@@ -1070,8 +1070,8 @@ member_identifier_declarator:
 		bit_field_size_opt
 	{
 	  $$=$1;
-	  if(!stack($3).is_nil())
-	    merge_types($$, $3);
+	  if(!$3->is_nil())
+	    merge_types((typet&)*$$, (typet&)*$3);
 	}
 	| bit_field_size
 	{
@@ -1083,8 +1083,8 @@ member_identifier_declarator:
 bit_field_size_opt:
 	/* nothing */
 	{
-	  init($$);
-	  stack($$).make_nil();
+	  init(&$$);
+	  $$->make_nil();
 	}
 	| bit_field_size
 	;
@@ -1092,8 +1092,8 @@ bit_field_size_opt:
 bit_field_size:			/* Expression */
 	':' constant_expression
 	{
-	  $$=$1; set($$, "c_bitfield");
-	  stack($$).set("size", stack($2));
+	  $$=$1; set(*$$, "c_bitfield");
+	  $$->set("size", *$2);
 	}
 	;
 
@@ -1106,44 +1106,46 @@ enum_name:			/* Type */
 		  exprt symbol("symbol");
 		  symbol.set("#base_name", PARSER.get_anon_name());
 
-		  PARSER.new_declaration(stack($1), symbol, stack($<type>$), true);
+		  init(&$<expr>$);
+		  PARSER.new_declaration(*$1, symbol, *$<expr>$, true);
 
-		  exprt tmp(stack($<type>$));
+		  exprt tmp(*$<expr>$);
 		  PARSER.move_declaration(tmp);
 		}
 		'{' enumerator_list '}'
 	{
 	  // grab symbol
-	  init($$, "symbol");
-	  stack($$).set("identifier", stack($<type>2).get("name"));
-	  stack($$).location()=stack($<type>2).location();
+	  init(*$$, "symbol");
+	  $$->set("identifier", $<expr>2->get("name"));
+	  $$->location()=$<expr>2->location();
 
-	  do_enum_members((const typet &)stack($$), stack($4));
+	  do_enum_members(*$$, *$4);
 
-	  PARSER.move_declaration(stack($<type>2));
+	  PARSER.move_declaration(*$<expr>2);
 	}
 	| enum_key identifier_or_typedef_name
 		{ /* !!! mid-rule action !!! */
-		  PARSER.new_declaration(stack($1), stack($2), stack($<type>$), true);
+		  init(&$<expr>$);
+		  PARSER.new_declaration(*$1, *$2, *$<expr>$, true);
 
-		  exprt tmp(stack($<type>$));
+		  exprt tmp(*$<expr>$);
 		  PARSER.move_declaration(tmp);
 		}
 		'{' enumerator_list '}'
 	{
 	  // grab symbol
-	  init($$, "symbol");
-	  stack($$).set("identifier", stack($<type>3).get("name"));
-	  stack($$).location()=stack($<type>3).location();
+	  init(*$$, "symbol");
+	  $$->set("identifier", $<expr>3->get("name"));
+	  $$->location()=$<expr>3->location();
 
-	  do_enum_members((const typet &)stack($$), stack($5));
+	  do_enum_members(*$$, *$5);
 
-	  PARSER.move_declaration(stack($<type>3));
+	  PARSER.move_declaration(*$<expr>3);
 	}
 	| enum_key identifier_or_typedef_name
 	{
-	  do_tag($1, $2);
-	  $$=$2;
+	  do_tag((typet&)*$1, (typet&)*$2);
+	  $$=(typet*)$2;
 	}
 	;
 
