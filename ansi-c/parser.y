@@ -1806,7 +1806,7 @@ parameter_typedef_declarator:
 	| typedef_name postfixing_abstract_declarator
 	{
 	  $$=$1;
-	  make_subtype($$, $2);
+	  make_subtype(*$$, *$2);
 	}
 	| clean_typedef_declarator
 	;
@@ -1816,13 +1816,13 @@ clean_typedef_declarator:	/* Declarator */
 	| '*' parameter_typedef_declarator
 	{
 	  $$=$2;
-	  do_pointer($1, $2);
+	  do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	| '*' type_qualifier_list parameter_typedef_declarator
 	{
-	  merge_types($2, $3);
+	  merge_types(*$2, *$3);
 	  $$=$2;
-	  do_pointer($1, $2);
+	  do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	;
 
@@ -1834,7 +1834,7 @@ clean_postfix_typedef_declarator:	/* Declarator */
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4)! */
 	  $$=$2;
-	  make_subtype($$, $4);
+	  make_subtype(*$$, *$4);
 	}
 	;
 
@@ -1843,25 +1843,25 @@ paren_typedef_declarator:	/* Declarator */
 	| '*' '(' simple_paren_typedef_declarator ')'
 	{
 	  $$=$3;
-	  do_pointer($1, $3);
+	  do_pointer((typet&)*$1, (typet&)*$3);
 	}
 	| '*' type_qualifier_list '(' simple_paren_typedef_declarator ')'
 	{
 	  // not sure where the type qualifiers belong
-	  merge_types($2, $4);
+	  merge_types(*$2, *$4);
 	  $$=$2;
-	  do_pointer($1, $2);
+	  do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	| '*' paren_typedef_declarator
 	{
 	  $$=$2;
-	  do_pointer($1, $2);
+	  do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	| '*' type_qualifier_list paren_typedef_declarator
 	{
-	  merge_types($2, $3);
+	  merge_types(*$2, *$3);
 	  $$=$2;
-	  do_pointer($1, $2);
+	  do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	;
 
@@ -1871,14 +1871,14 @@ paren_postfix_typedef_declarator:	/* Declarator */
 	| '(' simple_paren_typedef_declarator postfixing_abstract_declarator ')'
 	{	/* note: this is a function ($3) with a typedef name ($2) */
 	  $$=$2;
-	  make_subtype($$, $3);
+	  make_subtype(*$$, *$3);
 	}
 	| '(' paren_typedef_declarator ')' postfixing_abstract_declarator
 	{
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4)! */
 	  $$=$2;
-	  make_subtype($$, $4);
+	  make_subtype(*$$, *$4);
 	}
 	;
 
@@ -1901,22 +1901,22 @@ unary_identifier_declarator:
 	| '*' identifier_declarator
 	{
 	  $$ = $2;
-	  do_pointer($1, $2);
+	  do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	| '*' type_qualifier_list identifier_declarator
 	{
-	  if (stack($3).id() == "declarator") {
-	    exprt d = stack($3);
-	    stack($3) = (exprt&)d.add("subtype");
-	    merge_types($2, $3);
-	    d.add("subtype") = stack($2);
-	    stack($2) = d;
+	  if ($3->id() == "declarator") {
+	    typet d = (typet&)*$3;
+	    *$3 = (exprt&)d.add("subtype");
+	    merge_types(*$2, (typet&)*$3);
+	    d.add("subtype") = *$2;
+	    *$2 = d;
 	  } else  {
-	    merge_types($2, $3);
-	    move_decl_info_upwards((typet&)stack($2), ((typet&)stack($2)).subtypes().back());
+	    merge_types(*$2, (typet&)*$3);
+	    move_decl_info_upwards((typet&)*$2, ((typet&)*$2).subtypes().back());
 	  }
-	  $$ = $2;
-	  do_pointer($1, $2);
+	  $$ = (exprt*)$2;
+	  do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	;
 
@@ -1926,15 +1926,15 @@ postfix_identifier_declarator:
 		// postfix will be {code,array,incomplete-array}, which we
 		// wish to preserve. So discard the existing "declarator" name
 		// and move its contents into $2.
-		$$ = $2;
-		stack($$).add("identifier") = stack($1).add("identifier");
+		$$ = (exprt*)$2;
+		$$->add("identifier") = $1->add("identifier");
 
-		if (stack($1).id() == "declarator") {
-			stack($1).remove("identifier");
-			make_subtype((typet&)stack($$), (typet&)stack($1).add("subtype"));
+		if ($1->id() == "declarator") {
+			$1->remove("identifier");
+			make_subtype((typet&)*$$, (typet&)$1->add("subtype"));
 		} else {
-			stack($1).remove("identifier");
-			make_subtype($$, $1);
+			$1->remove("identifier");
+			make_subtype((typet&)*$$, (typet&)*$1);
 		}
 	}
 	| '(' unary_identifier_declarator ')'
@@ -1947,7 +1947,7 @@ postfix_identifier_declarator:
 		// just make $4 a subtype.
 
 		$$ = $2;
-		make_subtype($$, $4);
+		make_subtype((typet&)*$$, (typet&)*$4);
 	}
 
 paren_identifier_declarator:
