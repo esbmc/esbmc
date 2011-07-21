@@ -942,8 +942,8 @@ aggregate_name:
 	}
 	| aggregate_key identifier_or_typedef_name
 	{
-	  do_tag($1, $2);
-	  $$=$2;
+	  do_tag((typet&)*$1, (typet&)*$2);
+	  $$=(typet*)$2;
 	}
 	;
 
