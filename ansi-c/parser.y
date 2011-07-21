@@ -1152,14 +1152,14 @@ enum_name:			/* Type */
 enum_key: TOK_ENUM
 	{
 	  $$=$1;
-	  set($$, "c_enum");
+	  set(*$$, "c_enum");
 	}
 	;
 
 enumerator_list:		/* MemberList */
 	enumerator_declaration
 	{
-	  init($$);
+	  init(&$$);
 	  mto($$, $1);
 	}
 	| enumerator_list ',' enumerator_declaration
@@ -1176,19 +1176,19 @@ enumerator_list:		/* MemberList */
 enumerator_declaration:
 	  identifier_or_typedef_name enumerator_value_opt
 	{
-	  init($$);
+	  init(&$$);
 	  irept type("enum");
-	  PARSER.new_declaration(type, stack($1), stack($$));
-	  stack($$).set("is_macro", true);
-	  stack($$).add("value").swap(stack($2));
+	  PARSER.new_declaration(type, *$1, *$$);
+	  $$->set("is_macro", true);
+	  $$->add("value").swap(*$2);
 	}
 	;
 
 enumerator_value_opt:		/* Expression */
 	/* nothing */
 	{
-	  init($$);
-	  stack($$).make_nil();
+	  init(&$$);
+	  $$->make_nil();
 	}
 	| '=' constant_expression
 	{
@@ -1202,7 +1202,7 @@ parameter_type_list:		/* ParameterList */
 	{
 	  typet tmp("ansi_c_ellipsis");
 	  $$=$1;
-	  ((typet &)stack($$)).move_to_subtypes(tmp);
+	  ((typet &)*$$).move_to_subtypes(tmp);
 	}
 	| KnR_parameter_list
 	;
@@ -1210,119 +1210,119 @@ parameter_type_list:		/* ParameterList */
 KnR_parameter_list:
 	KnR_parameter
 	{
-          init($$, "arguments");
-          mts($$, $1);
+          init(*$$, "arguments");
+          mts((typet*)$$, (typet*)$1);
 	}
 	| KnR_parameter_list ',' KnR_parameter
 	{
           $$=$1;
-          mts($$, $3);
+          mts((typet*)$$, (typet*)$3);
 	}
 	;
 
 KnR_parameter: identifier
 	{
-          init($$);
+          init(&$$);
 	  irept type("KnR");
-	  PARSER.new_declaration(type, stack($1), stack($$));
+	  PARSER.new_declaration(type, *$1, *$$);
 	}
 	;
 
 parameter_list:
 	parameter_declaration
 	{
-	  init($$, "arguments");
-	  mts($$, $1);
+	  init(*$$, "arguments");
+	  mts((typet*)$$, (typet*)$1);
 	}
 	| parameter_list ',' parameter_declaration
 	{
 	  $$=$1;
-	  mts($$, $3);
+	  mts((typet*)$$, (typet*)$3);
 	}
 	;
 
 parameter_declaration:
 	declaration_specifier
 	{
-	  init($$);
+	  init(&$$);
 	  exprt nil;
 	  nil.make_nil();
-	  PARSER.new_declaration(stack($1), nil, stack($$));
+	  PARSER.new_declaration(*$1, nil, *$$);
 	}
 	| declaration_specifier parameter_abstract_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
 	}
 	| declaration_specifier identifier_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
 	}
 	| declaration_specifier parameter_typedef_declarator
 	{
           // the second tree is really the argument -- not part
           // of the type!
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
 	}
 	| declaration_qualifier_list
 	{
-	  init($$);
+	  init(&$$);
 	  exprt nil;
 	  nil.make_nil();
-	  PARSER.new_declaration(stack($1), nil, stack($$));
+	  PARSER.new_declaration(*$1, nil, *$$);
 	}
 	| declaration_qualifier_list parameter_abstract_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
 	}
 	| declaration_qualifier_list identifier_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
 	}
 	| type_specifier
 	{
-	  init($$);
+	  init(&$$);
 	  exprt nil;
 	  nil.make_nil();
-	  PARSER.new_declaration(stack($1), nil, stack($$));
+	  PARSER.new_declaration(*$1, nil, *$$);
 	}
 	| type_specifier parameter_abstract_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
 	}
 	| type_specifier identifier_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
 	}
 	| type_specifier parameter_typedef_declarator
 	{
           // the second tree is really the argument -- not part
           // of the type!
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
 	}
 	| type_qualifier_list
 	{
-	  init($$);
+	  init(&$$);
 	  exprt nil;
 	  nil.make_nil();
-	  PARSER.new_declaration(stack($1), nil, stack($$));
+	  PARSER.new_declaration(*$1, nil, *$$);
 	}
 	| type_qualifier_list parameter_abstract_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
 	}
 	| type_qualifier_list identifier_declarator
 	{
-	  init($$);
-	  PARSER.new_declaration(stack($1), stack($2), stack($$));
+	  init(&$$);
+	  PARSER.new_declaration(*$1, *$2, *$$);
 	}
 	;
 
