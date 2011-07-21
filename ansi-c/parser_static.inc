@@ -17,9 +17,19 @@ static void init(exprt **e)
   *e = new exprt();
 }
 
+static void init(typet **e)
+{
+  *e = new typet();
+}
+
 static void init(exprt &expr, const std::string &id)
 {
   expr.id(id);
+}
+
+static void init(typet &type, const std::string &id)
+{
+  type.id(id);
 }
 
 static void set(irept &expr, const std::string &id)
