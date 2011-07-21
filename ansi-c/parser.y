@@ -2079,27 +2079,27 @@ unary_abstract_declarator:
 parameter_unary_abstract_declarator:
 	'*'
 	{
-          $$=$1;
-          set($$, "pointer");
-          stack($$).add("subtype").make_nil();
+          $$=(typet*)$1;
+          set(*$$, "pointer");
+          $$->add("subtype").make_nil();
 	}
 	| '*' type_qualifier_list
 	{
           $$=$2;
-          exprt nil_declarator(static_cast<const exprt &>(get_nil_irep()));
-          merge_types(stack($2), nil_declarator);
-          do_pointer($1, $2);
+          typet nil_declarator(static_cast<const typet &>(get_nil_irep()));
+          merge_types(*$2, nil_declarator);
+          do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	| '*' parameter_abstract_declarator
 	{
           $$=$2;
-          do_pointer($1, $2);
+          do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	| '*' type_qualifier_list parameter_abstract_declarator
 	{
           $$=$2;
-          merge_types($2, $3);
-          do_pointer($1, $2);
+          merge_types(*$2, *$3);
+          do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	;
 
@@ -2115,7 +2115,7 @@ postfix_abstract_declarator:
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4) of pointers with name ($2)! */
 	  $$=$2;
-	  make_subtype($$, $4);
+	  make_subtype(*$$, *$4);
 	}
 	;
 
@@ -2130,7 +2130,7 @@ parameter_postfix_abstract_declarator:
 	  /* note: this is a pointer ($2) to a function ($4) */
 	  /* or an array ($4) of pointers with name ($2)! */
 	  $$=$2;
-	  make_subtype($$, $4);
+	  make_subtype(*$$, *$4);
 	}
 	;
 
