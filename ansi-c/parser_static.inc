@@ -12,122 +12,41 @@
   stack(x).location()=stack(l).location(); \
   stack(x).reserve_operands(2); mto(x, y); mto(x, z); }
 
-/*******************************************************************\
-
-Function: init
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void init(YYSTYPE &expr)
+static void init(exprt &expr, const std::string &id)
 {
-  newstack(expr);
+  expr.id(id);
 }
 
-/*******************************************************************\
-
-Function: init
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void init(YYSTYPE &expr, const std::string &id)
+static void set(exprt &expr, const std::string &id)
 {
-  newstack(expr);
-  stack(expr).id(id);
+  expr.id(id);
 }
 
-/*******************************************************************\
-
-Function: set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void set(YYSTYPE expr, const std::string &id)
-{
-  stack(expr).id(id);
-}
-
-/*******************************************************************\
-
-Function: statement
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void statement(YYSTYPE &expr, const std::string &id)
+static void statement(exprt &expr, const std::string &id)
 {
   set(expr, "code");
-  stack(expr).set("statement", id);
+  expr.set("statement", id);
 }
 
-/*******************************************************************\
-
-Function: decl_statement
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void decl_statement(
-  YYSTYPE &dest,
-  YYSTYPE &decl,
-  YYSTYPE &initializer)
+static void decl_statement(exprt &dest, exprt &decl, exprt &initializer)
 {
   codet decl_statement("decl");
   
   symbol_exprt symbol;
-  symbol.set_identifier(stack(decl).get("name"));
+  symbol.set_identifier(decl.get("name"));
   
   decl_statement.move_to_operands(symbol);
   
-  if(stack(initializer).is_not_nil())
+  if(initializer.is_not_nil())
   {
-    stack(decl).add("value")=stack(initializer);
-    decl_statement.move_to_operands(stack(initializer));
+    decl.add("value")=initializer;
+    decl_statement.move_to_operands(initializer);
   }
   
-  PARSER.move_declaration(stack(decl));
+  PARSER.move_declaration(decl);
   
-  stack(dest).move_to_operands(decl_statement);
+  dest.move_to_operands(decl_statement);
 }
-
-/*******************************************************************\
-
-Function: merge_types
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void merge_types(typet &dest, typet &src)
 {
