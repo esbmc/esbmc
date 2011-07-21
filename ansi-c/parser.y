@@ -537,15 +537,15 @@ conditional_expression:
 	logical_or_expression
 	| logical_or_expression '?' comma_expression ':' conditional_expression
 	{ $$=$2;
-	  init($$, "if");
+	  init(*$$, "if");
 	  mto($$, $1);
 	  mto($$, $3);
 	  mto($$, $5);
 	}
 	| logical_or_expression '?' ':' conditional_expression
 	{ $$=$2;
-	  init($$, "sideeffect");
-	  stack($$).set("statement", "gcc_conditional_expression");
+	  init(*$$, "sideeffect");
+	  $$->set("statement", "gcc_conditional_expression");
 	  mto($$, $1);
 	  mto($$, $4);
 	}
@@ -554,27 +554,27 @@ conditional_expression:
 assignment_expression:
 	conditional_expression
 	| cast_expression '=' assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign"); }
 	| cast_expression TOK_MULTASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign*"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign*"); }
 	| cast_expression TOK_DIVASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign_div"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_div"); }
 	| cast_expression TOK_MODASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign_mod"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_mod"); }
 	| cast_expression TOK_PLUSASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign+"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign+"); }
 	| cast_expression TOK_MINUSASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign-"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign-"); }
 	| cast_expression TOK_SLASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign_shl"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_shl"); }
 	| cast_expression TOK_SRASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign_shr"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_shr"); }
 	| cast_expression TOK_ANDASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign_bitand"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_bitand"); }
 	| cast_expression TOK_EORASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign_bitxor"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_bitxor"); }
 	| cast_expression TOK_ORASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); stack($$).set("statement", "assign_bitor"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_bitor"); }
 	;
 
 comma_expression:
@@ -589,7 +589,7 @@ constant_expression:
 
 comma_expression_opt:
 	/* nothing */
-	{ init($$); stack($$).make_nil(); }
+	{ init(&$$); $$->make_nil(); }
 	| comma_expression
 	;
 
