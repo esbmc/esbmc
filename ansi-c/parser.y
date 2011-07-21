@@ -363,7 +363,7 @@ postfix_expression:
 member_name:
 	identifier
 	| typedef_name
-	{ $$ = $1; /* XXX typing */}
+	{ $$ = (exprt *)$1; /* XXX typing */}
 	;
 
 argument_expression_list:
