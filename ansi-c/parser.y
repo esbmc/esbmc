@@ -1338,7 +1338,7 @@ parameter_declaration:
 identifier_or_typedef_name:
 	identifier
 	| typedef_name
-	{ $$ = $1; /* XXX typing */}
+	{ $$ = (exprt*)$1; /* XXX typing */}
 	;
 
 type_name:
@@ -1346,21 +1346,21 @@ type_name:
 	| type_specifier abstract_declarator
 	{
 	  $$=$1;
-	  make_subtype($$, $2);
+	  make_subtype(*$$, *$2);
 	}
 	| type_qualifier_list
 	| type_qualifier_list abstract_declarator
 	{
 	  $$=$1;
-	  make_subtype($$, $2);
+	  make_subtype(*$$, *$2);
 	}
 	;
 
 initializer_opt:
 	/* nothing */
 	{
-	  newstack($$);
-	  stack($$).make_nil();
+	  init(&$$);
+	  $$->make_nil();
 	}
 	| '=' initializer
 	{ $$ = $2; }
@@ -1375,23 +1375,23 @@ initializer:
 	'{' initializer_list '}'
 	{
 	  $$=$1;
-	  set($$, "constant");
-	  stack($$).type().id("incomplete_array");
-	  stack($$).operands().swap(stack($2).operands());
+	  set(*$$, "constant");
+	  $$->type().id("incomplete_array");
+	  $$->operands().swap($2->operands());
 	}
 	| '{' initializer_list ',' '}'
 	{
 	  $$=$1;
-	  set($$, "constant");
-	  stack($$).type().id("incomplete_array");
-	  stack($$).operands().swap(stack($2).operands());
+	  set(*$$, "constant");
+	  $$->type().id("incomplete_array");
+	  $$->operands().swap($2->operands());
 	}
 	| constant_expression	/* was: assignment_expression */
 	| '{' designated_initializer_list '}'
 	{
 	  $$=$1;
-	  set($$, "designated_list");
-	  stack($$).operands().swap(stack($2).operands());
+	  set(*$$, "designated_list");
+	  $$->operands().swap($2->operands());
 	}
 	;
 
@@ -1400,9 +1400,9 @@ initializer_list:
 	{
 	  $$=$1;
 	  exprt tmp;
-	  tmp.swap(stack($$));
-	  stack($$).clear();
-	  stack($$).move_to_operands(tmp);
+	  tmp.swap(*$$);
+	  $$->clear();
+	  $$->move_to_operands(tmp);
 	}
 	| initializer_list ',' initializer
 	{
@@ -1415,15 +1415,15 @@ initializer_list:
 designated_initializer:
           /* empty */
         {
-	  newstack($$);
-	  stack($$).make_nil();          
+	  init(&$$);
+	  $$->make_nil();
         }
         | '.' identifier '=' initializer
         {
           $$=$1;
-          stack($$).id("designated_initializer");
-          stack($$).set("component_name", stack($2).get("#base_name"));
-          stack($$).move_to_operands(stack($4));
+          $$->id("designated_initializer");
+          $$->set("component_name", $2->get("#base_name"));
+          $$->move_to_operands(*$4);
         }
         ;
 
@@ -1432,16 +1432,16 @@ designated_initializer_list:
 	{
 	  $$=$1;
 	  exprt tmp;
-	  tmp.swap(stack($$));
-	  stack($$).clear();
+	  tmp.swap(*$$);
+	  $$->clear();
 
 	  if(tmp.is_not_nil())
-            stack($$).move_to_operands(tmp);
+            $$->move_to_operands(tmp);
 	}
 	| designated_initializer_list ',' designated_initializer
 	{
 	  $$=$1;
-	  if(stack($3).is_not_nil())
+	  if($3->is_not_nil())
 	    mto($$, $3);
 	}
 	;
@@ -1463,9 +1463,9 @@ statement:
 declaration_statement:
 	declaration
 	{
-	  init($$);
-	  statement($$, "decl-block");
-	  stack($$).operands().swap(stack($1).operands());
+	  init(&$$);
+	  statement(*$$, "decl-block");
+	  $$->operands().swap($1->operands());
 	}
 	;
 
@@ -1473,24 +1473,23 @@ labeled_statement:
 	identifier_or_typedef_name ':' statement
 	{
 	  $$=$2;
-	  statement($$, "label");
-	  stack($$).set("label", stack($1).get("#base_name"));
+	  statement(*$$, "label");
+	  $$->set("label", $1->get("#base_name"));
 	  mto($$, $3);
 	}
 	| TOK_CASE constant_expression ':' statement
 	{
 	  $$=$1;
-	  statement($$, "label");
+	  statement(*$$, "label");
 	  mto($$, $4);
-	  static_cast<exprt &>(stack($$).add("case")).
-		move_to_operands(stack($2));
+	  static_cast<exprt &>($$->add("case")).move_to_operands(*$2);
 	}
 	| TOK_DEFAULT ':' statement
 	{
 	  $$=$1;
-	  statement($$, "label");
+	  statement(*$$, "label");
 	  mto($$, $3);
-	  stack($$).set("default", true);
+	  $$->set("default", true);
 	}
 	;
 
@@ -1502,15 +1501,15 @@ compound_statement:
 	compound_scope '{' '}'
 	{
 	  $$=$2;
-	  statement($$, "block");
-	  stack($$).set("#end_location", stack($3).location());
+	  statement(*$$, "block");
+	  $$->set("#end_location", $3->location());
 	  PARSER.pop_scope();
 	}
 	| compound_scope '{' statement_list '}'
 	{
 	  $$=$3;
-	  stack($$).location()=stack($2).location();
-	  stack($$).set("#end_location", stack($4).location());
+	  $$->location()=$2->location();
+	  $$->set("#end_location", $4->location());
 	  PARSER.pop_scope();
 	}
 	;
