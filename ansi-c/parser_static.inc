@@ -225,11 +225,6 @@ static void make_subtype(typet &dest, typet &src)
   }
 }
 
-static void make_subtype(YYSTYPE dest, YYSTYPE src)
-{
-  make_subtype((typet &)stack(dest), (typet &)stack(src));
-}
-    
 static void do_pointer(const YYSTYPE ptr, const YYSTYPE dest)
 {  
   set(ptr, "pointer");
