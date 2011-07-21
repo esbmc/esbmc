@@ -17,7 +17,7 @@ static void init(exprt &expr, const std::string &id)
   expr.id(id);
 }
 
-static void set(exprt &expr, const std::string &id)
+static void set(irept &expr, const std::string &id)
 {
   expr.id(id);
 }
