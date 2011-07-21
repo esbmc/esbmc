@@ -68,6 +68,13 @@ static void merge_types(typet &dest, typet &src)
   ((typet &)dest).move_to_subtypes((typet &)(src));
 }
 
+static void merge_types(typet *dest, typet *src)
+{
+
+  merge_types(*dest, *src);
+  return;
+}
+
 static void make_subtype(typet &dest, typet &src)
 {  
   // inserts "src" into "dest"
