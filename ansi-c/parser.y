@@ -1954,10 +1954,10 @@ paren_identifier_declarator:
 	identifier
 	{
 	  // All identifier_declarators are based from this.
-	  newstack($$);
-	  stack($$).id("declarator");
-	  stack($$).add("identifier") = stack($1);
-	  stack($$).add("subtype").make_nil();
+	  init(&$$);
+	  $$->id("declarator");
+	  $$->add("identifier") = *$1;
+	  $$->add("subtype").make_nil();
 	}
 	| '(' paren_identifier_declarator ')'
 	{
@@ -1980,10 +1980,10 @@ postfixing_abstract_declarator:	/* AbstrDeclarator */
 	array_abstract_declarator
 	| '(' ')'
 	{
-	  $$=$1;
-	  set($$, "code");
-	  stack($$).add("arguments");
-	  stack($$).add("subtype").make_nil();
+	  $$=(typet*)$1;
+	  set(*$$, "code");
+	  $$->add("arguments");
+	  $$->add("subtype").make_nil();
 	}
 	| '('
 	  {
@@ -1992,11 +1992,10 @@ postfixing_abstract_declarator:	/* AbstrDeclarator */
 	  }
 	  parameter_type_list ')'
 	{
-	  $$=$1;
-	  set($$, "code");
-	  stack($$).add("subtype").make_nil();
-	  stack($$).add("arguments").get_sub().
-	    swap(stack($3).add("subtypes").get_sub());
+	  $$=(typet*)$1;
+	  set(*$$, "code");
+	  $$->add("subtype").make_nil();
+	  $$->add("arguments").get_sub().swap($3->add("subtypes").get_sub());
 	  PARSER.pop_scope();
 	}
 	;
@@ -2005,10 +2004,10 @@ parameter_postfixing_abstract_declarator:
 	array_abstract_declarator
 	| '(' ')'
 	{
-	  $$=$1;
-	  set($$, "code");
-	  stack($$).add("arguments");
-	  stack($$).add("subtype").make_nil();
+	  $$=(typet*)$1;
+	  set(*$$, "code");
+	  $$->add("arguments");
+	  $$->add("subtype").make_nil();
 	}
 	| '('
 	  {
@@ -2017,11 +2016,10 @@ parameter_postfixing_abstract_declarator:
 	  }
 	  parameter_type_list ')'
 	{
-	  $$=$1;
-	  set($$, "code");
-	  stack($$).add("subtype").make_nil();
-	  stack($$).add("arguments").get_sub().
-	    swap(stack($3).add("subtypes").get_sub());
+	  $$=(typet*)$1;
+	  set(*$$, "code");
+	  $$->add("subtype").make_nil();
+	  $$->add("arguments").get_sub().swap($3->add("subtypes").get_sub());
 	  PARSER.pop_scope();
 	}
 	;
@@ -2029,52 +2027,52 @@ parameter_postfixing_abstract_declarator:
 array_abstract_declarator:
 	'[' ']'
 	{
-	  $$=$1;
-	  set($$, "incomplete_array");
-	  stack($$).add("subtype").make_nil();
+	  $$=(typet*)$1;
+	  set(*$$, "incomplete_array");
+	  $$->add("subtype").make_nil();
 	}
 	| '[' constant_expression ']'
 	{
-	  $$=$1;
-	  set($$, "array");
-	  stack($$).add("size").swap(stack($2));
-	  stack($$).add("subtype").make_nil();
+	  $$=(typet*)$1;
+	  set(*$$, "array");
+	  $$->add("size").swap(*$2);
+	  $$->add("subtype").make_nil();
 	}
 	| array_abstract_declarator '[' constant_expression ']'
 	{
 	  // we need to push this down
 	  $$=$1;
-	  set($2, "array");
-	  stack($2).add("size").swap(stack($3));
-	  stack($2).add("subtype").make_nil();
-	  make_subtype($1, $2);
+	  set(*$2, "array");
+	  $2->add("size").swap(*$3);
+	  $2->add("subtype").make_nil();
+	  make_subtype((typet&)*$1, (typet&)*$2);
 	}
 	;
 
 unary_abstract_declarator:
 	'*'
 	{
-	  $$=$1;
-	  set($$, "pointer");
-	  stack($$).add("subtype").make_nil();
+	  $$=(typet*)$1;
+	  set(*$$, "pointer");
+	  $$->add("subtype").make_nil();
 	}
 	| '*' type_qualifier_list
 	{
 	  $$=$2;
-	  exprt nil_declarator(static_cast<const exprt &>(get_nil_irep()));
-	  merge_types(stack($2), nil_declarator);
-	  do_pointer($1, $2);
+	  typet nil_declarator(static_cast<const typet &>(get_nil_irep()));
+	  merge_types(*$2, nil_declarator);
+	  do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	| '*' abstract_declarator
 	{
 	  $$=$2;
-	  do_pointer($1, $2);
+	  do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	| '*' type_qualifier_list abstract_declarator
 	{
 	  $$=$2;
-	  merge_types($2, $3);
-	  do_pointer($1, $2);
+	  merge_types(*$2, *$3);
+	  do_pointer((typet&)*$1, (typet&)*$2);
 	}
 	;
 
