@@ -31,8 +31,23 @@ int isatty(int) { return 0; }
 #define ECHO
 
 #include "ansi_c_parser.h"
-#include "parser_static.inc"
 #include "y.tab.h"
+
+static void init(exprt **e)
+{
+  *e = new exprt();
+}
+
+static void init(typet **e)
+{
+  *e = new typet();
+}
+
+static void init(exprt **expr, const std::string &id)
+{
+  init(expr);
+  (*expr)->id(id);
+}
 
 #define loc() { init(&yyansi_clval.loc); PARSER.set_location(*yyansi_clval.loc); }
 
