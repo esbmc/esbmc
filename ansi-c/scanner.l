@@ -387,14 +387,14 @@ void ansi_c_scanner_init()
 		}
 
 {decinteger}	{
-                  make_integer(yytext);
+                  make_integer(integer2string(string2integer(yytext, 10)));
 		  return(TOK_INTEGER);
 		}
 {decinteger_w}  {
                   std::string value(yytext);
                   unsigned w=atoi(value.substr(value.rfind('i')+1).c_str());
                   value=value.substr(0, value.rfind('i'));
-                  make_integer(value);
+                  make_integer(integer2string(string2integer(value, 10)));
                   yyansi_clval.expr->type().set("#width", w);
                   return(TOK_INTEGER);
     }
@@ -432,7 +432,7 @@ void ansi_c_scanner_init()
                   return(TOK_INTEGER);
     }
 {decinteger_u}	{
-                  make_integer(yytext);
+                  make_integer(integer2string(string2integer(yytext, 10)));
                   yyansi_clval.expr->type().set("#unsigned", true);
 		  return(TOK_INTEGER);
 		}
@@ -440,7 +440,7 @@ void ansi_c_scanner_init()
                   std::string value(yytext);
                   unsigned w=atoi(value.substr(value.rfind('i')+1).c_str());
                   value=value.substr(0, value.rfind('i'));
-                  make_integer(value);
+                  make_integer(integer2string(string2integer(value, 10)));
                   yyansi_clval.expr->type().set("#width", w);
                   yyansi_clval.expr->type().set("#unsigned", true);
                   return(TOK_INTEGER);
@@ -483,7 +483,7 @@ void ansi_c_scanner_init()
                   return(TOK_INTEGER);
     }
 {decinteger_l}	{
-                  make_integer(yytext);
+                  make_integer(integer2string(string2integer(yytext, 10)));
                   yyansi_clval.expr->type().set("#width", "long");
 		  return(TOK_INTEGER);
 		}
@@ -526,7 +526,7 @@ void ansi_c_scanner_init()
 		  return(TOK_INTEGER);
 		}
 {decinteger_ll}	{
-                  make_integer(yytext);
+                  make_integer(integer2string(string2integer(yytext, 10)));
                   yyansi_clval.expr->type().set("#width", "longlong");
 		  return(TOK_INTEGER);
 		}
@@ -546,7 +546,7 @@ void ansi_c_scanner_init()
 		  return(TOK_INTEGER);
 		}
 {decinteger_ull} {
-                  make_integer(yytext);
+                  make_integer(integer2string(string2integer(yytext, 10)));
                   yyansi_clval.expr->type().set("#width", "longlong");
                   yyansi_clval.expr->type().set("#unsigned", true);
 		  return(TOK_INTEGER);
