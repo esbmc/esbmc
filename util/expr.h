@@ -58,67 +58,67 @@ public:
   const typet &type() const { return static_cast<const typet &>(find(i_type)); }
 
   bool has_operands() const
-  { return ops.size() != 0; }
+  { return !find(o_operands).is_nil(); }
 
   operandst &operands()
-  { return ops; }
+  { return (operandst &)(add(o_operands).get_sub()); }
   
   const operandst &operands() const
-  { return ops; }
+  { return (const operandst &)(find(o_operands).get_sub()); }
    
   exprt &op0()
-  { return ops.front(); }
+  { return operands().front(); }
 
   exprt &op1()
   #ifdef USE_LIST
-  { return *(++ops().begin()); }
+  { return *(++operands().begin()); }
   #else
-  { return ops[1]; }
+  { return operands()[1]; }
   #endif
    
   exprt &op2()
   #ifdef USE_LIST
-  { return *(++ ++ops().begin()); }
+  { return *(++ ++operands().begin()); }
   #else
-  { return ops[2]; }
+  { return operands()[2]; }
   #endif
    
   exprt &op3()
   #ifdef USE_LIST
-  { return *(++ ++ ++ops().begin()); }
+  { return *(++ ++ ++operands().begin()); }
   #else
-  { return ops[3]; }
+  { return operands()[3]; }
   #endif
    
   const exprt &op0() const
-  { return ops.front(); }
+  { return operands().front(); }
 
   const exprt &op1() const
   #ifdef USE_LIST
-  { return *(++ops.begin()); }
+  { return *(++operands().begin()); }
   #else
-  { return ops[1]; }
+  { return operands()[1]; }
   #endif
   
   const exprt &op2() const
   #ifdef USE_LIST
-  { return *(++ ++ops.begin()); }
+  { return *(++ ++operands().begin()); }
   #else
-  { return ops[2]; }
+  { return operands()[2]; }
   #endif
   
   const exprt &op3() const
   #ifdef USE_LIST
-  { return *(++ ++ ++ops.begin()); }
+  { return *(++ ++ ++operands().begin()); }
   #else
-  { return ops[3]; }
+  { return operands()[3]; }
   #endif
   
   void reserve_operands(unsigned n)
   #ifdef USE_LIST
   { }
   #else
-  { ops.reserve(n) ; }
+  { operands().reserve(n) ; }
   #endif
    
   void move_to_operands(exprt &expr); // destroys expr
@@ -170,16 +170,6 @@ public:
     return static_cast<const exprt &>(find(name));
   }
 
-  void swap(exprt &ex)
-  {
-    std::swap(ex, *this);
-  }
-
- // Object contents
-protected:
-  operandst ops;
-
-public:
   // Actual expression nodes
   static irep_idt trans;
   static irep_idt symbol;
@@ -239,12 +229,5 @@ protected:
 };
 
 typedef std::list<exprt> expr_listt;
-
-inline exprt &to_expr(irept &i)
-{
-
-  exprt &e = static_cast<exprt&>(i);
-  return e;
-}
 
 #endif

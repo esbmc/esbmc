@@ -28,8 +28,9 @@ Function: exprt::move_to_operands
 
 void exprt::move_to_operands(exprt &expr)
 {
-  ops.push_back(static_cast<const exprt &>(get_nil_irep()));
-  ops.back().swap(expr);
+  operandst &op=operands();
+  op.push_back(static_cast<const exprt &>(get_nil_irep()));
+  op.back().swap(expr);
 }
 
 /*******************************************************************\
@@ -46,13 +47,14 @@ Function: exprt::move_to_operands
 
 void exprt::move_to_operands(exprt &e1, exprt &e2)
 {
+  operandst &op=operands();
   #ifndef USE_LIST
-  ops.reserve(ops.size()+2);
+  op.reserve(op.size()+2);
   #endif
-  ops.push_back(static_cast<const exprt &>(get_nil_irep()));
-  ops.back().swap(e1);
-  ops.push_back(static_cast<const exprt &>(get_nil_irep()));
-  ops.back().swap(e2);
+  op.push_back(static_cast<const exprt &>(get_nil_irep()));
+  op.back().swap(e1);
+  op.push_back(static_cast<const exprt &>(get_nil_irep()));
+  op.back().swap(e2);
 }
 
 /*******************************************************************\
@@ -69,15 +71,16 @@ Function: exprt::move_to_operands
 
 void exprt::move_to_operands(exprt &e1, exprt &e2, exprt &e3)
 {
+  operandst &op=operands();
   #ifndef USE_LIST
-  ops.reserve(ops.size()+3);
+  op.reserve(op.size()+3);
   #endif
-  ops.push_back(static_cast<const exprt &>(get_nil_irep()));
-  ops.back().swap(e1);
-  ops.push_back(static_cast<const exprt &>(get_nil_irep()));
-  ops.back().swap(e2);
-  ops.push_back(static_cast<const exprt &>(get_nil_irep()));
-  ops.back().swap(e3);
+  op.push_back(static_cast<const exprt &>(get_nil_irep()));
+  op.back().swap(e1);
+  op.push_back(static_cast<const exprt &>(get_nil_irep()));
+  op.back().swap(e2);
+  op.push_back(static_cast<const exprt &>(get_nil_irep()));
+  op.back().swap(e3);
 }
 
 /*******************************************************************\
@@ -94,7 +97,7 @@ Function: exprt::copy_to_operands
 
 void exprt::copy_to_operands(const exprt &expr)
 {
-  ops.push_back(expr);
+  operands().push_back(expr);
 }
 
 /*******************************************************************\
@@ -111,11 +114,12 @@ Function: exprt::copy_to_operands
 
 void exprt::copy_to_operands(const exprt &e1, const exprt &e2)
 {
+  operandst &op=operands();
   #ifndef USE_LIST
-  ops.reserve(ops.size()+2);
+  op.reserve(op.size()+2);
   #endif
-  ops.push_back(e1);
-  ops.push_back(e2);
+  op.push_back(e1);
+  op.push_back(e2);
 }
 
 /*******************************************************************\
@@ -133,12 +137,13 @@ Function: exprt::copy_to_operands
 void exprt::copy_to_operands(const exprt &e1, const exprt &e2,
                              const exprt &e3)
 {
+  operandst &op=operands();
   #ifndef USE_LIST
-  ops.reserve(ops.size()+3);
+  op.reserve(op.size()+3);
   #endif
-  ops.push_back(e1);
-  ops.push_back(e2);
-  ops.push_back(e3);
+  op.push_back(e1);
+  op.push_back(e2);
+  op.push_back(e3);
 }
 
 /*******************************************************************\
@@ -190,9 +195,9 @@ void exprt::make_not()
 
   exprt new_expr;
 
-  if(id()==i_not && ops.size()==1)
+  if(id()==i_not && operands().size()==1)
   {
-    new_expr.swap(ops.front());
+    new_expr.swap(operands().front());
   }
   else
   {
@@ -354,7 +359,7 @@ void exprt::negate()
     else if(id()=="unary-")
     {
       exprt tmp;
-      assert(ops.size()==1);
+      assert(operands().size()==1);
       tmp.swap(op0());
       swap(tmp);
     }

@@ -145,8 +145,7 @@ void bp_typecheckt::convert_function(exprt &declaration)
     id2string(symbol.mode)+"::fkt::"+
     id2string(symbol.base_name);
 
-  exprt &tmp = to_expr(declaration.add("body"));
-  symbol.value.swap(tmp);
+  symbol.value.swap(declaration.add("body"));
   
   convert_function_arguments(symbol);
   function_identifiers.push_back(symbol.name);  
