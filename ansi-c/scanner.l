@@ -436,130 +436,98 @@ void ansi_c_scanner_init()
                   yyansi_clval.expr->type().set("#unsigned", true);
 		  return(TOK_INTEGER);
 		}
-{decinteger_u_w}  { loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#unsigned", true);
+{decinteger_u_w}  {
                   std::string value(yytext);
                   unsigned w=atoi(value.substr(value.rfind('i')+1).c_str());
                   value=value.substr(0, value.rfind('i'));
-                  stack(yyansi_clval).type().set("#width", w);
-                  stack(yyansi_clval).set("value", value);
-      return(TOK_INTEGER);
+                  make_integer(value);
+                  yyansi_clval.expr->type().set("#width", w);
+                  yyansi_clval.expr->type().set("#unsigned", true);
+                  return(TOK_INTEGER);
     }
-{octinteger_u}	{ loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#unsigned", true);
-                  stack(yyansi_clval).set("#cformat", yytext);
-                  stack(yyansi_clval).set("#hex_or_oct", true);
+{octinteger_u}	{
                   mp_integer value=string2integer(yytext, 8);
-                  stack(yyansi_clval).set("value", integer2string(value));
+                  make_integer(integer2string(value));
+                  yyansi_clval.expr->type().set("#unsigned", true);
+                  yyansi_clval.expr->set("#hex_or_oct", true);
 		  return(TOK_INTEGER);
 		}
-{octinteger_u_w}  { loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#unsigned", true);
-                  stack(yyansi_clval).set("#cformat", yytext);
-                  stack(yyansi_clval).set("#hex_or_oct", true);
+{octinteger_u_w}  {
                   std::string str(yytext);
                   unsigned w=atoi(str.substr(str.rfind('i')+1).c_str());
                   str=str.substr(0, str.rfind('i'));
                   mp_integer value=string2integer(str, 8);
-                  stack(yyansi_clval).set("value", integer2string(value));
-                  stack(yyansi_clval).type().set("#width", w);
-      return(TOK_INTEGER);
+                  make_integer(integer2string(value));
+                  yyansi_clval.expr->type().set("#unsigned", true);
+                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->type().set("#width", w);
+                  return(TOK_INTEGER);
     }
-{hexinteger_u}	{ loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#unsigned", true);
-                  stack(yyansi_clval).set("#cformat", yytext);
-                  stack(yyansi_clval).set("#hex_or_oct", true);
+{hexinteger_u}	{
                   std::string hex(yytext, 2, std::string::npos);
                   mp_integer value=string2integer(hex, 16);
-                  stack(yyansi_clval).set("value", integer2string(value));
+                  make_integer(integer2string(value));
+                  yyansi_clval.expr->type().set("#unsigned", true);
+                  yyansi_clval.expr->set("#hex_or_oct", true);
 		  return(TOK_INTEGER);
 		}
-{hexinteger_u_w}  { loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#unsigned", true);
-                  stack(yyansi_clval).set("#cformat", yytext);
-                  stack(yyansi_clval).set("#hex_or_oct", true);
+{hexinteger_u_w}  {
                   std::string hex(yytext, 2, std::string::npos);
                   unsigned w=atoi(hex.substr(hex.rfind('i')+1).c_str());
                   hex=hex.substr(0, hex.rfind('i'));
-                  stack(yyansi_clval).type().set("#width", w);
                   mp_integer value=string2integer(hex, 16);
-                  stack(yyansi_clval).set("value", integer2string(value));
-      return(TOK_INTEGER);
+                  make_integer(integer2string(value));
+                  yyansi_clval.expr->type().set("#unsigned", true);
+                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->type().set("#width", w);
+                  return(TOK_INTEGER);
     }
-{decinteger_l}	{ loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#width", "long");
-                  stack(yyansi_clval).set("value", yytext);
+{decinteger_l}	{
+                  make_integer(yytext);
+                  yyansi_clval.expr->type().set("#width", "long");
 		  return(TOK_INTEGER);
 		}
-{octinteger_l}	{ loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#width", "long");
-                  stack(yyansi_clval).set("#cformat", yytext);
-                  stack(yyansi_clval).set("#hex_or_oct", true);
+{octinteger_l}	{
                   mp_integer value=string2integer(yytext, 8);
-                  stack(yyansi_clval).set("value", integer2string(value));
+                  make_integer(integer2string(value));
+                  yyansi_clval.expr->type().set("#width", "long");
+                  yyansi_clval.expr->set("#hex_or_oct", true);
 		  return(TOK_INTEGER);
 		}
-{hexinteger_l}	{ loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#width", "long");
-                  stack(yyansi_clval).set("#cformat", yytext);
-                  stack(yyansi_clval).set("#hex_or_oct", true);
+{hexinteger_l}	{
                   std::string hex(yytext, 2, std::string::npos);
                   mp_integer value=string2integer(hex, 16);
-                  stack(yyansi_clval).set("value", integer2string(value));
+                  make_integer(integer2string(value));
+                  yyansi_clval.expr->type().set("#width", "long");
+                  yyansi_clval.expr->set("#hex_or_oct", true);
 		  return(TOK_INTEGER);
 		}
-{decinteger_ul}	{ loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#width", "long");
-                  stack(yyansi_clval).type().set("#unsigned", true);
-                  stack(yyansi_clval).set("value", yytext);
+{decinteger_ul}	{
+                  make_integer(yytext);
+                  yyansi_clval.expr->type().set("#width", "long");
+                  yyansi_clval.expr->type().set("#unsigned", true);
 		  return(TOK_INTEGER);
 		}
-{octinteger_ul}	{ loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#width", "long");
-                  stack(yyansi_clval).type().set("#unsigned", true);
-                  stack(yyansi_clval).set("#cformat", yytext);
-                  stack(yyansi_clval).set("#hex_or_oct", true);
+{octinteger_ul}	{
                   mp_integer value=string2integer(yytext, 8);
-                  stack(yyansi_clval).set("value", integer2string(value));
+                  make_integer(integer2string(value));
+                  yyansi_clval.expr->type().set("#width", "long");
+                  yyansi_clval.expr->type().set("#unsigned", true);
+                  yyansi_clval.expr->set("#hex_or_oct", true);
 		  return(TOK_INTEGER);
 		}
-{hexinteger_ul}	{ loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
-                  stack(yyansi_clval).type().set("#width", "long");
-                  stack(yyansi_clval).type().set("#unsigned", true);
-                  stack(yyansi_clval).set("#cformat", yytext);
-                  stack(yyansi_clval).set("#hex_or_oct", true);
+{hexinteger_ul}	{
                   std::string hex(yytext, 2, std::string::npos);
                   mp_integer value=string2integer(hex, 16);
-                  stack(yyansi_clval).set("value", integer2string(value));
+                  make_integer(integer2string(value));
+                  yyansi_clval.expr->type().set("#width", "long");
+                  yyansi_clval.expr->type().set("#unsigned", true);
+                  yyansi_clval.expr->set("#hex_or_oct", true);
 		  return(TOK_INTEGER);
 		}
-{decinteger_ll}	{ loc();
-                  stack(yyansi_clval).id("constant");
-                  stack(yyansi_clval).type()=typet("integer");
+{decinteger_ll}	{
+                  make_integer(yytext);
                   stack(yyansi_clval).type().set("#width", "longlong");
-                  stack(yyansi_clval).set("value", yytext);
 		  return(TOK_INTEGER);
 		}
 {octinteger_ll}	{ loc();
