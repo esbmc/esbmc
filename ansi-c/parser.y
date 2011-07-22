@@ -920,7 +920,8 @@ aggregate_name:
 		'{' member_declaration_list_opt '}'
 	{
 	  typet &type=$<expr>2->type();
-	  type.add("components").get_sub().swap($4->add("operands").get_sub());
+	  type.add("components").get_sub() = (std::vector<irept> &)$4->operands();
+          $4->operands().clear();
 
 	  // grab symbol
 	  init(&$$, "symbol");
@@ -940,7 +941,8 @@ aggregate_name:
 		'{' member_declaration_list_opt '}'
 	{
 	  typet &type=$<expr>3->type();
-	  type.add("components").get_sub().swap($5->add("operands").get_sub());
+	  type.add("components").get_sub() = (std::vector<irept> &)$5->operands();
+          $5->operands().clear();
 
 	  // grab symbol
 	  init(&$$, "symbol");
