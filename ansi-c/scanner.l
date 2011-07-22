@@ -149,6 +149,7 @@ void ansi_c_scanner_init()
 <INITIAL>.|\n	{ BEGIN(GRAMMAR);
 		  yyless(0);		/* start again with this character */
 		  //yy_current_buffer->yy_at_bol = 1; /* at beginning of line */
+                  loc();
 		  switch(PARSER.grammar)
 		   {
                    case ansi_c_parsert::EXPRESSION: return TOK_PARSE_EXPRESSION;
@@ -320,7 +321,7 @@ void ansi_c_scanner_init()
 "__inline__"	{ loc(); return TOK_INLINE; }
 }
 
-<MSC_ASM1>{ws}"{" { BEGIN(MSC_ASM2); return '{'; }
+<MSC_ASM1>{ws}"{" { BEGIN(MSC_ASM2); loc(); return '{'; }
 <MSC_ASM1>.*    {
                   init(&yyansi_clval.expr);
                   yyansi_clval.expr->set("value", yytext);
