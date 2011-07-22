@@ -36,6 +36,16 @@ int isatty(int) { return 0; }
 
 #define loc() { init(&yyansi_clval.loc); PARSER.set_location(*yyansi_clval.loc); }
 
+static void make_string(std::string value)
+{
+  init(&yyansi_clval.expr, "constant");
+  PARSER.set_location(*yyansi_clval.expr);
+  yyansi_clval.expr->type()=typet("integer");
+  yyansi_clval.expr->set("#cformat", yytext);
+  yyansi_clval.expr->set("value", value);
+  return;
+}
+
 /*** macros for easier rule definition **********************************/
 %}
 
