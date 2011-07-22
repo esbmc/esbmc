@@ -1720,6 +1720,7 @@ external_definition_list:
 external_definition:
 	function_definition
 	| declaration
+	{ }
 	| ';' {} // empty declaration
 	;
 
