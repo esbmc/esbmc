@@ -277,7 +277,7 @@ static void create_function_scope(exprt &expr)
   }
 }
 
-void
+static void
 move_decl_info_upwards(typet &dest, typet &src)
 {
 
