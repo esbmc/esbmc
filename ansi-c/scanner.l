@@ -584,16 +584,19 @@ void ansi_c_scanner_init()
 		}
 
 {float}		{
+                  init(&yyansi_clval.expr);
                   convert_float_literal(yytext, *yyansi_clval.expr);
                   PARSER.set_location(*yyansi_clval.expr);
 		  return(TOK_FLOATING);
 		}
 {float_f}	{
+                  init(&yyansi_clval.expr);
                   convert_float_literal(yytext, *yyansi_clval.expr);
                   PARSER.set_location(*yyansi_clval.expr);
 		  return(TOK_FLOATING);
 		}
 {float_l}	{
+                  init(&yyansi_clval.expr);
                   convert_float_literal(yytext, *yyansi_clval.expr);
                   PARSER.set_location(*yyansi_clval.expr);
 		  return(TOK_FLOATING);
