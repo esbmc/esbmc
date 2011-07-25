@@ -99,7 +99,7 @@ bool c_typecheck_baset::zero_initializer(
     {
       exprt tmp;
 
-      if(zero_initializer(tmp, (const typet &)it->find("type")))
+      if(zero_initializer(tmp, (const typet &)it->type()))
         return true;
 
       value.move_to_operands(tmp);
@@ -121,7 +121,7 @@ bool c_typecheck_baset::zero_initializer(
 
     exprt tmp;
 
-    if(zero_initializer(tmp, (const typet &)components.front().find("type")))
+    if(zero_initializer(tmp, (const typet &)components.front().type()))
       return true;
 
     value.move_to_operands(tmp);

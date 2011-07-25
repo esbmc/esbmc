@@ -254,7 +254,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
     }
     else
     {
-      const typet &type=static_cast<const typet &>(it->find("type"));
+      const typet &type=static_cast<const typet &>(it->type());
       exprt size_expr=csize(type);
 
       mp_integer i;
@@ -1067,7 +1067,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
   }
 
   expr.type()=
-    static_cast<const typet &>(component.find("type"));
+    static_cast<const typet &>(component.type());
 
   if(op0.get_bool("#lvalue"))
     expr.set("#lvalue", true);

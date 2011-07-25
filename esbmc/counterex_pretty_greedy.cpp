@@ -116,7 +116,7 @@ void counterexample_beautification_greedyt::minimize(
 
     forall_irep(it, components)
     {
-      const typet &subtype=(typet &)it->find("type");
+      const typet &subtype=(typet &)it->type();
       unsigned width;
 
       if(boolbv_get_width(subtype, width))
@@ -235,7 +235,7 @@ unsigned counterexample_beautification_greedyt::get_max_width(
 
     forall_irep(it, components)
     {
-      const typet &subtype=(typet &)it->find("type");
+      const typet &subtype=(typet &)it->type();
       max_width=std::max(max_width, get_max_width(ns, subtype));
     }
 

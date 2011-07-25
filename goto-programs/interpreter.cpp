@@ -578,7 +578,7 @@ unsigned interpretert::get_size(const typet &type) const
 
     forall_irep(it, components)
     {
-      const typet &sub_type=static_cast<const typet &>(it->find("type"));
+      const typet &sub_type=static_cast<const typet &>(it->type());
 
       if(sub_type.id()!="code")
         sum+=get_size(sub_type);
@@ -595,7 +595,7 @@ unsigned interpretert::get_size(const typet &type) const
 
     forall_irep(it, components)
     {
-      const typet &sub_type=static_cast<const typet &>(it->find("type"));
+      const typet &sub_type=static_cast<const typet &>(it->type());
 
       if(sub_type.id()!="code")
         max_size=std::max(max_size, get_size(sub_type));

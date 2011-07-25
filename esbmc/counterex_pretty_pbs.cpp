@@ -62,7 +62,7 @@ void counterexample_beautification_pbst::beautify(
 
     forall_irep(it, components)
     {
-      const typet &subtype=(typet &)it->find("type");
+      const typet &subtype=(typet &)it->type();
       unsigned width;
 
       if(boolbv_get_width(subtype, width))

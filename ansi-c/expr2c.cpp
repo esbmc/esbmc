@@ -219,7 +219,7 @@ std::string expr2ct::convert_rec(
 
     forall_irep(it, components.get_sub())
     {
-      typet &subtype=(typet &)it->find("type");
+      typet &subtype=(typet &)it->type();
       base_type(subtype, ns);
     }
     */
@@ -234,7 +234,7 @@ std::string expr2ct::convert_rec(
 
     forall_irep(it, components.get_sub())
     {
-      typet &subtype=(typet &)it->find("type");
+      typet &subtype=(typet &)it->type();
       base_type(subtype, ns);
     }
     */
