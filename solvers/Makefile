@@ -5,9 +5,9 @@ include ../common
 include ../local.inc
 
 OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
-	prop/propobj.o smt/smt.o  dplib/dplib.o
+	prop/propobj.o smt/smt.o
 
-DIRS= sat flattening qbf prop smt dplib
+DIRS= sat flattening qbf prop smt
 
 ###############################################################################
 
@@ -24,6 +24,11 @@ endif
 ifdef USE_CVC
 OBJS+= cvc/cvc.o
 DIRS+= cvc
+endif
+
+ifdef USE_DPLIB
+OBJS+= dplib/dplib.o
+DIRS+= dplib
 endif
 
 ###############################################################################
