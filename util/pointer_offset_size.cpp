@@ -52,7 +52,7 @@ mp_integer pointer_offset_size(const typet &type)
 
     forall_irep(it, components)
     {
-      const typet &subtype=(typet &)it->find("type");
+      const typet &subtype=it->type();
       mp_integer sub_size=pointer_offset_size(subtype);
       result+=sub_size;
     }

@@ -75,7 +75,7 @@ void base_type(typet &type, const namespacet &ns)
 
     Forall_irep(it, components)
     {
-      typet &subtype=(typet &)it->find("type");
+      typet &subtype=it->type();
       base_type(subtype, ns);
     }
   }
@@ -199,8 +199,8 @@ bool base_type_eqt::base_type_eq_rec(
       
     for(unsigned i=0; i<arguments1.size(); i++)
     {
-      const typet &subtype1=(const typet &)arguments1[i].find("type");
-      const typet &subtype2=(const typet &)arguments2[i].find("type");
+      const typet &subtype1=arguments1[i].type();
+      const typet &subtype2=arguments2[i].type();
       if(!base_type_eq_rec(subtype1, subtype2)) return false;
     }
     
