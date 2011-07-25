@@ -22,12 +22,12 @@ public:
   
   exprt &decl_value()
   {
-    return static_cast<exprt &>(add("value"));
+    return static_cast<exprt &>(add("decl_value"));
   }
   
   const exprt &decl_value() const
   {
-    return static_cast<const exprt &>(find("value"));
+    return static_cast<const exprt &>(find("decl_value"));
   }
   
   void set_name(const irep_idt &name)
