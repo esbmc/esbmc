@@ -93,7 +93,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
   // eliminate typecasts from NULL
   if(expr.type().id()=="pointer" &&
      expr.op0().is_constant() &&
-     expr.op0().get("value")=="NULL")
+     expr.op0().value().as_string()=="NULL")
   {
     exprt tmp=expr.op0();
     tmp.type()=expr.type();
@@ -124,7 +124,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
 
   if(operand.is_constant())
   {
-    const irep_idt &value=operand.get("value");
+    const irep_idt &value=operand.value();
 
     exprt new_expr("constant", expr.type());
 
@@ -137,21 +137,21 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
 
       if(expr_type_id=="bool")
       {
-        new_expr.set("value", (int_value!=0)?"true":"false");
+        new_expr.value((int_value!=0)?"true":"false");
         expr.swap(new_expr);
         return false;
       }
 
       if(expr_type_id=="unsignedbv" || expr_type_id=="signedbv")
       {
-        new_expr.set("value", integer2binary(int_value, expr_width));
+        new_expr.value(integer2binary(int_value, expr_width));
         expr.swap(new_expr);
         return false;
       }
 
       if(expr_type_id=="integer")
       {
-        new_expr.set("value", value);
+        new_expr.value(value);
         expr.swap(new_expr);
         return false;
       }
@@ -159,7 +159,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
       if(expr_type_id=="c_enum" ||
          expr_type_id=="incomplete_c_enum")
       {
-        new_expr.set("value", integer2string(int_value));
+        new_expr.value(integer2string(int_value));
         expr.swap(new_expr);
         return false;
       }
@@ -229,7 +229,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
          expr_type_id=="signedbv" ||
          expr_type_id=="bv")
       {
-        new_expr.set("value", integer2binary(int_value, expr_width));
+        new_expr.value(integer2binary(int_value, expr_width));
         expr.swap(new_expr);
         return false;
       }
@@ -237,7 +237,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
       if(expr_type_id=="c_enum" ||
          expr_type_id=="incomplete_c_enum")
       {
-        new_expr.set("value", integer2string(int_value));
+        new_expr.value(integer2string(int_value));
         expr.swap(new_expr);
         return false;
       }
@@ -316,7 +316,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
       {
         mp_integer int_value=binary2integer(
           id2string(value), false);
-        new_expr.set("value", integer2binary(int_value, expr_width));
+        new_expr.value(integer2binary(int_value, expr_width));
         expr.swap(new_expr);
         return false;
       }
@@ -415,7 +415,7 @@ bool simplify_exprt::simplify_address_of(exprt &expr)
   if(expr.op0().id()=="NULL-object")
   {
     exprt constant("constant", expr.type());
-    constant.set("value", "NULL");
+    constant.value("NULL");
     expr.swap(constant);
     return false;
   }
@@ -1007,8 +1007,8 @@ bool simplify_exprt::simplify_bitwise(exprt &expr)
 
   while(expr.operands().size()>=2)
   {
-    const irep_idt &a_str=expr.op0().get("value");
-    const irep_idt &b_str=expr.op1().get("value");
+    const irep_idt &a_str=expr.op0().value();
+    const irep_idt &b_str=expr.op1().value();
 
     if(!expr.op0().is_constant())
       break;
@@ -1046,7 +1046,7 @@ bool simplify_exprt::simplify_bitwise(exprt &expr)
     else
       break;
 
-    new_op.set("value", new_value);
+    new_op.value(new_value);
 
     // erase first operand
     expr.operands().erase(expr.operands().begin());
@@ -1100,7 +1100,7 @@ bool simplify_exprt::simplify_extractbit(exprt &expr)
   if(i<0 || i>=width)
     return true;
 
-  const irep_idt &value=expr.op0().get("value");
+  const irep_idt &value=expr.op0().value();
 
   if(value.size()!=width)
     return true;
@@ -1139,7 +1139,7 @@ bool simplify_exprt::simplify_concatenation(exprt &expr)
         bool value=op.is_true();
         op=exprt("constant", typet("unsignedbv"));
         op.type().set("width", 1);
-        op.set("value", value?"1":"0");
+        op.value(value?"1":"0");
       }
     }
 
@@ -1158,8 +1158,8 @@ bool simplify_exprt::simplify_concatenation(exprt &expr)
       {
         // merge!
         const std::string new_value=
-          opi.get_string("value")+opn.get_string("value");
-        opi.set("value", new_value);
+          opi.value().as_string()+opn.value().as_string();
+        opi.value(new_value);
         opi.type().set("width", new_value.size());
         // erase opn
         expr.operands().erase(expr.operands().begin()+i+1);
@@ -1341,8 +1341,8 @@ bool simplify_exprt::simplify_if_implies(
       const irep_idt &type_id = cond.op1().type().id();
       if(type_id=="integer" || type_id=="natural")
       {
-	if(string2integer(cond.op1().get_string("value")) >=
-	  string2integer(expr.op1().get_string("value")))
+	if(string2integer(cond.op1().value().as_string()) >=
+	  string2integer(expr.op1().value().as_string()))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1351,8 +1351,8 @@ bool simplify_exprt::simplify_if_implies(
       else if(type_id=="unsignedbv")
       {
 	const mp_integer i1, i2;
-	if(binary2integer(cond.op1().get_string("value"), false) >=
-           binary2integer(expr.op1().get_string("value"), false))
+	if(binary2integer(cond.op1().value().as_string(), false) >=
+           binary2integer(expr.op1().value().as_string(), false))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1361,8 +1361,8 @@ bool simplify_exprt::simplify_if_implies(
       else if(type_id=="signedbv")
       {
 	const mp_integer i1, i2;
-	if(binary2integer(cond.op1().get_string("value"), true) >=
-           binary2integer(expr.op1().get_string("value"), true))
+	if(binary2integer(cond.op1().value().as_string(), true) >=
+           binary2integer(expr.op1().value().as_string(), true))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1377,8 +1377,8 @@ bool simplify_exprt::simplify_if_implies(
       const irep_idt &type_id = cond.op1().type().id();
       if(type_id=="integer" || type_id=="natural")
       {
-	if(string2integer(cond.op1().get_string("value")) <=
-	  string2integer(expr.op1().get_string("value")))
+	if(string2integer(cond.op1().value().as_string()) <=
+	  string2integer(expr.op1().value().as_string()))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1387,8 +1387,8 @@ bool simplify_exprt::simplify_if_implies(
       else if(type_id=="unsignedbv")
       {
 	const mp_integer i1, i2;
-	if(binary2integer(cond.op1().get_string("value"), false) <=
-           binary2integer(expr.op1().get_string("value"), false))
+	if(binary2integer(cond.op1().value().as_string(), false) <=
+           binary2integer(expr.op1().value().as_string(), false))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1397,8 +1397,8 @@ bool simplify_exprt::simplify_if_implies(
       else if(type_id=="signedbv")
       {
 	const mp_integer i1, i2;
-	if(binary2integer(cond.op1().get_string("value"), true) <=
-           binary2integer(expr.op1().get_string("value"), true))
+	if(binary2integer(cond.op1().value().as_string(), true) <=
+           binary2integer(expr.op1().value().as_string(), true))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1987,13 +1987,13 @@ bool simplify_exprt::simplify_bitnot(exprt &expr)
     {
       if(op.id()=="constant")
       {
-        std::string value=op.get_string("value");
+        std::string value=op.value().as_string();
 
         for(unsigned i=0; i<value.size(); i++)
           value[i]=(value[i]=='0')?'1':'0';
 
         exprt tmp("constant", op.type());
-        tmp.set("value", value);
+        tmp.value(value);
         expr.swap(tmp);
         return false;
       }
@@ -2506,10 +2506,10 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
     const exprt *other=NULL;
 
     if(expr.op0().is_constant() &&
-       expr.op0().get("value")=="NULL")
+       expr.op0().value().as_string()=="NULL")
       other=&(expr.op1());
     else if(expr.op1().is_constant() &&
-            expr.op1().get("value")=="NULL")
+            expr.op1().value().as_string()=="NULL")
       other=&(expr.op0());
 
     if(other!=NULL)
@@ -2817,7 +2817,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
     {
       mp_integer i;
 
-      const irep_idt &value=expr.op0().get("value");
+      const irep_idt &value=expr.op0().value();
 
       if(to_integer(expr.op1(), i))
       {
@@ -2958,7 +2958,7 @@ tvt simplify_exprt::objects_equal(const exprt &a, const exprt &b)
     return objects_equal_address_of(a.op0(), b.op0());
 
   if(a.id()=="constant" && b.id()=="constant" &&
-     a.get("value")=="NULL" && b.get("value")=="NULL")
+     a.value().as_string()=="NULL" && b.value().as_string()=="NULL")
     return tvt(true);
 
   return tvt(tvt::TV_UNKNOWN);
@@ -3308,7 +3308,7 @@ bool simplify_exprt::simplify_extractbits(exprt &expr)
 
     assert(start>=end); //is this always the case??
 
-    const irep_idt &value=expr.op0().get("value");
+    const irep_idt &value=expr.op0().value();
 
     if(value.size()!=width)
       return true;
@@ -3320,7 +3320,7 @@ bool simplify_exprt::simplify_extractbits(exprt &expr)
                     integer2long(start-end+1));
 
     exprt tmp("constant", expr.type());
-    tmp.set("value", extracted_value);
+    tmp.value(extracted_value);
     expr.swap(tmp);
 
     return false;

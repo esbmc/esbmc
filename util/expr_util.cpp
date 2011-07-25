@@ -37,7 +37,7 @@ exprt gen_zero(const typet &type)
      type_id=="natural" ||
      type_id=="complex")
   {
-    result.set("value", "0");
+    result.value("0");
   }
   else if(type_id=="unsignedbv" ||
           type_id=="signedbv" ||
@@ -52,7 +52,7 @@ exprt gen_zero(const typet &type)
     for(unsigned i=0; i<width; i++)
       value+='0';
 
-    result.set("value", value);
+    result.value(value);
   }
   else if(type_id=="bool")
   {
@@ -60,7 +60,7 @@ exprt gen_zero(const typet &type)
   }
   else if(type_id=="pointer")
   {
-    result.set("value", "NULL");
+    result.value("NULL");
   }
   else
     result.make_nil();
@@ -92,7 +92,7 @@ exprt gen_one(const typet &type)
      type_id=="natural" ||
      type_id=="complex")
   {
-    result.set("value", "1");
+    result.value("1");
   }
   else if(type_id=="unsignedbv" ||
           type_id=="signedbv")
@@ -101,7 +101,7 @@ exprt gen_one(const typet &type)
     for(int i=0; i<atoi(type.get("width").c_str())-1; i++)
       value+='0';
     value+='1';
-    result.set("value", value);
+    result.value(value);
   }
   else if(type_id=="fixedbv")
   {

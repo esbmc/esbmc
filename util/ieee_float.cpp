@@ -602,7 +602,7 @@ Function: ieee_floatt::to_expr
 exprt ieee_floatt::to_expr() const
 {
   exprt result=exprt("constant", spec.to_type());
-  result.set("value", integer2binary(pack(), spec.width()));
+  result.value(integer2binary(pack(), spec.width()));
   return result;
 }
 

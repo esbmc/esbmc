@@ -25,14 +25,14 @@ Function: string2array
 
 void string2array(const exprt &src, exprt &dest)
 {
-  const std::string &str=src.get_string("value");
+  const std::string &str=src.value().as_string();
   unsigned string_size=str.size()+1; // zero
   const typet &char_type=src.type().subtype();
   bool char_is_unsigned=char_type.id()=="unsignedbv";
 
   exprt size("constant", typet("signedbv"));
   size.type().set("width", config.ansi_c.int_width);
-  size.set("value", integer2binary(string_size, config.ansi_c.int_width));
+  size.value(integer2binary(string_size, config.ansi_c.int_width));
 
   dest=exprt("constant", typet("array"));
   dest.type().subtype()=char_type;
