@@ -19,7 +19,9 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/sat/dimacs_cnf.h>
 
+#ifdef USE_CVC
 #include <solvers/cvc/cvc_dec.h>
+#endif
 
 #include <solvers/boolector/boolector_dec.h>
 
@@ -502,7 +504,11 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       throw "This version of ESBMC was not compiled with boolector support";
 #endif
     else if(options.get_bool_option("cvc"))
+#ifdef USE_CVC
       solver = new cvc_solver(*this);
+#else
+      throw "This version of ESBMC was not compiled with CVC support";
+#endif
 #if 0
     else if(options.get_bool_option("smt"))
       solver = new smt_solver(*this);
@@ -712,6 +718,7 @@ bool bmc_baset::dimacs_solver::write_output()
   return false;
 }
 
+#ifdef USE_CVC
 bmc_baset::cvc_solver::cvc_solver(bmc_baset &bmc)
   : output_solver(bmc), cvc(*out_file)
 {
@@ -722,6 +729,7 @@ bool bmc_baset::cvc_solver::write_output()
 {
   return false;
 }
+#endif
 
 #ifdef USE_SMT
 bmc_baset::smt_solver::smt_solver(bmc_baset &bmc)
