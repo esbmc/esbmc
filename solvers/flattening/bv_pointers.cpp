@@ -341,7 +341,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
   }
   else if(expr.id()=="constant")
   {
-    if(expr.get("value")!="NULL")
+    if(expr.value().as_string()!="NULL")
       throw "found non-NULL pointer constant";
 
     encode(pointer_logic.get_null_object(), bv);

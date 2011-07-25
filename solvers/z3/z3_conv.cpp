@@ -3748,9 +3748,9 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
   else if (expr.type().id() == "bool")
   {
     // value will not actually be interpreted as number by below code
-    value = expr.get_string("value");
+    value = expr.value().as_string();
   }
-  else if (expr.type().id() == "pointer" && expr.get_string("value") == "NULL")
+  else if (expr.type().id() == "pointer" && expr.value().as_string() == "NULL")
   {
     // Uuugghhhh. Match what happens if we were to feed this to binary2integer.
     value = "0";

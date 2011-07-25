@@ -447,9 +447,9 @@ exprt z3_convt::bv_get_rec(
       std::cout << "offset: " << offset.pretty() << std::endl;
 
       pointer_logict::pointert pointer;
-      pointer.object=integer2long(binary2integer(object.get_string("value"), false));
+      pointer.object=integer2long(binary2integer(object.value().as_string(), false));
       std::cout << "pointer.object: " << pointer.object << std::endl;
-      pointer.offset=binary2integer(offset.get_string("value"), true);
+      pointer.offset=binary2integer(offset.value().as_string(), true);
       std::cout << "pointer.offset: " << pointer.offset << std::endl;
       if (pointer.offset < 0)
       {

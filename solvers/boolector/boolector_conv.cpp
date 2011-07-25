@@ -863,9 +863,9 @@ BtorExp* boolector_convt::convert_overflow_typecast(const exprt &expr)
   }
 
   if (is_signed(expr.op0().type()))
-    value = integer2string(binary2integer(expr.op0().get_string("value"), true),10);
+    value = integer2string(binary2integer(expr.op0().value().as_string(), true),10);
   else
-	value = integer2string(binary2integer(expr.op0().get_string("value"), false),10);
+	value = integer2string(binary2integer(expr.op0().value().as_string(), false),10);
 
   if (convert_bv(expr.op0(), operand[0]))
 	  return boolector_false(boolector_ctx);
@@ -1371,9 +1371,9 @@ bool boolector_convt::convert_constant_array(const exprt &expr, BtorExp* &bv)
 	//std::cout << "atoi(i_str): " << atoi(i_str) << std::endl;
     int_cte = boolector_int(boolector_ctx, atoi(i_str), config.ansi_c.int_width);
 	if (is_signed(it->type()))
-	  value_cte = integer2string(binary2integer(it->get("value").c_str(), true),10);
+	  value_cte = integer2string(binary2integer(it->value().as_string().c_str(), true),10);
 	else
-	  value_cte = integer2string(binary2integer(it->get("value").c_str(), false),10);
+	  value_cte = integer2string(binary2integer(it->value().as_string().c_str(), false),10);
 	//std::cout << "value_cte.c_str(): " << value_cte.c_str() << std::endl;
 	//std::cout << "width: " << width << std::endl;
 	val_cte = boolector_int(boolector_ctx, atoi(value_cte.c_str()), width);
@@ -1441,20 +1441,20 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
 
   if (expr.type().id() == "c_enum")
   {
-    value = expr.get_string("value");
+    value = expr.value().as_string();
   }
   else if (expr.type().id() == "bool")
   {
-    value = expr.get_string("value");
+    value = expr.value().as_string();
   }
-  else if (expr.type().id() == "pointer" && expr.get_string("value") == "NULL")
+  else if (expr.type().id() == "pointer" && expr.value().as_string() == "NULL")
   {
     value = "0";
   }
   else if (is_signed(expr.type()))
-    value = integer2string(binary2integer(expr.get_string("value"), true),10);
+    value = integer2string(binary2integer(expr.value().as_string(), true),10);
   else
-	value = integer2string(binary2integer(expr.get_string("value"), false),10);
+	value = integer2string(binary2integer(expr.value().as_string(), false),10);
 
   width = atoi(expr.type().get("width").c_str());
 
@@ -1478,8 +1478,8 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
 	BtorExp *magnitude, *fraction;
 	std::string m, f, c;
 
-	m = extract_magnitude(expr.get_string("value"), width);
-	f = extract_fraction(expr.get_string("value"), width);
+	m = extract_magnitude(expr.value().as_string(), width);
+	f = extract_fraction(expr.value().as_string(), width);
 
 	magnitude = boolector_int(boolector_ctx, atoi(m.c_str()), width/2);
 	fraction = boolector_int(boolector_ctx, atoi(f.c_str()), width/2);
@@ -2017,7 +2017,7 @@ bool boolector_convt::convert_array_of(const exprt &expr, BtorExp* &bv)
   std::string tmp;
   unsigned int j, size, width;
 
-  tmp = integer2string(binary2integer(array_type_size.size().get_string("value"), false),10);
+  tmp = integer2string(binary2integer(array_type_size.size().value().as_string(), false),10);
   size = atoi(tmp.c_str());
   width = atoi(expr.type().subtype().get("width").c_str());
 
@@ -2113,7 +2113,7 @@ bool boolector_convt::convert_index(const exprt &expr, BtorExp* &bv)
     unsigned size;
     BtorExp *lower, *upper, *formula;
 
-    tmp = integer2string(binary2integer(array_type_size.size().get_string("value"), false),10);
+    tmp = integer2string(binary2integer(array_type_size.size().value().as_string(), false),10);
     size = atoi(tmp.c_str());
     std::cout << "size: " << size << std::endl;
     std::cout << "expr.op1().type().id(): " << expr.op1().type().id() << std::endl;
@@ -2159,9 +2159,9 @@ bool boolector_convt::convert_shift_constant(const exprt &expr, unsigned int wop
   unsigned int size, width;
 
   if (is_signed(expr.type()))
-    value = integer2string(binary2integer(expr.get_string("value"), true),10);
+    value = integer2string(binary2integer(expr.value().as_string(), true),10);
   else
-	value = integer2string(binary2integer(expr.get_string("value"), false),10);
+	value = integer2string(binary2integer(expr.value().as_string(), false),10);
 
   size = atoi(expr.type().get("width").c_str());
 

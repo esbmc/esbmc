@@ -516,7 +516,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     {
       // RB: decimal conversion ... some solvers do not
       // support binary constants ...
-      const char *str=expr.get("value").c_str();
+      const char *str=expr.value().as_string().c_str();
       unsigned len=strlen(str);
       unsigned long value = 0;
       //
@@ -543,7 +543,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else if(expr.type().id()=="pointer")
     {
       assert( false && "Construct not supported yet" );
-      const irep_idt &value=expr.get("value");
+      const irep_idt &value=expr.value();
       
       if(value=="NULL")
       {
