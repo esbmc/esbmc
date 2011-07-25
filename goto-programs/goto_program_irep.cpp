@@ -34,7 +34,7 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
   if (instruction.location.is_not_nil())
     irep.set("location", instruction.location);
     
-  irep.set("type", (long) instruction.type);    
+  irep.set("typeid", (long) instruction.type);
 
   irep.set("guard", instruction.guard);
     
@@ -101,7 +101,7 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
   instruction.function = irep.find("function").id();
   instruction.location = static_cast<const locationt&>(irep.find("location"));    
   instruction.type = static_cast<goto_program_instruction_typet>(
-                  atoi(irep.find("type").id_string().c_str()));
+                  atoi(irep.find("typeid").id_string().c_str()));
   instruction.guard = static_cast<const exprt&>(irep.find("guard"));
   instruction.event = irep.find("event").id();
   
