@@ -532,7 +532,7 @@ void value_set_fivrnst::get_value_set_rec(
   else if(expr.is_constant())
   {
     // check if NULL
-    if(expr.get("value")=="NULL" &&
+    if(expr.value()=="NULL" &&
        expr.type().id()=="pointer")
     {
       insert_from(dest, exprt("NULL-object", expr.type().subtype()), 0);
@@ -672,8 +672,7 @@ void value_set_fivrnst::get_value_set_rec(
   
     const std::string name=
       "value_set::dynamic_object"+
-      dynamic_object.instance().get_string("value")+
-      suffix;
+      dynamic_object.instance().value().as_string()+suffix;
   
     // look it up
     valuest::const_iterator v_it=values.find(name);
@@ -1222,7 +1221,7 @@ void value_set_fivrnst::assign_rec(
   
     const std::string name=
       "value_set::dynamic_object"+
-      dynamic_object.instance().get_string("value");
+      dynamic_object.instance().value().as_string();
 
     entryt &temp_entry = get_temporary_entry(name, suffix);
     

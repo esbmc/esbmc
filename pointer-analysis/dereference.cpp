@@ -711,8 +711,8 @@ void dereferencet::bounds_check(
 	const typet array_type2=ns.follow(expr.op0().operands()[0].type());
 	const exprt &size_expr2=to_array_type(array_type2).size();
 
-	val1 = integer2string(binary2integer(size_expr.get_string("value"), true),10);
-	val2 = integer2string(binary2integer(size_expr2.get_string("value"), true),10);
+	val1 = integer2string(binary2integer(size_expr.value().as_string(), true),10);
+	val2 = integer2string(binary2integer(size_expr2.value().as_string(), true),10);
     total = atoi(val1.c_str())*atoi(val2.c_str());
 
     s << total;

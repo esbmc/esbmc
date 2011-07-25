@@ -180,7 +180,7 @@ std::string inv_object_storet::build_string(const exprt &expr) const
   {
     // NULL?
     if(expr.type().id()=="pointer")
-      if(expr.get("value")=="NULL")
+      if(expr.value()=="NULL")
         return "0";
   
     mp_integer i;
@@ -1145,7 +1145,7 @@ exprt invariant_sett::get_constant(const exprt &expr) const
             if(value==0)
             {
               exprt tmp("constant", expr.type());
-              tmp.set("value", "NULL");
+              tmp.value("NULL");
               return tmp;
             }
           }

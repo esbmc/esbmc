@@ -2788,7 +2788,7 @@ const std::string &goto_convertt::get_string_constant(
     throw 0;
   }
 
-  return expr.op0().op0().get_string("value");
+  return expr.op0().op0().value().as_string();
 }
 
 /*******************************************************************\

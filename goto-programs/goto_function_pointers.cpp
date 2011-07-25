@@ -118,7 +118,7 @@ static exprt build_or_expr(
       if(o.object().id()=="NULL-object")
       {
         address=constant_exprt(pointer_type);
-        address.set("value", "NULL");
+        address.value("NULL");
       }
       else
       {

@@ -451,7 +451,7 @@ void goto_symext::symex_step(
                   if (num.id() != "constant")
                     throw "Can't switch to non-constant thread id no";
 
-                  unsigned int tid = binary2integer(num.get("value").as_string(), false).to_long();
+                  unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
                   ex_state.set_active_state(tid);
                   return;
                 }

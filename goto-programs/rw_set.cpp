@@ -125,7 +125,7 @@ void rw_sett::read_write_rec(
 
     //std::cout << "index: " << expr.pretty() << std::endl;
     //std::cout << "antes suffix: " << suffix << std::endl;
-    tmp = integer2string(binary2integer(expr.op1().get_string("value"), true),10);
+    tmp = integer2string(binary2integer(expr.op1().value().as_string(), true),10);
     //std::cout << "depois tmp: " << tmp << std::endl;
 
     read_write_rec(expr.op0(), r, w, "["+suffix+tmp+"]", guard);

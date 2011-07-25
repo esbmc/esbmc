@@ -575,7 +575,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
       // Munge back into the shape of an actual string
       std::string str = "";
       forall_operands(iter2, it->second.value) {
-        char c = (char)strtol(iter2->get("value").as_string().c_str(), NULL, 2);
+        char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
         if (c != 0)
           str += c;
         else

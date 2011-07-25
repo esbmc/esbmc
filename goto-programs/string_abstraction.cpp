@@ -663,7 +663,7 @@ exprt string_abstractiont::build_unknown(bool write)
     return exprt("NULL-object", type);
 
   exprt result=exprt("constant", type);
-  result.set("value", "NULL");
+  result.value("NULL");
 
   return result;
 }
