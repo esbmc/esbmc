@@ -65,12 +65,12 @@ void ansi_c_convertt::convert_declaration(ansi_c_declarationt &declaration)
   // add language prefix
   declaration.set_name(language_prefix+id2string(declaration.get_name()));
 
-  if(declaration.value().is_not_nil())
+  if(declaration.decl_value().is_not_nil())
   {
     if(declaration.type().id()=="code")
-      convert_code(to_code(declaration.value()));
+      convert_code(to_code(declaration.decl_value()));
     else
-      convert_expr(declaration.value());
+      convert_expr(declaration.decl_value());
   }
 }
 

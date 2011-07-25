@@ -20,12 +20,12 @@ public:
   {
   }
   
-  exprt &value()
+  exprt &decl_value()
   {
     return static_cast<exprt &>(add("value"));
   }
   
-  const exprt &value() const
+  const exprt &decl_value() const
   {
     return static_cast<const exprt &>(find("value"));
   }
@@ -144,7 +144,7 @@ public:
   {
     symbol.clear();    
     symbol.location=location();
-    symbol.value=value();
+    symbol.value=decl_value();
     symbol.type=type();
     symbol.name=get_name();
     symbol.base_name=get_base_name();

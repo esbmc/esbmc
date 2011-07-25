@@ -256,7 +256,7 @@ void ansi_c_parsert::new_declaration(
   declaration.set_base_name(base_name);
   declaration.set_name(name);
   declaration.location()=identifier.location();
-  declaration.value().make_nil();
+  declaration.decl_value().make_nil();
   declaration.set_is_type(is_tag || id_class==ANSI_C_TYPEDEF);
   declaration.set_is_typedef(id_class==ANSI_C_TYPEDEF);
   declaration.set_is_global(is_global);
