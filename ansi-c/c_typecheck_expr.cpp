@@ -1782,7 +1782,7 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
     // save location
     locationt location=expr.location();
 
-    mp_integer value=string2integer(expr.get_string("value"));
+    mp_integer value=string2integer(expr.value().as_string());
     const std::string &given_width=expr.type().get_string("#width");
     bool is_unsigned=expr.type().get_bool("#unsigned");
     bool is_hex_or_oct=expr.get_bool("#hex_or_oct");
