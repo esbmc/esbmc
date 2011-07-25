@@ -53,6 +53,10 @@ ifdef MINISAT
 CXXFLAGS += -DMINISAT
 endif
 
+ifdef USE_CVC
+CXXFLAGS+= USE_CVC
+endif
+
 ###############################################################################
 
 esbmc: $(OBJ)
