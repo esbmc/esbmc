@@ -254,7 +254,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
     }
     else
     {
-      const typet &type=static_cast<const typet &>(it->type());
+      const typet &type=it->type();
       exprt size_expr=csize(type);
 
       mp_integer i;
@@ -1066,8 +1066,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
     throw 0;
   }
 
-  expr.type()=
-    static_cast<const typet &>(component.type());
+  expr.type()=component.type();
 
   if(op0.get_bool("#lvalue"))
     expr.set("#lvalue", true);
@@ -1739,8 +1738,7 @@ void c_typecheck_baset::typecheck_function_call_arguments(
       const code_typet::argumentt &argument_type=
         argument_types[i];
 
-      const typet &op_type=
-        static_cast<const typet &>(argument_type.find("type"));
+      const typet &op_type=argument_type.type();
 
       if(op_type.id()=="bool" &&
          op.id()=="sideeffect" &&

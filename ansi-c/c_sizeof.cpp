@@ -93,7 +93,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
 
     forall_irep(it, components)
     {
-      const typet &sub_type=static_cast<const typet &>(it->type());
+      const typet &sub_type=it->type();
 
       if(sub_type.id()=="code")
       {
@@ -124,7 +124,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
 
     forall_irep(it, components)
     {
-      const typet &sub_type=static_cast<const typet &>(it->type());
+      const typet &sub_type=it->type();
 
       if(sub_type.id()=="code")
       {
