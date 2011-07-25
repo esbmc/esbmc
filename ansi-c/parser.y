@@ -625,7 +625,7 @@ default_declaring_list:
 	initializer_opt
 		{
 		  init(&($<expr>$));
-		  $<expr>$->add("type")=*$1;
+		  $<expr>$->type()=*$1;
 		  decl_statement(*$<expr>$, *$<expr>3, *$4);
 		}
 	| type_qualifier_list identifier_declarator
@@ -636,13 +636,13 @@ default_declaring_list:
 	initializer_opt
 	{
 	  init(&$<expr>$);
-	  $<expr>$->add("type")=*$1;
+	  $<expr>$->type()=*$1;
 	  decl_statement(*$<expr>$, *$<expr>3, *$4);
 	}
 	| default_declaring_list ',' identifier_declarator
 		{
 		  init(&$<expr>$);
-		  const irept &t=$1->find("type");
+		  const irept &t=$1->type();
 		  PARSER.new_declaration(t, *$3, *$<expr>$);
 		}
 		initializer_opt
@@ -662,7 +662,7 @@ declaring_list:			/* DeclarationSpec */
 		initializer_opt
 	{
 	  init(&$<expr>$);
-	  $<expr>$->add("type")=*$1;
+	  $<expr>$->type()=*$1;
 	  decl_statement(*$<expr>$, *$<expr>3, *$4);
 	}
 	| type_specifier declarator
@@ -674,13 +674,13 @@ declaring_list:			/* DeclarationSpec */
 		initializer_opt
 	{
 	  init(&$<expr>$);
-	  $<expr>$->add("type")=*$1;
+	  $<expr>$->type()=*$1;
 	  decl_statement(*$<expr>$, *$<expr>3, *$4);
 	}
 	| declaring_list ',' declarator
 		{
 		  init(&$<expr>$);
-		  const irept &t=$1->find("type");
+		  const irept &t=$1->type();
 		  PARSER.new_declaration(t, *$3, *$<expr>$);
 		}
 		initializer_opt
