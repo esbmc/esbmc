@@ -264,7 +264,7 @@ string_literal_list:
 	| string_literal_list string
 	{ $$ = $1;
 	  // do concatenation
-	  $$->set("value", $$->get_string("value")+$2->get_string("value"));
+	  $$->value($$->value().as_string()+$2->value().as_string());
 	}
 	;
 

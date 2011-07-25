@@ -70,7 +70,7 @@ void convert_float_literal(
     else
       value*=power(10, exponent);
 
-    dest.set("value", integer2binary(value, width));  
+    dest.value(integer2binary(value, width));
   }
   else
   {
@@ -79,7 +79,6 @@ void convert_float_literal(
     a.spec=to_floatbv_type(dest.type());
     a.from_base10(significand, exponent);
 
-    dest.set("value",
-      integer2binary(a.pack(), a.spec.width()));  
+    dest.value(integer2binary(a.pack(), a.spec.width()));
   }
 }
