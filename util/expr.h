@@ -54,9 +54,6 @@ public:
   explicit exprt(const irep_idt &_id):irept(_id) { }
   exprt(const irep_idt &_id, const typet &_type):irept(_id) { type()=_type; }
  
-  typet &type() { return static_cast<typet &>(add(i_type)); }
-  const typet &type() const { return static_cast<const typet &>(find(i_type)); }
-
   bool has_operands() const
   { return !find(o_operands).is_nil(); }
 

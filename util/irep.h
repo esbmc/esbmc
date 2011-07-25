@@ -43,6 +43,8 @@ typedef dstring_hash irep_id_hash;
 
 #include <iostream>
 
+class typet;
+
 class irept
 {
 public:
@@ -128,6 +130,9 @@ public:
   void remove(const irep_namet &name);
   void move_to_sub(irept &irep);
   void move_to_named_sub(const irep_namet &name, irept &irep);
+
+  typet &type() { return (typet &)(add("type")); }
+  const typet &type() const { return (typet &)(find("type")); }
   
   friend bool operator==(const irept &i1, const irept &i2);
    
