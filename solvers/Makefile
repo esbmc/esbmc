@@ -12,13 +12,18 @@ ifdef Z3
 Z3BUILD= z3/z3.o
 endif
 
+ifdef USE_CVC
+CVCBUILD= cvc/cvc.o
+CVCDIR= cvc
+endif
+
 ###############################################################################
 
 OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
-	prop/propobj.o cvc/cvc.o smt/smt.o  dplib/dplib.o \
-	$(BOOLBUILD) $(Z3BUILD)
+	prop/propobj.o smt/smt.o  dplib/dplib.o \
+	$(BOOLBUILD) $(Z3BUILD) $(CVCBUILD)
 
-DIRS= sat flattening qbf prop cvc smt dplib boolector z3
+DIRS= sat flattening qbf prop smt dplib boolector z3 $(CVCDIR)
 
 $(DIRS):
 	$(MAKE) -C $@
