@@ -22,6 +22,12 @@ static void init(typet **e)
   *e = new typet();
 }
 
+static void init(ansi_c_declarationt **d)
+{
+
+  *d = new ansi_c_declarationt();
+}
+
 static void init(exprt **expr, const std::string &id)
 {
   init(expr);

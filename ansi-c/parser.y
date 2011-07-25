@@ -24,6 +24,7 @@ extern char *yyansi_ctext;
 %}
 
 %union {
+  ansi_c_declarationt* decl;
   exprt *expr;
   exprt *loc;  // Might not be an exprt far in the future.
   typet *type;
@@ -149,6 +150,8 @@ extern char *yyansi_ctext;
 %type <fake> grammar translation_unit external_definition_list
 %type <fake> external_definition function_definition
 
+%type <decl> function_head enumerator_declaration
+
 %type <expr> string_literal_list primary_expression builtin_va_arg_expression
 %type <expr> builtin_offsetof offsetof_member_designator statement_expression
 %type <expr> postfix_expression member_name argument_expression_list
@@ -163,7 +166,7 @@ extern char *yyansi_ctext;
 %type <expr> member_declaration member_default_declaring_list
 %type <expr> member_declaring_list member_declarator
 %type <expr> member_identifier_declarator bit_field_size_opt bit_field_size
-%type <expr> enum_key enumerator_list enumerator_declaration
+%type <expr> enum_key enumerator_list
 %type <expr> enumerator_value_opt parameter_type_list KnR_parameter_list
 %type <expr> KnR_parameter parameter_list parameter_declaration
 %type <expr> identifier_or_typedef_name initializer_opt initializer
@@ -175,7 +178,7 @@ extern char *yyansi_ctext;
 %type <expr> jump_statement gcc_asm_statement msc_asm_statement
 %type <expr> asm_commands asm_assembler_template
 %type <expr> KnR_parameter_header_opt KnR_parameter_header
-%type <expr> KnR_parameter_declaration function_head
+%type <expr> KnR_parameter_declaration
 %type <expr> declarator identifier_declarator unary_identifier_declarator
 %type <expr> postfix_identifier_declarator paren_identifier_declarator
 %type <expr> identifier integer floating character string constant
@@ -1191,7 +1194,7 @@ enumerator_declaration:
 	  irept type("enum");
 	  PARSER.new_declaration(type, *$1, *$$);
 	  $$->set("is_macro", true);
-	  $$->add("value").swap(*$2);
+	  $$->decl_value() = *$2;
 	}
 	;
 
@@ -1729,7 +1732,7 @@ external_definition:
 function_definition:
 	function_head KnR_parameter_header_opt compound_statement
 	{ 
-          $1->add("value").swap(*$3);
+          $1->decl_value() = *$3;
           PARSER.pop_scope();
           PARSER.move_declaration(*$1);
           PARSER.function="";
@@ -1738,7 +1741,7 @@ function_definition:
 	| function_head KnR_parameter_header_opt gcc_asm_statement
 	{ 
           // we ignore the value for now
-          //$1->add("value").swap(*$3);
+          //$1->decl_value() = *$3;
           PARSER.pop_scope();
           PARSER.move_declaration(*$1);
           PARSER.function="";
