@@ -665,7 +665,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   {
     // zero typecasted to a pointer is NULL
     expr.id("constant");
-    expr.set("value", "NULL");
+    expr.value("NULL");
     expr.remove("operands");
     return;
   }
@@ -899,14 +899,14 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
     if(type0.id()=="pointer" && op1.is_zero())
     {
       op1=exprt("constant", type0);
-      op1.set("value", "NULL");
+      op1.value("NULL");
       return;
     }
 
     if(type1.id()=="pointer" && op0.is_zero())
     {
       op0=exprt("constant", type1);
-      op0.set("value", "NULL");
+      op0.value("NULL");
       return;
     }
 

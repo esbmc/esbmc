@@ -446,7 +446,7 @@ void c_typecastt::implicit_typecast_followed(
        src_type.id()=="integer"))
     {
       expr=exprt("constant", dest_type);
-      expr.set("value", "NULL");
+      expr.value("NULL");
       return; // ok
     }
   

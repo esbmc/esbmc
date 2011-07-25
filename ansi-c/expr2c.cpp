@@ -1302,7 +1302,7 @@ std::string expr2ct::convert_constant(
 {
   const typet &type=ns.follow(src.type());
   const std::string &cformat=src.get_string("#cformat");
-  const std::string &value=src.get_string("value");
+  const std::string &value=src.value().as_string();
   std::string dest;
 
   if(cformat!="")

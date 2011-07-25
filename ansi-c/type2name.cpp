@@ -76,7 +76,7 @@ std::string type2name(const typet &type)
   else if(type.id()=="array")
   {
     const array_typet &t = to_array_type(type);
-    result+="ARR" + t.size().get("value").as_string();
+    result+="ARR" + t.size().value().as_string();
   }
   else if(type.id()=="incomplete_array")
   {    

@@ -48,7 +48,7 @@ void convert_integer_literal(
   
   if(base==10)
   {
-    dest.set("value", src);
+    dest.value(src);
     value=string2integer(src, 10);
   }
   else if(base==8)

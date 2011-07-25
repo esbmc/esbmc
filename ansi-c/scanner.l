@@ -57,7 +57,7 @@ static void make_integer(std::string value)
   PARSER.set_location(*yyansi_clval.expr);
   yyansi_clval.expr->type()=typet("integer");
   yyansi_clval.expr->set("#cformat", yytext);
-  yyansi_clval.expr->set("value", value);
+  yyansi_clval.expr->value(value);
   return;
 }
 
@@ -324,13 +324,13 @@ void ansi_c_scanner_init()
 <MSC_ASM1>{ws}"{" { BEGIN(MSC_ASM2); loc(); return '{'; }
 <MSC_ASM1>.*    {
                   init(&yyansi_clval.expr);
-                  yyansi_clval.expr->set("value", yytext);
+                  yyansi_clval.expr->value(yytext);
                   BEGIN(GRAMMAR);
 		  return(TOK_STRING); }
 
 <MSC_ASM2>[^}]* {
                   init(&yyansi_clval.expr);
-                  yyansi_clval.expr->set("value", yytext);
+                  yyansi_clval.expr->value(yytext);
 		  return(TOK_STRING); }
 <MSC_ASM2>"}"   { BEGIN(GRAMMAR); return '}'; }
 

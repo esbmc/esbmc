@@ -253,7 +253,7 @@ bool c_main(
       {
         // assign argv[argc] to NULL
         exprt null("constant", argv_symbol.type.subtype());
-        null.set("value", "NULL");
+        null.value("NULL");
 
         exprt index_expr("index", argv_symbol.type.subtype());
         index_expr.copy_to_operands(
@@ -273,7 +273,7 @@ bool c_main(
 
         // assume envp[envp_size] is NULL
         exprt null("constant", envp_symbol.type.subtype());
-        null.set("value", "NULL");
+        null.value("NULL");
 
         exprt index_expr("index", envp_symbol.type.subtype());
         index_expr.copy_to_operands(

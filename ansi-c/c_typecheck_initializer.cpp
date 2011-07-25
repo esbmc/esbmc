@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <arith_tools.h>
 #include <string2array.h>
 #include <config.h>
+#include <i2string.h>
 #include <type_eq.h>
 #include <std_types.h>
 #include <expr_util.h>
@@ -58,7 +59,7 @@ bool c_typecheck_baset::zero_initializer(
           type_id=="incomplete_c_enum")
   {
     value=exprt("constant", type);
-    value.set("value", 0);
+    value.value(i2string(0));
     return false;
   }
   else if(type_id=="array")

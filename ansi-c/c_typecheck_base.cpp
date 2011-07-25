@@ -495,7 +495,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
                 final_new.id()=="c_enum") &&
                 old_symbol.value.is_constant() &&
                 new_symbol.value.is_constant() &&
-                old_symbol.value.get("value")==new_symbol.value.get("value"))
+                old_symbol.value.value()==new_symbol.value.value())
             {
               // ignore
             }
