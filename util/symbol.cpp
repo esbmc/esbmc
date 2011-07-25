@@ -95,7 +95,7 @@ void symbolt::to_irep(irept &dest) const
 {
   dest.clear();
   dest.type()=type;
-  dest.add("value")=value;
+  dest.add("symvalue")=value;
   dest.add("location")=location;
   dest.set("name", name);
   dest.set("module", module);
@@ -137,7 +137,7 @@ Function: symbolt::from_irep
 void symbolt::from_irep(const irept &src)
 {
   type=src.type();
-  value=static_cast<const exprt &>(src.find("value"));
+  value=static_cast<const exprt &>(src.find("symvalue"));
   location=static_cast<const locationt &>(src.find("location"));
 
   name=src.get("name");
