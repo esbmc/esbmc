@@ -62,6 +62,14 @@ public:
   
   const operandst &operands() const
   { return (const operandst &)(find(o_operands).get_sub()); }
+
+  irep_idt value(void) const {
+    return get(a_value);
+  }
+
+  void value(irep_idt val) {
+    set(a_value, val);
+  };
    
   exprt &op0()
   { return operands().front(); }
