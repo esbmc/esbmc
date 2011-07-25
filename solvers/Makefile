@@ -4,26 +4,29 @@ include ../config.inc
 include ../common
 include ../local.inc
 
-ifdef BOOLECTOR
-BOOLBUILD= boolector/boolector.o
-endif
+OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
+	prop/propobj.o smt/smt.o  dplib/dplib.o
 
-ifdef Z3
-Z3BUILD= z3/z3.o
-endif
-
-ifdef USE_CVC
-CVCBUILD= cvc/cvc.o
-CVCDIR= cvc
-endif
+DIRS= sat flattening qbf prop smt dplib
 
 ###############################################################################
 
-OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
-	prop/propobj.o smt/smt.o  dplib/dplib.o \
-	$(BOOLBUILD) $(Z3BUILD) $(CVCBUILD)
+ifdef BOOLECTOR
+OBJS+= boolector/boolector.o
+DIRS+= boolector
+endif
 
-DIRS= sat flattening qbf prop smt dplib boolector z3 $(CVCDIR)
+ifdef Z3
+OBJS+= z3/z3.o
+DIRS+= z3
+endif
+
+ifdef USE_CVC
+OBJS+= cvc/cvc.o
+DIRS+= cvc
+endif
+
+###############################################################################
 
 $(DIRS):
 	$(MAKE) -C $@
