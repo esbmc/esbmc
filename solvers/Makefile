@@ -4,10 +4,9 @@ include ../config.inc
 include ../common
 include ../local.inc
 
-OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
-	prop/propobj.o
+OBJS= sat/satsolvers.o flattening/flattening.o prop/propobj.o
 
-DIRS= sat flattening qbf prop
+DIRS= sat flattening prop
 
 ###############################################################################
 
@@ -34,6 +33,11 @@ endif
 ifdef USE_SMT
 OBJS+= smt/smt.o
 DIRS+= smt
+endif
+
+ifdef USE_QBF
+OBJS+= qbf/qbfsolvers.o
+DIRS+= qbf
 endif
 
 ###############################################################################
