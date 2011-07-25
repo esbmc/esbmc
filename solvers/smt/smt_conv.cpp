@@ -209,7 +209,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
     forall_irep(it, components)
     {
       if(component_name==it->get("name")) { found=true; break; }
-      const typet &subtype=(typet &)it->find("type");
+      const typet &subtype=it->type();
       mp_integer sub_size=pointer_offset_size(subtype);
       if(sub_size==0) assert(false);
       offset+=sub_size;

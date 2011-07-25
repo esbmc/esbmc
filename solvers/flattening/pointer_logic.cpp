@@ -224,8 +224,7 @@ exprt pointer_logict::object_rec(
     {
       assert(offset>=current_offset);
 
-      const typet &subtype=
-        static_cast<const typet &>(it->find("type"));
+      const typet &subtype=it->type();
 
       mp_integer sub_size=pointer_offset_size(subtype);
       

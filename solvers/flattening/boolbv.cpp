@@ -102,7 +102,7 @@ bool boolbvt::literal(
 
       forall_irep(it, components.get_sub())
       {
-        const typet &subtype=(typet &)it->find("type");
+        const typet &subtype=it->type();
 
         if(it->get("name")==component_name)
           return literal(expr.op0(), bit+offset, dest);
@@ -506,7 +506,7 @@ void boolbvt::convert_struct(const exprt &expr, bvt &bv)
   
   forall_irep(it, components.get_sub())
   {
-    const typet &subtype=(typet &)it->find("type");
+    const typet &subtype=it->type();
     const exprt &op=expr.operands()[i];
 
     if(subtype!=op.type())

@@ -332,7 +332,7 @@ exprt z3_convt::bv_get_rec(
 
       forall_irep(it, components.get_sub())
       {
-        const typet &subtype=static_cast<const typet &>(it->find("type"));
+        const typet &subtype=it->type();
         op.push_back(nil_exprt());
         if (subtype.id()!="pointer") //@TODO: beautify counter-examples that contain pointers
         {
@@ -399,7 +399,7 @@ exprt z3_convt::bv_get_rec(
 
         forall_irep(it, components.get_sub())
         {
-          const typet &subtype=static_cast<const typet &>(it->find("type"));
+          const typet &subtype=it->type();
           //op.push_back(nil_exprt());
           if (subtype.id()!="pointer") //@TODO
           {

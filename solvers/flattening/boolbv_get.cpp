@@ -153,7 +153,7 @@ exprt boolbvt::bv_get_rec(
 
       forall_irep(it, components.get_sub())
       {
-        const typet &subtype=static_cast<const typet &>(it->find("type"));
+        const typet &subtype=it->type();
         op.push_back(nil_exprt());
 
         unsigned sub_width;
@@ -199,9 +199,7 @@ exprt boolbvt::bv_get_rec(
       value.set("component_name",
                 components.get_sub()[component_nr].get("name"));
       
-      const typet &subtype=
-        static_cast<const typet &>(
-          components.get_sub()[component_nr].find("type"));
+      const typet &subtype=components.get_sub()[component_nr].type();
 
       value.op0()=bv_get_rec(bv, unknown, offset, subtype);
 

@@ -251,8 +251,7 @@ void boolbvt::convert_with_struct(
   {
     unsigned sub_width;
 
-    const typet &subtype=static_cast<const typet &>
-      (it->find("type"));
+    const typet &subtype=it->type();
 
     if(boolbv_get_width(subtype, sub_width))
       sub_width=0;

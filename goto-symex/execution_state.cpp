@@ -994,7 +994,7 @@ execution_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == exprt::arrayof) {
     /* An array of the same set of values: generate all of them. */
     str = "array(";
-    irept array = rhs.find("type");
+    irept array = rhs.type();
     exprt size = (exprt&)array.find("size");
     str += "sz(" + serialise_expr(size) + "),";
     str += "elem(" + serialise_expr(rhs.op0()) + "))";

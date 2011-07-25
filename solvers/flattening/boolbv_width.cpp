@@ -127,7 +127,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
     forall_irep(it, components.get_sub())
     {
       unsigned sub_width;
-      const typet &sub_type=static_cast<const typet &>(it->find("type"));
+      const typet &sub_type=it->type();
 
       if(get_width(sub_type, sub_width))
         return true;
@@ -151,7 +151,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
     // get the biggest element, plus our index
     forall_irep(it, components.get_sub())
     {
-      const typet &subtype=static_cast<const typet &>(it->find("type"));
+      const typet &subtype=it->type();
 
       unsigned sub_width;
       if(get_width(subtype, sub_width))

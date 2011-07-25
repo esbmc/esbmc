@@ -160,7 +160,7 @@ exprt boolector_convt::bv_get_rec(
 
       forall_irep(it, components.get_sub())
       {
-        const typet &subtype=static_cast<const typet &>(it->find("type"));
+        const typet &subtype=static_cast<const typet &>(it->type());
         op.push_back(nil_exprt());
 
         unsigned sub_width;
