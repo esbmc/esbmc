@@ -51,7 +51,7 @@ static void statement(exprt &expr, const std::string &id)
   expr.set("statement", id);
 }
 
-static void decl_statement(exprt &dest, exprt &decl, exprt &initializer)
+static void decl_statement(exprt &dest, ansi_c_declarationt &decl, exprt &initializer)
 {
   codet decl_statement("decl");
   
@@ -62,7 +62,7 @@ static void decl_statement(exprt &dest, exprt &decl, exprt &initializer)
   
   if(initializer.is_not_nil())
   {
-    decl.add("value")=initializer;
+    decl.decl_value()=initializer;
     decl_statement.move_to_operands(initializer);
   }
   
@@ -181,6 +181,7 @@ static void do_pointer(typet &ptr, typet &dest)
   make_subtype(dest, ptr);
 }
 
+// XXX - fix type
 static void do_enum_members(
   const typet &enum_type,
   exprt &members)
@@ -193,8 +194,9 @@ static void do_enum_members(
   Forall_operands(it, members)
   {
     it->type()=enum_type;
-    
-    exprt &v=(exprt &)it->add("value");
+
+    ansi_c_declarationt &decl = (ansi_c_declarationt&)*it; // Casting you say...
+    exprt &v=decl.decl_value();
     if(v.is_nil())
       v=value;
 

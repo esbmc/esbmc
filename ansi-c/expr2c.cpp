@@ -22,6 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fixedbv.h>
 #include <prefix.h>
 
+#include "ansi_c_declaration.h"
 #include "expr2c.h"
 #include "lispirep.h"
 #include "c_typecast.h"
@@ -1330,8 +1331,8 @@ std::string expr2ct::convert_constant(
         return dest;
       }
 
-      const exprt &v=
-        static_cast<const exprt &>(it->find("value"));
+      const ansi_c_declarationt &decl = (const ansi_c_declarationt&)*it;
+      const exprt &v = decl.decl_value();
 
       if(v.is_not_nil())
         assert(!to_integer(v, i));

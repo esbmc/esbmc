@@ -622,36 +622,36 @@ declaration:
 default_declaring_list:
 	declaration_qualifier_list identifier_declarator
 		{
-		  init(&($<expr>$));
-		  PARSER.new_declaration(*$1, *$2, *$<expr>$);
+		  init(&($<decl>$));
+		  PARSER.new_declaration(*$1, *$2, *$<decl>$);
 		}
 	initializer_opt
 		{
 		  init(&($<expr>$));
 		  $<expr>$->type()=*$1;
-		  decl_statement(*$<expr>$, *$<expr>3, *$4);
+		  decl_statement(*$<expr>$, *$<decl>3, *$4);
 		}
 	| type_qualifier_list identifier_declarator
 	{
-	  init(&$<expr>$);
-	  PARSER.new_declaration(*$1, *$2, *$<expr>$);
+	  init(&$<decl>$);
+	  PARSER.new_declaration(*$1, *$2, *$<decl>$);
 	}
 	initializer_opt
 	{
 	  init(&$<expr>$);
 	  $<expr>$->type()=*$1;
-	  decl_statement(*$<expr>$, *$<expr>3, *$4);
+	  decl_statement(*$<expr>$, *$<decl>3, *$4);
 	}
 	| default_declaring_list ',' identifier_declarator
 		{
-		  init(&$<expr>$);
+		  init(&$<decl>$);
 		  const irept &t=$1->type();
-		  PARSER.new_declaration(t, *$3, *$<expr>$);
+		  PARSER.new_declaration(t, *$3, *$<decl>$);
 		}
 		initializer_opt
 	{
 	  $<expr>$=$1;
-	  decl_statement(*$<expr>$, *$<expr>4, *$5);
+	  decl_statement(*$<expr>$, *$<decl>4, *$5);
 	}
 	;
 
@@ -659,37 +659,37 @@ declaring_list:			/* DeclarationSpec */
 	declaration_specifier declarator
 		{
 		  // the symbol has to be visible during initialization
-		  init(&$<expr>$);
-		  PARSER.new_declaration(*$1, *$2, *$<expr>$);
+		  init(&$<decl>$);
+		  PARSER.new_declaration(*$1, *$2, *$<decl>$);
 		}
 		initializer_opt
 	{
 	  init(&$<expr>$);
 	  $<expr>$->type()=*$1;
-	  decl_statement(*$<expr>$, *$<expr>3, *$4);
+	  decl_statement(*$<expr>$, *$<decl>3, *$4);
 	}
 	| type_specifier declarator
 		{
 		  // the symbol has to be visible during initialization
-		  init(&$<expr>$);
-		  PARSER.new_declaration(*$1, *$2, *$<expr>$);
+		  init(&$<decl>$);
+		  PARSER.new_declaration(*$1, *$2, *$<decl>$);
 		}
 		initializer_opt
 	{
 	  init(&$<expr>$);
 	  $<expr>$->type()=*$1;
-	  decl_statement(*$<expr>$, *$<expr>3, *$4);
+	  decl_statement(*$<expr>$, *$<decl>3, *$4);
 	}
 	| declaring_list ',' declarator
 		{
-		  init(&$<expr>$);
+		  init(&$<decl>$);
 		  const irept &t=$1->type();
-		  PARSER.new_declaration(t, *$3, *$<expr>$);
+		  PARSER.new_declaration(t, *$3, *$<decl>$);
 		}
 		initializer_opt
 	{
 	  $<expr>$=$1;
-	  decl_statement(*$<expr>$, *$<expr>4, *$5);
+	  decl_statement(*$<expr>$, *$<decl>4, *$5);
 	}
 	;
 
