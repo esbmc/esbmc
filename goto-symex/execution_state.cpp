@@ -1059,7 +1059,7 @@ execution_statet::serialise_expr(const exprt &rhs)
     // It appears constants can be "true", "false", or a bit vector. Parse that,
     // and then print the value as a base 10 integer.
 
-    irep_idt idt_val = rhs.get(exprt::a_value);
+    irep_idt idt_val = rhs.value();
     if (idt_val == exprt::i_true) {
       val = 1;
     } else if (idt_val == exprt::i_false) {

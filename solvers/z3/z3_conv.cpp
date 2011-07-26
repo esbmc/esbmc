@@ -3191,7 +3191,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   	  //print_data_types(args[0], args[0]);
 	  if (op.id()==exprt::constant)
   	  {
-	    if (op.get(exprt::a_value).compare("NULL") == 0)
+	    if (op.value().compare("NULL") == 0)
   		  bv = convert_number(0, config.ansi_c.int_width, true);
   	  }
   	  else if (op.operands().size()==0)
@@ -3514,7 +3514,7 @@ bool z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast 
 
   bv = z3_api.mk_var(z3_ctx, identifier.c_str(), tuple_type);
 
-  if (expr.get(exprt::a_value).compare("NULL") == 0)
+  if (expr.value().compare("NULL") == 0)
   {
     if (int_encoding)
       bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, z3_api.mk_int(z3_ctx, -1));
@@ -3687,9 +3687,9 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 	else
 	{
 	  if (is_signed(it->type()))
-	    value_cte = integer2string(binary2integer(it->get(exprt::a_value).c_str(), true),10);
+	    value_cte = integer2string(binary2integer(it->value().c_str(), true),10);
 	  else
-	    value_cte = integer2string(binary2integer(it->get(exprt::a_value).c_str(), false),10);
+	    value_cte = integer2string(binary2integer(it->value().c_str(), false),10);
 
 	  if (int_encoding)
 	  {

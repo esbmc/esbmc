@@ -286,7 +286,7 @@ void basic_symext::symex_trace(
     std::list<exprt> vars;
     
     exprt trace_event("trave_event");
-    trace_event.set("event", code.arguments()[1].op0().get(exprt::a_value));
+    trace_event.set("event", code.arguments()[1].op0().value());
     
     vars.push_back(trace_event);
 
