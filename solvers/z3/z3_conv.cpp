@@ -816,7 +816,7 @@ bool z3_convt::create_struct_type(const typet &type, Z3_type_ast &bv)
   proj_types = new Z3_type_ast[size_of_struct];
   proj_decls = new Z3_const_decl_ast[size_of_struct];
 
-  struct_name = "struct_type_" + type.get_string("tag");
+  struct_name = "struct_type_" + type.tag().as_string();
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, struct_name.c_str());
 
   u_int i=0;
@@ -878,7 +878,7 @@ bool z3_convt::create_union_type(const typet &type, Z3_type_ast &bv)
   proj_types = new Z3_type_ast[size_of_union];
   proj_decls = new Z3_const_decl_ast[size_of_union];
 
-  union_name = "union_type_" + type.get_string("tag");
+  union_name = "union_type_" + type.tag().as_string();
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, union_name.c_str());
 
   u_int i=0;
@@ -3298,7 +3298,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 	  }
 	}
 	exprt new_struct("symbol", s);
-    new_struct.type().set("tag", expr.type().get_string("tag"));
+    new_struct.type().set("tag", expr.type().tag().as_string());
 	new_struct.set(irept::a_identifier, "typecast_" + expr.op0().identifier().as_string());
 
 	if (convert_bv(new_struct,operand))
@@ -3368,7 +3368,7 @@ bool z3_convt::convert_struct(const exprt &expr, Z3_ast &bv)
   assert(components.size()>=expr.operands().size());
   assert(!components.empty());
 
-  identifier = "conv_struct_" + expr.type().get_string("tag");
+  identifier = "conv_struct_" + expr.type().tag().as_string();
 
   if (convert_identifier(identifier, expr.type(), bv))
 	return true;
@@ -3417,7 +3417,7 @@ bool z3_convt::convert_union(const exprt &expr, Z3_ast &bv)
   assert(components.size()>=expr.operands().size());
   assert(!components.empty());
 
-  if (convert_identifier(expr.type().get_string("tag"), expr.type(), bv))
+  if (convert_identifier(expr.type().tag().as_string(), expr.type(), bv))
 	return true;
 
   for(struct_typet::componentst::const_iterator
@@ -3426,7 +3426,7 @@ bool z3_convt::convert_union(const exprt &expr, Z3_ast &bv)
     it++, i++)
   {
 
-	if (expr.type().get_string("tag").find("__align'") != std::string::npos && expr.type().id() == typet::t_union && i==1)
+	if (expr.type().tag().as_string().find("__align'") != std::string::npos && expr.type().id() == typet::t_union && i==1)
 	  return false;
 
 	if (convert_bv(expr.operands()[i], value))
@@ -3619,7 +3619,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     else
       array_type = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), tuple_type);
 
-    value_cte = "constant" + expr.op0().type().get_string("tag");
+    value_cte = "constant" + expr.op0().type().tag().as_string();
     array_cte = z3_api.mk_var(z3_ctx, value_cte.c_str(), array_type);
 
     i=0;
@@ -4871,7 +4871,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 #endif
 
 	//workaround
-	if (expr.op0().type().get_string("tag").find("__pthread_mutex_s") == std::string::npos)
+	if (expr.op0().type().tag().as_string().find("__pthread_mutex_s") == std::string::npos)
 	{
 		//pointer = convert_number(pointer_logic.add_object(expr), config.ansi_c.int_width, true);
 		//print_data_types(pointer_var,pointer);
@@ -4993,13 +4993,13 @@ bool z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   else if (expr.type().id()==typet::t_array && expr.type().subtype().id()==typet::t_struct)
   {
 	std::string identifier;
-	identifier = "array_of_" + expr.op0().type().get_string("tag");
+	identifier = "array_of_" + expr.op0().type().tag().as_string();
     bv = z3_api.mk_var(z3_ctx, identifier.c_str(), array_type);
   }
   else if (expr.type().id()==typet::t_array && expr.type().subtype().id()==typet::t_union)
   {
 	std::string identifier;
-	identifier = "array_of_" + expr.op0().type().get_string("tag");
+	identifier = "array_of_" + expr.op0().type().tag().as_string();
     bv = z3_api.mk_var(z3_ctx, identifier.c_str(), array_type);
   }
   else if (expr.type().subtype().id()==typet::t_array)

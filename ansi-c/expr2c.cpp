@@ -212,7 +212,7 @@ std::string expr2ct::convert_rec(
   {
     std::string dest=q+"struct";
 
-    const std::string &tag=src.get_string("tag");
+    const std::string &tag=src.tag().as_string();
     if(tag!="") dest+=" "+tag;
 
     /*
@@ -246,7 +246,7 @@ std::string expr2ct::convert_rec(
           src.id()=="incomplete_c_enum")
   {
     std::string result=q+"enum";
-    if(src.name()!="") result+=" "+src.get_string("tag");
+    if(src.name()!="") result+=" "+src.tag().as_string();
     return result;
   }
   else if(src.id()=="pointer")

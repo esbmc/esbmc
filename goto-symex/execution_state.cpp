@@ -1043,14 +1043,14 @@ execution_statet::serialise_expr(const exprt &rhs)
     str += "then(" + serialise_expr(rhs.op1()) + "),";
     str += "else(" + serialise_expr(rhs.op2()) + "))";
   } else if (rhs.id() == "struct") {
-    str = rhs.type().get("tag").as_string();
+    str = rhs.type().tag().as_string();
     str = "struct(tag(" + str + "),";
     forall_operands(it, rhs) {
       str = str + "(" + serialise_expr(*it) + "),";
     }
     str += ")";
   } else if (rhs.id() == "union") {
-    str = rhs.type().get("tag").as_string();
+    str = rhs.type().tag().as_string();
     str = "union(tag(" + str + "),";
     forall_operands(it, rhs) {
       str = str + "(" + serialise_expr(*it) + "),";
