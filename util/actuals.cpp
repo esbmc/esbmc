@@ -30,7 +30,7 @@ void get_actual_map(const exprt &expr,
       throw "expected actual";
 
     const exprt &value=it->op0();
-    const irep_idt &identifier=it->get("identifier");
+    const irep_idt &identifier=it->identifier();
 
     if(value.id()=="type")
       actual_map.insert(identifier, value.type());

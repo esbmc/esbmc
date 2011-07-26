@@ -108,7 +108,7 @@ void expr2ct::get_shorthands(const exprt &expr)
     if(!result.second)
       if(result.first->second!=*it)
       {
-        ns_collision.insert(it->get("identifier"));
+        ns_collision.insert(it->identifier());
         ns_collision.insert(result.first->second.identifier());
       }
   }
