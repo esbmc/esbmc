@@ -170,6 +170,10 @@ public:
     return get(a_line);
   }
 
+  const irep_idt &function(void) const {
+    return get(a_function);
+  }
+
   void identifier(irep_idt ident) {
     set(a_identifier, ident);
   }
@@ -218,7 +222,7 @@ protected:
 public:
   static irep_idt s_type;
   static irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
-  static irep_idt a_tag, a_from, a_file, a_line;
+  static irep_idt a_tag, a_from, a_file, a_line, a_function;
 
   class dt
   {

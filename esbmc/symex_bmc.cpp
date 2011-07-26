@@ -54,7 +54,7 @@ void symex_bmct::symex_step(
   {
     print(9, "File "+location.file().as_string()+
              " line "+location.line().as_string()+
-             " function "+location.get_string("function"));
+             " function "+location.function().as_string());
 
     last_location=location;
   }

@@ -33,7 +33,7 @@ public:
 
   const irep_idt &get_function() const
   {
-    return get("function");
+    return function();
   }
 
   void set_file(const irep_idt &file)

@@ -296,7 +296,7 @@ void document_subgoals(
 
       new_location.set("file", it->source.pc->location.file());
       new_location.set("line", it->source.pc->location.line());
-      new_location.set("function", it->source.pc->location.get("function"));
+      new_location.set("function", it->source.pc->location.function());
 
       claim_set[new_location].comment_set.insert(it->comment);
     }
@@ -312,7 +312,7 @@ void document_subgoals(
     out << "\\claimlocation{File "
         << escape_latex(location.file().as_string(), false)
         << " function "
-        << escape_latex(location.get_string("function"), false)
+        << escape_latex(location.function().as_string(), false)
         << "}" << std::endl;
 
     out << std::endl;
