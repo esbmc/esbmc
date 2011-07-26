@@ -1037,7 +1037,7 @@ void ieee_floatt::from_expr(const exprt &expr)
 {
   assert(expr.is_constant());
   spec=to_floatbv_type(expr.type());
-  unpack(binary2integer(expr.get_string("value"), false));
+  unpack(binary2integer(expr.value().as_string(), false));
 }
 
 /*******************************************************************\
