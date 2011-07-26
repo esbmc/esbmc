@@ -26,7 +26,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/flattening/sat_minimizer.h>
 #include <solvers/sat/cnf_clause_list.h>
 #include <solvers/sat/dimacs_cnf.h>
+#ifdef USE_CVC
 #include <solvers/cvc/cvc_dec.h>
+#endif
 #include <solvers/smt/smt_dec.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
@@ -141,6 +143,7 @@ protected:
     prop_convt conv_wrap;
   };
 
+#ifdef USE_CVC
   class cvc_solver : public output_solver {
   public:
     cvc_solver(bmc_baset &bmc);
@@ -148,6 +151,7 @@ protected:
   protected:
     cvc_convt cvc;
   };
+#endif
 
   class smt_solver: public output_solver {
   public:
