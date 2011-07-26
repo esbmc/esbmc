@@ -312,14 +312,14 @@ protected:
   { return !name.empty() && name[0]=='#'; }
 
 public:
-  static irep_idt s_type;
-  static irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
-  static irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
-  static irep_idt a_access, a_destination, a_base_name, a_comment, a_event;
-  static irep_idt a_literal, a_loopid, a_mode, a_module, a_ordering;
-  static irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
-  static irep_idt a_failed_symbol, a_dynamic, a_cmt_base_name, a_id_class;
-  static irep_idt a_cmt_identifier, a_cformat, a_cmt_width;
+  static const irep_idt s_type;
+  static const irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
+  static const irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
+  static const irep_idt a_access, a_destination, a_base_name, a_comment,a_event;
+  static const irep_idt a_literal, a_loopid, a_mode, a_module, a_ordering;
+  static const irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
+  static const irep_idt a_failed_symbol, a_dynamic, a_cmt_base_name, a_id_class;
+  static const irep_idt a_cmt_identifier, a_cformat, a_cmt_width;
 
   class dt
   {
