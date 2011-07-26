@@ -151,7 +151,7 @@ void basic_symext::symex_printf(
      format.op0().op1().is_zero())
   {
     const exprt &fmt_str=format.op0().op0();
-    const std::string &fmt=fmt_str.get_string(exprt::a_value);
+    const std::string &fmt=fmt_str.value().as_string();
 
     target->output(state.guard, state.source, fmt, args);
   }

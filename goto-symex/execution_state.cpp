@@ -773,7 +773,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 	  if ((symbol.static_lifetime || symbol.type.get("#dynamic") != ""))
 	  {
 	    std::string value, array_name;
-	    value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), true),10);
+	    value = integer2string(binary2integer(expr.op1().value().as_string(), true),10);
 	    array_name = expr.op0().identifier().as_string() + "::" + value;
 	    const irep_idt &array_identifier = array_name;
 	    //std::cout << "write_globals identifier: " << array_identifier.c_str() << std::endl;
@@ -880,7 +880,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 	  if ((symbol.static_lifetime || symbol.type.get("#dynamic") != ""))
 	  {
 	    std::string value, array_name;
-        value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), true),10);
+        value = integer2string(binary2integer(expr.op1().value().as_string(), true),10);
         array_name = expr.op0().identifier().as_string() + "::" + value;
         const irep_idt &array_identifier = array_name;
         //std::cout << "read_globals identifier: " << array_identifier.c_str() << std::endl;

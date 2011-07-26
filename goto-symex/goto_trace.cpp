@@ -156,7 +156,7 @@ void counterexample_value(
 	 value.type().id()==typet::t_unsignedbv ||
     	 value.type().id()==typet::t_fixedbv ||
     	 value.type().id()==typet::t_floatbv)
-        value_string+= " ("+value.get_string(exprt::a_value)+")";
+        value_string+= " ("+value.value().as_string()+")";
     }
 #if 0
     else if (lhs.type().id()==typet::t_pointer)

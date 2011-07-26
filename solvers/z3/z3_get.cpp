@@ -297,7 +297,7 @@ exprt z3_convt::bv_get_rec(
         {
           expr = unknown[i];
 
-          if (expr.get_string(exprt::a_value).compare("")==0)
+          if (expr.value().as_string().compare("")==0)
             op.push_back(zero_expr);
           else
             op.push_back(expr);

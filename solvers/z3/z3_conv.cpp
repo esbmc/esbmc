@@ -1351,7 +1351,7 @@ Z3_ast z3_convt::convert_lt(const exprt &expr)
 
 	if (op1.id()==exprt::constant && object.type().id()==typet::t_unsignedbv)
 	{
-	  value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), false),10);
+	  value = integer2string(binary2integer(expr.op1().value().as_string(), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
 	    return Z3_mk_false(z3_ctx);
@@ -1426,7 +1426,7 @@ Z3_ast z3_convt::convert_gt(const exprt &expr)
 
 	if (expr.op1().id()==exprt::constant && object.type().id()==typet::t_unsignedbv)
 	{
-	  value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), false),10);
+	  value = integer2string(binary2integer(expr.op1().value().as_string(), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
 	    return Z3_mk_false(z3_ctx);
@@ -1501,7 +1501,7 @@ Z3_ast z3_convt::convert_le(const exprt &expr)
 
 	if (expr.op1().id()==exprt::constant && object.type().id()==typet::t_unsignedbv)
 	{
-	  value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), false),10);
+	  value = integer2string(binary2integer(expr.op1().value().as_string(), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
 	    return Z3_mk_false(z3_ctx);
@@ -1577,7 +1577,7 @@ Z3_ast z3_convt::convert_ge(const exprt &expr)
 
 	if (expr.op1().id()==exprt::constant && object.type().id()==typet::t_unsignedbv)
 	{
-	  value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), false),10);
+	  value = integer2string(binary2integer(expr.op1().value().as_string(), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
 	    return Z3_mk_false(z3_ctx);
@@ -2278,9 +2278,9 @@ Z3_ast z3_convt::convert_overflow_typecast(const exprt &expr)
   }
 
   if (is_signed(expr.op0().type()))
-    value = integer2string(binary2integer(expr.op0().get_string(exprt::a_value), true),10);
+    value = integer2string(binary2integer(expr.op0().value().as_string(), true),10);
   else
-	value = integer2string(binary2integer(expr.op0().get_string(exprt::a_value), false),10);
+	value = integer2string(binary2integer(expr.op0().value().as_string(), false),10);
 
   if (convert_bv(expr.op0(), operand[0]))
 	return Z3_mk_false(z3_ctx);
@@ -3743,7 +3743,7 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
   {
     // jmorse: value field of C enum type is in fact base 10, wheras everything
     // else is base 2.
-    value = expr.get_string(exprt::a_value);
+    value = expr.value().as_string();
   }
   else if (expr.type().id() == "bool")
   {
@@ -3757,10 +3757,10 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
   }
   else if (is_signed(expr.type()))
   {
-    value = integer2string(binary2integer(expr.get_string(exprt::a_value), true),10);
+    value = integer2string(binary2integer(expr.value().as_string(), true),10);
   } else {
 
-    value = integer2string(binary2integer(expr.get_string(exprt::a_value), false),10);
+    value = integer2string(binary2integer(expr.value().as_string(), false),10);
   }
 
 #ifdef DEBUG
@@ -3795,15 +3795,15 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
     if (int_encoding)
     {
       std::string result;
-      result = fixed_point(expr.get_string(exprt::a_value), width);
+      result = fixed_point(expr.value().as_string(), width);
 	  bv = Z3_mk_numeral(z3_ctx, result.c_str(), Z3_mk_real_type(z3_ctx));
     }
 	else
 	{
 	  Z3_ast magnitude, fraction;
 	  std::string m, f, c;
-	  m = extract_magnitude(expr.get_string(exprt::a_value), width);
-	  f = extract_fraction(expr.get_string(exprt::a_value), width);
+	  m = extract_magnitude(expr.value().as_string(), width);
+	  f = extract_fraction(expr.value().as_string(), width);
 	  magnitude = Z3_mk_int(z3_ctx, atoi(m.c_str()), Z3_mk_bv_type(z3_ctx, width/2));
 	  fraction = Z3_mk_int(z3_ctx, atoi(f.c_str()), Z3_mk_bv_type(z3_ctx, width/2));
 	  bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
@@ -4936,7 +4936,7 @@ bool z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  tmp = integer2string(binary2integer(array_type_size.size().get_string(exprt::a_value), false),10);
+  tmp = integer2string(binary2integer(array_type_size.size().value().as_string(), false),10);
   size = atoi(tmp.c_str());
 
 #ifdef DEBUG
