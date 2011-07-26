@@ -268,6 +268,150 @@ public:
     return get(a_cmt_width);
   }
 
+  inline const irep_idt &axiom(void) const {
+    return get(a_axiom);
+  }
+
+  inline const irep_idt &binding(void) const {
+    return get(a_binding);
+  }
+
+  inline const irep_idt &bounds_check(void) const {
+    return get(a_bounds_check);
+  }
+
+  inline const irep_idt &cmt_constant(void) const {
+    return get(a_cmt_constant);
+  }
+
+  inline const irep_idt &dfault(void) const {
+    return get(a_default);
+  }
+
+  inline const irep_idt &ellipsis(void) const {
+    return get(a_ellipsis);
+  }
+
+  inline const irep_idt &explict(void) const {
+    return get(a_explicit);
+  }
+
+  inline const irep_idt &file_local(void) const {
+    return get(a_file_local);
+  }
+
+  inline const irep_idt &free_var(void) const {
+    return get(a_free_var);
+  }
+
+  inline const irep_idt &hex_or_oct(void) const {
+    return get(a_hex_or_oct);
+  }
+
+  inline const irep_idt &hide(void) const {
+    return get(a_hide);
+  }
+
+  inline const irep_idt &implicit(void) const {
+    return get(a_implicit);
+  }
+
+  inline const irep_idt &incomplete(void) const {
+    return get(a_incomplete);
+  }
+
+  inline const irep_idt &initialization(void) const {
+    return get(a_initialization);
+  }
+
+  inline const irep_idt &inlined(void) const {
+    return get(a_inlined);
+  }
+
+  inline const irep_idt &invalid_object(void) const {
+    return get(a_invalid_object);
+  }
+
+  inline const irep_idt &is_actual(void) const {
+    return get(a_is_actual);
+  }
+
+  inline const irep_idt &is_exported(void) const {
+    return get(a_is_exported);
+  }
+
+  inline const irep_idt &is_expression(void) const {
+    return get(a_is_expression);
+  }
+
+  inline const irep_idt &is_extern(void) const {
+    return get(a_is_extern);
+  }
+
+  inline const irep_idt &is_input(void) const {
+    return get(a_is_input);
+  }
+
+  inline const irep_idt &is_macro(void) const {
+    return get(a_is_macro);
+  }
+
+  inline const irep_idt &is_output(void) const {
+    return get(a_is_output);
+  }
+
+  inline const irep_idt &is_statevar(void) const {
+    return get(a_is_statevar);
+  }
+
+  inline const irep_idt &is_type(void) const {
+    return get(a_is_type);
+  }
+
+  inline const irep_idt &is_volatile(void) const {
+    return get(a_is_volatile);
+  }
+
+  inline const irep_idt &cmt_lvalue(void) const {
+    return get(a_cmt_lvalue);
+  }
+
+  inline const irep_idt &lvalue(void) const {
+    return get(a_lvalue);
+  }
+
+  inline const irep_idt &reference(void) const {
+    return get(a_reference);
+  }
+
+  inline const irep_idt &restricted(void) const {
+    return get(a_restricted);
+  }
+
+  inline const irep_idt &static_lifetime(void) const {
+    return get(a_static_lifetime);
+  }
+
+  inline const irep_idt &theorem(void) const {
+    return get(a_theorem);
+  }
+
+  inline const irep_idt &cmt_unsigned(void) const {
+    return get(a_cmt_unsigned);
+  }
+
+  inline const irep_idt &user_provided(void) const {
+    return get(a_user_provided);
+  }
+
+  inline const irep_idt &cmt_volatile(void) const {
+    return get(a_cmt_volatile);
+  }
+
+  inline const irep_idt &zero_initializer(void) const {
+    return get(a_zero_initializer);
+  }
+
   inline void identifier(irep_idt ident) {
     set(a_identifier, ident);
   }
@@ -321,7 +465,17 @@ public:
   static const irep_idt a_literal, a_loopid, a_mode, a_module, a_ordering;
   static const irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
   static const irep_idt a_failed_symbol, a_dynamic, a_cmt_base_name, a_id_class;
-  static const irep_idt a_cmt_identifier, a_cformat, a_cmt_width;
+  static const irep_idt a_cmt_identifier, a_cformat, a_cmt_width, a_axiom;
+  static const irep_idt a_binding, a_bounds_check, a_cmt_constant, a_default;
+  static const irep_idt a_ellipsis, a_explicit, a_file_local, a_free_var;
+  static const irep_idt a_hex_or_oct, a_hide, a_implicit, a_incomplete;
+  static const irep_idt a_initialization, a_inlined, a_invalid_object;
+  static const irep_idt a_is_actual, a_is_exported, a_is_expression;
+  static const irep_idt a_is_extern, a_is_input, a_is_macro, a_is_output;
+  static const irep_idt a_is_statevar, a_is_type, a_is_volatile, a_cmt_lvalue;
+  static const irep_idt a_lvalue, a_reference, a_static_lifetime, a_theorem;
+  static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
+  static const irep_idt a_zero_initializer, a_restricted;
 
   class dt
   {
