@@ -114,12 +114,14 @@ public:
   const irept &find(const irep_namet &name) const;
   irept &add(const irep_namet &name);
 
+protected:
   const std::string &get_string(const irep_namet &name) const
   {
     return get(name).as_string();
   }
   
   const irep_idt &get(const irep_namet &name) const;
+public:
   bool get_bool(const irep_namet &name) const;
 
   inline void set(const irep_namet &name, const irep_idt &value)

@@ -833,7 +833,7 @@ exprt string_abstractiont::build(const exprt &pointer, bool write)
 
       if(o.id()=="string-constant")
       {
-        exprt symbol=build_symbol_constant(o.get("value"));
+        exprt symbol=build_symbol_constant(o.value());
 
         if(symbol.is_nil())
           return build_unknown(write);
