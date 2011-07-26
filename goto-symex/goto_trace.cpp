@@ -218,8 +218,8 @@ void show_goto_trace_gui(
       out << "FAILED" << std::endl
           << it->comment << std::endl // value
           << std::endl // PC
-          << location.get("file") << std::endl
-          << location.get("line") << std::endl
+          << location.file() << std::endl
+          << location.line() << std::endl
           << location.get("column") << std::endl;
     }
     else if(it->type==goto_trace_stept::ASSIGNMENT)
@@ -245,15 +245,15 @@ void show_goto_trace_gui(
           << it->value.type().to_string() << ","
           << value_string << std::endl
           << it->step_nr << std::endl
-          << it->pc->location.get("file") << std::endl
-          << it->pc->location.get("line") << std::endl
+          << it->pc->location.file() << std::endl
+          << it->pc->location.line() << std::endl
           << it->pc->location.get("column") << std::endl;
     }
     else if(location!=previous_location)
     {
       // just the location
 
-      if(location.get("file")!="")
+      if(location.file()!="")
       {
         out << "TRACE" << std::endl;
 
@@ -262,8 +262,8 @@ void show_goto_trace_gui(
             << ","             // type
             << "" << std::endl // value
             << it->step_nr << std::endl
-            << location.get("file") << std::endl
-            << location.get("line") << std::endl
+            << location.file() << std::endl
+            << location.line() << std::endl
             << location.get("column") << std::endl;
       }
     }

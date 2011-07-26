@@ -18,12 +18,12 @@ public:
   
   const irep_idt &get_file() const
   {
-    return get("file");
+    return file();
   }
 
   const irep_idt &get_line() const
   {
-    return get("line");
+    return line();
   }
 
   const irep_idt &get_column() const

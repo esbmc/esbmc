@@ -824,5 +824,7 @@ irep_idt irept::a_identifier = dstring("identifier");
 irep_idt irept::a_comp_name = dstring("component_name");
 irep_idt irept::a_tag = dstring("tag");
 irep_idt irept::a_from = dstring("from");
+irep_idt irept::a_file = dstring("file");
+irep_idt irept::a_line = dstring("line");
 
 irep_idt irept::s_type = dstring("type");

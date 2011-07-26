@@ -52,8 +52,8 @@ void symex_bmct::symex_step(
 
   if(!location.is_nil() && last_location!=location)
   {
-    print(9, "File "+location.get_string("file")+
-             " line "+location.get_string("line")+
+    print(9, "File "+location.file().as_string()+
+             " line "+location.line().as_string()+
              " function "+location.get_string("function"));
 
     last_location=location;
