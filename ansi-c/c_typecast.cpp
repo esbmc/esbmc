@@ -105,8 +105,8 @@ bool check_c_implicit_typecast(
   // check qualifiers  
 
   if(src_type.id()=="pointer" && dest_type.id()=="pointer" &&
-     src_type.subtype().get_bool("#constant") &&
-     !dest_type.subtype().get_bool("#constant"))
+     src_type.subtype().cmt_constant() &&
+     !dest_type.subtype().cmt_constant())
     return true;
 
   if(src_type==dest_type) return false;
@@ -483,8 +483,8 @@ void c_typecastt::implicit_typecast_followed(
 
       // check qualifiers
 
-      if(src_type.subtype().get_bool("#constant") &&
-         !dest_type.subtype().get_bool("#constant"))
+      if(src_type.subtype().cmt_constant() &&
+         !dest_type.subtype().cmt_constant())
         warnings.push_back("disregarding const");
 
       if(src_type.subtype().get_bool("#volatile") &&

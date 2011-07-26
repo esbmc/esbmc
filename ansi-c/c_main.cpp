@@ -61,7 +61,7 @@ void static_lifetime_init(
 
   forall_symbols(it, context.symbols)
   {
-    if(it->second.type.get_bool("initialization") &&
+    if(it->second.type.initialization() &&
        it->second.type.id()=="code")
     {
       code_function_callt function_call;

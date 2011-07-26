@@ -327,7 +327,7 @@ void goto_inlinet::expand_function_call(
       it->local_variables.insert(target->local_variables.begin(),
                                  target->local_variables.end());
 
-    if(f.type.get_bool("#hide"))
+    if(f.type.hide())
     {
       const locationt &new_location=function.find_location();
     

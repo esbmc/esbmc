@@ -148,7 +148,7 @@ void symbolt::from_irep(const irept &src)
   ordering=atoi(src.ordering().c_str());
 
   theorem=src.get_bool("theorem");
-  axiom=src.get_bool("axiom");
+  axiom=src.axiom();
   is_type=src.get_bool("is_type");
   is_macro=src.get_bool("is_macro");
   is_exported=src.get_bool("is_exported");
@@ -156,11 +156,11 @@ void symbolt::from_irep(const irept &src)
   is_output=src.get_bool("is_output");
   is_statevar=src.get_bool("is_statevar");
   is_actual=src.get_bool("is_actual");
-  free_var=src.get_bool("free_var");
-  binding=src.get_bool("binding");
+  free_var=src.free_var();
+  binding=src.binding();
   lvalue=src.get_bool("lvalue");
   static_lifetime=src.get_bool("static_lifetime");
-  file_local=src.get_bool("file_local");
+  file_local=src.file_local();
   is_extern=src.get_bool("is_extern");
   is_volatile=src.get_bool("is_volatile");
 }

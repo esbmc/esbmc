@@ -235,7 +235,7 @@ public:
   
   bool has_ellipsis() const
   {
-    return find(a_arguments).get_bool("ellipsis");
+    return find(a_arguments).ellipsis();
   }
 
   void make_ellipsis()

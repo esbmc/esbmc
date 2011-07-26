@@ -521,7 +521,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
     // special case: ANSI-C 99 section 6.3.2.1 paragraph 4
 
     if(expr.id()=="address_of" &&
-       expr.get_bool("#implicit") &&
+       expr.implicit() &&
        expr.operands().size()==1 &&
        expr.op0().id()=="symbol" &&
        expr.op0().type().id()=="code")
@@ -1070,7 +1070,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
   if(op0.get_bool("#lvalue"))
     expr.set("#lvalue", true);
 
-  if(op0.get_bool("#constant"))
+  if(op0.cmt_constant())
     expr.set("#constant", true);
 
   // copy method identifier
@@ -1217,7 +1217,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
   // ANSI-C 99 section 6.3.2.1 paragraph 4
 
   if(op.id()=="address_of" &&
-     op.get_bool("#implicit") &&
+     op.implicit() &&
      op.operands().size()==1 &&
      op.op0().id()=="symbol" &&
      op.op0().type().id()=="code")
@@ -1381,7 +1381,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
       throw 0;
     }
 
-    if(type0.get_bool("#constant"))
+    if(type0.cmt_constant())
     {
       err_location(op0);
       str << "error: `" << to_string(op0)
@@ -1492,7 +1492,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
   // do implicit dereference
   if(f_op.id()=="address_of" &&
-     f_op.get_bool("#implicit") &&
+     f_op.implicit() &&
      f_op.operands().size()==1)
   {
     exprt tmp;
@@ -1707,7 +1707,7 @@ void c_typecheck_baset::typecheck_function_call_arguments(
 
   // no. of arguments test
 
-  if(code_type.get_bool("#incomplete"))
+  if(code_type.incomplete())
   {
     // can't check
   }
@@ -1785,7 +1785,7 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
     mp_integer value=string2integer(expr.value().as_string());
     const std::string &given_width=expr.type().cmt_width().as_string();
     bool is_unsigned=expr.type().get_bool("#unsigned");
-    bool is_hex_or_oct=expr.get_bool("#hex_or_oct");
+    bool is_hex_or_oct=expr.hex_or_oct();
     const std::string cformat=expr.cformat().as_string();
 
     if(value<0)
@@ -2182,7 +2182,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
 
     // set #lvalue and #constant
     op0.set("#lvalue", op0.op0().get_bool("#lvalue"));
-    op0.set("#constant", op0.op0().get_bool("#constant"));
+    op0.set("#constant", op0.op0().cmt_constant());
   }
 
   const typet o_type0=op0.type();
@@ -2202,7 +2202,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
     throw 0;
   }
 
-  if(o_type0.get_bool("#constant"))
+  if(o_type0.cmt_constant())
   {
     err_location(expr);
     str << "error: `" << to_string(op0)

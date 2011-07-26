@@ -2576,7 +2576,7 @@ std::string expr2ct::convert_code_label(
       labels_string+=":\n";
     }
 
-    if(src.get_bool("default"))
+    if(src.dfault())
     {
       if(first) { labels_string+="\n"; first=false; }
       labels_string+=indent_str(indent);

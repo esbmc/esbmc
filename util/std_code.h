@@ -353,7 +353,7 @@ public:
 
   inline bool is_default() const
   {
-    return get_bool("default");
+    return dfault();
   }
 
   const exprt::operandst &case_op() const

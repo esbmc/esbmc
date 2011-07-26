@@ -279,7 +279,7 @@ void goto_checkt::bounds_check(
     return;
 
   if(expr.find("bounds_check").is_not_nil() &&
-     !expr.get_bool("bounds_check"))
+     !expr.bounds_check())
     return;
 
   if(expr.operands().size()!=2)

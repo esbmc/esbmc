@@ -50,7 +50,7 @@ Function: c_qualifierst::read
 
 void c_qualifierst::read(const typet &src)
 {
-  if(src.get_bool("#constant"))
+  if(src.cmt_constant())
     is_constant=true;
 
   if(src.get_bool("#volatile"))
