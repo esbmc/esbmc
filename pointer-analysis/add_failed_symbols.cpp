@@ -24,7 +24,7 @@ void add_failed_symbol(symbolt &symbol, contextt &context)
 {
   if(!symbol.lvalue) return;
   
-  if(symbol.type.get("#failed_symbol")!="")
+  if(symbol.type.failed_symbol()!="")
     return;
 
   if(symbol.type.id()=="pointer")

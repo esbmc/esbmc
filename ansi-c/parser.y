@@ -342,13 +342,13 @@ postfix_expression:
 	{ $$=$2;
 	  set(*$$, "member");
 	  mto($$, $1);
-	  $$->set("component_name", $3->get("#base_name"));
+	  $$->set("component_name", $3->cmt_base_name());
 	}
 	| postfix_expression TOK_ARROW member_name
 	{ $$=$2;
 	  set(*$$, "ptrmember");
 	  mto($$, $1);
-	  $$->set("component_name", $3->get("#base_name"));
+	  $$->set("component_name", $3->cmt_base_name());
 	}
 	| postfix_expression TOK_INCR
 	{ $$=$2;
@@ -1427,7 +1427,7 @@ designated_initializer:
         {
           $$=$1;
           $$->id("designated_initializer");
-          $$->set("component_name", $2->get("#base_name"));
+          $$->set("component_name", $2->cmt_base_name());
           $$->move_to_operands(*$4);
         }
         ;
@@ -1479,7 +1479,7 @@ labeled_statement:
 	{
 	  $$=$2;
 	  statement(*$$, "label");
-	  $$->set("label", $1->get("#base_name"));
+	  $$->set("label", $1->cmt_base_name());
 	  mto($$, $3);
 	}
 	| TOK_CASE constant_expression ':' statement
@@ -1616,7 +1616,7 @@ jump_statement:
 	{
 	  $$=$1;
 	  statement(*$$, "goto");
-	  $$->set("destination", $2->get("#base_name"));
+	  $$->set("destination", $2->cmt_base_name());
 	}
 	| TOK_CONTINUE ';'
 	{ $$=$1; statement(*$$, "continue"); }

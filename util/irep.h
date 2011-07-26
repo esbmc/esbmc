@@ -246,6 +246,26 @@ public:
     return get(a_dynamic);
   }
 
+  inline const irep_idt &cmt_base_name(void) const {
+    return get(a_cmt_base_name);
+  }
+
+  inline const irep_idt &id_class(void) const {
+    return get(a_id_class);
+  }
+
+  inline const irep_idt &cmt_identifier(void) const {
+    return get(a_cmt_identifier);
+  }
+
+  inline const irep_idt &cformat(void) const {
+    return get(a_cformat);
+  }
+
+  inline const irep_idt &cmt_width(void) const {
+    return get(a_cmt_width);
+  }
+
   inline void identifier(irep_idt ident) {
     set(a_identifier, ident);
   }
@@ -298,7 +318,8 @@ public:
   static irep_idt a_access, a_destination, a_base_name, a_comment, a_event;
   static irep_idt a_literal, a_loopid, a_mode, a_module, a_ordering;
   static irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
-  static irep_idt a_failed_symbol, a_dynamic;
+  static irep_idt a_failed_symbol, a_dynamic, a_cmt_base_name, a_id_class;
+  static irep_idt a_cmt_identifier, a_cformat, a_cmt_width;
 
   class dt
   {

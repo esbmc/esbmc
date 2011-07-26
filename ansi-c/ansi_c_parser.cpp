@@ -217,7 +217,7 @@ void ansi_c_parsert::new_declaration(
   convert_declarator(declarator, static_cast<const typet &>(type), identifier);
   typet final_type=static_cast<typet &>(declarator);
   
-  std::string base_name=identifier.get_string("#base_name");
+  std::string base_name=identifier.cmt_base_name().as_string();
   
   bool is_global=current_scope().prefix=="";
 

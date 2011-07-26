@@ -57,7 +57,7 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
       type = std::pair<irep_idt, irep_idt>(name, irep_it->identifier());
       deps.insert(type);
     } else if (irep_it->id() == "argument") {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->get("#identifier"));
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->cmt_identifier());
       deps.insert(type);
     } else {
       generate_symbol_deps(name, *irep_it, deps);
@@ -69,7 +69,7 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
       type = std::pair<irep_idt, irep_idt>(name, irep_it->second.identifier());
       deps.insert(type);
     } else if (irep_it->second.id() == "argument") {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.get("#identifier"));
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.cmt_identifier());
       deps.insert(type);
     } else {
       generate_symbol_deps(name, irep_it->second, deps);

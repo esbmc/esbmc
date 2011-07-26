@@ -212,7 +212,7 @@ static void do_enum_members(
 
 static void do_tag(typet &key, typet &tag)
 {
-  irep_idt id_class_str=tag.get("#id_class");
+  irep_idt id_class_str=tag.id_class();
 
   ansi_c_id_classt id_class=
     (ansi_c_id_classt)atoi(id_class_str.c_str());

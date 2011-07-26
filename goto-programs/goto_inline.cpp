@@ -62,7 +62,7 @@ void goto_inlinet::parameter_assignments(
     // this is the type the n-th argument should be
     const typet &arg_type=ns.follow(argument.type());
 
-    const irep_idt &identifier=argument.get("#identifier");
+    const irep_idt &identifier=argument.cmt_identifier();
 
     if(identifier=="")
     {

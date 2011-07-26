@@ -224,12 +224,12 @@ public:
 
     const irep_idt &get_identifier() const
     {
-      return get("#identifier");
+      return cmt_identifier();
     }
 
     const irep_idt &get_base_name() const
     {
-      return get("#base_name");
+      return cmt_base_name();
     }
   };
   

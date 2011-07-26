@@ -1069,7 +1069,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	const symbolt &symbol=lookup(identifier);
 
     if (!(identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
-          && (symbol.static_lifetime || symbol.type.get("#dynamic") != ""))
+          && (symbol.static_lifetime || symbol.type.dynamic() != ""))
     {
 	  // make new assignment to temp for each global symbol
 	  symbolt &new_symbol=new_tmp_symbol(rhs.type());
@@ -1097,7 +1097,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   {
 	const irep_idt &identifier=rhs.identifier();
 	const symbolt &symbol=lookup(identifier);
-	if(symbol.static_lifetime || symbol.type.get("#dynamic") != "")
+	if(symbol.static_lifetime || symbol.type.dynamic() != "")
 	{
 	  // make new assignment to temp for each global symbol
 	  symbolt &new_symbol=new_tmp_symbol(rhs.type());
@@ -1165,7 +1165,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
     {
       return 0;
     }
-    else if (symbol.static_lifetime || symbol.type.get("#dynamic") != "")
+    else if (symbol.static_lifetime || symbol.type.dynamic() != "")
     {
       return 1;
     }

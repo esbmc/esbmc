@@ -1074,7 +1074,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
     expr.set("#constant", true);
 
   // copy method identifier
-  const irep_idt &identifier=component.get("#identifier");
+  const irep_idt &identifier=component.cmt_identifier();
 
   if(identifier!="")
     expr.set("#identifier", identifier);
@@ -1783,10 +1783,10 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
     locationt location=expr.location();
 
     mp_integer value=string2integer(expr.value().as_string());
-    const std::string &given_width=expr.type().get_string("#width");
+    const std::string &given_width=expr.type().cmt_width().as_string();
     bool is_unsigned=expr.type().get_bool("#unsigned");
     bool is_hex_or_oct=expr.get_bool("#hex_or_oct");
-    const std::string cformat=expr.get_string("#cformat");
+    const std::string cformat=expr.cformat().as_string();
 
     if(value<0)
       throw "unexpected value";
