@@ -444,7 +444,7 @@ void basic_symext::symex_assign_member(
     throw "member must take struct/union type operand but got "
           +struct_type.pretty();
 
-  const irep_idt &component_name=lhs.get("component_name");
+  const irep_idt &component_name=lhs.component_name();
 
   // typecasts involved? C++ does that for inheritance.
   if(lhs_struct.id()==exprt::typecast)

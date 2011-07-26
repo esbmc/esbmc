@@ -340,7 +340,7 @@ void value_sett::get_value_set_rec(
            type.id()=="incomplete_union");
            
     const std::string &component_name=
-      expr.get_string("component_name");
+      expr.component_name().as_string();
     
     get_value_set_rec(expr.op0(), dest,
       "."+component_name+suffix, original_type, ns);
@@ -733,7 +733,7 @@ void value_sett::get_reference_set_rec(
   }
   else if(expr.id()=="member")
   {
-    const irep_idt &component_name=expr.get("component_name");
+    const irep_idt &component_name=expr.component_name();
 
     if(expr.operands().size()!=1)
       throw "member expected to have one operand";
@@ -1095,7 +1095,7 @@ void value_sett::assign_rec(
     if(lhs.operands().size()!=1)
       throw "member expected to have one operand";
   
-    const std::string &component_name=lhs.get_string("component_name");
+    const std::string &component_name=lhs.component_name().as_string();
 
     const typet &type=ns.follow(lhs.op0().type());
 
@@ -1359,7 +1359,7 @@ exprt value_sett::make_member(
     // see if op1 is the member we want
     const exprt &member_operand=src.op1();
 
-    if(component_name==member_operand.get("component_name"))
+    if(component_name==member_operand.component_name())
       // yes! just take op2
       return src.op2();
     else

@@ -150,6 +150,10 @@ public:
     return get(a_name);
   }
 
+  const irep_idt &component_name(void) const {
+    return get(a_comp_name);
+  }
+
   void identifier(irep_idt ident) {
     set(a_identifier, ident);
   }
@@ -197,7 +201,7 @@ protected:
 
 public:
   static irep_idt s_type;
-  static irep_idt a_width, a_name, a_statement, a_identifier;
+  static irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
 
   class dt
   {

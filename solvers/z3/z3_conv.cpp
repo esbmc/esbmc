@@ -2368,7 +2368,7 @@ Z3_ast z3_convt::convert_rest_member(const exprt &expr)
   if (convert_bv(expr,bv))
 	return Z3_mk_false(z3_ctx);
 
-  if (expr.get_string("component_name") == "is_zero")
+  if (expr.component_name().as_string() == "is_zero")
   {
 	bv = Z3_mk_not(z3_ctx, Z3_mk_eq(z3_ctx, Z3_mk_false(z3_ctx), bv));
 	std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
@@ -5420,7 +5420,7 @@ u_int z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
     it!=components.end();
     it++, i++)
   {
-	if (it->name().compare(rhs.get_string("component_name")) == 0)
+	if (it->name().compare(rhs.component_name().as_string()) == 0)
       resp=i;
   }
 
@@ -5536,7 +5536,7 @@ bool z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
     it!=components.end();
     it++, i++)
   {
-	if (it->name().compare(expr.get_string("component_name")) == 0)
+	if (it->name().compare(expr.component_name().as_string()) == 0)
 	  j=i;
   }
 

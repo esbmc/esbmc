@@ -52,7 +52,7 @@ void boolbvt::convert_member(const exprt &expr, bvt &bv)
   if(operands[0].type().id()!="struct")
     throw "member takes struct operand";
 
-  const irep_idt &component_name=expr.get("component_name");
+  const irep_idt &component_name=expr.component_name();
   const struct_typet::componentst &components=
     to_struct_type(operands[0].type()).components();
 

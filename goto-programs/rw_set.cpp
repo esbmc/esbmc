@@ -114,7 +114,7 @@ void rw_sett::read_write_rec(
   else if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
-    const std::string &component_name=expr.get_string("component_name");
+    const std::string &component_name=expr.component_name().as_string();
     read_write_rec(expr.op0(), r, w, "."+component_name+suffix, guard);
   }
   else if(expr.id()=="index")

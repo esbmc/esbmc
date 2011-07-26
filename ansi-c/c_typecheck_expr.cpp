@@ -1031,7 +1031,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
   }
 
   const irep_idt &component_name=
-    expr.get("component_name");
+    expr.component_name();
 
   const irept &components=
     type.find("components");

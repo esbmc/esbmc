@@ -539,7 +539,7 @@ void value_set_fit::get_value_set_rec(
              type.id()=="incomplete_union");
              
       const std::string &component_name=
-        expr.get_string("component_name");
+        expr.component_name().as_string();
       
       get_value_set_rec(expr.op0(), dest, "."+component_name+suffix, 
                         original_type, ns, recursion_set);
@@ -1051,7 +1051,7 @@ void value_set_fit::get_reference_set_sharing_rec(
   }
   else if(expr.id()=="member")
   {
-    const irep_idt &component_name=expr.get("component_name");
+    const irep_idt &component_name=expr.component_name();
 
     if(expr.operands().size()!=1)
       throw "member expected to have one operand";
@@ -1188,7 +1188,7 @@ void value_set_fit::assign(
           const exprt &member_operand=rhs.op1();
 
           const irep_idt &component_name=
-            member_operand.get("component_name");
+            member_operand.component_name();
 
           if(component_name==name)
           {
@@ -1471,7 +1471,7 @@ void value_set_fit::assign_rec(
     
     if(lhs.op0().is_nil()) return;
   
-    const std::string &component_name=lhs.get_string("component_name");
+    const std::string &component_name=lhs.component_name().as_string();
 
     const typet &type=ns.follow(lhs.op0().type());
 

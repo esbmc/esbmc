@@ -736,7 +736,7 @@ exprt string_abstractiont::build_symbol_ptr(const exprt &object)
 
   while(p->id()=="member")
   {
-    suffix="#"+p->get_string("component_name")+suffix;
+    suffix="#"+p->component_name().as_string()+suffix;
     assert(p->operands().size()==1);
     p=&(p->op0());
   }
@@ -974,7 +974,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
 
   while(p->id()=="member")
   {
-    suffix="#"+p->get_string("component_name")+suffix;
+    suffix="#"+p->component_name().as_string()+suffix;
     assert(p->operands().size()==1);
     p=&(p->op0());
   }

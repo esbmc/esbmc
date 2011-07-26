@@ -553,7 +553,7 @@ std::string expr2ct::convert_with(
     if(src.operands()[i].id()=="member_name")
     {
       const irep_idt &component_name=
-        src.operands()[i].get("component_name");
+        src.operands()[i].component_name();
 
       const typet &full_type=ns.follow(src.op0().type());
 
@@ -1045,7 +1045,7 @@ std::string expr2ct::convert_member(
   const struct_typet &struct_type=to_struct_type(full_type);
 
   const exprt comp_expr=
-    struct_type.get_component(src.get("component_name"));
+    struct_type.get_component(src.component_name());
 
   if(comp_expr.is_nil())
     return convert_norep(src, precedence);
@@ -1519,7 +1519,7 @@ std::string expr2ct::convert_union(
   std::string tmp=convert(src.op0());
 
   dest+=".";
-  dest+=src.get_string("component_name");
+  dest+=src.component_name().as_string();
   dest+="=";
   dest+=tmp;
 

@@ -197,7 +197,7 @@ std::string inv_object_storet::build_string(const exprt &expr) const
   if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
-    return build_string(expr.op0())+"."+expr.get_string("component_name");
+    return build_string(expr.op0())+"."+expr.component_name().as_string();
   }
   
   if(expr.id()=="symbol")

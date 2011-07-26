@@ -102,7 +102,7 @@ mp_integer compute_pointer_offset(
     assert(type.id()=="struct" ||
            type.id()=="union");
 
-    const irep_idt &component_name=expr.get("component_name");
+    const irep_idt &component_name=expr.component_name();
     const struct_union_typet::componentst &components=
       to_struct_union_type(type).components();
     

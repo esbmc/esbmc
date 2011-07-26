@@ -2649,7 +2649,7 @@ bool simplify_exprt::simplify_with(exprt &expr)
       while(expr.operands().size()>1)
       {
         const irep_idt &component_name=
-          expr.op1().get("component_name");
+          expr.op1().component_name();
 
         if(!to_struct_type(expr.op0().type()).
            has_component(component_name))
@@ -3094,7 +3094,7 @@ bool simplify_exprt::simplify_member(member_exprt &expr)
 {
   if(expr.operands().size()!=1) return true;
 
-  const irep_idt &component_name=expr.get("component_name");
+  const irep_idt &component_name=expr.component_name();
 
   exprt &op=expr.op0();
 
@@ -3109,7 +3109,7 @@ bool simplify_exprt::simplify_member(member_exprt &expr)
         exprt &op1=operands[operands.size()-2];
         exprt &op2=operands[operands.size()-1];
 
-        if(op1.get("component_name")==component_name)
+        if(op1.component_name()==component_name)
         {
           // found it!
           exprt tmp;

@@ -200,7 +200,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
     const irept::subt &components=
       struct_op.type().find("components").get_sub();
     
-    const irep_idt &component_name=expr.get("component_name");
+    const irep_idt &component_name=expr.component_name();
     
     bool found=false;
     
@@ -1048,7 +1048,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       if(expr.type().id()=="struct")
       {
 	assert(false && "operator not supported yet");
-        smt_prop.out << " WITH ." << index.get("component_name");
+        smt_prop.out << " WITH ." << index.component_name();
         smt_prop.out << ":=(";
         convert_array_value(value);
         smt_prop.out << ")";
@@ -1056,7 +1056,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else if(expr.type().id()=="union")
       {
 	assert(false && "operator not supported yet");
-        smt_prop.out << " WITH ." << index.get("component_name");
+        smt_prop.out << " WITH ." << index.component_name();
         smt_prop.out << ":=(";
         convert_array_value(value);
         smt_prop.out << ")";
@@ -1080,7 +1080,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(expr.operands().size()==1);
     convert_smt_expr(expr.op0());
     smt_prop.out << ".";
-    smt_prop.out << expr.get("component_name");
+    smt_prop.out << expr.component_name();
   }
   else if(expr.id()=="pointer_offset")
   {

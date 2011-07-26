@@ -649,7 +649,7 @@ exprt c_typecheck_baset::do_designated_initializer(
     
     assert(initializer.operands().size()==1);
     
-    const irep_idt &component_name=initializer.get("component_name");
+    const irep_idt &component_name=initializer.component_name();
 
     if(!struct_type.has_component(component_name))
     {

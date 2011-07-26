@@ -794,7 +794,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 	  if ((symbol.static_lifetime || symbol.type.get("#dynamic") != ""))
 	  {
 	    std::string value, array_name;
-	    value = expr.get_string("component_name");
+	    value = expr.component_name().as_string();
 	    array_name = expr.op0().identifier().as_string() + "::" + value;
 	    const irep_idt &array_identifier = array_name;
 	    std::cout << "write_globals identifier: " << array_identifier.c_str() << std::endl;
@@ -901,7 +901,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 	  if ((symbol.static_lifetime || symbol.type.get("#dynamic") != ""))
 	  {
 	    std::string value, array_name;
-        value = expr.get_string("component_name");
+        value = expr.component_name().as_string();
         array_name = expr.op0().identifier().as_string() + "::" + value;
         const irep_idt &array_identifier = array_name;
         std::cout << "read_globals identifier: " << array_identifier.c_str() << std::endl;
@@ -1028,10 +1028,10 @@ execution_statet::serialise_expr(const exprt &rhs)
     str += serialise_expr(rhs.op0());
     str += ",idx(" + serialise_expr(rhs.op1()) + ")";
   } else if (rhs.id() == "member_name") {
-    str = "component(" + rhs.get("component_name").as_string() + ")";
+    str = "component(" + rhs.component_name().as_string() + ")";
   } else if (rhs.id() == exprt::member) {
     str = "member(entity(" + serialise_expr(rhs.op0()) + "),";
-    str += "member_name(" + rhs.get("component_name").as_string() + "))";
+    str += "member_name(" + rhs.component_name().as_string() + "))";
   } else if (rhs.id() == "nondet_symbol") {
     /* Just return the identifier: it'll be unique to this particular piece
      * of entropy */

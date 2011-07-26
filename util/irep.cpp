@@ -821,5 +821,6 @@ irep_idt irept::a_width = dstring("width");
 irep_idt irept::a_name = dstring("name");
 irep_idt irept::a_statement = dstring("statement");
 irep_idt irept::a_identifier = dstring("identifier");
+irep_idt irept::a_comp_name = dstring("component_name");
 
 irep_idt irept::s_type = dstring("type");

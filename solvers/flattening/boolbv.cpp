@@ -96,7 +96,7 @@ bool boolbvt::literal(
         throw "member takes one operand";
 
       const irept &components=expr.type().find("components");
-      const irep_idt &component_name=expr.get("component_name");
+      const irep_idt &component_name=expr.component_name();
 
       unsigned offset=0;
 

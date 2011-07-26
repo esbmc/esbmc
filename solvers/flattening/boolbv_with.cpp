@@ -242,7 +242,7 @@ void boolbvt::convert_with_struct(
   bvt op2_bv;
   convert_bv(op2, op2_bv);
 
-  const irep_idt &component_name=op1.get("component_name");
+  const irep_idt &component_name=op1.component_name();
   const irept &components=type.find("components");
 
   unsigned offset=0;
@@ -309,7 +309,7 @@ void boolbvt::convert_with_union(
     
   const struct_typet &s_type=to_struct_type(type);
 
-  const irep_idt &component_name=op1.get("component_name");
+  const irep_idt &component_name=op1.component_name();
 
   if(!s_type.has_component(component_name))
     throw "with/union: component not found";
