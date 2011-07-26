@@ -502,10 +502,10 @@ bool goto_inlinet::inline_instruction(
   }
   else if(it->is_other())
   {
-    if(it->code.get("statement")=="bp_constrain" &&
+    if(it->code.statement()=="bp_constrain" &&
        it->code.operands().size()==2 &&
        it->code.op0().operands().size()==2 &&
-       it->code.op0().op1().get("statement")=="function_call")
+       it->code.op0().op1().statement()=="function_call")
     {
       expand_function_call(
         dest, it,

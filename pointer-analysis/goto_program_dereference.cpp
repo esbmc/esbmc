@@ -421,7 +421,7 @@ void goto_program_dereferencet::dereference_instruction(
   }
   else if (i.is_return())
   {
-    assert(i.code.get("statement") == "return");
+    assert(i.code.statement() == "return");
     if (i.code.operands().size() == 0)
       return;
 
@@ -432,7 +432,7 @@ void goto_program_dereferencet::dereference_instruction(
   }
   else if(i.is_other())
   {
-    const irep_idt &statement=i.code.get("statement");
+    const irep_idt &statement=i.code.statement();
 
     if(statement=="decl")
     {

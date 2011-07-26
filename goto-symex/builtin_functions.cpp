@@ -181,7 +181,7 @@ void basic_symext::symex_cpp_new(
   if(code.type().id()!=typet::t_pointer)
     throw "new expected to return pointer";
 
-  do_array=(code.get("statement")=="cpp_new[]");
+  do_array=(code.statement()=="cpp_new[]");
       
   ex_state.dynamic_counter++;
 
@@ -246,7 +246,7 @@ void basic_symext::symex_cpp_delete(
   statet &state,
   const codet &code)
 {
-  //bool do_array=code.get("statement")=="delete[]";
+  //bool do_array=code.statement()=="delete[]";
 }
 
 /*******************************************************************\

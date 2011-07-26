@@ -738,7 +738,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
 
     if(i.is_other())
     {
-      const irep_idt &statement=i.code.get("statement");
+      const irep_idt &statement=i.code.statement();
 
       if(statement=="expression")
       {

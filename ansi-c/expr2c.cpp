@@ -1980,7 +1980,7 @@ std::string expr2ct::convert_code_switch(
   {
     const exprt &op=src.operands()[i];
 
-    if(op.get("statement")!="block")
+    if(op.statement()!="block")
     {
       unsigned precedence;
       dest+=convert_norep(op, precedence);
@@ -2131,7 +2131,7 @@ std::string expr2ct::convert_code_block(
 
   forall_operands(it, src)
   {
-    if(it->get("statement")=="block")
+    if(it->statement()=="block")
       dest+=convert_code_block(to_code(*it), indent+2);
     else
       dest+=convert_code(to_code(*it), indent);
@@ -2192,7 +2192,7 @@ std::string expr2ct::convert_code(
   const codet &src,
   unsigned indent)
 {
-  const irep_idt &statement=src.get("statement");
+  const irep_idt &statement=src.statement();
 
   if(statement=="expression")
     return convert_code_expression(src, indent);
@@ -2914,7 +2914,7 @@ std::string expr2ct::convert(
 
   else if(src.id()=="sideeffect")
   {
-    const irep_idt &statement=src.get("statement");
+    const irep_idt &statement=src.statement();
     if(statement=="preincrement")
       return convert_unary(src, "++", precedence=15);
     else if(statement=="predecrement")

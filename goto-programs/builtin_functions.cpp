@@ -592,7 +592,7 @@ void goto_convertt::do_cpp_new(
 
   exprt alloc_size;
 
-  if(rhs.get("statement")=="cpp_new[]")
+  if(rhs.statement()=="cpp_new[]")
   {
     alloc_size=static_cast<const exprt &>(rhs.find("size"));
     if(alloc_size.type()!=uint_type())

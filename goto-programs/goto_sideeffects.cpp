@@ -128,7 +128,7 @@ bool goto_convertt::has_function_call(const exprt &expr)
       return true;
 
   if(expr.id()=="sideeffect" &&
-     expr.get("statement")=="function_call")
+     expr.statement()=="function_call")
     return true;
 
   return false;
@@ -299,7 +299,7 @@ void goto_convertt::remove_sideeffects(
     return;
   }
   else if(expr.id()=="sideeffect" &&
-          expr.get("statement")=="gcc_conditional_expression")
+          expr.statement()=="gcc_conditional_expression")
   {
     remove_gcc_conditional_expression(expr, guard, dest);
     return;
@@ -311,7 +311,7 @@ void goto_convertt::remove_sideeffects(
 
   if(expr.id()=="sideeffect")
   {
-    const irep_idt &statement=expr.get("statement");
+    const irep_idt &statement=expr.statement();
 
     if(statement=="function_call") // might do anything
       remove_function_call(expr, guard, dest, result_is_used);
@@ -533,7 +533,7 @@ void goto_convertt::remove_function_call(
     // get name of function, if available
 
     if(expr.id()!="sideeffect" ||
-       expr.get("statement")!="function_call")
+       expr.statement()!="function_call")
       throw "expected function call";
 
     if(expr.operands().empty())
@@ -754,7 +754,7 @@ void goto_convertt::remove_statement_expression(
     goto_programt tmp;
     remove_sideeffects(last, guard, tmp, true);
 
-    if(last.get("statement")=="expression" &&
+    if(last.statement()=="expression" &&
        last.operands().size()==1)
       expr=last.op0();
     else

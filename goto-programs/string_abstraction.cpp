@@ -336,7 +336,7 @@ void string_abstractiont::abstract(irep_idt name,
       }
 
       // do initializations of those locals
-      if(it->is_other() && it->code.get("statement")=="decl")
+      if(it->is_other() && it->code.statement()=="decl")
       {
         assert(it->code.operands().size()==1);
         if(it->code.op0().id()=="symbol")

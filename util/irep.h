@@ -142,6 +142,10 @@ public:
     return get("width");
   }
 
+  const irep_idt statement(void) const {
+    return get("statement");
+  }
+
   void identifier(irep_idt ident) {
     set("identifier", ident);
   }

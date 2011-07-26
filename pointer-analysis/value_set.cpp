@@ -502,7 +502,7 @@ void value_sett::get_value_set_rec(
   }
   else if(expr.id()=="sideeffect")
   {
-    const irep_idt &statement=expr.get("statement");
+    const irep_idt &statement=expr.statement();
     
     if(statement=="function_call")
     {
@@ -1238,7 +1238,7 @@ void value_sett::apply_code(
   const exprt &code,
   const namespacet &ns)
 {
-  const irep_idt &statement=code.get("statement");
+  const irep_idt &statement=code.statement();
 
   if(statement=="block")
   {

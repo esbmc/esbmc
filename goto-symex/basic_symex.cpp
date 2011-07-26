@@ -91,7 +91,7 @@ Function: basic_symext::symex
 
 void basic_symext::symex(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
 {
-  const irep_idt &statement=code.get("statement");
+  const irep_idt &statement=code.statement();
 
   if(statement=="block")
     symex_block(state, ex_state, code, node_id);
@@ -599,7 +599,7 @@ Function: basic_symext::replace_nondet
 
 void basic_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
 {
-  if(expr.id()=="sideeffect" && expr.get("statement")=="nondet")
+  if(expr.id()=="sideeffect" && expr.statement()=="nondet")
   {
     exprt new_expr("nondet_symbol", expr.type());
     new_expr.set(exprt::a_identifier, "symex::nondet"+i2string(ex_state.nondet_count++));

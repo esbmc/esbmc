@@ -527,14 +527,14 @@ public:
   friend side_effect_expr_function_callt &to_side_effect_expr_function_call(exprt &expr)
   {
     assert(expr.id()=="sideeffect");
-    assert(expr.get("statement")=="function_call");
+    assert(expr.statement()=="function_call");
     return static_cast<side_effect_expr_function_callt &>(expr);
   }
 
   friend const side_effect_expr_function_callt &to_side_effect_expr_function_call(const exprt &expr)
   {
     assert(expr.id()=="sideeffect");
-    assert(expr.get("statement")=="function_call");
+    assert(expr.statement()=="function_call");
     return static_cast<const side_effect_expr_function_callt &>(expr);
   }
 };

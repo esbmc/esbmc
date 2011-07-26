@@ -289,7 +289,7 @@ Function: c_typecheck_baset::typecheck_expr_operands
 void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
 {
   if(expr.id()=="sideeffect" &&
-     expr.get("statement")=="function_call")
+     expr.statement()=="function_call")
   {
     // don't do function operand
     assert(expr.operands().size()==2);
@@ -297,7 +297,7 @@ void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
     typecheck_expr(expr.op1()); // arguments
   }
   else if(expr.id()=="sideeffect" &&
-          expr.get("statement")=="statement_expression")
+          expr.statement()=="statement_expression")
   {
     typecheck_code(to_code(expr.op0()));
   }
@@ -419,7 +419,7 @@ void c_typecheck_baset::typecheck_side_effect_statement_expression(
 
   codet &code=to_code(expr.op0());
 
-  assert(code.get("statement")=="block");
+  assert(code.statement()=="block");
 
   // the type is the type of the last statement in the
   // block
@@ -1741,7 +1741,7 @@ void c_typecheck_baset::typecheck_function_call_arguments(
 
       if(op_type.id()=="bool" &&
          op.id()=="sideeffect" &&
-         op.get("statement")=="assign" &&
+         op.statement()=="assign" &&
          op.type().id()!="bool")
       {
         err_location(expr);
@@ -2068,7 +2068,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
   const typet &type1=op1.type();
 
   if(expr.id()=="-" ||
-     (expr.id()=="sideeffect" && expr.get("statement")=="assign-"))
+     (expr.id()=="sideeffect" && expr.statement()=="assign-"))
   {
     if(type0.id()=="pointer" &&
        type1.id()=="pointer")
@@ -2090,7 +2090,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
     }
   }
   else if(expr.id()=="+" ||
-          (expr.id()=="sideeffect" && expr.get("statement")=="assign+"))
+          (expr.id()=="sideeffect" && expr.statement()=="assign+"))
   {
     exprt *pop, *intop;
 
@@ -2165,12 +2165,12 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
   if(expr.operands().size()!=2)
   {
     err_location(expr);
-    str << "operator `" << expr.get("statement")
+    str << "operator `" << expr.statement()
         << "' expects two operands";
     throw 0;
   }
 
-  const irep_idt &statement=expr.get("statement");
+  const irep_idt &statement=expr.statement();
 
   exprt &op0=expr.op0();
   exprt &op1=expr.op1();

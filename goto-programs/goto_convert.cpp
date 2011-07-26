@@ -43,7 +43,7 @@ void goto_convertt::finish_gotos()
   {
     goto_programt::instructiont &i=**it;
 
-    if(i.code.get("statement")=="non-deterministic-goto")
+    if(i.code.statement()=="non-deterministic-goto")
     {
       const irept &destinations=i.code.find("destinations");
 
@@ -80,7 +80,7 @@ void goto_convertt::finish_gotos()
 
       i.targets.push_back(l_it->second);
     }
-    else if(i.code.get("statement")=="goto")
+    else if(i.code.statement()=="goto")
     {
       const irep_idt &goto_label=i.code.get("destination");
 
@@ -498,7 +498,7 @@ void goto_convertt::convert_sideeffect(
   exprt &expr,
   goto_programt &dest)
 {
-  const irep_idt &statement=expr.get("statement");
+  const irep_idt &statement=expr.statement();
 
   if(statement=="postincrement" ||
      statement=="postdecrement" ||
@@ -837,7 +837,7 @@ void goto_convertt::convert_assign(
   remove_sideeffects(lhs, dest);
 
   if(rhs.id()=="sideeffect" &&
-     rhs.get("statement")=="function_call")
+     rhs.statement()=="function_call")
   {
     if(rhs.operands().size()!=2)
     {
@@ -851,8 +851,8 @@ void goto_convertt::convert_assign(
     do_function_call(lhs, rhs.op0(), rhs.op1().operands(), dest);
   }
   else if(rhs.id()=="sideeffect" &&
-          (rhs.get("statement")=="cpp_new" ||
-           rhs.get("statement")=="cpp_new[]"))
+          (rhs.statement()=="cpp_new" ||
+           rhs.statement()=="cpp_new[]"))
   {
     Forall_operands(it, rhs)
       remove_sideeffects(*it, dest);
@@ -2154,7 +2154,7 @@ void goto_convertt::convert_start_thread(
   start_thread->code.copy_to_operands(code.op1());
 
   // see if op0 is an unconditional goto
-  if(code.op0().get("statement")=="goto")
+  if(code.op0().statement()=="goto")
   {
     start_thread->code.set("destination",
       code.op0().get("destination"));
@@ -2327,7 +2327,7 @@ void goto_convertt::convert_bp_enforce(
     {
       if(it->is_assign())
       {
-        assert(it->code.get("statement")=="assign");
+        assert(it->code.statement()=="assign");
 
         // add constrain
         codet constrain("bp_constrain");
@@ -2339,7 +2339,7 @@ void goto_convertt::convert_bp_enforce(
         it->type=OTHER;
       }
       else if(it->is_other() &&
-              it->code.get("statement")=="bp_constrain")
+              it->code.statement()=="bp_constrain")
       {
         // add to constraint
         assert(it->code.operands().size()==2);

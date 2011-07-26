@@ -47,7 +47,7 @@ void c_typecheck_baset::typecheck_code(codet &code)
 
   code.type()=typet("code");
 
-  const irep_idt &statement=code.get("statement");
+  const irep_idt &statement=code.statement();
 
   if(statement=="expression")
     typecheck_expression(code);
@@ -364,7 +364,7 @@ void c_typecheck_baset::typecheck_expression(codet &code)
 
   if(op.id()=="sideeffect")
   {
-    const irep_idt &statement=op.get("statement");
+    const irep_idt &statement=op.statement();
     
     if(statement=="assign")
     {
@@ -377,7 +377,7 @@ void c_typecheck_baset::typecheck_expression(codet &code)
       code.operands().swap(operands);
       
       if(code.op1().id()=="sideeffect" &&
-         code.op1().get("statement")=="function_call")
+         code.op1().statement()=="function_call")
       {
         assert(code.op1().operands().size()==2);
   
@@ -561,7 +561,7 @@ void c_typecheck_baset::typecheck_ifthenelse(codet &code)
   typecheck_expr(cond);
 
   if(cond.id()=="sideeffect" &&
-     cond.get("statement")=="assign")
+     cond.statement()=="assign")
   {
     err_location(cond);
     warning("warning: assignment in if condition");

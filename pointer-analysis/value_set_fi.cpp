@@ -708,7 +708,7 @@ void value_set_fit::get_value_set_rec(
   }
   else if(expr.id()=="sideeffect")
   {
-    const irep_idt &statement=expr.get("statement");
+    const irep_idt &statement=expr.statement();
     
     if(statement=="function_call")
     {
@@ -1621,7 +1621,7 @@ void value_set_fit::apply_code(
   const exprt &code,
   const namespacet &ns)
 {
-  const irep_idt &statement=code.get("statement");
+  const irep_idt &statement=code.statement();
 
   if(statement=="block")
   {

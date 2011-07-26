@@ -1448,7 +1448,7 @@ Function: invariant_sett::apply_code
 
 void invariant_sett::apply_code(const codet &code)
 {
-  const irep_idt &statement=code.get("statement");
+  const irep_idt &statement=code.statement();
 
   if(statement=="block")
   {
