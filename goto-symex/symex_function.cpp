@@ -126,8 +126,8 @@ void goto_symext::argument_assignments(
       do_simplify(rhs);
       assignment(ex_state, lhs, rhs);
       
-	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ LHS --------- " << lhs.get(irept::a_identifier) << std::endl;
-	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ RHS --------- " << rhs.get(irept::a_identifier) << std::endl;
+	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ LHS --------- " << lhs.identifier() << std::endl;
+	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ RHS --------- " << rhs.identifier() << std::endl;
     }
 
     it1++;
@@ -193,7 +193,7 @@ void goto_symext::symex_function_call_symbol(
   assert(code.function().id()==exprt::symbol);
 
   const irep_idt &identifier=
-    code.function().get(irept::a_identifier);
+    code.function().identifier();
     
   if(identifier=="c::CBMC_trace")
   {

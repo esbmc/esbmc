@@ -97,9 +97,9 @@ void goto_trace_stept::output(
     irep_idt identifier;
 
     if(original_lhs.is_not_nil())
-      identifier=original_lhs.get(irept::a_identifier);
+      identifier=original_lhs.identifier();
     else
-      identifier=lhs.get(irept::a_identifier);
+      identifier=lhs.identifier();
 
     out << "  " << identifier
         << " = " << from_expr(ns, identifier, value)
@@ -142,7 +142,7 @@ void counterexample_value(
   const exprt &value,
   const pretty_namest &pretty_names)
 {
-  const irep_idt &identifier=lhs.get(irept::a_identifier);
+  const irep_idt &identifier=lhs.identifier();
   std::string value_string;
 
   if(value.is_nil())
@@ -227,9 +227,9 @@ void show_goto_trace_gui(
       irep_idt identifier;
 
       if(it->original_lhs.is_not_nil())
-        identifier=it->original_lhs.get(irept::a_identifier);
+        identifier=it->original_lhs.identifier();
       else
-        identifier=it->lhs.get(irept::a_identifier);
+        identifier=it->lhs.identifier();
 
       std::string value_string=from_expr(ns, identifier, it->value);
 

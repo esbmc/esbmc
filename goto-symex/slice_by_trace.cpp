@@ -597,7 +597,7 @@ std::set<exprt> symex_slice_by_tracet::implied_guards(exprt e)
   std::set<exprt> s;
 
   if (e.id() == exprt::symbol) { // Guard or merge
-    const char* merge_loc = strstr(e.get(irept::a_identifier).c_str(),"merge#");
+    const char* merge_loc = strstr(e.identifier().c_str(),"merge#");
     if (merge_loc == NULL) {
       exprt e_copy (e);
       simplify(e_copy);

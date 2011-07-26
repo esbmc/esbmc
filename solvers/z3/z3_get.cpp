@@ -121,7 +121,7 @@ exprt z3_convt::get(const exprt &expr) const
 	std::vector<exprt> unknown;
 	Z3_ast bv;
 
-	identifier = expr.get_string(irept::a_identifier);
+	identifier = expr.identifier().as_string();
 #if 1
 	if (expr.type().id()=="pointer")
 	{

@@ -227,7 +227,7 @@ irep_idt goto_symext::get_symbol(const exprt & expr) {
     }
   }
 
-  return expr.get(irept::a_identifier);
+  return expr.identifier();
 }
 
 /*******************************************************************\
@@ -428,10 +428,10 @@ void goto_symext::symex_step(
 
                 dereference(deref_code.function(), state, false, ex_state.node_id);
 
-                if(deref_code.function().get(irept::a_identifier) == "c::main")
+                if(deref_code.function().identifier() == "c::main")
                   is_main=true;
 
-                if(deref_code.function().get(irept::a_identifier) == "c::__ESBMC_yield")
+                if(deref_code.function().identifier() == "c::__ESBMC_yield")
                 {
                    state.source.pc++;
                    ex_state.reexecute_instruction = false;

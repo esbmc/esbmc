@@ -385,7 +385,7 @@ void goto_symex_statet::assignment(
   // the type might need renaming
   rename(lhs.type(), ns, exec_node_id);
 
-  const irep_idt &identifier= lhs.get(irept::a_identifier);
+  const irep_idt &identifier= lhs.identifier();
 
   // identifier should be l0 or l1, make sure it's l1
 
@@ -554,7 +554,7 @@ void goto_symex_statet::level1t::rename(exprt &expr,unsigned node_id)
 
   if(expr.id()==exprt::symbol)
   {
-    const irep_idt &identifier=expr.get(irept::a_identifier);
+    const irep_idt &identifier=expr.identifier();
 
     // first see if it's already an l1 name
 
@@ -602,7 +602,7 @@ void goto_symex_statet::level2t::rename(exprt &expr, unsigned node_id)
 
   if(expr.id()==exprt::symbol)
   {
-    const irep_idt &identifier=expr.get(irept::a_identifier);
+    const irep_idt &identifier=expr.identifier();
 
     // first see if it's already an l2 name
 
@@ -677,7 +677,7 @@ void goto_symex_statet::rename(
   }
   else if(type.id()==exprt::symbol)
   {
-	const symbolt &symbol=ns.lookup(type.get(irept::a_identifier));
+	const symbolt &symbol=ns.lookup(type.identifier());
 	type=symbol.type;
     rename(type, ns,node_id);
   }
@@ -730,7 +730,7 @@ Function: goto_symex_statet::get_original_name
 
 void goto_symex_statet::get_original_name(exprt &expr) const
 {
-// std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3 : " << expr.get(irept::a_identifier) << std::endl;
+// std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3 : " << expr.identifier() << std::endl;
   Forall_operands(it, expr)
     get_original_name(*it);
  //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 1" << std::endl;
@@ -738,11 +738,11 @@ void goto_symex_statet::get_original_name(exprt &expr) const
   if(expr.id()==exprt::symbol)
   {
 //	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 2" << std::endl;
-//	  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-1 : " << expr.get(irept::a_identifier) << std::endl;
+//	  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-1 : " << expr.identifier() << std::endl;
     level2.get_original_name(expr);
-  //  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-2 : " << expr.get(irept::a_identifier) << std::endl;
+  //  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-2 : " << expr.identifier() << std::endl;
     top().level1.get_original_name(expr);
-    //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-3 : " << expr.get(irept::a_identifier) << std::endl;
+    //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-3 : " << expr.identifier() << std::endl;
   }
 }
 
@@ -760,7 +760,7 @@ Function: goto_symex_statet::renaming_levelt::get_original_name
 
 void goto_symex_statet::renaming_levelt::get_original_name(exprt &expr) const
 {
-// std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 2 : " << expr.get(irept::a_identifier) << std::endl;
+// std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 2 : " << expr.identifier() << std::endl;
   Forall_operands(it, expr)
     get_original_name(*it);
 //	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::renaming_levelt::get_original_name 1" << std::endl;
@@ -768,7 +768,7 @@ void goto_symex_statet::renaming_levelt::get_original_name(exprt &expr) const
   if(expr.id()==exprt::symbol)
   {
     original_identifierst::const_iterator it=
-      original_identifiers.find(expr.get(irept::a_identifier));
+      original_identifiers.find(expr.identifier());
     if(it==original_identifiers.end()) return;
 //	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::renaming_levelt::get_original_name 2" << std::endl;
 
