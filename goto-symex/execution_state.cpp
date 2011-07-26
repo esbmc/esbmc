@@ -752,7 +752,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
     if (identifier == "c::__ESBMC_alloc"
         || identifier == "c::__ESBMC_alloc_size")
       return 0;
-    else if ((symbol.static_lifetime || symbol.type.dynamic() != ""))
+    else if ((symbol.static_lifetime || symbol.type.is_dynamic_set()))
     {
       //std::cout << "get_expr_write_globals: " << expr.pretty() << std::endl;
       _exprs_read_write.at(_active_thread).write_set.insert(identifier);
@@ -770,7 +770,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
 	  const symbolt &symbol = lookup(ns, identifier);
 
-	  if ((symbol.static_lifetime || symbol.type.dynamic() != ""))
+	  if ((symbol.static_lifetime || symbol.type.is_dynamic_set()))
 	  {
 	    std::string value, array_name;
 	    value = integer2string(binary2integer(expr.op1().value().as_string(), true),10);
@@ -791,7 +791,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
 	  const symbolt &symbol = lookup(ns, identifier);
 
-	  if ((symbol.static_lifetime || symbol.type.dynamic() != ""))
+	  if ((symbol.static_lifetime || symbol.type.is_dynamic_set()))
 	  {
 	    std::string value, array_name;
 	    value = expr.component_name().as_string();
@@ -859,7 +859,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 
     if (identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
       return 0;
-    else if ((symbol.static_lifetime || symbol.type.dynamic() != ""))
+    else if ((symbol.static_lifetime || symbol.type.is_dynamic_set()))
     {
       //std::cout << "get_expr_read_globals: " << expr.pretty() << std::endl;
       _exprs_read_write.at(_active_thread).read_set.insert(identifier);
@@ -877,7 +877,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
 	  const symbolt &symbol = lookup(ns, identifier);
 
-	  if ((symbol.static_lifetime || symbol.type.dynamic() != ""))
+	  if ((symbol.static_lifetime || symbol.type.is_dynamic_set()))
 	  {
 	    std::string value, array_name;
         value = integer2string(binary2integer(expr.op1().value().as_string(), true),10);
@@ -898,7 +898,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
 	  const symbolt &symbol = lookup(ns, identifier);
 
-	  if ((symbol.static_lifetime || symbol.type.dynamic() != ""))
+	  if ((symbol.static_lifetime || symbol.type.is_dynamic_set()))
 	  {
 	    std::string value, array_name;
         value = expr.component_name().as_string();

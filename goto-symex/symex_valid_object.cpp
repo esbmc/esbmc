@@ -85,7 +85,7 @@ void goto_symext::replace_dynamic_allocation(
         const symbolt &symbol=ns.lookup(l0_identifier);
         
         // dynamic?
-        if(symbol.type.get_bool("#dynamic"))
+        if(symbol.type.dynamic())
         {
           // TODO
         }
@@ -131,7 +131,7 @@ bool goto_symext::is_valid_object(
   if(symbol.static_lifetime) return true; // global
   
   // dynamic?
-  if(symbol.type.get_bool("#dynamic"))
+  if(symbol.type.dynamic())
     return false;
 
   // current location?

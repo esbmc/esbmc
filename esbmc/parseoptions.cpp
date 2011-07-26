@@ -757,7 +757,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
   if (identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
     return 0;
 
-  if (sym.static_lifetime || sym.type.dynamic() != "")
+  if (sym.static_lifetime || sym.type.is_dynamic_set())
     return 1;
 
   return 0;

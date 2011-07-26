@@ -784,7 +784,7 @@ void bv_pointerst::do_is_dynamic_object(
     const exprt &expr=*it;
     
     bool is_dynamic=
-      expr.type().get_bool("#dynamic") ||
+      expr.type().dynamic() ||
       (expr.id()=="symbol" &&
        has_prefix(expr.identifier().as_string(), "symex_dynamic::"));
     

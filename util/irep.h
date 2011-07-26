@@ -244,8 +244,13 @@ public:
     return get(a_failed_symbol);
   }
 
-  inline const irep_idt &dynamic(void) const {
-    return get(a_dynamic);
+  inline bool is_dynamic_set(void) const {
+    const irep_idt &c = get(a_dynamic);
+    return (c != "");
+  }
+
+  inline bool dynamic(void) const {
+    return get_bool(a_dynamic);
   }
 
   inline const irep_idt &cmt_base_name(void) const {
