@@ -362,7 +362,10 @@ bool flow_insensitive_analysis_baset::do_function_call(
     r->code.move_to_operands(rhs);    
     
     goto_programt::targett t=temp.add_instruction(END_FUNCTION);    
-    t->code.set("identifier", code.function());
+    //t->code.set("identifier", code.function());
+    // jmorse: this usage violates the "identifier" fields 'type'. There's no
+    // code right now that uses the temporary instruction generated here, so
+    // nothing need be fixed from disabling it. This comment left for posterity.
     t->function=f_it->first;
     t->location_number=1;
     
