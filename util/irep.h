@@ -131,50 +131,50 @@ public:
   void move_to_sub(irept &irep);
   void move_to_named_sub(const irep_namet &name, irept &irep);
 
-  typet &type() { return (typet &)(add(s_type)); }
-  const typet &type() const { return (typet &)(find(s_type)); }
+  inline typet &type() { return (typet &)(add(s_type)); }
+  inline const typet &type() const { return (typet &)(find(s_type)); }
 
-  const irep_idt &identifier(void) const {
+  inline const irep_idt &identifier(void) const {
     return get(a_identifier);
   }
 
-  const irep_idt &width(void) const {
+  inline const irep_idt &width(void) const {
     return get(a_width);
   }
 
-  const irep_idt &statement(void) const {
+  inline const irep_idt &statement(void) const {
     return get(a_statement);
   }
 
-  const irep_idt &name(void) const {
+  inline const irep_idt &name(void) const {
     return get(a_name);
   }
 
-  const irep_idt &component_name(void) const {
+  inline const irep_idt &component_name(void) const {
     return get(a_comp_name);
   }
 
-  const irep_idt &tag(void) const {
+  inline const irep_idt &tag(void) const {
     return get(a_tag);
   }
 
-  const irep_idt &from(void) const {
+  inline const irep_idt &from(void) const {
     return get(a_from);
   }
 
-  const irep_idt &file(void) const {
+  inline const irep_idt &file(void) const {
     return get(a_file);
   }
 
-  const irep_idt &line(void) const {
+  inline const irep_idt &line(void) const {
     return get(a_line);
   }
 
-  const irep_idt &function(void) const {
+  inline const irep_idt &function(void) const {
     return get(a_function);
   }
 
-  void identifier(irep_idt ident) {
+  inline void identifier(irep_idt ident) {
     set(a_identifier, ident);
   }
 
