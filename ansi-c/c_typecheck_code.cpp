@@ -373,7 +373,7 @@ void c_typecheck_baset::typecheck_expression(codet &code)
       // pull assignment statements up
       exprt::operandst operands;
       operands.swap(op.operands());
-      code.set("statement", "assign");
+      code.statement("assign");
       code.operands().swap(operands);
       
       if(code.op1().id()=="sideeffect" &&

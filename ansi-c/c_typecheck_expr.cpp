@@ -462,7 +462,7 @@ void c_typecheck_baset::typecheck_side_effect_statement_expression(
       code_expr.location() = fc.location();
 
       exprt assign("sideeffect");
-      assign.set("statement", "assign");
+      assign.statement("assign");
       assign.location()=fc.location();
       assign.move_to_operands(fc.lhs(), sideeffect);
       assign.type()=assign.op1().type();
@@ -2232,12 +2232,12 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
       {
         if(type0.id()=="unsignedbv")
         {
-          expr.set("statement", "assign_lshr");
+          expr.statement("assign_lshr");
           return;
         }
         else if(type0.id()=="signedbv")
         {
-          expr.set("statement", "assign_ashr");
+          expr.statement("assign_ashr");
           return;
         }
       }

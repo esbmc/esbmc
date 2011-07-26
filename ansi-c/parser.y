@@ -311,7 +311,7 @@ offsetof_member_designator:
 
 statement_expression: '(' compound_statement ')'
 	{ init(&$$, "sideeffect");
-	  $$->set("statement", "statement_expression");
+	  $$->statement("statement_expression");
           mto($$, $2);
 	}
 	;
@@ -327,12 +327,12 @@ postfix_expression:
 	  $$->op0().swap(*$1);
 	  $$->op1().clear();
 	  $$->op1().id("arguments");
-	  $$->set("statement", "function_call");
+	  $$->statement("function_call");
 	}
 	| postfix_expression '(' argument_expression_list ')'
 	{ $$=$2;
 	  init(&$$, "sideeffect");
-	  $$->set("statement", "function_call");
+	  $$->statement("function_call");
 	  $$->operands().resize(2);
 	  $$->op0().swap(*$1);
 	  $$->op1().swap(*$3);
@@ -354,13 +354,13 @@ postfix_expression:
 	{ $$=$2;
 	  init(&$$, "sideeffect");
 	  mto($$, $1);
-	  $$->set("statement", "postincrement");
+	  $$->statement("postincrement");
 	}
 	| postfix_expression TOK_DECR
 	{ $$=$2;
 	  init(&$$, "sideeffect");
 	  mto($$, $1);
-	  $$->set("statement", "postdecrement");
+	  $$->statement("postdecrement");
 	}
 	;
 
@@ -388,13 +388,13 @@ unary_expression:
 	| TOK_INCR unary_expression
 	{ $$=$1;
 	  set(*$$, "sideeffect");
-	  $$->set("statement", "preincrement");
+	  $$->statement("preincrement");
 	  mto($$, $2);
 	}
 	| TOK_DECR unary_expression
 	{ $$=$1;
 	  set(*$$, "sideeffect");
-	  $$->set("statement", "predecrement");
+	  $$->statement("predecrement");
 	  mto($$, $2);
 	}
 	| '&' cast_expression
@@ -549,7 +549,7 @@ conditional_expression:
 	| logical_or_expression '?' ':' conditional_expression
 	{ $$=$2;
 	  init(&$$, "sideeffect");
-	  $$->set("statement", "gcc_conditional_expression");
+	  $$->statement("gcc_conditional_expression");
 	  mto($$, $1);
 	  mto($$, $4);
 	}
@@ -558,27 +558,27 @@ conditional_expression:
 assignment_expression:
 	conditional_expression
 	| cast_expression '=' assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign"); }
 	| cast_expression TOK_MULTASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign*"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign*"); }
 	| cast_expression TOK_DIVASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_div"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign_div"); }
 	| cast_expression TOK_MODASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_mod"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign_mod"); }
 	| cast_expression TOK_PLUSASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign+"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign+"); }
 	| cast_expression TOK_MINUSASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign-"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign-"); }
 	| cast_expression TOK_SLASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_shl"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign_shl"); }
 	| cast_expression TOK_SRASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_shr"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign_shr"); }
 	| cast_expression TOK_ANDASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_bitand"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign_bitand"); }
 	| cast_expression TOK_EORASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_bitxor"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign_bitxor"); }
 	| cast_expression TOK_ORASSIGN assignment_expression
-	{ binary($$, $1, $2, "sideeffect", $3); $$->set("statement", "assign_bitor"); }
+	{ binary($$, $1, $2, "sideeffect", $3); $$->statement("assign_bitor"); }
 	;
 
 comma_expression:

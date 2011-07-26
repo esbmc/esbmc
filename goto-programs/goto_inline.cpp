@@ -389,7 +389,7 @@ void goto_inlinet::expand_function_call(
     if(lhs.is_not_nil())
     {
       exprt rhs=exprt("sideeffect", lhs.type());
-      rhs.set("statement", "nondet");
+      rhs.statement("nondet");
       rhs.location()=target->location;
 
       code_assignt code(lhs, rhs);

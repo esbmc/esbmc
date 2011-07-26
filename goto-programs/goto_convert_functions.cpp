@@ -160,7 +160,7 @@ void goto_convert_functionst::add_return(
   t->location=location;
 
   exprt rhs=exprt("sideeffect", f.type.return_type());
-  rhs.set("statement", "nondet");
+  rhs.statement("nondet");
   t->code.move_to_operands(rhs);
 }
 

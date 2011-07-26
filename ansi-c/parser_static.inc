@@ -48,7 +48,7 @@ static void set(irept &expr, const std::string &id)
 static void statement(exprt &expr, const std::string &id)
 {
   set(expr, "code");
-  expr.set("statement", id);
+  expr.statement(id);
 }
 
 static void decl_statement(exprt &dest, ansi_c_declarationt &decl, exprt &initializer)

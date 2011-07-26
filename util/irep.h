@@ -421,6 +421,10 @@ public:
     set(a_identifier, ident);
   }
 
+  inline void statement(const irep_idt statm) {
+    set(a_statement, statm);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)

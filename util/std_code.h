@@ -27,7 +27,7 @@ public:
   
   void set_statement(const irep_idt &statement)
   {
-    set("statement", statement);
+    this->statement(statement);
   }
 
   const irep_idt &get_statement() const
@@ -475,7 +475,7 @@ public:
 
   void set_statement(const irep_idt &statement)
   {
-    return set("statement", statement);
+    return this->statement(statement);
   }
 };
 

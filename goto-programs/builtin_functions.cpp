@@ -293,7 +293,7 @@ void goto_convertt::do_printf(
     exprt printf_code("sideeffect",
       static_cast<const typet &>(function.type().find("return_type")));
 
-    printf_code.set("statement", "printf");
+    printf_code.statement("printf");
 
     printf_code.operands()=arguments;
     printf_code.location()=function.location();
@@ -469,7 +469,7 @@ void goto_convertt::do_malloc(
   // produce new object
 
   exprt new_expr("sideeffect", lhs.type());
-  new_expr.set("statement", "malloc");
+  new_expr.statement("malloc");
   new_expr.copy_to_operands(arguments[0]);
   new_expr.set("#size", alloc_size);
   new_expr.set("#type", alloc_type);

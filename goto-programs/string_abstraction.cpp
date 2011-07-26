@@ -633,7 +633,7 @@ exprt string_abstractiont::build_unknown(whatt what, bool write)
   case LENGTH:
   case SIZE:
     result=exprt("sideeffect", type);
-    result.set("statement", "nondet");
+    result.statement("nondet");
     break;
 
   default: assert(false);
