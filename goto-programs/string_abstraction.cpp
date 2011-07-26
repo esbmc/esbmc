@@ -1345,7 +1345,7 @@ void string_abstractiont::abstract_function_call(
   const code_function_callt::argumentst &arguments=call.arguments();
   
   symbolst::const_iterator f_it = 
-    context.symbols.find(call.function().get("identifier"));
+    context.symbols.find(call.function().identifier());
   if(f_it==context.symbols.end())
     throw "invalid function call";
   

@@ -285,7 +285,7 @@ void goto_convertt::do_printf(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  const irep_idt &f_id=function.get("identifier");
+  const irep_idt &f_id=function.identifier();
 
   if(f_id==CPROVER_PREFIX "printf" ||
      f_id=="c::printf")
@@ -898,7 +898,7 @@ void goto_convertt::do_function_call_symbol(
     return; // ignore
 
   // lookup symbol
-  const irep_idt &identifier=function.get("identifier");
+  const irep_idt &identifier=function.identifier();
 
   const symbolt *symbol;
   if(ns.lookup(identifier, symbol))

@@ -71,7 +71,7 @@ bool rename(exprt &expr, const irep_idt &old_name,
 
   if(expr.id()=="symbol")
   {
-    if(expr.get("identifier")==old_name)
+    if(expr.identifier()==old_name)
     {
       expr.set("identifier", new_name);
       result=false;

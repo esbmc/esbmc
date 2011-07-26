@@ -93,7 +93,7 @@ void ansi_c_convertt::convert_expr(exprt &expr)
 
   if(expr.id()=="symbol")
   {
-    expr.set("identifier", final_id(expr.get("identifier")));
+    expr.set("identifier", final_id(expr.identifier()));
     expr.remove("#id_class");
     expr.remove("#base_name");
   }
@@ -304,7 +304,7 @@ void ansi_c_convertt::convert_type(
   }
   else if(type.id()=="symbol")
   {
-    irep_idt identifier=final_id(type.get("identifier"));
+    irep_idt identifier=final_id(type.identifier());
     type.set("identifier", identifier);
     type.remove("#id_class");
     type.remove("#base_name");

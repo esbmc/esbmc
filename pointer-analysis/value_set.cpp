@@ -1038,7 +1038,7 @@ void value_sett::assign_rec(
 
   if(lhs.id()=="symbol")
   {
-    const irep_idt &identifier=lhs.get("identifier");
+    const irep_idt &identifier=lhs.identifier();
     
     if(add_to_sets)
       make_union(get_entry(identifier, suffix).object_map, values_rhs);

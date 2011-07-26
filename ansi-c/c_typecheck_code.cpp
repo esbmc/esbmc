@@ -294,7 +294,7 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   replace_symbol(code.op0());
 
   // look it up
-  const irep_idt &identifier=code.op0().get("identifier");
+  const irep_idt &identifier=code.op0().identifier();
 
   symbolst::iterator s_it=context.symbols.find(identifier);
 

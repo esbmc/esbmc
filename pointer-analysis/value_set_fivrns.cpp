@@ -1194,7 +1194,7 @@ void value_set_fivrnst::assign_rec(
 
   if(lhs.id()=="symbol")
   {
-    const irep_idt &identifier=lhs.get("identifier");        
+    const irep_idt &identifier=lhs.identifier();        
 
     if(has_prefix(id2string(identifier), 
                   "value_set::dynamic_object") ||

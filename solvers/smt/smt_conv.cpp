@@ -1196,7 +1196,7 @@ void smt_convt::set_to(const exprt &expr, bool value)
     
     if(expr.op0().id()=="symbol")
     {
-      const irep_idt &identifier=expr.op0().get("identifier");
+      const irep_idt &identifier=expr.op0().identifier();
       
       identifiert &id=identifier_map[identifier];
 
@@ -1250,7 +1250,7 @@ void smt_convt::find_symbols(const exprt &expr)
     if(expr.type().id()=="code")
       return;
 
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
     identifiert &id=identifier_map[identifier];
 
     if(id.type.is_nil())

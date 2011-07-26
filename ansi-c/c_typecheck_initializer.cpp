@@ -154,7 +154,7 @@ void c_typecheck_baset::do_initializer(
 {
   if(type.id()=="symbol")
   {     
-    const irep_idt &identifier=type.get("identifier");
+    const irep_idt &identifier=type.identifier();
     symbolst::iterator sit=context.symbols.find(identifier);
 
     if(sit==context.symbols.end())

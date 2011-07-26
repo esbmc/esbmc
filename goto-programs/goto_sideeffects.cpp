@@ -541,7 +541,7 @@ void goto_convertt::remove_function_call(
 
     if(expr.op0().id()=="symbol")
     {
-      const irep_idt &identifier=expr.op0().get("identifier");
+      const irep_idt &identifier=expr.op0().identifier();
       const symbolt &symbol=lookup(identifier);
 
       std::string new_base_name=id2string(new_symbol.base_name);

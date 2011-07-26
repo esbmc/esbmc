@@ -227,7 +227,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
     throw "builtin_offsetof expects struct type";
   }
 
-  const irep_idt &identifier=type.get("identifier");
+  const irep_idt &identifier=type.identifier();
   symbolst::const_iterator s_it=context.symbols.find(identifier);
 
   if(s_it==context.symbols.end())
@@ -240,7 +240,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   // found it
   const symbolt &symbol=s_it->second;
   const irept &components=symbol.type.find("components");
-  const irep_idt &member=expr.find("member").get("identifier");
+  const irep_idt &member=expr.find("member").identifier();
   bool found=false;
   mp_integer offset=0;
 
@@ -325,7 +325,7 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   // adjust identifier, if needed
   replace_symbol(expr);
 
-  const irep_idt &identifier=expr.get("identifier");
+  const irep_idt &identifier=expr.identifier();
 
   // look it up
   symbolst::const_iterator s_it=context.symbols.find(identifier);
@@ -1452,11 +1452,11 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   {
     replace_symbol(f_op);
 
-    if(context.symbols.find(f_op.get("identifier"))==context.symbols.end())
+    if(context.symbols.find(f_op.identifier())==context.symbols.end())
     {
       // maybe this is an undeclared function
       // let's just add it
-      const irep_idt &identifier=f_op.get("identifier");
+      const irep_idt &identifier=f_op.identifier();
 
       symbolt new_symbol;
 

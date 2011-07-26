@@ -439,7 +439,7 @@ void goto_symext::symex_step(
                    return;
                 }
 
-                if (deref_code.function().get("identifier") == "c::__ESBMC_switch_to")
+                if (deref_code.function().identifier() == "c::__ESBMC_switch_to")
                 {
                   state.source.pc++;
                   ex_state.reexecute_instruction = false;

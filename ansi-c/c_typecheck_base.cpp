@@ -63,7 +63,7 @@ Function: c_typecheck_baset::replace_symbol
 void c_typecheck_baset::replace_symbol(irept &symbol)
 {
   id_replace_mapt::const_iterator it=
-    id_replace_map.find(symbol.get("identifier"));
+    id_replace_map.find(symbol.identifier());
   
   if(it!=id_replace_map.end())
     symbol.set("identifier", it->second);
@@ -386,7 +386,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         if (old_symbol.type.id()=="symbol")
         {
           // fix the symbol, not just the type
-          const irep_idt ident = old_symbol.type.get("identifier");
+          const irep_idt ident = old_symbol.type.identifier();
           symbolst::iterator s_it=context.symbols.find(ident);
     
           if(s_it==context.symbols.end())

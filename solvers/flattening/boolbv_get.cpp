@@ -33,7 +33,7 @@ exprt boolbvt::get(const exprt &expr) const
   if(expr.id()=="symbol" ||
      expr.id()=="nondet_symbol")
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
 
     boolbv_mapt::mappingt::const_iterator it=
       map.mapping.find(identifier);

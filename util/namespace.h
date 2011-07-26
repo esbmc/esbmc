@@ -26,7 +26,7 @@ public:
   
   const symbolt &lookup(const irept &irep) const
   {
-    return lookup(irep.get("identifier"));
+    return lookup(irep.identifier());
   }
   
   virtual ~namespacet()

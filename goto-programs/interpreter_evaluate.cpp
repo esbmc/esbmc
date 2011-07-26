@@ -438,7 +438,7 @@ mp_integer interpretert::evaluate_address(const exprt &expr) const
 {
   if(expr.id()=="symbol")
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
     
     interpretert::memory_mapt::const_iterator m_it1=
       memory_map.find(identifier);

@@ -30,7 +30,7 @@ void base_type(typet &type, const namespacet &ns)
   {
     const symbolt *symbol;
 
-    if(!ns.lookup(type.get("identifier"), symbol) &&
+    if(!ns.lookup(type.identifier(), symbol) &&
        symbol->is_type &&
        !symbol->type.is_nil())
     {
@@ -131,14 +131,14 @@ bool base_type_eqt::base_type_eq_rec(
   {
     // already in same set?
     if(identifiers.make_union(
-         type1.get("identifier"),
-         type2.get("identifier")))
+         type1.identifier(),
+         type2.identifier()))
       return true;
   }
 
   if(type1.id()=="symbol")
   {
-    const symbolt &symbol=ns.lookup(type1.get("identifier"));
+    const symbolt &symbol=ns.lookup(type1.identifier());
 
     if(!symbol.is_type)
       throw "symbol "+id2string(symbol.name)+" is not a type";
@@ -148,7 +148,7 @@ bool base_type_eqt::base_type_eq_rec(
 
   if(type2.id()=="symbol")
   {
-    const symbolt &symbol=ns.lookup(type2.get("identifier"));
+    const symbolt &symbol=ns.lookup(type2.identifier());
 
     if(!symbol.is_type)
       throw "symbol "+id2string(symbol.name)+" is not a type";

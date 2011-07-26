@@ -33,14 +33,14 @@ void c_finalize_expression(
     if(expr.type().id()=="incomplete_array")
     {
       symbolst::const_iterator it=
-        context.symbols.find(expr.get("identifier"));
+        context.symbols.find(expr.identifier());
 
       if(it==context.symbols.end())
       {
         message_streamt message_stream(message_handler);
         message_stream.str
           << "failed to find symbol "
-          << expr.get("identifier");
+          << expr.identifier();
         message_stream.error();
         throw 0;
       }

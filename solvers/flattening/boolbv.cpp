@@ -57,7 +57,7 @@ bool boolbvt::literal(
     if(expr.id()=="symbol" ||
        expr.id()=="nondet_symbol")
     {
-      const irep_idt &identifier=expr.get("identifier");
+      const irep_idt &identifier=expr.identifier();
 
       boolbv_mapt::mappingt::const_iterator it_m=
         map.mapping.find(identifier);
@@ -461,7 +461,7 @@ void boolbvt::convert_symbol(const exprt &expr, bvt &bv)
 
   bv.resize(width);
   
-  const irep_idt &identifier=expr.get("identifier");
+  const irep_idt &identifier=expr.identifier();
 
   if(identifier.empty())
     throw "got empty identifier";
@@ -838,7 +838,7 @@ bool boolbvt::boolbv_set_equality_to_true(const exprt &expr)
       convert_bv(operands[1], bv1);
       
       const irep_idt &identifier=
-        operands[0].get("identifier");
+        operands[0].identifier();
 
       const typet &type=operands[0].type();
 

@@ -440,7 +440,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
   
   if(function.id()=="symbol")
   {
-    const irep_idt &identifier=function.get("identifier");
+    const irep_idt &identifier=function.identifier();
     
     if(recursion_set.find(identifier)!=recursion_set.end())
     {
@@ -508,7 +508,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
         
         // ... but only if they are actually functions.
         goto_functionst::function_mapt::const_iterator it=
-          goto_functions.function_map.find(o.object().get("identifier"));
+          goto_functions.function_map.find(o.object().identifier());
         
         if (it!=goto_functions.function_map.end())
         {

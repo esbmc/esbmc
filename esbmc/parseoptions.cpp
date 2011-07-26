@@ -617,7 +617,7 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
 {
 
   if (e.id() ==  "symbol") {
-    std::string sym = e.get("identifier").as_string();
+    std::string sym = e.identifier().as_string();
 
 // Originally this piece of code renamed all the symbols in the property
 // expression to ones specified by the user. However, there's no easy way of
@@ -681,7 +681,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
   // Is this actually an assignment that we're interested in?
   std::map<std::string, std::pair<std::set<std::string>, exprt> >::const_iterator it;
-  std::string sym_name = sym.get("identifier").as_string();
+  std::string sym_name = sym.identifier().as_string();
   std::set<std::pair<std::string, exprt> > triggered;
   for (it = monitors.begin(); it != monitors.end(); it++) {
     if (it->second.first.find(sym_name) == it->second.first.end())
@@ -785,7 +785,7 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
         case FUNCTION_CALL:
           {
             code_function_callt deref_code = to_code_function_call(pit->code);
-            if (deref_code.function().get("identifier") == "c::__ESBMC_yield")
+            if (deref_code.function().identifier() == "c::__ESBMC_yield")
               print_insn = true;
           }
           break;

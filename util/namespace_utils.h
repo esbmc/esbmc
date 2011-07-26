@@ -37,7 +37,7 @@ class namespace_utils_baset
 
   bool lookup_symbol(const exprt &symbol_expr, const symbolt *&symbol) const
   {
-    return ns().lookup(symbol_expr.get("identifier"), symbol);
+    return ns().lookup(symbol_expr.identifier(), symbol);
   }
 
   void follow_symbol(irept &irep) const

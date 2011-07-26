@@ -291,7 +291,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     // adjust identifier, if needed
     replace_symbol(type);
 
-    const irep_idt &identifier=type.get("identifier");
+    const irep_idt &identifier=type.identifier();
 
     symbolst::const_iterator s_it=context.symbols.find(identifier);
 

@@ -193,7 +193,7 @@ void boolbvt::convert_index(
   {
     // optimization: only generate necessary literals
 
-    const irep_idt &identifier=array.get("identifier");
+    const irep_idt &identifier=array.identifier();
     
     const typet &type=array.type();
 

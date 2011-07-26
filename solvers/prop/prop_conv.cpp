@@ -33,7 +33,7 @@ bool prop_convt::literal(const exprt &expr, literalt &dest) const
 
   if(expr.id()=="symbol")
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
 
     symbolst::const_iterator result=symbols.find(identifier);
 
@@ -101,7 +101,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
   }
   else if(expr.id()=="symbol")
   {
-    symbolst::const_iterator result=symbols.find(expr.get("identifier"));
+    symbolst::const_iterator result=symbols.find(expr.identifier());
     if(result==symbols.end()) return true;
 
     value=prop.l_get(result->second);
@@ -234,7 +234,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
   }
   else if(expr.id()=="symbol")
   {
-    return get_literal(expr.get("identifier"));
+    return get_literal(expr.identifier());
   }
   else if(expr.id()=="literal")
   {
@@ -379,7 +379,7 @@ bool prop_convt::set_equality_to_true(const exprt &expr)
     if(expr.op0().id()=="symbol")
     {
       const irep_idt &identifier=
-        expr.op0().get("identifier");
+        expr.op0().identifier();
 
       literalt tmp=convert(expr.op1());
 

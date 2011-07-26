@@ -42,7 +42,7 @@ Function: expr2ct::id_shorthand
 
 std::string expr2ct::id_shorthand(const exprt &expr) const
 {
-  const irep_idt &identifier=expr.get("identifier");
+  const irep_idt &identifier=expr.identifier();
   const symbolt *symbol;
 
   if(!ns.lookup(identifier, symbol))
@@ -109,7 +109,7 @@ void expr2ct::get_shorthands(const exprt &expr)
       if(result.first->second!=*it)
       {
         ns_collision.insert(it->get("identifier"));
-        ns_collision.insert(result.first->second.get("identifier"));
+        ns_collision.insert(result.first->second.identifier());
       }
   }
 }
@@ -1140,7 +1140,7 @@ std::string expr2ct::convert_symbol(
   const exprt &src,
   unsigned &precedence __attribute__((unused)))
 {
-  const irep_idt &id=src.get("identifier");
+  const irep_idt &id=src.identifier();
   std::string dest;
 
   if(ns_collision.find(id)==ns_collision.end())

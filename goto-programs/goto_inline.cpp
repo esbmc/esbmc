@@ -261,7 +261,7 @@ void goto_inlinet::expand_function_call(
           "but got `"+function.id_string()+"'";
   }
   
-  const irep_idt &identifier=function.get("identifier");
+  const irep_idt &identifier=function.identifier();
   
   // see if we are already expanding it
   if(recursion_set.find(identifier)!=recursion_set.end())

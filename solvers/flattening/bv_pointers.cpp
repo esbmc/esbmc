@@ -282,7 +282,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
   if(expr.id()=="symbol")
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
     const typet &type=expr.type();
 
     for(unsigned i=0; i<bits; i++)

@@ -2982,7 +2982,7 @@ tvt simplify_exprt::objects_equal_address_of(const exprt &a, const exprt &b)
 
   if(a.id()=="symbol" && b.id()=="symbol")
   {
-    if(a.get("identifier")==b.get("identifier"))
+    if(a.identifier()==b.identifier())
       return tvt(true);
   }
   else if(a.id()=="index" && b.id()=="index")

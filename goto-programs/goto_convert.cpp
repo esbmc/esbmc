@@ -384,7 +384,7 @@ void goto_convertt::convert_block(
     {
       const exprt &op0=code.op0();
       assert(op0.id()=="symbol");
-      const irep_idt &identifier=op0.get("identifier");
+      const irep_idt &identifier=op0.identifier();
       const symbolt &symbol=lookup(identifier);
 
       if(!symbol.static_lifetime &&
@@ -769,7 +769,7 @@ void goto_convertt::convert_decl(
     throw "decl statement expects symbol as first operand";
   }
 
-  const irep_idt &identifier=op0.get("identifier");
+  const irep_idt &identifier=op0.identifier();
 
   const symbolt &symbol=lookup(identifier);
   if(symbol.static_lifetime ||
@@ -1052,15 +1052,15 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	|| rhs.id() == "index"
 	|| rhs.id() == "member")
   {
-    irep_idt identifier=rhs.op0().get("identifier");
+    irep_idt identifier=rhs.op0().identifier();
     if (rhs.id() == "member")
     {
       const exprt &object=rhs.operands()[0];
-      identifier=object.get("identifier");
+      identifier=object.identifier();
     }
     else if (rhs.id() == "index")
     {
-      identifier=rhs.op1().get("identifier");
+      identifier=rhs.op1().identifier();
     }
 
     if (identifier.empty())
@@ -1095,7 +1095,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   }
   else if(rhs.id() == "symbol")
   {
-	const irep_idt &identifier=rhs.get("identifier");
+	const irep_idt &identifier=rhs.identifier();
 	const symbolt &symbol=lookup(identifier);
 	if(symbol.static_lifetime || symbol.type.get("#dynamic") != "")
 	{
@@ -1157,7 +1157,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
 
   else if(expr.id() == "symbol")
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
   	const symbolt &symbol=lookup(identifier);
 
     if (identifier == "c::__ESBMC_alloc"
@@ -1993,7 +1993,7 @@ void goto_convertt::convert_specc_event(
   }
   else if(op.id()=="specc_event")
   {
-    irep_idt event=op.get("identifier");
+    irep_idt event=op.identifier();
 
     if(has_prefix(id2string(event), "specc::"))
       event=std::string(id2string(event), 7, std::string::npos);

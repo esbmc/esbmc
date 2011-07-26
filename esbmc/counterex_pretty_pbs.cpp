@@ -75,7 +75,7 @@ void counterexample_beautification_pbst::beautify(
   }
   else if(type.id()=="symbol")
   {
-    const symbolt &s=ns.lookup(type.get("identifier"));
+    const symbolt &s=ns.lookup(type.identifier());
     beautify(pbs, bv_cbmc, ns, expr, s.type, offset);
   }
   else if(type.id()=="pointer")

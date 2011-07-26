@@ -84,7 +84,7 @@ std::string type2name(const typet &type)
   }
   else if(type.id()=="symbol")
   {
-    result+="SYM#" + type.get("identifier").as_string() + "#";
+    result+="SYM#" + type.identifier().as_string() + "#";
   }
   else if(type.id()=="struct" || 
           type.id()=="union")

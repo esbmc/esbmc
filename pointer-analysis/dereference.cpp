@@ -638,7 +638,7 @@ void dereferencet::valid_check(
   }
   else if(symbol.id()=="symbol")
   {
-    const irep_idt identifier=symbol.get("identifier");
+    const irep_idt identifier=symbol.identifier();
 
     if(dereference_callback.is_valid_object(identifier))
       return; // always ok

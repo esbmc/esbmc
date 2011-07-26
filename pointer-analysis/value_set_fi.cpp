@@ -206,18 +206,18 @@ void value_set_fit::flatten_rec(
         
     if (o.type().id()=="#REF#")
     {
-      if (seen.find(o.get("identifier"))!=seen.end())
+      if (seen.find(o.identifier())!=seen.end())
       {
         generalize_index = true;
         continue;
       }
       
-      valuest::const_iterator fi = values.find(o.get("identifier"));
+      valuest::const_iterator fi = values.find(o.identifier());
       if (fi==values.end())
       {
         // this is some static object, keep it in.        
         exprt se("symbol", o.type().subtype());
-        se.set("identifier", o.get("identifier"));
+        se.set("identifier", o.identifier());
         insert(dest, se, 0);
       }
       else
@@ -393,7 +393,7 @@ void value_set_fit::get_value_set(
     {     
       assert(object.id()=="symbol");
       
-      const irep_idt &ident = object.get("identifier");
+      const irep_idt &ident = object.identifier();
       valuest::const_iterator v_it = values.find(ident);
 
       if (v_it!=values.end())
@@ -490,7 +490,7 @@ void value_set_fit::get_value_set_rec(
 
   if(expr.type().id()=="#REF#")
   {
-    valuest::const_iterator fi = values.find(expr.get("identifier"));
+    valuest::const_iterator fi = values.find(expr.identifier());
     
     if(fi!=values.end())
     {
@@ -840,7 +840,7 @@ void value_set_fit::get_reference_set(
     
     if (expr.type().id()=="#REF#")
     {
-      const irep_idt& ident = expr.get("identifier");
+      const irep_idt& ident = expr.identifier();
       valuest::const_iterator vit = values.find(ident);
       if (vit==values.end())
       {
@@ -922,7 +922,7 @@ void value_set_fit::get_reference_set_sharing_rec(
 
   if(expr.type().id()=="#REF#")
   {
-    valuest::const_iterator fi = values.find(expr.get("identifier"));
+    valuest::const_iterator fi = values.find(expr.identifier());
     if(fi!=values.end())
     {      
       forall_objects(it, fi->second.object_map.read())      
@@ -958,7 +958,7 @@ void value_set_fit::get_reference_set_sharing_rec(
       const exprt &obj = object_numbering[it->first];
       if (obj.type().id()=="#REF#")
       {
-        const irep_idt &ident = obj.get("identifier");
+        const irep_idt &ident = obj.identifier();
         valuest::const_iterator v_it = values.find(ident);
           
         if (v_it!=values.end())
@@ -1390,7 +1390,7 @@ void value_set_fit::assign_rec(
 
   if(lhs.type().id()=="#REF#")
   {
-    const irep_idt &ident = lhs.get("identifier");
+    const irep_idt &ident = lhs.identifier();
     object_mapt temp;
     gvs_recursion_sett recset;
     get_value_set_rec(lhs, temp, "", lhs.type().subtype(), ns, recset);
@@ -1409,7 +1409,7 @@ void value_set_fit::assign_rec(
   }
   else if(lhs.id()=="symbol")
   {
-    const irep_idt &identifier=lhs.get("identifier");
+    const irep_idt &identifier=lhs.identifier();
     
     if(has_prefix(id2string(identifier), 
                   "value_set::dynamic_object") ||

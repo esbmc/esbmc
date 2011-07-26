@@ -129,7 +129,7 @@ void counterexample_beautification_greedyt::minimize(
   }
   else if(type.id()=="symbol")
   {
-    const symbolt &s=ns.lookup(type.get("identifier"));
+    const symbolt &s=ns.lookup(type.identifier());
     minimize(solver, bv_cbmc, ns, expr, s.type, offset, bit_nr);
   }
   else if(type.id()=="pointer")
@@ -148,7 +148,7 @@ void counterexample_beautification_greedyt::minimize(
 
     unsigned bit=offset+width-bit_nr-1;
 
-    // std::cout << "XX: " << expr.get("identifier")
+    // std::cout << "XX: " << expr.identifier()
     //           << " bit=" << bit_nr <<std::endl;
 
     if(type.id()=="signedbv") // signed?
@@ -243,7 +243,7 @@ unsigned counterexample_beautification_greedyt::get_max_width(
   }
   else if(type.id()=="symbol")
   {
-    const symbolt &s=ns.lookup(type.get("identifier"));
+    const symbolt &s=ns.lookup(type.identifier());
     return get_max_width(ns, s.type);
   }
   else if(type.id()=="pointer")
