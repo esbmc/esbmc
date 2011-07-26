@@ -341,7 +341,7 @@ void satcheck_smvsat_interpolatort::build_aig(
     else if(n<=satsolver->num_variables())
     { // a SAT variable
       e.id("symbol");
-      e.set("identifier", n);
+      e.identifier(n);
     }
     else
     {

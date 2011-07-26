@@ -66,7 +66,7 @@ void c_typecheck_baset::replace_symbol(irept &symbol)
     id_replace_map.find(symbol.identifier());
   
   if(it!=id_replace_map.end())
-    symbol.set("identifier", it->second);
+    symbol.identifier(it->second);
 }
 
 /*******************************************************************\

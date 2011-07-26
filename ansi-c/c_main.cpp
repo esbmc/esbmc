@@ -48,7 +48,7 @@ void static_lifetime_init(
         assert(value.type().id()!="code");
 
         exprt symbol("symbol", it->second.type);
-        symbol.set("identifier", it->second.name);
+        symbol.identifier(it->second.name);
 
         code_assignt code(symbol, it->second.value);
         code.location()=it->second.location;

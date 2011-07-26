@@ -64,7 +64,7 @@ public:
 
   void set_identifier(const irep_idt &identifier)
   {
-    set("identifier", identifier);
+    this->identifier(identifier);
   }
 
   const irep_idt &get_identifier() const

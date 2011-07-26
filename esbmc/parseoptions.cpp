@@ -632,7 +632,7 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
       assert(0 && "Missing symbol mapping for property monitor");
 
     sym = strings[sym];
-    e.set("identifier", sym);
+    e.identifier(sym);
 #endif
 
     used_syms.insert(sym);

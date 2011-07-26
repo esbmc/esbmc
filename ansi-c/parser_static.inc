@@ -201,7 +201,7 @@ static void do_enum_members(
       v=value;
 
     exprt symbol_expr("symbol");
-    symbol_expr.set("identifier", it->name());
+    symbol_expr.identifier(it->name());
     
     value=exprt("+");
     value.copy_to_operands(symbol_expr, gen_one(int_type()));    
@@ -226,7 +226,7 @@ static void do_tag(typet &key, typet &tag)
 
   // grab symbol
   tag.id("symbol");
-  tag.set("identifier", declaration.get_name());
+  tag.identifier(declaration.get_name());
   tag.location()=declaration.location();
 
   declaration.type().id("incomplete_"+declaration.type().id_string());

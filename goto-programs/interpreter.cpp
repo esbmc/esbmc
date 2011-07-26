@@ -472,7 +472,7 @@ void interpretert::execute_function_call()
     {
       const code_typet::argumentt &a=arguments[i];
       exprt symbol_expr("symbol", a.type());
-      symbol_expr.set("identifier", a.get_identifier());
+      symbol_expr.identifier(a.get_identifier());
       assert(i<argument_values.size());
       assign(evaluate_address(symbol_expr), argument_values[i]);
     }

@@ -73,7 +73,7 @@ bool rename(exprt &expr, const irep_idt &old_name,
   {
     if(expr.identifier()==old_name)
     {
-      expr.set("identifier", new_name);
+      expr.identifier(new_name);
       result=false;
     }
   }

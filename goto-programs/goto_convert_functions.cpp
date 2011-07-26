@@ -239,7 +239,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
     goto_programt::targett t=f.body.add_instruction();
     t->type=END_FUNCTION;
     t->location=end_location;
-    t->code.set("identifier", identifier);
+    t->code.identifier(identifier);
 
     if(to_code(symbol.value).get_statement()=="block")
       t->location=static_cast<const locationt &>(

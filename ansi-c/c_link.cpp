@@ -372,7 +372,7 @@ void c_linkt::typecheck()
       if(counter>0)
       {
         exprt subst("symbol");
-        subst.set("identifier", newname);
+        subst.identifier(newname);
         subst.location() = it->second.location;
         symbol_fixer.insert(it->second.name, 
           static_cast<const typet&>(static_cast<const irept&>(subst)));

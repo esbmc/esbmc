@@ -217,7 +217,7 @@ void value_set_fit::flatten_rec(
       {
         // this is some static object, keep it in.        
         exprt se("symbol", o.type().subtype());
-        se.set("identifier", o.identifier());
+        se.identifier(o.identifier());
         insert(dest, se, 0);
       }
       else

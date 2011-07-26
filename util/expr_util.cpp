@@ -357,7 +357,7 @@ Function: symbol_expr
 exprt symbol_expr(const symbolt &symbol)
 {
   exprt tmp("symbol", symbol.type);
-  tmp.set("identifier", symbol.name);
+  tmp.identifier(symbol.name);
   return tmp;
 }
 
