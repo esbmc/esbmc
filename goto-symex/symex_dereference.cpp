@@ -103,7 +103,7 @@ bool symex_dereference_statet::has_failed_symbol(
       renaming_ns.lookup(expr.identifier());
 
     const irep_idt &failed_symbol=
-      ptr_symbol.type.get("#failed_symbol");
+      ptr_symbol.type.failed_symbol();
 
     if(failed_symbol=="") return false;
 

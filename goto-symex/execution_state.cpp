@@ -752,7 +752,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
     if (identifier == "c::__ESBMC_alloc"
         || identifier == "c::__ESBMC_alloc_size")
       return 0;
-    else if ((symbol.static_lifetime || symbol.type.get("#dynamic") != ""))
+    else if ((symbol.static_lifetime || symbol.type.dynamic() != ""))
     {
       //std::cout << "get_expr_write_globals: " << expr.pretty() << std::endl;
       _exprs_read_write.at(_active_thread).write_set.insert(identifier);

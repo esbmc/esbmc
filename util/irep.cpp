@@ -843,5 +843,7 @@ irep_idt irept::a_property = dstring("property");
 irep_idt irept::a_size = dstring("size");
 irep_idt irept::a_integer_bits = dstring("integer_bits");
 irep_idt irept::a_to = dstring("to");
+irep_idt irept::a_failed_symbol = dstring("#failed_symbol");
+irep_idt irept::a_dynamic = dstring("#dynamic");
 
 irep_idt irept::s_type = dstring("type");

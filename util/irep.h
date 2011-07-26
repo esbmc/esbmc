@@ -238,6 +238,14 @@ public:
     return get(a_to);
   }
 
+  inline const irep_idt &failed_symbol(void) const {
+    return get(a_failed_symbol);
+  }
+
+  inline const irep_idt &dynamic(void) const {
+    return get(a_dynamic);
+  }
+
   inline void identifier(irep_idt ident) {
     set(a_identifier, ident);
   }
@@ -290,6 +298,7 @@ public:
   static irep_idt a_access, a_destination, a_base_name, a_comment, a_event;
   static irep_idt a_literal, a_loopid, a_mode, a_module, a_ordering;
   static irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
+  static irep_idt a_failed_symbol, a_dynamic;
 
   class dt
   {
