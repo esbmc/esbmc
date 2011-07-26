@@ -224,7 +224,6 @@ public:
   static irep_idt argument;
 
   // Expression attributes
-  static irep_idt a_identifier;
   static irep_idt a_value;
 
   // Other foo

@@ -131,27 +131,27 @@ public:
   void move_to_sub(irept &irep);
   void move_to_named_sub(const irep_namet &name, irept &irep);
 
-  typet &type() { return (typet &)(add("type")); }
-  const typet &type() const { return (typet &)(find("type")); }
+  typet &type() { return (typet &)(add(s_type)); }
+  const typet &type() const { return (typet &)(find(s_type)); }
 
   const irep_idt &identifier(void) const {
-    return get("identifier");
+    return get(a_identifier);
   }
 
   const irep_idt &width(void) const {
-    return get("width");
+    return get(a_width);
   }
 
   const irep_idt &statement(void) const {
-    return get("statement");
+    return get(a_statement);
   }
 
   const irep_idt &name(void) const {
-    return get("name");
+    return get(a_name);
   }
 
   void identifier(irep_idt ident) {
-    set("identifier", ident);
+    set(a_identifier, ident);
   }
 
   friend bool operator==(const irept &i1, const irept &i2);
@@ -196,6 +196,9 @@ protected:
   { return !name.empty() && name[0]=='#'; }
 
 public:
+  static irep_idt s_type;
+  static irep_idt a_width, a_name, a_statement, a_identifier;
+
   class dt
   {
   public:
