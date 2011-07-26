@@ -133,7 +133,14 @@ public:
 
   typet &type() { return (typet &)(add("type")); }
   const typet &type() const { return (typet &)(find("type")); }
-  
+
+  const irep_idt identifier(void) const {
+    return get("identifier");
+  }
+
+  void identifier(irep_idt ident) {
+    set("identifier", ident);
+  }
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
