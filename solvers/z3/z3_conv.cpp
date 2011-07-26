@@ -828,7 +828,7 @@ bool z3_convt::create_struct_type(const typet &type, Z3_type_ast &bv)
     if (create_type(it->type(), proj_types[i]))
       return true;
 
-    proj_names[i] = Z3_mk_string_symbol(z3_ctx, it->get("name").c_str());
+    proj_names[i] = Z3_mk_string_symbol(z3_ctx, it->name().c_str());
   }
 
   bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, i, proj_names, proj_types, &mk_tuple_decl, proj_decls);
@@ -887,7 +887,7 @@ bool z3_convt::create_union_type(const typet &type, Z3_type_ast &bv)
     it!=components.end();
     it++,i++)
   {
-    proj_names[i] = Z3_mk_string_symbol(z3_ctx, it->get("name").c_str());
+    proj_names[i] = Z3_mk_string_symbol(z3_ctx, it->name().c_str());
     if (create_type(it->type(), proj_types[i]))
       return true;
   }
@@ -3269,24 +3269,24 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 	      it!=components.end();
 	      it++, i++)
 	  {
-	    if (it->get("name").compare(it2->get("name")) == 0)
+	    if (it->name().compare(it2->name()) == 0)
 	    {
 	      unsigned width;
 	      if (boolbv_get_width(it->type(), width))
 	        return true;
 		  if (it->type().id()==typet::t_signedbv)
 		  {
-			s.components()[j].set_name(it->get("name"));
+			s.components()[j].set_name(it->name());
 			s.components()[j].type()=signedbv_typet(width);
 		  }
 		  else if (it->type().id()==typet::t_unsignedbv)
 		  {
-			s.components()[j].set_name(it->get("name"));
+			s.components()[j].set_name(it->name());
 			s.components()[j].type()=unsignedbv_typet(width);
 		  }
 		  else if (it->type().id()==typet::t_bool)
 		  {
-			s.components()[j].set_name(it->get("name"));
+			s.components()[j].set_name(it->name());
 			s.components()[j].type()=bool_typet();
 		  }
 		  else
@@ -5420,7 +5420,7 @@ u_int z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
     it!=components.end();
     it++, i++)
   {
-	if (it->get("name").compare(rhs.get_string("component_name")) == 0)
+	if (it->name().compare(rhs.get_string("component_name")) == 0)
       resp=i;
   }
 
@@ -5536,7 +5536,7 @@ bool z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
     it!=components.end();
     it++, i++)
   {
-	if (it->get("name").compare(expr.get_string("component_name")) == 0)
+	if (it->name().compare(expr.get_string("component_name")) == 0)
 	  j=i;
   }
 
@@ -5823,7 +5823,7 @@ bool z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 
 	      if (width==object_width)
 	      {
-	    	if (convert_identifier(it->get("name").c_str(), it->type(), bv))
+	    	if (convert_identifier(it->name().c_str(), it->type(), bv))
 	    	  return true;
 
 	    	return false;
@@ -5836,14 +5836,14 @@ bool z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 
 		   if (width==object_width)
 		   {
-			  if (convert_identifier(it->get("name").c_str(), expr.type(), bv/*pointer_object*/))
+			  if (convert_identifier(it->name().c_str(), expr.type(), bv/*pointer_object*/))
 				 return true;
 
 			  return false;
 		   }
 		   else if (it->type().id() == typet::t_pointer)
 		   {
-		     if (convert_identifier(it->get("name").c_str(), /*expr.type()*/it->type(), bv))
+		     if (convert_identifier(it->name().c_str(), /*expr.type()*/it->type(), bv))
 			   return true;
 			 pointer_object = z3_api.mk_tuple_select(z3_ctx, bv, 0);
 		   }

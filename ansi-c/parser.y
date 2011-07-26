@@ -928,7 +928,7 @@ aggregate_name:
 
 	  // grab symbol
 	  init(&$$, "symbol");
-	  $$->set("identifier", $<expr>2->get("name"));
+	  $$->set("identifier", $<expr>2->name());
 	  $$->location()=$<expr>2->location();
 
 	  PARSER.move_declaration(*$<expr>2);
@@ -949,7 +949,7 @@ aggregate_name:
 
 	  // grab symbol
 	  init(&$$, "symbol");
-	  $$->set("identifier", $<expr>3->get("name"));
+	  $$->set("identifier", $<expr>3->name());
 	  $$->location()=$<expr>3->location();
 
 	  PARSER.move_declaration(*$<expr>3);
@@ -1130,7 +1130,7 @@ enum_name:			/* Type */
 	{
 	  // grab symbol
 	  init(&$$, "symbol");
-	  $$->set("identifier", $<expr>2->get("name"));
+	  $$->set("identifier", $<expr>2->name());
 	  $$->location()=$<expr>2->location();
 
 	  do_enum_members(*$$, *$4);
@@ -1149,7 +1149,7 @@ enum_name:			/* Type */
 	{
 	  // grab symbol
 	  init(&$$, "symbol");
-	  $$->set("identifier", $<expr>3->get("name"));
+	  $$->set("identifier", $<expr>3->name());
 	  $$->location()=$<expr>3->location();
 
 	  do_enum_members(*$$, *$5);

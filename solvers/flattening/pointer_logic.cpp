@@ -237,7 +237,7 @@ exprt pointer_logict::object_rec(
       {
         // found it
         member_exprt tmp(subtype);
-        tmp.set_component_name(it->get("name"));
+        tmp.set_component_name(it->name());
         tmp.op0()=src;
         
         return object_rec(

@@ -104,7 +104,7 @@ bool boolbvt::literal(
       {
         const typet &subtype=it->type();
 
-        if(it->get("name")==component_name)
+        if(it->name()==component_name)
           return literal(expr.op0(), bit+offset, dest);
 
         unsigned element_width;

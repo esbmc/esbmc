@@ -246,7 +246,7 @@ std::string expr2ct::convert_rec(
           src.id()=="incomplete_c_enum")
   {
     std::string result=q+"enum";
-    if(src.get("name")!="") result+=" "+src.get_string("tag");
+    if(src.name()!="") result+=" "+src.get_string("tag");
     return result;
   }
   else if(src.id()=="pointer")
@@ -1096,7 +1096,7 @@ std::string expr2ct::convert_struct_member_value(
   if(src.operands().size()!=1)
     return convert_norep(src, precedence);
 
-  return "."+src.get_string("name")+"="+convert(src.op0());
+  return "."+src.name().as_string()+"="+convert(src.op0());
 }
 
 /*******************************************************************\
@@ -1327,7 +1327,7 @@ std::string expr2ct::convert_constant(
     {
       if(i==int_value)
       {
-        dest=it->get_string("name");
+        dest=it->name().as_string();
         return dest;
       }
 
@@ -1483,7 +1483,7 @@ std::string expr2ct::convert_struct(
       newline=false;
 
     dest+=".";
-    dest+=c_it->get_string("name");
+    dest+=c_it->name().as_string();
     dest+="=";
     dest+=tmp;
 

@@ -118,7 +118,7 @@ bool c_typecheck_baset::zero_initializer(
     if(components.empty())
       return true;
 
-    value.set("component_name", components.front().get("name"));
+    value.set("component_name", components.front().name());
 
     exprt tmp;
 
@@ -543,7 +543,7 @@ exprt c_typecheck_baset::do_initializer_union(
   const typet &op_type=components.front().type();
   result.copy_to_operands(
     do_initializer_rec(state, op_type, force_constant, true));
-  result.set("component_name", components.front().get("name"));
+  result.set("component_name", components.front().name());
 
   return result;
 }

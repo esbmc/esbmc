@@ -140,7 +140,7 @@ void symbolt::from_irep(const irept &src)
   value=static_cast<const exprt &>(src.find("symvalue"));
   location=static_cast<const locationt &>(src.find("location"));
 
-  name=src.get("name");
+  name=src.name();
   module=src.get("module");
   base_name=src.get("base_name");
   mode=src.get("mode");

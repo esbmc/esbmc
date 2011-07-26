@@ -172,7 +172,7 @@ void invariant_propagationt::get_objects_rec(
         it!=c.end();
         it++)
     {
-      member_expr.set("component_name", it->get_string("name"));
+      member_expr.set("component_name", it->name().as_string());
       member_expr.type()=it->type();
       // recursive call
       get_objects_rec(member_expr, dest);

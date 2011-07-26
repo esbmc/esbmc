@@ -208,7 +208,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
 
     forall_irep(it, components)
     {
-      if(component_name==it->get("name")) { found=true; break; }
+      if(component_name==it->name()) { found=true; break; }
       const typet &subtype=it->type();
       mp_integer sub_size=pointer_offset_size(subtype);
       if(sub_size==0) assert(false);
@@ -501,7 +501,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
         it++, i++)
     {
       if(i!=0) smt_prop.out << ", ";
-      smt_prop.out << it->get("name");
+      smt_prop.out << it->name();
       smt_prop.out << ":=";
       convert_smt_expr(expr.operands()[i]);
     }
@@ -1345,7 +1345,7 @@ void smt_convt::convert_smt_type(const typet &type)
     {
       if(it!=components.begin()) smt_prop.out << ",";
       smt_prop.out << " ";
-      smt_prop.out << it->get("name");
+      smt_prop.out << it->name();
       smt_prop.out << ": ";
       convert_smt_type(it->type());
     }

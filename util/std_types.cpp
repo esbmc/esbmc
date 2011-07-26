@@ -179,7 +179,7 @@ bool struct_typet::is_prefix_of(const struct_typet &other) const
       tt_it++)
   {
     if(ot_it->type()!=tt_it->type() ||
-       ot_it->get("name")!=tt_it->get("name"))
+       ot_it->name()!=tt_it->name())
     {
       return false; // they just don't match
     }

@@ -256,7 +256,7 @@ void boolbvt::convert_with_struct(
     if(boolbv_get_width(subtype, sub_width))
       sub_width=0;
 
-    if(it->get("name")==component_name)
+    if(it->name()==component_name)
     {
       if(subtype!=op2.type())
         throw "with/struct: component `"+id2string(component_name)+

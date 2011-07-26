@@ -146,6 +146,10 @@ public:
     return get("statement");
   }
 
+  const irep_idt &name(void) const {
+    return get("name");
+  }
+
   void identifier(irep_idt ident) {
     set("identifier", ident);
   }

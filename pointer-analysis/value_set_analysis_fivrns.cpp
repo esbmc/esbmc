@@ -164,7 +164,7 @@ void value_set_analysis_fivrnst::get_entries_rec(
     {
       get_entries_rec(
         identifier,
-        suffix+"."+it->get_string("name"),
+        suffix+"."+it->name().as_string(),
         it->type(),
         dest);
     }

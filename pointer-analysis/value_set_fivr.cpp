@@ -1287,7 +1287,7 @@ void value_set_fivrt::assign(
         c_it++, no++)
     {
       const typet &subtype=c_it->type();
-      const irep_idt &name=c_it->get("name");
+      const irep_idt &name=c_it->name();
 
       // ignore methods
       if(subtype.id()=="code") continue;

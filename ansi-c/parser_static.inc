@@ -56,7 +56,7 @@ static void decl_statement(exprt &dest, ansi_c_declarationt &decl, exprt &initia
   codet decl_statement("decl");
   
   symbol_exprt symbol;
-  symbol.set_identifier(decl.get("name"));
+  symbol.set_identifier(decl.name());
   
   decl_statement.move_to_operands(symbol);
   
@@ -201,7 +201,7 @@ static void do_enum_members(
       v=value;
 
     exprt symbol_expr("symbol");
-    symbol_expr.set("identifier", it->get("name"));
+    symbol_expr.set("identifier", it->name());
     
     value=exprt("+");
     value.copy_to_operands(symbol_expr, gen_one(int_type()));    

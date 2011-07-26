@@ -99,7 +99,7 @@ std::string type2name(const typet &type)
         it++)
     {            
       result+=type2name(it->type());
-      result+="'" + it->get("name").as_string() + "'|";
+      result+="'" + it->name().as_string() + "'|";
     }
     result.resize(result.size()-1);
     result+="]";

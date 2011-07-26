@@ -177,7 +177,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
         it!=components.end();
         ) // no it++
     {
-      if(it->get("name")=="")
+      if(it->name()=="")
       {
         const typet &final_type=follow(it->type());
 

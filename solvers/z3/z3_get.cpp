@@ -371,7 +371,7 @@ exprt z3_convt::bv_get_rec(
       value.operands().resize(1);
 
       value.set("component_name",
-                components.get_sub()[component_nr].get("name"));
+                components.get_sub()[component_nr].name());
 
       exprt::operandst op;
       op.reserve(1);

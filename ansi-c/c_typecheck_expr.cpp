@@ -247,7 +247,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   c_sizeoft csize(*this);
   forall_irep(it, components.get_sub())
   {
-    if(it->get("name")==member)
+    if(it->name()==member)
     {
       found=true;
       break;
@@ -1041,7 +1041,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
   component.make_nil();
 
   forall_irep(it, components.get_sub())
-    if(it->get("name")==component_name)
+    if(it->name()==component_name)
     {
       component=*it;
       break;

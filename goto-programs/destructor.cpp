@@ -56,7 +56,7 @@ code_function_callt get_destructor(
              ns.follow(arg_type.subtype())==type)
           {
             exprt symbol_expr("symbol", it->type());
-            symbol_expr.set("identifier", it->get("name"));      
+            symbol_expr.set("identifier", it->name());      
 
             code_function_callt function_call;
             function_call.function()=symbol_expr;

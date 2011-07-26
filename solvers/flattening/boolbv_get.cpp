@@ -197,7 +197,7 @@ exprt boolbvt::bv_get_rec(
       value.operands().resize(1);
 
       value.set("component_name",
-                components.get_sub()[component_nr].get("name"));
+                components.get_sub()[component_nr].name());
       
       const typet &subtype=components.get_sub()[component_nr].type();
 
