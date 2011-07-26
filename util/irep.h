@@ -121,9 +121,9 @@ protected:
   }
   
   const irep_idt &get(const irep_namet &name) const;
-public:
   bool get_bool(const irep_namet &name) const;
 
+public:
   inline void set(const irep_namet &name, const irep_idt &value)
   { add(name).id(value); }
   
