@@ -512,7 +512,7 @@ bool exprt::sum(const exprt &expr)
     set(a_value, integer2binary(
       binary2integer(get_string(a_value), false)+
       binary2integer(expr.get_string(a_value), false),
-      atoi(type().get("width").c_str())));
+      atoi(type().width().c_str())));
     return false;
   }
   else if(type_id=="fixedbv")
@@ -520,7 +520,7 @@ bool exprt::sum(const exprt &expr)
     set(a_value, integer2binary(
       binary2integer(get_string(a_value), false)+
       binary2integer(expr.get_string(a_value), false),
-      atoi(type().get("width").c_str())));
+      atoi(type().width().c_str())));
     return false;
   }
   else if(type_id=="floatbv")
@@ -565,7 +565,7 @@ bool exprt::mul(const exprt &expr)
     set(a_value, integer2binary(
       binary2integer(get_string(a_value), false)*
       binary2integer(expr.get_string(a_value), false),
-      atoi(type().get("width").c_str())));
+      atoi(type().width().c_str())));
     return false;
   }
   else if(type_id=="fixedbv")
@@ -618,7 +618,7 @@ bool exprt::subtract(const exprt &expr)
     set(a_value, integer2binary(
       binary2integer(get_string(a_value), false)-
       binary2integer(expr.get_string(a_value), false),
-      atoi(type().get("width").c_str())));
+      atoi(type().width().c_str())));
     return false;
   }
 

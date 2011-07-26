@@ -252,7 +252,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       throw 0;
     }
 
-    unsigned width=atoi(base_type.get("width").c_str());
+    unsigned width=atoi(base_type.width().c_str());
 
     if(i>width)
     {

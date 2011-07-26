@@ -34,7 +34,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
      type.id()=="floatbv" ||
      type.id()=="fixedbv")
   {
-    unsigned bits=atoi(type.get("width").c_str());
+    unsigned bits=atoi(type.width().c_str());
     unsigned bytes=bits/8;
     if((bits%8)!=0) bytes++;
     dest=from_integer(bits/8, uint_type());

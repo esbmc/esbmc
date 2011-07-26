@@ -90,7 +90,7 @@ void bv_spect::from_type(const typet &type)
   else
     assert(0);
   
-  width=atoi(type.get("width").c_str());
+  width=atoi(type.width().c_str());
 }
 
 /*******************************************************************\

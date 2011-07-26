@@ -98,7 +98,7 @@ exprt gen_one(const typet &type)
           type_id=="signedbv")
   {
     std::string value;
-    for(int i=0; i<atoi(type.get("width").c_str())-1; i++)
+    for(int i=0; i<atoi(type.width().c_str())-1; i++)
       value+='0';
     value+='1';
     result.value(value);

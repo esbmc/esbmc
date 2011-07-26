@@ -33,9 +33,9 @@ std::string type2name(const typet &type)
   else if(type.id()=="empty")
     result+="V";   
   else if(type.id()=="signedbv")
-    result+="S" + type.get("width").as_string(); 
+    result+="S" + type.width().as_string(); 
   else if(type.id()=="unsignedbv")
-    result+="U" + type.get("width").as_string(); 
+    result+="U" + type.width().as_string(); 
   else if(type.id()=="bool") 
     result+="B";
   else if(type.id()=="integer") 
@@ -47,11 +47,11 @@ std::string type2name(const typet &type)
   else if(type.id()=="float") 
     result+="F";
   else if(type.id()=="floatbv") 
-    result+="F" + type.get("width").as_string();
+    result+="F" + type.width().as_string();
   else if(type.id()=="fixed") 
     result+="X";
   else if(type.id()=="fixedbv") 
-    result+="X" + type.get("width").as_string(); 
+    result+="X" + type.width().as_string(); 
   else if(type.id()=="natural")
     result+="N";
   else if(type.id()=="pointer")
@@ -109,7 +109,7 @@ std::string type2name(const typet &type)
   else if(type.id()=="incomplete_union")
     result +="UN?";
   else if(type.id()=="c_enum")
-    result +="EN" + type.get("width").as_string();
+    result +="EN" + type.width().as_string();
   else if(type.id()=="incomplete_c_enum")
     result +="EN?";
   else if(type.id()=="c_bitfield")

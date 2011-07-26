@@ -71,13 +71,13 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
           type.id()=="fixedbv" ||
           type.id()=="bv")
   {
-    width=atoi(type.get("width").c_str());
+    width=atoi(type.width().c_str());
     assert(width!=0);
     return false;
   }
   else if(type.id()=="verilogbv")
   {
-    width=atoi(type.get("width").c_str());
+    width=atoi(type.width().c_str());
     width=width*2; // we encode with two bits
     assert(width!=0);
     return false;
@@ -179,7 +179,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
   else if(type.id()=="c_enum" ||
           type.id()=="incomplete_c_enum")
   {
-    width=atoi(type.get("width").c_str());
+    width=atoi(type.width().c_str());
     assert(width!=0);
     return false;
   }

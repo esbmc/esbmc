@@ -130,8 +130,8 @@ void goto_checkt::overflow_check(
 
     const typet &old_type=expr.op0().type();
 
-    unsigned new_width=atoi(expr.type().get("width").c_str());
-    unsigned old_width=atoi(old_type.get("width").c_str());
+    unsigned new_width=atoi(expr.type().width().c_str());
+    unsigned old_width=atoi(old_type.width().c_str());
 
     if(old_type.id()=="unsignedbv") new_width--;
     if(new_width>=old_width) return;

@@ -1224,7 +1224,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
      expr.op0().type().id()=="signedbv")
   {
     mp_integer width=
-      string2integer(id2string(expr.op0().type().get("width")));
+      string2integer(id2string(expr.op0().type().width()));
 
     if(expr.id()=="lshr")
     {

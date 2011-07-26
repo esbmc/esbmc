@@ -395,11 +395,11 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else if(expr.type().id()=="signedbv" ||
             expr.type().id()=="unsignedbv")
     {
-      unsigned to_width=atoi(expr.type().get("width").c_str());
+      unsigned to_width=atoi(expr.type().width().c_str());
       
       if(op.type().id()=="signedbv")
       {
-        unsigned from_width=atoi(op.type().get("width").c_str());
+        unsigned from_width=atoi(op.type().width().c_str());
         
         if(from_width==to_width)
           convert_smt_expr(op);
@@ -418,7 +418,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       }
       else if(op.type().id()=="unsignedbv")
       {
-        unsigned from_width=atoi(op.type().get("width").c_str());
+        unsigned from_width=atoi(op.type().width().c_str());
         
         if(from_width==to_width)
           convert_smt_expr(op);
@@ -879,7 +879,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       if(expr.type().id()=="unsignedbv" ||
          expr.type().id()=="signedbv")
       {
-        smt_prop.out << "BVSUB(" << expr.type().get("width") << ", ";
+        smt_prop.out << "BVSUB(" << expr.type().width() << ", ";
         convert_smt_expr(expr.op0());
         smt_prop.out << ", ";
         convert_smt_expr(expr.op1());
@@ -908,7 +908,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else
         smt_prop.out << "SBVDIV";
 
-      smt_prop.out << "(" << expr.type().get("width") << ", ";
+      smt_prop.out << "(" << expr.type().width() << ", ";
       convert_smt_expr(expr.op0());
       smt_prop.out << ", ";
       convert_smt_expr(expr.op1());
@@ -930,7 +930,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else
         smt_prop.out << "SBVMOD";
 
-      smt_prop.out << "(" << expr.type().get("width") << ", ";
+      smt_prop.out << "(" << expr.type().width() << ", ";
       convert_smt_expr(expr.op0());
       smt_prop.out << ", ";
       convert_smt_expr(expr.op1());
@@ -947,7 +947,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       if(expr.type().id()=="unsignedbv" ||
          expr.type().id()=="signedbv")
       {
-        smt_prop.out << "BVMULT(" << expr.type().get("width") << ", ";
+        smt_prop.out << "BVMULT(" << expr.type().width() << ", ";
         convert_smt_expr(expr.op0());
         smt_prop.out << ", ";
         convert_smt_expr(expr.op1());
@@ -1024,7 +1024,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else
         assert(false);
 
-      smt_prop.out << "(" << expr.type().get("width") << ", ";
+      smt_prop.out << "(" << expr.type().width() << ", ";
       convert_smt_expr(expr.op0());
       smt_prop.out << ", ";
       convert_smt_expr(expr.op1());

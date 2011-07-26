@@ -53,7 +53,7 @@ void convert_float_literal(
 
   if(config.ansi_c.use_fixed_for_float)
   {
-    unsigned width=atoi(dest.type().get("width").c_str());
+    unsigned width=atoi(dest.type().width().c_str());
     unsigned fraction_bits;
     const std::string &integer_bits=dest.type().get_string("integer_bits");
 

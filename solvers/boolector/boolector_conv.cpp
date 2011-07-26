@@ -234,12 +234,12 @@ bool boolector_convt::create_boolector_array(const typet &type, std::string iden
   }
   else if (type.subtype().id() == "fixedbv")
   {
-	width = atoi(type.subtype().get("width").c_str());
+	width = atoi(type.subtype().width().c_str());
 	array = boolector_array(boolector_ctx, width, config.ansi_c.int_width, identifier.c_str());
   }
   else if (type.subtype().id() == "signedbv" || type.subtype().id() == "unsignedbv")
   {
-	width = atoi(type.subtype().get("width").c_str());
+	width = atoi(type.subtype().width().c_str());
 	array = boolector_array(boolector_ctx, width, config.ansi_c.int_width, identifier.c_str());
   }
   else if (type.subtype().id() == "pointer")
@@ -273,7 +273,7 @@ bool boolector_convt::convert_identifier(const std::string &identifier, const ty
 
   unsigned int width = 0;
 
-  width = atoi(type.get("width").c_str());
+  width = atoi(type.width().c_str());
 
   if (type.id()=="bool")
   {
@@ -1041,11 +1041,11 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
 
   if(expr.type().id()=="signedbv" || expr.type().id()=="unsignedbv")
   {
-    unsigned to_width=atoi(expr.type().get("width").c_str());
+    unsigned to_width=atoi(expr.type().width().c_str());
 
     if(op.type().id()=="signedbv")
     {
-      unsigned from_width=atoi(op.type().get("width").c_str());
+      unsigned from_width=atoi(op.type().width().c_str());
       //std::cout << "from_width: " << from_width << "\n";
       //std::cout << "to_width: " << to_width << "\n";
 
@@ -1069,7 +1069,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
     }
     else if(op.type().id()=="unsignedbv")
     {
-      unsigned from_width=atoi(op.type().get("width").c_str());
+      unsigned from_width=atoi(op.type().width().c_str());
 
       if(from_width==to_width)
       {
@@ -1358,8 +1358,8 @@ bool boolector_convt::convert_constant_array(const exprt &expr, BtorExp* &bv)
   std::string value_cte, tmp, identifier;
   char i_str[2];
 
-  width = atoi(expr.type().subtype().get("width").c_str());
-  identifier = expr.identifier().as_string() + expr.type().subtype().get("width").c_str();
+  width = atoi(expr.type().subtype().width().c_str());
+  identifier = expr.identifier().as_string() + expr.type().subtype().width().c_str();
 
   create_boolector_array(expr.type(), identifier, array_cte);
 
@@ -1456,7 +1456,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
   else
 	value = integer2string(binary2integer(expr.value().as_string(), false),10);
 
-  width = atoi(expr.type().get("width").c_str());
+  width = atoi(expr.type().width().c_str());
 
   if (expr.type().id()=="bool")
   {
@@ -1492,7 +1492,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
   }
   else if (expr.type().id()== "pointer")
   {
-	width = atoi(expr.type().subtype().get("width").c_str());
+	width = atoi(expr.type().subtype().width().c_str());
 	const_var = boolector_int(boolector_ctx, atoi(value.c_str()), width);
   }
 
@@ -2019,7 +2019,7 @@ bool boolector_convt::convert_array_of(const exprt &expr, BtorExp* &bv)
 
   tmp = integer2string(binary2integer(array_type_size.size().value().as_string(), false),10);
   size = atoi(tmp.c_str());
-  width = atoi(expr.type().subtype().get("width").c_str());
+  width = atoi(expr.type().subtype().width().c_str());
 
   if (expr.type().subtype().id()=="bool")
   {
@@ -2041,7 +2041,7 @@ bool boolector_convt::convert_array_of(const exprt &expr, BtorExp* &bv)
 	const exprt &object=expr.op0().operands()[0];
 	const exprt &index=expr.op0().operands()[1];
 
-	width = atoi(expr.op0().type().subtype().get("width").c_str());
+	width = atoi(expr.op0().type().subtype().width().c_str());
 	if (convert_bv(expr.op0(), value)) return true;
 	array_of_var = boolector_array(boolector_ctx, width, config.ansi_c.int_width, "&(ZERO_STRING())[0]");
   }
@@ -2119,7 +2119,7 @@ bool boolector_convt::convert_index(const exprt &expr, BtorExp* &bv)
     std::cout << "expr.op1().type().id(): " << expr.op1().type().id() << std::endl;
     if (expr.op1().type().id()=="signedbv")
     {
-      unsigned width = atoi(expr.op1().type().get("width").c_str());
+      unsigned width = atoi(expr.op1().type().width().c_str());
       std::cout << "width: " << width << std::endl;
       lower = boolector_sgte(boolector_ctx, index, boolector_zero (boolector_ctx, width));
       upper = boolector_slt(boolector_ctx, index, boolector_int(boolector_ctx, size, width));
@@ -2163,7 +2163,7 @@ bool boolector_convt::convert_shift_constant(const exprt &expr, unsigned int wop
   else
 	value = integer2string(binary2integer(expr.value().as_string(), false),10);
 
-  size = atoi(expr.type().get("width").c_str());
+  size = atoi(expr.type().width().c_str());
 
   if (wop0>wop1)
     width = (log(wop0)/log(2))+1;

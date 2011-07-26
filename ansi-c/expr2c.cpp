@@ -167,7 +167,7 @@ std::string expr2ct::convert_rec(
   }
   else if(src.id()=="signedbv" || src.id()=="unsignedbv")
   {
-    mp_integer width=string2integer(src.get_string("width"));
+    mp_integer width=string2integer(src.width().as_string());
 
     bool is_signed=src.id()=="signedbv";
     std::string sign_str=is_signed?"signed ":"unsigned ";
@@ -200,7 +200,7 @@ std::string expr2ct::convert_rec(
   else if(src.id()=="floatbv" ||
           src.id()=="fixedbv")
   {
-    mp_integer width=string2integer(src.get_string("width"));
+    mp_integer width=string2integer(src.width().as_string());
 
     if(width==config.ansi_c.single_width)
       return q+"float";

@@ -138,9 +138,14 @@ public:
     return get("identifier");
   }
 
+  const irep_idt width(void) const {
+    return get("width");
+  }
+
   void identifier(irep_idt ident) {
     set("identifier", ident);
   }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)

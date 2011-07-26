@@ -253,7 +253,7 @@ Function: c_typecastt::get_c_type
 c_typecastt::c_typet c_typecastt::get_c_type(
   const typet &type)
 {
-  unsigned width=atoi(type.get("width").c_str());
+  unsigned width=atoi(type.width().c_str());
   
   if(type.id()=="signedbv")
   {

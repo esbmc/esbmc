@@ -717,7 +717,7 @@ void dereferencet::bounds_check(
 
     s << total;
     unsigned width;
-    width = atoi(size_expr.type().get_string("width").c_str());
+    width = atoi(size_expr.type().width().as_string().c_str());
     constant_exprt value_expr(size_expr.type());
     value_expr.set_value(integer2binary(string2integer(s.str()),width));
     size_expr.swap(value_expr);
@@ -759,7 +759,7 @@ Function: dereferencet::memory_model
 
 static unsigned bv_width(const typet &type)
 {
-  return atoi(type.get("width").c_str());
+  return atoi(type.width().c_str());
 }
 
 static bool is_a_bv_type(const typet &type)

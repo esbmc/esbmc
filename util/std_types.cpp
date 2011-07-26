@@ -24,7 +24,8 @@ Function: bv_typet::get_width
 
 unsigned bv_typet::get_width() const
 {
-  return atoi(get("width").c_str());
+  return atoi(width().c_str());
+
 }
 
 /*******************************************************************\

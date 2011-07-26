@@ -3667,7 +3667,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 	  array_type  = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
   }
 
-  value_cte = expr.get_string(exprt::a_identifier) + expr.type().subtype().get("width").c_str();
+  value_cte = expr.get_string(exprt::a_identifier) + expr.type().subtype().width().c_str();
   bv = z3_api.mk_var(z3_ctx, value_cte.c_str(), array_type);
 
   i=0;
