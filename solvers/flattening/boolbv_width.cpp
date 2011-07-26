@@ -84,7 +84,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
   }
   else if(type.id()=="range")
   {
-    mp_integer from=string2integer(type.get_string("from")),
+    mp_integer from=string2integer(type.from().as_string()),
                  to=string2integer(type.get_string("to"));
 
     mp_integer size=to-from+1;

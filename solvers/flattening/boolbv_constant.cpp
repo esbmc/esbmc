@@ -52,7 +52,7 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
   }
   else if(expr.type().id()=="range")
   {
-    mp_integer from=string2integer(expr.type().get_string("from"));
+    mp_integer from=string2integer(expr.type().from().as_string());
     mp_integer value=string2integer(expr.value().as_string());
     mp_integer v=value-from;
     
