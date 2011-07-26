@@ -28,7 +28,7 @@ public:
 
   const irep_idt &get_column() const
   {
-    return get("column");
+    return column();
   }
 
   const irep_idt &get_function() const

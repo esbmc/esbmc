@@ -827,5 +827,6 @@ irep_idt irept::a_from = dstring("from");
 irep_idt irept::a_file = dstring("file");
 irep_idt irept::a_line = dstring("line");
 irep_idt irept::a_function = dstring("function");
+irep_idt irept::a_column = dstring("column");
 
 irep_idt irept::s_type = dstring("type");

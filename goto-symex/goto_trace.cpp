@@ -220,7 +220,7 @@ void show_goto_trace_gui(
           << std::endl // PC
           << location.file() << std::endl
           << location.line() << std::endl
-          << location.get("column") << std::endl;
+          << location.column() << std::endl;
     }
     else if(it->type==goto_trace_stept::ASSIGNMENT)
     {
@@ -247,7 +247,7 @@ void show_goto_trace_gui(
           << it->step_nr << std::endl
           << it->pc->location.file() << std::endl
           << it->pc->location.line() << std::endl
-          << it->pc->location.get("column") << std::endl;
+          << it->pc->location.column() << std::endl;
     }
     else if(location!=previous_location)
     {
@@ -264,7 +264,7 @@ void show_goto_trace_gui(
             << it->step_nr << std::endl
             << location.file() << std::endl
             << location.line() << std::endl
-            << location.get("column") << std::endl;
+            << location.column() << std::endl;
       }
     }
 
