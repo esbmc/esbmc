@@ -134,15 +134,15 @@ public:
   typet &type() { return (typet &)(add("type")); }
   const typet &type() const { return (typet &)(find("type")); }
 
-  const irep_idt identifier(void) const {
+  const irep_idt &identifier(void) const {
     return get("identifier");
   }
 
-  const irep_idt width(void) const {
+  const irep_idt &width(void) const {
     return get("width");
   }
 
-  const irep_idt statement(void) const {
+  const irep_idt &statement(void) const {
     return get("statement");
   }
 
