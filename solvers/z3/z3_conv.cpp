@@ -4703,7 +4703,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	std::cout << "object.pretty(): " << object.pretty() << std::endl;
 	std::cout << "index.pretty(): " << index.pretty() << std::endl;
 #endif
-    symbol_name = "address_of_index" + object.id_string() + object.get_string("identifier");
+    symbol_name = "address_of_index" + object.id_string() + object.identifier().as_string();
 	pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
 
 	if (object.id()=="zero_string")

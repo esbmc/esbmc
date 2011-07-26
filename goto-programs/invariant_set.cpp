@@ -201,7 +201,7 @@ std::string inv_object_storet::build_string(const exprt &expr) const
   }
   
   if(expr.id()=="symbol")
-    return expr.get_string("identifier");
+    return expr.identifier().as_string();
 
   return "";
 }

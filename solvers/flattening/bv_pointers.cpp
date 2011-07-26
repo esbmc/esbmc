@@ -786,7 +786,7 @@ void bv_pointerst::do_is_dynamic_object(
     bool is_dynamic=
       expr.type().get_bool("#dynamic") ||
       (expr.id()=="symbol" &&
-       has_prefix(expr.get_string("identifier"), "symex_dynamic::"));
+       has_prefix(expr.identifier().as_string(), "symex_dynamic::"));
     
     // only compare object part
     bvt bv;

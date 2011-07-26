@@ -741,7 +741,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
 static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
 {
-  std::string identifier = expr.get_string("identifier");
+  std::string identifier = expr.identifier().as_string();
 
   if (expr.id() != "symbol") {
     unsigned int globals = 0;

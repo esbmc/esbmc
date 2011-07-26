@@ -1170,7 +1170,7 @@ std::string expr2ct::convert_nondet_symbol(
   const exprt &src,
   unsigned &precedence __attribute__((unused)))
 {
-  const std::string &id=src.get_string("identifier");
+  const std::string &id=src.identifier().as_string();
   return "nondet_symbol("+id+")";
 }
 
@@ -1190,7 +1190,7 @@ std::string expr2ct::convert_predicate_symbol(
   const exprt &src,
   unsigned &precedence __attribute__((unused)))
 {
-  const std::string &id=src.get_string("identifier");
+  const std::string &id=src.identifier().as_string();
   return "ps("+id+")";
 }
 
@@ -1210,7 +1210,7 @@ std::string expr2ct::convert_predicate_next_symbol(
   const exprt &src,
   unsigned &precedence __attribute__((unused)))
 {
-  const std::string &id=src.get_string("identifier");
+  const std::string &id=src.identifier().as_string();
   return "pns("+id+")";
 }
 
@@ -1230,7 +1230,7 @@ std::string expr2ct::convert_quantified_symbol(
   const exprt &src,
   unsigned &precedence __attribute__((unused)))
 {
-  const std::string &id=src.get_string("identifier");
+  const std::string &id=src.identifier().as_string();
   return id;
 }
 
@@ -2756,7 +2756,7 @@ std::string expr2ct::convert(
 
   else if(src.id()=="builtin-function")
   {
-    return src.get_string("identifier");
+    return src.identifier().as_string();
   }
 
   else if(src.id()=="pointer_object")

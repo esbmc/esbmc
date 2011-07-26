@@ -351,7 +351,7 @@ void value_sett::get_value_set_rec(
   {
     // look it up
     valuest::const_iterator v_it=
-      values.find(expr.get_string("identifier")+suffix);
+      values.find(expr.identifier().as_string()+suffix);
       
     if(v_it!=values.end())
     {

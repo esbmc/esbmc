@@ -551,7 +551,7 @@ void value_set_fit::get_value_set_rec(
   {
     // just keep a reference to the ident in the set
     // (if it exists)
-    irep_idt ident = expr.get_string("identifier")+suffix;
+    irep_idt ident = expr.identifier().as_string()+suffix;
     valuest::const_iterator v_it=values.find(ident);
     
     if(has_prefix(id2string(ident), alloc_adapter_prefix))

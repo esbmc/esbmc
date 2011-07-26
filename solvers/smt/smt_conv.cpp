@@ -365,11 +365,11 @@ void smt_convt::convert_smt_expr(const exprt &expr)
 {
   if(expr.id()=="symbol")
   {
-    convert_identifier(expr.get_string("identifier"));
+    convert_identifier(expr.identifier().as_string());
   }
   else if(expr.id()=="nondet_symbol")
   {
-    convert_identifier("nondet"+expr.get_string("identifier"));
+    convert_identifier("nondet"+expr.identifier().as_string());
   }
   else if(expr.id()=="typecast")
   {
@@ -1269,7 +1269,7 @@ void smt_convt::find_symbols(const exprt &expr)
     if(expr.type().id()=="code")
       return;
 
-    const irep_idt identifier="nondet"+expr.get_string("identifier");
+    const irep_idt identifier="nondet"+expr.identifier().as_string();
 
     identifiert &id=identifier_map[identifier];
 

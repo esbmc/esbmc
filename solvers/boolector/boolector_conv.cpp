@@ -368,7 +368,7 @@ bool boolector_convt::read_cache(const exprt &expr, BtorExp* &bv)
   std::string symbol;
   unsigned int size = pointer_cache.size();
 
-  symbol = expr.get_string("identifier");
+  symbol = expr.identifier().as_string();
 
   for(pointer_cachet::const_iterator it = pointer_cache.begin();
   it != pointer_cache.end(); it++)
@@ -405,7 +405,7 @@ void boolector_convt::write_cache(const exprt &expr)
 
   std::string symbol, identifier;
 
-  identifier = expr.get_string("identifier");
+  identifier = expr.identifier().as_string();
 
   for (std::string::const_iterator it = identifier.begin(); it
 		!= identifier.end(); it++)
@@ -1359,7 +1359,7 @@ bool boolector_convt::convert_constant_array(const exprt &expr, BtorExp* &bv)
   char i_str[2];
 
   width = atoi(expr.type().subtype().get("width").c_str());
-  identifier = expr.get_string("identifier") + expr.type().subtype().get("width").c_str();
+  identifier = expr.identifier().as_string() + expr.type().subtype().get("width").c_str();
 
   create_boolector_array(expr.type(), identifier, array_cte);
 
@@ -2485,9 +2485,9 @@ bool boolector_convt::convert_pointer_object(const exprt &expr, BtorExp* &bv)
 bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 {
   if (expr.id() == "symbol")
-	return convert_identifier(expr.get_string("identifier"), expr.type(), bv);
+	return convert_identifier(expr.identifier().as_string(), expr.type(), bv);
   else if (expr.id() == "nondet_symbol") {
-	return convert_identifier("nondet$"+expr.get_string("identifier"), expr.type(), bv);
+	return convert_identifier("nondet$"+expr.identifier().as_string(), expr.type(), bv);
   } else if (expr.id() == "typecast")
     return convert_typecast(expr, bv);
 #if 0
