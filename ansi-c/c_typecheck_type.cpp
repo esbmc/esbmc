@@ -273,7 +273,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
   }
   else if(type.id()=="type_of")
   {
-    if(type.get_bool("#is_expression"))
+    if(type.is_expression())
     {
       exprt expr = (exprt&) type.subtype();
       typecheck_expr(expr);

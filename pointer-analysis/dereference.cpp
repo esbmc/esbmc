@@ -631,7 +631,7 @@ void dereferencet::valid_check(
     }
   }
   else if(symbol.is_nil() ||
-          symbol.get_bool("#invalid_object"))
+          symbol.invalid_object())
   {
     // always "valid", shut up
     return;

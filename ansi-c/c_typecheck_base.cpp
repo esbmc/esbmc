@@ -366,8 +366,8 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
   else
   {
     bool inlined=new_symbol.type.id()=="code" &&
-         (new_symbol.type.get_bool("#inlined") ||
-          old_symbol.type.get_bool("#inlined"));
+         (new_symbol.type.inlined() ||
+          old_symbol.type.inlined());
 
     if(final_old!=final_new)
     {
@@ -479,11 +479,11 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         // see if we already have one
         if(old_symbol.value.is_not_nil())
         {
-          if(new_symbol.value.get_bool("#zero_initializer"))
+          if(new_symbol.value.zero_initializer())
           {
             // do nothing
           }
-          else if(old_symbol.value.get_bool("#zero_initializer"))
+          else if(old_symbol.value.zero_initializer())
           {
             old_symbol.value=new_symbol.value;
             old_symbol.type=new_symbol.type;

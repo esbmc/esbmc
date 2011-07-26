@@ -349,7 +349,7 @@ void goto_symext::symex_step(
         case ASSERT:
             if (!state.guard.is_false()) {
                 if (!options.get_bool_option("no-assertions") ||
-                        !state.source.pc->location.get_bool("user-provided")
+                        !state.source.pc->location.user_provided()
                         || options.get_bool_option("deadlock-check")) {
 
                     std::string msg = state.source.pc->location.comment().as_string();

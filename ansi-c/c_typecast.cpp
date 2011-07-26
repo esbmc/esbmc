@@ -487,8 +487,8 @@ void c_typecastt::implicit_typecast_followed(
          !dest_type.subtype().cmt_constant())
         warnings.push_back("disregarding const");
 
-      if(src_type.subtype().get_bool("#volatile") &&
-         !dest_type.subtype().get_bool("#volatile"))
+      if(src_type.subtype().cmt_volatile() &&
+         !dest_type.subtype().cmt_volatile())
         warnings.push_back("disregarding volatile");
 
       if(src_type==dest_type)

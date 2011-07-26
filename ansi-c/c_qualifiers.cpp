@@ -53,10 +53,10 @@ void c_qualifierst::read(const typet &src)
   if(src.cmt_constant())
     is_constant=true;
 
-  if(src.get_bool("#volatile"))
+  if(src.cmt_volatile())
     is_volatile=true;
 
-  if(src.get_bool("#restricted"))
+  if(src.restricted())
     is_restricted=true;
 }
 

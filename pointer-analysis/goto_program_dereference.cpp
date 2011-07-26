@@ -30,7 +30,7 @@ bool goto_program_dereferencet::has_failed_symbol(
 {
   if(expr.id()=="symbol")
   {
-    if(expr.get_bool("#invalid_object"))
+    if(expr.invalid_object())
       return false;
 
     const symbolt &ptr_symbol=ns.lookup(expr);

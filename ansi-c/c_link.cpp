@@ -240,7 +240,7 @@ void c_linkt::duplicate_symbol(
         in_context.value.swap(new_symbol.value);
         in_context.type.swap(new_symbol.type); // for argument identifiers
       }
-      else if(in_context.type.get_bool("#inlined"))
+      else if(in_context.type.inlined())
       {
         // ok
       }
@@ -316,10 +316,10 @@ void c_linkt::duplicate_symbol(
     // care about initializers    
 
     if(!new_symbol.value.is_nil() &&
-       !new_symbol.value.get_bool("#zero_initializer"))
+       !new_symbol.value.zero_initializer())
     {
       if(in_context.value.is_nil() ||
-         in_context.value.get_bool("#zero_initializer"))
+         in_context.value.zero_initializer())
       {
         in_context.value.swap(new_symbol.value);
       }

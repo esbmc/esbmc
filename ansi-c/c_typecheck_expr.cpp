@@ -170,7 +170,7 @@ void c_typecheck_baset::typecheck_expr_comma(exprt &expr)
   expr.type()=expr.op1().type();
 
   // make this an l-value if the last operand is one
-  if(expr.op1().get_bool("#lvalue"))
+  if(expr.op1().cmt_lvalue())
     expr.set("#lvalue", true);
 }
 
@@ -671,7 +671,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
 
   // the new thing is an lvalue if the previous one is
   // an lvalue, and it's just a pointer type cast
-  if(expr.op0().get_bool("#lvalue"))
+  if(expr.op0().cmt_lvalue())
   {
     if(expr_type.id()=="pointer")
       expr.set("#lvalue", true);
@@ -768,7 +768,7 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
   if(final_array_type.id()=="array" ||
      final_array_type.id()=="incomplete_array")
   {
-    if(array_expr.get_bool("#lvalue"))
+    if(array_expr.cmt_lvalue())
       expr.set("#lvalue", true);
   }
   else if(final_array_type.id()=="pointer")
@@ -1067,7 +1067,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
 
   expr.type()=component.type();
 
-  if(op0.get_bool("#lvalue"))
+  if(op0.cmt_lvalue())
     expr.set("#lvalue", true);
 
   if(op0.cmt_constant())
@@ -1233,7 +1233,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
   expr.type()=typet("pointer");
 
   if(op.type().id()!="code" &&
-     !op.get_bool("#lvalue"))
+     !op.cmt_lvalue())
   {
     err_location(expr);
     str << "address_of error: `" << to_string(op)
@@ -1373,7 +1373,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
     const typet &type0=op0.type();
     const typet &final_type0=follow(type0);
 
-    if(!op0.get_bool("#lvalue"))
+    if(!op0.cmt_lvalue())
     {
       err_location(op0);
       str << "prefix operator error: `" << to_string(op0)
@@ -1784,7 +1784,7 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
 
     mp_integer value=string2integer(expr.value().as_string());
     const std::string &given_width=expr.type().cmt_width().as_string();
-    bool is_unsigned=expr.type().get_bool("#unsigned");
+    bool is_unsigned=expr.type().cmt_unsigned();
     bool is_hex_or_oct=expr.hex_or_oct();
     const std::string cformat=expr.cformat().as_string();
 
@@ -2181,7 +2181,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
     assert(op0.operands().size()==1);
 
     // set #lvalue and #constant
-    op0.set("#lvalue", op0.op0().get_bool("#lvalue"));
+    op0.set("#lvalue", op0.op0().cmt_lvalue());
     op0.set("#constant", op0.op0().cmt_constant());
   }
 
@@ -2194,7 +2194,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
 
   expr.type()=type0;
 
-  if(!op0.get_bool("#lvalue"))
+  if(!op0.cmt_lvalue())
   {
     err_location(expr);
     str << "assignment error: `" << to_string(op0)

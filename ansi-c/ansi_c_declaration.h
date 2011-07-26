@@ -52,7 +52,7 @@ public:
   
   bool get_is_type() const
   {
-    return get_bool("is_type");
+    return is_type();
   }
   
   void set_is_type(bool is_type)
@@ -72,7 +72,7 @@ public:
   
   bool get_is_macro() const
   {
-    return get_bool("is_macro");
+    return is_macro();
   }
   
   void set_is_macro(bool is_macro)
@@ -132,7 +132,7 @@ public:
   
   bool get_is_extern() const
   {
-    return get_bool("is_extern");
+    return is_extern();
   }
   
   void set_is_extern(bool is_extern)

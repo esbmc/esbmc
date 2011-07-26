@@ -418,7 +418,7 @@ void ansi_c_convertt::convert_type(
   }
   else if(type.id()=="type_of")
   {
-    if(type.get_bool("#is_expression"))
+    if(type.is_expression())
       convert_expr((exprt&)type.subtype());
     else
       convert_type(type.subtype());

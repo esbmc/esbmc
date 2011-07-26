@@ -46,7 +46,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   }
   else if(type.id()=="pointer")
   {
-    if(type.get_bool("#reference"))
+    if(type.reference())
       return sizeof_rec(type.subtype());
 
     unsigned bits=config.ansi_c.pointer_width;
