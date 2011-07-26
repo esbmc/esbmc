@@ -70,6 +70,14 @@ public:
   void value(irep_idt val) {
     set(a_value, val);
   };
+
+  const irep_idt identifier(void) const {
+    return get(a_identifier);
+  }
+
+  void identifier(irep_idt ident) {
+    set(a_identifier, ident);
+  }
    
   exprt &op0()
   { return operands().front(); }
