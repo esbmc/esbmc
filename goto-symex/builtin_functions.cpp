@@ -327,7 +327,7 @@ void basic_symext::symex_fkt(
   Forall_operands(it, fc)
     if(first) first=false; else new_fc.move_to_operands(*it);
 
-  new_fc.set(exprt::a_identifier, fc.op0().get(exprt::a_identifier));
+  new_fc.set(irept::a_identifier, fc.op0().get(irept::a_identifier));
 
   fc.swap(new_fc);
   #endif
@@ -349,7 +349,7 @@ void basic_symext::symex_macro(
   statet &state,
   const code_function_callt &code)
 {
-  const irep_idt &identifier=code.op0().get(exprt::a_identifier);
+  const irep_idt &identifier=code.op0().get(irept::a_identifier);
 
   if(identifier==CPROVER_MACRO_PREFIX "waitfor")
   {

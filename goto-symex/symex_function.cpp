@@ -126,8 +126,8 @@ void goto_symext::argument_assignments(
       do_simplify(rhs);
       assignment(ex_state, lhs, rhs);
       
-	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ LHS --------- " << lhs.get(exprt::a_identifier) << std::endl;
-	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ RHS --------- " << rhs.get(exprt::a_identifier) << std::endl;
+	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ LHS --------- " << lhs.get(irept::a_identifier) << std::endl;
+	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ RHS --------- " << rhs.get(irept::a_identifier) << std::endl;
     }
 
     it1++;
@@ -193,7 +193,7 @@ void goto_symext::symex_function_call_symbol(
   assert(code.function().id()==exprt::symbol);
 
   const irep_idt &identifier=
-    code.function().get(exprt::a_identifier);
+    code.function().get(irept::a_identifier);
     
   if(identifier=="c::CBMC_trace")
   {
@@ -261,7 +261,7 @@ void goto_symext::symex_function_call_code(
     if(call.lhs().is_not_nil())
     {
       exprt rhs=exprt("nondet_symbol", call.lhs().type());
-      rhs.set(exprt::a_identifier, "symex::"+i2string(ex_state.nondet_count++));
+      rhs.set(irept::a_identifier, "symex::"+i2string(ex_state.nondet_count++));
       rhs.location()=call.location();
       code_assignt code(call.lhs(), rhs);
       basic_symext::symex(state, ex_state, code, ex_state.node_id);

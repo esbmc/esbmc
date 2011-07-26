@@ -166,8 +166,8 @@ void preconditiont::compute_rec(exprt &dest)
   }
   else if(dest.id()==exprt::symbol)
   {
-    if(dest.get(exprt::a_identifier)==
-       s.get_original_name(SSA_step.lhs.get(exprt::a_identifier)))
+    if(dest.get(irept::a_identifier)==
+       s.get_original_name(SSA_step.lhs.get(irept::a_identifier)))
     {
       dest=SSA_step.rhs;
       s.get_original_name(dest);
@@ -179,7 +179,7 @@ void preconditiont::compute_rec(exprt &dest)
     assert(dest.operands().size()==1);
 
     const irep_idt &lhs_identifier=
-      s.get_original_name(SSA_step.lhs.get(exprt::a_identifier));
+      s.get_original_name(SSA_step.lhs.get(irept::a_identifier));
   
     // aliasing may happen here
 

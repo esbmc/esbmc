@@ -75,9 +75,9 @@ void convert(
         irep_idt identifier;
 
         if(it->original_lhs.is_not_nil())
-          identifier=it->original_lhs.get(exprt::a_identifier);
+          identifier=it->original_lhs.get(irept::a_identifier);
         else
-          identifier=it->lhs.get(exprt::a_identifier);
+          identifier=it->lhs.get(irept::a_identifier);
           
         xmlt &xml_assignment=xml.new_element("assignment");
 
