@@ -126,7 +126,7 @@ std::ostream& goto_programt::output_instruction(
     {
       out << from_expr(ns, identifier, it->guard);
     
-      const irep_idt &comment=it->location.get("comment");
+      const irep_idt &comment=it->location.comment();
       if(comment!="") out << " // " << comment;
     }
       

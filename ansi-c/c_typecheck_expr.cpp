@@ -1055,7 +1055,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
     throw 0;
   }
 
-  const irep_idt &access=component.get("access");
+  const irep_idt &access=component.access();
 
   if(access=="private")
   {

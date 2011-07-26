@@ -42,7 +42,7 @@ Function: fixedbv_typet::get_integer_bits
 
 unsigned fixedbv_typet::get_integer_bits() const
 {
-  const std::string &integer_bits=get_string("integer_bits");
+  const std::string &integer_bits=get("integer_bits").as_string();
   assert(integer_bits!="");
   return atoi(integer_bits.c_str());
 }

@@ -671,7 +671,7 @@ void goto_convertt::remove_temporary_object(
 
   symbolt &new_symbol=new_tmp_symbol(expr.type());
 
-  new_symbol.mode=expr.get("mode");
+  new_symbol.mode=expr.mode();
 
   if(expr.operands().size()==1)
   {

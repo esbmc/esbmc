@@ -446,7 +446,7 @@ void goto_symext::loop_bound_exceeded(
   statet &state,
   const exprt &guard, unsigned node_id)
 {
-  const irep_idt &loop_id=state.source.pc->location.get("loop-id");
+  const irep_idt &loop_id=state.source.pc->location.loopid();
 
   exprt negated_cond;
 

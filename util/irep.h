@@ -178,6 +178,66 @@ public:
     return get(a_column);
   }
 
+  inline const irep_idt &destination(void) const {
+    return get(a_destination);
+  }
+
+  inline const irep_idt &access(void) const {
+    return get(a_access);
+  }
+
+  inline const irep_idt &base_name(void) const {
+    return get(a_base_name);
+  }
+
+  inline const irep_idt &comment(void) const {
+    return get(a_comment);
+  }
+
+  inline const irep_idt &event(void) const {
+    return get(a_event);
+  }
+
+  inline const irep_idt &literal(void) const {
+    return get(a_literal);
+  }
+
+  inline const irep_idt &loopid(void) const {
+    return get(a_loopid);
+  }
+
+  inline const irep_idt &mode(void) const {
+    return get(a_mode);
+  }
+
+  inline const irep_idt &module(void) const {
+    return get(a_module);
+  }
+
+  inline const irep_idt &ordering(void) const {
+    return get(a_ordering);
+  }
+
+  inline const irep_idt &pretty_name(void) const {
+    return get(a_pretty_name);
+  }
+
+  inline const irep_idt &property(void) const {
+    return get(a_property);
+  }
+
+  inline const irep_idt &size(void) const {
+    return get(a_size);
+  }
+
+  inline const irep_idt &integer_bits(void) const {
+    return get(a_integer_bits);
+  }
+
+  inline const irep_idt &to(void) const {
+    return get(a_to);
+  }
+
   inline void identifier(irep_idt ident) {
     set(a_identifier, ident);
   }
@@ -227,6 +287,9 @@ public:
   static irep_idt s_type;
   static irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
   static irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
+  static irep_idt a_access, a_destination, a_base_name, a_comment, a_event;
+  static irep_idt a_literal, a_loopid, a_mode, a_module, a_ordering;
+  static irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
 
   class dt
   {

@@ -42,7 +42,7 @@ public:
   
   irep_idt get_base_name() const
   {
-    return get("base_name");
+    return base_name();
   }
   
   void set_base_name(const irep_idt &base_name)

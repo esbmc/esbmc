@@ -141,11 +141,11 @@ void symbolt::from_irep(const irept &src)
   location=static_cast<const locationt &>(src.find("location"));
 
   name=src.name();
-  module=src.get("module");
-  base_name=src.get("base_name");
-  mode=src.get("mode");
-  pretty_name=src.get("pretty_name");
-  ordering=atoi(src.get("ordering").c_str());
+  module=src.module();
+  base_name=src.base_name();
+  mode=src.mode();
+  pretty_name=src.pretty_name();
+  ordering=atoi(src.ordering().c_str());
 
   theorem=src.get_bool("theorem");
   axiom=src.get_bool("axiom");

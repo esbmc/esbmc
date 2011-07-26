@@ -352,7 +352,7 @@ void goto_symext::symex_step(
                         !state.source.pc->location.get_bool("user-provided")
                         || options.get_bool_option("deadlock-check")) {
 
-                    std::string msg = state.source.pc->location.get_string("comment");
+                    std::string msg = state.source.pc->location.comment().as_string();
                     if (msg == "") msg = "assertion";
                     exprt tmp(instruction.guard);
 

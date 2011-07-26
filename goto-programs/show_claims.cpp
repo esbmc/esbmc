@@ -42,8 +42,8 @@ void show_claims(
     {
       count++;
 
-      const irep_idt &comment=it->location.get("comment");
-      const irep_idt &property=it->location.get("property");
+      const irep_idt &comment=it->location.comment();
+      const irep_idt &property=it->location.property();
       const irep_idt description=
         (comment==""?"assertion":comment);
 

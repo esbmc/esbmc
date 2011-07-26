@@ -66,7 +66,7 @@ void goto_convertt::finish_gotos()
     }
     else if(i.is_start_thread())
     {
-      const irep_idt &goto_label=i.code.get("destination");
+      const irep_idt &goto_label=i.code.destination();
 
       labelst::const_iterator l_it=
         targets.labels.find(goto_label);
@@ -82,7 +82,7 @@ void goto_convertt::finish_gotos()
     }
     else if(i.code.statement()=="goto")
     {
-      const irep_idt &goto_label=i.code.get("destination");
+      const irep_idt &goto_label=i.code.destination();
 
       labelst::const_iterator l_it=targets.labels.find(goto_label);
 
@@ -2157,7 +2157,7 @@ void goto_convertt::convert_start_thread(
   if(code.op0().statement()=="goto")
   {
     start_thread->code.set("destination",
-      code.op0().get("destination"));
+      code.op0().destination());
     // remember it to do target later
     targets.gotos.insert(start_thread);
   }
@@ -2227,7 +2227,7 @@ void goto_convertt::convert_sync(
 
   copy(code, SYNC, dest);
   dest.instructions.back().event=
-    dest.instructions.back().code.get("event");
+    dest.instructions.back().code.event();
 }
 
 /*******************************************************************\

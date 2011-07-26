@@ -114,7 +114,7 @@ std::string type2name(const typet &type)
     result +="EN?";
   else if(type.id()=="c_bitfield")
   {
-    result+="BF" + type.get("size").as_string(); 
+    result+="BF" + type.size().as_string(); 
   }
   else
   {

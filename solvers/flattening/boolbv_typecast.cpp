@@ -416,7 +416,7 @@ literalt boolbvt::convert_typecast(const exprt &expr)
     if(expr.op0().type().id()=="range")
     {
       mp_integer from=string2integer(expr.op0().type().from().as_string());
-      mp_integer to=string2integer(expr.op0().type().get_string("to"));
+      mp_integer to=string2integer(expr.op0().type().to().as_string());
 
       if(from==1 && to==1)
         return const_literal(true);

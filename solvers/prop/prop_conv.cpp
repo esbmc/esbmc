@@ -239,7 +239,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
   else if(expr.id()=="literal")
   {
     literalt l;
-    l.set(atoi(expr.get("literal").c_str()));
+    l.set(atoi(expr.literal().c_str()));
     return l;
   }
   else if(expr.id()=="nondet_symbol")

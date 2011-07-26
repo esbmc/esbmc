@@ -55,7 +55,7 @@ void convert_float_literal(
   {
     unsigned width=atoi(dest.type().width().c_str());
     unsigned fraction_bits;
-    const std::string &integer_bits=dest.type().get_string("integer_bits");
+    const std::string &integer_bits=dest.type().integer_bits().as_string();
 
     if(integer_bits=="")
       fraction_bits=width/2;

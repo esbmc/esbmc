@@ -565,7 +565,7 @@ std::string expr2ct::convert_with(
 
       assert(comp_expr.is_not_nil());
 
-      op1=comp_expr.get_string("pretty_name");
+      op1=comp_expr.pretty_name().as_string();
       p1=10;
     }
     else
@@ -1050,7 +1050,7 @@ std::string expr2ct::convert_member(
   if(comp_expr.is_nil())
     return convert_norep(src, precedence);
 
-  dest+=comp_expr.get_string("pretty_name");
+  dest+=comp_expr.pretty_name().as_string();
 
   return dest;
 }
@@ -1917,7 +1917,7 @@ std::string expr2ct::convert_code_goto(
 {
   std:: string dest=indent_str(indent);
   dest+="goto ";
-  dest+=src.get_string("destination");
+  dest+=src.destination().as_string();
   dest+=";\n";
 
   return dest;
