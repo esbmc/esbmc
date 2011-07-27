@@ -1616,7 +1616,7 @@ jump_statement:
 	{
 	  $$=$1;
 	  statement(*$$, "goto");
-	  $$->set("destination", $2->cmt_base_name());
+	  $$->destination($2->cmt_base_name());
 	}
 	| TOK_CONTINUE ';'
 	{ $$=$1; statement(*$$, "continue"); }

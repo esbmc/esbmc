@@ -472,7 +472,7 @@ void goto_convertt::convert_block(
 
 	  t_d_a->guard.swap(deallocated_assert);
 	  t_d_a->location = lhs_pointer.location();
-	  t_d_a->location.set("comment","dereference failure: forgotten memory");
+	  t_d_a->location.comment("dereference failure: forgotten memory");
     }
   }
   }
@@ -963,9 +963,9 @@ void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rh
 	//std::cout << "lhs.pretty(): " << lhs.identifier().as_string() << std::endl;
 	//std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
 	//if (lhs.identifier().as_string().find("atomicity") == std::string::npos)
-	  //t->location.set("comment","atomicity violation on assignment to " + s);
+	  //t->location.comment("atomicity violation on assignment to " + s);
 	//else
-	  t->location.set("comment","atomicity violation on assignment to " + lhs.identifier().as_string());
+	  t->location.comment("atomicity violation on assignment to " + lhs.identifier().as_string());
   }
 
 #ifdef DEBUG
@@ -1017,7 +1017,7 @@ void goto_convertt::break_globals2assignments(exprt & rhs, goto_programt & dest,
     goto_programt::targett t=dest.add_instruction(ASSERT);
 	t->guard.swap(atomic_dest);
 	t->location=location;
-    t->location.set("comment","atomicity violation");
+    t->location.comment("atomicity violation");
   }
 
 #ifdef DEBUG
@@ -2156,8 +2156,7 @@ void goto_convertt::convert_start_thread(
   // see if op0 is an unconditional goto
   if(code.op0().statement()=="goto")
   {
-    start_thread->code.set("destination",
-      code.op0().destination());
+    start_thread->code.destination(code.op0().destination());
     // remember it to do target later
     targets.gotos.insert(start_thread);
   }
