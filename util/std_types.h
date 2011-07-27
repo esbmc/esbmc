@@ -219,7 +219,7 @@ public:
 
     void set_base_name(const irep_idt &name)
     {
-      set("#base_name", name);
+      cmt_base_name(name);
     }
 
     const irep_idt &get_identifier() const

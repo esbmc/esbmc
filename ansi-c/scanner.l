@@ -396,7 +396,7 @@ void ansi_c_scanner_init()
 
                   PARSER.set_location((exprt&)*i);
                   i->id("symbol");
-                  i->set("#base_name", base_name);
+                  i->cmt_base_name(base_name);
                   i->identifier(identifier);
                   i->set("#id_class", result);
                   return token;

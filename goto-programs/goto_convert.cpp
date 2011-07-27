@@ -219,7 +219,7 @@ void goto_convertt::convert_label(
     goto_programt::targett t=dest.add_instruction(ASSERT);
     t->guard.make_false();
     t->location=code.location();
-    t->location.set("property", "error label");
+    t->location.property("error label");
     t->location.comment("error label");
     t->location.set("user-provided", true);
 
@@ -1283,7 +1283,7 @@ void goto_convertt::convert_assert(
   goto_programt::targett t=dest.add_instruction(ASSERT);
   t->guard.swap(cond);
   t->location=code.location();
-  t->location.set("property", "assertion");
+  t->location.property("assertion");
   t->location.set("user-provided", true);
 }
 

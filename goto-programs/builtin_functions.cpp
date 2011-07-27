@@ -937,7 +937,7 @@ void goto_convertt::do_function_call_symbol(
     t->location.set("user-provided", true);
 
     if(is_assert)
-      t->location.set("property", "assertion");
+      t->location.property("assertion");
 
     if(lhs.is_not_nil())
     {
@@ -964,7 +964,7 @@ void goto_convertt::do_function_call_symbol(
     t->guard=arguments[0];
     t->location=function.location();
     t->location.set("user-provided", true);
-    t->location.set("property", "assertion");
+    t->location.property("assertion");
     t->location.comment(description);
 
     if(lhs.is_not_nil())
@@ -1058,7 +1058,7 @@ void goto_convertt::do_function_call_symbol(
     t->guard=false_exprt();
     t->location=function.location();
     t->location.set("user-provided", true);
-    t->location.set("property", "assertion");
+    t->location.property("assertion");
     t->location.comment(description);
     // we ignore any LHS
   }
@@ -1082,7 +1082,7 @@ void goto_convertt::do_function_call_symbol(
     t->guard=false_exprt();
     t->location=function.location();
     t->location.set("user-provided", true);
-    t->location.set("property", "assertion");
+    t->location.property("assertion");
     t->location.comment(description);
     // we ignore any LHS
   }
@@ -1106,7 +1106,7 @@ void goto_convertt::do_function_call_symbol(
     t->guard=false_exprt();
     t->location=function.location();
     t->location.set("user-provided", true);
-    t->location.set("property", "assertion");
+    t->location.property("assertion");
     t->location.comment(description);
     // we ignore any LHS
   }

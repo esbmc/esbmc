@@ -915,7 +915,7 @@ aggregate_name:
 		  // an anon struct
 		  exprt symbol("symbol");
 
-		  symbol.set("#base_name", PARSER.get_anon_name());
+		  symbol.cmt_base_name(PARSER.get_anon_name());
 
 		  init(&$<expr>$);
 		  PARSER.new_declaration(*$1, symbol, *$<expr>$, true);
@@ -1118,7 +1118,7 @@ enum_name:			/* Type */
 		{
 		  // an anon enum
 		  exprt symbol("symbol");
-		  symbol.set("#base_name", PARSER.get_anon_name());
+		  symbol.cmt_base_name(PARSER.get_anon_name());
 
 		  init(&$<expr>$);
 		  PARSER.new_declaration(*$1, symbol, *$<expr>$, true);

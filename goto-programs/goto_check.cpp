@@ -463,7 +463,7 @@ void goto_checkt::add_guarded_claim(
     t->guard.swap(new_expr);
     t->location=location;
     t->location.comment(comment);
-    t->location.set("property", property);
+    t->location.property(property);
   }
 }
 

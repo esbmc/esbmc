@@ -113,7 +113,7 @@ void goto_program_dereferencet::dereference_failure(
       goto_programt::targett t=new_code.add_instruction(ASSERT);
       t->guard.swap(guard_expr);
       t->location=dereference_location;
-      t->location.set("property", property);
+      t->location.property(property);
       t->location.comment("dereference failure: "+msg);
     }
   }

@@ -465,6 +465,14 @@ public:
     set(a_cmt_unsigned, val);
   }
 
+  inline void property(const irep_idt prop) {
+    set(a_property, prop);
+  }
+
+  inline void cmt_base_name(const irep_idt name) {
+    set(a_cmt_base_name, name);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)

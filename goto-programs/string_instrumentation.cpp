@@ -335,7 +335,7 @@ void string_instrumentationt::do_sprintf(
 
   goto_programt::targett assertion=tmp.add_instruction();
   assertion->location=target->location;
-  assertion->location.set("property", "string");
+  assertion->location.property("string");
   assertion->location.comment("sprintf buffer overflow");
   assertion->local_variables=target->local_variables;
 
@@ -390,7 +390,7 @@ void string_instrumentationt::do_snprintf(
 
   goto_programt::targett assertion=tmp.add_instruction();
   assertion->location=target->location;
-  assertion->location.set("property", "string");
+  assertion->location.property("string");
   assertion->location.comment("snprintf buffer overflow");
   assertion->local_variables=target->local_variables;
 
@@ -505,7 +505,7 @@ void string_instrumentationt::do_format_string_read(
         {
           goto_programt::targett assertion=dest.add_instruction();
           assertion->location=target->location;
-          assertion->location.set("property", "string");
+          assertion->location.property("string");
           std::string comment("zero-termination of string argument of ");
           comment += function_name;
           assertion->location.comment(comment);
@@ -539,7 +539,7 @@ void string_instrumentationt::do_format_string_read(
     goto_programt::targett format_ass=dest.add_instruction();
     format_ass->make_assertion(is_zero_string(arguments[1]));
     format_ass->location=target->location;
-    format_ass->location.set("property", "string");
+    format_ass->location.property("string");
     std::string comment("zero-termination of format string of ");
     comment += function_name;
     format_ass->location.comment(comment);
@@ -555,7 +555,7 @@ void string_instrumentationt::do_format_string_read(
       {
         goto_programt::targett assertion=dest.add_instruction();
         assertion->location=target->location;
-        assertion->location.set("property", "string");
+        assertion->location.property("string");
         std::string comment("zero-termination of string argument of ");
         comment += function_name;
         assertion->location.comment(comment);
@@ -627,7 +627,7 @@ void string_instrumentationt::do_format_string_write(
 
           goto_programt::targett assertion=dest.add_instruction();
           assertion->location=target->location;
-          assertion->location.set("property", "string");
+          assertion->location.property("string");
           std::string comment("format string buffer overflow in ");
           comment += function_name;
           assertion->location.comment(comment);
@@ -711,7 +711,7 @@ void string_instrumentationt::do_format_string_write(
       {
         goto_programt::targett assertion=dest.add_instruction();
         assertion->location=target->location;
-        assertion->location.set("property", "string");
+        assertion->location.property("string");
         std::string comment("format string buffer overflow in ");
         comment += function_name;
         assertion->location.comment(comment);
@@ -790,7 +790,7 @@ void string_instrumentationt::do_strchr(
   goto_programt::targett assertion=tmp.add_instruction();
   assertion->make_assertion(is_zero_string(arguments[0]));
   assertion->location=target->location;
-  assertion->location.set("property", "string");
+  assertion->location.property("string");
   assertion->location.comment("zero-termination of string argument of strchr");
   assertion->local_variables=target->local_variables;
 
@@ -828,7 +828,7 @@ void string_instrumentationt::do_strrchr(
   goto_programt::targett assertion=tmp.add_instruction();
   assertion->make_assertion(is_zero_string(arguments[0]));
   assertion->location=target->location;
-  assertion->location.set("property", "string");
+  assertion->location.property("string");
   assertion->location.comment("zero-termination of string argument of strrchr");
   assertion->local_variables=target->local_variables;
 
@@ -866,14 +866,14 @@ void string_instrumentationt::do_strstr(
   goto_programt::targett assertion0=tmp.add_instruction();
   assertion0->make_assertion(is_zero_string(arguments[0]));
   assertion0->location=target->location;
-  assertion0->location.set("property", "string");
+  assertion0->location.property("string");
   assertion0->location.comment("zero-termination of 1st string argument of strstr");
   assertion0->local_variables=target->local_variables;
 
   goto_programt::targett assertion1=tmp.add_instruction();
   assertion1->make_assertion(is_zero_string(arguments[1]));
   assertion1->location=target->location;
-  assertion1->location.set("property", "string");
+  assertion1->location.property("string");
   assertion1->location.comment("zero-termination of 2nd string argument of strstr");
   assertion1->local_variables=target->local_variables;
 
@@ -911,14 +911,14 @@ void string_instrumentationt::do_strtok(
   goto_programt::targett assertion0=tmp.add_instruction();
   assertion0->make_assertion(is_zero_string(arguments[0]));
   assertion0->location=target->location;
-  assertion0->location.set("property", "string");
+  assertion0->location.property("string");
   assertion0->location.comment("zero-termination of 1st string argument of strtok");
   assertion0->local_variables=target->local_variables;
 
   goto_programt::targett assertion1=tmp.add_instruction();
   assertion1->make_assertion(is_zero_string(arguments[1]));
   assertion1->location=target->location;
-  assertion1->location.set("property", "string");
+  assertion1->location.property("string");
   assertion1->location.comment("zero-termination of 2nd string argument of strtok");
   assertion1->local_variables=target->local_variables;
 
