@@ -123,12 +123,12 @@ protected:
   const irep_idt &get(const irep_namet &name) const;
   bool get_bool(const irep_namet &name) const;
 
-public:
   inline void set(const irep_namet &name, const irep_idt &value)
   { add(name).id(value); }
   
   void set(const irep_namet &name, const long value);
   void set(const irep_namet &name, const irept &irep);
+public:
   void remove(const irep_namet &name);
   void move_to_sub(irept &irep);
   void move_to_named_sub(const irep_namet &name, irept &irep);
