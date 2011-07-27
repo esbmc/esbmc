@@ -914,3 +914,7 @@ const irep_idt irept::s_bv = dstring("bv");
 const irep_idt irept::s_targets = dstring("targets");
 const irep_idt irept::s_variables = dstring("variables");
 const irep_idt irept::s_initializer = dstring("initializer");
+const irep_idt irept::s_declaration_type = dstring("declaration_type");
+const irep_idt irept::s_decl_value = dstring("decl_value");
+const irep_idt irept::s_symvalue = dstring("symvalue");
+const irep_idt irept::s_cmt_location = dstring("#location");

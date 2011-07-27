@@ -217,7 +217,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
 
     if(to_code(symbol.value).get_statement()=="block")
       end_location=static_cast<const locationt &>(
-        symbol.value.find("#end_location"));
+        symbol.value.end_location());
     else
       end_location.make_nil();
 
@@ -243,7 +243,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
 
     if(to_code(symbol.value).get_statement()=="block")
       t->location=static_cast<const locationt &>(
-        symbol.value.find("#end_location"));
+        symbol.value.end_location());
 
     // do local variables
     Forall_goto_program_instructions(i_it, f.body)

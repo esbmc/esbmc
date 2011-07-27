@@ -137,7 +137,7 @@ Function: symbolt::from_irep
 void symbolt::from_irep(const irept &src)
 {
   type=src.type();
-  value=static_cast<const exprt &>(src.find("symvalue"));
+  value=static_cast<const exprt &>(src.symvalue());
   location=static_cast<const locationt &>(src.location());
 
   name=src.name();

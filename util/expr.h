@@ -157,7 +157,7 @@ public:
 
   const locationt &location() const
   {
-    return static_cast<const locationt &>(find(o_location));
+    return static_cast<const locationt &>(cmt_location());
   }
 
   locationt &location()

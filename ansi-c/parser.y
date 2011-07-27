@@ -1038,7 +1038,7 @@ member_declaring_list:
 	{
 	  exprt declaration;
 
-	  irept declaration_type($1->find("declaration_type"));
+	  irept declaration_type($1->declaration_type());
 	  PARSER.new_declaration(declaration_type, *$3, declaration, false, false);
 
 	  $$=$1;

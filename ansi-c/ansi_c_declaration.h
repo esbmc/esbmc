@@ -27,7 +27,7 @@ public:
   
   const exprt &decl_value() const
   {
-    return static_cast<const exprt &>(find("decl_value"));
+    return static_cast<const exprt &>(irept::decl_value());
   }
   
   void set_name(const irep_idt &name)
