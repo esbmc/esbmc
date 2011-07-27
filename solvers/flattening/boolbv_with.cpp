@@ -243,7 +243,7 @@ void boolbvt::convert_with_struct(
   convert_bv(op2, op2_bv);
 
   const irep_idt &component_name=op1.component_name();
-  const irept &components=type.find("components");
+  const irept &components=type.components();
 
   unsigned offset=0;
 

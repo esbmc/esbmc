@@ -142,7 +142,7 @@ exprt boolector_convt::bv_get_rec(
     else if(type.id()=="struct")
     {
 #if 0
-      const irept &components=type.find("components");
+      const irept &components=type.components();
       exprt::operandst op;
       op.reserve(components.get_sub().size());
       unsigned int size;

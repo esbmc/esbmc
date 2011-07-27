@@ -224,7 +224,7 @@ void bv_pointerst::convert_address_of_rec(
     convert_address_of_rec(struct_op, bv);
 
     const irept::subt &components=
-      struct_op.type().find("components").get_sub();
+      struct_op.type().components().get_sub();
     
     const irep_idt &component_name=expr.component_name();
     

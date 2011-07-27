@@ -46,7 +46,7 @@ mp_integer pointer_offset_size(const typet &type)
   else if(type.id()=="struct" ||
           type.id()=="union")
   {
-    const irept::subt &components=type.find("components").get_sub();
+    const irept::subt &components=type.components().get_sub();
     
     mp_integer result=1; // for the struct itself
 

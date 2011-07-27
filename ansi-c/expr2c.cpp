@@ -216,7 +216,7 @@ std::string expr2ct::convert_rec(
     if(tag!="") dest+=" "+tag;
 
     /*
-    const irept &components=type.find("components");
+    const irept &components=type.components();
 
     forall_irep(it, components.get_sub())
     {
@@ -231,7 +231,7 @@ std::string expr2ct::convert_rec(
   {
     std::string dest=q+"union ";
     /*
-    const irept &components=type.find("components");
+    const irept &components=type.components();
 
     forall_irep(it, components.get_sub())
     {
@@ -1445,7 +1445,7 @@ std::string expr2ct::convert_struct(
   std::string dest="{ ";
 
   const irept::subt &components=
-    full_type.find("components").get_sub();
+    full_type.components().get_sub();
 
   assert(components.size()==src.operands().size());
 

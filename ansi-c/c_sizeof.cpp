@@ -87,7 +87,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   else if(type.id()=="struct")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     mp_integer sum=0;
 
@@ -118,7 +118,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   else if(type.id()=="union")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     mp_integer max_size=0;
 

@@ -313,7 +313,7 @@ exprt z3_convt::bv_get_rec(
     }
     else if(type.id()=="struct")
     {
-      const irept &components=type.find("components");
+      const irept &components=type.components();
       exprt::operandst op;
       op.reserve(components.get_sub().size());
       unsigned int size;
@@ -360,7 +360,7 @@ exprt z3_convt::bv_get_rec(
     }
     else if(type.id()=="union")
     {
-      const irept &components=type.find("components");
+      const irept &components=type.components();
 
       unsigned component_nr=0;
 

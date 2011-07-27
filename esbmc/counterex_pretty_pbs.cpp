@@ -58,7 +58,7 @@ void counterexample_beautification_pbst::beautify(
   }
   else if(type.id()=="struct")
   {
-    const irept::subt &components=type.find("components").get_sub();
+    const irept::subt &components=type.components().get_sub();
 
     forall_irep(it, components)
     {

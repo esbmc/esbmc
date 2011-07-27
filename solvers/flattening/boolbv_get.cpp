@@ -146,7 +146,7 @@ exprt boolbvt::bv_get_rec(
     }
     else if(type.id()=="struct")
     {
-      const irept &components=type.find("components");
+      const irept &components=type.components();
       unsigned new_offset=0;
       exprt::operandst op;
       op.reserve(components.get_sub().size());
@@ -170,7 +170,7 @@ exprt boolbvt::bv_get_rec(
     }
     else if(type.id()=="union")
     {
-      const irept &components=type.find("components");
+      const irept &components=type.components();
 
       unsigned component_bits=
         integer2long(address_bits(components.get_sub().size()));

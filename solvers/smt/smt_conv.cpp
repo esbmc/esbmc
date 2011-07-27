@@ -198,7 +198,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
     convert_address_of_rec(struct_op);
 
     const irept::subt &components=
-      struct_op.type().find("components").get_sub();
+      struct_op.type().components().get_sub();
     
     const irep_idt &component_name=expr.component_name();
     

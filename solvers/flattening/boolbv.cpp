@@ -95,7 +95,7 @@ bool boolbvt::literal(
       if(expr.operands().size()!=1)
         throw "member takes one operand";
 
-      const irept &components=expr.type().find("components");
+      const irept &components=expr.type().components();
       const irep_idt &component_name=expr.component_name();
 
       unsigned offset=0;
@@ -495,7 +495,7 @@ void boolbvt::convert_struct(const exprt &expr, bvt &bv)
   if(boolbv_get_width(expr.type(), width))
     return conversion_failed(expr, bv);
 
-  const irept &components=expr.type().find("components");
+  const irept &components=expr.type().components();
 
   if(expr.operands().size()!=components.get_sub().size())
     throw "struct: wrong number of arguments";

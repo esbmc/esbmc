@@ -572,7 +572,7 @@ unsigned interpretert::get_size(const typet &type) const
   if(type.id()=="struct")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     unsigned sum=0;
 
@@ -589,7 +589,7 @@ unsigned interpretert::get_size(const typet &type) const
   else if(type.id()=="union")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     unsigned max_size=0;
 

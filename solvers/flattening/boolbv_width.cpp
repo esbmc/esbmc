@@ -120,7 +120,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
   }
   else if(type.id()=="struct")
   {
-    const irept &components=type.find("components");
+    const irept &components=type.components();
 
     width=0;
     
@@ -144,7 +144,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
   }
   else if(type.id()=="union")
   {
-    const irept &components=type.find("components");
+    const irept &components=type.components();
 
     width=0;
 

@@ -214,7 +214,7 @@ exprt pointer_logict::object_rec(
     }
 
     const irept::subt &components=
-      src.type().find("components").get_sub();
+      src.type().components().get_sub();
       
     mp_integer current_offset=1;
 

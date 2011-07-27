@@ -92,7 +92,7 @@ bool c_typecheck_baset::zero_initializer(
   else if(type_id=="struct")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     value=exprt("struct", type);
 
@@ -111,7 +111,7 @@ bool c_typecheck_baset::zero_initializer(
   else if(type_id=="union")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     value=exprt("union", type);
 
