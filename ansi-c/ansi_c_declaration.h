@@ -42,12 +42,12 @@ public:
   
   irep_idt get_base_name() const
   {
-    return base_name();
+    return this->base_name();
   }
   
   void set_base_name(const irep_idt &base_name)
   {
-    return set("base_name", base_name);
+    return this->base_name(base_name);
   }
   
   bool get_is_type() const

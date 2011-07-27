@@ -1494,7 +1494,7 @@ labeled_statement:
 	  $$=$1;
 	  statement(*$$, "label");
 	  mto($$, $3);
-	  $$->set("default", true);
+	  $$->dfault(true);
 	}
 	;
 
@@ -1507,14 +1507,14 @@ compound_statement:
 	{
 	  $$=$2;
 	  statement(*$$, "block");
-	  $$->set("#end_location", $3->location());
+	  $$->end_location($3->location());
 	  PARSER.pop_scope();
 	}
 	| compound_scope '{' statement_list '}'
 	{
 	  $$=$3;
 	  $$->location()=$2->location();
-	  $$->set("#end_location", $4->location());
+	  $$->end_location($4->location());
 	  PARSER.pop_scope();
 	}
 	;

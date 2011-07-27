@@ -26,7 +26,7 @@ Function: convert
 
 void convert( const goto_programt::instructiont &instruction, irept &irep ) 
 {  
-  irep.set("code", instruction.code);
+  irep.code(instruction.code);
     
   if (instruction.function!="")
     irep.function(instruction.function);

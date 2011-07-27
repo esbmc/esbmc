@@ -887,5 +887,10 @@ const irep_idt irept::a_user_provided = dstring("user-provided");
 const irep_idt irept::a_cmt_volatile = dstring("#volatile");
 const irep_idt irept::a_zero_initializer = dstring("#zero_initializer");
 const irep_idt irept::a_flavor = dstring("flavor");
+const irep_idt irept::a_cmt_active = dstring("#active");
+const irep_idt irept::a_code = dstring("code");
+const irep_idt irept::a_component = dstring("component");
+const irep_idt irept::a_c_size_type = dstring("#c_size_type");
+const irep_idt irept::a_end_location = dstring("#end_location");
 
 const irep_idt irept::s_type = dstring("type");

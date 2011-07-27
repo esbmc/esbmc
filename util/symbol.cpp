@@ -99,7 +99,7 @@ void symbolt::to_irep(irept &dest) const
   dest.add("location")=location;
   dest.name(name);
   dest.set("module", module);
-  dest.set("base_name", base_name);
+  dest.base_name(base_name);
   dest.set("mode", mode);
   dest.set("pretty_name", pretty_name);
   dest.set("ordering", ordering);
@@ -114,7 +114,7 @@ void symbolt::to_irep(irept &dest) const
   if (is_statevar) dest.set("is_statevar", true);
   if (is_actual) dest.set("is_actual", true);
   if (free_var) dest.set("free_var", true);
-  if (binding) dest.set("binding", true);
+  if (binding) dest.binding(true);
   if (lvalue) dest.set("lvalue", true);
   if (static_lifetime) dest.set("static_lifetime", true);
   if (file_local) dest.set("file_local", true);

@@ -261,7 +261,7 @@ bool c_main(
           symbol_expr(argc_symbol));
 
         // disable bounds check on that one
-        index_expr.set("bounds_check", false);
+        index_expr.bounds_check(false);
 
         init_code.copy_to_operands(code_assignt(index_expr, null));
       }
@@ -281,7 +281,7 @@ bool c_main(
           symbol_expr(envp_size_symbol));
 
         // disable bounds check on that one
-        index_expr.set("bounds_check", false);
+        index_expr.bounds_check(false);
 
         exprt is_null("=", typet("bool"));
         is_null.copy_to_operands(index_expr, null);
@@ -312,7 +312,7 @@ bool c_main(
           index_expr.copy_to_operands(symbol_expr(argv_symbol), gen_zero(index_type()));
 
           // disable bounds check on that one
-          index_expr.set("bounds_check", false);
+          index_expr.bounds_check(false);
 
           op1=exprt("address_of", arg1.type());
           op1.move_to_operands(index_expr);

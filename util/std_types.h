@@ -240,7 +240,7 @@ public:
 
   void make_ellipsis()
   {
-    add(a_arguments).set("ellipsis", true);
+    add(a_arguments).ellipsis(true);
   }
 
   typedef std::vector<argumentt> argumentst;

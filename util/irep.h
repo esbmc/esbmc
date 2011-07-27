@@ -525,6 +525,54 @@ public:
     set(a_cmt_constant, val);
   }
 
+  inline void cmt_active(const irep_idt val) {
+    set(a_cmt_active, val);
+  }
+
+  inline void base_name(const irep_idt val) {
+    set(a_base_name, val);
+  }
+
+  inline void binding(bool val) {
+    set(a_binding, val);
+  }
+
+  inline void bounds_check(const irep_idt val) {
+    set(a_bounds_check, val);
+  }
+
+  inline void code(const irept &val) {
+    set(a_code, val);
+  }
+
+  inline void component(const irep_idt val) {
+    set(a_component, val);
+  }
+
+  inline void component(unsigned int val) {
+    set(a_component, val);
+  }
+
+  inline void c_sizeof_type(const irept &val) {
+    set(a_c_size_type, val);
+  }
+
+  inline void dfault(bool val) {
+    set(a_default, val);
+  }
+
+  inline void dynamic(bool val) {
+    set(a_dynamic, val);
+  }
+
+  inline void end_location(const irept &val) {
+    set(a_end_location, val);
+  }
+
+  inline void ellipsis(bool val) {
+    set(a_ellipsis, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
@@ -585,6 +633,8 @@ public:
   static const irep_idt a_lvalue, a_reference, a_static_lifetime, a_theorem;
   static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
   static const irep_idt a_zero_initializer, a_restricted, a_flavor;
+  static const irep_idt a_cmt_active, a_code, a_component, a_c_size_type;
+  static const irep_idt a_end_location;
 
   class dt
   {

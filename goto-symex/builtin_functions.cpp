@@ -81,7 +81,7 @@ void basic_symext::symex_malloc(
     symbol.type.size(size);
   }
 
-  symbol.type.set("#dynamic", true);
+  symbol.type.dynamic(true);
 
   symbol.mode="C";
 
@@ -205,8 +205,8 @@ void basic_symext::symex_cpp_new(
   else
     symbol.type=code.type().subtype();
 
-  //symbol.type.set("#active", symbol_expr(active_symbol));
-  symbol.type.set("#dynamic", true);
+  //symbol.type.active(symbol_expr(active_symbol));
+  symbol.type.dynamic(true);
   
   new_context.add(symbol);
 
