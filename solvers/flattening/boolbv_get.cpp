@@ -196,8 +196,7 @@ exprt boolbvt::bv_get_rec(
       exprt value("union", type);
       value.operands().resize(1);
 
-      value.set("component_name",
-                components.get_sub()[component_nr].name());
+      value.component_name(components.get_sub()[component_nr].name());
       
       const typet &subtype=components.get_sub()[component_nr].type();
 

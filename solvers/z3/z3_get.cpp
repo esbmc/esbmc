@@ -370,8 +370,7 @@ exprt z3_convt::bv_get_rec(
       exprt value("union", type);
       value.operands().resize(1);
 
-      value.set("component_name",
-                components.get_sub()[component_nr].name());
+      value.component_name(components.get_sub()[component_nr].name());
 
       exprt::operandst op;
       op.reserve(1);
