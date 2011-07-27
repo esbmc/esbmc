@@ -45,6 +45,12 @@ void goto_convertt::finish_gotos()
 
     if(i.code.statement()=="non-deterministic-goto")
     {
+      assert(0 && "can't handle non-deterministic gotos");
+      // jmorse - looks like this portion of code is related to the non-existant
+      // nondeterministic goto. Nothing else in {es,c}bmc fiddles with
+      // "destinations", and I'm busy fixing the type situation, so gets
+      // disabled as it serves no purpose and is only getting in the way.
+#if 0
       const irept &destinations=i.code.find("destinations");
 
       i.make_goto();
@@ -63,6 +69,7 @@ void goto_convertt::finish_gotos()
 
         i.targets.push_back(l_it->second);
       }
+#endif
     }
     else if(i.is_start_thread())
     {
