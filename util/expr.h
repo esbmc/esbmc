@@ -63,7 +63,7 @@ public:
   const operandst &operands() const
   { return (const operandst &)(find(o_operands).get_sub()); }
 
-  const irep_idt value(void) const {
+  const irep_idt &value(void) const {
     return get(a_value);
   }
 
