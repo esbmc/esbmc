@@ -36,10 +36,10 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
     
   irep.set("typeid", (long) instruction.type);
 
-  irep.set("guard", instruction.guard);
+  irep.guard(instruction.guard);
     
   if (instruction.event!="")
-    irep.set("event", instruction.event);
+    irep.event(instruction.event);
   
   if(! instruction.targets.empty())
   {

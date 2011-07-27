@@ -541,6 +541,10 @@ public:
     set(a_bounds_check, val);
   }
 
+  inline void bounds_check(bool val) {
+    set(a_bounds_check, val);
+  }
+
   inline void code(const irept &val) {
     set(a_code, val);
   }
@@ -571,6 +575,62 @@ public:
 
   inline void ellipsis(bool val) {
     set(a_ellipsis, val);
+  }
+
+  inline void axiom(bool val) {
+    set(a_axiom, val);
+  }
+
+  inline void event(const irep_idt &val) {
+    set(a_event, val);
+  }
+
+  inline void failed_symbol(const irep_idt val) {
+    set(a_failed_symbol, val);
+  }
+
+  inline void file(const irep_idt val) {
+    set(a_file, val);
+  }
+
+  inline void file_local(bool val) {
+    set(a_file_local, val);
+  }
+
+  inline void free_var(bool val) {
+    set(a_free_var, val);
+  }
+
+  inline void guard(const irept &val) {
+    set(a_guard, val);
+  }
+
+  inline void hide(bool val) {
+    set(a_hide, val);
+  }
+
+  inline void id_class(unsigned int val) {
+    set(a_id_class, val);
+  }
+
+  inline void cmt_identifier(const irep_idt val) {
+    set(a_cmt_identifier, val);
+  }
+
+  inline void implicit(bool val) {
+    set(a_implicit, val);
+  }
+
+  inline void incomplete(bool val) {
+    set(a_incomplete, val);
+  }
+
+  inline void inlined(bool val) {
+    set(a_inlined, val);
+  }
+
+  inline void invalid_object(bool val) {
+    set(a_invalid_object, val);
   }
 
   friend bool operator==(const irept &i1, const irept &i2);
@@ -634,7 +694,7 @@ public:
   static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
   static const irep_idt a_zero_initializer, a_restricted, a_flavor;
   static const irep_idt a_cmt_active, a_code, a_component, a_c_size_type;
-  static const irep_idt a_end_location;
+  static const irep_idt a_end_location, a_guard;
 
   class dt
   {

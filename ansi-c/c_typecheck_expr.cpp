@@ -386,7 +386,7 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
     if(expr.type().id()=="code") // function designator
     { // special case: this is sugar for &f
       exprt tmp("address_of", pointer_typet());
-      tmp.set("#implicit", true);
+      tmp.implicit(true);
       tmp.type().subtype()=expr.type();
       tmp.location()=expr.location();
       tmp.move_to_operands(expr);
@@ -1077,7 +1077,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
   const irep_idt &identifier=component.cmt_identifier();
 
   if(identifier!="")
-    expr.set("#identifier", identifier);
+    expr.cmt_identifier(identifier);
 }
 
 /*******************************************************************\
@@ -1225,7 +1225,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
     // make the implicit address_of an explicit address_of
     exprt tmp;
     tmp.swap(op);
-    tmp.set("#implicit", false);
+    tmp.implicit(false);
     expr.swap(tmp);
     return;
   }
@@ -1334,7 +1334,7 @@ void c_typecheck_baset::typecheck_expr_function_identifier(exprt &expr)
   if(expr.type().id()=="code")
   {
     exprt tmp("address_of", pointer_typet());
-    tmp.set("#implicit", true);
+    tmp.implicit(true);
     tmp.type().subtype()=expr.type();
     tmp.location()=expr.location();
     tmp.move_to_operands(expr);
@@ -1464,7 +1464,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
       new_symbol.base_name=std::string(id2string(identifier), 3, std::string::npos);
       new_symbol.location=expr.location();
       new_symbol.type=code_typet();
-      new_symbol.type.set("#incomplete", true);
+      new_symbol.type.incomplete(true);
       new_symbol.type.add("return_type")=int_type();
       // TODO: should add arguments
 
@@ -1502,7 +1502,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   else
   {
     exprt tmp("dereference", f_op_type.subtype());
-    tmp.set("#implicit", true);
+    tmp.implicit(true);
     tmp.location()=f_op.location();
     tmp.move_to_operands(f_op);
     f_op.swap(tmp);

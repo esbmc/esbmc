@@ -438,8 +438,8 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
 
     if(inlined)
     {
-      old_symbol.type.set("#inlined", true);
-      new_symbol.type.set("#inlined", true);
+      old_symbol.type.inlined(true);
+      new_symbol.type.inlined(true);
     }
     
     // do value

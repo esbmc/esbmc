@@ -105,7 +105,7 @@ void symbolt::to_irep(irept &dest) const
   dest.set("ordering", ordering);
 
   if (theorem) dest.set("theorem", true);
-  if (axiom) dest.set("axiom", true);
+  if (axiom) dest.axiom(true);
   if (is_type) dest.set("is_type", true);
   if (is_macro) dest.set("is_macro", true);
   if (is_exported) dest.set("is_exported", true);
@@ -113,11 +113,11 @@ void symbolt::to_irep(irept &dest) const
   if (is_output) dest.set("is_output", true);
   if (is_statevar) dest.set("is_statevar", true);
   if (is_actual) dest.set("is_actual", true);
-  if (free_var) dest.set("free_var", true);
+  if (free_var) dest.free_var(true);
   if (binding) dest.binding(true);
   if (lvalue) dest.set("lvalue", true);
   if (static_lifetime) dest.set("static_lifetime", true);
-  if (file_local) dest.set("file_local", true);
+  if (file_local) dest.file_local(true);
   if (is_extern) dest.set("is_extern", true);
   if (is_volatile) dest.set("is_volatile", true);       
 }

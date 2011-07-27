@@ -166,7 +166,7 @@ public:
       (!get_is_global() && !get_is_extern() && !is_code);
     
     if(get_is_inline())
-      symbol.type.set("#inlined", true);
+      symbol.type.inlined(true);
   }
 };
 

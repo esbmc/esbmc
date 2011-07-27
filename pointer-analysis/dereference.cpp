@@ -190,7 +190,7 @@ void dereferencet::dereference(
       new_context.move(symbol);
     }
 
-    value.set("#invalid_object", true);
+    value.invalid_object(true);
   }
 
   dest.swap(value);

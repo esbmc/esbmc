@@ -38,7 +38,7 @@ public:
 
   void set_file(const irep_idt &file)
   {
-    set("file", file);
+    this->file(file);
   }
 
   void set_line(const irep_idt &line)

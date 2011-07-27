@@ -398,7 +398,7 @@ void ansi_c_scanner_init()
                   i->id("symbol");
                   i->cmt_base_name(base_name);
                   i->identifier(identifier);
-                  i->set("#id_class", result);
+                  i->id_class((unsigned int)result);
                   return token;
 		}
 

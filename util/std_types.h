@@ -214,7 +214,7 @@ public:
     
     void set_identifier(const irep_idt &identifier)
     {
-      set("#identifier", identifier);
+      cmt_identifier(identifier);
     }
 
     void set_base_name(const irep_idt &name)

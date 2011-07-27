@@ -256,7 +256,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
     f.body.number_targets();
 
     if(hide(f.body))
-      f.type.set("#hide", true);
+      f.type.hide(true);
   }
 
 }

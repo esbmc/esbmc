@@ -38,7 +38,7 @@ void add_failed_symbol(symbolt &symbol, contextt &context)
     new_symbol.type=symbol.type.subtype();
     new_symbol.value.make_nil();
     
-    symbol.type.set("#failed_symbol", new_symbol.name);
+    symbol.type.failed_symbol(new_symbol.name);
     
     if(new_symbol.type.id()=="pointer")
       add_failed_symbol(new_symbol, context); // recursive call
