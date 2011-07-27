@@ -1851,7 +1851,7 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
     }
 
     typet value_type(is_signed?"signedbv":"unsignedbv");
-    value_type.set("width", width);
+    value_type.width(width);
 
     expr=from_integer(value, value_type);
     expr.location()=location;
@@ -2076,7 +2076,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
       typet pointer_diff_type;
 
       pointer_diff_type=typet("signedbv");
-      pointer_diff_type.set("width", config.ansi_c.pointer_diff_width);
+      pointer_diff_type.width(config.ansi_c.pointer_diff_width);
 
       expr.type()=pointer_diff_type;
       return;

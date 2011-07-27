@@ -441,6 +441,22 @@ public:
     set(a_hex_or_oct, which);
   }
 
+  inline void cmt_width(const irep_idt width) {
+    set(a_cmt_width, width);
+  }
+
+  inline void cmt_width(unsigned int width) {
+    set(a_cmt_width, width);
+  }
+
+  inline void width(const irep_idt width) {
+    set(a_width, width);
+  }
+
+  inline void width(unsigned int width) {
+    set(a_width, width);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)

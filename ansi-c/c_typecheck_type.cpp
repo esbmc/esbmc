@@ -111,7 +111,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     bool size_is_unsigned=(size.type().id()=="unsignedbv");
 
     typet integer_type(size_is_unsigned?"unsignedbv":"signedbv");
-    integer_type.set("width", config.ansi_c.int_width);
+    integer_type.width(config.ansi_c.int_width);
 
     implicit_typecast(size, integer_type);
 
@@ -269,7 +269,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
 
     typet tmp(base_type);
     type.swap(tmp);
-    type.set("width", width);
+    type.width(width);
   }
   else if(type.id()=="type_of")
   {

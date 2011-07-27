@@ -99,7 +99,7 @@ Function: smt_convt::array_index_type
 typet smt_convt::gen_array_index_type()
 {
   typet t("signedbv");
-  t.set("width", 32);
+  t.width(32);
   return t;
 }
 
@@ -218,7 +218,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
     assert(found);
     
     typet index_type("unsignedbv");
-    index_type.set("width", config.ansi_c.pointer_width);
+    index_type.width(config.ansi_c.pointer_width);
 
     exprt index=from_integer(offset, index_type);
 

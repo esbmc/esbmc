@@ -1138,7 +1138,7 @@ bool simplify_exprt::simplify_concatenation(exprt &expr)
       {
         bool value=op.is_true();
         op=exprt("constant", typet("unsignedbv"));
-        op.type().set("width", 1);
+        op.type().width(1);
         op.value(value?"1":"0");
       }
     }
@@ -1160,7 +1160,7 @@ bool simplify_exprt::simplify_concatenation(exprt &expr)
         const std::string new_value=
           opi.value().as_string()+opn.value().as_string();
         opi.value(new_value);
-        opi.type().set("width", new_value.size());
+        opi.type().width(new_value.size());
         // erase opn
         expr.operands().erase(expr.operands().begin()+i+1);
         result=true;

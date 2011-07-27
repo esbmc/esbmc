@@ -298,7 +298,7 @@ void ansi_c_convert_typet::write(typet &type)
       throw 0;
     }
 
-    type.set("width", width);
+    type.width(width);
   }
 
   c_qualifiers.write(type);

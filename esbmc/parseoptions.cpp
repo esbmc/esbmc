@@ -713,7 +713,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   }
 
   typet uint32 = typet("unsignedbv");
-  uint32.set("width", 32);
+  uint32.width(32);
   new_insn.type = ASSIGN;
   new_insn.function = insn->function;
   constant_exprt c_expr = constant_exprt(uint32);
