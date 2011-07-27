@@ -445,7 +445,7 @@ void c_typecheck_baset::typecheck_side_effect_statement_expression(
     sideeffect.location()=fc.location();
 
     sideeffect.type()=
-      static_cast<const typet &>(fc.function().type().find("return_type"));
+      static_cast<const typet &>(fc.function().type().return_type());
 
     expr.type()=sideeffect.type();
 

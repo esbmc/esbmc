@@ -253,7 +253,7 @@ std::string expr2ct::convert_rec(
   {
     if(src.subtype().id()=="code")
     {
-      const typet &return_type=(typet &)src.subtype().find("return_type");
+      const typet &return_type=(typet &)src.subtype().return_type();
 
       std::string dest=q+convert(return_type);
 
@@ -303,7 +303,7 @@ std::string expr2ct::convert_rec(
   }
   else if(src.id()=="code")
   {
-    const typet &return_type=(typet &)src.find("return_type");
+    const typet &return_type=(typet &)src.return_type();
 
     std::string dest=convert(return_type)+" ";
 

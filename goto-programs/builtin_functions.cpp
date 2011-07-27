@@ -291,7 +291,7 @@ void goto_convertt::do_printf(
      f_id=="c::printf")
   {
     exprt printf_code("sideeffect",
-      static_cast<const typet &>(function.type().find("return_type")));
+      static_cast<const typet &>(function.type().return_type()));
 
     printf_code.statement("printf");
 

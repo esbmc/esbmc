@@ -202,8 +202,8 @@ bool base_type_eqt::base_type_eq_rec(
       if(!base_type_eq_rec(subtype1, subtype2)) return false;
     }
     
-    const typet &return_type1=(typet &)type1.find("return_type");
-    const typet &return_type2=(typet &)type2.find("return_type");
+    const typet &return_type1=(typet &)type1.return_type();
+    const typet &return_type2=(typet &)type2.return_type();
     
     if(!base_type_eq_rec(return_type1, return_type2))
       return false;
