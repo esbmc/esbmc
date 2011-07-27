@@ -910,3 +910,6 @@ const irep_idt irept::s_body = dstring("body");
 const irep_idt irept::s_member = dstring("member");
 const irep_idt irept::s_labels = dstring("labels");
 const irep_idt irept::s_c_sizeof_type = dstring("#c_sizeof_type");
+const irep_idt irept::s_bv = dstring("bv");
+const irep_idt irept::s_targets = dstring("targets");
+const irep_idt irept::s_variables = dstring("variables");

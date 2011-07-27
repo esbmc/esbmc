@@ -288,6 +288,18 @@ public:
     return find(s_c_sizeof_type);
   }
 
+  inline const irept &bv(void) const {
+    return find(s_bv);
+  }
+
+  inline const irept &targets(void) const {
+    return find(s_targets);
+  }
+
+  inline const irept &variables(void) const {
+    return find(s_variables);
+  }
+
   inline bool is_dynamic_set(void) const {
     const irep_idt &c = get(a_dynamic);
     return (c != "");
@@ -845,7 +857,7 @@ protected:
 public:
   static const irep_idt s_type, s_arguments, s_components, s_case;
   static const irep_idt s_return_type, s_body, s_member, s_labels;
-  static const irep_idt s_c_sizeof_type;
+  static const irep_idt s_c_sizeof_type, s_bv, s_targets, s_variables;
   static const irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
   static const irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
   static const irep_idt a_access, a_destination, a_base_name, a_comment,a_event;

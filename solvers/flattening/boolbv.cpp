@@ -432,7 +432,7 @@ void boolbvt::convert_bv_literals(const exprt &expr, bvt &bv)
 
   bv.resize(width);
 
-  const irept::subt &bv_sub=expr.find("bv").get_sub();
+  const irept::subt &bv_sub=expr.bv().get_sub();
 
   if(bv_sub.size()!=width)
     throw "bv_literals with wrong size";

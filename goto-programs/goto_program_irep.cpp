@@ -116,7 +116,7 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
     instruction.labels.push_back(it->id());
   }
   
-  const irept &vars=irep.find("variables");
+  const irept &vars=irep.variables();
   const irept::subt &vsubs=vars.get_sub();  
   for (irept::subt::const_iterator it=vsubs.begin();
        it!=vsubs.end();
@@ -182,7 +182,7 @@ void convert( const irept &irep, goto_programt &program )
     convert(*it, program.instructions.back());
     
     number_targets_list.push_back(std::list<unsigned>());
-    const irept &targets=it->find("targets");
+    const irept &targets=it->targets();
     const irept::subt &tsubs=targets.get_sub();
     for (irept::subt::const_iterator tit=tsubs.begin();
          tit!=tsubs.end();
