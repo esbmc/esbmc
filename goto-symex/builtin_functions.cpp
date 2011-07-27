@@ -327,7 +327,7 @@ void basic_symext::symex_fkt(
   Forall_operands(it, fc)
     if(first) first=false; else new_fc.move_to_operands(*it);
 
-  new_fc.set(irept::a_identifier, fc.op0().identifier());
+  new_fc.identifier(fc.op0().identifier());
 
   fc.swap(new_fc);
   #endif

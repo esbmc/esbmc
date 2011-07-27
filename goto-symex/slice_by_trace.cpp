@@ -42,7 +42,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
 
   merge_identifier = "goto_symex::\\merge";
   merge_symbol=exprt(exprt::symbol, typet(typet::t_bool));
-  merge_symbol.set(irept::a_identifier, merge_identifier);
+  merge_symbol.identifier(merge_identifier);
 
   std::vector<exprt> trace_conditions;
 
@@ -308,7 +308,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	  merge.push_back(t[j]);
 	} else {
 	  exprt merge_sym =exprt(exprt::symbol, typet(typet::t_bool));
-	  merge_sym.set(irept::a_identifier, id2string(merge_identifier)+"#"+
+	  merge_sym.identifier(id2string(merge_identifier)+"#"+
 			i2string(merge_count++));
 	  exprt t_copy (t[j]);
 	  merge_map_back.push_back(t_copy);
@@ -337,7 +337,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	      exprt constant_value = exprt(exprt::constant,(*pvi).type());
 	      std::string bit_string = 
 		integer2binary(atoi(k->c_str()), bv_width((*pvi).type()));
-	      constant_value.set(exprt::a_value, bit_string);
+	      constant_value.value(bit_string);
 	      equal_cond.move_to_operands(constant_value);
 	      eq_conds.push_back(equal_cond);
 	      pvi++;
@@ -557,7 +557,7 @@ void symex_slice_by_tracet::assign_merges(
   for (std::vector<exprt>::reverse_iterator i = merge_map_back.rbegin();
        i != merge_map_back.rend(); i++) {
     exprt merge_sym =exprt(exprt::symbol, typet(typet::t_bool));
-    merge_sym.set(irept::a_identifier, id2string(merge_identifier)+"#"+i2string(merge_count));
+    merge_sym.identifier(id2string(merge_identifier)+"#"+i2string(merge_count));
     merge_count--;
     guardt t_guard;
     t_guard.make_true();

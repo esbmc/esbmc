@@ -399,7 +399,7 @@ void goto_symex_statet::assignment(
 
   level2.rename(l1_identifier, entry.count,exec_node_id);
 
-  lhs.set(irept::a_identifier, level2.name(l1_identifier, entry.count));
+  lhs.identifier(level2.name(l1_identifier, entry.count));
 
   if (ex_state.owning_rt->state_hashing)
     level2.current_hashes[orig_name] = hash;
@@ -424,7 +424,7 @@ void goto_symex_statet::assignment(
     level2.get_original_name(l1_rhs);
 
     exprt l1_lhs(exprt::symbol, lhs.type());
-    l1_lhs.set(irept::a_identifier, l1_identifier);
+    l1_lhs.identifier(l1_identifier);
 
     value_set.assign(l1_lhs, l1_rhs, ns);
   }
@@ -566,7 +566,7 @@ void goto_symex_statet::level1t::rename(exprt &expr,unsigned node_id)
       current_names.find(identifier);
 
     if(it!=current_names.end())
-      expr.set(irept::a_identifier, name(identifier, it->second,node_id));
+      expr.identifier(name(identifier, it->second,node_id));
   }
   else if(expr.id()==exprt::addrof ||
           expr.id()=="implicit_address_of" ||
@@ -618,13 +618,13 @@ void goto_symex_statet::level2t::rename(exprt &expr, unsigned node_id)
       if(it->second.constant.is_not_nil())
         expr=it->second.constant;
       else
-        expr.set(irept::a_identifier, name(identifier, it->second.count));
+        expr.identifier(name(identifier, it->second.count));
     }
     else
     {
       std::string new_identifier=name(identifier, 0);
       original_identifiers[new_identifier]=identifier;
-      expr.set(irept::a_identifier, new_identifier);
+      expr.identifier(new_identifier);
     }
   }
   else if(expr.id()==exprt::addrof ||
@@ -773,7 +773,7 @@ void goto_symex_statet::renaming_levelt::get_original_name(exprt &expr) const
 //	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::renaming_levelt::get_original_name 2" << std::endl;
 
     assert(it->second!="");
-    expr.set(irept::a_identifier, it->second);
+    expr.identifier(it->second);
   }
 }
 
