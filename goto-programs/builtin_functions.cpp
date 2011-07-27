@@ -44,7 +44,7 @@ static void get_alloc_type_rec(
 {
   static bool is_mul=false;
 
-  const irept &sizeof_type=src.find("#c_sizeof_type");
+  const irept &sizeof_type=src.c_sizeof_type();
   //nec: ex33.c
   if(!sizeof_type.is_nil() && !is_mul)
   {

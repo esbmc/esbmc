@@ -909,3 +909,4 @@ const irep_idt irept::s_return_type = dstring("return_type");
 const irep_idt irept::s_body = dstring("body");
 const irep_idt irept::s_member = dstring("member");
 const irep_idt irept::s_labels = dstring("labels");
+const irep_idt irept::s_c_sizeof_type = dstring("#c_sizeof_type");

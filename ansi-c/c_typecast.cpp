@@ -586,7 +586,7 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
     {
       // preserve #c_sizeof_type -- don't make it a reference!
       const irept c_sizeof_type=
-        dest.op0().find("#c_sizeof_type");
+        dest.op0().c_sizeof_type();
 
       simplify_exprt simplify_expr;
       simplify_expr.simplify_typecast(dest, simplify_exprt::NORMAL);
