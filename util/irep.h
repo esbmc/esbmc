@@ -433,6 +433,14 @@ public:
     set(a_comp_name, name);
   }
 
+  inline void hex_or_oct(const irep_idt which) {
+    set(a_hex_or_oct, which);
+  }
+
+  inline void hex_or_oct(bool which) {
+    set(a_hex_or_oct, which);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)

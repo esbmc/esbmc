@@ -417,7 +417,7 @@ void ansi_c_scanner_init()
 {octinteger}	{
                   mp_integer value=string2integer(yytext, 8);
                   make_integer(integer2string(value));
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 {octinteger_w}  {
@@ -427,14 +427,14 @@ void ansi_c_scanner_init()
                   mp_integer value=string2integer(str, 8);
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#width", w);
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
                   return(TOK_INTEGER);
     }
 {hexinteger}	{
                   std::string hex(yytext, 2, std::string::npos);
                   mp_integer value=string2integer(hex, 16);
                   make_integer(integer2string(value));
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 {hexinteger_w}   {
@@ -443,7 +443,7 @@ void ansi_c_scanner_init()
                   hex=hex.substr(0, hex.rfind('i'));
                   mp_integer value=string2integer(hex, 16);
                   make_integer(integer2string(value));
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
                   yyansi_clval.expr->type().set("#width", w);
                   return(TOK_INTEGER);
     }
@@ -465,7 +465,7 @@ void ansi_c_scanner_init()
                   mp_integer value=string2integer(yytext, 8);
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#unsigned", true);
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 {octinteger_u_w}  {
@@ -475,7 +475,7 @@ void ansi_c_scanner_init()
                   mp_integer value=string2integer(str, 8);
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#unsigned", true);
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
                   yyansi_clval.expr->type().set("#width", w);
                   return(TOK_INTEGER);
     }
@@ -484,7 +484,7 @@ void ansi_c_scanner_init()
                   mp_integer value=string2integer(hex, 16);
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#unsigned", true);
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 {hexinteger_u_w}  {
@@ -494,7 +494,7 @@ void ansi_c_scanner_init()
                   mp_integer value=string2integer(hex, 16);
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#unsigned", true);
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
                   yyansi_clval.expr->type().set("#width", w);
                   return(TOK_INTEGER);
     }
@@ -507,7 +507,7 @@ void ansi_c_scanner_init()
                   mp_integer value=string2integer(yytext, 8);
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#width", "long");
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 {hexinteger_l}	{
@@ -515,7 +515,7 @@ void ansi_c_scanner_init()
                   mp_integer value=string2integer(hex, 16);
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#width", "long");
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 {decinteger_ul}	{
@@ -529,7 +529,7 @@ void ansi_c_scanner_init()
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#width", "long");
                   yyansi_clval.expr->type().set("#unsigned", true);
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 {hexinteger_ul}	{
@@ -538,7 +538,7 @@ void ansi_c_scanner_init()
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#width", "long");
                   yyansi_clval.expr->type().set("#unsigned", true);
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 {decinteger_ll}	{
@@ -550,7 +550,7 @@ void ansi_c_scanner_init()
                   mp_integer value=string2integer(yytext, 8);
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#width", "longlong");
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 {hexinteger_ll}	{
@@ -558,7 +558,7 @@ void ansi_c_scanner_init()
                   mp_integer value=string2integer(hex, 16);
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#width", "longlong");
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 {decinteger_ull} {
@@ -570,7 +570,7 @@ void ansi_c_scanner_init()
 {hexinteger_ull} {
                    mp_integer value=string2integer(yytext, 16);
                    make_integer(integer2string(value));
-                   yyansi_clval.expr->set("#hex_or_oct", true);
+                   yyansi_clval.expr->hex_or_oct(true);
                    yyansi_clval.expr->type().set("#width", "longlong");
                    yyansi_clval.expr->type().set("#unsigned", true);
                    return(TOK_INTEGER);
@@ -580,7 +580,7 @@ void ansi_c_scanner_init()
                   make_integer(integer2string(value));
                   yyansi_clval.expr->type().set("#width", "longlong");
                   yyansi_clval.expr->type().set("#unsigned", true);
-                  yyansi_clval.expr->set("#hex_or_oct", true);
+                  yyansi_clval.expr->hex_or_oct(true);
 		  return(TOK_INTEGER);
 		}
 

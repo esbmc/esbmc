@@ -53,12 +53,12 @@ void convert_integer_literal(
   }
   else if(base==8)
   {
-    dest.set("#hex_or_oct", true);
+    dest.hex_or_oct(true);
     value=string2integer(src, 8);
   }
   else
   {
-    dest.set("#hex_or_oct", true);
+    dest.hex_or_oct(true);
     std::string without_prefix(src, 2, std::string::npos);
     value=string2integer(without_prefix, 16);
   }
