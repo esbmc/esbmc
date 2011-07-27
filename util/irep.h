@@ -429,6 +429,10 @@ public:
     set(a_comment, cmt);
   }
 
+  inline void component_name(const irep_idt name) {
+    set(a_comp_name, name);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)

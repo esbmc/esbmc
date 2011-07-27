@@ -767,7 +767,7 @@ public:
 
   void set_component_name(const irep_idt &component_name)
   {
-    set("component_name", component_name);
+    this->component_name(component_name);
   }
 };
 

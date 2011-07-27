@@ -342,13 +342,13 @@ postfix_expression:
 	{ $$=$2;
 	  set(*$$, "member");
 	  mto($$, $1);
-	  $$->set("component_name", $3->cmt_base_name());
+	  $$->component_name($3->cmt_base_name());
 	}
 	| postfix_expression TOK_ARROW member_name
 	{ $$=$2;
 	  set(*$$, "ptrmember");
 	  mto($$, $1);
-	  $$->set("component_name", $3->cmt_base_name());
+	  $$->component_name($3->cmt_base_name());
 	}
 	| postfix_expression TOK_INCR
 	{ $$=$2;
@@ -1427,7 +1427,7 @@ designated_initializer:
         {
           $$=$1;
           $$->id("designated_initializer");
-          $$->set("component_name", $2->cmt_base_name());
+          $$->component_name($2->cmt_base_name());
           $$->move_to_operands(*$4);
         }
         ;

@@ -150,9 +150,9 @@ protected:
 
     switch(what)
     {
-    case IS_ZERO: result.set("component_name", "is_zero"); break;
-    case SIZE: result.set("component_name", "size"); break;
-    case LENGTH: result.set("component_name", "length"); break;
+    case IS_ZERO: result.component_name("is_zero"); break;
+    case SIZE: result.component_name("size"); break;
+    case LENGTH: result.component_name("length"); break;
     default: assert(false);
     }
 

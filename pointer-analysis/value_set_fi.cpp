@@ -1082,7 +1082,7 @@ void value_set_fit::get_reference_set_sharing_rec(
 
         exprt member_expr("member", expr.type());
         member_expr.copy_to_operands(object);
-        member_expr.set("component_name", component_name);
+        member_expr.component_name(component_name);
         
         // adjust type?
         if(ns.follow(struct_op.type())!=ns.follow(object.type()))
@@ -1160,7 +1160,7 @@ void value_set_fit::assign(
       if(subtype.id()=="code") continue;
     
       exprt lhs_member("member", subtype);
-      lhs_member.set("component_name", name);
+      lhs_member.component_name(name);
       lhs_member.copy_to_operands(lhs);
 
       exprt rhs_member;
@@ -1200,14 +1200,14 @@ void value_set_fit::assign(
             // no! do op0
             rhs_member=exprt("member", subtype);
             rhs_member.copy_to_operands(rhs.op0());
-            rhs_member.set("component_name", name);
+            rhs_member.component_name(name);
           }
         }
         else
         {
           rhs_member=exprt("member", subtype);
           rhs_member.copy_to_operands(rhs);
-          rhs_member.set("component_name", name);
+          rhs_member.component_name(name);
         }
 
         assign(lhs_member, rhs_member, ns);

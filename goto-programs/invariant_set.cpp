@@ -710,8 +710,8 @@ void invariant_sett::strengthen_rec(const exprt &expr)
       {
         const irep_idt &component_name=it->name();
 
-        lhs_member_expr.set("component_name", component_name);
-        rhs_member_expr.set("component_name", component_name);
+        lhs_member_expr.component_name(component_name);
+        rhs_member_expr.component_name(component_name);
         lhs_member_expr.type()=it->type();
         rhs_member_expr.type()=it->type();
 

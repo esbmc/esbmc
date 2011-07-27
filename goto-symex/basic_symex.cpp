@@ -477,7 +477,7 @@ void basic_symext::symex_assign_member(
   new_rhs.copy_to_operands(exprt("member_name"));
   new_rhs.move_to_operands(rhs);
 
-  new_rhs.op1().set("component_name", component_name);
+  new_rhs.op1().component_name(component_name);
 
   symex_assign_rec(state, ex_state, lhs_struct, new_rhs, guard,node_id);
 }
