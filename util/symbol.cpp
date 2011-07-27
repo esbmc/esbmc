@@ -98,13 +98,13 @@ void symbolt::to_irep(irept &dest) const
   dest.add("symvalue")=value;
   dest.add("location")=location;
   dest.name(name);
-  dest.set("module", module);
+  dest.module(module);
   dest.base_name(base_name);
-  dest.set("mode", mode);
-  dest.set("pretty_name", pretty_name);
-  dest.set("ordering", ordering);
+  dest.mode(mode);
+  dest.pretty_name(pretty_name);
+  dest.ordering(ordering);
 
-  if (theorem) dest.set("theorem", true);
+  if (theorem) dest.theorem(true);
   if (axiom) dest.axiom(true);
   if (is_type) dest.is_type(true);
   if (is_macro) dest.is_macro(true);
@@ -115,8 +115,8 @@ void symbolt::to_irep(irept &dest) const
   if (is_actual) dest.is_actual(true);
   if (free_var) dest.free_var(true);
   if (binding) dest.binding(true);
-  if (lvalue) dest.set("lvalue", true);
-  if (static_lifetime) dest.set("static_lifetime", true);
+  if (lvalue) dest.lvalue(true);
+  if (static_lifetime) dest.static_lifetime(true);
   if (file_local) dest.file_local(true);
   if (is_extern) dest.is_extern(true);
   if (is_volatile) dest.is_volatile(true);       

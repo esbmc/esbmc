@@ -896,5 +896,9 @@ const irep_idt irept::a_guard = dstring("guard");
 const irep_idt irept::a_label = dstring("label");
 const irep_idt irept::a_lhs = dstring("lhs");
 const irep_idt irept::a_location = dstring("location");
+const irep_idt irept::a_object_type = dstring("object_type");
+const irep_idt irept::a_cmt_size = dstring("#size");
+const irep_idt irept::a_cmt_type = dstring("#type");
+const irep_idt irept::a_type_id = dstring("type_id");
 
 const irep_idt irept::s_type = dstring("type");

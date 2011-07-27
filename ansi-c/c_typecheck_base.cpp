@@ -132,7 +132,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
       return; // bail out, we have an appropriate symbol already.
 
     irep_idt newtag((std::string("#anon#") + typestr).c_str());
-    symbol.type.set("tag", newtag);
+    symbol.type.tag(newtag);
   }
   else if(symbol.file_local) // rename file-local stuff
   {

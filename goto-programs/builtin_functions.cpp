@@ -471,8 +471,8 @@ void goto_convertt::do_malloc(
   exprt new_expr("sideeffect", lhs.type());
   new_expr.statement("malloc");
   new_expr.copy_to_operands(arguments[0]);
-  new_expr.set("#size", alloc_size);
-  new_expr.set("#type", alloc_type);
+  new_expr.cmt_size(alloc_size);
+  new_expr.cmt_type(alloc_type);
   new_expr.location()=location;
 
   goto_programt::targett t_n=dest.add_instruction(ASSIGN);

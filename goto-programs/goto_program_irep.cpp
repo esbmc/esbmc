@@ -32,9 +32,9 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
     irep.function(instruction.function);
     
   if (instruction.location.is_not_nil())
-    irep.set("location", instruction.location);
+    irep.location(instruction.location);
     
-  irep.set("typeid", (long) instruction.type);
+  irep.type_id((long) instruction.type);
 
   irep.guard(instruction.guard);
     

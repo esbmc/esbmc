@@ -80,12 +80,12 @@ void c_qualifierst::write(typet &dest) const
     dest.remove("#constant");
 
   if(is_volatile)
-    dest.set("#volatile", true);
+    dest.cmt_volatile(true);
   else
     dest.remove("#volatile");
 
   if(is_restricted)
-    dest.set("#restricted", true);
+    dest.restricted(true);
   else
     dest.remove("#restricted");
 }

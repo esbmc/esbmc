@@ -468,7 +468,7 @@ void dereferencet::build_reference_to(
       {
         exprt type_expr=exprt("pointer_object_has_type", typet("bool"));
         type_expr.copy_to_operands(deref_expr);
-        type_expr.set("object_type", type);
+        type_expr.object_type(type);
         type_expr.make_not();
 
         guardt tmp_guard(guard);

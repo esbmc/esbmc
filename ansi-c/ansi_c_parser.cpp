@@ -227,7 +227,7 @@ void ansi_c_parsert::new_declaration(
     is_tag?"tag-"+base_name:base_name;
     
   if(is_tag)
-    final_type.set("tag", base_name);
+    final_type.tag(base_name);
 
   std::string name;
 

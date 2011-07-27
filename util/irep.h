@@ -689,16 +689,68 @@ public:
     set(a_line, val);
   }
 
-  inline void location(const irep_idt &val) {
+  inline void location(const irept &val) {
     set(a_location, val);
   }
 
-  inline void lvalue(const irep_idt &val) {
+  inline void lvalue(bool val) {
     set(a_lvalue, val);
   }
 
   inline void mode(const irep_idt &val) {
     set(a_mode, val);
+  }
+
+  inline void module(const irep_idt &val) {
+    set(a_module, val);
+  }
+
+  inline void object_type(const irept &val) {
+    set(a_object_type, val);
+  }
+
+  inline void ordering(unsigned int val) {
+    set(a_ordering, val);
+  }
+
+  inline void pretty_name(const irep_idt &val) {
+    set(a_pretty_name, val);
+  }
+
+  inline void restricted(bool val) {
+    set(a_restricted, val);
+  }
+
+  inline void cmt_size(const irept &val) {
+    set(a_cmt_size, val);
+  }
+
+  inline void static_lifetime(bool val) {
+    set(a_static_lifetime, val);
+  }
+
+  inline void tag(const irep_idt &val) {
+    set(a_tag, val);
+  }
+
+  inline void theorem(bool val) {
+    set(a_theorem, val);
+  }
+
+  inline void cmt_type(const irept &val) {
+    set(a_cmt_type, val);
+  }
+
+  inline void type_id(unsigned int val) {
+    set(a_type_id, val);
+  }
+
+  inline void cmt_volatile(bool val) {
+    set(a_cmt_volatile, val);
+  }
+
+  inline void zero_initializer(bool val) {
+    set(a_zero_initializer, val);
   }
 
   friend bool operator==(const irept &i1, const irept &i2);
@@ -763,6 +815,8 @@ public:
   static const irep_idt a_zero_initializer, a_restricted, a_flavor;
   static const irep_idt a_cmt_active, a_code, a_component, a_c_size_type;
   static const irep_idt a_end_location, a_guard, a_label, a_lhs, a_location;
+  static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;
+  static const irep_idt a_cmt_type;
 
   class dt
   {

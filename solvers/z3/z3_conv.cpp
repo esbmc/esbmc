@@ -3298,7 +3298,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 	  }
 	}
 	exprt new_struct("symbol", s);
-    new_struct.type().set("tag", expr.type().tag().as_string());
+    new_struct.type().tag(expr.type().tag().as_string());
 	new_struct.set(irept::a_identifier, "typecast_" + expr.op0().identifier().as_string());
 
 	if (convert_bv(new_struct,operand))

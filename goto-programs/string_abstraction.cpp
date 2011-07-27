@@ -45,15 +45,15 @@ public:
     s.components().resize(3);
 
     s.components()[0].name("is_zero");
-    s.components()[0].set("pretty_name", "is_zero");
+    s.components()[0].pretty_name("is_zero");
     s.components()[0].type()=build_type(IS_ZERO);
 
     s.components()[1].name("length");
-    s.components()[1].set("pretty_name", "length");
+    s.components()[1].pretty_name("length");
     s.components()[1].type()=build_type(LENGTH);
 
     s.components()[2].name("size");
-    s.components()[2].set("pretty_name", "size");
+    s.components()[2].pretty_name("size");
     s.components()[2].type()=build_type(SIZE);
 
     string_struct=s;

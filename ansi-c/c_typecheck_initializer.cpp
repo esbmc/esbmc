@@ -585,7 +585,7 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
           throw 0;
         }
         
-        symbol.value.set("#zero_initializer", true);
+        symbol.value.zero_initializer(true);
       }
     }
     else
