@@ -56,7 +56,7 @@ static void make_integer(std::string value)
   init(&yyansi_clval.expr, "constant");
   PARSER.set_location(*yyansi_clval.expr);
   yyansi_clval.expr->type()=typet("integer");
-  yyansi_clval.expr->set("#cformat", yytext);
+  yyansi_clval.expr->cformat(yytext);
   yyansi_clval.expr->value(value);
   return;
 }

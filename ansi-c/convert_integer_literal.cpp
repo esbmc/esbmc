@@ -79,6 +79,6 @@ void convert_integer_literal(
     
   dest=from_integer(value, type);
 
-  dest.set("#cformat", src);
+  dest.cformat(src);
   
 }

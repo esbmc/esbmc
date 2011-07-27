@@ -75,7 +75,7 @@ Function: c_qualifierst::write
 void c_qualifierst::write(typet &dest) const
 {
   if(is_constant)
-    dest.set("#constant", true);
+    dest.cmt_constant(true);
   else
     dest.remove("#constant");
 

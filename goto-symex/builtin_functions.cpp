@@ -78,7 +78,7 @@ void basic_symext::symex_malloc(
   {
     symbol.type=typet(typet::t_array);
     symbol.type.subtype()=type;
-    symbol.type.set("size", size);
+    symbol.type.size(size);
   }
 
   symbol.type.set("#dynamic", true);
@@ -200,7 +200,7 @@ void basic_symext::symex_cpp_new(
   {
     symbol.type=array_typet();
     symbol.type.subtype()=code.type().subtype();
-    symbol.type.set("size", code.find("size"));
+    symbol.type.size(code.find("size"));
   }
   else
     symbol.type=code.type().subtype();

@@ -221,7 +221,7 @@ void goto_convertt::convert_label(
     t->location=code.location();
     t->location.property("error label");
     t->location.comment("error label");
-    t->location.set("user-provided", true);
+    t->location.user_provided(true);
 
     target=t;
     dest.destructive_append(tmp);
@@ -1284,7 +1284,7 @@ void goto_convertt::convert_assert(
   t->guard.swap(cond);
   t->location=code.location();
   t->location.property("assertion");
-  t->location.set("user-provided", true);
+  t->location.user_provided(true);
 }
 
 /*******************************************************************\

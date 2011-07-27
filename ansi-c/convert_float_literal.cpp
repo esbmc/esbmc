@@ -42,7 +42,7 @@ void convert_float_literal(
   
   dest=exprt("constant");
   
-  dest.set("#cformat", src);
+  dest.cformat(src);
 
   if(is_float)
     dest.type()=float_type();

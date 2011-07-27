@@ -29,7 +29,7 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
   irep.set("code", instruction.code);
     
   if (instruction.function!="")
-    irep.set("function", instruction.function);
+    irep.function(instruction.function);
     
   if (instruction.location.is_not_nil())
     irep.set("location", instruction.location);

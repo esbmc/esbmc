@@ -63,7 +63,7 @@ public:
 
   void set_function(const irep_idt &function)
   {
-    set("function", function);
+    this->function(function);
   }
 
 };

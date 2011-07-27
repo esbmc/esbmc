@@ -386,7 +386,7 @@ exprt boolbvt::bv_get_unbounded_array(
   if(size_mpint>100)
   {
     result=exprt("array-list", type);
-    result.type().set("size", integer2string(size_mpint));
+    result.type().size(integer2string(size_mpint));
 
     result.operands().reserve(values.size()*2);
 
@@ -403,7 +403,7 @@ exprt boolbvt::bv_get_unbounded_array(
   {
     // set the size
     result=exprt("array", type);
-    result.type().set("size", size);
+    result.type().size(size);
 
     unsigned long size_int=integer2long(size_mpint);
 

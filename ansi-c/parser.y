@@ -1107,7 +1107,7 @@ bit_field_size:			/* Expression */
 	':' constant_expression
 	{
 	  $$=$1; set(*$$, "c_bitfield");
-	  $$->set("size", *$2);
+	  $$->size(*$2);
 	}
 	;
 
@@ -1632,18 +1632,18 @@ gcc_asm_statement:
 	TOK_GCC_ASM volatile_opt '(' asm_commands ')' ';'
 	{ $$=$1;
 	  statement(*$$, "asm");
-	  $$->set("flavor", "gcc"); }
+	  $$->flavor("gcc"); }
 	;
 
 msc_asm_statement:
 	TOK_MSC_ASM '{' TOK_STRING '}'
 	{ $$=$1;
 	  statement(*$$, "asm");
-	  $$->set("flavor", "msc"); }
+	  $$->flavor("msc"); }
 	| TOK_MSC_ASM TOK_STRING
 	{ $$=$1;
 	  statement(*$$, "asm");
-	  $$->set("flavor", "msc"); }
+	  $$->flavor("msc"); }
 	;
 
 volatile_opt:

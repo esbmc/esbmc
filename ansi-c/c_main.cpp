@@ -231,7 +231,7 @@ bool c_main(
         /*
         exprt zero_string("zero_string", array_typet());
         zero_string.type().subtype()=char_type();
-        zero_string.type().set("size", "infinity");
+        zero_string.type().size("infinity");
         exprt index("index", char_type());
         index.copy_to_operands(zero_string, gen_zero(uint_type()));
         exprt address_of("address_of", pointer_typet());

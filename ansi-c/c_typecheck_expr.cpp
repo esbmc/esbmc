@@ -1071,7 +1071,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
     expr.cmt_lvalue(true);
 
   if(op0.cmt_constant())
-    expr.set("#constant", true);
+    expr.cmt_constant(true);
 
   // copy method identifier
   const irep_idt &identifier=component.cmt_identifier();
@@ -1857,7 +1857,7 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
     expr.location()=location;
 
     if(!cformat.empty())
-      expr.set("#cformat", cformat);
+      expr.cformat(cformat);
   }
   else if(type.id()=="array" ||
           type.id()=="incomplete_array")
@@ -2182,7 +2182,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
 
     // set #lvalue and #constant
     op0.cmt_lvalue(op0.op0().cmt_lvalue());
-    op0.set("#constant", op0.op0().cmt_constant());
+    op0.cmt_constant(op0.op0().cmt_constant());
   }
 
   const typet o_type0=op0.type();

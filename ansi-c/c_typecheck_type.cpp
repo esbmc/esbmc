@@ -165,7 +165,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       if(type.id()=="incomplete_array")
       {
         type.id("array");
-        type.set("size", gen_zero(int_type()));
+        type.size(gen_zero(int_type()));
       }
     }
 

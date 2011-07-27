@@ -485,6 +485,46 @@ public:
     set(a_name, val);
   }
 
+  inline void cformat(const irep_idt val) {
+    set(a_cformat, val);
+  }
+
+  inline void flavor(const irep_idt val) {
+    set(a_flavor, val);
+  }
+
+  inline void function(const irep_idt val) {
+    set(a_function, val);
+  }
+
+  inline void size(const irep_idt val) {
+    set(a_size, val);
+  }
+
+  inline void size(const irept &val) {
+    set(a_size, val);
+  }
+
+  inline void user_provided(const irep_idt val) {
+    set(a_user_provided, val);
+  }
+
+  inline void user_provided(bool val) {
+    set(a_user_provided, val);
+  }
+
+  inline void destination(const irep_idt val) {
+    set(a_destination, val);
+  }
+
+  inline void cmt_constant(const irep_idt val) {
+    set(a_cmt_constant, val);
+  }
+
+  inline void cmt_constant(bool val) {
+    set(a_cmt_constant, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
@@ -544,7 +584,7 @@ public:
   static const irep_idt a_is_statevar, a_is_type, a_is_volatile, a_cmt_lvalue;
   static const irep_idt a_lvalue, a_reference, a_static_lifetime, a_theorem;
   static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
-  static const irep_idt a_zero_initializer, a_restricted;
+  static const irep_idt a_zero_initializer, a_restricted, a_flavor;
 
   class dt
   {

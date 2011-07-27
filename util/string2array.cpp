@@ -36,7 +36,7 @@ void string2array(const exprt &src, exprt &dest)
 
   dest=exprt("constant", typet("array"));
   dest.type().subtype()=char_type;
-  dest.type().set("size", size);
+  dest.type().size(size);
 
   dest.operands().resize(string_size);
 
@@ -58,7 +58,7 @@ void string2array(const exprt &src, exprt &dest)
       ch_str[0]=ch;
       ch_str[1]=0;
 
-      op.set("#cformat", "'"+std::string(ch_str)+"'");
+      op.cformat("'"+std::string(ch_str)+"'");
     }
   }
 }

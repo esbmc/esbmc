@@ -934,7 +934,7 @@ void goto_convertt::do_function_call_symbol(
       is_assume?ASSUME:ASSERT);
     t->guard=arguments.front();
     t->location=function.location();
-    t->location.set("user-provided", true);
+    t->location.user_provided(true);
 
     if(is_assert)
       t->location.property("assertion");
@@ -963,7 +963,7 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t=dest.add_instruction(ASSERT);
     t->guard=arguments[0];
     t->location=function.location();
-    t->location.set("user-provided", true);
+    t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
 
@@ -1057,7 +1057,7 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t=dest.add_instruction(ASSERT);
     t->guard=false_exprt();
     t->location=function.location();
-    t->location.set("user-provided", true);
+    t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
     // we ignore any LHS
@@ -1081,7 +1081,7 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t=dest.add_instruction(ASSERT);
     t->guard=false_exprt();
     t->location=function.location();
-    t->location.set("user-provided", true);
+    t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
     // we ignore any LHS
@@ -1105,7 +1105,7 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t=dest.add_instruction(ASSERT);
     t->guard=false_exprt();
     t->location=function.location();
-    t->location.set("user-provided", true);
+    t->location.user_provided(true);
     t->location.property("assertion");
     t->location.comment(description);
     // we ignore any LHS
