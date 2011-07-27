@@ -101,7 +101,7 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
   instruction.function = irep.find("function").id();
   instruction.location = static_cast<const locationt&>(irep.find("location"));    
   instruction.type = static_cast<goto_program_instruction_typet>(
-                  atoi(irep.find("typeid").id_string().c_str()));
+                  atoi(irep.type_id().c_str()));
   instruction.guard = static_cast<const exprt&>(irep.find("guard"));
   instruction.event = irep.find("event").id();
   

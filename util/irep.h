@@ -248,6 +248,10 @@ public:
     return get(a_failed_symbol);
   }
 
+  inline const irep_idt &type_id(void) const {
+    return get(a_type_id);
+  }
+
   inline const irept &arguments(void) const {
     return find(s_arguments);
   }
