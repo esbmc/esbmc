@@ -243,7 +243,7 @@ void add_race_assertions(
           else
             t->location=original_instruction.code.op1().location();
         }
-        t->location.set("comment", e_it->second.get_comment());
+        t->location.comment(e_it->second.get_comment());
         i_it=++t;
       }
 

@@ -114,7 +114,7 @@ void goto_program_dereferencet::dereference_failure(
       t->guard.swap(guard_expr);
       t->location=dereference_location;
       t->location.set("property", property);
-      t->location.set("comment", "dereference failure: "+msg);
+      t->location.comment("dereference failure: "+msg);
     }
   }
 }

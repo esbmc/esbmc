@@ -965,7 +965,7 @@ void goto_convertt::do_function_call_symbol(
     t->location=function.location();
     t->location.set("user-provided", true);
     t->location.set("property", "assertion");
-    t->location.set("comment", description);
+    t->location.comment(description);
 
     if(lhs.is_not_nil())
     {
@@ -1059,7 +1059,7 @@ void goto_convertt::do_function_call_symbol(
     t->location=function.location();
     t->location.set("user-provided", true);
     t->location.set("property", "assertion");
-    t->location.set("comment", description);
+    t->location.comment(description);
     // we ignore any LHS
   }
   else if(identifier=="c::__assert_rtn")
@@ -1083,7 +1083,7 @@ void goto_convertt::do_function_call_symbol(
     t->location=function.location();
     t->location.set("user-provided", true);
     t->location.set("property", "assertion");
-    t->location.set("comment", description);
+    t->location.comment(description);
     // we ignore any LHS
   }
   else if(identifier=="c::_wassert")
@@ -1107,7 +1107,7 @@ void goto_convertt::do_function_call_symbol(
     t->location=function.location();
     t->location.set("user-provided", true);
     t->location.set("property", "assertion");
-    t->location.set("comment", description);
+    t->location.comment(description);
     // we ignore any LHS
   }
   else

@@ -220,7 +220,7 @@ void goto_convertt::convert_label(
     t->guard.make_false();
     t->location=code.location();
     t->location.set("property", "error label");
-    t->location.set("comment", "error label");
+    t->location.comment("error label");
     t->location.set("user-provided", true);
 
     target=t;
@@ -1085,7 +1085,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	  assignment.copy_to_operands(symbol_expr(new_symbol));
 	  assignment.copy_to_operands(rhs);
 	  assignment.location() = location;
-	  assignment.set("comment", "atomicity violation");
+	  assignment.comment("atomicity violation");
 	  copy(assignment, ASSIGN, dest);
 
 	  if(atomic == 0)
@@ -1115,7 +1115,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	  assignment.copy_to_operands(rhs);
 
 	  assignment.location() = rhs.find_location();
-	  assignment.set("comment", "atomicity violation");
+	  assignment.comment("atomicity violation");
 	  copy(assignment, ASSIGN, dest);
 
 	  if(atomic == 0)

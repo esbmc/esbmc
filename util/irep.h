@@ -425,6 +425,10 @@ public:
     set(a_statement, statm);
   }
 
+  inline void comment(const irep_idt cmt) {
+    set(a_comment, cmt);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)

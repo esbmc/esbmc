@@ -368,7 +368,7 @@ void goto_convert_functionst::remove_function_pointer(
       new_code.add_instruction(ASSERT);
     t->guard=expr_or;
     t->location=function.location();
-    t->location.set("comment", "unexpected target function");
+    t->location.comment("unexpected target function");
   }
 #endif
 
