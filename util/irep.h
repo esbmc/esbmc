@@ -457,6 +457,14 @@ public:
     set(a_width, width);
   }
 
+  inline void cmt_unsigned(const irep_idt val) {
+    set(a_cmt_unsigned, val);
+  }
+
+  inline void cmt_unsigned(bool val) {
+    set(a_cmt_unsigned, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
