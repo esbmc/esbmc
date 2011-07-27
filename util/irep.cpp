@@ -893,5 +893,8 @@ const irep_idt irept::a_component = dstring("component");
 const irep_idt irept::a_c_size_type = dstring("#c_size_type");
 const irep_idt irept::a_end_location = dstring("#end_location");
 const irep_idt irept::a_guard = dstring("guard");
+const irep_idt irept::a_label = dstring("label");
+const irep_idt irept::a_lhs = dstring("lhs");
+const irep_idt irept::a_location = dstring("location");
 
 const irep_idt irept::s_type = dstring("type");

@@ -368,7 +368,7 @@ public:
 
   void set_label(const irep_idt &label)
   {
-    set("label", label);
+    this->label(label);
   }
 };
 

@@ -295,7 +295,7 @@ void document_subgoals(
       locationt new_location;
 
       new_location.file(it->source.pc->location.file());
-      new_location.set("line", it->source.pc->location.line());
+      new_location.line(it->source.pc->location.line());
       new_location.function(it->source.pc->location.function());
 
       claim_set[new_location].comment_set.insert(it->comment);

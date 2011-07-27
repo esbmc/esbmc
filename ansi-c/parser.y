@@ -851,7 +851,7 @@ typeof_type_specifier:
 	  new_type.subtype() = (typet &)*$$;
 	  $$->swap(new_type);
 	  $$->location()=location;
-	  $$->set("#is_expression", true);
+	  $$->is_expression(true);
 	}
 	| TOK_TYPEOF '(' ptr_type_specifier  ')'
 	{ $$ = $3;
@@ -860,7 +860,7 @@ typeof_type_specifier:
 	  new_type.subtype() = (typet &)*$$;
 	  $$->swap(new_type);
 	  $$->location()=location;
-	  $$->set("#is_expression", false);
+	  $$->is_expression(false);
 	}
 	;
 
@@ -1193,7 +1193,7 @@ enumerator_declaration:
 	  init(&$$);
 	  irept type("enum");
 	  PARSER.new_declaration(type, *$1, *$$);
-	  $$->set("is_macro", true);
+	  $$->is_macro(true);
 	  $$->decl_value() = *$2;
 	}
 	;
@@ -1479,7 +1479,7 @@ labeled_statement:
 	{
 	  $$=$2;
 	  statement(*$$, "label");
-	  $$->set("label", $1->cmt_base_name());
+	  $$->label($1->cmt_base_name());
 	  mto($$, $3);
 	}
 	| TOK_CASE constant_expression ':' statement

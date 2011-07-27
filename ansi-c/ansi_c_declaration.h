@@ -57,7 +57,7 @@ public:
   
   void set_is_type(bool is_type)
   {
-    set("is_type", is_type);
+    this->is_type(is_type);
   }
   
   bool get_is_typedef() const
@@ -72,12 +72,12 @@ public:
   
   bool get_is_macro() const
   {
-    return is_macro();
+    return this->is_macro();
   }
   
   void set_is_macro(bool is_macro)
   {
-    set("is_macro", is_macro);
+    this->is_macro(is_macro);
   }
   
   bool get_is_static() const
@@ -137,7 +137,7 @@ public:
   
   void set_is_extern(bool is_extern)
   {
-    set("is_extern", is_extern);
+    this->is_extern(is_extern);
   }
   
   void to_symbol(symbolt &symbol) const

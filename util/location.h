@@ -43,12 +43,12 @@ public:
 
   void set_line(const irep_idt &line)
   {
-    set("line", line);
+    this->line(line);
   }
 
   void set_line(unsigned line)
   {
-    set("line", line);
+    this->line(line);
   }
 
   void set_column(const irep_idt &column)

@@ -52,7 +52,7 @@ public:
   {
     exprt result=predicate_exprt("is_zero_string");
     result.copy_to_operands(what);
-    result.set("lhs", write);
+    result.lhs(write);
     return result;
   }
 
@@ -62,7 +62,7 @@ public:
   {
     exprt result("zero_string_length", uint_type());
     result.copy_to_operands(what);
-    result.set("lhs", write);
+    result.lhs(write);
     return result;
   }
 

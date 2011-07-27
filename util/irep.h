@@ -633,6 +633,74 @@ public:
     set(a_invalid_object, val);
   }
 
+  inline void is_actual(bool val) {
+    set(a_is_actual, val);
+  }
+
+  inline void is_exported(bool val) {
+    set(a_is_exported, val);
+  }
+
+  inline void is_expression(bool val) {
+    set(a_is_expression, val);
+  }
+
+  inline void is_extern(bool val) {
+    set(a_is_extern, val);
+  }
+
+  inline void is_input(bool val) {
+    set(a_is_input, val);
+  }
+
+  inline void is_macro(bool val) {
+    set(a_is_macro, val);
+  }
+
+  inline void is_output(bool val) {
+    set(a_is_output, val);
+  }
+
+  inline void is_statevar(bool val) {
+    set(a_is_statevar, val);
+  }
+
+  inline void is_type(bool val) {
+    set(a_is_type, val);
+  }
+
+  inline void is_volatile(bool val) {
+    set(a_is_volatile, val);
+  }
+
+  inline void label(const irep_idt &val) {
+    set(a_label, val);
+  }
+
+  inline void lhs(bool val) {
+    set(a_lhs, val);
+  }
+
+  inline void line(const irep_idt &val) {
+    set(a_line, val);
+  }
+
+  inline void line(unsigned int val) {
+    set(a_line, val);
+  }
+
+  inline void location(const irep_idt &val) {
+    set(a_location, val);
+  }
+
+  inline void lvalue(const irep_idt &val) {
+    set(a_lvalue, val);
+  }
+
+  inline void mode(const irep_idt &val) {
+    set(a_mode, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
@@ -694,7 +762,7 @@ public:
   static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
   static const irep_idt a_zero_initializer, a_restricted, a_flavor;
   static const irep_idt a_cmt_active, a_code, a_component, a_c_size_type;
-  static const irep_idt a_end_location, a_guard;
+  static const irep_idt a_end_location, a_guard, a_label, a_lhs, a_location;
 
   class dt
   {
