@@ -25,8 +25,7 @@ Function: c_typecheck_baset::add_argc_argv
 
 void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
 {
-  const irept &arguments=
-    main_symbol.type.find("arguments");
+  const irept &arguments=main_symbol.type.arguments();
 
   if(arguments.get_sub().size()==0)
     return;

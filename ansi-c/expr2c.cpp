@@ -262,7 +262,7 @@ std::string expr2ct::convert_rec(
 
       // arguments
       dest+="(";
-      const irept &arguments=src.subtype().find("arguments");
+      const irept &arguments=src.subtype().arguments();
 
       forall_irep(it, arguments.get_sub())
       {

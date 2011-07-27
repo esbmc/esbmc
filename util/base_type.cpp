@@ -188,11 +188,9 @@ bool base_type_eqt::base_type_eq_rec(
   }
   else if(type1.id()=="code")
   {
-    const irept::subt &arguments1=
-      type1.find("arguments").get_sub();
+    const irept::subt &arguments1=type1.arguments().get_sub();
 
-    const irept::subt &arguments2=
-      type2.find("arguments").get_sub();
+    const irept::subt &arguments2=type2.arguments().get_sub();
     
     if(arguments1.size()!=arguments2.size())
       return false;

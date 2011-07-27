@@ -244,6 +244,10 @@ public:
     return get(a_failed_symbol);
   }
 
+  inline const irept &arguments(void) const {
+    return find(s_arguments);
+  }
+
   inline bool is_dynamic_set(void) const {
     const irep_idt &c = get(a_dynamic);
     return (c != "");
@@ -795,7 +799,7 @@ protected:
   { return !name.empty() && name[0]=='#'; }
 
 public:
-  static const irep_idt s_type;
+  static const irep_idt s_type, s_arguments;
   static const irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
   static const irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
   static const irep_idt a_access, a_destination, a_base_name, a_comment,a_event;
