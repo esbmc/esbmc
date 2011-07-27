@@ -111,7 +111,9 @@ public:
   inline void id(const irep_idt &_data)
   { write().data=_data; }
 
+protected:
   const irept &find(const irep_namet &name) const;
+public:
   irept &add(const irep_namet &name);
 
 protected:

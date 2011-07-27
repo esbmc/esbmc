@@ -289,7 +289,7 @@ static void
 move_decl_info_upwards(typet &dest, typet &src)
 {
 
-  if (src.find("identifier").is_nil())
+  if (!src.is_identifier_set())
     return;
 
   dest.add("identifier") = src.add("identifier");

@@ -102,7 +102,7 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
   instruction.location = static_cast<const locationt&>(irep.location());    
   instruction.type = static_cast<goto_program_instruction_typet>(
                   atoi(irep.type_id().c_str()));
-  instruction.guard = static_cast<const exprt&>(irep.find("guard"));
+  instruction.guard = static_cast<const exprt&>(irep.guard());
   instruction.event = irep.event_irep().id();
   
   // don't touch the targets, the goto_programt conversion does that
