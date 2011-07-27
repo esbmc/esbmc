@@ -762,7 +762,7 @@ std::string expr2ct::convert_malloc(
 
   std::string dest="MALLOC";
   dest+='(';
-  dest+=convert((const typet &)src.find("#type"));
+  dest+=convert((const typet &)src.cmt_type());
   dest+=", ";
   dest+=op0;
   dest+=')';

@@ -256,6 +256,10 @@ public:
     return find(s_components);
   }
 
+  inline const irept &cmt_type(void) const {
+    return find(a_cmt_type);
+  }
+
   inline bool is_dynamic_set(void) const {
     const irep_idt &c = get(a_dynamic);
     return (c != "");
