@@ -107,7 +107,7 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
   
   // don't touch the targets, the goto_programt conversion does that
     
-  const irept &lbls=irep.find("labels");
+  const irept &lbls=irep.labels_irep();
   const irept::subt &lsubs=lbls.get_sub();  
   for (irept::subt::const_iterator it=lsubs.begin();
        it!=lsubs.end();

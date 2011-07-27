@@ -2554,8 +2554,10 @@ std::string expr2ct::convert_code_label(
   bool first=true;
   std::string labels_string;
 
+  // XXX jmorse - labels irep isn't set anyhere, this code is pointless.
+
   {
-    const irept::named_subt &labels=src.find("labels").get_named_sub();
+    const irept::named_subt &labels=src.labels_irep().get_named_sub();
 
     forall_named_irep(it, labels)
     {
