@@ -639,7 +639,7 @@ void goto_convertt::cpp_new_initializer(
   // grab initializer
   exprt initializer;
 
-  if(rhs.find("initializer").is_nil())
+  if(rhs.initializer().is_nil())
     initializer.make_nil();
   else
   {

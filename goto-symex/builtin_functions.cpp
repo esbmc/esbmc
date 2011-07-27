@@ -45,7 +45,7 @@ void basic_symext::symex_malloc(
 
   // size
   typet type=static_cast<const typet &>(code.cmt_type());
-  exprt size=static_cast<const exprt &>(code.find("#size"));
+  exprt size=static_cast<const exprt &>(code.cmt_size());
   bool size_is_one;
 
   if(size.is_nil())

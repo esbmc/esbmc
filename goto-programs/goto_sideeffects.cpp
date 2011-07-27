@@ -685,10 +685,10 @@ void goto_convertt::remove_temporary_object(
     dest.destructive_append(tmp_program);
   }
 
-  if(expr.find("initializer").is_not_nil())
+  if(expr.initializer().is_not_nil())
   {
     assert(expr.operands().empty());
-    exprt initializer=static_cast<const exprt &>(expr.find("initializer"));
+    exprt initializer=static_cast<const exprt &>(expr.initializer());
     replace_new_object(symbol_expr(new_symbol), initializer);
 
     goto_programt tmp_program;

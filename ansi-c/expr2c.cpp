@@ -731,7 +731,7 @@ std::string expr2ct::convert_pointer_object_has_type(
   dest+='(';
   dest+=op0;
   dest+=", ";
-  dest+=convert(static_cast<const typet &>(src.find("object_type")));
+  dest+=convert(static_cast<const typet &>(src.object_type()));
   dest+=')';
 
   return dest;
