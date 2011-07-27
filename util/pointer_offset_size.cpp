@@ -33,7 +33,7 @@ mp_integer pointer_offset_size(const typet &type)
     mp_integer sub=pointer_offset_size(type.subtype());
   
     // get size
-    const exprt &size=(const exprt &)type.find("size");
+    const exprt &size=(const exprt &)type.size_irep();
 
     // constant?
     mp_integer i;

@@ -200,7 +200,7 @@ void basic_symext::symex_cpp_new(
   {
     symbol.type=array_typet();
     symbol.type.subtype()=code.type().subtype();
-    symbol.type.size(code.find("size"));
+    symbol.type.size(code.size_irep());
   }
   else
     symbol.type=code.type().subtype();

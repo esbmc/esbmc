@@ -605,7 +605,7 @@ unsigned interpretert::get_size(const typet &type) const
   }
   else if(type.id()=="array")
   {
-    const exprt &size_expr=static_cast<const exprt &>(type.find("size"));
+    const exprt &size_expr=static_cast<const exprt &>(type.size_irep());
 
     unsigned subtype_size=get_size(type.subtype());
 

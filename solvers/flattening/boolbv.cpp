@@ -953,7 +953,7 @@ bool boolbvt::is_unbounded_array(const typet &type) const
   
   if(unbounded_array==U_ALL) return true;
   
-  const exprt &size=(exprt &)type.find("size");
+  const exprt &size=(exprt &)type.size_irep();
   
   mp_integer s;
   if(to_integer(size, s)) return true;

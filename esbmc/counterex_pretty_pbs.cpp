@@ -39,7 +39,7 @@ void counterexample_beautification_pbst::beautify(
   if(type.id()=="array")
   {
     // get size
-    const exprt &size_expr=(exprt &)type.find("size");
+    const exprt &size_expr=(exprt &)type.size_irep();
     mp_integer size_int, i;
 
     if(to_integer(size_expr, size_int)) return;

@@ -594,7 +594,7 @@ void goto_convertt::do_cpp_new(
 
   if(rhs.statement()=="cpp_new[]")
   {
-    alloc_size=static_cast<const exprt &>(rhs.find("size"));
+    alloc_size=static_cast<const exprt &>(rhs.size_irep());
     if(alloc_size.type()!=uint_type())
       alloc_size.make_typecast(uint_type());
   }

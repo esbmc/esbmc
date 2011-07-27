@@ -340,10 +340,10 @@ void goto_checkt::bounds_check(
   }
 
   {
-    if(array_type.find("size").is_nil())
+    if(array_type.size_irep().is_nil())
       throw "index array operand of wrong type";
 
-    const exprt &size=(const exprt &)array_type.find("size");
+    const exprt &size=(const exprt &)array_type.size_irep();
 
     if(size.id()!="infinity")
     {
@@ -385,7 +385,7 @@ void goto_checkt::array_size_check(
 {
   if(expr.type().id()=="array")
   {
-    const exprt &size=(exprt &)expr.type().find("size");
+    const exprt &size=(exprt &)expr.type().size_irep();
 
     if(size.type().id()=="unsignedbv")
     {

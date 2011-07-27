@@ -290,7 +290,7 @@ std::string expr2ct::convert_rec(
   }
   else if(src.id()=="array")
   {
-    std::string size_string=convert(static_cast<const exprt &>(src.find("size")));
+    std::string size_string=convert(static_cast<const exprt &>(src.size_irep()));
     return convert(src.subtype())+" ["+size_string+"]";
   }
   else if(src.id()=="incomplete_array")

@@ -995,7 +995,7 @@ execution_statet::serialise_expr(const exprt &rhs)
     /* An array of the same set of values: generate all of them. */
     str = "array(";
     irept array = rhs.type();
-    exprt size = (exprt&)array.find("size");
+    exprt size = (exprt&)array.size_irep();
     str += "sz(" + serialise_expr(size) + "),";
     str += "elem(" + serialise_expr(rhs.op0()) + "))";
   } else if (rhs.id() == exprt::with) {

@@ -232,6 +232,10 @@ public:
     return get(a_size);
   }
 
+  inline const irept &size_irep(void) const {
+    return find(a_size);
+  }
+
   inline const irep_idt &integer_bits(void) const {
     return get(a_integer_bits);
   }
