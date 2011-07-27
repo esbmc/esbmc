@@ -2635,8 +2635,7 @@ std::string expr2ct::convert_Hoare(const exprt &src)
 
   const exprt &assumption=src.op0();
   const exprt &assertion=src.op1();
-  const codet &code=
-    static_cast<const codet &>(src.find("code"));
+  const codet &code=static_cast<const codet &>(src.code());
 
   std::string dest="\n";
   dest+="{";

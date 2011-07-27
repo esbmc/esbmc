@@ -136,6 +136,10 @@ public:
   inline typet &type() { return (typet &)(add(s_type)); }
   inline const typet &type() const { return (typet &)(find(s_type)); }
 
+  inline bool is_identifier_set(void) const {
+    return (get(a_identifier) != "");
+  }
+
   inline const irep_idt &identifier(void) const {
     return get(a_identifier);
   }
@@ -176,6 +180,10 @@ public:
     return get(a_function);
   }
 
+  inline const irept &function_irep(void) const {
+    return find(a_function);
+  }
+
   inline const irep_idt &column(void) const {
     return get(a_column);
   }
@@ -198,6 +206,10 @@ public:
 
   inline const irep_idt &event(void) const {
     return get(a_event);
+  }
+
+  inline const irept &event_irep(void) const {
+    return find(a_event);
   }
 
   inline const irep_idt &literal(void) const {
@@ -310,6 +322,18 @@ public:
 
   inline const irept &cmt_size(void) const {
     return find(a_cmt_size);
+  }
+
+  inline const irept &code(void) const {
+    return find(a_code);
+  }
+
+  inline const irept &guard(void) const {
+    return find(a_guard);
+  }
+
+  inline const irept &location(void) const {
+    return find(a_location);
   }
 
   inline bool is_dynamic_set(void) const {

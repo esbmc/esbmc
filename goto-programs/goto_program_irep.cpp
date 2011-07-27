@@ -97,13 +97,13 @@ Function: convert
 
 void convert(const irept &irep, goto_programt::instructiont &instruction)
 {
-  instruction.code=static_cast<const codet &>(irep.find("code"));
-  instruction.function = irep.find("function").id();
-  instruction.location = static_cast<const locationt&>(irep.find("location"));    
+  instruction.code=static_cast<const codet &>(irep.code());
+  instruction.function = irep.function_irep().id();
+  instruction.location = static_cast<const locationt&>(irep.location());    
   instruction.type = static_cast<goto_program_instruction_typet>(
                   atoi(irep.type_id().c_str()));
   instruction.guard = static_cast<const exprt&>(irep.find("guard"));
-  instruction.event = irep.find("event").id();
+  instruction.event = irep.event_irep().id();
   
   // don't touch the targets, the goto_programt conversion does that
     

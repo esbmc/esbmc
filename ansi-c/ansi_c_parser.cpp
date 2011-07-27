@@ -144,7 +144,7 @@ void ansi_c_parsert::convert_declarator(
   // form of ireps named {declarator,code,array,incomplete_array} with
   // identifier subtypes.
 
-  if (!declarator.find("identifier").is_nil() && declarator.id() != "symbol") {
+  if (declarator.is_identifier_set() && declarator.id() != "symbol") {
     identifier = declarator.add("identifier");
     declarator.remove("identifier");
 
