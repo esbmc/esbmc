@@ -171,7 +171,7 @@ void c_typecheck_baset::typecheck_expr_comma(exprt &expr)
 
   // make this an l-value if the last operand is one
   if(expr.op1().cmt_lvalue())
-    expr.set("#lvalue", true);
+    expr.cmt_lvalue(true);
 }
 
 /*******************************************************************\
@@ -381,7 +381,7 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
     expr.location()=location;
 
     if(symbol.lvalue)
-      expr.set("#lvalue", true);
+      expr.cmt_lvalue(true);
 
     if(expr.type().id()=="code") // function designator
     { // special case: this is sugar for &f
@@ -674,7 +674,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   if(expr.op0().cmt_lvalue())
   {
     if(expr_type.id()=="pointer")
-      expr.set("#lvalue", true);
+      expr.cmt_lvalue(true);
   }
 }
 
@@ -769,7 +769,7 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
      final_array_type.id()=="incomplete_array")
   {
     if(array_expr.cmt_lvalue())
-      expr.set("#lvalue", true);
+      expr.cmt_lvalue(true);
   }
   else if(final_array_type.id()=="pointer")
   {
@@ -779,7 +779,7 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
     addition.operands().swap(expr.operands());
     expr.move_to_operands(addition);
     expr.id("dereference");
-    expr.set("#lvalue", true);
+    expr.cmt_lvalue(true);
   }
   else
   {
@@ -1068,7 +1068,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
   expr.type()=component.type();
 
   if(op0.cmt_lvalue())
-    expr.set("#lvalue", true);
+    expr.cmt_lvalue(true);
 
   if(op0.cmt_constant())
     expr.set("#constant", true);
@@ -1308,7 +1308,7 @@ void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
     throw 0;
   }
 
-  expr.set("#lvalue", true);
+  expr.cmt_lvalue(true);
 
   // if you dereference a pointer pointing to
   // a function, you get a pointer again
@@ -1560,7 +1560,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
       exprt is_zero_string_expr("is_zero_string", bool_typet());
       is_zero_string_expr.operands()=expr.arguments();
-      is_zero_string_expr.set("#lvalue", true); // make it an lvalue
+      is_zero_string_expr.cmt_lvalue(true); // make it an lvalue
       expr.swap(is_zero_string_expr);
     }
     else if(identifier==CPROVER_PREFIX "zero_string_length")
@@ -1573,7 +1573,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
       exprt zero_string_length_expr("zero_string_length", uint_type());
       zero_string_length_expr.operands()=expr.arguments();
-      zero_string_length_expr.set("#lvalue", true); // make it an lvalue
+      zero_string_length_expr.cmt_lvalue(true); // make it an lvalue
       expr.swap(zero_string_length_expr);
     }
     else if(identifier==CPROVER_PREFIX "POINTER_OFFSET")
@@ -2181,7 +2181,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
     assert(op0.operands().size()==1);
 
     // set #lvalue and #constant
-    op0.set("#lvalue", op0.op0().cmt_lvalue());
+    op0.cmt_lvalue(op0.op0().cmt_lvalue());
     op0.set("#constant", op0.op0().cmt_constant());
   }
 

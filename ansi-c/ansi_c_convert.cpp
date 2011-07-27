@@ -407,7 +407,7 @@ void ansi_c_convertt::convert_type(
       exprt new_component("component");
 
       new_component.location()=component.location();
-      new_component.set("name", component.get_base_name());
+      new_component.name(component.get_base_name());
       new_component.set("pretty_name", component.get_base_name());
       new_component.type().swap(component.type());
 

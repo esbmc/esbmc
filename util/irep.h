@@ -477,6 +477,10 @@ public:
     set(a_cmt_lvalue, val);
   }
 
+  inline void cmt_lvalue(bool val) {
+    set(a_cmt_lvalue, val);
+  }
+
   inline void name(const irep_idt val) {
     set(a_name, val);
   }

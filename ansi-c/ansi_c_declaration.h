@@ -32,7 +32,7 @@ public:
   
   void set_name(const irep_idt &name)
   {
-    return set("name", name);
+    return this->name(name);
   }
   
   irep_idt get_name() const
