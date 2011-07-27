@@ -240,7 +240,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   // found it
   const symbolt &symbol=s_it->second;
   const irept &components=symbol.type.components();
-  const irep_idt &member=expr.find("member").identifier();
+  const irep_idt &member=expr.member_irep().identifier();
   bool found=false;
   mp_integer offset=0;
 

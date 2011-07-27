@@ -906,3 +906,5 @@ const irep_idt irept::s_arguments = dstring("arguments");
 const irep_idt irept::s_components = dstring("components");
 const irep_idt irept::s_case = dstring("case");
 const irep_idt irept::s_return_type = dstring("return_type");
+const irep_idt irept::s_body = dstring("body");
+const irep_idt irept::s_member = dstring("member");

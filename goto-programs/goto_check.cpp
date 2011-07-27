@@ -278,8 +278,7 @@ void goto_checkt::bounds_check(
   if(expr.id()!="index")
     return;
 
-  if(expr.find("bounds_check").is_not_nil() &&
-     !expr.bounds_check())
+  if(expr.is_bounds_check_set() && !expr.bounds_check())
     return;
 
   if(expr.operands().size()!=2)

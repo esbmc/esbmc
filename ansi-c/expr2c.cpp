@@ -308,7 +308,7 @@ std::string expr2ct::convert_rec(
     std::string dest=convert(return_type)+" ";
 
     dest+="(";
-    const irept &arguments=src.find("arguments");
+    const irept &arguments=src.arguments();
 
     forall_irep(it, arguments.get_sub())
     {
@@ -1321,7 +1321,7 @@ std::string expr2ct::convert_constant(
   {
     mp_integer int_value=string2integer(value);
     mp_integer i=0;
-    const irept &body=type.find("body");
+    const irept &body=type.body();
 
     forall_irep(it, body.get_sub())
     {
