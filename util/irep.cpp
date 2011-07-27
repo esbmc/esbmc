@@ -904,3 +904,4 @@ const irep_idt irept::a_type_id = dstring("type_id");
 const irep_idt irept::s_type = dstring("type");
 const irep_idt irept::s_arguments = dstring("arguments");
 const irep_idt irept::s_components = dstring("components");
+const irep_idt irept::s_case = dstring("case");

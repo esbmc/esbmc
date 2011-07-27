@@ -358,7 +358,7 @@ public:
 
   const exprt::operandst &case_op() const
   {
-    return static_cast<const exprt &>(find("case")).operands();
+    return static_cast<const exprt &>(case_irep()).operands();
   }
   
   const irep_idt &get_label() const

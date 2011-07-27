@@ -504,7 +504,7 @@ void c_typecheck_baset::typecheck_label(code_labelt &code)
     }
   }
 
-  if(code.find("case").is_not_nil())
+  if(code.case_irep().is_not_nil())
   {
     if(!case_is_allowed)
     {

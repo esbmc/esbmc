@@ -2565,7 +2565,7 @@ std::string expr2ct::convert_code_label(
       labels_string+=":\n";
     }
 
-    const exprt &case_expr=(exprt &)src.find("case");
+    const exprt &case_expr=(exprt &)src.case_irep();
 
     forall_operands(it, case_expr)
     {

@@ -260,6 +260,10 @@ public:
     return find(a_cmt_type);
   }
 
+  inline const irept &case_irep(void) const {
+    return find(s_case);
+  }
+
   inline bool is_dynamic_set(void) const {
     const irep_idt &c = get(a_dynamic);
     return (c != "");
@@ -811,7 +815,7 @@ protected:
   { return !name.empty() && name[0]=='#'; }
 
 public:
-  static const irep_idt s_type, s_arguments, s_components;
+  static const irep_idt s_type, s_arguments, s_components, s_case;
   static const irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
   static const irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
   static const irep_idt a_access, a_destination, a_base_name, a_comment,a_event;
