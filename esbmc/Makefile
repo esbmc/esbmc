@@ -54,7 +54,7 @@ CXXFLAGS += -DMINISAT
 endif
 
 ifdef USE_CVC
-CXXFLAGS+= USE_CVC
+CXXFLAGS+= -DUSE_CVC
 endif
 
 ifdef USE_SMT
