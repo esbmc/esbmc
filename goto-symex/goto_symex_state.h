@@ -338,6 +338,8 @@ public:
   inline framet &new_frame(unsigned int thread_id) { call_stack.push_back(framet(thread_id)); return call_stack.back(); }
   inline void pop_frame() { call_stack.pop_back(); }
   inline const framet &previous_frame() { return *(--(--call_stack.end())); }
+
+  void print_stack_trace();
 };
 
 #endif

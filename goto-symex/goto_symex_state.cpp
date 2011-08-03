@@ -867,3 +867,15 @@ void goto_symex_statet::level2t::print(std::ostream &out, unsigned node_id) cons
 
 }
 
+void goto_symex_statet::print_stack_trace(void)
+{
+  call_stackt::reverse_iterator it;
+
+  // Iterate through each call frame printing func name and location.
+  for (it = call_stack.rbegin(); it != call_stack.rend(); it++) {
+    std::cout << "Func: " << it->function_identifier.as_string();
+    std::cout << " at " << it->calling_location.pc->location_number << std::endl;
+  }
+
+  return;
+}
