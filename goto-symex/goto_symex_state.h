@@ -339,7 +339,7 @@ public:
   inline void pop_frame() { call_stack.pop_back(); }
   inline const framet &previous_frame() { return *(--(--call_stack.end())); }
 
-  void print_stack_trace();
+  void print_stack_trace() const;
 };
 
 #endif
