@@ -1160,3 +1160,18 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
 
   return m;
 }
+
+void execution_statet::print_stack_traces(void) const
+{
+  std::vector<goto_symex_statet>::const_iterator it;
+  int i;
+
+  i = 0;
+  for (it = _threads_state.begin(); it != _threads_state.end(); it++) {
+    std::cout << "Thread " << i++ << ":" << std::endl;
+    it->print_stack_trace();
+    std::cout << std::endl;
+  }
+
+  return;
+}

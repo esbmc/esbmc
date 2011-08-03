@@ -185,6 +185,8 @@ public:
     crypto_hash update_hash_for_assignment(const exprt &rhs);
     std::string serialise_expr(const exprt &rhs);
 
+    void print_stack_traces(void) const;
+
 private:
     void decreament_trds_in_run(const namespacet &ns, symex_targett &target);
     const symbolt& lookup(const namespacet &ns, const irep_idt &identifier)  const;
