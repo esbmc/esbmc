@@ -875,7 +875,11 @@ void goto_symex_statet::print_stack_trace(void) const
   // Iterate through each call frame printing func name and location.
   src = source;
   for (it = call_stack.rbegin(); it != call_stack.rend(); it++) {
-    std::cout << "Func: " << it->function_identifier.as_string();
+    if (it->function_identifier == "") // Top level call
+      std::cout << "init";
+    else
+      std::cout << it->function_identifier.as_string();
+
     std::cout << " at " << src.pc->location_number << std::endl;
     src = it->calling_location;
   }
