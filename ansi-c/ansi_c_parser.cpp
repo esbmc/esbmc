@@ -144,9 +144,9 @@ void ansi_c_parsert::convert_declarator(
   // form of ireps named {declarator,code,array,incomplete_array} with
   // identifier subtypes.
 
-  if (declarator.is_identifier_set() && declarator.id() != "symbol") {
-    identifier = declarator.add("identifier");
-    declarator.remove("identifier");
+  if (declarator.is_decl_ident_set() && declarator.id() != "symbol") {
+    identifier = declarator.decl_ident();
+    declarator.remove("decl_ident");
 
     if (declarator.id() == "merged_type")
       insert_base_type((typet&)declarator, type);

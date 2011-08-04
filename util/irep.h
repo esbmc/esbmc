@@ -358,6 +358,14 @@ public:
     return find(s_cmt_location);
   }
 
+  inline const irept &decl_ident(void) const {
+    return find(s_decl_ident);
+  }
+
+  inline bool is_decl_ident_set(void) const {
+    return (get(s_decl_ident) != "");
+  }
+
   inline bool is_dynamic_set(void) const {
     const irep_idt &c = get(a_dynamic);
     return (c != "");
@@ -537,6 +545,10 @@ public:
 
   inline void arguments(const irept &val) {
     set(s_arguments, val);
+  }
+
+  inline void decl_ident(const irept &val) {
+    set(s_decl_ident, val);
   }
 
   inline void identifier(const irep_idt ident) {
@@ -921,7 +933,7 @@ public:
   static const irep_idt s_return_type, s_body, s_member, s_labels;
   static const irep_idt s_c_sizeof_type, s_bv, s_targets, s_variables;
   static const irep_idt s_initializer, s_declaration_type, s_decl_value;
-  static const irep_idt s_symvalue, s_cmt_location;
+  static const irep_idt s_symvalue, s_cmt_location, s_decl_ident;
   static const irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
   static const irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
   static const irep_idt a_access, a_destination, a_base_name, a_comment,a_event;

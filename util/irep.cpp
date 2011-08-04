@@ -918,3 +918,4 @@ const irep_idt irept::s_declaration_type = dstring("declaration_type");
 const irep_idt irept::s_decl_value = dstring("decl_value");
 const irep_idt irept::s_symvalue = dstring("symvalue");
 const irep_idt irept::s_cmt_location = dstring("#location");
+const irep_idt irept::s_decl_ident = dstring("decl_ident");

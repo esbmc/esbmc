@@ -1053,8 +1053,8 @@ member_declarator:
 	  {
 	    $$=$2;
 	    // Shift name of member upwards
-	    $$->add("identifier") = $1->add("identifier");
-	    $1->remove("identifier");
+	    $$->decl_ident($1->decl_ident());
+	    $1->remove("decl_ident");
 	    $$->add("subtype") = $1->add("subtype");
 	  }
 	  else
@@ -1933,13 +1933,13 @@ postfix_identifier_declarator:
 		// wish to preserve. So discard the existing "declarator" name
 		// and move its contents into $2.
 		$$ = (exprt*)$2;
-		$$->add("identifier") = $1->add("identifier");
+		$$->identifier($1->identifier());
 
 		if ($1->id() == "declarator") {
-			$1->remove("identifier");
+			$1->remove("decl_ident");
 			make_subtype((typet&)*$$, (typet&)$1->add("subtype"));
 		} else {
-			$1->remove("identifier");
+			$1->remove("decl_ident");
 			make_subtype((typet&)*$$, (typet&)*$1);
 		}
 	}
@@ -1962,7 +1962,7 @@ paren_identifier_declarator:
 	  // All identifier_declarators are based from this.
 	  init(&$$);
 	  $$->id("declarator");
-	  $$->add("identifier") = *$1;
+	  $$->decl_ident(*$1);
 	  $$->add("subtype").make_nil();
 	}
 	| '(' paren_identifier_declarator ')'
