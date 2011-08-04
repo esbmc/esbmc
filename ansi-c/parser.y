@@ -1988,7 +1988,7 @@ postfixing_abstract_declarator:	/* AbstrDeclarator */
 	{
 	  $$=(typet*)$1;
 	  set(*$$, "code");
-	  $$->add("arguments");
+	  $$->arguments(irept());
 	  $$->add("subtype").make_nil();
 	}
 	| '('
@@ -2001,7 +2001,9 @@ postfixing_abstract_declarator:	/* AbstrDeclarator */
 	  $$=(typet*)$1;
 	  set(*$$, "code");
 	  $$->add("subtype").make_nil();
-	  $$->add("arguments").get_sub().swap($3->add("subtypes").get_sub());
+	  exprt args("arguments");
+	  args.get_sub().swap($3->add("subtypes").get_sub());
+	  $$->arguments(args);
 	  PARSER.pop_scope();
 	}
 	;
@@ -2012,7 +2014,7 @@ parameter_postfixing_abstract_declarator:
 	{
 	  $$=(typet*)$1;
 	  set(*$$, "code");
-	  $$->add("arguments");
+	  $$->arguments(irept());
 	  $$->add("subtype").make_nil();
 	}
 	| '('
@@ -2025,7 +2027,9 @@ parameter_postfixing_abstract_declarator:
 	  $$=(typet*)$1;
 	  set(*$$, "code");
 	  $$->add("subtype").make_nil();
-	  $$->add("arguments").get_sub().swap($3->add("subtypes").get_sub());
+	  exprt args("arguments");
+	  args.get_sub().swap($3->add("subtypes").get_sub());
+	  $$->arguments(args);
 	  PARSER.pop_scope();
 	}
 	;

@@ -535,6 +535,10 @@ public:
     return get_bool(a_zero_initializer);
   }
 
+  inline void arguments(const irept &val) {
+    set(s_arguments, val);
+  }
+
   inline void identifier(const irep_idt ident) {
     set(a_identifier, ident);
   }
