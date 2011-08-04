@@ -170,7 +170,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 
     // get number of necessary bits
 
-    unsigned size=type.find("elements").get_sub().size();
+    unsigned size=type.elements().get_sub().size();
     width=integer2long(address_bits(size));
     assert(width!=0);
 
