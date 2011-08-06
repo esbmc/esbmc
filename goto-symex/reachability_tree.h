@@ -132,13 +132,13 @@ public:
   // The current terminating execution state that we've reached
   execution_statet* reached_terminal_state;
   bool _go_next_formula;
+  bool _go_next;
   bool state_hashing;
 private:
   std::list<execution_statet*> execution_states;
   /* This is derefed and returned by get_current_state */
   std::list<execution_statet*>::iterator _cur_state_it;
   int _CS_bound, _actual_CS_bound;
-  bool _go_next;
   bool _DFS, _multi_formulae, _is_same_mutex, _deadlock_detection, _por;
   bool directed_interleavings;
   const namespacet &_ns;

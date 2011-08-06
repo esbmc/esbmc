@@ -182,10 +182,11 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
   // happened where we expected it to, and then switch to the correct thread for
   // the history we've been provided with.
   for (it = dfs.states.begin(); it != dfs.states.end(); it++) {
-    while (!art1->is_go_next_state())
-      symex_step(art1->_goto_functions, *art1);
-
-    art1->multi_formulae_go_next_state();
+    do {
+      art1->_go_next = false;
+      while (!art1->is_go_next_state())
+        symex_step(art1->_goto_functions, *art1);
+    } while (art1->get_cur_state().generating_new_threads == -1);
 
     if (art1->get_cur_state()._threads_state.size() != it->num_threads) {
       std::cerr << "Unexpected number of threads when reexploring checkpoint"
