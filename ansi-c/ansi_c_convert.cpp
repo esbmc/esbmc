@@ -400,7 +400,8 @@ void ansi_c_convertt::convert_type(
           type.id()=="ansi_c_channel" ||
           type.id()=="ansi_c_behavior")
   {
-    irept::subt &components=type.add("components").get_sub();
+    // Create new components subt to operate upon
+    irept::subt components=type.components().get_sub();
 
     Forall_irep(it, components)
     {
@@ -419,6 +420,11 @@ void ansi_c_convertt::convert_type(
 
       component.swap(new_component);
     }
+
+    // Set into type
+    irept tmp = type.components();
+    tmp.get_sub() = components;
+    type.components(tmp);
   }
   else if(type.id()=="type_of")
   {

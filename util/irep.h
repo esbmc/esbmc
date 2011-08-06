@@ -891,6 +891,10 @@ public:
     set(a_zero_initializer, val);
   }
 
+  inline void components(const irept &val) {
+    set(s_components, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)

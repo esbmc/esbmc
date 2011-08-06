@@ -71,13 +71,19 @@ void base_type(typet &type, const namespacet &ns)
           type.id()=="class" ||
           type.id()=="union")
   {
-    irept::subt &components=type.add("components").get_sub();
+    // New subt for manipulating components
+    irept::subt components=type.components().get_sub();
 
     Forall_irep(it, components)
     {
       typet &subtype=it->type();
       base_type(subtype, ns);
     }
+
+    // Set back into type
+    irept tmp = type.components();
+    tmp.get_sub() = components;
+    type.components(tmp);
   }
 }
 
