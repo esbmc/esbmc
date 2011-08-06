@@ -644,7 +644,7 @@ void goto_convertt::cpp_new_initializer(
   else
   {
     initializer.make_nil();
-    rhs.add("initializer").swap(initializer);
+    rhs.initializer(initializer);
   }
 
   if(initializer.is_not_nil())
