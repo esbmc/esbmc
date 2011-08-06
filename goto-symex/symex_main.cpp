@@ -177,11 +177,13 @@ bool
 goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
 {
   std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
+  unsigned int i;
 
   // Symex repeatedly until context switch points. At each point, verify that it
   // happened where we expected it to, and then switch to the correct thread for
   // the history we've been provided with.
-  for (it = dfs.states.begin(); it != dfs.states.end(); it++) {
+  for (it = dfs.states.begin(), i = 0; it != dfs.states.end(); i++) {
+
     do {
       art1->_go_next = false;
 
@@ -204,15 +206,19 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
       abort();
     }
 
+    art1->multi_formulae_go_next_state();
+
+    // check we're on the right thread; except on the last run, where there are
+    // no more threads to be run.
+    if (i + 1 < dfs.states.size())
+      assert(art1->get_cur_state().get_active_state_number() == it->cur_thread);
+
     if (art1->get_cur_state().get_active_state().source.pc->location_number !=
         it->location_number) {
       std::cerr << "Interleave at unexpected location when restoring checkpoint"
                 << std::endl;
       abort();
     }
-
-    art1->get_cur_state().set_active_state(it->cur_thread);
-    art1->get_cur_state()._DFS_traversed = it->explored;
   }
 
   return false;
