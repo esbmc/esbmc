@@ -47,6 +47,8 @@ void base_type(typet &type, const namespacet &ns)
     tmp.swap(type.subtype());
     type.swap(tmp);
   }
+#if 0
+// Disabled by jmorse - no-where else in ESBMC is "predicate" used.
   else if(type.id()=="predicate")
   {
     exprt &predicate=(exprt &)type.add("predicate");
@@ -57,6 +59,7 @@ void base_type(typet &type, const namespacet &ns)
     type.swap(tmp);
     base_type(type, ns); // recursive call
   }
+#endif
   else if(type.id()=="mapping")
   {
     assert(type.subtypes().size()==2);
