@@ -2885,7 +2885,7 @@ std::string expr2ct::convert(
     return convert_byte_update(src, precedence=15);
   }
 
-  else if(src.id()=="address_of")
+  else if(src.is_address_of())
   {
     if(src.operands().size()!=1)
       return convert_norep(src, precedence);

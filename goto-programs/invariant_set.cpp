@@ -240,7 +240,7 @@ Function: inv_object_storet::is_constant_address
 
 bool inv_object_storet::is_constant_address(const exprt &expr)
 {
-  if(expr.id()=="address_of" ||
+  if(expr.is_address_of() ||
      expr.id()=="implicit_address_of" ||
      expr.id()=="reference_to")
     if(expr.operands().size()==1)
@@ -1083,7 +1083,7 @@ Function: invariant_sett::simplify
 void invariant_sett::simplify(
   exprt &expr) const
 {
-  if(expr.id()=="address_of" ||
+  if(expr.is_address_of() ||
      expr.id()=="implicit_address_of" ||
      expr.id()=="reference_to")
     return;

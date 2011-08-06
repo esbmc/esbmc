@@ -483,7 +483,7 @@ void string_instrumentationt::do_format_string_read(
 {
   const exprt &format_arg = arguments[format_string_inx];
 
-  if(format_arg.id()=="address_of" &&
+  if(format_arg.is_address_of() &&
      format_arg.op0().id()=="index" &&
      format_arg.op0().op0().id()=="string-constant")
   {
@@ -600,7 +600,7 @@ void string_instrumentationt::do_format_string_write(
 {
   const exprt &format_arg = arguments[format_string_inx];
 
-  if(format_arg.id()=="address_of" &&
+  if(format_arg.is_address_of() &&
      format_arg.op0().id()=="index" &&
      format_arg.op0().op0().id()=="string-constant") // constant format
   {

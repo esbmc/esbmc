@@ -1129,7 +1129,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	    rhs=symbol_expr(new_symbol);
     }
   }
-  else if(rhs.id() != "address_of")// && rhs.id() != "dereference")
+  else if(!rhs.is_address_of())// && rhs.id() != "dereference")
   {
     Forall_operands(it, rhs)
 	{
@@ -1159,7 +1159,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   if(!options.get_bool_option("atomicity-check"))
 	return 0;
 
-  if(expr.id() == "address_of")
+  if(expr.is_address_of())
   	return 0;
 
   else if(expr.id() == "symbol")
@@ -2782,7 +2782,7 @@ const std::string &goto_convertt::get_string_constant(
      expr.operands().size()==1)
     return get_string_constant(expr.op0());
 
-  if(expr.id()!="address_of" ||
+  if(!expr.is_address_of() ||
      expr.operands().size()!=1 ||
      expr.op0().id()!="index" ||
      expr.op0().operands().size()!=2 ||

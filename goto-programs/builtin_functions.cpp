@@ -192,7 +192,7 @@ void goto_convertt::do_pthread_create(
 
     // do dereferencing
     if(thread_function.id()=="implicit_address_of" ||
-       thread_function.id()=="address_of")
+       thread_function.is_address_of())
     {
       exprt tmp;
       assert(thread_function.operands().size()==1);

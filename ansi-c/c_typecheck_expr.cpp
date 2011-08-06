@@ -86,7 +86,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_unary_boolean(expr);
   else if(expr.id()=="and" || expr.id()=="or")
     typecheck_expr_binary_boolean(expr);
-  else if(expr.id()=="address_of")
+  else if(expr.is_address_of())
     typecheck_expr_address_of(expr);
   else if(expr.id()=="dereference")
     typecheck_expr_dereference(expr);
@@ -521,7 +521,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 
     // special case: ANSI-C 99 section 6.3.2.1 paragraph 4
 
-    if(expr.id()=="address_of" &&
+    if(expr.is_address_of() &&
        expr.implicit() &&
        expr.operands().size()==1 &&
        expr.op0().id()=="symbol" &&
@@ -1217,7 +1217,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
   // special case: address of function designator
   // ANSI-C 99 section 6.3.2.1 paragraph 4
 
-  if(op.id()=="address_of" &&
+  if(op.is_address_of() &&
      op.implicit() &&
      op.operands().size()==1 &&
      op.op0().id()=="symbol" &&
@@ -1492,7 +1492,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   }
 
   // do implicit dereference
-  if(f_op.id()=="address_of" &&
+  if(f_op.is_address_of() &&
      f_op.implicit() &&
      f_op.operands().size()==1)
   {

@@ -504,7 +504,7 @@ void goto_checkt::check_rec(
     return;
   }
 
-  if(expr.id()=="address_of")
+  if(expr.is_address_of())
   {
     assert(expr.operands().size()==1);
     check_rec(expr.op0(), guard, true);

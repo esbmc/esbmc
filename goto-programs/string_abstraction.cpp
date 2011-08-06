@@ -818,7 +818,7 @@ exprt string_abstractiont::build(const exprt &pointer, bool write)
 
   pointer_arithmetict ptr(pointer);
 
-  if(ptr.pointer.id()=="address_of")
+  if(ptr.pointer.is_address_of())
   {
     if(write)
       build_unknown(write);

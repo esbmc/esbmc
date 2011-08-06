@@ -79,7 +79,7 @@ bool rename(exprt &expr, const irep_idt &old_name,
   }
   else
   {
-    if(expr.id()=="address_of" ||
+    if(expr.is_address_of() ||
        expr.id()=="implicit_adress_of")
     {
       // TODO

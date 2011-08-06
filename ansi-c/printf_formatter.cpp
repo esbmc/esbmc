@@ -179,7 +179,7 @@ void printf_formattert::process_format(std::ostream &out)
       if(next_operand==operands.end()) break;
       // this is the address of a string
       const exprt &op=*(next_operand++);
-      if(op.id()=="address_of" &&
+      if(op.is_address_of() &&
          op.operands().size()==1 &&
          op.op0().id()=="index" &&
          op.op0().operands().size()==2 &&

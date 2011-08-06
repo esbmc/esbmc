@@ -963,7 +963,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else
       assert(false);
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.is_address_of() ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {

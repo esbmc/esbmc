@@ -481,7 +481,7 @@ void value_set_fivrnst::get_value_set_rec(
 
     return;
   }
-  else if(expr.id()=="address_of")
+  else if(expr.is_address_of())
   {
     if(expr.operands().size()!=1)
       throw expr.id_string()+" expected to have one operand";

@@ -380,7 +380,7 @@ bool simplify_exprt::simplify_dereference(exprt &expr)
 
   if(expr.op0().type().id()!="pointer") return true;
 
-  if(expr.op0().id()=="address_of")
+  if(expr.op0().is_address_of())
   {
     if(expr.op0().operands().size()==1)
     {
@@ -516,7 +516,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
 
   if(ptr.type().id()!="pointer") return true;
 
-  if(ptr.id()=="address_of")
+  if(ptr.is_address_of())
   {
     if(ptr.operands().size()!=1) return true;
 
@@ -2514,7 +2514,7 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
 
     if(other!=NULL)
     {
-      if(other->id()=="address_of" &&
+      if(other->is_address_of() &&
          other->operands().size()==1)
       {
         if(other->op0().id()=="symbol" ||
@@ -2953,7 +2953,7 @@ tvt simplify_exprt::objects_equal(const exprt &a, const exprt &b)
 {
   if(a==b) return tvt(true);
 
-  if(a.id()=="address_of" && b.id()=="address_of" &&
+  if(a.is_address_of() && b.is_address_of() &&
      a.operands().size()==1 && b.operands().size()==1)
     return objects_equal_address_of(a.op0(), b.op0());
 
@@ -3507,7 +3507,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   }
   else if(expr.id()=="dereference")
     result=simplify_dereference(expr) && result;
-  else if(expr.id()=="address_of")
+  else if(expr.is_address_of())
     result=simplify_address_of(expr) && result;
   else if(expr.id()=="pointer_offset")
     result=simplify_pointer_offset(expr) && result;
@@ -3567,7 +3567,7 @@ bool simplify_exprt::simplify_rec(exprt &expr, modet mode)
   bool result=true;
   modet sub_mode=mode;
 
-  if(expr.id()=="address_of")
+  if(expr.is_address_of())
     sub_mode=ADDRESS_OF;
 
   if(expr.has_operands())

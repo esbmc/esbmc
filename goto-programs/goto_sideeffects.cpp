@@ -352,7 +352,7 @@ void goto_convertt::remove_sideeffects(
     }
   }
 #if 0
-  else if(expr.id()=="address_of")
+  else if(expr.is_address_of())
   {
 	std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
     assert(expr.operands().size()==1);

@@ -348,7 +348,7 @@ void interpretert::evaluate(
       dest.push_back(-tmp0.front());
     return;
   }
-  else if(expr.id()=="address_of")
+  else if(expr.is_address_of())
   {
     if(expr.operands().size()!=1)
       throw "address_of expects one operand";

@@ -330,7 +330,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
   {
     return SUB::convert_member(expr, bv);
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.is_address_of() ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {
