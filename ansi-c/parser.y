@@ -2006,7 +2006,7 @@ postfixing_abstract_declarator:	/* AbstrDeclarator */
 	  set(*$$, "code");
 	  $$->subtype().make_nil();
 	  exprt args("arguments");
-	  args.get_sub().swap($3->add("subtypes").get_sub());
+	  args.get_sub() = (std::vector<irept>&)(((typet*)$3)->subtypes());
 	  $$->arguments(args);
 	  PARSER.pop_scope();
 	}
@@ -2032,7 +2032,7 @@ parameter_postfixing_abstract_declarator:
 	  set(*$$, "code");
 	  $$->subtype().make_nil();
 	  exprt args("arguments");
-	  args.get_sub().swap($3->add("subtypes").get_sub());
+	  args.get_sub() = (std::vector<irept> &)(((typet*)$3)->subtypes());
 	  $$->arguments(args);
 	  PARSER.pop_scope();
 	}
