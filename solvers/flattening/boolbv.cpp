@@ -899,12 +899,15 @@ Function: boolbvt::make_bv_expr
 void boolbvt::make_bv_expr(const typet &type, const bvt &bv, exprt &dest)
 {
   dest=exprt("bv_literals", type);
-  irept::subt &bv_sub=dest.add("bv").get_sub();
+  irept _bv;
+  irept::subt &bv_sub = _bv.get_sub();
 
   bv_sub.resize(bv.size());
 
   for(unsigned i=0; i<bv.size(); i++)
     bv_sub[i].id(i2string(bv[i].get()));
+
+  dest.bv(_bv);
 }
 
 /*******************************************************************\

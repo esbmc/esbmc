@@ -923,6 +923,10 @@ public:
     set(s_declaration_type, val);
   }
 
+  inline void bv(const irept &val) {
+    set(s_bv, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
