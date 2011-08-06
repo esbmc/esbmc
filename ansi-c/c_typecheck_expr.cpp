@@ -1466,7 +1466,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
       new_symbol.location=expr.location();
       new_symbol.type=code_typet();
       new_symbol.type.incomplete(true);
-      new_symbol.type.add("return_type")=int_type();
+      new_symbol.type.return_type(int_type());
       // TODO: should add arguments
 
       symbolt *symbol_ptr;

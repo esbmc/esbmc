@@ -943,6 +943,10 @@ public:
     set(s_member, val);
   }
 
+  inline void return_type(const irept &val) {
+    set(s_return_type, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
