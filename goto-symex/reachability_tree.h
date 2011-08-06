@@ -89,6 +89,9 @@ public:
     dfs_position(reachability_treet &rt);
     dfs_position(std::string filename);
     bool write_to_file(std::string filename);
+protected:
+    bool read_from_file(std::string filename);
+public:
     struct dfs_state {
       unsigned int location_number;
       unsigned int num_threads;

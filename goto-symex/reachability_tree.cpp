@@ -817,3 +817,68 @@ bool reachability_treet::dfs_position::write_to_file(std::string filename)
   fclose(f);
   return false;
 }
+
+bool reachability_treet::dfs_position::read_from_file(std::string filename)
+{
+  reachability_treet::dfs_position::file_hdr hdr;
+  reachability_treet::dfs_position::file_entry entry;
+  FILE *f;
+  unsigned int i, j;
+  char c;
+
+  f = fopen(filename.c_str(), "r");
+  if (f == NULL) {
+    std::cerr << "Couldn't open checkpoint input file" << std::endl;
+    return true;
+  }
+
+  if (fread(&hdr, sizeof(hdr), 1, f) != 1) {
+    std::cerr << "Read error on checkpoint file" << std::endl;
+    fclose(f);
+    return true;
+  }
+
+  if (hdr.magic != file_magic) {
+    std::cerr << "Magic number indicates that this isn't a checkpoint file"
+              << std::endl;
+    fclose(f);
+    return true;
+  }
+
+  for (i = 0; i < hdr.num_states; i++) {
+    reachability_treet::dfs_position::dfs_state state;
+    if (fread(&entry, sizeof(entry), 1, f) != 1) {
+      std::cerr << "Read error on checkpoint file" << std::endl;
+      fclose(f);
+      return true;
+    }
+
+    state.location_number = entry.location_number;
+    state.num_threads = entry.num_threads;
+    state.cur_thread = entry.cur_thread;
+
+    assert(state.num_threads < 65536);
+    if (state.cur_thread >= state.num_threads) {
+      std::cerr << "Inconsistent checkpoint data" << std::endl;
+      fclose(f);
+      return true;
+    }
+
+    for (j = 0; j < state.num_threads; j++) {
+      if (j % 8 == 0) {
+        if (fread(&c, sizeof(c), 1, f) != 1) {
+          std::cerr << "Read error on checkpoint file" << std::endl;
+          fclose(f);
+          return true;
+        }
+      }
+
+      state.explored.push_back(c & (1 << (j & 7)));
+    }
+
+    states.push_back(state);
+  }
+
+  fclose(f);
+  return false;
+}
