@@ -112,8 +112,9 @@ void ansi_c_convertt::convert_expr(exprt &expr)
   }
   else if(expr.id()=="builtin_offsetof")
   {
-    typet &offsetof_type=static_cast<typet &>(expr.add("offsetof_type"));
+    typet offsetof_type=static_cast<const typet &>(expr.offsetof_type());
     convert_type(offsetof_type);
+    expr.offsetof_type(offsetof_type);
   }
   else if(expr.id()=="typecast")
   {

@@ -218,8 +218,9 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
     throw "builtin_offsetof expects no operands";
   }
 
-  typet &type=static_cast<typet &>(expr.add("offsetof_type"));
+  typet type=static_cast<const typet &>(expr.offsetof_type());
   typecheck_type(type);
+  expr.offsetof_type(type);
 
   if(type.id()!="symbol")
   {

@@ -298,7 +298,7 @@ builtin_offsetof:
 	{
 	  $$=$1;
 	  $$->id("builtin_offsetof");
-	  $$->add("offsetof_type").swap(*$3);
+	  $$->offsetof_type(*$3);
 	  $$->add("member").swap(*$5);
 	}
 	;
