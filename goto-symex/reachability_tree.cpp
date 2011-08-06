@@ -799,8 +799,8 @@ bool reachability_treet::dfs_position::write_to_file(
     for (ex_it = it->explored.begin(); ex_it != it->explored.end(); ex_it++) {
       if (*ex_it) {
         buffer[i >> 3] |= (1 << i & 7);
-        i++;
       }
+      i++;
     }
 
     // Round up
