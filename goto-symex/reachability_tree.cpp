@@ -751,3 +751,69 @@ reachability_treet::dfs_position::dfs_position(reachability_treet &rt)
 }
 
 const uint64_t reachability_treet::dfs_position::file_magic = 'ESBMCCHK';
+
+bool reachability_treet::dfs_position::write_to_file(std::string filename)
+{
+  uint8_t buffer[8192];
+  reachability_treet::dfs_position::file_hdr hdr;
+  reachability_treet::dfs_position::file_entry entry;
+  std::vector<bool>::const_iterator ex_it;
+  std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
+  FILE *f;
+  unsigned int i;
+
+  f = fopen(filename.c_str(), "w");
+  if (f == NULL) {
+    std::cerr << "Couldn't open checkpoint output file" << std::endl;
+    return true;
+  }
+
+  hdr.magic = file_magic;
+  hdr.checksum = 0;
+  hdr.num_states = states.size();
+  hdr.num_ileaves = 0;
+
+  if (fwrite(&hdr, sizeof(hdr), 1, f) != 1) {
+    std::cerr << "Write error writing checkpoint file" << std::endl;
+    fclose(f);
+    return true;
+  }
+
+  for (it = states.begin(); it != states.end(); it++) {
+    entry.location_number = it->location_number;
+    entry.num_threads = it->num_threads;
+    entry.cur_thread = it->cur_thread;
+    
+    if (fwrite(&entry, sizeof(entry), 1, f) != 1) {
+      std::cerr << "Write error writing checkpoint file" << std::endl;
+      fclose(f);
+      return true;
+    }
+
+    assert(it->explored.size() < 65536);
+    assert(it->explored.size() == entry.num_threads);
+
+    i = 0;
+    memset(buffer, 0, sizeof(buffer));
+    for (ex_it = it->explored.begin(); ex_it != it->explored.end(); ex_it++) {
+      if (*ex_it) {
+        buffer[i >> 3] |= (1 << i & 7);
+        i++;
+      }
+    }
+
+    // Round up
+    i += 7;
+    i >>= 3;
+
+    assert(i != 0); // Always at least one thread in _existance_.
+    if (fwrite(buffer, i, 1, f) != 1) {
+      std::cerr << "Write error writing checkpoint file" << std::endl;
+      fclose(f);
+      return true;
+    }
+  }
+
+  fclose(f);
+  return false;
+}
