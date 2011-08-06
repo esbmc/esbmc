@@ -662,7 +662,9 @@ void goto_symex_statet::rename(
   if(type.id()==typet::t_array)
   {
     rename(type.subtype(), ns,node_id);
-    rename(static_cast<exprt &>(type.add("size")), ns,node_id);
+    exprt tmp = static_cast<const exprt &>(type.size_irep());
+    rename(tmp, ns,node_id);
+    type.size(tmp);
   }
   else if(type.id()==typet::t_struct ||
           type.id()==typet::t_union ||
@@ -702,7 +704,9 @@ void goto_symex_statet::renaming_levelt::rename(typet &type, unsigned node_id)
   if(type.id()==typet::t_array)
   {
     rename(type.subtype(),node_id);
-    rename((exprt &)type.add("size"),node_id);
+    exprt tmp = static_cast<const exprt &>(type.size_irep());
+    rename(tmp, node_id);
+    type.size(tmp);
   }
   else if(type.id()==typet::t_struct ||
           type.id()==typet::t_union ||

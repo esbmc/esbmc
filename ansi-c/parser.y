@@ -2045,7 +2045,7 @@ array_abstract_declarator:
 	{
 	  $$=(typet*)$1;
 	  set(*$$, "array");
-	  $$->add("size").swap(*$2);
+	  $$->size(*$2);
 	  $$->subtype().make_nil();
 	}
 	| array_abstract_declarator '[' constant_expression ']'
@@ -2053,7 +2053,7 @@ array_abstract_declarator:
 	  // we need to push this down
 	  $$=$1;
 	  set(*$2, "array");
-	  $2->add("size").swap(*$3);
+	  $2->size(*$3);
 	  ((typet*)$2)->subtype().make_nil();
 	  make_subtype((typet&)*$1, (typet&)*$2);
 	}

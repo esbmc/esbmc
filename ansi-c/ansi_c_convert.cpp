@@ -300,7 +300,11 @@ void ansi_c_convertt::convert_type(
   else if(type.id()=="c_bitfield")
   {
     convert_type(type.subtype());
-    convert_expr(static_cast<exprt &>(type.add("size")));
+    exprt tmp = static_cast<const exprt &>(type.size_irep());
+    convert_expr(tmp);
+    type.size(tmp);
+    // XXX jmorse - does this reveal a condition where c_bitfield doesn't have
+    // a size field?
   }
   else if(type.id()=="symbol")
   {

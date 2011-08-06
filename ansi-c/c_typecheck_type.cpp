@@ -228,7 +228,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     typecheck_type(type.subtype());
 
     // we turn this into unsigedbv/signedbv
-    exprt &size=static_cast<exprt &>(type.add("size"));
+    exprt size = static_cast<const exprt &>(type.size_irep());
 
     typecheck_expr(size);
     make_constant_index(size);
@@ -239,6 +239,9 @@ void c_typecheck_baset::typecheck_type(typet &type)
       err_location(size);
       throw "failed to convert bit field width";
     }
+
+    // Now converted, set size field.
+    type.size(size);
 
     const typet &base_type=follow(type.subtype());
 

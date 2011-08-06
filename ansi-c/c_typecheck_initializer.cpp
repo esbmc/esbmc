@@ -437,7 +437,7 @@ exprt c_typecheck_baset::do_initializer_incomplete_array(
     
   // set size
   result.type().id("array");
-  result.type().add("size")=from_integer(s, int_type());
+  result.type().size(from_integer(s, int_type()));
   
   return result;
 }
