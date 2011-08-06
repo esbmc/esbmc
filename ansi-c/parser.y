@@ -1031,7 +1031,7 @@ member_declaring_list:
 	  init(&$$, "declaration_list");
 
 	  // save the type_specifier
-	  $$->add("declaration_type")=*$1;
+	  $$->declaration_type(*$1);
 
 	  exprt declaration;
 	  PARSER.new_declaration(*$1, *$2, declaration, false, false);

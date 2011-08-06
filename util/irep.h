@@ -919,6 +919,10 @@ public:
     set(s_offsetof_type, val);
   }
 
+  inline void declaration_type(const irept &val) {
+    set(s_declaration_type, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
