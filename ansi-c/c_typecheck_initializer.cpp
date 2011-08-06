@@ -171,7 +171,7 @@ void c_typecheck_baset::do_initializer(
     
   if(type.id()=="incomplete_array")
   {
-    assert(value.type().id()=="array");
+    assert(value.type().is_array());
     type=value.type();
   } 
 }
@@ -217,7 +217,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   }
   
   if(full_type.id()=="incomplete_array" ||
-     full_type.id()=="array" ||
+     full_type.is_array() ||
      full_type.id()=="struct" ||
      full_type.id()=="union")
   {
@@ -230,7 +230,7 @@ exprt c_typecheck_baset::do_initializer_rec(
     else if(value.id()=="string-constant")
     {
       // we only do this for arrays, not for structs
-      if(full_type.id()=="array" ||
+      if(full_type.is_array() ||
          full_type.id()=="incomplete_array")
       {
         exprt tmp;
@@ -296,7 +296,7 @@ exprt c_typecheck_baset::do_initializer_rec(
 
   const typet &full_type=follow(type);
 
-  if(full_type.id()=="array")
+  if(full_type.is_array())
     return do_initializer_array(state, to_array_type(full_type), force_constant);
   else if(full_type.id()=="incomplete_array")
     return do_initializer_incomplete_array(state, full_type, force_constant);

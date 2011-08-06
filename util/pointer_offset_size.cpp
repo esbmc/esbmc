@@ -28,7 +28,7 @@ Function: pointer_offset_size
 
 mp_integer pointer_offset_size(const typet &type)
 {
-  if(type.id()=="array")
+  if(type.is_array())
   {
     mp_integer sub=pointer_offset_size(type.subtype());
   
@@ -84,7 +84,7 @@ mp_integer compute_pointer_offset(
   else if(expr.id()=="index")
   {
     assert(expr.operands().size()==2);
-    assert(expr.op0().type().id()=="array");
+    assert(expr.op0().type().is_array());
     mp_integer sub_size=pointer_offset_size(expr.op0().type().subtype());
 
     mp_integer i;

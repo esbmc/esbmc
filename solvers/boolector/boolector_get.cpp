@@ -104,7 +104,7 @@ exprt boolector_convt::bv_get_rec(
 
   if(bvtype==IS_UNKNOWN)
   {
-    if(type.id()=="array")
+    if(type.is_array())
     {
 #if 0
       unsigned sub_width;

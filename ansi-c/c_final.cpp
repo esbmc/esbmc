@@ -47,7 +47,7 @@ void c_finalize_expression(
       
       const symbolt &symbol=it->second;
 
-      if(symbol.type.id()=="array")
+      if(symbol.type.is_array())
         expr.type()=symbol.type;
       else if(symbol.type.id()=="incomplete_array")
       {

@@ -887,7 +887,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
   // first of all, it must be a buffer
   const typet &obj_t=ns.follow(object.type());
 
-  if(obj_t.id()!="array")  
+  if(!obj_t.is_array())  
     return static_cast<const exprt &>(get_nil_irep());
 
   const array_typet &obj_array_type=to_array_type(obj_t);
@@ -901,7 +901,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
     const typet &t=ns.follow(object.op0().type());
 
     if(object.op0().id()!="symbol" ||
-       t.id()!="array")
+       !t.is_array())
       return static_cast<const exprt &>(get_nil_irep());
 
     const symbol_exprt &expr_symbol=to_symbol_expr(object.op0());

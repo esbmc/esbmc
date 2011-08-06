@@ -293,7 +293,7 @@ void goto_checkt::bounds_check(
     std::cerr << expr.pretty() << std::endl;
     throw "index got incomplete array";
   }
-  else if(array_type.id()!="array")
+  else if(!array_type.is_array())
     throw "bounds check expected array type, got "+array_type.id_string();
 
   std::string name=array_name(expr.op0());
@@ -382,7 +382,7 @@ void goto_checkt::array_size_check(
   const exprt &expr,
   const irept &location)
 {
-  if(expr.type().id()=="array")
+  if(expr.type().is_array())
   {
     const exprt &size=(exprt &)expr.type().size_irep();
 
@@ -655,7 +655,7 @@ void goto_checkt::check_rec(
   }
   else if (expr.id() == "struct" || expr.id() == "union"
 		    || expr.type().id()=="pointer" || expr.id()=="member" ||
-		    (expr.type().id() == "array" && expr.type().subtype().id() == "array"))
+		    (expr.type().is_array() && expr.type().subtype().is_array()))
   {
 	use_boolector=false; //always deactivate boolector
 	options.set_option("bl", false);

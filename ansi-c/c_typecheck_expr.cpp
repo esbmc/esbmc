@@ -612,7 +612,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   if(!is_number(expr_type) &&
      expr_type.id()!="bool" &&
      expr_type.id()!="pointer" &&
-     expr_type.id()!="array" &&
+     !expr_type.is_array() &&
      expr_type.id()!="empty" &&
      expr_type.id()!="c_enum" &&
      expr_type.id()!="incomplete_c_enum")
@@ -632,7 +632,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
      op_type.id()=="pointer")
   {
   }
-  else if(op_type.id()=="array" ||
+  else if(op_type.is_array() ||
           op_type.id()=="incomplete_array")
   {
     index_exprt index;
@@ -753,10 +753,10 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
     const typet &array_full_type=follow(array_expr.type());
     const typet &index_full_type=follow(index_expr.type());
 
-    if(array_full_type.id()!="array" &&
+    if(!array_full_type.is_array() &&
        array_full_type.id()!="incomplete_array" &&
        array_full_type.id()!="pointer" &&
-       (index_full_type.id()=="array" ||
+       (index_full_type.is_array() ||
         index_full_type.id()=="incomplete_array" ||
         index_full_type.id()=="pointer"))
       std::swap(array_expr, index_expr);
@@ -766,7 +766,7 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
 
   const typet &final_array_type=follow(array_expr.type());
 
-  if(final_array_type.id()=="array" ||
+  if(final_array_type.is_array() ||
      final_array_type.id()=="incomplete_array")
   {
     if(array_expr.cmt_lvalue())
@@ -854,7 +854,7 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
     if(follow(o_type0)==follow(o_type1))
     {
       const typet &final_type=follow(o_type0);
-      if(final_type.id()!="array" &&
+      if(!final_type.is_array() &&
          final_type.id()!="incomplete_array" &&
          final_type.id()!="incomplete_struct")
       {
@@ -962,7 +962,7 @@ void c_typecheck_baset::typecheck_expr_ptrmember(exprt &expr)
   const typet &final_op0_type=follow(expr.op0().type());
 
   if(final_op0_type.id()!="pointer" &&
-     final_op0_type.id()!="array")
+     !final_op0_type.is_array())
   {
     err_location(expr);
     str << "ptrmember operator requires pointer type "
@@ -1243,7 +1243,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
   }
 
   // turn &array into &(array[0])
-  if(follow(op.type()).id()=="array")
+  if(follow(op.type()).is_array())
   {
     index_exprt index;
     index.array()=op;
@@ -1281,7 +1281,7 @@ void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
 
   const typet op_type=follow(op.type());
 
-  if(op_type.id()=="array" ||
+  if(op_type.is_array() ||
      op_type.id()=="incomplete_array")
   {
     // *a is the same as a[0]
@@ -1756,7 +1756,7 @@ void c_typecheck_baset::typecheck_function_call_arguments(
       // don't know type, just do standard conversion
 
       const typet &type=follow(op.type());
-      if(type.id()=="array" || type.id()=="incomplete_array")
+      if(type.is_array() || type.id()=="incomplete_array")
         implicit_typecast(op, pointer_typet(empty_typet()));
     }
   }
@@ -1860,7 +1860,7 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
     if(!cformat.empty())
       expr.cformat(cformat);
   }
-  else if(type.id()=="array" ||
+  else if(type.is_array() ||
           type.id()=="incomplete_array")
   {
     // nothing to do

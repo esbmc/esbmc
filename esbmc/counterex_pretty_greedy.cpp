@@ -90,7 +90,7 @@ void counterexample_beautification_greedyt::minimize(
 {
   // array or struct?
 
-  if(type.id()=="array")
+  if(type.is_array())
   {
     // get size
     const exprt &size_expr=(exprt &)type.size_irep();
@@ -224,7 +224,7 @@ unsigned counterexample_beautification_greedyt::get_max_width(
 {
   // array or struct?
 
-  if(type.id()=="array")
+  if(type.is_array())
   {
     return get_max_width(ns, type.subtype());
   }

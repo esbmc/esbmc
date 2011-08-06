@@ -159,7 +159,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
     {
       if(array.type().id()=="pointer")
         convert_smt_expr(array);
-      else if(array.type().id()=="array")
+      else if(array.type().is_array())
         convert_address_of_rec(array);
       else
         assert(false);
@@ -172,7 +172,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
       
       if(array.type().id()=="pointer")
         convert_smt_expr(array);
-      else if(array.type().id()=="array")
+      else if(array.type().is_array())
         convert_address_of_rec(array);
       else
         assert(false);
@@ -564,7 +564,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else
         throw "unknown boolean constant";
     }
-    else if(expr.type().id()=="array")
+    else if(expr.type().is_array())
     {
       assert( false && "Construct not supported yet" );
       smt_prop.out << "ARRAY (i: " << array_index_type() << "):";
@@ -978,7 +978,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     // Not supported but it does not work otherwise
     //
     // assert(false && "Construct not supported yet");
-    assert(expr.type().id()=="array");
+    assert(expr.type().is_array());
     assert(expr.operands().size()==1);
     smt_prop.out << "bv0[32]";
     // smt_prop.out << "(ARRAY (i: " << array_index_type() << "): ";
@@ -1061,7 +1061,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
         convert_array_value(value);
         smt_prop.out << ")";
       }
-      else if(expr.type().id()=="array")
+      else if(expr.type().is_array())
       {
         smt_prop.out << " ";
         convert_smt_expr(index);
@@ -1307,7 +1307,7 @@ Function: smt_convt::convert_smt_type
 
 void smt_convt::convert_smt_type(const typet &type)
 {
-  if(type.id()=="array")
+  if(type.is_array())
   {
     const array_typet &array_type=to_array_type(type);
     
@@ -1390,7 +1390,7 @@ Function: smt_convt::find_symbols
 
 void smt_convt::find_symbols(const typet &type)
 {
-  if(type.id()=="array")
+  if(type.is_array())
   {
     const array_typet &array_type=to_array_type(type);
     find_symbols(array_type.size());

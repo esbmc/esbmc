@@ -2667,9 +2667,9 @@ bool simplify_exprt::simplify_with(exprt &expr)
       }
     }
   }
-  else if(expr.op0().type().id()=="array")
+  else if(expr.op0().type().is_array())
   {
-    if(expr.op0().id()=="array" ||
+    if(expr.op0().is_array() ||
        expr.op0().id()=="constant")
     {
       while(expr.operands().size()>1)
@@ -2788,7 +2788,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
     }
   }
   else if(expr.op0().id()=="constant" ||
-          expr.op0().id()=="array")
+          expr.op0().is_array())
   {
     if(mode==NORMAL)
     {

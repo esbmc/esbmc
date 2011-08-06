@@ -639,7 +639,7 @@ void value_set_fivrt::get_value_set_rec(
 
     const typet &type=ns.follow(expr.op0().type());
 
-    assert(type.id()=="array" ||
+    assert(type.is_array() ||
            type.id()=="incomplete_array" || 
            type.id()=="#REF#");
            
@@ -885,7 +885,7 @@ void value_set_fivrt::get_value_set_rec(
   }
   else if(expr.id()=="with" ||
           expr.id()=="array_of" ||
-          expr.id()=="array")
+          expr.is_array())
   {
     // these are supposed to be done by assign()
     throw "unexpected value in get_value_set: "+expr.id_string();
@@ -1063,8 +1063,8 @@ void value_set_fivrt::get_reference_set_sharing_rec(
           expr.id()=="dynamic_object" ||
           expr.id()=="string-constant")
   {
-    if(expr.type().id()=="array" &&
-       expr.type().subtype().id()=="array")
+    if(expr.type().is_array() &&
+       expr.type().subtype().is_array())
       insert_from(dest, expr);
     else    
       insert_from(dest, expr, 0);
@@ -1134,7 +1134,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
     const exprt &offset=expr.op1();
     const typet &array_type=ns.follow(array.type());
     
-    assert(array_type.id()=="array" ||
+    assert(array_type.is_array() ||
            array_type.id()=="incomplete_array");
 
     object_mapt array_references;
@@ -1353,7 +1353,7 @@ void value_set_fivrt::assign(
       }
     }
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     exprt lhs_index("index", type.subtype());
     lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
@@ -1373,7 +1373,7 @@ void value_set_fivrt::assign(
 //        std::cout << "AOF: " << rhs.op0() << std::endl;
         assign(lhs_index, rhs.op0(), ns, add_to_sets);
       }
-      else if(rhs.id()=="array" ||
+      else if(rhs.is_array() ||
               rhs.id()=="constant")
       {
         forall_operands(o_it, rhs)
@@ -1626,7 +1626,7 @@ void value_set_fivrt::assign_rec(
       
     const typet &type=ns.follow(lhs.op0().type());
       
-    assert(type.id()=="array" || type.id()=="incomplete_array" || type.id()=="#REF#");
+    assert(type.is_array() || type.id()=="incomplete_array" || type.id()=="#REF#");
 
     assign_rec(lhs.op0(), values_rhs, "[]"+suffix, ns, recursion_set, add_to_sets);
   }

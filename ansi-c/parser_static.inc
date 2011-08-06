@@ -105,7 +105,7 @@ static void make_subtype(typet &dest, typet &src)
   if (src.is_nil())
     return;
   
-  assert(src.id()=="array" ||
+  assert(src.is_array() ||
          src.id()=="incomplete_array" ||
          src.id()=="pointer" ||
          src.id()=="code" ||
@@ -127,7 +127,7 @@ static void make_subtype(typet &dest, typet &src)
     }
 
     if(sub->id()=="pointer" ||
-       sub->id()=="array" ||
+       sub->is_array() ||
        sub->id()=="incomplete_array" ||
        sub->id()=="code" ||
        sub->id()=="declarator")

@@ -80,7 +80,7 @@ void boolbvt::convert_with(
 
   next_bv.resize(prev_bv.size());
 
-  if(type.id()=="array")
+  if(type.is_array())
     return convert_with_array(to_array_type(type), op1, op2, prev_bv, next_bv);
   else if(type.id()=="bv" ||
           type.id()=="unsignedbv" ||

@@ -603,7 +603,7 @@ unsigned interpretert::get_size(const typet &type) const
 
     return max_size;    
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     const exprt &size_expr=static_cast<const exprt &>(type.size_irep());
 

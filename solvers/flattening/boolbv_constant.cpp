@@ -28,7 +28,7 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
 
   bv.resize(width);
   
-  if(expr.type().id()=="array")
+  if(expr.type().is_array())
   {
     unsigned op_width=width/expr.operands().size();
     unsigned offset=0;

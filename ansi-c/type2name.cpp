@@ -73,7 +73,7 @@ std::string type2name(const typet &type)
     result.resize(result.size()-1);
     result+=")";
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     const array_typet &t = to_array_type(type);
     result+="ARR" + t.size().value().as_string();

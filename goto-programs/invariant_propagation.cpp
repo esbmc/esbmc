@@ -178,7 +178,7 @@ void invariant_propagationt::get_objects_rec(
       get_objects_rec(member_expr, dest);
     }
   }
-  else if(t.id()=="array")
+  else if(t.is_array())
   {
     //get_objects_rec(identifier, suffix+"[]", t.subtype(), dest);
     //we don't track these
@@ -252,7 +252,7 @@ bool invariant_propagationt::check_type(const typet &type) const
   else if(type.id()=="struct" ||
           type.id()=="union")
     return false;
-  else if(type.id()=="array")
+  else if(type.is_array())
     return false;
   else if(type.id()=="symbol")
     return check_type(ns.follow(type));

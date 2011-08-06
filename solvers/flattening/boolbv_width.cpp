@@ -97,7 +97,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 
     return false;
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     const array_typet &array_type=to_array_type(type);
     unsigned sub_width;

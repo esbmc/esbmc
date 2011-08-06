@@ -36,7 +36,7 @@ void boolbvt::convert_index(const index_exprt &expr, bvt &bv)
   const exprt &array=expr.array();
   const exprt &index=expr.index();
 
-  if(array.type().id()!="array")
+  if(array.type().!is_array())
     throw "index expects array type argument";
 
   // see if the array size is constant
@@ -178,7 +178,7 @@ void boolbvt::convert_index(
   const mp_integer &index,
   bvt &bv)
 {
-  if(array.type().id()!="array")
+  if(array.type().!is_array())
     throw "index expects array typed array";
 
   unsigned width;

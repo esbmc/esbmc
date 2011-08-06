@@ -102,7 +102,7 @@ void goto_inlinet::parameter_assignments(
         // we are willing to do some conversion
         if((f_argtype.id()=="pointer" &&
             f_acttype.id()=="pointer") ||
-           (f_argtype.id()=="array" &&
+           (f_argtype.is_array() &&
             f_acttype.id()=="pointer" &&
             f_argtype.subtype()==f_acttype.subtype()))
         {

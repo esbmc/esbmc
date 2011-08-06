@@ -239,7 +239,7 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
     }
   }
   else if(symbol.type.id()=="incomplete_array" || 
-          symbol.type.id()=="array")
+          symbol.type.is_array())
   {
     // insert a new type symbol for the array
     {
@@ -371,7 +371,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
 
     if(final_old!=final_new)
     {
-      if(final_old.id()=="array" &&
+      if(final_old.is_array() &&
          final_new.id()=="incomplete_array" &&
          final_old.subtype()==final_new.subtype())
       {
@@ -379,7 +379,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         new_symbol.type=old_symbol.type;
       }
       else if(final_old.id()=="incomplete_array" &&
-              final_new.id()=="array" &&
+              final_new.is_array() &&
               final_old.subtype()==final_new.subtype())
       {
         // this is also ok

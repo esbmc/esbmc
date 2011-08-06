@@ -121,7 +121,7 @@ exprt boolbvt::bv_get_rec(
 
   if(bvtype==IS_UNKNOWN)
   {
-    if(type.id()=="array")
+    if(type.is_array())
     {
       unsigned sub_width;
       const typet &subtype=type.subtype();

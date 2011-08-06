@@ -752,7 +752,7 @@ void goto_convertt::do_array_set(
   if(array_ptr.id()!="implicit_address_of")
     throw "array_set expects array-pointer as first argument";
 
-  if(array_ptr.op0().type().id()!="array")
+  if(!array_ptr.op0().type().is_array())
     throw "array_set expects array as first argument";
 
   const exprt &array=array_ptr.op0();

@@ -381,7 +381,7 @@ void ansi_c_convertt::convert_type(
         throw "unexpected argument: "+it->id_string();
     }
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     array_typet &array_type=to_array_type(type);
 

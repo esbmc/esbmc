@@ -57,7 +57,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   {
     dest=from_integer(1, uint_type());
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     const exprt &size_expr=
       static_cast<const exprt &>(type.size_irep());

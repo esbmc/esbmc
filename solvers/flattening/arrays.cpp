@@ -155,7 +155,7 @@ void arrayst::collect_arrays(const exprt &a)
   else if(a.id()=="nondet_symbol")
   {
   }
-  else if(a.id()=="constant" || a.id()=="array")
+  else if(a.id()=="constant" || a.is_array())
   {
   }
   else if(a.id()=="array_of")
@@ -375,7 +375,7 @@ void arrayst::add_array_constraints(
   else if(expr.id()=="symbol" ||
           expr.id()=="nondet_symbol" ||
           expr.id()=="constant" ||
-          expr.id()=="array")
+          expr.is_array())
   {
   }
   else

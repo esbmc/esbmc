@@ -302,7 +302,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     string2array(expr, tmp);
     return convert_bitvector(tmp, bv);
   }
-  else if(expr.id()=="array")
+  else if(expr.is_array())
     return convert_array(expr, bv);
   else if(expr.id()=="lambda")
     return convert_lambda(expr, bv);
@@ -332,7 +332,7 @@ void boolbvt::convert_array(const exprt &expr, bvt &bv)
     
   bv.resize(width);
 
-  if(expr.type().id()=="array")
+  if(expr.type().is_array())
   {
     unsigned op_width=width/expr.operands().size();
     unsigned offset=0;
@@ -379,7 +379,7 @@ void boolbvt::convert_lambda(const exprt &expr, bvt &bv)
   if(expr.operands().size()!=2)
     throw "lambda takes two operands";
 
-  if(expr.type().id()!="array")
+  if(expr.type().!is_array())
     return conversion_failed(expr, bv);
 
   const exprt &array_size=
@@ -952,7 +952,7 @@ Function: boolbvt::is_unbounded_array
 
 bool boolbvt::is_unbounded_array(const typet &type) const
 {
-  if(type.id()!="array") return false;
+  if(type.!is_array()) return false;
   
   if(unbounded_array==U_ALL) return true;
   

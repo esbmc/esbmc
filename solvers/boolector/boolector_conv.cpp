@@ -95,7 +95,7 @@ bool boolector_convt::check_all_types(const typet &type)
 {
   if (type.id()=="bool" || type.id()=="signedbv" || type.id()=="unsignedbv" ||
 	  type.id()=="symbol" || type.id()=="empty" || type.id() == "fixedbv" ||
-	  type.id()=="array" || type.id()=="struct" || type.id()=="pointer" ||
+	  type.is_array() || type.id()=="struct" || type.id()=="pointer" ||
 	  type.id()=="union")
   {
     return true;
@@ -287,7 +287,7 @@ bool boolector_convt::convert_identifier(const std::string &identifier, const ty
   {
 	bv = boolector_var(boolector_ctx, width, identifier.c_str());
   }
-  else if (type.id()=="array")
+  else if (type.is_array())
   {
 	create_boolector_array(type, identifier, bv);
   }
@@ -444,7 +444,7 @@ BtorExp* boolector_convt::convert_lt(const exprt &expr)
   assert(expr.operands().size()==2);
   BtorExp *constraint, *operand0, *operand1;
 
-  if (expr.op0().type().id()=="array")
+  if (expr.op0().type().is_array())
     write_cache(expr.op0());
 
   if (convert_bv(expr.op0(), operand0))
@@ -480,7 +480,7 @@ BtorExp* boolector_convt::convert_gt(const exprt &expr)
   assert(expr.operands().size()==2);
   BtorExp *constraint, *operand0, *operand1;
 
-  if (expr.op0().type().id()=="array")
+  if (expr.op0().type().is_array())
     write_cache(expr.op0());
 
   if (convert_bv(expr.op0(), operand0))
@@ -517,7 +517,7 @@ BtorExp* boolector_convt::convert_le(const exprt &expr)
   assert(expr.operands().size()==2);
   BtorExp *constraint, *operand0, *operand1;
 
-  if (expr.op0().type().id()=="array")
+  if (expr.op0().type().is_array())
     write_cache(expr.op0());
 
   if (convert_bv(expr.op0(), operand0))
@@ -553,7 +553,7 @@ BtorExp* boolector_convt::convert_ge(const exprt &expr)
   assert(expr.operands().size()==2);
   BtorExp *constraint, *operand0, *operand1;
 
-  if (expr.op0().type().id()=="array")
+  if (expr.op0().type().is_array())
     write_cache(expr.op0());
 
   if (convert_bv(expr.op0(), operand0))
@@ -597,7 +597,7 @@ BtorExp* boolector_convt::convert_eq(const exprt &expr)
   assert(expr.operands().size()==2);
   static BtorExp *constraint, *operand0, *operand1;
 
-  if (expr.op0().type().id()=="array")
+  if (expr.op0().type().is_array())
     write_cache(expr.op0());
 
   if (convert_bv(expr.op0(), operand0))
@@ -1486,7 +1486,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
 	const_var = boolector_concat(boolector_ctx, magnitude, fraction);
 	//const_var = boolector_int(boolector_ctx, atoi(value.c_str()), width);
   }
-  else if (expr.type().id()== "array")
+  else if (expr.type().is_array())
   {
 	convert_constant_array(expr, const_var);
   }
@@ -2591,7 +2591,7 @@ bool boolector_convt::assign_boolector_expr(const exprt expr)
 	ignoring(expr);
 	return false;
   }
-  else if (expr.op0().type().id() == "array" && expr.op0().type().subtype().id()=="struct")
+  else if (expr.op0().type().is_array() && expr.op0().type().subtype().id()=="struct")
   {
 	ignoring(expr);
   	return false;

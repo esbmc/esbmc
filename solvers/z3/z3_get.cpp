@@ -108,10 +108,10 @@ exprt z3_convt::get(const exprt &expr) const
 
   //std::cout << "expr.pretty(): " << expr.pretty() << "\n";
 
-  if ((expr.type().id() =="array" && expr.type().subtype().id() =="array") ||
-      (expr.type().id() =="array" && expr.type().subtype().id() =="pointer") ||
-      (expr.type().id() =="array" && expr.type().subtype().id() =="union") ||
-      (expr.type().id() =="array" && expr.type().subtype().id() =="struct"))
+  if ((expr.type().is_array() && expr.type().subtype().is_array()) ||
+      (expr.type().is_array() && expr.type().subtype().id() =="pointer") ||
+      (expr.type().is_array() && expr.type().subtype().id() =="union") ||
+      (expr.type().is_array() && expr.type().subtype().id() =="struct"))
     return expr;
 
   if(expr.id()==exprt::symbol ||
@@ -263,7 +263,7 @@ exprt z3_convt::bv_get_rec(
 
   if(bvtype==IS_UNKNOWN)
   {
-    if(type.id()=="array")
+    if(type.is_array())
     {
       unsigned sub_width;
       const typet &subtype=type.subtype();

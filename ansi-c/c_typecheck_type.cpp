@@ -100,7 +100,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
 
     typecheck_type(code_type.return_type());
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     array_typet &array_type=to_array_type(type);
     exprt &size=array_type.size();
@@ -332,7 +332,7 @@ Function: c_typecheck_baset::adjust_function_argument
 
 void c_typecheck_baset::adjust_function_argument(typet &type) const
 {
-  if(type.id()=="array" ||
+  if(type.is_array() ||
      type.id()=="incomplete_array")
   {
     type.id("pointer");

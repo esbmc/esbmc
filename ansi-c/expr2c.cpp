@@ -288,7 +288,7 @@ std::string expr2ct::convert_rec(
         return q+" ("+tmp+" *)";
     }
   }
-  else if(src.id()=="array")
+  else if(src.is_array())
   {
     std::string size_string=convert(static_cast<const exprt &>(src.size_irep()));
     return convert(src.subtype())+" ["+size_string+"]";
@@ -1386,7 +1386,7 @@ std::string expr2ct::convert_constant(
         dest+="l";
     }
   }
-  else if(type.id()=="array" ||
+  else if(type.is_array() ||
           type.id()=="incomplete_array")
   {
     dest="{ ";
@@ -3082,7 +3082,7 @@ std::string expr2ct::convert(
   else if(src.id()=="union")
     return convert_union(src, precedence);
 
-  else if(src.id()=="array")
+  else if(src.is_array())
     return convert_array(src, precedence);
 
   else if(src.id()=="array-list")

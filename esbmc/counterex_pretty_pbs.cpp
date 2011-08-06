@@ -36,7 +36,7 @@ void counterexample_beautification_pbst::beautify(
 {
   // array or struct?
 
-  if(type.id()=="array")
+  if(type.is_array())
   {
     // get size
     const exprt &size_expr=(exprt &)type.size_irep();

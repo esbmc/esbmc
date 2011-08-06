@@ -66,7 +66,7 @@ void base_type(typet &type, const namespacet &ns)
     base_type(type.subtypes()[0], ns);
     base_type(type.subtypes()[1], ns);
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     base_type(type.subtype(), ns);
   }
@@ -223,7 +223,7 @@ bool base_type_eqt::base_type_eq_rec(
   {
     return base_type_eq_rec(type1.subtype(), type2.subtype());
   }
-  else if(type1.id()=="array")
+  else if(type1.is_array())
   {
     if(!base_type_eq_rec(type1.subtype(), type2.subtype()))
       return false;

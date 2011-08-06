@@ -666,7 +666,7 @@ void dereferencet::bounds_check(
   //std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
   const typet &array_type=ns.follow(expr.op0().type());
   //std::cout << "array_type.pretty(): " << array_type.pretty() << std::endl;
-  if(array_type.id()!="array")
+  if(!array_type.is_array())
     throw "bounds check expected array type";
 
   std::string name=array_name(ns, expr.array());

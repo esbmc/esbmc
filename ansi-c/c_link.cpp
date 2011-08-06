@@ -161,12 +161,12 @@ void c_linkt::duplicate_type(
       // ignore
     }
     else if(ns.follow(in_context.type).id()=="incomplete_array" &&
-            ns.follow(new_symbol.type).id()=="array")
+            ns.follow(new_symbol.type).is_array())
     {
       // store new type
       in_context.type=new_symbol.type;
     }
-    else if(ns.follow(in_context.type).id()=="array" &&
+    else if(ns.follow(in_context.type).is_array() &&
             ns.follow(new_symbol.type).id()=="incomplete_array")
     {
       // ignore
@@ -271,12 +271,12 @@ void c_linkt::duplicate_symbol(
     if(!base_type_eq(in_context.type, new_symbol.type, ns))
     {
       if(ns.follow(in_context.type).id()=="incomplete_array" &&
-         ns.follow(new_symbol.type).id()=="array")
+         ns.follow(new_symbol.type).is_array())
       {
         // store new type
         in_context.type=new_symbol.type;
       }
-      else if(ns.follow(in_context.type).id()=="array" &&
+      else if(ns.follow(in_context.type).is_array() &&
               ns.follow(new_symbol.type).id()=="incomplete_array")
       {
         // ignore

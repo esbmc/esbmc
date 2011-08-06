@@ -310,7 +310,7 @@ void boolbvt::convert_typecast(const exprt &expr, bvt &bv)
     return;
     
   default:
-    if(expr.type().id()=="array")
+    if(expr.type().is_array())
     {
       assert(op_width==dest_width);
       bv=op_bv;

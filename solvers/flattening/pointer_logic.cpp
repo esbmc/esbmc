@@ -187,7 +187,7 @@ exprt pointer_logict::object_rec(
 {
   assert(offset>=0);
 
-  if(src.type().id()=="array")
+  if(src.type().is_array())
   {
     mp_integer size=pointer_offset_size(src.type().subtype());
 
