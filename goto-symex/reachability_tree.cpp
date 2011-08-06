@@ -766,7 +766,7 @@ reachability_treet::dfs_position::dfs_position(const std::string filename)
   read_from_file(filename);
 }
 
-const uint64_t reachability_treet::dfs_position::file_magic = 'ESBMCCHK';
+const uint32_t reachability_treet::dfs_position::file_magic = 'ECHK';
 
 bool reachability_treet::dfs_position::write_to_file(
                                        const std::string filename) const

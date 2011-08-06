@@ -100,11 +100,11 @@ public:
       std::vector<bool> explored;
     };
 
-    static const uint64_t file_magic;
+    static const uint32_t file_magic;
 
     struct file_hdr {
-      uint64_t magic;
-      uint64_t checksum;
+      uint32_t magic;
+      uint32_t checksum;
       uint32_t num_states;
       uint32_t num_ileaves;
     };
