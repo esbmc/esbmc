@@ -87,11 +87,11 @@ public:
 
   class dfs_position {
 public:
-    dfs_position(reachability_treet &rt);
-    dfs_position(std::string filename);
-    bool write_to_file(std::string filename);
+    dfs_position(const reachability_treet &rt);
+    dfs_position(const std::string filename);
+    bool write_to_file(const std::string filename) const;
 protected:
-    bool read_from_file(std::string filename);
+    bool read_from_file(const std::string filename);
 public:
     struct dfs_state {
       unsigned int location_number;

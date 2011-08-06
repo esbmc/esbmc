@@ -729,7 +729,7 @@ void reachability_treet::go_next_state()
   _go_next = false;
 }
 
-reachability_treet::dfs_position::dfs_position(reachability_treet &rt)
+reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
 {
   std::list<execution_statet*>::const_iterator it;
 
@@ -750,7 +750,7 @@ reachability_treet::dfs_position::dfs_position(reachability_treet &rt)
   ileaves = 0; // Can use this depending on a future refactor.
 }
 
-reachability_treet::dfs_position::dfs_position(std::string filename)
+reachability_treet::dfs_position::dfs_position(const std::string filename)
 {
 
   read_from_file(filename);
@@ -758,7 +758,8 @@ reachability_treet::dfs_position::dfs_position(std::string filename)
 
 const uint64_t reachability_treet::dfs_position::file_magic = 'ESBMCCHK';
 
-bool reachability_treet::dfs_position::write_to_file(std::string filename)
+bool reachability_treet::dfs_position::write_to_file(
+                                       const std::string filename) const
 {
   uint8_t buffer[8192];
   reachability_treet::dfs_position::file_hdr hdr;
@@ -824,7 +825,8 @@ bool reachability_treet::dfs_position::write_to_file(std::string filename)
   return false;
 }
 
-bool reachability_treet::dfs_position::read_from_file(std::string filename)
+bool reachability_treet::dfs_position::read_from_file(
+                                       const std::string filename)
 {
   reachability_treet::dfs_position::file_hdr hdr;
   reachability_treet::dfs_position::file_entry entry;
