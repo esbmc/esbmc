@@ -98,6 +98,7 @@ public:
 
     struct file_hdr {
       uint64_t magic;
+      uint64_t checksum;
       uint32_t num_states;
       uint32_t num_ileaves;
     };
