@@ -740,11 +740,21 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
     execution_statet *ex = *it;
     state.location_number = ex->get_active_state().source.pc->location_number;
     state.num_threads = ex->_threads_state.size();
-    state.cur_thread = ex->get_active_state_number();
     state.explored = ex->_DFS_traversed;
+
+    // The thread taken in this DFS path isn't decided at this execution state,
+    // instead it's whatever thread is active in the /next/ state. So, take the
+    // currently active thread no and assign it to the previous dfs state
+    // we recorded.
+    if (states.size() > 0)
+      states.back().cur_thread = ex->get_active_state_number();
 
     states.push_back(state);
   }
+
+  // The final execution state in a DFS is a dummy, there are no paths from it,
+  // so assign a dummy cur_thread value.
+  states.back().cur_thread = 0;
 
   checksum = 0; // Use this in the future.
   ileaves = 0; // Can use this depending on a future refactor.
