@@ -184,8 +184,18 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
   for (it = dfs.states.begin(); it != dfs.states.end(); it++) {
     do {
       art1->_go_next = false;
+
+      // Restore the DFS exploration space so that when an interleaving occurs,
+      // we take the option leading to the thread we desire to run. This assumes
+      // that the DFS exploration path algorithm never changes in ESBMC
+      // Has to occur here; between generating new threads, ESBMC messes with
+      // the dfs state.
+      art1->get_cur_state()._DFS_traversed = it->explored;
+      art1->get_cur_state()._DFS_traversed[it->cur_thread] = false;
+
       while (!art1->is_go_next_state())
         symex_step(art1->_goto_functions, *art1);
+
     } while (art1->get_cur_state().generating_new_threads == -1);
 
     if (art1->get_cur_state()._threads_state.size() != it->num_threads) {
