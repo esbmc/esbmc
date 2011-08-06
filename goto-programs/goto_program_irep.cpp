@@ -43,7 +43,7 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
   
   if(! instruction.targets.empty())
   {
-    irept &tgts = irep.targets();
+    irept tgts;
     for(goto_programt::targetst::const_iterator it=
           instruction.targets.begin();
         it!=instruction.targets.end();
@@ -52,6 +52,8 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
       irept t(i2string((*it)->location_number));
       tgts.move_to_sub(t);      
     }
+
+    irep.targets(tgts);
   }  
     
   if(! instruction.labels.empty())

@@ -951,6 +951,10 @@ public:
     set(s_variables, val);
   }
 
+  inline void targets(const irept &val) {
+    set(s_targets, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
