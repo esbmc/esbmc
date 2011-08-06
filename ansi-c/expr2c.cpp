@@ -3016,7 +3016,7 @@ std::string expr2ct::convert(
   else if(src.id()=="bitor")
     return convert_binary(src, "|", precedence=6, false);
 
-  else if(src.id()=="and")
+  else if(src.is_and())
     return convert_binary(src, "&&", precedence=5, false);
 
   else if(src.id()=="or")

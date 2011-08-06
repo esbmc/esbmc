@@ -510,7 +510,7 @@ void goto_checkt::check_rec(
     check_rec(expr.op0(), guard, true);
     return;
   }
-  else if(expr.id()=="and" || expr.id()=="or")
+  else if(expr.is_and() || expr.id()=="or")
   {
     if(!expr.is_boolean())
       throw expr.id_string()+" must be Boolean, but got "+

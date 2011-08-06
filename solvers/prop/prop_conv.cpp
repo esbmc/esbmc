@@ -120,19 +120,19 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
       return false;
     }
   }
-  else if(expr.id()=="and" || expr.id()=="or")
+  else if(expr.is_and() || expr.id()=="or")
   {
     if(expr.type().id()=="bool" &&
        expr.operands().size()>=1)
     {
-      value=tvt(expr.id()=="and");
+      value=tvt(expr.is_and());
 
       forall_operands(it, expr)
       {
         tvt tmp;
         if(get_bool(*it, tmp)) return true;
 
-        if(expr.id()=="and")
+        if(expr.is_and())
         {
           if(tmp.is_false()) { value=tvt(false); return false; }
 
@@ -284,7 +284,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     return op_bv[0];
   }
-  else if(expr.id()=="or" || expr.id()=="and" || expr.id()=="xor" ||
+  else if(expr.id()=="or" || expr.is_and() || expr.id()=="xor" ||
           expr.id()=="nor" || expr.id()=="nand")
   {
     if(op.size()==0)
@@ -301,7 +301,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
         return prop.lor(bv);
       else if(expr.id()=="nor")
         return prop.lnot(prop.lor(bv));
-      else if(expr.id()=="and")
+      else if(expr.is_and())
         return prop.land(bv);
       else if(expr.id()=="nand")
         return prop.lnot(prop.land(bv));
@@ -443,7 +443,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
       {
         // set_to_true
 
-        if(expr.id()=="and")
+        if(expr.is_and())
         {
           forall_operands(it, expr)
             set_to_true(*it);

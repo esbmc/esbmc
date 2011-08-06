@@ -1541,7 +1541,7 @@ bool simplify_exprt::simplify_if_branch(
   bool tresult = true;
   bool fresult = true;
 
-  if(cond.id()=="and")
+  if(cond.is_and())
   {
     tresult = simplify_if_conj(trueexpr, cond) && tresult;
     fresult = simplify_if_recursive(falseexpr, cond, false) && fresult;
@@ -1584,7 +1584,7 @@ bool simplify_exprt::simplify_if_cond(exprt &expr, modet mode)
   {
     tmp = true;
 
-    if(expr.id()=="and")
+    if(expr.is_and())
     {
       if(expr.has_operands())
       {
@@ -1754,7 +1754,7 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
     expr.make_false();
     return false;
   }
-  else if(op.id()=="and" ||
+  else if(op.is_and() ||
           op.id()=="or")
   {
     exprt tmp;
@@ -1767,7 +1767,7 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
       simplify_node(*it, mode);
     }
 
-    expr.id(expr.id()=="and"?"or":"and");
+    expr.id(expr.is_and()?"or":"and");
 
     return false;
   }
@@ -1843,7 +1843,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
     }
   }
   else if(expr.id()=="or" ||
-          expr.id()=="and" ||
+          expr.is_and() ||
           expr.id()=="xor")
   {
     if(operands.size()==0) return true;
@@ -1861,7 +1861,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
       bool is_true=it->is_true();
       bool is_false=it->is_false();
 
-      if(expr.id()=="and" && is_false)
+      if(expr.is_and() && is_false)
       {
         expr.make_false();
         return false;
@@ -1874,13 +1874,13 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
 
       bool erase;
 
-      if(expr.id()=="and")
+      if(expr.is_and())
         erase=is_true;
       else
         erase=is_false;
 
       if(last_set && *it==*last &&
-         (expr.id()=="or" || expr.id()=="and"))
+         (expr.id()=="or" || expr.is_and()))
         erase=true; // erase duplicate operands
 
       if(erase)
@@ -1897,7 +1897,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
     }
 
     // search for a and !a
-    if(expr.id()=="and" || expr.id()=="or")
+    if(expr.is_and() || expr.id()=="or")
     {
       // first gather all the a's with !a
 
@@ -1921,7 +1921,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
 
     if(operands.size()==0)
     {
-      if(expr.id()=="and")
+      if(expr.is_and())
         expr.make_true();
       else
         expr.make_false();
@@ -3493,7 +3493,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_not(expr, mode) && result;
   else if(expr.id()=="=>"  || expr.id()=="<=>" ||
           expr.id()=="or"  || expr.id()=="xor" ||
-          expr.id()=="and")
+          expr.is_and())
     result=simplify_boolean(expr, mode) && result;
   else if(expr.id()=="comma")
   {

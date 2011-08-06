@@ -1669,7 +1669,7 @@ bool boolector_convt::convert_logical_ops(const exprt &expr, BtorExp* &bv)
 
 	  if (i>=1)
 	  {
-		if(expr.id()=="and")
+		if(expr.is_and())
 		  args[i] = boolector_and(boolector_ctx, args[i-1], args[i]);
 		else if(expr.id()=="or")
 		  args[i] = boolector_or(boolector_ctx, args[i-1], args[i]);
@@ -2509,7 +2509,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
     return convert_unary_minus(expr, bv);
   else if (expr.id() == "if")
     return convert_if(expr, bv);
-  else if (expr.id() == "and" || expr.id() == "or" || expr.id() == "xor")
+  else if (expr.is_and() || expr.id() == "or" || expr.id() == "xor")
 	return convert_logical_ops(expr, bv);
   else if (expr.id() == "not")
 	return convert_logical_not(expr, bv);
@@ -2633,7 +2633,7 @@ void boolector_convt::set_to(const exprt &expr, bool value)
 #endif
 
 
-  if(expr.id()=="and" && value)
+  if(expr.is_and() && value)
   {
     forall_operands(it, expr)
       set_to(*it, true);
@@ -2683,7 +2683,7 @@ void boolector_convt::set_to(const exprt &expr, bool value)
       if(value)
       {
         // set_to_true
-        if(expr.id()=="and")
+        if(expr.is_and())
         {
           forall_operands(it, expr)
             set_to_true(*it);
@@ -2745,7 +2745,7 @@ void boolector_convt::set_to(const exprt &expr, bool value)
   // fall back to convert
   prop.l_set_to(convert(expr), value);
 
-  if (value && expr.id() == "and")
+  if (value && expr.is_and())
   {
 	forall_operands(it, expr)
 	  set_to(*it, true);

@@ -203,7 +203,7 @@ void interpretert::evaluate(
 
     return;
   }
-  else if(expr.id()=="and")
+  else if(expr.is_and())
   {
     if(expr.operands().size()<1)
       throw id2string(expr.id())+" expects at least one operand";

@@ -1993,7 +1993,7 @@ void goto_convertt::convert_specc_event(
   const exprt &op,
   std::set<irep_idt> &events)
 {
-  if(op.id()=="or" || op.id()=="and")
+  if(op.id()=="or" || op.is_and())
   {
     forall_operands(it, op)
       convert_specc_event(*it, events);
@@ -2695,7 +2695,7 @@ void goto_convertt::generate_conditional_branch(
     return;
   }
 
-  if(guard.id()=="and")
+  if(guard.is_and())
   {
     // turn
     //   if(a && b) goto target_true; else goto target_false;

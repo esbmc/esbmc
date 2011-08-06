@@ -176,7 +176,7 @@ void goto_convertt::remove_sideeffects(
   if(!has_sideeffect(expr))
     return;
 
-  if(expr.id()=="and" || expr.id()=="or")
+  if(expr.is_and() || expr.id()=="or")
   {
     if(!expr.is_boolean())
       throw expr.id_string()+" must be Boolean, but got "+

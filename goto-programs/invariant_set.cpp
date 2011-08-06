@@ -625,7 +625,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
   {
     // give up, we expect NNF
   }
-  else if(expr.id()=="and")
+  else if(expr.is_and())
   {
     forall_operands(it, expr)
       strengthen_rec(*it);
@@ -852,7 +852,7 @@ tvt invariant_sett::implies_rec(const exprt &expr) const
   {
     // give up, we expect NNF
   }
-  else if(expr.id()=="and")
+  else if(expr.is_and())
   {
     forall_operands(it, expr)
       if(implies_rec(*it)!=tvt(true))
@@ -983,7 +983,7 @@ void invariant_sett::nnf(exprt &expr, bool negate)
     tmp.swap(expr.op0());
     expr.swap(tmp);
   }
-  else if(expr.id()=="and")
+  else if(expr.is_and())
   {
     if(negate) expr.id("or");
     

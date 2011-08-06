@@ -695,7 +695,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     convert_smt_expr(expr.op2());
     smt_prop.out << ")";
   }
-  else if(expr.id()=="and" ||
+  else if(expr.is_and() ||
           expr.id()=="or" ||
           expr.id()=="xor")
   {
@@ -708,7 +708,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       {
         if(it!=expr.operands().begin())
         {
-          if(expr.id()=="and")
+          if(expr.is_and())
             smt_prop.out << " AND ";
           else if(expr.id()=="or")
             smt_prop.out << " OR ";
@@ -1178,7 +1178,7 @@ Function: smt_convt::set_to
 
 void smt_convt::set_to(const exprt &expr, bool value)
 {
-  if(value && expr.id()=="and")
+  if(value && expr.is_and())
   {
     forall_operands(it, expr)
       set_to(*it, true);
