@@ -577,7 +577,8 @@ void execution_statet::add_thread(goto_programt::const_targett thread_start, got
   _threads_state.push_back(state);
   _atomic_numbers.push_back(0);
 
-  _DFS_traversed.push_back(false);
+  _DFS_traversed.reserve(_threads_state.size());
+  _DFS_traversed[state.source.thread_nr] = false;
   _exprs.push_back(exprt());
 
   _exprs_read_write.push_back(read_write_set());
@@ -606,7 +607,8 @@ void execution_statet::add_thread(goto_symex_statet & state)
   _threads_state.push_back(new_state);
   _atomic_numbers.push_back(0);
 
-  _DFS_traversed.push_back(false);
+  _DFS_traversed.reserve(_threads_state.size());
+  _DFS_traversed[new_state.source.thread_nr] = false;
   _exprs.push_back(exprt());
 
   _exprs_read_write.push_back(read_write_set());
