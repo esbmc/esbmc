@@ -750,6 +750,12 @@ reachability_treet::dfs_position::dfs_position(reachability_treet &rt)
   ileaves = 0; // Can use this depending on a future refactor.
 }
 
+reachability_treet::dfs_position::dfs_position(std::string filename)
+{
+
+  read_from_file(filename);
+}
+
 const uint64_t reachability_treet::dfs_position::file_magic = 'ESBMCCHK';
 
 bool reachability_treet::dfs_position::write_to_file(std::string filename)
