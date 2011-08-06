@@ -1491,7 +1491,7 @@ labeled_statement:
 	  $$=$1;
 	  statement(*$$, "label");
 	  mto($$, $4);
-	  exprt tmp = (exprt&)$$->case_irep();
+	  exprt tmp("");
 	  tmp.move_to_operands(*$2);
 	  $$->case_irep(tmp);
 	}
