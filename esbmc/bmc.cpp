@@ -7,6 +7,11 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <sys/types.h>
+
+#include <signal.h>
+#include <unistd.h>
+
 #include <sstream>
 #include <fstream>
 
@@ -42,6 +47,16 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include "counterex_pretty_greedy.h"
 #include "document_subgoals.h"
 #include "version.h"
+
+static volatile bool checkpoint_sig = false;
+
+void
+sigusr1_handler(int sig)
+{
+
+  checkpoint_sig = true;
+  return;
+}
 
 /*******************************************************************\
 
@@ -326,12 +341,19 @@ Function: bmc_baset::run
 
 bool bmc_baset::run(const goto_functionst &goto_functions)
 {
+  struct sigaction act;
   bool resp;
   symex.set_message_handler(message_handler);
   symex.set_verbosity(get_verbosity());
   symex.options=options;
 
   symex.last_location.make_nil();
+
+  // Collect SIGUSR1, indicating that we're supposed to checkpoint.
+  act.sa_handler = sigusr1_handler;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = 0;
+  sigaction(SIGUSR1, &act, NULL);
 
   // get unwinding info
   setup_unwind();
@@ -386,6 +408,23 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
         {
           return true;
         }
+      }
+
+      if (checkpoint_sig) {
+        // We're supposed to perform a checkpoint now.
+        std::string f;
+
+        if (options.get_option("checkpoint-file") == "") {
+          char buffer[32];
+          sprintf(buffer, "%d", getpid());
+          f = "esbmc_checkpoint." + std::string(buffer);
+        } else {
+          f = options.get_option("checkpoint-file");
+        }
+
+        symex.save_checkpoint(f);
+
+        checkpoint_sig = false;
       }
     } while(symex.multi_formulas_setup_next());
   }

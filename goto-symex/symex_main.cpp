@@ -228,6 +228,16 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
   return false;
 }
 
+void goto_symext::save_checkpoint(const std::string fname) const
+{
+
+  reachability_treet::dfs_position pos(*art1);
+  if (pos.write_to_file(fname))
+    std::cerr << "Couldn't save checkpoint; continuing" << std::endl;
+
+  return;
+}
+
 /*******************************************************************\
 
 Function: goto_symext::operator()
