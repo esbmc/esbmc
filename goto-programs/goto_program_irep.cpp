@@ -43,7 +43,7 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
   
   if(! instruction.targets.empty())
   {
-    irept &tgts = irep.add("targets");        
+    irept &tgts = irep.targets();
     for(goto_programt::targetst::const_iterator it=
           instruction.targets.begin();
         it!=instruction.targets.end();
