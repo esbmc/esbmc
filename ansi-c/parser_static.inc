@@ -289,10 +289,10 @@ static void
 move_decl_info_upwards(typet &dest, typet &src)
 {
 
-  if (!src.is_identifier_set())
+  if (!src.is_decl_ident_set())
     return;
 
-  dest.add("identifier") = src.add("identifier");
-  src.remove("identifier");
+  dest.decl_ident(src.decl_ident());
+  src.remove("decl_ident");
   return;
 }

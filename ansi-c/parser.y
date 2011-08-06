@@ -1933,7 +1933,7 @@ postfix_identifier_declarator:
 		// wish to preserve. So discard the existing "declarator" name
 		// and move its contents into $2.
 		$$ = (exprt*)$2;
-		$$->identifier($1->identifier());
+		$$->decl_ident($1->decl_ident());
 
 		if ($1->id() == "declarator") {
 			$1->remove("decl_ident");
