@@ -67,7 +67,7 @@ void ansi_c_convertt::convert_declaration(ansi_c_declarationt &declaration)
 
   if(declaration.decl_value().is_not_nil())
   {
-    if(declaration.type().id()=="code")
+    if(declaration.type().is_code())
       convert_code(to_code(declaration.decl_value()));
     else
       convert_expr(declaration.decl_value());
@@ -326,7 +326,7 @@ void ansi_c_convertt::convert_type(
       throw "no qualifiers permitted for event type";
     }
   }
-  else if(type.id()=="code")
+  else if(type.is_code())
   {
     c_storage_spect sub_storage_spec;
 

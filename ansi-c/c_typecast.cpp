@@ -468,8 +468,8 @@ void c_typecastt::implicit_typecast_followed(
         dest_type.subtype(), src_type.subtype(), ns))
       {
       }
-      else if(src_sub.id()=="code" &&
-              dest_sub.id()=="code")
+      else if(src_sub.is_code() &&
+              dest_sub.is_code())
       {
         // very generous:
         // between any two function pointers it's ok

@@ -75,7 +75,7 @@ void goto_convert_functionst::goto_convert()
 
   forall_symbols(it, context.symbols)
   {
-    if(!it->second.is_type && it->second.type.id()=="code")
+    if(!it->second.is_type && it->second.type.is_code())
       symbol_list.push_back(it->first);
   }
 
@@ -205,7 +205,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
       arg_ids.push_back(identifier);
     }
 
-    if(symbol.value.id()!="code")
+    if(!symbol.value.is_code())
     {
       err_location(symbol.value);
       throw "got invalid code for function `"+id2string(identifier)+"'";

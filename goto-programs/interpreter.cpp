@@ -530,7 +530,7 @@ void interpretert::build_memory_map(const symbolt &symbol)
 {
   unsigned size=0;
 
-  if(symbol.type.id()=="code")
+  if(symbol.type.is_code())
   {
     size=1;
   }
@@ -580,7 +580,7 @@ unsigned interpretert::get_size(const typet &type) const
     {
       const typet &sub_type=it->type();
 
-      if(sub_type.id()!="code")
+      if(!sub_type.is_code())
         sum+=get_size(sub_type);
     }
     
@@ -597,7 +597,7 @@ unsigned interpretert::get_size(const typet &type) const
     {
       const typet &sub_type=it->type();
 
-      if(sub_type.id()!="code")
+      if(!sub_type.is_code())
         max_size=std::max(max_size, get_size(sub_type));
     }
 

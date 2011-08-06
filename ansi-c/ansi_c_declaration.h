@@ -153,7 +153,7 @@ public:
     symbol.is_macro=get_is_macro();
     symbol.is_actual=get_is_argument();
 
-    bool is_code=symbol.type.id()=="code";
+    bool is_code=symbol.type.is_code();
   
     symbol.static_lifetime=
       !symbol.is_macro &&

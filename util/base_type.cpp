@@ -195,7 +195,7 @@ bool base_type_eqt::base_type_eq_rec(
   {
     return true;
   }
-  else if(type1.id()=="code")
+  else if(type1.is_code())
   {
     const irept::subt &arguments1=type1.arguments().get_sub();
 

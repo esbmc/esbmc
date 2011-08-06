@@ -108,7 +108,7 @@ static void make_subtype(typet &dest, typet &src)
   assert(src.is_array() ||
          src.id()=="incomplete_array" ||
          src.id()=="pointer" ||
-         src.id()=="code" ||
+         src.is_code() ||
          src.id()=="merged_type" ||
          src.id()=="declarator");
 
@@ -129,7 +129,7 @@ static void make_subtype(typet &dest, typet &src)
     if(sub->id()=="pointer" ||
        sub->is_array() ||
        sub->id()=="incomplete_array" ||
-       sub->id()=="code" ||
+       sub->is_code() ||
        sub->id()=="declarator")
     {
       // walk down
@@ -243,7 +243,7 @@ static void create_function_scope(exprt &expr)
                      id2string(declaration.get_base_name())+"::";
   PARSER.new_scope(prefix);
   
-  if(declaration.type().id()=="code")
+  if(declaration.type().is_code())
   {
     code_typet &code_type=to_code_type(declaration.type());
     

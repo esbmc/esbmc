@@ -44,13 +44,13 @@ public:
 
 extern inline const codet &to_code(const exprt &expr)
 {
-  assert(expr.id()=="code");
+  assert(expr.is_code());
   return static_cast<const codet &>(expr);
 }
 
 extern inline codet &to_code(exprt &expr)
 {
-  assert(expr.id()=="code");
+  assert(expr.is_code());
   return static_cast<codet &>(expr);
 }
 

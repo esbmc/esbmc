@@ -102,7 +102,7 @@ void interpretert::evaluate(
 
     forall_operands(it, expr)
     {
-      if(it->type().id()=="code") continue;
+      if(it->type().is_code()) continue;
 
       unsigned sub_size=get_size(it->type());
       if(sub_size==0) continue;

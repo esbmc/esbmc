@@ -137,7 +137,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 
     return false;
   }
-  else if(type.id()=="code")
+  else if(type.is_code())
   {
     width=0;
     return false;

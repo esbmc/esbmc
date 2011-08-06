@@ -175,7 +175,7 @@ void goto_convertt::do_pthread_create(
       throw "create_thread expects function pointer as third argument";
     }
 
-    if(thread_function.type().subtype().id()!="code")
+    if(!thread_function.type().subtype().is_code())
     {
       // cast it to code type
       code_typet ct;
@@ -907,7 +907,7 @@ void goto_convertt::do_function_call_symbol(
     throw "error: function `"+id2string(identifier)+"' not found";
   }
 
-  if(symbol->type.id()!="code")
+  if(!symbol->type.is_code())
   {
     err_location(function);
     throw "error: function `"+id2string(identifier)+"' type mismatch: expected code";

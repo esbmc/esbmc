@@ -720,7 +720,7 @@ void goto_convertt::remove_statement_expression(
   if(expr.operands().size()!=1)
     throw "statement_expression takes 1 operand";
 
-  if(expr.op0().id()!="code")
+  if(!expr.op0().is_code())
     throw "statement_expression takes code as operand";
 
   codet &code=to_code(expr.op0());

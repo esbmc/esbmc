@@ -1247,7 +1247,7 @@ void smt_convt::find_symbols(const exprt &expr)
     
   if(expr.id()=="symbol")
   {
-    if(expr.type().id()=="code")
+    if(expr.type().is_code())
       return;
 
     const irep_idt &identifier=expr.identifier();
@@ -1266,7 +1266,7 @@ void smt_convt::find_symbols(const exprt &expr)
   }  
   else if(expr.id()=="nondet_symbol")
   {
-    if(expr.type().id()=="code")
+    if(expr.type().is_code())
       return;
 
     const irep_idt identifier="nondet"+expr.identifier().as_string();

@@ -206,8 +206,8 @@ void c_linkt::duplicate_symbol(
 {
   // see if it is a function or a variable
 
-  bool is_code_in_context=in_context.type.id()=="code";
-  bool is_code_new_symbol=new_symbol.type.id()=="code";
+  bool is_code_in_context=in_context.type.is_code();
+  bool is_code_new_symbol=new_symbol.type.is_code();
 
   if(is_code_in_context!=is_code_new_symbol)
   {

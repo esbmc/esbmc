@@ -395,7 +395,7 @@ void goto_convertt::convert_block(
       const symbolt &symbol=lookup(identifier);
 
       if(!symbol.static_lifetime &&
-         symbol.type.id()!="code")
+         !symbol.type.is_code())
         locals.push_back(identifier);
     }
 
@@ -780,7 +780,7 @@ void goto_convertt::convert_decl(
 
   const symbolt &symbol=lookup(identifier);
   if(symbol.static_lifetime ||
-     symbol.type.id()=="code")
+     symbol.type.is_code())
 	  return; // this is a SKIP!
 
   if(code.operands().size()==1)

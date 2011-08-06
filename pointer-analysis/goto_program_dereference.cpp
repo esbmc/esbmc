@@ -63,7 +63,7 @@ bool goto_program_dereferencet::is_valid_object(
 {
   const symbolt &symbol=ns.lookup(identifier);
 
-  if(symbol.type.id()=="code")
+  if(symbol.type.is_code())
     return true;
 
   if(symbol.static_lifetime)

@@ -270,7 +270,7 @@ bool value_set_analysis_fivrnst::check_type(const typet &type)
             const typet *t = &type;
             while (t->id()=="pointer") t = &(t->subtype());
                     
-            return (t->id()=="code");
+            return (t->is_code());
           }
           
           break;

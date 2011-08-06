@@ -45,7 +45,7 @@ void static_lifetime_init(
 
       if(value.is_not_nil())
       {
-        assert(value.type().id()!="code");
+        assert(!value.type().is_code());
 
         exprt symbol("symbol", it->second.type);
         symbol.identifier(it->second.name);
@@ -62,7 +62,7 @@ void static_lifetime_init(
   forall_symbols(it, context.symbols)
   {
     if(it->second.type.initialization() &&
-       it->second.type.id()=="code")
+       it->second.type.is_code())
     {
       code_function_callt function_call;
       function_call.function()=symbol_expr(it->second);
@@ -103,7 +103,7 @@ bool c_main(
 
       if(s_it==context.symbols.end()) continue;
 
-      if(s_it->second.type.id()=="code")
+      if(s_it->second.type.is_code())
         matches.push_back(it->second);
     }
 

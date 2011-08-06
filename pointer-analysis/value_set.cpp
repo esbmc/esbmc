@@ -834,7 +834,7 @@ void value_sett::assign(
       const irep_idt &name=c_it->name();
 
       // ignore methods
-      if(subtype.id()=="code") continue;
+      if(subtype.is_code()) continue;
     
       member_exprt lhs_member(subtype);
       lhs_member.set_component_name(name);

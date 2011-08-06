@@ -58,7 +58,7 @@ std::string type2name(const typet &type)
     result+="*";
   else if(type.id()=="reference")
     result+="&";
-  else if(type.id()=="code")
+  else if(type.is_code())
   {
     const code_typet &t = to_code_type(type);
     const code_typet::argumentst arguments = t.arguments();

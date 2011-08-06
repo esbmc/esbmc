@@ -107,7 +107,7 @@ static exprt build_or_expr(
       const object_descriptor_exprt &o=
         to_object_descriptor_expr(*it);
 
-      if(o.object().type().id()!="code") // bad pointer
+      if(!o.object().type().is_code()) // bad pointer
         continue;
 
       pointer_typet pointer_type;

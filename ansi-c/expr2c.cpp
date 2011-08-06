@@ -251,7 +251,7 @@ std::string expr2ct::convert_rec(
   }
   else if(src.id()=="pointer")
   {
-    if(src.subtype().id()=="code")
+    if(src.subtype().is_code())
     {
       const typet &return_type=(typet &)src.subtype().return_type();
 
@@ -301,7 +301,7 @@ std::string expr2ct::convert_rec(
   {
     return convert_rec(ns.follow(src), new_qualifiers);
   }
-  else if(src.id()=="code")
+  else if(src.is_code())
   {
     const typet &return_type=(typet &)src.return_type();
 
@@ -1457,7 +1457,7 @@ std::string expr2ct::convert_struct(
 
   forall_irep(c_it, components)
   {
-    if(o_it->type().id()=="code")
+    if(o_it->type().is_code())
       continue;
 
     if(first)
@@ -3067,7 +3067,7 @@ std::string expr2ct::convert(
   else if(src.id()=="Hoare")
     return convert_Hoare(src);
 
-  else if(src.id()=="code")
+  else if(src.is_code())
     return convert_code(to_code(src));
 
   else if(src.id()=="constant")

@@ -298,8 +298,8 @@ bool dereferencet::dereference_type_compare(
   }
 
   // we are generous about code pointers
-  if(dereference_type.id()=="code" &&
-     object_type.id()=="code")
+  if(dereference_type.is_code() &&
+     object_type.is_code())
     return true;
 
   // really different
@@ -866,7 +866,7 @@ bool dereferencet::memory_model_bytes(
   const typet from_type=value.type();
 
   // we won't try to convert to/from code
-  if(from_type.id()=="code" || to_type.id()=="code")
+  if(from_type.is_code() || to_type.is_code())
     return false;
 
   // won't do this without a committment to an endianess

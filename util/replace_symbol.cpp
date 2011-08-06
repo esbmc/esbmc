@@ -107,7 +107,7 @@ bool replace_symbolt::replace(typet &dest)
          it++)
       replace(*it);
   } 
-  else if(dest.id()=="code")
+  else if(dest.is_code())
   {
     code_typet &code_type=to_code_type(dest);
     code_typet::argumentst &arguments=code_type.arguments();

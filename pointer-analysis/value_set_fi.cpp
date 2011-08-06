@@ -1157,7 +1157,7 @@ void value_set_fit::assign(
       const irep_idt &name=c_it->name();
 
       // ignore methods
-      if(subtype.id()=="code") continue;
+      if(subtype.is_code()) continue;
     
       exprt lhs_member("member", subtype);
       lhs_member.component_name(name);

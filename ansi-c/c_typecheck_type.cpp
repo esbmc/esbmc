@@ -30,7 +30,7 @@ Function: c_typecheck_baset::typecheck_type
 
 void c_typecheck_baset::typecheck_type(typet &type)
 {
-  if(type.id()=="code")
+  if(type.is_code())
   {
     code_typet &code_type=to_code_type(type);
 

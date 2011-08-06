@@ -2586,7 +2586,7 @@ bool boolector_convt::assign_boolector_expr(const exprt expr)
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
 #endif
 
-  if (expr.op0().type().id() == "pointer" && expr.op0().type().subtype().id()=="code")
+  if (expr.op0().type().id() == "pointer" && expr.op0().type().subtype().is_code())
   {
 	ignoring(expr);
 	return false;

@@ -42,7 +42,7 @@ Function: c_typecheck_baset::typecheck_code
 
 void c_typecheck_baset::typecheck_code(codet &code)
 {
-  if(code.id()!="code")
+  if(!code.is_code())
     throw "expected code, got "+code.pretty();
 
   code.type()=typet("code");
@@ -310,7 +310,7 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   // or a function
   // or static
   if(symbol.is_type ||
-     symbol.type.id()=="code" ||
+     symbol.type.is_code() ||
      symbol.static_lifetime)
   {
     locationt location=code.location();

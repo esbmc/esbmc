@@ -95,7 +95,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
     {
       const typet &sub_type=it->type();
 
-      if(sub_type.id()=="code")
+      if(sub_type.is_code())
       {
       }
       else
@@ -126,7 +126,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
     {
       const typet &sub_type=it->type();
 
-      if(sub_type.id()=="code")
+      if(sub_type.is_code())
       {
       }
       else

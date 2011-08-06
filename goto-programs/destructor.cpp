@@ -43,7 +43,7 @@ code_function_callt get_destructor(
         it!=components.end();
         it++)
     {
-      if(it->type().id()=="code")
+      if(it->type().is_code())
       {
         const code_typet &code_type=to_code_type(it->type());
         

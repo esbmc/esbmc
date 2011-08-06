@@ -142,14 +142,14 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     new_name=prefix+module+"::"+
       std::string(id2string(symbol.name), prefix.size(), std::string::npos);
   }
-  else if(symbol.is_extern && final_type.id()!="code")
+  else if(symbol.is_extern && !final_type.is_code())
   {
     // variables mared as "extern" go into the global namespace
     // and have static lifetime
     new_name=root_name;
     symbol.static_lifetime=true;
   }
-  else if(final_type.id()=="code")
+  else if(final_type.is_code())
   {
     // functions always go into the global namespace
     // code doesn't have lifetime
@@ -223,7 +223,7 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
 
   // check initializer, if needed
 
-  if(symbol.type.id()=="code")
+  if(symbol.type.is_code())
   {
     if(symbol.value.is_not_nil())
       typecheck_function_body(symbol);
@@ -291,7 +291,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
   if(old_symbol.type.id()=="KnR")
   {
     // check the type
-    if(final_new.id()=="code")
+    if(final_new.is_code())
     {
       err_location(new_symbol.location);
       throw "function type not allowed for K&R function argument";
@@ -365,7 +365,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
   }
   else
   {
-    bool inlined=new_symbol.type.id()=="code" &&
+    bool inlined=new_symbol.type.is_code() &&
          (new_symbol.type.inlined() ||
           old_symbol.type.inlined());
 
@@ -403,8 +403,8 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         else
           old_symbol.type=new_symbol.type;
       }
-      else if(old_symbol.type.id()=="code" &&
-              new_symbol.type.id()=="code")
+      else if(old_symbol.type.is_code() &&
+              new_symbol.type.is_code())
       {
         code_typet &old_ct=to_code_type(old_symbol.type);
         code_typet &new_ct=to_code_type(new_symbol.type);
@@ -443,7 +443,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
     }
     
     // do value
-    if(old_symbol.type.id()=="code")
+    if(old_symbol.type.is_code())
     {
       if(new_symbol.value.is_not_nil())
       {      

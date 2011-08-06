@@ -117,7 +117,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_comma(expr);
   else if(expr.id()=="if")
     typecheck_expr_trinary(expr);
-  else if(expr.id()=="code")
+  else if(expr.is_code())
     typecheck_code(to_code(expr));
   else if(expr.id()=="builtin_va_arg")
     typecheck_expr_builtin_va_arg(expr);
@@ -384,7 +384,7 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
     if(symbol.lvalue)
       expr.cmt_lvalue(true);
 
-    if(expr.type().id()=="code") // function designator
+    if(expr.type().is_code()) // function designator
     { // special case: this is sugar for &f
       exprt tmp("address_of", pointer_typet());
       tmp.implicit(true);
@@ -525,7 +525,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
        expr.implicit() &&
        expr.operands().size()==1 &&
        expr.op0().id()=="symbol" &&
-       expr.op0().type().id()=="code")
+       expr.op0().type().is_code())
     {
       // undo implicit address_of
       exprt tmp;
@@ -1221,7 +1221,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
      op.implicit() &&
      op.operands().size()==1 &&
      op.op0().id()=="symbol" &&
-     op.op0().type().id()=="code")
+     op.op0().type().is_code())
   {
     // make the implicit address_of an explicit address_of
     exprt tmp;
@@ -1233,7 +1233,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
 
   expr.type()=typet("pointer");
 
-  if(op.type().id()!="code" &&
+  if(!op.type().is_code() &&
      !op.cmt_lvalue())
   {
     err_location(expr);
@@ -1332,7 +1332,7 @@ Function: c_typecheck_baset::typecheck_expr_function_identifier
 
 void c_typecheck_baset::typecheck_expr_function_identifier(exprt &expr)
 {
-  if(expr.type().id()=="code")
+  if(expr.type().is_code())
   {
     exprt tmp("address_of", pointer_typet());
     tmp.implicit(true);
@@ -1509,7 +1509,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
     f_op.swap(tmp);
   }
 
-  if(f_op.type().id()!="code")
+  if(!f_op.type().is_code())
   {
     err_location(f_op);
     throw "expected code as argument";
