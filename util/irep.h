@@ -956,6 +956,29 @@ public:
     set(s_targets, val);
   }
 
+  inline bool is_address_of() { return id() == id_address_of; }
+  inline bool is_and() { return id() == id_and; }
+  inline bool is_array() { return id() == id_array; }
+  inline bool is_bool() { return id() == id_bool; }
+  inline bool is_code() { return id() == id_code; }
+  inline bool is_constant() { return id() == id_constant; }
+  inline bool is_dereference() { return id() == id_dereference; }
+  inline bool is_empty() { return id() == id_empty; }
+  inline bool is_fixedbv() { return id() == id_fixedbv; }
+  inline bool is_floatbv() { return id() == id_floatbv; }
+  inline bool is_incomplete_array() { return id() == id_incomplete_array; }
+  inline bool is_index() { return id() == id_index; }
+  inline bool is_member() { return id() == id_member; }
+  inline bool is_not() { return id() == id_not; }
+  inline bool is_notequal() { return id() == id_notequal; }
+  inline bool is_pointer() { return id() == id_pointer; }
+  inline bool is_signedbv() { return id() == id_signedbv; }
+  inline bool is_struct() { return id() == id_struct; }
+  inline bool is_symbol() { return id() == id_symbol; }
+  inline bool is_typecast() { return id() == id_typecast; }
+  inline bool is_union() { return id() == id_union; }
+  inline bool is_unsignedbv() { return id() == id_unsignedbv; }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
