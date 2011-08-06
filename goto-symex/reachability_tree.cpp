@@ -6,6 +6,9 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
+#include <arpa/inet.h>
+
+#include <netinet/in.h>
 
 #include "reachability_tree.h"
 #include <i2string.h>
@@ -785,24 +788,24 @@ bool reachability_treet::dfs_position::write_to_file(
     return true;
   }
 
-  hdr.magic = file_magic;
+  hdr.magic = htonl(file_magic);
   hdr.checksum = 0;
-  hdr.num_states = states.size();
+  hdr.num_states = htonl(states.size());
   hdr.num_ileaves = 0;
 
   if (fwrite(&hdr, sizeof(hdr), 1, f) != 1)
     goto fail;
 
   for (it = states.begin(); it != states.end(); it++) {
-    entry.location_number = it->location_number;
-    entry.num_threads = it->num_threads;
-    entry.cur_thread = it->cur_thread;
+    entry.location_number = htonl(it->location_number);
+    entry.num_threads = htons(it->num_threads);
+    entry.cur_thread = htons(it->cur_thread);
     
     if (fwrite(&entry, sizeof(entry), 1, f) != 1)
       goto fail;
 
     assert(it->explored.size() < 65536);
-    assert(it->explored.size() == entry.num_threads);
+    assert(it->explored.size() == ntohs(entry.num_threads));
 
     i = 0;
     memset(buffer, 0, sizeof(buffer));
@@ -849,21 +852,21 @@ bool reachability_treet::dfs_position::read_from_file(
   if (fread(&hdr, sizeof(hdr), 1, f) != 1)
     goto fail;
 
-  if (hdr.magic != file_magic) {
+  if (hdr.magic != htonl(file_magic)) {
     std::cerr << "Magic number indicates that this isn't a checkpoint file"
               << std::endl;
     fclose(f);
     return true;
   }
 
-  for (i = 0; i < hdr.num_states; i++) {
+  for (i = 0; i < ntohl(hdr.num_states); i++) {
     reachability_treet::dfs_position::dfs_state state;
     if (fread(&entry, sizeof(entry), 1, f) != 1)
       goto fail;
 
-    state.location_number = entry.location_number;
-    state.num_threads = entry.num_threads;
-    state.cur_thread = entry.cur_thread;
+    state.location_number = ntohl(entry.location_number);
+    state.num_threads = ntohs(entry.num_threads);
+    state.cur_thread = ntohs(entry.cur_thread);
 
     assert(state.num_threads < 65536);
     if (state.cur_thread >= state.num_threads) {
