@@ -112,11 +112,12 @@ public:
   { write().data=_data; }
 
 protected:
+  // This class has to be able to fiddle with ireps directly. Ewww.
+  friend class irep_serializationt;
+
   const irept &find(const irep_namet &name) const;
-public:
   irept &add(const irep_namet &name);
 
-protected:
   const std::string &get_string(const irep_namet &name) const
   {
     return get(name).as_string();
