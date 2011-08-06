@@ -85,7 +85,22 @@ public:
     _go_next = true;
   }
 
+  class dfs_position {
+    dfs_position(reachability_treet &rt);
+    dfs_position(std::string filename);
+    bool write_to_file();
+    struct dfs_state {
+      unsigned int location_number;
+      unsigned int num_threads;
+      unsigned int cur_thread;
+      std::vector<bool> explored;
+    };
+
+    std::vector<struct dfs_state> states;
+  };
+
   const goto_functionst &_goto_functions;
+
   // The current terminating execution state that we've reached
   execution_statet* reached_terminal_state;
   bool _go_next_formula;
