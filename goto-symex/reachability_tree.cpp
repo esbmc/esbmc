@@ -728,3 +728,23 @@ void reachability_treet::go_next_state()
 
   _go_next = false;
 }
+
+reachability_treet::dfs_position::dfs_position(reachability_treet &rt)
+{
+  std::list<execution_statet*>::const_iterator it;
+
+  // Iterate through each position in the DFS tree recording data into this
+  // object.
+  for (it = rt.execution_states.begin(); it != rt.execution_states.end(); it++){
+    reachability_treet::dfs_position::dfs_state state;
+    execution_statet *ex = *it;
+    state.location_number = ex->get_active_state().source.pc->location_number;
+    state.num_threads = ex->_threads_state.size();
+    state.cur_thread = ex->get_active_state_number();
+    state.explored = ex->_DFS_traversed;
+
+    states.push_back(state);
+  }
+
+  checksum = 0; // Use this in the future.
+}
