@@ -56,7 +56,7 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
     
   if(! instruction.labels.empty())
   {
-    irept &lbls = irep.add("labels");
+    irept lbls;
     irept::subt &subs = lbls.get_sub();
     subs.reserve(instruction.labels.size());
     for(goto_programt::instructiont::labelst::const_iterator it=
@@ -66,6 +66,8 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
     {
       subs.push_back(irept(*it));
     }
+
+    irep.labels(lbls);
   }
   
   if (! instruction.local_variables.empty())

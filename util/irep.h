@@ -931,6 +931,10 @@ public:
     set(s_initializer, val);
   }
 
+  inline void labels(const irept &val) {
+    set(s_labels, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
