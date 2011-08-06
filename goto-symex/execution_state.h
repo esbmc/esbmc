@@ -60,6 +60,8 @@ public:
 		node_count=0;
 		nondet_count = 0;
 		dynamic_counter = 0;
+		_DFS_traversed.reserve(1);
+		_DFS_traversed[0] = false;
 
 		str_state = string_container.take_state_snapshot();
 	};
