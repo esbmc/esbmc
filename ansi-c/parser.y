@@ -435,7 +435,7 @@ unary_expression:
 	| TOK_SIZEOF '(' type_name ')'
 	{ $$=$1;
 	  set(*$$, "sizeof");
-	  $$->add("sizeof-type").swap(*$3);
+	  $$->sizeof_type(*$3);
 	}
 	;
 

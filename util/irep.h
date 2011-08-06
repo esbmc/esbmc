@@ -399,6 +399,10 @@ public:
     return get(a_cmt_width);
   }
 
+  inline const irept &sizeof_type(void) const {
+    return find(s_sizeof_type);
+  }
+
   inline bool axiom(void) const {
     return get_bool(a_axiom);
   }
@@ -899,6 +903,10 @@ public:
     set(s_case, val);
   }
 
+  inline void sizeof_type(const irept &val) {
+    set(s_sizeof_type, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
@@ -946,7 +954,7 @@ public:
   static const irep_idt s_c_sizeof_type, s_bv, s_targets, s_variables;
   static const irep_idt s_initializer, s_declaration_type, s_decl_value;
   static const irep_idt s_symvalue, s_cmt_location, s_decl_ident;
-  static const irep_idt s_elements;
+  static const irep_idt s_elements, s_sizeof_type;
   static const irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
   static const irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
   static const irep_idt a_access, a_destination, a_base_name, a_comment,a_event;

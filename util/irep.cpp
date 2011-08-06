@@ -920,3 +920,4 @@ const irep_idt irept::s_symvalue = dstring("symvalue");
 const irep_idt irept::s_cmt_location = dstring("#location");
 const irep_idt irept::s_decl_ident = dstring("decl_ident");
 const irep_idt irept::s_elements = dstring("elements");
+const irep_idt irept::s_sizeof_type = dstring("sizeof-type");

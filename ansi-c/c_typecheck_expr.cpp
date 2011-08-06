@@ -493,7 +493,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 
   if(expr.operands().size()==0)
   {
-    type.swap((typet &)expr.add("sizeof-type"));
+    type = ((typet &)expr.sizeof_type());
     typecheck_type(type);
   }
   else if(expr.operands().size()==1)
