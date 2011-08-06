@@ -259,7 +259,7 @@ bool invariant_propagationt::check_type(const typet &type) const
   else if(type.id()=="unsignedbv" ||
           type.id()=="signedbv")
     return true;
-  else if(type.id()=="bool")
+  else if(type.is_bool())
     return true;
   
   return false;

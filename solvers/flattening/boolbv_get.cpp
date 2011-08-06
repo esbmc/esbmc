@@ -102,7 +102,7 @@ exprt boolbvt::bv_get_rec(
   assert(bv.size()==unknown.size());
   assert(bv.size()>=offset+width);
 
-  if(type.id()=="bool")
+  if(type.is_bool())
   {
     if(!unknown[offset])
     {
@@ -291,7 +291,7 @@ Function: boolbvt::bv_get_cache
 
 exprt boolbvt::bv_get_cache(const exprt &expr) const
 {
-  if(expr.type().id()=="bool") // boolean?
+  if(expr.type().is_bool()) // boolean?
     return get(expr);
     
   // look up literals in cache

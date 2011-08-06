@@ -29,7 +29,7 @@ Function: prop_convt::literal
 
 bool prop_convt::literal(const exprt &expr, literalt &dest) const
 {
-  assert(expr.type().id()=="bool");
+  assert(expr.type().is_bool());
 
   if(expr.id()=="symbol")
   {
@@ -112,7 +112,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 
   if(expr.id()=="not")
   {
-    if(expr.type().id()=="bool" &&
+    if(expr.type().is_bool() &&
        expr.operands().size()==1)
     {
       if(get_bool(expr.op0(), value)) return true;
@@ -122,7 +122,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
   }
   else if(expr.is_and() || expr.id()=="or")
   {
-    if(expr.type().id()=="bool" &&
+    if(expr.type().is_bool() &&
        expr.operands().size()>=1)
     {
       value=tvt(expr.is_and());
@@ -213,7 +213,7 @@ Function: prop_convt::convert_bool
 
 literalt prop_convt::convert_bool(const exprt &expr)
 {
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
   {
     std::string msg="prop_convt::convert_bool got "
                     "non-boolean expression:\n";
@@ -323,8 +323,8 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     bool equal=(expr.id()=="=");
 
-    if(op[0].type().id()=="bool" &&
-       op[1].type().id()=="bool")
+    if(op[0].type().is_bool() &&
+       op[1].type().is_bool())
     {
       literalt tmp1=convert(op[0]),
                tmp2=convert(op[1]);
@@ -410,7 +410,7 @@ Function: prop_convt::set_to
 
 void prop_convt::set_to(const exprt &expr, bool value)
 {
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
   {
     std::string msg="prop_convt::set_to got "
                     "non-boolean expression:\n";
@@ -421,7 +421,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
   bool boolean=true;
 
   forall_operands(it, expr)
-    if(it->type().id()!="bool")
+    if(!it->type().is_bool())
     {
       boolean=false;
       break;
@@ -593,7 +593,7 @@ exprt prop_convt::get(const exprt &expr) const
 
   tvt value;
 
-  if(expr.type().id()=="bool" &&
+  if(expr.type().is_bool() &&
      !get_bool(expr, value))
   {
     switch(value.get_value())

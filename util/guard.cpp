@@ -56,7 +56,7 @@ Function: guardt::add
 
 void guardt::add(const exprt &expr)
 {
-  if(expr.is_and() && expr.type().id()=="bool")
+  if(expr.is_and() && expr.type().is_bool())
   {
     forall_operands(it, expr)
       add(*it);

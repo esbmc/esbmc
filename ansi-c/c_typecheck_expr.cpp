@@ -610,7 +610,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   }
 
   if(!is_number(expr_type) &&
-     expr_type.id()!="bool" &&
+     !expr_type.is_bool() &&
      expr_type.id()!="pointer" &&
      !expr_type.is_array() &&
      expr_type.id()!="empty" &&
@@ -628,7 +628,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   if(is_number(op_type) ||
      op_type.id()=="c_enum" ||
      op_type.id()=="incomplete_c_enum" ||
-     op_type.id()=="bool" ||
+     op_type.is_bool() ||
      op_type.id()=="pointer")
   {
   }
@@ -695,7 +695,7 @@ void c_typecheck_baset::make_index_type(exprt &expr)
 {
   const typet &full_type=follow(expr.type());
 
-  if(full_type.id()=="bool")
+  if(full_type.is_bool())
   {
     expr.make_typecast(index_type());
   }
@@ -1391,7 +1391,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
     }
 
     if(is_number(final_type0) ||
-       final_type0.id()=="bool" ||
+       final_type0.is_bool() ||
        final_type0.id()=="c_enum" ||
        final_type0.id()=="incomplete_c_enum" ||
        final_type0.id()=="pointer")
@@ -1740,10 +1740,10 @@ void c_typecheck_baset::typecheck_function_call_arguments(
 
       const typet &op_type=argument_type.type();
 
-      if(op_type.id()=="bool" &&
+      if(op_type.is_bool() &&
          op.id()=="sideeffect" &&
          op.statement()=="assign" &&
-         op.type().id()!="bool")
+         !op.type().is_bool())
       {
         err_location(expr);
         warning("assignment where Boolean argument is expected");
@@ -2252,7 +2252,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
       typecheck_expr_pointer_arithmetic(expr);
       return;
     }
-    else if(final_type0.id()=="bool" ||
+    else if(final_type0.is_bool() ||
             final_type0.id()=="c_enum" ||
             final_type0.id()=="incomplete_c_enum")
     {

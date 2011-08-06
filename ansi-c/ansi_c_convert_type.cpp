@@ -87,7 +87,7 @@ void ansi_c_convert_typet::read_rec(const typet &type)
     double_cnt++;
   else if(type.id()=="float")
     float_cnt++;
-  else if(type.id()=="bool")
+  else if(type.is_bool())
     bool_cnt++;
   else if(type.id()=="static")
     c_storage_spec.is_static=true;

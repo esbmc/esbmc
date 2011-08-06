@@ -236,7 +236,7 @@ exprt z3_convt::bv_get_rec(
   if(boolbv_get_width(type, width))
     return nil_exprt();
 
-  if(type.id()=="bool")
+  if(type.is_bool())
   {
 	std::string value;
 	size_t found;

@@ -322,7 +322,7 @@ Function: smt_convt::convert_as_bv
 
 void smt_convt::convert_as_bv(const exprt &expr)
 {
-  if(expr.type().id()=="bool")
+  if(expr.type().is_bool())
   {
     smt_prop.out << "IF ";
     convert_smt_expr(expr);
@@ -377,7 +377,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(expr.operands().size()==1);
     const exprt &op=expr.op0();
     
-    if(expr.type().id()=="bool")
+    if(expr.type().is_bool())
     {
       if(op.type().id()=="signedbv" ||
          op.type().id()=="unsignedbv" ||
@@ -442,7 +442,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
           smt_prop.out << ")[" << (to_width-1) << ":0]";
         }
       }
-      else if(op.type().id()=="bool")
+      else if(op.type().is_bool())
       {
         if(to_width>1)
         {
@@ -555,7 +555,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else
         throw "unknown pointer constant: "+id2string(value);
     }
-    else if(expr.type().id()=="bool")
+    else if(expr.type().is_bool())
     {
       if(expr.is_true())
         smt_prop.out << "true";
@@ -700,7 +700,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
           expr.id()=="xor")
   {
     assert(false && "Construct not supported yet");
-    assert(expr.type().id()=="bool");
+    assert(expr.type().is_bool());
     
     if(expr.operands().size()>=2)
     {
@@ -741,7 +741,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(expr.operands().size()==2);
     assert(expr.op0().type()==expr.op1().type());
 
-    if(expr.op0().type().id()=="bool")
+    if(expr.op0().type().is_bool())
     {
       if(expr.id()=="notequal") 
 	smt_prop.out << "(xor ";
@@ -1313,7 +1313,7 @@ void smt_convt::convert_smt_type(const typet &type)
     
     smt_prop.out << "Array[32:";
                  
-    if(array_type.subtype().id()=="bool")
+    if(array_type.subtype().is_bool())
       smt_prop.out << "1";
     else
       smt_prop.out << "32";
@@ -1321,7 +1321,7 @@ void smt_convt::convert_smt_type(const typet &type)
     smt_prop.out << "]";
   }
   /*
-  else if(type.id()=="bool")
+  else if(type.is_bool())
   {
     assert(false && "Construct not supported yet");
     smt_prop.out << "BOOLEAN";

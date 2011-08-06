@@ -93,7 +93,7 @@ void boolector_convt::print_data_types(BtorExp* operand0, BtorExp* operand1)
 
 bool boolector_convt::check_all_types(const typet &type)
 {
-  if (type.id()=="bool" || type.id()=="signedbv" || type.id()=="unsignedbv" ||
+  if (type.is_bool() || type.id()=="signedbv" || type.id()=="unsignedbv" ||
 	  type.id()=="symbol" || type.id()=="empty" || type.id() == "fixedbv" ||
 	  type.is_array() || type.id()=="struct" || type.id()=="pointer" ||
 	  type.id()=="union")
@@ -228,7 +228,7 @@ bool boolector_convt::create_boolector_array(const typet &type, std::string iden
   BtorExp *array;
   unsigned int width = 0;
 
-  if (type.subtype().id() == "bool")
+  if (type.subtype().is_bool())
   {
     array = boolector_array(boolector_ctx, 1, config.ansi_c.int_width, identifier.c_str());
   }
@@ -275,7 +275,7 @@ bool boolector_convt::convert_identifier(const std::string &identifier, const ty
 
   width = atoi(type.width().c_str());
 
-  if (type.id()=="bool")
+  if (type.is_bool())
   {
 	bv = boolector_var(boolector_ctx, 1, identifier.c_str());
   }
@@ -1089,7 +1089,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
       	result = boolector_slice(boolector_ctx, operand, (to_width-1), 0);
       }
     }
-    else if (op.type().id()=="bool")
+    else if (op.type().is_bool())
     {
   	  BtorExp *zero, *one;
       unsigned width;
@@ -1158,7 +1158,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
 
       result = boolector_concat(boolector_ctx, result, boolector_int(boolector_ctx, 0, to_fraction_bits));
     }
-    else if(op.type().id()=="bool")
+    else if(op.type().is_bool())
     {
       BtorExp *zero, *one;
       unsigned width;
@@ -1214,7 +1214,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
 	BtorExp *zero, *one;
 	unsigned width;
 
-	if (op.type().id()=="bool")
+	if (op.type().is_bool())
 	{
       boolbv_get_width(expr.type(), width);
 
@@ -1443,7 +1443,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
   {
     value = expr.value().as_string();
   }
-  else if (expr.type().id() == "bool")
+  else if (expr.type().is_bool())
   {
     value = expr.value().as_string();
   }
@@ -1458,7 +1458,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
 
   width = atoi(expr.type().width().c_str());
 
-  if (expr.type().id()=="bool")
+  if (expr.type().is_bool())
   {
 	if (expr.is_false())
 	  const_var = boolector_false(boolector_ctx);
@@ -1649,7 +1649,7 @@ bool boolector_convt::convert_logical_ops(const exprt &expr, BtorExp* &bv)
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
 #endif
 
-  assert(expr.type().id()=="bool");
+  assert(expr.type().is_bool());
   assert(expr.operands().size()>=1);
 
   u_int i=0, size;
@@ -2021,7 +2021,7 @@ bool boolector_convt::convert_array_of(const exprt &expr, BtorExp* &bv)
   size = atoi(tmp.c_str());
   width = atoi(expr.type().subtype().width().c_str());
 
-  if (expr.type().subtype().id()=="bool")
+  if (expr.type().subtype().is_bool())
   {
     value = boolector_false(boolector_ctx);
     array_of_var = boolector_array(boolector_ctx, 1, config.ansi_c.int_width,"ARRAY_OF(false)");
@@ -2647,7 +2647,7 @@ void boolector_convt::set_to(const exprt &expr, bool value)
   }
 
 #if 1
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
   {
     std::string msg="prop_convt::set_to got "
                     "non-boolean expression:\n";
@@ -2658,7 +2658,7 @@ void boolector_convt::set_to(const exprt &expr, bool value)
   bool boolean=true;
 
   forall_operands(it, expr)
-    if(it->type().id()!="bool")
+    if(!it->type().is_bool())
     {
       boolean=false;
       break;
@@ -2783,7 +2783,7 @@ void boolector_convt::set_to(const exprt &expr, bool value)
 		return ;
 	  }
 
-	  if (expr.op0().type().id()=="bool")
+	  if (expr.op0().type().is_bool())
 	    formula = boolector_iff(boolector_ctx, operand0, operand1);
 	  else
 	    formula = boolector_eq(boolector_ctx, operand0, operand1);

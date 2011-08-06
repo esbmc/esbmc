@@ -60,7 +60,7 @@ Function: boolbv_widtht::get_width
 
 bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 {
-  if(type.id()=="bool")
+  if(type.is_bool())
   {
     width=1;
     return false;

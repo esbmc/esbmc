@@ -110,10 +110,10 @@ void goto_inlinet::parameter_assignments(
         }
         else if((f_argtype.id()=="signedbv" ||
             f_argtype.id()=="unsignedbv" ||
-            f_argtype.id()=="bool") &&
+            f_argtype.is_bool()) &&
            (f_acttype.id()=="signedbv" ||
             f_acttype.id()=="unsignedbv" ||
-            f_acttype.id()=="bool"))  
+            f_acttype.is_bool()))  
         {
           actual.make_typecast(arg_type);
         }

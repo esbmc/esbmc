@@ -240,7 +240,7 @@ Function: exprt::is_true
 bool exprt::is_true() const
 {
   return is_constant() &&
-         type().id()=="bool" &&
+         type().is_bool() &&
          get(a_value)!="false";
 }
 
@@ -259,7 +259,7 @@ Function: exprt::is_false
 bool exprt::is_false() const
 {
   return is_constant() &&
-         type().id()=="bool" &&
+         type().is_bool() &&
          get(a_value)=="false";
 }
 
@@ -388,7 +388,7 @@ Function: exprt::is_boolean
 
 bool exprt::is_boolean() const
 {
-  return type().id()=="bool";
+  return type().is_bool();
 }
 
 /*******************************************************************\

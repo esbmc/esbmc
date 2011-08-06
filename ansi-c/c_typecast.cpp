@@ -115,7 +115,7 @@ bool check_c_implicit_typecast(
 
   if(src_type_id=="natural")
   {
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
@@ -125,7 +125,7 @@ bool check_c_implicit_typecast(
   }
   else if(src_type_id=="integer")
   {
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="unsignedbv") return false;
@@ -136,14 +136,14 @@ bool check_c_implicit_typecast(
   }
   else if(src_type_id=="real")
   {
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="floatbv") return false;
     if(dest_type.id()=="fixedbv") return false;
   }
   else if(src_type_id=="rational")
   {
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="floatbv") return false;
     if(dest_type.id()=="fixedbv") return false;
@@ -165,7 +165,7 @@ bool check_c_implicit_typecast(
           src_type_id=="incomplete_c_enum")
   {
     if(dest_type.id()=="unsignedbv") return false;
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
@@ -178,7 +178,7 @@ bool check_c_implicit_typecast(
   else if(src_type_id=="floatbv" ||
           src_type_id=="fixedbv")
   {
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
@@ -206,7 +206,7 @@ bool check_c_implicit_typecast(
         dest_type.id()=="incomplete_array") &&
        (src_type.subtype()==dest_type.subtype())) return false;
 
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="signedbv") return false;
   }
@@ -277,7 +277,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
     else if(width<=config.ansi_c.long_long_int_width)
       return ULONGLONG;
   }
-  else if(type.id()=="bool")
+  else if(type.is_bool())
     return BOOL;
   else if(type.id()=="floatbv" ||
           type.id()=="fixedbv")

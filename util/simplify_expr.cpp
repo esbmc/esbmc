@@ -1427,7 +1427,7 @@ bool simplify_exprt::simplify_if_recursive(
   const exprt &cond,
   bool truth)
 {
-  if(expr.type().id()=="bool")
+  if(expr.type().is_bool())
   {
     bool new_truth;
 
@@ -1731,8 +1731,8 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
 
   exprt &op=expr.op0();
 
-  if(expr.type().id()!="bool" ||
-     op.type().id()!="bool") return true;
+  if(!expr.type().is_bool() ||
+     !op.type().is_bool()) return true;
 
   if(op.id()=="not") // (not not a) == a
   {
@@ -1793,13 +1793,13 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
 
   exprt::operandst &operands=expr.operands();
 
-  if(expr.type().id()!="bool") return true;
+  if(!expr.type().is_bool()) return true;
 
   if(expr.id()=="=>")
   {
     if(operands.size()!=2 ||
-       operands.front().type().id()!="bool" ||
-       operands.back().type().id()!="bool")
+       !operands.front().type().is_bool() ||
+       !operands.back().type().is_bool())
       return true;
 
     // turn a => b into !a || b
@@ -1813,8 +1813,8 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
   else if(expr.id()=="<=>")
   {
     if(operands.size()!=2 ||
-       operands.front().type().id()!="bool" ||
-       operands.back().type().id()!="bool")
+       !operands.front().type().is_bool() ||
+       !operands.back().type().is_bool())
       return true;
 
     if(operands.front().is_false())
@@ -1856,7 +1856,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
     for(exprt::operandst::iterator it=operands.begin();
         it!=operands.end();)
     {
-      if(it->type().id()!="bool") return true;
+      if(!it->type().is_bool()) return true;
 
       bool is_true=it->is_true();
       bool is_false=it->is_false();
@@ -1906,7 +1906,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
       forall_operands(it, expr)
         if(it->id()=="not" &&
            it->operands().size()==1 &&
-           it->type().id()=="bool")
+           it->type().is_bool())
           expr_set.insert(it->op0());
 
       // now search for a
@@ -2057,7 +2057,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
 {
   exprt::operandst &operands=expr.operands();
 
-  if(expr.type().id()!="bool") return true;
+  if(!expr.type().is_bool()) return true;
 
   if(operands.size()!=2) return true;
 
@@ -2072,7 +2072,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
 
   if(op0_is_const && op1_is_const)
   {
-    if(expr.op0().type().id()=="bool")
+    if(expr.op0().type().is_bool())
     {
       bool v0=expr.op0().is_true();
       bool v1=expr.op1().is_true();
@@ -2551,7 +2551,7 @@ bool simplify_exprt::simplify_ieee_float_relation(exprt &expr)
 {
   exprt::operandst &operands=expr.operands();
 
-  if(expr.type().id()!="bool") return true;
+  if(!expr.type().is_bool()) return true;
 
   if(operands.size()!=2) return true;
 

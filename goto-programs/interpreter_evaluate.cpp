@@ -80,7 +80,7 @@ void interpretert::evaluate(
       dest.push_back(f.get_value());
       return;
     }
-    else if(expr.type().id()=="bool")
+    else if(expr.type().is_bool())
     {
       dest.push_back(expr.is_true());
       return;
@@ -395,7 +395,7 @@ void interpretert::evaluate(
         dest.push_back(binary2integer(s, false));        
         return;
       }
-      else if(expr.type().id()=="bool")
+      else if(expr.type().is_bool())
       {
         dest.push_back(value!=0);
         return;

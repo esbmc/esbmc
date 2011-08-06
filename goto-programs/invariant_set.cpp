@@ -167,7 +167,7 @@ std::string inv_object_storet::build_string(const exprt &expr) const
         if(bv_width(expr.type())>=bv_width(expr.op0().type()))
           return build_string(expr.op0());
       }
-      else if(expr.op0().type().id()=="bool")
+      else if(expr.op0().type().is_bool())
       {
         return build_string(expr.op0());
       }
@@ -599,7 +599,7 @@ Function: invariant_sett::strengthen_rec
 
 void invariant_sett::strengthen_rec(const exprt &expr)
 {
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
     throw "non-Boolean argument to strengthen()";
 
   #if 0
@@ -836,7 +836,7 @@ Function: invariant_sett::implies
 
 tvt invariant_sett::implies_rec(const exprt &expr) const
 {
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
     throw "implies: non-Boolean expression";
     
   #if 0
@@ -964,7 +964,7 @@ Function: invariant_sett::nnf
 
 void invariant_sett::nnf(exprt &expr, bool negate)
 {
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
     throw "nnf: non-Boolean expression";
 
   if(expr.is_true())

@@ -99,7 +99,7 @@ void boolbvt::convert_typecast(const exprt &expr, bvt &bv)
         return;
 
       default:
-        if(op.type().id()=="bool")
+        if(op.type().is_bool())
         {
           // bool to float
           
@@ -191,7 +191,7 @@ void boolbvt::convert_typecast(const exprt &expr, bvt &bv)
 
       return;
     }
-    else if(op.type().id()=="bool")
+    else if(op.type().is_bool())
     {
       // bool to fixed
       unsigned fraction_bits=
@@ -268,7 +268,7 @@ void boolbvt::convert_typecast(const exprt &expr, bvt &bv)
       }
 
     default:
-      if(op.type().id()=="bool")
+      if(op.type().is_bool())
       {
         // bool to integer
 

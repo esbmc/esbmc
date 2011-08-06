@@ -152,7 +152,7 @@ std::string expr2ct::convert_rec(
 
   std::string q=new_qualifiers.as_string();
 
-  if(src.id()=="bool")
+  if(src.is_bool())
   {
     return q+"_Bool";
   }
@@ -1349,7 +1349,7 @@ std::string expr2ct::convert_constant(
     return convert_norep(src, precedence);
   else if(type.id()=="bv")
     dest=value;
-  else if(type.id()=="bool")
+  else if(type.is_bool())
   {
     if(src.is_true())
       dest="TRUE";

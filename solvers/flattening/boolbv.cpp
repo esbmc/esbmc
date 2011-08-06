@@ -47,7 +47,7 @@ bool boolbvt::literal(
   const unsigned bit,
   literalt &dest) const
 {
-  if(expr.type().id()=="bool")
+  if(expr.type().is_bool())
   {
     assert(bit==0);
     return prop_convt::literal(expr, dest);
@@ -200,7 +200,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
   std::cout << "BV: " << expr.pretty() << std::endl;
   #endif
 
-  if(expr.type().id()=="bool")
+  if(expr.type().is_bool())
   {
     bv.resize(1);
     bv[0]=convert(expr);

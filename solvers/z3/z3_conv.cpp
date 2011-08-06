@@ -3745,7 +3745,7 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
     // else is base 2.
     value = expr.value().as_string();
   }
-  else if (expr.type().id() == "bool")
+  else if (expr.type().is_bool())
   {
     // value will not actually be interpreted as number by below code
     value = expr.value().as_string();

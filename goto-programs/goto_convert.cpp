@@ -529,7 +529,7 @@ void goto_convertt::convert_sideeffect(
 
     const typet &op_type=ns.follow(expr.op0().type());
 
-    if(op_type.id()=="bool")
+    if(op_type.is_bool())
     {
       rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
       rhs.op0().make_typecast(int_type());
@@ -633,7 +633,7 @@ void goto_convertt::convert_sideeffect(
     rhs.copy_to_operands(expr.op0(), expr.op1());
     rhs.type()=expr.op0().type();
 
-    if(rhs.op0().type().id()=="bool")
+    if(rhs.op0().type().is_bool())
     {
       rhs.op0().make_typecast(int_type());
       rhs.op1().make_typecast(int_type());

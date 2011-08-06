@@ -53,7 +53,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
     dest=from_integer(bits/8, uint_type());
     if((bits%8)!=0) dest.make_nil();
   }
-  else if(type.id()=="bool")
+  else if(type.is_bool())
   {
     dest=from_integer(1, uint_type());
   }
