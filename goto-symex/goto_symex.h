@@ -46,6 +46,7 @@ public:
 
   virtual void operator()();
 
+    bool restore_from_dfs_state(const reachability_treet::dfs_position &dfs);
     symex_target_equationt *multi_formulas_get_next_formula();
     bool multi_formulas_setup_next();
     void multi_formulas_init(const goto_functionst &goto_functions);

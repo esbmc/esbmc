@@ -173,6 +173,33 @@ symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
   return &art1->get_cur_state()._target;
 }
 
+bool
+goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
+{
+  std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
+
+  // Symex repeatedly until context switch points. At each point, verify that it
+  // happened where we expected it to, and then switch to the correct thread for
+  // the history we've been provided with.
+  for (it = dfs.states.begin(); it != dfs.states.end(); it++) {
+    while (!art1->is_go_next_state())
+      symex_step(art1->_goto_functions, *art1);
+
+    art1->multi_formulae_go_next_state();
+
+    if (art1->get_cur_state()._threads_state.size() != it->num_threads) {
+      std::cerr << "Unexpected number of threads when reexploring checkpoint"
+                << std::endl;
+      return true;
+    }
+
+    art1->get_cur_state().set_active_state(it->cur_thread);
+    art1->get_cur_state()._DFS_traversed = it->explored;
+  }
+
+  return false;
+}
+
 /*******************************************************************\
 
 Function: goto_symext::operator()
