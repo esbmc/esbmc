@@ -190,7 +190,14 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
     if (art1->get_cur_state()._threads_state.size() != it->num_threads) {
       std::cerr << "Unexpected number of threads when reexploring checkpoint"
                 << std::endl;
-      return true;
+      abort();
+    }
+
+    if (art1->get_cur_state().get_active_state().source.pc->location_number !=
+        it->location_number) {
+      std::cerr << "Interleave at unexpected location when restoring checkpoint"
+                << std::endl;
+      abort();
     }
 
     art1->get_cur_state().set_active_state(it->cur_thread);
