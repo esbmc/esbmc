@@ -182,7 +182,7 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
   // Symex repeatedly until context switch points. At each point, verify that it
   // happened where we expected it to, and then switch to the correct thread for
   // the history we've been provided with.
-  for (it = dfs.states.begin(), i = 0; it != dfs.states.end(); i++) {
+  for (it = dfs.states.begin(), i = 0; it != dfs.states.end(); it++, i++) {
 
     do {
       art1->_go_next = false;
