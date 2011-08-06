@@ -97,6 +97,11 @@ public:
     };
 
     std::vector<struct dfs_state> states;
+
+    // We need to be able to detect when the source files have changed somehow,
+    // leading to the checkpoint being invalid. So add a checksum field. Exactly
+    // how it's going to be calculated, I don't know yet.
+    uint64_t checksum;
   };
 
   const goto_functionst &_goto_functions;
