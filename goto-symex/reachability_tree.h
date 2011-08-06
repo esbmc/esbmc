@@ -98,6 +98,9 @@ public:
 
     std::vector<struct dfs_state> states;
 
+    // Number of interleavings explored to date.
+    unsigned int ileaves;
+
     // We need to be able to detect when the source files have changed somehow,
     // leading to the checkpoint being invalid. So add a checksum field. Exactly
     // how it's going to be calculated, I don't know yet.

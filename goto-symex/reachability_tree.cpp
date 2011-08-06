@@ -747,4 +747,5 @@ reachability_treet::dfs_position::dfs_position(reachability_treet &rt)
   }
 
   checksum = 0; // Use this in the future.
+  ileaves = 0; // Can use this depending on a future refactor.
 }
