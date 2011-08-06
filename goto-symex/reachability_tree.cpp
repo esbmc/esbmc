@@ -780,22 +780,16 @@ bool reachability_treet::dfs_position::write_to_file(
   hdr.num_states = states.size();
   hdr.num_ileaves = 0;
 
-  if (fwrite(&hdr, sizeof(hdr), 1, f) != 1) {
-    std::cerr << "Write error writing checkpoint file" << std::endl;
-    fclose(f);
-    return true;
-  }
+  if (fwrite(&hdr, sizeof(hdr), 1, f) != 1)
+    goto fail;
 
   for (it = states.begin(); it != states.end(); it++) {
     entry.location_number = it->location_number;
     entry.num_threads = it->num_threads;
     entry.cur_thread = it->cur_thread;
     
-    if (fwrite(&entry, sizeof(entry), 1, f) != 1) {
-      std::cerr << "Write error writing checkpoint file" << std::endl;
-      fclose(f);
-      return true;
-    }
+    if (fwrite(&entry, sizeof(entry), 1, f) != 1)
+      goto fail;
 
     assert(it->explored.size() < 65536);
     assert(it->explored.size() == entry.num_threads);
@@ -814,15 +808,17 @@ bool reachability_treet::dfs_position::write_to_file(
     i >>= 3;
 
     assert(i != 0); // Always at least one thread in _existance_.
-    if (fwrite(buffer, i, 1, f) != 1) {
-      std::cerr << "Write error writing checkpoint file" << std::endl;
-      fclose(f);
-      return true;
-    }
+    if (fwrite(buffer, i, 1, f) != 1)
+      goto fail;
   }
 
   fclose(f);
   return false;
+
+fail:
+  std::cerr << "Write error writing checkpoint file" << std::endl;
+  fclose(f);
+  return true;
 }
 
 bool reachability_treet::dfs_position::read_from_file(
@@ -840,11 +836,8 @@ bool reachability_treet::dfs_position::read_from_file(
     return true;
   }
 
-  if (fread(&hdr, sizeof(hdr), 1, f) != 1) {
-    std::cerr << "Read error on checkpoint file" << std::endl;
-    fclose(f);
-    return true;
-  }
+  if (fread(&hdr, sizeof(hdr), 1, f) != 1)
+    goto fail;
 
   if (hdr.magic != file_magic) {
     std::cerr << "Magic number indicates that this isn't a checkpoint file"
@@ -855,11 +848,8 @@ bool reachability_treet::dfs_position::read_from_file(
 
   for (i = 0; i < hdr.num_states; i++) {
     reachability_treet::dfs_position::dfs_state state;
-    if (fread(&entry, sizeof(entry), 1, f) != 1) {
-      std::cerr << "Read error on checkpoint file" << std::endl;
-      fclose(f);
-      return true;
-    }
+    if (fread(&entry, sizeof(entry), 1, f) != 1)
+      goto fail;
 
     state.location_number = entry.location_number;
     state.num_threads = entry.num_threads;
@@ -874,11 +864,8 @@ bool reachability_treet::dfs_position::read_from_file(
 
     for (j = 0; j < state.num_threads; j++) {
       if (j % 8 == 0) {
-        if (fread(&c, sizeof(c), 1, f) != 1) {
-          std::cerr << "Read error on checkpoint file" << std::endl;
-          fclose(f);
-          return true;
-        }
+        if (fread(&c, sizeof(c), 1, f) != 1)
+          goto fail;
       }
 
       state.explored.push_back(c & (1 << (j & 7)));
@@ -889,4 +876,9 @@ bool reachability_treet::dfs_position::read_from_file(
 
   fclose(f);
   return false;
+
+fail:
+  std::cerr << "Read error on checkpoint file" << std::endl;
+  fclose(f);
+  return true;
 }
