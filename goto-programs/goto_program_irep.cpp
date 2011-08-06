@@ -72,7 +72,7 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
   
   if (! instruction.local_variables.empty())
   {
-    irept &vars = irep.add("variables");
+    irept vars;
     irept::subt &subs = vars.get_sub();
     subs.reserve(instruction.local_variables.size());
     for(goto_programt::local_variablest::const_iterator it=
@@ -82,6 +82,8 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
     {
       subs.push_back(irept(*it));
     }
+
+    irep.variables(vars);
   }
 }
 
