@@ -1491,7 +1491,9 @@ labeled_statement:
 	  $$=$1;
 	  statement(*$$, "label");
 	  mto($$, $4);
-	  static_cast<exprt &>($$->add("case")).move_to_operands(*$2);
+	  exprt tmp = (exprt&)$$->case_irep();
+	  tmp.move_to_operands(*$2);
+	  $$->case_irep(tmp);
 	}
 	| TOK_DEFAULT ':' statement
 	{

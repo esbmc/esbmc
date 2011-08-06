@@ -512,13 +512,15 @@ void c_typecheck_baset::typecheck_label(code_labelt &code)
       throw "did not expect `case' here";
     }
 
-    exprt &case_expr=static_cast<exprt &>(code.add("case"));
+    exprt case_expr=static_cast<const exprt &>(code.case_irep());
 
     Forall_operands(it, case_expr)
     {
       typecheck_expr(*it);
       implicit_typecast(*it, switch_op_type);
     }
+
+    code.case_irep(case_expr);
   }
 }
 

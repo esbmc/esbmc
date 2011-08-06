@@ -156,8 +156,11 @@ void ansi_c_convertt::convert_code(codet &code)
     assert(code.operands().size()==1);
     convert_code(to_code(code.op0()));
 
-    if(code.case_irep().is_not_nil())
-      convert_expr(static_cast<exprt &>(code.add("case")));
+    if(code.case_irep().is_not_nil()) {
+      exprt tmp = (exprt&)code.case_irep();
+      convert_expr(tmp);
+      code.case_irep(tmp);
+    }
   }
   else if(statement=="block" ||
           statement=="decl-block")

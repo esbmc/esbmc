@@ -895,6 +895,10 @@ public:
     set(s_components, val);
   }
 
+  inline void case_irep(const irept &val) {
+    set(s_case, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
