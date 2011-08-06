@@ -1055,7 +1055,7 @@ member_declarator:
 	    // Shift name of member upwards
 	    $$->decl_ident($1->decl_ident());
 	    $1->remove("decl_ident");
-	    $$->add("subtype") = $1->add("subtype");
+	    ((typet*)$$)->subtype() = ((typet*)$1)->subtype();
 	  }
 	  else
 	    $$=$1;
@@ -1068,7 +1068,7 @@ member_declarator:
 	| bit_field_size
 	{
 	  $$=$1;
-	  $$->add("subtype").make_nil();
+	  ((typet*)$$)->subtype().make_nil();
 	}
 	;
 
@@ -1913,9 +1913,9 @@ unary_identifier_declarator:
 	{
 	  if ($3->id() == "declarator") {
 	    typet d = (typet&)*$3;
-	    *$3 = (exprt&)d.add("subtype");
+	    *$3 = (exprt&)d.subtype();
 	    merge_types(*$2, (typet&)*$3);
-	    d.add("subtype") = *$2;
+	    d.subtype() = *$2;
 	    *$2 = d;
 	  } else  {
 	    merge_types(*$2, (typet&)*$3);
@@ -1937,7 +1937,7 @@ postfix_identifier_declarator:
 
 		if ($1->id() == "declarator") {
 			$1->remove("decl_ident");
-			make_subtype((typet&)*$$, (typet&)$1->add("subtype"));
+			make_subtype((typet&)*$$, (typet&)((typet*)$1)->subtype());
 		} else {
 			$1->remove("decl_ident");
 			make_subtype((typet&)*$$, (typet&)*$1);
@@ -1963,7 +1963,7 @@ paren_identifier_declarator:
 	  init(&$$);
 	  $$->id("declarator");
 	  $$->decl_ident(*$1);
-	  $$->add("subtype").make_nil();
+	  ((typet*)$$)->subtype().make_nil();
 	}
 	| '(' paren_identifier_declarator ')'
 	{
@@ -1989,7 +1989,7 @@ postfixing_abstract_declarator:	/* AbstrDeclarator */
 	  $$=(typet*)$1;
 	  set(*$$, "code");
 	  $$->arguments(irept());
-	  $$->add("subtype").make_nil();
+	  $$->subtype().make_nil();
 	}
 	| '('
 	  {
@@ -2000,7 +2000,7 @@ postfixing_abstract_declarator:	/* AbstrDeclarator */
 	{
 	  $$=(typet*)$1;
 	  set(*$$, "code");
-	  $$->add("subtype").make_nil();
+	  $$->subtype().make_nil();
 	  exprt args("arguments");
 	  args.get_sub().swap($3->add("subtypes").get_sub());
 	  $$->arguments(args);
@@ -2015,7 +2015,7 @@ parameter_postfixing_abstract_declarator:
 	  $$=(typet*)$1;
 	  set(*$$, "code");
 	  $$->arguments(irept());
-	  $$->add("subtype").make_nil();
+	  $$->subtype().make_nil();
 	}
 	| '('
 	  {
@@ -2026,7 +2026,7 @@ parameter_postfixing_abstract_declarator:
 	{
 	  $$=(typet*)$1;
 	  set(*$$, "code");
-	  $$->add("subtype").make_nil();
+	  $$->subtype().make_nil();
 	  exprt args("arguments");
 	  args.get_sub().swap($3->add("subtypes").get_sub());
 	  $$->arguments(args);
@@ -2039,14 +2039,14 @@ array_abstract_declarator:
 	{
 	  $$=(typet*)$1;
 	  set(*$$, "incomplete_array");
-	  $$->add("subtype").make_nil();
+	  $$->subtype().make_nil();
 	}
 	| '[' constant_expression ']'
 	{
 	  $$=(typet*)$1;
 	  set(*$$, "array");
 	  $$->add("size").swap(*$2);
-	  $$->add("subtype").make_nil();
+	  $$->subtype().make_nil();
 	}
 	| array_abstract_declarator '[' constant_expression ']'
 	{
@@ -2054,7 +2054,7 @@ array_abstract_declarator:
 	  $$=$1;
 	  set(*$2, "array");
 	  $2->add("size").swap(*$3);
-	  $2->add("subtype").make_nil();
+	  ((typet*)$2)->subtype().make_nil();
 	  make_subtype((typet&)*$1, (typet&)*$2);
 	}
 	;
@@ -2064,7 +2064,7 @@ unary_abstract_declarator:
 	{
 	  $$=(typet*)$1;
 	  set(*$$, "pointer");
-	  $$->add("subtype").make_nil();
+	  $$->subtype().make_nil();
 	}
 	| '*' type_qualifier_list
 	{
@@ -2091,7 +2091,7 @@ parameter_unary_abstract_declarator:
 	{
           $$=(typet*)$1;
           set(*$$, "pointer");
-          $$->add("subtype").make_nil();
+          $$->subtype().make_nil();
 	}
 	| '*' type_qualifier_list
 	{

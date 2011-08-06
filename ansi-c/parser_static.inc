@@ -177,7 +177,7 @@ static void make_subtype(typet &dest, typet &src)
 static void do_pointer(typet &ptr, typet &dest)
 {  
   set(ptr, "pointer");
-  ptr.add("subtype").make_nil();
+  ptr.subtype().make_nil();
   make_subtype(dest, ptr);
 }
 
