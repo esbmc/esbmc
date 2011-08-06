@@ -907,6 +907,10 @@ public:
     set(s_sizeof_type, val);
   }
 
+  inline void cmt_c_sizeof_type(const irept &val) {
+    set(s_c_sizeof_type, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)

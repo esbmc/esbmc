@@ -592,7 +592,7 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
       simplify_expr.simplify_typecast(dest, simplify_exprt::NORMAL);
 
       if(c_sizeof_type.is_not_nil())
-        dest.add("#c_sizeof_type")=c_sizeof_type;
+        dest.cmt_c_sizeof_type(c_sizeof_type);
     }
   }
 }
