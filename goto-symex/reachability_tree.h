@@ -96,6 +96,19 @@ public:
       std::vector<bool> explored;
     };
 
+    struct file_hdr {
+      uint64_t magic;
+      uint32_t num_states;
+      uint32_t num_ileaves;
+    };
+
+    struct file_entry {
+      uint32_t location_number;
+      uint16_t num_threads;
+      uint16_t cur_thread;
+      // Followed by bitfield for threads explored state.
+    };
+
     std::vector<struct dfs_state> states;
 
     // Number of interleavings explored to date.
