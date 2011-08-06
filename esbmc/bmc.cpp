@@ -360,6 +360,17 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   {
     symex.multi_formulas_init(goto_functions);
 
+    if (options.get_bool_option("from-checkpoint")) {
+      if (options.get_option("checkpoint-file") == "") {
+        std::cerr << "Please provide a checkpoint file" << std::endl;
+        abort();
+      }
+
+      reachability_treet::dfs_position pos(
+                                         options.get_option("checkpoint-file"));
+      symex.restore_from_dfs_state(pos);
+    }
+
     do
     {
       symex.total_claims=0;
