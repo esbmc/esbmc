@@ -95,8 +95,8 @@ void symbolt::to_irep(irept &dest) const
 {
   dest.clear();
   dest.type()=type;
-  dest.add("symvalue")=value;
-  dest.add("location")=location;
+  dest.symvalue(value);
+  dest.location(location);
   dest.name(name);
   dest.module(module);
   dest.base_name(base_name);
