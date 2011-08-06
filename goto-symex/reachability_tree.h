@@ -96,6 +96,8 @@ public:
       std::vector<bool> explored;
     };
 
+    static const uint64_t file_magic;
+
     struct file_hdr {
       uint64_t magic;
       uint64_t checksum;
