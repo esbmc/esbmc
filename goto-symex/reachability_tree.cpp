@@ -735,7 +735,7 @@ reachability_treet::dfs_position::dfs_position(reachability_treet &rt)
 
   // Iterate through each position in the DFS tree recording data into this
   // object.
-  for (it = rt.execution_states.begin(); it != rt.execution_states.end(); it++){
+  for (it = rt.execution_states.begin(); it != rt.execution_states.end();it++){
     reachability_treet::dfs_position::dfs_state state;
     execution_statet *ex = *it;
     state.location_number = ex->get_active_state().source.pc->location_number;
