@@ -86,6 +86,7 @@ public:
   }
 
   class dfs_position {
+public:
     dfs_position(reachability_treet &rt);
     dfs_position(std::string filename);
     bool write_to_file(std::string filename);
