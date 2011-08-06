@@ -1026,6 +1026,13 @@ public:
   static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;
   static const irep_idt a_cmt_type;
 
+  static const irep_idt id_address_of, id_and, id_array, id_bool, id_code;
+  static const irep_idt id_constant, id_dereference, id_empty, id_fixedbv;
+  static const irep_idt id_floatbv, id_incomplete_array, id_index, id_member;
+  static const irep_idt id_not, id_notequal, id_pointer, id_signedbv;
+  static const irep_idt id_struct, id_symbol, id_typecast, id_union;
+  static const irep_idt id_unsignedbv;
+
   class dt
   {
   public:
