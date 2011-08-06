@@ -299,7 +299,7 @@ builtin_offsetof:
 	  $$=$1;
 	  $$->id("builtin_offsetof");
 	  $$->offsetof_type(*$3);
-	  $$->add("member").swap(*$5);
+	  $$->member_irep(*$5);
 	}
 	;
 

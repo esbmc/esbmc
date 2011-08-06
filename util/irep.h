@@ -939,6 +939,10 @@ public:
     set(s_symvalue, val);
   }
 
+  inline void member_irep(const irept &val) {
+    set(s_member, val);
+  }
+
   friend bool operator==(const irept &i1, const irept &i2);
    
   friend inline bool operator!=(const irept &i1, const irept &i2)
