@@ -379,7 +379,7 @@ void boolbvt::convert_lambda(const exprt &expr, bvt &bv)
   if(expr.operands().size()!=2)
     throw "lambda takes two operands";
 
-  if(expr.type().!is_array())
+  if(!expr.type().is_array())
     return conversion_failed(expr, bv);
 
   const exprt &array_size=
@@ -952,7 +952,7 @@ Function: boolbvt::is_unbounded_array
 
 bool boolbvt::is_unbounded_array(const typet &type) const
 {
-  if(type.!is_array()) return false;
+  if(!type.is_array()) return false;
   
   if(unbounded_array==U_ALL) return true;
   
