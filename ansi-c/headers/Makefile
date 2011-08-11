@@ -1,12 +1,15 @@
+include ../../config.inc
+include ../../local.inc
+
 OBJS= stddef.o stdarg.o stdbool.o
 
 all: headers.o
 
 headers.o: $(OBJS)
-	$(LD) $^ -o $@ -r
+	$(LD) $(LDFLAGS) $^ -o $@ -r
 
 .h.o:
-	$(LD) -b binary $< -o $@ -r
+	$(LD) $(LDFLAGS) -b binary $< -o $@ -r
 
 clean:
 	-rm *.o
