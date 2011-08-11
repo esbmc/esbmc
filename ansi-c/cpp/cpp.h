@@ -35,7 +35,7 @@
 #define MAX_INCLEVEL    100
 
 typedef unsigned char usch;
-extern char *yytext;
+extern char *cpptext;
 extern usch *stringbuf;
 
 extern	int	trulvl;
@@ -115,14 +115,14 @@ int slow;	/* scan slowly for new tokens */
 
 void popfile(void);
 void prtline(void);
-int yylex(void);
+int cpplex(void);
 void cunput(int);
 int curline(void);
 char *curfile(void);
 void setline(int);
 void setfile(char *);
-int yyparse(void);
-void yyerror(char *);
+int cppparse(void);
+void cpperror(char *);
 void unpstr(usch *);
 usch *savstr(usch *str);
 void savch(int c);
