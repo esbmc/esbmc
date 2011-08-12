@@ -91,7 +91,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
   }
 
   // eliminate typecasts from NULL
-  if(expr.type().id()=="pointer" &&
+  if(expr.type().is_pointer() &&
      expr.op0().is_constant() &&
      expr.op0().value().as_string()=="NULL")
   {
@@ -102,9 +102,9 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
   }
 
   // eliminate duplicate pointer typecasts
-  if(expr.type().id()=="pointer" &&
+  if(expr.type().is_pointer() &&
      expr.op0().id()=="typecast" &&
-     expr.op0().type().id()=="pointer" &&
+     expr.op0().type().is_pointer() &&
      expr.op0().operands().size()==1)
   {
     exprt tmp;
@@ -378,7 +378,7 @@ bool simplify_exprt::simplify_dereference(exprt &expr)
 {
   if(expr.operands().size()!=1) return true;
 
-  if(expr.op0().type().id()!="pointer") return true;
+  if(!expr.op0().type().is_pointer()) return true;
 
   if(expr.op0().is_address_of())
   {
@@ -410,7 +410,7 @@ bool simplify_exprt::simplify_address_of(exprt &expr)
 {
   if(expr.operands().size()!=1) return true;
 
-  if(expr.type().id()!="pointer") return true;
+  if(!expr.type().is_pointer()) return true;
 
   if(expr.op0().id()=="NULL-object")
   {
@@ -514,7 +514,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
 
   exprt &ptr=expr.op0();
 
-  if(ptr.type().id()!="pointer") return true;
+  if(!ptr.type().is_pointer()) return true;
 
   if(ptr.is_address_of())
   {
@@ -552,7 +552,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
 
     forall_operands(it, ptr)
     {
-      if(it->type().id()=="pointer")
+      if(it->type().is_pointer())
         ptr_expr.push_back(*it);
       else if(!it->is_zero())
         int_expr.push_back(*it);
@@ -900,7 +900,7 @@ bool simplify_exprt::simplify_addition_substraction(
   exprt &expr, modet mode)
 {
   if(!is_number(expr.type()) &&
-     expr.type().id()!="pointer")
+     !expr.type().is_pointer())
     return true;
 
   bool result=true;
@@ -2385,7 +2385,7 @@ bool simplify_exprt::simplify_inequality_constant(
 {
   assert(expr.op1().is_constant());
 
-  if(expr.op1().type().id()=="pointer")
+  if(expr.op1().type().is_pointer())
     return true;
 
   // is it a separation predicate?
@@ -2501,7 +2501,7 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
   // special case
   if((expr.id()=="=" || expr.is_notequal()) &&
      expr.operands().size()==2 &&
-     expr.op0().type().id()=="pointer")
+     expr.op0().type().is_pointer())
   {
     const exprt *other=NULL;
 
@@ -2866,11 +2866,11 @@ bool simplify_exprt::simplify_object(exprt &expr)
 {
   if(expr.id()=="+")
   {
-    if(expr.type().id()=="pointer")
+    if(expr.type().is_pointer())
     {
       // kill integers from sum
       for(unsigned i=0; i<expr.operands().size(); i++)
-        if(expr.operands()[i].type().id()=="pointer")
+        if(expr.operands()[i].type().is_pointer())
         {
           exprt tmp=expr.operands()[i];
           expr.swap(tmp);
@@ -2882,7 +2882,7 @@ bool simplify_exprt::simplify_object(exprt &expr)
   else if(expr.id()=="typecast")
   {
     if(expr.operands().size()==1 &&
-       expr.op0().type().id()=="pointer")
+       expr.op0().type().is_pointer())
     {
       exprt tmp;
       tmp.swap(expr.op0());

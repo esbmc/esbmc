@@ -548,7 +548,7 @@ void goto_convertt::convert_sideeffect(
     {
       typet constant_type;
 
-      if(op_type.id()=="pointer")
+      if(op_type.is_pointer())
         constant_type=index_type();
       else if(is_number(op_type))
         constant_type=op_type;

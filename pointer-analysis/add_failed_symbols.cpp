@@ -27,7 +27,7 @@ void add_failed_symbol(symbolt &symbol, contextt &context)
   if(symbol.type.failed_symbol()!="")
     return;
 
-  if(symbol.type.id()=="pointer")
+  if(symbol.type.is_pointer())
   {
     symbolt new_symbol;
     new_symbol.lvalue=true;
@@ -40,7 +40,7 @@ void add_failed_symbol(symbolt &symbol, contextt &context)
     
     symbol.type.failed_symbol(new_symbol.name);
     
-    if(new_symbol.type.id()=="pointer")
+    if(new_symbol.type.is_pointer())
       add_failed_symbol(new_symbol, context); // recursive call
         
     context.move(new_symbol);

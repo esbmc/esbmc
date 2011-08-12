@@ -179,7 +179,7 @@ std::string inv_object_storet::build_string(const exprt &expr) const
   if(expr.is_constant())
   {
     // NULL?
-    if(expr.type().id()=="pointer")
+    if(expr.type().is_pointer())
       if(expr.value()=="NULL")
         return "0";
   
@@ -1140,7 +1140,7 @@ exprt invariant_sett::get_constant(const exprt &expr) const
           mp_integer value;
           assert(!to_integer(e, value));
           
-          if(expr.type().id()=="pointer")
+          if(expr.type().is_pointer())
           {
             if(value==0)
             {

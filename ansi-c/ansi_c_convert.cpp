@@ -295,7 +295,7 @@ void ansi_c_convertt::convert_type(
 
   c_storage_spec=ansi_c_convert_type.c_storage_spec;
 
-  if(type.id()=="pointer")
+  if(type.is_pointer())
   {
     c_storage_spect sub_storage_spec;
 

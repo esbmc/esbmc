@@ -63,8 +63,8 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
   }
 
   {
-    if(op1.type().id()!="pointer" ||
-       op1.type().subtype().id()!="pointer")
+    if(!op1.type().is_pointer() ||
+       !op1.type().subtype().is_pointer())
     {
       err_location(main_symbol.location);
       str << "argv argument expected to be pointer-to-pointer type, "
@@ -112,7 +112,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     envp_size_symbol.static_lifetime=true;    
     move_symbol(envp_size_symbol, envp_new_size_symbol);        
 
-    if(envp_symbol.type.id()!="pointer")
+    if(!envp_symbol.type.is_pointer())
     {
       err_location(main_symbol.location);
       str << "envp argument expected to be pointer type, but got `"

@@ -378,7 +378,7 @@ void interpretert::evaluate(
     {
       const mp_integer &value=tmp.front();
 
-      if(expr.type().id()=="pointer")
+      if(expr.type().is_pointer())
       {
         dest.push_back(value);
         return;

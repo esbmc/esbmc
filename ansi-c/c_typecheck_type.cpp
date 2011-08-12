@@ -142,7 +142,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
   {
     typecheck_type(type.subtype());
   }
-  else if(type.id()=="pointer")
+  else if(type.is_pointer())
   {
     typecheck_type(type.subtype());
   }

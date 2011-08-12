@@ -95,7 +95,7 @@ bool boolector_convt::check_all_types(const typet &type)
 {
   if (type.is_bool() || type.id()=="signedbv" || type.id()=="unsignedbv" ||
 	  type.id()=="symbol" || type.is_empty() || type.is_fixedbv() ||
-	  type.is_array() || type.id()=="struct" || type.id()=="pointer" ||
+	  type.is_array() || type.id()=="struct" || type.is_pointer() ||
 	  type.id()=="union")
   {
     return true;
@@ -152,7 +152,7 @@ int boolector_convt::check_boolector_properties(void)
 
 bool boolector_convt::is_ptr(const typet &type)
 {
-  return type.id()=="pointer" || type.id()=="reference";
+  return type.is_pointer() || type.id()=="reference";
 }
 
 /*******************************************************************
@@ -242,7 +242,7 @@ bool boolector_convt::create_boolector_array(const typet &type, std::string iden
 	width = atoi(type.subtype().width().c_str());
 	array = boolector_array(boolector_ctx, width, config.ansi_c.int_width, identifier.c_str());
   }
-  else if (type.subtype().id() == "pointer")
+  else if (type.subtype().is_pointer())
   {
 	create_boolector_array(type.subtype(), identifier, array);
   }
@@ -291,7 +291,7 @@ bool boolector_convt::convert_identifier(const std::string &identifier, const ty
   {
 	create_boolector_array(type, identifier, bv);
   }
-  else if (type.id()=="pointer")
+  else if (type.is_pointer())
   {
 	if (convert_identifier(identifier, type.subtype(), bv))
 	  return true;
@@ -1109,7 +1109,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
   	  if (convert_bv(op,operand)) return true;
   	  result = boolector_cond(boolector_ctx, operand, one, zero);
     }
-    if (op.type().id()=="pointer")
+    if (op.type().is_pointer())
     {
       unsigned width;
       unsigned object=pointer_logic.add_object(expr);
@@ -1447,7 +1447,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
   {
     value = expr.value().as_string();
   }
-  else if (expr.type().id() == "pointer" && expr.value().as_string() == "NULL")
+  else if (expr.type().is_pointer() && expr.value().as_string() == "NULL")
   {
     value = "0";
   }
@@ -1490,7 +1490,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
   {
 	convert_constant_array(expr, const_var);
   }
-  else if (expr.type().id()== "pointer")
+  else if (expr.type().is_pointer())
   {
 	width = atoi(expr.type().subtype().width().c_str());
 	const_var = boolector_int(boolector_ctx, atoi(value.c_str()), width);
@@ -1975,7 +1975,7 @@ bool boolector_convt::convert_pointer(const exprt &expr, BtorExp* &bv)
 #endif
 
   assert(expr.operands().size()==1);
-  assert(expr.type().id()=="pointer");
+  assert(expr.type().is_pointer());
 
   BtorExp *result, *args[2];
   std::string symbol_name;
@@ -2036,7 +2036,7 @@ bool boolector_convt::convert_array_of(const exprt &expr, BtorExp* &bv)
 	if (convert_bv(expr.op0(), value)) return true;
     array_of_var = boolector_array(boolector_ctx, width, config.ansi_c.int_width, "ARRAY_OF(0l)");
   }
-  else if (expr.type().subtype().id()=="pointer")
+  else if (expr.type().subtype().is_pointer())
   {
 	const exprt &object=expr.op0().operands()[0];
 	const exprt &index=expr.op0().operands()[1];
@@ -2586,7 +2586,7 @@ bool boolector_convt::assign_boolector_expr(const exprt expr)
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
 #endif
 
-  if (expr.op0().type().id() == "pointer" && expr.op0().type().subtype().is_code())
+  if (expr.op0().type().is_pointer() && expr.op0().type().subtype().is_code())
   {
 	ignoring(expr);
 	return false;
@@ -2596,7 +2596,7 @@ bool boolector_convt::assign_boolector_expr(const exprt expr)
 	ignoring(expr);
   	return false;
   }
-  else if (expr.op0().type().id() == "pointer" && expr.op0().type().subtype().id()=="symbol")
+  else if (expr.op0().type().is_pointer() && expr.op0().type().subtype().id()=="symbol")
   {
 	ignoring(expr);
   	return false;

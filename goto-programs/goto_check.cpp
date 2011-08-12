@@ -219,8 +219,8 @@ void goto_checkt::pointer_rel_check(
   if(expr.operands().size()!=2)
     throw expr.id_string()+" takes one argument";
 
-  if(expr.op0().type().id()=="pointer" &&
-     expr.op1().type().id()=="pointer")
+  if(expr.op0().type().is_pointer() &&
+     expr.op1().type().is_pointer())
   {
     // add same-object subgoal
 
@@ -286,7 +286,7 @@ void goto_checkt::bounds_check(
 
   typet array_type=ns.follow(expr.op0().type());
 
-  if(array_type.id()=="pointer")
+  if(array_type.is_pointer())
     return; // done by the pointer code
   else if(array_type.is_incomplete_array())
   {
@@ -654,7 +654,7 @@ void goto_checkt::check_rec(
 	}
   }
   else if (expr.id() == "struct" || expr.id() == "union"
-		    || expr.type().id()=="pointer" || expr.is_member() ||
+		    || expr.type().is_pointer() || expr.is_member() ||
 		    (expr.type().is_array() && expr.type().subtype().is_array()))
   {
 	use_boolector=false; //always deactivate boolector

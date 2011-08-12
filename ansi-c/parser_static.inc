@@ -107,7 +107,7 @@ static void make_subtype(typet &dest, typet &src)
   
   assert(src.is_array() ||
          src.is_incomplete_array() ||
-         src.id()=="pointer" ||
+         src.is_pointer() ||
          src.is_code() ||
          src.id()=="merged_type" ||
          src.id()=="declarator");
@@ -126,7 +126,7 @@ static void make_subtype(typet &dest, typet &src)
       sub=&(p->subtypes().back());
     }
 
-    if(sub->id()=="pointer" ||
+    if(sub->is_pointer() ||
        sub->is_array() ||
        sub->is_incomplete_array() ||
        sub->is_code() ||

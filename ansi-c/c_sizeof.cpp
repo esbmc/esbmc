@@ -44,7 +44,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   {
     dest=from_integer(config.ansi_c.int_width/8, uint_type());
   }
-  else if(type.id()=="pointer")
+  else if(type.is_pointer())
   {
     if(type.reference())
       return sizeof_rec(type.subtype());

@@ -257,7 +257,7 @@ Function: value_propagationt::check_type
 
 bool value_propagationt::check_type(const typet &type)
 {
-  if(type.id()=="pointer")
+  if(type.is_pointer())
     return true;
   else if(type.id()=="struct" ||
           type.id()=="union")

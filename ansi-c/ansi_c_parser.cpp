@@ -119,7 +119,7 @@ insert_base_type(typet &dest, const typet &base_type)
       // further {pointer,array,incomplete_array} or some qualifier. If the
       // former, descend further; if not, insert type here.
       p=&(t.subtypes().back());
-      if (p->id() != "pointer" && p->id() != "merged_type" &&
+      if (!p->is_pointer() && p->id() != "merged_type" &&
           !p->is_array() && !p->is_incomplete_array()) {
         t.subtypes().push_back(typet());
         p=&(t.subtypes().back());

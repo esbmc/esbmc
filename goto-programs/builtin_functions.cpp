@@ -136,7 +136,7 @@ void goto_convertt::do_pthread_create(
   // first do non-det assignment to __threadp
 
   {
-    if(arguments[0].type().id()!="pointer")
+    if(!arguments[0].type().is_pointer())
     {
       err_location(arguments[0]);
       throw "first argument of pthread_create is expected to be"
@@ -169,7 +169,7 @@ void goto_convertt::do_pthread_create(
     function_call.arguments().push_back(arguments[3]);
     function_call.location()=function.location();
 
-    if(thread_function.type().id()!="pointer")
+    if(!thread_function.type().is_pointer())
     {
       err_location(function);
       throw "create_thread expects function pointer as third argument";
@@ -480,7 +480,7 @@ void goto_convertt::do_malloc(
   t_n->location=location;
 
   exprt lhs_pointer=lhs;
-  if(lhs_pointer.type().id()!="pointer")
+  if(!lhs_pointer.type().is_pointer())
     lhs_pointer.make_typecast(pointer_typet(empty_typet()));
 
   // set up some expressions
@@ -542,7 +542,7 @@ void goto_convertt::do_malloc(
   //std::cout << "allocated_object.type().id(): " << allocated_object.type().id() << std::endl;
 
   if (options.get_bool_option("memory-leak-check")
-	  && allocated_object.type().id()=="pointer")
+	  && allocated_object.type().is_pointer())
     allocated_objects.push(allocated_object);
 
   //std::cout << "in malloc allocated_objects.size(): " << allocated_objects.size() << std::endl;

@@ -52,7 +52,7 @@ code_function_callt get_destructor(
         {
           const typet &arg_type=code_type.arguments().front().type();
           
-          if(arg_type.id()=="pointer" &&
+          if(arg_type.is_pointer() &&
              ns.follow(arg_type.subtype())==type)
           {
             exprt symbol_expr("symbol", it->type());

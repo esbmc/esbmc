@@ -109,7 +109,7 @@ exprt z3_convt::get(const exprt &expr) const
   //std::cout << "expr.pretty(): " << expr.pretty() << "\n";
 
   if ((expr.type().is_array() && expr.type().subtype().is_array()) ||
-      (expr.type().is_array() && expr.type().subtype().id() =="pointer") ||
+      (expr.type().is_array() && expr.type().subtype().is_pointer()) ||
       (expr.type().is_array() && expr.type().subtype().id() =="union") ||
       (expr.type().is_array() && expr.type().subtype().id() =="struct"))
     return expr;
@@ -123,7 +123,7 @@ exprt z3_convt::get(const exprt &expr) const
 
 	identifier = expr.identifier().as_string();
 #if 1
-	if (expr.type().id()=="pointer")
+	if (expr.type().is_pointer())
 	{
 	  for(z3_cachet::const_iterator it = z3_cache.begin();
 	      it != z3_cache.end(); it++)
@@ -334,7 +334,7 @@ exprt z3_convt::bv_get_rec(
       {
         const typet &subtype=it->type();
         op.push_back(nil_exprt());
-        if (subtype.id()!="pointer") //@TODO: beautify counter-examples that contain pointers
+        if (!subtype.is_pointer()) //@TODO: beautify counter-examples that contain pointers
         {
           unsigned sub_width;
 
@@ -400,7 +400,7 @@ exprt z3_convt::bv_get_rec(
         {
           const typet &subtype=it->type();
           //op.push_back(nil_exprt());
-          if (subtype.id()!="pointer") //@TODO
+          if (!subtype.is_pointer()) //@TODO
           {
             unsigned sub_width;
             if(!boolbv_get_width(subtype, sub_width))
@@ -424,7 +424,7 @@ exprt z3_convt::bv_get_rec(
       return value;
     }
 #if 0
-    else if (type.id()=="pointer")
+    else if (type.is_pointer())
     {
       exprt object, offset;
       Z3_app app = Z3_to_app(z3_ctx, bv);

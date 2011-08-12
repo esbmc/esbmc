@@ -196,7 +196,7 @@ void bv_pointerst::convert_address_of_rec(
     
     // recursive call
 
-    if(array.type().id()=="pointer")
+    if(array.type().is_pointer())
       convert_pointer_type(array, bv);
     else
       convert_address_of_rec(array, bv);
@@ -304,7 +304,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
     const exprt &op=expr.op0();
 
-    if(op.type().id()=="pointer")
+    if(op.type().is_pointer())
       return convert_pointer_type(op, bv);
     else
     {
@@ -358,7 +358,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
     forall_operands(it, expr)
     {
-      if(it->type().id()=="pointer")
+      if(it->type().is_pointer())
       {
         if(found)
           throw "found two pointers in sum";
@@ -383,7 +383,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
     {
       bvt op;
 
-      if(it->type().id()=="pointer") continue;
+      if(it->type().is_pointer()) continue;
 
       if(it->type().id()!="unsignedbv" &&
          it->type().id()!="signedbv")
@@ -412,7 +412,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
     if(expr.operands().size()!=2)
       throw "operator "+expr.id_string()+" takes two operands";
 
-    if(expr.op0().type().id()!="pointer")
+    if(!expr.op0().type().is_pointer())
       throw "found no pointer in pointer type in difference";
 
     bvt bv0, bv1;
@@ -468,8 +468,8 @@ void bv_pointerst::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_pointer_type(expr, bv);
 
   if(expr.id()=="-" && expr.operands().size()==2 &&
-     expr.op0().type().id()=="pointer" &&
-     expr.op1().type().id()=="pointer")
+     expr.op0().type().is_pointer() &&
+     expr.op1().type().is_pointer())
   {
     bvt op0, op1;
 
@@ -533,7 +533,7 @@ void bv_pointerst::convert_bitvector(const exprt &expr, bvt &bv)
   }
   else if(expr.id()=="typecast" &&
           expr.operands().size()==1 &&
-          expr.op0().type().id()=="pointer")
+          expr.op0().type().is_pointer())
   {
     bvt op0;
     convert_pointer_type(expr.op0(), op0);

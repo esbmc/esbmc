@@ -249,7 +249,7 @@ std::string expr2ct::convert_rec(
     if(src.name()!="") result+=" "+src.tag().as_string();
     return result;
   }
-  else if(src.id()=="pointer")
+  else if(src.is_pointer())
   {
     if(src.subtype().is_code())
     {
@@ -360,7 +360,7 @@ std::string expr2ct::convert_typecast(
 
   const typet &type=ns.follow(src.type());
 
-  if(type.id()=="pointer" &&
+  if(type.is_pointer() &&
      ns.follow(type.subtype()).is_empty() && // to (void *)?
      src.op0().is_zero())
     return "NULL";
@@ -1406,7 +1406,7 @@ std::string expr2ct::convert_constant(
 
     dest+=" }";
   }
-  else if(type.id()=="pointer")
+  else if(type.is_pointer())
   {
     if(value=="NULL")
       dest="NULL";

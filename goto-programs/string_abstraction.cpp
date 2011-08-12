@@ -261,7 +261,7 @@ void string_abstractiont::abstract(irep_idt name,
 
     new_args.push_back(argument);
 
-    if(type.id()=="pointer" && is_char_type(type.subtype()))
+    if(type.is_pointer() && is_char_type(type.subtype()))
     {
       code_typet::argumentt new_arg;
 
@@ -287,7 +287,7 @@ void string_abstractiont::abstract(irep_idt name,
   // this, another pointer to a string struct is tacked onto the end of the
   // function arguments.
   const typet ret_type = func_type.return_type();
-  if(ret_type.id()=="pointer" && is_char_type(ret_type.subtype())) {
+  if(ret_type.is_pointer() && is_char_type(ret_type.subtype())) {
     code_typet::argumentt new_arg;
 
     new_arg.type() = pointer_typet(pointer_typet(string_struct));
@@ -370,7 +370,7 @@ void string_abstractiont::abstract(irep_idt name,
               it_next++;
 
               dest.body.destructive_insert(it_next, tmp);
-            } else if (symbol.type.id() == "pointer" &&
+            } else if (symbol.type.is_pointer() &&
                        symbol.type.subtype() == string_struct) {
               goto_programt tmp;
 
@@ -461,7 +461,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   while(ret_val.id()=="typecast")
     ret_val = ret_val.op0();
 
-  if (ret_val.type().id() != "pointer" || !is_char_type(ret_val.type().subtype()))
+  if (!ret_val.type().is_pointer() || !is_char_type(ret_val.type().subtype()))
     return;
 
   // We have a return type that needs to also write to the callers string
@@ -691,7 +691,7 @@ exprt string_abstractiont::build(
   {
     // cast from another pointer type?
     assert(pointer.operands().size()==1);
-    if(pointer.op0().type().id()!="pointer")
+    if(!pointer.op0().type().is_pointer())
       return build_unknown(what, write);
 
     // recursive call
@@ -796,7 +796,7 @@ exprt string_abstractiont::build(const exprt &pointer, bool write)
   {
     // cast from another pointer type?
     assert(pointer.operands().size()==1);
-    if(pointer.op0().type().id()!="pointer")
+    if(!pointer.op0().type().is_pointer())
       return build_unknown(write);
 
     // recursive call
@@ -1199,7 +1199,7 @@ void string_abstractiont::abstract_assign(
   if(has_string_macros(rhs))
     replace_string_macros(rhs, false, target->location);
 
-  if(lhs.type().id()=="pointer")
+  if(lhs.type().is_pointer())
     abstract_pointer_assign(dest, target);
   else if(is_char_type(lhs.type()))
     abstract_char_assign(dest, target);
@@ -1364,10 +1364,10 @@ void string_abstractiont::abstract_function_call(
     while(tcfree->id()=="typecast")
       tcfree=&tcfree->op0();
     
-    if(tcfree->type().id()=="pointer" &&
+    if(tcfree->type().is_pointer() &&
        is_char_type(tcfree->type().subtype()))
     {
-      if (actual.type().id() == "pointer")
+      if (actual.type().is_pointer())
         new_args.push_back(build(actual, false));
       else
         new_args.push_back(address_of_exprt(build(actual, false)));
@@ -1382,7 +1382,7 @@ void string_abstractiont::abstract_function_call(
     // Uuugh. Arg we're pointing at may (or may not) now be a string struct ptr.
     // Ultimately the fix to this horror is not rewriting program code and
     // signature in the same pass.
-    if (arg->type().id() == "pointer" && arg->type().subtype() == string_struct)
+    if (arg->type().is_pointer() && arg->type().subtype() == string_struct)
       arg++;
 
     if (arg == argument_types.end())
@@ -1392,7 +1392,7 @@ void string_abstractiont::abstract_function_call(
   // If we have a char return type, receive a returned string struct by passing
   // a string struct pointer as the last argument.
   typet fnc_ret_type = fnc_type.return_type();
-  if (fnc_ret_type.id() == "pointer" && is_char_type(fnc_ret_type.subtype())) {
+  if (fnc_ret_type.is_pointer() && is_char_type(fnc_ret_type.subtype())) {
     if (call.lhs().is_nil()) {
       constant_exprt null(typet("pointer"));
       null.type().subtype() = pointer_typet(string_struct);

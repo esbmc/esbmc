@@ -132,7 +132,7 @@ void counterexample_beautification_greedyt::minimize(
     const symbolt &s=ns.lookup(type.identifier());
     minimize(solver, bv_cbmc, ns, expr, s.type, offset, bit_nr);
   }
-  else if(type.id()=="pointer")
+  else if(type.is_pointer())
   {
     // no beautification for pointers right now
   }
@@ -246,7 +246,7 @@ unsigned counterexample_beautification_greedyt::get_max_width(
     const symbolt &s=ns.lookup(type.identifier());
     return get_max_width(ns, s.type);
   }
-  else if(type.id()=="pointer")
+  else if(type.is_pointer())
   {
   }
   else

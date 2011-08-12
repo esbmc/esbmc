@@ -292,7 +292,7 @@ void c_linkt::duplicate_symbol(
       {
         // ignore
       }
-      else if(ns.follow(in_context.type).id()=="pointer" &&
+      else if(ns.follow(in_context.type).is_pointer() &&
               ns.follow(new_symbol.type).is_incomplete_array())
       {
         // ignore

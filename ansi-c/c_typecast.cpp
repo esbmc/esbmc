@@ -104,7 +104,7 @@ bool check_c_implicit_typecast(
 {
   // check qualifiers  
 
-  if(src_type.id()=="pointer" && dest_type.id()=="pointer" &&
+  if(src_type.is_pointer() && dest_type.is_pointer() &&
      src_type.subtype().cmt_constant() &&
      !dest_type.subtype().cmt_constant())
     return true;
@@ -132,7 +132,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
-    if(dest_type.id()=="pointer") return false;
+    if(dest_type.is_pointer()) return false;
   }
   else if(src_type_id=="real")
   {
@@ -154,7 +154,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="signedbv") return false;
-    if(dest_type.id()=="pointer") return false;
+    if(dest_type.is_pointer()) return false;
     if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
     if(dest_type.id()=="c_enum") return false;
@@ -171,7 +171,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
-    if(dest_type.id()=="pointer") return false;
+    if(dest_type.is_pointer()) return false;
     if(dest_type.id()=="c_enum") return false;
     if(dest_type.id()=="incomplete_c_enum") return false;
   }
@@ -190,7 +190,7 @@ bool check_c_implicit_typecast(
           src_type_id=="incomplete_array" ||
           src_type_id=="pointer")
   {
-    if(dest_type.id()=="pointer")
+    if(dest_type.is_pointer())
     {
       const irept &dest_subtype=dest_type.subtype();
       const irept &src_subtype =src_type.subtype();
@@ -289,7 +289,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
     else if(width<=config.ansi_c.long_double_width)
       return LONGDOUBLE;
   }
-  else if(type.id()=="pointer")
+  else if(type.is_pointer())
   {
     if(type.subtype().is_empty())
       return VOIDPTR;
@@ -361,7 +361,7 @@ void c_typecastt::implicit_typecast_arithmetic(
 
   if(new_type!=expr_type)
   {
-    if(new_type.id()=="pointer" &&
+    if(new_type.is_pointer() &&
        (expr_type.is_array() ||
         expr_type.is_incomplete_array()))
     {
@@ -435,7 +435,7 @@ void c_typecastt::implicit_typecast_followed(
   const typet &src_type,
   const typet &dest_type)
 {
-  if(dest_type.id()=="pointer")
+  if(dest_type.is_pointer())
   {
     // special case: 0 == NULL
 
@@ -450,7 +450,7 @@ void c_typecastt::implicit_typecast_followed(
       return; // ok
     }
   
-    if(src_type.id()=="pointer" ||
+    if(src_type.is_pointer() ||
        src_type.is_array() ||
        src_type.is_incomplete_array())
     {

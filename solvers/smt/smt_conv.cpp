@@ -157,7 +157,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
 
     if(index.is_zero())
     {
-      if(array.type().id()=="pointer")
+      if(array.type().is_pointer())
         convert_smt_expr(array);
       else if(array.type().is_array())
         convert_address_of_rec(array);
@@ -170,7 +170,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
       smt_prop.out << smt_pointer_type();
       smt_prop.out << " = ";
       
-      if(array.type().id()=="pointer")
+      if(array.type().is_pointer())
         convert_smt_expr(array);
       else if(array.type().is_array())
         convert_address_of_rec(array);
@@ -381,7 +381,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     {
       if(op.type().id()=="signedbv" ||
          op.type().id()=="unsignedbv" ||
-         op.type().id()=="pointer")
+         op.type().is_pointer())
       {
         convert_smt_expr(op);
         smt_prop.out << "/=";
@@ -470,9 +470,9 @@ void smt_convt::convert_smt_expr(const exprt &expr)
               " -> "+expr.type().id_string();
       }
     }
-    else if(expr.type().id()=="pointer")
+    else if(expr.type().is_pointer())
     {
-      if(op.type().id()=="pointer")
+      if(op.type().is_pointer())
       {
         convert_smt_expr(op);
       }
@@ -540,7 +540,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
 
       smt_prop.out << "bv" << value << "[" << len << "]";
     }
-    else if(expr.type().id()=="pointer")
+    else if(expr.type().is_pointer())
     {
       assert( false && "Construct not supported yet" );
       const irep_idt &value=expr.value();
@@ -833,19 +833,19 @@ void smt_convt::convert_smt_expr(const exprt &expr)
           
         smt_prop.out << ")";
       }
-      else if(expr.type().id()=="pointer")
+      else if(expr.type().is_pointer())
       {
         if(expr.operands().size()!=2)
           throw "pointer arithmetic with more than two operands";
         
         const exprt *p, *i;
         
-        if(expr.op0().type().id()=="pointer")
+        if(expr.op0().type().is_pointer())
         {
           p=&expr.op0();
           i=&expr.op1();
         }
-        else if(expr.op1().type().id()=="pointer")
+        else if(expr.op1().type().is_pointer())
         {
           p=&expr.op1();
           i=&expr.op0();
@@ -969,7 +969,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
   {
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==1);
-    assert(expr.type().id()=="pointer");
+    assert(expr.type().is_pointer());
     convert_address_of_rec(expr.op0());
   }
   else if(expr.id()=="array_of")
@@ -1352,7 +1352,7 @@ void smt_convt::convert_smt_type(const typet &type)
     
     smt_prop.out << " #]";
   }
-  else if(type.id()=="pointer" ||
+  else if(type.is_pointer() ||
           type.id()=="reference")
   {
     assert(false && "Construct not supported yet");

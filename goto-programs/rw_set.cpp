@@ -85,7 +85,7 @@ void rw_sett::read_write_rec(
       //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
       //std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
 
-      if(!symbol->static_lifetime /*&& expr.type().id()=="pointer"*/)
+      if(!symbol->static_lifetime /*&& expr.type().is_pointer()*/)
       {
         //std::cout << "entrou aqui 1" << std::endl;
         return; // ignore for now

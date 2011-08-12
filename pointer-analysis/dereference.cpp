@@ -52,7 +52,7 @@ bool dereferencet::has_dereference(const exprt &expr) const
   if(expr.is_dereference() ||
      expr.id()=="implicit_dereference" ||
      (expr.is_index() && expr.operands().size()==2 &&
-      expr.op0().type().id()=="pointer"))
+      expr.op0().type().is_pointer()))
     return true;
 
   return false;
@@ -95,7 +95,7 @@ void dereferencet::dereference(
   const guardt &guard,
   const modet mode)
 {
-  if(dest.type().id()!="pointer")
+  if(!dest.type().is_pointer())
     throw "dereference expected pointer type, but got "+
           dest.type().pretty();
 
@@ -213,7 +213,7 @@ void dereferencet::add_checks(
   const guardt &guard,
   const modet mode)
 {
-  if(dest.type().id()!="pointer")
+  if(!dest.type().is_pointer())
     throw "dereference expected pointer type, but got "+
           dest.type().pretty();
 

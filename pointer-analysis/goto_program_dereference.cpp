@@ -255,7 +255,7 @@ void goto_program_dereferencet::dereference_rec(
     if(expr.operands().size()!=2)
       throw "index expects two operands";
 
-    if(expr.op0().type().id()=="pointer")
+    if(expr.op0().type().is_pointer())
     {
       dereference_location=expr.find_location();
 

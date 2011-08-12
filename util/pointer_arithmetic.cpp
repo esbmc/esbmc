@@ -48,7 +48,7 @@ void pointer_arithmetict::read(const exprt &src)
   {
     forall_operands(it, src)
     {
-      if(it->type().id()=="pointer")
+      if(it->type().is_pointer())
         read(*it);
       else
         add_to_offset(*it);

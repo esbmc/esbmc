@@ -100,10 +100,10 @@ void goto_inlinet::parameter_assignments(
         const typet &f_acttype = ns.follow(actual.type());
         
         // we are willing to do some conversion
-        if((f_argtype.id()=="pointer" &&
-            f_acttype.id()=="pointer") ||
+        if((f_argtype.is_pointer() &&
+            f_acttype.is_pointer()) ||
            (f_argtype.is_array() &&
-            f_acttype.id()=="pointer" &&
+            f_acttype.is_pointer() &&
             f_argtype.subtype()==f_acttype.subtype()))
         {
           actual.make_typecast(arg_type);

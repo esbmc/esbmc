@@ -116,7 +116,7 @@ protected:
 
   bool is_string_type(const typet &t) const
   {
-    return ((t.id()=="pointer" || t.is_array()) &&
+    return ((t.is_pointer() || t.is_array()) &&
             (t.subtype().id()=="signedbv" || t.subtype().id()=="unsignedbv") &&
             (bv_width(t.subtype())==config.ansi_c.char_width));
   }
@@ -513,7 +513,7 @@ void string_instrumentationt::do_format_string_read(
 
           exprt temp(arg);
 
-          if(arg_type.id()!="pointer")
+          if(!arg_type.is_pointer())
           {
             index_exprt index;
             index.array()=temp;
@@ -563,7 +563,7 @@ void string_instrumentationt::do_format_string_read(
 
         exprt temp(arg);
 
-        if(arg_type.id()!="pointer")
+        if(!arg_type.is_pointer())
         {
           index_exprt index;
           index.array()=temp;
@@ -643,7 +643,7 @@ void string_instrumentationt::do_format_string_write(
 
             exprt fw_lt_bs;
 
-            if(arg_type.id()=="pointer")
+            if(arg_type.is_pointer())
               fw_lt_bs=binary_relation_exprt(fw_1, "<=", buffer_size(argument));
             else
             {
@@ -1111,7 +1111,7 @@ void string_instrumentationt::invalidate_buffer(
 
   exprt cnt_bs, bufp;
 
-  if(buf_type.id()=="pointer")
+  if(buf_type.is_pointer())
     bufp = buffer;
   else
   {

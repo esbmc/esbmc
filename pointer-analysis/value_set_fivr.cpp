@@ -758,7 +758,7 @@ void value_set_fivrt::get_value_set_rec(
   else if(expr.is_constant())
   {
     // check if NULL
-    if(expr.value()=="NULL" && expr.type().id()=="pointer")
+    if(expr.value()=="NULL" && expr.type().is_pointer())
     {
       insert_from(dest, exprt("NULL-object", expr.type().subtype()), 0);
       return;
@@ -779,13 +779,13 @@ void value_set_fivrt::get_value_set_rec(
     if(expr.operands().size()<2)
       throw expr.id_string()+" expected to have at least two operands";
 
-    if(expr.type().id()=="pointer")
+    if(expr.type().is_pointer())
     {
       // find the pointer operand
       const exprt *ptr_operand=NULL;
 
       forall_operands(it, expr)
-        if(it->type().id()=="pointer")
+        if(it->type().is_pointer())
         {
           if(ptr_operand==NULL)
             ptr_operand=&(*it);
@@ -807,7 +807,7 @@ void value_set_fivrt::get_value_set_rec(
         if(object.offset_is_zero() &&
            expr.operands().size()==2)
         {
-          if(expr.op0().type().id()!="pointer")
+          if(!expr.op0().type().is_pointer())
           {
             mp_integer i;
             if(to_integer(expr.op0(), i))
@@ -844,7 +844,7 @@ void value_set_fivrt::get_value_set_rec(
     }
     else if(statement=="malloc")
     {
-      if(expr.type().id()!="pointer")
+      if(!expr.type().is_pointer())
         throw "malloc expected to return pointer type";
       
       assert(suffix=="");
@@ -865,7 +865,7 @@ void value_set_fivrt::get_value_set_rec(
             statement=="cpp_new[]")
     {
       assert(suffix=="");
-      assert(expr.type().id()=="pointer");
+      assert(expr.type().is_pointer());
 
       dynamic_object_exprt dynamic_object(expr.type().subtype());
       // let's make up a unique number for this object...
@@ -932,7 +932,7 @@ void value_set_fivrt::dereference_rec(
   // remove pointer typecasts
   if(src.id()=="typecast")
   {
-    assert(src.type().id()=="pointer");
+    assert(src.type().is_pointer());
 
     if(src.operands().size()!=1)
       throw "typecast expects one operand";
@@ -1428,7 +1428,7 @@ void value_set_fivrt::do_free(
   const namespacet &ns)
 {  
   // op must be a pointer
-  if(op.type().id()!="pointer")
+  if(!op.type().is_pointer())
     throw "free expected to have pointer-type operand";
 
   // find out what it points to    

@@ -258,17 +258,17 @@ Function: value_set_analysis_fit::check_type
 
 bool value_set_analysis_fit::check_type(const typet &type)
 {
-  if(type.id()=="pointer")
+  if(type.is_pointer())
   {
     switch(track_options) {
       case TRACK_ALL_POINTERS:
         { return true; break; }
       case TRACK_FUNCTION_POINTERS:
       {
-        if(type.id()=="pointer")
+        if(type.is_pointer())
         {
           const typet *t = &type;
-          while (t->id()=="pointer") t = &(t->subtype());
+          while (t->is_pointer()) t = &(t->subtype());
                   
           return (t->is_code());
         }

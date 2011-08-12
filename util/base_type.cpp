@@ -219,7 +219,7 @@ bool base_type_eqt::base_type_eq_rec(
     
     return true;
   }
-  else if(type1.id()=="pointer")
+  else if(type1.is_pointer())
   {
     return base_type_eq_rec(type1.subtype(), type2.subtype());
   }

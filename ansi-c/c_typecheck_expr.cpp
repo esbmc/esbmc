@@ -611,7 +611,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
 
   if(!is_number(expr_type) &&
      !expr_type.is_bool() &&
-     expr_type.id()!="pointer" &&
+     !expr_type.is_pointer() &&
      !expr_type.is_array() &&
      expr_type.id()!="empty" &&
      expr_type.id()!="c_enum" &&
@@ -629,7 +629,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
      op_type.id()=="c_enum" ||
      op_type.id()=="incomplete_c_enum" ||
      op_type.is_bool() ||
-     op_type.id()=="pointer")
+     op_type.is_pointer())
   {
   }
   else if(op_type.is_array() ||
@@ -661,7 +661,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
 
   // special case: NULL
 
-  if(expr_type.id()=="pointer" &&
+  if(expr_type.is_pointer() &&
      op.is_zero())
   {
     // zero typecasted to a pointer is NULL
@@ -674,7 +674,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   // an lvalue, and it's just a pointer type cast
   if(expr.op0().cmt_lvalue())
   {
-    if(expr_type.id()=="pointer")
+    if(expr_type.is_pointer())
       expr.cmt_lvalue(true);
   }
 }
@@ -755,10 +755,10 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
 
     if(!array_full_type.is_array() &&
        !array_full_type.is_incomplete_array() &&
-       array_full_type.id()!="pointer" &&
+       !array_full_type.is_pointer() &&
        (index_full_type.is_array() ||
         index_full_type.is_incomplete_array() ||
-        index_full_type.id()=="pointer"))
+        index_full_type.is_pointer()))
       std::swap(array_expr, index_expr);
   }
 
@@ -772,7 +772,7 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
     if(array_expr.cmt_lvalue())
       expr.cmt_lvalue(true);
   }
-  else if(final_array_type.id()=="pointer")
+  else if(final_array_type.is_pointer())
   {
     // p[i] is syntactic sugar for *(p+i)
 
@@ -877,7 +877,7 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
       return;
     }
 
-    if(type0.id()=="pointer")
+    if(type0.is_pointer())
     {
       if(expr.id()=="=" || expr.is_notequal())
         return;
@@ -896,14 +896,14 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
   else
   {
     // pointer and zero
-    if(type0.id()=="pointer" && op1.is_zero())
+    if(type0.is_pointer() && op1.is_zero())
     {
       op1=exprt("constant", type0);
       op1.value("NULL");
       return;
     }
 
-    if(type1.id()=="pointer" && op0.is_zero())
+    if(type1.is_pointer() && op0.is_zero())
     {
       op0=exprt("constant", type1);
       op0.value("NULL");
@@ -911,19 +911,19 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
     }
 
     // pointer and integer
-    if(type0.id()=="pointer" && is_number(type1))
+    if(type0.is_pointer() && is_number(type1))
     {
       op1.make_typecast(type0);
       return;
     }
 
-    if(type1.id()=="pointer" && is_number(type0))
+    if(type1.is_pointer() && is_number(type0))
     {
       op0.make_typecast(type1);
       return;
     }
 
-    if(type0.id()=="pointer" && type1.id()=="pointer")
+    if(type0.is_pointer() && type1.is_pointer())
     {
       op1.make_typecast(type0);
       return;
@@ -961,7 +961,7 @@ void c_typecheck_baset::typecheck_expr_ptrmember(exprt &expr)
 
   const typet &final_op0_type=follow(expr.op0().type());
 
-  if(final_op0_type.id()!="pointer" &&
+  if(!final_op0_type.is_pointer() &&
      !final_op0_type.is_array())
   {
     err_location(expr);
@@ -1112,15 +1112,15 @@ void c_typecheck_baset::typecheck_expr_trinary(exprt &expr)
   implicit_typecast_bool(operands[0]);
   implicit_typecast_arithmetic(operands[1], operands[2]);
 
-  if(operands[1].type().id()=="pointer" &&
-     operands[2].type().id()!="pointer")
+  if(operands[1].type().is_pointer() &&
+     !operands[2].type().is_pointer())
     implicit_typecast(operands[2], operands[1].type());
-  else if(operands[2].type().id()=="pointer" &&
-          operands[1].type().id()!="pointer")
+  else if(operands[2].type().is_pointer() &&
+          !operands[1].type().is_pointer())
     implicit_typecast(operands[1], operands[2].type());
 
-  if(operands[1].type().id()=="pointer" &&
-     operands[2].type().id()=="pointer" &&
+  if(operands[1].type().is_pointer() &&
+     operands[2].type().is_pointer() &&
      operands[1].type()!=operands[2].type())
   {
     // make it void *
@@ -1290,7 +1290,7 @@ void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
     expr.copy_to_operands(gen_zero(index_type()));
     assert(expr.operands().size()==2);
   }
-  else if(op_type.id()=="pointer")
+  else if(op_type.is_pointer())
   {
     if(op_type.subtype().is_empty())
     {
@@ -1394,7 +1394,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
        final_type0.is_bool() ||
        final_type0.id()=="c_enum" ||
        final_type0.id()=="incomplete_c_enum" ||
-       final_type0.id()=="pointer")
+       final_type0.is_pointer())
     {
       expr.type()=type0;
     }
@@ -1483,7 +1483,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
   const typet f_op_type=follow(f_op.type());
 
-  if(f_op_type.id()!="pointer")
+  if(!f_op_type.is_pointer())
   {
     err_location(f_op);
     str << "expected function/function pointer as argument but got `"
@@ -2002,7 +2002,7 @@ void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
     if(expr.id()=="+" || expr.id()=="-" ||
        expr.id()=="*" || expr.id()=="/")
     {
-      if(type0.id()=="pointer" || type1.id()=="pointer")
+      if(type0.is_pointer() || type1.is_pointer())
       {
         typecheck_expr_pointer_arithmetic(expr);
         return;
@@ -2071,8 +2071,8 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
   if(expr.id()=="-" ||
      (expr.id()=="sideeffect" && expr.statement()=="assign-"))
   {
-    if(type0.id()=="pointer" &&
-       type1.id()=="pointer")
+    if(type0.is_pointer() &&
+       type1.is_pointer())
     {
       typet pointer_diff_type;
 
@@ -2083,7 +2083,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
       return;
     }
 
-    if(type0.id()=="pointer")
+    if(type0.is_pointer())
     {
       make_index_type(op1);
       expr.type()=type0;
@@ -2095,12 +2095,12 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
   {
     exprt *pop, *intop;
 
-    if(type0.id()=="pointer")
+    if(type0.is_pointer())
     {
       pop=&op0;
       intop=&op1;
     }
-    else if(type1.id()=="pointer")
+    else if(type1.is_pointer())
     {
       pop=&op1;
       intop=&op0;
@@ -2246,7 +2246,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
   }
   else
   {
-    if(final_type0.id()=="pointer" &&
+    if(final_type0.is_pointer() &&
        (statement=="assign-" || statement=="assign+"))
     {
       typecheck_expr_pointer_arithmetic(expr);

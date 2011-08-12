@@ -78,7 +78,7 @@ void counterexample_beautification_pbst::beautify(
     const symbolt &s=ns.lookup(type.identifier());
     beautify(pbs, bv_cbmc, ns, expr, s.type, offset);
   }
-  else if(type.id()=="pointer")
+  else if(type.is_pointer())
   {
     // no beautification for pointers right now
   }

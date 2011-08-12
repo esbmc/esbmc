@@ -54,7 +54,7 @@ std::string type2name(const typet &type)
     result+="X" + type.width().as_string(); 
   else if(type.id()=="natural")
     result+="N";
-  else if(type.id()=="pointer")
+  else if(type.is_pointer())
     result+="*";
   else if(type.id()=="reference")
     result+="&";
