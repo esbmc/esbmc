@@ -978,6 +978,40 @@ public:
   inline bool is_typecast() const { return id() == id_typecast; }
   inline bool is_union() const { return id() == id_union; }
   inline bool is_unsignedbv() const { return id() == id_unsignedbv; }
+  inline bool is_array_of() const { return id() == id_array_of; }
+  inline bool is_ashr() const { return id() == id_ashr; }
+  inline bool is_bitand() const { return id() == id_bitand; }
+  inline bool is_bitnot() const { return id() == id_bitnot; }
+  inline bool is_bitor() const { return id() == id_bitor; }
+  inline bool is_bitxor() const { return id() == id_bitxor; }
+  inline bool is_bv() const { return id() == id_bv; }
+  inline bool is_byte_extract_big_endian() const { return id() == id_byte_extract_big_endian; }
+  inline bool is_byte_extract_little_endian() const { return id() == id_byte_extract_little_endian; }
+  inline bool is_byte_update_big_endian() const { return id() == id_byte_update_big_endian; }
+  inline bool is_byte_update_little_endian() const { return id() == id_byte_update_little_endian; }
+  inline bool is_c_enum() const { return id() == id_c_enum; }
+  inline bool is_dynamic_object() const { return id() == id_dynamic_object; }
+  inline bool is_dynamic_size() const { return id() == id_dynamic_size; }
+  inline bool is_if() const { return id() == id_if; }
+  inline bool is_implicit_address_of() const { return id() == id_implicit_address_of; }
+  inline bool is_implicit_dereference() const { return id() == id_implicit_dereference; }
+  inline bool is_incomplete_c_enum() const { return id() == id_incomplete_c_enum; }
+  inline bool is_incomplete_struct() const { return id() == id_incomplete_struct; }
+  inline bool is_incomplete_union() const { return id() == id_incomplete_union; }
+  inline bool is_integer() const { return id() == id_integer; }
+  inline bool is_invalid() const { return id() == id_invalid; }
+  inline bool is_nondet_symbol() const { return id() == id_nondet_symbol; }
+  inline bool is_null_object() const { return id() == id_null_object; }
+  inline bool is_or() const { return id() == id_or; }
+  inline bool is_reference() const { return id() == id_reference; }
+  inline bool is_reference_to() const { return id() == id_reference_to; }
+  inline bool is_sideeffect() const { return id() == id_sideeffect; }
+  inline bool is_string_constant() const { return id() == id_string_constant; }
+  inline bool is_unary_sub() const { return id() == id_unary_sub; }
+  inline bool is_unknown() const { return id() == id_unknown; }
+  inline bool is_with() const { return id() == id_with; }
+  inline bool is_zero_string() const { return id() == id_zero_string; }
+  inline bool is_zero_string_length() const { return id() == id_zero_string_length; }
 
   friend bool operator==(const irept &i1, const irept &i2);
    
@@ -1054,7 +1088,19 @@ public:
   static const irep_idt id_floatbv, id_incomplete_array, id_index, id_member;
   static const irep_idt id_not, id_notequal, id_pointer, id_signedbv;
   static const irep_idt id_struct, id_symbol, id_typecast, id_union;
-  static const irep_idt id_unsignedbv;
+  static const irep_idt id_unsignedbv, id_array_of, id_ashr, id_bitand;
+  static const irep_idt id_bitnot, id_bitor, id_bitxor, id_bv;
+  static const irep_idt id_byte_extract_big_endian;
+  static const irep_idt id_byte_extract_little_endian;
+  static const irep_idt id_byte_update_big_endian, id_byte_update_little_endian;
+  static const irep_idt id_c_enum, id_dynamic_object, id_dynamic_size, id_if;
+  static const irep_idt id_implicit_address_of, id_implicit_dereference;
+  static const irep_idt id_incomplete_c_enum, id_incomplete_struct;
+  static const irep_idt id_incomplete_union, id_integer, id_invalid;
+  static const irep_idt id_nondet_symbol, id_null_object, id_or, id_reference;
+  static const irep_idt id_reference_to, id_sideeffect, id_string_constant;
+  static const irep_idt id_unary_sub, id_unknown, id_with, id_zero_string;
+  static const irep_idt id_zero_string_length;
 
   class dt
   {
