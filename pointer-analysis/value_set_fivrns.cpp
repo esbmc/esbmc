@@ -419,7 +419,7 @@ void value_set_fivrnst::get_value_set_rec(
     const typet &type=ns.follow(expr.op0().type());
 
     assert(type.is_array() ||
-           type.id()=="incomplete_array");
+           type.is_incomplete_array());
            
     get_value_set_rec(expr.op0(), dest, "[]"+suffix, original_type, ns);
     
@@ -799,7 +799,7 @@ void value_set_fivrnst::get_reference_set_rec(
     const typet &array_type=ns.follow(array.type());
     
     assert(array_type.is_array() ||
-           array_type.id()=="incomplete_array");
+           array_type.is_incomplete_array());
 
     
     object_mapt array_references;
@@ -1257,7 +1257,7 @@ void value_set_fivrnst::assign_rec(
       
     const typet &type=ns.follow(lhs.op0().type());
       
-    assert(type.is_array() || type.id()=="incomplete_array");
+    assert(type.is_array() || type.is_incomplete_array());
 
     assign_rec(lhs.op0(), values_rhs, "[]"+suffix, ns, add_to_sets);
   }

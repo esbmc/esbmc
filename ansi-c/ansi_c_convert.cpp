@@ -392,7 +392,7 @@ void ansi_c_convertt::convert_type(
 
     convert_expr(array_type.size());
   }
-  else if(type.id()=="incomplete_array")
+  else if(type.is_incomplete_array())
   {
     c_storage_spect sub_storage_spec;
 

@@ -238,7 +238,7 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
         it->set_identifier("");
     }
   }
-  else if(symbol.type.id()=="incomplete_array" || 
+  else if(symbol.type.is_incomplete_array() || 
           symbol.type.is_array())
   {
     // insert a new type symbol for the array
@@ -372,13 +372,13 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
     if(final_old!=final_new)
     {
       if(final_old.is_array() &&
-         final_new.id()=="incomplete_array" &&
+         final_new.is_incomplete_array() &&
          final_old.subtype()==final_new.subtype())
       {
         // this is ok        
         new_symbol.type=old_symbol.type;
       }
-      else if(final_old.id()=="incomplete_array" &&
+      else if(final_old.is_incomplete_array() &&
               final_new.is_array() &&
               final_old.subtype()==final_new.subtype())
       {
@@ -433,7 +433,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
     }
     else // finals are equal
       if(old_symbol.type.id()=="symbol" &&
-         new_symbol.type.id()=="incomplete_array")
+         new_symbol.type.is_incomplete_array())
         new_symbol.type=old_symbol.type; // fix from i.a. to a symbol ref.
 
     if(inlined)

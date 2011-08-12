@@ -138,7 +138,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       }
     }
   }
-  else if(type.id()=="incomplete_array")
+  else if(type.is_incomplete_array())
   {
     typecheck_type(type.subtype());
   }
@@ -162,7 +162,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       typecheck_type(type);
       
       // incomplete arrays become arrays of size 0
-      if(type.id()=="incomplete_array")
+      if(type.is_incomplete_array())
       {
         type.id("array");
         type.size(gen_zero(int_type()));
@@ -333,7 +333,7 @@ Function: c_typecheck_baset::adjust_function_argument
 void c_typecheck_baset::adjust_function_argument(typet &type) const
 {
   if(type.is_array() ||
-     type.id()=="incomplete_array")
+     type.is_incomplete_array())
   {
     type.id("pointer");
     type.remove("size");

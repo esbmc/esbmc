@@ -169,7 +169,7 @@ void c_typecheck_baset::do_initializer(
   
   value=do_initializer_rec(value, type, force_constant);
     
-  if(type.id()=="incomplete_array")
+  if(type.is_incomplete_array())
   {
     assert(value.type().is_array());
     type=value.type();
@@ -216,13 +216,13 @@ exprt c_typecheck_baset::do_initializer_rec(
     return do_designated_initializer(value, to_struct_type(full_type), force_constant);
   }
   
-  if(full_type.id()=="incomplete_array" ||
+  if(full_type.is_incomplete_array() ||
      full_type.is_array() ||
      full_type.id()=="struct" ||
      full_type.id()=="union")
   {
     if(value.is_constant() &&
-       follow(value.type()).id()=="incomplete_array")
+       follow(value.type()).is_incomplete_array())
     {
       init_statet state(value);
       return do_initializer_rec(state, type, force_constant, false);
@@ -231,7 +231,7 @@ exprt c_typecheck_baset::do_initializer_rec(
     {
       // we only do this for arrays, not for structs
       if(full_type.is_array() ||
-         full_type.id()=="incomplete_array")
+         full_type.is_incomplete_array())
       {
         exprt tmp;
         string2array(value, tmp);
@@ -285,7 +285,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   // we may go down one level, but we don't have to
   if(go_down &&
      state.has_next() &&
-     state->type().id()=="incomplete_array" &&
+     state->type().is_incomplete_array() &&
      state->is_constant())
   {
     init_statet tmp_state(*state);
@@ -298,7 +298,7 @@ exprt c_typecheck_baset::do_initializer_rec(
 
   if(full_type.is_array())
     return do_initializer_array(state, to_array_type(full_type), force_constant);
-  else if(full_type.id()=="incomplete_array")
+  else if(full_type.is_incomplete_array())
     return do_initializer_incomplete_array(state, full_type, force_constant);
   else if(full_type.id()=="struct")
     return do_initializer_struct(state, to_struct_type(full_type), force_constant);
@@ -573,7 +573,7 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
       const typet &final_type=follow(symbol.type);
       
       if(final_type.id()!="incomplete_struct" &&
-         final_type.id()!="incomplete_array")
+         !final_type.is_incomplete_array())
       {
         // zero initializer
         if(zero_initializer(symbol.value, symbol.type))

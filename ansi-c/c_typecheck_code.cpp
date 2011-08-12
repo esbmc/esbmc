@@ -335,7 +335,7 @@ void c_typecheck_baset::typecheck_decl(codet &code)
 
   // this must not be an incomplete type
   if(type.id()=="incomplete_struct" ||
-     type.id()=="incomplete_array")
+     type.is_incomplete_array())
   {
     err_location(code);
     throw "incomplete type not permitted here";

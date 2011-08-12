@@ -293,7 +293,7 @@ std::string expr2ct::convert_rec(
     std::string size_string=convert(static_cast<const exprt &>(src.size_irep()));
     return convert(src.subtype())+" ["+size_string+"]";
   }
-  else if(src.id()=="incomplete_array")
+  else if(src.is_incomplete_array())
   {
     return convert(src.subtype())+" []";
   }
@@ -1387,7 +1387,7 @@ std::string expr2ct::convert_constant(
     }
   }
   else if(type.is_array() ||
-          type.id()=="incomplete_array")
+          type.is_incomplete_array())
   {
     dest="{ ";
 

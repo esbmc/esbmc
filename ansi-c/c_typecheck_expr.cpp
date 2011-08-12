@@ -633,7 +633,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   {
   }
   else if(op_type.is_array() ||
-          op_type.id()=="incomplete_array")
+          op_type.is_incomplete_array())
   {
     index_exprt index;
     index.array()=op;
@@ -754,10 +754,10 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
     const typet &index_full_type=follow(index_expr.type());
 
     if(!array_full_type.is_array() &&
-       array_full_type.id()!="incomplete_array" &&
+       !array_full_type.is_incomplete_array() &&
        array_full_type.id()!="pointer" &&
        (index_full_type.is_array() ||
-        index_full_type.id()=="incomplete_array" ||
+        index_full_type.is_incomplete_array() ||
         index_full_type.id()=="pointer"))
       std::swap(array_expr, index_expr);
   }
@@ -767,7 +767,7 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
   const typet &final_array_type=follow(array_expr.type());
 
   if(final_array_type.is_array() ||
-     final_array_type.id()=="incomplete_array")
+     final_array_type.is_incomplete_array())
   {
     if(array_expr.cmt_lvalue())
       expr.cmt_lvalue(true);
@@ -855,7 +855,7 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
     {
       const typet &final_type=follow(o_type0);
       if(!final_type.is_array() &&
-         final_type.id()!="incomplete_array" &&
+         !final_type.is_incomplete_array() &&
          final_type.id()!="incomplete_struct")
       {
         adjust_float_rel(expr);
@@ -1282,7 +1282,7 @@ void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
   const typet op_type=follow(op.type());
 
   if(op_type.is_array() ||
-     op_type.id()=="incomplete_array")
+     op_type.is_incomplete_array())
   {
     // *a is the same as a[0]
     expr.id("index");
@@ -1756,7 +1756,7 @@ void c_typecheck_baset::typecheck_function_call_arguments(
       // don't know type, just do standard conversion
 
       const typet &type=follow(op.type());
-      if(type.is_array() || type.id()=="incomplete_array")
+      if(type.is_array() || type.is_incomplete_array())
         implicit_typecast(op, pointer_typet(empty_typet()));
     }
   }
@@ -1861,7 +1861,7 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
       expr.cformat(cformat);
   }
   else if(type.is_array() ||
-          type.id()=="incomplete_array")
+          type.is_incomplete_array())
   {
     // nothing to do
   }

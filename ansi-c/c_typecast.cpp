@@ -203,7 +203,7 @@ bool check_c_implicit_typecast(
     }
     
     if((dest_type.is_array() ||
-        dest_type.id()=="incomplete_array") &&
+        dest_type.is_incomplete_array()) &&
        (src_type.subtype()==dest_type.subtype())) return false;
 
     if(dest_type.is_bool()) return false;
@@ -297,7 +297,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
       return PTR;
   }
   else if(type.is_array() ||
-          type.id()=="incomplete_array")
+          type.is_incomplete_array())
   {
     return PTR;
   }
@@ -336,7 +336,7 @@ void c_typecastt::implicit_typecast_arithmetic(
   {
   case PTR:
     if(expr_type.is_array() ||
-       expr_type.id()=="incomplete_array")
+       expr_type.is_incomplete_array())
     {
       new_type.id("pointer");
       new_type.subtype()=expr_type.subtype();
@@ -363,7 +363,7 @@ void c_typecastt::implicit_typecast_arithmetic(
   {
     if(new_type.id()=="pointer" &&
        (expr_type.is_array() ||
-        expr_type.id()=="incomplete_array"))
+        expr_type.is_incomplete_array()))
     {
       exprt index_expr("index", expr_type.subtype());
       index_expr.reserve_operands(2);
@@ -452,7 +452,7 @@ void c_typecastt::implicit_typecast_followed(
   
     if(src_type.id()=="pointer" ||
        src_type.is_array() ||
-       src_type.id()=="incomplete_array")
+       src_type.is_incomplete_array())
     {
       // we are quite generous about pointers
       
@@ -566,7 +566,7 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
   const typet &dest_type=ns.follow(dest.type());
 
   if(dest_type.is_array() || 
-     dest_type.id()=="incomplete_array")
+     dest_type.is_incomplete_array())
   {
     index_exprt index;
     index.array()=dest;
