@@ -158,7 +158,7 @@ void arrayst::collect_arrays(const exprt &a)
   else if(a.is_constant() || a.is_array())
   {
   }
-  else if(a.id()=="array_of")
+  else if(a.is_array_of())
   {
   }
   else
@@ -370,7 +370,7 @@ void arrayst::add_array_constraints(
     return add_array_constraints_with(index_set, to_with_expr(expr));
   else if(expr.id()=="if")
     return add_array_constraints_if(index_set, to_if_expr(expr));
-  else if(expr.id()=="array_of")
+  else if(expr.is_array_of())
     return add_array_constraints_array_of(index_set, to_array_of_expr(expr));
   else if(expr.is_symbol() ||
           expr.id()=="nondet_symbol" ||

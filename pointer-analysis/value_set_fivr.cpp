@@ -884,7 +884,7 @@ void value_set_fivrt::get_value_set_rec(
     return;
   }
   else if(expr.id()=="with" ||
-          expr.id()=="array_of" ||
+          expr.is_array_of() ||
           expr.is_array())
   {
     // these are supposed to be done by assign()
@@ -1367,7 +1367,7 @@ void value_set_fivrt::assign(
     {
       assert(base_type_eq(rhs.type(), type, ns));
         
-      if(rhs.id()=="array_of")
+      if(rhs.is_array_of())
       {
         assert(rhs.operands().size()==1);
 //        std::cout << "AOF: " << rhs.op0() << std::endl;

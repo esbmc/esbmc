@@ -306,7 +306,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_array(expr, bv);
   else if(expr.id()=="lambda")
     return convert_lambda(expr, bv);
-  else if(expr.id()=="array_of")
+  else if(expr.is_array_of())
     return convert_array_of(expr, bv);
 
   return conversion_failed(expr, bv);

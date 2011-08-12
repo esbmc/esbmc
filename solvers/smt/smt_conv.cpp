@@ -972,7 +972,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(expr.type().is_pointer());
     convert_address_of_rec(expr.op0());
   }
-  else if(expr.id()=="array_of")
+  else if(expr.is_array_of())
   {
     //
     // Not supported but it does not work otherwise

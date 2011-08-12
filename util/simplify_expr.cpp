@@ -2836,7 +2836,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       }
     }
   }
-  else if(expr.op0().id()=="array_of")
+  else if(expr.op0().is_array_of())
   {
     if(expr.op0().operands().size()==1)
     {

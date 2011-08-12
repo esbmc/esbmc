@@ -544,7 +544,7 @@ void value_sett::get_value_set_rec(
     return;
   }
   else if(expr.id()=="with" ||
-          expr.id()=="array_of" ||
+          expr.is_array_of() ||
           expr.is_array())
   {
     // these are supposed to be done by assign()
@@ -871,7 +871,7 @@ void value_sett::assign(
     {
       assert(base_type_eq(rhs.type(), type, ns));
         
-      if(rhs.id()=="array_of")
+      if(rhs.is_array_of())
       {
         assert(rhs.operands().size()==1);
         assign(lhs_index, rhs.op0(), ns, add_to_sets);

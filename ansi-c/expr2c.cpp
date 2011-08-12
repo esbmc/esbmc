@@ -2775,7 +2775,7 @@ std::string expr2ct::convert(
     return convert_pointer_object_has_type(src, precedence=15);
   }
 
-  else if(src.id()=="array_of")
+  else if(src.is_array_of())
   {
     return convert_array_of(src, precedence=15);
   }
