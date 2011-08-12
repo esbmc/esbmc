@@ -316,7 +316,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     return prop.lnot(convert(op[0]));
   }
-  else if(expr.id()=="=" || expr.id()=="notequal")
+  else if(expr.id()=="=" || expr.is_notequal())
   {
     if(op.size()!=2)
       throw "equality takes two operands";

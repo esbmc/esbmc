@@ -785,7 +785,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     else if(!has_eq(p))
       add_eq(p);
   }
-  else if(expr.id()=="notequal")
+  else if(expr.is_notequal())
   {
     assert(expr.operands().size()==2);
     
@@ -869,7 +869,7 @@ tvt invariant_sett::implies_rec(const exprt &expr) const
   else if(expr.id()=="<=" ||
           expr.id()=="<" ||
           expr.id()=="=" ||
-          expr.id()=="notequal")
+          expr.is_notequal())
   {
     assert(expr.operands().size()==2);
 
@@ -906,7 +906,7 @@ tvt invariant_sett::implies_rec(const exprt &expr) const
     }
     else if(expr.id()=="=")
       return is_eq(p);
-    else if(expr.id()=="notequal")
+    else if(expr.is_notequal())
       return is_ne(p);
     else
       assert(false);
@@ -1057,7 +1057,7 @@ void invariant_sett::nnf(exprt &expr, bool negate)
   {
     if(negate) expr.id("notequal");
   }
-  else if(expr.id()=="notequal")
+  else if(expr.is_notequal())
   {
     if(negate) expr.id("=");
   }

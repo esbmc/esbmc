@@ -125,7 +125,7 @@ void interpretert::evaluate(
     dest.clear();
   }
   else if(expr.id()=="=" ||
-          expr.id()=="notequal" ||
+          expr.is_notequal() ||
           expr.id()=="<=" ||
           expr.id()==">=" ||
           expr.id()=="<" ||
@@ -145,7 +145,7 @@ void interpretert::evaluate(
     
       if(expr.id()=="=")
         dest.push_back(op0==op1);
-      else if(expr.id()=="notequal")
+      else if(expr.is_notequal())
         dest.push_back(op0!=op1);
       else if(expr.id()=="<=")
         dest.push_back(op0<=op1);

@@ -1937,7 +1937,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
 
     return result;
   }
-  else if(expr.id()=="=" || expr.id()=="notequal")
+  else if(expr.id()=="=" || expr.is_notequal())
   {
     if(operands.size()==2 && operands.front()==operands.back())
     {
@@ -2082,7 +2082,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
         expr.make_bool(v0==v1);
         return false;
       }
-      else if(expr.id()=="notequal")
+      else if(expr.is_notequal())
       {
         expr.make_bool(v0!=v1);
         return false;
@@ -2093,7 +2093,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
       fixedbvt f0(expr.op0());
       fixedbvt f1(expr.op1());
 
-      if(expr.id()=="notequal")
+      if(expr.is_notequal())
         expr.make_bool(f0!=f1);
       else if(expr.id()=="=")
         expr.make_bool(f0==f1);
@@ -2115,7 +2115,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
       ieee_floatt f0(expr.op0());
       ieee_floatt f1(expr.op1());
 
-      if(expr.id()=="notequal")
+      if(expr.is_notequal())
         expr.make_bool(f0!=f1);
       else if(expr.id()=="=")
         expr.make_bool(f0==f1);
@@ -2142,7 +2142,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
       if(to_integer(expr.op1(), v1))
         return true;
 
-      if(expr.id()=="notequal")
+      if(expr.is_notequal())
         expr.make_bool(v0!=v1);
       else if(expr.id()=="=")
         expr.make_bool(v0==v1);
@@ -2257,7 +2257,7 @@ bool simplify_exprt::simplify_inequality_not_constant(
   exprt::operandst &operands=expr.operands();
 
   // eliminate strict inequalities
-  if(expr.id()=="notequal")
+  if(expr.is_notequal())
   {
     expr.id("=");
     simplify_inequality_not_constant(expr, mode);
@@ -2394,7 +2394,7 @@ bool simplify_exprt::simplify_inequality_constant(
   {
     // see if there is a constant in the sum
 
-    if(expr.id()=="=" || expr.id()=="notequal")
+    if(expr.id()=="=" || expr.is_notequal())
     {
       mp_integer constant=0;
       bool changed=false;
@@ -2499,7 +2499,7 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
   bool result=true;
 
   // special case
-  if((expr.id()=="=" || expr.id()=="notequal") &&
+  if((expr.id()=="=" || expr.is_notequal()) &&
      expr.operands().size()==2 &&
      expr.op0().type().id()=="pointer")
   {
@@ -2527,7 +2527,7 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
     }
   }
 
-  if(expr.id()=="="  || expr.id()=="notequal" ||
+  if(expr.id()=="="  || expr.is_notequal() ||
      expr.id()==">=" || expr.id()=="<=" ||
      expr.id()==">"  || expr.id()=="<")
     result=simplify_inequality(expr, mode) && result;
@@ -3441,7 +3441,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
 
   if(expr.id()=="typecast")
     result=simplify_typecast(expr, mode) && result;
-  else if(expr.id()=="=" || expr.id()=="notequal" ||
+  else if(expr.id()=="=" || expr.is_notequal() ||
           expr.id()==">" || expr.id()=="<" ||
           expr.id()==">=" || expr.id()=="<=")
     result=simplify_relation(expr, mode) && result;

@@ -919,7 +919,7 @@ literalt boolector_convt::convert_rest(const exprt &expr)
   if (!assign_boolector_expr(expr))
 	return l;
 
-  if (expr.id() == "=" || expr.id() == "notequal")
+  if (expr.id() == "=" || expr.is_notequal())
 	constraint = convert_eq(expr);
   else if (expr.id() == "<")
 	constraint = convert_lt(expr);
@@ -2513,7 +2513,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 	return convert_logical_ops(expr, bv);
   else if (expr.is_not())
 	return convert_logical_not(expr, bv);
-  else if (expr.id() == "=" || expr.id() == "notequal")
+  else if (expr.id() == "=" || expr.is_notequal())
 	return convert_equality(expr, bv);
   else if (expr.id() == "<=" || expr.id() == "<" || expr.id() == ">="
 		|| expr.id() == ">")

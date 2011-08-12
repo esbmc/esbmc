@@ -646,7 +646,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     return convert_typecast(expr);
   else if(expr.id()=="=")
     return convert_equality(to_equality_expr(expr));
-  else if(expr.id()=="notequal")
+  else if(expr.is_notequal())
   {
     if(expr.operands().size()!=2)
       throw "notequal expects two operands";

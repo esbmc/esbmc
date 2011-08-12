@@ -2532,7 +2532,7 @@ void goto_convertt::convert_ifthenelse(
 	  //std::cout << "2: " << code.pretty() << std::endl;
 	  exprt tmp_guard;
 	  if (options.get_bool_option("control-flow-test")
-		  && code.op0().id() != "notequal" && code.op0().id() != "symbol"
+		  && !code.op0().is_notequal() && code.op0().id() != "symbol"
 		  && code.op0().id() != "typecast" && code.op0().id() != "="
 		  && !is_thread
 		  && !options.get_bool_option("deadlock-check"))

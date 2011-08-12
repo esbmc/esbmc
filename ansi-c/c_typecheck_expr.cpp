@@ -95,7 +95,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
   else if(expr.id()=="ptrmember")
     typecheck_expr_ptrmember(expr);
   else if(expr.id()=="="  ||
-          expr.id()=="notequal" ||
+          expr.is_notequal() ||
           expr.id()=="<"  ||
           expr.id()=="<=" ||
           expr.id()==">"  ||
@@ -814,7 +814,7 @@ void c_typecheck_baset::adjust_float_rel(exprt &expr)
   {
     if(expr.id()=="=")
       expr.id("ieee_float_equal");
-    else if(expr.id()=="notequal")
+    else if(expr.is_notequal())
       expr.id("ieee_float_notequal");
   }
 }
@@ -849,7 +849,7 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
   const typet o_type0=op0.type();
   const typet o_type1=op1.type();
 
-  if(expr.id()=="=" || expr.id()=="notequal")
+  if(expr.id()=="=" || expr.is_notequal())
   {
     if(follow(o_type0)==follow(o_type1))
     {
@@ -879,7 +879,7 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
 
     if(type0.id()=="pointer")
     {
-      if(expr.id()=="=" || expr.id()=="notequal")
+      if(expr.id()=="=" || expr.is_notequal())
         return;
 
       if(expr.id()=="<=" || expr.id()=="<" ||
@@ -889,7 +889,7 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
 
     if(type0.id()=="string-constant")
     {
-      if(expr.id()=="=" || expr.id()=="notequal")
+      if(expr.id()=="=" || expr.is_notequal())
         return;
     }
   }

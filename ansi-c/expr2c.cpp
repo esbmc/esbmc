@@ -2983,7 +2983,7 @@ std::string expr2ct::convert(
           src.id()=="<=" || src.id()==">=")
     return convert_binary(src, src.id_string(), precedence=10, true);
 
-  else if(src.id()=="notequal")
+  else if(src.is_notequal())
     return convert_binary(src, "!=", precedence=9, true);
 
   else if(src.id()=="=")

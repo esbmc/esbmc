@@ -233,7 +233,7 @@ void propagate_not(exprt &expr)
   }
   else if(expr.id()=="=")
     expr.id("notequal");
-  else if(expr.id()=="notequal")
+  else if(expr.is_notequal())
     expr.id("=");
   else
   {

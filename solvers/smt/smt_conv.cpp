@@ -736,14 +736,14 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     smt_prop.out << ")";
   }
   else if(expr.id()=="=" ||
-          expr.id()=="notequal")
+          expr.is_notequal())
   {
     assert(expr.operands().size()==2);
     assert(expr.op0().type()==expr.op1().type());
 
     if(expr.op0().type().is_bool())
     {
-      if(expr.id()=="notequal") 
+      if(expr.is_notequal()) 
 	smt_prop.out << "(xor ";
       else 
 	smt_prop.out << "(iff ";
@@ -755,14 +755,14 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     }
     else
     {
-      if(expr.id()=="notequal") 
+      if(expr.is_notequal()) 
 	smt_prop.out << "(not ";
       smt_prop.out << "(= ";
       convert_smt_expr(expr.op0());
       smt_prop.out << " ";
       convert_smt_expr(expr.op1());
       smt_prop.out << ")";
-      if(expr.id()=="notequal") 
+      if(expr.is_notequal()) 
 	smt_prop.out << ")";
     }
   }
