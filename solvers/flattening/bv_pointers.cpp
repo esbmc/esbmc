@@ -186,7 +186,7 @@ void bv_pointerst::convert_address_of_rec(
     encode(pointer_logic.get_null_object(), bv);
     return;
   }
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     if(expr.operands().size()!=2)
       throw "index takes two operands";
@@ -322,7 +322,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
   {
     return SUB::convert_if(expr, bv);
   }
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     return SUB::convert_index(to_index_expr(expr), bv);
   }

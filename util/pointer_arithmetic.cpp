@@ -65,7 +65,7 @@ void pointer_arithmetict::read(const exprt &src)
   else if(src.is_address_of())
   {
     assert(src.operands().size()==1);
-    if(src.op0().id()=="index")
+    if(src.op0().is_index())
     {
       const index_exprt &index_expr=
         to_index_expr(src.op0());

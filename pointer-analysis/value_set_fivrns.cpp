@@ -412,7 +412,7 @@ void value_set_fivrnst::get_value_set_rec(
     insert_from(dest, exprt("unknown", original_type));
     return;
   }  
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     assert(expr.operands().size()==2);
 
@@ -789,7 +789,7 @@ void value_set_fivrnst::get_reference_set_rec(
 
     return;
   }
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     if(expr.operands().size()!=2)
       throw "index expected to have two operands";
@@ -1250,7 +1250,7 @@ void value_set_fivrnst::assign_rec(
         assign_rec(object, values_rhs, suffix, ns, add_to_sets);
     }
   }
-  else if(lhs.id()=="index")
+  else if(lhs.is_index())
   {
     if(lhs.operands().size()!=2)
       throw "index expected to have two operands";

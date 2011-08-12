@@ -2901,7 +2901,7 @@ std::string expr2ct::convert(
       return convert_unary(src, "*", precedence=15);
   }
 
-  else if(src.id()=="index")
+  else if(src.is_index())
     return convert_index(src, precedence=16);
 
   else if(src.id()=="member")

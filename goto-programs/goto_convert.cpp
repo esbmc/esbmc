@@ -1056,7 +1056,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 
   if(rhs.is_dereference()
 	|| rhs.id() == "implicit_dereference"
-	|| rhs.id() == "index"
+	|| rhs.is_index()
 	|| rhs.id() == "member")
   {
     irep_idt identifier=rhs.op0().identifier();
@@ -1065,7 +1065,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
       const exprt &object=rhs.operands()[0];
       identifier=object.identifier();
     }
-    else if (rhs.id() == "index")
+    else if (rhs.is_index())
     {
       identifier=rhs.op1().identifier();
     }
@@ -2784,7 +2784,7 @@ const std::string &goto_convertt::get_string_constant(
 
   if(!expr.is_address_of() ||
      expr.operands().size()!=1 ||
-     expr.op0().id()!="index" ||
+     !expr.op0().is_index() ||
      expr.op0().operands().size()!=2 ||
      expr.op0().op0().id()!="string-constant")
   {

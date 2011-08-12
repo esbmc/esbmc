@@ -419,7 +419,7 @@ bool simplify_exprt::simplify_address_of(exprt &expr)
     expr.swap(constant);
     return false;
   }
-  else if(expr.op0().id()=="index")
+  else if(expr.op0().is_index())
   {
     exprt &index_expr=expr.op0();
 
@@ -471,7 +471,7 @@ exprt simplify_exprt::pointer_offset(
     // need to count members here
     return nil_exprt();
   }
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     const index_exprt &index_expr=to_index_expr(expr);
     const exprt &array=index_expr.array();
@@ -2985,7 +2985,7 @@ tvt simplify_exprt::objects_equal_address_of(const exprt &a, const exprt &b)
     if(a.identifier()==b.identifier())
       return tvt(true);
   }
-  else if(a.id()=="index" && b.id()=="index")
+  else if(a.is_index() && b.is_index())
   {
     if(a.operands().size()==2 && b.operands().size()==2)
       return objects_equal_address_of(a.op0(), b.op0());
@@ -3451,7 +3451,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_lambda(expr) && result;
   else if(expr.id()=="with")
     result=simplify_with(expr) && result;
-  else if(expr.id()=="index")
+  else if(expr.is_index())
     result=simplify_index(to_index_expr(expr), mode) && result;
   else if(expr.id()=="member")
     result=simplify_member(to_member_expr(expr)) && result;

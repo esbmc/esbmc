@@ -101,7 +101,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
           expr.id()==">"  ||
           expr.id()==">=")
     typecheck_expr_rel(expr);
-  else if(expr.id()=="index")
+  else if(expr.is_index())
     typecheck_expr_index(expr);
   else if(expr.id()=="typecast")
     typecheck_expr_typecast(expr);

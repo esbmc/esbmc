@@ -24,7 +24,7 @@ std::string array_name(
   const namespacet &ns,
   const exprt &expr)
 {
-  if(expr.id()=="index")
+  if(expr.is_index())
   {
     if(expr.operands().size()!=2)
       throw "index takes two operands";

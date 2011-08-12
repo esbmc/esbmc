@@ -27,7 +27,7 @@ Function: boolbvt::convert_index
 
 void boolbvt::convert_index(const index_exprt &expr, bvt &bv)
 {
-  if(expr.id()!="index")
+  if(!expr.is_index())
     throw "expected index expression";
 
   if(expr.operands().size()!=2)

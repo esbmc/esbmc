@@ -1980,7 +1980,7 @@ bool boolector_convt::convert_pointer(const exprt &expr, BtorExp* &bv)
   BtorExp *result, *args[2];
   std::string symbol_name;
 
-  if (expr.op0().id() == "index")
+  if (expr.op0().is_index())
   {
     const exprt &object=expr.op0().operands()[0];
 	const exprt &index=expr.op0().operands()[1];
@@ -2535,7 +2535,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 	return convert_pointer(expr, bv);
   else if (expr.id() == "array_of")
 	return convert_array_of(expr, bv);
-  else if (expr.id() == "index")
+  else if (expr.is_index())
 	return convert_index(expr, bv);
   else if (expr.id() == "ashr" || expr.id() == "lshr" || expr.id() == "shl")
 	return convert_shift(expr, bv);

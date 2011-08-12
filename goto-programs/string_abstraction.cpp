@@ -825,7 +825,7 @@ exprt string_abstractiont::build(const exprt &pointer, bool write)
 
     assert(ptr.pointer.operands().size()==1);
 
-    if(ptr.pointer.op0().id()=="index")
+    if(ptr.pointer.op0().is_index())
     {
       assert(ptr.pointer.op0().operands().size()==2);
 
@@ -894,7 +894,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
 
   // we do buffers, arrays of buffers, and a buffer in a struct
 
-  if(object.id()=="index")
+  if(object.is_index())
   {
     assert(object.operands().size()==2);
 
@@ -1272,7 +1272,7 @@ void string_abstractiont::abstract_char_assign(
   if(!rhs.is_zero())
     return;
 
-  if(lhs.id()=="index")
+  if(lhs.is_index())
   {
     assert(lhs.operands().size()==2);
 

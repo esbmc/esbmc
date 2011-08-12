@@ -51,7 +51,7 @@ bool dereferencet::has_dereference(const exprt &expr) const
 
   if(expr.is_dereference() ||
      expr.id()=="implicit_dereference" ||
-     (expr.id()=="index" && expr.operands().size()==2 &&
+     (expr.is_index() && expr.operands().size()==2 &&
       expr.op0().type().id()=="pointer"))
     return true;
 
@@ -72,7 +72,7 @@ Function: dereferencet::get_symbol
 
 const exprt& dereferencet::get_symbol(const exprt &expr)
 {
-  if(expr.id()=="member" || expr.id()=="index")
+  if(expr.id()=="member" || expr.is_index())
     return get_symbol(expr.op0());
 
   return expr;
@@ -557,7 +557,7 @@ void dereferencet::build_reference_to(
     else
     {
       //std::cout << "value.id(): " << value.id() << std::endl;
-      if(value.id()=="index")
+      if(value.is_index())
       {
         index_exprt &index_expr=to_index_expr(value);
         index_expr.index()=offset;
@@ -702,7 +702,7 @@ void dereferencet::bounds_check(
   exprt size_expr=
     to_array_type(array_type).size();
 
-  if (expr.op0().id() == "index")
+  if (expr.op0().is_index())
   {
 	std::string val1, val2, tot;
 	int total;

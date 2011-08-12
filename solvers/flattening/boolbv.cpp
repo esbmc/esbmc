@@ -72,7 +72,7 @@ bool boolbvt::literal(
       dest=map_entry.literal_map[bit].l;
       return false;
     }
-    else if(expr.id()=="index")
+    else if(expr.is_index())
     {
       if(expr.operands().size()!=2)
         throw "index takes two operands";
@@ -207,7 +207,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return;
   }
 
-  if(expr.id()=="index")
+  if(expr.is_index())
     return convert_index(to_index_expr(expr), bv);
   else if(expr.id()=="constraint_select_one")
     return convert_constraint_select_one(expr, bv);
@@ -666,7 +666,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     return convert_quantifier(expr);
   else if(expr.id()=="exists")
     return convert_quantifier(expr);
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     bvt bv;
     convert_index(to_index_expr(expr), bv);

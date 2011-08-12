@@ -117,7 +117,7 @@ void rw_sett::read_write_rec(
     const std::string &component_name=expr.component_name().as_string();
     read_write_rec(expr.op0(), r, w, "."+component_name+suffix, guard);
   }
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     // we don't distinguish the array elements for now
     assert(expr.operands().size()==2);

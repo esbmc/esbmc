@@ -250,7 +250,7 @@ void goto_program_dereferencet::dereference_rec(
     dereference.dereference(tmp, guard, mode);
     expr.swap(tmp);
   }
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     if(expr.operands().size()!=2)
       throw "index expects two operands";

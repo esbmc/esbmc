@@ -147,7 +147,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
       << ", offset:="
       << bin_zero(config.ansi_c.pointer_width) << " #)";
   }
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     if(expr.operands().size()!=2)
       throw "index takes two operands";
@@ -985,7 +985,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     // convert_array_value(expr.op0());
     // smt_prop.out << ")";
   }
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     assert(expr.operands().size()==2);
     smt_prop.out << "(select ";

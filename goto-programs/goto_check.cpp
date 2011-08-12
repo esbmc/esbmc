@@ -275,7 +275,7 @@ void goto_checkt::bounds_check(
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  if(expr.id()!="index")
+  if(!expr.is_index())
     return;
 
   if(expr.is_bounds_check_set() && !expr.bounds_check())
@@ -490,7 +490,7 @@ void goto_checkt::check_rec(
       assert(expr.operands().size()==1);
       check_rec(expr.op0(), guard, false);
     }
-    else if(expr.id()=="index")
+    else if(expr.is_index())
     {
       assert(expr.operands().size()==2);
       check_rec(expr.op0(), guard, true);
@@ -580,7 +580,7 @@ void goto_checkt::check_rec(
     check_rec(*it, guard, false);
 
   //std::cout << "expr.id(): " << expr.id() << std::endl;
-  if(expr.id()=="index")
+  if(expr.is_index())
   {
     bounds_check(expr, guard);
   }

@@ -270,7 +270,7 @@ bool inv_object_storet::is_constant_address_rec(const exprt &expr)
     assert(expr.operands().size()==1);
     return is_constant_address_rec(expr.op0());
   }
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     assert(expr.operands().size()==2);
     if(expr.op1().is_constant())
@@ -1352,7 +1352,7 @@ void invariant_sett::modifies(const exprt &lhs)
     unsigned a;
     if(!get_object(lhs, a)) modifies(a);
   }
-  else if(lhs.id()=="index")
+  else if(lhs.is_index())
   {
     // we don't track arrays
   }

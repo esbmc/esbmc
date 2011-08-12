@@ -81,7 +81,7 @@ unsigned pointer_logict::add_object(const exprt &expr)
 {
   // remove any index/member
   
-  if(expr.id()=="index")
+  if(expr.is_index())
   {
     assert(expr.operands().size()==2);
     return add_object(expr.op0());

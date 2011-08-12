@@ -81,7 +81,7 @@ mp_integer compute_pointer_offset(
 {
   if(expr.id()=="symbol")
     return 0;
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     assert(expr.operands().size()==2);
     assert(expr.op0().type().is_array());

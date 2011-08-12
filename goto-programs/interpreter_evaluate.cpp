@@ -357,7 +357,7 @@ void interpretert::evaluate(
     return;
   }
   else if(expr.is_dereference() ||
-          expr.id()=="index" ||
+          expr.is_index() ||
           expr.id()=="symbol" ||
           expr.id()=="member")
   {
@@ -466,7 +466,7 @@ mp_integer interpretert::evaluate_address(const exprt &expr) const
     if(tmp0.size()==1)
       return tmp0.front();
   }
-  else if(expr.id()=="index")
+  else if(expr.is_index())
   {
     if(expr.operands().size()!=2)
       throw "index expects two operands";
