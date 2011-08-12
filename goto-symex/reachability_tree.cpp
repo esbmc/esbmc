@@ -564,7 +564,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     execution_states.push_back(new_state);
 
     /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_thread_no() != i) {
+    if (new_state->get_active_state_number() != i) {
       new_state->increment_context_switch();
       new_state->set_active_state(i);
     }
