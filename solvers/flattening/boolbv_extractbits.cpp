@@ -30,7 +30,7 @@ void boolbvt::convert_extractbits(const exprt &expr, bvt &bv)
     return conversion_failed(expr, bv);
   
   if(!expr.type().is_signedbv() &&
-     expr.type().id()!="unsignedbv" &&
+     !expr.type().is_unsignedbv() &&
      expr.type().id()!="bv")
     return conversion_failed(expr, bv);
 

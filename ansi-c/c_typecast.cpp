@@ -119,7 +119,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
-    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.is_unsignedbv()) return false;
     if(dest_type.is_signedbv()) return false;
     if(dest_type.is_floatbv()) return false;
   }
@@ -128,7 +128,7 @@ bool check_c_implicit_typecast(
     if(dest_type.is_bool()) return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
-    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.is_unsignedbv()) return false;
     if(dest_type.is_signedbv()) return false;
     if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
@@ -152,7 +152,7 @@ bool check_c_implicit_typecast(
   {
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
-    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.is_unsignedbv()) return false;
     if(dest_type.is_signedbv()) return false;
     if(dest_type.is_pointer()) return false;
     if(dest_type.is_floatbv()) return false;
@@ -164,7 +164,7 @@ bool check_c_implicit_typecast(
           src_type_id=="c_enum" ||
           src_type_id=="incomplete_c_enum")
   {
-    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.is_unsignedbv()) return false;
     if(dest_type.is_bool()) return false;
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
@@ -182,7 +182,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.is_signedbv()) return false;
-    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.is_unsignedbv()) return false;
     if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
   }
@@ -207,7 +207,7 @@ bool check_c_implicit_typecast(
        (src_type.subtype()==dest_type.subtype())) return false;
 
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.is_unsignedbv()) return false;
     if(dest_type.is_signedbv()) return false;
   }
 
@@ -266,7 +266,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
     else if(width<=config.ansi_c.long_long_int_width)
       return LONGLONG;
   }
-  else if(type.id()=="unsignedbv")
+  else if(type.is_unsignedbv())
   {
     if(width<=config.ansi_c.char_width)
       return UCHAR;
@@ -440,7 +440,7 @@ void c_typecastt::implicit_typecast_followed(
     // special case: 0 == NULL
 
     if(expr.is_zero() && (
-       src_type.id()=="unsignedbv" ||
+       src_type.is_unsignedbv() ||
        src_type.is_signedbv() ||
        src_type.id()=="natural" ||
        src_type.id()=="integer"))

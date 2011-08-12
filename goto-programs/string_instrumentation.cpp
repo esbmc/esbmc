@@ -117,7 +117,7 @@ protected:
   bool is_string_type(const typet &t) const
   {
     return ((t.is_pointer() || t.is_array()) &&
-            (t.subtype().is_signedbv() || t.subtype().id()=="unsignedbv") &&
+            (t.subtype().is_signedbv() || t.subtype().is_unsignedbv()) &&
             (bv_width(t.subtype())==config.ansi_c.char_width));
   }
 

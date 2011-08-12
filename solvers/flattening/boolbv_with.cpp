@@ -83,7 +83,7 @@ void boolbvt::convert_with(
   if(type.is_array())
     return convert_with_array(to_array_type(type), op1, op2, prev_bv, next_bv);
   else if(type.id()=="bv" ||
-          type.id()=="unsignedbv" ||
+          type.is_unsignedbv() ||
           type.is_signedbv())
     return convert_with_bv(type, op1, op2, prev_bv, next_bv);
   else if(type.is_struct())

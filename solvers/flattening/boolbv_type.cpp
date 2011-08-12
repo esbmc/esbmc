@@ -24,7 +24,7 @@ bvtypet get_bvtype(const typet &type)
 {
   if(type.is_signedbv())
     return IS_SIGNED;
-  else if(type.id()=="unsignedbv")
+  else if(type.is_unsignedbv())
     return IS_UNSIGNED;
   else if(type.id()=="c_enum" ||
           type.id()=="incomplete_c_enum")

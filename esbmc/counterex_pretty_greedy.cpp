@@ -137,7 +137,7 @@ void counterexample_beautification_greedyt::minimize(
     // no beautification for pointers right now
   }
   else if(type.is_signedbv() ||
-          type.id()=="unsignedbv")
+          type.is_unsignedbv())
   {
     unsigned width;
 

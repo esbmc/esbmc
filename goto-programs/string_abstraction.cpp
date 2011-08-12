@@ -96,7 +96,7 @@ protected:
       return is_char_type(ns.follow(type));
 
     if(!type.is_signedbv() &&
-       type.id()!="unsignedbv")
+       !type.is_unsignedbv())
       return false;
 
     return bv_width(type)==config.ansi_c.char_width;

@@ -51,7 +51,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     argc_symbol.lvalue=true;
 
     if(!argc_symbol.type.is_signedbv() &&
-       argc_symbol.type.id()!="unsignedbv")
+       !argc_symbol.type.is_unsignedbv())
     {
       err_location(main_symbol.location);
       str << "argc argument expected to be integer type, but got `"

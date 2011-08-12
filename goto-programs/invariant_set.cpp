@@ -159,10 +159,10 @@ std::string inv_object_storet::build_string(const exprt &expr) const
     assert(expr.operands().size()==1);
     
     if(expr.type().is_signedbv() ||
-       expr.type().id()=="unsignedbv")
+       expr.type().is_unsignedbv())
     {
       if(expr.op0().type().is_signedbv() ||
-         expr.op0().type().id()=="unsignedbv")
+         expr.op0().type().is_unsignedbv())
       {
         if(bv_width(expr.type())>=bv_width(expr.op0().type()))
           return build_string(expr.op0());
@@ -552,7 +552,7 @@ void invariant_sett::add_type_bounds(const exprt &expr, const typet &type)
 {
   if(expr.type()==type) return;
 
-  if(type.id()=="unsignedbv")
+  if(type.is_unsignedbv())
   {
     unsigned op_width=bv_width(type);
 
@@ -941,7 +941,7 @@ void invariant_sett::get_bounds(unsigned a, boundst &bounds) const
       return;
     }
     
-    if(e_a.type().id()=="unsignedbv")
+    if(e_a.type().is_unsignedbv())
       bounds=lower_interval(mp_integer(0));
   }
 
@@ -1001,7 +1001,7 @@ void invariant_sett::nnf(exprt &expr, bool negate)
   {
     assert(expr.operands().size()==1);
 
-    if(expr.op0().type().id()=="unsignedbv" ||
+    if(expr.op0().type().is_unsignedbv() ||
        expr.op0().type().is_signedbv())
     {
       equality_exprt tmp;

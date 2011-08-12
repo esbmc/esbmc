@@ -108,7 +108,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     typecheck_expr(size);
     typecheck_type(array_type.subtype());
 
-    bool size_is_unsigned=(size.type().id()=="unsignedbv");
+    bool size_is_unsigned=(size.type().is_unsignedbv());
 
     typet integer_type(size_is_unsigned?"unsignedbv":"signedbv");
     integer_type.width(config.ansi_c.int_width);
@@ -246,7 +246,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     const typet &base_type=follow(type.subtype());
 
     if(!base_type.is_signedbv() &&
-       base_type.id()!="unsignedbv" &&
+       !base_type.is_unsignedbv() &&
        base_type.id()!="c_enum")
     {
       err_location(type);

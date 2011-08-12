@@ -385,7 +385,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
       if(it->type().is_pointer()) continue;
 
-      if(it->type().id()!="unsignedbv" &&
+      if(!it->type().is_unsignedbv() &&
          !it->type().is_signedbv())
         return conversion_failed(expr, bv);
 
@@ -426,7 +426,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
     for(unsigned i=0; i<offset_bits; i++)
       sum[i]=bv0[i];
 
-    if(expr.op1().type().id()!="unsignedbv" &&
+    if(!expr.op1().type().is_unsignedbv() &&
        !expr.op1().type().is_signedbv())
       return conversion_failed(expr, bv);
 

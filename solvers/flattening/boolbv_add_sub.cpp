@@ -28,7 +28,7 @@ Function: boolbvt::convert_add_sub
 
 void boolbvt::convert_add_sub(const exprt &expr, bvt &bv)
 {
-  if(expr.type().id()!="unsignedbv" &&
+  if(!expr.type().is_unsignedbv() &&
      !expr.type().is_signedbv() &&
      !expr.type().is_fixedbv() &&
      !expr.type().is_floatbv() &&

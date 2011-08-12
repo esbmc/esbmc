@@ -380,7 +380,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     if(expr.type().is_bool())
     {
       if(op.type().is_signedbv() ||
-         op.type().id()=="unsignedbv" ||
+         op.type().is_unsignedbv() ||
          op.type().is_pointer())
       {
         convert_smt_expr(op);
@@ -393,7 +393,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       }
     }
     else if(expr.type().is_signedbv() ||
-            expr.type().id()=="unsignedbv")
+            expr.type().is_unsignedbv())
     {
       unsigned to_width=atoi(expr.type().width().c_str());
       
@@ -416,7 +416,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
           smt_prop.out << ")[" << (to_width-1) << ":0]";
         }
       }
-      else if(op.type().id()=="unsignedbv")
+      else if(op.type().is_unsignedbv())
       {
         unsigned from_width=atoi(op.type().width().c_str());
         
@@ -510,7 +510,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
   }
   else if(expr.is_constant())
   {
-    if(expr.type().id()=="unsignedbv" ||
+    if(expr.type().is_unsignedbv() ||
        expr.type().is_signedbv() ||
        expr.type().id()=="bv")
     {
@@ -673,7 +673,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
   {
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==1);
-    if(expr.type().id()=="unsignedbv" ||
+    if(expr.type().is_unsignedbv() ||
        expr.type().is_signedbv())
     {
       smt_prop.out << "BVUMINUS(";
@@ -775,7 +775,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     
     const typet &op_type=expr.op0().type();
 
-    if(op_type.id()=="unsignedbv")
+    if(op_type.is_unsignedbv())
     {
       smt_prop.out << "(";
 
@@ -820,7 +820,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
   {
     if(expr.operands().size()>=2)
     {
-      if(expr.type().id()=="unsignedbv" ||
+      if(expr.type().is_unsignedbv() ||
 	 expr.type().is_signedbv())
       {
         smt_prop.out << "(bvadd ";
@@ -876,7 +876,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     if(expr.operands().size()==2)
     {
-      if(expr.type().id()=="unsignedbv" ||
+      if(expr.type().is_unsignedbv() ||
          expr.type().is_signedbv())
       {
         smt_prop.out << "BVSUB(" << expr.type().width() << ", ";
@@ -900,10 +900,10 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==2);
 
-    if(expr.type().id()=="unsignedbv" ||
+    if(expr.type().is_unsignedbv() ||
        expr.type().is_signedbv())
     {
-      if(expr.type().id()=="unsignedbv")
+      if(expr.type().is_unsignedbv())
         smt_prop.out << "BVDIV";
       else
         smt_prop.out << "SBVDIV";
@@ -922,10 +922,10 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==2);
 
-    if(expr.type().id()=="unsignedbv" ||
+    if(expr.type().is_unsignedbv() ||
        expr.type().is_signedbv())
     {
-      if(expr.type().id()=="unsignedbv")
+      if(expr.type().is_unsignedbv())
         smt_prop.out << "BVMOD";
       else
         smt_prop.out << "SBVMOD";
@@ -944,7 +944,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     if(expr.operands().size()==2)
     {
-      if(expr.type().id()=="unsignedbv" ||
+      if(expr.type().is_unsignedbv() ||
          expr.type().is_signedbv())
       {
         smt_prop.out << "BVMULT(" << expr.type().width() << ", ";
@@ -1012,7 +1012,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==2);
 
-    if(expr.type().id()=="unsignedbv" ||
+    if(expr.type().is_unsignedbv() ||
        expr.type().is_signedbv())
     {
       if(expr.id()=="ashr")
@@ -1122,7 +1122,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==2);
 
-    if(expr.op0().type().id()=="unsignedbv" ||
+    if(expr.op0().type().is_unsignedbv() ||
        expr.op0().type().is_signedbv())
     {
       smt_prop.out << "(";

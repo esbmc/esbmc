@@ -165,7 +165,7 @@ std::string expr2ct::convert_rec(
   {
     return q+"void";
   }
-  else if(src.is_signedbv() || src.id()=="unsignedbv")
+  else if(src.is_signedbv() || src.is_unsignedbv())
   {
     mp_integer width=string2integer(src.width().as_string());
 
@@ -1356,7 +1356,7 @@ std::string expr2ct::convert_constant(
     else
       dest="FALSE";
   }
-  else if(type.id()=="unsignedbv" ||
+  else if(type.is_unsignedbv() ||
           type.is_signedbv())
   {
     mp_integer int_value=binary2integer(value, type.is_signedbv());

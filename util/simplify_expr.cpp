@@ -721,7 +721,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
     return true;
 
   if(expr.type().is_signedbv() ||
-     expr.type().id()=="unsignedbv" ||
+     expr.type().is_unsignedbv() ||
      expr.type().id()=="natural" ||
      expr.type().id()=="integer")
   {
@@ -844,7 +844,7 @@ bool simplify_exprt::simplify_modulo(exprt &expr)
     return true;
 
   if(expr.type().is_signedbv() ||
-     expr.type().id()=="unsignedbv" ||
+     expr.type().is_unsignedbv() ||
      expr.type().id()=="natural" ||
      expr.type().id()=="integer")
   {
@@ -1220,7 +1220,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
   if(to_integer(expr.op0(), value))
     return true;
 
-  if(expr.op0().type().id()=="unsignedbv" ||
+  if(expr.op0().type().is_unsignedbv() ||
      expr.op0().type().is_signedbv())
   {
     mp_integer width=
@@ -1980,7 +1980,7 @@ bool simplify_exprt::simplify_bitnot(exprt &expr)
   exprt &op=operands.front();
 
   if(expr.type().id()=="bv" ||
-     expr.type().id()=="unsignedbv" ||
+     expr.type().is_unsignedbv() ||
      expr.type().is_signedbv())
   {
     if(op.type()==expr.type())
@@ -2433,7 +2433,7 @@ bool simplify_exprt::simplify_inequality_constant(
   if(expr.op1().is_zero())
   {
     if(expr.id()==">=" &&
-       expr.op0().type().id()=="unsignedbv")
+       expr.op0().type().is_unsignedbv())
     {
       // zero is always smaller or equal something unsigned
       expr.make_true();

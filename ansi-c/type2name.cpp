@@ -34,7 +34,7 @@ std::string type2name(const typet &type)
     result+="V";   
   else if(type.is_signedbv())
     result+="S" + type.width().as_string(); 
-  else if(type.id()=="unsignedbv")
+  else if(type.is_unsignedbv())
     result+="U" + type.width().as_string(); 
   else if(type.is_bool()) 
     result+="B";

@@ -230,7 +230,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
 
     bv.resize(result_width);
 
-    if(expr.type().id()=="unsignedbv" ||
+    if(expr.type().is_unsignedbv() ||
        expr.type().is_signedbv())
     {
       std::string binary=integer2binary(op_width/8, result_width);
@@ -719,7 +719,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
 
     if(operands[0].type().is_signedbv())
       return bv[bv.size()-1];
-    else if(operands[0].type().id()=="unsignedbv")
+    else if(operands[0].type().is_unsignedbv())
       return const_literal(false);
     else if(operands[0].type().is_fixedbv())
       return bv[bv.size()-1];

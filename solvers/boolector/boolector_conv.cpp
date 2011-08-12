@@ -93,7 +93,7 @@ void boolector_convt::print_data_types(BtorExp* operand0, BtorExp* operand1)
 
 bool boolector_convt::check_all_types(const typet &type)
 {
-  if (type.is_bool() || type.is_signedbv() || type.id()=="unsignedbv" ||
+  if (type.is_bool() || type.is_signedbv() || type.is_unsignedbv() ||
 	  type.is_symbol() || type.is_empty() || type.is_fixedbv() ||
 	  type.is_array() || type.is_struct() || type.is_pointer() ||
 	  type.is_union())
@@ -237,7 +237,7 @@ bool boolector_convt::create_boolector_array(const typet &type, std::string iden
 	width = atoi(type.subtype().width().c_str());
 	array = boolector_array(boolector_ctx, width, config.ansi_c.int_width, identifier.c_str());
   }
-  else if (type.subtype().is_signedbv() || type.subtype().id() == "unsignedbv")
+  else if (type.subtype().is_signedbv() || type.subtype().is_unsignedbv())
   {
 	width = atoi(type.subtype().width().c_str());
 	array = boolector_array(boolector_ctx, width, config.ansi_c.int_width, identifier.c_str());
@@ -279,7 +279,7 @@ bool boolector_convt::convert_identifier(const std::string &identifier, const ty
   {
 	bv = boolector_var(boolector_ctx, 1, identifier.c_str());
   }
-  else if (type.is_signedbv() || type.id()=="unsignedbv" || type.id()=="c_enum")
+  else if (type.is_signedbv() || type.is_unsignedbv() || type.id()=="c_enum")
   {
 	bv = boolector_var(boolector_ctx, width, identifier.c_str());
   }
@@ -454,7 +454,7 @@ BtorExp* boolector_convt::convert_lt(const exprt &expr)
 
   if (expr.op1().type().is_signedbv() || expr.op1().type().is_fixedbv())
 	constraint = boolector_slt(boolector_ctx, operand0, operand1);
-  else if (expr.op1().type().id()=="unsignedbv")
+  else if (expr.op1().type().is_unsignedbv())
 	constraint = boolector_ult(boolector_ctx, operand0, operand1);
 
   return constraint;
@@ -490,7 +490,7 @@ BtorExp* boolector_convt::convert_gt(const exprt &expr)
 
   if (expr.op1().type().is_signedbv() || expr.op1().type().is_fixedbv())
 	constraint = boolector_sgt(boolector_ctx, operand0, operand1);
-  else if (expr.op1().type().id()=="unsignedbv")
+  else if (expr.op1().type().is_unsignedbv())
 	constraint = boolector_ugt(boolector_ctx, operand0, operand1);
 
   return constraint;
@@ -527,7 +527,7 @@ BtorExp* boolector_convt::convert_le(const exprt &expr)
 
   if (expr.op1().type().is_signedbv() || expr.op1().type().is_fixedbv())
 	constraint = boolector_slte(boolector_ctx, operand0, operand1);
-  else if (expr.op1().type().id()=="unsignedbv")
+  else if (expr.op1().type().is_unsignedbv())
 	constraint = boolector_ulte(boolector_ctx, operand0, operand1);
 
   return constraint;
@@ -565,7 +565,7 @@ BtorExp* boolector_convt::convert_ge(const exprt &expr)
 
   if (expr.op1().type().is_signedbv() || expr.op1().type().is_fixedbv())
 	constraint = boolector_sgte(boolector_ctx, operand0, operand1);
-  else if (expr.op1().type().id()=="unsignedbv")
+  else if (expr.op1().type().is_unsignedbv())
 	constraint = boolector_ugte(boolector_ctx, operand0, operand1);
 
   //std::cout << expr.pretty() << std::endl;
@@ -704,7 +704,7 @@ BtorExp* boolector_convt::convert_overflow_sum(const exprt &expr)
 
   if (expr.op0().type().is_signedbv() && expr.op1().type().id()=="signedbv")
     bv = boolector_saddo(boolector_ctx, operand[0], operand[1]);
-  else if (expr.op0().type().id()=="unsignedbv" && expr.op1().type().id()=="unsignedbv")
+  else if (expr.op0().type().is_unsignedbv() && expr.op1().type().is_unsignedbv())
 	bv = boolector_uaddo(boolector_ctx, operand[0], operand[1]);
 
   return bv; //boolector_not(boolector_ctx, bv);
@@ -737,7 +737,7 @@ BtorExp* boolector_convt::convert_overflow_sub(const exprt &expr)
 
   if (expr.op0().type().is_signedbv() && expr.op1().type().id()=="signedbv")
     bv = boolector_ssubo(boolector_ctx, operand[0], operand[1]);
-  else if (expr.op0().type().id()=="unsignedbv" && expr.op1().type().id()=="unsignedbv")
+  else if (expr.op0().type().is_unsignedbv() && expr.op1().type().is_unsignedbv())
 	bv = boolector_usubo(boolector_ctx, operand[0], operand[1]);
 
   return bv; //boolector_not(boolector_ctx, bv);
@@ -770,7 +770,7 @@ BtorExp* boolector_convt::convert_overflow_mul(const exprt &expr)
 
   if (expr.op0().type().is_signedbv() && expr.op1().type().id()=="signedbv")
     bv = boolector_smulo(boolector_ctx, operand[0], operand[1]);
-  else if (expr.op0().type().id()=="unsignedbv" && expr.op1().type().id()=="unsignedbv")
+  else if (expr.op0().type().is_unsignedbv() && expr.op1().type().is_unsignedbv())
 	bv = boolector_umulo(boolector_ctx, operand[0], operand[1]);
 
   return bv; //boolector_not(boolector_ctx, bv);
@@ -812,7 +812,7 @@ BtorExp* boolector_convt::convert_overflow_unary(const exprt &expr)
 #if 0
   if (expr.op0().type().is_signedbv())
     bv = boolector_slt(boolector_ctx, boolector_neg(boolector_ctx, operand), boolector_ones(boolector_ctx,width));
-  else if (expr.op0().type().id()=="unsignedbv")
+  else if (expr.op0().type().is_unsignedbv())
 	bv = boolector_ult(boolector_ctx, boolector_neg(boolector_ctx, operand), boolector_ones(boolector_ctx,width));
 #endif
 
@@ -883,7 +883,7 @@ BtorExp* boolector_convt::convert_overflow_typecast(const exprt &expr)
 	overflow[1] = boolector_sgt(boolector_ctx, operand[0], operand[2]);
 	bv = boolector_not(boolector_ctx, boolector_and(boolector_ctx, overflow[0], overflow[1]));
   }
-  else if (expr.op0().type().id()=="unsignedbv")
+  else if (expr.op0().type().is_unsignedbv())
   {
 	operand[2] = boolector_unsigned_int(boolector_ctx, 0, width);
 	operand[1] = boolector_unsigned_int(boolector_ctx, result, width);
@@ -985,7 +985,7 @@ bool boolector_convt::convert_rel(const exprt &expr, BtorExp* &bv)
 
   const typet &op_type=expr.op0().type();
 
-  if (op_type.id()=="unsignedbv" || op_type.subtype().id()=="unsignedbv")
+  if (op_type.is_unsignedbv() || op_type.subtype().is_unsignedbv())
   {
     if(expr.id()=="<=")
    	  result = boolector_ulte(boolector_ctx,operand0,operand1);
@@ -1039,7 +1039,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
 
   const exprt &op=expr.op0();
 
-  if(expr.type().is_signedbv() || expr.type().id()=="unsignedbv")
+  if(expr.type().is_signedbv() || expr.type().is_unsignedbv())
   {
     unsigned to_width=atoi(expr.type().width().c_str());
 
@@ -1067,7 +1067,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
     	result = boolector_slice(boolector_ctx, operand, (to_width-1), 0);
       }
     }
-    else if(op.type().id()=="unsignedbv")
+    else if(op.type().is_unsignedbv())
     {
       unsigned from_width=atoi(op.type().width().c_str());
 
@@ -1100,7 +1100,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
   	    zero = boolector_int(boolector_ctx, 0, width);
   	    one =  boolector_int(boolector_ctx, 1, width);
   	  }
-  	  else if (expr.type().id()=="unsignedbv")
+  	  else if (expr.type().is_unsignedbv())
   	  {
   	    zero = boolector_unsigned_int(boolector_ctx, 0, width);
   	    one =  boolector_unsigned_int(boolector_ctx, 1, width);
@@ -1123,7 +1123,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
     unsigned to_fraction_bits=fixedbv_type.get_fraction_bits();
     unsigned to_integer_bits=fixedbv_type.get_integer_bits();
 
-    if(op.type().id()=="unsignedbv" ||
+    if(op.type().is_unsignedbv() ||
        op.type().is_signedbv() ||
        op.type().id()=="enum")
     {
@@ -1144,7 +1144,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
       {
         assert(from_width<to_integer_bits);
 
-        if(expr.type().id()=="unsignedbv")
+        if(expr.type().is_unsignedbv())
         {
        	  if (convert_bv(op, args[0])) return true;
           result = boolector_uext(boolector_ctx, args[0], (to_integer_bits-from_width));
@@ -1469,7 +1469,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
   {
 	const_var = boolector_int(boolector_ctx, atoi(value.c_str()), width);
   }
-  else if (expr.type().id() == "unsignedbv")
+  else if (expr.type().is_unsignedbv())
   {
 	const_var = boolector_unsigned_int(boolector_ctx, atoi(value.c_str()), width);
   }
@@ -1851,7 +1851,7 @@ bool boolector_convt::convert_div(const exprt &expr, BtorExp* &bv)
 
   if (expr.type().is_signedbv())
 	result = boolector_sdiv(boolector_ctx, args[0], args[1]);
-  else if (expr.type().id()=="unsignedbv")
+  else if (expr.type().is_unsignedbv())
 	result = boolector_udiv(boolector_ctx, args[0], args[1]);
   else if (expr.type().is_fixedbv())
   {
@@ -1895,7 +1895,7 @@ bool boolector_convt::convert_mod(const exprt &expr, BtorExp* &bv)
 
   if(expr.type().is_signedbv())
 	result = boolector_srem(boolector_ctx, operand0, operand1);
-  else if (expr.type().id()=="unsignedbv")
+  else if (expr.type().is_unsignedbv())
 	result = boolector_urem(boolector_ctx, operand0, operand1);
   else if (expr.type().is_fixedbv())
 	throw "unsupported type for mod: "+expr.type().id_string();
@@ -2026,7 +2026,7 @@ bool boolector_convt::convert_array_of(const exprt &expr, BtorExp* &bv)
     value = boolector_false(boolector_ctx);
     array_of_var = boolector_array(boolector_ctx, 1, config.ansi_c.int_width,"ARRAY_OF(false)");
   }
-  else if (expr.type().subtype().is_signedbv() || expr.type().subtype().id()=="unsignedbv")
+  else if (expr.type().subtype().is_signedbv() || expr.type().subtype().is_unsignedbv())
   {
 	if (convert_bv(expr.op0(), value)) return true;
     array_of_var = boolector_array(boolector_ctx, width, config.ansi_c.int_width,"ARRAY_OF(0)");
@@ -2173,7 +2173,7 @@ bool boolector_convt::convert_shift_constant(const exprt &expr, unsigned int wop
 
   if (expr.type().is_signedbv() || expr.type().id() == "c_enum")
 	result = boolector_int(boolector_ctx, atoi(value.c_str()), width);
-  else if (expr.type().id() == "unsignedbv")
+  else if (expr.type().is_unsignedbv())
 	result = boolector_unsigned_int(boolector_ctx, atoi(value.c_str()), width);
   else if (expr.type().is_fixedbv())
 	result = boolector_int(boolector_ctx, atoi(value.c_str()), width);
@@ -2294,7 +2294,7 @@ bool boolector_convt::convert_abs(const exprt &expr, BtorExp* &bv)
   out = "width: "+ width;
   if (expr.type().is_signedbv() || expr.type().is_fixedbv())
     zero = boolector_int(boolector_ctx, 0, width);
-  else if (expr.type().id()=="unsignedbv")
+  else if (expr.type().is_unsignedbv())
 	zero = boolector_unsigned_int(boolector_ctx, 0, width);
 
   minus_one = boolector_int(boolector_ctx, -1, width);

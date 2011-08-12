@@ -26,7 +26,7 @@ bv_semt bv_sem(const typet &type)
 {
   if(type.id()=="bv")
     return BV_NONE;
-  else if(type.id()=="unsignedbv")
+  else if(type.is_unsignedbv())
     return BV_UNSIGNED;
   else if(type.is_signedbv())
     return BV_SIGNED;

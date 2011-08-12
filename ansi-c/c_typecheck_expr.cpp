@@ -699,7 +699,7 @@ void c_typecheck_baset::make_index_type(exprt &expr)
   {
     expr.make_typecast(index_type());
   }
-  else if(full_type.id()=="unsignedbv")
+  else if(full_type.is_unsignedbv())
   {
     unsigned width=bv_width(expr.type());
 
@@ -1977,7 +1977,7 @@ void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
       {
         const typet &op0_type=follow(op0.type());
 
-        if(op0_type.id()=="unsignedbv")
+        if(op0_type.is_unsignedbv())
         {
           expr.id("lshr");
           return;
@@ -2020,7 +2020,7 @@ void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
     {
       if(type0==type1)
       {
-        if(type0.is_signedbv() || type0.id()=="unsignedbv")
+        if(type0.is_signedbv() || type0.is_unsignedbv())
         {
           expr.type()=type0;
           return;
@@ -2231,7 +2231,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
       }
       else
       {
-        if(type0.id()=="unsignedbv")
+        if(type0.is_unsignedbv())
         {
           expr.statement("assign_lshr");
           return;

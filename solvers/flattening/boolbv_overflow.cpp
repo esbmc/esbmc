@@ -55,7 +55,7 @@ literalt boolbvt::convert_overflow(const exprt &expr)
     if(operands.size()!=2)
       throw "operand "+expr.id_string()+" takes two operands";
 
-    if(operands[0].type().id()!="unsignedbv" &&
+    if(!operands[0].type().is_unsignedbv() &&
        !operands[0].type().is_signedbv())
       return SUB::convert_rest(expr);
 

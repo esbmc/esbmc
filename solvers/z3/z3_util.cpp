@@ -90,7 +90,7 @@ const typet z3_convt::select_pointer(const typet &type)
 
 bool z3_convt::check_all_types(const typet &type)
 {
-  if (type.is_bool() || type.is_signedbv() || type.id()=="unsignedbv" ||
+  if (type.is_bool() || type.is_signedbv() || type.is_unsignedbv() ||
 	  type.is_symbol() || type.is_empty() || type.is_fixedbv() ||
 	  type.is_array() || type.is_struct() || type.is_pointer() ||
 	  type.is_union() || type.is_code())
@@ -114,7 +114,7 @@ bool z3_convt::check_all_types(const typet &type)
 
 bool z3_convt::is_bv(const typet &type)
 {
-  if (type.is_signedbv() || type.id()=="unsignedbv" ||
+  if (type.is_signedbv() || type.is_unsignedbv() ||
 	  type.is_fixedbv())
     return true;
 

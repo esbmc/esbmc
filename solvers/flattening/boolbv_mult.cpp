@@ -114,7 +114,7 @@ void boolbvt::convert_mult(const exprt &expr, bvt &bv)
     return;
     #endif
   }
-  else if(expr.type().id()=="unsignedbv" ||
+  else if(expr.type().is_unsignedbv() ||
           expr.type().is_signedbv())
   {
     if(op0.type()!=expr.type())

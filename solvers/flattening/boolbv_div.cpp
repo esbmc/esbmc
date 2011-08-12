@@ -28,7 +28,7 @@ Function: boolbvt::convert_div
 
 void boolbvt::convert_div(const exprt &expr, bvt &bv)
 {
-  if(expr.type().id()!="unsignedbv" &&
+  if(!expr.type().is_unsignedbv() &&
      !expr.type().is_signedbv() &&
      !expr.type().is_fixedbv() &&
      !expr.type().is_floatbv())

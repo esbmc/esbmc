@@ -133,7 +133,7 @@ void goto_checkt::overflow_check(
     unsigned new_width=atoi(expr.type().width().c_str());
     unsigned old_width=atoi(old_type.width().c_str());
 
-    if(old_type.id()=="unsignedbv") new_width--;
+    if(old_type.is_unsignedbv()) new_width--;
     if(new_width>=old_width) return;
 
     overflow.id(overflow.id_string()+"-"+i2string(new_width));
@@ -300,12 +300,12 @@ void goto_checkt::bounds_check(
 
   const exprt &index=expr.op1();
 
-  if(index.type().id()!="unsignedbv")
+  if(!index.type().is_unsignedbv())
   {
     // we undo typecasts to signedbv
     if(index.is_typecast() &&
        index.operands().size()==1 &&
-       index.op0().type().id()=="unsignedbv")
+       index.op0().type().is_unsignedbv())
     {
       // ok
     }
@@ -386,7 +386,7 @@ void goto_checkt::array_size_check(
   {
     const exprt &size=(exprt &)expr.type().size_irep();
 
-    if(size.type().id()=="unsignedbv")
+    if(size.type().is_unsignedbv())
     {
       // nothing to do
     }

@@ -185,7 +185,7 @@ bool c_main(
 
         if(argc_symbol.type.is_signedbv())
           max=power(2, atoi(argc_symbol.type.width().c_str())-1)-1;
-        else if(argc_symbol.type.id()=="unsignedbv")
+        else if(argc_symbol.type.is_unsignedbv())
           max=power(2, atoi(argc_symbol.type.width().c_str()))-1;
         else
           assert(false);
@@ -209,7 +209,7 @@ bool c_main(
 
         if(envp_size_symbol.type.is_signedbv())
           max=power(2, atoi(envp_size_symbol.type.width().c_str())-1)-1;
-        else if(envp_size_symbol.type.id()=="unsignedbv")
+        else if(envp_size_symbol.type.is_unsignedbv())
           max=power(2, atoi(envp_size_symbol.type.width().c_str()))-1;
         else
           assert(false);

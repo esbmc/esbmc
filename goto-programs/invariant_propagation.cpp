@@ -256,7 +256,7 @@ bool invariant_propagationt::check_type(const typet &type) const
     return false;
   else if(type.is_symbol())
     return check_type(ns.follow(type));
-  else if(type.id()=="unsignedbv" ||
+  else if(type.is_unsignedbv() ||
           type.is_signedbv())
     return true;
   else if(type.is_bool())
