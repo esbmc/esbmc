@@ -81,7 +81,7 @@ void boolbvt::convert_mult(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.type().id()=="floatbv")
+  else if(expr.type().is_floatbv())
   {
     #ifdef HAVE_FLOATBV
     if(op0.type()!=expr.type())

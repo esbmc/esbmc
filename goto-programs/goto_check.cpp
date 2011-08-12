@@ -176,7 +176,7 @@ void goto_checkt::nan_check(
     return;
 
   // first, check type
-  if(expr.type().id()!="floatbv")
+  if(!expr.type().is_floatbv())
     return;
 
   if(expr.id()!="+" &&
@@ -606,7 +606,7 @@ void goto_checkt::check_rec(
    		}
       }
     }
-    else if(expr.type().id()=="floatbv")
+    else if(expr.type().is_floatbv())
       nan_check(expr, guard);
   }
   else if(expr.id()=="<=" || expr.id()=="<" ||

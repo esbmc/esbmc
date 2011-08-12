@@ -29,7 +29,7 @@ bvtypet get_bvtype(const typet &type)
   else if(type.id()=="c_enum" ||
           type.id()=="incomplete_c_enum")
     return IS_C_ENUM;
-  else if(type.id()=="floatbv")
+  else if(type.is_floatbv())
     return IS_FLOAT;
   else if(type.is_fixedbv())
     return IS_FIXED;

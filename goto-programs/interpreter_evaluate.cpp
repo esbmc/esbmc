@@ -66,7 +66,7 @@ void interpretert::evaluate(
     if(expr.type().id()=="struct")
     {
     }
-    else if(expr.type().id()=="floatbv")
+    else if(expr.type().is_floatbv())
     {
       ieee_floatt f;
       f.from_expr(expr);
@@ -266,7 +266,7 @@ void interpretert::evaluate(
       f.from_integer(1);
       result=f.get_value();
     }
-    else if(expr.type().id()=="floatbv")
+    else if(expr.type().is_floatbv())
     {
       ieee_floatt f;
       f.spec=to_floatbv_type(expr.type());
@@ -292,7 +292,7 @@ void interpretert::evaluate(
           f1*=f2;
           result=f1.get_value();
         }
-        else if(expr.type().id()=="floatbv")
+        else if(expr.type().is_floatbv())
         {
           ieee_floatt f1, f2;
           f1.spec=to_floatbv_type(expr.type());

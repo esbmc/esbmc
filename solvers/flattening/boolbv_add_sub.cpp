@@ -31,7 +31,7 @@ void boolbvt::convert_add_sub(const exprt &expr, bvt &bv)
   if(expr.type().id()!="unsignedbv" &&
      expr.type().id()!="signedbv" &&
      !expr.type().is_fixedbv() &&
-     expr.type().id()!="floatbv" &&
+     !expr.type().is_floatbv() &&
      expr.type().id()!="range")
     return conversion_failed(expr, bv);
 
@@ -84,7 +84,7 @@ void boolbvt::convert_add_sub(const exprt &expr, bvt &bv)
     if(op.size()!=width)
       throw "convert_add_sub: unexpected operand width";
 
-    if(expr.type().id()=="floatbv")
+    if(expr.type().is_floatbv())
     {
       #ifdef HAVE_FLOATBV
       float_utilst float_utils(prop);

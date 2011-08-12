@@ -41,7 +41,7 @@ std::string format_constantt::operator()(const exprt &expr)
     {
       return fixedbvt(expr).format(*this);
     }
-    else if(expr.type().id()=="floatbv")
+    else if(expr.type().is_floatbv())
     {
       return ieee_floatt(expr).format(*this);
     }

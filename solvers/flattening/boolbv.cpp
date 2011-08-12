@@ -723,7 +723,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
       return const_literal(false);
     else if(operands[0].type().is_fixedbv())
       return bv[bv.size()-1];
-    else if(operands[0].type().id()=="floatbv")
+    else if(operands[0].type().is_floatbv())
       return bv[bv.size()-1];
   }
   else if(expr.id()=="reduction_or"  || expr.id()=="reduction_and"  ||
@@ -740,7 +740,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     bvt bv;
     convert_bv(operands[0], bv);
     
-    if(expr.op0().type().id()=="floatbv")
+    if(expr.op0().type().is_floatbv())
     {
       #ifdef HAVE_FLOATBV
       float_utilst float_utils(prop);
@@ -757,7 +757,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     bvt bv;
     convert_bv(operands[0], bv);
     
-    if(expr.op0().type().id()=="floatbv")
+    if(expr.op0().type().is_floatbv())
     {
       #ifdef HAVE_FLOATBV
       float_utilst float_utils(prop);
@@ -776,7 +776,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     bvt bv;
     convert_bv(operands[0], bv);
     
-    if(expr.op0().type().id()=="floatbv")
+    if(expr.op0().type().is_floatbv())
     {
       #ifdef HAVE_FLOATBV
       float_utilst float_utils(prop);
@@ -793,7 +793,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     bvt bv;
     convert_bv(operands[0], bv);
     
-    if(expr.op0().type().id()=="floatbv")
+    if(expr.op0().type().is_floatbv())
     {
       #ifdef HAVE_FLOATBV
       float_utilst float_utils(prop);

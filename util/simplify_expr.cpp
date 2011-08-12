@@ -794,7 +794,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
       }
     }
   }
-  else if(expr.type().id()=="floatbv")
+  else if(expr.type().is_floatbv())
   {
     // division by one?
     if(expr.op1().is_constant() &&
@@ -2110,7 +2110,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
 
       return false;
     }
-    else if(expr.op0().type().id()=="floatbv")
+    else if(expr.op0().type().is_floatbv())
     {
       ieee_floatt f0(expr.op0());
       ieee_floatt f1(expr.op1());

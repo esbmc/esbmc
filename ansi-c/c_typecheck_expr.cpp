@@ -810,7 +810,7 @@ void c_typecheck_baset::adjust_float_rel(exprt &expr)
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
 
-  if(follow(expr.op0().type()).id()=="floatbv")
+  if(follow(expr.op0().type()).is_floatbv())
   {
     if(expr.id()=="=")
       expr.id("ieee_float_equal");

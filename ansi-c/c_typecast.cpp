@@ -121,7 +121,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="signedbv") return false;
-    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.is_floatbv()) return false;
   }
   else if(src_type_id=="integer")
   {
@@ -130,7 +130,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="signedbv") return false;
-    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
     if(dest_type.id()=="pointer") return false;
   }
@@ -138,14 +138,14 @@ bool check_c_implicit_typecast(
   {
     if(dest_type.is_bool()) return false;
     if(dest_type.id()=="complex") return false;
-    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
   }
   else if(src_type_id=="rational")
   {
     if(dest_type.is_bool()) return false;
     if(dest_type.id()=="complex") return false;
-    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
   }
   else if(src_type_id=="bool")
@@ -155,7 +155,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="pointer") return false;
-    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
     if(dest_type.id()=="c_enum") return false;
   }
@@ -169,7 +169,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
-    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
     if(dest_type.id()=="pointer") return false;
     if(dest_type.id()=="c_enum") return false;
@@ -183,7 +183,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="unsignedbv") return false;
-    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
   }
   else if(src_type_id=="array" ||
@@ -279,7 +279,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
   }
   else if(type.is_bool())
     return BOOL;
-  else if(type.id()=="floatbv" ||
+  else if(type.is_floatbv() ||
           type.is_fixedbv())
   {
     if(width<=config.ansi_c.single_width)

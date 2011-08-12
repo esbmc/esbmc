@@ -46,7 +46,7 @@ std::string type2name(const typet &type)
     result+="C";
   else if(type.id()=="float") 
     result+="F";
-  else if(type.id()=="floatbv") 
+  else if(type.is_floatbv()) 
     result+="F" + type.width().as_string();
   else if(type.id()=="fixed") 
     result+="X";

@@ -31,7 +31,7 @@ void boolbvt::convert_div(const exprt &expr, bvt &bv)
   if(expr.type().id()!="unsignedbv" &&
      expr.type().id()!="signedbv" &&
      !expr.type().is_fixedbv() &&
-     expr.type().id()!="floatbv")
+     !expr.type().is_floatbv())
     return conversion_failed(expr, bv);
 
   unsigned width;
@@ -73,7 +73,7 @@ void boolbvt::convert_div(const exprt &expr, bvt &bv)
     // cut it down again
     res.resize(width);
   }
-  else if(expr.type().id()=="floatbv")
+  else if(expr.type().is_floatbv())
   {
     #ifdef HAVE_FLOATBV
     float_utilst float_utils(prop);

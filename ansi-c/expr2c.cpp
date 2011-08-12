@@ -197,7 +197,7 @@ std::string expr2ct::convert_rec(
       return q+sign_str+"long long int";
     }
   }
-  else if(src.id()=="floatbv" ||
+  else if(src.is_floatbv() ||
           src.is_fixedbv())
   {
     mp_integer width=string2integer(src.width().as_string());
@@ -1362,7 +1362,7 @@ std::string expr2ct::convert_constant(
     mp_integer int_value=binary2integer(value, type.id()=="signedbv");
     dest=integer2string(int_value);
   }
-  else if(type.id()=="floatbv")
+  else if(type.is_floatbv())
   {
     dest=ieee_floatt(src).to_ansi_c_string();
 
