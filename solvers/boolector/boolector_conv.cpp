@@ -95,7 +95,7 @@ bool boolector_convt::check_all_types(const typet &type)
 {
   if (type.is_bool() || type.is_signedbv() || type.id()=="unsignedbv" ||
 	  type.id()=="symbol" || type.is_empty() || type.is_fixedbv() ||
-	  type.is_array() || type.id()=="struct" || type.is_pointer() ||
+	  type.is_array() || type.is_struct() || type.is_pointer() ||
 	  type.id()=="union")
   {
     return true;
@@ -2491,7 +2491,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
   } else if (expr.id() == "typecast")
     return convert_typecast(expr, bv);
 #if 0
-  else if (expr.id() == "struct")
+  else if (expr.is_struct())
 	return convert_struct(expr);
   else if (expr.id() == "union")
 	return convert_union(expr);
@@ -2591,7 +2591,7 @@ bool boolector_convt::assign_boolector_expr(const exprt expr)
 	ignoring(expr);
 	return false;
   }
-  else if (expr.op0().type().is_array() && expr.op0().type().subtype().id()=="struct")
+  else if (expr.op0().type().is_array() && expr.op0().type().subtype().is_struct())
   {
 	ignoring(expr);
   	return false;

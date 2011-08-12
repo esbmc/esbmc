@@ -482,7 +482,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else
       throw "TODO typecast4 ? -> "+expr.type().id_string();
   }
-  else if(expr.id()=="struct")
+  else if(expr.is_struct())
   {
     assert(false && "Construct not supported yet");
     smt_prop.out << "(# ";
@@ -1045,7 +1045,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       const exprt &index=expr.operands()[i];
       const exprt &value=expr.operands()[i+1];
 
-      if(expr.type().id()=="struct")
+      if(expr.type().is_struct())
       {
 	assert(false && "operator not supported yet");
         smt_prop.out << " WITH ." << index.component_name();
@@ -1327,7 +1327,7 @@ void smt_convt::convert_smt_type(const typet &type)
     smt_prop.out << "BOOLEAN";
   }
   */
-  else if(type.id()=="struct" ||
+  else if(type.is_struct() ||
           type.id()=="union")
   {
     assert(false && "Construct not supported yet");
@@ -1395,7 +1395,7 @@ void smt_convt::find_symbols(const typet &type)
     const array_typet &array_type=to_array_type(type);
     find_symbols(array_type.size());
   }
-  else if(type.id()=="struct" ||
+  else if(type.is_struct() ||
           type.id()=="union")
   {
   }

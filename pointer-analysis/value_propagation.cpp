@@ -149,7 +149,7 @@ void value_propagationt::get_entries_rec(
 {
   const typet &t=ns.follow(type);
 
-  if(t.id()=="struct" ||
+  if(t.is_struct() ||
      t.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(t);
@@ -259,7 +259,7 @@ bool value_propagationt::check_type(const typet &type)
 {
   if(type.is_pointer())
     return true;
-  else if(type.id()=="struct" ||
+  else if(type.is_struct() ||
           type.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(type);

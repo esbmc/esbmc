@@ -56,7 +56,7 @@ void counterexample_beautification_pbst::beautify(
       offset+=width;
     }    
   }
-  else if(type.id()=="struct")
+  else if(type.is_struct())
   {
     const irept::subt &components=type.components().get_sub();
 

@@ -144,7 +144,7 @@ exprt boolbvt::bv_get_rec(
         return dest;
       }
     }
-    else if(type.id()=="struct")
+    else if(type.is_struct())
     {
       const irept &components=type.components();
       unsigned new_offset=0;

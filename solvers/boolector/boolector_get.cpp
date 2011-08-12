@@ -139,7 +139,7 @@ exprt boolector_convt::bv_get_rec(
 #endif
       return nil_exprt();
     }
-    else if(type.id()=="struct")
+    else if(type.is_struct())
     {
 #if 0
       const irept &components=type.components();

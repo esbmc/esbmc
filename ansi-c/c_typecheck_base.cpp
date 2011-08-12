@@ -165,7 +165,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   
   // set the pretty name
   if(symbol.is_type &&
-     (final_type.id()=="struct" ||
+     (final_type.is_struct() ||
       final_type.id()=="incomplete_struct"))
   {
     symbol.pretty_name="struct "+id2string(symbol.base_name);

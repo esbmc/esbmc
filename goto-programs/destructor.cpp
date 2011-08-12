@@ -31,7 +31,7 @@ code_function_callt get_destructor(
   {
     return get_destructor(ns, ns.follow(type));
   }
-  else if(type.id()=="struct")
+  else if(type.is_struct())
   {
     const struct_typet &struct_type=to_struct_type(type);
 

@@ -63,7 +63,7 @@ void interpretert::evaluate(
 {
   if(expr.is_constant())
   {
-    if(expr.type().id()=="struct")
+    if(expr.type().is_struct())
     {
     }
     else if(expr.type().is_floatbv())
@@ -95,7 +95,7 @@ void interpretert::evaluate(
       }
     }
   }
-  else if(expr.id()=="struct")
+  else if(expr.is_struct())
   {
     dest.reserve(get_size(expr.type()));
     bool error=false;

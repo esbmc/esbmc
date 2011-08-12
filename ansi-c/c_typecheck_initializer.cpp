@@ -205,7 +205,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   
   if(value.id()=="designated_list")
   {
-    if(full_type.id()!="struct")
+    if(!full_type.is_struct())
     {
       err_location(value);
       str << "designated initializers cannot initialize `"
@@ -218,7 +218,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   
   if(full_type.is_incomplete_array() ||
      full_type.is_array() ||
-     full_type.id()=="struct" ||
+     full_type.is_struct() ||
      full_type.id()=="union")
   {
     if(value.is_constant() &&
@@ -300,7 +300,7 @@ exprt c_typecheck_baset::do_initializer_rec(
     return do_initializer_array(state, to_array_type(full_type), force_constant);
   else if(full_type.is_incomplete_array())
     return do_initializer_incomplete_array(state, full_type, force_constant);
-  else if(full_type.id()=="struct")
+  else if(full_type.is_struct())
     return do_initializer_struct(state, to_struct_type(full_type), force_constant);
   else if(full_type.id()=="union")
     return do_initializer_union(state, to_union_type(full_type), force_constant);

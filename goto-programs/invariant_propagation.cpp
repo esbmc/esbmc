@@ -157,7 +157,7 @@ void invariant_propagationt::get_objects_rec(
 {
   const typet &t=ns.follow(src.type());
 
-  if(t.id()=="struct" ||
+  if(t.is_struct() ||
      t.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(t);
@@ -249,7 +249,7 @@ bool invariant_propagationt::check_type(const typet &type) const
 {
   if(type.is_pointer())
     return true;
-  else if(type.id()=="struct" ||
+  else if(type.is_struct() ||
           type.id()=="union")
     return false;
   else if(type.is_array())

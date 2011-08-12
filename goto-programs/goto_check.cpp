@@ -653,7 +653,7 @@ void goto_checkt::check_rec(
         options.set_option("int-encoding", false);
 	}
   }
-  else if (expr.id() == "struct" || expr.id() == "union"
+  else if (expr.is_struct() || expr.id() == "union"
 		    || expr.type().is_pointer() || expr.is_member() ||
 		    (expr.type().is_array() && expr.type().subtype().is_array()))
   {

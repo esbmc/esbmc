@@ -202,7 +202,7 @@ exprt pointer_logict::object_rec(
     
     return object_rec(rest, pointer_type, tmp);
   }
-  else if(src.type().id()=="struct" ||
+  else if(src.type().is_struct() ||
           src.type().id()=="union")
   {
     assert(offset>=0);

@@ -399,7 +399,7 @@ void ansi_c_convertt::convert_type(
     convert_type(type.subtype(), sub_storage_spec);
     c_storage_spec|=sub_storage_spec;
   }
-  else if(type.id()=="struct" ||
+  else if(type.is_struct() ||
           type.id()=="union" ||
           type.id()=="ansi_c_interface" ||
           type.id()=="ansi_c_channel" ||

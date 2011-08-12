@@ -569,7 +569,7 @@ Function: interpretert::get_size
 
 unsigned interpretert::get_size(const typet &type) const
 {
-  if(type.id()=="struct")
+  if(type.is_struct())
   {
     const irept::subt &components=
       type.components().get_sub();

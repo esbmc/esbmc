@@ -86,7 +86,7 @@ void boolbvt::convert_with(
           type.id()=="unsignedbv" ||
           type.is_signedbv())
     return convert_with_bv(type, op1, op2, prev_bv, next_bv);
-  else if(type.id()=="struct")
+  else if(type.is_struct())
     return convert_with_struct(type, op1, op2, prev_bv, next_bv);
   else if(type.id()=="union")
     return convert_with_union(type, op1, op2, prev_bv, next_bv);

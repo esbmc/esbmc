@@ -586,7 +586,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
 
   const typet expr_type=follow(expr.type());
 
-  if(expr_type.id()=="struct" ||
+  if(expr_type.is_struct() ||
      expr_type.id()=="union")
   {
     // this is a GCC extension called 'temporary union'
@@ -1020,7 +1020,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
     throw 0;
   }
 
-  if(type.id()!="struct" &&
+  if(!type.is_struct() &&
      type.id()!="union" &&
      type.id()!="class")
   {

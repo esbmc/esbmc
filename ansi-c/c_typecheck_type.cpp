@@ -146,7 +146,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
   {
     typecheck_type(type.subtype());
   }
-  else if(type.id()=="struct" ||
+  else if(type.is_struct() ||
           type.id()=="union")
   {
     struct_typet &struct_type=to_struct_type(type);
@@ -181,7 +181,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       {
         const typet &final_type=follow(it->type());
 
-        if(final_type.id()=="struct" ||
+        if(final_type.is_struct() ||
            final_type.id()=="union")
         {
           struct_typet::componentt c;
@@ -190,7 +190,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
 
           // copy child's records
           const typet &final_type=follow(c.type());
-          if(final_type.id()!="struct" &&
+          if(!final_type.is_struct() &&
              final_type.id()!="union")
           {
             err_location(type);

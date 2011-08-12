@@ -111,7 +111,7 @@ exprt z3_convt::get(const exprt &expr) const
   if ((expr.type().is_array() && expr.type().subtype().is_array()) ||
       (expr.type().is_array() && expr.type().subtype().is_pointer()) ||
       (expr.type().is_array() && expr.type().subtype().id() =="union") ||
-      (expr.type().is_array() && expr.type().subtype().id() =="struct"))
+      (expr.type().is_array() && expr.type().subtype().is_struct()))
     return expr;
 
   if(expr.id()==exprt::symbol ||
@@ -268,7 +268,7 @@ exprt z3_convt::bv_get_rec(
       unsigned sub_width;
       const typet &subtype=type.subtype();
 
-      if (subtype.id()=="struct") //@TODO
+      if (subtype.is_struct()) //@TODO
         return nil_exprt();
 
       if(!boolbv_get_width(subtype, sub_width))
@@ -311,7 +311,7 @@ exprt z3_convt::bv_get_rec(
         return dest;
       }
     }
-    else if(type.id()=="struct")
+    else if(type.is_struct())
     {
       const irept &components=type.components();
       exprt::operandst op;

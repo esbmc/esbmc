@@ -86,10 +86,10 @@ std::string type2name(const typet &type)
   {
     result+="SYM#" + type.identifier().as_string() + "#";
   }
-  else if(type.id()=="struct" || 
+  else if(type.is_struct() || 
           type.id()=="union")
   {
-    if(type.id()=="struct") result +="ST";
+    if(type.is_struct()) result +="ST";
     if(type.id()=="union") result +="UN";
     const struct_typet &t = to_struct_type(type);
     const struct_typet::componentst &components = t.components();

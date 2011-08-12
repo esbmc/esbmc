@@ -84,7 +84,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
       c_implicit_typecast(dest.op1(), dest.type(), ns);
     }
   }
-  else if(type.id()=="struct")
+  else if(type.is_struct())
   {
     const irept::subt &components=
       type.components().get_sub();

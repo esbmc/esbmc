@@ -292,7 +292,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
   else if(expr.id()=="nondet_symbol" ||
           expr.id()=="quant_symbol")
     return convert_symbol(expr, bv);
-  else if(expr.id()=="struct")
+  else if(expr.is_struct())
     return convert_struct(expr, bv);
   else if(expr.id()=="union")
     return convert_union(expr, bv);
@@ -488,7 +488,7 @@ Function: boolbvt::convert_struct
 
 void boolbvt::convert_struct(const exprt &expr, bvt &bv)
 {
-  if(expr.type().id()!="struct")
+  if(!expr.type().is_struct())
     return conversion_failed(expr, bv);
 
   unsigned width;

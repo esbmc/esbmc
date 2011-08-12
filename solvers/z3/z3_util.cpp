@@ -92,7 +92,7 @@ bool z3_convt::check_all_types(const typet &type)
 {
   if (type.is_bool() || type.is_signedbv() || type.id()=="unsignedbv" ||
 	  type.id()=="symbol" || type.is_empty() || type.is_fixedbv() ||
-	  type.is_array() || type.id()=="struct" || type.is_pointer() ||
+	  type.is_array() || type.is_struct() || type.is_pointer() ||
 	  type.id()=="union" || type.is_code())
   {
     return true;

@@ -97,7 +97,7 @@ bool replace_symbolt::replace(typet &dest)
   Forall_subtypes(it, dest)
     replace(*it);
     
-  if(dest.id()=="struct" ||
+  if(dest.is_struct() ||
      dest.id()=="union")
   {
     struct_typet &struct_type = to_struct_type(dest);    

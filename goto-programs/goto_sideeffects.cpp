@@ -377,7 +377,7 @@ void goto_convertt::address_of_replace_objects(
   exprt &expr,
   goto_programt &dest)
 {
-  if(expr.id()=="struct" ||
+  if(expr.is_struct() ||
      expr.id()=="union" ||
      expr.is_array())
   {

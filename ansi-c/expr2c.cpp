@@ -207,7 +207,7 @@ std::string expr2ct::convert_rec(
     else if(width==config.ansi_c.double_width)
       return q+"double";
   }
-  else if(src.id()=="struct" ||
+  else if(src.is_struct() ||
           src.id()=="incomplete_struct")
   {
     std::string dest=q+"struct";
@@ -1038,7 +1038,7 @@ std::string expr2ct::convert_member(
 
   const typet &full_type=ns.follow(src.op0().type());
 
-  if(full_type.id()!="struct" &&
+  if(!full_type.is_struct() &&
      full_type.id()!="union")
     return convert_norep(src, precedence);
 
@@ -1439,7 +1439,7 @@ std::string expr2ct::convert_struct(
 {
   const typet full_type=ns.follow(src.type());
 
-  if(full_type.id()!="struct")
+  if(!full_type.is_struct())
     return convert_norep(src, precedence);
 
   std::string dest="{ ";
@@ -3076,7 +3076,7 @@ std::string expr2ct::convert(
   else if(src.id()=="string-constant")
     return convert_constant(src, precedence);
 
-  else if(src.id()=="struct")
+  else if(src.is_struct())
     return convert_struct(src, precedence);
 
   else if(src.id()=="union")

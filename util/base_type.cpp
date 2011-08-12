@@ -70,7 +70,7 @@ void base_type(typet &type, const namespacet &ns)
   {
     base_type(type.subtype(), ns);
   }
-  else if(type.id()=="struct" ||
+  else if(type.is_struct() ||
           type.id()=="class" ||
           type.id()=="union")
   {
@@ -168,7 +168,7 @@ bool base_type_eqt::base_type_eq_rec(
   if(type1.id()!=type2.id())
     return false;
 
-  if(type1.id()=="struct" ||
+  if(type1.is_struct() ||
      type1.id()=="class" ||
      type1.id()=="union")
   {

@@ -1051,7 +1051,7 @@ execution_statet::serialise_expr(const exprt &rhs)
     str = "cond(if(" + serialise_expr(rhs.op0()) + "),";
     str += "then(" + serialise_expr(rhs.op1()) + "),";
     str += "else(" + serialise_expr(rhs.op2()) + "))";
-  } else if (rhs.id() == "struct") {
+  } else if (rhs.is_struct()) {
     str = rhs.type().tag().as_string();
     str = "struct(tag(" + str + "),";
     forall_operands(it, rhs) {

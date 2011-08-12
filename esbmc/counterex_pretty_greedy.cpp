@@ -110,7 +110,7 @@ void counterexample_beautification_greedyt::minimize(
       offset+=width;
     }    
   }
-  else if(type.id()=="struct")
+  else if(type.is_struct())
   {
     const irept::subt &components=type.components().get_sub();
 
@@ -228,7 +228,7 @@ unsigned counterexample_beautification_greedyt::get_max_width(
   {
     return get_max_width(ns, type.subtype());
   }
-  else if(type.id()=="struct")
+  else if(type.is_struct())
   {
     const irept::subt &components=type.components().get_sub();
     unsigned max_width=0;

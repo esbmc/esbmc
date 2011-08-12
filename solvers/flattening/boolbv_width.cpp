@@ -118,7 +118,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 
     return false;
   }
-  else if(type.id()=="struct")
+  else if(type.is_struct())
   {
     const irept &components=type.components();
 

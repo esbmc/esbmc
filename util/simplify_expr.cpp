@@ -2641,9 +2641,9 @@ bool simplify_exprt::simplify_with(exprt &expr)
 
   // now look at first operand
 
-  if(expr.op0().type().id()=="struct")
+  if(expr.op0().type().is_struct())
   {
-    if(expr.op0().id()=="struct" ||
+    if(expr.op0().is_struct() ||
        expr.op0().is_constant())
     {
       while(expr.operands().size()>1)
@@ -3133,10 +3133,10 @@ bool simplify_exprt::simplify_member(member_exprt &expr)
       return false;
     }
   }
-  else if(op.id()=="struct" ||
+  else if(op.is_struct() ||
           op.is_constant())
   {
-    if(op.type().id()=="struct")
+    if(op.type().is_struct())
     {
       const struct_typet &struct_type=to_struct_type(op.type());
       if(struct_type.has_component(component_name))

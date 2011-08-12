@@ -316,12 +316,12 @@ void boolbvt::convert_typecast(const exprt &expr, bvt &bv)
       bv=op_bv;
       return;
     }
-    else if(expr.type().id()=="struct")
+    else if(expr.type().is_struct())
     {
       const struct_typet &dest_struct =
         to_struct_type(expr.type());
 
-      if(op.type().id()=="struct")
+      if(op.type().is_struct())
       {
         // we do subsets
 

@@ -286,8 +286,8 @@ bool dereferencet::dereference_type_compare(
   base_type(ot_base, ns);
   base_type(dt_base, ns);
 
-  if(ot_base.id()=="struct" &&
-     dt_base.id()=="struct")
+  if(ot_base.is_struct() &&
+     dt_base.is_struct())
   {
     if(to_struct_type(dt_base).is_prefix_of(
          to_struct_type(ot_base)))

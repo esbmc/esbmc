@@ -656,7 +656,7 @@ void value_set_fivrt::get_value_set_rec(
     {
       const typet &type=ns.follow(expr.op0().type());
       
-      assert(type.id()=="struct" ||
+      assert(type.is_struct() ||
              type.id()=="union" ||
              type.id()=="incomplete_struct" ||
              type.id()=="incomplete_union");
@@ -877,7 +877,7 @@ void value_set_fivrt::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="struct")
+  else if(expr.is_struct())
   {
     // this is like a static struct object
     insert_from(dest, address_of_exprt(expr), 0);
@@ -1200,7 +1200,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
       if(object.id()=="unknown")
         insert_from(dest, exprt("unknown", expr.type()));
       else if(object.id()=="dynamic_object" &&
-              obj_type.id()!="struct" && 
+              !obj_type.is_struct() && 
               obj_type.id()!="union")
       {
         // we catch dynamic objects of the wrong type,
@@ -1274,7 +1274,7 @@ void value_set_fivrt::assign(
 
   const typet &type=ns.follow(lhs.type());
   
-  if(type.id()=="struct" ||
+  if(type.is_struct() ||
      type.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(type);
@@ -1313,7 +1313,7 @@ void value_set_fivrt::assign(
         
         assert(base_type_eq(rhs.type(), type, ns));
       
-        if(rhs.id()=="struct" ||
+        if(rhs.is_struct() ||
            rhs.is_constant())
         {
           assert(no<rhs.operands().size());
@@ -1641,7 +1641,7 @@ void value_set_fivrt::assign_rec(
 
     const typet &type=ns.follow(lhs.op0().type());
 
-    assert(type.id()=="struct" ||
+    assert(type.is_struct() ||
            type.id()=="union" ||
            type.id()=="incomplete_struct" ||
            type.id()=="incomplete_union");

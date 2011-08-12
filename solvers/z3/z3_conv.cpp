@@ -6345,7 +6345,7 @@ bool z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 	return convert_identifier("nondet$"+expr.identifier().as_string(), expr.type(), bv);
   else if (expr.id() == exprt::typecast)
     return convert_typecast(expr, bv);
-  else if (expr.id() == "struct")
+  else if (expr.is_struct())
 	return convert_struct(expr, bv);
   else if (expr.id() == "union")
 	return convert_union(expr, bv);

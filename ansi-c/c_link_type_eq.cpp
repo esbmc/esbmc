@@ -45,12 +45,12 @@ bool c_link_type_eqt::base_type_eq_rec(
 {
   // we are more generous than base_type_eq
   
-  if(type1.id()=="struct" &&
+  if(type1.is_struct() &&
      type2.id()=="incomplete_struct")
     return true;
 
   if(type1.id()=="incomplete_struct" &&
-     type2.id()=="struct")
+     type2.is_struct())
     return true;
 
   return base_type_eqt::base_type_eq_rec(type1, type2);

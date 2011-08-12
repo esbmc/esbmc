@@ -274,7 +274,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
     return true;
   }
 #endif
-  else if(expr.id()=="struct")
+  else if(expr.is_struct())
   {
     forall_operands(it, expr)
       if(!constant_propagation(expr.op0()))
