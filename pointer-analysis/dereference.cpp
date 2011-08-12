@@ -272,7 +272,7 @@ bool dereferencet::dereference_type_compare(
 {
   const typet &object_type=object.type();
 
-  if(dereference_type.id()=="empty")
+  if(dereference_type.is_empty())
     return true; // always ok
 
   if(base_type_eq(object_type, dereference_type, ns))
@@ -536,8 +536,8 @@ void dereferencet::build_reference_to(
         if(!options.get_bool_option("no-pointer-check"))
         {
           //nec: ex29
-          if (value.type().subtype().id()=="empty" ||
-        		  type.subtype().id()=="empty")
+          if (value.type().subtype().is_empty() ||
+        		  type.subtype().is_empty())
             return;
           std::string msg="memory model not applicable (got `";
           msg+=from_type(ns, "", value.type());

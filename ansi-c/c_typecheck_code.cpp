@@ -624,7 +624,7 @@ void c_typecheck_baset::typecheck_return(codet &code)
   {
     typecheck_expr(code.op0());
 
-    if(return_type.id()=="empty")
+    if(return_type.is_empty())
     {
       if(code.op0().type().id()!="empty")
       {

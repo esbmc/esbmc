@@ -42,7 +42,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       code_type.make_ellipsis();
     }
     else if(arguments.size()==1 &&
-            arguments[0].type().id()=="empty")
+            arguments[0].type().is_empty())
     {
       // if we just have one argument of type void, remove it
       arguments.clear();

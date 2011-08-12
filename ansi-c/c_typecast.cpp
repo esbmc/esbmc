@@ -197,8 +197,8 @@ bool check_c_implicit_typecast(
 
       if(src_subtype==dest_subtype)
         return false;
-      else if(src_subtype.id()=="empty" || // from void to anything
-              dest_subtype.id()=="empty")  // to void from anything
+      else if(src_subtype.is_empty() || // from void to anything
+              dest_subtype.is_empty())  // to void from anything
         return false;
     }
     
@@ -291,7 +291,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
   }
   else if(type.id()=="pointer")
   {
-    if(type.subtype().id()=="empty")
+    if(type.subtype().is_empty())
       return VOIDPTR;
     else
       return PTR;
@@ -459,8 +459,8 @@ void c_typecastt::implicit_typecast_followed(
       const typet &src_sub=ns.follow(src_type.subtype());
       const typet &dest_sub=ns.follow(dest_type.subtype());
 
-      if(src_sub.id()=="empty" ||
-         dest_sub.id()=="empty")
+      if(src_sub.is_empty() ||
+         dest_sub.is_empty())
       {
         // from/to void is always good
       }

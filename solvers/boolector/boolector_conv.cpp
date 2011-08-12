@@ -94,7 +94,7 @@ void boolector_convt::print_data_types(BtorExp* operand0, BtorExp* operand1)
 bool boolector_convt::check_all_types(const typet &type)
 {
   if (type.is_bool() || type.id()=="signedbv" || type.id()=="unsignedbv" ||
-	  type.id()=="symbol" || type.id()=="empty" || type.id() == "fixedbv" ||
+	  type.id()=="symbol" || type.is_empty() || type.id() == "fixedbv" ||
 	  type.is_array() || type.id()=="struct" || type.id()=="pointer" ||
 	  type.id()=="union")
   {

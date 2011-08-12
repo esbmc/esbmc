@@ -641,7 +641,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
     index.type()=op_type.subtype();
     op=gen_address_of(index);
   }
-  else if(op_type.id()=="empty")
+  else if(op_type.is_empty())
   {
     if(expr_type.id()!="empty")
     {
@@ -1136,8 +1136,8 @@ void c_typecheck_baset::typecheck_expr_trinary(exprt &expr)
     return;
   }
 
-  if(operands[1].type().id()=="empty" ||
-     operands[2].type().id()=="empty")
+  if(operands[1].type().is_empty() ||
+     operands[2].type().is_empty())
   {
     expr.type()=empty_typet();
     return;
@@ -1292,7 +1292,7 @@ void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
   }
   else if(op_type.id()=="pointer")
   {
-    if(op_type.subtype().id()=="empty")
+    if(op_type.subtype().is_empty())
     {
       err_location(expr);
       error("operand of unary * is a void * pointer");

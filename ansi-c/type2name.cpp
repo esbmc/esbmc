@@ -30,7 +30,7 @@ std::string type2name(const typet &type)
   std::string result;
   if(type.id()=="")
     throw "Empty type encountered.";
-  else if(type.id()=="empty")
+  else if(type.is_empty())
     result+="V";   
   else if(type.id()=="signedbv")
     result+="S" + type.width().as_string(); 

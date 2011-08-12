@@ -161,7 +161,7 @@ std::string expr2ct::convert_rec(
   {
     return q+src.id_string();
   }
-  else if(src.id()=="empty")
+  else if(src.is_empty())
   {
     return q+"void";
   }
@@ -361,7 +361,7 @@ std::string expr2ct::convert_typecast(
   const typet &type=ns.follow(src.type());
 
   if(type.id()=="pointer" &&
-     ns.follow(type.subtype()).id()=="empty" && // to (void *)?
+     ns.follow(type.subtype()).is_empty() && // to (void *)?
      src.op0().is_zero())
     return "NULL";
 
