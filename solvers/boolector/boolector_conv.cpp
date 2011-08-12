@@ -96,7 +96,7 @@ bool boolector_convt::check_all_types(const typet &type)
   if (type.is_bool() || type.is_signedbv() || type.id()=="unsignedbv" ||
 	  type.is_symbol() || type.is_empty() || type.is_fixedbv() ||
 	  type.is_array() || type.is_struct() || type.is_pointer() ||
-	  type.id()=="union")
+	  type.is_union())
   {
     return true;
   }
@@ -2493,7 +2493,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 #if 0
   else if (expr.is_struct())
 	return convert_struct(expr);
-  else if (expr.id() == "union")
+  else if (expr.is_union())
 	return convert_union(expr);
 #endif
   else if (expr.is_constant())

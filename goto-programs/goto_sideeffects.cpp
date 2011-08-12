@@ -378,7 +378,7 @@ void goto_convertt::address_of_replace_objects(
   goto_programt &dest)
 {
   if(expr.is_struct() ||
-     expr.id()=="union" ||
+     expr.is_union() ||
      expr.is_array())
   {
     make_temp_symbol(expr, dest);

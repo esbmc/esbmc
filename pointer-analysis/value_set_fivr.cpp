@@ -657,7 +657,7 @@ void value_set_fivrt::get_value_set_rec(
       const typet &type=ns.follow(expr.op0().type());
       
       assert(type.is_struct() ||
-             type.id()=="union" ||
+             type.is_union() ||
              type.id()=="incomplete_struct" ||
              type.id()=="incomplete_union");
              
@@ -1201,7 +1201,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
         insert_from(dest, exprt("unknown", expr.type()));
       else if(object.id()=="dynamic_object" &&
               !obj_type.is_struct() && 
-              obj_type.id()!="union")
+              !obj_type.is_union())
       {
         // we catch dynamic objects of the wrong type,
         // to avoid non-integral typecasts.        
@@ -1275,7 +1275,7 @@ void value_set_fivrt::assign(
   const typet &type=ns.follow(lhs.type());
   
   if(type.is_struct() ||
-     type.id()=="union")
+     type.is_union())
   {
     const struct_typet &struct_type=to_struct_type(type);
     
@@ -1642,7 +1642,7 @@ void value_set_fivrt::assign_rec(
     const typet &type=ns.follow(lhs.op0().type());
 
     assert(type.is_struct() ||
-           type.id()=="union" ||
+           type.is_union() ||
            type.id()=="incomplete_struct" ||
            type.id()=="incomplete_union");
            

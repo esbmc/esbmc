@@ -142,7 +142,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
     width=0;
     return false;
   }
-  else if(type.id()=="union")
+  else if(type.is_union())
   {
     const irept &components=type.components();
 

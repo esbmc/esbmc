@@ -1058,7 +1058,7 @@ execution_statet::serialise_expr(const exprt &rhs)
       str = str + "(" + serialise_expr(*it) + "),";
     }
     str += ")";
-  } else if (rhs.id() == "union") {
+  } else if (rhs.is_union()) {
     str = rhs.type().tag().as_string();
     str = "union(tag(" + str + "),";
     forall_operands(it, rhs) {

@@ -110,7 +110,7 @@ exprt z3_convt::get(const exprt &expr) const
 
   if ((expr.type().is_array() && expr.type().subtype().is_array()) ||
       (expr.type().is_array() && expr.type().subtype().is_pointer()) ||
-      (expr.type().is_array() && expr.type().subtype().id() =="union") ||
+      (expr.type().is_array() && expr.type().subtype().is_union()) ||
       (expr.type().is_array() && expr.type().subtype().is_struct()))
     return expr;
 
@@ -358,7 +358,7 @@ exprt z3_convt::bv_get_rec(
       dest.operands().swap(op);
       return dest;
     }
-    else if(type.id()=="union")
+    else if(type.is_union())
     {
       const irept &components=type.components();
 

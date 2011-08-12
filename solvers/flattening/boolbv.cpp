@@ -294,7 +294,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_symbol(expr, bv);
   else if(expr.is_struct())
     return convert_struct(expr, bv);
-  else if(expr.id()=="union")
+  else if(expr.is_union())
     return convert_union(expr, bv);
   else if(expr.id()=="string-constant")
   {

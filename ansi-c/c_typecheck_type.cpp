@@ -147,7 +147,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     typecheck_type(type.subtype());
   }
   else if(type.is_struct() ||
-          type.id()=="union")
+          type.is_union())
   {
     struct_typet &struct_type=to_struct_type(type);
     struct_typet::componentst &components=struct_type.components();
@@ -182,7 +182,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
         const typet &final_type=follow(it->type());
 
         if(final_type.is_struct() ||
-           final_type.id()=="union")
+           final_type.is_union())
         {
           struct_typet::componentt c;
           c.swap(*it);
@@ -191,7 +191,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
           // copy child's records
           const typet &final_type=follow(c.type());
           if(!final_type.is_struct() &&
-             final_type.id()!="union")
+             !final_type.is_union())
           {
             err_location(type);
             str << "expected struct or union as anonymous member, but got `"

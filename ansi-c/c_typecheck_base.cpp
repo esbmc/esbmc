@@ -171,7 +171,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     symbol.pretty_name="struct "+id2string(symbol.base_name);
   }
   else if(symbol.is_type &&
-          (final_type.id()=="union" ||
+          (final_type.is_union() ||
            final_type.id()=="incomplete_union"))
   {
     symbol.pretty_name="union "+id2string(symbol.base_name);

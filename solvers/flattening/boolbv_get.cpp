@@ -168,7 +168,7 @@ exprt boolbvt::bv_get_rec(
       dest.operands().swap(op);
       return dest;
     }
-    else if(type.id()=="union")
+    else if(type.is_union())
     {
       const irept &components=type.components();
 

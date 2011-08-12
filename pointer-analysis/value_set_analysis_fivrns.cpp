@@ -151,7 +151,7 @@ void value_set_analysis_fivrnst::get_entries_rec(
   const typet &t=ns.follow(type);
 
   if(t.is_struct() ||
-     t.id()=="union")
+     t.is_union())
   {
     const struct_typet &struct_type=to_struct_type(t);
     
@@ -280,7 +280,7 @@ bool value_set_analysis_fivrnst::check_type(const typet &type)
       }
     }
     else if(type.is_struct() ||
-            type.id()=="union")
+            type.is_union())
     {
       const struct_typet &struct_type=to_struct_type(type);
       

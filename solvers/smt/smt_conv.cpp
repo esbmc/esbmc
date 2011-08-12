@@ -1053,7 +1053,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
         convert_array_value(value);
         smt_prop.out << ")";
       }
-      else if(expr.type().id()=="union")
+      else if(expr.type().is_union())
       {
 	assert(false && "operator not supported yet");
         smt_prop.out << " WITH ." << index.component_name();
@@ -1328,7 +1328,7 @@ void smt_convt::convert_smt_type(const typet &type)
   }
   */
   else if(type.is_struct() ||
-          type.id()=="union")
+          type.is_union())
   {
     assert(false && "Construct not supported yet");
     const struct_typet &struct_type=to_struct_type(type);
@@ -1396,7 +1396,7 @@ void smt_convt::find_symbols(const typet &type)
     find_symbols(array_type.size());
   }
   else if(type.is_struct() ||
-          type.id()=="union")
+          type.is_union())
   {
   }
 }

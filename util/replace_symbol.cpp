@@ -98,7 +98,7 @@ bool replace_symbolt::replace(typet &dest)
     replace(*it);
     
   if(dest.is_struct() ||
-     dest.id()=="union")
+     dest.is_union())
   {
     struct_typet &struct_type = to_struct_type(dest);    
     struct_typet::componentst &components = struct_type.components();

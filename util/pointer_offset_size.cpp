@@ -44,7 +44,7 @@ mp_integer pointer_offset_size(const typet &type)
     return sub*i;
   }
   else if(type.is_struct() ||
-          type.id()=="union")
+          type.is_union())
   {
     const irept::subt &components=type.components().get_sub();
     
@@ -100,7 +100,7 @@ mp_integer compute_pointer_offset(
     const typet &type=ns.follow(expr.op0().type());
     
     assert(type.is_struct() ||
-           type.id()=="union");
+           type.is_union());
 
     const irep_idt &component_name=expr.component_name();
     const struct_union_typet::componentst &components=

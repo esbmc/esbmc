@@ -182,7 +182,7 @@ exprt boolector_convt::bv_get_rec(
 #endif
       return nil_exprt();
     }
-    else if(type.id()=="union")
+    else if(type.is_union())
     {
       //@TODO: reconstruct the counter-example for unions
       return nil_exprt();

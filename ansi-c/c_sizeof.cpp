@@ -115,7 +115,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
 
     dest=from_integer(sum, uint_type());
   }
-  else if(type.id()=="union")
+  else if(type.is_union())
   {
     const irept::subt &components=
       type.components().get_sub();

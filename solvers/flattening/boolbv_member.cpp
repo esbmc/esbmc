@@ -31,7 +31,7 @@ void boolbvt::convert_member(const exprt &expr, bvt &bv)
 
   convert_bv(expr.op0(), op0_bv);
 
-  if(operands[0].type().id()=="union")
+  if(operands[0].type().is_union())
   {
     unsigned width;
 

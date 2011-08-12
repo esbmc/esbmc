@@ -283,7 +283,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
     return true;
   }
 
-  else if(expr.id()=="union")
+  else if(expr.is_union())
   {
     if(expr.operands().size()==1)
       return constant_propagation(expr.op0());

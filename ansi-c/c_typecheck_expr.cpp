@@ -587,7 +587,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   const typet expr_type=follow(expr.type());
 
   if(expr_type.is_struct() ||
-     expr_type.id()=="union")
+     expr_type.is_union())
   {
     // this is a GCC extension called 'temporary union'
     // the argument is expected to be a 'designated_list'
@@ -1021,7 +1021,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
   }
 
   if(!type.is_struct() &&
-     type.id()!="union" &&
+     !type.is_union() &&
      type.id()!="class")
   {
     err_location(expr);

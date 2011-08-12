@@ -227,7 +227,7 @@ std::string expr2ct::convert_rec(
 
     return dest;
   }
-  else if(src.id()=="union")
+  else if(src.is_union())
   {
     std::string dest=q+"union ";
     /*
@@ -1039,7 +1039,7 @@ std::string expr2ct::convert_member(
   const typet &full_type=ns.follow(src.op0().type());
 
   if(!full_type.is_struct() &&
-     full_type.id()!="union")
+     !full_type.is_union())
     return convert_norep(src, precedence);
 
   const struct_typet &struct_type=to_struct_type(full_type);
@@ -3079,7 +3079,7 @@ std::string expr2ct::convert(
   else if(src.is_struct())
     return convert_struct(src, precedence);
 
-  else if(src.id()=="union")
+  else if(src.is_union())
     return convert_union(src, precedence);
 
   else if(src.is_array())

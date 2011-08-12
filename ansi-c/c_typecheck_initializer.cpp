@@ -219,7 +219,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   if(full_type.is_incomplete_array() ||
      full_type.is_array() ||
      full_type.is_struct() ||
-     full_type.id()=="union")
+     full_type.is_union())
   {
     if(value.is_constant() &&
        follow(value.type()).is_incomplete_array())
@@ -302,7 +302,7 @@ exprt c_typecheck_baset::do_initializer_rec(
     return do_initializer_incomplete_array(state, full_type, force_constant);
   else if(full_type.is_struct())
     return do_initializer_struct(state, to_struct_type(full_type), force_constant);
-  else if(full_type.id()=="union")
+  else if(full_type.is_union())
     return do_initializer_union(state, to_union_type(full_type), force_constant);
   else
   {

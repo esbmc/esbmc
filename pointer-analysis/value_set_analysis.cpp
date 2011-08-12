@@ -150,7 +150,7 @@ void value_set_analysist::get_entries_rec(
   const typet &t=ns.follow(type);
 
   if(t.is_struct() ||
-     t.id()=="union")
+     t.is_union())
   {
     const struct_typet &struct_type=to_struct_type(t);
     
@@ -260,7 +260,7 @@ bool value_set_analysist::check_type(const typet &type)
   if(type.is_pointer())
     return true;
   else if(type.is_struct() ||
-          type.id()=="union")
+          type.is_union())
   {
     const struct_typet &struct_type=to_struct_type(type);
     

@@ -335,7 +335,7 @@ void value_sett::get_value_set_rec(
     const typet &type=ns.follow(expr.op0().type());
 
     assert(type.is_struct() ||
-           type.id()=="union" ||
+           type.is_union() ||
            type.id()=="incomplete_struct" ||
            type.id()=="incomplete_union");
            
@@ -821,7 +821,7 @@ void value_sett::assign(
   const typet &type=ns.follow(lhs.type());
   
   if(type.is_struct() ||
-     type.id()=="union")
+     type.is_union())
   {
     const struct_typet &struct_type=to_struct_type(type);
     
@@ -1100,7 +1100,7 @@ void value_sett::assign_rec(
     const typet &type=ns.follow(lhs.op0().type());
 
     assert(type.is_struct() ||
-           type.id()=="union" ||
+           type.is_union() ||
            type.id()=="incomplete_struct" ||
            type.id()=="incomplete_union");
            

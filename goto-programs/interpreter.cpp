@@ -586,7 +586,7 @@ unsigned interpretert::get_size(const typet &type) const
     
     return sum;
   }
-  else if(type.id()=="union")
+  else if(type.is_union())
   {
     const irept::subt &components=
       type.components().get_sub();

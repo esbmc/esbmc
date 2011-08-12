@@ -88,7 +88,7 @@ void boolbvt::convert_with(
     return convert_with_bv(type, op1, op2, prev_bv, next_bv);
   else if(type.is_struct())
     return convert_with_struct(type, op1, op2, prev_bv, next_bv);
-  else if(type.id()=="union")
+  else if(type.is_union())
     return convert_with_union(type, op1, op2, prev_bv, next_bv);
 
   throw "unexpected with type";

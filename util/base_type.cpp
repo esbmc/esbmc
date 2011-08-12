@@ -72,7 +72,7 @@ void base_type(typet &type, const namespacet &ns)
   }
   else if(type.is_struct() ||
           type.id()=="class" ||
-          type.id()=="union")
+          type.is_union())
   {
     // New subt for manipulating components
     irept::subt components=type.components().get_sub();
@@ -170,7 +170,7 @@ bool base_type_eqt::base_type_eq_rec(
 
   if(type1.is_struct() ||
      type1.id()=="class" ||
-     type1.id()=="union")
+     type1.is_union())
   {
     const struct_union_typet::componentst &components1=
       to_struct_union_type(type1).components();
