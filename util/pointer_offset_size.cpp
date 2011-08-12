@@ -94,7 +94,7 @@ mp_integer compute_pointer_offset(
     
     return 0; // TODO
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     assert(expr.operands().size()==1);
     const typet &type=ns.follow(expr.op0().type());

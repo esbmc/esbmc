@@ -648,7 +648,7 @@ void value_set_fivrt::get_value_set_rec(
     
     return;
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     assert(expr.operands().size()==1);
     
@@ -1178,7 +1178,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
     
     return;
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     const irep_idt &component_name=expr.component_name();
 
@@ -1630,7 +1630,7 @@ void value_set_fivrt::assign_rec(
 
     assign_rec(lhs.op0(), values_rhs, "[]"+suffix, ns, recursion_set, add_to_sets);
   }
-  else if(lhs.id()=="member")
+  else if(lhs.is_member())
   {
     if(lhs.operands().size()!=1)
       throw "member expected to have one operand";

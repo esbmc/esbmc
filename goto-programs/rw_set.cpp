@@ -111,7 +111,7 @@ void rw_sett::read_write_rec(
     entry.w=entry.w || w;
     entry.guard=guard.as_expr();
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     assert(expr.operands().size()==1);
     const std::string &component_name=expr.component_name().as_string();

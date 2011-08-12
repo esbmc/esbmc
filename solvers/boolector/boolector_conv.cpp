@@ -2541,7 +2541,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 	return convert_shift(expr, bv);
   else if (expr.id() == "with")
 	return convert_with(expr, bv);
-  else if (expr.id() == "member")
+  else if (expr.is_member())
 	return convert_member(expr, bv);
 #if 0
   else if (expr.id() == "invalid-pointer")

@@ -213,7 +213,7 @@ void bv_pointerst::convert_address_of_rec(
     
     return increase_offset(bv, size, index);
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     if(expr.operands().size()!=1)
       throw "member takes one operand";
@@ -326,7 +326,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
   {
     return SUB::convert_index(to_index_expr(expr), bv);
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     return SUB::convert_member(expr, bv);
   }

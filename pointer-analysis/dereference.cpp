@@ -72,7 +72,7 @@ Function: dereferencet::get_symbol
 
 const exprt& dereferencet::get_symbol(const exprt &expr)
 {
-  if(expr.id()=="member" || expr.is_index())
+  if(expr.is_member() || expr.is_index())
     return get_symbol(expr.op0());
 
   return expr;

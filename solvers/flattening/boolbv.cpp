@@ -90,7 +90,7 @@ bool boolbvt::literal(
 
       return literal(expr.op0(), bit+offset, dest);
     }
-    else if(expr.id()=="member")
+    else if(expr.is_member())
     {
       if(expr.operands().size()!=1)
         throw "member takes one operand";
@@ -211,7 +211,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_index(to_index_expr(expr), bv);
   else if(expr.id()=="constraint_select_one")
     return convert_constraint_select_one(expr, bv);
-  else if(expr.id()=="member")
+  else if(expr.is_member())
     return convert_member(expr, bv);
   else if(expr.id()=="with")
     return convert_with(expr, bv);
@@ -676,7 +676,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
 
     return bv[0];
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     bvt bv;
     convert_member(expr, bv);

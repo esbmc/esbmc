@@ -654,7 +654,7 @@ void goto_checkt::check_rec(
 	}
   }
   else if (expr.id() == "struct" || expr.id() == "union"
-		    || expr.type().id()=="pointer" || expr.id()=="member" ||
+		    || expr.type().id()=="pointer" || expr.is_member() ||
 		    (expr.type().is_array() && expr.type().subtype().is_array()))
   {
 	use_boolector=false; //always deactivate boolector

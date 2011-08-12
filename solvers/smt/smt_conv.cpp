@@ -184,7 +184,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
       smt_prop.out << "))";
     }
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     if(expr.operands().size()!=1)
       throw "member takes one operand";
@@ -1074,7 +1074,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
 
     smt_prop.out << ")";
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==1);

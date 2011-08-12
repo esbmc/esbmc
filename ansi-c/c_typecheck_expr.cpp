@@ -90,7 +90,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_address_of(expr);
   else if(expr.is_dereference())
     typecheck_expr_dereference(expr);
-  else if(expr.id()=="member")
+  else if(expr.is_member())
     typecheck_expr_member(expr);
   else if(expr.id()=="ptrmember")
     typecheck_expr_ptrmember(expr);

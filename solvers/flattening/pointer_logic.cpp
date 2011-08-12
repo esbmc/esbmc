@@ -86,7 +86,7 @@ unsigned pointer_logict::add_object(const exprt &expr)
     assert(expr.operands().size()==2);
     return add_object(expr.op0());
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     assert(expr.operands().size()==1);
     return add_object(expr.op0());

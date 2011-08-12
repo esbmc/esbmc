@@ -359,7 +359,7 @@ void interpretert::evaluate(
   else if(expr.is_dereference() ||
           expr.is_index() ||
           expr.id()=="symbol" ||
-          expr.id()=="member")
+          expr.is_member())
   {
     mp_integer a=evaluate_address(expr);
     dest.resize(get_size(expr.type()));
@@ -477,7 +477,7 @@ mp_integer interpretert::evaluate_address(const exprt &expr) const
     if(tmp1.size()==1)
       return evaluate_address(expr.op0())+tmp1.front();
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     if(expr.operands().size()!=1)
       throw "member expects one operand";

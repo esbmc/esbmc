@@ -530,7 +530,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
   {
     // ignore, can't be a function
   }
-  else if(function.id()=="member" || function.is_index())
+  else if(function.is_member() || function.is_index())
   {
     // ignore, can't be a function
   }

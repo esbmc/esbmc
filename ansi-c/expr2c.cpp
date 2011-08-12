@@ -369,7 +369,7 @@ std::string expr2ct::convert_typecast(
 
   std::string tmp=convert(src.op0(), precedence);
 
-  if(src.op0().id()=="member" ||
+  if(src.op0().is_member() ||
      src.op0().is_constant() ||
      src.op0().id()=="symbol") // better fix precedence
     dest+=tmp;
@@ -2904,7 +2904,7 @@ std::string expr2ct::convert(
   else if(src.is_index())
     return convert_index(src, precedence=16);
 
-  else if(src.id()=="member")
+  else if(src.is_member())
     return convert_member(src, precedence=16);
 
   else if(src.id()=="array-member-value")

@@ -1057,10 +1057,10 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   if(rhs.is_dereference()
 	|| rhs.id() == "implicit_dereference"
 	|| rhs.is_index()
-	|| rhs.id() == "member")
+	|| rhs.is_member())
   {
     irep_idt identifier=rhs.op0().identifier();
-    if (rhs.id() == "member")
+    if (rhs.is_member())
     {
       const exprt &object=rhs.operands()[0];
       identifier=object.identifier();

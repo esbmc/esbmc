@@ -465,7 +465,7 @@ exprt simplify_exprt::pointer_offset(
   {
     return gen_zero(type);
   }
-  else if(expr.id()=="member")
+  else if(expr.is_member())
   {
     assert(expr.operands().size()==1);
     // need to count members here
@@ -2518,7 +2518,7 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
          other->operands().size()==1)
       {
         if(other->op0().id()=="symbol" ||
-           other->op0().id()=="member")
+           other->op0().is_member())
         {
           expr.make_bool(expr.id()!="=");
           return false;
@@ -2990,7 +2990,7 @@ tvt simplify_exprt::objects_equal_address_of(const exprt &a, const exprt &b)
     if(a.operands().size()==2 && b.operands().size()==2)
       return objects_equal_address_of(a.op0(), b.op0());
   }
-  else if(a.id()=="member" && b.id()=="member")
+  else if(a.is_member() && b.is_member())
   {
     if(a.operands().size()==1 && b.operands().size()==1)
       return objects_equal_address_of(a.op0(), b.op0());
@@ -3453,7 +3453,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_with(expr) && result;
   else if(expr.is_index())
     result=simplify_index(to_index_expr(expr), mode) && result;
-  else if(expr.id()=="member")
+  else if(expr.is_member())
     result=simplify_member(to_member_expr(expr)) && result;
   else if(expr.id()=="pointer_object")
     result=simplify_pointer_object(expr) && result;
