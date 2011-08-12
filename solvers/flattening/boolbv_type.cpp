@@ -22,7 +22,7 @@ Function: get_bvtype
 
 bvtypet get_bvtype(const typet &type)
 {
-  if(type.id()=="signedbv")
+  if(type.is_signedbv())
     return IS_SIGNED;
   else if(type.id()=="unsignedbv")
     return IS_UNSIGNED;

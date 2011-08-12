@@ -96,7 +96,7 @@ public:
   
   static bool is_bitvector_type(const typet &type)
   {
-    return type.id()=="unsignedbv" || type.id()=="signedbv" || type.id()=="bv";
+    return type.id()=="unsignedbv" || type.is_signedbv() || type.id()=="bv";
   }
 };
 

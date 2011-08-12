@@ -720,7 +720,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
      expr.type()!=expr.op1().type())
     return true;
 
-  if(expr.type().id()=="signedbv" ||
+  if(expr.type().is_signedbv() ||
      expr.type().id()=="unsignedbv" ||
      expr.type().id()=="natural" ||
      expr.type().id()=="integer")
@@ -843,7 +843,7 @@ bool simplify_exprt::simplify_modulo(exprt &expr)
   if(expr.operands().size()!=2)
     return true;
 
-  if(expr.type().id()=="signedbv" ||
+  if(expr.type().is_signedbv() ||
      expr.type().id()=="unsignedbv" ||
      expr.type().id()=="natural" ||
      expr.type().id()=="integer")
@@ -1221,7 +1221,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
     return true;
 
   if(expr.op0().type().id()=="unsignedbv" ||
-     expr.op0().type().id()=="signedbv")
+     expr.op0().type().is_signedbv())
   {
     mp_integer width=
       string2integer(id2string(expr.op0().type().width()));
@@ -1981,7 +1981,7 @@ bool simplify_exprt::simplify_bitnot(exprt &expr)
 
   if(expr.type().id()=="bv" ||
      expr.type().id()=="unsignedbv" ||
-     expr.type().id()=="signedbv")
+     expr.type().is_signedbv())
   {
     if(op.type()==expr.type())
     {

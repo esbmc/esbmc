@@ -82,11 +82,11 @@ void counterexample_beautification_pbst::beautify(
   {
     // no beautification for pointers right now
   }
-  else if(type.id()=="signedbv" ||
+  else if(type.is_signedbv() ||
           type.id()=="unsignedbv")
   {
     unsigned width;
-    bool is_signed=type.id()=="signedbv";
+    bool is_signed=type.is_signedbv();
 
     if(boolbv_get_width(type, width))
       return;

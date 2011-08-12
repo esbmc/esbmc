@@ -158,10 +158,10 @@ std::string inv_object_storet::build_string(const exprt &expr) const
   {
     assert(expr.operands().size()==1);
     
-    if(expr.type().id()=="signedbv" ||
+    if(expr.type().is_signedbv() ||
        expr.type().id()=="unsignedbv")
     {
-      if(expr.op0().type().id()=="signedbv" ||
+      if(expr.op0().type().is_signedbv() ||
          expr.op0().type().id()=="unsignedbv")
       {
         if(bv_width(expr.type())>=bv_width(expr.op0().type()))
@@ -1002,7 +1002,7 @@ void invariant_sett::nnf(exprt &expr, bool negate)
     assert(expr.operands().size()==1);
 
     if(expr.op0().type().id()=="unsignedbv" ||
-       expr.op0().type().id()=="signedbv")
+       expr.op0().type().is_signedbv())
     {
       equality_exprt tmp;
       tmp.lhs()=expr.op0();

@@ -120,7 +120,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="unsignedbv") return false;
-    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.is_signedbv()) return false;
     if(dest_type.is_floatbv()) return false;
   }
   else if(src_type_id=="integer")
@@ -129,7 +129,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="unsignedbv") return false;
-    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.is_signedbv()) return false;
     if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
     if(dest_type.is_pointer()) return false;
@@ -153,7 +153,7 @@ bool check_c_implicit_typecast(
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="unsignedbv") return false;
-    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.is_signedbv()) return false;
     if(dest_type.is_pointer()) return false;
     if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
@@ -168,7 +168,7 @@ bool check_c_implicit_typecast(
     if(dest_type.is_bool()) return false;
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
-    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.is_signedbv()) return false;
     if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
     if(dest_type.is_pointer()) return false;
@@ -181,7 +181,7 @@ bool check_c_implicit_typecast(
     if(dest_type.is_bool()) return false;
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
-    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.is_signedbv()) return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.is_floatbv()) return false;
     if(dest_type.is_fixedbv()) return false;
@@ -208,7 +208,7 @@ bool check_c_implicit_typecast(
 
     if(dest_type.is_bool()) return false;
     if(dest_type.id()=="unsignedbv") return false;
-    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.is_signedbv()) return false;
   }
 
   return true;
@@ -255,7 +255,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
 {
   unsigned width=atoi(type.width().c_str());
   
-  if(type.id()=="signedbv")
+  if(type.is_signedbv())
   {
     if(width<=config.ansi_c.char_width)
       return CHAR;
@@ -441,7 +441,7 @@ void c_typecastt::implicit_typecast_followed(
 
     if(expr.is_zero() && (
        src_type.id()=="unsignedbv" ||
-       src_type.id()=="signedbv" ||
+       src_type.is_signedbv() ||
        src_type.id()=="natural" ||
        src_type.id()=="integer"))
     {

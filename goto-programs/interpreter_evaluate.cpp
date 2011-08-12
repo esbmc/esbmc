@@ -383,7 +383,7 @@ void interpretert::evaluate(
         dest.push_back(value);
         return;
       }
-      else if(expr.type().id()=="signedbv")
+      else if(expr.type().is_signedbv())
       {
         const std::string s=integer2binary(value, bv_width(expr.type()));
         dest.push_back(binary2integer(s, true));

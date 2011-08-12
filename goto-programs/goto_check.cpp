@@ -115,7 +115,7 @@ void goto_checkt::overflow_check(
     return;
 
   // first, check type
-  if(expr.type().id()!="signedbv")
+  if(!expr.type().is_signedbv())
     return;
 
   // add overflow subgoal
@@ -594,10 +594,10 @@ void goto_checkt::check_rec(
           expr.id()=="unary-" ||
           expr.id()=="typecast")
   {
-    if(expr.type().id()=="signedbv")
+    if(expr.type().is_signedbv())
     {
       overflow_check(expr, guard);
-      if (expr.id()=="typecast" && expr.op0().type().id()!="signedbv")
+      if (expr.id()=="typecast" && !expr.op0().type().is_signedbv())
       {
    		if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
    			&& !options.get_bool_option("z3-ir"))

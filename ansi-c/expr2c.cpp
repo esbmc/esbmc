@@ -165,11 +165,11 @@ std::string expr2ct::convert_rec(
   {
     return q+"void";
   }
-  else if(src.id()=="signedbv" || src.id()=="unsignedbv")
+  else if(src.is_signedbv() || src.id()=="unsignedbv")
   {
     mp_integer width=string2integer(src.width().as_string());
 
-    bool is_signed=src.id()=="signedbv";
+    bool is_signed=src.is_signedbv();
     std::string sign_str=is_signed?"signed ":"unsigned ";
 
     if(width==config.ansi_c.int_width)
@@ -1357,9 +1357,9 @@ std::string expr2ct::convert_constant(
       dest="FALSE";
   }
   else if(type.id()=="unsignedbv" ||
-          type.id()=="signedbv")
+          type.is_signedbv())
   {
-    mp_integer int_value=binary2integer(value, type.id()=="signedbv");
+    mp_integer int_value=binary2integer(value, type.is_signedbv());
     dest=integer2string(int_value);
   }
   else if(type.is_floatbv())

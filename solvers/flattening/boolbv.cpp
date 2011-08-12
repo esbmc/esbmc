@@ -231,7 +231,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     bv.resize(result_width);
 
     if(expr.type().id()=="unsignedbv" ||
-       expr.type().id()=="signedbv")
+       expr.type().is_signedbv())
     {
       std::string binary=integer2binary(op_width/8, result_width);
 
@@ -717,7 +717,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     if(bv.size()<1)
       throw "sign operator takes one non-empty operand";
 
-    if(operands[0].type().id()=="signedbv")
+    if(operands[0].type().is_signedbv())
       return bv[bv.size()-1];
     else if(operands[0].type().id()=="unsignedbv")
       return const_literal(false);

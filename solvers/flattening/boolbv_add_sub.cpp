@@ -29,7 +29,7 @@ Function: boolbvt::convert_add_sub
 void boolbvt::convert_add_sub(const exprt &expr, bvt &bv)
 {
   if(expr.type().id()!="unsignedbv" &&
-     expr.type().id()!="signedbv" &&
+     !expr.type().is_signedbv() &&
      !expr.type().is_fixedbv() &&
      !expr.type().is_floatbv() &&
      expr.type().id()!="range")
@@ -64,7 +64,7 @@ void boolbvt::convert_add_sub(const exprt &expr, bvt &bv)
                     expr.id()=="no-overflow-minus");
 
   bv_utilst::representationt rep=
-    (expr.type().id()=="signedbv" ||
+    (expr.type().is_signedbv() ||
      expr.type().is_fixedbv())?bv_utilst::SIGNED:
                                   bv_utilst::UNSIGNED;
 

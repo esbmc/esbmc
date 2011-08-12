@@ -29,7 +29,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
 {
   exprt dest;
 
-  if(type.id()=="signedbv" ||
+  if(type.is_signedbv() ||
      type.id()=="unsignedbv" ||
      type.is_floatbv() ||
      type.is_fixedbv())

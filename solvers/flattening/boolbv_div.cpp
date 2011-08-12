@@ -29,7 +29,7 @@ Function: boolbvt::convert_div
 void boolbvt::convert_div(const exprt &expr, bvt &bv)
 {
   if(expr.type().id()!="unsignedbv" &&
-     expr.type().id()!="signedbv" &&
+     !expr.type().is_signedbv() &&
      !expr.type().is_fixedbv() &&
      !expr.type().is_floatbv())
     return conversion_failed(expr, bv);
@@ -86,7 +86,7 @@ void boolbvt::convert_div(const exprt &expr, bvt &bv)
   else
   {
     bv_utilst::representationt rep=
-      expr.type().id()=="signedbv"?bv_utilst::SIGNED:
+      expr.type().is_signedbv()?bv_utilst::SIGNED:
                                    bv_utilst::UNSIGNED;
 
     bv_utils.divider(op0, op1, res, rem, rep);

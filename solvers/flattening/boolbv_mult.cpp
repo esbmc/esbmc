@@ -115,13 +115,13 @@ void boolbvt::convert_mult(const exprt &expr, bvt &bv)
     #endif
   }
   else if(expr.type().id()=="unsignedbv" ||
-          expr.type().id()=="signedbv")
+          expr.type().is_signedbv())
   {
     if(op0.type()!=expr.type())
       throw "multiplication with mixed types";
       
     bv_utilst::representationt rep=
-      expr.type().id()=="signedbv"?bv_utilst::SIGNED:
+      expr.type().is_signedbv()?bv_utilst::SIGNED:
                                    bv_utilst::UNSIGNED;
     
     convert_bv(op0, bv);

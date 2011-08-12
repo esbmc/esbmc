@@ -136,7 +136,7 @@ void counterexample_beautification_greedyt::minimize(
   {
     // no beautification for pointers right now
   }
-  else if(type.id()=="signedbv" ||
+  else if(type.is_signedbv() ||
           type.id()=="unsignedbv")
   {
     unsigned width;
@@ -151,7 +151,7 @@ void counterexample_beautification_greedyt::minimize(
     // std::cout << "XX: " << expr.identifier()
     //           << " bit=" << bit_nr <<std::endl;
 
-    if(type.id()=="signedbv") // signed?
+    if(type.is_signedbv()) // signed?
     {
       if(bit_nr==0) // is it the sign bit?
       {

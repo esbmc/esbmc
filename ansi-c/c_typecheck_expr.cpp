@@ -706,7 +706,7 @@ void c_typecheck_baset::make_index_type(exprt &expr)
     if(width!=config.ansi_c.int_width)
       expr.make_typecast(uint_type());
   }
-  else if(full_type.id()=="signedbv" ||
+  else if(full_type.is_signedbv() ||
           full_type.id()=="c_enum" ||
           full_type.id()=="incomplete_c_enum")
   {
@@ -1982,7 +1982,7 @@ void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
           expr.id("lshr");
           return;
         }
-        else if(op0_type.id()=="signedbv")
+        else if(op0_type.is_signedbv())
         {
           expr.id("ashr");
           return;
@@ -2020,7 +2020,7 @@ void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
     {
       if(type0==type1)
       {
-        if(type0.id()=="signedbv" || type0.id()=="unsignedbv")
+        if(type0.is_signedbv() || type0.id()=="unsignedbv")
         {
           expr.type()=type0;
           return;
@@ -2236,7 +2236,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
           expr.statement("assign_lshr");
           return;
         }
-        else if(type0.id()=="signedbv")
+        else if(type0.is_signedbv())
         {
           expr.statement("assign_ashr");
           return;

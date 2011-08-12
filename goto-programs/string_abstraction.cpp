@@ -95,7 +95,7 @@ protected:
     if(type.id()=="symbol")
       return is_char_type(ns.follow(type));
 
-    if(type.id()!="signedbv" &&
+    if(!type.is_signedbv() &&
        type.id()!="unsignedbv")
       return false;
 

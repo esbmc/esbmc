@@ -23,7 +23,7 @@ Function: boolbvt::convert_shift
 void boolbvt::convert_shift(const exprt &expr, bvt &bv)
 {
   if(expr.type().id()!="unsignedbv" &&
-     expr.type().id()!="signedbv")
+     !expr.type().is_signedbv())
     return conversion_failed(expr, bv);
 
   unsigned width;

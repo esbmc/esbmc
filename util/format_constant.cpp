@@ -30,7 +30,7 @@ std::string format_constantt::operator()(const exprt &expr)
     if(expr.type().id()=="natural" ||
        expr.type().id()=="integer" ||
        expr.type().id()=="unsignedbv" ||
-       expr.type().id()=="signedbv")
+       expr.type().is_signedbv())
     {
       mp_integer i;
       if(to_integer(expr, i)) return "(number conversion failed)";

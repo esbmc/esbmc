@@ -245,7 +245,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
 
     const typet &base_type=follow(type.subtype());
 
-    if(base_type.id()!="signedbv" &&
+    if(!base_type.is_signedbv() &&
        base_type.id()!="unsignedbv" &&
        base_type.id()!="c_enum")
     {

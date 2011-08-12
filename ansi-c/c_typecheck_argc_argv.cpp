@@ -50,7 +50,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     argc_symbol.static_lifetime=true;
     argc_symbol.lvalue=true;
 
-    if(argc_symbol.type.id()!="signedbv" &&
+    if(!argc_symbol.type.is_signedbv() &&
        argc_symbol.type.id()!="unsignedbv")
     {
       err_location(main_symbol.location);

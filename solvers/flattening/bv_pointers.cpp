@@ -386,11 +386,11 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
       if(it->type().is_pointer()) continue;
 
       if(it->type().id()!="unsignedbv" &&
-         it->type().id()!="signedbv")
+         !it->type().is_signedbv())
         return conversion_failed(expr, bv);
 
       bv_utilst::representationt rep=
-        it->type().id()=="signedbv"?bv_utilst::SIGNED:
+        it->type().is_signedbv()?bv_utilst::SIGNED:
                                     bv_utilst::UNSIGNED;
 
       convert_bv(*it, op);
@@ -427,14 +427,14 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
       sum[i]=bv0[i];
 
     if(expr.op1().type().id()!="unsignedbv" &&
-       expr.op1().type().id()!="signedbv")
+       !expr.op1().type().is_signedbv())
       return conversion_failed(expr, bv);
 
     if(bv1.size()>offset_bits || bv1.size()==0)
       throw "unexpected pointer arithmetic operand width";
 
     bv_utilst::representationt rep=
-      expr.op1().type().id()=="signedbv"?bv_utilst::SIGNED:
+      expr.op1().type().is_signedbv()?bv_utilst::SIGNED:
                                          bv_utilst::UNSIGNED;
  
     bv1=bv_utils.extension(bv1, offset_bits, rep);
@@ -690,7 +690,7 @@ void bv_pointerst::increase_offset(
   convert_bv(index, bv_index);
 
   bv_utilst::representationt rep=
-    index.type().id()=="signedbv"?bv_utilst::SIGNED:
+    index.type().is_signedbv()?bv_utilst::SIGNED:
                                   bv_utilst::UNSIGNED;
 
   bv_index=bv_utils.extension(bv_index, offset_bits, rep);

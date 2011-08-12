@@ -65,7 +65,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
     width=1;
     return false;
   }
-  else if(type.id()=="signedbv" ||
+  else if(type.is_signedbv() ||
           type.id()=="unsignedbv" ||
           type.is_floatbv() ||
           type.is_fixedbv() ||
