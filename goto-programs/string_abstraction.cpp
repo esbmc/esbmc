@@ -458,7 +458,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   replace_string_macros(it->code.op0(), false, it->location);
 
   ret_val = it->code.op0();
-  while(ret_val.id()=="typecast")
+  while(ret_val.is_typecast())
     ret_val = ret_val.op0();
 
   if (!ret_val.type().is_pointer() || !is_char_type(ret_val.type().subtype()))
@@ -687,7 +687,7 @@ exprt string_abstractiont::build(
   const locationt &location)
 {
   // take care of pointer typecasts now
-  if(pointer.id()=="typecast")
+  if(pointer.is_typecast())
   {
     // cast from another pointer type?
     assert(pointer.operands().size()==1);
@@ -792,7 +792,7 @@ Function: string_abstractiont::build
 exprt string_abstractiont::build(const exprt &pointer, bool write)
 {
   // take care of typecasts
-  if(pointer.id()=="typecast")
+  if(pointer.is_typecast())
   {
     // cast from another pointer type?
     assert(pointer.operands().size()==1);
@@ -1227,7 +1227,7 @@ void string_abstractiont::abstract_pointer_assign(
   exprt rhs=assign.rhs();
   exprt *rhsp=&(assign.rhs());
 
-  while(rhsp->id()=="typecast")
+  while(rhsp->is_typecast())
     rhsp=&(rhsp->op0());
   
   // we only care about char pointers for now
@@ -1361,7 +1361,7 @@ void string_abstractiont::abstract_function_call(
     new_args.push_back(actual);
 
     const exprt *tcfree = &*arg;
-    while(tcfree->id()=="typecast")
+    while(tcfree->is_typecast())
       tcfree=&tcfree->op0();
     
     if(tcfree->type().is_pointer() &&

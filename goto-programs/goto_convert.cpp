@@ -870,7 +870,7 @@ void goto_convertt::convert_assign(
   {
     remove_sideeffects(rhs, dest);
 
-    if(lhs.id()=="typecast")
+    if(lhs.is_typecast())
     {
       assert(lhs.operands().size()==1);
 
@@ -2533,7 +2533,7 @@ void goto_convertt::convert_ifthenelse(
 	  exprt tmp_guard;
 	  if (options.get_bool_option("control-flow-test")
 		  && !code.op0().is_notequal() && !code.op0().is_symbol()
-		  && code.op0().id() != "typecast" && code.op0().id() != "="
+		  && !code.op0().is_typecast() && code.op0().id() != "="
 		  && !is_thread
 		  && !options.get_bool_option("deadlock-check"))
 	  {
@@ -2778,7 +2778,7 @@ Function: goto_convertt::get_string_constant
 const std::string &goto_convertt::get_string_constant(
   const exprt &expr)
 {
-  if(expr.id()=="typecast" &&
+  if(expr.is_typecast() &&
      expr.operands().size()==1)
     return get_string_constant(expr.op0());
 

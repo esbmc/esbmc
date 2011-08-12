@@ -2488,7 +2488,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 	return convert_identifier(expr.identifier().as_string(), expr.type(), bv);
   else if (expr.id() == "nondet_symbol") {
 	return convert_identifier("nondet$"+expr.identifier().as_string(), expr.type(), bv);
-  } else if (expr.id() == "typecast")
+  } else if (expr.is_typecast())
     return convert_typecast(expr, bv);
 #if 0
   else if (expr.is_struct())

@@ -116,7 +116,7 @@ void ansi_c_convertt::convert_expr(exprt &expr)
     convert_type(offsetof_type);
     expr.offsetof_type(offsetof_type);
   }
-  else if(expr.id()=="typecast")
+  else if(expr.is_typecast())
   {
     convert_type(expr.type());
   }

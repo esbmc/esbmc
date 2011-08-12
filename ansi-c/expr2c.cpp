@@ -3088,7 +3088,7 @@ std::string expr2ct::convert(
   else if(src.id()=="array-list")
     return convert_array_list(src, precedence);
 
-  else if(src.id()=="typecast")
+  else if(src.is_typecast())
     return convert_typecast(src, precedence);
 
   else if(src.id()=="implicit_address_of")

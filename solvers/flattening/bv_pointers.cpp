@@ -297,7 +297,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.id()=="typecast")
+  else if(expr.is_typecast())
   {
     if(expr.operands().size()!=1)
       throw "typecast takes one operand";
@@ -531,7 +531,7 @@ void bv_pointerst::convert_bitvector(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.id()=="typecast" &&
+  else if(expr.is_typecast() &&
           expr.operands().size()==1 &&
           expr.op0().type().is_pointer())
   {

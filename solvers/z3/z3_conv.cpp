@@ -1418,7 +1418,7 @@ Z3_ast z3_convt::convert_gt(const exprt &expr)
 
   //workaround: bug in the front-end
   //to check it, run example ex10.c of NEC
-  if (expr.op0().id() == "typecast" && expr.op0().type().id()==typet::t_signedbv)
+  if (expr.op0().is_typecast() && expr.op0().type().id()==typet::t_signedbv)
   {
 	const exprt &object=expr.op0().operands()[0];
 	std::string value;
@@ -4220,14 +4220,14 @@ bool z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
     if (expr.type().id() == typet::t_signedbv)
       bv=args[i];
   }
-  else if (expr.op0().id()=="typecast" || expr.op1().id()=="typecast")
+  else if (expr.op0().is_typecast() || expr.op1().is_typecast())
   {
     forall_operands(it, expr)
     {
       if (convert_bv(*it, args[i]))
         return true;
 
-  	  if (it->id()=="typecast")
+  	  if (it->is_typecast())
   	  {
   		const exprt &offset=it->operands()[0];
 
@@ -4354,7 +4354,7 @@ bool z3_convt::convert_sub(const exprt &expr, Z3_ast &bv)
       bv=args[i];
   }
 #if 0
-  else if (expr.op0().id()=="typecast" || expr.op1().id()=="typecast")
+  else if (expr.op0().is_typecast() || expr.op1().is_typecast())
   {
 	assert(expr.operands().size()==2);
 
@@ -4363,14 +4363,14 @@ bool z3_convt::convert_sub(const exprt &expr, Z3_ast &bv)
 	if (convert_bv(expr.op1(), args[1]))
       return true;
 
-	if (expr.op0().id()=="typecast")
+	if (expr.op0().is_typecast())
 	{
 	  const exprt &offset=expr.op0().operands()[0];
 	  if (offset.type().id()==typet::t_pointer)
 	    args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 1); //select pointer index
 	}
 
-	if (expr.op1().id()=="typecast")
+	if (expr.op1().is_typecast())
 	{
 	  const exprt &offset=expr.op1().operands()[0];
 	  if (offset.type().id()==typet::t_pointer)

@@ -154,7 +154,7 @@ Function: inv_object_storet::build_string
 std::string inv_object_storet::build_string(const exprt &expr) const
 {
   // we ignore some casts
-  if(expr.id()=="typecast")
+  if(expr.is_typecast())
   {
     assert(expr.operands().size()==1);
     
@@ -752,12 +752,12 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     }
     
     // special rule: x = (type) y
-    if(expr.op1().id()=="typecast")
+    if(expr.op1().is_typecast())
     {
       assert(expr.op1().operands().size()==1);
       add_type_bounds(expr.op0(), expr.op1().op0().type());
     }
-    else if(expr.op0().id()=="typecast")
+    else if(expr.op0().is_typecast())
     {
       assert(expr.op0().operands().size()==1);
       add_type_bounds(expr.op1(), expr.op0().op0().type());
@@ -997,7 +997,7 @@ void invariant_sett::nnf(exprt &expr, bool negate)
     Forall_operands(it, expr)
       nnf(*it, negate);
   }
-  else if(expr.id()=="typecast")
+  else if(expr.is_typecast())
   {
     assert(expr.operands().size()==1);
 
@@ -1373,7 +1373,7 @@ void invariant_sett::modifies(const exprt &lhs)
     modifies(lhs.op1());
     modifies(lhs.op2());
   }
-  else if(lhs.id()=="typecast")
+  else if(lhs.is_typecast())
   {
     // just go down
     assert(lhs.operands().size()==1);

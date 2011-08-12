@@ -103,7 +103,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
 
   // eliminate duplicate pointer typecasts
   if(expr.type().is_pointer() &&
-     expr.op0().id()=="typecast" &&
+     expr.op0().is_typecast() &&
      expr.op0().type().is_pointer() &&
      expr.op0().operands().size()==1)
   {
@@ -322,7 +322,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
       }
     }
   }
-  else if(operand.id()=="typecast") // typecast of typecast
+  else if(operand.is_typecast()) // typecast of typecast
   {
     if(operand.operands().size()==1 &&
        op_type_id==expr_type_id &&
@@ -529,7 +529,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
       return false;
     }
   }
-  else if(ptr.id()=="typecast") // pointer typecast
+  else if(ptr.is_typecast()) // pointer typecast
   {
     // need to be careful here
     if(ptr.operands().size()!=1) return true;
@@ -2879,7 +2879,7 @@ bool simplify_exprt::simplify_object(exprt &expr)
         }
     }
   }
-  else if(expr.id()=="typecast")
+  else if(expr.is_typecast())
   {
     if(expr.operands().size()==1 &&
        expr.op0().type().is_pointer())
@@ -3439,7 +3439,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
 
   result=sort_and_join(expr) && result;
 
-  if(expr.id()=="typecast")
+  if(expr.is_typecast())
     result=simplify_typecast(expr, mode) && result;
   else if(expr.id()=="=" || expr.is_notequal() ||
           expr.id()==">" || expr.id()=="<" ||

@@ -103,7 +103,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_rel(expr);
   else if(expr.is_index())
     typecheck_expr_index(expr);
-  else if(expr.id()=="typecast")
+  else if(expr.is_typecast())
     typecheck_expr_typecast(expr);
   else if(expr.id()=="sizeof")
     typecheck_expr_sizeof(expr);
@@ -2177,7 +2177,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
   exprt &op1=expr.op1();
 
   // se if we have a typecast on the LHS
-  if(op0.id()=="typecast")
+  if(op0.is_typecast())
   {
     assert(op0.operands().size()==1);
 

@@ -252,7 +252,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_if(expr, bv);
   else if(expr.is_constant())
     return convert_constant(expr, bv);
-  else if(expr.id()=="typecast")
+  else if(expr.is_typecast())
     return convert_typecast(expr, bv);
   else if(expr.is_symbol())
     return convert_symbol(expr, bv);
@@ -642,7 +642,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
 
   const exprt::operandst &operands=expr.operands();
 
-  if(expr.id()=="typecast")
+  if(expr.is_typecast())
     return convert_typecast(expr);
   else if(expr.id()=="=")
     return convert_equality(to_equality_expr(expr));

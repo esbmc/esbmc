@@ -288,7 +288,7 @@ void goto_convertt::remove_sideeffects(
 
     return;
   }
-  else if(expr.id()=="typecast")
+  else if(expr.is_typecast())
   {
     if(expr.operands().size()!=1)
       throw "typecast takes one argument";

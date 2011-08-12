@@ -371,7 +371,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
   {
     convert_identifier("nondet"+expr.identifier().as_string());
   }
-  else if(expr.id()=="typecast")
+  else if(expr.is_typecast())
   {
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==1);

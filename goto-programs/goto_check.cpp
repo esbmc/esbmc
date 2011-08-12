@@ -123,7 +123,7 @@ void goto_checkt::overflow_check(
   exprt overflow("overflow-"+expr.id_string(), bool_typet());
   overflow.operands()=expr.operands();
 
-  if(expr.id()=="typecast")
+  if(expr.is_typecast())
   {
     if(expr.operands().size()!=1)
       throw "typecast takes one operand";
@@ -303,7 +303,7 @@ void goto_checkt::bounds_check(
   if(index.type().id()!="unsignedbv")
   {
     // we undo typecasts to signedbv
-    if(index.id()=="typecast" &&
+    if(index.is_typecast() &&
        index.operands().size()==1 &&
        index.op0().type().id()=="unsignedbv")
     {
@@ -592,12 +592,12 @@ void goto_checkt::check_rec(
   else if(expr.id()=="+" || expr.id()=="-" ||
           expr.id()=="*" ||
           expr.id()=="unary-" ||
-          expr.id()=="typecast")
+          expr.is_typecast())
   {
     if(expr.type().is_signedbv())
     {
       overflow_check(expr, guard);
-      if (expr.id()=="typecast" && !expr.op0().type().is_signedbv())
+      if (expr.is_typecast() && !expr.op0().type().is_signedbv())
       {
    		if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
    			&& !options.get_bool_option("z3-ir"))

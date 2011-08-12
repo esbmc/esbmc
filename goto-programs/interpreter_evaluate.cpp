@@ -366,7 +366,7 @@ void interpretert::evaluate(
     read(a, dest);
     return;
   }
-  else if(expr.id()=="typecast")
+  else if(expr.is_typecast())
   {
     if(expr.operands().size()!=1)
       throw "typecast expects one operand";

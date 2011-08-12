@@ -637,7 +637,7 @@ void value_set_fit::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="typecast")
+  else if(expr.is_typecast())
   {
     if(expr.operands().size()!=1)
       throw "typecast takes one operand";
@@ -801,7 +801,7 @@ void value_set_fit::dereference_rec(
   exprt &dest) const
 {
   // remove pointer typecasts
-  if(src.id()=="typecast")
+  if(src.is_typecast())
   {
     assert(src.type().is_pointer());
 
@@ -1499,7 +1499,7 @@ void value_set_fit::assign_rec(
   {
     // evil as well
   }
-  else if(lhs.id()=="typecast")
+  else if(lhs.is_typecast())
   {
     const typecast_exprt &typecast_expr=to_typecast_expr(lhs);
   
