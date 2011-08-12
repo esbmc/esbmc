@@ -73,7 +73,7 @@ void interpretert::evaluate(
       dest.push_back(f.pack());
       return;
     }
-    else if(expr.type().id()=="fixedbv")
+    else if(expr.type().is_fixedbv())
     {
       fixedbvt f;
       f.from_expr(expr);
@@ -259,7 +259,7 @@ void interpretert::evaluate(
     // type-dependent!
     mp_integer result;
     
-    if(expr.type().id()=="fixedbv")
+    if(expr.type().is_fixedbv())
     {
       fixedbvt f;
       f.spec=to_fixedbv_type(expr.type());
@@ -282,7 +282,7 @@ void interpretert::evaluate(
       evaluate(*it, tmp);
       if(tmp.size()==1)
       {
-        if(expr.type().id()=="fixedbv")
+        if(expr.type().is_fixedbv())
         {
           fixedbvt f1, f2;
           f1.spec=to_fixedbv_type(expr.type());

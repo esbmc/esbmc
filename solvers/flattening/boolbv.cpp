@@ -721,7 +721,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
       return bv[bv.size()-1];
     else if(operands[0].type().id()=="unsignedbv")
       return const_literal(false);
-    else if(operands[0].type().id()=="fixedbv")
+    else if(operands[0].type().is_fixedbv())
       return bv[bv.size()-1];
     else if(operands[0].type().id()=="floatbv")
       return bv[bv.size()-1];

@@ -661,7 +661,7 @@ void goto_checkt::check_rec(
 	options.set_option("bl", false);
 	options.set_option("z3", true); //activate Z3 for solving the VCs
   }
-  else if (expr.type().id()=="fixedbv")
+  else if (expr.type().is_fixedbv())
   {
 	use_boolector=false;
 	options.set_option("bl", false);

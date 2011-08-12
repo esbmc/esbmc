@@ -474,7 +474,7 @@ exprt z3_convt::bv_get_rec(
   else
     return nil_exprt();
 
-  if (type.id()=="fixedbv" && int_encoding)
+  if (type.is_fixedbv() && int_encoding)
   {
     if (boolbv_get_width(type, width))
 	  return nil_exprt();

@@ -84,7 +84,7 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
   else if(expr.type().id()=="unsignedbv" ||
           expr.type().id()=="signedbv" ||
           expr.type().id()=="bv" ||
-          expr.type().id()=="fixedbv" ||
+          expr.type().is_fixedbv() ||
           expr.type().id()=="floatbv")
   {
     const std::string &binary=expr.value().as_string();

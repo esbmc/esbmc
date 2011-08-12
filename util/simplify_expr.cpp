@@ -769,7 +769,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
       }
     }
   }
-  else if(expr.type().id()=="fixedbv")
+  else if(expr.type().is_fixedbv())
   {
     // division by one?
     if(expr.op1().is_constant() &&
@@ -2088,7 +2088,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
         return false;
       }
     }
-    else if(expr.op0().type().id()=="fixedbv")
+    else if(expr.op0().type().is_fixedbv())
     {
       fixedbvt f0(expr.op0());
       fixedbvt f1(expr.op1());

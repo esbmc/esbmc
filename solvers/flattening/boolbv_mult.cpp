@@ -42,7 +42,7 @@ void boolbvt::convert_mult(const exprt &expr, bvt &bv)
 
   bool no_overflow=expr.id()=="no-overflow-mult";
   
-  if(expr.type().id()=="fixedbv")
+  if(expr.type().is_fixedbv())
   {
     if(op0.type()!=expr.type())
       throw "multiplication with mixed types";

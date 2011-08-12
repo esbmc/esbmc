@@ -198,7 +198,7 @@ std::string expr2ct::convert_rec(
     }
   }
   else if(src.id()=="floatbv" ||
-          src.id()=="fixedbv")
+          src.is_fixedbv())
   {
     mp_integer width=string2integer(src.width().as_string());
 
@@ -1374,7 +1374,7 @@ std::string expr2ct::convert_constant(
         dest+="l";
     }
   }
-  else if(type.id()=="fixedbv")
+  else if(type.is_fixedbv())
   {
     dest=fixedbvt(src).to_ansi_c_string();
 

@@ -94,7 +94,7 @@ void boolector_convt::print_data_types(BtorExp* operand0, BtorExp* operand1)
 bool boolector_convt::check_all_types(const typet &type)
 {
   if (type.is_bool() || type.id()=="signedbv" || type.id()=="unsignedbv" ||
-	  type.id()=="symbol" || type.is_empty() || type.id() == "fixedbv" ||
+	  type.id()=="symbol" || type.is_empty() || type.is_fixedbv() ||
 	  type.is_array() || type.id()=="struct" || type.id()=="pointer" ||
 	  type.id()=="union")
   {
@@ -117,7 +117,7 @@ bool boolector_convt::check_all_types(const typet &type)
 
 bool boolector_convt::is_signed(const typet &type)
 {
-  if (type.id()=="signedbv" || type.id()=="fixedbv")
+  if (type.id()=="signedbv" || type.is_fixedbv())
     return true;
 
   return false;
@@ -232,7 +232,7 @@ bool boolector_convt::create_boolector_array(const typet &type, std::string iden
   {
     array = boolector_array(boolector_ctx, 1, config.ansi_c.int_width, identifier.c_str());
   }
-  else if (type.subtype().id() == "fixedbv")
+  else if (type.subtype().is_fixedbv())
   {
 	width = atoi(type.subtype().width().c_str());
 	array = boolector_array(boolector_ctx, width, config.ansi_c.int_width, identifier.c_str());
@@ -283,7 +283,7 @@ bool boolector_convt::convert_identifier(const std::string &identifier, const ty
   {
 	bv = boolector_var(boolector_ctx, width, identifier.c_str());
   }
-  else if (type.id()== "fixedbv")
+  else if (type.is_fixedbv())
   {
 	bv = boolector_var(boolector_ctx, width, identifier.c_str());
   }
@@ -452,7 +452,7 @@ BtorExp* boolector_convt::convert_lt(const exprt &expr)
   if (convert_bv(expr.op1(), operand1))
 	return boolector_false(boolector_ctx);
 
-  if (expr.op1().type().id()=="signedbv" || expr.op1().type().id()=="fixedbv")
+  if (expr.op1().type().id()=="signedbv" || expr.op1().type().is_fixedbv())
 	constraint = boolector_slt(boolector_ctx, operand0, operand1);
   else if (expr.op1().type().id()=="unsignedbv")
 	constraint = boolector_ult(boolector_ctx, operand0, operand1);
@@ -488,7 +488,7 @@ BtorExp* boolector_convt::convert_gt(const exprt &expr)
   if (convert_bv(expr.op1(), operand1))
 	return boolector_false(boolector_ctx);
 
-  if (expr.op1().type().id()=="signedbv" || expr.op1().type().id()=="fixedbv")
+  if (expr.op1().type().id()=="signedbv" || expr.op1().type().is_fixedbv())
 	constraint = boolector_sgt(boolector_ctx, operand0, operand1);
   else if (expr.op1().type().id()=="unsignedbv")
 	constraint = boolector_ugt(boolector_ctx, operand0, operand1);
@@ -525,7 +525,7 @@ BtorExp* boolector_convt::convert_le(const exprt &expr)
   if (convert_bv(expr.op1(), operand1))
 	  return boolector_false(boolector_ctx);
 
-  if (expr.op1().type().id()=="signedbv" || expr.op1().type().id()=="fixedbv")
+  if (expr.op1().type().id()=="signedbv" || expr.op1().type().is_fixedbv())
 	constraint = boolector_slte(boolector_ctx, operand0, operand1);
   else if (expr.op1().type().id()=="unsignedbv")
 	constraint = boolector_ulte(boolector_ctx, operand0, operand1);
@@ -563,7 +563,7 @@ BtorExp* boolector_convt::convert_ge(const exprt &expr)
 
   //std::cout << expr.pretty() << std::endl;
 
-  if (expr.op1().type().id()=="signedbv" || expr.op1().type().id()=="fixedbv")
+  if (expr.op1().type().id()=="signedbv" || expr.op1().type().is_fixedbv())
 	constraint = boolector_sgte(boolector_ctx, operand0, operand1);
   else if (expr.op1().type().id()=="unsignedbv")
 	constraint = boolector_ugte(boolector_ctx, operand0, operand1);
@@ -870,7 +870,7 @@ BtorExp* boolector_convt::convert_overflow_typecast(const exprt &expr)
   if (convert_bv(expr.op0(), operand[0]))
 	  return boolector_false(boolector_ctx);
 
-  if (expr.op0().type().id()=="signedbv" || expr.op0().type().id()=="fixedbv")
+  if (expr.op0().type().id()=="signedbv" || expr.op0().type().is_fixedbv())
   {
 	tmp = boolector_int(boolector_ctx, result, width);
 	two = boolector_int(boolector_ctx, 2, width);
@@ -996,8 +996,8 @@ bool boolector_convt::convert_rel(const exprt &expr, BtorExp* &bv)
     else if(expr.id()==">")
       result = boolector_ugte(boolector_ctx,operand0,operand1);
   }
-  else if (op_type.id()=="signedbv" || op_type.id()=="fixedbv" ||
-			 op_type.subtype().id()=="signedbv" || op_type.subtype().id()=="fixedbv" )
+  else if (op_type.id()=="signedbv" || op_type.is_fixedbv() ||
+			 op_type.subtype().id()=="signedbv" || op_type.subtype().is_fixedbv() )
   {
     if(expr.id()=="<=")
       result = boolector_slte(boolector_ctx,operand0,operand1);
@@ -1095,7 +1095,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
       unsigned width;
 
       boolbv_get_width(expr.type(), width);
-  	  if (expr.type().id()=="signedbv" || expr.type().id()=="fixedbv")
+  	  if (expr.type().id()=="signedbv" || expr.type().is_fixedbv())
   	  {
   	    zero = boolector_int(boolector_ctx, 0, width);
   	    one =  boolector_int(boolector_ctx, 1, width);
@@ -1117,7 +1117,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
       result = boolector_int(boolector_ctx, object, width);
     }
   }
-  else if(expr.type().id()=="fixedbv")
+  else if(expr.type().is_fixedbv())
   {
     const fixedbv_typet &fixedbv_type=to_fixedbv_type(expr.type());
     unsigned to_fraction_bits=fixedbv_type.get_fraction_bits();
@@ -1170,7 +1170,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
   	  result = boolector_cond(boolector_ctx, result, one, zero);
   	  result = boolector_concat(boolector_ctx, result, boolector_int(boolector_ctx, 0, to_fraction_bits));
     }
-    else if(op.type().id()=="fixedbv")
+    else if(op.type().is_fixedbv())
     {
       BtorExp *magnitude, *fraction;
       const fixedbv_typet &from_fixedbv_type=to_fixedbv_type(op.type());
@@ -1473,7 +1473,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
   {
 	const_var = boolector_unsigned_int(boolector_ctx, atoi(value.c_str()), width);
   }
-  else if (expr.type().id()== "fixedbv")
+  else if (expr.type().is_fixedbv())
   {
 	BtorExp *magnitude, *fraction;
 	std::string m, f, c;
@@ -1853,7 +1853,7 @@ bool boolector_convt::convert_div(const exprt &expr, BtorExp* &bv)
 	result = boolector_sdiv(boolector_ctx, args[0], args[1]);
   else if (expr.type().id()=="unsignedbv")
 	result = boolector_udiv(boolector_ctx, args[0], args[1]);
-  else if (expr.type().id()=="fixedbv")
+  else if (expr.type().is_fixedbv())
   {
     fixedbvt fbt(expr);
     unsigned fraction_bits=fbt.spec.get_fraction_bits();
@@ -1897,7 +1897,7 @@ bool boolector_convt::convert_mod(const exprt &expr, BtorExp* &bv)
 	result = boolector_srem(boolector_ctx, operand0, operand1);
   else if (expr.type().id()=="unsignedbv")
 	result = boolector_urem(boolector_ctx, operand0, operand1);
-  else if (expr.type().id()=="fixedbv")
+  else if (expr.type().is_fixedbv())
 	throw "unsupported type for mod: "+expr.type().id_string();
 
   bv = result;
@@ -1927,7 +1927,7 @@ bool boolector_convt::convert_mul(const exprt &expr, BtorExp* &bv)
   size=expr.operands().size()+1;
   BtorExp *args[size];
 
-  if(expr.type().id()=="fixedbv")
+  if(expr.type().is_fixedbv())
   {
     fixedbvt fbt(expr);
 	fraction_bits=fbt.spec.get_fraction_bits();
@@ -1937,7 +1937,7 @@ bool boolector_convt::convert_mul(const exprt &expr, BtorExp* &bv)
   {
 	if (convert_bv(*it, args[i])) return true;
 
-    if(expr.type().id()=="fixedbv")
+    if(expr.type().is_fixedbv())
       args[i] = boolector_sext(boolector_ctx, args[i], fraction_bits);
 
     if (i==1)
@@ -1947,7 +1947,7 @@ bool boolector_convt::convert_mul(const exprt &expr, BtorExp* &bv)
     ++i;
   }
 
-  if(expr.type().id()=="fixedbv")
+  if(expr.type().is_fixedbv())
   {
 	fixedbvt fbt(expr);
     args[i] = boolector_slice(boolector_ctx, args[i], fbt.spec.width+fraction_bits-1, fraction_bits);
@@ -2031,7 +2031,7 @@ bool boolector_convt::convert_array_of(const exprt &expr, BtorExp* &bv)
 	if (convert_bv(expr.op0(), value)) return true;
     array_of_var = boolector_array(boolector_ctx, width, config.ansi_c.int_width,"ARRAY_OF(0)");
   }
-  else if (expr.type().subtype().id()=="fixedbv")
+  else if (expr.type().subtype().is_fixedbv())
   {
 	if (convert_bv(expr.op0(), value)) return true;
     array_of_var = boolector_array(boolector_ctx, width, config.ansi_c.int_width, "ARRAY_OF(0l)");
@@ -2175,7 +2175,7 @@ bool boolector_convt::convert_shift_constant(const exprt &expr, unsigned int wop
 	result = boolector_int(boolector_ctx, atoi(value.c_str()), width);
   else if (expr.type().id() == "unsignedbv")
 	result = boolector_unsigned_int(boolector_ctx, atoi(value.c_str()), width);
-  else if (expr.type().id()== "fixedbv")
+  else if (expr.type().is_fixedbv())
 	result = boolector_int(boolector_ctx, atoi(value.c_str()), width);
 
   bv = result;
@@ -2292,7 +2292,7 @@ bool boolector_convt::convert_abs(const exprt &expr, BtorExp* &bv)
   static BtorExp *zero, *minus_one, *is_negative, *val_orig, *val_mul;
 
   out = "width: "+ width;
-  if (expr.type().id()=="signedbv" || expr.type().id()=="fixedbv")
+  if (expr.type().id()=="signedbv" || expr.type().is_fixedbv())
     zero = boolector_int(boolector_ctx, 0, width);
   else if (expr.type().id()=="unsignedbv")
 	zero = boolector_unsigned_int(boolector_ctx, 0, width);
@@ -2301,7 +2301,7 @@ bool boolector_convt::convert_abs(const exprt &expr, BtorExp* &bv)
 
   if (convert_bv(op0, val_orig)) return true;
 
-  if (expr.type().id()=="signedbv" || expr.type().id()=="fixedbv")
+  if (expr.type().id()=="signedbv" || expr.type().is_fixedbv())
     is_negative = boolector_slt(boolector_ctx, val_orig, zero);
 
   val_mul = boolector_mul(boolector_ctx, val_orig, minus_one);

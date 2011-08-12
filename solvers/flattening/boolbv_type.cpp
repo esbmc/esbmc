@@ -31,7 +31,7 @@ bvtypet get_bvtype(const typet &type)
     return IS_C_ENUM;
   else if(type.id()=="floatbv")
     return IS_FLOAT;
-  else if(type.id()=="fixedbv")
+  else if(type.is_fixedbv())
     return IS_FIXED;
   else if(type.id()=="bv")
     return IS_BV;

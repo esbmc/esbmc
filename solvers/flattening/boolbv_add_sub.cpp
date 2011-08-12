@@ -30,7 +30,7 @@ void boolbvt::convert_add_sub(const exprt &expr, bvt &bv)
 {
   if(expr.type().id()!="unsignedbv" &&
      expr.type().id()!="signedbv" &&
-     expr.type().id()!="fixedbv" &&
+     !expr.type().is_fixedbv() &&
      expr.type().id()!="floatbv" &&
      expr.type().id()!="range")
     return conversion_failed(expr, bv);
@@ -65,7 +65,7 @@ void boolbvt::convert_add_sub(const exprt &expr, bvt &bv)
 
   bv_utilst::representationt rep=
     (expr.type().id()=="signedbv" ||
-     expr.type().id()=="fixedbv")?bv_utilst::SIGNED:
+     expr.type().is_fixedbv())?bv_utilst::SIGNED:
                                   bv_utilst::UNSIGNED;
 
   for(exprt::operandst::const_iterator it=operands.begin()+1;

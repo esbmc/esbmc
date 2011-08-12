@@ -50,7 +50,7 @@ std::string type2name(const typet &type)
     result+="F" + type.width().as_string();
   else if(type.id()=="fixed") 
     result+="X";
-  else if(type.id()=="fixedbv") 
+  else if(type.is_fixedbv()) 
     result+="X" + type.width().as_string(); 
   else if(type.id()=="natural")
     result+="N";

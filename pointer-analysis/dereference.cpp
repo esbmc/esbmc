@@ -767,7 +767,7 @@ static bool is_a_bv_type(const typet &type)
   return type.id()=="unsignedbv" ||
          type.id()=="signedbv" ||
          type.id()=="bv" ||
-         type.id()=="fixedbv" ||
+         type.is_fixedbv() ||
          type.id()=="floatbv";
 }
 
@@ -816,7 +816,7 @@ bool dereferencet::memory_model_conversion(
   // avoid semantic conversion in case of
   // cast to float
   if(from_type.id()!="bv" &&
-     (to_type.id()=="fixedbv" || to_type.id()=="floatbv"))
+     (to_type.is_fixedbv() || to_type.id()=="floatbv"))
   {
     value.make_typecast(bv_typet(bv_width(from_type)));
     value.make_typecast(to_type);

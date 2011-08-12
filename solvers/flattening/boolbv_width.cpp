@@ -68,7 +68,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
   else if(type.id()=="signedbv" ||
           type.id()=="unsignedbv" ||
           type.id()=="floatbv" ||
-          type.id()=="fixedbv" ||
+          type.is_fixedbv() ||
           type.id()=="bv")
   {
     width=atoi(type.width().c_str());

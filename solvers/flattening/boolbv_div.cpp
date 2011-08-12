@@ -30,7 +30,7 @@ void boolbvt::convert_div(const exprt &expr, bvt &bv)
 {
   if(expr.type().id()!="unsignedbv" &&
      expr.type().id()!="signedbv" &&
-     expr.type().id()!="fixedbv" &&
+     !expr.type().is_fixedbv() &&
      expr.type().id()!="floatbv")
     return conversion_failed(expr, bv);
 
@@ -56,7 +56,7 @@ void boolbvt::convert_div(const exprt &expr, bvt &bv)
 
   bvt res, rem;
 
-  if(expr.type().id()=="fixedbv")
+  if(expr.type().is_fixedbv())
   {
     unsigned fraction_bits=
       to_fixedbv_type(expr.type()).get_fraction_bits();
