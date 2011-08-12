@@ -1014,7 +1014,7 @@ std::string expr2ct::convert_member(
   unsigned p;
   std::string dest;
 
-  if(src.op0().id()=="dereference" &&
+  if(src.op0().is_dereference() &&
      src.operands().size()==1)
   {
     std::string op=convert(src.op0().op0(), p);
@@ -2893,7 +2893,7 @@ std::string expr2ct::convert(
       return convert_unary(src, "&", precedence=15);
   }
 
-  else if(src.id()=="dereference")
+  else if(src.is_dereference())
   {
     if(src.operands().size()!=1)
       return convert_norep(src, precedence);

@@ -493,7 +493,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
         state,
         goto_functions) || new_data;
   }
-  else if(function.id()=="dereference")
+  else if(function.is_dereference())
   {
     // get value set
     expr_sett values;

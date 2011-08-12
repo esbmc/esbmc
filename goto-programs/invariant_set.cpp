@@ -1356,7 +1356,7 @@ void invariant_sett::modifies(const exprt &lhs)
   {
     // we don't track arrays
   }
-  else if(lhs.id()=="dereference")
+  else if(lhs.is_dereference())
   {
     // be very, very conservative for now
     make_true();

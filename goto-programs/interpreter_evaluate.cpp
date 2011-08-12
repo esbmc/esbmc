@@ -356,7 +356,7 @@ void interpretert::evaluate(
     dest.push_back(evaluate_address(expr.op0()));
     return;
   }
-  else if(expr.id()=="dereference" ||
+  else if(expr.is_dereference() ||
           expr.id()=="index" ||
           expr.id()=="symbol" ||
           expr.id()=="member")
@@ -455,7 +455,7 @@ mp_integer interpretert::evaluate_address(const exprt &expr) const
         return m_it2->second;
     }
   }
-  else if(expr.id()=="dereference")
+  else if(expr.is_dereference())
   {
     if(expr.operands().size()!=1)
       throw "dereference expects one operand";

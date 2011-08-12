@@ -490,7 +490,7 @@ void value_set_fivrnst::get_value_set_rec(
     
     return;
   }
-  else if(expr.id()=="dereference" ||
+  else if(expr.is_dereference() ||
           expr.id()=="implicit_dereference")
   {
     object_mapt reference_set;
@@ -774,7 +774,7 @@ void value_set_fivrnst::get_reference_set_rec(
 
     return;
   }
-  else if(expr.id()=="dereference" ||
+  else if(expr.is_dereference() ||
           expr.id()=="implicit_dereference")
   {
     if(expr.operands().size()!=1)
@@ -1233,7 +1233,7 @@ void value_set_fivrnst::assign_rec(
     
     make_union(temp_entry.object_map, values_rhs);
   }
-  else if(lhs.id()=="dereference" ||
+  else if(lhs.is_dereference() ||
           lhs.id()=="implicit_dereference")
   {
     if(lhs.operands().size()!=1)

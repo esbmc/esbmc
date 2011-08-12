@@ -88,7 +88,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_binary_boolean(expr);
   else if(expr.is_address_of())
     typecheck_expr_address_of(expr);
-  else if(expr.id()=="dereference")
+  else if(expr.is_dereference())
     typecheck_expr_dereference(expr);
   else if(expr.id()=="member")
     typecheck_expr_member(expr);

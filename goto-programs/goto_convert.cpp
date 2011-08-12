@@ -1054,7 +1054,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   if(!options.get_bool_option("atomicity-check"))
     return;
 
-  if(rhs.id() == "dereference"
+  if(rhs.is_dereference()
 	|| rhs.id() == "implicit_dereference"
 	|| rhs.id() == "index"
 	|| rhs.id() == "member")

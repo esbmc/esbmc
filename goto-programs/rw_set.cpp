@@ -131,7 +131,7 @@ void rw_sett::read_write_rec(
     read_write_rec(expr.op0(), r, w, "["+suffix+tmp+"]", guard);
     read(expr.op1(), guard);
   }
-  else if(expr.id()=="dereference")
+  else if(expr.is_dereference())
   {
     assert(expr.operands().size()==1);
     read(expr.op0(), guard);

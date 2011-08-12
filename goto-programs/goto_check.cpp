@@ -485,7 +485,7 @@ void goto_checkt::check_rec(
 {
   if(address)
   {
-    if(expr.id()=="dereference")
+    if(expr.is_dereference())
     {
       assert(expr.operands().size()==1);
       check_rec(expr.op0(), guard, false);

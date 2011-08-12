@@ -554,7 +554,7 @@ void static_analysis_baset::do_function_call_rec(
       
     merge(new_state, *n2);
   }
-  else if(function.id()=="dereference")
+  else if(function.is_dereference())
   {
     // get value set
     std::list<exprt> values;

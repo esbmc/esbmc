@@ -1316,7 +1316,7 @@ void string_abstractiont::abstract_char_assign(
     target++;
     dest.destructive_insert(target, tmp);
   }
-  else if(lhs.id()=="dereference")
+  else if(lhs.is_dereference())
   {
     assert(lhs.operands().size()==1);
 

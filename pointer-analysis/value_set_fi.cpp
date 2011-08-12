@@ -589,7 +589,7 @@ void value_set_fit::get_value_set_rec(
     
     return;
   }
-  else if(expr.id()=="dereference" ||
+  else if(expr.is_dereference() ||
           expr.id()=="implicit_dereference")
   {
     object_mapt reference_set;
@@ -942,7 +942,7 @@ void value_set_fit::get_reference_set_sharing_rec(
 
     return;
   }
-  else if(expr.id()=="dereference" ||
+  else if(expr.is_dereference() ||
           expr.id()=="implicit_dereference")
   {
     if(expr.operands().size()!=1)
@@ -1436,7 +1436,7 @@ void value_set_fit::assign_rec(
     if (make_union(get_entry(name, suffix).object_map, values_rhs))
       changed = true;
   }
-  else if(lhs.id()=="dereference" ||
+  else if(lhs.is_dereference() ||
           lhs.id()=="implicit_dereference")
   {
     if(lhs.operands().size()!=1)

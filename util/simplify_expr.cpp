@@ -3505,7 +3505,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
       result=false;
     }
   }
-  else if(expr.id()=="dereference")
+  else if(expr.is_dereference())
     result=simplify_dereference(expr) && result;
   else if(expr.is_address_of())
     result=simplify_address_of(expr) && result;

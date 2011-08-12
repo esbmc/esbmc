@@ -49,7 +49,7 @@ bool dereferencet::has_dereference(const exprt &expr) const
     if(has_dereference(*it))
       return true;
 
-  if(expr.id()=="dereference" ||
+  if(expr.is_dereference() ||
      expr.id()=="implicit_dereference" ||
      (expr.id()=="index" && expr.operands().size()==2 &&
       expr.op0().type().id()=="pointer"))

@@ -240,7 +240,7 @@ bool goto_convert_functionst::have_function_pointers(
       const code_function_callt &code=
         to_code_function_call(target->code);
     
-      if(code.function().id()=="dereference" ||
+      if(code.function().is_dereference() ||
          code.function().id()=="implicit_dereference")
         return true;
     }
@@ -274,7 +274,7 @@ bool goto_convert_functionst::remove_function_pointers(
       const code_function_callt &code=
         to_code_function_call(target->code);
     
-      if(code.function().id()=="dereference" ||
+      if(code.function().is_dereference() ||
          code.function().id()=="implicit_dereference")
       {
         remove_function_pointer(value_sets, goto_program, target); 
@@ -314,7 +314,7 @@ void goto_convert_functionst::remove_function_pointer(
   const exprt &lhs=code.lhs();
   const exprt &function=code.function();
 
-  assert(function.id()=="dereference");  
+  assert(function.is_dereference());  
   assert(function.operands().size()==1);
 
   value_setst::valuest value_set;
