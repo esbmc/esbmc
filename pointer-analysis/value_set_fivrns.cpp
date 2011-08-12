@@ -978,7 +978,7 @@ void value_set_fivrnst::assign(
         assert(base_type_eq(rhs.type(), type, ns));
       
         if(rhs.id()=="struct" ||
-           rhs.id()=="constant")
+           rhs.is_constant())
         {
           assert(no<rhs.operands().size());
           rhs_member=rhs.operands()[no];
@@ -1038,7 +1038,7 @@ void value_set_fivrnst::assign(
         assign(lhs_index, rhs.op0(), ns, add_to_sets);
       }
       else if(rhs.is_array() ||
-              rhs.id()=="constant")
+              rhs.is_constant())
       {
         forall_operands(o_it, rhs)
         {

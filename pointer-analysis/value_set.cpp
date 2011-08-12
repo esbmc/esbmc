@@ -877,7 +877,7 @@ void value_sett::assign(
         assign(lhs_index, rhs.op0(), ns, add_to_sets);
       }
       else if(rhs.is_array() ||
-              rhs.id()=="constant")
+              rhs.is_constant())
       {
         forall_operands(o_it, rhs)
         {
@@ -1346,7 +1346,7 @@ exprt value_sett::make_member(
     to_struct_type(ns.follow(src.type()));
 
   if(src.id()=="struct" ||
-     src.id()=="constant")
+     src.is_constant())
   {
     unsigned no=struct_type.component_number(component_name);
     assert(no<src.operands().size());

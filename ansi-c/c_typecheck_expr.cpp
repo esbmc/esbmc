@@ -71,7 +71,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
 {
   if(expr.id()=="sideeffect")
     typecheck_expr_side_effect(to_side_effect_expr(expr));
-  else if(expr.id()=="constant")
+  else if(expr.is_constant())
     typecheck_expr_constant(expr);
   else if(expr.id()=="infinit")
   {

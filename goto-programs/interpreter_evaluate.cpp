@@ -61,7 +61,7 @@ void interpretert::evaluate(
   const exprt &expr,
   std::vector<mp_integer> &dest) const
 {
-  if(expr.id()=="constant")
+  if(expr.is_constant())
   {
     if(expr.type().id()=="struct")
     {

@@ -175,7 +175,7 @@ literalt prop_convt::convert(const exprt &expr, bool do_cache)
 {
   if(!do_cache ||
      expr.id()=="symbol" ||
-     expr.id()=="constant")
+     expr.is_constant())
     return convert_bool(expr);
 
   // check cache first

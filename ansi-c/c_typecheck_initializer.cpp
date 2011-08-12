@@ -221,7 +221,7 @@ exprt c_typecheck_baset::do_initializer_rec(
      full_type.id()=="struct" ||
      full_type.id()=="union")
   {
-    if(value.id()=="constant" &&
+    if(value.is_constant() &&
        follow(value.type()).id()=="incomplete_array")
     {
       init_statet state(value);
@@ -286,7 +286,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   if(go_down &&
      state.has_next() &&
      state->type().id()=="incomplete_array" &&
-     state->id()=="constant")
+     state->is_constant())
   {
     init_statet tmp_state(*state);
     state++;

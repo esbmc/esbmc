@@ -71,7 +71,7 @@ exprt boolbvt::get(const exprt &expr) const
       return bv_get_rec(bv, unknown, 0, map_entry.type);
     }
   }
-  else if(expr.id()=="constant")
+  else if(expr.is_constant())
     return expr;
 
   return SUB::get(expr);

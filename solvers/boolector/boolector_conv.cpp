@@ -2207,12 +2207,12 @@ bool boolector_convt::convert_shift(const exprt &expr, BtorExp* &bv)
   boolbv_get_width(expr.op0().type(), width_op0);
   boolbv_get_width(expr.op1().type(), width_op1);
 
-  if (expr.op0().id()=="constant")
+  if (expr.op0().is_constant())
 	convert_shift_constant(expr.op0(), width_op0, width_op1, operand0);
   else
     if (convert_bv(expr.op0(), operand0)) return true;
 
-  if (expr.op1().id()=="constant")
+  if (expr.op1().is_constant())
 	convert_shift_constant(expr.op1(), width_op0, width_op1, operand1);
   else
     if (convert_bv(expr.op1(), operand1)) return true;
@@ -2496,7 +2496,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
   else if (expr.id() == "union")
 	return convert_union(expr);
 #endif
-  else if (expr.id() == "constant")
+  else if (expr.is_constant())
 	return convert_constant(expr, bv);
   else if (expr.id() == "concatenation")
 	return convert_concatenation(expr, bv);

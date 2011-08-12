@@ -370,7 +370,7 @@ std::string expr2ct::convert_typecast(
   std::string tmp=convert(src.op0(), precedence);
 
   if(src.op0().id()=="member" ||
-     src.op0().id()=="constant" ||
+     src.op0().is_constant() ||
      src.op0().id()=="symbol") // better fix precedence
     dest+=tmp;
   else
@@ -3070,7 +3070,7 @@ std::string expr2ct::convert(
   else if(src.is_code())
     return convert_code(to_code(src));
 
-  else if(src.id()=="constant")
+  else if(src.is_constant())
     return convert_constant(src, precedence);
 
   else if(src.id()=="string-constant")

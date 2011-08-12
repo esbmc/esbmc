@@ -250,7 +250,7 @@ void bv_pointerst::convert_address_of_rec(
     
     return;
   }
-  else if(expr.id()=="constant" ||
+  else if(expr.is_constant() ||
           expr.id()=="string-constant" ||
           expr.id()=="zero_string")
   { // constant
@@ -339,7 +339,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
       
     return convert_address_of_rec(expr.op0(), bv);
   }
-  else if(expr.id()=="constant")
+  else if(expr.is_constant())
   {
     if(expr.value().as_string()!="NULL")
       throw "found non-NULL pointer constant";

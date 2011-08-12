@@ -1985,7 +1985,7 @@ bool simplify_exprt::simplify_bitnot(exprt &expr)
   {
     if(op.type()==expr.type())
     {
-      if(op.id()=="constant")
+      if(op.is_constant())
       {
         std::string value=op.value().as_string();
 
@@ -2644,7 +2644,7 @@ bool simplify_exprt::simplify_with(exprt &expr)
   if(expr.op0().type().id()=="struct")
   {
     if(expr.op0().id()=="struct" ||
-       expr.op0().id()=="constant")
+       expr.op0().is_constant())
     {
       while(expr.operands().size()>1)
       {
@@ -2670,7 +2670,7 @@ bool simplify_exprt::simplify_with(exprt &expr)
   else if(expr.op0().type().is_array())
   {
     if(expr.op0().is_array() ||
-       expr.op0().id()=="constant")
+       expr.op0().is_constant())
     {
       while(expr.operands().size()>1)
       {
@@ -2787,7 +2787,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       return false;
     }
   }
-  else if(expr.op0().id()=="constant" ||
+  else if(expr.op0().is_constant() ||
           expr.op0().is_array())
   {
     if(mode==NORMAL)
@@ -2957,7 +2957,7 @@ tvt simplify_exprt::objects_equal(const exprt &a, const exprt &b)
      a.operands().size()==1 && b.operands().size()==1)
     return objects_equal_address_of(a.op0(), b.op0());
 
-  if(a.id()=="constant" && b.id()=="constant" &&
+  if(a.is_constant() && b.is_constant() &&
      a.value().as_string()=="NULL" && b.value().as_string()=="NULL")
     return tvt(true);
 
@@ -3134,7 +3134,7 @@ bool simplify_exprt::simplify_member(member_exprt &expr)
     }
   }
   else if(op.id()=="struct" ||
-          op.id()=="constant")
+          op.is_constant())
   {
     if(op.type().id()=="struct")
     {
@@ -3370,7 +3370,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
     expr.swap(tmp);
     return false;
   }
-  else if(operand.id()=="constant")
+  else if(operand.is_constant())
   {
     const irep_idt &type_id=expr.type().id();
 //    std::cout << "type_id: " << type_id << std::endl;

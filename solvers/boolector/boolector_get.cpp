@@ -50,7 +50,7 @@ exprt boolector_convt::get(const exprt &expr) const
 
 	return bv_get_rec(bv, unknown, false, expr.type());
   }
-  else if(expr.id()=="constant")
+  else if(expr.is_constant())
     return expr;
 
   return expr;

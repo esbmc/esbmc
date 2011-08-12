@@ -250,7 +250,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_cond(expr, bv);
   else if(expr.id()=="if")
     return convert_if(expr, bv);
-  else if(expr.id()=="constant")
+  else if(expr.is_constant())
     return convert_constant(expr, bv);
   else if(expr.id()=="typecast")
     return convert_typecast(expr, bv);

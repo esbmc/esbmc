@@ -138,7 +138,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
   assert(false && "Construct not supported yet");
 
   if(expr.id()=="symbol" ||
-     expr.id()=="constant" ||
+     expr.is_constant() ||
      expr.id()=="string-constant")
   {
     smt_prop.out
@@ -508,7 +508,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     
     smt_prop.out << " #)";
   }
-  else if(expr.id()=="constant")
+  else if(expr.is_constant())
   {
     if(expr.type().id()=="unsignedbv" ||
        expr.type().id()=="signedbv" ||
