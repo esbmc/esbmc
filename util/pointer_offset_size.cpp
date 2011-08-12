@@ -79,7 +79,7 @@ mp_integer compute_pointer_offset(
   const namespacet &ns,
   const exprt &expr)
 {
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
     return 0;
   else if(expr.is_index())
   {

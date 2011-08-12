@@ -262,7 +262,7 @@ void string_instrumentationt::do_function_call(
   exprt &function=call.function();
   //const exprt &lhs=call.lhs();
 
-  if(function.id()=="symbol")
+  if(function.is_symbol())
   {
     const irep_idt &identifier=
       to_symbol_expr(function).get_identifier();

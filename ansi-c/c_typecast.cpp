@@ -228,7 +228,7 @@ Function: c_typecastt::follow_with_qualifiers
 
 typet c_typecastt::follow_with_qualifiers(const typet &src_type)
 {
-  if(src_type.id()!="symbol") return src_type;
+  if(!src_type.is_symbol() return src_type;
   
   c_qualifierst qualifiers(src_type);
   
@@ -306,7 +306,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
   {
     return INT;
   }
-  else if(type.id()=="symbol")
+  else if(type.is_symbol())
     return get_c_type(ns.follow(type));
     
   return OTHER;  

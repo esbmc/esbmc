@@ -71,7 +71,7 @@ Function: expr2ct::get_symbols
 
 void expr2ct::get_symbols(const exprt &expr)
 {
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
     symbols.insert(expr);
 
   forall_operands(it, expr)
@@ -297,7 +297,7 @@ std::string expr2ct::convert_rec(
   {
     return convert(src.subtype())+" []";
   }
-  else if(src.id()=="symbol")
+  else if(src.is_symbol())
   {
     return convert_rec(ns.follow(src), new_qualifiers);
   }
@@ -371,7 +371,7 @@ std::string expr2ct::convert_typecast(
 
   if(src.op0().is_member() ||
      src.op0().is_constant() ||
-     src.op0().id()=="symbol") // better fix precedence
+     src.op0().is_symbol()) // better fix precedence
     dest+=tmp;
   else
     dest+='('+tmp+')';
@@ -3040,7 +3040,7 @@ std::string expr2ct::convert(
   else if(src.id()=="with")
     return convert_with(src, precedence=2);
 
-  else if(src.id()=="symbol")
+  else if(src.is_symbol())
     return convert_symbol(src, precedence);
 
   else if(src.id()=="next_symbol")

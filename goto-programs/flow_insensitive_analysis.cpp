@@ -441,7 +441,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
 { 
   bool new_data = false;
   
-  if(function.id()=="symbol")
+  if(function.is_symbol())
   {
     const irep_idt &identifier=function.identifier();
     

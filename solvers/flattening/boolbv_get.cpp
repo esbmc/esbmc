@@ -30,7 +30,7 @@ Function: boolbvt::get
 
 exprt boolbvt::get(const exprt &expr) const
 {
-  if(expr.id()=="symbol" ||
+  if(expr.is_symbol() ||
      expr.id()=="nondet_symbol")
   {
     const irep_idt &identifier=expr.identifier();

@@ -390,7 +390,7 @@ void goto_convertt::convert_block(
     if(code.get_statement()=="decl")
     {
       const exprt &op0=code.op0();
-      assert(op0.id()=="symbol");
+      assert(op0.is_symbol());
       const irep_idt &identifier=op0.identifier();
       const symbolt &symbol=lookup(identifier);
 
@@ -770,7 +770,7 @@ void goto_convertt::convert_decl(
 
   const exprt &op0=code.op0();
 
-  if(op0.id()!="symbol")
+  if(!op0.is_symbol())
   {
     err_location(op0);
     throw "decl statement expects symbol as first operand";
@@ -1100,7 +1100,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 
     }
   }
-  else if(rhs.id() == "symbol")
+  else if(rhs.is_symbol())
   {
 	const irep_idt &identifier=rhs.identifier();
 	const symbolt &symbol=lookup(identifier);
@@ -1162,7 +1162,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   if(expr.is_address_of())
   	return 0;
 
-  else if(expr.id() == "symbol")
+  else if(expr.is_symbol())
   {
     const irep_idt &identifier=expr.identifier();
   	const symbolt &symbol=lookup(identifier);
@@ -2532,7 +2532,7 @@ void goto_convertt::convert_ifthenelse(
 	  //std::cout << "2: " << code.pretty() << std::endl;
 	  exprt tmp_guard;
 	  if (options.get_bool_option("control-flow-test")
-		  && !code.op0().is_notequal() && code.op0().id() != "symbol"
+		  && !code.op0().is_notequal() && !code.op0().is_symbol()
 		  && code.op0().id() != "typecast" && code.op0().id() != "="
 		  && !is_thread
 		  && !options.get_bool_option("deadlock-check"))

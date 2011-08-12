@@ -37,7 +37,7 @@ void find_macros(
     const exprt &e=*stack.top();
     stack.pop();
     
-    if(e.id()=="symbol" ||
+    if(e.is_symbol() ||
        e.id()=="next_symbol")
     {
       const irep_idt &identifier=e.identifier();

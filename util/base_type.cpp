@@ -26,7 +26,7 @@ Function: base_type
 
 void base_type(typet &type, const namespacet &ns)
 {
-  if(type.id()=="symbol")
+  if(type.is_symbol())
   {
     const symbolt *symbol;
 
@@ -135,8 +135,8 @@ bool base_type_eqt::base_type_eq_rec(
   #endif
   
   // loop avoidance
-  if(type1.id()=="symbol" &&
-     type2.id()=="symbol")
+  if(type1.is_symbol() &&
+     type2.is_symbol())
   {
     // already in same set?
     if(identifiers.make_union(
@@ -145,7 +145,7 @@ bool base_type_eqt::base_type_eq_rec(
       return true;
   }
 
-  if(type1.id()=="symbol")
+  if(type1.is_symbol())
   {
     const symbolt &symbol=ns.lookup(type1.identifier());
 
@@ -155,7 +155,7 @@ bool base_type_eqt::base_type_eq_rec(
     return base_type_eq_rec(symbol.type, type2);
   }
 
-  if(type2.id()=="symbol")
+  if(type2.is_symbol())
   {
     const symbolt &symbol=ns.lookup(type2.identifier());
 

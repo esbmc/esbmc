@@ -200,7 +200,7 @@ std::string inv_object_storet::build_string(const exprt &expr) const
     return build_string(expr.op0())+"."+expr.component_name().as_string();
   }
   
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
     return expr.identifier().as_string();
 
   return "";
@@ -263,7 +263,7 @@ Function: inv_object_storet::is_constant_address_rec
 
 bool inv_object_storet::is_constant_address_rec(const exprt &expr)
 {
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
     return true;
   else if(expr.is_member())
   {
@@ -1091,7 +1091,7 @@ void invariant_sett::simplify(
   Forall_operands(it, expr)
     simplify(*it);
 
-  if(expr.id()=="symbol" ||
+  if(expr.is_symbol() ||
      expr.is_member())
   {
     exprt tmp=get_constant(expr);
@@ -1346,7 +1346,7 @@ Function: invariant_sett::modifies
 
 void invariant_sett::modifies(const exprt &lhs)
 {
-  if(lhs.id()=="symbol" ||
+  if(lhs.is_symbol() ||
      lhs.is_member())
   {
     unsigned a;

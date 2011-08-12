@@ -254,7 +254,7 @@ void goto_inlinet::expand_function_call(
   bool full)
 {
   // look it up
-  if(function.id()!="symbol")
+  if(!function.is_symbol())
   {
     err_location(function);
     throw "function_call expects symbol as function operand, "
@@ -491,7 +491,7 @@ bool goto_inlinet::inline_instruction(
   {
     const code_function_callt &call=to_code_function_call(it->code);
 
-    if(call.function().id()=="symbol")
+    if(call.function().is_symbol())
     {
       expand_function_call(
         dest, it, call.lhs(), call.function(), call.arguments(),

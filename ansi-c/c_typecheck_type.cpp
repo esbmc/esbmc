@@ -289,7 +289,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       type.swap(t);
     }
   }
-  else if(type.id()=="symbol")
+  else if(type.is_symbol())
   {
     // adjust identifier, if needed
     replace_symbol(type);

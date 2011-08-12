@@ -59,7 +59,7 @@ void boolbvt::convert_index(const index_exprt &expr, bvt &bv)
 
     // record type if array is a symbol
 
-    if(array.id()=="symbol")
+    if(array.is_symbol())
       map.get_map_entry(
         to_symbol_expr(array).get_identifier(), array.type());
 
@@ -189,7 +189,7 @@ void boolbvt::convert_index(
 
   mp_integer offset=index*width;
 
-  if(array.id()=="symbol")
+  if(array.is_symbol())
   {
     // optimization: only generate necessary literals
 

@@ -504,7 +504,7 @@ void static_analysis_baset::do_function_call_rec(
   statet &new_state,
   const goto_functionst &goto_functions)
 {
-  if(function.id()=="symbol")
+  if(function.is_symbol())
   {
     const irep_idt &identifier=function.identifier();
     

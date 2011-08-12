@@ -147,7 +147,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
 
     dest=from_integer(max_size, uint_type());
   }
-  else if(type.id()=="symbol")
+  else if(type.is_symbol())
   {
     return sizeof_rec(ns.follow(type));
   }

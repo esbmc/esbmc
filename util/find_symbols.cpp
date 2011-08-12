@@ -45,7 +45,7 @@ void find_symbols(
   bool current,
   bool next)
 {
-  if((src.id()=="symbol" && current) ||
+  if((src.is_symbol() && current) ||
      (src.id()=="next_symbol" && next))
     dest.insert(src.identifier());
   else
@@ -73,7 +73,7 @@ bool has_symbol(
   bool current,
   bool next)
 {
-  if((src.id()=="symbol" && current) ||
+  if((src.is_symbol() && current) ||
      (src.id()=="next_symbol" && next))
     return symbols.count(src.identifier())!=0;
   else
@@ -121,7 +121,7 @@ void find_symbols(
   const exprt &src,
   std::set<exprt> &dest)
 {
-  if(src.id()=="symbol" || src.id()=="next_symbol")
+  if(src.is_symbol() || src.id()=="next_symbol")
     dest.insert(src);
   else
   {

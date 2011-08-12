@@ -615,7 +615,7 @@ unsigned interpretert::get_size(const typet &type) const
     else
       return subtype_size;
   }
-  else if(type.id()=="symbol")
+  else if(type.is_symbol())
   {
     return get_size(ns.follow(type));
   }

@@ -77,7 +77,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
   {
     // ignore
   }
-  else if(expr.id()=="symbol")
+  else if(expr.is_symbol())
     typecheck_expr_symbol(expr);
   else if(expr.id()=="unary+" || expr.id()=="unary-" ||
           expr.id()=="bitnot")
@@ -222,7 +222,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   typecheck_type(type);
   expr.offsetof_type(type);
 
-  if(type.id()!="symbol")
+  if(!type.is_symbol())
   {
     err_location(expr);
     throw "builtin_offsetof expects struct type";
@@ -524,7 +524,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
     if(expr.is_address_of() &&
        expr.implicit() &&
        expr.operands().size()==1 &&
-       expr.op0().id()=="symbol" &&
+       expr.op0().is_symbol() &&
        expr.op0().type().is_code())
     {
       // undo implicit address_of
@@ -1220,7 +1220,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
   if(op.is_address_of() &&
      op.implicit() &&
      op.operands().size()==1 &&
-     op.op0().id()=="symbol" &&
+     op.op0().is_symbol() &&
      op.op0().type().is_code())
   {
     // make the implicit address_of an explicit address_of
@@ -1449,7 +1449,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   // f_op is not yet typechecked, in contrast to the other arguments
   // this is a big special case
 
-  if(f_op.id()=="symbol")
+  if(f_op.is_symbol())
   {
     replace_symbol(f_op);
 
@@ -1522,7 +1522,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   typecheck_function_call_arguments(expr);
 
   // some built-in functions
-  if(f_op.id()=="symbol")
+  if(f_op.is_symbol())
   {
     const irep_idt &identifier=to_symbol_expr(f_op).get_identifier();
 

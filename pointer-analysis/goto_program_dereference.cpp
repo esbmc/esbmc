@@ -28,7 +28,7 @@ bool goto_program_dereferencet::has_failed_symbol(
   const exprt &expr,
   const symbolt *&symbol)
 {
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
   {
     if(expr.invalid_object())
       return false;

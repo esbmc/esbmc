@@ -91,7 +91,7 @@ void ansi_c_convertt::convert_expr(exprt &expr)
   Forall_operands(it, expr)
     convert_expr(*it);
 
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
   {
     expr.identifier(final_id(expr.identifier()));
     expr.remove("#id_class");
@@ -311,7 +311,7 @@ void ansi_c_convertt::convert_type(
     // XXX jmorse - does this reveal a condition where c_bitfield doesn't have
     // a size field?
   }
-  else if(type.id()=="symbol")
+  else if(type.is_symbol())
   {
     irep_idt identifier=final_id(type.identifier());
     type.identifier(identifier);

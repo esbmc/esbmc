@@ -55,7 +55,7 @@ Function: replace_symbolt::replace
 
 bool replace_symbolt::replace(exprt &dest)
 {
-  if(dest.id()=="symbol")
+  if(dest.is_symbol())
   {
     expr_mapt::const_iterator it=
       expr_map.find(dest.identifier());
@@ -117,7 +117,7 @@ bool replace_symbolt::replace(typet &dest)
       replace(*it);
   }
   
-  if(dest.id()=="symbol")
+  if(dest.is_symbol())
   {
     type_mapt::const_iterator it=
       type_map.find(dest.identifier());

@@ -284,7 +284,7 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   }
 
   // op0 must be symbol
-  if(code.op0().id()!="symbol")
+  if(!code.op0().is_symbol())
   {
     err_location(code);
     throw "decl expected to have symbol as first operand";

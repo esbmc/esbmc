@@ -137,7 +137,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
 {
   assert(false && "Construct not supported yet");
 
-  if(expr.id()=="symbol" ||
+  if(expr.is_symbol() ||
      expr.is_constant() ||
      expr.id()=="string-constant")
   {
@@ -363,7 +363,7 @@ Function: smt_convt::convert_smt_expr
 
 void smt_convt::convert_smt_expr(const exprt &expr)
 {
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
   {
     convert_identifier(expr.identifier().as_string());
   }
@@ -1194,7 +1194,7 @@ void smt_convt::set_to(const exprt &expr, bool value)
   {
     assert(expr.operands().size()==2);
     
-    if(expr.op0().id()=="symbol")
+    if(expr.op0().is_symbol())
     {
       const irep_idt &identifier=expr.op0().identifier();
       
@@ -1245,7 +1245,7 @@ void smt_convt::find_symbols(const exprt &expr)
   forall_operands(it, expr)
     find_symbols(*it);
     
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
   {
     if(expr.type().is_code())
       return;

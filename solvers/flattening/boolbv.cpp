@@ -54,7 +54,7 @@ bool boolbvt::literal(
   }
   else
   {
-    if(expr.id()=="symbol" ||
+    if(expr.is_symbol() ||
        expr.id()=="nondet_symbol")
     {
       const irep_idt &identifier=expr.identifier();
@@ -254,7 +254,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_constant(expr, bv);
   else if(expr.id()=="typecast")
     return convert_typecast(expr, bv);
-  else if(expr.id()=="symbol")
+  else if(expr.is_symbol())
     return convert_symbol(expr, bv);
   else if(expr.id()=="bv_literals")
     return convert_bv_literals(expr, bv);
@@ -826,7 +826,7 @@ bool boolbvt::boolbv_set_equality_to_true(const exprt &expr)
 
   if(operands.size()==2)
   {
-    if(operands[0].id()=="symbol" &&
+    if(operands[0].is_symbol() &&
        operands[0].type()==operands[1].type() &&
        operands[0].type().id()!="bool")
     {

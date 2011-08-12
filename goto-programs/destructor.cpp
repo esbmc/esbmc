@@ -27,7 +27,7 @@ code_function_callt get_destructor(
   const namespacet &ns,
   const typet &type)
 {
-  if(type.id()=="symbol")
+  if(type.is_symbol())
   {
     return get_destructor(ns, ns.follow(type));
   }

@@ -391,7 +391,7 @@ void value_set_fit::get_value_set(
     const exprt &object=object_numbering[it->first];
     if (object.type().id()=="#REF#")
     {     
-      assert(object.id()=="symbol");
+      assert(object.is_symbol());
       
       const irep_idt &ident = object.identifier();
       valuest::const_iterator v_it = values.find(ident);
@@ -547,7 +547,7 @@ void value_set_fit::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="symbol")
+  else if(expr.is_symbol())
   {
     // just keep a reference to the ident in the set
     // (if it exists)
@@ -930,7 +930,7 @@ void value_set_fit::get_reference_set_sharing_rec(
       return;
     }
   }  
-  else if(expr.id()=="symbol" ||
+  else if(expr.is_symbol() ||
           expr.id()=="dynamic_object" ||
           expr.id()=="string-constant")
   {    
@@ -1407,7 +1407,7 @@ void value_set_fit::assign_rec(
       recursion_set.erase(ident);
     }
   }
-  else if(lhs.id()=="symbol")
+  else if(lhs.is_symbol())
   {
     const irep_idt &identifier=lhs.identifier();
     
@@ -1648,7 +1648,7 @@ void value_set_fit::apply_code(
 
     const exprt &lhs=code.op0();
 
-    if(lhs.id()!="symbol")
+    if(!lhs.is_symbol())
       throw "decl expected to have symbol on lhs";
 
     assign(lhs, exprt("invalid", lhs.type()), ns);

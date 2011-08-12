@@ -31,7 +31,7 @@ bool prop_convt::literal(const exprt &expr, literalt &dest) const
 {
   assert(expr.type().is_bool());
 
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
   {
     const irep_idt &identifier=expr.identifier();
 
@@ -99,7 +99,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
     value=tvt(false);
     return false;
   }
-  else if(expr.id()=="symbol")
+  else if(expr.is_symbol())
   {
     symbolst::const_iterator result=symbols.find(expr.identifier());
     if(result==symbols.end()) return true;
@@ -174,7 +174,7 @@ Function: prop_convt::convert
 literalt prop_convt::convert(const exprt &expr, bool do_cache)
 {
   if(!do_cache ||
-     expr.id()=="symbol" ||
+     expr.is_symbol() ||
      expr.is_constant())
     return convert_bool(expr);
 
@@ -232,7 +232,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
     else
       throw "unknown boolean constant: "+expr.to_string();
   }
-  else if(expr.id()=="symbol")
+  else if(expr.is_symbol())
   {
     return get_literal(expr.identifier());
   }
@@ -376,7 +376,7 @@ bool prop_convt::set_equality_to_true(const exprt &expr)
     // optimization for constraint of the form
     // new_variable = value
 
-    if(expr.op0().id()=="symbol")
+    if(expr.op0().is_symbol())
     {
       const irep_idt &identifier=
         expr.op0().identifier();

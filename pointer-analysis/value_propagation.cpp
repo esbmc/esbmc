@@ -277,7 +277,7 @@ bool value_propagationt::check_type(const typet &type)
   }
   else if(type.is_array())
     return check_type(type.subtype());
-  else if(type.id()=="symbol")
+  else if(type.is_symbol())
     return check_type(ns.follow(type));
   
   return false;

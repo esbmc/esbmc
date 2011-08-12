@@ -75,7 +75,7 @@ void rw_sett::read_write_rec(
   const std::string &suffix,
   const guardt &guard)
 {
-  if(expr.id()=="symbol" && !expr.has_operands())
+  if(expr.is_symbol() && !expr.has_operands())
   {
     const symbol_exprt &symbol_expr=to_symbol_expr(expr);
 

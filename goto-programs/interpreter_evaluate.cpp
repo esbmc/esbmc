@@ -358,7 +358,7 @@ void interpretert::evaluate(
   }
   else if(expr.is_dereference() ||
           expr.is_index() ||
-          expr.id()=="symbol" ||
+          expr.is_symbol() ||
           expr.is_member())
   {
     mp_integer a=evaluate_address(expr);
@@ -436,7 +436,7 @@ Function: interpretert::evaluate_address
 
 mp_integer interpretert::evaluate_address(const exprt &expr) const
 {
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
   {
     const irep_idt &identifier=expr.identifier();
     

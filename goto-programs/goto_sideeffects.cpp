@@ -64,7 +64,7 @@ void goto_convertt::read(exprt &expr, goto_programt &dest)
   if(expr.is_constant())
     return;
 
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
   {
     // see if we already renamed it
 
@@ -539,7 +539,7 @@ void goto_convertt::remove_function_call(
     if(expr.operands().empty())
       throw "function_call expects at least one operand";
 
-    if(expr.op0().id()=="symbol")
+    if(expr.op0().is_symbol())
     {
       const irep_idt &identifier=expr.op0().identifier();
       const symbolt &symbol=lookup(identifier);

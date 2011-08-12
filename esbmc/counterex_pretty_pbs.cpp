@@ -73,7 +73,7 @@ void counterexample_beautification_pbst::beautify(
       offset+=width;
     }
   }
-  else if(type.id()=="symbol")
+  else if(type.is_symbol())
   {
     const symbolt &s=ns.lookup(type.identifier());
     beautify(pbs, bv_cbmc, ns, expr, s.type, offset);

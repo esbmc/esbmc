@@ -144,7 +144,7 @@ void ansi_c_parsert::convert_declarator(
   // form of ireps named {declarator,code,array,incomplete_array} with
   // identifier subtypes.
 
-  if (declarator.is_decl_ident_set() && declarator.id() != "symbol") {
+  if (declarator.is_decl_ident_set() && !declarator.is_symbol()) {
     identifier = declarator.decl_ident();
     declarator.remove("decl_ident");
 
@@ -166,7 +166,7 @@ void ansi_c_parsert::convert_declarator(
   {
     typet &t=*p;
 
-    if(t.id()=="symbol")
+    if(t.is_symbol())
     {
       identifier=t;
       t=type;

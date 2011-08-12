@@ -383,7 +383,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
               final_old.subtype()==final_new.subtype())
       {
         // this is also ok
-        if (old_symbol.type.id()=="symbol")
+        if (old_symbol.type.is_symbol())
         {
           // fix the symbol, not just the type
           const irep_idt ident = old_symbol.type.identifier();
@@ -432,7 +432,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
       }
     }
     else // finals are equal
-      if(old_symbol.type.id()=="symbol" &&
+      if(old_symbol.type.is_symbol() &&
          new_symbol.type.is_incomplete_array())
         new_symbol.type=old_symbol.type; // fix from i.a. to a symbol ref.
 

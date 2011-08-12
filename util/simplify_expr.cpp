@@ -460,7 +460,7 @@ exprt simplify_exprt::pointer_offset(
   const exprt &expr,
   const typet &type)
 {
-  if(expr.id()=="symbol" ||
+  if(expr.is_symbol() ||
      expr.id()=="string-constant")
   {
     return gen_zero(type);
@@ -2517,7 +2517,7 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
       if(other->is_address_of() &&
          other->operands().size()==1)
       {
-        if(other->op0().id()=="symbol" ||
+        if(other->op0().is_symbol() ||
            other->op0().is_member())
         {
           expr.make_bool(expr.id()!="=");
@@ -2980,7 +2980,7 @@ tvt simplify_exprt::objects_equal_address_of(const exprt &a, const exprt &b)
 {
   if(a==b) return tvt(true);
 
-  if(a.id()=="symbol" && b.id()=="symbol")
+  if(a.is_symbol() && b.is_symbol())
   {
     if(a.identifier()==b.identifier())
       return tvt(true);

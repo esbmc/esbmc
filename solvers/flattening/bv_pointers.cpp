@@ -176,7 +176,7 @@ void bv_pointerst::convert_address_of_rec(
   const exprt &expr,
   bvt &bv)
 {
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
   {
     add_addr(expr, bv);
     return;
@@ -280,7 +280,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
   bv.resize(bits);
 
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
   {
     const irep_idt &identifier=expr.identifier();
     const typet &type=expr.type();
@@ -785,7 +785,7 @@ void bv_pointerst::do_is_dynamic_object(
     
     bool is_dynamic=
       expr.type().dynamic() ||
-      (expr.id()=="symbol" &&
+      (expr.is_symbol() &&
        has_prefix(expr.identifier().as_string(), "symex_dynamic::"));
     
     // only compare object part

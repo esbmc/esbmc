@@ -92,7 +92,7 @@ protected:
 
   bool is_char_type(const typet &type) const
   {
-    if(type.id()=="symbol")
+    if(type.is_symbol())
       return is_char_type(ns.follow(type));
 
     if(!type.is_signedbv() &&
@@ -339,7 +339,7 @@ void string_abstractiont::abstract(irep_idt name,
       if(it->is_other() && it->code.statement()=="decl")
       {
         assert(it->code.operands().size()==1);
-        if(it->code.op0().id()=="symbol")
+        if(it->code.op0().is_symbol())
         {
           const irep_idt &identifier=
             to_symbol_expr(it->code.op0()).get_identifier();
@@ -741,7 +741,7 @@ exprt string_abstractiont::build_symbol_ptr(const exprt &object)
     p=&(p->op0());
   }
 
-  if(p->id()!="symbol")
+  if(!p->is_symbol())
     return static_cast<const exprt &>(get_nil_irep());
 
   const symbol_exprt &expr_symbol=to_symbol_expr(*p);
@@ -900,7 +900,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
 
     const typet &t=ns.follow(object.op0().type());
 
-    if(object.op0().id()!="symbol" ||
+    if(!object.op0().is_symbol() ||
        !t.is_array())
       return static_cast<const exprt &>(get_nil_irep());
 
@@ -979,7 +979,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
     p=&(p->op0());
   }
 
-  if(p->id()!="symbol")
+  if(!p->is_symbol())
     return static_cast<const exprt &>(get_nil_irep());
 
   const symbol_exprt &expr_symbol=to_symbol_expr(*p);

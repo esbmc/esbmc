@@ -32,7 +32,7 @@ bool pointer_logict::is_dynamic_object(const exprt &expr) const
 {
   if(expr.type().dynamic()) return true;
   
-  if(expr.id()=="symbol")
+  if(expr.is_symbol())
     if(has_prefix(id2string(to_symbol_expr(expr).get_identifier()),
                   "symex_dynamic::"))
       return true;

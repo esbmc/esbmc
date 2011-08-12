@@ -92,7 +92,7 @@ void goto_convertt::do_function_call(
   {
     do_function_call_if(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.id()=="symbol")
+  else if(new_function.is_symbol())
   {
     do_function_call_symbol(new_lhs, new_function, new_arguments, dest);
   }

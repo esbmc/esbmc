@@ -94,7 +94,7 @@ void boolector_convt::print_data_types(BtorExp* operand0, BtorExp* operand1)
 bool boolector_convt::check_all_types(const typet &type)
 {
   if (type.is_bool() || type.is_signedbv() || type.id()=="unsignedbv" ||
-	  type.id()=="symbol" || type.is_empty() || type.is_fixedbv() ||
+	  type.is_symbol() || type.is_empty() || type.is_fixedbv() ||
 	  type.is_array() || type.is_struct() || type.is_pointer() ||
 	  type.id()=="union")
   {
@@ -569,7 +569,7 @@ BtorExp* boolector_convt::convert_ge(const exprt &expr)
 	constraint = boolector_ugte(boolector_ctx, operand0, operand1);
 
   //std::cout << expr.pretty() << std::endl;
-  //if (expr.op0().id()=="symbol" && expr.op1().is_constant())
+  //if (expr.op0().is_symbol() && expr.op1().is_constant())
     //boolector_assert(boolector_ctx, constraint);
 
   return constraint;
@@ -612,7 +612,7 @@ BtorExp* boolector_convt::convert_eq(const exprt &expr)
 	constraint = boolector_ne(boolector_ctx, operand0, operand1);
 	//std::cout << "expr.op1().is_constant(): " << expr.op1().is_constant() << std::endl;
 	//std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-	//if (expr.op0().id()=="symbol" && expr.op1().is_constant())
+	//if (expr.op0().is_symbol() && expr.op1().is_constant())
 	  //boolector_assert(boolector_ctx, constraint);
   }
 
@@ -2106,7 +2106,7 @@ bool boolector_convt::convert_index(const exprt &expr, BtorExp* &bv)
   if (convert_bv(expr.op0(), array)) return true;
   if (convert_bv(expr.op1(), index)) return true;
 #if 0
-  if (expr.op0().is_constant() && expr.op1().id()=="symbol")
+  if (expr.op0().is_constant() && expr.op1().is_symbol())
   {
     const array_typet &array_type_size=to_array_type(expr.op0().type());
     std::string tmp;
@@ -2484,7 +2484,7 @@ bool boolector_convt::convert_pointer_object(const exprt &expr, BtorExp* &bv)
 
 bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 {
-  if (expr.id() == "symbol")
+  if (expr.is_symbol())
 	return convert_identifier(expr.identifier().as_string(), expr.type(), bv);
   else if (expr.id() == "nondet_symbol") {
 	return convert_identifier("nondet$"+expr.identifier().as_string(), expr.type(), bv);
@@ -2596,7 +2596,7 @@ bool boolector_convt::assign_boolector_expr(const exprt expr)
 	ignoring(expr);
   	return false;
   }
-  else if (expr.op0().type().is_pointer() && expr.op0().type().subtype().id()=="symbol")
+  else if (expr.op0().type().is_pointer() && expr.op0().type().subtype().is_symbol())
   {
 	ignoring(expr);
   	return false;

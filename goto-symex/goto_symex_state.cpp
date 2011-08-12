@@ -376,7 +376,7 @@ void goto_symex_statet::assignment(
   unsigned exec_node_id)
 {
   crypto_hash hash;
-  assert(lhs.id()=="symbol");
+  assert(lhs.is_symbol());
   assert(lhs.id()==exprt::symbol);
 
   if (ex_state.owning_rt->state_hashing)

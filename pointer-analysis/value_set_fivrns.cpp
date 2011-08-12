@@ -447,7 +447,7 @@ void value_set_fivrnst::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="symbol")
+  else if(expr.is_symbol())
   {
     // just keep a reference to the ident in the set
     // (if it exists)
@@ -762,7 +762,7 @@ void value_set_fivrnst::get_reference_set_rec(
   std::cout << "GET_REFERENCE_SET_REC EXPR: " << from_expr(ns, "", expr) << std::endl;
   #endif
 
-  if(expr.id()=="symbol" ||
+  if(expr.is_symbol() ||
      expr.id()=="dynamic_object" ||
      expr.id()=="string-constant")
   {
@@ -1192,7 +1192,7 @@ void value_set_fivrnst::assign_rec(
     std::cout << "ASSIGN_REC RHS: " << to_expr(it) << std::endl;
   #endif  
 
-  if(lhs.id()=="symbol")
+  if(lhs.is_symbol())
   {
     const irep_idt &identifier=lhs.identifier();        
 
@@ -1466,7 +1466,7 @@ void value_set_fivrnst::apply_code(
 
     const exprt &lhs=code.op0();
 
-    if(lhs.id()!="symbol")
+    if(!lhs.is_symbol())
       throw "decl expected to have symbol on lhs";
     
     assign(lhs, exprt("invalid", lhs.type()), ns);

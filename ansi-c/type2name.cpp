@@ -82,7 +82,7 @@ std::string type2name(const typet &type)
   {    
     result+="ARR?"; 
   }
-  else if(type.id()=="symbol")
+  else if(type.is_symbol())
   {
     result+="SYM#" + type.identifier().as_string() + "#";
   }

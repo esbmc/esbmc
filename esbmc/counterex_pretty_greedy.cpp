@@ -127,7 +127,7 @@ void counterexample_beautification_greedyt::minimize(
       offset+=width;
     }
   }
-  else if(type.id()=="symbol")
+  else if(type.is_symbol())
   {
     const symbolt &s=ns.lookup(type.identifier());
     minimize(solver, bv_cbmc, ns, expr, s.type, offset, bit_nr);
@@ -241,7 +241,7 @@ unsigned counterexample_beautification_greedyt::get_max_width(
 
     return max_width;
   }
-  else if(type.id()=="symbol")
+  else if(type.is_symbol())
   {
     const symbolt &s=ns.lookup(type.identifier());
     return get_max_width(ns, s.type);
