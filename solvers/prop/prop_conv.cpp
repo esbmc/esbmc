@@ -110,7 +110,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 
   // sub-expressions
 
-  if(expr.id()=="not")
+  if(expr.is_not())
   {
     if(expr.type().is_bool() &&
        expr.operands().size()==1)
@@ -309,7 +309,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
         return prop.lxor(bv);
     }
   }
-  else if(expr.id()=="not")
+  else if(expr.is_not())
   {
     if(op.size()!=1)
       throw "not takes one operand";
@@ -429,7 +429,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
 
   if(boolean)
   {
-    if(expr.id()=="not")
+    if(expr.is_not())
     {
       if(expr.operands().size()==1)
       {

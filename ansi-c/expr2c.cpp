@@ -2958,7 +2958,7 @@ std::string expr2ct::convert(
       return convert_norep(src, precedence);
   }
 
-  else if(src.id()=="not")
+  else if(src.is_not())
     return convert_unary(src, "!", precedence=15);
 
   else if(src.id()=="bitnot")

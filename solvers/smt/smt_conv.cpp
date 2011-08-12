@@ -728,7 +728,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else
       assert(false);
   }
-  else if(expr.id()=="not")
+  else if(expr.is_not())
   {
     assert(expr.operands().size()==1);
     smt_prop.out << "(not ";

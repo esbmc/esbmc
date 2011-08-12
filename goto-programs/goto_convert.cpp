@@ -2663,7 +2663,7 @@ void goto_convertt::generate_conditional_branch(
   const locationt &location,
   goto_programt &dest)
 {
-  if(guard.id()=="not")
+  if(guard.is_not())
   {
     assert(guard.operands().size()==1);
     // swap targets

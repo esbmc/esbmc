@@ -1643,7 +1643,7 @@ bool simplify_exprt::simplify_if(exprt &expr)
 
     if(do_simplify_if)
     {
-      if(cond.id()=="not")
+      if(cond.is_not())
       {
         exprt tmp;
         tmp.swap(cond.op0());
@@ -1734,7 +1734,7 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
   if(!expr.type().is_bool() ||
      !op.type().is_bool()) return true;
 
-  if(op.id()=="not") // (not not a) == a
+  if(op.is_not()) // (not not a) == a
   {
     if(op.operands().size()==1)
     {
@@ -1904,7 +1904,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
       std::set<exprt> expr_set;
 
       forall_operands(it, expr)
-        if(it->id()=="not" &&
+        if(it->is_not() &&
            it->operands().size()==1 &&
            it->type().is_bool())
           expr_set.insert(it->op0());
@@ -3489,7 +3489,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_multiplication(expr) && result;
   else if(expr.id()=="unary-")
     result=simplify_unary_minus(expr) && result;
-  else if(expr.id()=="not")
+  else if(expr.is_not())
     result=simplify_not(expr, mode) && result;
   else if(expr.id()=="=>"  || expr.id()=="<=>" ||
           expr.id()=="or"  || expr.id()=="xor" ||

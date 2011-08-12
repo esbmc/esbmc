@@ -621,7 +621,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     // wow, that's strong
     make_false();
   }
-  else if(expr.id()=="not")
+  else if(expr.is_not())
   {
     // give up, we expect NNF
   }
@@ -848,7 +848,7 @@ tvt invariant_sett::implies_rec(const exprt &expr) const
 
   if(expr.is_true())
     return tvt(true);
-  else if(expr.id()=="not")
+  else if(expr.is_not())
   {
     // give up, we expect NNF
   }
@@ -975,7 +975,7 @@ void invariant_sett::nnf(exprt &expr, bool negate)
   {
     if(negate) expr.make_true();
   }
-  else if(expr.id()=="not")
+  else if(expr.is_not())
   {
     assert(expr.operands().size()==1);
     nnf(expr.op0(), !negate);

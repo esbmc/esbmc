@@ -226,7 +226,7 @@ void interpretert::evaluate(
 
     return;
   }
-  else if(expr.id()=="not")
+  else if(expr.is_not())
   {
     if(expr.operands().size()!=1)
       throw id2string(expr.id())+" expects one operand";

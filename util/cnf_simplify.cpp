@@ -162,7 +162,7 @@ Function: cnf_propagate_not
 
 void cnf_propagate_not(exprt &expr)
 {
-  if(expr.id()=="not")
+  if(expr.is_not())
   {
     if(expr.operands().size()==1)
     {
@@ -224,7 +224,7 @@ void propagate_not(exprt &expr)
     expr.id("or");
   else if(expr.id()=="nand")
     expr.id("and");
-  else if(expr.id()=="not")
+  else if(expr.is_not())
   {
     assert(expr.operands().size()==1);
     exprt tmp;

@@ -2511,7 +2511,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
     return convert_if(expr, bv);
   else if (expr.is_and() || expr.id() == "or" || expr.id() == "xor")
 	return convert_logical_ops(expr, bv);
-  else if (expr.id() == "not")
+  else if (expr.is_not())
 	return convert_logical_not(expr, bv);
   else if (expr.id() == "=" || expr.id() == "notequal")
 	return convert_equality(expr, bv);
@@ -2640,7 +2640,7 @@ void boolector_convt::set_to(const exprt &expr, bool value)
     return;
   }
 
-  if(expr.id()=="not")
+  if(expr.is_not())
   {
     assert(expr.operands().size()==1);
     return set_to(expr.op0(), !value);
@@ -2670,7 +2670,7 @@ void boolector_convt::set_to(const exprt &expr, bool value)
 
   if(boolean)
   {
-    if(expr.id()=="not")
+    if(expr.is_not())
     {
       if(expr.operands().size()==1)
       {
