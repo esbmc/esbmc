@@ -629,7 +629,7 @@ void goto_checkt::check_rec(
     }
   }
   else if (expr.is_bitand() || expr.is_bitor() ||
-		   expr.id() == "bitxor" || expr.id() == "bitnand" ||
+		   expr.is_bitxor() || expr.id() == "bitnand" ||
 		   expr.id() == "bitnor" || expr.id() == "bitnxor")
   {
 	if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")

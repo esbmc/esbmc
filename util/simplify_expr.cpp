@@ -1038,7 +1038,7 @@ bool simplify_exprt::simplify_bitwise(exprt &expr)
       for(unsigned i=0; i<width; i++)
         new_value[i]=(a_str[i]=='1' || b_str[i]=='1')?'1':'0';
     }
-    else if(expr.id()=="bitxor")
+    else if(expr.is_bitxor())
     {
       for(unsigned i=0; i<width; i++)
         new_value[i]=((a_str[i]=='1')!=(b_str[i]=='1'))?'1':'0';
@@ -3479,7 +3479,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   else if(expr.is_bitnot() ||
           expr.is_bitand() ||
           expr.is_bitor() ||
-          expr.id()=="bitxor")
+          expr.is_bitxor())
     result=simplify_bitwise(expr) && result;
   else if(expr.is_ashr() || expr.id()=="lshr" || expr.id()=="shl")
     result=simplify_shifts(expr) && result;

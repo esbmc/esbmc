@@ -619,7 +619,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
 
     smt_prop.out << ")";
   }
-  else if(expr.id()=="bitxor")
+  else if(expr.is_bitxor())
   {
     assert( false && "Construct not supported yet" );
     assert(!expr.operands().empty());
