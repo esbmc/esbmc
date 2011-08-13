@@ -24,7 +24,7 @@ Function: bv_sem
 
 bv_semt bv_sem(const typet &type)
 {
-  if(type.id()=="bv")
+  if(type.is_bv())
     return BV_NONE;
   else if(type.is_unsignedbv())
     return BV_UNSIGNED;

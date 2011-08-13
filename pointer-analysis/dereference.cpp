@@ -766,7 +766,7 @@ static bool is_a_bv_type(const typet &type)
 {
   return type.is_unsignedbv() ||
          type.is_signedbv() ||
-         type.id()=="bv" ||
+         type.is_bv() ||
          type.is_fixedbv() ||
          type.is_floatbv();
 }
@@ -876,7 +876,7 @@ bool dereferencet::memory_model_bytes(
   // But anything else we will try!
 
   // We allow reading more or less anything as bit-vector.
-  if(to_type.id()=="bv" ||
+  if(to_type.is_bv() ||
      to_type.is_unsignedbv() ||
      to_type.is_signedbv())
   {

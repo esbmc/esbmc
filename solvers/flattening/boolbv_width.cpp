@@ -69,7 +69,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
           type.is_unsignedbv() ||
           type.is_floatbv() ||
           type.is_fixedbv() ||
-          type.id()=="bv")
+          type.is_bv())
   {
     width=atoi(type.width().c_str());
     assert(width!=0);

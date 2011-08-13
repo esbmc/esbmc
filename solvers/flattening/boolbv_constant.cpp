@@ -83,7 +83,7 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
   }
   else if(expr.type().is_unsignedbv() ||
           expr.type().is_signedbv() ||
-          expr.type().id()=="bv" ||
+          expr.type().is_bv() ||
           expr.type().is_fixedbv() ||
           expr.type().is_floatbv())
   {

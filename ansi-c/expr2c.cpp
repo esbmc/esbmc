@@ -1347,7 +1347,7 @@ std::string expr2ct::convert_constant(
   }
   else if(type.id()=="rational")
     return convert_norep(src, precedence);
-  else if(type.id()=="bv")
+  else if(type.is_bv())
     dest=value;
   else if(type.is_bool())
   {

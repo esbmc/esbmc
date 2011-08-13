@@ -512,7 +512,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
   {
     if(expr.type().is_unsignedbv() ||
        expr.type().is_signedbv() ||
-       expr.type().id()=="bv")
+       expr.type().is_bv())
     {
       // RB: decimal conversion ... some solvers do not
       // support binary constants ...

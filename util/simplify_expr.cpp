@@ -1979,7 +1979,7 @@ bool simplify_exprt::simplify_bitnot(exprt &expr)
 
   exprt &op=operands.front();
 
-  if(expr.type().id()=="bv" ||
+  if(expr.type().is_bv() ||
      expr.type().is_unsignedbv() ||
      expr.type().is_signedbv())
   {

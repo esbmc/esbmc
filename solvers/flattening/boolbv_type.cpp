@@ -33,7 +33,7 @@ bvtypet get_bvtype(const typet &type)
     return IS_FLOAT;
   else if(type.is_fixedbv())
     return IS_FIXED;
-  else if(type.id()=="bv")
+  else if(type.is_bv())
     return IS_BV;
   else if(type.id()=="verilogbv")
     return IS_VERILOGBV;
