@@ -36,7 +36,7 @@ std::string array_name(
     const symbolt &symbol=ns.lookup(expr);
     return "array `"+id2string(symbol.base_name)+"'";
   }
-  else if(expr.id()=="string-constant")
+  else if(expr.is_string_constant())
   {
     return "string";
   }

@@ -296,7 +296,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_struct(expr, bv);
   else if(expr.is_union())
     return convert_union(expr, bv);
-  else if(expr.id()=="string-constant")
+  else if(expr.is_string_constant())
   {
     exprt tmp;
     string2array(expr, tmp);

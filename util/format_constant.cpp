@@ -46,7 +46,7 @@ std::string format_constantt::operator()(const exprt &expr)
       return ieee_floatt(expr).format(*this);
     }
   }
-  else if(expr.id()=="string-constant")
+  else if(expr.is_string_constant())
     return expr.value().as_string();
 
   return "(format-constant failed: "+expr.id_string()+")";

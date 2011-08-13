@@ -344,7 +344,7 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
     return constant_propagation_reference(expr.op0());
   }
 #if 1
-  else if(expr.id()=="string-constant")
+  else if(expr.is_string_constant())
     return true;
 #endif
 #if 0

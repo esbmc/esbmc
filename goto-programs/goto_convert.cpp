@@ -2786,7 +2786,7 @@ const std::string &goto_convertt::get_string_constant(
      expr.operands().size()!=1 ||
      !expr.op0().is_index() ||
      expr.op0().operands().size()!=2 ||
-     expr.op0().op0().id()!="string-constant")
+     !expr.op0().op0().is_string_constant())
   {
     err_location(expr);
 //    str << "expected string constant, but got: "

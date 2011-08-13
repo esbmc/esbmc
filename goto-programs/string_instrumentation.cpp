@@ -485,7 +485,7 @@ void string_instrumentationt::do_format_string_read(
 
   if(format_arg.is_address_of() &&
      format_arg.op0().is_index() &&
-     format_arg.op0().op0().id()=="string-constant")
+     format_arg.op0().op0().is_string_constant())
   {
     format_token_listt token_list;
     parse_format_string(format_arg.op0().op0(), token_list);
@@ -501,7 +501,7 @@ void string_instrumentationt::do_format_string_read(
         const exprt &arg = arguments[argument_start_inx+args];
         const typet &arg_type = ns.follow(arg.type());
 
-        if(arg.id()!="string-constant") // we don't need to check constants
+        if(!arg.is_string_constant()) // we don't need to check constants
         {
           goto_programt::targett assertion=dest.add_instruction();
           assertion->location=target->location;
@@ -550,7 +550,7 @@ void string_instrumentationt::do_format_string_read(
       const exprt &arg = arguments[i];
       const typet &arg_type=ns.follow(arguments[i].type());
 
-      if(arguments[i].id()!="string-constant" &&
+      if(!arguments[i].is_string_constant() &&
          is_string_type(arg_type))
       {
         goto_programt::targett assertion=dest.add_instruction();
@@ -602,7 +602,7 @@ void string_instrumentationt::do_format_string_write(
 
   if(format_arg.is_address_of() &&
      format_arg.op0().is_index() &&
-     format_arg.op0().op0().id()=="string-constant") // constant format
+     format_arg.op0().op0().is_string_constant()) // constant format
   {
     format_token_listt token_list;
     parse_format_string(format_arg.op0().op0(), token_list);

@@ -353,7 +353,7 @@ void symex_target_equationt::convert_output(
         exprt tmp=*o_it;
         ::base_type(tmp, ns);
         if(tmp.is_constant() ||
-           tmp.id()=="string-constant")
+           tmp.is_string_constant())
           it->converted_output_args.push_back(tmp);
         else
         {

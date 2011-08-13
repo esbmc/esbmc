@@ -18,13 +18,13 @@ public:
 
   friend inline const string_constantt &to_string_constant(const exprt &expr)
   {
-    assert(expr.id()=="string-constant");
+    assert(expr.is_string_constant());
     return static_cast<const string_constantt &>(expr);
   }
 
   friend inline string_constantt &to_string_constant(exprt &expr)
   {
-    assert(expr.id()=="string-constant");
+    assert(expr.is_string_constant());
     return static_cast<string_constantt &>(expr);
   }
   

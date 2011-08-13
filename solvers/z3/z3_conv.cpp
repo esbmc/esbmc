@@ -1840,7 +1840,7 @@ Z3_ast z3_convt::convert_same_object(const exprt &expr)
     {
       if (expr.op0().type().subtype().id()==typet::t_signedbv
     	&& expr.op1().type().subtype().id()==typet::t_signedbv
-    	&& index.id()!="string-constant")
+    	&& !index.is_string_constant())
           formula[1] = formula[0];
     }
 
@@ -4696,7 +4696,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 
   if(expr.id()==exprt::symbol ||
      expr.id()==exprt::constant ||
-     expr.id()=="string-constant")
+     expr.is_string_constant())
   {
     pointer_logic.add_object(expr);
   }
@@ -4721,7 +4721,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	  if (convert_zero_string(object, po))
 	    return true;
 	}
-	else if (object.id()=="string-constant")
+	else if (object.is_string_constant())
 	{
 	  if (convert_bv(object, po))
 		return true;
@@ -6400,7 +6400,7 @@ bool z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 	return convert_pointer_object(expr, bv);
   else if (expr.id() == "same-object")
 	return convert_object(expr, bv);
-  else if (expr.id() == "string-constant") {
+  else if (expr.is_string_constant()) {
 	  exprt tmp;
 	  string2array(expr, tmp);
 	return convert_bv(tmp, bv);

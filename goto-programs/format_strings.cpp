@@ -228,7 +228,7 @@ bool parse_format_string(
 {
   token_list.clear();
 
-  if(format_arg.id()=="string-constant")
+  if(format_arg.is_string_constant())
   {
     const std::string &arg_string = format_arg.value().as_string();
 

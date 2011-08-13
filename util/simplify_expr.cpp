@@ -461,7 +461,7 @@ exprt simplify_exprt::pointer_offset(
   const typet &type)
 {
   if(expr.is_symbol() ||
-     expr.id()=="string-constant")
+     expr.is_string_constant())
   {
     return gen_zero(type);
   }
@@ -2811,7 +2811,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       }
     }
   }
-  else if(expr.op0().id()=="string-constant")
+  else if(expr.op0().is_string_constant())
   {
     if(mode==NORMAL)
     {

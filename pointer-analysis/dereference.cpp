@@ -618,7 +618,7 @@ void dereferencet::valid_check(
 
   const exprt &symbol=get_symbol(object);
 
-  if(symbol.id()=="string-constant")
+  if(symbol.is_string_constant())
   {
     // always valid, but can't write
 

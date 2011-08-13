@@ -227,7 +227,7 @@ exprt c_typecheck_baset::do_initializer_rec(
       init_statet state(value);
       return do_initializer_rec(state, type, force_constant, false);
     }
-    else if(value.id()=="string-constant")
+    else if(value.is_string_constant())
     {
       // we only do this for arrays, not for structs
       if(full_type.is_array() ||

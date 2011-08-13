@@ -1308,7 +1308,7 @@ std::string expr2ct::convert_constant(
 
   if(cformat!="")
     dest=cformat;
-  else if(src.id()=="string-constant")
+  else if(src.is_string_constant())
   {
     dest='"';
     MetaString(dest, value);
@@ -3073,7 +3073,7 @@ std::string expr2ct::convert(
   else if(src.is_constant())
     return convert_constant(src, precedence);
 
-  else if(src.id()=="string-constant")
+  else if(src.is_string_constant())
     return convert_constant(src, precedence);
 
   else if(src.is_struct())

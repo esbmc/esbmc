@@ -147,7 +147,7 @@ void basic_symext::symex_printf(
      format.operands().size()==1 &&
      format.op0().id()==exprt::index &&
      format.op0().operands().size()==2 &&
-     format.op0().op0().id()=="string-constant" &&
+     format.op0().op0().is_string_constant() &&
      format.op0().op1().is_zero())
   {
     const exprt &fmt_str=format.op0().op0();
@@ -278,7 +278,7 @@ void basic_symext::symex_trace(
     
   if(!code.arguments()[1].is_implicit_address_of() ||
      code.arguments()[1].operands().size()!=1 ||
-     code.arguments()[1].op0().id()!="string-constant")
+     !code.arguments()[1].op0().is_string_constant())
     throw "CBMC_trace expects string constant as second argument";
   
   if(mp_integer(debug_thresh)>=debug_lvl)

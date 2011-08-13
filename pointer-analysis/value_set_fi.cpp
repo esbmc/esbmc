@@ -932,7 +932,7 @@ void value_set_fit::get_reference_set_sharing_rec(
   }  
   else if(expr.is_symbol() ||
           expr.is_dynamic_object() ||
-          expr.id()=="string-constant")
+          expr.is_string_constant())
   {    
     if(expr.type().is_array() &&
        expr.type().subtype().is_array())
@@ -1490,7 +1490,7 @@ void value_set_fit::assign_rec(
   {
     // we ignore this here
   }
-  else if(lhs.id()=="string-constant")
+  else if(lhs.is_string_constant())
   {
     // someone writes into a string-constant
     // evil guy

@@ -2557,7 +2557,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
   else if (expr.id() == "same-object")
 	return convert_object(expr);
 #endif
-  else if (expr.id() == "string-constant") {
+  else if (expr.is_string_constant()) {
 	  exprt tmp;
 	  string2array(expr, tmp);
 	return convert_boolector_expr(tmp, bv);

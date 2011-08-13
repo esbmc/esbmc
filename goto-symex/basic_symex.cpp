@@ -263,7 +263,7 @@ void basic_symext::symex_assign_rec(
     symex_assign_if(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()==exprt::typecast)
     symex_assign_typecast(state, ex_state, lhs, rhs, guard,node_id);
-  else if(lhs.id()=="string-constant" ||
+  else if(lhs.is_string_constant() ||
           lhs.is_null_object() ||
           lhs.id()=="zero_string")
   {

@@ -831,7 +831,7 @@ exprt string_abstractiont::build(const exprt &pointer, bool write)
 
       const exprt &o=ptr.pointer.op0().op0();
 
-      if(o.id()=="string-constant")
+      if(o.is_string_constant())
       {
         exprt symbol=build_symbol_constant(o.value());
 

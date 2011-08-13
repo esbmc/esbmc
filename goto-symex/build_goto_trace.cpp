@@ -77,7 +77,7 @@ void build_goto_trace(
     {
       const exprt &arg=*j;
       if(arg.is_constant() ||
-         arg.id()=="string-constant")
+         arg.is_string_constant())
         goto_trace_step.output_args.push_back(arg);
       else
       {

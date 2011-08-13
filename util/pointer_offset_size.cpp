@@ -120,7 +120,7 @@ mp_integer compute_pointer_offset(
     
     assert(false);
   }
-  else if(expr.id()=="string-constant")
+  else if(expr.is_string_constant())
   {
     return 0;
   }

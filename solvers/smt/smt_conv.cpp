@@ -139,7 +139,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
 
   if(expr.is_symbol() ||
      expr.is_constant() ||
-     expr.id()=="string-constant")
+     expr.is_string_constant())
   {
     smt_prop.out
       << "(# object:="
@@ -1110,7 +1110,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     convert_smt_expr(expr.op1());
     smt_prop.out << ").object";
   }
-  else if(expr.id()=="string-constant")
+  else if(expr.is_string_constant())
   {
     assert(false && "Construct not supported yet");
     exprt tmp;

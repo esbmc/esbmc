@@ -204,7 +204,7 @@ void bv_pointerst::convert_address_of_rec(
     // get size
     mp_integer size;
     
-    if(array.type().id()=="string-constant")
+    if(array.type().is_string_constant())
       size=1;
     else
       size=pointer_offset_size(array.type().subtype());
@@ -251,7 +251,7 @@ void bv_pointerst::convert_address_of_rec(
     return;
   }
   else if(expr.is_constant() ||
-          expr.id()=="string-constant" ||
+          expr.is_string_constant() ||
           expr.id()=="zero_string")
   { // constant
     add_addr(expr, bv);

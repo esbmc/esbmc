@@ -1082,7 +1082,7 @@ execution_statet::serialise_expr(const exprt &rhs)
     str = "const(" + tmp.str() + ")";
   } else if (rhs.id() == "pointer_offset") {
     str = "pointer_offset(" + serialise_expr(rhs.op0()) + ")";
-  } else if (rhs.id() == "string-constant") {
+  } else if (rhs.is_string_constant()) {
     exprt tmp;
     string2array(rhs, tmp);
     return serialise_expr(tmp);

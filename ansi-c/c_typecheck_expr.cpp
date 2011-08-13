@@ -123,7 +123,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_builtin_va_arg(expr);
   else if(expr.id()=="builtin_offsetof")
     typecheck_expr_builtin_offsetof(expr);
-  else if(expr.id()=="string-constant")
+  else if(expr.is_string_constant())
   {
     // already fine
   }
@@ -887,7 +887,7 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
         return;
     }
 
-    if(type0.id()=="string-constant")
+    if(type0.is_string_constant())
     {
       if(expr.id()=="=" || expr.is_notequal())
         return;
