@@ -96,7 +96,7 @@ void value_set_fit::output(
     
       std::string result;
 
-      if(o.id()=="invalid" || o.id()=="unknown")
+      if(o.is_invalid() || o.id()=="unknown")
       {
         result="<";
         result+=from_expr(ns, identifier, o);
@@ -272,7 +272,7 @@ exprt value_set_fit::to_expr(object_map_dt::const_iterator it) const
 {
   const exprt &object=object_numbering[it->first];
   
-  if(object.id()=="invalid" ||
+  if(object.is_invalid() ||
      object.id()=="unknown")
     return object;
 
@@ -505,7 +505,7 @@ void value_set_fit::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="unknown" || expr.id()=="invalid")
+  else if(expr.id()=="unknown" || expr.is_invalid())
   {
     insert(dest, exprt("unknown", original_type));
     return;
@@ -1166,7 +1166,7 @@ void value_set_fit::assign(
       exprt rhs_member;
     
       if(rhs.id()=="unknown" ||
-         rhs.id()=="invalid")
+         rhs.is_invalid())
       {
         rhs_member=exprt(rhs.id(), subtype);
       }
@@ -1220,7 +1220,7 @@ void value_set_fit::assign(
     lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
 
     if(rhs.id()=="unknown" ||
-       rhs.id()=="invalid")
+       rhs.is_invalid())
     {
       assign(lhs_index, exprt(rhs.id(), type.subtype()), ns);
     }

@@ -90,7 +90,7 @@ void value_sett::output(
     
       std::string result;
 
-      if(o.id()=="invalid" || o.id()=="unknown")
+      if(o.is_invalid() || o.id()=="unknown")
         result=from_expr(ns, identifier, o);
       else
       {
@@ -140,7 +140,7 @@ exprt value_sett::to_expr(object_map_dt::const_iterator it) const
 {
   const exprt &object=object_numbering[it->first];
   
-  if(object.id()=="invalid" ||
+  if(object.is_invalid() ||
      object.id()=="unknown")
     return object;
 
@@ -310,7 +310,7 @@ void value_sett::get_value_set_rec(
   std::cout << std::endl;
   #endif
 
-  if(expr.id()=="unknown" || expr.id()=="invalid")
+  if(expr.id()=="unknown" || expr.is_invalid())
   {
     insert(dest, exprt("unknown", original_type));
     return;
@@ -843,7 +843,7 @@ void value_sett::assign(
       exprt rhs_member;
 
       if(rhs.id()=="unknown" ||
-         rhs.id()=="invalid")
+         rhs.is_invalid())
       {
         rhs_member=exprt(rhs.id(), subtype);
       }
@@ -863,7 +863,7 @@ void value_sett::assign(
     lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
 
     if(rhs.id()=="unknown" ||
-       rhs.id()=="invalid")
+       rhs.is_invalid())
     {
       assign(lhs_index, exprt(rhs.id(), type.subtype()), ns, add_to_sets);
     }

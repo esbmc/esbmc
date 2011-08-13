@@ -127,13 +127,13 @@ void value_set_fivrnst::output_entry(
   
     std::string result="<"; //+i2string(o_it->first) + ",";
 
-    if(o.id()=="invalid")
+    if(o.is_invalid())
     {
       result+="#";
       result+=", *, "; // offset unknown
       if (o.type().id()=="unknown")
         result+="*";
-      else if (o.type().id()=="invalid")
+      else if (o.type().is_invalid())
         result+="#";
       else
         result+=from_type(ns, identifier, o.type());        
@@ -145,7 +145,7 @@ void value_set_fivrnst::output_entry(
       result+=", *, "; // offset unknown
       if (o.type().id()=="unknown")
         result+="*";
-      else if (o.type().id()=="invalid")
+      else if (o.type().is_invalid())
         result+="#";
       else
         result+=from_type(ns, identifier, o.type());        
@@ -234,7 +234,7 @@ exprt value_set_fivrnst::to_expr(object_map_dt::const_iterator it) const
 {
   const exprt &object=object_numbering[it->first];
   
-  if(object.id()=="invalid" ||
+  if(object.is_invalid() ||
      object.id()=="unknown")
     return object;
 
@@ -407,7 +407,7 @@ void value_set_fivrnst::get_value_set_rec(
   std::cout << std::endl;
   #endif
 
-  if(expr.id()=="unknown" || expr.id()=="invalid")
+  if(expr.id()=="unknown" || expr.is_invalid())
   {
     insert_from(dest, exprt("unknown", original_type));
     return;
@@ -963,7 +963,7 @@ void value_set_fivrnst::assign(
       exprt rhs_member;
     
       if(rhs.id()=="unknown" ||
-         rhs.id()=="invalid")
+         rhs.is_invalid())
       {
         rhs_member=exprt(rhs.id(), subtype);
       }
@@ -1023,7 +1023,7 @@ void value_set_fivrnst::assign(
     lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
 
     if(rhs.id()=="unknown" ||
-       rhs.id()=="invalid")
+       rhs.is_invalid())
     {
       assign(lhs_index, exprt(rhs.id(), type.subtype()), ns, add_to_sets);
     }    

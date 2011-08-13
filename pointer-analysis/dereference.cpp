@@ -332,7 +332,7 @@ void dereferencet::build_reference_to(
   pointer_guard.make_false();
 
   if(what.id()=="unknown" ||
-     what.id()=="invalid")
+     what.is_invalid())
   {
     if(!options.get_bool_option("no-pointer-check"))
     {

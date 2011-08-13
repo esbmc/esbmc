@@ -124,13 +124,13 @@ void value_set_fivrt::output(
     
       std::string result="<"; //+i2string(o_it->first) + ",";
 
-      if(o.id()=="invalid")
+      if(o.is_invalid())
       {
         result+="#";
         result+=", *, "; // offset unknown
         if (o.type().id()=="unknown")
           result+="*";
-        else if (o.type().id()=="invalid")
+        else if (o.type().is_invalid())
           result+="#";
         else
           result+=from_type(ns, identifier, o.type());        
@@ -142,7 +142,7 @@ void value_set_fivrt::output(
         result+=", *, "; // offset unknown
         if (o.type().id()=="unknown")
           result+="*";
-        else if (o.type().id()=="invalid")
+        else if (o.type().is_invalid())
           result+="#";
         else
           result+=from_type(ns, identifier, o.type());        
@@ -391,7 +391,7 @@ exprt value_set_fivrt::to_expr(object_map_dt::const_iterator it) const
 {
   const exprt &object=object_numbering[it->first];
   
-  if(object.id()=="invalid" ||
+  if(object.is_invalid() ||
      object.id()=="unknown")
     return object;
 
@@ -628,7 +628,7 @@ void value_set_fivrt::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="unknown" || expr.id()=="invalid")
+  else if(expr.id()=="unknown" || expr.is_invalid())
   {
     insert_from(dest, exprt("unknown", original_type));
     return;
@@ -1299,7 +1299,7 @@ void value_set_fivrt::assign(
       exprt rhs_member;
     
       if(rhs.id()=="unknown" ||
-         rhs.id()=="invalid")
+         rhs.is_invalid())
       {
         rhs_member=exprt(rhs.id(), subtype);
       }
@@ -1359,7 +1359,7 @@ void value_set_fivrt::assign(
     lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
 
     if(rhs.id()=="unknown" ||
-       rhs.id()=="invalid")
+       rhs.is_invalid())
     {
       assign(lhs_index, exprt(rhs.id(), type.subtype()), ns, add_to_sets);
     }    

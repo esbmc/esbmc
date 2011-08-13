@@ -3109,7 +3109,7 @@ std::string expr2ct::convert(
   else if(src.id()=="unknown")
     return "*";
 
-  else if(src.id()=="invalid")
+  else if(src.is_invalid())
     return "#";
 
   else if(src.id()=="extractbit")
