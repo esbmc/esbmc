@@ -2547,7 +2547,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
   else if (expr.id() == "invalid-pointer")
 	return convert_invalid_pointer(expr);
 #endif
-  else if (expr.id()=="zero_string")
+  else if (expr.is_zero_string())
 	return convert_zero_string(expr, bv);
   else if (expr.id() == "pointer_offset")
 	return select_pointer_offset(expr, bv);

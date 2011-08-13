@@ -4716,7 +4716,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     symbol_name = "address_of_index" + object.id_string() + object.identifier().as_string();
 	pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
 
-	if (object.id()=="zero_string")
+	if (object.is_zero_string())
 	{
 	  if (convert_zero_string(object, po))
 	    return true;
@@ -6392,7 +6392,7 @@ bool z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 	return convert_with(expr, bv);
   else if (expr.id() == exprt::member)
 	return convert_member(expr, bv);
-  else if (expr.id()=="zero_string")
+  else if (expr.is_zero_string())
 	return convert_zero_string(expr, bv);
   else if (expr.id() == "pointer_offset")
 	return select_pointer_offset(expr, bv);

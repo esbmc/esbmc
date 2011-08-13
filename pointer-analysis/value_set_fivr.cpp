@@ -1672,7 +1672,7 @@ void value_set_fivrt::assign_rec(
     assign_rec(typecast_expr.op(), values_rhs, suffix, 
                ns, recursion_set, add_to_sets);
   }
-  else if(lhs.id()=="zero_string" ||
+  else if(lhs.is_zero_string() ||
           lhs.id()=="is_zero_string" ||
           lhs.id()=="zero_string_length")
   {

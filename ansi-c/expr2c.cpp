@@ -2825,7 +2825,7 @@ std::string expr2ct::convert(
     return convert_function(src, "IS_ZERO_STRING", precedence=15);
   }
 
-  else if(src.id()=="zero_string")
+  else if(src.is_zero_string())
   {
     return convert_function(src, "ZERO_STRING", precedence=15);
   }

@@ -252,7 +252,7 @@ void bv_pointerst::convert_address_of_rec(
   }
   else if(expr.is_constant() ||
           expr.is_string_constant() ||
-          expr.id()=="zero_string")
+          expr.is_zero_string())
   { // constant
     add_addr(expr, bv);
     return;

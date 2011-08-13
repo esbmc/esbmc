@@ -749,7 +749,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
       expr.is_dynamic_size() ||
       expr.id() == "dynamic_type" ||
       expr.id() == "is_zero_string" ||
-      expr.id() == "zero_string" ||
+      expr.is_zero_string() ||
       expr.id() == "zero_string_length")
       return 0;
   else if (expr.id() == exprt::symbol)
@@ -850,7 +850,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
             expr.is_dynamic_size() ||
             expr.id() == "dynamic_type" ||
             expr.id() == "is_zero_string" ||
-            expr.id() == "zero_string" ||
+            expr.is_zero_string() ||
             expr.id() == "zero_string_length")
     return 0;
   else if (expr.id() == exprt::symbol)
