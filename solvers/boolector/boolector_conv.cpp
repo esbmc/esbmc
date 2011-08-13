@@ -152,7 +152,7 @@ int boolector_convt::check_boolector_properties(void)
 
 bool boolector_convt::is_ptr(const typet &type)
 {
-  return type.is_pointer() || type.id()=="reference";
+  return type.is_pointer() || type.is_reference();
 }
 
 /*******************************************************************

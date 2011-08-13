@@ -159,7 +159,7 @@ exprt pointer_logict::pointer_expr(
   
   if(type.is_pointer())
     result=exprt("address_of", type);
-  else if(type.id()=="reference")
+  else if(type.is_reference())
     result=exprt("reference_to", type);
   else
     assert(0);

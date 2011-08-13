@@ -184,7 +184,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
     return false;
   }
   else if(type.is_pointer() ||
-          type.id()=="reference")
+          type.is_reference())
   {
     width=config.ansi_c.pointer_width+BV_ADDR_BITS;
     return false;

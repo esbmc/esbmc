@@ -492,7 +492,7 @@ Z3_lbool z3_convt::check2_z3_properties(void)
 
 bool z3_convt::is_ptr(const typet &type)
 {
-  return type.id()==typet::t_pointer || type.id()=="reference";
+  return type.id()==typet::t_pointer || type.is_reference();
 }
 
 /*******************************************************************

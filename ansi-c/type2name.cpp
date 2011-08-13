@@ -56,7 +56,7 @@ std::string type2name(const typet &type)
     result+="N";
   else if(type.is_pointer())
     result+="*";
-  else if(type.id()=="reference")
+  else if(type.is_reference())
     result+="&";
   else if(type.is_code())
   {

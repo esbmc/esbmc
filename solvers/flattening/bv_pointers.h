@@ -66,7 +66,7 @@ protected:
   
   static bool is_ptr(const typet &type)
   {
-    return type.is_pointer() || type.id()=="reference";
+    return type.is_pointer() || type.is_reference();
   }
 };
 
