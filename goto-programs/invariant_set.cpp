@@ -638,7 +638,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     // special rule: x <= (a & b)
     // implies:      x<=a && x<=b
 
-    if(expr.op1().id()=="bitand")
+    if(expr.op1().is_bitand())
     {
       const exprt &bitand_op=expr.op1();
       
@@ -729,7 +729,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     // special rule: x = (a & b)
     // implies:      x<=a && x<=b
 
-    if(expr.op1().id()=="bitand")
+    if(expr.op1().is_bitand())
     {
       const exprt &bitand_op=expr.op1();
       
@@ -743,7 +743,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
       
       return;
     }
-    else if(expr.op0().id()=="bitand")
+    else if(expr.op0().is_bitand())
     {
       exprt tmp(expr);
       std::swap(tmp.op0(), tmp.op1());

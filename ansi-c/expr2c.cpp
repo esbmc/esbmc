@@ -3007,7 +3007,7 @@ std::string expr2ct::convert(
   else if(src.id()=="abs")
     return convert_function(src, "abs", precedence=15);
 
-  else if(src.id()=="bitand")
+  else if(src.is_bitand())
     return convert_binary(src, "&", precedence=8, false);
 
   else if(src.id()=="bitxor")

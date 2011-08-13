@@ -51,7 +51,7 @@ void cnf_join_binary(exprt &expr)
     cnf_join_binary(*it);
 
   if(expr.is_and() || expr.id()=="or" || expr.id()=="xor" ||
-     expr.id()=="bitand" || expr.id()=="bitor" || expr.id()=="bitxor")
+     expr.is_bitand() || expr.id()=="bitor" || expr.id()=="bitxor")
   {
     exprt tmp;
 
@@ -132,7 +132,7 @@ Function: cnf_join_binary
 void cnf_join_binary(exprt &expr)
 {
   if(expr.is_and() || expr.id()=="or" || expr.id()=="xor" ||
-     expr.id()=="bitand" || expr.id()=="bitor" || expr.id()=="bitxor")
+     expr.is_bitand() || expr.id()=="bitor" || expr.id()=="bitxor")
   {
     exprt::operandst list;
 

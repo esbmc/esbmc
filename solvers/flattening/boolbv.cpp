@@ -277,7 +277,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_replication(expr, bv);
   else if(expr.id()=="extractbits")
     return convert_extractbits(expr, bv);
-  else if(expr.id()=="bitnot" || expr.id()=="bitand" ||
+  else if(expr.id()=="bitnot" || expr.is_bitand() ||
           expr.id()=="bitor" || expr.id()=="bitxor")
     return convert_bitwise(expr, bv);
   else if(expr.id()=="unary-" ||

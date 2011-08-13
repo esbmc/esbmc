@@ -1028,7 +1028,7 @@ bool simplify_exprt::simplify_bitwise(exprt &expr)
     std::string new_value;
     new_value.resize(width);
 
-    if(expr.id()=="bitand")
+    if(expr.is_bitand())
     {
       for(unsigned i=0; i<width; i++)
         new_value[i]=(a_str[i]=='1' && b_str[i]=='1')?'1':'0';
@@ -3477,7 +3477,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   {
   }
   else if(expr.id()=="bitnot" ||
-          expr.id()=="bitand" ||
+          expr.is_bitand() ||
           expr.id()=="bitor" ||
           expr.id()=="bitxor")
     result=simplify_bitwise(expr) && result;

@@ -596,7 +596,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     }
   }
   else if(expr.id()=="concatenation" || 
-          expr.id()=="bitand" ||
+          expr.is_bitand() ||
           expr.id()=="bitor")
   {
     assert( false && "Construct not supported yet" );
@@ -608,7 +608,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       {
         if(expr.id()=="concatenation")
           smt_prop.out << " @ ";
-        else if(expr.id()=="bitand")
+        else if(expr.is_bitand())
           smt_prop.out << " & ";
         else if(expr.id()=="bitor")
           smt_prop.out << " | ";

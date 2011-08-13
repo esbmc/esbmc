@@ -1546,7 +1546,7 @@ bool boolector_convt::convert_bitwise(const exprt &expr, BtorExp* &bv)
   if (convert_bv(expr.op1(), args[1]))
 	return true;
 
-  if(expr.id()=="bitand")
+  if(expr.is_bitand())
     bv = boolector_and(boolector_ctx, args[0], args[1]);
   else if(expr.id()=="bitor")
 	bv = boolector_or(boolector_ctx, args[0], args[1]);
@@ -2500,7 +2500,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 	return convert_constant(expr, bv);
   else if (expr.id() == "concatenation")
 	return convert_concatenation(expr, bv);
-  else if (expr.id() == "bitand" || expr.id() == "bitor" || expr.id() == "bitxor"
+  else if (expr.is_bitand() || expr.id() == "bitor" || expr.id() == "bitxor"
 		|| expr.id() == "bitnand" || expr.id() == "bitnor" || expr.id() == "bitnxor")
     return convert_bitwise(expr, bv);
   else if (expr.id() == "bitnot")
