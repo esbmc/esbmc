@@ -6378,7 +6378,7 @@ bool z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
   else if (expr.id() == exprt::mult)
 	return convert_mul(expr, bv);
   else if (expr.id() == exprt::addrof || expr.is_implicit_address_of()
-		|| expr.id() == "reference_to")
+		|| expr.is_reference_to())
 	return convert_pointer(expr, bv);
   else if (expr.id() == exprt::arrayof)
 	return convert_array_of(expr, bv);

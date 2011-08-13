@@ -332,7 +332,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
   }
   else if(expr.is_address_of() ||
           expr.is_implicit_address_of() ||
-          expr.id()=="reference_to")
+          expr.is_reference_to())
   {
     if(expr.operands().size()!=1)
       throw expr.id_string()+" takes one operand";

@@ -235,7 +235,7 @@ bool postconditiont::is_used(
   const irep_idt &identifier)
 {
   if(expr.id()==exprt::addrof ||
-     expr.id()=="reference_to" ||
+     expr.is_reference_to() ||
      expr.is_implicit_address_of())
   {
     // only do index!

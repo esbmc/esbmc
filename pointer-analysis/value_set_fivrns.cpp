@@ -509,7 +509,7 @@ void value_set_fivrnst::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="reference_to")
+  else if(expr.is_reference_to())
   {
     object_mapt reference_set;
     

@@ -735,7 +735,7 @@ void value_set_fivrt::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="reference_to")
+  else if(expr.is_reference_to())
   {
     object_mapt reference_set;
     

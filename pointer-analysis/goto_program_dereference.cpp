@@ -212,7 +212,7 @@ void goto_program_dereferencet::dereference_rec(
   }
 
   if(expr.is_address_of() ||
-     expr.id()=="reference_to")
+     expr.is_reference_to())
   {
     // turn &*p to p
     // this has *no* side effect!
