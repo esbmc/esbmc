@@ -66,7 +66,7 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.type().id()=="c_enum" ||
+  else if(expr.type().is_c_enum() ||
           expr.type().id()=="incomplete_c_enum")
   {
     mp_integer value=string2integer(expr.value().as_string());

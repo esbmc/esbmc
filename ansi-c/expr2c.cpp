@@ -242,7 +242,7 @@ std::string expr2ct::convert_rec(
 
     return dest;
   }
-  else if(src.id()=="c_enum" ||
+  else if(src.is_c_enum() ||
           src.id()=="incomplete_c_enum")
   {
     std::string result=q+"enum";
@@ -1316,7 +1316,7 @@ std::string expr2ct::convert_constant(
   }
   else if(type.id()=="integer" || type.id()=="natural")
     dest=value;
-  else if(type.id()=="c_enum" ||
+  else if(type.is_c_enum() ||
           type.id()=="incomplete_c_enum")
   {
     mp_integer int_value=string2integer(value);

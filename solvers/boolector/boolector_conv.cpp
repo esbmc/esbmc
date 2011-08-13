@@ -279,7 +279,7 @@ bool boolector_convt::convert_identifier(const std::string &identifier, const ty
   {
 	bv = boolector_var(boolector_ctx, 1, identifier.c_str());
   }
-  else if (type.is_signedbv() || type.is_unsignedbv() || type.id()=="c_enum")
+  else if (type.is_signedbv() || type.is_unsignedbv() || type.is_c_enum())
   {
 	bv = boolector_var(boolector_ctx, width, identifier.c_str());
   }
@@ -1209,7 +1209,7 @@ bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
       throw "unexpected typecast to fixedbv";
   }
 
-  if(expr.type().id()=="c_enum")
+  if(expr.type().is_c_enum())
   {
 	BtorExp *zero, *one;
 	unsigned width;
@@ -1439,7 +1439,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
   std::string value;
   unsigned int width;
 
-  if (expr.type().id() == "c_enum")
+  if (expr.type().is_c_enum())
   {
     value = expr.value().as_string();
   }
@@ -1465,7 +1465,7 @@ bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
 	else if (expr.is_true())
 	  const_var = boolector_true(boolector_ctx);
   }
-  else if (expr.type().is_signedbv() || expr.type().id() == "c_enum")
+  else if (expr.type().is_signedbv() || expr.type().is_c_enum())
   {
 	const_var = boolector_int(boolector_ctx, atoi(value.c_str()), width);
   }
@@ -2171,7 +2171,7 @@ bool boolector_convt::convert_shift_constant(const exprt &expr, unsigned int wop
     width = log(size)/log(2);
 
 
-  if (expr.type().is_signedbv() || expr.type().id() == "c_enum")
+  if (expr.type().is_signedbv() || expr.type().is_c_enum())
 	result = boolector_int(boolector_ctx, atoi(value.c_str()), width);
   else if (expr.type().is_unsignedbv())
 	result = boolector_unsigned_int(boolector_ctx, atoi(value.c_str()), width);

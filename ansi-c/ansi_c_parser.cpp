@@ -282,7 +282,7 @@ ansi_c_id_classt ansi_c_parsert::get_class(const typet &type)
     return ANSI_C_TYPEDEF;
   else if(type.is_struct() ||
           type.is_union() ||
-          type.id()=="c_enum")
+          type.is_c_enum())
     return ANSI_C_TAG;
   else if(type.id()=="merged_type")
   {

@@ -614,7 +614,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
      !expr_type.is_pointer() &&
      !expr_type.is_array() &&
      expr_type.id()!="empty" &&
-     expr_type.id()!="c_enum" &&
+     !expr_type.is_c_enum() &&
      expr_type.id()!="incomplete_c_enum")
   {
     err_location(expr);
@@ -626,7 +626,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   const typet op_type=follow(op.type());
 
   if(is_number(op_type) ||
-     op_type.id()=="c_enum" ||
+     op_type.is_c_enum() ||
      op_type.id()=="incomplete_c_enum" ||
      op_type.is_bool() ||
      op_type.is_pointer())
@@ -707,7 +707,7 @@ void c_typecheck_baset::make_index_type(exprt &expr)
       expr.make_typecast(uint_type());
   }
   else if(full_type.is_signedbv() ||
-          full_type.id()=="c_enum" ||
+          full_type.is_c_enum() ||
           full_type.id()=="incomplete_c_enum")
   {
     if(full_type!=index_type())
@@ -1392,7 +1392,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
 
     if(is_number(final_type0) ||
        final_type0.is_bool() ||
-       final_type0.id()=="c_enum" ||
+       final_type0.is_c_enum() ||
        final_type0.id()=="incomplete_c_enum" ||
        final_type0.is_pointer())
     {
@@ -2253,7 +2253,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
       return;
     }
     else if(final_type0.is_bool() ||
-            final_type0.id()=="c_enum" ||
+            final_type0.is_c_enum() ||
             final_type0.id()=="incomplete_c_enum")
     {
       implicit_typecast_arithmetic(op1);

@@ -176,7 +176,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 
     return false;
   }
-  else if(type.id()=="c_enum" ||
+  else if(type.is_c_enum() ||
           type.id()=="incomplete_c_enum")
   {
     width=atoi(type.width().c_str());

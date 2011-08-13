@@ -220,7 +220,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
         it++;
     }
   }
-  else if(type.id()=="c_enum")
+  else if(type.is_c_enum())
   {
   }
   else if(type.id()=="c_bitfield")
@@ -247,7 +247,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
 
     if(!base_type.is_signedbv() &&
        !base_type.is_unsignedbv() &&
-       base_type.id()!="c_enum")
+       !base_type.is_c_enum())
     {
       err_location(type);
       str << "Bit-field with non-integer type: "

@@ -652,7 +652,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	bv = Z3_mk_bool_type(z3_ctx);
   }
   else if (type.id()==typet::t_signedbv || type.id()==typet::t_unsignedbv ||
-		  type.id()=="c_enum" || type.id()=="incomplete_c_enum")
+		  type.is_c_enum() || type.id()=="incomplete_c_enum")
   {
     if (boolbv_get_width(type, width))
       return true;
@@ -1154,7 +1154,7 @@ bool z3_convt::convert_identifier(const std::string &identifier, const typet &ty
 
 	bv = z3_api.mk_var(z3_ctx, identifier.c_str(), type_var);
   }
-  else if (type.id()=="c_enum")
+  else if (type.is_c_enum())
   {
 	if (create_enum_type(type_var))
 	  return true;
@@ -2870,7 +2870,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 	std::cout << "op.type().subtype().id(): " << op.type().subtype().id() << std::endl;
     std::cout << "to_width: " << to_width << std::endl;
 #endif
-    if (op.type().id()==typet::t_signedbv || op.type().id()=="c_enum" || op.type().id()==typet::t_fixedbv || op.type().subtype().id()==typet::t_signedbv || op.type().subtype().id()==typet::t_fixedbv)
+    if (op.type().id()==typet::t_signedbv || op.type().is_c_enum() || op.type().id()==typet::t_fixedbv || op.type().subtype().id()==typet::t_signedbv || op.type().subtype().id()==typet::t_fixedbv)
     {
       unsigned from_width;
 
@@ -3322,7 +3322,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   }
 
 
-  if(expr.type().id()=="c_enum")
+  if(expr.type().is_c_enum())
   {
 	Z3_ast zero, one;
 	unsigned width;
@@ -3739,7 +3739,7 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
   std::string value;
   unsigned width;
 
-  if (expr.type().id() == "c_enum")
+  if (expr.type().is_c_enum())
   {
     // jmorse: value field of C enum type is in fact base 10, wheras everything
     // else is base 2.
@@ -3787,7 +3787,7 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 	else
 	  bv = Z3_mk_unsigned_int(z3_ctx, atoi(value.c_str()), Z3_mk_bv_type(z3_ctx, width));
   }
-  if (expr.type().id()==typet::t_signedbv || expr.type().id()=="c_enum")
+  if (expr.type().id()==typet::t_signedbv || expr.type().is_c_enum())
   {
     if (boolbv_get_width(expr.type(), width))
       return true;

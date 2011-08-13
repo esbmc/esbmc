@@ -39,7 +39,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
     if((bits%8)!=0) bytes++;
     dest=from_integer(bits/8, uint_type());
   }
-  else if(type.id()=="c_enum" ||
+  else if(type.is_c_enum() ||
           type.id()=="incomplete_c_enum")
   {
     dest=from_integer(config.ansi_c.int_width/8, uint_type());

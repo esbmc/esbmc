@@ -438,7 +438,7 @@ void ansi_c_convertt::convert_type(
     else
       convert_type(type.subtype());
   }
-  else if(type.id()=="c_enum" ||
+  else if(type.is_c_enum() ||
           type.id()=="incomplete_c_enum")
   {
     // add width

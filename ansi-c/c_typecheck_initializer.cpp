@@ -599,7 +599,7 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
     const typet &final_type=follow(symbol.type);
     
     if(final_type.id()=="incomplete_c_enum" ||
-       final_type.id()=="c_enum")
+       final_type.is_c_enum())
     {
       if(symbol.is_macro)
       {

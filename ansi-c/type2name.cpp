@@ -108,7 +108,7 @@ std::string type2name(const typet &type)
     result +="ST?";
   else if(type.id()=="incomplete_union")
     result +="UN?";
-  else if(type.id()=="c_enum")
+  else if(type.is_c_enum())
     result +="EN" + type.width().as_string();
   else if(type.id()=="incomplete_c_enum")
     result +="EN?";

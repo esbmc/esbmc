@@ -177,7 +177,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     symbol.pretty_name="union "+id2string(symbol.base_name);
   }
   else if(symbol.is_type &&
-          (final_type.id()=="c_enum" ||
+          (final_type.is_c_enum() ||
            final_type.id()=="incomplete_c_enum"))
   {
     symbol.pretty_name="enum "+id2string(symbol.base_name);
@@ -415,9 +415,9 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
           new_ct=old_ct;
       }
       else if((final_old.id()=="incomplete_c_enum" ||
-               final_old.id()=="c_enum") &&
+               final_old.is_c_enum()) &&
               (final_new.id()=="incomplete_c_enum" ||
-               final_new.id()=="c_enum"))
+               final_new.is_c_enum()))
       {
         // this is ok for now
       }
@@ -492,7 +492,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
           {
             if(new_symbol.is_macro &&
                (final_new.id()=="incomplete_c_enum" ||
-                final_new.id()=="c_enum") &&
+                final_new.is_c_enum()) &&
                 old_symbol.value.is_constant() &&
                 new_symbol.value.is_constant() &&
                 old_symbol.value.value()==new_symbol.value.value())
