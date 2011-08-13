@@ -1388,8 +1388,8 @@ void invariant_sett::modifies(const exprt &lhs)
   else if(lhs.id()=="dynamic_size")
   {
   }
-  else if(lhs.id()=="byte_extract_little_endian" ||
-          lhs.id()=="byte_extract_big_endian")
+  else if(lhs.is_byte_extract_little_endian() ||
+          lhs.is_byte_extract_big_endian())
   {
     // just go down
     assert(lhs.operands().size()==2);

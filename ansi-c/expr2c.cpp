@@ -2998,10 +2998,10 @@ std::string expr2ct::convert(
   else if(src.id()=="ieee_float_notequal")
     return convert_function(src, "IEEE_FLOAT_NOTEQUAL", precedence=15);
 
-  else if(src.id()=="byte_update_little_endian")
+  else if(src.is_byte_update_little_endian())
     return convert_function(src, "BYTE_UPDATE_LITTLE_ENDIAN", precedence=15);
 
-  else if(src.id()=="byte_update_big_endian")
+  else if(src.is_byte_update_big_endian())
     return convert_function(src, "BYTE_UPDATE_BIG_ENDIAN", precedence=15);
 
   else if(src.id()=="abs")

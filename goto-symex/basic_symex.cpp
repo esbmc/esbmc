@@ -269,8 +269,8 @@ void basic_symext::symex_assign_rec(
   {
     // ignore
   }
-  else if(lhs.id()=="byte_extract_little_endian" ||
-          lhs.id()=="byte_extract_big_endian")
+  else if(lhs.is_byte_extract_little_endian() ||
+          lhs.is_byte_extract_big_endian())
     symex_assign_byte_extract(state, ex_state, lhs, rhs, guard,node_id);
   else
     throw "assignment to "+lhs.id_string()+" not handled";
@@ -553,9 +553,9 @@ void basic_symext::symex_assign_byte_extract(
 
   exprt new_rhs;
 
-  if(lhs.id()=="byte_extract_little_endian")
+  if(lhs.is_byte_extract_little_endian())
     new_rhs.id("byte_update_little_endian");
-  else if(lhs.id()=="byte_extract_big_endian")
+  else if(lhs.is_byte_extract_big_endian())
     new_rhs.id("byte_update_big_endian");
   else
     assert(false);

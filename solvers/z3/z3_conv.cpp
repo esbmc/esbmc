@@ -6129,7 +6129,7 @@ bool z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 
   mp_integer upper, lower;
 
-  if(expr.id()=="byte_extract_little_endian")
+  if(expr.is_byte_extract_little_endian())
   {
     upper = ((i+1)*8)-1; //((i+1)*w)-1;
     lower = i*8; //i*w;
@@ -6410,11 +6410,11 @@ bool z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 	assert(expr.operands().size()==2);
   else if (expr.id()=="is_dynamic_object")
     return convert_is_dynamic_object(expr, bv);
-  else if (expr.id()=="byte_update_little_endian" ||
-		  expr.id()=="byte_update_big_endian")
+  else if (expr.is_byte_update_little_endian() ||
+		  expr.is_byte_update_big_endian())
     return convert_byte_update(expr, bv);
-  else if (expr.id()=="byte_extract_little_endian" ||
-		  expr.id()=="byte_extract_big_endian")
+  else if (expr.is_byte_extract_little_endian() ||
+		  expr.is_byte_extract_big_endian())
     return convert_byte_extract(expr, bv);
 #if 1
   else if(expr.id()==exprt::isnan)

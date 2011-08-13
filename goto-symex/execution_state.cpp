@@ -1087,10 +1087,10 @@ execution_statet::serialise_expr(const exprt &rhs)
     string2array(rhs, tmp);
     return serialise_expr(tmp);
   } else if (rhs.id() == "same-object") {
-  } else if (rhs.id() == "byte_update_little_endian") {
-  } else if (rhs.id() == "byte_update_big_endian") {
-  } else if (rhs.id() == "byte_extract_little_endian") {
-  } else if (rhs.id() == "byte_extract_big_endian") {
+  } else if (rhs.is_byte_update_little_endian()) {
+  } else if (rhs.is_byte_update_big_endian()) {
+  } else if (rhs.is_byte_extract_little_endian()) {
+  } else if (rhs.is_byte_extract_big_endian()) {
   } else if (rhs.id() == "infinity") {
     return "inf";
   } else {

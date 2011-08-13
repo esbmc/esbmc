@@ -1131,8 +1131,8 @@ void value_sett::assign_rec(
   
     assign_rec(typecast_expr.op(), values_rhs, suffix, ns, add_to_sets);
   }
-  else if(lhs.id()=="byte_extract_little_endian" ||
-          lhs.id()=="byte_extract_big_endian")
+  else if(lhs.is_byte_extract_little_endian() ||
+          lhs.is_byte_extract_big_endian())
   {
     assert(lhs.operands().size()==2);
     assign_rec(lhs.op0(), values_rhs, suffix, ns, true);
