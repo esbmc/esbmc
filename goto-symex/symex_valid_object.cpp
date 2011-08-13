@@ -100,7 +100,7 @@ void goto_symext::replace_dynamic_allocation(
     // default behavior
     basic_symext::replace_dynamic_allocation(state, expr);
   }
-  else if(expr.id()=="dynamic_size")
+  else if(expr.is_dynamic_size())
   {
     // default behavior
     basic_symext::replace_dynamic_allocation(state, expr);

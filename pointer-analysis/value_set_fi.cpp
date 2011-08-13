@@ -762,7 +762,7 @@ void value_set_fit::get_value_set_rec(
     // these are supposed to be done by assign()
     throw "unexpected value in get_value_set: "+expr.id_string();
   }
-  else if(expr.id()=="dynamic_object")
+  else if(expr.is_dynamic_object())
   {
     const dynamic_object_exprt &dynamic_object=
       to_dynamic_object_expr(expr);
@@ -931,7 +931,7 @@ void value_set_fit::get_reference_set_sharing_rec(
     }
   }  
   else if(expr.is_symbol() ||
-          expr.id()=="dynamic_object" ||
+          expr.is_dynamic_object() ||
           expr.id()=="string-constant")
   {    
     if(expr.type().is_array() &&
@@ -1068,7 +1068,7 @@ void value_set_fit::get_reference_set_sharing_rec(
       
       if(object.id()=="unknown")
         insert(dest, exprt("unknown", expr.type()));
-      else if(object.id()=="dynamic_object" &&
+      else if(object.is_dynamic_object() &&
               !obj_type.is_struct() && 
               !obj_type.is_union())
       {
@@ -1307,7 +1307,7 @@ void value_set_fit::do_free(
   {
     const exprt &object=object_numbering[it->first];
 
-    if(object.id()=="dynamic_object")
+    if(object.is_dynamic_object())
     {
       const dynamic_object_exprt &dynamic_object=
         to_dynamic_object_expr(object);
@@ -1334,7 +1334,7 @@ void value_set_fit::do_free(
     {
       const exprt &object=object_numbering[o_it->first];
 
-      if(object.id()=="dynamic_object")
+      if(object.is_dynamic_object())
       {
         const exprt &instance=
           to_dynamic_object_expr(object).instance();
@@ -1424,7 +1424,7 @@ void value_set_fit::assign_rec(
         changed = true;
     }
   }
-  else if(lhs.id()=="dynamic_object")
+  else if(lhs.is_dynamic_object())
   {
     const dynamic_object_exprt &dynamic_object=
       to_dynamic_object_expr(lhs);
@@ -1485,7 +1485,7 @@ void value_set_fit::assign_rec(
   }
   else if(lhs.id()=="valid_object" ||
 		  lhs.id()=="deallocated_object" ||
-          lhs.id()=="dynamic_size" ||
+          lhs.is_dynamic_size() ||
           lhs.id()=="dynamic_type")
   {
     // we ignore this here

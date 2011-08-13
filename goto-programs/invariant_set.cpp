@@ -1385,7 +1385,7 @@ void invariant_sett::modifies(const exprt &lhs)
   else if(lhs.id()=="deallocated_object")
   {
   }
-  else if(lhs.id()=="dynamic_size")
+  else if(lhs.is_dynamic_size())
   {
   }
   else if(lhs.is_byte_extract_little_endian() ||

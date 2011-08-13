@@ -3461,7 +3461,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_is_dynamic_object(expr) && result;
   else if(expr.id()=="same-object")
     result=simplify_same_object(expr) && result;
-  else if(expr.id()=="dynamic_size")
+  else if(expr.is_dynamic_size())
     result=simplify_dynamic_size(expr) && result;
   else if(expr.id()=="valid_object")
     result=simplify_valid_object(expr) && result;

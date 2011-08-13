@@ -2810,7 +2810,7 @@ std::string expr2ct::convert(
     return convert_function(src, "DEALLOCATED_OBJECT", precedence=15);
   }
 
-  else if(src.id()=="dynamic_object")
+  else if(src.is_dynamic_object())
   {
     return convert_function(src, "DYNAMIC_OBJECT", precedence=15);
   }
@@ -2840,7 +2840,7 @@ std::string expr2ct::convert(
     return convert_function(src, "BUFFER_SIZE", precedence=15);
   }
 
-  else if(src.id()=="dynamic_size")
+  else if(src.is_dynamic_size())
   {
     return convert_function(src, "DYNAMIC_SIZE", precedence=15);
   }

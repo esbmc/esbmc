@@ -746,7 +746,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 
   if (expr.id() == exprt::addrof ||
       expr.id() == "valid_object" ||
-      expr.id() == "dynamic_size" ||
+      expr.is_dynamic_size() ||
       expr.id() == "dynamic_type" ||
       expr.id() == "is_zero_string" ||
       expr.id() == "zero_string" ||
@@ -847,7 +847,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
   if (expr.id() == exprt::addrof ||
             expr.type().id() == typet::t_pointer ||
             expr.id() == "valid_object" ||
-            expr.id() == "dynamic_size" ||
+            expr.is_dynamic_size() ||
             expr.id() == "dynamic_type" ||
             expr.id() == "is_zero_string" ||
             expr.id() == "zero_string" ||

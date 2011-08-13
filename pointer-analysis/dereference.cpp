@@ -381,7 +381,7 @@ void dereferencet::build_reference_to(
         "NULL pointer", tmp_guard);
     }
   }
-  else if(root_object.id()=="dynamic_object")
+  else if(root_object.is_dynamic_object())
   {
     const dynamic_object_exprt &dynamic_object=
       to_dynamic_object_expr(root_object);
