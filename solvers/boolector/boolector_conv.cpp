@@ -2505,7 +2505,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
     return convert_bitwise(expr, bv);
   else if (expr.is_bitnot())
 	return convert_bitnot(expr, bv);
-  else if (expr.id() == "unary-")
+  else if (expr.is_unary_sub())
     return convert_unary_minus(expr, bv);
   else if (expr.is_if())
     return convert_if(expr, bv);

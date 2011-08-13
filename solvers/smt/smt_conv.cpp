@@ -669,7 +669,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     convert_smt_expr(expr.op0());
     smt_prop.out << ")";
   }
-  else if(expr.id()=="unary-")
+  else if(expr.is_unary_sub())
   {
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==1);

@@ -2724,7 +2724,7 @@ std::string expr2ct::convert(
       return convert_binary(src, "-", precedence=12, true);
   }
 
-  else if(src.id()=="unary-")
+  else if(src.is_unary_sub())
   {
     if(src.operands().size()!=1)
       return convert_norep(src, precedence);

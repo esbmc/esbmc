@@ -356,7 +356,7 @@ void exprt::negate()
   {
     if(is_constant())
       set(a_value, integer2string(-string2integer(get_string(a_value))));
-    else if(id()=="unary-")
+    else if(is_unary_sub())
     {
       exprt tmp;
       assert(operands().size()==1);

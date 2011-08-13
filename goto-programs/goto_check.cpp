@@ -591,7 +591,7 @@ void goto_checkt::check_rec(
   }
   else if(expr.id()=="+" || expr.id()=="-" ||
           expr.id()=="*" ||
-          expr.id()=="unary-" ||
+          expr.is_unary_sub() ||
           expr.is_typecast())
   {
     if(expr.type().is_signedbv())

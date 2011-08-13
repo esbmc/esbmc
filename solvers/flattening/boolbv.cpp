@@ -280,7 +280,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
   else if(expr.is_bitnot() || expr.is_bitand() ||
           expr.is_bitor() || expr.is_bitxor())
     return convert_bitwise(expr, bv);
-  else if(expr.id()=="unary-" ||
+  else if(expr.is_unary_sub() ||
           expr.id()=="no-overflow-unary-minus")
     return convert_unary_minus(expr, bv);
   else if(expr.id()=="abs")

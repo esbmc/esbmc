@@ -6355,7 +6355,7 @@ bool z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     return convert_bitwise(expr, bv);
   else if (expr.id() == exprt::i_bitnot)
 	return convert_bitnot(expr, bv);
-  else if (expr.id() == "unary-")
+  else if (expr.is_unary_sub())
     return convert_unary_minus(expr, bv);
   else if (expr.id() == exprt::i_if)
     return convert_if(expr, bv);

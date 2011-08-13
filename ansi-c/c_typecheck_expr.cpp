@@ -79,7 +79,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
   }
   else if(expr.is_symbol())
     typecheck_expr_symbol(expr);
-  else if(expr.id()=="unary+" || expr.id()=="unary-" ||
+  else if(expr.id()=="unary+" || expr.is_unary_sub() ||
           expr.is_bitnot())
     typecheck_expr_unary_arithmetic(expr);
   else if(expr.is_not())

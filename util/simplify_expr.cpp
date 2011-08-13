@@ -341,7 +341,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
   if((op_type_id=="unsignedbv" || op_type_id=="signedbv") &&
      (expr_type_id=="unsignedbv" || expr_type_id=="signedbv") &&
      (operand.id()=="+" || operand.id()=="-" ||
-      operand.id()=="unary-" || operand.id()=="*") &&
+      operand.is_unary_sub() || operand.id()=="*") &&
      expr_width<=op_width)
   {
     exprt new_expr;
@@ -2445,7 +2445,7 @@ bool simplify_exprt::simplify_inequality_constant(
     if(expr.id()=="=")
     {
       // rules below do not hold for >=
-      if(operand.id()=="unary-")
+      if(operand.is_unary_sub())
       {
         if(operand.operands().size()!=1) return true;
         exprt tmp;
@@ -2461,10 +2461,10 @@ bool simplify_exprt::simplify_inequality_constant(
         {
           // if we have -b+a=0, make that a+(-b)=0
 
-          if(operand.op0().id()=="unary-")
+          if(operand.op0().is_unary_sub())
             operand.op0().swap(operand.op1());
 
-          if(operand.op1().id()=="unary-" &&
+          if(operand.op1().is_unary_sub() &&
              operand.op1().operands().size()==1)
           {
             exprt tmp(expr.id(), expr.type());
@@ -3357,7 +3357,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
   //std::cout << "simplify_unary_minus expr.pretty(): " << expr.pretty() << std::endl;
   //std::cout << "operand.id(): " << operand.id() << std::endl;
 
-  if(operand.id()=="unary-")
+  if(operand.is_unary_sub())
   {
     if(operand.operands().size()!=1)
       return true;
@@ -3487,7 +3487,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_addition_substraction(expr, mode) && result;
   else if(expr.id()=="*")
     result=simplify_multiplication(expr) && result;
-  else if(expr.id()=="unary-")
+  else if(expr.is_unary_sub())
     result=simplify_unary_minus(expr) && result;
   else if(expr.is_not())
     result=simplify_not(expr, mode) && result;

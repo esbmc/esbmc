@@ -336,7 +336,7 @@ void interpretert::evaluate(
       dest.push_back(tmp0.front()/tmp1.front());
     return;
   }
-  else if(expr.id()=="unary-")
+  else if(expr.is_unary_sub())
   {
     if(expr.operands().size()!=1)
       throw "unary- expects one operand";
