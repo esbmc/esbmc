@@ -253,7 +253,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     return prop.limplies(convert(op[0]), convert(op[1]));
   }
-  else if(expr.id()=="if")
+  else if(expr.is_if())
   {
     if(op.size()!=3)
       throw "if takes three operands";

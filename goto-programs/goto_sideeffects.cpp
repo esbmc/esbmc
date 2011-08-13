@@ -226,7 +226,7 @@ void goto_convertt::remove_sideeffects(
 
     return;
   }
-  else if(expr.id()=="if")
+  else if(expr.is_if())
   {
     if(expr.operands().size()!=3)
       throw "if takes three arguments";

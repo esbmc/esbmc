@@ -804,7 +804,7 @@ exprt string_abstractiont::build(const exprt &pointer, bool write)
   }
 
   // take care of if
-  if(pointer.id()=="if")
+  if(pointer.is_if())
   {
     exprt result=if_exprt();
 

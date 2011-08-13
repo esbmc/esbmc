@@ -472,7 +472,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
     
     recursion_set.erase(identifier);
   }
-  else if(function.id()=="if")
+  else if(function.is_if())
   {
     if(function.operands().size()!=3)
       throw "if takes three arguments";

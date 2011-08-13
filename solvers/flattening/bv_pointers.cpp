@@ -318,7 +318,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
       return;
     }
   }
-  else if(expr.id()=="if")
+  else if(expr.is_if())
   {
     return SUB::convert_if(expr, bv);
   }

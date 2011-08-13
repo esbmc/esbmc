@@ -1366,7 +1366,7 @@ void invariant_sett::modifies(const exprt &lhs)
     // be very, very conservative for now
     make_true();
   }
-  else if(lhs.id()=="if")
+  else if(lhs.is_if())
   {
     // we just assume both are changed
     assert(lhs.operands().size()==3);

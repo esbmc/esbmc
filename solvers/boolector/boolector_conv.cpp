@@ -2507,7 +2507,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 	return convert_bitnot(expr, bv);
   else if (expr.id() == "unary-")
     return convert_unary_minus(expr, bv);
-  else if (expr.id() == "if")
+  else if (expr.is_if())
     return convert_if(expr, bv);
   else if (expr.is_and() || expr.id() == "or" || expr.id() == "xor")
 	return convert_logical_ops(expr, bv);

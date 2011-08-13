@@ -182,7 +182,7 @@ void interpretert::evaluate(
 
     return;
   }
-  else if(expr.id()=="if")
+  else if(expr.is_if())
   {
     if(expr.operands().size()!=3)
       throw "if expects three operands";

@@ -115,7 +115,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_binary_arithmetic(expr);
   else if(expr.id()=="comma")
     typecheck_expr_comma(expr);
-  else if(expr.id()=="if")
+  else if(expr.is_if())
     typecheck_expr_trinary(expr);
   else if(expr.is_code())
     typecheck_code(to_code(expr));

@@ -683,7 +683,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else
       throw "unsupported type for unary-: "+expr.type().id_string();
   }
-  else if(expr.id()=="if")
+  else if(expr.is_if())
   {
     assert(expr.operands().size()==3);
     // smt_prop.out << "(if_then_else ";

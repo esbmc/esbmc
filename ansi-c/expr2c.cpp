@@ -3025,7 +3025,7 @@ std::string expr2ct::convert(
   else if(src.id()=="=>")
     return convert_binary(src, "=>", precedence=3, true);
 
-  else if(src.id()=="if")
+  else if(src.is_if())
     return convert_trinary(src, "?", ":", precedence=3);
 
   else if(src.id()=="forall")

@@ -248,7 +248,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_case(expr, bv);
   else if(expr.id()=="cond")
     return convert_cond(expr, bv);
-  else if(expr.id()=="if")
+  else if(expr.is_if())
     return convert_if(expr, bv);
   else if(expr.is_constant())
     return convert_constant(expr, bv);

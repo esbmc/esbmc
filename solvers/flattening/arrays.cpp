@@ -125,7 +125,7 @@ void arrayst::collect_arrays(const exprt &a)
     index_expr.index()=a.op1();
     record_array_index(index_expr);
   }
-  else if(a.id()=="if")
+  else if(a.is_if())
   {
     if(a.operands().size()!=3)
       throw "if expected to have three operands";
@@ -368,7 +368,7 @@ void arrayst::add_array_constraints(
 {
   if(expr.id()=="with")
     return add_array_constraints_with(index_set, to_with_expr(expr));
-  else if(expr.id()=="if")
+  else if(expr.is_if())
     return add_array_constraints_if(index_set, to_if_expr(expr));
   else if(expr.is_array_of())
     return add_array_constraints_array_of(index_set, to_array_of_expr(expr));

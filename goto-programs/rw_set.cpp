@@ -147,7 +147,7 @@ void rw_sett::read_write_rec(
     assert(expr.operands().size()==1);
 
   }
-  else if(expr.id()=="if")
+  else if(expr.is_if())
   {
     assert(expr.operands().size()==3);
     read(expr.op0(), guard);

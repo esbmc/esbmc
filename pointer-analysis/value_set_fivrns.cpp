@@ -469,7 +469,7 @@ void value_set_fivrnst::get_value_set_rec(
 	    }
 		}
   }
-  else if(expr.id()=="if")
+  else if(expr.is_if())
   {
     if(expr.operands().size()!=3)
       throw "if takes three operands";
@@ -889,7 +889,7 @@ void value_set_fivrnst::get_reference_set_rec(
 
     return;
   }
-  else if(expr.id()=="if")
+  else if(expr.is_if())
   {
     if(expr.operands().size()!=3)
       throw "if takes three operands";
@@ -926,7 +926,7 @@ void value_set_fivrnst::assign(
   std::cout << "ASSIGN RHS: " << from_expr(ns, "", rhs) << std::endl;  
   #endif
 
-  if(rhs.id()=="if")
+  if(rhs.is_if())
   {
     if(rhs.operands().size()!=3)
       throw "if takes three operands";

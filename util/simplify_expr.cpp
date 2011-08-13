@@ -2029,7 +2029,7 @@ bool simplify_exprt::get_values(
 
     return false;
   }
-  else if(expr.id()=="if")
+  else if(expr.is_if())
   {
     if(expr.operands().size()!=3)
       return true;
@@ -3445,7 +3445,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
           expr.id()==">" || expr.id()=="<" ||
           expr.id()==">=" || expr.id()=="<=")
     result=simplify_relation(expr, mode) && result;
-  else if(expr.id()=="if")
+  else if(expr.is_if())
     result=simplify_if(expr) && result;
   else if(expr.id()=="lambda")
     result=simplify_lambda(expr) && result;
