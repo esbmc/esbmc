@@ -978,4 +978,4 @@ const irep_idt irept::id_unary_sub = dstring("unary-");
 const irep_idt irept::id_unknown = dstring("unknown");
 const irep_idt irept::id_with = dstring("with");
 const irep_idt irept::id_zero_string = dstring("zero_string");
-const irep_idt irept::id_zero_string_length = dstring("zero_length");
+const irep_idt irept::id_zero_string_length = dstring("zero_string_length");
