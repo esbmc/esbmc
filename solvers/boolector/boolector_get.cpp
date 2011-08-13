@@ -35,7 +35,7 @@ Function: boolector_convt::get
 exprt boolector_convt::get(const exprt &expr) const
 {
   if(expr.is_symbol() ||
-     expr.id()=="nondet_symbol")
+     expr.is_nondet_symbol())
   {
 	std::string tmp;
 	std::vector<exprt> unknown;

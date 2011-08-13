@@ -1041,7 +1041,7 @@ execution_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == exprt::member) {
     str = "member(entity(" + serialise_expr(rhs.op0()) + "),";
     str += "member_name(" + rhs.component_name().as_string() + "))";
-  } else if (rhs.id() == "nondet_symbol") {
+  } else if (rhs.is_nondet_symbol()) {
     /* Just return the identifier: it'll be unique to this particular piece
      * of entropy */
     exprt tmp = rhs;

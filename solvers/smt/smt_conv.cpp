@@ -367,7 +367,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
   {
     convert_identifier(expr.identifier().as_string());
   }
-  else if(expr.id()=="nondet_symbol")
+  else if(expr.is_nondet_symbol())
   {
     convert_identifier("nondet"+expr.identifier().as_string());
   }
@@ -1264,7 +1264,7 @@ void smt_convt::find_symbols(const exprt &expr)
       smt_prop.out << ")) " << std::endl;
     }
   }  
-  else if(expr.id()=="nondet_symbol")
+  else if(expr.is_nondet_symbol())
   {
     if(expr.type().is_code())
       return;

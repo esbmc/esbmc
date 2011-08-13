@@ -55,7 +55,7 @@ bool boolbvt::literal(
   else
   {
     if(expr.is_symbol() ||
-       expr.id()=="nondet_symbol")
+       expr.is_nondet_symbol())
     {
       const irep_idt &identifier=expr.identifier();
 
@@ -289,7 +289,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_byte_extract(expr, bv);
   else if(has_prefix(expr.id_string(), "byte_update"))
     return convert_byte_update(expr, bv);
-  else if(expr.id()=="nondet_symbol" ||
+  else if(expr.is_nondet_symbol() ||
           expr.id()=="quant_symbol")
     return convert_symbol(expr, bv);
   else if(expr.is_struct())

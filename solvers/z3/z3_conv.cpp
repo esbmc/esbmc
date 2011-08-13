@@ -6341,7 +6341,7 @@ bool z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 
   if (expr.id() == exprt::symbol)
 	return convert_identifier(expr.identifier().as_string(), expr.type(), bv);
-  else if (expr.id() == "nondet_symbol")
+  else if (expr.is_nondet_symbol())
 	return convert_identifier("nondet$"+expr.identifier().as_string(), expr.type(), bv);
   else if (expr.id() == exprt::typecast)
     return convert_typecast(expr, bv);

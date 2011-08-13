@@ -290,7 +290,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.id()=="nondet_symbol")
+  else if(expr.is_nondet_symbol())
   {
     for(unsigned i=0; i<bits; i++)
       bv[i]=prop.new_variable();

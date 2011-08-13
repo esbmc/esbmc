@@ -3046,7 +3046,7 @@ std::string expr2ct::convert(
   else if(src.id()=="next_symbol")
     return convert_symbol(src, precedence);
 
-  else if(src.id()=="nondet_symbol")
+  else if(src.is_nondet_symbol())
     return convert_nondet_symbol(src, precedence);
 
   else if(src.id()=="predicate_symbol")

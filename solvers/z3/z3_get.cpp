@@ -115,7 +115,7 @@ exprt z3_convt::get(const exprt &expr) const
     return expr;
 
   if(expr.id()==exprt::symbol ||
-     expr.id()=="nondet_symbol")
+     expr.is_nondet_symbol())
   {
 	std::string identifier, tmp;
 	std::vector<exprt> unknown;
