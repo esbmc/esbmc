@@ -1778,7 +1778,7 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
 {
   const typet &type=expr.type();
 
-  if(type.id()=="integer")
+  if(type.is_integer())
   {
     // save location
     locationt location=expr.location();

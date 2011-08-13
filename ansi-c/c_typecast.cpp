@@ -116,7 +116,7 @@ bool check_c_implicit_typecast(
   if(src_type_id=="natural")
   {
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="integer") return false;
+    if(dest_type.is_integer()) return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
     if(dest_type.is_unsignedbv()) return false;
@@ -150,7 +150,7 @@ bool check_c_implicit_typecast(
   }
   else if(src_type_id=="bool")
   {
-    if(dest_type.id()=="integer") return false;
+    if(dest_type.is_integer()) return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.is_unsignedbv()) return false;
     if(dest_type.is_signedbv()) return false;
@@ -166,7 +166,7 @@ bool check_c_implicit_typecast(
   {
     if(dest_type.is_unsignedbv()) return false;
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="integer") return false;
+    if(dest_type.is_integer()) return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.is_signedbv()) return false;
     if(dest_type.is_floatbv()) return false;
@@ -179,7 +179,7 @@ bool check_c_implicit_typecast(
           src_type_id=="fixedbv")
   {
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="integer") return false;
+    if(dest_type.is_integer()) return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.is_signedbv()) return false;
     if(dest_type.is_unsignedbv()) return false;
@@ -443,7 +443,7 @@ void c_typecastt::implicit_typecast_followed(
        src_type.is_unsignedbv() ||
        src_type.is_signedbv() ||
        src_type.id()=="natural" ||
-       src_type.id()=="integer"))
+       src_type.is_integer()))
     {
       expr=exprt("constant", dest_type);
       expr.value("NULL");

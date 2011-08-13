@@ -1358,7 +1358,7 @@ void smt_convt::convert_smt_type(const typet &type)
     assert(false && "Construct not supported yet");
     smt_prop.out << smt_pointer_type();
   }
-  else if(type.id()=="integer")
+  else if(type.is_integer())
   {
     smt_prop.out << "Int";
   }

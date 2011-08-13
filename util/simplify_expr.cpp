@@ -723,7 +723,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
   if(expr.type().is_signedbv() ||
      expr.type().is_unsignedbv() ||
      expr.type().id()=="natural" ||
-     expr.type().id()=="integer")
+     expr.type().is_integer())
   {
     mp_integer int_value0, int_value1;
     bool ok0, ok1;
@@ -846,7 +846,7 @@ bool simplify_exprt::simplify_modulo(exprt &expr)
   if(expr.type().is_signedbv() ||
      expr.type().is_unsignedbv() ||
      expr.type().id()=="natural" ||
-     expr.type().id()=="integer")
+     expr.type().is_integer())
   {
     if(expr.type()==expr.op0().type() &&
        expr.type()==expr.op1().type())
@@ -1270,7 +1270,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
       }
     }
   }
-  else if(expr.op0().type().id()=="integer" ||
+  else if(expr.op0().type().is_integer() ||
 	  expr.op0().type().id()=="natural")
   {
     if(expr.id()=="lshr")
