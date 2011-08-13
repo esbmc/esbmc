@@ -111,7 +111,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
           expr.id()=="*" || expr.id()=="/" ||
           expr.id()=="mod" ||
           expr.id()=="shl" || expr.id()=="shr" ||
-          expr.is_bitand() || expr.id()=="bitxor" || expr.id()=="bitor")
+          expr.is_bitand() || expr.id()=="bitxor" || expr.is_bitor())
     typecheck_expr_binary_arithmetic(expr);
   else if(expr.id()=="comma")
     typecheck_expr_comma(expr);
@@ -2027,7 +2027,7 @@ void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
         }
       }
     }
-    else if(expr.is_bitand() || expr.id()=="bitxor" || expr.id()=="bitor")
+    else if(expr.is_bitand() || expr.id()=="bitxor" || expr.is_bitor())
     {
       if(type0==type1)
       {

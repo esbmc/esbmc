@@ -628,7 +628,7 @@ void goto_checkt::check_rec(
         options.set_option("int-encoding", false);
     }
   }
-  else if (expr.is_bitand() || expr.id() == "bitor" ||
+  else if (expr.is_bitand() || expr.is_bitor() ||
 		   expr.id() == "bitxor" || expr.id() == "bitnand" ||
 		   expr.id() == "bitnor" || expr.id() == "bitnxor")
   {

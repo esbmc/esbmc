@@ -597,7 +597,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
   }
   else if(expr.id()=="concatenation" || 
           expr.is_bitand() ||
-          expr.id()=="bitor")
+          expr.is_bitor())
   {
     assert( false && "Construct not supported yet" );
     smt_prop.out << "(";
@@ -610,7 +610,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
           smt_prop.out << " @ ";
         else if(expr.is_bitand())
           smt_prop.out << " & ";
-        else if(expr.id()=="bitor")
+        else if(expr.is_bitor())
           smt_prop.out << " | ";
       }
 

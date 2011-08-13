@@ -3013,7 +3013,7 @@ std::string expr2ct::convert(
   else if(src.id()=="bitxor")
     return convert_binary(src, "^", precedence=7, false);
 
-  else if(src.id()=="bitor")
+  else if(src.is_bitor())
     return convert_binary(src, "|", precedence=6, false);
 
   else if(src.is_and())

@@ -46,7 +46,7 @@ void boolbvt::convert_bitwise(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.is_bitand() || expr.id()=="bitor" ||
+  else if(expr.is_bitand() || expr.is_bitor() ||
           expr.id()=="bitxor")
   {
     bv.resize(width);
@@ -67,7 +67,7 @@ void boolbvt::convert_bitwise(const exprt &expr, bvt &bv)
       {
         if(expr.is_bitand())
           bv[i]=prop.land(bv[i], op[i]);
-        else if(expr.id()=="bitor")
+        else if(expr.is_bitor())
           bv[i]=prop.lor(bv[i], op[i]);
         else if(expr.id()=="bitxor")
           bv[i]=prop.lxor(bv[i], op[i]);

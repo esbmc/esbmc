@@ -278,7 +278,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
   else if(expr.id()=="extractbits")
     return convert_extractbits(expr, bv);
   else if(expr.is_bitnot() || expr.is_bitand() ||
-          expr.id()=="bitor" || expr.id()=="bitxor")
+          expr.is_bitor() || expr.id()=="bitxor")
     return convert_bitwise(expr, bv);
   else if(expr.id()=="unary-" ||
           expr.id()=="no-overflow-unary-minus")
