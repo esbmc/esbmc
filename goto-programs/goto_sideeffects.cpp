@@ -103,7 +103,7 @@ bool goto_convertt::has_sideeffect(const exprt &expr)
     if(has_sideeffect(*it))
       return true;
 
-  if(expr.id()=="sideeffect")
+  if(expr.is_sideeffect())
     return true;
 
   return false;
@@ -127,7 +127,7 @@ bool goto_convertt::has_function_call(const exprt &expr)
     if(has_function_call(*it))
       return true;
 
-  if(expr.id()=="sideeffect" &&
+  if(expr.is_sideeffect() &&
      expr.statement()=="function_call")
     return true;
 
@@ -298,7 +298,7 @@ void goto_convertt::remove_sideeffects(
 
     return;
   }
-  else if(expr.id()=="sideeffect" &&
+  else if(expr.is_sideeffect() &&
           expr.statement()=="gcc_conditional_expression")
   {
     remove_gcc_conditional_expression(expr, guard, dest);
@@ -309,7 +309,7 @@ void goto_convertt::remove_sideeffects(
   Forall_operands(it, expr)
     remove_sideeffects(*it, guard, dest);
 
-  if(expr.id()=="sideeffect")
+  if(expr.is_sideeffect())
   {
     const irep_idt &statement=expr.statement();
 

@@ -833,7 +833,7 @@ void value_set_fivrt::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="sideeffect")
+  else if(expr.is_sideeffect())
   {
     const irep_idt &statement=expr.statement();
     

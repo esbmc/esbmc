@@ -69,7 +69,7 @@ Function: c_typecheck_baset::typecheck_expr_main
 
 void c_typecheck_baset::typecheck_expr_main(exprt &expr)
 {
-  if(expr.id()=="sideeffect")
+  if(expr.is_sideeffect())
     typecheck_expr_side_effect(to_side_effect_expr(expr));
   else if(expr.is_constant())
     typecheck_expr_constant(expr);
@@ -289,7 +289,7 @@ Function: c_typecheck_baset::typecheck_expr_operands
 
 void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
 {
-  if(expr.id()=="sideeffect" &&
+  if(expr.is_sideeffect() &&
      expr.statement()=="function_call")
   {
     // don't do function operand
@@ -297,7 +297,7 @@ void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
 
     typecheck_expr(expr.op1()); // arguments
   }
-  else if(expr.id()=="sideeffect" &&
+  else if(expr.is_sideeffect() &&
           expr.statement()=="statement_expression")
   {
     typecheck_code(to_code(expr.op0()));
@@ -1741,7 +1741,7 @@ void c_typecheck_baset::typecheck_function_call_arguments(
       const typet &op_type=argument_type.type();
 
       if(op_type.is_bool() &&
-         op.id()=="sideeffect" &&
+         op.is_sideeffect() &&
          op.statement()=="assign" &&
          !op.type().is_bool())
       {
@@ -2069,7 +2069,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
   const typet &type1=op1.type();
 
   if(expr.id()=="-" ||
-     (expr.id()=="sideeffect" && expr.statement()=="assign-"))
+     (expr.is_sideeffect() && expr.statement()=="assign-"))
   {
     if(type0.is_pointer() &&
        type1.is_pointer())
@@ -2091,7 +2091,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
     }
   }
   else if(expr.id()=="+" ||
-          (expr.id()=="sideeffect" && expr.statement()=="assign+"))
+          (expr.is_sideeffect() && expr.statement()=="assign+"))
   {
     exprt *pop, *intop;
 

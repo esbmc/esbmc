@@ -362,7 +362,7 @@ void c_typecheck_baset::typecheck_expression(codet &code)
   exprt &op=code.op0();
   typecheck_expr(op);
 
-  if(op.id()=="sideeffect")
+  if(op.is_sideeffect())
   {
     const irep_idt &statement=op.statement();
     
@@ -376,7 +376,7 @@ void c_typecheck_baset::typecheck_expression(codet &code)
       code.statement("assign");
       code.operands().swap(operands);
       
-      if(code.op1().id()=="sideeffect" &&
+      if(code.op1().is_sideeffect() &&
          code.op1().statement()=="function_call")
       {
         assert(code.op1().operands().size()==2);
@@ -562,7 +562,7 @@ void c_typecheck_baset::typecheck_ifthenelse(codet &code)
 
   typecheck_expr(cond);
 
-  if(cond.id()=="sideeffect" &&
+  if(cond.is_sideeffect() &&
      cond.statement()=="assign")
   {
     err_location(cond);

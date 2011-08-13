@@ -2913,7 +2913,7 @@ std::string expr2ct::convert(
   else if(src.id()=="struct-member-value")
     return convert_struct_member_value(src, precedence=16);
 
-  else if(src.id()=="sideeffect")
+  else if(src.is_sideeffect())
   {
     const irep_idt &statement=src.statement();
     if(statement=="preincrement")

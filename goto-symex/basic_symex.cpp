@@ -181,7 +181,7 @@ void basic_symext::symex_assign(statet &state, execution_statet &ex_state, const
   replace_nondet(lhs, ex_state);
   replace_nondet(rhs, ex_state);
 
-  if(rhs.id()=="sideeffect")
+  if(rhs.is_sideeffect())
   {
     const side_effect_exprt &side_effect_expr=to_side_effect_expr(rhs);
     const irep_idt &statement=side_effect_expr.get_statement();
@@ -599,7 +599,7 @@ Function: basic_symext::replace_nondet
 
 void basic_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
 {
-  if(expr.id()=="sideeffect" && expr.statement()=="nondet")
+  if(expr.is_sideeffect() && expr.statement()=="nondet")
   {
     exprt new_expr("nondet_symbol", expr.type());
     new_expr.identifier("symex::nondet"+i2string(ex_state.nondet_count++));

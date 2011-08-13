@@ -723,7 +723,7 @@ void goto_convertt::convert_expression(
 
   exprt expr=code.op0();
 
-  if(expr.id()=="sideeffect")
+  if(expr.is_sideeffect())
   {
     Forall_operands(it, expr)
       remove_sideeffects(*it, dest);
@@ -843,7 +843,7 @@ void goto_convertt::convert_assign(
 
   remove_sideeffects(lhs, dest);
 
-  if(rhs.id()=="sideeffect" &&
+  if(rhs.is_sideeffect() &&
      rhs.statement()=="function_call")
   {
     if(rhs.operands().size()!=2)
@@ -857,7 +857,7 @@ void goto_convertt::convert_assign(
 
     do_function_call(lhs, rhs.op0(), rhs.op1().operands(), dest);
   }
-  else if(rhs.id()=="sideeffect" &&
+  else if(rhs.is_sideeffect() &&
           (rhs.statement()=="cpp_new" ||
            rhs.statement()=="cpp_new[]"))
   {
