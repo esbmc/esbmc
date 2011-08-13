@@ -2961,7 +2961,7 @@ std::string expr2ct::convert(
   else if(src.is_not())
     return convert_unary(src, "!", precedence=15);
 
-  else if(src.id()=="bitnot")
+  else if(src.is_bitnot())
     return convert_unary(src, "~", precedence=15);
 
   else if(src.id()=="*")

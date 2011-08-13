@@ -80,7 +80,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
   else if(expr.is_symbol())
     typecheck_expr_symbol(expr);
   else if(expr.id()=="unary+" || expr.id()=="unary-" ||
-          expr.id()=="bitnot")
+          expr.is_bitnot())
     typecheck_expr_unary_arithmetic(expr);
   else if(expr.is_not())
     typecheck_expr_unary_boolean(expr);

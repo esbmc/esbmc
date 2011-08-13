@@ -3471,12 +3471,12 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_division(expr) && result;
   else if(expr.id()=="mod")
     result=simplify_modulo(expr) && result;
-  else if(expr.id()=="bitnot")
+  else if(expr.is_bitnot())
     result=simplify_bitnot(expr) && result;
   else if(expr.id()=="mod")
   {
   }
-  else if(expr.id()=="bitnot" ||
+  else if(expr.is_bitnot() ||
           expr.is_bitand() ||
           expr.id()=="bitor" ||
           expr.id()=="bitxor")

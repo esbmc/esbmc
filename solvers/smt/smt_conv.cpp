@@ -661,7 +661,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     convert_smt_expr(expr.op1());
     smt_prop.out << ")";
   }
-  else if(expr.id()=="bitnot")
+  else if(expr.is_bitnot())
   {
     assert( false && "Construct not supported yet" );
     assert(expr.operands().size()==1);

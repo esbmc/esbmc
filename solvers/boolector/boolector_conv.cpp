@@ -2503,7 +2503,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
   else if (expr.is_bitand() || expr.id() == "bitor" || expr.id() == "bitxor"
 		|| expr.id() == "bitnand" || expr.id() == "bitnor" || expr.id() == "bitnxor")
     return convert_bitwise(expr, bv);
-  else if (expr.id() == "bitnot")
+  else if (expr.is_bitnot())
 	return convert_bitnot(expr, bv);
   else if (expr.id() == "unary-")
     return convert_unary_minus(expr, bv);

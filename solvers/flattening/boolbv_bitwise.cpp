@@ -26,7 +26,7 @@ void boolbvt::convert_bitwise(const exprt &expr, bvt &bv)
   if(boolbv_get_width(expr.type(), width))
     return conversion_failed(expr, bv);
 
-  if(expr.id()=="bitnot")
+  if(expr.is_bitnot())
   {
     if(expr.operands().size()!=1)
       throw "bitnot takes one operand";
