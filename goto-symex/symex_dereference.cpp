@@ -172,7 +172,7 @@ void goto_symext::dereference_rec(
   const bool write)
 {
   if(expr.id()==exprt::deref ||
-     expr.id()=="implicit_dereference")
+     expr.is_implicit_dereference())
   {
     if(expr.operands().size()!=1)
       throw "dereference takes one operand";

@@ -84,7 +84,7 @@ void goto_convertt::do_function_call(
   }
   // split on the function
   if(new_function.is_dereference() ||
-     new_function.id()=="implicit_dereference")
+     new_function.is_implicit_dereference())
   {
     do_function_call_dereference(new_lhs, new_function, new_arguments, dest);
   }

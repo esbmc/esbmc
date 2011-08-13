@@ -1055,7 +1055,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
     return;
 
   if(rhs.is_dereference()
-	|| rhs.id() == "implicit_dereference"
+	|| rhs.is_implicit_dereference()
 	|| rhs.is_index()
 	|| rhs.is_member())
   {

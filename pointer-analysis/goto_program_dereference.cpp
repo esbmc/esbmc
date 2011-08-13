@@ -220,7 +220,7 @@ void goto_program_dereferencet::dereference_rec(
     assert(expr.operands().size()==1);
 
     if(expr.op0().is_dereference() ||
-       expr.op0().id()=="implicit_dereference")
+       expr.op0().is_implicit_dereference())
     {
       assert(expr.op0().operands().size()==1);
 
@@ -238,7 +238,7 @@ void goto_program_dereferencet::dereference_rec(
     dereference_rec(*it, guard, mode);
 
   if(expr.is_dereference() ||
-     expr.id()=="implicit_dereference")
+     expr.is_implicit_dereference())
   {
     if(expr.operands().size()!=1)
       throw "dereference expects one operand";

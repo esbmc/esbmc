@@ -241,7 +241,7 @@ bool goto_convert_functionst::have_function_pointers(
         to_code_function_call(target->code);
     
       if(code.function().is_dereference() ||
-         code.function().id()=="implicit_dereference")
+         code.function().is_implicit_dereference())
         return true;
     }
 
@@ -275,7 +275,7 @@ bool goto_convert_functionst::remove_function_pointers(
         to_code_function_call(target->code);
     
       if(code.function().is_dereference() ||
-         code.function().id()=="implicit_dereference")
+         code.function().is_implicit_dereference())
       {
         remove_function_pointer(value_sets, goto_program, target); 
         did_something=true;

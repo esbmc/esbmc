@@ -191,7 +191,7 @@ void goto_convertt::do_pthread_create(
     }
 
     // do dereferencing
-    if(thread_function.id()=="implicit_address_of" ||
+    if(thread_function.is_implicit_address_of() ||
        thread_function.is_address_of())
     {
       exprt tmp;
@@ -749,7 +749,7 @@ void goto_convertt::do_array_set(
   const exprt &array_ptr=arguments[0];
   const exprt &value=arguments[1];
 
-  if(array_ptr.id()!="implicit_address_of")
+  if(!array_ptr.is_implicit_address_of())
     throw "array_set expects array-pointer as first argument";
 
   if(!array_ptr.op0().type().is_array())

@@ -118,7 +118,7 @@ void preconditiont::compute_address_of(exprt &dest)
     compute_address_of(dest.op0());
   }
   else if(dest.id()==exprt::deref || 
-          dest.id()=="implicit_dereference")
+          dest.is_implicit_dereference())
   {
     assert(dest.operands().size()==1);
     compute(dest.op0());
@@ -158,7 +158,7 @@ void preconditiont::compute_rec(exprt &dest)
 {
   if(dest.id()==exprt::addrof ||
      dest.id()=="reference_to" ||
-     dest.id()=="implicit_address_of")
+     dest.is_implicit_address_of())
   {
     // only do index!
     assert(dest.operands().size()==1);
@@ -174,7 +174,7 @@ void preconditiont::compute_rec(exprt &dest)
     }
   }
   else if(dest.id()==exprt::deref ||
-          dest.id()=="implicit_dereference")
+          dest.is_implicit_dereference())
   {
     assert(dest.operands().size()==1);
 

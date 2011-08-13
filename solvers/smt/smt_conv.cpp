@@ -964,7 +964,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       assert(false);
   }
   else if(expr.is_address_of() ||
-          expr.id()=="implicit_address_of" ||
+          expr.is_implicit_address_of() ||
           expr.id()=="reference_to")
   {
     assert(false && "Construct not supported yet");

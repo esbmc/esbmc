@@ -142,7 +142,7 @@ void rw_sett::read_write_rec(
     read_write_rec(tmp, r, w, suffix, guard);
   }
   else if(expr.is_address_of() ||
-          expr.id()=="implicit_address_of")
+          expr.is_implicit_address_of())
   {
     assert(expr.operands().size()==1);
 

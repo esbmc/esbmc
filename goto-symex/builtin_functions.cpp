@@ -276,7 +276,7 @@ void basic_symext::symex_trace(
   if(to_integer(code.arguments()[0], debug_lvl))
     throw "CBMC_trace expects constant as first argument";
     
-  if(code.arguments()[1].id()!="implicit_address_of" ||
+  if(!code.arguments()[1].is_implicit_address_of() ||
      code.arguments()[1].operands().size()!=1 ||
      code.arguments()[1].op0().id()!="string-constant")
     throw "CBMC_trace expects string constant as second argument";

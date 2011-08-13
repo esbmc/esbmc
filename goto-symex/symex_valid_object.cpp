@@ -69,7 +69,7 @@ void goto_symext::replace_dynamic_allocation(
     
     // check what we have
     if(expr.op0().id()==exprt::addrof ||
-       expr.op0().id()=="implicit_address_of")
+       expr.op0().is_implicit_address_of())
     {
       assert(expr.op0().operands().size()==1);
       exprt &object=expr.op0().op0();

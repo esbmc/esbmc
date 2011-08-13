@@ -481,7 +481,7 @@ void goto_symex_statet::rename(exprt &expr, const namespacet &ns,unsigned node_i
     level2.rename(expr,node_id);
   }
   else if(expr.id()==exprt::addrof ||
-          expr.id()=="implicit_address_of" ||
+          expr.is_implicit_address_of() ||
           expr.id()=="reference_to")
   {
     assert(expr.operands().size()==1);
@@ -569,7 +569,7 @@ void goto_symex_statet::level1t::rename(exprt &expr,unsigned node_id)
       expr.identifier(name(identifier, it->second,node_id));
   }
   else if(expr.id()==exprt::addrof ||
-          expr.id()=="implicit_address_of" ||
+          expr.is_implicit_address_of() ||
           expr.id()=="reference_to")
   {
     assert(expr.operands().size()==1);
@@ -628,7 +628,7 @@ void goto_symex_statet::level2t::rename(exprt &expr, unsigned node_id)
     }
   }
   else if(expr.id()==exprt::addrof ||
-          expr.id()=="implicit_address_of" ||
+          expr.is_implicit_address_of() ||
           expr.id()=="reference_to")
   {
     // do nothing

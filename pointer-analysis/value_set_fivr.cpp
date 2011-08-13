@@ -717,7 +717,7 @@ void value_set_fivrt::get_value_set_rec(
     return;
   }
   else if(expr.is_dereference() ||
-          expr.id()=="implicit_dereference")
+          expr.is_implicit_dereference())
   {
     object_mapt reference_set;
     get_reference_set_sharing(expr, reference_set, ns);
@@ -1072,7 +1072,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
     return;
   }
   else if(expr.is_dereference() ||
-          expr.id()=="implicit_dereference")
+          expr.is_implicit_dereference())
   {
     if(expr.operands().size()!=1)
       throw expr.id_string()+" expected to have one operand";
@@ -1603,7 +1603,7 @@ void value_set_fivrt::assign_rec(
     make_union(temp_entry.object_map, values_rhs);
   }
   else if(lhs.is_dereference() ||
-          lhs.id()=="implicit_dereference")
+          lhs.is_implicit_dereference())
   {
     if(lhs.operands().size()!=1)
       throw lhs.id_string()+" expected to have one operand";

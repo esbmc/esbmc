@@ -2530,7 +2530,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 	return convert_mul(expr, bv);
   else if(expr.id()=="abs")
     return convert_abs(expr, bv);
-  else if (expr.is_address_of() || expr.id() == "implicit_address_of"
+  else if (expr.is_address_of() || expr.is_implicit_address_of()
 		|| expr.id() == "reference_to")
 	return convert_pointer(expr, bv);
   else if (expr.is_array_of())
