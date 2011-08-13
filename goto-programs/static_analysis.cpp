@@ -576,7 +576,7 @@ void static_analysis_baset::do_function_call_rec(
       }
     }
   }
-  else if(function.id()=="NULL-object")
+  else if(function.is_null_object())
   {
     // ignore, can't be a function
   }

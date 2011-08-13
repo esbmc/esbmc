@@ -96,7 +96,7 @@ void goto_convertt::do_function_call(
   {
     do_function_call_symbol(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.id()=="NULL-object")
+  else if(new_function.is_null_object())
   {
   }
   else

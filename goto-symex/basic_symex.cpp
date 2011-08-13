@@ -264,7 +264,7 @@ void basic_symext::symex_assign_rec(
   else if(lhs.id()==exprt::typecast)
     symex_assign_typecast(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="string-constant" ||
-          lhs.id()=="NULL-object" ||
+          lhs.is_null_object() ||
           lhs.id()=="zero_string")
   {
     // ignore
@@ -451,7 +451,7 @@ void basic_symext::symex_assign_member(
   {
     assert(lhs_struct.operands().size()==1);
 
-    if(lhs_struct.op0().id()=="NULL-object")
+    if(lhs_struct.op0().is_null_object())
     {
       // ignore
     }

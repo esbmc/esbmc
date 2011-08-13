@@ -412,7 +412,7 @@ bool simplify_exprt::simplify_address_of(exprt &expr)
 
   if(!expr.type().is_pointer()) return true;
 
-  if(expr.op0().id()=="NULL-object")
+  if(expr.op0().is_null_object())
   {
     exprt constant("constant", expr.type());
     constant.value("NULL");

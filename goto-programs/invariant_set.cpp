@@ -1395,7 +1395,7 @@ void invariant_sett::modifies(const exprt &lhs)
     assert(lhs.operands().size()==2);
     modifies(lhs.op0());
   }
-  else if(lhs.id()=="NULL-object")
+  else if(lhs.is_null_object())
   {
     // ignore
   }

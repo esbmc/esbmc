@@ -2745,7 +2745,7 @@ std::string expr2ct::convert(
     return convert_function(src, "INVALID-POINTER", precedence=15);
   }
 
-  else if(src.id()=="NULL-object")
+  else if(src.is_null_object())
   {
     return "NULL-object";
   }

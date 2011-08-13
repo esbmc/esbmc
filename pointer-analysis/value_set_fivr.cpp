@@ -1661,7 +1661,7 @@ void value_set_fivrt::assign_rec(
     // someone writes into a string-constant
     // evil guy
   }
-  else if(lhs.id()=="NULL-object")
+  else if(lhs.is_null_object())
   {
     // evil as well
   }

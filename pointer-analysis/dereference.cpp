@@ -362,7 +362,7 @@ void dereferencet::build_reference_to(
   const exprt &root_object=o.root_object();
   const exprt &object=o.object();
 
-  if(root_object.id()=="NULL-object")
+  if(root_object.is_null_object())
   {
     if(!options.get_bool_option("no-pointer-check"))
     {
