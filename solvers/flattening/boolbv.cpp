@@ -269,7 +269,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_div(expr, bv);
   else if(expr.id()=="mod")
     return convert_mod(expr, bv);
-  else if(expr.id()=="shl" || expr.id()=="ashr" || expr.id()=="lshr")
+  else if(expr.id()=="shl" || expr.is_ashr() || expr.id()=="lshr")
     return convert_shift(expr, bv);
   else if(expr.id()=="concatenation")
     return convert_concatenation(expr, bv);

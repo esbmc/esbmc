@@ -48,7 +48,7 @@ void boolbvt::convert_shift(const exprt &expr, bvt &bv)
 
   if(expr.id()=="shl")
     shift=bv_utilst::LEFT;
-  else if(expr.id()=="ashr")
+  else if(expr.is_ashr())
     shift=bv_utilst::ARIGHT;
   else if(expr.id()=="lshr")
     shift=bv_utilst::LRIGHT;

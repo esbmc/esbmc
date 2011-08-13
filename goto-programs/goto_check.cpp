@@ -616,7 +616,7 @@ void goto_checkt::check_rec(
 
   }
 
-  if (expr.id() == "ashr" || expr.id() == "lshr" ||
+  if (expr.is_ashr() || expr.id() == "lshr" ||
 	  expr.id() == "shl")
   {
     if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")

@@ -2976,7 +2976,7 @@ std::string expr2ct::convert(
   else if(src.id()=="shl")
     return convert_binary(src, "<<", precedence=11, true);
 
-  else if(src.id()=="ashr" || src.id()=="lshr")
+  else if(src.is_ashr() || src.id()=="lshr")
     return convert_binary(src, ">>", precedence=11, true);
 
   else if(src.id()=="<" || src.id()==">" ||

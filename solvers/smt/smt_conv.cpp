@@ -1005,7 +1005,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     
     smt_prop.out << ")";
   }
-  else if(expr.id()=="ashr" ||
+  else if(expr.is_ashr() ||
           expr.id()=="lshr" ||
           expr.id()=="shl")
   {
@@ -1015,7 +1015,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     if(expr.type().is_unsignedbv() ||
        expr.type().is_signedbv())
     {
-      if(expr.id()=="ashr")
+      if(expr.is_ashr())
         smt_prop.out << "BVASHR";
       else if(expr.id()=="lshr")
         smt_prop.out << "BVLSHR";

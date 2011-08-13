@@ -1241,7 +1241,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
         return false;
       }
     }
-    else if(expr.id()=="ashr")
+    else if(expr.is_ashr())
     {
       // this is to simulate an arithmetic right shift
       if(distance>=0)
@@ -1282,7 +1282,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
         return false;
       }
     }
-    else if(expr.id()=="ashr")
+    else if(expr.is_ashr())
     {
       // this is to simulate an arithmetic right shift
       if(distance>=0)
@@ -3481,7 +3481,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
           expr.id()=="bitor" ||
           expr.id()=="bitxor")
     result=simplify_bitwise(expr) && result;
-  else if(expr.id()=="ashr" || expr.id()=="lshr" || expr.id()=="shl")
+  else if(expr.is_ashr() || expr.id()=="lshr" || expr.id()=="shl")
     result=simplify_shifts(expr) && result;
   else if(expr.id()=="+" || expr.id()=="-")
     result=simplify_addition_substraction(expr, mode) && result;

@@ -2217,7 +2217,7 @@ bool boolector_convt::convert_shift(const exprt &expr, BtorExp* &bv)
   else
     if (convert_bv(expr.op1(), operand1)) return true;
 
-  if(expr.id()=="ashr")
+  if(expr.is_ashr())
     result = boolector_sra(boolector_ctx, operand0, operand1);
   else if (expr.id()=="lshr")
     result = boolector_srl(boolector_ctx, operand0, operand1);
@@ -2537,7 +2537,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 	return convert_array_of(expr, bv);
   else if (expr.is_index())
 	return convert_index(expr, bv);
-  else if (expr.id() == "ashr" || expr.id() == "lshr" || expr.id() == "shl")
+  else if (expr.is_ashr() || expr.id() == "lshr" || expr.id() == "shl")
 	return convert_shift(expr, bv);
   else if (expr.id() == "with")
 	return convert_with(expr, bv);

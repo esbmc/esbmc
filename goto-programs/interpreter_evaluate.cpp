@@ -402,7 +402,7 @@ void interpretert::evaluate(
       }
     }
   }
-  else if(expr.id()=="ashr")
+  else if(expr.is_ashr())
   {
     if(expr.operands().size()!=2)
       throw "ashr expects two operands";
