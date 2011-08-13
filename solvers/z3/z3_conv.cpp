@@ -6404,7 +6404,7 @@ bool z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 	  exprt tmp;
 	  string2array(expr, tmp);
 	return convert_bv(tmp, bv);
-  } else if (expr.id() == "zero_string_length")
+  } else if (expr.is_zero_string_length())
     return convert_zero_string_length(expr.op0(), bv);
   else if (expr.id() == "replication")
 	assert(expr.operands().size()==2);

@@ -1674,7 +1674,7 @@ void value_set_fivrt::assign_rec(
   }
   else if(lhs.is_zero_string() ||
           lhs.id()=="is_zero_string" ||
-          lhs.id()=="zero_string_length")
+          lhs.is_zero_string_length())
   {
     // ignore
   }

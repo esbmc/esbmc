@@ -2830,7 +2830,7 @@ std::string expr2ct::convert(
     return convert_function(src, "ZERO_STRING", precedence=15);
   }
 
-  else if(src.id()=="zero_string_length")
+  else if(src.is_zero_string_length())
   {
     return convert_function(src, "ZERO_STRING_LENGTH", precedence=15);
   }

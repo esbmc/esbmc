@@ -525,7 +525,7 @@ Function: string_abstractiont::has_string_macros
 bool string_abstractiont::has_string_macros(const exprt &expr)
 {
   if(expr.id()=="is_zero_string" ||
-     expr.id()=="zero_string_length" ||
+     expr.is_zero_string_length() ||
      expr.id()=="buffer_size")
     return true;
 
@@ -559,7 +559,7 @@ void string_abstractiont::replace_string_macros(
     exprt tmp=is_zero_string(expr.op0(), lhs, location);
     expr.swap(tmp);
   }
-  else if(expr.id()=="zero_string_length")
+  else if(expr.is_zero_string_length())
   {
     assert(expr.operands().size()==1);
     exprt tmp=zero_string_length(expr.op0(), lhs, location);

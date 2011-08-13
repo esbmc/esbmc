@@ -1112,7 +1112,7 @@ void value_sett::assign_rec(
           lhs.id()=="dynamic_type" ||
           lhs.id()=="is_zero_string" ||
           lhs.is_zero_string() ||
-          lhs.id()=="zero_string_length")
+          lhs.is_zero_string_length())
   {
     // we ignore this here
   }
