@@ -195,7 +195,7 @@ exprt c_typecheck_baset::do_initializer_rec(
 {
   const typet &full_type=follow(type);
 
-  if(full_type.id()=="incomplete_struct")
+  if(full_type.is_incomplete_struct())
   {
     err_location(value);
     str << "type `"
@@ -572,7 +572,7 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
     {
       const typet &final_type=follow(symbol.type);
       
-      if(final_type.id()!="incomplete_struct" &&
+      if(!final_type.is_incomplete_struct() &&
          !final_type.is_incomplete_array())
       {
         // zero initializer
@@ -598,7 +598,7 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
   {
     const typet &final_type=follow(symbol.type);
     
-    if(final_type.id()=="incomplete_c_enum" ||
+    if(final_type.is_incomplete_c_enum() ||
        final_type.is_c_enum())
     {
       if(symbol.is_macro)

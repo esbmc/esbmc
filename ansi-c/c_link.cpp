@@ -144,19 +144,19 @@ void c_linkt::duplicate_type(
   // check if it is the same -- use base_type_eq, not c_link_type_eq
   if(!base_type_eq(in_context.type, new_symbol.type, ns))
   {
-    if(in_context.type.id()=="incomplete_struct" &&
+    if(in_context.type.is_incomplete_struct() &&
        new_symbol.type.is_struct())
     {
       // replace old symbol
       in_context.type=new_symbol.type;
     }
     else if(in_context.type.is_struct() &&
-            new_symbol.type.id()=="incomplete_struct")
+            new_symbol.type.is_incomplete_struct())
     {
       // ignore
     }
     else if(in_context.type.is_struct() &&
-            new_symbol.type.id()=="incomplete_struct")
+            new_symbol.type.is_incomplete_struct())
     {
       // ignore
     }
@@ -281,14 +281,14 @@ void c_linkt::duplicate_symbol(
       {
         // ignore
       }
-      else if(in_context.type.id()=="incomplete_struct" &&
+      else if(in_context.type.is_incomplete_struct() &&
               new_symbol.type.is_struct())
       {
         // store new type
         in_context.type=new_symbol.type;
       }
       else if(in_context.type.is_struct() &&
-              new_symbol.type.id()=="incomplete_struct")
+              new_symbol.type.is_incomplete_struct())
       {
         // ignore
       }

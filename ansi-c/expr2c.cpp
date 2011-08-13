@@ -208,7 +208,7 @@ std::string expr2ct::convert_rec(
       return q+"double";
   }
   else if(src.is_struct() ||
-          src.id()=="incomplete_struct")
+          src.is_incomplete_struct())
   {
     std::string dest=q+"struct";
 
@@ -243,7 +243,7 @@ std::string expr2ct::convert_rec(
     return dest;
   }
   else if(src.is_c_enum() ||
-          src.id()=="incomplete_c_enum")
+          src.is_incomplete_c_enum())
   {
     std::string result=q+"enum";
     if(src.name()!="") result+=" "+src.tag().as_string();
@@ -1317,7 +1317,7 @@ std::string expr2ct::convert_constant(
   else if(type.id()=="integer" || type.id()=="natural")
     dest=value;
   else if(type.is_c_enum() ||
-          type.id()=="incomplete_c_enum")
+          type.is_incomplete_c_enum())
   {
     mp_integer int_value=string2integer(value);
     mp_integer i=0;

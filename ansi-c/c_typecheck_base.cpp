@@ -166,19 +166,19 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   // set the pretty name
   if(symbol.is_type &&
      (final_type.is_struct() ||
-      final_type.id()=="incomplete_struct"))
+      final_type.is_incomplete_struct()))
   {
     symbol.pretty_name="struct "+id2string(symbol.base_name);
   }
   else if(symbol.is_type &&
           (final_type.is_union() ||
-           final_type.id()=="incomplete_union"))
+           final_type.is_incomplete_union()))
   {
     symbol.pretty_name="union "+id2string(symbol.base_name);
   }
   else if(symbol.is_type &&
           (final_type.is_c_enum() ||
-           final_type.id()=="incomplete_c_enum"))
+           final_type.is_incomplete_c_enum()))
   {
     symbol.pretty_name="enum "+id2string(symbol.base_name);
   }
@@ -303,9 +303,9 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
   else if(old_symbol.is_type)
   {
     // see if we had s.th. incomplete before
-    if(old_symbol.type.id()=="incomplete_struct" ||
-       old_symbol.type.id()=="incomplete_union" ||
-       old_symbol.type.id()=="incomplete_c_enum")
+    if(old_symbol.type.is_incomplete_struct() ||
+       old_symbol.type.is_incomplete_union() ||
+       old_symbol.type.is_incomplete_c_enum())
     {
       // new one complete?
       if("incomplete_"+new_symbol.type.id_string()==old_symbol.type.id_string())
@@ -330,9 +330,9 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
     else
     {
       // see if new one is just a tag
-      if(new_symbol.type.id()=="incomplete_struct" ||
-         new_symbol.type.id()=="incomplete_union" ||
-         new_symbol.type.id()=="incomplete_c_enum")
+      if(new_symbol.type.is_incomplete_struct() ||
+         new_symbol.type.is_incomplete_union() ||
+         new_symbol.type.is_incomplete_c_enum())
       {
         if("incomplete_"+old_symbol.type.id_string()==new_symbol.type.id_string())
         {
@@ -414,9 +414,9 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         else if(!old_ct.has_ellipsis() && new_ct.has_ellipsis())
           new_ct=old_ct;
       }
-      else if((final_old.id()=="incomplete_c_enum" ||
+      else if((final_old.is_incomplete_c_enum() ||
                final_old.is_c_enum()) &&
-              (final_new.id()=="incomplete_c_enum" ||
+              (final_new.is_incomplete_c_enum() ||
                final_new.is_c_enum()))
       {
         // this is ok for now
@@ -491,7 +491,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
           else
           {
             if(new_symbol.is_macro &&
-               (final_new.id()=="incomplete_c_enum" ||
+               (final_new.is_incomplete_c_enum() ||
                 final_new.is_c_enum()) &&
                 old_symbol.value.is_constant() &&
                 new_symbol.value.is_constant() &&

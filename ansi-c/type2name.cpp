@@ -104,13 +104,13 @@ std::string type2name(const typet &type)
     result.resize(result.size()-1);
     result+="]";
   }
-  else if(type.id()=="incomplete_struct")
+  else if(type.is_incomplete_struct())
     result +="ST?";
-  else if(type.id()=="incomplete_union")
+  else if(type.is_incomplete_union())
     result +="UN?";
   else if(type.is_c_enum())
     result +="EN" + type.width().as_string();
-  else if(type.id()=="incomplete_c_enum")
+  else if(type.is_incomplete_c_enum())
     result +="EN?";
   else if(type.id()=="c_bitfield")
   {

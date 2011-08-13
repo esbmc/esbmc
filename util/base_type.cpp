@@ -191,7 +191,7 @@ bool base_type_eqt::base_type_eq_rec(
     
     return true;
   }
-  else if(type1.id()=="incomplete_struct")
+  else if(type1.is_incomplete_struct())
   {
     return true;
   }

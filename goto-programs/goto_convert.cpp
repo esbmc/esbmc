@@ -537,7 +537,7 @@ void goto_convertt::convert_sideeffect(
       rhs.make_typecast(typet("bool"));
     }
     else if(op_type.is_c_enum() ||
-            op_type.id()=="incomplete_c_enum")
+            op_type.is_incomplete_c_enum())
     {
       rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
       rhs.op0().make_typecast(int_type());

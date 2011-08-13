@@ -334,7 +334,7 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   const typet &type=follow(code.op0().type());
 
   // this must not be an incomplete type
-  if(type.id()=="incomplete_struct" ||
+  if(type.is_incomplete_struct() ||
      type.is_incomplete_array())
   {
     err_location(code);

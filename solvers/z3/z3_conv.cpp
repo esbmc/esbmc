@@ -652,7 +652,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	bv = Z3_mk_bool_type(z3_ctx);
   }
   else if (type.id()==typet::t_signedbv || type.id()==typet::t_unsignedbv ||
-		  type.is_c_enum() || type.id()=="incomplete_c_enum")
+		  type.is_c_enum() || type.is_incomplete_c_enum())
   {
     if (boolbv_get_width(type, width))
       return true;

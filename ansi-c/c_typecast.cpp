@@ -173,7 +173,7 @@ bool check_c_implicit_typecast(
     if(dest_type.is_fixedbv()) return false;
     if(dest_type.is_pointer()) return false;
     if(dest_type.is_c_enum()) return false;
-    if(dest_type.id()=="incomplete_c_enum") return false;
+    if(dest_type.is_incomplete_c_enum()) return false;
   }
   else if(src_type_id=="floatbv" ||
           src_type_id=="fixedbv")
@@ -302,7 +302,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
     return PTR;
   }
   else if(type.is_c_enum() ||
-          type.id()=="incomplete_c_enum")
+          type.is_incomplete_c_enum())
   {
     return INT;
   }

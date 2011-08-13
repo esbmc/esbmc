@@ -627,7 +627,7 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
 
   if(is_number(op_type) ||
      op_type.is_c_enum() ||
-     op_type.id()=="incomplete_c_enum" ||
+     op_type.is_incomplete_c_enum() ||
      op_type.is_bool() ||
      op_type.is_pointer())
   {
@@ -708,7 +708,7 @@ void c_typecheck_baset::make_index_type(exprt &expr)
   }
   else if(full_type.is_signedbv() ||
           full_type.is_c_enum() ||
-          full_type.id()=="incomplete_c_enum")
+          full_type.is_incomplete_c_enum())
   {
     if(full_type!=index_type())
       expr.make_typecast(index_type());
@@ -856,7 +856,7 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
       const typet &final_type=follow(o_type0);
       if(!final_type.is_array() &&
          !final_type.is_incomplete_array() &&
-         final_type.id()!="incomplete_struct")
+         !final_type.is_incomplete_struct())
       {
         adjust_float_rel(expr);
         return; // no promotion necessary
@@ -1012,7 +1012,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
 
   follow_symbol(type);
 
-  if(type.id()=="incomplete_struct")
+  if(type.is_incomplete_struct())
   {
     err_location(expr);
     str << "member operator got incomplete structure type "
@@ -1393,7 +1393,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
     if(is_number(final_type0) ||
        final_type0.is_bool() ||
        final_type0.is_c_enum() ||
-       final_type0.id()=="incomplete_c_enum" ||
+       final_type0.is_incomplete_c_enum() ||
        final_type0.is_pointer())
     {
       expr.type()=type0;
@@ -2254,7 +2254,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
     }
     else if(final_type0.is_bool() ||
             final_type0.is_c_enum() ||
-            final_type0.id()=="incomplete_c_enum")
+            final_type0.is_incomplete_c_enum())
     {
       implicit_typecast_arithmetic(op1);
       if(is_number(op1.type()))

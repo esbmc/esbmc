@@ -658,8 +658,8 @@ void value_set_fivrt::get_value_set_rec(
       
       assert(type.is_struct() ||
              type.is_union() ||
-             type.id()=="incomplete_struct" ||
-             type.id()=="incomplete_union");
+             type.is_incomplete_struct() ||
+             type.is_incomplete_union());
              
       const std::string &component_name=
         expr.component_name().as_string();
@@ -1643,8 +1643,8 @@ void value_set_fivrt::assign_rec(
 
     assert(type.is_struct() ||
            type.is_union() ||
-           type.id()=="incomplete_struct" ||
-           type.id()=="incomplete_union");
+           type.is_incomplete_struct() ||
+           type.is_incomplete_union());
            
     assign_rec(lhs.op0(), values_rhs, "."+component_name+suffix, 
                ns, recursion_set, add_to_sets);
