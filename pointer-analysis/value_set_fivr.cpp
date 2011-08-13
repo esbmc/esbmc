@@ -128,7 +128,7 @@ void value_set_fivrt::output(
       {
         result+="#";
         result+=", *, "; // offset unknown
-        if (o.type().id()=="unknown")
+        if (o.type().is_unknown())
           result+="*";
         else if (o.type().is_invalid())
           result+="#";
@@ -136,11 +136,11 @@ void value_set_fivrt::output(
           result+=from_type(ns, identifier, o.type());        
         result+=">";
       }
-      else if (o.id()=="unknown")
+      else if (o.is_unknown())
       {
         result+="*";
         result+=", *, "; // offset unknown
-        if (o.type().id()=="unknown")
+        if (o.type().is_unknown())
           result+="*";
         else if (o.type().is_invalid())
           result+="#";
@@ -159,7 +159,7 @@ void value_set_fivrt::output(
         
         result+=", ";
         
-        if (o.type().id()=="unknown")
+        if (o.type().is_unknown())
           result+="*";
         else
         {
@@ -392,7 +392,7 @@ exprt value_set_fivrt::to_expr(object_map_dt::const_iterator it) const
   const exprt &object=object_numbering[it->first];
   
   if(object.is_invalid() ||
-     object.id()=="unknown")
+     object.is_unknown())
     return object;
 
   object_descriptor_exprt od;
@@ -628,7 +628,7 @@ void value_set_fivrt::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="unknown" || expr.is_invalid())
+  else if(expr.is_unknown() || expr.is_invalid())
   {
     insert_from(dest, exprt("unknown", original_type));
     return;
@@ -1146,7 +1146,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
     {
       const exprt &object=object_numbering[a_it->first];
 
-      if(object.id()=="unknown")
+      if(object.is_unknown())
         insert_from(dest, exprt("unknown", expr.type()));
       else
       {
@@ -1197,7 +1197,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
       const exprt &object=object_numbering[it->first];
       const typet &obj_type=ns.follow(object.type());
       
-      if(object.id()=="unknown")
+      if(object.is_unknown())
         insert_from(dest, exprt("unknown", expr.type()));
       else if(object.is_dynamic_object() &&
               !obj_type.is_struct() && 
@@ -1298,7 +1298,7 @@ void value_set_fivrt::assign(
 
       exprt rhs_member;
     
-      if(rhs.id()=="unknown" ||
+      if(rhs.is_unknown() ||
          rhs.is_invalid())
       {
         rhs_member=exprt(rhs.id(), subtype);
@@ -1358,7 +1358,7 @@ void value_set_fivrt::assign(
     exprt lhs_index("index", type.subtype());
     lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
 
-    if(rhs.id()=="unknown" ||
+    if(rhs.is_unknown() ||
        rhs.is_invalid())
     {
       assign(lhs_index, exprt(rhs.id(), type.subtype()), ns, add_to_sets);
@@ -1615,7 +1615,7 @@ void value_set_fivrt::assign_rec(
     {
       const exprt &object=object_numbering[it->first];
 
-      if(object.id()!="unknown")
+      if(!object.is_unknown())
         assign_rec(object, values_rhs, suffix, ns, recursion_set, add_to_sets);
     }
   }

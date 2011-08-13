@@ -3106,7 +3106,7 @@ std::string expr2ct::convert(
   else if(std::string(src.id_string(), 0, 9)=="overflow-")
     return convert_overflow(src, precedence);
 
-  else if(src.id()=="unknown")
+  else if(src.is_unknown())
     return "*";
 
   else if(src.is_invalid())

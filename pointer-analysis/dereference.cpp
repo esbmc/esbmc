@@ -331,7 +331,7 @@ void dereferencet::build_reference_to(
   value.make_nil();
   pointer_guard.make_false();
 
-  if(what.id()=="unknown" ||
+  if(what.is_unknown() ||
      what.is_invalid())
   {
     if(!options.get_bool_option("no-pointer-check"))

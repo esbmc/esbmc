@@ -330,7 +330,7 @@ void goto_convert_functionst::remove_function_pointer(
       it!=value_set.end();
       it++)
   {
-    if(it->id()=="unknown")
+    if(it->is_unknown())
       has_unknown=true;
     else
       new_value_set.insert(*it);

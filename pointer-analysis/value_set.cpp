@@ -90,7 +90,7 @@ void value_sett::output(
     
       std::string result;
 
-      if(o.is_invalid() || o.id()=="unknown")
+      if(o.is_invalid() || o.is_unknown())
         result=from_expr(ns, identifier, o);
       else
       {
@@ -141,7 +141,7 @@ exprt value_sett::to_expr(object_map_dt::const_iterator it) const
   const exprt &object=object_numbering[it->first];
   
   if(object.is_invalid() ||
-     object.id()=="unknown")
+     object.is_unknown())
     return object;
 
   object_descriptor_exprt od;
@@ -310,7 +310,7 @@ void value_sett::get_value_set_rec(
   std::cout << std::endl;
   #endif
 
-  if(expr.id()=="unknown" || expr.is_invalid())
+  if(expr.is_unknown() || expr.is_invalid())
   {
     insert(dest, exprt("unknown", original_type));
     return;
@@ -701,7 +701,7 @@ void value_sett::get_reference_set_rec(
     {
       const exprt &object=object_numbering[a_it->first];
 
-      if(object.id()=="unknown")
+      if(object.is_unknown())
         insert(dest, exprt("unknown", expr.type()));
       else
       {
@@ -752,7 +752,7 @@ void value_sett::get_reference_set_rec(
     {
       const exprt &object=object_numbering[it->first];
       
-      if(object.id()=="unknown")
+      if(object.is_unknown())
         insert(dest, exprt("unknown", expr.type()));
       else
       {
@@ -842,7 +842,7 @@ void value_sett::assign(
 
       exprt rhs_member;
 
-      if(rhs.id()=="unknown" ||
+      if(rhs.is_unknown() ||
          rhs.is_invalid())
       {
         rhs_member=exprt(rhs.id(), subtype);
@@ -862,7 +862,7 @@ void value_sett::assign(
     exprt lhs_index("index", type.subtype());
     lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
 
-    if(rhs.id()=="unknown" ||
+    if(rhs.is_unknown() ||
        rhs.is_invalid())
     {
       assign(lhs_index, exprt(rhs.id(), type.subtype()), ns, add_to_sets);
@@ -1075,7 +1075,7 @@ void value_sett::assign_rec(
     {
       const exprt &object=object_numbering[it->first];
 
-      if(object.id()!="unknown")
+      if(!object.is_unknown())
         assign_rec(object, values_rhs, suffix, ns, add_to_sets);
     }
   }

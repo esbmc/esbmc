@@ -96,12 +96,12 @@ void value_set_fit::output(
     
       std::string result;
 
-      if(o.is_invalid() || o.id()=="unknown")
+      if(o.is_invalid() || o.is_unknown())
       {
         result="<";
         result+=from_expr(ns, identifier, o);
         result+=", *, "; // offset unknown
-        if (o.type().id()=="unknown")
+        if (o.type().is_unknown())
           result+="*";
         else
           result+=from_type(ns, identifier, o.type());        
@@ -118,7 +118,7 @@ void value_set_fit::output(
         
         result+=", ";
         
-        if (o.type().id()=="unknown")
+        if (o.type().is_unknown())
           result+="*";
         else
           result+=from_type(ns, identifier, o.type());
@@ -273,7 +273,7 @@ exprt value_set_fit::to_expr(object_map_dt::const_iterator it) const
   const exprt &object=object_numbering[it->first];
   
   if(object.is_invalid() ||
-     object.id()=="unknown")
+     object.is_unknown())
     return object;
 
   object_descriptor_exprt od;
@@ -505,7 +505,7 @@ void value_set_fit::get_value_set_rec(
       return;
     }
   }
-  else if(expr.id()=="unknown" || expr.is_invalid())
+  else if(expr.is_unknown() || expr.is_invalid())
   {
     insert(dest, exprt("unknown", original_type));
     return;
@@ -1017,7 +1017,7 @@ void value_set_fit::get_reference_set_sharing_rec(
     {
       const exprt &object=object_numbering[a_it->first];
 
-      if(object.id()=="unknown")
+      if(object.is_unknown())
         insert(dest, exprt("unknown", expr.type()));
       else
       {
@@ -1066,7 +1066,7 @@ void value_set_fit::get_reference_set_sharing_rec(
       const exprt &object=object_numbering[it->first];    
       const typet &obj_type=ns.follow(object.type());
       
-      if(object.id()=="unknown")
+      if(object.is_unknown())
         insert(dest, exprt("unknown", expr.type()));
       else if(object.is_dynamic_object() &&
               !obj_type.is_struct() && 
@@ -1165,7 +1165,7 @@ void value_set_fit::assign(
 
       exprt rhs_member;
     
-      if(rhs.id()=="unknown" ||
+      if(rhs.is_unknown() ||
          rhs.is_invalid())
       {
         rhs_member=exprt(rhs.id(), subtype);
@@ -1219,7 +1219,7 @@ void value_set_fit::assign(
     exprt lhs_index("index", type.subtype());
     lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
 
-    if(rhs.id()=="unknown" ||
+    if(rhs.is_unknown() ||
        rhs.is_invalid())
     {
       assign(lhs_index, exprt(rhs.id(), type.subtype()), ns);
@@ -1400,7 +1400,7 @@ void value_set_fit::assign_rec(
       recursion_set.insert(ident);
       
       forall_objects(it, temp.read())
-        if(object_numbering[it->first].id()!="unknown")
+        if(!object_numbering[it->first].is_unknown())
           assign_rec(object_numbering[it->first], values_rhs, 
                      suffix, ns, recursion_set);
       
@@ -1449,7 +1449,7 @@ void value_set_fit::assign_rec(
     {
       const exprt &object=object_numbering[it->first];
 
-      if(object.id()!="unknown")
+      if(!object.is_unknown())
         assign_rec(object, values_rhs, suffix, ns, recursion_set);
     }
   }
