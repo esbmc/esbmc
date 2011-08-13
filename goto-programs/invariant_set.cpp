@@ -860,7 +860,7 @@ tvt invariant_sett::implies_rec(const exprt &expr) const
       
     return tvt(true);
   }
-  else if(expr.id()=="or")
+  else if(expr.is_or())
   {
     forall_operands(it, expr)
       if(implies_rec(*it)==tvt(true))
@@ -990,7 +990,7 @@ void invariant_sett::nnf(exprt &expr, bool negate)
     Forall_operands(it, expr)
       nnf(*it, negate);
   }
-  else if(expr.id()=="or")
+  else if(expr.is_or())
   {
     if(negate) expr.id("and");
     

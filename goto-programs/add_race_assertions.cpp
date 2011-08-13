@@ -235,7 +235,7 @@ void add_race_assertions(
         {
           if (original_instruction.code.op1().operands().size()>0)
           {
-        	if (original_instruction.code.op1().id()=="or")
+        	if (original_instruction.code.op1().is_or())
         	  t->location=original_instruction.code.op1().operands()[0].op0().location();
         	else
         	  t->location=original_instruction.code.op1().op0().location();

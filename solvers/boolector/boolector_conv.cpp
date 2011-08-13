@@ -1671,7 +1671,7 @@ bool boolector_convt::convert_logical_ops(const exprt &expr, BtorExp* &bv)
 	  {
 		if(expr.is_and())
 		  args[i] = boolector_and(boolector_ctx, args[i-1], args[i]);
-		else if(expr.id()=="or")
+		else if(expr.is_or())
 		  args[i] = boolector_or(boolector_ctx, args[i-1], args[i]);
 		else if(expr.id()=="xor")
 		  args[i] = boolector_xor(boolector_ctx, args[i-1], args[i]);
@@ -2509,7 +2509,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
     return convert_unary_minus(expr, bv);
   else if (expr.is_if())
     return convert_if(expr, bv);
-  else if (expr.is_and() || expr.id() == "or" || expr.id() == "xor")
+  else if (expr.is_and() || expr.is_or() || expr.id() == "xor")
 	return convert_logical_ops(expr, bv);
   else if (expr.is_not())
 	return convert_logical_not(expr, bv);
@@ -2689,7 +2689,7 @@ void boolector_convt::set_to(const exprt &expr, bool value)
             set_to_true(*it);
           return;
         }
-        else if(expr.id()=="or")
+        else if(expr.is_or())
         {
           if(expr.operands().size()>0)
           {
@@ -2733,7 +2733,7 @@ void boolector_convt::set_to(const exprt &expr, bool value)
             set_to_false(expr.op1());
           }
         }
-        else if(expr.id()=="or") // !(a || b)  ==  (!a && !b)
+        else if(expr.is_or()) // !(a || b)  ==  (!a && !b)
         {
           forall_operands(it, expr)
             set_to_false(*it);

@@ -1546,7 +1546,7 @@ bool simplify_exprt::simplify_if_branch(
     tresult = simplify_if_conj(trueexpr, cond) && tresult;
     fresult = simplify_if_recursive(falseexpr, cond, false) && fresult;
   }
-  else if(cond.id()=="or")
+  else if(cond.is_or())
   {
     tresult = simplify_if_recursive(trueexpr, cond, true) && tresult;
     fresult = simplify_if_disj(falseexpr, cond) && fresult;
@@ -1755,7 +1755,7 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
     return false;
   }
   else if(op.is_and() ||
-          op.id()=="or")
+          op.is_or())
   {
     exprt tmp;
     tmp.swap(op);
@@ -1842,7 +1842,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
       return false;
     }
   }
-  else if(expr.id()=="or" ||
+  else if(expr.is_or() ||
           expr.is_and() ||
           expr.id()=="xor")
   {
@@ -1866,7 +1866,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
         expr.make_false();
         return false;
       }
-      else if(expr.id()=="or" && is_true)
+      else if(expr.is_or() && is_true)
       {
         expr.make_true();
         return false;
@@ -1880,7 +1880,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
         erase=is_false;
 
       if(last_set && *it==*last &&
-         (expr.id()=="or" || expr.is_and()))
+         (expr.is_or() || expr.is_and()))
         erase=true; // erase duplicate operands
 
       if(erase)
@@ -1897,7 +1897,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
     }
 
     // search for a and !a
-    if(expr.is_and() || expr.id()=="or")
+    if(expr.is_and() || expr.is_or())
     {
       // first gather all the a's with !a
 
@@ -1914,7 +1914,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
       forall_operands(it, expr)
         if(expr_set.find(*it)!=expr_set.end())
         {
-          expr.make_bool(expr.id()=="or");
+          expr.make_bool(expr.is_or());
           return false;
         }
     }
@@ -3492,7 +3492,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   else if(expr.is_not())
     result=simplify_not(expr, mode) && result;
   else if(expr.id()=="=>"  || expr.id()=="<=>" ||
-          expr.id()=="or"  || expr.id()=="xor" ||
+          expr.is_or()  || expr.id()=="xor" ||
           expr.is_and())
     result=simplify_boolean(expr, mode) && result;
   else if(expr.id()=="comma")

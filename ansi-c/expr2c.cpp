@@ -3019,7 +3019,7 @@ std::string expr2ct::convert(
   else if(src.is_and())
     return convert_binary(src, "&&", precedence=5, false);
 
-  else if(src.id()=="or")
+  else if(src.is_or())
     return convert_binary(src, "||", precedence=4, false);
 
   else if(src.id()=="=>")

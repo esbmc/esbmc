@@ -139,7 +139,7 @@ void goto_program_dereferencet::dereference_rec(
   if(!dereference.has_dereference(expr))
     return;
 
-  if(expr.is_and() || expr.id()=="or")
+  if(expr.is_and() || expr.is_or())
   {
     if(!expr.is_boolean())
       throw expr.id_string()+" must be Boolean, but got "+
@@ -158,7 +158,7 @@ void goto_program_dereferencet::dereference_rec(
       if(dereference.has_dereference(op))
         dereference_rec(op, guard, dereferencet::READ);
 
-      if(expr.id()=="or")
+      if(expr.is_or())
       {
         exprt tmp(op);
         tmp.make_not();

@@ -176,7 +176,7 @@ void goto_convertt::remove_sideeffects(
   if(!has_sideeffect(expr))
     return;
 
-  if(expr.is_and() || expr.id()=="or")
+  if(expr.is_and() || expr.is_or())
   {
     if(!expr.is_boolean())
       throw expr.id_string()+" must be Boolean, but got "+
@@ -212,7 +212,7 @@ void goto_convertt::remove_sideeffects(
         remove_sideeffects(op, guard, dest);
       }
 
-      if(expr.id()=="or")
+      if(expr.is_or())
       {
         exprt tmp(op);
         tmp.make_not();

@@ -50,7 +50,7 @@ void cnf_join_binary(exprt &expr)
   Forall_operands(it, expr)
     cnf_join_binary(*it);
 
-  if(expr.is_and() || expr.id()=="or" || expr.id()=="xor" ||
+  if(expr.is_and() || expr.is_or() || expr.id()=="xor" ||
      expr.is_bitand() || expr.is_bitor() || expr.is_bitxor())
   {
     exprt tmp;
@@ -131,7 +131,7 @@ Function: cnf_join_binary
 
 void cnf_join_binary(exprt &expr)
 {
-  if(expr.is_and() || expr.id()=="or" || expr.id()=="xor" ||
+  if(expr.is_and() || expr.is_or() || expr.id()=="xor" ||
      expr.is_bitand() || expr.is_bitor() || expr.is_bitxor())
   {
     exprt::operandst list;
@@ -210,7 +210,7 @@ Function: propagate_not
 
 void propagate_not(exprt &expr)
 {
-  if(expr.is_and() || expr.id()=="or")
+  if(expr.is_and() || expr.is_or())
   {
     if(expr.is_and())
       expr.id("or");

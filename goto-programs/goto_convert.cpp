@@ -1993,7 +1993,7 @@ void goto_convertt::convert_specc_event(
   const exprt &op,
   std::set<irep_idt> &events)
 {
-  if(op.id()=="or" || op.is_and())
+  if(op.is_or() || op.is_and())
   {
     forall_operands(it, op)
       convert_specc_event(*it, events);
@@ -2041,7 +2041,7 @@ void goto_convertt::convert_specc_wait(
 
   const exprt &op=code.op0();
 
-  if(op.id()=="or")
+  if(op.is_or())
     t->or_semantics=true;
 
   convert_specc_event(op, t->events);
@@ -2718,7 +2718,7 @@ void goto_convertt::generate_conditional_branch(
 
     return;
   }
-  else if(guard.id()=="or")
+  else if(guard.is_or())
   {
     // turn
     //   if(a || b) goto target_true; else goto target_false;

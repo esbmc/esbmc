@@ -696,7 +696,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     smt_prop.out << ")";
   }
   else if(expr.is_and() ||
-          expr.id()=="or" ||
+          expr.is_or() ||
           expr.id()=="xor")
   {
     assert(false && "Construct not supported yet");
@@ -710,7 +710,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
         {
           if(expr.is_and())
             smt_prop.out << " AND ";
-          else if(expr.id()=="or")
+          else if(expr.is_or())
             smt_prop.out << " OR ";
           else if(expr.id()=="xor")
             smt_prop.out << " XOR ";

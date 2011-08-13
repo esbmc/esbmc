@@ -120,7 +120,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
       return false;
     }
   }
-  else if(expr.is_and() || expr.id()=="or")
+  else if(expr.is_and() || expr.is_or())
   {
     if(expr.type().is_bool() &&
        expr.operands().size()>=1)
@@ -284,7 +284,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     return op_bv[0];
   }
-  else if(expr.id()=="or" || expr.is_and() || expr.id()=="xor" ||
+  else if(expr.is_or() || expr.is_and() || expr.id()=="xor" ||
           expr.id()=="nor" || expr.id()=="nand")
   {
     if(op.size()==0)
@@ -297,7 +297,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     if(!bv.empty())
     {
-      if(expr.id()=="or")
+      if(expr.is_or())
         return prop.lor(bv);
       else if(expr.id()=="nor")
         return prop.lnot(prop.lor(bv));
@@ -450,7 +450,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
 
           return;
         }
-        else if(expr.id()=="or")
+        else if(expr.is_or())
         {
           if(expr.operands().size()>0)
           {
@@ -493,7 +493,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
             set_to_false(expr.op1());
           }
         }
-        else if(expr.id()=="or") // !(a || b)  ==  (!a && !b)
+        else if(expr.is_or()) // !(a || b)  ==  (!a && !b)
         {
           forall_operands(it, expr)
             set_to_false(*it);
