@@ -2742,7 +2742,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       return false;
     }
   }
-  else if(expr.op0().id()=="with")
+  else if(expr.op0().is_with())
   {
     exprt &with_expr=expr.op0();
 
@@ -3098,7 +3098,7 @@ bool simplify_exprt::simplify_member(member_exprt &expr)
 
   exprt &op=expr.op0();
 
-  if(op.id()=="with")
+  if(op.is_with())
   {
     if(op.operands().size()>=3)
     {
@@ -3449,7 +3449,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_if(expr) && result;
   else if(expr.id()=="lambda")
     result=simplify_lambda(expr) && result;
-  else if(expr.id()=="with")
+  else if(expr.is_with())
     result=simplify_with(expr) && result;
   else if(expr.is_index())
     result=simplify_index(to_index_expr(expr), mode) && result;

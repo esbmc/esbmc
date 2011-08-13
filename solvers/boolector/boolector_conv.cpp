@@ -2539,7 +2539,7 @@ bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
 	return convert_index(expr, bv);
   else if (expr.is_ashr() || expr.id() == "lshr" || expr.id() == "shl")
 	return convert_shift(expr, bv);
-  else if (expr.id() == "with")
+  else if (expr.is_with())
 	return convert_with(expr, bv);
   else if (expr.is_member())
 	return convert_member(expr, bv);

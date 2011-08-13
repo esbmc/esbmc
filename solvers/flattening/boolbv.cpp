@@ -213,7 +213,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_constraint_select_one(expr, bv);
   else if(expr.is_member())
     return convert_member(expr, bv);
-  else if(expr.id()=="with")
+  else if(expr.is_with())
     return convert_with(expr, bv);
   else if(expr.id()=="width")
   {

@@ -658,7 +658,7 @@ void value_set_fivrnst::get_value_set_rec(
     insert_from(dest, address_of_exprt(expr), 0);
     return;
   }
-  else if(expr.id()=="with" ||
+  else if(expr.is_with() ||
           expr.is_array_of() ||
           expr.is_array())
   {
@@ -983,7 +983,7 @@ void value_set_fivrnst::assign(
           assert(no<rhs.operands().size());
           rhs_member=rhs.operands()[no];
         }
-        else if(rhs.id()=="with")
+        else if(rhs.is_with())
         {
           assert(rhs.operands().size()==3);
 
@@ -1045,7 +1045,7 @@ void value_set_fivrnst::assign(
           assign(lhs_index, *o_it, ns, add_to_sets);
         }
       }
-      else if(rhs.id()=="with")
+      else if(rhs.is_with())
       {
         assert(rhs.operands().size()==3);
 

@@ -103,7 +103,7 @@ Function: arrayst::collect_arrays
 
 void arrayst::collect_arrays(const exprt &a)
 {
-  if(a.id()=="with")
+  if(a.is_with())
   {
     if(a.operands().size()!=3)
       throw "with expected to have three operands";
@@ -366,7 +366,7 @@ void arrayst::add_array_constraints(
   const index_sett &index_set,
   const exprt &expr)
 {
-  if(expr.id()=="with")
+  if(expr.is_with())
     return add_array_constraints_with(index_set, to_with_expr(expr));
   else if(expr.is_if())
     return add_array_constraints_if(index_set, to_if_expr(expr));

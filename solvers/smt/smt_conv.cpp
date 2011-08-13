@@ -1033,7 +1033,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else
       throw "unsupported type for "+expr.id_string()+": "+expr.type().id_string();
   }
-  else if(expr.id()=="with")
+  else if(expr.is_with())
   {
     assert(expr.operands().size()>=1);
     smt_prop.out << "(store ";

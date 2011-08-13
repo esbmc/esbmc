@@ -543,7 +543,7 @@ void value_sett::get_value_set_rec(
     insert(dest, address_of_exprt(expr), 0);
     return;
   }
-  else if(expr.id()=="with" ||
+  else if(expr.is_with() ||
           expr.is_array_of() ||
           expr.is_array())
   {
@@ -885,7 +885,7 @@ void value_sett::assign(
           add_to_sets=true;
         }
       }
-      else if(rhs.id()=="with")
+      else if(rhs.is_with())
       {
         assert(rhs.operands().size()==3);
 
@@ -1352,7 +1352,7 @@ exprt value_sett::make_member(
     assert(no<src.operands().size());
     return src.operands()[no];
   }
-  else if(src.id()=="with")
+  else if(src.is_with())
   {
     assert(src.operands().size()==3);
 
