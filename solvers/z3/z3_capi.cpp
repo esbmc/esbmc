@@ -6,6 +6,8 @@ Author:
 
 \*******************************************************************/
 
+#include <string>
+
 #include "z3_capi.h"
 
 /**
@@ -43,7 +45,6 @@ void error_handler(Z3_error_code e)
     exitf("incorrect use of Z3");
 }
 
-static jmp_buf g_catch_buffer;
 /**
    \brief Low tech exceptions.
 
@@ -51,7 +52,12 @@ static jmp_buf g_catch_buffer;
 */
 void throw_z3_error(Z3_error_code c)
 {
-    longjmp(g_catch_buffer, c);
+  char buffer[16];
+
+  snprintf(buffer, 15, "%d", c);
+  buffer[15] = '\0';
+
+  throw std::string("Z3 Error ") + buffer;
 }
 
 /**
