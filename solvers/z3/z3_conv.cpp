@@ -3136,10 +3136,21 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 
       if(from_width==to_width)
       {
+#ifdef DEBUG
+    	  std::cout << "op.operands().size(): " << op.operands().size() << std::endl;
+#endif
     	if (convert_bv(op, args[0]))
     	  return true;
-    	if (op.operands().size()>0)
+
+      	if (op.operands().size()==0)
+      	{
+      		bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+      	}
+      	else if (op.operands().size()>0)
     	{
+#ifdef DEBUG
+    	  std::cout << "op.op0().id(): " << op.op0().id() << std::endl;
+#endif
     	  if (op.op0().id() == "address_of")
     	    bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
     	}
