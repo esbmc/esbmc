@@ -3216,7 +3216,14 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   	  {
   	    bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
   	  }
+  	  else if (op.id() == "typecast")
+  	  {
+#ifdef DEBUG
+  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
+#endif
+  		bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
 
+  	  }
   	  return false;
     }
     else if(op.type().subtype().id()=="pointer")
