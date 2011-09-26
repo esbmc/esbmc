@@ -911,6 +911,6 @@ reachability_treet::print_ileave_trace(void) const
   std::cout << "Context switch trace for interleaving:" << std::endl;
   for (it = execution_states.begin(); it != execution_states.end(); it++) {
     std::cout << "Context switch point " << i << std::endl;
-    (*it)->print_stack_traces();
+    (*it)->print_stack_traces(4);
   }
 }
