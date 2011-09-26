@@ -544,7 +544,6 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   }
 #endif
 
-  bool generated = false;
   unsigned int tid;
 
   for(tid = 0; tid < ex_state._threads_state.size(); tid++)
@@ -569,6 +568,13 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     if(!apply_static_por(ex_state, expr, tid))
       continue;
 
+    break;
+  }
+
+  _go_next = true;
+
+  if (tid != ex_state._threads_state.size()) {
+
     /* Generate a new execution state, duplicate of previous? */
     execution_statet *new_state = new execution_statet(ex_state);
     execution_states.push_back(new_state);
@@ -587,21 +593,15 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     /* Reset interleavings (?) investigated in this new state */
     new_state->reset_DFS_traversed();
 
-    generated = true;
-    break;
+    return true;
+  } else {
+    /* Once we've generated all interleavings from this state, increment hit
+     * count so that we don't come back here again */
+    if (state_hashing)
+      hit_hashes.insert(hash);
 
+    return false;
   }
-
-  /* Once we've generated all interleavings from this state, increment hit count
-   * so that we don't come back here again */
-  if (generated == false && state_hashing)
-    hit_hashes.insert(hash);
-
-  _go_next = true;
-
-  return generated;
-
-  return true;
 }
 
 /*******************************************************************
