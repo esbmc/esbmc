@@ -316,6 +316,15 @@ void goto_symext::symex_step(
 
   const goto_programt::instructiont &instruction = *state.source.pc;
 
+  if (config.options.get_option("break-at") != "") {
+    int insn_num = strtol(config.options.get_option("break-at").c_str(), NULL, 10);
+    if (instruction.location_number == insn_num) {
+      // If you're developing ESBMC on a machine that isn't x86, I'll send you
+      // cookies.
+      __asm__("int $3");
+    }
+  }
+
   merge_gotos(state, ex_state, ex_state.node_id);
 
   // depth exceeded?
