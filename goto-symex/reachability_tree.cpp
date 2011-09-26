@@ -916,3 +916,8 @@ reachability_treet::print_ileave_trace(void) const
     (*it)->print_stack_traces(4);
   }
 }
+
+int
+reachability_treet::get_ileave_direction_from_user(void) const
+{
+}

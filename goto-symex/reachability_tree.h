@@ -61,6 +61,7 @@ public:
   bool check_CS_bound();
   int get_CS_bound();
   int get_actual_CS_bound();
+  int get_ileave_direction_from_user(void) const;
   bool generate_states_base(const exprt & expr);
   bool apply_static_por(execution_statet &ex_state, const exprt &expr, int i);
   bool generate_states_after_start_thread();
