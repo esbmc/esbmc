@@ -14,6 +14,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <i2string.h>
 #include <expr_util.h>
 #include <std_expr.h>
+#include <config.h>
 
 #include "crypto_hash.h"
 
@@ -664,7 +665,8 @@ void reachability_treet::multi_formulae_go_next_state()
     if (generate_states_base(exprt())) {
       _cur_state_it++;
     } else {
-      print_ileave_trace();
+      if (config.options.get_bool_option("print-stack-traces"))
+        print_ileave_trace();
       _go_next_formula = true;
     }
   }
