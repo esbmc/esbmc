@@ -948,7 +948,7 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
 
   // If no threads were viable, don't present a choice.
   if (tid == get_cur_state()._threads_state.size())
-    return 0;
+    return get_cur_state()._threads_state.size();
 
   std::cout << "Context switch point encountered; please select a thread to run" << std::endl;
   std::cout << "Current thread states:" << std::endl;
