@@ -924,10 +924,11 @@ reachability_treet::print_ileave_trace(void) const
 }
 
 int
-reachability_treet::get_ileave_direction_from_user(void) const
+reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
 {
   std::list<execution_statet*>::const_iterator it;
   std::string input;
+  unsigned int tid;
 
   std::cout << "Context switch point encountered; please select a thread to run" << std::endl;
   std::cout << "Current thread states:" << std::endl;
@@ -947,14 +948,45 @@ reachability_treet::get_ileave_direction_from_user(void) const
       const char *start;
       char *end;
       start = input.c_str();
-      int num = strtol(start, &end, 10);
+      tid = strtol(start, &end, 10);
       if (start == end) {
         std::cout << "Not a valid input" << std::endl;
-      } else if (num < 0 || num >= get_cur_state()._threads_state.size()) {
+      } else if (tid >= get_cur_state()._threads_state.size()) {
         std::cout << "Number out of range";
       } else {
-        return num;
+        if (!check_thread_viable(tid, expr))
+          break;
       }
     }
   }
+
+  return tid;
+}
+
+bool
+reachability_treet::check_thread_viable(int tid, const exprt &expr) const
+{
+  const execution_statet &ex = get_cur_state();
+
+  if (ex._DFS_traversed.at(tid) == true) {
+    std::cout << "Thread unschedulable as it's already been explored" << std::endl;
+    return false;
+  }
+
+  if (ex._threads_state.at(tid).call_stack.empty()) {
+    std::cout << "Thread unschedulable due to empty call stack" << std::endl;
+    return false;
+  }
+
+  if (ex._threads_state.at(tid).thread_ended) {
+    std::cout << "That thread has ended" << std::endl;
+    return false;
+  }
+
+  if (!apply_static_por(ex, expr, tid)) {
+    std::cout << "Thread unschedulable due to POR" << std::endl;
+    return false;
+  }
+
+  return true;
 }
