@@ -939,9 +939,7 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
   for (it = execution_states.begin(); it != execution_states.end(); it++)
     (*it)->print_stack_traces(4);
 
-  while (true) {
-    std::cout << "Input: ";
-    std::cin >> input;
+  while (std::cout << "Input: ", std::getline(std::cin, input)) {
     if (input == "b") {
       std::cout << "Back unimplemented" << std::endl;
     } else if (input == "q") {
@@ -962,6 +960,11 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
           break;
       }
     }
+  }
+
+  if (std::cin.eof()) {
+    std::cout << std::endl;
+    exit(1);
   }
 
   return tid;
