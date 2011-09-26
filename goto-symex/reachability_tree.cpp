@@ -546,29 +546,32 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
   unsigned int tid;
 
-  for(tid = 0; tid < ex_state._threads_state.size(); tid++)
-  {
-    /* For all threads: */
+  if (config.options.get_bool_option("interactive-ileaves")) {
+    tid = get_ileave_direction_from_user(expr);
+  } else {
+    for(tid = 0; tid < ex_state._threads_state.size(); tid++)
+    {
+      /* For all threads: */
 
-    /* DFS -> depth first search? Check whether we've searched this... thing? */
-    if(ex_state._DFS_traversed.at(tid))
-      continue;
+      if(ex_state._DFS_traversed.at(tid))
+        continue;
 
-    ex_state._DFS_traversed.at(tid) = true;
+      ex_state._DFS_traversed.at(tid) = true;
 
-    /* Presumably checks whether this thread isn't in user code yet? */
-    if(ex_state._threads_state.at(tid).call_stack.empty())
-      continue;
+      /* Presumably checks whether this thread isn't in user code yet? */
+      if(ex_state._threads_state.at(tid).call_stack.empty())
+        continue;
 
-    /* Is it even still running? */
-    if(ex_state._threads_state.at(tid).thread_ended)
-      continue;
+      /* Is it even still running? */
+      if(ex_state._threads_state.at(tid).thread_ended)
+        continue;
 
-    //apply static partial-order reduction
-    if(!apply_static_por(ex_state, expr, tid))
-      continue;
+      //apply static partial-order reduction
+      if(!apply_static_por(ex_state, expr, tid))
+        continue;
 
-    break;
+      break;
+    }
   }
 
   _go_next = true;
