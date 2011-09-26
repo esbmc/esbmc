@@ -544,35 +544,42 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   }
 #endif
 
-  unsigned int tid;
+  unsigned int tid = 0, user_tid = 0;
 
   if (config.options.get_bool_option("interactive-ileaves")) {
-    tid = get_ileave_direction_from_user(expr);
-  } else {
-    for(tid = 0; tid < ex_state._threads_state.size(); tid++)
-    {
-      /* For all threads: */
-
-      if(ex_state._DFS_traversed.at(tid))
-        continue;
-
-      ex_state._DFS_traversed.at(tid) = true;
-
-      /* Presumably checks whether this thread isn't in user code yet? */
-      if(ex_state._threads_state.at(tid).call_stack.empty())
-        continue;
-
-      /* Is it even still running? */
-      if(ex_state._threads_state.at(tid).thread_ended)
-        continue;
-
-      //apply static partial-order reduction
-      if(!apply_static_por(ex_state, expr, tid))
-        continue;
-
-      break;
-    }
+    user_tid = tid = get_ileave_direction_from_user(expr);
   }
+
+  for(; tid < ex_state._threads_state.size(); tid++)
+  {
+    /* For all threads: */
+
+    if(ex_state._DFS_traversed.at(tid))
+      continue;
+
+    ex_state._DFS_traversed.at(tid) = true;
+
+    /* Presumably checks whether this thread isn't in user code yet? */
+    if(ex_state._threads_state.at(tid).call_stack.empty())
+      continue;
+
+    /* Is it even still running? */
+    if(ex_state._threads_state.at(tid).thread_ended)
+      continue;
+
+    //apply static partial-order reduction
+    if(!apply_static_por(ex_state, expr, tid))
+      continue;
+
+    break;
+  }
+
+  if (config.options.get_bool_option("interactive-ileaves") && tid != user_tid){
+    std::cerr << "Ileave code selected different thread from user choice";
+    std::cerr << std::endl;
+  }
+
+  std::cout << "Tid " << tid << " user tid " << user_tid << std::endl;
 
   _go_next = true;
 
