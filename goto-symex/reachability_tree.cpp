@@ -961,7 +961,7 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
       } else if (tid >= get_cur_state()._threads_state.size()) {
         std::cout << "Number out of range";
       } else {
-        if (!check_thread_viable(tid, expr))
+        if (check_thread_viable(tid, expr))
           break;
       }
     }
