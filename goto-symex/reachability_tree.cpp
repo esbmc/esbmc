@@ -905,4 +905,12 @@ fail:
 void
 reachability_treet::print_ileave_trace(void) const
 {
+  std::list<execution_statet*>::const_iterator it;
+  int i = 0;
+
+  std::cout << "Context switch trace for interleaving:" << std::endl;
+  for (it = execution_states.begin(); it != execution_states.end(); it++) {
+    std::cout << "Context switch point " << i << std::endl;
+    (*it)->print_stack_traces();
+  }
 }
