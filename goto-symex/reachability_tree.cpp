@@ -940,6 +940,16 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
   std::string input;
   unsigned int tid;
 
+  // First of all, are there actually any valid context switch targets?
+  for (tid = 0; tid < get_cur_state()._threads_state.size(); tid++) {
+    if (check_thread_viable(tid, expr, true))
+      break;
+  }
+
+  // If no threads were viable, don't present a choice.
+  if (tid == get_cur_state()._threads_state.size())
+    return 0;
+
   std::cout << "Context switch point encountered; please select a thread to run" << std::endl;
   std::cout << "Current thread states:" << std::endl;
   execution_states.back()->print_stack_traces(4);
