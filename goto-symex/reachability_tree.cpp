@@ -926,4 +926,35 @@ reachability_treet::print_ileave_trace(void) const
 int
 reachability_treet::get_ileave_direction_from_user(void) const
 {
+  std::list<execution_statet*>::const_iterator it;
+  std::string input;
+
+  std::cout << "Context switch point encountered; please select a thread to run" << std::endl;
+  std::cout << "Current thread states:" << std::endl;
+  for (it = execution_states.begin(); it != execution_states.end(); it++)
+    (*it)->print_stack_traces(4);
+
+  while (true) {
+    std::cout << "Input: ";
+    std::cin >> input;
+    if (input == "b") {
+      std::cout << "Back unimplemented" << std::endl;
+    } else if (input == "q") {
+      exit(1);
+    } else if (input.size() <= 0) {
+      ;
+    } else {
+      const char *start;
+      char *end;
+      start = input.c_str();
+      int num = strtol(start, &end, 10);
+      if (start == end) {
+        std::cout << "Not a valid input" << std::endl;
+      } else if (num < 0 || num >= get_cur_state()._threads_state.size()) {
+        std::cout << "Number out of range";
+      } else {
+        return num;
+      }
+    }
+  }
 }
