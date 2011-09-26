@@ -40,6 +40,12 @@ execution_statet & reachability_treet::get_cur_state()
   return **_cur_state_it;
 }
 
+const execution_statet & reachability_treet::get_cur_state() const
+{
+
+  return **_cur_state_it;
+}
+
 /*******************************************************************
  Function: reachability_treet::has_more_states
 

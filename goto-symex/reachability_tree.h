@@ -56,6 +56,7 @@ public:
   virtual ~reachability_treet() { };
 
   execution_statet & get_cur_state();
+  const execution_statet & get_cur_state() const;
   bool reset_to_unexplored_state();
   bool has_more_states();
   bool check_CS_bound();
