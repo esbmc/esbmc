@@ -661,10 +661,12 @@ void reachability_treet::multi_formulae_go_next_state()
   if(it != execution_states.end()) {
     _cur_state_it++;
   } else {
-    if (generate_states_base(exprt()))
+    if (generate_states_base(exprt())) {
       _cur_state_it++;
-    else
+    } else {
+      print_ileave_trace();
       _go_next_formula = true;
+    }
   }
 
   _go_next = false;
@@ -898,4 +900,9 @@ fail:
   std::cerr << "Read error on checkpoint file" << std::endl;
   fclose(f);
   return true;
+}
+
+void
+reachability_treet::print_ileave_trace(void) const
+{
 }
