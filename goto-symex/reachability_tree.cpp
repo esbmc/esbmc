@@ -424,7 +424,7 @@ bool reachability_treet::generate_states()
 
  \*******************************************************************/
 
-bool reachability_treet::apply_static_por(execution_statet &ex_state, const exprt &expr, int i)
+bool reachability_treet::apply_static_por(const execution_statet &ex_state, const exprt &expr, int i) const
 {
   bool consider = true;
 
