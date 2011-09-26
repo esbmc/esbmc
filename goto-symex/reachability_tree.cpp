@@ -545,27 +545,28 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 #endif
 
   bool generated = false;
+  unsigned int tid;
 
-  for(unsigned int i = 0; i < ex_state._threads_state.size(); i++)
+  for(tid = 0; tid < ex_state._threads_state.size(); tid++)
   {
     /* For all threads: */
 
     /* DFS -> depth first search? Check whether we've searched this... thing? */
-    if(ex_state._DFS_traversed.at(i))
+    if(ex_state._DFS_traversed.at(tid))
       continue;
 
-    ex_state._DFS_traversed.at(i) = true;
+    ex_state._DFS_traversed.at(tid) = true;
 
     /* Presumably checks whether this thread isn't in user code yet? */
-    if(ex_state._threads_state.at(i).call_stack.empty())
+    if(ex_state._threads_state.at(tid).call_stack.empty())
       continue;
 
     /* Is it even still running? */
-    if(ex_state._threads_state.at(i).thread_ended)
+    if(ex_state._threads_state.at(tid).thread_ended)
       continue;
 
     //apply static partial-order reduction
-    if(!apply_static_por(ex_state, expr, i))
+    if(!apply_static_por(ex_state, expr, tid))
       continue;
 
     /* Generate a new execution state, duplicate of previous? */
@@ -573,9 +574,9 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     execution_states.push_back(new_state);
 
     /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_state_number() != i) {
+    if (new_state->get_active_state_number() != tid) {
       new_state->increment_context_switch();
-      new_state->set_active_state(i);
+      new_state->set_active_state(tid);
     }
 
     new_state->set_parent_guard(ex_state.get_guard_identifier());
