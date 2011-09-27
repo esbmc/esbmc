@@ -572,7 +572,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   if (generated == false && state_hashing)
     hit_hashes.insert(hash);
 
-  _go_next = true;
+  at_end_of_run = true;
 
   return generated;
 
@@ -580,7 +580,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 }
 
 /*******************************************************************
- Function: reachability_treet::is_go_next_state
+ Function: reachability_treet::is_at_end_of_run
 
  Inputs:
 
@@ -590,13 +590,13 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
  \*******************************************************************/
 
-bool reachability_treet::is_go_next_state()
+bool reachability_treet::is_at_end_of_run()
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  return _go_next ||
+  return at_end_of_run ||
          get_cur_state().get_active_state().thread_ended ||
          get_cur_state().get_active_state().call_stack.empty();
 }
@@ -650,7 +650,7 @@ void reachability_treet::multi_formulae_go_next_state()
       _go_next_formula = true;
   }
 
-  _go_next = false;
+  at_end_of_run = false;
 }
 
 bool reachability_treet::reset_to_unexplored_state()
@@ -678,7 +678,7 @@ bool reachability_treet::reset_to_unexplored_state()
   if (execution_states.size() > 0)
     _cur_state_it++;
 
-  _go_next = false;
+  at_end_of_run = false;
   return execution_states.size() != 0;
 }
 
@@ -716,7 +716,7 @@ void reachability_treet::go_next_state()
       _cur_state_it++;
   }
 
-  _go_next = false;
+  at_end_of_run = false;
 }
 
 reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)

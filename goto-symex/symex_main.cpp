@@ -157,7 +157,7 @@ symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
   art1->get_cur_state().execute_guard(ns, *target);
   while(!art1->is_go_next_formula())
   {
-    while (!art1->is_go_next_state())
+    while (!art1->is_at_end_of_run())
       symex_step(art1->_goto_functions, *art1);
 
     art1->multi_formulae_go_next_state();
@@ -181,9 +181,9 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
   // the history we've been provided with.
   for (it = dfs.states.begin(), i = 0; it != dfs.states.end(); it++, i++) {
 
-    art1->_go_next = false;
+    art1->at_end_of_run = false;
 
-    while (!art1->is_go_next_state()) {
+    while (!art1->is_at_end_of_run()) {
       // Restore the DFS exploration space so that when an interleaving occurs
       // we take the option leading to the thread we desire to run. This
       // assumes that the DFS exploration path algorithm never changes.
@@ -255,7 +255,7 @@ void goto_symext::operator()(const goto_functionst &goto_functions)
   {
     total_states++;
     art.get_cur_state().execute_guard(ns, *target);
-    while (!art.is_go_next_state())
+    while (!art.is_at_end_of_run())
     {
       symex_step(goto_functions, art);
     }
@@ -345,7 +345,7 @@ void goto_symext::symex_step(
                 ex_state.end_thread(ns, *target);
                 ex_state.reexecute_instruction = false;
                 art.generate_states_base(exprt());
-                art.set_go_next_state();
+                art.set_is_at_end_of_run();
             }
             else
             {
