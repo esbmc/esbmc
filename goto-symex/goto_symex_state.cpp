@@ -867,7 +867,7 @@ void goto_symex_statet::level2t::print(std::ostream &out, unsigned node_id) cons
 
 }
 
-void goto_symex_statet::print_stack_trace(unsigned int indent) const
+void goto_symex_statet::print_stack_trace(const namespacet &ns, unsigned int indent) const
 {
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
@@ -894,7 +894,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
 
   if (!thread_ended) {
     std::cout << spaces << "Next instruction to be executed:" << std::endl;
-    source.prog->output_instruction(namespacet(contextt()), "", std::cout, source.pc, true, false);
+    source.prog->output_instruction(ns, "", std::cout, source.pc, true, false);
   }
 
   return;

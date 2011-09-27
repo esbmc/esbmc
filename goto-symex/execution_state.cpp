@@ -1170,7 +1170,7 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   return m;
 }
 
-void execution_statet::print_stack_traces(unsigned int indent) const
+void execution_statet::print_stack_traces(const namespacet &ns, unsigned int indent) const
 {
   std::vector<goto_symex_statet>::const_iterator it;
   std::string spaces = std::string("");
@@ -1182,7 +1182,7 @@ void execution_statet::print_stack_traces(unsigned int indent) const
   i = 0;
   for (it = _threads_state.begin(); it != _threads_state.end(); it++) {
     std::cout << spaces << "Thread " << i++ << ":" << std::endl;
-    it->print_stack_trace(indent+2);
+    it->print_stack_trace(ns, indent+2);
     std::cout << std::endl;
   }
 
