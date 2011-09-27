@@ -53,7 +53,7 @@ public:
 
 		_goto_program =&(it->second.body);
 
-		add_thread((*_goto_program).instructions.begin(),(*_goto_program).instructions.end());
+		add_thread((*_goto_program).instructions.begin(),(*_goto_program).instructions.end(), _goto_program);
 		_active_thread = 0;
 		_last_active_thread = 0;
 		generating_new_threads = 0;
@@ -168,7 +168,7 @@ public:
 	void set_active_state(unsigned int i);
     void execute_guard(const namespacet & ns, symex_targett &target);
 
-	void add_thread(goto_programt::const_targett start, goto_programt::const_targett end);
+	void add_thread(goto_programt::const_targett start, goto_programt::const_targett end, const goto_programt *prog);
 	void add_thread(goto_symex_statet & state);
     void end_thread(const namespacet &ns, symex_targett &target);
     /* Presumably this does the same as read_globals, see below */

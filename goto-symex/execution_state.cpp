@@ -565,14 +565,14 @@ void execution_statet::execute_guard(const namespacet &ns, symex_targett &target
 
  \*******************************************************************/
 
-void execution_statet::add_thread(goto_programt::const_targett thread_start, goto_programt::const_targett thread_end)
+void execution_statet::add_thread(goto_programt::const_targett thread_start, goto_programt::const_targett thread_end, const goto_programt *prog)
 {
 #ifdef DEBUG
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
 #endif
 
   goto_symex_statet state(_state_level2);
-  state.initialize(thread_start, thread_end, _threads_state.size());
+  state.initialize(thread_start, thread_end, prog, _threads_state.size());
 
   _threads_state.push_back(state);
   _atomic_numbers.push_back(0);

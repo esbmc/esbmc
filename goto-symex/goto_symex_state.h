@@ -226,7 +226,7 @@ public:
 
   level2t &level2;
 
-  void initialize(const goto_programt::const_targett & start,const goto_programt::const_targett & end, unsigned int thread_id);
+  void initialize(const goto_programt::const_targett & start,const goto_programt::const_targett & end, const goto_programt *prog, unsigned int thread_id);
 
   void rename(exprt &expr, const namespacet &ns, unsigned node_id);
   void rename_address(exprt &expr, const namespacet &ns, unsigned node_id);

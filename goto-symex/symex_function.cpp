@@ -305,6 +305,7 @@ void goto_symext::symex_function_call_code(
 
   state.source.is_set=true;
   state.source.pc=goto_function.body.instructions.begin();
+  state.source.prog=&goto_function.body;
 }
 
 /*******************************************************************\
@@ -327,6 +328,7 @@ void goto_symext::pop_frame(statet &state)
 
   // restore state
   state.source.pc=frame.calling_location.pc;
+  state.source.prog=frame.calling_location.prog;
 
  // std::cout << "executing end function before remove locals 1" << std::endl;
 

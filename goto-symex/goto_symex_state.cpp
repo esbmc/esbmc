@@ -58,7 +58,7 @@ Function: goto_symex_statet::initialize
 
 \*******************************************************************/
 
-void goto_symex_statet::initialize(const goto_programt::const_targett & start, const goto_programt::const_targett & end, unsigned int thread_id)
+void goto_symex_statet::initialize(const goto_programt::const_targett & start, const goto_programt::const_targett & end, const goto_programt *prog, unsigned int thread_id)
 {
   new_frame(thread_id);
 
@@ -71,7 +71,7 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
 	  end_pc++;
 */
   top().end_of_function=end;
-  top().calling_location=top().end_of_function;
+  top().calling_location=symex_targett::sourcet(top().end_of_function, prog);
 }
 
 /*******************************************************************\
