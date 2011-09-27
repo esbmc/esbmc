@@ -602,7 +602,7 @@ bool reachability_treet::is_at_end_of_run()
 }
 
 /*******************************************************************
- Function: reachability_treet::is_go_next_formula
+ Function: reachability_treet::is_has_complete_formula
 
  Inputs:
 
@@ -612,13 +612,13 @@ bool reachability_treet::is_at_end_of_run()
 
  \*******************************************************************/
 
-bool reachability_treet::is_go_next_formula()
+bool reachability_treet::is_has_complete_formula()
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  return _go_next_formula;
+  return has_complete_formula;
 }
 
 /*******************************************************************
@@ -647,7 +647,7 @@ void reachability_treet::multi_formulae_go_next_state()
     if (generate_states_base(exprt()))
       _cur_state_it++;
     else
-      _go_next_formula = true;
+      has_complete_formula = true;
   }
 
   at_end_of_run = false;

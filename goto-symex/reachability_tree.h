@@ -44,7 +44,7 @@ public:
       por = true;
 
     at_end_of_run = false;
-    _go_next_formula = false;
+    has_complete_formula = false;
     is_same_mutex=false;
     execution_statet *s = new execution_statet(goto_functions, ns, this, initial_level2, options.get_bool_option("schedule"));
     execution_states.push_back(s);
@@ -74,7 +74,7 @@ public:
 
   const symbolt &lookup(const namespacet &ns, const irep_idt &identifier) const;
   bool is_at_end_of_run();
-  bool is_go_next_formula();
+  bool is_has_complete_formula();
   void go_next_state();
   void multi_formulae_go_next_state();
   void set_is_at_end_of_run()
@@ -128,7 +128,10 @@ public:
 
   // The current terminating execution state that we've reached
   execution_statet* reached_terminal_state;
-  bool _go_next_formula;
+  // Has complete formula: we have executed up to the end of the program and
+  // we have an SSA formula we can verify. When this occurs, we drop back and
+  // let the higher level code convert the formula/equation.
+  bool has_complete_formula;
   // End of run: where we have executed up to the point where there is a
   // context switch that may be taken.
   bool at_end_of_run;

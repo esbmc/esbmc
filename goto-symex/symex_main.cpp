@@ -155,7 +155,7 @@ symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
 
   target = &art1->get_cur_state()._target;
   art1->get_cur_state().execute_guard(ns, *target);
-  while(!art1->is_go_next_formula())
+  while(!art1->is_has_complete_formula())
   {
     while (!art1->is_at_end_of_run())
       symex_step(art1->_goto_functions, *art1);
@@ -164,7 +164,7 @@ symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
     target = &art1->get_cur_state()._target;
     total_states++;
   }
-  art1->_go_next_formula = false;
+  art1->has_complete_formula = false;
   total_formulae++;
 
   return &art1->get_cur_state()._target;
