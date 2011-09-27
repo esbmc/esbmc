@@ -44,6 +44,11 @@ goto_symex_statet & execution_statet::get_active_state() {
     return _threads_state.at(_active_thread);
 }
 
+const goto_symex_statet & execution_statet::get_active_state() const
+{
+    return _threads_state.at(_active_thread);
+}
+
 /*******************************************************************
  Function: execution_statet::all_threads_ended
 

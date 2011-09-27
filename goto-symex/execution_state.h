@@ -160,6 +160,7 @@ public:
     void set_parent_guard(const irep_idt & parent_guard);
     bool all_threads_ended();
 	goto_symex_statet & get_active_state();
+	const goto_symex_statet & get_active_state() const;
 	unsigned int get_active_state_number() { return _active_thread; }
 	unsigned int get_active_atomic_number();
 	void increment_active_atomic_number();
