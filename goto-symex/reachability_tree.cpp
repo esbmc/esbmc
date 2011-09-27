@@ -579,8 +579,6 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     std::cerr << std::endl;
   }
 
-  std::cout << "Tid " << tid << " user tid " << user_tid << std::endl;
-
   _go_next = true;
 
   if (tid != ex_state._threads_state.size()) {
