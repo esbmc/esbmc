@@ -1182,7 +1182,7 @@ void execution_statet::print_stack_traces(unsigned int indent) const
   i = 0;
   for (it = _threads_state.begin(); it != _threads_state.end(); it++) {
     std::cout << spaces << "Thread " << i++ << ":" << std::endl;
-    it->print_stack_trace(indent);
+    it->print_stack_trace(indent+2);
     std::cout << std::endl;
   }
 
