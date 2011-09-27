@@ -33,19 +33,19 @@ public:
     _ns(ns),
     options(opts)
   {
-    _CS_bound = atoi(options.get_option("context-switch").c_str());
-    _deadlock_detection = options.get_bool_option("deadlock-check");
+    CS_bound = atoi(options.get_option("context-switch").c_str());
+    deadlock_detection = options.get_bool_option("deadlock-check");
     state_hashing = options.get_bool_option("state-hashing");
     directed_interleavings = options.get_bool_option("direct-interleavings");
 
     if (options.get_bool_option("no-por") || options.get_bool_option("control-flow-test"))
-      _por = false;
+      por = false;
     else
-      _por = true;
+      por = true;
 
     _go_next = false;
     _go_next_formula = false;
-    _is_same_mutex=false;
+    is_same_mutex=false;
     execution_statet *s = new execution_statet(goto_functions, ns, this, initial_level2, options.get_bool_option("schedule"));
     execution_states.push_back(s);
     _cur_state_it = execution_states.begin();
@@ -135,8 +135,8 @@ private:
   std::list<execution_statet*> execution_states;
   /* This is derefed and returned by get_current_state */
   std::list<execution_statet*>::iterator _cur_state_it;
-  int _CS_bound;
-  bool _is_same_mutex, _deadlock_detection, _por;
+  int CS_bound;
+  bool is_same_mutex, deadlock_detection, por;
   bool directed_interleavings;
   const namespacet &_ns;
 

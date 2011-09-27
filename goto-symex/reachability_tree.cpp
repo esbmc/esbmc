@@ -72,7 +72,7 @@ bool reachability_treet::has_more_states()
 
 bool reachability_treet::check_CS_bound()
 {
-  if(_CS_bound  != -1 && get_cur_state().get_context_switch() >= _CS_bound)
+  if(CS_bound  != -1 && get_cur_state().get_context_switch() >= CS_bound)
   {
     return true;
   }
@@ -93,7 +93,7 @@ bool reachability_treet::check_CS_bound()
 
 int reachability_treet::get_CS_bound()
 {
-  return _CS_bound;
+  return CS_bound;
 }
 
 /*******************************************************************
@@ -201,7 +201,7 @@ bool reachability_treet::generate_states_before_write(const exprt &code)
 
 bool reachability_treet::get_is_same_mutex(void)
 {
-  return _is_same_mutex;
+  return is_same_mutex;
 }
 
 /*******************************************************************
@@ -242,9 +242,9 @@ void reachability_treet::check_mutex(const exprt &code, const execution_statet &
 	  val = integer2string(binary2integer(value.get_string("value"), true),10);
 
 	  if (identifier.find(object.op0().op0().get_string("identifier")) != std::string::npos)
-	    _is_same_mutex=true;
+	    is_same_mutex=true;
 	  else if (val.find("0") == std::string::npos)
-	    _is_same_mutex=false;
+	    is_same_mutex=false;
 
 	  identifier = object.op0().op0().get_string("identifier");
     }
@@ -272,7 +272,7 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
     throw "assignment expects two operands";
 
 #if 0
-  if (!_deadlock_detection)
+  if (!deadlock_detection)
     check_mutex(code, ex_state);
 
   if (get_is_same_mutex())
@@ -404,7 +404,7 @@ bool reachability_treet::apply_static_por(execution_statet &ex_state, const expr
 {
   bool consider = true;
 
-  if (_por)
+  if (por)
   {
     if(ex_state.last_global_expr.is_not_nil() && !expr.id().empty())
     {
@@ -465,7 +465,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
 //  std::cout << "generate_states_base expr.pretty(): " << expr.pretty() << std::endl;
 
-  if(_CS_bound  != -1 && get_cur_state().get_context_switch() >= _CS_bound)
+  if(CS_bound  != -1 && get_cur_state().get_context_switch() >= CS_bound)
     return false;
 
   if (directed_interleavings)
