@@ -43,7 +43,6 @@ public:
     else
       _por = true;
 
-    _DFS=true;
     _go_next = false;
     _go_next_formula = false;
     _is_same_mutex=false;
@@ -137,7 +136,7 @@ private:
   /* This is derefed and returned by get_current_state */
   std::list<execution_statet*>::iterator _cur_state_it;
   int _CS_bound;
-  bool _DFS, _is_same_mutex, _deadlock_detection, _por;
+  bool _is_same_mutex, _deadlock_detection, _por;
   bool directed_interleavings;
   const namespacet &_ns;
 
