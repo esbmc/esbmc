@@ -160,7 +160,7 @@ symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
     while (!art1->is_at_end_of_run())
       symex_step(art1->_goto_functions, *art1);
 
-    art1->multi_formulae_go_next_state();
+    art1->switch_to_next_execution_state();
     target = &art1->get_cur_state()._target;
     total_states++;
   }
@@ -201,7 +201,7 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
       abort();
     }
 
-    art1->multi_formulae_go_next_state();
+    art1->switch_to_next_execution_state();
 
     // check we're on the right thread; except on the last run, where there are
     // no more threads to be run.

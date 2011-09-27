@@ -76,7 +76,7 @@ public:
   bool is_at_end_of_run();
   bool is_has_complete_formula();
   void go_next_state();
-  void multi_formulae_go_next_state();
+  void switch_to_next_execution_state();
   void set_is_at_end_of_run()
   {
     at_end_of_run = true;
