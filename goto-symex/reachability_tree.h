@@ -137,7 +137,7 @@ private:
   /* This is derefed and returned by get_current_state */
   std::list<execution_statet*>::iterator _cur_state_it;
   int _CS_bound;
-  bool _DFS, _multi_formulae, _is_same_mutex, _deadlock_detection, _por;
+  bool _DFS, _is_same_mutex, _deadlock_detection, _por;
   bool directed_interleavings;
   const namespacet &_ns;
 
