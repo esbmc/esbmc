@@ -167,9 +167,6 @@ symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
   art1->_go_next_formula = false;
   total_formulae++;
 
-//  if (art1->get_actual_CS_bound() > art1->get_CS_bound())
-//    std::cout << "**** WARNING: need to increase the number of context switches" << std::endl;
-
   return &art1->get_cur_state()._target;
 }
 

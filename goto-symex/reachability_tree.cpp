@@ -74,7 +74,6 @@ bool reachability_treet::check_CS_bound()
 {
   if(_CS_bound  != -1 && get_cur_state().get_context_switch() >= _CS_bound)
   {
-	_actual_CS_bound++;
     return true;
   }
   else
@@ -95,22 +94,6 @@ bool reachability_treet::check_CS_bound()
 int reachability_treet::get_CS_bound()
 {
   return _CS_bound;
-}
-
-/*******************************************************************
- Function: reachability_treet::get_actual_CS_bound
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-int reachability_treet::get_actual_CS_bound()
-{
-  return _actual_CS_bound;
 }
 
 /*******************************************************************

@@ -46,7 +46,6 @@ public:
     _DFS=true;
     _go_next = false;
     _go_next_formula = false;
-    _actual_CS_bound = _CS_bound;
     _is_same_mutex=false;
     execution_statet *s = new execution_statet(goto_functions, ns, this, initial_level2, options.get_bool_option("schedule"));
     execution_states.push_back(s);
@@ -60,7 +59,6 @@ public:
   bool has_more_states();
   bool check_CS_bound();
   int get_CS_bound();
-  int get_actual_CS_bound();
   bool generate_states_base(const exprt & expr);
   bool apply_static_por(execution_statet &ex_state, const exprt &expr, int i);
   bool generate_states_after_start_thread();
@@ -138,7 +136,7 @@ private:
   std::list<execution_statet*> execution_states;
   /* This is derefed and returned by get_current_state */
   std::list<execution_statet*>::iterator _cur_state_it;
-  int _CS_bound, _actual_CS_bound;
+  int _CS_bound;
   bool _DFS, _multi_formulae, _is_same_mutex, _deadlock_detection, _por;
   bool directed_interleavings;
   const namespacet &_ns;
