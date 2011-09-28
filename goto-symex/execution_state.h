@@ -41,7 +41,6 @@ public:
 		reexecute_instruction = true;
 		reexecute_atomic = false;
 		_CS_number = 0;
-		_actual_CS_number=0;
 		node_id = 0;
 		guard_execution = "execution_statet::\\guard_exec";
 		guard_thread = "execution_statet::\\trdsel";
@@ -109,7 +108,6 @@ public:
 		_parent_guard_identifier = ex._parent_guard_identifier;
 		reexecute_instruction = ex.reexecute_instruction;
 		reexecute_atomic = ex.reexecute_atomic;
-		_actual_CS_number = ex._actual_CS_number;
 		nondet_count = ex.nondet_count;
 		dynamic_counter = ex.dynamic_counter;
 		node_id = ex.node_id;
@@ -241,7 +239,6 @@ public:
 
     bool reexecute_instruction; // temporarily disable context switch for the thread inherited from the last active thread
     bool reexecute_atomic; // temporarily disable context switch for the thread inherited from the last active thread
-    int _actual_CS_number; //count the actual number of context switches
 
     unsigned nondet_count;
     unsigned dynamic_counter;
