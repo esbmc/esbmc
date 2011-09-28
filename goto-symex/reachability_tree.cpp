@@ -37,13 +37,13 @@ execution_statet & reachability_treet::get_cur_state()
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  return **_cur_state_it;
+  return **cur_state_it;
 }
 
 const execution_statet & reachability_treet::get_cur_state() const
 {
 
-  return **_cur_state_it;
+  return **cur_state_it;
 }
 
 /*******************************************************************
@@ -120,7 +120,7 @@ bool reachability_treet::is_global_assign(const exprt &code)
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  int num_read_globals = get_cur_state().get_expr_read_globals(_ns,code.op1());
+  int num_read_globals = get_cur_state().get_expr_read_globals(ns,code.op1());
 
   if (get_is_same_mutex())
     return false;
@@ -157,7 +157,7 @@ bool reachability_treet::generate_states_before_read(const exprt &code)
   if (get_cur_state().get_active_atomic_number() > 0)
    	return false;
 
-  if (get_cur_state().get_expr_read_globals(_ns,code) > 0)
+  if (get_cur_state().get_expr_read_globals(ns,code) > 0)
     return generate_states_base(code);
   else
     return false;
@@ -260,8 +260,8 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
   if(get_cur_state().get_active_atomic_number() > 0)
     return false;
 
-  int num_write_globals = get_cur_state().get_expr_write_globals(_ns,code.op0());
-  int num_read_globals = get_cur_state().get_expr_read_globals(_ns,code.op1());
+  int num_write_globals = get_cur_state().get_expr_write_globals(ns,code.op0());
+  int num_read_globals = get_cur_state().get_expr_read_globals(ns,code.op1());
 
   //std::cout << "code.pretty(): " << code.pretty() << std::endl;
   //std::cout << "num_read_globals: " << num_read_globals << std::endl;
@@ -561,14 +561,14 @@ void reachability_treet::switch_to_next_execution_state()
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  std::list<execution_statet*>::iterator it = _cur_state_it;
+  std::list<execution_statet*>::iterator it = cur_state_it;
   it++;
 
   if(it != execution_states.end()) {
-    _cur_state_it++;
+    cur_state_it++;
   } else {
     if (generate_states_base(exprt()))
-      _cur_state_it++;
+      cur_state_it++;
     else
       has_complete_formula = true;
   }
@@ -588,18 +588,18 @@ bool reachability_treet::reset_to_unexplored_state()
   // the last on the list. If we can, it's an unexplored state, if we can't,
   // all depths from the current execution state are explored, so delete it.
 
-  it = _cur_state_it--;
+  it = cur_state_it--;
   delete *it;
   execution_states.erase(it);
 
   while(execution_states.size() > 0 && !generate_states_base(exprt())) {
-    it = _cur_state_it--;
+    it = cur_state_it--;
     delete *it;
     execution_states.erase(it);
   }
 
   if (execution_states.size() > 0)
-    _cur_state_it++;
+    cur_state_it++;
 
   at_end_of_run = false;
   return execution_states.size() != 0;
@@ -622,21 +622,21 @@ void reachability_treet::go_next_state()
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-  std::list<execution_statet*>::iterator it = _cur_state_it;
+  std::list<execution_statet*>::iterator it = cur_state_it;
   it++;
   if(it != execution_states.end())
-    _cur_state_it++;
+    cur_state_it++;
   else
   {
     while(execution_states.size() > 0 && !generate_states_base(exprt()))
     {
-      it = _cur_state_it;
-      _cur_state_it--;
+      it = cur_state_it;
+      cur_state_it--;
       execution_states.erase(it);
     }
 
     if(execution_states.size() > 0)
-      _cur_state_it++;
+      cur_state_it++;
   }
 
   at_end_of_run = false;
@@ -815,7 +815,7 @@ reachability_treet::print_ileave_trace(void) const
   std::cout << "Context switch trace for interleaving:" << std::endl;
   for (it = execution_states.begin(); it != execution_states.end(); it++, i++) {
     std::cout << "Context switch point " << i << std::endl;
-    (*it)->print_stack_traces(_ns, 4);
+    (*it)->print_stack_traces(ns, 4);
   }
 }
 
@@ -845,7 +845,7 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
 
   std::cout << "Context switch point encountered; please select a thread to run" << std::endl;
   std::cout << "Current thread states:" << std::endl;
-  execution_states.back()->print_stack_traces(_ns, 4);
+  execution_states.back()->print_stack_traces(ns, 4);
 
   while (std::cout << "Input: ", std::getline(std::cin, input)) {
     if (input == "b") {

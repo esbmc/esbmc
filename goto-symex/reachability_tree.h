@@ -28,9 +28,9 @@ public:
     const goto_functionst &goto_functions,
     const namespacet &ns,
     optionst opts):
-    _goto_functions(goto_functions),
+    goto_functions(goto_functions),
     reached_terminal_state(NULL),
-    _ns(ns),
+    ns(ns),
     options(opts)
   {
     CS_bound = atoi(options.get_option("context-switch").c_str());
@@ -48,7 +48,7 @@ public:
     is_same_mutex=false;
     execution_statet *s = new execution_statet(goto_functions, ns, this, initial_level2, options.get_bool_option("schedule"));
     execution_states.push_back(s);
-    _cur_state_it = execution_states.begin();
+    cur_state_it = execution_states.begin();
   };
 
   virtual ~reachability_treet() { };
@@ -126,7 +126,7 @@ public:
     uint64_t checksum;
   };
 
-  const goto_functionst &_goto_functions;
+  const goto_functionst &goto_functions;
 
   // The current terminating execution state that we've reached
   execution_statet* reached_terminal_state;
@@ -141,11 +141,11 @@ public:
 private:
   std::list<execution_statet*> execution_states;
   /* This is derefed and returned by get_current_state */
-  std::list<execution_statet*>::iterator _cur_state_it;
+  std::list<execution_statet*>::iterator cur_state_it;
   int CS_bound;
   bool is_same_mutex, deadlock_detection, por;
   bool directed_interleavings;
-  const namespacet &_ns;
+  const namespacet &ns;
 
     /* jmorse */
   std::set<crypto_hash>hit_hashes;
