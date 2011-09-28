@@ -16,6 +16,11 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <options.h>
 #include "execution_state.h"
 #include "basic_symex.h"
+#include "symex_target_equation.h"
+
+// Can't include goto_symex.h due to inclusion order. This can be fixed with the
+// refactor; in the meantime, forward dec.
+class goto_symext;
 
 #include "crypto_hash.h"
 
@@ -83,6 +88,10 @@ public:
   {
     at_end_of_run = true;
   }
+
+  // Interface for bmc operation goes here
+  symex_target_equationt *get_next_formula(goto_symext &symex);
+  bool setup_next_formula(void);
 
   class dfs_position {
 public:

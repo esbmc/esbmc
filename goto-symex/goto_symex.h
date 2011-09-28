@@ -43,8 +43,6 @@ public:
   virtual void operator()();
 
     bool restore_from_dfs_state(const reachability_treet::dfs_position &dfs);
-    symex_target_equationt *multi_formulas_get_next_formula();
-    bool multi_formulas_setup_next();
     void save_checkpoint(const std::string fname) const;
 
   void symex_step(

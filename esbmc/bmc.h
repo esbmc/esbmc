@@ -32,6 +32,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/smt/smt_dec.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
+#include <goto-symex/reachability_tree.h>
 
 #include "symex_bmc.h"
 #include "bv_cbmc.h"
@@ -182,7 +183,7 @@ protected:
 
   virtual void error_trace(
     const prop_convt &prop_conv);
-    bool run_thread();
+    bool run_thread(reachability_treet *art);
 };
 
 class bmct:public bmc_baset

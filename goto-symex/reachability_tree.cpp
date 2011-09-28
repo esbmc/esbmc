@@ -11,6 +11,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <netinet/in.h>
 
 #include "reachability_tree.h"
+#include "goto_symex.h"
 #include <i2string.h>
 #include <expr_util.h>
 #include <std_expr.h>
@@ -908,4 +909,36 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
   }
 
   return true;
+}
+
+symex_target_equationt *
+reachability_treet::get_next_formula(goto_symext &symex)
+{
+
+  static unsigned int total_formulae = 0;
+  static int total_states = 0;
+
+  symex.target = &get_cur_state()._target;
+  get_cur_state().execute_guard(ns, *symex.target);
+  while(!is_has_complete_formula())
+  {
+    while (!is_at_end_of_run())
+      symex.symex_step(goto_functions, *this);
+
+    switch_to_next_execution_state();
+    symex.target = &get_cur_state()._target;
+    total_states++;
+  }
+
+  has_complete_formula = false;
+  total_formulae++;
+
+  return &get_cur_state()._target;
+}
+
+bool
+reachability_treet::setup_next_formula(void)
+{
+
+  return reset_to_unexplored_state();
 }

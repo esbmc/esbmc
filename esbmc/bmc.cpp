@@ -369,7 +369,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
     if(symex.options.get_bool_option("uw-model"))
         std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
 
-    resp = run_thread();
+    resp = run_thread(art);
 
 
     //underapproximation-widening model
@@ -379,7 +379,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       symex.total_claims=0;
       symex.remaining_claims=0;
       std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
-      resp = run_thread();
+      resp = run_thread(art);
     }
 
     return resp;
@@ -405,7 +405,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       if (++interleaving_number>1)
         std::cout << "*** Thread interleavings " << interleaving_number << " ***" << std::endl;
 
-      if(run_thread())
+      if(run_thread(art))
       {
         ++interleaving_failed;
         if(!symex.options.get_bool_option("all-runs"))
@@ -430,7 +430,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
         checkpoint_sig = false;
       }
-    } while(symex.multi_formulas_setup_next());
+    } while(art->setup_next_formula());
   }
 
   if (symex.options.get_bool_option("all-runs"))
@@ -442,7 +442,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   return false;
 }
 
-bool bmc_baset::run_thread()
+bool bmc_baset::run_thread(reachability_treet *art)
 {
   solver_base *solver;
   bool ret;
@@ -455,7 +455,7 @@ bool bmc_baset::run_thread()
     }
     else
     {
-      equation = symex.multi_formulas_get_next_formula();
+      equation = art->get_next_formula(symex);
     }
   }
 

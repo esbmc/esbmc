@@ -84,58 +84,6 @@ void goto_symext::claim(
   target->assertion(state.guard, expr, msg, state.source);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::multi_formulas_has_more_formula
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool goto_symext::multi_formulas_setup_next()
-{
-  return art1->reset_to_unexplored_state();
-}
-
-
-/*******************************************************************\
-
-Function: goto_symext::multi_formulas_get_next_formula
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
-{
-  static unsigned int total_formulae = 0;
-  static int total_states = 0;
-
-  target = &art1->get_cur_state()._target;
-  art1->get_cur_state().execute_guard(ns, *target);
-  while(!art1->is_has_complete_formula())
-  {
-    while (!art1->is_at_end_of_run())
-      symex_step(art1->goto_functions, *art1);
-
-    art1->switch_to_next_execution_state();
-    target = &art1->get_cur_state()._target;
-    total_states++;
-  }
-  art1->has_complete_formula = false;
-  total_formulae++;
-
-  return &art1->get_cur_state()._target;
-}
-
 bool
 goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
 {
