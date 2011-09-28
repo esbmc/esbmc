@@ -40,8 +40,6 @@ public:
 
     irep_idt get_symbol(const exprt & expr);
 
-  virtual void operator()();
-
     bool restore_from_dfs_state(const reachability_treet::dfs_position &dfs);
     void save_checkpoint(const std::string fname) const;
 

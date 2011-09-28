@@ -942,3 +942,21 @@ reachability_treet::setup_next_formula(void)
 
   return reset_to_unexplored_state();
 }
+
+void
+reachability_treet::generate_schedule_formula(goto_symext &symex)
+{
+
+  int total_states = 0;
+  while (has_more_states())
+  {
+    total_states++;
+    get_cur_state().execute_guard(ns, *symex.target);
+    while (!is_at_end_of_run())
+    {
+      symex.symex_step(goto_functions, *this);
+    }
+
+    go_next_state();
+  }
+}

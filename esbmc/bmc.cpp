@@ -451,7 +451,7 @@ bool bmc_baset::run_thread(reachability_treet *art)
   {
     if(symex.options.get_bool_option("schedule"))
     {
-      symex();
+      art->generate_schedule_formula(symex);
     }
     else
     {

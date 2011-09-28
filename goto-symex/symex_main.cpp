@@ -149,39 +149,6 @@ void goto_symext::save_checkpoint(const std::string fname) const
 
 /*******************************************************************\
 
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::operator()()
-{
-
-  int total_states = 0;
-  while (art1->has_more_states())
-  {
-    total_states++;
-    art1->get_cur_state().execute_guard(ns, *target);
-    while (!art1->is_at_end_of_run())
-    {
-      symex_step(art1->goto_functions, *art1);
-    }
-
-    art1->go_next_state();
-  }
-
-//  if (art.get_actual_CS_bound() > art.get_CS_bound())
-//    std::cout << "**** WARNING: need to increase the number of context switches" << std::endl;
-
-}
-
-/*******************************************************************\
-
 Function: goto_symext::get_symbol
 
   Inputs:

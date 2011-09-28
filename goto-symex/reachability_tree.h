@@ -90,8 +90,10 @@ public:
   }
 
   // Interface for bmc operation goes here
+
   symex_target_equationt *get_next_formula(goto_symext &symex);
   bool setup_next_formula(void);
+  void generate_schedule_formula(goto_symext &symex);
 
   class dfs_position {
 public:
