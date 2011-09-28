@@ -48,6 +48,7 @@ public:
     context(_context),
     symex(_symex),
     equation(&_equation),
+    ns(_context, new_context),
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
@@ -80,6 +81,8 @@ protected:
   const contextt &context;
   symex_bmct &symex;
   symex_target_equationt *equation;
+  contextt new_context;
+  namespacet ns;
 
   // use gui format
   language_uit::uit ui;
@@ -189,15 +192,12 @@ public:
     const contextt &_context,
     message_handlert &_message_handler):
     bmc_baset(_context, _symex, _equation, _message_handler),
-    ns(_context, new_context),
     _equation(ns),
     _symex(ns, new_context, _equation)
   {
   }
 
 protected:
-  contextt new_context;
-  namespacet ns;
   symex_target_equationt _equation;
   symex_bmct _symex;
 };
