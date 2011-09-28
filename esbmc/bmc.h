@@ -182,7 +182,7 @@ protected:
 
   virtual void error_trace(
     const prop_convt &prop_conv);
-    bool run_thread(const goto_functionst &goto_functions);
+    bool run_thread();
 };
 
 class bmct:public bmc_baset

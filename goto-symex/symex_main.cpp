@@ -86,40 +86,6 @@ void goto_symext::claim(
 
 /*******************************************************************\
 
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::operator()() {
-
-    throw "symex_main::goto_symex::operator() : who called me?";
-}
-/*******************************************************************\
-
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::multi_formulas_init(const goto_functionst &goto_functions)
-{
-
-  art1 = new reachability_treet(goto_functions, ns, options);
-}
-
-/*******************************************************************\
-
 Function: goto_symext::multi_formulas_has_more_formula
 
   Inputs:
@@ -245,22 +211,20 @@ Function: goto_symext::operator()
 
 \*******************************************************************/
 
-void goto_symext::operator()(const goto_functionst &goto_functions)
+void goto_symext::operator()()
 {
 
-  reachability_treet art(goto_functions, ns, options);
-
   int total_states = 0;
-  while (art.has_more_states())
+  while (art1->has_more_states())
   {
     total_states++;
-    art.get_cur_state().execute_guard(ns, *target);
-    while (!art.is_at_end_of_run())
+    art1->get_cur_state().execute_guard(ns, *target);
+    while (!art1->is_at_end_of_run())
     {
-      symex_step(goto_functions, art);
+      symex_step(art1->goto_functions, *art1);
     }
 
-    art.go_next_state();
+    art1->go_next_state();
   }
 
 //  if (art.get_actual_CS_bound() > art.get_CS_bound())
