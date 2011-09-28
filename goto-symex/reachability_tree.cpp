@@ -164,38 +164,6 @@ bool reachability_treet::generate_states_before_read(const exprt &code)
 }
 
 /*******************************************************************
- Function: reachability_treet::generate_states_before_write
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool reachability_treet::generate_states_before_write(const exprt &code)
-{
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
-  if (get_is_same_mutex())
-    return false;
-
-  if (check_CS_bound())
-    return false;
-
-  if (get_cur_state().get_active_atomic_number() > 0)
-   	return false;
-
-  if (get_cur_state().get_expr_write_globals(_ns, code) > 0)
-    return generate_states_base(code);
-  else
-    return false;
-}
-
-/*******************************************************************
  Function: reachability_treet::get_is_mutex
 
  Inputs:
@@ -306,67 +274,6 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
   }
 
   return false;
-}
-
-/*******************************************************************
- Function: reachability_treet::generate_states_before_function
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool reachability_treet::generate_states_before_function(const code_function_callt &code)
-{
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
-  if (get_is_same_mutex())
-    return false;
-
-  if(check_CS_bound())
-    return false;
-
-  if(get_cur_state().get_active_atomic_number() > 0)
-   	return false;
-
-  int num_globals = 0;
-
-  for(std::vector<exprt>::const_iterator it=code.arguments().begin();
-            it!=code.arguments().end(); it++)
-  {
-    num_globals += get_cur_state().get_expr_read_globals(_ns,*it);
-  }
-  if(num_globals > 0)
-    return generate_states_base(code);
-
-  return false;
-}
-
-/*******************************************************************
- Function: reachability_treet::generate_states_after_start_thread
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool reachability_treet::generate_states_after_start_thread()
-{
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
-  get_cur_state().reexecute_instruction = false;
-
-  return generate_states_base(exprt());
 }
 
 /*******************************************************************

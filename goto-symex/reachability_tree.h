@@ -64,16 +64,13 @@ public:
   bool check_thread_viable(int tid, const exprt &expr, bool quiet) const;
   bool generate_states_base(const exprt & expr);
   bool apply_static_por(const execution_statet &ex_state, const exprt &expr, int i) const;
-  bool generate_states_after_start_thread();
   bool generate_states();
 
   bool get_is_same_mutex(void);
   void check_mutex(const exprt &code, const execution_statet &ex_state);
 
   bool generate_states_before_read(const exprt &code);
-  bool generate_states_before_write(const exprt &code);
   bool generate_states_before_assign(const exprt &code, execution_statet &ex_state);
-  bool generate_states_before_function(const code_function_callt &code);
   bool is_global_assign(const exprt &code);
 
   const symbolt &lookup(const namespacet &ns, const irep_idt &identifier) const;
