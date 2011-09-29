@@ -3153,7 +3153,23 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
       {
     	if (convert_bv(op, args[0]))
     	  return true;
-    	if (op.operands().size()>0)
+
+#ifdef DEBUG
+      std::cout << "op.operands().size(): " << op.operands().size() << std::endl;
+      std::cout << "op.pretty(): " << op.pretty() << std::endl;
+      std::cout << "op.type().subtype().id(): " << op.type().subtype().id() << std::endl;
+      //assert(0);
+#endif
+
+        if (op.operands().size()==0
+        	&& op.id() == "constant"
+        	&& op.type().subtype().id() == "empty")
+        {
+          //bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+          //assert(0);
+          return true;
+        }
+        else if (op.operands().size()>0)
     	{
     	  if (op.op0().id() == "address_of")
     	    bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -3247,12 +3263,16 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 #endif
   	    bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
   	  }
-  	  else if (op.id() == "typecast")
+  	  else if (op.id() == "typecast" || op.id() == "member")
   	  {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
   		bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+#ifdef DEBUG
+      print_data_types(args[0], bv);
+      show_bv_size(bv);
+#endif
 
   	  }
 #ifdef DEBUG
