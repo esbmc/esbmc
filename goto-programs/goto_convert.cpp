@@ -221,7 +221,7 @@ void goto_convertt::convert_label(
     t->location=code.location();
     t->location.set("property", "error label");
     t->location.set("comment", "error label");
-    t->location.set("user-provided", true);
+    t->location.set("user-provided", false);
 
     target=t;
     dest.destructive_append(tmp);
