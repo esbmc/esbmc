@@ -1327,7 +1327,7 @@ Z3_ast z3_convt::convert_lt(const exprt &expr)
 #endif
 
   assert(expr.operands().size()==2);
-  static Z3_ast bv, operand[2];
+  Z3_ast bv, operand[2];
   const exprt &op0=expr.op0();
   const exprt &op1=expr.op1();
 
@@ -1403,7 +1403,7 @@ Z3_ast z3_convt::convert_gt(const exprt &expr)
 #endif
 
   assert(expr.operands().size()==2);
-  static Z3_ast bv, operand[2];
+  Z3_ast bv, operand[2];
 
   if (convert_bv(expr.op0(), operand[0]))
 	return Z3_mk_false(z3_ctx);
@@ -1481,7 +1481,7 @@ Z3_ast z3_convt::convert_le(const exprt &expr)
 #endif
 
   assert(expr.operands().size()==2);
-  static Z3_ast bv, operand[2];
+  Z3_ast bv, operand[2];
 
   if (convert_bv(expr.op0(), operand[0]))
 	return Z3_mk_false(z3_ctx);
@@ -1556,7 +1556,7 @@ Z3_ast z3_convt::convert_ge(const exprt &expr)
 #endif
 
   assert(expr.operands().size()==2);
-  static Z3_ast bv, operand[2];
+  Z3_ast bv, operand[2];
 
   if (convert_bv(expr.op0(), operand[0]))
 	return Z3_mk_false(z3_ctx);
@@ -1635,7 +1635,7 @@ Z3_ast z3_convt::convert_eq(const exprt &expr)
 #endif
 
   assert(expr.operands().size()==2);
-  static Z3_ast bv, operand[2];
+  Z3_ast bv, operand[2];
   const exprt &op0=expr.op0();
   const exprt &op1=expr.op1();
 
@@ -1653,7 +1653,7 @@ Z3_ast z3_convt::convert_eq(const exprt &expr)
 
   if (op0.type().id()=="pointer" && op1.type().id()=="pointer")
   {
-    static Z3_ast pointer[2], formula[2];
+    Z3_ast pointer[2], formula[2];
 
     if (op1.id()=="address_of")
       z3_cache.insert(std::pair<const exprt, std::string>(op1.op0(), op0.get_string("identifier")));
@@ -1718,7 +1718,7 @@ Z3_ast z3_convt::convert_invalid(const exprt &expr)
 
 
   assert(expr.operands().size()==1);
-  static Z3_ast bv, pointer, operand[2];
+  Z3_ast bv, pointer, operand[2];
 
 #ifdef DEBUG
   std::cout << "is_in_cache(expr.op0()): " << is_in_cache(expr.op0()) << std::endl;
@@ -1804,7 +1804,7 @@ Z3_ast z3_convt::convert_same_object(const exprt &expr)
 #endif
 
   const exprt::operandst &operands=expr.operands();
-  static Z3_ast bv, operand[2], pointer[2], offset[2], formula[2], zero;
+  Z3_ast bv, operand[2], pointer[2], offset[2], formula[2], zero;
   const exprt &op0=expr.op0();
   const exprt &op1=expr.op1();
 
@@ -1919,7 +1919,7 @@ Z3_ast z3_convt::convert_dynamic_object(const exprt &expr)
 #endif
 
   assert(expr.operands().size()==1);
-  static Z3_ast bv, operand0, operand1;
+  Z3_ast bv, operand0, operand1;
   std::vector<unsigned> dynamic_objects;
   pointer_logic.get_dynamic_objects(dynamic_objects);
 
@@ -2023,7 +2023,7 @@ Z3_ast z3_convt::convert_overflow_sum(const exprt &expr)
 #endif
 
   assert(expr.operands().size()==2);
-  static Z3_ast bv, result[2], operand[2];
+  Z3_ast bv, result[2], operand[2];
   unsigned width_op0, width_op1;
 
   if (expr.op0().type().id()=="array")
@@ -2087,7 +2087,7 @@ Z3_ast z3_convt::convert_overflow_sub(const exprt &expr)
 #endif
 
   assert(expr.operands().size()==2);
-  static Z3_ast bv, result[2], operand[2];
+  Z3_ast bv, result[2], operand[2];
   unsigned width_op0, width_op1;
 
   if (expr.op0().type().id()=="array")
@@ -2153,7 +2153,7 @@ Z3_ast z3_convt::convert_overflow_mul(const exprt &expr)
 #endif
 
   assert(expr.operands().size()==2);
-  static Z3_ast bv, result[2], operand[2];
+  Z3_ast bv, result[2], operand[2];
   unsigned width_op0, width_op1;
 
   if (expr.op0().type().id()=="array")
@@ -2216,7 +2216,7 @@ Z3_ast z3_convt::convert_overflow_unary(const exprt &expr)
 #endif
 
   assert(expr.operands().size()==1);
-  static Z3_ast bv, operand;
+  Z3_ast bv, operand;
   unsigned width;
 
   if (convert_bv(expr.op0(), operand))
@@ -2260,10 +2260,10 @@ Z3_ast z3_convt::convert_overflow_typecast(const exprt &expr)
   if(operands.size()!=1)
     throw "operand "+expr.id_string()+" takes one operand";
 
-  static Z3_ast bv, operand[3], mid, overflow[2], tmp, minus_one, two;
+  Z3_ast bv, operand[3], mid, overflow[2], tmp, minus_one, two;
   u_int i, result=1, width;
   std::string value;
-  static bool encoding=false;
+  bool encoding=false;
 
   if (boolbv_get_width(expr.op0().type(), width))
     return Z3_mk_false(z3_ctx);
@@ -2504,7 +2504,7 @@ literalt z3_convt::convert_rest(const exprt &expr)
 
 
   literalt l = z3_prop.new_variable();
-  static Z3_ast formula, constraint;
+  Z3_ast formula, constraint;
 
   if (!assign_z3_expr(expr) && !ignoring_expr)
 	return l;
@@ -4745,7 +4745,7 @@ bool z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size()==1);
   assert(expr.type().id()=="pointer");
 
-  static Z3_ast pointer_var, pointer;
+  Z3_ast pointer_var, pointer;
   Z3_type_ast pointer_type;
   Z3_ast offset, po, pi;
   std::string symbol_name, out;
@@ -5262,7 +5262,7 @@ bool z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
     throw "abs takes one operand";
 
   const exprt &op0=expr.op0();
-  static Z3_ast zero, is_negative, operand[2], val_mul;
+  Z3_ast zero, is_negative, operand[2], val_mul;
 
   //out = "width: "+ width;
   if (expr.type().id()=="signedbv")
@@ -5314,6 +5314,11 @@ bool z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
 	  is_negative = Z3_mk_lt(z3_ctx, operand[0], zero);
 	else
       is_negative = Z3_mk_bvslt(z3_ctx, operand[0], zero);
+  } else {
+    // XXXjmorse - the other case handled in this function is unsignedbv, which
+    // is never < 0, so is_negative is always false. However I don't know
+    // where the guarentee that only those types come here is.
+    is_negative = false;
   }
 
   if (int_encoding)
@@ -5564,7 +5569,7 @@ bool z3_convt::select_pointer_offset(const exprt &expr, Z3_ast &bv)
 #endif
 
   assert(expr.operands().size()==1);
-  static Z3_ast pointer;
+  Z3_ast pointer;
 
   if (convert_bv(expr.op0(), pointer))
 	return true;
@@ -5987,7 +5992,7 @@ bool z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
 #endif
 
   assert(expr.operands().size()==1);
-  static Z3_ast operand0, operand1;
+  Z3_ast operand0, operand1;
 
   std::vector<unsigned> dynamic_objects;
   pointer_logic.get_dynamic_objects(dynamic_objects);
@@ -6677,7 +6682,7 @@ void z3_convt::set_to(const exprt &expr, bool value)
 
 	  if (op0.type().id()=="pointer" && op1.type().id()=="pointer")
 	  {
-	    static Z3_ast pointer[2], formula[2];
+	    Z3_ast pointer[2], formula[2];
 
 		pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 0); //select object
 	    pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 0);
