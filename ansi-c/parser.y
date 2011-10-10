@@ -75,6 +75,8 @@ extern char *yyansi_ctext;
 %token	TOK_ANDAND
 %token	TOK_OROR
 %token	TOK_ELLIPSIS
+%token  TOK_ASM_STRING
+%token  TOK_GCC_ASM_PAREN
 
 /*** modifying assignment operators ***/
 
@@ -1544,11 +1546,21 @@ jump_statement:
 	;
 
 gcc_asm_statement:
-	TOK_GCC_ASM volatile_opt '(' asm_commands ')' ';'
+	TOK_GCC_ASM_PAREN volatile_opt '(' gcc_asm_commands ')' ';'
 	{ $$=$1;
 	  statement($$, "asm");
-	  stack($$).set("flavor", "gcc"); }
+	  stack($$).set("flavor", "gcc");
+	  stack($$).operands().swap(stack($4).operands());
+	}
+	| TOK_GCC_ASM_PAREN '{' TOK_ASM_STRING '}'
+	{
+	  $$=$1;
+	  statement($$, "asm");
+	  stack($$).set("flavor", "gcc");
+	  mto($$, $3);
+	}
 	;
+
 
 msc_asm_statement:
 	TOK_MSC_ASM '{' TOK_STRING '}'
@@ -1573,49 +1585,76 @@ volatile_opt:
            );
 */
 
-asm_commands:
-          asm_assembler_template
-        | asm_assembler_template asm_outputs
-        | asm_assembler_template asm_outputs asm_inputs
-        | asm_assembler_template asm_outputs asm_inputs asm_clobbered_registers
+gcc_asm_commands:
+	gcc_asm_assembler_template
+	  {
+	    init($$);
+	    mto($$, $1);
+	  }
+	| gcc_asm_assembler_template gcc_asm_outputs
+	  {
+	    init($$);
+	    mto($$, $1);
+	  }
+	| gcc_asm_assembler_template gcc_asm_outputs gcc_asm_inputs
+	  {
+	    init($$);
+	    mto($$, $1);
+	  }
+	| gcc_asm_assembler_template gcc_asm_outputs gcc_asm_inputs gcc_asm_clobbered_registers
+	  {
+	    init($$);
+	    mto($$, $1);
+	  }
 	;
 
-asm_assembler_template: string_literal_list
-        ;
+gcc_asm_assembler_template: string_literal_list
+	  ;
 
-asm_outputs:
-          ':' asm_output_list
-        ;
+gcc_asm_outputs:
+	  ':' gcc_asm_output_list
+	| ':'
+	;
 
-asm_output:
-          string '(' comma_expression ')'
-        ;
+gcc_asm_output:
+	  string_literal_list '(' comma_expression ')'
+	| '[' identifier_or_typedef_name ']'
+	  string_literal_list '(' comma_expression ')'
+	;
 
-asm_output_list:
-          asm_output
-        | asm_output_list ',' asm_output
-        ;
+gcc_asm_output_list:
+	  gcc_asm_output
+	| gcc_asm_output_list ',' gcc_asm_output
+	;
 
-asm_inputs:
-          ':' asm_input_list
-        ;
+gcc_asm_inputs:
+	  ':' gcc_asm_input_list
+	| ':'
+	;
 
-asm_input:
-          string '(' comma_expression ')'
-        ;
+gcc_asm_input:
+	  string_literal_list '(' comma_expression ')'
+	| '[' identifier_or_typedef_name ']'
+	  string_literal_list '(' comma_expression ')'
+	;
 
-asm_input_list:
-          asm_input
-        | asm_input_list ',' asm_input
+gcc_asm_input_list:
+	  gcc_asm_input
+	| gcc_asm_input_list ',' gcc_asm_input
 
-asm_clobbered_registers:
-          ':' asm_clobbered_registers_list
-        ;
+gcc_asm_clobbered_registers:
+	  ':' gcc_asm_clobbered_registers_list
+	| ':'
+	;
 
-asm_clobbered_registers_list:
-          string
-        | asm_clobbered_registers_list ',' string
-        ;
+gcc_asm_clobbered_register:
+	  string_literal_list
+	;
+
+gcc_asm_clobbered_registers_list:
+	  gcc_asm_clobbered_register
+	| gcc_asm_clobbered_registers_list ',' gcc_asm_clobbered_register
+	;
 
 /*** External Definitions ***********************************************/
 
