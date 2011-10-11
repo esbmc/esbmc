@@ -2686,11 +2686,147 @@ bool z3_convt::convert_typecast_bool(const exprt &expr, Z3_ast &bv)
     throw "TODO typecast1 "+op.type().id_string()+" -> bool";
 }
 
+
+bool z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
+{
+  const exprt &op=expr.op0();
+  Z3_ast args[2];
+
+  const fixedbv_typet &fixedbv_type=to_fixedbv_type(expr.type());
+  unsigned to_fraction_bits=fixedbv_type.get_fraction_bits();
+  unsigned to_integer_bits=fixedbv_type.get_integer_bits();
+
+  if(op.type().id()=="unsignedbv" ||
+     op.type().id()=="signedbv" ||
+     op.type().id()=="enum")
+  {
+    unsigned from_width;
+
+    if (boolbv_get_width(op.type(), from_width))
+      return true;
+
+    if(from_width==to_integer_bits)
+    {
+      if (convert_bv(op, bv))
+        return true;
+    }
+    else if(from_width>to_integer_bits)
+    {
+      if (convert_bv(op, args[0]))
+        return true;
+
+      if (op.type().id()=="pointer")
+        args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+
+      bv = Z3_mk_extract(z3_ctx, (from_width-1), to_integer_bits, args[0]);
+    }
+    else
+    {
+      assert(from_width<to_integer_bits);
+      if(expr.type().id()=="unsignedbv")
+      {
+        if (convert_bv(op, args[0]))
+          return true;
+
+        if (op.type().id()=="pointer")
+          args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+
+        bv = Z3_mk_zero_ext(z3_ctx, (to_integer_bits-from_width), args[0]);
+      }
+      else
+      {
+        if (convert_bv(op, args[0]))
+          return true;
+
+        if (op.type().id()=="pointer")
+          args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+
+        bv = Z3_mk_sign_ext(z3_ctx, (to_integer_bits-from_width), args[0]);
+      }
+    }
+
+    bv = Z3_mk_concat(z3_ctx, bv, convert_number(0, to_fraction_bits, true));
+  }
+  else if(op.type().id()=="bool")
+  {
+    Z3_ast zero, one;
+    unsigned width;
+
+    if (boolbv_get_width(expr.type(), width))
+      return true;
+
+    zero = convert_number(0, to_integer_bits, true);
+    one =  convert_number(1, to_integer_bits, true);
+    bv = Z3_mk_ite(z3_ctx, bv, one, zero);
+    bv = Z3_mk_concat(z3_ctx, bv, convert_number(0, to_fraction_bits, true));
+  }
+  else if(op.type().id()=="fixedbv")
+  {
+    Z3_ast magnitude, fraction;
+    const fixedbv_typet &from_fixedbv_type=to_fixedbv_type(op.type());
+    unsigned from_fraction_bits=from_fixedbv_type.get_fraction_bits();
+    unsigned from_integer_bits=from_fixedbv_type.get_integer_bits();
+    unsigned from_width=from_fixedbv_type.get_width();
+
+    if(to_integer_bits<=from_integer_bits)
+    {
+      if (convert_bv(op, args[0]))
+        return true;
+
+      if (op.type().id()=="pointer")
+        args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+
+      magnitude = Z3_mk_extract(z3_ctx, (from_fraction_bits+to_integer_bits-1), from_fraction_bits, args[0]);
+    }
+    else
+    {
+      assert(to_integer_bits>from_integer_bits);
+
+      if (convert_bv(op, args[0]))
+        return true;
+
+      if (op.type().id()=="pointer")
+        args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+
+      magnitude = Z3_mk_sign_ext(z3_ctx, (to_integer_bits-from_integer_bits), Z3_mk_extract(z3_ctx, from_width-1, from_fraction_bits, args[0]));
+    }
+
+    if(to_fraction_bits<=from_fraction_bits)
+    {
+      if (convert_bv(op, args[0]))
+        return true;
+
+      if (op.type().id()=="pointer")
+        args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+
+      fraction = Z3_mk_extract(z3_ctx, (from_fraction_bits-1), from_fraction_bits-to_fraction_bits, args[0]);
+    }
+    else
+    {
+      assert(to_fraction_bits>from_fraction_bits);
+      if (convert_bv(op, args[0]))
+        return true;
+
+      if (op.type().id()=="pointer")
+        args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+
+      fraction = Z3_mk_concat(z3_ctx, Z3_mk_extract(z3_ctx, (from_fraction_bits-1), 0, args[0]), convert_number(0, to_fraction_bits-from_fraction_bits, true));
+    }
+    bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
+  }
+  else
+    throw "unexpected typecast to fixedbv";
+
+  return false;
+}
+
+
 bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 {
   //@TODO: Break this method into smaller methods
   assert(expr.operands().size()==1);
   const exprt &op=expr.op0();
+
 
   Z3_ast args[2];
 
@@ -2703,130 +2839,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   }
   else if(expr.type().id()=="fixedbv" && !int_encoding)
   {
-    const fixedbv_typet &fixedbv_type=to_fixedbv_type(expr.type());
-    unsigned to_fraction_bits=fixedbv_type.get_fraction_bits();
-    unsigned to_integer_bits=fixedbv_type.get_integer_bits();
-
-    if(op.type().id()=="unsignedbv" ||
-       op.type().id()=="signedbv" ||
-       op.type().id()=="enum")
-    {
-      unsigned from_width;
-
-   	  if (boolbv_get_width(op.type(), from_width))
-      return true;
-
-      if(from_width==to_integer_bits)
-      {
-      	if (convert_bv(op, bv))
-      	  return true;
-      }
-      else if(from_width>to_integer_bits)
-      {
-      	if (convert_bv(op, args[0]))
-      	  return true;
-
-        if (op.type().id()=="pointer")
-    	  args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-
-      	bv = Z3_mk_extract(z3_ctx, (from_width-1), to_integer_bits, args[0]);
-      }
-      else
-      {
-        assert(from_width<to_integer_bits);
-        if(expr.type().id()=="unsignedbv")
-        {
-       	  if (convert_bv(op, args[0]))
-            return true;
-
-          if (op.type().id()=="pointer")
-      	    args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-
-          bv = Z3_mk_zero_ext(z3_ctx, (to_integer_bits-from_width), args[0]);
-        }
-        else
-        {
-      	  if (convert_bv(op, args[0]))
-      		return true;
-
-          if (op.type().id()=="pointer")
-      	    args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-
-      	  bv = Z3_mk_sign_ext(z3_ctx, (to_integer_bits-from_width), args[0]);
-        }
-      }
-
-   	  bv = Z3_mk_concat(z3_ctx, bv, convert_number(0, to_fraction_bits, true));
-    }
-    else if(op.type().id()=="bool")
-    {
-      Z3_ast zero, one;
-      unsigned width;
-
-      if (boolbv_get_width(expr.type(), width))
-        return true;
-
-  	  zero = convert_number(0, to_integer_bits, true);
-  	  one =  convert_number(1, to_integer_bits, true);
-  	  bv = Z3_mk_ite(z3_ctx, bv, one, zero);
-  	  bv = Z3_mk_concat(z3_ctx, bv, convert_number(0, to_fraction_bits, true));
-    }
-    else if(op.type().id()=="fixedbv")
-    {
-      Z3_ast magnitude, fraction;
-      const fixedbv_typet &from_fixedbv_type=to_fixedbv_type(op.type());
-      unsigned from_fraction_bits=from_fixedbv_type.get_fraction_bits();
-      unsigned from_integer_bits=from_fixedbv_type.get_integer_bits();
-      unsigned from_width=from_fixedbv_type.get_width();
-
-      if(to_integer_bits<=from_integer_bits)
-      {
-        if (convert_bv(op, args[0]))
-          return true;
-
-        if (op.type().id()=="pointer")
-      	  args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-
-        magnitude = Z3_mk_extract(z3_ctx, (from_fraction_bits+to_integer_bits-1), from_fraction_bits, args[0]);
-      }
-      else
-      {
-        assert(to_integer_bits>from_integer_bits);
-
-    	if (convert_bv(op, args[0]))
-    		return true;
-
-        if (op.type().id()=="pointer")
-    	    args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-
-        magnitude = Z3_mk_sign_ext(z3_ctx, (to_integer_bits-from_integer_bits), Z3_mk_extract(z3_ctx, from_width-1, from_fraction_bits, args[0]));
-      }
-
-      if(to_fraction_bits<=from_fraction_bits)
-      {
-        if (convert_bv(op, args[0]))
-          return true;
-
-        if (op.type().id()=="pointer")
-          args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-
-        fraction = Z3_mk_extract(z3_ctx, (from_fraction_bits-1), from_fraction_bits-to_fraction_bits, args[0]);
-      }
-      else
-      {
-        assert(to_fraction_bits>from_fraction_bits);
-        if (convert_bv(op, args[0]))
-          return true;
-
-        if (op.type().id()=="pointer")
-          args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-
-        fraction = Z3_mk_concat(z3_ctx, Z3_mk_extract(z3_ctx, (from_fraction_bits-1), 0, args[0]), convert_number(0, to_fraction_bits-from_fraction_bits, true));
-      }
-      bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
-    }
-    else
-      throw "unexpected typecast to fixedbv";
+    return convert_typecast_fixedbv_nonint(expr, bv);
   }
   else if ((expr.type().id()=="signedbv" || expr.type().id()=="unsignedbv"
 	  || expr.type().id()=="fixedbv" || expr.type().id()=="pointer"))
