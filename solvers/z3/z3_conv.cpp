@@ -2665,6 +2665,27 @@ bool z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
+bool z3_convt::convert_typecast_bool(const exprt &expr, Z3_ast &bv)
+{
+  const exprt &op=expr.op0();
+  Z3_ast args[2];
+
+  if(op.type().id()=="signedbv" ||
+     op.type().id()=="unsignedbv" ||
+     op.type().id()=="pointer")
+  {
+    args[0] = bv;
+    if (int_encoding)
+      args[1] = z3_api.mk_int(z3_ctx, 0);
+    else
+      args[1] = Z3_mk_int(z3_ctx, 0, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+
+    bv = Z3_mk_distinct(z3_ctx,2,args);
+  }
+  else
+    throw "TODO typecast1 "+op.type().id_string()+" -> bool";
+}
+
 bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 {
   //@TODO: Break this method into smaller methods
@@ -2678,20 +2699,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 
   if(expr.type().id()=="bool")
   {
-    if(op.type().id()=="signedbv" ||
-       op.type().id()=="unsignedbv" ||
-       op.type().id()=="pointer")
-    {
-      args[0] = bv;
-   	  if (int_encoding)
-    	args[1] = z3_api.mk_int(z3_ctx, 0);
-      else
-    	args[1] = Z3_mk_int(z3_ctx, 0, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
-
-   	  bv = Z3_mk_distinct(z3_ctx,2,args);
-    }
-    else
-      throw "TODO typecast1 "+op.type().id_string()+" -> bool";
+    return convert_typecast_bool(expr, bv);
   }
   else if(expr.type().id()=="fixedbv" && !int_encoding)
   {
