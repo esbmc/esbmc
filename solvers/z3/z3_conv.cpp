@@ -2667,12 +2667,6 @@ bool z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 
 bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 {
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
-
-
   //@TODO: Break this method into smaller methods
   assert(expr.operands().size()==1);
   const exprt &op=expr.op0();
