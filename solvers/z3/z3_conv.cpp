@@ -2667,14 +2667,11 @@ bool z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 
 bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
   std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
   std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
   std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
-#endif
 
-//  std::cout << "expr.op0().type().subtype().id(): " << expr.op0().type().subtype().id() << std::endl;
 
   //@TODO: Break this method into smaller methods
   assert(expr.operands().size()==1);
@@ -2708,10 +2705,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
     unsigned to_fraction_bits=fixedbv_type.get_fraction_bits();
     unsigned to_integer_bits=fixedbv_type.get_integer_bits();
 
-#ifdef DEBUG
-    std::cout << "op.type().id(): " << op.type().id() << std::endl;
-#endif
-
     if(op.type().id()=="unsignedbv" ||
        op.type().id()=="signedbv" ||
        op.type().id()=="enum")
@@ -2720,11 +2713,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 
    	  if (boolbv_get_width(op.type(), from_width))
       return true;
-
-#ifdef DEBUG
-   	  std::cout << "from_width: " << from_width << std::endl;
-   	  std::cout << "to_integer_bits: " << to_integer_bits << std::endl;
-#endif
 
       if(from_width==to_integer_bits)
       {
@@ -2843,15 +2831,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   {
 	unsigned to_width;
 
-#ifdef DEBUG
-	std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
-	std::cout << "expr.type().subtype().id(): " << expr.type().subtype().id() << std::endl;
-	std::cout << "expr.type().subtype().pretty(): " << expr.type().subtype().pretty() << std::endl;
-	std::cout << "expr.op0().type().pretty(): " << expr.op0().type().pretty() << std::endl;
-	std::cout << "expr.type().pretty(): " << expr.type().pretty() << std::endl;
-	std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-#endif
-
     if (expr.type().id()=="pointer" && expr.type().subtype().id()=="symbol")
     {
       //changed
@@ -2873,18 +2852,10 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
       if (boolbv_get_width(expr.type(), to_width))
         return true;
     }
-#ifdef DEBUG
-	std::cout << "op.type().id(): " << op.type().id() << std::endl;
-	std::cout << "op.type().subtype().id(): " << op.type().subtype().id() << std::endl;
-    std::cout << "to_width: " << to_width << std::endl;
-#endif
     if (op.type().id()=="signedbv" || op.type().id()=="c_enum" || op.type().id()=="fixedbv" ||
     	op.type().subtype().id()=="signedbv" || op.type().subtype().id()=="fixedbv")
     {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-      unsigned from_width;
+     unsigned from_width;
 
       if (op.type().id()=="pointer")
       {
@@ -2896,11 +2867,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
        	if (boolbv_get_width(op.type(), from_width))
        	  return true;
       }
-
-#ifdef DEBUG
-      std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
-      std::cout << "from_width: " << from_width << std::endl;
-#endif
 
       if(from_width==to_width)
       {
@@ -2914,10 +2880,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
         else if (int_encoding && op.type().id()=="fixedbv" && expr.type().id()=="signedbv")
           bv = Z3_mk_real2int(z3_ctx, bv);
 
-#ifdef DEBUG
-        print_data_types(bv,bv);
-#endif
-
       }
       else if(from_width<to_width)
       {
@@ -2929,14 +2891,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
           to_width = (to_width==40) ? config.ansi_c.int_width : to_width;
     	  args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
         }
-
-#ifdef DEBUG
-        print_data_types(bv,bv);
-        std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
-        std::cout << "expr.type().subtype().id(): " << expr.type().subtype().id() << std::endl;
-        std::cout << "op.type().id(): " << op.type().id() << std::endl;
-        std::cout << "op.type().subtype().id(): " << op.type().subtype().id() << std::endl;
-#endif
 
         if (int_encoding && ((expr.type().id()=="fixedbv" && op.type().id()=="signedbv") ||
             (op.type().id()=="pointer" && expr.type().subtype().id() == "fixedbv")))
@@ -2954,14 +2908,7 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
         if (op.type().id()=="pointer")
   	      args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
 
-#ifdef DEBUG
-      std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
-      std::cout << "op.type().id(): " << op.type().id() << std::endl;
-      std::cout << "op.type().subtype().id(): " << op.type().subtype().id() << std::endl;
-      std::cout << "to_width: " << to_width << std::endl;
-      print_data_types(args[0], args[0]);
-#endif
-        if (int_encoding && ((op.type().id()=="signedbv" && expr.type().id()=="fixedbv") /*||
+       if (int_encoding && ((op.type().id()=="signedbv" && expr.type().id()=="fixedbv") /*||
            (op.type().id()=="pointer" && op.type().subtype().id()=="fixedbv"))*/ ))
       	  bv = Z3_mk_int2real(z3_ctx, args[0]);
         else if (int_encoding && op.type().id()=="pointer" && op.type().subtype().id()=="fixedbv")
@@ -2975,19 +2922,10 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
           if (!to_width) to_width = config.ansi_c.int_width;
     	  bv = Z3_mk_extract(z3_ctx, (to_width-1), 0, args[0]);
         }
-
-#ifdef DEBUG
-      print_data_types(bv, bv);
-#endif
-
       }
     }
     else if (op.type().id()=="unsignedbv" || op.type().subtype().id()=="unsignedbv")
     {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
       unsigned from_width;
 
       if (op.type().id()=="pointer")
@@ -3038,10 +2976,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
     }
     else if (op.type().id()=="bool")
 	{
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
       Z3_ast zero=0, one=0;
       unsigned width;
 
@@ -3091,10 +3025,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 	}
     else if(op.type().subtype().id()=="empty")
     {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
       unsigned from_width=config.ansi_c.int_width;
       Z3_ast object, pointer_var;
       Z3_symbol mk_tuple_name, proj_names[2];
@@ -3120,10 +3050,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
       	  to_width = config.ansi_c.int_width;
       }
 
-#ifdef DEBUG
-      std::cout << "to_width: " << to_width << std::endl;
-#endif
-
 	  if (int_encoding)
 	    proj_types[0] = Z3_mk_int_type(z3_ctx);
 	  else
@@ -3138,10 +3064,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
       name+=val;
       mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
 
-#ifdef DEBUG
-      std::cout << "name: " << name << std::endl;
-#endif
-
 	  proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
 
 	  if (int_encoding)
@@ -3153,13 +3075,6 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
       {
     	if (convert_bv(op, args[0]))
     	  return true;
-
-#ifdef DEBUG
-      std::cout << "op.operands().size(): " << op.operands().size() << std::endl;
-      std::cout << "op.pretty(): " << op.pretty() << std::endl;
-      std::cout << "op.type().subtype().id(): " << op.type().subtype().id() << std::endl;
-      //assert(0);
-#endif
 
         if (op.operands().size()==0
         	&& op.id() == "constant"
@@ -3212,44 +3127,20 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
     }
     else if(op.type().subtype().id()=="symbol" || op.type().subtype().id()=="code")
     {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
   	  if (convert_bv(op, args[0]))
   	  {
   		  assert(0);
   	    return true;
   	  }
-  	  //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-  	  //std::cout << "op.pretty(): " << op.pretty() << std::endl;
-      //bv = args[0];
-  	  //std::cout << "op.type().id(): " << op.type().id() << std::endl;
-  	  //std::cout << "op.type().subtype().id(): " << op.type().subtype().id() << std::endl;
-  	  //std::cout << "expr.type().subtype().id(): " << expr.type().subtype().id() << std::endl;
-#ifdef DEBUG
-  	  std::cout << "op.id(): " << op.id() << std::endl;
-      std::cout << "op.operands().size(): " << op.operands().size() << std::endl;
-      print_data_types(args[0], args[0]);
-#endif
-  	  //std::cout << "op.op0().type().id(): " << op.op0().type().id() << std::endl;
-  	  //std::cout << "op.op0().id(): " << op.op0().id() << std::endl;
 
   	  if (op.id()=="constant")
   	  {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
   	    if (op.get("value").compare("NULL") == 0)
   		  bv = convert_number(0, config.ansi_c.int_width, true);
   	  }
   	  else if (op.operands().size()==0)
   	  {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-   	    if (expr.type().subtype().id()!="empty" &&
+            if (expr.type().subtype().id()!="empty" &&
    	       (op.type().id()=="pointer" && op.type().subtype().id()=="symbol"))
       	  bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
   	  }
@@ -3258,37 +3149,16 @@ bool z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
   		 op.op0().id()!="index" && expr.type().id()!="pointer"
   		 /*&& op.op0().type().id()!="struct"*/)
   	  {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-  	    bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+ 	    bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
   	  }
   	  else if (op.id() == "typecast" || op.id() == "member")
   	  {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-  		bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-#ifdef DEBUG
-      print_data_types(args[0], bv);
-      show_bv_size(bv);
-#endif
-
+ 		bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
   	  }
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
   	  return false;
     }
     else if(op.type().subtype().id()=="pointer")
     {
-#ifdef DEBUG
-      std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-      std::cout << "op.pretty(): " << op.pretty() << std::endl;
-      std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
   	  if (convert_bv(op, bv))
   	    return true;
 
