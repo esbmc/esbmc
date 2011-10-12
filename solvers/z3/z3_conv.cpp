@@ -3030,6 +3030,9 @@ bool z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
     //mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "pointer_tuple");
     proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
 
+    // XXXjmorse - is this supposed to extract the bit width from the first
+    // non-pointer part of the expr type? It's not going to work on an arbitary
+    // depth of pointers.
     if (expr.type().subtype().id()!="pointer")
     {
       if (boolbv_get_width(expr.type().subtype() /*expr.type()*/, to_width))
