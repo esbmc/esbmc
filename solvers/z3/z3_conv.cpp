@@ -2826,27 +2826,27 @@ bool z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
   Z3_ast args[2];
   unsigned to_width;
 
-  if (expr.type().id()=="pointer" && expr.type().subtype().id()=="symbol")
+  // Fetch width of target (?) data item
+  if (expr.type().id()=="pointer")
   {
-    //changed
-    //if (boolbv_get_width(expr.op0().type(), to_width))
-    //return true;
-    to_width=config.ansi_c.int_width;
-  }
-  else if (expr.type().id()=="pointer" && expr.type().subtype().id()!="empty")
-  {
-    if (boolbv_get_width(expr.type().subtype(), to_width))
-      return true;
-  }
-  else if (expr.type().id()=="pointer" && expr.type().subtype().id()=="empty")
-  {
-    to_width=config.ansi_c.int_width;
+    if (expr.type().subtype().id() == "symbol")
+    {
+      to_width=config.ansi_c.int_width;
+    }
+    else if (expr.type().subtype().id() == "empty")
+    {
+      to_width=config.ansi_c.int_width;
+    } else {
+      if (boolbv_get_width(expr.type().subtype(), to_width))
+        return true;
+    }
   }
   else
   {
     if (boolbv_get_width(expr.type(), to_width))
       return true;
   }
+
   if (op.type().id()=="signedbv" || op.type().id()=="c_enum" || op.type().id()=="fixedbv" ||
       op.type().subtype().id()=="signedbv" || op.type().subtype().id()=="fixedbv")
   {
