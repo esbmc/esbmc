@@ -2874,6 +2874,7 @@ bool z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
         bv = Z3_mk_int2real(z3_ctx, bv);
       else if (int_encoding && op.type().id()=="fixedbv" && expr.type().id()=="signedbv")
         bv = Z3_mk_real2int(z3_ctx, bv);
+      // XXXjmorse - there isn't a case here for if !int_encoding
 
     }
     else if(from_width<to_width)
