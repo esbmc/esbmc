@@ -1,0 +1,3367 @@
+file main.c: Parsing
+Converting
+Type-checking main
+file main.c line 1066 function main: function `c::malloc' is not declared
+file main.c line 1102 function ssl3_accept: function `c::nondet_int' is not declared
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 1 iteration 1 file main.c line 1129 function ssl3_accept
+Unwinding loop 2 iteration 1 file main.c line 1696 function ssl3_accept
+size of program expression: 1742 assignments
+Generated 3 VCC(s), 3 remaining after simplification
+Encoding remaining VCC(s) using bit-vector arithmetic
+warning: ignoring not
+  * type: bool
+  * operands: 
+    0: =
+        * type: bool
+        * operands: 
+          0: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: member
+                    * type: pointer
+                        * subtype: code
+                            * arguments: 
+                              * ellipsis: 1
+                            * return_type: empty
+                                * #location: 
+                                  * file: main.c
+                                  * line: 833
+                            * #location: 
+                              * file: main.c
+                              * line: 833
+                        * #location: 
+                          * file: main.c
+                          * line: 833
+                    * operands: 
+                      0: symbol
+                          * identifier: symex_dynamic::dynamic_1_value&0#3
+                          * type: struct
+                              * tag: ssl_st
+                              * components: 
+                                0: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: version
+                                    * pretty_name: version
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 792
+                                1: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: type
+                                    * pretty_name: type
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 793
+                                2: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-ssl_method_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 694
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 794
+                                    * name: method
+                                    * pretty_name: method
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 794
+                                3: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-bio_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 28
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 795
+                                    * name: rbio
+                                    * pretty_name: rbio
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 795
+                                4: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-bio_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 28
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 796
+                                    * name: wbio
+                                    * pretty_name: wbio
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 796
+                                5: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-bio_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 28
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 797
+                                    * name: bbio
+                                    * pretty_name: bbio
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 797
+                                6: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: rwstate
+                                    * pretty_name: rwstate
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 798
+                                7: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: in_handshake
+                                    * pretty_name: in_handshake
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 799
+                                8: component
+                                    * type: pointer
+                                        * subtype: code
+                                            * arguments: 
+                                              * ellipsis: 1
+                                            * return_type: signedbv
+                                                * width: 32
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 800
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 800
+                                    * name: handshake_func
+                                    * pretty_name: handshake_func
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 800
+                                9: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: server
+                                    * pretty_name: server
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 801
+                                10: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: new_session
+                                    * pretty_name: new_session
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 802
+                                11: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: quiet_shutdown
+                                    * pretty_name: quiet_shutdown
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 803
+                                12: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: shutdown
+                                    * pretty_name: shutdown
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 804
+                                13: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: state
+                                    * pretty_name: state
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 805
+                                14: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: rstate
+                                    * pretty_name: rstate
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 806
+                                15: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-buf_mem_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 11
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 807
+                                    * name: init_buf
+                                    * pretty_name: init_buf
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 807
+                                16: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: init_num
+                                    * pretty_name: init_num
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 808
+                                17: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: init_off
+                                    * pretty_name: init_off
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 809
+                                18: component
+                                    * type: pointer
+                                        * subtype: unsignedbv
+                                            * width: 8
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 810
+                                    * name: packet
+                                    * pretty_name: packet
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 810
+                                19: component
+                                    * type: unsignedbv
+                                        * width: 32
+                                    * name: packet_length
+                                    * pretty_name: packet_length
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 811
+                                20: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-ssl2_state_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 812
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 812
+                                    * name: s2
+                                    * pretty_name: s2
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 812
+                                21: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-ssl3_state_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 813
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 813
+                                    * name: s3
+                                    * pretty_name: s3
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 813
+                                22: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: read_ahead
+                                    * pretty_name: read_ahead
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 814
+                                23: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: hit
+                                    * pretty_name: hit
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 815
+                                24: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: purpose
+                                    * pretty_name: purpose
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 816
+                                25: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: trust
+                                    * pretty_name: trust
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 817
+                                26: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-stack_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 20
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 818
+                                    * name: cipher_list
+                                    * pretty_name: cipher_list
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 818
+                                27: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-stack_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 20
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 819
+                                    * name: cipher_list_by_id
+                                    * pretty_name: cipher_list_by_id
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 819
+                                28: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-evp_cipher_ctx_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 426
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 820
+                                    * name: enc_read_ctx
+                                    * pretty_name: enc_read_ctx
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 820
+                                29: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-env_md_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 406
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 821
+                                    * name: read_hash
+                                    * pretty_name: read_hash
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 821
+                                30: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-comp_ctx_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 644
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 822
+                                    * name: expand
+                                    * pretty_name: expand
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 822
+                                31: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-evp_cipher_ctx_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 426
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 823
+                                    * name: enc_write_ctx
+                                    * pretty_name: enc_write_ctx
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 823
+                                32: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-env_md_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 406
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 824
+                                    * name: write_hash
+                                    * pretty_name: write_hash
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 824
+                                33: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-comp_ctx_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 644
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 825
+                                    * name: compress
+                                    * pretty_name: compress
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 825
+                                34: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-cert_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 826
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 826
+                                    * name: cert
+                                    * pretty_name: cert
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 826
+                                35: component
+                                    * type: unsignedbv
+                                        * width: 32
+                                    * name: sid_ctx_length
+                                    * pretty_name: sid_ctx_length
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 827
+                                36: component
+                                    * type: array
+                                        * subtype: unsignedbv
+                                            * width: 8
+                                        * size: constant
+                                            * type: signedbv
+                                                * width: 32
+                                            * value: 00000000000000000000000000100000
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 828
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 828
+                                    * name: sid_ctx
+                                    * pretty_name: sid_ctx
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 828
+                                37: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-ssl_session_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 722
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 829
+                                    * name: session
+                                    * pretty_name: session
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 829
+                                38: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: verify_mode
+                                    * pretty_name: verify_mode
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 830
+                                39: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: verify_depth
+                                    * pretty_name: verify_depth
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 831
+                                40: component
+                                    * type: pointer
+                                        * subtype: code
+                                            * arguments: 
+                                              0: argument
+                                                  * type: signedbv
+                                                      * width: 32
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 832
+                                                  * #base_name: ok
+                                                  * #identifier: c::141::ok
+                                              1: argument
+                                                  * type: pointer
+                                                      * subtype: symbol
+                                                          * identifier: c::tag-x509_store_ctx_st
+                                                          * #location: 
+                                                            * file: main.c
+                                                            * line: 588
+                                                      * #location: 
+                                                        * file: main.c
+                                                        * line: 832
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 832
+                                                  * #base_name: ctx
+                                                  * #identifier: c::141::ctx
+                                            * return_type: signedbv
+                                                * width: 32
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 832
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 832
+                                    * name: verify_callback
+                                    * pretty_name: verify_callback
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 832
+                                41: component
+                                    * type: pointer
+                                        * subtype: code
+                                            * arguments: 
+                                              * ellipsis: 1
+                                            * return_type: empty
+                                                * #location: 
+                                                  * file: main.c
+                                                  * line: 833
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 833
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 833
+                                    * name: info_callback
+                                    * pretty_name: info_callback
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 833
+                                42: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: error
+                                    * pretty_name: error
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 834
+                                43: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: error_code
+                                    * pretty_name: error_code
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 835
+                                44: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-ssl_ctx_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 664
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 836
+                                    * name: ctx
+                                    * pretty_name: ctx
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 836
+                                45: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: debug
+                                    * pretty_name: debug
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 837
+                                46: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: verify_result
+                                    * pretty_name: verify_result
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 838
+                                47: component
+                                    * type: struct
+                                        * tag: crypto_ex_data_st
+                                        * components: 
+                                          0: component
+                                              * type: pointer
+                                                  * subtype: symbol
+                                                      * identifier: c::tag-stack_st
+                                                      * #location: 
+                                                        * file: main.c
+                                                        * line: 20
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 24
+                                              * name: sk
+                                              * pretty_name: sk
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 24
+                                          1: component
+                                              * type: signedbv
+                                                  * width: 32
+                                              * name: dummy
+                                              * pretty_name: dummy
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 25
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 23
+                                    * name: ex_data
+                                    * pretty_name: ex_data
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 839
+                                48: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-stack_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 20
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 840
+                                    * name: client_CA
+                                    * pretty_name: client_CA
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 840
+                                49: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: references
+                                    * pretty_name: references
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 841
+                                50: component
+                                    * type: unsignedbv
+                                        * width: 32
+                                    * name: options
+                                    * pretty_name: options
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 842
+                                51: component
+                                    * type: unsignedbv
+                                        * width: 32
+                                    * name: mode
+                                    * pretty_name: mode
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 843
+                                52: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: first_packet
+                                    * pretty_name: first_packet
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 844
+                                53: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: client_version
+                                    * pretty_name: client_version
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 845
+                              * #location: 
+                                * file: main.c
+                                * line: 791
+                    * component_name: info_callback
+                    * #location: 
+                      * file: main.c
+                      * line: 1108
+                      * function: ssl3_accept
+                    * #lvalue: 1
+              * #location: 
+                * file: main.c
+                * line: 1108
+                * function: ssl3_accept
+          1: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: constant
+                    * type: pointer
+                        * subtype: empty
+                            * #location: 
+                              * file: main.c
+                              * line: 1108
+                              * function: ssl3_accept
+                        * #location: 
+                          * file: main.c
+                          * line: 1108
+                          * function: ssl3_accept
+                    * value: NULL
+                    * #location: 
+                      * file: main.c
+                      * line: 1108
+                      * function: ssl3_accept
+              * #location: 
+                * file: main.c
+                * line: 1108
+                * function: ssl3_accept
+        * #location: 
+          * file: main.c
+          * line: 1108
+          * function: ssl3_accept
+warning: ignoring =
+  * type: bool
+  * operands: 
+    0: typecast
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: member
+              * type: pointer
+                  * subtype: symbol
+                      * identifier: c::tag-cert_st
+                      * #location: 
+                        * file: main.c
+                        * line: 826
+                  * #location: 
+                    * file: main.c
+                    * line: 826
+              * operands: 
+                0: symbol
+                    * identifier: symex_dynamic::dynamic_1_value&0#4
+                    * type: struct
+                        * tag: ssl_st
+                        * components: 
+                          0: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: version
+                              * pretty_name: version
+                              * #location: 
+                                * file: main.c
+                                * line: 792
+                          1: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: type
+                              * pretty_name: type
+                              * #location: 
+                                * file: main.c
+                                * line: 793
+                          2: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-ssl_method_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 694
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 794
+                              * name: method
+                              * pretty_name: method
+                              * #location: 
+                                * file: main.c
+                                * line: 794
+                          3: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-bio_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 28
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 795
+                              * name: rbio
+                              * pretty_name: rbio
+                              * #location: 
+                                * file: main.c
+                                * line: 795
+                          4: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-bio_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 28
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 796
+                              * name: wbio
+                              * pretty_name: wbio
+                              * #location: 
+                                * file: main.c
+                                * line: 796
+                          5: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-bio_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 28
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 797
+                              * name: bbio
+                              * pretty_name: bbio
+                              * #location: 
+                                * file: main.c
+                                * line: 797
+                          6: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: rwstate
+                              * pretty_name: rwstate
+                              * #location: 
+                                * file: main.c
+                                * line: 798
+                          7: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: in_handshake
+                              * pretty_name: in_handshake
+                              * #location: 
+                                * file: main.c
+                                * line: 799
+                          8: component
+                              * type: pointer
+                                  * subtype: code
+                                      * arguments: 
+                                        * ellipsis: 1
+                                      * return_type: signedbv
+                                          * width: 32
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 800
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 800
+                              * name: handshake_func
+                              * pretty_name: handshake_func
+                              * #location: 
+                                * file: main.c
+                                * line: 800
+                          9: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: server
+                              * pretty_name: server
+                              * #location: 
+                                * file: main.c
+                                * line: 801
+                          10: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: new_session
+                              * pretty_name: new_session
+                              * #location: 
+                                * file: main.c
+                                * line: 802
+                          11: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: quiet_shutdown
+                              * pretty_name: quiet_shutdown
+                              * #location: 
+                                * file: main.c
+                                * line: 803
+                          12: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: shutdown
+                              * pretty_name: shutdown
+                              * #location: 
+                                * file: main.c
+                                * line: 804
+                          13: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: state
+                              * pretty_name: state
+                              * #location: 
+                                * file: main.c
+                                * line: 805
+                          14: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: rstate
+                              * pretty_name: rstate
+                              * #location: 
+                                * file: main.c
+                                * line: 806
+                          15: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-buf_mem_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 11
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 807
+                              * name: init_buf
+                              * pretty_name: init_buf
+                              * #location: 
+                                * file: main.c
+                                * line: 807
+                          16: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: init_num
+                              * pretty_name: init_num
+                              * #location: 
+                                * file: main.c
+                                * line: 808
+                          17: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: init_off
+                              * pretty_name: init_off
+                              * #location: 
+                                * file: main.c
+                                * line: 809
+                          18: component
+                              * type: pointer
+                                  * subtype: unsignedbv
+                                      * width: 8
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 810
+                              * name: packet
+                              * pretty_name: packet
+                              * #location: 
+                                * file: main.c
+                                * line: 810
+                          19: component
+                              * type: unsignedbv
+                                  * width: 32
+                              * name: packet_length
+                              * pretty_name: packet_length
+                              * #location: 
+                                * file: main.c
+                                * line: 811
+                          20: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-ssl2_state_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 812
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 812
+                              * name: s2
+                              * pretty_name: s2
+                              * #location: 
+                                * file: main.c
+                                * line: 812
+                          21: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-ssl3_state_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 813
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 813
+                              * name: s3
+                              * pretty_name: s3
+                              * #location: 
+                                * file: main.c
+                                * line: 813
+                          22: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: read_ahead
+                              * pretty_name: read_ahead
+                              * #location: 
+                                * file: main.c
+                                * line: 814
+                          23: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: hit
+                              * pretty_name: hit
+                              * #location: 
+                                * file: main.c
+                                * line: 815
+                          24: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: purpose
+                              * pretty_name: purpose
+                              * #location: 
+                                * file: main.c
+                                * line: 816
+                          25: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: trust
+                              * pretty_name: trust
+                              * #location: 
+                                * file: main.c
+                                * line: 817
+                          26: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-stack_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 20
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 818
+                              * name: cipher_list
+                              * pretty_name: cipher_list
+                              * #location: 
+                                * file: main.c
+                                * line: 818
+                          27: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-stack_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 20
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 819
+                              * name: cipher_list_by_id
+                              * pretty_name: cipher_list_by_id
+                              * #location: 
+                                * file: main.c
+                                * line: 819
+                          28: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-evp_cipher_ctx_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 426
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 820
+                              * name: enc_read_ctx
+                              * pretty_name: enc_read_ctx
+                              * #location: 
+                                * file: main.c
+                                * line: 820
+                          29: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-env_md_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 406
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 821
+                              * name: read_hash
+                              * pretty_name: read_hash
+                              * #location: 
+                                * file: main.c
+                                * line: 821
+                          30: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-comp_ctx_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 644
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 822
+                              * name: expand
+                              * pretty_name: expand
+                              * #location: 
+                                * file: main.c
+                                * line: 822
+                          31: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-evp_cipher_ctx_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 426
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 823
+                              * name: enc_write_ctx
+                              * pretty_name: enc_write_ctx
+                              * #location: 
+                                * file: main.c
+                                * line: 823
+                          32: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-env_md_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 406
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 824
+                              * name: write_hash
+                              * pretty_name: write_hash
+                              * #location: 
+                                * file: main.c
+                                * line: 824
+                          33: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-comp_ctx_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 644
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 825
+                              * name: compress
+                              * pretty_name: compress
+                              * #location: 
+                                * file: main.c
+                                * line: 825
+                          34: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-cert_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 826
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 826
+                              * name: cert
+                              * pretty_name: cert
+                              * #location: 
+                                * file: main.c
+                                * line: 826
+                          35: component
+                              * type: unsignedbv
+                                  * width: 32
+                              * name: sid_ctx_length
+                              * pretty_name: sid_ctx_length
+                              * #location: 
+                                * file: main.c
+                                * line: 827
+                          36: component
+                              * type: array
+                                  * subtype: unsignedbv
+                                      * width: 8
+                                  * size: constant
+                                      * type: signedbv
+                                          * width: 32
+                                      * value: 00000000000000000000000000100000
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 828
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 828
+                              * name: sid_ctx
+                              * pretty_name: sid_ctx
+                              * #location: 
+                                * file: main.c
+                                * line: 828
+                          37: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-ssl_session_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 722
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 829
+                              * name: session
+                              * pretty_name: session
+                              * #location: 
+                                * file: main.c
+                                * line: 829
+                          38: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: verify_mode
+                              * pretty_name: verify_mode
+                              * #location: 
+                                * file: main.c
+                                * line: 830
+                          39: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: verify_depth
+                              * pretty_name: verify_depth
+                              * #location: 
+                                * file: main.c
+                                * line: 831
+                          40: component
+                              * type: pointer
+                                  * subtype: code
+                                      * arguments: 
+                                        0: argument
+                                            * type: signedbv
+                                                * width: 32
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 832
+                                            * #base_name: ok
+                                            * #identifier: c::141::ok
+                                        1: argument
+                                            * type: pointer
+                                                * subtype: symbol
+                                                    * identifier: c::tag-x509_store_ctx_st
+                                                    * #location: 
+                                                      * file: main.c
+                                                      * line: 588
+                                                * #location: 
+                                                  * file: main.c
+                                                  * line: 832
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 832
+                                            * #base_name: ctx
+                                            * #identifier: c::141::ctx
+                                      * return_type: signedbv
+                                          * width: 32
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 832
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 832
+                              * name: verify_callback
+                              * pretty_name: verify_callback
+                              * #location: 
+                                * file: main.c
+                                * line: 832
+                          41: component
+                              * type: pointer
+                                  * subtype: code
+                                      * arguments: 
+                                        * ellipsis: 1
+                                      * return_type: empty
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 833
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 833
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 833
+                              * name: info_callback
+                              * pretty_name: info_callback
+                              * #location: 
+                                * file: main.c
+                                * line: 833
+                          42: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: error
+                              * pretty_name: error
+                              * #location: 
+                                * file: main.c
+                                * line: 834
+                          43: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: error_code
+                              * pretty_name: error_code
+                              * #location: 
+                                * file: main.c
+                                * line: 835
+                          44: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-ssl_ctx_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 664
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 836
+                              * name: ctx
+                              * pretty_name: ctx
+                              * #location: 
+                                * file: main.c
+                                * line: 836
+                          45: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: debug
+                              * pretty_name: debug
+                              * #location: 
+                                * file: main.c
+                                * line: 837
+                          46: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: verify_result
+                              * pretty_name: verify_result
+                              * #location: 
+                                * file: main.c
+                                * line: 838
+                          47: component
+                              * type: struct
+                                  * tag: crypto_ex_data_st
+                                  * components: 
+                                    0: component
+                                        * type: pointer
+                                            * subtype: symbol
+                                                * identifier: c::tag-stack_st
+                                                * #location: 
+                                                  * file: main.c
+                                                  * line: 20
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 24
+                                        * name: sk
+                                        * pretty_name: sk
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 24
+                                    1: component
+                                        * type: signedbv
+                                            * width: 32
+                                        * name: dummy
+                                        * pretty_name: dummy
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 25
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 23
+                              * name: ex_data
+                              * pretty_name: ex_data
+                              * #location: 
+                                * file: main.c
+                                * line: 839
+                          48: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-stack_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 20
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 840
+                              * name: client_CA
+                              * pretty_name: client_CA
+                              * #location: 
+                                * file: main.c
+                                * line: 840
+                          49: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: references
+                              * pretty_name: references
+                              * #location: 
+                                * file: main.c
+                                * line: 841
+                          50: component
+                              * type: unsignedbv
+                                  * width: 32
+                              * name: options
+                              * pretty_name: options
+                              * #location: 
+                                * file: main.c
+                                * line: 842
+                          51: component
+                              * type: unsignedbv
+                                  * width: 32
+                              * name: mode
+                              * pretty_name: mode
+                              * #location: 
+                                * file: main.c
+                                * line: 843
+                          52: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: first_packet
+                              * pretty_name: first_packet
+                              * #location: 
+                                * file: main.c
+                                * line: 844
+                          53: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: client_version
+                              * pretty_name: client_version
+                              * #location: 
+                                * file: main.c
+                                * line: 845
+                        * #location: 
+                          * file: main.c
+                          * line: 791
+              * component_name: cert
+              * #location: 
+                * file: main.c
+                * line: 1123
+                * function: ssl3_accept
+              * #lvalue: 1
+        * #location: 
+          * file: main.c
+          * line: 1123
+          * function: ssl3_accept
+    1: typecast
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: constant
+              * type: pointer
+                  * subtype: empty
+                      * #location: 
+                        * file: main.c
+                        * line: 1123
+                        * function: ssl3_accept
+                  * #location: 
+                    * file: main.c
+                    * line: 1123
+                    * function: ssl3_accept
+              * value: NULL
+              * #location: 
+                * file: main.c
+                * line: 1123
+                * function: ssl3_accept
+        * #location: 
+          * file: main.c
+          * line: 1123
+          * function: ssl3_accept
+  * #location: 
+    * file: main.c
+    * line: 1123
+    * function: ssl3_accept
+warning: ignoring not
+  * type: bool
+  * operands: 
+    0: =
+        * type: bool
+        * operands: 
+          0: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: symbol
+                    * identifier: c::main::ssl3_accept::1::cb@1!0&0#3
+                    * type: pointer
+                        * subtype: code
+                            * arguments: 
+                              * ellipsis: 1
+                            * return_type: empty
+                                * #location: 
+                                  * file: main.c
+                                  * line: 1079
+                                  * function: ssl3_accept
+                            * #location: 
+                              * file: main.c
+                              * line: 1079
+                              * function: ssl3_accept
+                        * #location: 
+                          * file: main.c
+                          * line: 1079
+                          * function: ssl3_accept
+                    * #location: 
+                      * file: main.c
+                      * line: 1247
+                      * function: ssl3_accept
+                    * #lvalue: 1
+              * #location: 
+                * file: main.c
+                * line: 1247
+                * function: ssl3_accept
+          1: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: constant
+                    * type: pointer
+                        * subtype: empty
+                            * #location: 
+                              * file: main.c
+                              * line: 1247
+                              * function: ssl3_accept
+                        * #location: 
+                          * file: main.c
+                          * line: 1247
+                          * function: ssl3_accept
+                    * value: NULL
+                    * #location: 
+                      * file: main.c
+                      * line: 1247
+                      * function: ssl3_accept
+              * #location: 
+                * file: main.c
+                * line: 1247
+                * function: ssl3_accept
+        * #location: 
+          * file: main.c
+          * line: 1247
+          * function: ssl3_accept
+warning: ignoring =
+  * type: bool
+  * operands: 
+    0: typecast
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: member
+              * type: pointer
+                  * subtype: symbol
+                      * identifier: c::tag-buf_mem_st
+                      * #location: 
+                        * file: main.c
+                        * line: 11
+                  * #location: 
+                    * file: main.c
+                    * line: 807
+              * operands: 
+                0: symbol
+                    * identifier: symex_dynamic::dynamic_1_value&0#11
+                    * type: struct
+                        * tag: ssl_st
+                        * components: 
+                          0: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: version
+                              * pretty_name: version
+                              * #location: 
+                                * file: main.c
+                                * line: 792
+                          1: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: type
+                              * pretty_name: type
+                              * #location: 
+                                * file: main.c
+                                * line: 793
+                          2: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-ssl_method_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 694
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 794
+                              * name: method
+                              * pretty_name: method
+                              * #location: 
+                                * file: main.c
+                                * line: 794
+                          3: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-bio_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 28
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 795
+                              * name: rbio
+                              * pretty_name: rbio
+                              * #location: 
+                                * file: main.c
+                                * line: 795
+                          4: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-bio_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 28
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 796
+                              * name: wbio
+                              * pretty_name: wbio
+                              * #location: 
+                                * file: main.c
+                                * line: 796
+                          5: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-bio_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 28
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 797
+                              * name: bbio
+                              * pretty_name: bbio
+                              * #location: 
+                                * file: main.c
+                                * line: 797
+                          6: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: rwstate
+                              * pretty_name: rwstate
+                              * #location: 
+                                * file: main.c
+                                * line: 798
+                          7: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: in_handshake
+                              * pretty_name: in_handshake
+                              * #location: 
+                                * file: main.c
+                                * line: 799
+                          8: component
+                              * type: pointer
+                                  * subtype: code
+                                      * arguments: 
+                                        * ellipsis: 1
+                                      * return_type: signedbv
+                                          * width: 32
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 800
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 800
+                              * name: handshake_func
+                              * pretty_name: handshake_func
+                              * #location: 
+                                * file: main.c
+                                * line: 800
+                          9: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: server
+                              * pretty_name: server
+                              * #location: 
+                                * file: main.c
+                                * line: 801
+                          10: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: new_session
+                              * pretty_name: new_session
+                              * #location: 
+                                * file: main.c
+                                * line: 802
+                          11: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: quiet_shutdown
+                              * pretty_name: quiet_shutdown
+                              * #location: 
+                                * file: main.c
+                                * line: 803
+                          12: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: shutdown
+                              * pretty_name: shutdown
+                              * #location: 
+                                * file: main.c
+                                * line: 804
+                          13: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: state
+                              * pretty_name: state
+                              * #location: 
+                                * file: main.c
+                                * line: 805
+                          14: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: rstate
+                              * pretty_name: rstate
+                              * #location: 
+                                * file: main.c
+                                * line: 806
+                          15: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-buf_mem_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 11
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 807
+                              * name: init_buf
+                              * pretty_name: init_buf
+                              * #location: 
+                                * file: main.c
+                                * line: 807
+                          16: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: init_num
+                              * pretty_name: init_num
+                              * #location: 
+                                * file: main.c
+                                * line: 808
+                          17: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: init_off
+                              * pretty_name: init_off
+                              * #location: 
+                                * file: main.c
+                                * line: 809
+                          18: component
+                              * type: pointer
+                                  * subtype: unsignedbv
+                                      * width: 8
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 810
+                              * name: packet
+                              * pretty_name: packet
+                              * #location: 
+                                * file: main.c
+                                * line: 810
+                          19: component
+                              * type: unsignedbv
+                                  * width: 32
+                              * name: packet_length
+                              * pretty_name: packet_length
+                              * #location: 
+                                * file: main.c
+                                * line: 811
+                          20: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-ssl2_state_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 812
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 812
+                              * name: s2
+                              * pretty_name: s2
+                              * #location: 
+                                * file: main.c
+                                * line: 812
+                          21: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-ssl3_state_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 813
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 813
+                              * name: s3
+                              * pretty_name: s3
+                              * #location: 
+                                * file: main.c
+                                * line: 813
+                          22: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: read_ahead
+                              * pretty_name: read_ahead
+                              * #location: 
+                                * file: main.c
+                                * line: 814
+                          23: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: hit
+                              * pretty_name: hit
+                              * #location: 
+                                * file: main.c
+                                * line: 815
+                          24: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: purpose
+                              * pretty_name: purpose
+                              * #location: 
+                                * file: main.c
+                                * line: 816
+                          25: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: trust
+                              * pretty_name: trust
+                              * #location: 
+                                * file: main.c
+                                * line: 817
+                          26: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-stack_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 20
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 818
+                              * name: cipher_list
+                              * pretty_name: cipher_list
+                              * #location: 
+                                * file: main.c
+                                * line: 818
+                          27: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-stack_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 20
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 819
+                              * name: cipher_list_by_id
+                              * pretty_name: cipher_list_by_id
+                              * #location: 
+                                * file: main.c
+                                * line: 819
+                          28: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-evp_cipher_ctx_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 426
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 820
+                              * name: enc_read_ctx
+                              * pretty_name: enc_read_ctx
+                              * #location: 
+                                * file: main.c
+                                * line: 820
+                          29: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-env_md_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 406
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 821
+                              * name: read_hash
+                              * pretty_name: read_hash
+                              * #location: 
+                                * file: main.c
+                                * line: 821
+                          30: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-comp_ctx_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 644
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 822
+                              * name: expand
+                              * pretty_name: expand
+                              * #location: 
+                                * file: main.c
+                                * line: 822
+                          31: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-evp_cipher_ctx_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 426
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 823
+                              * name: enc_write_ctx
+                              * pretty_name: enc_write_ctx
+                              * #location: 
+                                * file: main.c
+                                * line: 823
+                          32: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-env_md_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 406
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 824
+                              * name: write_hash
+                              * pretty_name: write_hash
+                              * #location: 
+                                * file: main.c
+                                * line: 824
+                          33: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-comp_ctx_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 644
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 825
+                              * name: compress
+                              * pretty_name: compress
+                              * #location: 
+                                * file: main.c
+                                * line: 825
+                          34: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-cert_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 826
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 826
+                              * name: cert
+                              * pretty_name: cert
+                              * #location: 
+                                * file: main.c
+                                * line: 826
+                          35: component
+                              * type: unsignedbv
+                                  * width: 32
+                              * name: sid_ctx_length
+                              * pretty_name: sid_ctx_length
+                              * #location: 
+                                * file: main.c
+                                * line: 827
+                          36: component
+                              * type: array
+                                  * subtype: unsignedbv
+                                      * width: 8
+                                  * size: constant
+                                      * type: signedbv
+                                          * width: 32
+                                      * value: 00000000000000000000000000100000
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 828
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 828
+                              * name: sid_ctx
+                              * pretty_name: sid_ctx
+                              * #location: 
+                                * file: main.c
+                                * line: 828
+                          37: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-ssl_session_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 722
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 829
+                              * name: session
+                              * pretty_name: session
+                              * #location: 
+                                * file: main.c
+                                * line: 829
+                          38: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: verify_mode
+                              * pretty_name: verify_mode
+                              * #location: 
+                                * file: main.c
+                                * line: 830
+                          39: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: verify_depth
+                              * pretty_name: verify_depth
+                              * #location: 
+                                * file: main.c
+                                * line: 831
+                          40: component
+                              * type: pointer
+                                  * subtype: code
+                                      * arguments: 
+                                        0: argument
+                                            * type: signedbv
+                                                * width: 32
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 832
+                                            * #base_name: ok
+                                            * #identifier: c::141::ok
+                                        1: argument
+                                            * type: pointer
+                                                * subtype: symbol
+                                                    * identifier: c::tag-x509_store_ctx_st
+                                                    * #location: 
+                                                      * file: main.c
+                                                      * line: 588
+                                                * #location: 
+                                                  * file: main.c
+                                                  * line: 832
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 832
+                                            * #base_name: ctx
+                                            * #identifier: c::141::ctx
+                                      * return_type: signedbv
+                                          * width: 32
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 832
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 832
+                              * name: verify_callback
+                              * pretty_name: verify_callback
+                              * #location: 
+                                * file: main.c
+                                * line: 832
+                          41: component
+                              * type: pointer
+                                  * subtype: code
+                                      * arguments: 
+                                        * ellipsis: 1
+                                      * return_type: empty
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 833
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 833
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 833
+                              * name: info_callback
+                              * pretty_name: info_callback
+                              * #location: 
+                                * file: main.c
+                                * line: 833
+                          42: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: error
+                              * pretty_name: error
+                              * #location: 
+                                * file: main.c
+                                * line: 834
+                          43: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: error_code
+                              * pretty_name: error_code
+                              * #location: 
+                                * file: main.c
+                                * line: 835
+                          44: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-ssl_ctx_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 664
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 836
+                              * name: ctx
+                              * pretty_name: ctx
+                              * #location: 
+                                * file: main.c
+                                * line: 836
+                          45: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: debug
+                              * pretty_name: debug
+                              * #location: 
+                                * file: main.c
+                                * line: 837
+                          46: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: verify_result
+                              * pretty_name: verify_result
+                              * #location: 
+                                * file: main.c
+                                * line: 838
+                          47: component
+                              * type: struct
+                                  * tag: crypto_ex_data_st
+                                  * components: 
+                                    0: component
+                                        * type: pointer
+                                            * subtype: symbol
+                                                * identifier: c::tag-stack_st
+                                                * #location: 
+                                                  * file: main.c
+                                                  * line: 20
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 24
+                                        * name: sk
+                                        * pretty_name: sk
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 24
+                                    1: component
+                                        * type: signedbv
+                                            * width: 32
+                                        * name: dummy
+                                        * pretty_name: dummy
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 25
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 23
+                              * name: ex_data
+                              * pretty_name: ex_data
+                              * #location: 
+                                * file: main.c
+                                * line: 839
+                          48: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-stack_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 20
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 840
+                              * name: client_CA
+                              * pretty_name: client_CA
+                              * #location: 
+                                * file: main.c
+                                * line: 840
+                          49: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: references
+                              * pretty_name: references
+                              * #location: 
+                                * file: main.c
+                                * line: 841
+                          50: component
+                              * type: unsignedbv
+                                  * width: 32
+                              * name: options
+                              * pretty_name: options
+                              * #location: 
+                                * file: main.c
+                                * line: 842
+                          51: component
+                              * type: unsignedbv
+                                  * width: 32
+                              * name: mode
+                              * pretty_name: mode
+                              * #location: 
+                                * file: main.c
+                                * line: 843
+                          52: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: first_packet
+                              * pretty_name: first_packet
+                              * #location: 
+                                * file: main.c
+                                * line: 844
+                          53: component
+                              * type: signedbv
+                                  * width: 32
+                              * name: client_version
+                              * pretty_name: client_version
+                              * #location: 
+                                * file: main.c
+                                * line: 845
+                        * #location: 
+                          * file: main.c
+                          * line: 791
+              * component_name: init_buf
+              * #location: 
+                * file: main.c
+                * line: 1258
+                * function: ssl3_accept
+              * #lvalue: 1
+        * #location: 
+          * file: main.c
+          * line: 1258
+          * function: ssl3_accept
+    1: typecast
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: constant
+              * type: pointer
+                  * subtype: empty
+                      * #location: 
+                        * file: main.c
+                        * line: 1258
+                        * function: ssl3_accept
+                  * #location: 
+                    * file: main.c
+                    * line: 1258
+                    * function: ssl3_accept
+              * value: NULL
+              * #location: 
+                * file: main.c
+                * line: 1258
+                * function: ssl3_accept
+        * #location: 
+          * file: main.c
+          * line: 1258
+          * function: ssl3_accept
+  * #location: 
+    * file: main.c
+    * line: 1258
+    * function: ssl3_accept
+warning: ignoring =
+  * type: bool
+  * operands: 
+    0: typecast
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: symbol
+              * identifier: c::main::ssl3_accept::1::buf@1!0&0#1
+              * type: pointer
+                  * subtype: symbol
+                      * identifier: c::tag-buf_mem_st
+                      * #location: 
+                        * file: main.c
+                        * line: 11
+                  * #location: 
+                    * file: main.c
+                    * line: 1075
+                    * function: ssl3_accept
+              * #location: 
+                * file: main.c
+                * line: 1260
+                * function: ssl3_accept
+              * #lvalue: 1
+        * #location: 
+          * file: main.c
+          * line: 1260
+          * function: ssl3_accept
+    1: typecast
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: constant
+              * type: pointer
+                  * subtype: empty
+                      * #location: 
+                        * file: main.c
+                        * line: 1260
+                        * function: ssl3_accept
+                  * #location: 
+                    * file: main.c
+                    * line: 1260
+                    * function: ssl3_accept
+              * value: NULL
+              * #location: 
+                * file: main.c
+                * line: 1260
+                * function: ssl3_accept
+        * #location: 
+          * file: main.c
+          * line: 1260
+          * function: ssl3_accept
+  * #location: 
+    * file: main.c
+    * line: 1260
+    * function: ssl3_accept
+warning: ignoring =
+  * type: bool
+  * operands: 
+    0: typecast
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: member
+              * type: pointer
+                  * subtype: symbol
+                      * identifier: c::tag-evp_pkey_st
+                      * #location: 
+                        * file: main.c
+                        * line: 392
+                  * #location: 
+                    * file: main.c
+                    * line: 973
+              * operands: 
+                0: index
+                    * type: struct
+                        * tag: cert_pkey_st
+                        * components: 
+                          0: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-x509_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 553
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 972
+                              * name: x509
+                              * pretty_name: x509
+                              * #location: 
+                                * file: main.c
+                                * line: 972
+                          1: component
+                              * type: pointer
+                                  * subtype: symbol
+                                      * identifier: c::tag-evp_pkey_st
+                                      * #location: 
+                                        * file: main.c
+                                        * line: 392
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 973
+                              * name: privatekey
+                              * pretty_name: privatekey
+                              * #location: 
+                                * file: main.c
+                                * line: 973
+                        * #location: 
+                          * file: main.c
+                          * line: 971
+                    * operands: 
+                      0: member
+                          * type: array
+                              * subtype: struct
+                                  * tag: cert_pkey_st
+                                  * components: 
+                                    0: component
+                                        * type: pointer
+                                            * subtype: symbol
+                                                * identifier: c::tag-x509_st
+                                                * #location: 
+                                                  * file: main.c
+                                                  * line: 553
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 972
+                                        * name: x509
+                                        * pretty_name: x509
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 972
+                                    1: component
+                                        * type: pointer
+                                            * subtype: symbol
+                                                * identifier: c::tag-evp_pkey_st
+                                                * #location: 
+                                                  * file: main.c
+                                                  * line: 392
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 973
+                                        * name: privatekey
+                                        * pretty_name: privatekey
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 973
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 971
+                              * size: constant
+                                  * type: signedbv
+                                      * width: 32
+                                  * value: 00000000000000000000000000000101
+                                  * #location: 
+                                    * file: main.c
+                                    * line: 985
+                              * #location: 
+                                * file: main.c
+                                * line: 985
+                          * operands: 
+                            0: symbol
+                                * identifier: symex::invalid_object186&0#0
+                                * type: struct
+                                    * tag: cert_st
+                                    * components: 
+                                      0: component
+                                          * type: pointer
+                                              * subtype: symbol
+                                                  * identifier: c::tag-cert_pkey_st
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 975
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 977
+                                          * name: key
+                                          * pretty_name: key
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 977
+                                      1: component
+                                          * type: signedbv
+                                              * width: 32
+                                          * name: valid
+                                          * pretty_name: valid
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 978
+                                      2: component
+                                          * type: unsignedbv
+                                              * width: 32
+                                          * name: mask
+                                          * pretty_name: mask
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 979
+                                      3: component
+                                          * type: unsignedbv
+                                              * width: 32
+                                          * name: export_mask
+                                          * pretty_name: export_mask
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 980
+                                      4: component
+                                          * type: pointer
+                                              * subtype: symbol
+                                                  * identifier: c::tag-rsa_st
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 258
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 981
+                                          * name: rsa_tmp
+                                          * pretty_name: rsa_tmp
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 981
+                                      5: component
+                                          * type: pointer
+                                              * subtype: code
+                                                  * arguments: 
+                                                    0: argument
+                                                        * type: pointer
+                                                            * subtype: symbol
+                                                                * identifier: c::tag-ssl_st
+                                                                * #location: 
+                                                                  * file: main.c
+                                                                  * line: 661
+                                                            * #location: 
+                                                              * file: main.c
+                                                              * line: 982
+                                                        * #location: 
+                                                          * file: main.c
+                                                          * line: 982
+                                                        * #base_name: ssl
+                                                        * #identifier: c::142::ssl
+                                                    1: argument
+                                                        * type: signedbv
+                                                            * width: 32
+                                                        * #location: 
+                                                          * file: main.c
+                                                          * line: 982
+                                                        * #base_name: is_export
+                                                        * #identifier: c::142::is_export
+                                                    2: argument
+                                                        * type: signedbv
+                                                            * width: 32
+                                                        * #location: 
+                                                          * file: main.c
+                                                          * line: 982
+                                                        * #base_name: keysize
+                                                        * #identifier: c::142::keysize
+                                                  * return_type: pointer
+                                                      * subtype: symbol
+                                                          * identifier: c::tag-rsa_st
+                                                          * #location: 
+                                                            * file: main.c
+                                                            * line: 258
+                                                      * #location: 
+                                                        * file: main.c
+                                                        * line: 982
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 982
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 982
+                                          * name: rsa_tmp_cb
+                                          * pretty_name: rsa_tmp_cb
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 982
+                                      6: component
+                                          * type: pointer
+                                              * subtype: symbol
+                                                  * identifier: c::tag-dh_st
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 305
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 983
+                                          * name: dh_tmp
+                                          * pretty_name: dh_tmp
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 983
+                                      7: component
+                                          * type: pointer
+                                              * subtype: code
+                                                  * arguments: 
+                                                    0: argument
+                                                        * type: pointer
+                                                            * subtype: symbol
+                                                                * identifier: c::tag-ssl_st
+                                                                * #location: 
+                                                                  * file: main.c
+                                                                  * line: 661
+                                                            * #location: 
+                                                              * file: main.c
+                                                              * line: 984
+                                                        * #location: 
+                                                          * file: main.c
+                                                          * line: 984
+                                                        * #base_name: ssl
+                                                        * #identifier: c::143::ssl
+                                                    1: argument
+                                                        * type: signedbv
+                                                            * width: 32
+                                                        * #location: 
+                                                          * file: main.c
+                                                          * line: 984
+                                                        * #base_name: is_export
+                                                        * #identifier: c::143::is_export
+                                                    2: argument
+                                                        * type: signedbv
+                                                            * width: 32
+                                                        * #location: 
+                                                          * file: main.c
+                                                          * line: 984
+                                                        * #base_name: keysize
+                                                        * #identifier: c::143::keysize
+                                                  * return_type: pointer
+                                                      * subtype: symbol
+                                                          * identifier: c::tag-dh_st
+                                                          * #location: 
+                                                            * file: main.c
+                                                            * line: 305
+                                                      * #location: 
+                                                        * file: main.c
+                                                        * line: 984
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 984
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 984
+                                          * name: dh_tmp_cb
+                                          * pretty_name: dh_tmp_cb
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 984
+                                      8: component
+                                          * type: array
+                                              * subtype: struct
+                                                  * tag: cert_pkey_st
+                                                  * components: 
+                                                    0: component
+                                                        * type: pointer
+                                                            * subtype: symbol
+                                                                * identifier: c::tag-x509_st
+                                                                * #location: 
+                                                                  * file: main.c
+                                                                  * line: 553
+                                                            * #location: 
+                                                              * file: main.c
+                                                              * line: 972
+                                                        * name: x509
+                                                        * pretty_name: x509
+                                                        * #location: 
+                                                          * file: main.c
+                                                          * line: 972
+                                                    1: component
+                                                        * type: pointer
+                                                            * subtype: symbol
+                                                                * identifier: c::tag-evp_pkey_st
+                                                                * #location: 
+                                                                  * file: main.c
+                                                                  * line: 392
+                                                            * #location: 
+                                                              * file: main.c
+                                                              * line: 973
+                                                        * name: privatekey
+                                                        * pretty_name: privatekey
+                                                        * #location: 
+                                                          * file: main.c
+                                                          * line: 973
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 971
+                                              * size: constant
+                                                  * type: signedbv
+                                                      * width: 32
+                                                  * value: 00000000000000000000000000000101
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 985
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 985
+                                          * name: pkeys
+                                          * pretty_name: pkeys
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 985
+                                      9: component
+                                          * type: signedbv
+                                              * width: 32
+                                          * name: references
+                                          * pretty_name: references
+                                          * #location: 
+                                            * file: main.c
+                                            * line: 986
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 976
+                                * #invalid_object: 1
+                          * component_name: pkeys
+                          * #location: 
+                            * file: main.c
+                            * line: 1382
+                            * function: ssl3_accept
+                          * #lvalue: 1
+                      1: constant
+                          * type: signedbv
+                              * width: 32
+                          * value: 00000000000000000000000000000000
+                          * #location: 
+                            * file: main.c
+                            * line: 1382
+                            * function: ssl3_accept
+                          * #cformat: 0
+                    * #location: 
+                      * file: main.c
+                      * line: 1382
+                      * function: ssl3_accept
+                    * #lvalue: 1
+              * component_name: privatekey
+              * #location: 
+                * file: main.c
+                * line: 1382
+                * function: ssl3_accept
+              * #lvalue: 1
+        * #location: 
+          * file: main.c
+          * line: 1382
+          * function: ssl3_accept
+    1: typecast
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: constant
+              * type: pointer
+                  * subtype: empty
+                      * #location: 
+                        * file: main.c
+                        * line: 1382
+                        * function: ssl3_accept
+                  * #location: 
+                    * file: main.c
+                    * line: 1382
+                    * function: ssl3_accept
+              * value: NULL
+              * #location: 
+                * file: main.c
+                * line: 1382
+                * function: ssl3_accept
+        * #location: 
+          * file: main.c
+          * line: 1382
+          * function: ssl3_accept
+  * #location: 
+    * file: main.c
+    * line: 1382
+    * function: ssl3_accept
+warning: ignoring not
+  * type: bool
+  * operands: 
+    0: =
+        * type: bool
+        * operands: 
+          0: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: member
+                    * type: pointer
+                        * subtype: symbol
+                            * identifier: c::tag-x509_st
+                            * #location: 
+                              * file: main.c
+                              * line: 553
+                        * #location: 
+                          * file: main.c
+                          * line: 709
+                    * operands: 
+                      0: symbol
+                          * identifier: symex::invalid_object192&0#0
+                          * type: struct
+                              * tag: ssl_session_st
+                              * components: 
+                                0: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: ssl_version
+                                    * pretty_name: ssl_version
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 698
+                                1: component
+                                    * type: unsignedbv
+                                        * width: 32
+                                    * name: key_arg_length
+                                    * pretty_name: key_arg_length
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 699
+                                2: component
+                                    * type: array
+                                        * subtype: unsignedbv
+                                            * width: 8
+                                        * size: constant
+                                            * type: signedbv
+                                                * width: 32
+                                            * value: 00000000000000000000000000001000
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 700
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 700
+                                    * name: key_arg
+                                    * pretty_name: key_arg
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 700
+                                3: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: master_key_length
+                                    * pretty_name: master_key_length
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 701
+                                4: component
+                                    * type: array
+                                        * subtype: unsignedbv
+                                            * width: 8
+                                        * size: constant
+                                            * type: signedbv
+                                                * width: 32
+                                            * value: 00000000000000000000000000110000
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 702
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 702
+                                    * name: master_key
+                                    * pretty_name: master_key
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 702
+                                5: component
+                                    * type: unsignedbv
+                                        * width: 32
+                                    * name: session_id_length
+                                    * pretty_name: session_id_length
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 703
+                                6: component
+                                    * type: array
+                                        * subtype: unsignedbv
+                                            * width: 8
+                                        * size: constant
+                                            * type: signedbv
+                                                * width: 32
+                                            * value: 00000000000000000000000000100000
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 704
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 704
+                                    * name: session_id
+                                    * pretty_name: session_id
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 704
+                                7: component
+                                    * type: unsignedbv
+                                        * width: 32
+                                    * name: sid_ctx_length
+                                    * pretty_name: sid_ctx_length
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 705
+                                8: component
+                                    * type: array
+                                        * subtype: unsignedbv
+                                            * width: 8
+                                        * size: constant
+                                            * type: signedbv
+                                                * width: 32
+                                            * value: 00000000000000000000000000100000
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 706
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 706
+                                    * name: sid_ctx
+                                    * pretty_name: sid_ctx
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 706
+                                9: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: not_resumable
+                                    * pretty_name: not_resumable
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 707
+                                10: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-sess_cert_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 708
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 708
+                                    * name: sess_cert
+                                    * pretty_name: sess_cert
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 708
+                                11: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-x509_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 553
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 709
+                                    * name: peer
+                                    * pretty_name: peer
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 709
+                                12: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: verify_result
+                                    * pretty_name: verify_result
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 710
+                                13: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: references
+                                    * pretty_name: references
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 711
+                                14: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: timeout
+                                    * pretty_name: timeout
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 712
+                                15: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: time
+                                    * pretty_name: time
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 713
+                                16: component
+                                    * type: signedbv
+                                        * width: 32
+                                    * name: compress_meth
+                                    * pretty_name: compress_meth
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 714
+                                17: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-ssl_cipher_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 660
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 715
+                                    * name: cipher
+                                    * pretty_name: cipher
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 715
+                                18: component
+                                    * type: unsignedbv
+                                        * width: 32
+                                    * name: cipher_id
+                                    * pretty_name: cipher_id
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 716
+                                19: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-stack_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 20
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 717
+                                    * name: ciphers
+                                    * pretty_name: ciphers
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 717
+                                20: component
+                                    * type: struct
+                                        * tag: crypto_ex_data_st
+                                        * components: 
+                                          0: component
+                                              * type: pointer
+                                                  * subtype: symbol
+                                                      * identifier: c::tag-stack_st
+                                                      * #location: 
+                                                        * file: main.c
+                                                        * line: 20
+                                                  * #location: 
+                                                    * file: main.c
+                                                    * line: 24
+                                              * name: sk
+                                              * pretty_name: sk
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 24
+                                          1: component
+                                              * type: signedbv
+                                                  * width: 32
+                                              * name: dummy
+                                              * pretty_name: dummy
+                                              * #location: 
+                                                * file: main.c
+                                                * line: 25
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 23
+                                    * name: ex_data
+                                    * pretty_name: ex_data
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 718
+                                21: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-ssl_session_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 719
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 719
+                                    * name: prev
+                                    * pretty_name: prev
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 719
+                                22: component
+                                    * type: pointer
+                                        * subtype: symbol
+                                            * identifier: c::tag-ssl_session_st
+                                            * #location: 
+                                              * file: main.c
+                                              * line: 720
+                                        * #location: 
+                                          * file: main.c
+                                          * line: 720
+                                    * name: next
+                                    * pretty_name: next
+                                    * #location: 
+                                      * file: main.c
+                                      * line: 720
+                              * #location: 
+                                * file: main.c
+                                * line: 697
+                          * #invalid_object: 1
+                    * component_name: peer
+                    * #location: 
+                      * file: main.c
+                      * line: 1417
+                      * function: ssl3_accept
+                    * #lvalue: 1
+              * #location: 
+                * file: main.c
+                * line: 1417
+                * function: ssl3_accept
+          1: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: constant
+                    * type: pointer
+                        * subtype: empty
+                            * #location: 
+                              * file: main.c
+                              * line: 1417
+                              * function: ssl3_accept
+                        * #location: 
+                          * file: main.c
+                          * line: 1417
+                          * function: ssl3_accept
+                    * value: NULL
+                    * #location: 
+                      * file: main.c
+                      * line: 1417
+                      * function: ssl3_accept
+              * #location: 
+                * file: main.c
+                * line: 1417
+                * function: ssl3_accept
+        * #location: 
+          * file: main.c
+          * line: 1417
+          * function: ssl3_accept
+warning: ignoring not
+  * type: bool
+  * operands: 
+    0: =
+        * type: bool
+        * operands: 
+          0: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: symbol
+                    * identifier: c::main::ssl3_accept::1::cb@1!0&0#3
+                    * type: pointer
+                        * subtype: code
+                            * arguments: 
+                              * ellipsis: 1
+                            * return_type: empty
+                                * #location: 
+                                  * file: main.c
+                                  * line: 1079
+                                  * function: ssl3_accept
+                            * #location: 
+                              * file: main.c
+                              * line: 1079
+                              * function: ssl3_accept
+                        * #location: 
+                          * file: main.c
+                          * line: 1079
+                          * function: ssl3_accept
+                    * #location: 
+                      * file: main.c
+                      * line: 1602
+                      * function: ssl3_accept
+                    * #lvalue: 1
+              * #location: 
+                * file: main.c
+                * line: 1602
+                * function: ssl3_accept
+          1: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: constant
+                    * type: pointer
+                        * subtype: empty
+                            * #location: 
+                              * file: main.c
+                              * line: 1602
+                              * function: ssl3_accept
+                        * #location: 
+                          * file: main.c
+                          * line: 1602
+                          * function: ssl3_accept
+                    * value: NULL
+                    * #location: 
+                      * file: main.c
+                      * line: 1602
+                      * function: ssl3_accept
+              * #location: 
+                * file: main.c
+                * line: 1602
+                * function: ssl3_accept
+        * #location: 
+          * file: main.c
+          * line: 1602
+          * function: ssl3_accept
+warning: ignoring not
+  * type: bool
+  * operands: 
+    0: =
+        * type: bool
+        * operands: 
+          0: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: symbol
+                    * identifier: c::main::ssl3_accept::1::cb@1!0&0#3
+                    * type: pointer
+                        * subtype: code
+                            * arguments: 
+                              * ellipsis: 1
+                            * return_type: empty
+                                * #location: 
+                                  * file: main.c
+                                  * line: 1079
+                                  * function: ssl3_accept
+                            * #location: 
+                              * file: main.c
+                              * line: 1079
+                              * function: ssl3_accept
+                        * #location: 
+                          * file: main.c
+                          * line: 1079
+                          * function: ssl3_accept
+                    * #location: 
+                      * file: main.c
+                      * line: 1666
+                      * function: ssl3_accept
+                    * #lvalue: 1
+              * #location: 
+                * file: main.c
+                * line: 1666
+                * function: ssl3_accept
+          1: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: constant
+                    * type: pointer
+                        * subtype: empty
+                            * #location: 
+                              * file: main.c
+                              * line: 1666
+                              * function: ssl3_accept
+                        * #location: 
+                          * file: main.c
+                          * line: 1666
+                          * function: ssl3_accept
+                    * value: NULL
+                    * #location: 
+                      * file: main.c
+                      * line: 1666
+                      * function: ssl3_accept
+              * #location: 
+                * file: main.c
+                * line: 1666
+                * function: ssl3_accept
+        * #location: 
+          * file: main.c
+          * line: 1666
+          * function: ssl3_accept
+warning: ignoring not
+  * type: bool
+  * operands: 
+    0: =
+        * type: bool
+        * operands: 
+          0: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: symbol
+                    * identifier: c::main::ssl3_accept::1::cb@1!0&0#3
+                    * type: pointer
+                        * subtype: code
+                            * arguments: 
+                              * ellipsis: 1
+                            * return_type: empty
+                                * #location: 
+                                  * file: main.c
+                                  * line: 1079
+                                  * function: ssl3_accept
+                            * #location: 
+                              * file: main.c
+                              * line: 1079
+                              * function: ssl3_accept
+                        * #location: 
+                          * file: main.c
+                          * line: 1079
+                          * function: ssl3_accept
+                    * #location: 
+                      * file: main.c
+                      * line: 1689
+                      * function: ssl3_accept
+                    * #lvalue: 1
+              * #location: 
+                * file: main.c
+                * line: 1689
+                * function: ssl3_accept
+          1: typecast
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: constant
+                    * type: pointer
+                        * subtype: empty
+                            * #location: 
+                              * file: main.c
+                              * line: 1689
+                              * function: ssl3_accept
+                        * #location: 
+                          * file: main.c
+                          * line: 1689
+                          * function: ssl3_accept
+                    * value: NULL
+                    * #location: 
+                      * file: main.c
+                      * line: 1689
+                      * function: ssl3_accept
+              * #location: 
+                * file: main.c
+                * line: 1689
+                * function: ssl3_accept
+        * #location: 
+          * file: main.c
+          * line: 1689
+          * function: ssl3_accept
+Solving with SMT Solver Z3 v2.11
+Runtime decision procedure: 2.263s
+Building error trace
+
+Counterexample:
+
+State 4 file main.c line 1067 function main thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_1_value=(assignment removed)
+
+State 5 file main.c line 1068 function main thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_1_value=(assignment removed)
+
+State 7 file main.c line 1100 function ssl3_accept thread 0
+----------------------------------------------------
+  main::ssl3_accept::1::blastFlag=0 (00000000000000000000000000000000)
+
+State 8 file main.c line 1101 function ssl3_accept thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_1_value=(assignment removed)
+
+State 9 file main.c line 1104 function ssl3_accept thread 0
+----------------------------------------------------
+  main::ssl3_accept::1::cb=NULL
+
+State 10 file main.c line 1106 function ssl3_accept thread 0
+----------------------------------------------------
+  main::ssl3_accept::1::skip=0 (00000000000000000000000000000000)
+
+State 11 file main.c line 1107 function ssl3_accept thread 0
+----------------------------------------------------
+  main::ssl3_accept::1::got_new_session=0 (00000000000000000000000000000000)
+
+State 13 file main.c line 1109 function ssl3_accept thread 0
+----------------------------------------------------
+  main::ssl3_accept::1::cb=(assignment removed)
+
+State 15 file main.c line 1113 function ssl3_accept thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_1_value=(assignment removed)
+
+State 19 file main.c line 1131 function ssl3_accept thread 0
+----------------------------------------------------
+  main::ssl3_accept::1::state=8464 (00000000000000000010000100010000)
+
+State 30 file main.c line 1316 function ssl3_accept thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_1_value=(assignment removed)
+
+State 31 file main.c line 1317 function ssl3_accept thread 0
+----------------------------------------------------
+  main::ssl3_accept::1::ret=1 (00000000000000000000000000000001)
+
+State 35 file main.c line 1329 function ssl3_accept thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_1_value=(assignment removed)
+
+State 36 file main.c line 1330 function ssl3_accept thread 0
+----------------------------------------------------
+  symex_dynamic::dynamic_1_value=(assignment removed)
+
+State 41 file main.c line 1657 function ssl3_accept thread 0
+----------------------------------------------------
+  main::ssl3_accept::1::ret=1 (00000000000000000000000000000001)
+
+Violated property:
+  file main.c line 1129 function ssl3_accept
+  unwinding assertion loop 
+
+VERIFICATION FAILED
+EXIT=0
+SIGNAL=0
