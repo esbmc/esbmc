@@ -1677,9 +1677,9 @@ void cpp_typecheckt::make_ptr_typecast(
   struct_typet dest_struct =
   to_struct_type(static_cast<const typet&>(follow(dest_type.subtype())));
 
-  assert(subtype_typecast(src_struct, dest_struct)
-         || subtype_typecast(dest_struct, src_struct));
-
+  bool res = subtype_typecast(src_struct, dest_struct)
+             || subtype_typecast(dest_struct, src_struct);
+  assert(res);
 
   expr.make_typecast(dest_type);
 
