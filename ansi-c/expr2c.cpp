@@ -1333,8 +1333,10 @@ std::string expr2ct::convert_constant(
       const exprt &v=
         static_cast<const exprt &>(it->find("value"));
 
-      if(v.is_not_nil())
-        assert(!to_integer(v, i));
+      if(v.is_not_nil()) {
+        bool res = to_integer(v, i);
+        assert(!res);
+      }
 
       ++i;
     }
