@@ -196,7 +196,8 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   {
     // just put into context
     symbolt *new_symbol;
-    assert(!move_symbol(symbol, new_symbol));
+    bool res = move_symbol(symbol, new_symbol);
+    assert(!res);
     
     typecheck_new_symbol(*new_symbol);
   }    
