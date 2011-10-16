@@ -9,13 +9,14 @@ Author:
 #ifndef CPROVER_PROP_Z3_CAPI_H
 #define CPROVER_PROP_Z3_CAPI_H
 
+#include <config.h>
+
 #include<stdio.h>
 #include<stdlib.h>
 #include<stdarg.h>
 #include<memory.h>
 #include<setjmp.h>
 #include <z3.h>
-
 
 class z3_capi {
 
@@ -32,6 +33,7 @@ class z3_capi {
       z3_bool_sort = Z3_mk_bool_type(z3_ctx);
       z3_true = Z3_mk_true(z3_ctx);
       z3_false = Z3_mk_false(z3_ctx);
+      z3_intwidth_bv_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
     }
 
     static Z3_context mk_context(char *solver);
@@ -66,6 +68,7 @@ class z3_capi {
     Z3_sort z3_bool_sort;
     Z3_ast z3_true;
     Z3_ast z3_false;
+    Z3_sort z3_intwidth_bv_sort;
 
   private:
     static Z3_context mk_context_custom(Z3_config cfg, Z3_error_handler err);

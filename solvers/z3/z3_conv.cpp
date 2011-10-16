@@ -545,7 +545,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 	if (int_encoding)
 	  bv = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_bool_sort);
 	else
-	  bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), z3_api.z3_bool_sort);
+	  bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, z3_api.z3_bool_sort);
   }
   else if (type.subtype().id() == "fixedbv")
   {
@@ -559,7 +559,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
 	  bv  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_real_sort);
     else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
+      bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, Z3_mk_bv_type(z3_ctx, width));
   }
   else if (type.subtype().id() == "struct")
   {
@@ -569,7 +569,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
       bv  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, tuple_type);
     else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), tuple_type);
+      bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, tuple_type);
   }
   else if (type.subtype().id() == "union")
   {
@@ -579,7 +579,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
       bv  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, tuple_type);
     else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), tuple_type);
+      bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, tuple_type);
   }
   else if (type.subtype().id() == "array") // array of array
   {
@@ -589,7 +589,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
 	  bv  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, array_of_array_type);
     else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), array_of_array_type);
+      bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, array_of_array_type);
   }
   else
   {
@@ -613,7 +613,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
       bv  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_int_sort);
     else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
+      bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, Z3_mk_bv_type(z3_ctx, width));
   }
 
 #ifdef DEBUG
@@ -686,7 +686,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	  }
 	  else
 	  {
-		bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), bv);
+		bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, bv);
 		return false;
 	  }
 	}
@@ -702,7 +702,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	  }
 	  else
 	  {
-		bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), bv);
+		bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, bv);
 		return false;
 	  }
 	}
@@ -723,7 +723,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	  if (int_encoding)
 	    bv = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_bool_sort);
 	  else
-		bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), z3_api.z3_bool_sort);
+		bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, z3_api.z3_bool_sort);
 
 	  return false;
 	}
@@ -736,7 +736,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	if (int_encoding)
 	  bv = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_int_sort);
 	else
-	  bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
+	  bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, Z3_mk_bv_type(z3_ctx, width));
   }
   else if (type.id()=="struct")
   {
@@ -757,7 +757,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
         if (int_encoding)
     	  bv = z3_api.z3_int_sort;
     	else
-    	  bv = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+    	  bv = z3_api.z3_intwidth_bv_sort;
 
     	return false;
       }
@@ -770,7 +770,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
 	  bv = z3_api.z3_int_sort;
 	else
-	  bv = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+	  bv = z3_api.z3_intwidth_bv_sort;
   }
   else
 	return true;
@@ -898,7 +898,7 @@ bool z3_convt::create_union_type(const typet &type, Z3_type_ast &bv)
   if (int_encoding)
     proj_types[size_of_union-1] = z3_api.z3_int_sort;
   else
-	proj_types[size_of_union-1] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+	proj_types[size_of_union-1] = z3_api.z3_intwidth_bv_sort;
 
 
   bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, size_of_union, proj_names, proj_types, &mk_tuple_decl, proj_decls);
@@ -930,7 +930,7 @@ bool z3_convt::create_enum_type(Z3_type_ast &bv)
   if (int_encoding)
 	bv = z3_api.z3_int_sort;
   else
-	bv = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+	bv = z3_api.z3_intwidth_bv_sort;
 
   return false;
 }
@@ -969,7 +969,7 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
 	  proj_types[0] = z3_api.z3_int_sort;
 	else
-	  proj_types[0] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+	  proj_types[0] = z3_api.z3_intwidth_bv_sort;
   }
   else if (check_all_types(type.subtype()))
   {
@@ -981,7 +981,7 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 	    if (int_encoding)
 	      proj_types[0] = z3_api.z3_int_sort;
 	    else
-	      proj_types[0] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+	      proj_types[0] = z3_api.z3_intwidth_bv_sort;
 	  }
 	  else
 	    return true;
@@ -997,7 +997,7 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 	    if (int_encoding)
 	      proj_types[0] = z3_api.z3_int_sort;
 	    else
-	      proj_types[0] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+	      proj_types[0] = z3_api.z3_intwidth_bv_sort;
 	  }
 	  else
 	    return true;
@@ -1049,7 +1049,7 @@ bool z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
   if (int_encoding)
     proj_types[1] = z3_api.z3_int_sort;
   else
-    proj_types[1] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+    proj_types[1] = z3_api.z3_intwidth_bv_sort;
 
   bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 2, proj_names, proj_types, &mk_tuple_decl, proj_decls);
 
@@ -2678,7 +2678,7 @@ bool z3_convt::convert_typecast_bool(const exprt &expr, Z3_ast &bv)
     if (int_encoding)
       args[1] = z3_api.mk_int(z3_ctx, 0);
     else
-      args[1] = Z3_mk_int(z3_ctx, 0, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+      args[1] = Z3_mk_int(z3_ctx, 0, z3_api.z3_intwidth_bv_sort);
 
     bv = Z3_mk_distinct(z3_ctx,2,args);
   }
@@ -3063,7 +3063,7 @@ bool z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
     if (int_encoding)
       proj_types[1] = z3_api.z3_int_sort;
     else
-      proj_types[1] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+      proj_types[1] = z3_api.z3_intwidth_bv_sort;
 
     if(from_width==to_width)
     {
@@ -3490,14 +3490,14 @@ bool z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast 
     if (int_encoding)
       bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, z3_api.mk_int(z3_ctx, -1));
     else
-      bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, Z3_mk_int(z3_ctx, -1, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width)));
+      bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, Z3_mk_int(z3_ctx, -1, z3_api.z3_intwidth_bv_sort));
   }
   else
   {
     if (int_encoding)
       bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, z3_api.mk_int(z3_ctx, 0));
     else
-      bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, Z3_mk_int(z3_ctx, 0, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width)));
+      bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, Z3_mk_int(z3_ctx, 0, z3_api.z3_intwidth_bv_sort));
   }
 
   unsigned object=pointer_logic.add_object(expr);
@@ -3507,7 +3507,7 @@ bool z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast 
     if (int_encoding)
       bv = z3_api.mk_tuple_update(z3_ctx, bv, 0, z3_api.mk_int(z3_ctx, object));
     else
-      bv = z3_api.mk_tuple_update(z3_ctx, bv, 0, Z3_mk_int(z3_ctx, object, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width)));
+      bv = z3_api.mk_tuple_update(z3_ctx, bv, 0, Z3_mk_int(z3_ctx, object, z3_api.z3_intwidth_bv_sort));
   }
 
 #ifdef DEBUG
@@ -3578,7 +3578,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     if (int_encoding)
       array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_real_sort);
     else
-      array_type  = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
+      array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, Z3_mk_bv_type(z3_ctx, width));
   }
   else if (expr.type().subtype().id() == "struct")
   {
@@ -3588,7 +3588,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     if (int_encoding)
       array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, tuple_type);
     else
-      array_type = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), tuple_type);
+      array_type = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, tuple_type);
 
     value_cte = "constant" + expr.op0().type().get_string("tag");
     array_cte = z3_api.mk_var(z3_ctx, value_cte.c_str(), array_type);
@@ -3600,7 +3600,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
   	  if (int_encoding)
   	    int_cte = z3_api.mk_int(z3_ctx, atoi(i_str));
   	  else
-  	    int_cte = Z3_mk_int(z3_ctx, atoi(i_str), Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+  	    int_cte = Z3_mk_int(z3_ctx, atoi(i_str), z3_api.z3_intwidth_bv_sort);
 
   	  if (convert_struct(*it, tmp_struct))
   	    return true;
@@ -3635,7 +3635,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     if (int_encoding)
       array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_int_sort);
     else
-	  array_type  = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
+	  array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, Z3_mk_bv_type(z3_ctx, width));
   }
 
   value_cte = expr.get_string("identifier") + expr.type().subtype().get("width").c_str();
@@ -3648,7 +3648,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 	if (int_encoding)
 	  int_cte = z3_api.mk_int(z3_ctx, atoi(i_str));
 	else
-	  int_cte = Z3_mk_int(z3_ctx, atoi(i_str), Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+	  int_cte = Z3_mk_int(z3_ctx, atoi(i_str), z3_api.z3_intwidth_bv_sort);
 
 	if (it->type().id()=="array")
 	{
@@ -5631,7 +5631,7 @@ bool z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 	  if (int_encoding)
 	    pointer_object = z3_api.mk_int(z3_ctx, atoi(val));
 	  else
-	    pointer_object = Z3_mk_int(z3_ctx, atoi(val), Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+	    pointer_object = Z3_mk_int(z3_ctx, atoi(val), z3_api.z3_intwidth_bv_sort);
     }
   }
   else
@@ -5643,7 +5643,7 @@ bool z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
         if (int_encoding)
     	  bv = z3_api.mk_unsigned_int(z3_ctx, 0);
         else
-    	  bv = Z3_mk_unsigned_int(z3_ctx, 0, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+    	  bv = Z3_mk_unsigned_int(z3_ctx, 0, z3_api.z3_intwidth_bv_sort);
         return false;
       }
       else
