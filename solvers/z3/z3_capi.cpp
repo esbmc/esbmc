@@ -184,6 +184,27 @@ Z3_ast z3_capi::mk_real_var(Z3_context ctx, const char * name)
     return mk_var(ctx, name, z3_real_sort);
 }
 
+Z3_sort z3_capi::mk_bv_sort(Z3_context ctx, unsigned int width)
+{
+  if (width == 8) {
+    return z3_bvsort_8;
+  } else if (width == 16) {
+    return z3_bvsort_16;
+  } else if (width == 32) {
+    return z3_bvsort_32;
+  } else if (width == 64) {
+    return z3_bvsort_64;
+  } else {
+    assert(width <= 64);
+    if (z3_bvsort_array[width] != NULL) {
+      return z3_bvsort_array[width];
+    } else {
+      z3_bvsort_array[width] = Z3_mk_bv_type(z3_ctx, width);
+      return z3_bvsort_array[width];
+    }
+  }
+}
+
 /**
    \brief Create the unary function application: <tt>(f x)</tt>.
 */

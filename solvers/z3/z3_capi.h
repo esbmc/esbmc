@@ -34,6 +34,15 @@ class z3_capi {
       z3_true = Z3_mk_true(z3_ctx);
       z3_false = Z3_mk_false(z3_ctx);
       z3_intwidth_bv_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+      z3_bvsort_8 = Z3_mk_bv_type(z3_ctx, 8);
+      z3_bvsort_16 = Z3_mk_bv_type(z3_ctx, 16);
+      z3_bvsort_32 = Z3_mk_bv_type(z3_ctx, 32);
+      z3_bvsort_64 = Z3_mk_bv_type(z3_ctx, 64);
+      memset(z3_bvsort_array, 0, sizeof(z3_bvsort_array));
+      z3_bvsort_array[8] = z3_bvsort_8;
+      z3_bvsort_array[16] = z3_bvsort_16;
+      z3_bvsort_array[32] = z3_bvsort_32;
+      z3_bvsort_array[64] = z3_bvsort_64;
     }
 
     static Z3_context mk_context(char *solver);
@@ -45,6 +54,7 @@ class z3_capi {
     Z3_ast mk_int(Z3_context ctx, int v);
     Z3_ast mk_unsigned_int(Z3_context ctx, unsigned int v);
     Z3_ast mk_real_var(Z3_context ctx, const char * name);
+    Z3_sort mk_bv_sort(Z3_context, unsigned int width);
     Z3_ast mk_unary_app(Z3_context ctx, Z3_const_decl_ast f, Z3_ast x);
     Z3_ast mk_binary_app(Z3_context ctx, Z3_const_decl_ast f, Z3_ast x, Z3_ast y);
     Z3_lbool check(Z3_context ctx, Z3_lbool expected_result);
@@ -69,6 +79,8 @@ class z3_capi {
     Z3_ast z3_true;
     Z3_ast z3_false;
     Z3_sort z3_intwidth_bv_sort;
+    Z3_sort z3_bvsort_8, z3_bvsort_16, z3_bvsort_32, z3_bvsort_64;
+    Z3_sort z3_bvsort_array[64];
 
   private:
     static Z3_context mk_context_custom(Z3_config cfg, Z3_error_handler err);
