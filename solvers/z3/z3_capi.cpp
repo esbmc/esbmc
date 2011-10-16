@@ -156,8 +156,7 @@ Z3_ast z3_capi::mk_bool_var(Z3_context ctx, const char * name)
 */
 Z3_ast z3_capi::mk_int_var(Z3_context ctx, const char * name)
 {
-    Z3_sort ty = Z3_mk_int_sort(ctx);
-    return mk_var(ctx, name, ty);
+    return mk_var(ctx, name, z3_int_sort);
 }
 
 /**
@@ -165,8 +164,7 @@ Z3_ast z3_capi::mk_int_var(Z3_context ctx, const char * name)
 */
 Z3_ast z3_capi::mk_unsigned_int(Z3_context ctx, unsigned int v)
 {
-    Z3_sort ty = Z3_mk_int_sort(ctx);
-    return Z3_mk_unsigned_int(ctx, v, ty);
+    return Z3_mk_unsigned_int(ctx, v, z3_int_sort);
 }
 
 /**
@@ -174,8 +172,7 @@ Z3_ast z3_capi::mk_unsigned_int(Z3_context ctx, unsigned int v)
 */
 Z3_ast z3_capi::mk_int(Z3_context ctx, int v)
 {
-    Z3_sort ty = Z3_mk_int_sort(ctx);
-    return Z3_mk_int(ctx, v, ty);
+    return Z3_mk_int(ctx, v, z3_int_sort);
 }
 
 /**
@@ -183,8 +180,7 @@ Z3_ast z3_capi::mk_int(Z3_context ctx, int v)
 */
 Z3_ast z3_capi::mk_real_var(Z3_context ctx, const char * name)
 {
-    Z3_sort ty = Z3_mk_real_sort(ctx);
-    return mk_var(ctx, name, ty);
+    return mk_var(ctx, name, z3_real_sort);
 }
 
 /**
