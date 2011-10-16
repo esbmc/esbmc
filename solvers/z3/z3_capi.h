@@ -21,8 +21,12 @@ class z3_capi {
 
   public:
 
-    z3_capi(){};  // constructor
+    z3_capi(){};
     ~z3_capi(){}; // destructor
+    void set_ctx(Z3_context ctx)
+    {
+      z3_ctx = ctx;
+    }
 
     static Z3_context mk_context(char *solver);
     static Z3_context mk_proof_context(bool solver, unsigned int is_uw);
@@ -52,7 +56,7 @@ class z3_capi {
 
   private:
     static Z3_context mk_context_custom(Z3_config cfg, Z3_error_handler err);
-	Z3_context z3_ctx;
+    Z3_context z3_ctx;
 };
 
 #endif

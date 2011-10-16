@@ -47,6 +47,8 @@ public:
       }
     }
 
+    z3_api.set_ctx(z3_ctx);
+
    s_is_uw = uw;
    s_relevancy = relevancy;
 
