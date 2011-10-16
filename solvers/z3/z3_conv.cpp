@@ -559,7 +559,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
 	  bv  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_real_sort);
     else
-      bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, Z3_mk_bv_type(z3_ctx, width));
+      bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, z3_api.mk_bv_sort(z3_ctx,  width));
   }
   else if (type.subtype().id() == "struct")
   {
@@ -613,7 +613,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
       bv  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_int_sort);
     else
-      bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, Z3_mk_bv_type(z3_ctx, width));
+      bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, z3_api.mk_bv_sort(z3_ctx,  width));
   }
 
 #ifdef DEBUG
@@ -660,7 +660,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
       bv = z3_api.z3_int_sort;
     else
-      bv = Z3_mk_bv_type(z3_ctx, width);
+      bv = z3_api.mk_bv_sort(z3_ctx,  width);
   }
   else if (type.id() == "fixedbv")
   {
@@ -670,7 +670,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
     if (int_encoding)
       bv = z3_api.z3_real_sort;
     else
-      bv = Z3_mk_bv_type(z3_ctx, width);
+      bv = z3_api.mk_bv_sort(z3_ctx,  width);
   }
   else if (type.id()=="array")
   {
@@ -736,7 +736,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	if (int_encoding)
 	  bv = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_int_sort);
 	else
-	  bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, Z3_mk_bv_type(z3_ctx, width));
+	  bv = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, z3_api.mk_bv_sort(z3_ctx,  width));
   }
   else if (type.id()=="struct")
   {
@@ -1097,7 +1097,7 @@ bool z3_convt::convert_identifier(const std::string &identifier, const typet &ty
 	if (int_encoding)
       bv = z3_api.mk_int_var(z3_ctx, identifier.c_str());
 	else
-	  bv = z3_api.mk_var(z3_ctx, identifier.c_str(), Z3_mk_bv_type(z3_ctx, width));
+	  bv = z3_api.mk_var(z3_ctx, identifier.c_str(), z3_api.mk_bv_sort(z3_ctx,  width));
   }
   else if (type.id()=="unsignedbv")
   {
@@ -1114,7 +1114,7 @@ bool z3_convt::convert_identifier(const std::string &identifier, const typet &ty
 	    z3_prop.assumpt.push_back(formula);
 	}
 	else
-	  bv = z3_api.mk_var(z3_ctx, identifier.c_str(), Z3_mk_bv_type(z3_ctx, width));
+	  bv = z3_api.mk_var(z3_ctx, identifier.c_str(), z3_api.mk_bv_sort(z3_ctx,  width));
   }
   else if (type.id()== "fixedbv")
   {
@@ -1124,7 +1124,7 @@ bool z3_convt::convert_identifier(const std::string &identifier, const typet &ty
 	if (int_encoding)
 	  bv = z3_api.mk_real_var(z3_ctx, identifier.c_str());
 	else
-	  bv = z3_api.mk_var(z3_ctx, identifier.c_str(), Z3_mk_bv_type(z3_ctx, width));
+	  bv = z3_api.mk_var(z3_ctx, identifier.c_str(), z3_api.mk_bv_sort(z3_ctx,  width));
   }
   else if (type.id()=="array")
   {
@@ -3047,7 +3047,7 @@ bool z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
     if (int_encoding)
       proj_types[0] = z3_api.z3_int_sort;
     else
-      proj_types[0] = Z3_mk_bv_type(z3_ctx, to_width);
+      proj_types[0] = z3_api.mk_bv_sort(z3_ctx,  to_width);
 
     char val[3];
     std::string name;
@@ -3578,7 +3578,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     if (int_encoding)
       array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_real_sort);
     else
-      array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, Z3_mk_bv_type(z3_ctx, width));
+      array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, z3_api.mk_bv_sort(z3_ctx,  width));
   }
   else if (expr.type().subtype().id() == "struct")
   {
@@ -3635,7 +3635,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     if (int_encoding)
       array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_int_sort, z3_api.z3_int_sort);
     else
-	  array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, Z3_mk_bv_type(z3_ctx, width));
+	  array_type  = Z3_mk_array_type(z3_ctx, z3_api.z3_intwidth_bv_sort, z3_api.mk_bv_sort(z3_ctx,  width));
   }
 
   value_cte = expr.get_string("identifier") + expr.type().subtype().get("width").c_str();
@@ -3673,7 +3673,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 	  }
 	  else
 	  {
-	    val_cte = Z3_mk_int(z3_ctx, atoi(value_cte.c_str()), Z3_mk_bv_type(z3_ctx, width));
+	    val_cte = Z3_mk_int(z3_ctx, atoi(value_cte.c_str()), z3_api.mk_bv_sort(z3_ctx,  width));
 	  }
 	}
 
@@ -3746,7 +3746,7 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 	if (int_encoding)
 	  bv = z3_api.mk_unsigned_int(z3_ctx, atoi(value.c_str()));
 	else
-	  bv = Z3_mk_unsigned_int(z3_ctx, atoi(value.c_str()), Z3_mk_bv_type(z3_ctx, width));
+	  bv = Z3_mk_unsigned_int(z3_ctx, atoi(value.c_str()), z3_api.mk_bv_sort(z3_ctx,  width));
   }
   if (expr.type().id()=="signedbv" || expr.type().id()=="c_enum")
   {
@@ -3756,7 +3756,7 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 	if (int_encoding)
 	  bv = z3_api.mk_int(z3_ctx, atoi(value.c_str()));
 	else
-	  bv = Z3_mk_int(z3_ctx, atoi(value.c_str()), Z3_mk_bv_type(z3_ctx, width));
+	  bv = Z3_mk_int(z3_ctx, atoi(value.c_str()), z3_api.mk_bv_sort(z3_ctx,  width));
   }
   else if (expr.type().id()== "fixedbv")
   {
@@ -3775,8 +3775,8 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 	  std::string m, f, c;
 	  m = extract_magnitude(expr.get_string("value"), width);
 	  f = extract_fraction(expr.get_string("value"), width);
-	  magnitude = Z3_mk_int(z3_ctx, atoi(m.c_str()), Z3_mk_bv_type(z3_ctx, width/2));
-	  fraction = Z3_mk_int(z3_ctx, atoi(f.c_str()), Z3_mk_bv_type(z3_ctx, width/2));
+	  magnitude = Z3_mk_int(z3_ctx, atoi(m.c_str()), z3_api.mk_bv_sort(z3_ctx,  width/2));
+	  fraction = Z3_mk_int(z3_ctx, atoi(f.c_str()), z3_api.mk_bv_sort(z3_ctx,  width/2));
 	  bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
 	}
   }
