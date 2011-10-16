@@ -148,6 +148,7 @@ Z3_ast z3_capi::mk_var(Z3_context ctx, const char * name, Z3_sort ty)
 Z3_ast z3_capi::mk_bool_var(Z3_context ctx, const char * name)
 {
     Z3_sort ty = Z3_mk_bool_sort(ctx);
+    // Inexplicably, Z3 crashes if we use the fixed bool sort.
     return mk_var(ctx, name, ty);
 }
 
