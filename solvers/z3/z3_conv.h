@@ -60,6 +60,8 @@ public:
     z3_int_sort = Z3_mk_int_type(z3_ctx);
     z3_real_sort = Z3_mk_real_type(z3_ctx);
     z3_bool_sort = Z3_mk_bool_type(z3_ctx);
+    z3_true = Z3_mk_true(z3_ctx);
+    z3_false = Z3_mk_false(z3_ctx);
   }
 
   virtual ~z3_convt();
@@ -230,6 +232,8 @@ private:
   Z3_sort z3_int_sort;
   Z3_sort z3_real_sort;
   Z3_sort z3_bool_sort;
+  Z3_ast z3_true;
+  Z3_ast z3_false;
 };
 
 #endif

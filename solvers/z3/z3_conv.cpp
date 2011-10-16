@@ -54,7 +54,7 @@ z3_convt::~z3_convt()
 	std::ofstream temp_out;
     Z3_string smt_lib_str, logic;
     Z3_ast assumpt_array[z3_prop.assumpt.size()+1], formula;
-    formula = Z3_mk_true(z3_ctx);
+    formula = z3_true;
 
     for(unsigned i=0; i<z3_prop.assumpt.size(); i++)
       assumpt_array[i] = z3_prop.assumpt.at(i);
@@ -1332,10 +1332,10 @@ Z3_ast z3_convt::convert_lt(const exprt &expr)
   const exprt &op1=expr.op1();
 
   if (convert_bv(op0, operand[0]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (convert_bv(op1, operand[1]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (op0.type().id() == "pointer")
 	operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
@@ -1354,7 +1354,7 @@ Z3_ast z3_convt::convert_lt(const exprt &expr)
 	  value = integer2string(binary2integer(expr.op1().get_string("value"), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
-	    return Z3_mk_false(z3_ctx);
+	    return z3_false;
 
       if (int_encoding)
       {
@@ -1406,9 +1406,9 @@ Z3_ast z3_convt::convert_gt(const exprt &expr)
   Z3_ast bv, operand[2];
 
   if (convert_bv(expr.op0(), operand[0]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
   if (convert_bv(expr.op1(), operand[1]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (expr.op0().type().id() == "pointer")
 	operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
@@ -1429,7 +1429,7 @@ Z3_ast z3_convt::convert_gt(const exprt &expr)
 	  value = integer2string(binary2integer(expr.op1().get_string("value"), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
-	    return Z3_mk_false(z3_ctx);
+	    return z3_false;
 
       if (int_encoding)
       {
@@ -1484,9 +1484,9 @@ Z3_ast z3_convt::convert_le(const exprt &expr)
   Z3_ast bv, operand[2];
 
   if (convert_bv(expr.op0(), operand[0]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
   if (convert_bv(expr.op1(), operand[1]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (expr.op0().type().id() == "pointer")
 	operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
@@ -1505,7 +1505,7 @@ Z3_ast z3_convt::convert_le(const exprt &expr)
 	  value = integer2string(binary2integer(expr.op1().get_string("value"), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
-	    return Z3_mk_false(z3_ctx);
+	    return z3_false;
 
       if (int_encoding)
       {
@@ -1559,10 +1559,10 @@ Z3_ast z3_convt::convert_ge(const exprt &expr)
   Z3_ast bv, operand[2];
 
   if (convert_bv(expr.op0(), operand[0]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (convert_bv(expr.op1(), operand[1]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
 
   if (expr.op0().type().id() == "pointer")
@@ -1582,7 +1582,7 @@ Z3_ast z3_convt::convert_ge(const exprt &expr)
 	  value = integer2string(binary2integer(expr.op1().get_string("value"), false),10);
 
       if (boolbv_get_width(expr.op1().type(), width))
-	    return Z3_mk_false(z3_ctx);
+	    return z3_false;
 
       if (int_encoding)
       {
@@ -1642,14 +1642,14 @@ Z3_ast z3_convt::convert_eq(const exprt &expr)
   if (op0.type().id()=="array")
   {
     if (write_cache(op0))
-      return Z3_mk_false(z3_ctx);
+      return z3_false;
   }
 
   if (convert_bv(op0, operand[0]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (convert_bv(op1, operand[1]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (op0.type().id()=="pointer" && op1.type().id()=="pointer")
   {
@@ -1728,29 +1728,29 @@ Z3_ast z3_convt::convert_invalid(const exprt &expr)
 
   if (expr.op0().id()=="address_of" ||
 	 (expr.op0().type().id()=="pointer" && expr.op0().type().subtype().id()=="symbol"))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (!is_in_cache(expr.op0()) && expr.op0().id()=="typecast")
-	return Z3_mk_true(z3_ctx);
+	return z3_true;
 
   if (!is_in_cache(expr.op0()))
   {
 	if (expr.op0().id()=="+" && expr.op0().type().subtype().id()!="empty")
-      return Z3_mk_true(z3_ctx);
+      return z3_true;
 	else
-	  return Z3_mk_false(z3_ctx);
+	  return z3_false;
   }
 
   //the subtype field of index is empty and generates seg. fault
   if (!is_in_cache(expr.op0()) && expr.op0().id()=="index")
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (convert_bv(expr.op0(), pointer)) //return pointer tuple
-    return Z3_mk_false(z3_ctx);
+    return z3_false;
 
   //@TODO
   if (expr.op0().id()=="member" && expr.op0().type().id()=="pointer" && expr.op0().type().subtype().id()=="signedbv")
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (expr.op0().type().id()=="pointer")
 	  operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer, 1); //pointer index
@@ -1812,11 +1812,11 @@ Z3_ast z3_convt::convert_same_object(const exprt &expr)
 	  || (!is_in_cache(op0) && !is_in_cache(op1)))
   {
 	//object is not in the cache and generates spurious counter-example
-    return Z3_mk_false(z3_ctx);
+    return z3_false;
   }
   else if (op0.id()=="address_of" && op1.id()=="constant")
   {
-	return Z3_mk_false(z3_ctx); //TODO
+	return z3_false; //TODO
   }
   else if (op0.id()=="symbol" && op1.id()=="address_of")
   {
@@ -1824,13 +1824,13 @@ Z3_ast z3_convt::convert_same_object(const exprt &expr)
     const exprt &index=object.operands()[0];
 
 	if (convert_bv(op0, pointer[0]))
-	  return Z3_mk_false(z3_ctx);
+	  return z3_false;
 
 	if (convert_bv(op1, pointer[1]))
-	  return Z3_mk_false(z3_ctx);
+	  return z3_false;
 
 	if (op1.type().id()=="pointer" && op1.type().subtype().id()=="union")
-	  return Z3_mk_false(z3_ctx);
+	  return z3_false;
 
 	operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 0);
 	operand[1] = z3_api.mk_tuple_select(z3_ctx, pointer[1], 0);
@@ -1855,9 +1855,9 @@ Z3_ast z3_convt::convert_same_object(const exprt &expr)
      is_ptr(operands[1].type()))
   {
 	if (convert_bv(op0, pointer[0]))
-	  return Z3_mk_false(z3_ctx);
+	  return z3_false;
 	if (convert_bv(op1, pointer[1]))
-	  return Z3_mk_false(z3_ctx);
+	  return z3_false;
 
 	operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 0);
 	operand[1] = z3_api.mk_tuple_select(z3_ctx, pointer[1], 0);
@@ -1928,13 +1928,13 @@ Z3_ast z3_convt::convert_dynamic_object(const exprt &expr)
 #endif
 
   if(dynamic_objects.empty())
-    return Z3_mk_true(z3_ctx);
+    return z3_true;
   else
   {
 	unsigned width;
 
     if (convert_bv(expr.op0(), operand0))
-	  return Z3_mk_false(z3_ctx);
+	  return z3_false;
 
     //std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
     if (expr.op0().type().id()=="pointer")
@@ -1942,12 +1942,12 @@ Z3_ast z3_convt::convert_dynamic_object(const exprt &expr)
       if (expr.op0().type().subtype().id()!="pointer")
       {
     	if (boolbv_get_width(expr.op0().type().subtype(), width))
-    	  return Z3_mk_false(z3_ctx);
+    	  return z3_false;
       }
       else if (expr.op0().type().subtype().subtype().id()!="pointer")
       {
     	if (boolbv_get_width(expr.op0().type().subtype().subtype(), width))
-    	  return Z3_mk_false(z3_ctx);
+    	  return z3_false;
       }
       else
    	    width = config.ansi_c.int_width;
@@ -1955,7 +1955,7 @@ Z3_ast z3_convt::convert_dynamic_object(const exprt &expr)
     else
     {
       if (boolbv_get_width(expr.op0().type(), width))
-        return Z3_mk_false(z3_ctx);
+        return z3_false;
     }
 
     if (expr.op0().type().id()=="pointer")
@@ -1996,7 +1996,7 @@ Z3_ast z3_convt::convert_dynamic_object(const exprt &expr)
     }
   }
 
-  //bv = Z3_mk_false(z3_ctx);
+  //bv = z3_false;
 
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
@@ -2029,26 +2029,26 @@ Z3_ast z3_convt::convert_overflow_sum(const exprt &expr)
   if (expr.op0().type().id()=="array")
   {
     if (write_cache(expr.op0()))
-      return Z3_mk_false(z3_ctx);
+      return z3_false;
   }
 
   if (convert_bv(expr.op0(), operand[0]))
-	return Z3_mk_false(z3_ctx);;
+	return z3_false;;
 
   if (expr.op0().type().id()=="pointer")
 	operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
 
   if (convert_bv(expr.op1(), operand[1]))
-    return Z3_mk_false(z3_ctx);;
+    return z3_false;;
 
   if (expr.op1().type().id()=="pointer")
 	operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
   if (boolbv_get_width(expr.op0().type(), width_op0))
-    return Z3_mk_false(z3_ctx);
+    return z3_false;
 
   if (boolbv_get_width(expr.op1().type(), width_op1))
-    return Z3_mk_false(z3_ctx);
+    return z3_false;
 
   if (int_encoding)
   {
@@ -2093,29 +2093,29 @@ Z3_ast z3_convt::convert_overflow_sub(const exprt &expr)
   if (expr.op0().type().id()=="array")
   {
     if (write_cache(expr.op0()))
-      return Z3_mk_false(z3_ctx);
+      return z3_false;
   }
   //new change
   if (expr.op0().id()=="symbol" && expr.op1().id()=="address_of")
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (convert_bv(expr.op0(), operand[0]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (expr.op0().type().id()=="pointer")
 	operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
 
   if (convert_bv(expr.op1(), operand[1]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (expr.op1().type().id()=="pointer")
 	operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
   if (boolbv_get_width(expr.op0().type(), width_op0))
-    return Z3_mk_false(z3_ctx);
+    return z3_false;
 
   if (boolbv_get_width(expr.op1().type(), width_op1))
-    return Z3_mk_false(z3_ctx);
+    return z3_false;
 
   if (int_encoding)
   {
@@ -2159,26 +2159,26 @@ Z3_ast z3_convt::convert_overflow_mul(const exprt &expr)
   if (expr.op0().type().id()=="array")
   {
     if (write_cache(expr.op0()))
-      return Z3_mk_false(z3_ctx);;
+      return z3_false;;
   }
 
   if (convert_bv(expr.op0(), operand[0]))
-	return Z3_mk_false(z3_ctx);;
+	return z3_false;;
 
   if (expr.op0().type().id()=="pointer")
 	operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
 
   if (convert_bv(expr.op1(), operand[1]))
-	return Z3_mk_false(z3_ctx);;
+	return z3_false;;
 
   if (expr.op1().type().id()=="pointer")
 	operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
   if (boolbv_get_width(expr.op0().type(), width_op0))
-    return Z3_mk_false(z3_ctx);
+    return z3_false;
 
   if (boolbv_get_width(expr.op1().type(), width_op1))
-    return Z3_mk_false(z3_ctx);
+    return z3_false;
 
   if (int_encoding)
   {
@@ -2220,13 +2220,13 @@ Z3_ast z3_convt::convert_overflow_unary(const exprt &expr)
   unsigned width;
 
   if (convert_bv(expr.op0(), operand))
-	return Z3_mk_false(z3_ctx);;
+	return z3_false;;
 
   if (expr.op0().type().id()=="pointer")
 	operand = z3_api.mk_tuple_select(z3_ctx, operand, 1);
 
   if (boolbv_get_width(expr.op0().type(), width))
-    return Z3_mk_false(z3_ctx);
+    return z3_false;
 
   if (int_encoding)
 	operand = Z3_mk_int2bv(z3_ctx, width, operand);
@@ -2266,7 +2266,7 @@ Z3_ast z3_convt::convert_overflow_typecast(const exprt &expr)
   bool encoding=false;
 
   if (boolbv_get_width(expr.op0().type(), width))
-    return Z3_mk_false(z3_ctx);
+    return z3_false;
 
   if(bits>=width || bits==0)
     throw "overflow-typecast got wrong number of bits";
@@ -2287,7 +2287,7 @@ Z3_ast z3_convt::convert_overflow_typecast(const exprt &expr)
 	value = integer2string(binary2integer(expr.op0().get_string("value"), false),10);
 
   if (convert_bv(expr.op0(), operand[0]))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (int_encoding)
   {
@@ -2370,11 +2370,11 @@ Z3_ast z3_convt::convert_rest_member(const exprt &expr)
   Z3_ast bv;
 
   if (convert_bv(expr,bv))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (expr.get_string("component_name") == "is_zero")
   {
-	bv = Z3_mk_not(z3_ctx, Z3_mk_eq(z3_ctx, Z3_mk_false(z3_ctx), bv));
+	bv = Z3_mk_not(z3_ctx, Z3_mk_eq(z3_ctx, z3_false, bv));
 	std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
   }
 
@@ -2407,10 +2407,10 @@ Z3_ast z3_convt::convert_rest_index(const exprt &expr)
   const exprt &index=expr.op1();
 
   if (convert_bv(array, operand0))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (convert_bv(index, operand1))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
@@ -2435,7 +2435,7 @@ Z3_ast z3_convt::convert_rest_index(const exprt &expr)
   else
   {
     bv = Z3_mk_select(z3_ctx, operand0, operand1);
-    bv = Z3_mk_eq(z3_ctx, bv, Z3_mk_false(z3_ctx));
+    bv = Z3_mk_eq(z3_ctx, bv, z3_false);
   }
 
 
@@ -2472,10 +2472,10 @@ Z3_ast z3_convt::convert_memory_leak(const exprt &expr)
   const exprt &index=expr.op1();
 
   if (convert_bv(array, operand0))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   if (convert_bv(index, operand1))
-	return Z3_mk_false(z3_ctx);
+	return z3_false;
 
   bv = Z3_mk_select(z3_ctx, operand0, operand1);
 
@@ -3788,9 +3788,9 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
   else if (expr.type().id()=="bool")
   {
 	if (expr.is_false())
-	  bv = Z3_mk_false(z3_ctx);
+	  bv = z3_false;
 	else if (expr.is_true())
-	  bv = Z3_mk_true(z3_ctx);
+	  bv = z3_true;
   }
   else if (expr.type().id()=="array")
   {
@@ -4939,7 +4939,7 @@ bool z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
-    value = Z3_mk_false(z3_ctx);
+    value = z3_false;
     if (width==1) out = "width: "+ width;
     identifier = "ARRAY_OF(false)" + width;
     bv = z3_api.mk_var(z3_ctx, identifier.c_str(), array_type);
@@ -5353,7 +5353,7 @@ bool z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
       one = convert_number(1, width, false);
     else
       one = convert_number(1, width, true);
-	operand0 = Z3_mk_ite(z3_ctx, Z3_mk_ge(z3_ctx, operand0, one), Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));
+	operand0 = Z3_mk_ite(z3_ctx, Z3_mk_ge(z3_ctx, operand0, one), z3_true, z3_false);
 #endif
   }
 
@@ -5899,7 +5899,7 @@ bool z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
 
   if(dynamic_objects.empty())
   {
-	bv = Z3_mk_false(z3_ctx);
+	bv = z3_false;
     return false;
   }
   else
@@ -6278,9 +6278,9 @@ bool z3_convt::convert_isnan(const exprt &expr, Z3_ast &bv)
 
     if (int_encoding)
       bv = Z3_mk_ite(z3_ctx, Z3_mk_ge(z3_ctx, Z3_mk_real2int(z3_ctx, op0), convert_number(0, width, true)),
-    		  	  	  	  	  	  	  Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));
+    		  	  	  	  	  	  	  z3_true, z3_false);
     else
-      bv = Z3_mk_ite(z3_ctx, Z3_mk_bvsge(z3_ctx, op0, convert_number(0, width, true)), Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));
+      bv = Z3_mk_ite(z3_ctx, Z3_mk_bvsge(z3_ctx, op0, convert_number(0, width, true)), z3_true, z3_false);
   }
   else
     throw "isnan with unsupported operand type";
