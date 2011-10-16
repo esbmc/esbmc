@@ -543,9 +543,9 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
   if (type.subtype().id() == "bool")
   {
 	if (int_encoding)
-	  bv = Z3_mk_array_type(z3_ctx, z3_int_sort, Z3_mk_bool_type(z3_ctx));
+	  bv = Z3_mk_array_type(z3_ctx, z3_int_sort, z3_bool_sort);
 	else
-	  bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bool_type(z3_ctx));
+	  bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), z3_bool_sort);
   }
   else if (type.subtype().id() == "fixedbv")
   {
@@ -649,7 +649,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 
   if (type.id()=="bool")
   {
-	bv = Z3_mk_bool_type(z3_ctx);
+	bv = z3_bool_sort;
   }
   else if (type.id()=="signedbv" || type.id()=="unsignedbv" ||
 		  type.id()=="c_enum" || type.id()=="incomplete_c_enum")
@@ -721,9 +721,9 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	else if (type.subtype().id()=="bool")
 	{
 	  if (int_encoding)
-	    bv = Z3_mk_array_type(z3_ctx, z3_int_sort, Z3_mk_bool_type(z3_ctx));
+	    bv = Z3_mk_array_type(z3_ctx, z3_int_sort, z3_bool_sort);
 	  else
-		bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bool_type(z3_ctx));
+		bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), z3_bool_sort);
 
 	  return false;
 	}
