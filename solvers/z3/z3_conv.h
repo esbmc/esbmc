@@ -58,6 +58,7 @@ public:
 
     // Initialize various commonly used values for later reuse
     z3_int_sort = Z3_mk_int_type(z3_ctx);
+    z3_real_sort = Z3_mk_real_type(z3_ctx);
   }
 
   virtual ~z3_convt();
@@ -226,6 +227,7 @@ public:
 private:
   // Common sorts and constants that we re-use to save on memory
   Z3_sort z3_int_sort;
+  Z3_sort z3_real_sort;
 };
 
 #endif

@@ -557,7 +557,7 @@ bool z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 #endif
 
     if (int_encoding)
-	  bv  = Z3_mk_array_type(z3_ctx, z3_int_sort, Z3_mk_real_type(z3_ctx));
+	  bv  = Z3_mk_array_type(z3_ctx, z3_int_sort, z3_real_sort);
     else
       bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
   }
@@ -668,7 +668,7 @@ bool z3_convt::create_type(const typet &type, Z3_type_ast &bv)
       return true;
 
     if (int_encoding)
-      bv = Z3_mk_real_type(z3_ctx);
+      bv = z3_real_sort;
     else
       bv = Z3_mk_bv_type(z3_ctx, width);
   }
@@ -3008,8 +3008,8 @@ bool z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
     {
       if (int_encoding)
       {
-        zero = Z3_mk_int(z3_ctx, 0, Z3_mk_real_type(z3_ctx));
-        one = Z3_mk_int(z3_ctx, 1, Z3_mk_real_type(z3_ctx));
+        zero = Z3_mk_int(z3_ctx, 0, z3_real_sort);
+        one = Z3_mk_int(z3_ctx, 1, z3_real_sort);
       }
       else
       {
@@ -3576,7 +3576,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
       return true;
 
     if (int_encoding)
-      array_type  = Z3_mk_array_type(z3_ctx, z3_int_sort, Z3_mk_real_type(z3_ctx));
+      array_type  = Z3_mk_array_type(z3_ctx, z3_int_sort, z3_real_sort);
     else
       array_type  = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width), Z3_mk_bv_type(z3_ctx, width));
   }
@@ -3669,7 +3669,7 @@ bool z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 		else if (it->type().id()=="unsignedbv")
 		  val_cte = Z3_mk_unsigned_int(z3_ctx, atoi(value_cte.c_str()), z3_int_sort);
 		else if (it->type().id()=="fixedbv")
-		  val_cte = Z3_mk_int(z3_ctx, atoi(value_cte.c_str()), Z3_mk_real_type(z3_ctx));
+		  val_cte = Z3_mk_int(z3_ctx, atoi(value_cte.c_str()), z3_real_sort);
 	  }
 	  else
 	  {
@@ -3767,7 +3767,7 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
     {
       std::string result;
       result = fixed_point(expr.get_string("value"), width);
-	  bv = Z3_mk_numeral(z3_ctx, result.c_str(), Z3_mk_real_type(z3_ctx));
+	  bv = Z3_mk_numeral(z3_ctx, result.c_str(), z3_real_sort);
     }
 	else
 	{
@@ -3923,7 +3923,7 @@ bool z3_convt::convert_unary_minus(const exprt &expr, Z3_ast &bv)
     }
     else if (expr.type().id() == "fixedbv")
     {
-      args[1] = Z3_mk_int(z3_ctx, -1, Z3_mk_real_type(z3_ctx));
+      args[1] = Z3_mk_int(z3_ctx, -1, z3_real_sort);
       bv = Z3_mk_mul(z3_ctx, 2, args);
     }
   }
@@ -5182,8 +5182,8 @@ bool z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
   {
 	if (int_encoding)
 	{
-      zero = Z3_mk_int(z3_ctx, 0, Z3_mk_real_type(z3_ctx));
-      operand[1] = Z3_mk_int(z3_ctx, -1, Z3_mk_real_type(z3_ctx));
+      zero = Z3_mk_int(z3_ctx, 0, z3_real_sort);
+      operand[1] = Z3_mk_int(z3_ctx, -1, z3_real_sort);
 	}
 	else
 	{
