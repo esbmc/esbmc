@@ -57,13 +57,6 @@ public:
     this->uw = uw;
     ignoring_expr=true;
     max_core_size=Z3_UNSAT_CORE_LIMIT;
-
-    // Initialize various commonly used values for later reuse
-    z3_int_sort = Z3_mk_int_type(z3_ctx);
-    z3_real_sort = Z3_mk_real_type(z3_ctx);
-    z3_bool_sort = Z3_mk_bool_type(z3_ctx);
-    z3_true = Z3_mk_true(z3_ctx);
-    z3_false = Z3_mk_false(z3_ctx);
   }
 
   virtual ~z3_convt();
@@ -229,13 +222,6 @@ public:
   static bool s_is_uw;
   static bool s_relevancy;
   static unsigned int num_ctx_ileaves; // Number of ileaves z3_ctx has handled
-private:
-  // Common sorts and constants that we re-use to save on memory
-  Z3_sort z3_int_sort;
-  Z3_sort z3_real_sort;
-  Z3_sort z3_bool_sort;
-  Z3_ast z3_true;
-  Z3_ast z3_false;
 };
 
 #endif

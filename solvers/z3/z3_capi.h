@@ -26,6 +26,12 @@ class z3_capi {
     void set_ctx(Z3_context ctx)
     {
       z3_ctx = ctx;
+      // Common sorts and constants that we re-use to save on memory
+      z3_int_sort = Z3_mk_int_type(z3_ctx);
+      z3_real_sort = Z3_mk_real_type(z3_ctx);
+      z3_bool_sort = Z3_mk_bool_type(z3_ctx);
+      z3_true = Z3_mk_true(z3_ctx);
+      z3_false = Z3_mk_false(z3_ctx);
     }
 
     static Z3_context mk_context(char *solver);
@@ -53,6 +59,13 @@ class z3_capi {
     void display_function_interpretations(Z3_context c, FILE * out, Z3_model m);
     void display_model(Z3_context c, FILE * out, Z3_model m);
     void display_version();
+
+  public:
+    Z3_sort z3_int_sort;
+    Z3_sort z3_real_sort;
+    Z3_sort z3_bool_sort;
+    Z3_ast z3_true;
+    Z3_ast z3_false;
 
   private:
     static Z3_context mk_context_custom(Z3_config cfg, Z3_error_handler err);
