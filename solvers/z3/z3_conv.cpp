@@ -36,6 +36,13 @@ extern void finalize_symbols(void);
 
 //#define DEBUG
 
+#ifdef DEBUG
+#define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
+                        "[" << __LINE__ << "]" << std::endl;
+#else
+#define DEBUGLOC
+#endif
+
 /*******************************************************************
    Function: z3_convt::get_z3_core_size
 
@@ -273,9 +280,7 @@ z3_convt::extract_fraction(std::string v, unsigned width)
 std::string
 z3_convt::fixed_point(std::string v, unsigned width)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   const int precision = 10000;
   std::string i, f, b, result;
@@ -323,9 +328,7 @@ z3_convt::fixed_point(std::string v, unsigned width)
 void
 z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC
 
   std::string literal;
   static bool is_first_literal = true;
@@ -413,9 +416,7 @@ z3_convt::store_sat_assignments(Z3_model m)
 Z3_lbool
 z3_convt::check2_z3_properties(void)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC
 
   assert(number_of_assumptions == assumptions.size());
 
@@ -516,9 +517,7 @@ z3_convt::is_ptr(const typet &type)
 bool
 z3_convt::select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   bv = Z3_mk_select(z3_ctx, object, offset);
   return false;
@@ -538,9 +537,7 @@ z3_convt::select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv)
 bool
 z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_type_ast tuple_type, array_of_array_type;
   unsigned width;
@@ -618,9 +615,7 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
                             Z3_mk_bv_type(z3_ctx, width));
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -639,9 +634,7 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 bool
 z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   unsigned width = config.ansi_c.int_width;
 
@@ -748,9 +741,7 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
   } else
     return true;
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -769,9 +760,7 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 bool
 z3_convt::create_struct_type(const typet &type, Z3_type_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_symbol mk_tuple_name, *proj_names;
   std::string struct_name;
@@ -812,9 +801,7 @@ z3_convt::create_struct_type(const typet &type, Z3_type_ast &bv)
   delete[] proj_types;
   delete[] proj_decls;
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -833,9 +820,7 @@ z3_convt::create_struct_type(const typet &type, Z3_type_ast &bv)
 bool
 z3_convt::create_union_type(const typet &type, Z3_type_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_symbol mk_tuple_name, *proj_names;
   std::string union_name;
@@ -902,9 +887,7 @@ z3_convt::create_union_type(const typet &type, Z3_type_ast &bv)
 bool
 z3_convt::create_enum_type(Z3_type_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   if (int_encoding)
     bv = Z3_mk_int_type(z3_ctx);
@@ -927,9 +910,7 @@ z3_convt::create_enum_type(Z3_type_ast &bv)
 bool
 z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   typet actual_type;
   Z3_symbol mk_tuple_name, proj_names[2];
@@ -972,9 +953,7 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
     return true;
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   std::string name = "pointer_tuple_";
   std::stringstream s;
@@ -983,9 +962,6 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
     name += Z3_get_symbol_string(z3_ctx, Z3_get_type_name(z3_ctx, proj_types[0]));
   } else   {
     name += Z3_get_symbol_string(z3_ctx, Z3_get_type_name(z3_ctx, proj_types[0]));
-#ifdef DEBUG
-    std::cout << "type.pretty(): " << type.pretty() << std::endl;
-#endif
     if (actual_type.id() != "bool") {
       if (actual_type.id() == "struct")
 	s << "struct";
@@ -995,9 +971,7 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
     name += s.str();
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
@@ -1012,9 +986,7 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
   bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
                         &mk_tuple_decl, proj_decls);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -1034,9 +1006,7 @@ bool
 z3_convt::convert_identifier(const std::string &identifier, const typet &type,
   Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_type_ast type_var;
   unsigned width;
@@ -1106,9 +1076,7 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
 
   //throw "convert_identifier: " + type.id_string() + " is unsupported";
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -1148,9 +1116,7 @@ z3_convt::is_in_cache(const exprt &expr)
 bool
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
 #if 1
   bv_cachet::const_iterator cache_result = bv_cache.find(expr);
@@ -1165,9 +1131,7 @@ z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
   // insert into cache
   bv_cache.insert(std::pair<const exprt, Z3_ast>(expr, bv));
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -1256,9 +1220,7 @@ z3_convt::write_cache(const exprt &expr)
 Z3_ast
 z3_convt::convert_lt(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast bv, operand[2];
@@ -1326,9 +1288,7 @@ z3_convt::convert_lt(const exprt &expr)
 Z3_ast
 z3_convt::convert_gt(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast bv, operand[2];
@@ -1398,9 +1358,7 @@ z3_convt::convert_gt(const exprt &expr)
 Z3_ast
 z3_convt::convert_le(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast bv, operand[2];
@@ -1468,9 +1426,7 @@ z3_convt::convert_le(const exprt &expr)
 Z3_ast
 z3_convt::convert_ge(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast bv, operand[2];
@@ -1540,9 +1496,7 @@ z3_convt::convert_ge(const exprt &expr)
 Z3_ast
 z3_convt::convert_eq(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast bv, operand[2];
@@ -1599,9 +1553,7 @@ z3_convt::convert_eq(const exprt &expr)
       bv = Z3_mk_distinct(z3_ctx, 2, operand);
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return bv;
 }
@@ -1620,9 +1572,7 @@ z3_convt::convert_eq(const exprt &expr)
 Z3_ast
 z3_convt::convert_invalid(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
 
   assert(expr.operands().size() == 1);
@@ -1675,9 +1625,7 @@ z3_convt::convert_invalid(const exprt &expr)
   else
     bv = Z3_mk_bvsge(z3_ctx, operand[0], operand[1]);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return bv;
 }
@@ -1696,9 +1644,7 @@ z3_convt::convert_invalid(const exprt &expr)
 Z3_ast
 z3_convt::convert_same_object(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   const exprt::operandst &operands = expr.operands();
   Z3_ast bv, operand[2], pointer[2], offset[2], formula[2], zero;
@@ -1780,9 +1726,7 @@ z3_convt::convert_same_object(const exprt &expr)
     bv = Z3_mk_and(z3_ctx, 2, formula);
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return bv;
 }
@@ -1801,9 +1745,7 @@ z3_convt::convert_same_object(const exprt &expr)
 Z3_ast
 z3_convt::convert_dynamic_object(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1);
   Z3_ast bv, operand0, operand1;
@@ -1873,9 +1815,7 @@ z3_convt::convert_dynamic_object(const exprt &expr)
 
   //bv = Z3_mk_false(z3_ctx);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return bv;
 }
@@ -1894,9 +1834,7 @@ z3_convt::convert_dynamic_object(const exprt &expr)
 Z3_ast
 z3_convt::convert_overflow_sum(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast bv, result[2], operand[2];
@@ -1959,9 +1897,7 @@ z3_convt::convert_overflow_sum(const exprt &expr)
 Z3_ast
 z3_convt::convert_overflow_sub(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast bv, result[2], operand[2];
@@ -2026,9 +1962,7 @@ z3_convt::convert_overflow_sub(const exprt &expr)
 Z3_ast
 z3_convt::convert_overflow_mul(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast bv, result[2], operand[2];
@@ -2093,9 +2027,7 @@ z3_convt::convert_overflow_mul(const exprt &expr)
 Z3_ast
 z3_convt::convert_overflow_unary(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1);
   Z3_ast bv, operand;
@@ -2133,9 +2065,7 @@ z3_convt::convert_overflow_unary(const exprt &expr)
 Z3_ast
 z3_convt::convert_overflow_typecast(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   unsigned bits = atoi(expr.id().c_str() + 18);
 
@@ -2235,9 +2165,7 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
 Z3_ast
 z3_convt::convert_rest_member(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_ast bv;
 
@@ -2267,9 +2195,7 @@ z3_convt::convert_rest_member(const exprt &expr)
 Z3_ast
 z3_convt::convert_rest_index(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_ast bv, operand0, operand1;
 
@@ -2285,9 +2211,7 @@ z3_convt::convert_rest_index(const exprt &expr)
   if (convert_bv(index, operand1))
     return Z3_mk_false(z3_ctx);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   //std::cout << "index dynamic_objects.empty(): " << dynamic_objects.empty() <<
   // std::endl;
@@ -2313,9 +2237,7 @@ z3_convt::convert_rest_index(const exprt &expr)
   }
 
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return bv;
 }
@@ -2334,9 +2256,7 @@ z3_convt::convert_rest_index(const exprt &expr)
 Z3_ast
 z3_convt::convert_memory_leak(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_ast bv, operand0, operand1;
 
@@ -2371,9 +2291,7 @@ z3_convt::convert_memory_leak(const exprt &expr)
 literalt
 z3_convt::convert_rest(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
 //  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 
@@ -2429,9 +2347,7 @@ z3_convt::convert_rest(const exprt &expr)
   formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(l), constraint);
   Z3_assert_cnstr(z3_ctx, formula);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   if (z3_prop.smtlib)
     z3_prop.assumpt.push_back(formula);
@@ -2453,9 +2369,7 @@ z3_convt::convert_rest(const exprt &expr)
 bool
 z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
 
@@ -2519,9 +2433,7 @@ z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
     }
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -3127,9 +3039,7 @@ z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_struct(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_ast value;
 
@@ -3156,9 +3066,7 @@ z3_convt::convert_struct(const exprt &expr, Z3_ast &bv)
     bv = z3_api.mk_tuple_update(z3_ctx, bv, i, value);
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -3177,9 +3085,7 @@ z3_convt::convert_struct(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_union(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_ast value;
 
@@ -3213,9 +3119,7 @@ z3_convt::convert_union(const exprt &expr, Z3_ast &bv)
 
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -3234,9 +3138,7 @@ z3_convt::convert_union(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_type_ast tuple_type;
   std::string cte, identifier;
@@ -3313,9 +3215,7 @@ z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
                                                        config.ansi_c.int_width)));
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -3334,9 +3234,7 @@ z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
 bool
 z3_convt::convert_zero_string(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   Z3_type_ast array_type;
 
@@ -3362,9 +3260,7 @@ z3_convt::convert_zero_string(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   u_int width = 0, i = 0;
   Z3_type_ast array_type, tuple_type;
@@ -3422,10 +3318,7 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     bv = array_cte;
 
 
-#ifdef DEBUG
-    std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-    std::endl;
-#endif
+    DEBUGLOC;
 
     return false;
     //return array_cte;
@@ -3498,9 +3391,7 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
   }
 
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -3519,9 +3410,7 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   std::string value;
   unsigned width;
@@ -3601,9 +3490,7 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
       return true;
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -3622,9 +3509,7 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_bitwise(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() >= 2);
   Z3_ast *args;
@@ -3695,9 +3580,7 @@ z3_convt::convert_bitwise(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_unary_minus(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1);
   Z3_ast args[2];
@@ -3734,9 +3617,7 @@ z3_convt::convert_unary_minus(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_if(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 3);
 
@@ -3751,15 +3632,9 @@ z3_convt::convert_if(const exprt &expr, Z3_ast &bv)
   if (convert_bv(expr.op2(), operand2))
     return true;
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
   bv = Z3_mk_ite(z3_ctx, operand0, operand1, operand2);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -3778,9 +3653,7 @@ z3_convt::convert_if(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.type().id() == "bool");
   assert(expr.operands().size() >= 1);
@@ -3815,9 +3688,7 @@ z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
 
   delete[] args;
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -3836,9 +3707,7 @@ z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_logical_not(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1);
   Z3_ast operand0;
@@ -3848,9 +3717,7 @@ z3_convt::convert_logical_not(const exprt &expr, Z3_ast &bv)
 
   bv = Z3_mk_not(z3_ctx, operand0);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -3869,9 +3736,7 @@ z3_convt::convert_logical_not(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   assert(expr.op0().type() == expr.op1().type());
@@ -3889,9 +3754,7 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
   else
     bv = Z3_mk_distinct(z3_ctx, 2, args);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -3910,9 +3773,7 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() >= 2);
   Z3_ast *args;
@@ -4014,9 +3875,7 @@ z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
 
   delete[] args;
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -4035,9 +3894,7 @@ z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_sub(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() >= 2);
   Z3_ast *args;
@@ -4151,9 +4008,7 @@ z3_convt::convert_sub(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_div(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast operand0, operand1;
@@ -4202,9 +4057,7 @@ z3_convt::convert_div(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_mod(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast operand0, operand1;
@@ -4245,9 +4098,7 @@ z3_convt::convert_mod(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() >= 2);
   Z3_ast *args;
@@ -4356,9 +4207,7 @@ z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
 
   delete[] args;
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -4377,9 +4226,7 @@ z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1);
   assert(expr.type().id() == "pointer");
@@ -4534,9 +4381,7 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 
   bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, offset); //update offset
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -4555,9 +4400,7 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.type().id() == "array");
   assert(expr.operands().size() == 1);
@@ -4628,9 +4471,7 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
     out = "j: " + j;
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -4649,9 +4490,7 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
 
@@ -4676,9 +4515,7 @@ z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
     bv = Z3_mk_select(z3_ctx, args[0], args[1]);
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -4697,9 +4534,7 @@ z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast operand0, operand1;
@@ -4776,9 +4611,7 @@ z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   unsigned width;
   //std::string out;
@@ -4860,9 +4693,7 @@ z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 3);
   Z3_ast array_var, array_val, operand0, operand1, operand2;
@@ -4934,9 +4765,7 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1);
   Z3_ast operand0;
@@ -4972,9 +4801,7 @@ z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
   else
     bv = Z3_mk_bvnot(z3_ctx, operand0);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -4993,9 +4820,7 @@ z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
 u_int
 z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   const struct_typet &struct_type = to_struct_type(lhs.type());
   const struct_typet::componentst &components = struct_type.components();
@@ -5027,9 +4852,7 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 bool
 z3_convt::convert_object(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast args[2];
@@ -5055,9 +4878,7 @@ z3_convt::convert_object(const exprt &expr, Z3_ast &bv)
 
   bv = Z3_mk_distinct(z3_ctx, 2, args);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
   return false;
 }
 
@@ -5075,9 +4896,7 @@ z3_convt::convert_object(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::select_pointer_offset(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1);
   Z3_ast pointer;
@@ -5104,9 +4923,7 @@ z3_convt::select_pointer_offset(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   const struct_typet &struct_type = to_struct_type(expr.op0().type());
   const struct_typet::componentst &components = struct_type.components();
@@ -5138,9 +4955,7 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 
   bv = z3_api.mk_tuple_select(z3_ctx, struct_var, j);
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -5159,9 +4974,7 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1 && is_ptr(expr.op0().type()));
   Z3_ast pointer_object = 0;
@@ -5405,9 +5218,7 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_zero_string_length(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1);
   Z3_ast operand;
@@ -5434,9 +5245,7 @@ z3_convt::convert_zero_string_length(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1);
   Z3_ast operand0, operand1;
@@ -5474,9 +5283,7 @@ z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
     }
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -5495,9 +5302,7 @@ z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 3);
 
@@ -5535,9 +5340,7 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   std::stringstream s;
   s << i;
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   if (expr.op0().type().id() == "struct") {
     const struct_typet &struct_type = to_struct_type(expr.op0().type());
@@ -5583,9 +5386,7 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   } else
     throw "convert_byte_update: " + expr.id_string() + " is unsupported";
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -5604,9 +5405,7 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
 
@@ -5757,9 +5556,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
     }
   }
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   return false;
 }
@@ -5778,9 +5575,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_isnan(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   assert(expr.operands().size() == 1);
 
@@ -5828,9 +5623,7 @@ z3_convt::convert_isnan(const exprt &expr, Z3_ast &bv)
 bool
 z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
   if (expr.id() == "symbol")
     return convert_identifier(expr.get_string("identifier"), expr.type(), bv);
@@ -5965,9 +5758,7 @@ z3_convt::assign_z3_expr(const exprt expr)
 void
 z3_convt::set_to(const exprt &expr, bool value)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
 #if 1
   if (expr.type().id() != "bool") {
@@ -6137,9 +5928,7 @@ z3_convt::set_to(const exprt &expr, bool value)
   }
   ignoring_expr = true;
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
+  DEBUGLOC;
 
 }
 
