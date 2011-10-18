@@ -82,8 +82,13 @@ protected:
 
   bool create_array_type(const typet &type, Z3_type_ast &bv);
   bool create_type(const typet &type, Z3_type_ast &bv);
-  bool create_struct_type(const typet &type, Z3_type_ast &bv);
-  bool create_union_type(const typet &type, Z3_type_ast &bv);
+  bool create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv);
+  bool create_struct_type(const typet &type, Z3_type_ast &bv) {
+    return create_struct_union_type(type, false, bv);
+  }
+  bool create_union_type(const typet &type, Z3_type_ast &bv) {
+    return create_struct_union_type(type, true, bv);
+  }
   bool create_enum_type(Z3_type_ast &bv);
   bool create_pointer_type(const typet &type, Z3_type_ast &bv);
   Z3_ast convert_lt(const exprt &expr);

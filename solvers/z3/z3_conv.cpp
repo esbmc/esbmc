@@ -731,89 +731,30 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
  \*******************************************************************/
 
 bool
-z3_convt::create_struct_type(const typet &type, Z3_type_ast &bv)
+z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
 {
   DEBUGLOC;
 
   Z3_symbol mk_tuple_name, *proj_names;
-  std::string struct_name;
+  std::string name;
   Z3_type_ast *proj_types;
   Z3_const_decl_ast mk_tuple_decl, *proj_decls;
-  u_int size_of_struct;
+  u_int num_elems;
 
-  const struct_typet &struct_type = to_struct_type(type);
-
-  const struct_typet::componentst &components =
-    struct_type.components();
+  const struct_union_typet &su_type = to_struct_union_type(type);
+  const struct_union_typet::componentst &components = su_type.components();
 
   assert(components.size() > 0);
-  size_of_struct = components.size();
-  proj_names = new Z3_symbol[size_of_struct];
-  proj_types = new Z3_type_ast[size_of_struct];
-  proj_decls = new Z3_const_decl_ast[size_of_struct];
+  num_elems = components.size();
+  if (uni) num_elems++;
 
-  struct_name = "struct_type_" + type.get_string("tag");
-  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, struct_name.c_str());
+  proj_names = new Z3_symbol[num_elems];
+  proj_types = new Z3_type_ast[num_elems];
+  proj_decls = new Z3_const_decl_ast[num_elems];
 
-  u_int i = 0;
-  for (struct_typet::componentst::const_iterator
-       it = components.begin();
-       it != components.end();
-       it++, i++)
-  {
-    if (create_type(it->type(), proj_types[i]))
-      return true;
-
-    proj_names[i] = Z3_mk_string_symbol(z3_ctx, it->get("name").c_str());
-  }
-
-  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, i, proj_names, proj_types,
-                        &mk_tuple_decl, proj_decls);
-
-  delete[] proj_names;
-  delete[] proj_types;
-  delete[] proj_decls;
-
-  DEBUGLOC;
-
-  return false;
-}
-
-/*******************************************************************
-   Function: z3_convt::create_union_type
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-bool
-z3_convt::create_union_type(const typet &type, Z3_type_ast &bv)
-{
-  DEBUGLOC;
-
-  Z3_symbol mk_tuple_name, *proj_names;
-  std::string union_name;
-  Z3_type_ast *proj_types;
-  Z3_const_decl_ast mk_tuple_decl, *proj_decls;
-  u_int size_of_union;
-
-  const struct_typet &struct_type = to_struct_type(type);
-
-  const struct_typet::componentst &components =
-    struct_type.components();
-
-  assert(components.size() > 0);
-  size_of_union = components.size() + 1;
-  proj_names = new Z3_symbol[size_of_union];
-  proj_types = new Z3_type_ast[size_of_union];
-  proj_decls = new Z3_const_decl_ast[size_of_union];
-
-  union_name = "union_type_" + type.get_string("tag");
-  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, union_name.c_str());
+  name = ((uni) ? "union" : "struct" );
+  name += "_type_" + type.get_string("tag");
+  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
 
   u_int i = 0;
   for (struct_typet::componentst::const_iterator
@@ -826,22 +767,26 @@ z3_convt::create_union_type(const typet &type, Z3_type_ast &bv)
       return true;
   }
 
-  //The id field records the last value written to the union
-  proj_names[size_of_union - 1] = Z3_mk_string_symbol(z3_ctx, "id");
+  if (uni) {
+    // ID field records last value written to union
+    proj_names[num_elems - 1] = Z3_mk_string_symbol(z3_ctx, "id");
+    // XXXjmorse - must this field really become a bitfield, ever? It's internal
+    // tracking data, not program data.
+    if (int_encoding)
+      proj_types[num_elems - 1] = Z3_mk_int_type(z3_ctx);
+    else
+      proj_types[num_elems - 1] = Z3_mk_bv_type(z3_ctx,
+                                                config.ansi_c.int_width);
+  }
 
-  if (int_encoding)
-    proj_types[size_of_union - 1] = Z3_mk_int_type(z3_ctx);
-  else
-    proj_types[size_of_union - 1] = Z3_mk_bv_type(z3_ctx,
-                                                  config.ansi_c.int_width);
-
-
-  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, size_of_union, proj_names,
+  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, num_elems, proj_names,
                         proj_types, &mk_tuple_decl, proj_decls);
 
   delete[] proj_names;
   delete[] proj_types;
   delete[] proj_decls;
+
+  DEBUGLOC;
 
   return false;
 }
