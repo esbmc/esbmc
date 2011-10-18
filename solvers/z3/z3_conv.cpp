@@ -518,8 +518,6 @@ z3_convt::select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  print_data_types(object, offset);
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
   bv = Z3_mk_select(z3_ctx, object, offset);
@@ -542,8 +540,6 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "type.subtype().id(): " << type.subtype().id() << std::endl;
-  std::cout << "type.pretty(): " << type.pretty() << std::endl;
 #endif
 
   Z3_type_ast tuple_type, array_of_array_type;
@@ -560,10 +556,6 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
   } else if (type.subtype().id() == "fixedbv")   {
     if (boolbv_get_width(type.subtype(), width))
       return true;
-
-#ifdef DEBUG
-    std::cout << "width: " << width << std::endl;
-#endif
 
     if (int_encoding)
       bv  = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx),
@@ -649,13 +641,6 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "type.pretty(): " << type.pretty() << std::endl;
-  std::cout << "type.id(): " << type.id() << std::endl;
-  std::cout << "type.subtype().id(): " << type.subtype().id() << std::endl;
-  //std::cout << "type.get_string: " << type.get_string("identifier") <<
-  // std::endl;
-  //std::cout << "type.subtype().get_string: " <<
-  // type.subtype().get_string("identifier") << std::endl;
 #endif
 
   unsigned width = config.ansi_c.int_width;
@@ -944,8 +929,6 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "type.subtype().pretty(): " << type.subtype().pretty() <<
-  std::endl;
 #endif
 
   typet actual_type;
@@ -1000,8 +983,6 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
     name += Z3_get_symbol_string(z3_ctx, Z3_get_type_name(z3_ctx, proj_types[0]));
   } else   {
     name += Z3_get_symbol_string(z3_ctx, Z3_get_type_name(z3_ctx, proj_types[0]));
-    //std::cout << "type.pretty(): " << type.pretty() << std::endl;
-    //std::cout << "name: " << name << std::endl;
 #ifdef DEBUG
     std::cout << "type.pretty(): " << type.pretty() << std::endl;
 #endif
@@ -1055,15 +1036,10 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "type.pretty(): " << type.pretty() << std::endl;
 #endif
 
   Z3_type_ast type_var;
   unsigned width;
-
-#ifdef DEBUG
-  std::cout << "identifier: " << identifier.c_str() << std::endl;
-#endif
 
   if (type.id() == "bool") {
     bv = z3_api.mk_bool_var(z3_ctx, identifier.c_str());
@@ -1130,7 +1106,6 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
 
   //throw "convert_identifier: " + type.id_string() + " is unsupported";
 
-  //++number_variables_z3;
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
@@ -1425,7 +1400,6 @@ z3_convt::convert_le(const exprt &expr)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
   assert(expr.operands().size() == 2);
@@ -1568,8 +1542,6 @@ z3_convt::convert_eq(const exprt &expr)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.op1().pretty(): " << expr.op1().pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 2);
@@ -1650,23 +1622,11 @@ z3_convt::convert_invalid(const exprt &expr)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "convert_invalid expr.op0().type().id(): " <<
-  expr.op0().type().id() << std::endl;
-  std::cout << "expr.op0().type().subtype().id(): " <<
-  expr.op0().type().subtype().id() << std::endl;
 #endif
 
 
   assert(expr.operands().size() == 1);
   Z3_ast bv, pointer, operand[2];
-
-#ifdef DEBUG
-  std::cout << "is_in_cache(expr.op0()): " << is_in_cache(expr.op0()) <<
-  std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-  std::cout << "expr.op0().id(): " << expr.op0().id() << std::endl;
-#endif
 
   if (expr.op0().id() == "address_of" ||
       (expr.op0().type().id() == "pointer" &&
@@ -1700,13 +1660,6 @@ z3_convt::convert_invalid(const exprt &expr)
 	                                                           // index
 
   operand[1] = convert_number(0, config.ansi_c.int_width, true);
-
-#ifdef DEBUG
-  if (is_in_cache(expr.op0()))
-    std::cout << "is_in_cache" << std::endl;
-  else
-    std::cout << "not_in_cache" << std::endl;
-#endif
 
   if (expr.op0().type().id() == "pointer" &&
       (expr.op0().type().subtype().id() == "signedbv"
@@ -1745,8 +1698,6 @@ z3_convt::convert_same_object(const exprt &expr)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.op1().pretty(): " << expr.op1().pretty() << std::endl;
 #endif
 
   const exprt::operandst &operands = expr.operands();
@@ -1852,18 +1803,12 @@ z3_convt::convert_dynamic_object(const exprt &expr)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 1);
   Z3_ast bv, operand0, operand1;
   std::vector<unsigned> dynamic_objects;
   pointer_logic.get_dynamic_objects(dynamic_objects);
-
-#ifdef DEBUG
-  std::cout << "dynamic_objects.empty(): " << dynamic_objects.empty() <<
-  std::endl;
-#endif
 
   if (dynamic_objects.empty())
     return Z3_mk_true(z3_ctx);
@@ -2016,8 +1961,6 @@ z3_convt::convert_overflow_sub(const exprt &expr)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.op1().pretty(): " << expr.op1().pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 2);
@@ -2240,12 +2183,6 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
 
   if (expr.op0().type().id() == "fixedbv") {
     unsigned size = (width / 2) + 1;
-#ifdef DEBUG
-    print_data_types(operand[0], operand[0]);
-    show_bv_size(operand[0]);
-    std::cout << "width: " << width << std::endl;
-    std::cout << "size: " << size << std::endl;
-#endif
     operand[0] = Z3_mk_extract(z3_ctx, width - 1, size - 1, operand[0]);
   }
 
@@ -2300,7 +2237,6 @@ z3_convt::convert_rest_member(const exprt &expr)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
   Z3_ast bv;
@@ -2350,8 +2286,6 @@ z3_convt::convert_rest_index(const exprt &expr)
     return Z3_mk_false(z3_ctx);
 
 #ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  print_data_types(operand0, operand1);
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
@@ -2439,7 +2373,6 @@ z3_convt::convert_rest(const exprt &expr)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
 //  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
@@ -2493,9 +2426,6 @@ z3_convt::convert_rest(const exprt &expr)
   } else
     throw "convert_z3_expr: " + expr.id_string() + " is unsupported";
 
-#ifdef DEBUG
-  std::cout << "l.var_no(): l" << l.var_no() << std::endl;
-#endif
   formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(l), constraint);
   Z3_assert_cnstr(z3_ctx, formula);
 
@@ -3249,7 +3179,6 @@ z3_convt::convert_union(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
   Z3_ast value;
@@ -3307,9 +3236,6 @@ z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.type().pretty(): " << expr.type().pretty() << std::endl;
-  std::cout << "expr.type().subtype().pretty(): " <<
-  expr.type().subtype().pretty() << std::endl;
 #endif
 
   Z3_type_ast tuple_type;
@@ -3438,7 +3364,6 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
   u_int width = 0, i = 0;
@@ -3596,7 +3521,6 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
   std::string value;
@@ -3619,10 +3543,6 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 
     value = integer2string(binary2integer(expr.get_string("value"), false), 10);
   }
-
-#ifdef DEBUG
-  std::cout << value << std::endl;
-#endif
 
   if (expr.type().id() == "unsignedbv") {
     if (boolbv_get_width(expr.type(), width))
@@ -3816,7 +3736,6 @@ z3_convt::convert_if(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.op2(): " << expr.op2().pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 3);
@@ -3861,7 +3780,6 @@ z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
   assert(expr.type().id() == "bool");
@@ -3920,7 +3838,6 @@ z3_convt::convert_logical_not(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 1);
@@ -3954,7 +3871,6 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 2);
@@ -3996,9 +3912,6 @@ z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.op1().pretty(): " << expr.op1().pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() >= 2);
@@ -4334,7 +4247,6 @@ z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() >= 2);
@@ -4467,9 +4379,6 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.id(): " << expr.id() << std::endl;
-  std::cout << "expr.op0().id(): " << expr.op0().id() << std::endl;
-  std::cout << "convert_pointer: " << expr.pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 1);
@@ -4495,13 +4404,6 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     const exprt &object = expr.op0().operands()[0];
     const exprt &index = expr.op0().operands()[1];
 
-#ifdef DEBUG
-    std::cout << "index.is_zero(): " << index.is_zero() << std::endl;
-    std::cout << "object.id(): " << object.id() << std::endl;
-    std::cout << "object.type().id(): " << object.type().id() << std::endl;
-    std::cout << "object.pretty(): " << object.pretty() << std::endl;
-    std::cout << "index.pretty(): " << index.pretty() << std::endl;
-#endif
     symbol_name = "address_of_index" + object.id_string() + object.get_string(
       "identifier");
     pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
@@ -4521,49 +4423,22 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	return true;
     }
 
-#ifdef DEBUG
-    std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-    std::endl;
-#endif
-
     if (convert_bv(index, pi))
       return true;
-
-#ifdef DEBUG
-    std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-    std::endl;
-#endif
 
     if (select_pointer_value(po, pi, pointer))
       return true;
 
-#ifdef DEBUG
-    std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-    std::endl;
-#endif
-
     if (expr.op0().type().id() != "struct" && expr.op0().type().id() !=
         "union") {
-#ifdef DEBUG
-      std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-      std::endl;
-#endif
 
       pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer); //update
 			                                                     // object
       bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, pi); //update offset
       return false;
     }
-#ifdef DEBUG
-    std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-    std::endl;
-#endif
 
   } else if (expr.op0().id() == "symbol")   {
-#ifdef DEBUG
-    std::cout << "convert_pointer expr.op0().type().id(): " <<
-    expr.op0().type().id() << std::endl;
-#endif
 
     if (expr.op0().type().id() == "signedbv" || expr.op0().type().id() ==
         "fixedbv"
@@ -4580,10 +4455,6 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	return true;
     } else if (expr.op0().type().id() == "struct"
                || expr.op0().type().id() == "union") {
-#ifdef DEBUG
-      std::cout << "convert_pointer expr.type().subtype().id(): " <<
-      expr.type().subtype().id() << std::endl;
-#endif
 
       char val[2];
       static int count = 0;
@@ -4602,31 +4473,11 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
       if (convert_bv(expr.op0(), pointer))
 	return true;
 
-#ifdef DEBUG
-      std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-      std::endl;
-      std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-      std::cout << "expr.type().subtype().id(): " <<
-      expr.type().subtype().id() << std::endl;
-      std::cout << "identifier: " << expr.op0().get_string("identifier") <<
-      std::endl;
-      print_data_types(pointer_var, pointer);
-      std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-      std::endl;
-      std::cout << "identifier: " << expr.op0().get_string("identifier") <<
-      std::endl;
-#endif
-
       if (expr.type().subtype().id() == "symbol"
           && expr.op0().get_string("identifier").find("symex_dynamic") ==
           std::string::npos) {
 	pointer = z3_api.mk_tuple_select(z3_ctx, pointer, 0);
       }
-
-#ifdef DEBUG
-      std::cout << "expr.type().subtype().id(): " <<
-      expr.type().subtype().id() << std::endl;
-#endif
 
       if (expr.type().subtype().id() != "struct") {
 	const struct_typet &struct_type = to_struct_type(expr.op0().type());
@@ -4641,16 +4492,6 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	//show_bv_size(pointer);
       }
 
-#ifdef DEBUG
-      std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-      std::endl;
-      print_data_types(pointer_var, pointer);
-      //show_bv_size(pointer);
-      //std::cout << "expr.pretty(): " << expr.pretty() << "\n";
-      //std::cout << "expr.type().pretty(): " << expr.type().pretty() << "\n";
-      //std::cout << "expr.type().subtype().pretty(): " <<
-      // expr.type().subtype().pretty() << "\n";
-#endif
       pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);     //update
 			                                                         // object
     }   else if (expr.op0().type().id() == "code") {
@@ -4667,28 +4508,9 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     if (convert_bv(expr.op0(), pointer))
       return true;
 
-#ifdef DEBUG
-    std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-    std::endl;
-#endif
-
     //workaround
     if (expr.op0().type().get_string("tag").find("__pthread_mutex_s") ==
         std::string::npos) {
-      //pointer = convert_number(pointer_logic.add_object(expr),
-      // config.ansi_c.int_width, true);
-      //print_data_types(pointer_var,pointer);
-#ifdef DEBUG
-      std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-      std::endl;
-#endif
-      //std::cout << "expr.op0().pretty(): " << expr.op0().pretty() <<
-      // std::endl;
-      //print_data_types(pointer_var, pointer);
-      //print_data_types( z3_api.mk_tuple_select(z3_ctx, pointer, 0),
-      // z3_api.mk_tuple_select(z3_ctx, pointer, 1));
-      //pointer = convert_number(pointer_logic.add_object(expr),
-      // config.ansi_c.int_width, true);
 
       if (expr.op0().type().subtype().id() == "symbol")
 	pointer_var =
@@ -4709,10 +4531,6 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 			                                                               // object
     }
   }
-
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, offset); //update offset
 
@@ -4751,30 +4569,14 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   static u_int size, j, inc = 0;
   unsigned width;
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
   tmp =
     integer2string(binary2integer(array_type_size.size().get_string(
                                     "value"), false), 10);
   size = atoi(tmp.c_str());
 
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
   size = (size == 0) ? 100 : size; //fill in at least one position
 
-#ifdef DEBUG
-  std::cout << "size: " << size << std::endl;
-#endif
-
   index = convert_number(j, config.ansi_c.int_width, true);
-
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   if (convert_bv(expr.op0(), value))
     return true;
@@ -4784,10 +4586,6 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
     return true;
 
   if (expr.type().subtype().id() == "bool") {
-#ifdef DEBUG
-    std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-    std::endl;
-#endif
 
     value = Z3_mk_false(z3_ctx);
     if (width == 1) out = "width: " + width;
@@ -4825,9 +4623,6 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   //update array
   for (j = 0; j < size; j++)
   {
-#ifdef DEBUG
-    std::cout << "j: "  << j << std::endl;
-#endif
     index = convert_number(j, config.ansi_c.int_width, true);
     bv = Z3_mk_store(z3_ctx, bv, index, value);
     out = "j: " + j;
@@ -4856,10 +4651,6 @@ z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.op0().type().subtype().id(): " <<
-  expr.op0().type().subtype().id() << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.op1().pretty(): " << expr.op1().pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 2);
@@ -5071,13 +4862,6 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.op1().pretty(): " << expr.op1().pretty() << std::endl;
-  std::cout << "expr.op2().pretty(): " << expr.op2().pretty() << std::endl;
-  std::cout << "expr.op2().type().id(): " << expr.op2().type().id() <<
-  std::endl;
-  std::cout << "expr.op2().id(): " << expr.op2().id() << std::endl;
-  std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
 #endif
 
   assert(expr.operands().size() == 3);
@@ -5152,8 +4936,6 @@ z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 1);
@@ -5247,8 +5029,6 @@ z3_convt::convert_object(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.op1().pretty(): " << expr.op1().pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 2);
@@ -5326,12 +5106,7 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "convert_member expr.pretty(): " << expr.pretty() << std::endl;
 #endif
-
-  //bv = z3_api.mk_tuple_update(z3_ctx, bv, components.size(),
-  // convert_number(convert_member_name(expr.op0(), expr.op1()),
-  // config.ansi_c.int_width, 0));
 
   const struct_typet &struct_type = to_struct_type(expr.op0().type());
   const struct_typet::componentst &components = struct_type.components();
@@ -5350,16 +5125,11 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
       j = i;
   }
 
-#ifdef DEBUG
-  std::cout << "j: " << j << std::endl;
-#endif
-
 #if 1
   if (expr.op0().type().id() == "union") {
     union_varst::const_iterator cache_result = union_vars.find(
       expr.op0().get_string("identifier").c_str());
     if (cache_result != union_vars.end()) {
-      //std::cout << "Cache hit on " << cache_result->first << "\n";
       bv = z3_api.mk_tuple_select(z3_ctx, struct_var, cache_result->second);
       return false;
     }
@@ -5391,8 +5161,6 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-  std::cout << "expr.op0().id(): " << expr.op0().id() << std::endl;
 #endif
 
   assert(expr.operands().size() == 1 && is_ptr(expr.op0().type()));
@@ -5476,19 +5244,10 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 	return true;
     }
 
-#ifdef DEBUG
-    std::cout << "object.type().id(): " << object.type().id() << std::endl;
-#endif
-
     if (object.type().id() == "signedbv" || object.type().id() == "unsignedbv"
         || object.type().id() == "fixedbv") {
       if (boolbv_get_width(object.type(), object_width))
 	return true;
-
-#ifdef DEBUG
-      std::cout << "width: " << width << std::endl;
-      std::cout << "object_width: " << object_width << std::endl;
-#endif
 
       if (width > object_width && !int_encoding)
 	bv = Z3_mk_zero_ext(z3_ctx, (width - object_width), pointer_object);
@@ -5499,10 +5258,6 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
       else
 	bv = pointer_object;
 
-#ifdef DEBUG
-      print_data_types(bv, pointer_object);
-      std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
       return false;
     } else if (object.type().id() == "array")     {
       Z3_ast args[2];
@@ -5536,11 +5291,6 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
     } else if (object.type().id() == "pointer")     {
       Z3_ast args[2];
 
-#ifdef DEBUG
-      std::cout << "object.type().subtype().id(): " <<
-      object.type().subtype().id() << std::endl;
-#endif
-
       if (object.type().subtype().id() == "symbol") {
 	bv = z3_api.mk_tuple_select(z3_ctx, pointer_object, 0);
 	return false;
@@ -5548,11 +5298,6 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 
       assert(object.operands().size() > 0);
       const exprt &object_array = object.operands()[0];
-
-#ifdef DEBUG
-      std::cout << "object_array.type().id(): " << object_array.type().id() <<
-      std::endl;
-#endif
 
       if (object_array.type().id() == "array") {
 	const exprt &object_index = object.operands()[1];
@@ -5576,12 +5321,6 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 	  if (boolbv_get_width(object.type().subtype(), object_width))
 	    return true;
 	}
-
-#ifdef DEBUG
-	std::cout << "width: " << width << std::endl;
-	std::cout << "object_width: " << object_width << std::endl;
-	std::cout << "int_encoding: " << int_encoding << std::endl;
-#endif
 
 	if (width > object_width && !int_encoding)
 	  bv = Z3_mk_zero_ext(z3_ctx, (width - object_width), pointer_object);
@@ -5642,11 +5381,6 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 	bv = Z3_mk_extract(z3_ctx, (width - 1), 0, pointer_object);
       else
 	bv = pointer_object;
-
-#ifdef DEBUG
-      std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-      std::endl;
-#endif
 
       return false;
     }
@@ -5763,10 +5497,6 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.op1().pretty(): " << expr.op1().pretty() << std::endl;
-  std::cout << "expr.op2().pretty(): " << expr.op2().pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 3);
@@ -5876,9 +5606,6 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.op1().pretty(): " << expr.op1().pretty() << std::endl;
 #endif
 
   assert(expr.operands().size() == 2);
@@ -5919,17 +5646,6 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   s_upper << upper;
   s_lower << lower;
   s_i << i;
-
-#ifdef DEBUG
-  std::cout << "i: " << i << std::endl;
-  std::cout << "width: " << width << std::endl;
-  std::cout << "s_upper.str(): " << s_upper.str() << std::endl;
-  std::cout << "s_lower.str(): " << s_lower.str() << std::endl;
-  std::cout << "expr.op0().type().id(): " << expr.op0().type().id() <<
-  std::endl;
-  std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
-  std::cout << "int_encoding: " << int_encoding << std::endl;
-#endif
 
   if (int_encoding) {
     if (expr.op0().type().id() == "fixedbv") {
@@ -6042,7 +5758,6 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   }
 
 #ifdef DEBUG
-  print_data_types(bv, bv);
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
 
@@ -6252,7 +5967,6 @@ z3_convt::set_to(const exprt &expr, bool value)
 {
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 #endif
 
 #if 1
