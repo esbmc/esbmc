@@ -830,42 +830,46 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 {
   DEBUGLOC;
 
-  typet actual_type;
+  // XXXjmorse - this assertion should never fail, but it does...
+  //assert(type.id() == "pointer" || type.id() == "reference");
+  typet actual_type = type.subtype();
+
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_type_ast proj_types[2];
   Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
+  Z3_sort native_int_sort;
 
-  if (is_ptr(type.subtype())) {
-    actual_type = select_pointer(type.subtype());
-    if (create_type(select_pointer(type.subtype()), proj_types[0]))
+  if (int_encoding) {
+    native_int_sort = Z3_mk_int_type(z3_ctx);
+  } else {
+    native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+  }
+  proj_types[1] = native_int_sort;
+
+  // XXXjmorse - so how about three levels of pointers?
+  // XXXjmorse - First tuple field should be integer, always. It's an obj id.
+  if (is_ptr(actual_type)) {
+    actual_type = select_pointer(actual_type);
+    if (create_type(actual_type, proj_types[0]))
       return true;
-  } else if (type.subtype().id() == "code")     {
-    actual_type = type.subtype();
-    if (int_encoding)
-      proj_types[0] = Z3_mk_int_type(z3_ctx);
-    else
-      proj_types[0] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
-  } else if (check_all_types(type.subtype()))   {
-    actual_type = type.subtype();
-    if (create_type(type.subtype(), proj_types[0])) {
-      if (type.subtype().id() == "symbol") {
-	if (int_encoding)
-	  proj_types[0] = Z3_mk_int_type(z3_ctx);
-	else
-	  proj_types[0] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
-      } else
+  } else if (actual_type.id() == "code")     {
+    proj_types[0] = native_int_sort;
+  } else if (check_all_types(actual_type))   {
+    if (create_type(actual_type, proj_types[0])) {
+      if (actual_type.id() == "symbol") {
+        proj_types[0] = native_int_sort;
+      } else {
 	return true;
+      }
     }
   } else if (check_all_types(type))   {
     actual_type = type;
     if (create_type(type, proj_types[0])) {
       if (type.id() == "symbol") {
-	if (int_encoding)
-	  proj_types[0] = Z3_mk_int_type(z3_ctx);
-	else
-	  proj_types[0] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
-      } else
+        proj_types[0] = native_int_sort;
+      } else {
 	return true;
+      }
     }
   } else   {
     return true;
@@ -874,32 +878,20 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
   DEBUGLOC;
 
   std::string name = "pointer_tuple_";
-  std::stringstream s;
+  name += Z3_get_symbol_string(z3_ctx, Z3_get_type_name(z3_ctx, proj_types[0]));
 
-  if (int_encoding) {
-    name += Z3_get_symbol_string(z3_ctx, Z3_get_type_name(z3_ctx, proj_types[0]));
-  } else   {
-    name += Z3_get_symbol_string(z3_ctx, Z3_get_type_name(z3_ctx, proj_types[0]));
+  if (!int_encoding) {
     if (actual_type.id() != "bool") {
       if (actual_type.id() == "struct")
-	s << "struct";
+	name += "struct";
       else
-	s << Z3_get_bv_type_size(z3_ctx, proj_types[0]);
+	name += Z3_get_bv_type_size(z3_ctx, proj_types[0]);
     }
-    name += s.str();
   }
-
-  DEBUGLOC;
 
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
-
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
-
-  if (int_encoding)
-    proj_types[1] = Z3_mk_int_type(z3_ctx);
-  else
-    proj_types[1] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
 
   bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
                         &mk_tuple_decl, proj_decls);
