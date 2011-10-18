@@ -539,59 +539,34 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 {
   DEBUGLOC;
 
-  Z3_type_ast tuple_type, array_of_array_type;
+  Z3_sort elem_sort, idx_sort;
   unsigned width;
 
+  if (int_encoding) {
+    idx_sort = Z3_mk_int_type(z3_ctx);
+  } else {
+    idx_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+  }
+
   if (type.subtype().id() == "bool") {
-    if (int_encoding)
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx),
-                            Z3_mk_bool_type(z3_ctx));
-    else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
-                         config.ansi_c.int_width),
-                         Z3_mk_bool_type(z3_ctx));
+    elem_sort = Z3_mk_bool_type(z3_ctx);
   } else if (type.subtype().id() == "fixedbv")   {
     if (boolbv_get_width(type.subtype(), width))
       return true;
 
     if (int_encoding)
-      bv  = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx),
-                             Z3_mk_real_type(z3_ctx));
+      elem_sort = Z3_mk_real_type(z3_ctx);
     else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
-                         config.ansi_c.int_width),
-                         Z3_mk_bv_type(z3_ctx, width));
+      elem_sort = Z3_mk_bv_type(z3_ctx, width);
   } else if (type.subtype().id() == "struct")   {
-    if (create_struct_type(type.subtype(), tuple_type))
+    if (create_struct_type(type.subtype(), elem_sort))
       return true;
-
-    if (int_encoding)
-      bv  = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx), tuple_type);
-    else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
-                            config.ansi_c.int_width),
-                            tuple_type);
   } else if (type.subtype().id() == "union")   {
-    if (create_union_type(type.subtype(), tuple_type))
+    if (create_union_type(type.subtype(), elem_sort))
       return true;
-
-    if (int_encoding)
-      bv  = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx), tuple_type);
-    else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
-                            config.ansi_c.int_width),
-                            tuple_type);
   } else if (type.subtype().id() == "array")   { // array of array
-    if (create_array_type(type.subtype(), array_of_array_type))
+    if (create_array_type(type.subtype(), elem_sort))
       return true;
-
-    if (int_encoding)
-      bv  = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(
-                               z3_ctx), array_of_array_type);
-    else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
-                            config.ansi_c.int_width),
-                            array_of_array_type);
   } else   {
     if (type.subtype().id() == "pointer") {
       if (boolbv_get_width(type.subtype().subtype(), width)) {
@@ -607,14 +582,12 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     }
 
     if (int_encoding)
-      bv  = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx),
-                             Z3_mk_int_type(z3_ctx));
+      elem_sort = Z3_mk_int_type(z3_ctx);
     else
-      bv = Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
-                            config.ansi_c.int_width),
-                            Z3_mk_bv_type(z3_ctx, width));
+      elem_sort = Z3_mk_bv_type(z3_ctx, width);
   }
 
+  bv = Z3_mk_array_type(z3_ctx, idx_sort, elem_sort);
   DEBUGLOC;
 
   return false;
