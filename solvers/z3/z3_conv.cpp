@@ -1158,7 +1158,6 @@ z3_convt::read_cache(const exprt &expr, Z3_ast &bv)
        it != z3_cache.end(); it++)
   {
     if (symbol.compare((*it).second.c_str()) == 0) {
-      //std::cout << "Cache hit on:" << (*it).first.pretty() << std::endl;
       if (convert_bv((*it).first, bv))
 	return true;
 
@@ -1574,7 +1573,6 @@ z3_convt::convert_invalid(const exprt &expr)
 {
   DEBUGLOC;
 
-
   assert(expr.operands().size() == 1);
   Z3_ast bv, pointer, operand[2];
 
@@ -1617,7 +1615,6 @@ z3_convt::convert_invalid(const exprt &expr)
        == "empty")) {
     operand[1] = convert_number(-1, config.ansi_c.int_width, true);
     return Z3_mk_not(z3_ctx, Z3_mk_distinct(z3_ctx, 2, operand));
-    //return Z3_mk_eq(z3_ctx, operand[0], operand[1]);
   }
 
   if (int_encoding)
@@ -1760,7 +1757,6 @@ z3_convt::convert_dynamic_object(const exprt &expr)
     if (convert_bv(expr.op0(), operand0))
       return Z3_mk_false(z3_ctx);
 
-    //std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
     if (expr.op0().type().id() == "pointer") {
       if (expr.op0().type().subtype().id() != "pointer") {
 	if (boolbv_get_width(expr.op0().type().subtype(), width))
@@ -1778,17 +1774,8 @@ z3_convt::convert_dynamic_object(const exprt &expr)
     if (expr.op0().type().id() == "pointer")
       operand0 = z3_api.mk_tuple_select(z3_ctx, operand0, 0);
 
-    //if (!int_encoding)
-    //operand0 = Z3_mk_extract(z3_ctx, BV_ADDR_BITS-1, 0, operand0);
-    //operand0 = Z3_mk_extract(z3_ctx,
-    // config.ansi_c.pointer_width+BV_ADDR_BITS-1, config.ansi_c.pointer_width,
-    // operand0);
-
-    //std::cout << "width: " << width << std::endl;
-    //show_bv_size(operand0);
     if (dynamic_objects.size() == 1) {
       Z3_ast tmp;
-      //operand1 = convert_number(dynamic_objects.front(), BV_ADDR_BITS, true);
       operand1 = convert_number(dynamic_objects.front(), width, true);
       tmp = Z3_mk_eq(z3_ctx, operand0, operand1);
       Z3_assert_cnstr(z3_ctx, tmp);
@@ -1804,16 +1791,10 @@ z3_convt::convert_dynamic_object(const exprt &expr)
            it++, i++)
       {
 	args[i] = Z3_mk_eq(z3_ctx, operand0, convert_number(*it, width, true));
-	//args[i]=Z3_mk_eq(z3_ctx, operand0, convert_number(*it, BV_ADDR_BITS,
-	// true));
 	bv = Z3_mk_or(z3_ctx, i, args);
       }
-
-      //bv = Z3_mk_eq(z3_ctx, Z3_mk_or(z3_ctx, i, args), operand0);
     }
   }
-
-  //bv = Z3_mk_false(z3_ctx);
 
   DEBUGLOC;
 
@@ -2213,14 +2194,6 @@ z3_convt::convert_rest_index(const exprt &expr)
 
   DEBUGLOC;
 
-  //std::cout << "index dynamic_objects.empty(): " << dynamic_objects.empty() <<
-  // std::endl;
-  //std::cout << expr.op1().operands()[0].op0().pretty() << std::endl;
-  //std::cout << "expr.op1().operands()[0].op0().id(): " <<
-  // expr.op1().operands()[0].op0().id() << std::endl;
-  //std::cout << "expr.op1().operands()[0].operands().size(): " <<
-  // expr.op1().operands()[0].operands().size() << std::endl;
-
   if (expr.op1().operands()[0].operands().size() == 0) {
     bv =
       Z3_mk_select(z3_ctx, operand0,
@@ -2292,9 +2265,6 @@ literalt
 z3_convt::convert_rest(const exprt &expr)
 {
   DEBUGLOC;
-
-//  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-
 
   literalt l = z3_prop.new_variable();
   Z3_ast formula, constraint;
@@ -2389,10 +2359,6 @@ z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 	                                                     // index
 
   const typet &op_type = expr.op0().type();
-
-  //std::cout << "op_type.id(): " << op_type.id() << std::endl;
-  //std::cout << "op_type.subtype().id(): " << op_type.subtype().id() <<
-  // std::endl;
 
   if (int_encoding) {
     if (expr.id() == "<=")
@@ -2772,7 +2738,6 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
     Z3_type_ast proj_types[2], type_var;
     Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
 
-    //mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "pointer_tuple");
     proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
 
     // XXXjmorse - is this supposed to extract the bit width from the first
@@ -2815,8 +2780,6 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
       if (op.operands().size() == 0
           && op.id() == "constant"
           && op.type().subtype().id() == "empty") {
-	//bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-	//assert(0);
 	return true;
       } else if (op.operands().size() > 0)     {
 	if (op.op0().id() == "address_of")
@@ -3826,10 +3789,6 @@ z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
       if (it->id() == "typecast") {
 	const exprt &offset = it->operands()[0];
 
-	//std::cout << "offset.type().id(): " << offset.type().id() <<
-	// std::endl;
-	//std::cout << "offset.type().subtype().id(): " <<
-	// offset.type().subtype().id() << std::endl;
 	if (offset.type().id() == "pointer" && offset.type().subtype().id() !=
 	    "empty" /*&& offset.type().subtype().id()!="signedbv"*/)
 	  args[i] = z3_api.mk_tuple_select(z3_ctx, args[i], 1);     //select
@@ -3936,37 +3895,6 @@ z3_convt::convert_sub(const exprt &expr, Z3_ast &bv)
     if (expr.type().id() == "signedbv")
       bv = args[i];
   }
-#if 0
-  else if (expr.op0().id() == "typecast" || expr.op1().id() == "typecast") {
-    assert(expr.operands().size() == 2);
-
-    if (convert_bv(expr.op0(), args[0]))
-      return true;
-    if (convert_bv(expr.op1(), args[1]))
-      return true;
-
-    if (expr.op0().id() == "typecast") {
-      const exprt &offset = expr.op0().operands()[0];
-      if (offset.type().id() == "pointer")
-	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 1);     //select
-			                                          // pointer
-			                                          // index
-    }
-
-    if (expr.op1().id() == "typecast") {
-      const exprt &offset = expr.op1().operands()[0];
-      if (offset.type().id() == "pointer")
-	args[1] = z3_api.mk_tuple_select(z3_ctx, args[1], 1);     //select
-			                                          // pointer
-			                                          // index
-    }
-
-    if (int_encoding)
-      bv = Z3_mk_sub(z3_ctx, 2, args);
-    else
-      bv = Z3_mk_bvsub(z3_ctx, args[0], args[1]);
-  }
-#endif
   else {
     forall_operands(it, expr)
     {
@@ -4571,10 +4499,6 @@ z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
       operand1 = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op1), operand1);
   }
 
-//  if (int_encoding)
-//	throw "bitshift operations are not supported yet";
-//  else
-//  {
   if (expr.id() == "ashr")
     bv = Z3_mk_bvashr(z3_ctx, operand0, operand1);
   else if (expr.id() == "lshr")
@@ -4583,7 +4507,6 @@ z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
     bv = Z3_mk_bvshl(z3_ctx, operand0, operand1);
   else
     assert(false);
-//  }
 
   if (int_encoding) {
     if (expr.type().id() == "signedbv")
@@ -4627,7 +4550,6 @@ z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
   const exprt &op0 = expr.op0();
   Z3_ast zero, is_negative, operand[2], val_mul;
 
-  //out = "width: "+ width;
   if (expr.type().id() == "signedbv") {
     if (int_encoding) {
       zero = z3_api.mk_int(z3_ctx, 0);
@@ -4776,23 +4698,6 @@ z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
   if (int_encoding && expr.op0().id() == "member") {
     bv = operand0;
     return false;
-#if 0
-    Z3_ast one, zero;
-    unsigned width;
-
-    if (boolbv_get_width(expr.op0().type(), width))
-      return true;
-
-    //std::cout << "width: " << width << std::endl;
-
-    if (expr.op0().type().id() == "unsignedbv")
-      one = convert_number(1, width, false);
-    else
-      one = convert_number(1, width, true);
-    operand0 =
-      Z3_mk_ite(z3_ctx, Z3_mk_ge(z3_ctx, operand0, one), Z3_mk_true(
-                  z3_ctx), Z3_mk_false(z3_ctx));
-#endif
   }
 
 
@@ -5315,16 +5220,6 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
     //throw "byte_update takes constant as second parameter";
   }
 
-#if 0
-  unsigned width;
-
-  if (boolbv_get_width(expr.op0().type(), width))
-    return true;
-
-  if (width == 0)
-    throw "failed to get width of byte_update operand";
-#endif
-
   Z3_ast tuple, value;
   uint width_op0, width_op2;
 
@@ -5412,7 +5307,6 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   mp_integer i;
   if (to_integer(expr.op1(), i))
     return true;
-  //throw "byte_extract takes constant as second parameter";
 
   unsigned width, w;
 
@@ -5485,15 +5379,6 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       throw "convert_byte_extract: " + expr.op0().type().id_string() +
             " is unsupported";
   } else   {
-#if 0
-    if (expr.op0().type().id() == "signedbv" ||
-        expr.op0().type().id() == "unsignedbv") {
-      bv =
-        Z3_mk_extract(z3_ctx, atoi(s_upper.str().c_str()) -
-                      atoi(s_lower.str().c_str()), 0, op0);
-      return false;
-    }
-#endif
     if (expr.op0().type().id() == "struct") {
       const struct_typet &struct_type = to_struct_type(expr.op0().type());
       const struct_typet::componentst &components = struct_type.components();
@@ -5733,7 +5618,6 @@ z3_convt::assign_z3_expr(const exprt expr)
 
   //ignore these IRep expressions for now. I don't know what they mean.
 
-  //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
   if (size == 2 && expr.op1().id() == "unary+") {
     ignoring(expr.op1());
     ignoring_expr = false;
@@ -5777,14 +5661,12 @@ z3_convt::set_to(const exprt &expr, bool value)
   }
 
   if (boolean) {
-    //std::cout << "expr.id(): " << expr.id() << std::endl;
     if (expr.id() == "not") {
       if (expr.operands().size() == 1) {
 	set_to(expr.op0(), !value);
 	return;
       }
     } else   {
-      //std::cout << "value: " << value << std::endl;
       if (value) {
 	// set_to_true
 	if (expr.id() == "and") {
@@ -5812,13 +5694,6 @@ z3_convt::set_to(const exprt &expr, bool value)
 	    return;
 	  }
 	}
-#if 0
-	else if (expr.id() == "=") {
-
-	  if (!set_equality_to_true(expr))
-	    return;
-	}
-#endif
       } else   {
 	// set_to_false
 	if (expr.id() == "=>") { // !(a=>b)  ==  (a && !b)
@@ -5860,18 +5735,12 @@ z3_convt::set_to(const exprt &expr, bool value)
 
     if (assign_z3_expr(expr) && ignoring_expr) {
       if (convert_bv(op0, operand[0])) {
-	//std::cout << "no support for op0: " << op0.pretty() << std::endl;
-	//std::cout << "op1.pretty(): " << op1.pretty() << std::endl;
 	ignoring(op0);
 	return;
-	//assert(0);
       }
       if (convert_bv(op1, operand[1])) {
-	//std::cout << "op0.pretty(): " << op0.pretty() << std::endl;
-	//std::cout << "no support for op1: " << op1.pretty() << std::endl;
 	ignoring(op1);
 	return;
-	//assert(0);
       }
 
       if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
