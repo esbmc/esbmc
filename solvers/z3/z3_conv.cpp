@@ -981,7 +981,6 @@ z3_convt::is_in_cache(const exprt &expr)
 {
   bv_cachet::const_iterator cache_result = bv_cache.find(expr);
   if (cache_result != bv_cache.end()) {
-    //std::cout << "Cache hit on " << expr.pretty() << std::endl;
     return true;
   }
 
@@ -1003,13 +1002,12 @@ z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
-#if 1
   bv_cachet::const_iterator cache_result = bv_cache.find(expr);
   if (cache_result != bv_cache.end()) {
     bv = cache_result->second;
     return false;
   }
-#endif
+
   if (convert_z3_expr(expr, bv))
     return true;
 
