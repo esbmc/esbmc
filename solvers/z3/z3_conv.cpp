@@ -1109,18 +1109,21 @@ z3_convt::convert_lt(const exprt &expr)
   const exprt &op0 = expr.op0();
   const exprt &op1 = expr.op1();
 
+  // XXXjmorse, surely return value of convert_bv is an error indicator?
   if (convert_bv(op0, operand[0]))
     return Z3_mk_false(z3_ctx);
 
   if (convert_bv(op1, operand[1]))
     return Z3_mk_false(z3_ctx);
 
+  // XXXjmorse pointer comparisons require serious consideration
   if (op0.type().id() == "pointer")
     operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
 
   if (op1.type().id() == "pointer")
     operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
+  // XXXjmorse is this special case absolutely required?
   if (op0.id() == "typecast" && op0.type().id() == "signedbv") {
     const exprt &object = expr.op0().operands()[0];
     std::string value;
