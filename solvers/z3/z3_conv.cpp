@@ -1126,30 +1126,6 @@ z3_convt::convert_lt(const exprt &expr)
   if (op1.type().id() == "pointer")
     operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
-  // XXXjmorse is this special case absolutely required?
-  if (op0.id() == "typecast" && op0.type().id() == "signedbv") {
-    const exprt &object = expr.op0().operands()[0];
-    std::string value;
-    unsigned width;
-
-    if (op1.id() == "constant" && object.type().id() == "unsignedbv") {
-      value = integer2string(binary2integer(expr.op1().get_string(
-                                            "value"), false), 10);
-
-      if (boolbv_get_width(expr.op1().type(), width))
-	return Z3_mk_false(z3_ctx);
-
-      if (int_encoding) {
-	operand[1] = z3_api.mk_int(z3_ctx, atoi(value.c_str()));
-	bv = Z3_mk_lt(z3_ctx, operand[0], operand[1]);
-      } else   {
-	operand[1] = convert_number(atoi(value.c_str()), width, false);
-	bv = Z3_mk_bvult(z3_ctx, operand[0], operand[1]);
-      }
-      return bv;
-    }
-  }
-
   if (int_encoding) {
     bv = Z3_mk_lt(z3_ctx, operand[0], operand[1]);
   } else   {
@@ -1191,31 +1167,6 @@ z3_convt::convert_gt(const exprt &expr)
 
   if (expr.op1().type().id() == "pointer")
     operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
-
-  //workaround: bug in the front-end
-  //to check it, run example ex10.c of NEC
-  if (expr.op0().id() == "typecast" && expr.op0().type().id() == "signedbv") {
-    const exprt &object = expr.op0().operands()[0];
-    std::string value;
-    unsigned width;
-
-    if (expr.op1().id() == "constant" && object.type().id() == "unsignedbv") {
-      value = integer2string(binary2integer(expr.op1().get_string(
-                                            "value"), false), 10);
-
-      if (boolbv_get_width(expr.op1().type(), width))
-	return Z3_mk_false(z3_ctx);
-
-      if (int_encoding) {
-	operand[1] = z3_api.mk_int(z3_ctx, atoi(value.c_str()));
-	bv = Z3_mk_gt(z3_ctx, operand[0], operand[1]);
-      } else   {
-	operand[1] = convert_number(atoi(value.c_str()), width, false);
-	bv = Z3_mk_bvugt(z3_ctx, operand[0], operand[1]);
-      }
-      return bv;
-    }
-  }
 
   if (int_encoding) {
     bv = Z3_mk_gt(z3_ctx, operand[0], operand[1]);
@@ -1262,30 +1213,6 @@ z3_convt::convert_le(const exprt &expr)
   if (expr.op1().type().id() == "pointer")
     operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
-  if (expr.op0().id() == "typecast" && expr.op0().type().id() == "signedbv") {
-    const exprt &object = expr.op0().operands()[0];
-    std::string value;
-    unsigned width;
-
-    if (expr.op1().id() == "constant" && object.type().id() == "unsignedbv") {
-      value = integer2string(binary2integer(expr.op1().get_string(
-                                            "value"), false), 10);
-
-      if (boolbv_get_width(expr.op1().type(), width))
-	return Z3_mk_false(z3_ctx);
-
-      if (int_encoding) {
-	operand[1] = z3_api.mk_int(z3_ctx, atoi(value.c_str()));
-	bv = Z3_mk_le(z3_ctx, operand[0], operand[1]);
-      } else   {
-	operand[1] = convert_number(atoi(value.c_str()), width, false);
-	bv = Z3_mk_bvule(z3_ctx, operand[0], operand[1]);
-      }
-
-      return bv;
-    }
-  }
-
   if (int_encoding) {
     bv = Z3_mk_le(z3_ctx, operand[0], operand[1]);
   } else   {
@@ -1331,30 +1258,6 @@ z3_convt::convert_ge(const exprt &expr)
 
   if (expr.op1().type().id() == "pointer")
     operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
-
-  if (expr.op0().id() == "typecast" && expr.op0().type().id() == "signedbv") {
-    const exprt &object = expr.op0().operands()[0];
-    std::string value;
-    unsigned width;
-
-    if (expr.op1().id() == "constant" && object.type().id() == "unsignedbv") {
-      value = integer2string(binary2integer(expr.op1().get_string(
-                                            "value"), false), 10);
-
-      if (boolbv_get_width(expr.op1().type(), width))
-	return Z3_mk_false(z3_ctx);
-
-      if (int_encoding) {
-	operand[1] = z3_api.mk_int(z3_ctx, atoi(value.c_str()));
-	bv = Z3_mk_ge(z3_ctx, operand[0], operand[1]);
-      } else   {
-	operand[1] = convert_number(atoi(value.c_str()), width, false);
-	bv = Z3_mk_bvuge(z3_ctx, operand[0], operand[1]);
-      }
-
-      return bv;
-    }
-  }
 
   if (int_encoding) {
     bv = Z3_mk_ge(z3_ctx, operand[0], operand[1]);
