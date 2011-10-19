@@ -9,40 +9,46 @@
 #ifndef STL_IOSTREAM
 #define STL_IOSTREAM
 
+#ifndef EOF
+# define EOF (-1)
+#endif
+
 namespace std
 {
-  struct ostream
-  {
-    ostream(int id): id(id){}
-    int id;
-    private:
-    ostream(const ostream&); // disabled
-    ostream& operator=(const ostream&); // disabled
-  };
+	struct ostream
+	{
+		ostream(int id): id(id){}
+		int id;
+	private:
+		ostream(const ostream&); // disabled
+		ostream& operator=(const ostream&); // disabled
+	};
 
-  struct istream
-  {
-    istream(int id): id(id){}
-    int id;
-    private:
-    istream(const istream&); // disabled
-    istream& operator=(const istream&); // disabled
-  };
+	struct istream
+	{
+		istream(int id): id(id){}
+		int id;
+	private:
+		istream(const istream&); // disabled
+		istream& operator=(const istream&); // disabled
+	public:
+		int get();
+	};
 
 
-  struct iostream: ostream, istream
-  {
-    iostream(int id): ostream(id), istream(id){}
-    private:
-    iostream(const iostream&); // disabled
-    iostream& operator=(const iostream&); // disabled
-  };
+	struct iostream: ostream, istream
+	{
+		iostream(int id): ostream(id), istream(id){}
+	private:
+		iostream(const iostream&); // disabled
+		iostream& operator=(const iostream&); // disabled
+	};
 
-  extern istream cin;
-  extern ostream cout;
-  extern ostream cerr;
+	extern istream cin;
+	extern ostream cout;
+	extern ostream cerr;
 
-  char endl = '\n';
+	char endl = '\n';
 }
 
 namespace esbmc
@@ -66,75 +72,80 @@ namespace std
 {
 	inline istream& operator >> (istream& is, char& c)
 	{ 
-	  esbmc::esbmc_read_char(is.id,c);
-	  return is;
+		esbmc::esbmc_read_char(is.id,c);
+		return is;
 	}
 
 	inline istream& operator >> (istream& is, int& i)
 	{ 
-	  esbmc::esbmc_read_int(is.id,i);
-	  return is;
+		esbmc::esbmc_read_int(is.id,i);
+		return is;
 	}
 
 	inline istream& operator >> (istream& is, unsigned long& l) //Felipe Rodrigues
 	{ 
-	  esbmc::esbmc_read_unsigned_long(is.id,l);
-	  return is;
+		esbmc::esbmc_read_unsigned_long(is.id,l);
+		return is;
 	}
 
 	inline istream& operator >> (istream& is, double& d) //Felipe Rodrigues
 	{ 
-	  esbmc::esbmc_read_double(is.id,d);
-	  return is;
+		esbmc::esbmc_read_double(is.id,d);
+		return is;
 	}
-
 	
 	inline ostream& operator << (ostream& o, const char*  cstr)
 	{ 
-	  esbmc::esbmc_print_cstr(o.id, cstr);
-	  return o;
+		esbmc::esbmc_print_cstr(o.id, cstr);
+		return o;
 	}
 
 	inline ostream& operator << (ostream& o, char  c)
 	{ 
-	  esbmc::esbmc_print_char(o.id, c);
-	  return o;
+		esbmc::esbmc_print_char(o.id, c);
+		return o;
 	}
 
 	inline ostream&  operator << (ostream& o, int  i)
 	{ 
-	  esbmc::esbmc_print_int(o.id, i);
-	  return o;
+		esbmc::esbmc_print_int(o.id, i);
+		return o;
 	}
 
 	inline ostream&  operator << (ostream& o, double  d) // Felipe Rodrigues
 	{ 
-	  esbmc::esbmc_print_double(o.id, d);
-	  return o;
+		esbmc::esbmc_print_double(o.id, d);
+		return o;
 	}
 
 	inline ostream& operator << (ostream& o, unsigned  i)
 	{ 
-	  esbmc::esbmc_print_unsigned(o.id, i);
-	  return o;
+		esbmc::esbmc_print_unsigned(o.id, i);
+		return o;
 	}
 
 	inline ostream& operator << (ostream& o, long long  i)
 	{ 
-	  esbmc::esbmc_print_long_long(o.id, i);
-	  return o;
+		esbmc::esbmc_print_long_long(o.id, i);
+		return o;
 	}
 
 	inline ostream& operator << (ostream& o, unsigned long long  i)
 	{ 
-	  esbmc::esbmc_print_unsigned_long_long(o.id, i);
-	  return o;
+		esbmc::esbmc_print_unsigned_long_long(o.id, i);
+		return o;
 	}
 
 	inline ostream& operator << (ostream& o, bool  b)
 	{ 
-	  esbmc::esbmc_print_bool(o.id, b);
-	  return o;
+		esbmc::esbmc_print_bool(o.id, b);
+		return o;
+	}
+
+	unsigned int nondet_uint();
+	int get()
+	{
+	  return nondet_uint();
 	}
 
 }
