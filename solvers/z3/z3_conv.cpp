@@ -882,10 +882,13 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 
   if (!int_encoding) {
     if (actual_type.id() != "bool") {
-      if (actual_type.id() == "struct")
+      if (actual_type.id() == "struct") {
 	name += "struct";
-      else
-	name += Z3_get_bv_type_size(z3_ctx, proj_types[0]);
+      } else {
+        std::stringstream s;
+        s << Z3_get_bv_type_size(z3_ctx, proj_types[0]);
+        name += s.str();
+      }
     }
   }
 
