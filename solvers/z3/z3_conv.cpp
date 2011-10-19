@@ -2041,8 +2041,6 @@ z3_convt::convert_rest_member(const exprt &expr)
 
   if (expr.get_string("component_name") == "is_zero") {
     bv = Z3_mk_not(z3_ctx, Z3_mk_eq(z3_ctx, Z3_mk_false(z3_ctx), bv));
-    std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-    std::endl;
   }
 
   return bv;
