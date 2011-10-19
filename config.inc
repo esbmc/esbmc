@@ -7,7 +7,8 @@ YFLAGS = -v
 LEX    = flex
 
 # Linux etc.
-GCCFLAGS = -Wall -MMD -Wextra -O3 -finline-limit=1000000 -Wno-deprecated
+#you need to install the glibc-static package to compile statically
+GCCFLAGS = -static -Wall -MMD -Wextra -O3 -finline-limit=1000000 -Wno-deprecated
 LDFLAGS=
 
 # use these for Cygwin:

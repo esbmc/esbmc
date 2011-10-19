@@ -3,6 +3,7 @@
 Module: Symbolic Execution
 
 Author: Daniel Kroening, kroening@kroening.com
+		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
