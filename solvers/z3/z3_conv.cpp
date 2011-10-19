@@ -918,73 +918,48 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
 {
   DEBUGLOC;
 
-  Z3_type_ast type_var;
+  Z3_sort sort;
   unsigned width;
 
   if (type.id() == "bool") {
-    bv = z3_api.mk_bool_var(z3_ctx, identifier.c_str());
+    sort =  Z3_mk_bool_type(z3_ctx);
+  } else if (!int_encoding && (type.id() == "signedbv" ||
+                    type.id() == "unsignedbv" || type.id() == "signedbv")) {
+    if (boolbv_get_width(type, width))
+      return true;
+    sort = Z3_mk_bv_type(z3_ctx, width);
   } else if (type.id() == "signedbv")     {
-    if (boolbv_get_width(type, width))
-      return true;
-
-    if (int_encoding)
-      bv = z3_api.mk_int_var(z3_ctx, identifier.c_str());
-    else
-      bv =
-        z3_api.mk_var(z3_ctx, identifier.c_str(), Z3_mk_bv_type(z3_ctx, width));
+    sort = Z3_mk_int_sort(z3_ctx);
   } else if (type.id() == "unsignedbv")     {
-    if (boolbv_get_width(type, width))
+    Z3_ast formula;
+    bv = z3_api.mk_int_var(z3_ctx, identifier.c_str());
+    formula = Z3_mk_ge(z3_ctx, bv, z3_api.mk_int(z3_ctx, 0));
+    Z3_assert_cnstr(z3_ctx, formula);
+    if (z3_prop.smtlib)
+      z3_prop.assumpt.push_back(formula);
+    return false;
+  } else if (type.id() == "fixedbv") {
+    sort = Z3_mk_real_sort(z3_ctx);
+  } else if (type.id() == "array") {
+    if (create_array_type(type, sort))
       return true;
-
-    if (int_encoding) {
-      Z3_ast formula;
-      bv = z3_api.mk_int_var(z3_ctx, identifier.c_str());
-      formula = Z3_mk_ge(z3_ctx, bv, z3_api.mk_int(z3_ctx, 0));
-      Z3_assert_cnstr(z3_ctx, formula);
-      if (z3_prop.smtlib)
-	z3_prop.assumpt.push_back(formula);
-    } else
-      bv =
-        z3_api.mk_var(z3_ctx, identifier.c_str(), Z3_mk_bv_type(z3_ctx, width));
-  } else if (type.id() == "fixedbv")    {
-    if (boolbv_get_width(type, width))
+  } else if (type.id() == "pointer" || type.id() == "code") {
+    if (create_pointer_type(type, sort))
       return true;
-
-    if (int_encoding)
-      bv = z3_api.mk_real_var(z3_ctx, identifier.c_str());
-    else
-      bv =
-        z3_api.mk_var(z3_ctx, identifier.c_str(), Z3_mk_bv_type(z3_ctx, width));
-  } else if (type.id() == "array")     {
-    if (create_array_type(type, type_var))
-      return true;
-
-    bv = z3_api.mk_var(z3_ctx, identifier.c_str(), type_var);
-  } else if (type.id() == "pointer" || type.id() == "code")       {
-    if (create_pointer_type(type, type_var))
-      return true;
-
-    bv = z3_api.mk_var(z3_ctx, identifier.c_str(), type_var);
   } else if (type.id() == "struct")     {
-    if (create_struct_type(type, type_var))
+    if (create_struct_type(type, sort))
       return true;
-
-    bv = z3_api.mk_var(z3_ctx, identifier.c_str(), type_var);
   } else if (type.id() == "union")     {
-    if (create_union_type(type, type_var))
+    if (create_union_type(type, sort))
       return true;
-
-    bv = z3_api.mk_var(z3_ctx, identifier.c_str(), type_var);
   } else if (type.id() == "c_enum")     {
-    if (create_enum_type(type_var))
+    if (create_enum_type(sort))
       return true;
-
-    bv = z3_api.mk_var(z3_ctx, identifier.c_str(), type_var);
   } else   {
     return true;
   }
 
-  //throw "convert_identifier: " + type.id_string() + " is unsupported";
+  bv = z3_api.mk_var(z3_ctx, identifier.c_str(), sort);
 
   DEBUGLOC;
 
