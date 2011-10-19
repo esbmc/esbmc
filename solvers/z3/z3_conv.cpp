@@ -924,7 +924,7 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
   if (type.id() == "bool") {
     sort =  Z3_mk_bool_type(z3_ctx);
   } else if (!int_encoding && (type.id() == "signedbv" ||
-                    type.id() == "unsignedbv" || type.id() == "signedbv")) {
+                    type.id() == "unsignedbv" || type.id() == "fixedbv")) {
     if (boolbv_get_width(type, width))
       return true;
     sort = Z3_mk_bv_type(z3_ctx, width);
