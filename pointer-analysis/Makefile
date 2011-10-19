@@ -14,6 +14,11 @@ all: pointer-analysis.o
 include ../config.inc
 include ../common
 
+GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `gcc -dumpversion`)
+ifeq "$(GCCVERSIONGTEQ460)" "1"
+  CXXFLAGS += -fpermissive
+endif
+
 ###############################################################################
 
 pointer-analysis.o: $(OBJ)
