@@ -70,6 +70,9 @@ namespace esbmc
 
 namespace std
 {
+	bool nondet_bool();
+	unsigned int nondet_uint();
+
 	inline istream& operator >> (istream& is, char& c)
 	{ 
 		esbmc::esbmc_read_char(is.id,c);
@@ -142,11 +145,11 @@ namespace std
 		return o;
 	}
 
-	unsigned int nondet_uint();
-	int get()
-	{
-	  return nondet_uint();
+	int get() {
+	  if (nondet_bool())
+	    return nondet_uint();
+	  else
+	    return EOF;
 	}
-
 }
 #endif
