@@ -1,0 +1,27 @@
+#ifndef STL_CTIME
+#define STL_CTIME
+
+#undef NULL
+#if defined(__cplusplus)
+#define NULL 0
+#else
+#define NULL ((void *)0)
+#endif
+
+typedef unsigned int time_t;
+unsigned int nondet_uint();
+
+time_t time (time_t *timer);
+
+time_t time (time_t *timer)
+{
+  time_t t = nondet_uint();
+
+  if (timer!=NULL)
+    *timer = t;
+
+  return t;
+}
+
+#endif
+
