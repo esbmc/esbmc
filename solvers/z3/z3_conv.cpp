@@ -1366,6 +1366,7 @@ z3_convt::convert_invalid(const exprt &expr)
   DEBUGLOC;
 
   assert(expr.operands().size() == 1);
+  assert(expr.op0().type().id() == "pointer");
   Z3_ast bv, pointer, operand[2];
 
   if (expr.op0().id() == "address_of" ||
@@ -1395,9 +1396,7 @@ z3_convt::convert_invalid(const exprt &expr)
       expr.op0().type().subtype().id() == "signedbv")
     return Z3_mk_false(z3_ctx);
 
-  if (expr.op0().type().id() == "pointer")
-    operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer, 1);       //pointer
-	                                                           // index
+  operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer, 1); //pointer index
 
   operand[1] = convert_number(0, config.ansi_c.int_width, true);
 
