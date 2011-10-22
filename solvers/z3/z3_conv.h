@@ -99,9 +99,7 @@ protected:
   Z3_ast convert_invalid(const exprt &expr);
   Z3_ast convert_same_object(const exprt &expr);
   Z3_ast convert_dynamic_object(const exprt &expr);
-  Z3_ast convert_overflow_sum(const exprt &expr);
-  Z3_ast convert_overflow_sub(const exprt &expr);
-  Z3_ast convert_overflow_mul(const exprt &expr);
+  Z3_ast convert_overflow_sum_sub_mul(const exprt &expr);
   Z3_ast convert_overflow_unary(const exprt &expr);
   Z3_ast convert_overflow_typecast(const exprt &expr);
   Z3_ast convert_rest_index(const exprt &expr);

@@ -1593,7 +1593,7 @@ z3_convt::convert_dynamic_object(const exprt &expr)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_overflow_sum
+   Function: z3_convt::convert_overflow_sum_sub_mul
 
    Inputs:
 
@@ -1604,7 +1604,7 @@ z3_convt::convert_dynamic_object(const exprt &expr)
  \*******************************************************************/
 
 Z3_ast
-z3_convt::convert_overflow_sum(const exprt &expr)
+z3_convt::convert_overflow_sum_sub_mul(const exprt &expr)
 {
   DEBUGLOC;
 
@@ -1617,137 +1617,11 @@ z3_convt::convert_overflow_sum(const exprt &expr)
       return Z3_mk_false(z3_ctx);
   }
 
-  if (convert_bv(expr.op0(), operand[0]))
-    return Z3_mk_false(z3_ctx);
-  ;
-
-  if (expr.op0().type().id() == "pointer")
-    operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
-
-  if (convert_bv(expr.op1(), operand[1]))
-    return Z3_mk_false(z3_ctx);
-  ;
-
-  if (expr.op1().type().id() == "pointer")
-    operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
-
-  if (boolbv_get_width(expr.op0().type(), width_op0))
-    return Z3_mk_false(z3_ctx);
-
-  if (boolbv_get_width(expr.op1().type(), width_op1))
-    return Z3_mk_false(z3_ctx);
-
-  if (int_encoding) {
-    operand[0] = Z3_mk_int2bv(z3_ctx, width_op0, operand[0]);
-    operand[1] = Z3_mk_int2bv(z3_ctx, width_op1, operand[1]);
-  }
-
-  if (expr.op0().type().id() == "signedbv" && expr.op1().type().id() ==
-      "signedbv")
-    result[0] = Z3_mk_bvadd_no_overflow(z3_ctx, operand[0], operand[1], 1);
-  else if (expr.op0().type().id() == "unsignedbv" && expr.op1().type().id() ==
-           "unsignedbv")
-    result[0] = Z3_mk_bvadd_no_overflow(z3_ctx, operand[0], operand[1], 0);
-
-  result[1] = Z3_mk_bvadd_no_underflow(z3_ctx, operand[0], operand[1]);
-  bv = Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, result));
-
-  return bv;
-}
-
-/*******************************************************************
-   Function: z3_convt::convert_overflow_sub
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-Z3_ast
-z3_convt::convert_overflow_sub(const exprt &expr)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 2);
-  Z3_ast bv, result[2], operand[2];
-  unsigned width_op0, width_op1;
-
-  if (expr.op0().type().id() == "array") {
-    if (write_cache(expr.op0()))
-      return Z3_mk_false(z3_ctx);
-  }
-  //new change
   if (expr.op0().id() == "symbol" && expr.op1().id() == "address_of")
     return Z3_mk_false(z3_ctx);
 
   if (convert_bv(expr.op0(), operand[0]))
     return Z3_mk_false(z3_ctx);
-
-  if (expr.op0().type().id() == "pointer")
-    operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
-
-  if (convert_bv(expr.op1(), operand[1]))
-    return Z3_mk_false(z3_ctx);
-
-  if (expr.op1().type().id() == "pointer")
-    operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
-
-  if (boolbv_get_width(expr.op0().type(), width_op0))
-    return Z3_mk_false(z3_ctx);
-
-  if (boolbv_get_width(expr.op1().type(), width_op1))
-    return Z3_mk_false(z3_ctx);
-
-  if (int_encoding) {
-    operand[0] = Z3_mk_int2bv(z3_ctx, width_op0, operand[0]);
-    operand[1] = Z3_mk_int2bv(z3_ctx, width_op1, operand[1]);
-  }
-
-  if (expr.op0().type().id() == "signedbv" && expr.op1().type().id() ==
-      "signedbv")
-    result[1] = Z3_mk_bvsub_no_underflow(z3_ctx, operand[0], operand[1], 1);
-  else if (expr.op0().type().id() == "unsignedbv" && expr.op1().type().id() ==
-           "unsignedbv")
-    result[1] = Z3_mk_bvsub_no_underflow(z3_ctx, operand[0], operand[1], 0);
-
-  result[0] = Z3_mk_bvsub_no_overflow(z3_ctx, operand[0], operand[1]);
-
-  bv = Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, result));
-
-  return bv;
-}
-
-/*******************************************************************
-   Function: z3_convt::convert_overflow_mul
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-Z3_ast
-z3_convt::convert_overflow_mul(const exprt &expr)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 2);
-  Z3_ast bv, result[2], operand[2];
-  unsigned width_op0, width_op1;
-
-  if (expr.op0().type().id() == "array") {
-    if (write_cache(expr.op0()))
-      return Z3_mk_false(z3_ctx);
-    ;
-  }
-
-  if (convert_bv(expr.op0(), operand[0]))
-    return Z3_mk_false(z3_ctx);
   ;
 
   if (expr.op0().type().id() == "pointer")
@@ -1771,15 +1645,32 @@ z3_convt::convert_overflow_mul(const exprt &expr)
     operand[1] = Z3_mk_int2bv(z3_ctx, width_op1, operand[1]);
   }
 
+  typedef Z3_ast (*type1)(Z3_context, Z3_ast, Z3_ast, Z3_bool);
+  typedef Z3_ast (*type2)(Z3_context, Z3_ast, Z3_ast);
+  type1 call1;
+  type2 call2;
+
+  if (expr.id() == "overflow-+") {
+    call1 = Z3_mk_bvadd_no_overflow;
+    call2 = Z3_mk_bvadd_no_underflow;
+  } else if (expr.id() == "overflow--") {
+    call1 = Z3_mk_bvsub_no_underflow;
+    call2 = Z3_mk_bvsub_no_overflow;
+  } else if (expr.id() == "overflow-*") {
+    call1 = Z3_mk_bvmul_no_overflow;
+    call2 = Z3_mk_bvmul_no_underflow;
+  } else {
+    assert(false);
+  }
+
   if (expr.op0().type().id() == "signedbv" && expr.op1().type().id() ==
       "signedbv")
-    result[1] = Z3_mk_bvmul_no_overflow(z3_ctx, operand[0], operand[1], 1);
+    result[0] = call1(z3_ctx, operand[0], operand[1], 1);
   else if (expr.op0().type().id() == "unsignedbv" && expr.op1().type().id() ==
            "unsignedbv")
-    result[1] = Z3_mk_bvmul_no_overflow(z3_ctx, operand[0], operand[1], 0);
+    result[0] = call1(z3_ctx, operand[0], operand[1], 0);
 
-  result[0] = Z3_mk_bvmul_no_underflow(z3_ctx, operand[0], operand[1]);
-
+  result[1] = call2(z3_ctx, operand[0], operand[1]);
   bv = Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, result));
 
   return bv;
@@ -2078,11 +1969,11 @@ z3_convt::convert_rest(const exprt &expr)
   else if (expr.id() == "is_dynamic_object")
     constraint = convert_dynamic_object(expr);
   else if (expr.id() == "overflow-+")
-    constraint = convert_overflow_sum(expr);
+    constraint = convert_overflow_sum_sub_mul(expr);
   else if (expr.id() == "overflow--")
-    constraint = convert_overflow_sub(expr);
+    constraint = convert_overflow_sum_sub_mul(expr);
   else if (expr.id() == "overflow-*")
-    constraint = convert_overflow_mul(expr);
+    constraint = convert_overflow_sum_sub_mul(expr);
   else if (expr.id() == "overflow-unary-")
     constraint = convert_overflow_unary(expr);
   else if (has_prefix(expr.id_string(), "overflow-typecast-"))
