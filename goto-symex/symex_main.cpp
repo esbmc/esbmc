@@ -192,11 +192,14 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
       // assumes that the DFS exploration path algorithm never changes.
       // Has to occur here; between generating new threads, ESBMC messes with
       // the dfs state.
-      art1->get_cur_state()._DFS_traversed = it->explored;
+      for (int dfspos = 0; dfspos < art1->get_cur_state()._DFS_traversed.size();
+           dfspos++)
+        art1->get_cur_state()._DFS_traversed[dfspos] = true;
       art1->get_cur_state()._DFS_traversed[it->cur_thread] = false;
 
       symex_step(art1->_goto_functions, *art1);
     }
+    art1->get_cur_state()._DFS_traversed = it->explored;
 
     if (art1->get_cur_state()._threads_state.size() != it->num_threads) {
       std::cerr << "Unexpected number of threads when reexploring checkpoint"
