@@ -1767,15 +1767,11 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
   if (expr.op0().type().id() == "signedbv" || expr.op0().type().id() ==
       "fixedbv") {
     // Produce some useful constants
-    if (expr.op0().type().id() == "signedbv") {
-      tmp = convert_number_bv(result, width, true);
-      two = convert_number_bv(2, width, true);
-      minus_one = convert_number_bv(-1, width, true);
-    } else   {
-      tmp = convert_number_bv(result, width / 2, true);
-      two = convert_number_bv(2, width / 2, true);
-      minus_one = convert_number_bv(-1, width / 2, true);
-    }
+    unsigned int nums_width = (expr.op0().type().id() == "signedbv")
+                               ? width : width / 2;
+    tmp = convert_number_bv(result, nums_width, true);
+    two = convert_number_bv(2, nums_width, true);
+    minus_one = convert_number_bv(-1, nums_width, true);
 
     // Now produce numbers that bracket the selected bitwidth. So for 16 bis
     // we would generate 2^15-1 and -2^15
