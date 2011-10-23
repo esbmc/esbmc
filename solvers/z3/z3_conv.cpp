@@ -1740,7 +1740,6 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
   Z3_ast bv, operand[3], mid, overflow[2], tmp, minus_one, two;
   u_int i, result = 1, width;
   std::string value;
-  bool encoding = false;
 
   if (boolbv_get_width(expr.op0().type(), width))
     return Z3_mk_false(z3_ctx);
@@ -1768,11 +1767,8 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
   if (convert_bv(expr.op0(), operand[0]))
     return Z3_mk_false(z3_ctx);
 
-  if (int_encoding) {
+  if (int_encoding)
     operand[0] = Z3_mk_int2bv(z3_ctx, width, operand[0]);
-    encoding = true;
-    int_encoding = false;
-  }
 
   if (expr.op0().type().id() == "fixedbv") {
     unsigned size = (width / 2) + 1;
@@ -1782,13 +1778,13 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
   if (expr.op0().type().id() == "signedbv" || expr.op0().type().id() ==
       "fixedbv") {
     if (expr.op0().type().id() == "signedbv") {
-      tmp = convert_number(result, width, true);
-      two = convert_number(2, width, true);
-      minus_one = convert_number(-1, width, true);
+      tmp = convert_number_bv(result, width, true);
+      two = convert_number_bv(2, width, true);
+      minus_one = convert_number_bv(-1, width, true);
     } else   {
-      tmp = convert_number(result, width / 2, true);
-      two = convert_number(2, width / 2, true);
-      minus_one = convert_number(-1, width / 2, true);
+      tmp = convert_number_bv(result, width / 2, true);
+      two = convert_number_bv(2, width / 2, true);
+      minus_one = convert_number_bv(-1, width / 2, true);
     }
 
     mid = Z3_mk_bvsdiv(z3_ctx, tmp, two);
@@ -1799,16 +1795,11 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
     overflow[1] = Z3_mk_bvsgt(z3_ctx, operand[0], operand[2]);
     bv = Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, overflow));
   } else if (expr.op0().type().id() == "unsignedbv")     {
-    operand[2] = convert_number(0, width, false);
-    operand[1] = convert_number(result, width, false);
+    operand[2] = convert_number_bv(0, width, false);
+    operand[1] = convert_number_bv(result, width, false);
     overflow[0] = Z3_mk_bvult(z3_ctx, operand[0], operand[1]);
     overflow[1] = Z3_mk_bvuge(z3_ctx, operand[0], operand[2]);
     bv = Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, overflow));
-  }
-
-  if (encoding) {
-    int_encoding = true;
-    encoding = false;
   }
 
   return bv;
