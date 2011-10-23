@@ -114,8 +114,7 @@ protected:
   bool convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv);
   bool convert_typecast_struct(const exprt &expr, Z3_ast &bv);
   bool convert_typecast_enum(const exprt &expr, Z3_ast &bv);
-  bool convert_struct(const exprt &expr, Z3_ast &bv);
-  bool convert_union(const exprt &expr, Z3_ast &bv);
+  bool convert_struct_union(const exprt &expr, Z3_ast &bv);
   bool convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv);
   bool convert_zero_string(const exprt &expr, Z3_ast &bv);
   bool convert_array(const exprt &expr, Z3_ast &bv);

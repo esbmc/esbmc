@@ -2667,7 +2667,7 @@ z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_struct
+   Function: z3_convt::convert_struct_union
 
    Inputs:
 
@@ -2678,14 +2678,15 @@ z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
  \*******************************************************************/
 
 bool
-z3_convt::convert_struct(const exprt &expr, Z3_ast &bv)
+z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
   Z3_ast value;
 
-  // Converts a static struct - IE, one that hasn't had any "with" operations
-  // applied to it, perhaps due to initialization or constant propagation.
+  // Converts a static struct/union - IE, one that hasn't had any "with"
+  // operations applied to it, perhaps due to initialization or constant
+  // propagation.
   const struct_typet &struct_type = to_struct_type(expr.type());
   const struct_typet::componentst &components = struct_type.components();
   u_int i = 0;
@@ -2694,13 +2695,16 @@ z3_convt::convert_struct(const exprt &expr, Z3_ast &bv)
   assert(components.size() >= expr.operands().size());
   assert(!components.empty());
 
-  identifier = "conv_struct_" + expr.type().get_string("tag");
+  if (expr.id() == "struct" || expr.type().id() == "struct")
+    identifier = "conv_struct_" + expr.type().get_string("tag");
+  else
+    identifier = expr.type().get_string("tag");
 
   // Generate a tuple of the correct form for this type
   if (convert_identifier(identifier, expr.type(), bv))
     return true;
 
-  // Populate tuple with members of that struct
+  // Populate tuple with members of that struct/union
   for (struct_typet::componentst::const_iterator
        it = components.begin();
        it != components.end();
@@ -2711,58 +2715,10 @@ z3_convt::convert_struct(const exprt &expr, Z3_ast &bv)
     bv = z3_api.mk_tuple_update(z3_ctx, bv, i, value);
   }
 
-  DEBUGLOC;
-
-  return false;
-}
-
-/*******************************************************************
-   Function: z3_convt::convert_union
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-bool
-z3_convt::convert_union(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  Z3_ast value;
-
-  const struct_typet &struct_type = to_struct_type(expr.type());
-  const struct_typet::componentst &components = struct_type.components();
-  u_int i = 0;
-
-  assert(components.size() >= expr.operands().size());
-  assert(!components.empty());
-
-  if (convert_identifier(expr.type().get_string("tag"), expr.type(), bv))
-    return true;
-
-  for (struct_typet::componentst::const_iterator
-       it = components.begin();
-       it != components.end();
-       it++, i++)
-  {
-
-    if (expr.type().get_string("tag").find("__align'") != std::string::npos &&
-        expr.type().id() == "union" && i == 1)
-      return false;
-
-    if (convert_bv(expr.operands()[i], value))
-      return true;
-
-    bv = z3_api.mk_tuple_update(z3_ctx, bv, i, value);
+  // Update unions "last-set" member to be the last field
+  if (expr.id() == "union")
     bv = z3_api.mk_tuple_update(z3_ctx, bv, components.size(),
                                 convert_number(i, config.ansi_c.int_width, 0));
-                                //record the last element written to the union
-
-  }
 
   DEBUGLOC;
 
@@ -2953,7 +2909,7 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 	  Z3_mk_int(z3_ctx, atoi(i_str),
 	            Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
 
-      if (convert_struct(*it, tmp_struct))
+      if (convert_struct_union(*it, tmp_struct))
 	return true;
 
       array_cte = Z3_mk_store(z3_ctx, array_cte, int_cte, tmp_struct);
@@ -3127,11 +3083,8 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
   } else if (expr.type().id() == "array")     {
     if (convert_array(expr, bv))
       return true;
-  } else if (expr.type().id() == "struct")     {
-    if (convert_struct(expr, bv))
-      return true;
-  } else if (expr.type().id() == "union")     {
-    if (convert_union(expr, bv))
+  } else if (expr.type().id() == "struct" || expr.type().id() == "union") {
+    if (convert_struct_union(expr, bv))
       return true;
   }
 
@@ -5204,10 +5157,8 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
                                 "identifier"), expr.type(), bv);
   else if (expr.id() == "typecast")
     return convert_typecast(expr, bv);
-  else if (expr.id() == "struct")
-    return convert_struct(expr, bv);
-  else if (expr.id() == "union")
-    return convert_union(expr, bv);
+  else if (expr.id() == "struct" || expr.id() == "union")
+    return convert_struct_union(expr, bv);
   else if (expr.id() == "constant")
     return convert_constant(expr, bv);
   else if (expr.id() == "bitand" || expr.id() == "bitor" || expr.id() ==
