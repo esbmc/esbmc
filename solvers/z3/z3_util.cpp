@@ -155,23 +155,20 @@ Z3_ast z3_convt::convert_number(int value, u_int width, bool type)
 {
 
   static Z3_ast number_var;
-  char val[2];
-
-  sprintf(val,"%i", value);
 
   if (type==false)
   {
     if (int_encoding)
-	  number_var = z3_api.mk_unsigned_int(z3_ctx, atoi(val));
+	  number_var = z3_api.mk_unsigned_int(z3_ctx, value);
     else
-	  number_var = Z3_mk_unsigned_int(z3_ctx, atoi(val), Z3_mk_bv_type(z3_ctx, width));
+	  number_var = Z3_mk_unsigned_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
   }
   else if (type==true)
   {
     if (int_encoding)
-	  number_var = z3_api.mk_int(z3_ctx, atoi(val));
+	  number_var = z3_api.mk_int(z3_ctx, value);
 	else
-	  number_var = Z3_mk_int(z3_ctx, atoi(val), Z3_mk_bv_type(z3_ctx, width));
+	  number_var = Z3_mk_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
   }
 
   return number_var;
