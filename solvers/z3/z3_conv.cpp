@@ -1740,7 +1740,6 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
   Z3_ast bv, operand[3], mid, overflow[2], tmp, minus_one, two;
   uint64_t result;
   u_int i, width;
-  std::string value;
 
   if (boolbv_get_width(expr.op0().type(), width))
     return Z3_mk_false(z3_ctx);
@@ -1750,10 +1749,6 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
 
   assert(bits <= 32 && bits != 0);
   result = 1 << bits;
-
-  bool constnum_is_signed = (is_signed(expr.op0().type())) ? true : false;
-  value = integer2string(binary2integer(expr.op0().get_string(
-                                            "value"), constnum_is_signed), 10);
 
   if (convert_bv(expr.op0(), operand[0]))
     return Z3_mk_false(z3_ctx);
