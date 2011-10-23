@@ -1738,7 +1738,8 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
     throw "operand " + expr.id_string() + " takes one operand";
 
   Z3_ast bv, operand[3], mid, overflow[2], tmp, minus_one, two;
-  u_int i, result = 1, width;
+  uint64_t result;
+  u_int i, width;
   std::string value;
 
   if (boolbv_get_width(expr.op0().type(), width))
@@ -1747,15 +1748,9 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
   if (bits >= width || bits == 0)
     throw "overflow-typecast got wrong number of bits";
 
-  assert(bits <= 32);
+  assert(bits <= 32 && bits != 0);
+  result = 1 << bits;
 
-  for (i = 0; i < bits; i++)
-  {
-    if (i == 31)
-      result = (result - 1) * 2 + 1;
-    else if (i < 31)
-      result *= 2;
-  }
 
   if (is_signed(expr.op0().type()))
     value = integer2string(binary2integer(expr.op0().get_string(
