@@ -153,12 +153,7 @@ bool z3_convt::is_signed(const typet &type)
 
 Z3_ast z3_convt::convert_number(int value, u_int width, bool type)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
-  std::string out;
-  out = "j: "+ 2;
   static Z3_ast number_var;
   char val[2];
 
