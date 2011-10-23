@@ -154,24 +154,28 @@ bool z3_convt::is_signed(const typet &type)
 Z3_ast z3_convt::convert_number(int value, u_int width, bool type)
 {
 
-  static Z3_ast number_var;
+  if (int_encoding)
+    return convert_number_int(value, width, type);
+  else
+    return convert_number_bv(value, width, type);
+}
 
-  if (type==false)
-  {
-    if (int_encoding)
-	  number_var = z3_api.mk_unsigned_int(z3_ctx, value);
-    else
-	  number_var = Z3_mk_unsigned_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
-  }
-  else if (type==true)
-  {
-    if (int_encoding)
-	  number_var = z3_api.mk_int(z3_ctx, value);
-	else
-	  number_var = Z3_mk_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
-  }
+Z3_ast z3_convt::convert_number_int(int value, u_int width, bool type)
+{
 
-  return number_var;
+  if (type)
+    return z3_api.mk_int(z3_ctx, value);
+  else
+    return z3_api.mk_unsigned_int(z3_ctx, value);
+}
+
+Z3_ast z3_convt::convert_number_bv(int value, u_int width, bool type)
+{
+
+  if (type)
+    return Z3_mk_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
+  else
+    return Z3_mk_unsigned_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
 }
 
 /*******************************************************************
