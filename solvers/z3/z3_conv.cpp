@@ -2844,6 +2844,9 @@ z3_convt::convert_zero_string(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
+  // XXXjmorse - this method appears to just return a free variable. Surely
+  // it should be selecting the zero_string field out of the referenced
+  // string?
   Z3_type_ast array_type;
 
   if (create_array_type(expr.type(), array_type))
