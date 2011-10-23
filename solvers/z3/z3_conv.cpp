@@ -1172,11 +1172,14 @@ z3_convt::convert_gt(const exprt &expr)
     bv = Z3_mk_gt(z3_ctx, operand[0], operand[1]);
   } else   {
     if (expr.op1().type().id() == "signedbv" || expr.op1().type().id() ==
-        "fixedbv"
-        || expr.op1().type().id() == "pointer")
+        "fixedbv" || expr.op1().type().id() == "pointer") {
       bv = Z3_mk_bvsgt(z3_ctx, operand[0], operand[1]);
-    else if (expr.op1().type().id() == "unsignedbv")
+    } else if (expr.op1().type().id() == "unsignedbv") {
       bv = Z3_mk_bvugt(z3_ctx, operand[0], operand[1]);
+    } else {
+      // XXXjmorse what guarentees this isn't reached?
+      assert(false);
+    }
   }
 
   return bv;
@@ -1217,11 +1220,14 @@ z3_convt::convert_le(const exprt &expr)
     bv = Z3_mk_le(z3_ctx, operand[0], operand[1]);
   } else   {
     if (expr.op1().type().id() == "signedbv" || expr.op1().type().id() ==
-        "fixedbv"
-        || expr.op1().type().id() == "pointer")
+        "fixedbv" || expr.op1().type().id() == "pointer") {
       bv = Z3_mk_bvsle(z3_ctx, operand[0], operand[1]);
-    else if (expr.op1().type().id() == "unsignedbv")
+    } else if (expr.op1().type().id() == "unsignedbv") {
       bv = Z3_mk_bvule(z3_ctx, operand[0], operand[1]);
+    } else {
+      // XXXjmorse what guarentees this isn't reached?
+      assert(false);
+    }
   }
 
   return bv;
@@ -1263,11 +1269,14 @@ z3_convt::convert_ge(const exprt &expr)
     bv = Z3_mk_ge(z3_ctx, operand[0], operand[1]);
   } else   {
     if (expr.op1().type().id() == "signedbv" || expr.op1().type().id() ==
-        "fixedbv"
-        || expr.op1().type().id() == "pointer")
+        "fixedbv" || expr.op1().type().id() == "pointer") {
       bv = Z3_mk_bvsge(z3_ctx, operand[0], operand[1]);
-    else if (expr.op1().type().id() == "unsignedbv")
+    } else if (expr.op1().type().id() == "unsignedbv") {
       bv = Z3_mk_bvuge(z3_ctx, operand[0], operand[1]);
+    } else {
+      // XXXjmorse - what guarentees this isn't reached.
+      assert(false);
+    }
   }
 
   return bv;
@@ -1512,6 +1521,9 @@ z3_convt::convert_same_object(const exprt &expr)
 
     formula[1] = Z3_mk_and(z3_ctx, 2, offset);
     bv = Z3_mk_and(z3_ctx, 2, formula);
+  } else {
+    // XXXjmorse - what guarentees this isn't reached?
+    assert(false);
   }
 
   DEBUGLOC;
@@ -1565,7 +1577,10 @@ z3_convt::convert_dynamic_object(const exprt &expr)
     if (expr.op0().type().id() == "pointer")
       operand0 = z3_api.mk_tuple_select(z3_ctx, operand0, 0);
 
-    if (dynamic_objects.size() == 1) {
+    if (dynamic_objects.size() == 0) {
+      // Can't be one of nil dynamic objects
+      return Z3_mk_false(z3_ctx);
+    } else if (dynamic_objects.size() == 1) {
       Z3_ast tmp;
       operand1 = convert_number(dynamic_objects.front(), width, true);
       tmp = Z3_mk_eq(z3_ctx, operand0, operand1);
@@ -2094,8 +2109,11 @@ z3_convt::convert_typecast_bool(const exprt &expr, Z3_ast &bv)
         Z3_mk_int(z3_ctx, 0, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
 
     bv = Z3_mk_distinct(z3_ctx, 2, args);
-  } else
+  } else {
     throw "TODO typecast1 " + op.type().id_string() + " -> bool";
+  }
+
+  return false;
 }
 
 
@@ -4236,6 +4254,8 @@ z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
       zero = convert_number(0, width, false);
       operand[1] = convert_number(-1, width, true);
     }
+  } else {
+    throw "Unexpected type in convert_abs";
   }
 
   if (convert_bv(op0, operand[0]))
@@ -4832,7 +4852,10 @@ z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
                     config.ansi_c.pointer_width,
                     operand0);
 
-    if (dynamic_objects.size() == 1) {
+    if (dynamic_objects.size() == 0) {
+      // If there are no dynamic objects, this obj can't be one of them.
+      bv = Z3_mk_false(z3_ctx);
+    } else if (dynamic_objects.size() == 1) {
       operand1 = convert_number(dynamic_objects.front(), BV_ADDR_BITS, true);
       bv = Z3_mk_eq(z3_ctx, operand0, operand1);
     } else   {
