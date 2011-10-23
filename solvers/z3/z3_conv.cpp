@@ -1595,10 +1595,9 @@ z3_convt::convert_dynamic_object(const exprt &expr)
            it = dynamic_objects.begin();
            it != dynamic_objects.end();
            it++, i++)
-      {
 	args[i] = Z3_mk_eq(z3_ctx, operand0, convert_number(*it, width, true));
-	bv = Z3_mk_or(z3_ctx, i, args);
-      }
+
+      bv = Z3_mk_or(z3_ctx, i, args);
     }
   }
 
