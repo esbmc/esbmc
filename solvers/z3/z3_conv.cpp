@@ -1730,6 +1730,8 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
 {
   DEBUGLOC;
 
+  // Addition in the following strips the "overflow-typecast-" prefix, and
+  // leaves us with the number of bits in the irep name.
   unsigned bits = atoi(expr.id().c_str() + 18);
 
   const exprt::operandst &operands = expr.operands();
@@ -1756,6 +1758,7 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
   if (int_encoding)
     operand[0] = Z3_mk_int2bv(z3_ctx, width, operand[0]);
 
+  // XXXjmorse - fixedbv is /not/ always partitioned at width/2
   if (expr.op0().type().id() == "fixedbv") {
     unsigned size = (width / 2) + 1;
     operand[0] = Z3_mk_extract(z3_ctx, width - 1, size - 1, operand[0]);
@@ -1763,6 +1766,7 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
 
   if (expr.op0().type().id() == "signedbv" || expr.op0().type().id() ==
       "fixedbv") {
+    // Produce some useful constants
     if (expr.op0().type().id() == "signedbv") {
       tmp = convert_number_bv(result, width, true);
       two = convert_number_bv(2, width, true);
@@ -1773,15 +1777,20 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
       minus_one = convert_number_bv(-1, width / 2, true);
     }
 
+    // Now produce numbers that bracket the selected bitwidth. So for 16 bis
+    // we would generate 2^15-1 and -2^15
     mid = Z3_mk_bvsdiv(z3_ctx, tmp, two);
     operand[1] = Z3_mk_bvsub(z3_ctx, mid, minus_one);
     operand[2] = Z3_mk_bvmul(z3_ctx, operand[1], minus_one);
 
+    // Ensure operand lies between these braces
     overflow[0] = Z3_mk_bvslt(z3_ctx, operand[0], operand[1]);
     overflow[1] = Z3_mk_bvsgt(z3_ctx, operand[0], operand[2]);
   } else if (expr.op0().type().id() == "unsignedbv")     {
+    // Create zero and 2^bitwidth,
     operand[2] = convert_number_bv(0, width, false);
     operand[1] = convert_number_bv(result, width, false);
+    // Ensure operand lies between those numbers.
     overflow[0] = Z3_mk_bvult(z3_ctx, operand[0], operand[1]);
     overflow[1] = Z3_mk_bvuge(z3_ctx, operand[0], operand[2]);
   }
