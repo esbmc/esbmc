@@ -1866,6 +1866,9 @@ z3_convt::convert_rest_index(const exprt &expr)
 
   DEBUGLOC;
 
+  // XXXjmorse - first two clauses are related to retrieving data from the
+  // __ESBMC_alloc and __ESBMC_alloc_size arrays. Not certain why they need
+  // special cases though.
   if (expr.op1().operands()[0].operands().size() == 0) {
     bv =
       Z3_mk_select(z3_ctx, operand0,
@@ -1880,7 +1883,6 @@ z3_convt::convert_rest_index(const exprt &expr)
     bv = Z3_mk_select(z3_ctx, operand0, operand1);
     bv = Z3_mk_eq(z3_ctx, bv, Z3_mk_false(z3_ctx));
   }
-
 
   DEBUGLOC;
 
