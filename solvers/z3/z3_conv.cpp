@@ -2874,50 +2874,35 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 
   u_int width = 0, i = 0;
+  Z3_sort native_int_sort;
   Z3_type_ast array_type, tuple_type;
   Z3_ast array_cte, int_cte, val_cte, tmp_struct;
   std::string value_cte;
-  char i_str[2];
 
+  assert(expr.id() == "constant");
+  native_int_sort = (int_encoding) ? Z3_mk_int_sort(z3_ctx)
+                              : Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
   width = config.ansi_c.int_width;
 
   if (expr.type().subtype().id() == "fixedbv") {
     if (boolbv_get_width(expr.type().subtype(), width))
       return true;
 
-    if (int_encoding)
-      array_type  = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(
-                                       z3_ctx), Z3_mk_real_type(z3_ctx));
-    else
-      array_type  =
-        Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
-                                               config.ansi_c.int_width),
-                         Z3_mk_bv_type(z3_ctx, width));
+    Z3_sort fixedbvsort = (int_encoding) ? Z3_mk_real_type(z3_ctx)
+                                         : Z3_mk_real_type(z3_ctx);
+    array_type = Z3_mk_array_type(z3_ctx, native_int_sort, fixedbvsort);
   } else if (expr.type().subtype().id() == "struct")   {
     if (create_struct_type(expr.op0().type(), tuple_type))
       return true;
 
-    if (int_encoding)
-      array_type  = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx), tuple_type);
-    else
-      array_type =
-        Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
-                                               config.ansi_c.int_width),
-                         tuple_type);
-
+    array_type = Z3_mk_array_type(z3_ctx, native_int_sort, tuple_type);
     value_cte = "constant" + expr.op0().type().get_string("tag");
     array_cte = z3_api.mk_var(z3_ctx, value_cte.c_str(), array_type);
 
     i = 0;
     forall_operands(it, expr)
     {
-      sprintf(i_str, "%i", i);
-      if (int_encoding)
-	int_cte = z3_api.mk_int(z3_ctx, atoi(i_str));
-      else
-	int_cte =
-	  Z3_mk_int(z3_ctx, atoi(i_str),
-	            Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+      int_cte = Z3_mk_int(z3_ctx, i, native_int_sort);
 
       if (convert_struct_union(*it, tmp_struct))
 	return true;
@@ -2927,7 +2912,6 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     }
 
     bv = array_cte;
-
 
     DEBUGLOC;
 
@@ -2943,14 +2927,9 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     if (boolbv_get_width(expr.type().subtype(), width))
       return true;
 
-    if (int_encoding)
-      array_type  = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(
-                                       z3_ctx), Z3_mk_int_type(z3_ctx));
-    else
-      array_type  =
-        Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
-                                               config.ansi_c.int_width),
-                         Z3_mk_bv_type(z3_ctx, width));
+    Z3_sort elemsort = (int_encoding) ? Z3_mk_int_sort(z3_ctx)
+                                      : Z3_mk_bv_sort(z3_ctx, width);
+    array_type = Z3_mk_array_type(z3_ctx, native_int_sort, elemsort);
   }
 
   value_cte = expr.get_string("identifier") +
@@ -2960,40 +2939,24 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
   i = 0;
   forall_operands(it, expr)
   {
-    sprintf(i_str, "%i", i);
-    if (int_encoding)
-      int_cte = z3_api.mk_int(z3_ctx, atoi(i_str));
-    else
-      int_cte =
-        Z3_mk_int(z3_ctx, atoi(i_str),
-                  Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+    int_cte = Z3_mk_int(z3_ctx, i, native_int_sort);
 
     if (it->type().id() == "array") {
       if (convert_bv(*it, val_cte))
 	return true;
-    } else   {
-      if (is_signed(it->type()))
-	value_cte =
-	  integer2string(binary2integer(it->get("value").c_str(), true), 10);
-      else
-	value_cte =
-	  integer2string(binary2integer(it->get("value").c_str(), false), 10);
+    } else  {
+      int64_t value = binary2integer(it->get("value").c_str(),
+                                     is_signed(it->type())).to_long();
 
       if (int_encoding) {
 	if (it->type().id() == "signedbv")
-	  val_cte =
-	    Z3_mk_int(z3_ctx, atoi(value_cte.c_str()), Z3_mk_int_type(z3_ctx));
+	  val_cte = Z3_mk_int64(z3_ctx, value, Z3_mk_int_type(z3_ctx));
 	else if (it->type().id() == "unsignedbv")
-	  val_cte = Z3_mk_unsigned_int(z3_ctx, atoi(
-	                                 value_cte.c_str()),
-	                               Z3_mk_int_type(z3_ctx));
+	  val_cte = Z3_mk_unsigned_int64(z3_ctx, value,Z3_mk_int_type(z3_ctx));
 	else if (it->type().id() == "fixedbv")
-	  val_cte =
-	    Z3_mk_int(z3_ctx, atoi(value_cte.c_str()), Z3_mk_real_type(z3_ctx));
-      } else   {
-	val_cte =
-	  Z3_mk_int(z3_ctx, atoi(value_cte.c_str()),
-	            Z3_mk_bv_type(z3_ctx, width));
+	  val_cte = Z3_mk_int64(z3_ctx, value, Z3_mk_real_type(z3_ctx));
+      } else {
+	val_cte = Z3_mk_int64(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
       }
     }
 
