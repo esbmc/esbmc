@@ -1831,10 +1831,6 @@ z3_convt::convert_rest_member(const exprt &expr)
   if (convert_bv(expr, bv))
     return Z3_mk_false(z3_ctx);
 
-  if (expr.get_string("component_name") == "is_zero") {
-    bv = Z3_mk_not(z3_ctx, Z3_mk_eq(z3_ctx, Z3_mk_false(z3_ctx), bv));
-  }
-
   return bv;
 }
 
