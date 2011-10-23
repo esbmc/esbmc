@@ -151,7 +151,7 @@ bool z3_convt::is_signed(const typet &type)
 
  \*******************************************************************/
 
-Z3_ast z3_convt::convert_number(int value, u_int width, bool type)
+Z3_ast z3_convt::convert_number(int64_t value, u_int width, bool type)
 {
 
   if (int_encoding)
@@ -160,7 +160,7 @@ Z3_ast z3_convt::convert_number(int value, u_int width, bool type)
     return convert_number_bv(value, width, type);
 }
 
-Z3_ast z3_convt::convert_number_int(int value, u_int width, bool type)
+Z3_ast z3_convt::convert_number_int(int64_t value, u_int width, bool type)
 {
 
   if (type)
@@ -169,7 +169,7 @@ Z3_ast z3_convt::convert_number_int(int value, u_int width, bool type)
     return z3_api.mk_unsigned_int(z3_ctx, value);
 }
 
-Z3_ast z3_convt::convert_number_bv(int value, u_int width, bool type)
+Z3_ast z3_convt::convert_number_bv(int64_t value, u_int width, bool type)
 {
 
   if (type)

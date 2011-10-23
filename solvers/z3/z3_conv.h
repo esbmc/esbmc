@@ -9,6 +9,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef CPROVER_PROP_Z3_CONV_H
 #define CPROVER_PROP_Z3_CONV_H
 
+#include <stdint.h>
+
 #include <map>
 #include <hash_cont.h>
 #include <solvers/prop/prop_conv.h>
@@ -204,9 +206,9 @@ private:
   void print_data_types(Z3_ast operand0, Z3_ast operand1);
   void print_location(const exprt &expr);
   void show_bv_size(Z3_ast operand);
-  Z3_ast convert_number(int value, u_int width, bool type);
-  Z3_ast convert_number_int(int value, u_int width, bool type);
-  Z3_ast convert_number_bv(int value, u_int width, bool type);
+  Z3_ast convert_number(int64_t value, u_int width, bool type);
+  Z3_ast convert_number_int(int64_t value, u_int width, bool type);
+  Z3_ast convert_number_bv(int64_t value, u_int width, bool type);
   void generate_assumptions(const exprt &expr, const Z3_ast &result);
   void store_sat_assignments(Z3_model m);
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
