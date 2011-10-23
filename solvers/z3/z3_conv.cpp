@@ -2684,6 +2684,8 @@ z3_convt::convert_struct(const exprt &expr, Z3_ast &bv)
 
   Z3_ast value;
 
+  // Converts a static struct - IE, one that hasn't had any "with" operations
+  // applied to it, perhaps due to initialization or constant propagation.
   const struct_typet &struct_type = to_struct_type(expr.type());
   const struct_typet::componentst &components = struct_type.components();
   u_int i = 0;
@@ -2694,9 +2696,11 @@ z3_convt::convert_struct(const exprt &expr, Z3_ast &bv)
 
   identifier = "conv_struct_" + expr.type().get_string("tag");
 
+  // Generate a tuple of the correct form for this type
   if (convert_identifier(identifier, expr.type(), bv))
     return true;
 
+  // Populate tuple with members of that struct
   for (struct_typet::componentst::const_iterator
        it = components.begin();
        it != components.end();
