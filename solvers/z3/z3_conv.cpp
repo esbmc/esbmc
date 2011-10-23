@@ -1751,13 +1751,9 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
   assert(bits <= 32 && bits != 0);
   result = 1 << bits;
 
-
-  if (is_signed(expr.op0().type()))
-    value = integer2string(binary2integer(expr.op0().get_string(
-                                            "value"), true), 10);
-  else
-    value = integer2string(binary2integer(expr.op0().get_string(
-                                            "value"), false), 10);
+  bool constnum_is_signed = (is_signed(expr.op0().type())) ? true : false;
+  value = integer2string(binary2integer(expr.op0().get_string(
+                                            "value"), constnum_is_signed), 10);
 
   if (convert_bv(expr.op0(), operand[0]))
     return Z3_mk_false(z3_ctx);
@@ -1788,14 +1784,14 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
 
     overflow[0] = Z3_mk_bvslt(z3_ctx, operand[0], operand[1]);
     overflow[1] = Z3_mk_bvsgt(z3_ctx, operand[0], operand[2]);
-    bv = Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, overflow));
   } else if (expr.op0().type().id() == "unsignedbv")     {
     operand[2] = convert_number_bv(0, width, false);
     operand[1] = convert_number_bv(result, width, false);
     overflow[0] = Z3_mk_bvult(z3_ctx, operand[0], operand[1]);
     overflow[1] = Z3_mk_bvuge(z3_ctx, operand[0], operand[2]);
-    bv = Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, overflow));
   }
+
+  bv = Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, overflow));
 
   return bv;
 }
