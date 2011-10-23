@@ -2684,6 +2684,11 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
 
   Z3_ast value;
 
+  // XXXjmorse - original convert_struct and convert_union were used both when
+  // either expr.id() or expr.type().id() was struct/union. This can (still)
+  // lead to an arbitary irep with type struct/union being fed here, which
+  // could be invalid.
+
   // Converts a static struct/union - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
