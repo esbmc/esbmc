@@ -2019,6 +2019,8 @@ z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 
   Z3_ast operand0, operand1;
 
+  // XXXjmorse - are there not also convert{gt,lt,ge,le} methods which already
+  // implement this?
   if (convert_bv(expr.op0(), operand0))
     return true;
   if (convert_bv(expr.op1(), operand1))
