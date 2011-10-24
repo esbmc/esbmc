@@ -125,8 +125,7 @@ protected:
   bool convert_logical_ops(const exprt &expr, Z3_ast &bv);
   bool convert_logical_not(const exprt &expr, Z3_ast &bv);
   bool convert_equality(const exprt &expr, Z3_ast &bv);
-  bool convert_add(const exprt &expr, Z3_ast &bv);
-  bool convert_sub(const exprt &expr, Z3_ast &bv);
+  bool convert_add_sub(const exprt &expr, Z3_ast &bv);
   bool convert_div(const exprt &expr, Z3_ast &bv);
   bool convert_mod(const exprt &expr, Z3_ast &bv);
   bool convert_mul(const exprt &expr, Z3_ast &bv);

@@ -3298,7 +3298,7 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_add
+   Function: z3_convt::convert_add_sub
 
    Inputs:
 
@@ -3309,9 +3309,25 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
  \*******************************************************************/
 
 bool
-z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
+z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
+
+  typedef Z3_ast (*call1)(Z3_context, Z3_ast, Z3_ast);
+  typedef Z3_ast (*call2)(Z3_context, unsigned int, const Z3_ast *);
+
+  call1 bvcall;
+  call2 intcall;
+
+  if (expr.id() == "+") {
+    bvcall = Z3_mk_bvadd;
+    intcall = Z3_mk_add;
+  } else if (expr.id() == "-") {
+    bvcall = Z3_mk_bvsub;
+    intcall = Z3_mk_sub;
+  } else {
+    assert(false);
+  }
 
   assert(expr.operands().size() >= 2);
   Z3_ast *args;
@@ -3339,53 +3355,22 @@ z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
 
       if (!int_encoding) {
 	if (i == 1) {
-	  args[size - 1] = Z3_mk_bvadd(z3_ctx, args[0], args[1]);
+	  args[size - 1] = bvcall(z3_ctx, args[0], args[1]);
 	} else if (i > 1)     {
-	  args[size - 1] = Z3_mk_bvadd(z3_ctx, args[size - 1], args[i]);
+	  args[size - 1] = bvcall(z3_ctx, args[size - 1], args[i]);
 	}
       }
       ++i;
     }
 
     if (int_encoding)
-      args[i] = Z3_mk_add(z3_ctx, i, args);
+      args[i] = intcall(z3_ctx, i, args);
 
     bv = z3_api.mk_tuple_update(z3_ctx, pointer, 1, args[i]);
 
     if (expr.type().id() == "signedbv")
       bv = args[i];
-  } else if (expr.op0().id() == "typecast" || expr.op1().id() ==
-             "typecast")       {
-    forall_operands(it, expr)
-    {
-      if (convert_bv(*it, args[i]))
-	return true;
-
-      if (it->id() == "typecast") {
-	const exprt &offset = it->operands()[0];
-
-	if (offset.type().id() == "pointer" && offset.type().subtype().id() !=
-	    "empty" /*&& offset.type().subtype().id()!="signedbv"*/)
-	  args[i] = z3_api.mk_tuple_select(z3_ctx, args[i], 1);     //select
-				                                    // pointer
-				                                    // index
-      }
-
-      if (!int_encoding) {
-	if (i == 1) {
-	  args[size - 1] = Z3_mk_bvadd(z3_ctx, args[0], args[1]);
-	} else if (i > 1)     {
-	  args[size - 1] = Z3_mk_bvadd(z3_ctx, args[size - 1], args[i]);
-	}
-      }
-      ++i;
-    }
-
-    if (int_encoding)
-      args[i] = Z3_mk_add(z3_ctx, i, args);
-
-    bv = args[i];
-  } else   {
+ } else   {
     forall_operands(it, expr)
     {
       if (convert_bv(*it, args[i]))
@@ -3393,16 +3378,16 @@ z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
 
       if (!int_encoding) {
 	if (i == 1) {
-	  args[size - 1] = Z3_mk_bvadd(z3_ctx, args[0], args[1]);
+	  args[size - 1] = bvcall(z3_ctx, args[0], args[1]);
 	} else if (i > 1)     {
-	  args[size - 1] = Z3_mk_bvadd(z3_ctx, args[size - 1], args[i]);
+	  args[size - 1] = bvcall(z3_ctx, args[size - 1], args[i]);
 	}
       }
       ++i;
     }
 
     if (int_encoding)
-      args[i] = Z3_mk_add(z3_ctx, i, args);
+      args[i] = intcall(z3_ctx, i, args);
 
     bv = args[i];
   }
@@ -3410,89 +3395,6 @@ z3_convt::convert_add(const exprt &expr, Z3_ast &bv)
   delete[] args;
 
   DEBUGLOC;
-
-  return false;
-}
-
-/*******************************************************************
-   Function: z3_convt::convert_sub
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-bool
-z3_convt::convert_sub(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() >= 2);
-  Z3_ast *args;
-  u_int i = 0, size;
-
-  size = expr.operands().size() + 1;
-  args = new Z3_ast[size];
-
-  if (expr.op0().type().id() == "pointer" || expr.op1().type().id() ==
-      "pointer") {
-    Z3_ast pointer = 0;
-
-    forall_operands(it, expr)
-    {
-      if (convert_bv(*it, args[i]))
-	return true;
-
-      if (it->type().id() == "pointer") {
-	pointer = args[i];
-	args[i] = z3_api.mk_tuple_select(z3_ctx, pointer, 1); //select pointer
-				                              // index
-      }
-
-      if (!int_encoding) {
-	if (i == 1) {
-	  args[size - 1] = Z3_mk_bvsub(z3_ctx, args[0], args[1]);
-	} else if (i > 1)     {
-	  args[size - 1] = Z3_mk_bvsub(z3_ctx, args[size - 1], args[i]);
-	}
-      }
-      ++i;
-    }
-
-    if (int_encoding)
-      args[i] = Z3_mk_sub(z3_ctx, i, args);
-
-    bv = z3_api.mk_tuple_update(z3_ctx, pointer, 1, args[i]);
-
-    if (expr.type().id() == "signedbv")
-      bv = args[i];
-  }
-  else {
-    forall_operands(it, expr)
-    {
-      if (convert_bv(*it, args[i]))
-	return true;
-
-      if (!int_encoding) {
-	if (i == 1) {
-	  args[size - 1] = Z3_mk_bvsub(z3_ctx, args[0], args[1]);
-	} else if (i > 1)     {
-	  args[size - 1] = Z3_mk_bvsub(z3_ctx, args[size - 1], args[i]);
-	}
-      }
-      ++i;
-    }
-
-    if (int_encoding)
-      args[i] = Z3_mk_sub(z3_ctx, i, args);
-
-    bv = args[i];
-  }
-
-  delete[] args;
 
   return false;
 }
@@ -5121,10 +5023,8 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
   else if (expr.id() == "<=" || expr.id() == "<" || expr.id() == ">="
            || expr.id() == ">")
     return convert_rel(expr, bv);
-  else if (expr.id() == "+")
-    return convert_add(expr, bv);
-  else if (expr.id() == "-")
-    return convert_sub(expr, bv);
+  else if (expr.id() == "+" || expr.id() == "-")
+    return convert_add_sub(expr, bv);
   else if (expr.id() == "/")
     return convert_div(expr, bv);
   else if (expr.id() == "mod")
