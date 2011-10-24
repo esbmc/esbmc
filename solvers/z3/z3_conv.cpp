@@ -4068,36 +4068,25 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 3);
   Z3_ast array_var, array_val, operand0, operand1, operand2;
 
-  if (expr.type().id() == "struct") {
+  if (expr.type().id() == "struct" || expr.type().id() == "union") {
+    unsigned int idx;
+
     if (convert_bv(expr.op0(), array_var))
       return true;
 
     if (convert_bv(expr.op2(), array_val))
       return true;
 
-    bv = z3_api.mk_tuple_update(z3_ctx, array_var,
-                                convert_member_name(expr.op0(),
-                                                    expr.op1()), array_val);
-  } else if (expr.type().id() == "union")   {
-    if (convert_bv(expr.op0(), array_var))
-      return true;
+    idx = convert_member_name(expr.op0(), expr.op1());
+    bv = z3_api.mk_tuple_update(z3_ctx, array_var, idx, array_val);
 
-    if (convert_bv(expr.op2(), array_val))
-      return true;
-
-    const struct_typet &struct_type = to_struct_type(expr.op0().type());
-    const struct_typet::componentst &components = struct_type.components();
-
-    assert(components.size() >= expr.op0().operands().size());
-
-    bv = z3_api.mk_tuple_update(z3_ctx, array_var,
-                                convert_member_name(expr.op0(),
-                                                    expr.op1()), array_val);
-
-    bv = z3_api.mk_tuple_update(z3_ctx, bv, components.size(),
-                                convert_number(convert_member_name(expr.op0(),
-                                                                   expr.op1()),
-                                               config.ansi_c.int_width, 0));
+    // Update last-updated-field field if it's a union
+    if (expr.type().id() == "union") {
+       unsigned int components_size =
+                  to_struct_union_type( expr.op0().type()).components().size();
+       bv = z3_api.mk_tuple_update(z3_ctx, bv, components_size,
+                              convert_number(idx, config.ansi_c.int_width, 0));
+    }
   } else   {
 
     if (convert_bv(expr.op0(), operand0))
