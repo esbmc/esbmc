@@ -3549,35 +3549,6 @@ z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
       args[i] = Z3_mk_mul(z3_ctx, i, args);
 
     bv = z3_api.mk_tuple_update(z3_ctx, pointer, 1, args[i]);
-  } else if (expr.op0().id() == "typecast" || expr.op1().id() ==
-             "typecast")       {
-    forall_operands(it, expr)
-    {
-      if (convert_bv(*it, args[i]))
-	return true;
-
-      if (it->id() == "typecast") {
-	const exprt &offset = it->operands()[0];
-	if (offset.type().id() == "pointer")
-	  args[i] = z3_api.mk_tuple_select(z3_ctx, args[i], 1);     //select
-				                                    // pointer
-				                                    // index
-      }
-
-      if (!int_encoding) {
-	if (i == 1) {
-	  args[size - 1] = Z3_mk_bvmul(z3_ctx, args[0], args[1]);
-	} else if (i > 1)     {
-	  args[size - 1] = Z3_mk_bvmul(z3_ctx, args[size - 1], args[i]);
-	}
-      }
-      ++i;
-    }
-
-    if (int_encoding)
-      args[i] = Z3_mk_mul(z3_ctx, i, args);
-
-    bv = args[i];
   } else   {
     forall_operands(it, expr)
     {
