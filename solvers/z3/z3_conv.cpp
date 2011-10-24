@@ -3814,7 +3814,8 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   Z3_type_ast array_type = 0;
   const array_typet &array_type_size = to_array_type(expr.type());
   std::string tmp, out, identifier;
-  static u_int size, j, inc = 0;
+  u_int j, size;
+  static u_int inc = 0; // valid-ish as static, should be member.
   unsigned width;
 
   tmp =
@@ -3823,8 +3824,6 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   size = atoi(tmp.c_str());
 
   size = (size == 0) ? 100 : size; //fill in at least one position
-
-  index = convert_number(j, config.ansi_c.int_width, true);
 
   if (convert_bv(expr.op0(), value))
     return true;
