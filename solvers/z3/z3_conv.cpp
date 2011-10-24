@@ -3785,14 +3785,13 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   Z3_type_ast array_type = 0;
   const array_typet &array_type_size = to_array_type(expr.type());
   std::string tmp, out, identifier;
-  u_int j, size;
+  int64_t size;
+  u_int j;
   static u_int inc = 0; // valid-ish as static, should be member.
   unsigned width;
 
-  tmp =
-    integer2string(binary2integer(array_type_size.size().get_string(
-                                    "value"), false), 10);
-  size = atoi(tmp.c_str());
+  size = binary2integer(array_type_size.size().get_string("value"), false)
+                        .to_long();
 
   size = (size == 0) ? 100 : size; //fill in at least one position
 
