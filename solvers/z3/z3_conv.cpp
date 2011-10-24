@@ -2941,24 +2941,8 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
   {
     int_cte = Z3_mk_int(z3_ctx, i, native_int_sort);
 
-    if (it->type().id() == "array") {
-      if (convert_bv(*it, val_cte))
-	return true;
-    } else  {
-      int64_t value = binary2integer(it->get("value").c_str(),
-                                     is_signed(it->type())).to_long();
-
-      if (int_encoding) {
-	if (it->type().id() == "signedbv")
-	  val_cte = Z3_mk_int64(z3_ctx, value, Z3_mk_int_type(z3_ctx));
-	else if (it->type().id() == "unsignedbv")
-	  val_cte = Z3_mk_unsigned_int64(z3_ctx, value,Z3_mk_int_type(z3_ctx));
-	else if (it->type().id() == "fixedbv")
-	  val_cte = Z3_mk_int64(z3_ctx, value, Z3_mk_real_type(z3_ctx));
-      } else {
-	val_cte = Z3_mk_int64(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
-      }
-    }
+    if (convert_bv(*it, val_cte))
+      return true;
 
     bv = Z3_mk_store(z3_ctx, bv, int_cte, val_cte);
     ++i;
