@@ -2896,27 +2896,6 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
       return true;
 
     array_type = Z3_mk_array_type(z3_ctx, native_int_sort, tuple_type);
-    value_cte = "constant" + expr.op0().type().get_string("tag");
-    array_cte = z3_api.mk_var(z3_ctx, value_cte.c_str(), array_type);
-
-    i = 0;
-    forall_operands(it, expr)
-    {
-      int_cte = Z3_mk_int(z3_ctx, i, native_int_sort);
-
-      if (convert_struct_union(*it, tmp_struct))
-	return true;
-
-      array_cte = Z3_mk_store(z3_ctx, array_cte, int_cte, tmp_struct);
-      ++i;
-    }
-
-    bv = array_cte;
-
-    DEBUGLOC;
-
-    return false;
-    //return array_cte;
   } else if (expr.type().subtype().id() == "array")   {
     if (boolbv_get_width(expr.type().subtype().subtype(), width))
       return true;
@@ -2932,8 +2911,12 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     array_type = Z3_mk_array_type(z3_ctx, native_int_sort, elemsort);
   }
 
-  value_cte = expr.get_string("identifier") +
-              expr.type().subtype().get("width").c_str();
+  if (expr.type().subtype().id() == "struct")
+    value_cte = "constant" + expr.op0().type().get_string("tag");
+  else
+    value_cte = expr.get_string("identifier") +
+                expr.type().subtype().get("width").c_str();
+
   bv = z3_api.mk_var(z3_ctx, value_cte.c_str(), array_type);
 
   i = 0;
