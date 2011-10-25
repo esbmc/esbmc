@@ -4358,20 +4358,19 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
     const struct_typet &struct_type = to_struct_type(object.type());
     const struct_typet::componentst &components = struct_type.components();
     u_int i = 0;
-    char val[2];
 
+    // XXXjmorse - sets pointer object to the index of the component. This is
+    // wrong.
     for (struct_typet::componentst::const_iterator
          it = components.begin();
          it != components.end();
          it++, i++)
     {
-      sprintf(val, "%i", i);
       if (int_encoding)
-	pointer_object = z3_api.mk_int(z3_ctx, atoi(val));
+	pointer_object = z3_api.mk_int(z3_ctx, i);
       else
 	pointer_object =
-	  Z3_mk_int(z3_ctx, atoi(val),
-	            Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+	  Z3_mk_int(z3_ctx, i, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
     }
   } else   {
     if (convert_bv(object, pointer_object)) {
