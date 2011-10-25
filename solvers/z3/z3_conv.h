@@ -227,6 +227,7 @@ private:
     std::string msg;
     irept irep;
 
+  public:
     conv_error(std::string msg, irept irep) {
       this->msg = msg;
       this->irep = irep;
