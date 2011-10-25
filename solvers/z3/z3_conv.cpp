@@ -889,6 +889,7 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
   Z3_sort sort;
   unsigned width;
 
+  // XXX XXX XXX - surely this can all become create_type?
   if (type.id() == "bool") {
     sort =  Z3_mk_bool_type(z3_ctx);
   } else if (!int_encoding && (type.id() == "signedbv" ||
