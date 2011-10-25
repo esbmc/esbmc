@@ -249,6 +249,8 @@ private:
       if (num_frames == 0)
         msg += "(couldn't get a backtrace)\n";
 
+      msg += "For irep:" + irep.pretty(0);
+
       return msg;
     }
   };
