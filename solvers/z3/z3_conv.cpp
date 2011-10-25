@@ -4309,6 +4309,7 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 
   assert(expr.operands().size() == 1 && is_ptr(expr.op0().type()));
   Z3_ast pointer_object = 0;
+  // XXXjmorse - this isn't always anything. See: 01_cbmc_Malloc5
   const exprt &object = expr.op0().operands()[0];
   unsigned width, object_width;
 
@@ -4374,6 +4375,7 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
     }
   } else   {
     if (convert_bv(object, pointer_object)) {
+      // Zero is the null object. Not correct.
       if (object.type().id() == "pointer" && object.type().subtype().id() ==
           "symbol") {
 	if (int_encoding)
@@ -4638,6 +4640,9 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 
   assert(expr.operands().size() == 3);
+  // op0 is the object to update
+  // op1 is the byte number
+  // op2 is the value to update with
 
   mp_integer i;
   if (to_integer(expr.op1(), i)) {
@@ -4670,6 +4675,7 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
     const struct_typet::componentst &components = struct_type.components();
     bool has_field = false;
 
+    // XXXjmorse, this isn't going to be the case if it's a with.
     assert(components.size() >= expr.op0().operands().size());
     assert(!components.empty());
 
@@ -4731,6 +4737,8 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 
   assert(expr.operands().size() == 2);
+  // op0 is object to extract from
+  // op1 is byte field to extract from.
 
   mp_integer i;
   if (to_integer(expr.op1(), i))
@@ -4741,6 +4749,8 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   if (boolbv_get_width(expr.op0().type(), width))
     return true;
 
+  // XXXjmorse - looks like this only ever reads a single byte, not the desired
+  // number of bytes to fill the type.
   if (boolbv_get_width(expr.type(), w))
     return true;
 
