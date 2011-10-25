@@ -3,7 +3,7 @@
  *
  * Author: Blanc Nicolas
  *
- * 
+ *
 \*******************************************************************/
 
 #ifndef STL_IOSTREAM
@@ -35,7 +35,6 @@ namespace std
 		int get();
 	};
 
-
 	struct iostream: ostream, istream
 	{
 		iostream(int id): ostream(id), istream(id){}
@@ -44,9 +43,110 @@ namespace std
 		iostream& operator=(const iostream&); // disabled
 	};
 
+	struct setprecision
+	{
+		setprecision(int p);
+	};
+
+	struct setbase
+	{
+		setbase(int b);
+	};
+
+	struct fixedStruct
+	{
+		fixedStruct();
+	private:
+		fixedStruct(const fixedStruct&); // disabled
+	};
+
+	struct averageStruct
+	{
+		averageStruct();
+	private:
+		averageStruct(const averageStruct&); // disabled
+	};
+
+	struct leftStruct
+	{
+		leftStruct();
+	private:
+		leftStruct(const leftStruct&); // disabled
+	};
+
+	struct rightStruct
+	{
+		rightStruct();
+	private:
+		rightStruct(const rightStruct&); // disabled
+	};
+
+	struct hexStruct
+	{
+		hexStruct();
+	private:
+		hexStruct(const hexStruct&); // disabled
+	};
+
+	struct decStruct
+	{
+		decStruct();
+	private:
+		decStruct(const decStruct&); // disabled
+	};
+
+	struct octStruct
+	{
+		octStruct();
+	private:
+		octStruct(const octStruct&); // disabled
+	};
+
+	struct setw
+	{
+		setw(int w);
+	};
+
+	struct setfill
+	{
+		setfill(int f);
+	};
+
+	struct flushStruct
+	{
+		flushStruct();
+	private:
+		flushStruct(const flushStruct&); // disabled
+
+	};
+
+	struct scientificStruct
+	{
+		scientificStruct();
+	private:
+		scientificStruct(const scientificStruct&); // disabled
+	};
+
+	struct showpointStruct
+	{
+		showpointStruct();
+	private:
+		showpointStruct(const showpointStruct&); // disabled
+	};
+
 	extern istream cin;
 	extern ostream cout;
 	extern ostream cerr;
+	extern fixedStruct fixed;
+	extern averageStruct average;
+	extern leftStruct left;
+	extern rightStruct right;
+	extern hexStruct hex;
+	extern octStruct oct;
+	extern decStruct dec;
+	extern flushStruct flush;
+	extern scientificStruct scientific;
+	extern showpointStruct showpoint;
 
 	char endl = '\n';
 }
@@ -125,8 +225,8 @@ namespace std
 	{ 
 		esbmc::esbmc_print_unsigned(o.id, i);
 		return o;
-	}
 
+	}
 	inline ostream& operator << (ostream& o, long long  i)
 	{ 
 		esbmc::esbmc_print_long_long(o.id, i);
@@ -145,11 +245,102 @@ namespace std
 		return o;
 	}
 
+	inline ostream& operator << (ostream& o, setprecision sp)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, fixedStruct f)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, averageStruct a)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, setw s)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, leftStruct l)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, rightStruct r)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, hexStruct h)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, decStruct d)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, octStruct oc)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, setbase b)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, flushStruct f)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, setfill f)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, scientificStruct s)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, showpointStruct sp)
+	{
+		return o;
+	}
+
 	int get() {
 	  if (nondet_bool())
 	    return nondet_uint();
 	  else
 	    return EOF;
 	}
+
+	setw::setw(int w)
+	{
+		__ESBMC_assert(w > 0, "The width must be greater than 0");
+	}
+
+	setprecision::setprecision(int p)
+	{
+		__ESBMC_assert(p > 0, "The precision must be greater than 0");
+	}
+
+	setbase::setbase(int b)
+	{
+		// model
+	}
+
+	setfill::setfill(int f)
+	{
+		// model
+	}
+
 }
 #endif
