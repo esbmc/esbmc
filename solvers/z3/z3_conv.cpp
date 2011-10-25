@@ -4267,24 +4267,14 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
-  const struct_typet &struct_type = to_struct_type(expr.op0().type());
-  const struct_typet::componentst &components = struct_type.components();
-  u_int i = 0, j = 0;
+  u_int j = 0;
   Z3_ast struct_var;
 
   if (convert_bv(expr.op0(), struct_var))
     return true;
 
-  for (struct_typet::componentst::const_iterator
-       it = components.begin();
-       it != components.end();
-       it++, i++)
-  {
-    if (it->get("name").compare(expr.get_string("component_name")) == 0)
-      j = i;
-  }
+  j = convert_member_name(expr.op0(), expr);
 
-#if 1
   if (expr.op0().type().id() == "union") {
     union_varst::const_iterator cache_result = union_vars.find(
       expr.op0().get_string("identifier").c_str());
@@ -4293,7 +4283,6 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
       return false;
     }
   }
-#endif
 
   bv = z3_api.mk_tuple_select(z3_ctx, struct_var, j);
 
