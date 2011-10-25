@@ -9,6 +9,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef CPROVER_PROP_Z3_CONV_H
 #define CPROVER_PROP_Z3_CONV_H
 
+#include <execinfo.h>
 #include <stdint.h>
 
 #include <map>
@@ -220,11 +221,17 @@ private:
   union_varst union_vars;
 
   class conv_error {
+    void *backtrace_ptrs[50];
+    char **backtrace_syms;
+    int num_frames;
     std::string msg;
     irept irep;
+
     conv_error(std::string msg, irept irep) {
       this->msg = msg;
       this->irep = irep;
+      num_frames = backtrace(backtrace_ptrs, 50);
+      backtrace_syms = backtrace_symbols(backtrace_ptrs, num_frames);
       return;
     }
   };
