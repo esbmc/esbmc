@@ -1274,6 +1274,7 @@ z3_convt::convert_eq(const exprt &expr)
   if (convert_bv(op1, operand[1]))
     return Z3_mk_false(z3_ctx);
 
+  // XXXjmorse, surely types in equality are identical?
   if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
     Z3_ast pointer[2], formula[2];
 
@@ -1304,8 +1305,6 @@ z3_convt::convert_eq(const exprt &expr)
       formula[1] = Z3_mk_distinct(z3_ctx, 2, pointer);
 
     bv = Z3_mk_and(z3_ctx, 2, formula);
-
-    //return bv;
   } else   {
     if (expr.id() == "=")
       bv = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
@@ -1334,6 +1333,9 @@ z3_convt::convert_invalid(const exprt &expr)
 {
   DEBUGLOC;
 
+  // XXXjmorse - precisely what does this method /mean/ though?
+  // what's it checking
+
   assert(expr.operands().size() == 1);
   assert(expr.op0().type().id() == "pointer");
   Z3_ast bv, pointer, operand[2];
@@ -1343,6 +1345,8 @@ z3_convt::convert_invalid(const exprt &expr)
        expr.op0().type().subtype().id() == "symbol"))
     return Z3_mk_false(z3_ctx);
 
+  // XXXjmorse - what's this clause and the next about? Why does presence in the
+  // cache affect how things are handled? Plus, the cache is optional...
   if (!is_in_cache(expr.op0()) && expr.op0().id() == "typecast")
     return Z3_mk_true(z3_ctx);
 
@@ -1354,6 +1358,7 @@ z3_convt::convert_invalid(const exprt &expr)
   }
 
   //the subtype field of index is empty and generates seg. fault
+  // XXXjmorse, so we ignore it?
   if (!is_in_cache(expr.op0()) && expr.op0().id() == "index")
     return Z3_mk_false(z3_ctx);
 
