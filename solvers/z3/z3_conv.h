@@ -219,6 +219,19 @@ private:
   typedef std::map<std::string, unsigned int> union_varst;
   union_varst union_vars;
 
+  class conv_error {
+    std::string msg, func;
+    irept irep;
+    unsigned line;
+    conv_error(std::string msg, irept irep, std::string func, unsigned line) {
+      this->msg = msg;
+      this->irep = irep;
+      this->func = func;
+      this->line = line;
+      return;
+    }
+  };
+
 public:
   static Z3_context z3_ctx;
   static bool s_is_uw;
