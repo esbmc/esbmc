@@ -83,17 +83,17 @@ private:
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
-  bool create_array_type(const typet &type, Z3_type_ast &bv);
-  bool create_type(const typet &type, Z3_type_ast &bv);
-  bool create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv);
-  bool create_struct_type(const typet &type, Z3_type_ast &bv) {
-    return create_struct_union_type(type, false, bv);
+  void create_array_type(const typet &type, Z3_type_ast &bv);
+  void create_type(const typet &type, Z3_type_ast &bv);
+  void create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv);
+  void create_struct_type(const typet &type, Z3_type_ast &bv) {
+    create_struct_union_type(type, false, bv);
   }
-  bool create_union_type(const typet &type, Z3_type_ast &bv) {
-    return create_struct_union_type(type, true, bv);
+  void create_union_type(const typet &type, Z3_type_ast &bv) {
+    create_struct_union_type(type, true, bv);
   }
-  bool create_enum_type(Z3_type_ast &bv);
-  bool create_pointer_type(const typet &type, Z3_type_ast &bv);
+  void create_enum_type(Z3_type_ast &bv);
+  void create_pointer_type(const typet &type, Z3_type_ast &bv);
   Z3_ast convert_lt(const exprt &expr);
   Z3_ast convert_gt(const exprt &expr);
   Z3_ast convert_le(const exprt &expr);
@@ -142,7 +142,7 @@ private:
   bool convert_member(const exprt &expr, Z3_ast &bv);
   bool convert_pointer_object(const exprt &expr, Z3_ast &bv);
   bool convert_zero_string_length(const exprt &expr, Z3_ast &bv);
-  bool select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv);
+  void select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv);
   bool convert_is_dynamic_object(const exprt &expr, Z3_ast &bv);
   bool convert_byte_update(const exprt &expr, Z3_ast &bv);
   bool convert_byte_extract(const exprt &expr, Z3_ast &bv);

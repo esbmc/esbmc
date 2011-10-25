@@ -514,13 +514,13 @@ z3_convt::is_ptr(const typet &type)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv)
 {
   DEBUGLOC;
 
   bv = Z3_mk_select(z3_ctx, object, offset);
-  return false;
+  return;
 }
 
 /*******************************************************************
@@ -534,7 +534,7 @@ z3_convt::select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 {
   DEBUGLOC;
@@ -558,14 +558,11 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     else
       elem_sort = Z3_mk_bv_type(z3_ctx, width);
   } else if (type.subtype().id() == "struct")   {
-    if (create_struct_type(type.subtype(), elem_sort))
-      return true;
+    create_struct_type(type.subtype(), elem_sort);
   } else if (type.subtype().id() == "union")   {
-    if (create_union_type(type.subtype(), elem_sort))
-      return true;
+    create_union_type(type.subtype(), elem_sort);
   } else if (type.subtype().id() == "array")   { // array of array
-    if (create_array_type(type.subtype(), elem_sort))
-      return true;
+    create_array_type(type.subtype(), elem_sort);
   } else   {
     if (type.subtype().id() == "pointer") {
       if (boolbv_get_width(type.subtype().subtype(), width)) {
@@ -573,7 +570,7 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 	    || type.subtype().subtype().id() == "symbol")
 	  width = config.ansi_c.int_width;
 	else
-	  return true;
+          throw new conv_error("Unexpected pointer subsubtype", type);
       }
     } else   {
       get_type_width(type.subtype(), width);
@@ -588,7 +585,7 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
   bv = Z3_mk_array_type(z3_ctx, idx_sort, elem_sort);
   DEBUGLOC;
 
-  return false;
+  return;
 }
 
 /*******************************************************************
@@ -602,7 +599,7 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 {
   DEBUGLOC;
@@ -628,30 +625,28 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
       bv = Z3_mk_bv_type(z3_ctx, width);
   } else if (type.id() == "array")     {
     if (type.subtype().id() == "struct") {
-      if (create_struct_type(type.subtype(), bv))
-	return true;
+      create_struct_type(type.subtype(), bv);
 
       if (int_encoding) {
 	bv = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx), bv);
-	return false;
+        return;
       } else   {
 	bv =
 	  Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
 	                                         config.ansi_c.int_width), bv);
-	return false;
+	return;
       }
     } else if (type.subtype().id() == "array")     {
-      if (create_type(type.subtype(), bv))
-	return true;
+      create_type(type.subtype(), bv);
 
       if (int_encoding) {
 	bv = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(z3_ctx), bv);
-	return false;
+	return;
       } else   {
 	bv =
 	  Z3_mk_array_type(z3_ctx, Z3_mk_bv_type(z3_ctx,
 	                                         config.ansi_c.int_width), bv);
-	return false;
+	return;
       }
     } else if (type.subtype().id() == "pointer")     {
       if (boolbv_get_width(type.subtype().subtype(), width)) {
@@ -659,7 +654,7 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	    type.subtype().subtype().id() == "symbol")
 	  width = config.ansi_c.int_width;
 	else
-	  return true;
+          throw new conv_error("unexpected pointer subsubtype", type);
       }
       if (!width) width = config.ansi_c.int_width;
     } else if (type.subtype().id() == "bool")     {
@@ -671,7 +666,7 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 	                      config.ansi_c.int_width),
 	                      Z3_mk_bool_type(z3_ctx));
 
-      return false;
+      return;
     } else   {
       get_type_width(type.subtype(), width);
     }
@@ -684,34 +679,22 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
                             config.ansi_c.int_width),
                             Z3_mk_bv_type(z3_ctx, width));
   } else if (type.id() == "struct")     {
-    if (create_struct_type(type, bv))
-      return true;
+    create_struct_type(type, bv);
   } else if (type.id() == "union")     {
-    if (create_union_type(type, bv))
-      return true;
+    create_union_type(type, bv);
   } else if (type.id() == "pointer")     {
-    if (create_pointer_type(type, bv)) {
-      if (type.subtype().id() == "symbol") {
-	if (int_encoding)
-	  bv = Z3_mk_int_type(z3_ctx);
-	else
-	  bv = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
-
-	return false;
-      } else
-	return true;
-    }
+    create_pointer_type(type, bv);
   } else if (type.id() == "symbol" || type.id() == "empty")     {
     if (int_encoding)
       bv = Z3_mk_int_type(z3_ctx);
     else
       bv = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
   } else
-    return true;
+    throw new conv_error("unexpected type in create_type", type);
 
   DEBUGLOC;
 
-  return false;
+  return;
 }
 
 /*******************************************************************
@@ -725,7 +708,7 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
 {
   DEBUGLOC;
@@ -758,8 +741,7 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
        it++, i++)
   {
     proj_names[i] = Z3_mk_string_symbol(z3_ctx, it->get("name").c_str());
-    if (create_type(it->type(), proj_types[i]))
-      return true;
+    create_type(it->type(), proj_types[i]);
   }
 
   if (uni) {
@@ -783,7 +765,7 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
 
   DEBUGLOC;
 
-  return false;
+  return;
 }
 
 /*******************************************************************
@@ -797,7 +779,7 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::create_enum_type(Z3_type_ast &bv)
 {
   DEBUGLOC;
@@ -807,7 +789,7 @@ z3_convt::create_enum_type(Z3_type_ast &bv)
   else
     bv = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
 
-  return false;
+  return;
 }
 
 /*******************************************************************
@@ -820,7 +802,8 @@ z3_convt::create_enum_type(Z3_type_ast &bv)
    Purpose:
 
  \*******************************************************************/
-bool
+
+void
 z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 {
   DEBUGLOC;
@@ -845,29 +828,16 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
   // XXXjmorse - First tuple field should be integer, always. It's an obj id.
   if (is_ptr(actual_type)) {
     actual_type = select_pointer(actual_type);
-    if (create_type(actual_type, proj_types[0]))
-      return true;
+    create_type(actual_type, proj_types[0]);
   } else if (actual_type.id() == "code")     {
     proj_types[0] = native_int_sort;
   } else if (check_all_types(actual_type))   {
-    if (create_type(actual_type, proj_types[0])) {
-      if (actual_type.id() == "symbol") {
-        proj_types[0] = native_int_sort;
-      } else {
-	return true;
-      }
-    }
+    create_type(actual_type, proj_types[0]);
   } else if (check_all_types(type))   {
     actual_type = type;
-    if (create_type(type, proj_types[0])) {
-      if (type.id() == "symbol") {
-        proj_types[0] = native_int_sort;
-      } else {
-	return true;
-      }
-    }
+    create_type(type, proj_types[0]);
   } else   {
-    return true;
+    throw new conv_error("unexpected type for pointer conversion", type);
   }
 
   DEBUGLOC;
@@ -896,7 +866,7 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 
   DEBUGLOC;
 
-  return false;
+  return;
 }
 
 /*******************************************************************
@@ -938,22 +908,17 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
   } else if (type.id() == "fixedbv") {
     sort = Z3_mk_real_sort(z3_ctx);
   } else if (type.id() == "array") {
-    if (create_array_type(type, sort))
-      return true;
+    create_array_type(type, sort);
   } else if (type.id() == "pointer" || type.id() == "code") {
-    if (create_pointer_type(type, sort))
-      return true;
+    create_pointer_type(type, sort);
   } else if (type.id() == "struct")     {
-    if (create_struct_type(type, sort))
-      return true;
+    create_struct_type(type, sort);
   } else if (type.id() == "union")     {
-    if (create_union_type(type, sort))
-      return true;
+    create_union_type(type, sort);
   } else if (type.id() == "c_enum")     {
-    if (create_enum_type(sort))
-      return true;
+    create_enum_type(sort);
   } else   {
-    return true;
+    throw new conv_error("Unexpected type in convert_identifier", type);
   }
 
   bv = z3_api.mk_var(z3_ctx, identifier.c_str(), sort);
@@ -2744,16 +2709,14 @@ z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
     }
 
     if (expr.type().subtype().id() == "code") {
-      if (create_pointer_type(expr.type(), tuple_type))
-	return true;
-    } else if (create_pointer_type(expr.type().subtype(), tuple_type))
-      return true;
+      create_pointer_type(expr.type(), tuple_type);
+    } else {
+      create_pointer_type(expr.type().subtype(), tuple_type);
+    }
 
   } else if (check_all_types(expr.type()))   {
     get_type_width(expr.type(), width);
-
-    if (create_pointer_type(expr.type(), tuple_type))
-      return true;
+    create_pointer_type(expr.type(), tuple_type);
   }
 
   sprintf(val, "%i", width);
@@ -2824,8 +2787,7 @@ z3_convt::convert_zero_string(const exprt &expr, Z3_ast &bv)
   // string?
   Z3_type_ast array_type;
 
-  if (create_array_type(expr.type(), array_type))
-    return true;
+  create_array_type(expr.type(), array_type);
 
   bv = z3_api.mk_var(z3_ctx, "zero_string", array_type);
 
@@ -2866,15 +2828,11 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
                                          : Z3_mk_real_type(z3_ctx);
     array_type = Z3_mk_array_type(z3_ctx, native_int_sort, fixedbvsort);
   } else if (expr.type().subtype().id() == "struct")   {
-    if (create_struct_type(expr.op0().type(), tuple_type))
-      return true;
-
+    create_struct_type(expr.op0().type(), tuple_type);
     array_type = Z3_mk_array_type(z3_ctx, native_int_sort, tuple_type);
   } else if (expr.type().subtype().id() == "array")   {
     get_type_width(expr.type().subtype().subtype(), width);
-
-    if (create_array_type(expr.type(), array_type))
-      return true;
+    create_array_type(expr.type(), array_type);
   } else   {
     get_type_width(expr.type().subtype(), width);
 
@@ -3579,9 +3537,7 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
   Z3_ast offset, po, pi;
   std::string symbol_name, out;
 
-  if (create_pointer_type(expr.type(), pointer_type))
-    return true;
-
+  create_pointer_type(expr.type(), pointer_type);
   offset = convert_number(0, config.ansi_c.int_width, true);
 
   if (expr.id() == "symbol" ||
@@ -3616,8 +3572,7 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     if (convert_bv(index, pi))
       return true;
 
-    if (select_pointer_value(po, pi, pointer))
-      return true;
+    select_pointer_value(po, pi, pointer);
 
     if (expr.op0().type().id() != "struct" && expr.op0().type().id() !=
         "union") {
@@ -3764,8 +3719,8 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
 
   if (convert_bv(expr.op0(), value))
     return true;
-  if (create_array_type(expr.type(), array_type))
-    return true;
+
+  create_array_type(expr.type(), array_type);
   get_type_width(expr.op0().type(), width);
 
   if (expr.type().subtype().id() == "bool") {
@@ -4059,9 +4014,7 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
       return true;
 
     if (expr.op2().type().id() == "pointer") {
-      if (select_pointer_value(operand0, operand1, operand2)) //select pointer
-				                              // value
-	return true;
+      select_pointer_value(operand0, operand1, operand2); //select pointer value
     }
 
     bv = Z3_mk_store(z3_ctx, operand0, operand1, operand2);
