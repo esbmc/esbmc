@@ -1945,8 +1945,8 @@ z3_convt::convert_rest(const exprt &expr)
       return l;
     } else
       throw "convert_z3_expr: " + expr.id_string() + " is unsupported";
-  } catch (conv_error e) {
-    std::cerr << e.to_string() << std::endl;
+  } catch (conv_error *e) {
+    std::cerr << e->to_string() << std::endl;
     ignoring(expr);
   }
 
@@ -5124,8 +5124,8 @@ z3_convt::set_to(const exprt &expr, bool value)
       }
     }
     ignoring_expr = true;
-  } catch (conv_error e) {
-    std::cerr << e.to_string() << std::endl;
+  } catch (conv_error *e) {
+    std::cerr << e->to_string() << std::endl;
     ignoring(expr);
   }
 
