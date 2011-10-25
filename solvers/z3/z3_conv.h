@@ -234,6 +234,20 @@ private:
       backtrace_syms = backtrace_symbols(backtrace_ptrs, num_frames);
       return;
     }
+
+    std::string to_string(void) {
+      std::string msg;
+      msg = "Encountered Z3 conversion error: \"" + msg + "\" at:\n";
+      for (int i = 0; i < num_frames; i++) {
+        msg += backtrace_syms[i];
+        msg += "\n";
+      }
+
+      if (num_frames == 0)
+        msg += "(couldn't get a backtrace)\n";
+
+      return msg;
+    }
   };
 
 public:
