@@ -1900,50 +1900,55 @@ z3_convt::convert_rest(const exprt &expr)
   literalt l = z3_prop.new_variable();
   Z3_ast formula, constraint;
 
-  if (!assign_z3_expr(expr) && !ignoring_expr)
-    return l;
+  try {
+    if (!assign_z3_expr(expr) && !ignoring_expr)
+      return l;
 
-  if (expr.id() == "<")
-    constraint = convert_lt(expr);
-  else if (expr.id() == ">")
-    constraint = convert_gt(expr);
-  else if (expr.id() == "<=")
-    constraint = convert_le(expr);
-  else if (expr.id() == ">=")
-    constraint = convert_ge(expr);
-  else if (expr.id() == "=" || expr.id() == "notequal")
-    constraint = convert_eq(expr);
-  else if (expr.id() == "invalid-pointer")
-    constraint = convert_invalid(expr);
-  else if (expr.id() == "same-object")
-    constraint = convert_same_object(expr);
-  else if (expr.id() == "is_dynamic_object")
-    constraint = convert_dynamic_object(expr);
-  else if (expr.id() == "overflow-+")
-    constraint = convert_overflow_sum_sub_mul(expr);
-  else if (expr.id() == "overflow--")
-    constraint = convert_overflow_sum_sub_mul(expr);
-  else if (expr.id() == "overflow-*")
-    constraint = convert_overflow_sum_sub_mul(expr);
-  else if (expr.id() == "overflow-unary-")
-    constraint = convert_overflow_unary(expr);
-  else if (has_prefix(expr.id_string(), "overflow-typecast-"))
-    constraint = convert_overflow_typecast(expr);
-  else if (expr.id() == "member")
-    constraint = convert_rest_member(expr);
-  else if (expr.id() == "index")
-    constraint = convert_rest_index(expr);
-  else if (expr.id() == "memory-leak")
-    constraint = convert_memory_leak(expr);
+    if (expr.id() == "<")
+      constraint = convert_lt(expr);
+    else if (expr.id() == ">")
+      constraint = convert_gt(expr);
+    else if (expr.id() == "<=")
+      constraint = convert_le(expr);
+    else if (expr.id() == ">=")
+      constraint = convert_ge(expr);
+    else if (expr.id() == "=" || expr.id() == "notequal")
+      constraint = convert_eq(expr);
+    else if (expr.id() == "invalid-pointer")
+      constraint = convert_invalid(expr);
+    else if (expr.id() == "same-object")
+      constraint = convert_same_object(expr);
+    else if (expr.id() == "is_dynamic_object")
+      constraint = convert_dynamic_object(expr);
+    else if (expr.id() == "overflow-+")
+      constraint = convert_overflow_sum_sub_mul(expr);
+    else if (expr.id() == "overflow--")
+      constraint = convert_overflow_sum_sub_mul(expr);
+    else if (expr.id() == "overflow-*")
+      constraint = convert_overflow_sum_sub_mul(expr);
+    else if (expr.id() == "overflow-unary-")
+      constraint = convert_overflow_unary(expr);
+    else if (has_prefix(expr.id_string(), "overflow-typecast-"))
+      constraint = convert_overflow_typecast(expr);
+    else if (expr.id() == "member")
+      constraint = convert_rest_member(expr);
+    else if (expr.id() == "index")
+      constraint = convert_rest_index(expr);
+    else if (expr.id() == "memory-leak")
+      constraint = convert_memory_leak(expr);
 #if 0
-  else if (expr.id() == "pointer_object_has_type") //@TODO
-    ignoring(expr);
+    else if (expr.id() == "pointer_object_has_type") //@TODO
+      ignoring(expr);
 #endif
-  else if (expr.id() == "is_zero_string") {
+    else if (expr.id() == "is_zero_string") {
+      ignoring(expr);
+      return l;
+    } else
+      throw "convert_z3_expr: " + expr.id_string() + " is unsupported";
+  } catch (conv_error e) {
+    std::cerr << e.to_string() << std::endl;
     ignoring(expr);
-    return l;
-  } else
-    throw "convert_z3_expr: " + expr.id_string() + " is unsupported";
+  }
 
   formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(l), constraint);
   Z3_assert_cnstr(z3_ctx, formula);
@@ -5050,76 +5055,79 @@ z3_convt::set_to(const exprt &expr, bool value)
 
 
 
-  if (expr.id() == "=" && value) {
-    assert(expr.operands().size() == 2);
+  try {
+    if (expr.id() == "=" && value) {
+      assert(expr.operands().size() == 2);
 
-    Z3_ast result, operand[2];
-    const exprt &op0 = expr.op0();
-    const exprt &op1 = expr.op1();
+      Z3_ast result, operand[2];
+      const exprt &op0 = expr.op0();
+      const exprt &op1 = expr.op1();
 
-    if (assign_z3_expr(expr) && ignoring_expr) {
-      if (convert_bv(op0, operand[0])) {
-	ignoring(op0);
-	return;
-      }
-      if (convert_bv(op1, operand[1])) {
-	ignoring(op1);
-	return;
-      }
+      if (assign_z3_expr(expr) && ignoring_expr) {
+        if (convert_bv(op0, operand[0])) {
+          ignoring(op0);
+          return;
+        }
+        if (convert_bv(op1, operand[1])) {
+          ignoring(op1);
+          return;
+        }
 
-      if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
-	Z3_ast pointer[2], formula[2];
+        if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
+          Z3_ast pointer[2], formula[2];
 
-	pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 0);         //select
-				                                            // object
-	pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 0);
+          pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 0);
+          pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 0);
 
-	formula[0] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
+          formula[0] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
+          pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
 
-	pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);         //select
-				                                            // index
-	pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
-	formula[1] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
+          pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
+          formula[1] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
 
-	if (expr.op0().type().id() == "bool")
-	  result = Z3_mk_iff(z3_ctx, formula[0], formula[1]);
-	else
-	  result = Z3_mk_and(z3_ctx, 2, formula);
+          if (expr.op0().type().id() == "bool")
+            result = Z3_mk_iff(z3_ctx, formula[0], formula[1]);
+          else
+            result = Z3_mk_and(z3_ctx, 2, formula);
 
-	Z3_assert_cnstr(z3_ctx, result);
+          Z3_assert_cnstr(z3_ctx, result);
 
-	if (z3_prop.smtlib)
-	  z3_prop.assumpt.push_back(result);
-      } else   {
+          if (z3_prop.smtlib)
+            z3_prop.assumpt.push_back(result);
+        } else   {
 #if 1
-	if (op0.type().id() == "union" && op1.id() == "with") {
-	  union_vars.insert(std::pair<std::string,
-	                              unsigned int>(op0.get_string("identifier"),
-	                                            convert_member_name(
-	                                              op1.op0(), op1.op1())));
-	}
+          if (op0.type().id() == "union" && op1.id() == "with") {
+            union_vars.insert(std::pair<std::string,
+                                     unsigned int>(op0.get_string("identifier"),
+                                                      convert_member_name(
+                                                        op1.op0(), op1.op1())));
+          }
 #endif
 
-	if (op0.type().id() == "bool")
-	  result = Z3_mk_iff(z3_ctx, operand[0], operand[1]);
-	else
-	  result = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
+          if (op0.type().id() == "bool")
+            result = Z3_mk_iff(z3_ctx, operand[0], operand[1]);
+          else
+            result = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
 
-	Z3_assert_cnstr(z3_ctx, result);
+          Z3_assert_cnstr(z3_ctx, result);
 
-	if (z3_prop.smtlib)
-	  z3_prop.assumpt.push_back(result);
+          if (z3_prop.smtlib)
+            z3_prop.assumpt.push_back(result);
 
-	if (uw && expr.op0().get_string("identifier").find("guard_exec") !=
-	    std::string::npos
-	    && number_of_assumptions < max_core_size) {
-	  if (!op1.is_true())
-	    generate_assumptions(expr, operand[0]);
-	}
+          if (uw && expr.op0().get_string("identifier").find("guard_exec") !=
+              std::string::npos
+              && number_of_assumptions < max_core_size) {
+            if (!op1.is_true())
+              generate_assumptions(expr, operand[0]);
+          }
+        }
       }
     }
+    ignoring_expr = true;
+  } catch (conv_error e) {
+    std::cerr << e.to_string() << std::endl;
+    ignoring(expr);
   }
-  ignoring_expr = true;
 
   DEBUGLOC;
 
