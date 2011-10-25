@@ -4181,7 +4181,7 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_object
+   Function: z3_convt::convert_same_object
 
    Inputs:
 
@@ -4192,7 +4192,7 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
  \*******************************************************************/
 
 bool
-z3_convt::convert_object(const exprt &expr, Z3_ast &bv)
+z3_convt::convert_same_object(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
@@ -5011,7 +5011,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
   else if (expr.id() == "pointer_object")
     return convert_pointer_object(expr, bv);
   else if (expr.id() == "same-object")
-    return convert_object(expr, bv);
+    return convert_same_object(expr, bv);
   else if (expr.id() == "string-constant") {
     exprt tmp;
     string2array(expr, tmp);

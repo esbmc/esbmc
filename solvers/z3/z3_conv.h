@@ -136,7 +136,7 @@ protected:
   bool convert_abs(const exprt &expr, Z3_ast &bv);
   bool convert_with(const exprt &expr, Z3_ast &bv);
   bool convert_bitnot(const exprt &expr, Z3_ast &bv);
-  bool convert_object(const exprt &expr, Z3_ast &bv);
+  bool convert_same_object(const exprt &expr, Z3_ast &bv);
   bool select_pointer_offset(const exprt &expr, Z3_ast &bv);
   bool convert_member(const exprt &expr, Z3_ast &bv);
   bool convert_pointer_object(const exprt &expr, Z3_ast &bv);
