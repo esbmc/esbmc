@@ -4747,26 +4747,21 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   if (width == 0)
     throw "failed to get width of byte_extract operand";
 
-  mp_integer upper, lower;
+  uint64_t upper, lower;
 
   if (expr.id() == "byte_extract_little_endian") {
-    upper = ((i + 1) * 8) - 1; //((i+1)*w)-1;
-    lower = i * 8; //i*w;
+    upper = ((i.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
+    lower = i.to_long() * 8; //i*w;
   } else   {
-    mp_integer max = width - 1;
-    upper = max - (i * 8); //max-(i*w);
-    lower = max - ((i + 1) * 8 - 1); //max-((i+1)*w-1);
+    uint64_t max = width - 1;
+    upper = max - (i.to_long() * 8); //max-(i*w);
+    lower = max - ((i.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
 
   Z3_ast op0;
 
   if (convert_bv(expr.op0(), op0))
     return true;
-
-  std::stringstream s_upper, s_lower, s_i;
-  s_upper << upper;
-  s_lower << lower;
-  s_i << i;
 
   if (int_encoding) {
     if (expr.op0().type().id() == "fixedbv") {
@@ -4776,8 +4771,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	op0 = Z3_mk_real2int(z3_ctx, op0);
 	tmp = Z3_mk_int2bv(z3_ctx, width, op0);
 	bv =
-	  Z3_mk_extract(z3_ctx, atoi(s_upper.str().c_str()),
-	                atoi(s_lower.str().c_str()), tmp);
+	  Z3_mk_extract(z3_ctx, upper, lower, tmp);
 	if (expr.type().id() == "signedbv")
 	  bv = Z3_mk_bv2int(z3_ctx, bv, 1);
 	else
@@ -4790,14 +4784,12 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       Z3_ast tmp;
       tmp = Z3_mk_int2bv(z3_ctx, width, op0);
 
-      if (width >= atoi(s_upper.str().c_str()))
+      if (width >= upper)
 	bv =
-	  Z3_mk_extract(z3_ctx, atoi(s_upper.str().c_str()),
-	                atoi(s_lower.str().c_str()), tmp);
+	  Z3_mk_extract(z3_ctx, upper, lower, tmp);
       else
 	bv =
-	  Z3_mk_extract(z3_ctx, atoi(s_upper.str().c_str()) -
-	                atoi(s_lower.str().c_str()), 0, tmp);
+	  Z3_mk_extract(z3_ctx, upper - lower, 0, tmp);
 
       if (expr.op0().type().id() == "signedbv")
 	bv = Z3_mk_bv2int(z3_ctx, bv, 1);
@@ -4838,9 +4830,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       op0 = struct_elem_inv[components.size()];
     }
 
-    bv =
-      Z3_mk_extract(z3_ctx, atoi(s_upper.str().c_str()), atoi(
-                      s_lower.str().c_str()), op0);
+    bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
 
     if (expr.op0().id() == "index") {
       Z3_ast args[2];
