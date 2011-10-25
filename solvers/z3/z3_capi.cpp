@@ -8,6 +8,7 @@ Author:
 
 #include <string>
 
+#include "z3_conv.h"
 #include "z3_capi.h"
 
 /**
@@ -696,13 +697,14 @@ Z3_ast z3_capi::mk_tuple_select(Z3_context c, Z3_ast t, unsigned i)
     ty = Z3_get_type(c, t);
 
     if (Z3_get_type_kind(c, ty) != Z3_TUPLE_TYPE) {
-        exitf("argument must be a tuple");
+      throw new z3_convt::conv_error("argument must be a tuple", irept());
     }
 
     num_fields = Z3_get_tuple_type_num_fields(c, ty);
 
     if (i >= num_fields) {
-        exitf("invalid tuple select, index is too big");
+      throw new z3_convt::conv_error("invalid tuple select, index is too big",
+                                     irept());
     }
 
     Z3_const_decl_ast proj_decl = Z3_get_tuple_type_field_decl(c, ty, i);

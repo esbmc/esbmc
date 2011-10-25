@@ -222,6 +222,7 @@ private:
   typedef std::map<std::string, unsigned int> union_varst;
   union_varst union_vars;
 
+public:
   class conv_error {
     void *backtrace_ptrs[50];
     char **backtrace_syms;
