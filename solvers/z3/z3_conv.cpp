@@ -5259,6 +5259,16 @@ z3_convt::get_number_variables_z3(void)
   return number_variables_z3;
 }
 
+void
+z3_convt::get_type_width(const typet &t, unsigned &width)
+{
+
+  if (boolbv_get_width(t, width))
+    throw new z3_convt::conv_error("Failed to determine type bitwidth", t);
+
+  return;
+}
+
 Z3_context z3_convt::z3_ctx = NULL;
 
 unsigned int z3_convt::num_ctx_ileaves = 0;

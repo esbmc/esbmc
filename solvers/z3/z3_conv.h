@@ -152,6 +152,8 @@ private:
   bool convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv);
   bool convert_bv(const exprt &expr, Z3_ast &bv);
 
+  void get_type_width(const typet &t, unsigned &width);
+
   std::string double2string(double d) const;
 
   std::string get_fixed_point(
