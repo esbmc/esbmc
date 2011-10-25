@@ -1948,6 +1948,7 @@ z3_convt::convert_rest(const exprt &expr)
   } catch (conv_error *e) {
     std::cerr << e->to_string() << std::endl;
     ignoring(expr);
+    return l;
   }
 
   formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(l), constraint);
