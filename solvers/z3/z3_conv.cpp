@@ -880,7 +880,7 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_identifier(const std::string &identifier, const typet &type,
   Z3_ast &bv)
 {
@@ -905,7 +905,7 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
     Z3_assert_cnstr(z3_ctx, formula);
     if (z3_prop.smtlib)
       z3_prop.assumpt.push_back(formula);
-    return false;
+    return;
   } else if (type.id() == "fixedbv") {
     sort = Z3_mk_real_sort(z3_ctx);
   } else if (type.id() == "array") {
@@ -925,8 +925,6 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
   bv = z3_api.mk_var(z3_ctx, identifier.c_str(), sort);
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************\
@@ -960,7 +958,7 @@ z3_convt::is_in_cache(const exprt &expr)
 
 \*******************************************************************/
 
-bool
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -968,18 +966,17 @@ z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
   bv_cachet::const_iterator cache_result = bv_cache.find(expr);
   if (cache_result != bv_cache.end()) {
     bv = cache_result->second;
-    return false;
+    return;
   }
 
-  if (convert_z3_expr(expr, bv))
-    return true;
+  convert_z3_expr(expr, bv);
 
   // insert into cache
   bv_cache.insert(std::pair<const exprt, Z3_ast>(expr, bv));
 
   DEBUGLOC;
 
-  return false;
+  return;
 }
 
 /*******************************************************************
@@ -993,7 +990,7 @@ z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::read_cache(const exprt &expr, Z3_ast &bv)
 {
   std::string symbol;
@@ -1004,17 +1001,12 @@ z3_convt::read_cache(const exprt &expr, Z3_ast &bv)
        it != z3_cache.end(); it++)
   {
     if (symbol.compare((*it).second.c_str()) == 0) {
-      if (convert_bv((*it).first, bv))
-	return true;
-
-      return false;
+      convert_bv((*it).first, bv);
+      return;
     }
   }
 
-  if (convert_bv(expr, bv))
-    return true;
-
-  return false;
+  convert_bv(expr, bv);
 }
 
 /*******************************************************************
@@ -1028,7 +1020,7 @@ z3_convt::read_cache(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::write_cache(const exprt &expr)
 {
   std::string symbol, identifier;
@@ -1044,11 +1036,9 @@ z3_convt::write_cache(const exprt &expr)
       symbol += ch;
     } else if (ch == '#')   {
       z3_cache.insert(std::pair<const exprt, std::string>(expr, symbol));
-      return false;
+      return;
     }
   }
-
-  return false;
 }
 
 /*******************************************************************
@@ -1072,12 +1062,8 @@ z3_convt::convert_lt(const exprt &expr)
   const exprt &op0 = expr.op0();
   const exprt &op1 = expr.op1();
 
-  // XXXjmorse, surely return value of convert_bv is an error indicator?
-  if (convert_bv(op0, operand[0]))
-    return Z3_mk_false(z3_ctx);
-
-  if (convert_bv(op1, operand[1]))
-    return Z3_mk_false(z3_ctx);
+  convert_bv(op0, operand[0]);
+  convert_bv(op1, operand[1]);
 
   // XXXjmorse pointer comparisons require serious consideration
   if (op0.type().id() == "pointer")
@@ -1117,10 +1103,8 @@ z3_convt::convert_gt(const exprt &expr)
   assert(expr.operands().size() == 2);
   Z3_ast bv, operand[2];
 
-  if (convert_bv(expr.op0(), operand[0]))
-    return Z3_mk_false(z3_ctx);
-  if (convert_bv(expr.op1(), operand[1]))
-    return Z3_mk_false(z3_ctx);
+  convert_bv(expr.op0(), operand[0]);
+  convert_bv(expr.op1(), operand[1]);
 
   if (expr.op0().type().id() == "pointer")
     operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
@@ -1165,10 +1149,8 @@ z3_convt::convert_le(const exprt &expr)
   assert(expr.operands().size() == 2);
   Z3_ast bv, operand[2];
 
-  if (convert_bv(expr.op0(), operand[0]))
-    return Z3_mk_false(z3_ctx);
-  if (convert_bv(expr.op1(), operand[1]))
-    return Z3_mk_false(z3_ctx);
+  convert_bv(expr.op0(), operand[0]);
+  convert_bv(expr.op1(), operand[1]);
 
   if (expr.op0().type().id() == "pointer")
     operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
@@ -1212,12 +1194,8 @@ z3_convt::convert_ge(const exprt &expr)
   assert(expr.operands().size() == 2);
   Z3_ast bv, operand[2];
 
-  if (convert_bv(expr.op0(), operand[0]))
-    return Z3_mk_false(z3_ctx);
-
-  if (convert_bv(expr.op1(), operand[1]))
-    return Z3_mk_false(z3_ctx);
-
+  convert_bv(expr.op0(), operand[0]);
+  convert_bv(expr.op1(), operand[1]);
 
   if (expr.op0().type().id() == "pointer")
     operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
@@ -1263,16 +1241,11 @@ z3_convt::convert_eq(const exprt &expr)
   const exprt &op0 = expr.op0();
   const exprt &op1 = expr.op1();
 
-  if (op0.type().id() == "array") {
-    if (write_cache(op0))
-      return Z3_mk_false(z3_ctx);
-  }
+  if (op0.type().id() == "array")
+    write_cache(op0);
 
-  if (convert_bv(op0, operand[0]))
-    return Z3_mk_false(z3_ctx);
-
-  if (convert_bv(op1, operand[1]))
-    return Z3_mk_false(z3_ctx);
+  convert_bv(op0, operand[0]);
+  convert_bv(op1, operand[1]);
 
   // XXXjmorse, surely types in equality are identical?
   if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
@@ -1362,8 +1335,7 @@ z3_convt::convert_invalid(const exprt &expr)
   if (!is_in_cache(expr.op0()) && expr.op0().id() == "index")
     return Z3_mk_false(z3_ctx);
 
-  if (convert_bv(expr.op0(), pointer)) //return pointer tuple
-    return Z3_mk_false(z3_ctx);
+  convert_bv(expr.op0(), pointer); //return pointer tuple
 
   //@TODO
   if (expr.op0().id() == "member" && expr.op0().type().id() == "pointer" &&
@@ -1423,11 +1395,8 @@ z3_convt::convert_same_object(const exprt &expr)
     const exprt &object = op1.operands()[0];
     const exprt &index = object.operands()[0];
 
-    if (convert_bv(op0, pointer[0]))
-      return Z3_mk_false(z3_ctx);
-
-    if (convert_bv(op1, pointer[1]))
-      return Z3_mk_false(z3_ctx);
+    convert_bv(op0, pointer[0]);
+    convert_bv(op1, pointer[1]);
 
     if (op1.type().id() == "pointer" && op1.type().subtype().id() == "union")
       return Z3_mk_false(z3_ctx);
@@ -1451,10 +1420,8 @@ z3_convt::convert_same_object(const exprt &expr)
   } else if (operands.size() == 2 &&
              is_ptr(operands[0].type()) &&
              is_ptr(operands[1].type())) {
-    if (convert_bv(op0, pointer[0]))
-      return Z3_mk_false(z3_ctx);
-    if (convert_bv(op1, pointer[1]))
-      return Z3_mk_false(z3_ctx);
+    convert_bv(op0, pointer[0]);
+    convert_bv(op1, pointer[1]);
 
     operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 0);
     operand[1] = z3_api.mk_tuple_select(z3_ctx, pointer[1], 0);
@@ -1522,8 +1489,7 @@ z3_convt::convert_dynamic_object(const exprt &expr)
   else {
     unsigned width;
 
-    if (convert_bv(expr.op0(), operand0))
-      return Z3_mk_false(z3_ctx);
+    convert_bv(expr.op0(), operand0);
 
     if (expr.op0().type().id() == "pointer") {
       if (expr.op0().type().subtype().id() != "pointer") {
@@ -1588,24 +1554,18 @@ z3_convt::convert_overflow_sum_sub_mul(const exprt &expr)
   Z3_ast bv, result[2], operand[2];
   unsigned width_op0, width_op1;
 
-  if (expr.op0().type().id() == "array") {
-    if (write_cache(expr.op0()))
-      return Z3_mk_false(z3_ctx);
-  }
+  if (expr.op0().type().id() == "array")
+    write_cache(expr.op0());
 
   if (expr.op0().id() == "symbol" && expr.op1().id() == "address_of")
     return Z3_mk_false(z3_ctx);
 
-  if (convert_bv(expr.op0(), operand[0]))
-    return Z3_mk_false(z3_ctx);
-  ;
+  convert_bv(expr.op0(), operand[0]);
 
   if (expr.op0().type().id() == "pointer")
     operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
 
-  if (convert_bv(expr.op1(), operand[1]))
-    return Z3_mk_false(z3_ctx);
-  ;
+  convert_bv(expr.op1(), operand[1]);
 
   if (expr.op1().type().id() == "pointer")
     operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
@@ -1669,9 +1629,7 @@ z3_convt::convert_overflow_unary(const exprt &expr)
   Z3_ast bv, operand;
   unsigned width;
 
-  if (convert_bv(expr.op0(), operand))
-    return Z3_mk_false(z3_ctx);
-  ;
+  convert_bv(expr.op0(), operand);
 
   if (expr.op0().type().id() == "pointer")
     operand = z3_api.mk_tuple_select(z3_ctx, operand, 1);
@@ -1723,8 +1681,7 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
   assert(bits <= 32 && bits != 0);
   result = 1 << bits;
 
-  if (convert_bv(expr.op0(), operand[0]))
-    return Z3_mk_false(z3_ctx);
+  convert_bv(expr.op0(), operand[0]);
 
   if (int_encoding)
     operand[0] = Z3_mk_int2bv(z3_ctx, width, operand[0]);
@@ -1785,8 +1742,7 @@ z3_convt::convert_rest_member(const exprt &expr)
 
   Z3_ast bv;
 
-  if (convert_bv(expr, bv))
-    return Z3_mk_false(z3_ctx);
+  convert_bv(expr, bv);
 
   return bv;
 }
@@ -1815,11 +1771,8 @@ z3_convt::convert_rest_index(const exprt &expr)
   const exprt &array = expr.op0();
   const exprt &index = expr.op1();
 
-  if (convert_bv(array, operand0))
-    return Z3_mk_false(z3_ctx);
-
-  if (convert_bv(index, operand1))
-    return Z3_mk_false(z3_ctx);
+  convert_bv(array, operand0);
+  convert_bv(index, operand1);
 
   DEBUGLOC;
 
@@ -1870,11 +1823,8 @@ z3_convt::convert_memory_leak(const exprt &expr)
   const exprt &array = expr.op0();
   const exprt &index = expr.op1();
 
-  if (convert_bv(array, operand0))
-    return Z3_mk_false(z3_ctx);
-
-  if (convert_bv(index, operand1))
-    return Z3_mk_false(z3_ctx);
+  convert_bv(array, operand0);
+  convert_bv(index, operand1);
 
   bv = Z3_mk_select(z3_ctx, operand0, operand1);
 
@@ -1973,7 +1923,7 @@ z3_convt::convert_rest(const exprt &expr)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -1984,10 +1934,8 @@ z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 
   // XXXjmorse - are there not also convert{gt,lt,ge,le} methods which already
   // implement this?
-  if (convert_bv(expr.op0(), operand0))
-    return true;
-  if (convert_bv(expr.op1(), operand1))
-    return true;
+  convert_bv(expr.op0(), operand0);
+  convert_bv(expr.op1(), operand1);
 
   if (expr.op0().type().id() == "pointer")
     operand0 = z3_api.mk_tuple_select(z3_ctx, operand0, 1);  //select pointer
@@ -2040,7 +1988,7 @@ z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 
   DEBUGLOC;
 
-  return false;
+  return;
 }
 
 /*******************************************************************
@@ -2054,7 +2002,7 @@ z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_typecast_bool(const exprt &expr, Z3_ast &bv)
 {
   const exprt &op = expr.op0();
@@ -2072,14 +2020,12 @@ z3_convt::convert_typecast_bool(const exprt &expr, Z3_ast &bv)
 
     bv = Z3_mk_distinct(z3_ctx, 2, args);
   } else {
-    throw "TODO typecast1 " + op.type().id_string() + " -> bool";
+    throw new conv_error("Unimplemented bool typecast", expr);
   }
-
-  return false;
 }
 
 
-bool
+void
 z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
 {
   const exprt &op = expr.op0();
@@ -2097,11 +2043,9 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
     get_type_width(op.type(), from_width);
 
     if (from_width == to_integer_bits) {
-      if (convert_bv(op, bv))
-	return true;
+      convert_bv(op, bv);
     } else if (from_width > to_integer_bits)      {
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       if (op.type().id() == "pointer")
 	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -2110,16 +2054,14 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
     } else   {
       assert(from_width < to_integer_bits);
       if (expr.type().id() == "unsignedbv") {
-	if (convert_bv(op, args[0]))
-	  return true;
+	convert_bv(op, args[0]);
 
 	if (op.type().id() == "pointer")
 	  args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
 
 	bv = Z3_mk_zero_ext(z3_ctx, (to_integer_bits - from_width), args[0]);
       } else   {
-	if (convert_bv(op, args[0]))
-	  return true;
+	convert_bv(op, args[0]);
 
 	if (op.type().id() == "pointer")
 	  args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -2147,8 +2089,7 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
     unsigned from_width = from_fixedbv_type.get_width();
 
     if (to_integer_bits <= from_integer_bits) {
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       if (op.type().id() == "pointer")
 	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -2159,8 +2100,7 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
     } else   {
       assert(to_integer_bits > from_integer_bits);
 
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       if (op.type().id() == "pointer")
 	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -2172,8 +2112,7 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
     }
 
     if (to_fraction_bits <= from_fraction_bits) {
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       if (op.type().id() == "pointer")
 	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -2184,8 +2123,7 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
                       args[0]);
     } else   {
       assert(to_fraction_bits > from_fraction_bits);
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       if (op.type().id() == "pointer")
 	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -2197,13 +2135,14 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
                                     true));
     }
     bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
-  } else
-    throw "unexpected typecast to fixedbv";
+  } else {
+    throw new conv_error("unexpected typecast to fixedbv", expr);
+  }
 
-  return false;
+  return;
 }
 
-bool
+void
 z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
 {
   const exprt &op = expr.op0();
@@ -2236,8 +2175,7 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
     }
 
     if (from_width == to_width) {
-      if (convert_bv(op, bv))
-	return true;
+      convert_bv(op, bv);
 
       if (op.type().id() == "pointer")
 	bv = z3_api.mk_tuple_select(z3_ctx, bv, 0);
@@ -2250,8 +2188,7 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
       // XXXjmorse - there isn't a case here for if !int_encoding
 
     } else if (from_width < to_width)      {
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       if (op.type().id() == "pointer") {
 	to_width = (to_width == 40) ? config.ansi_c.int_width : to_width;
@@ -2268,8 +2205,7 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
       else
 	bv = Z3_mk_sign_ext(z3_ctx, (to_width - from_width), args[0]);
     } else if (from_width > to_width)     {
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       if (op.type().id() == "pointer")
 	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -2304,14 +2240,12 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
     }
 
     if (from_width == to_width) {
-      if (convert_bv(op, bv))
-	return true;
+      convert_bv(op, bv);
 
       if (op.type().id() == "pointer")
 	bv = z3_api.mk_tuple_select(z3_ctx, bv, 0);
     } else if (from_width < to_width)      {
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       if (op.type().id() == "pointer")
 	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -2321,8 +2255,7 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
       else
 	bv = Z3_mk_zero_ext(z3_ctx, (to_width - from_width), args[0]);
     } else if (from_width > to_width)     {
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       if (op.type().id() == "pointer")
 	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
@@ -2407,22 +2340,20 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
       proj_types[1] = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
 
     if (from_width == to_width) {
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       if (op.operands().size() == 0
           && op.id() == "constant"
           && op.type().subtype().id() == "empty") {
-	return true;
+        throw new conv_error("Can't typecast empty pointer constant", expr);
       } else if (op.operands().size() > 0)     {
 	if (op.op0().id() == "address_of")
 	  bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
       }
 
-      return false;
+      return;
     } else if (from_width < to_width)      {
-      if (convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       object = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
 
@@ -2431,8 +2362,7 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
       else
 	bv = Z3_mk_sign_ext(z3_ctx, (to_width - from_width), object);
     } else if (from_width > to_width)     {
-      if ( convert_bv(op, args[0]))
-	return true;
+      convert_bv(op, args[0]);
 
       object = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
 
@@ -2451,14 +2381,10 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
     bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, bv);
     bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1,
                                 z3_api.mk_tuple_select(z3_ctx, args[0], 1));
-
-    return false;
+    return;
   } else if (op.type().subtype().id() == "symbol" ||
              op.type().subtype().id() == "code")        {
-    if (convert_bv(op, args[0])) {
-      assert(0);
-      return true;
-    }
+    convert_bv(op, args[0]);
 
     if (op.id() == "constant") {
       if (op.get("value").compare("NULL") == 0)
@@ -2476,32 +2402,29 @@ z3_convt::convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv)
     } else if (op.id() == "typecast" || op.id() == "member")   {
       bv = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
     }
-    return false;
+    return;
   } else if (op.type().subtype().id() == "pointer")      {
-    if (convert_bv(op, bv))
-      return true;
+    convert_bv(op, bv);
 
     if (op.type().subtype().subtype().id() != "empty" &&
         expr.type().id() != "pointer")
       bv = z3_api.mk_tuple_select(z3_ctx, bv, 0);
 
-    return false;
+    return;
   } else   {
-    return true;
+    throw new conv_error("Unexpected type in int/ptr typecast", expr);
   }
+
   if (expr.type().id() == "pointer") {
     Z3_ast pointer_var;
 
-    if (convert_z3_pointer(expr, "pointer", pointer_var))
-      return true;
+    convert_z3_pointer(expr, "pointer", pointer_var);
 
     bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, bv);
   }
-
-  return false;
 }
 
-bool
+void
 z3_convt::convert_typecast_struct(const exprt &expr, Z3_ast &bv)
 {
 
@@ -2539,7 +2462,7 @@ z3_convt::convert_typecast_struct(const exprt &expr, Z3_ast &bv)
 	  s.components()[j].set_name(it->get("name"));
 	  s.components()[j].type() = bool_typet();
 	} else   {
-	  return true;
+          throw new conv_error("Unexpected type when casting struct", *it);
 	}
 	j++;
       }
@@ -2549,8 +2472,7 @@ z3_convt::convert_typecast_struct(const exprt &expr, Z3_ast &bv)
   new_struct.type().set("tag", expr.type().get_string("tag"));
   new_struct.set("identifier", "typecast_" + expr.op0().get_string("identifier"));
 
-  if (convert_bv(new_struct, operand))
-    return true;
+  convert_bv(new_struct, operand);
 
   i2 = 0;
   for (struct_typet::componentst::const_iterator
@@ -2567,10 +2489,10 @@ z3_convt::convert_typecast_struct(const exprt &expr, Z3_ast &bv)
   }
 
   bv = operand;
-  return false;
+  return;
 }
 
-bool
+void
 z3_convt::convert_typecast_enum(const exprt &expr, Z3_ast &bv)
 {
   const exprt &op = expr.op0();
@@ -2584,11 +2506,9 @@ z3_convt::convert_typecast_enum(const exprt &expr, Z3_ast &bv)
     one =  convert_number(1, width, true);
     bv = Z3_mk_ite(z3_ctx, bv, one, zero);
   }
-
-  return false;
 }
 
-bool
+void
 z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 {
   assert(expr.operands().size() == 1);
@@ -2596,29 +2516,25 @@ z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 
   Z3_ast args[2];
 
-  if (convert_bv(op, bv))
-    return true;
+  convert_bv(op, bv);
 
   if (expr.type().id() == "bool") {
-    return convert_typecast_bool(expr, bv);
+    convert_typecast_bool(expr, bv);
   } else if (expr.type().id() == "fixedbv" && !int_encoding)      {
-    return convert_typecast_fixedbv_nonint(expr, bv);
+    convert_typecast_fixedbv_nonint(expr, bv);
   } else if ((expr.type().id() == "signedbv" || expr.type().id() ==
               "unsignedbv"
               || expr.type().id() == "fixedbv" || expr.type().id() ==
               "pointer")) {
-    return convert_typecast_ints_ptrs(expr, bv);
+    convert_typecast_ints_ptrs(expr, bv);
   } else if (expr.type().id() == "struct")     {
-    return convert_typecast_struct(expr, bv);
+    convert_typecast_struct(expr, bv);
   } else if (expr.type().id() == "c_enum")      {
-    return convert_typecast_enum(expr, bv);
+    convert_typecast_enum(expr, bv);
   } else {
     // XXXjmorse -- what about all other types, eh?
-    assert(false && "Typecast for unexpected type");
+    throw new conv_error("Typecast for unexpected type", expr);
   }
-
-
-  return false;
 }
 
 /*******************************************************************
@@ -2632,7 +2548,7 @@ z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -2661,8 +2577,7 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
     identifier = expr.type().get_string("tag");
 
   // Generate a tuple of the correct form for this type
-  if (convert_identifier(identifier, expr.type(), bv))
-    return true;
+  convert_identifier(identifier, expr.type(), bv);
 
   // Populate tuple with members of that struct/union
   for (struct_typet::componentst::const_iterator
@@ -2670,8 +2585,7 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
        it != components.end();
        it++, i++)
   {
-    if (convert_bv(expr.operands()[i], value))
-      return true;
+    convert_bv(expr.operands()[i], value);
     bv = z3_api.mk_tuple_update(z3_ctx, bv, i, value);
   }
 
@@ -2681,8 +2595,6 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
                                 convert_number(i, config.ansi_c.int_width, 0));
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -2696,7 +2608,7 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -2713,7 +2625,7 @@ z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
 	    || expr.type().subtype().subtype().id() == "symbol")
 	  width = config.ansi_c.int_width;
 	else
-	  return true;
+          throw new conv_error("Can't determine pointer width", expr);
       }
     } else   {
       if (boolbv_get_width(expr.type().subtype(), width))
@@ -2774,8 +2686,6 @@ z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
   }
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -2789,7 +2699,7 @@ z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_zero_string(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -2802,8 +2712,6 @@ z3_convt::convert_zero_string(const exprt &expr, Z3_ast &bv)
   create_array_type(expr.type(), array_type);
 
   bv = z3_api.mk_var(z3_ctx, "zero_string", array_type);
-
-  return false;
 }
 
 /*******************************************************************
@@ -2817,7 +2725,7 @@ z3_convt::convert_zero_string(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -2866,8 +2774,7 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
   {
     int_cte = Z3_mk_int(z3_ctx, i, native_int_sort);
 
-    if (convert_bv(*it, val_cte))
-      return true;
+    convert_bv(*it, val_cte);
 
     bv = Z3_mk_store(z3_ctx, bv, int_cte, val_cte);
     ++i;
@@ -2875,8 +2782,6 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -2890,7 +2795,7 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -2952,24 +2857,19 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
       bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
     }
   } else if (expr.type().id() == "pointer")    {
-    if (convert_z3_pointer(expr, value, bv))
-      return true;
+    convert_z3_pointer(expr, value, bv);
   } else if (expr.type().id() == "bool")     {
     if (expr.is_false())
       bv = Z3_mk_false(z3_ctx);
     else if (expr.is_true())
       bv = Z3_mk_true(z3_ctx);
   } else if (expr.type().id() == "array")     {
-    if (convert_array(expr, bv))
-      return true;
+    convert_array(expr, bv);
   } else if (expr.type().id() == "struct" || expr.type().id() == "union") {
-    if (convert_struct_union(expr, bv))
-      return true;
+    convert_struct_union(expr, bv);
   }
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -2983,7 +2883,7 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_bitwise(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -2994,15 +2894,12 @@ z3_convt::convert_bitwise(const exprt &expr, Z3_ast &bv)
 
   args = new Z3_ast[expr.operands().size() + 1];
 
-  if (convert_bv(expr.op0(), args[0]))
-    return true;
-  if (convert_bv(expr.op1(), args[1]))
-    return true;
+  convert_bv(expr.op0(), args[0]);
+  convert_bv(expr.op1(), args[1]);
 
   forall_operands(it, expr)
   {
-    if (convert_bv(*it, args[i]))
-      return true;
+    convert_bv(*it, args[i]);
 
     if (int_encoding) {
       get_type_width(expr.type(), width);
@@ -3032,13 +2929,11 @@ z3_convt::convert_bitwise(const exprt &expr, Z3_ast &bv)
     else if (expr.type().id() == "unsignedbv")
       bv = Z3_mk_bv2int(z3_ctx, args[i], false);
     else
-      throw "bitwise operations are not supported";
+      throw new conv_error("bitwise ops not supported for type", expr);
   } else
     bv = args[i];
 
   delete[] args;
-
-  return false;
 }
 
 /*******************************************************************
@@ -3052,7 +2947,7 @@ z3_convt::convert_bitwise(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_unary_minus(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3060,8 +2955,7 @@ z3_convt::convert_unary_minus(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 1);
   Z3_ast args[2];
 
-  if (convert_bv(expr.op0(), args[0]))
-    return true;
+  convert_bv(expr.op0(), args[0]);
 
   if (int_encoding) {
     if (expr.type().id() == "signedbv" || expr.type().id() == "unsignedbv") {
@@ -3074,8 +2968,6 @@ z3_convt::convert_unary_minus(const exprt &expr, Z3_ast &bv)
   } else   {
     bv = Z3_mk_bvneg(z3_ctx, args[0]);
   }
-
-  return false;
 }
 
 /*******************************************************************
@@ -3089,7 +2981,7 @@ z3_convt::convert_unary_minus(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_if(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3098,20 +2990,13 @@ z3_convt::convert_if(const exprt &expr, Z3_ast &bv)
 
   Z3_ast operand0, operand1, operand2;
 
-  if (convert_bv(expr.op0(), operand0))
-    return true;
-
-  if (convert_bv(expr.op1(), operand1))
-    return true;
-
-  if (convert_bv(expr.op2(), operand2))
-    return true;
+  convert_bv(expr.op0(), operand0);
+  convert_bv(expr.op1(), operand1);
+  convert_bv(expr.op2(), operand2);
 
   bv = Z3_mk_ite(z3_ctx, operand0, operand1, operand2);
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -3125,7 +3010,7 @@ z3_convt::convert_if(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3140,13 +3025,11 @@ z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
   args = new Z3_ast[size];
 
   if (expr.operands().size() == 1) {
-    if (convert_bv(expr.op0(), bv))
-      return true;
+    convert_bv(expr.op0(), bv);
   } else   {
     forall_operands(it, expr)
     {
-      if (convert_bv(*it, args[i]))
-	return true;
+      convert_bv(*it, args[i]);
 
       if (i >= 1 && expr.id() == "xor")
 	args[i] = Z3_mk_xor(z3_ctx, args[i - 1], args[i]);
@@ -3164,8 +3047,6 @@ z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
   delete[] args;
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -3179,7 +3060,7 @@ z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_logical_not(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3187,14 +3068,11 @@ z3_convt::convert_logical_not(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 1);
   Z3_ast operand0;
 
-  if (convert_bv(expr.op0(), operand0))
-    return true;
+  convert_bv(expr.op0(), operand0);
 
   bv = Z3_mk_not(z3_ctx, operand0);
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -3208,7 +3086,7 @@ z3_convt::convert_logical_not(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3218,11 +3096,8 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 
   Z3_ast args[2];
 
-  if (convert_bv(expr.op0(), args[0]))
-    return true;
-
-  if (convert_bv(expr.op1(), args[1]))
-    return true;
+  convert_bv(expr.op0(), args[0]);
+  convert_bv(expr.op1(), args[1]);
 
   if (expr.id() == "=")
     bv = Z3_mk_eq(z3_ctx, args[0], args[1]);
@@ -3230,8 +3105,6 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
     bv = Z3_mk_distinct(z3_ctx, 2, args);
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -3245,7 +3118,7 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3263,7 +3136,7 @@ z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
     bvcall = Z3_mk_bvsub;
     intcall = Z3_mk_sub;
   } else {
-    assert(false);
+    throw new conv_error("Non add/sub expr in convert_add_sub", expr);
   }
 
   assert(expr.operands().size() >= 2);
@@ -3280,8 +3153,7 @@ z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
 
     forall_operands(it, expr)
     {
-      if (convert_bv(*it, args[i]))
-	return true;
+      convert_bv(*it, args[i]);
 
       if (it->type().id() == "pointer") {
 	pointer = args[i];
@@ -3310,8 +3182,7 @@ z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
  } else   {
     forall_operands(it, expr)
     {
-      if (convert_bv(*it, args[i]))
-	return true;
+      convert_bv(*it, args[i]);
 
       if (!int_encoding) {
 	if (i == 1) {
@@ -3332,8 +3203,6 @@ z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
   delete[] args;
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -3347,7 +3216,7 @@ z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_div(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3355,10 +3224,8 @@ z3_convt::convert_div(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 2);
   Z3_ast operand0, operand1;
 
-  if (convert_bv(expr.op0(), operand0))
-    return true;
-  if (convert_bv(expr.op1(), operand1))
-    return true;
+  convert_bv(expr.op0(), operand0);
+  convert_bv(expr.op1(), operand1);
 
   if (int_encoding) {
     bv = Z3_mk_div(z3_ctx, operand0, operand1);
@@ -3378,11 +3245,10 @@ z3_convt::convert_div(const exprt &expr, Z3_ast &bv)
                                                                   fraction_bits, true)),
                                       Z3_mk_sign_ext(z3_ctx, fraction_bits,
                                                      operand1)));
-    } else
-      throw "unsupported type for /: " + expr.type().id_string();
+    } else {
+      throw new conv_error("unsupported type for /: ", expr);
+    }
   }
-
-  return false;
 }
 
 /*******************************************************************
@@ -3396,7 +3262,7 @@ z3_convt::convert_div(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_mod(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3404,26 +3270,21 @@ z3_convt::convert_mod(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 2);
   Z3_ast operand0, operand1;
 
-  if (convert_bv(expr.op0(), operand0))
-    return true;
-  if (convert_bv(expr.op1(), operand1))
-    return true;
+  convert_bv(expr.op0(), operand0);
+  convert_bv(expr.op1(), operand1);
+
+  if (expr.type().id() != "signedbv" && expr.type().id() != "unsignedbv")
+    throw new conv_error("unsupported type for mod", expr);
 
   if (int_encoding) {
-    if (expr.type().id() == "signedbv" || expr.type().id() == "unsignedbv")
-      bv = Z3_mk_mod(z3_ctx, operand0, operand1);
-    else if (expr.type().id() == "fixedbv")
-      throw "unsupported type for mod: " + expr.type().id_string();
+    bv = Z3_mk_mod(z3_ctx, operand0, operand1);
   } else   {
     if (expr.type().id() == "signedbv") {
       bv = Z3_mk_bvsrem(z3_ctx, operand0, operand1);
     }   else if (expr.type().id() == "unsignedbv") {
       bv = Z3_mk_bvurem(z3_ctx, operand0, operand1);
-    } else if (expr.type().id() == "fixedbv")
-      throw "unsupported type for mod: " + expr.type().id_string();
+    }
   }
-
-  return false;
 }
 
 /*******************************************************************
@@ -3437,7 +3298,7 @@ z3_convt::convert_mod(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3460,8 +3321,7 @@ z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
 
     forall_operands(it, expr)
     {
-      if (convert_bv(*it, args[i]))
-	return true;
+      convert_bv(*it, args[i]);
 
       if (it->type().id() == "pointer") {
 	pointer = args[i];
@@ -3489,8 +3349,7 @@ z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
   } else   {
     forall_operands(it, expr)
     {
-      if (convert_bv(*it, args[i]))
-	return true;
+      convert_bv(*it, args[i]);
 
       if (expr.type().id() == "fixedbv" && !int_encoding)
 	args[i] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[i]);
@@ -3521,8 +3380,6 @@ z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
   delete[] args;
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -3536,7 +3393,7 @@ z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3567,22 +3424,17 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
 
     if (object.id() == "zero_string") {
-      if (convert_zero_string(object, po))
-	return true;
+      convert_zero_string(object, po);
     } else if (object.id() == "string-constant")     {
-      if (convert_bv(object, po))
-	return true;
+      convert_bv(object, po);
     } else if (object.type().id() == "array" && object.id() != "member"
                && object.type().subtype().id() != "struct") {
-      if (read_cache(object, po))
-	return true;
+      read_cache(object, po);
     } else   {
-      if (convert_bv(object, po))
-	return true;
+      convert_bv(object, po);
     }
 
-    if (convert_bv(index, pi))
-      return true;
+    convert_bv(index, pi);
 
     select_pointer_value(po, pi, pointer);
 
@@ -3592,7 +3444,7 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
       pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer); //update
 			                                                     // object
       bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, pi); //update offset
-      return false;
+      return;
     }
 
   } else if (expr.op0().id() == "symbol")   {
@@ -3600,16 +3452,13 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     if (expr.op0().type().id() == "signedbv" || expr.op0().type().id() ==
         "fixedbv"
         || expr.op0().type().id() == "unsignedbv") {
-      if (convert_z3_pointer(expr, expr.op0().get_string("identifier"),
-                             pointer_var))
-	return true;
+      convert_z3_pointer(expr, expr.op0().get_string("identifier"),
+                             pointer_var);
     } else if (expr.op0().type().id() == "pointer")   {
-      if (convert_bv(expr.op0(), pointer_var))
-	return true;
+      convert_bv(expr.op0(), pointer_var);
     } else if (expr.op0().type().id() == "bool")   {
-      if (convert_z3_pointer(expr, expr.op0().get_string("identifier"),
-                             pointer_var))
-	return true;
+      convert_z3_pointer(expr, expr.op0().get_string("identifier"),
+                             pointer_var);
     } else if (expr.op0().type().id() == "struct"
                || expr.op0().type().id() == "union") {
 
@@ -3627,8 +3476,7 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 
       pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
 
-      if (convert_bv(expr.op0(), pointer))
-	return true;
+      convert_bv(expr.op0(), pointer);
 
       if (expr.type().subtype().id() == "symbol"
           && expr.op0().get_string("identifier").find("symex_dynamic") ==
@@ -3652,9 +3500,8 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
       pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);     //update
 			                                                         // object
     }   else if (expr.op0().type().id() == "code") {
-      if (convert_z3_pointer(expr, expr.op0().get_string("identifier"),
-                             pointer_var))
-	return true;
+      convert_z3_pointer(expr, expr.op0().get_string("identifier"),
+                             pointer_var);
     }
   } else if (expr.op0().id() == "member")   {
     const exprt &object = expr.op0().operands()[0];
@@ -3662,8 +3509,7 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     symbol_name = "address_of_member" + object.get_string("identifier");
     pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
 
-    if (convert_bv(expr.op0(), pointer))
-      return true;
+    convert_bv(expr.op0(), pointer);
 
     //workaround
     if (expr.op0().type().get_string("tag").find("__pthread_mutex_s") ==
@@ -3692,8 +3538,6 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
   bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, offset); //update offset
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -3707,7 +3551,7 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3729,8 +3573,7 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
 
   size = (size == 0) ? 100 : size; //fill in at least one position
 
-  if (convert_bv(expr.op0(), value))
-    return true;
+  convert_bv(expr.op0(), value);
 
   create_array_type(expr.type(), array_type);
   get_type_width(expr.op0().type(), width);
@@ -3779,8 +3622,6 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   }
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -3794,7 +3635,7 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3804,18 +3645,14 @@ z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
   Z3_ast args[2], pointer;
   std::string identifier;
 
-  if (convert_bv(expr.op0(), args[0]))
-    return true;
-
-  if (convert_bv(expr.op1(), args[1]))
-    return true;
+  convert_bv(expr.op0(), args[0]);
+  convert_bv(expr.op1(), args[1]);
 
   if (expr.op0().type().subtype().id() == "pointer") {
 
     bv = Z3_mk_select(z3_ctx, args[0], args[1]);
 
-    if (convert_z3_pointer(expr.op0(), "index", pointer))
-      return true;
+    convert_z3_pointer(expr.op0(), "index", pointer);
 
     bv = z3_api.mk_tuple_update(z3_ctx, pointer, 0, bv);
   } else   {
@@ -3823,8 +3660,6 @@ z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
   }
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -3838,7 +3673,7 @@ z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3847,10 +3682,8 @@ z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
   Z3_ast operand0, operand1;
   unsigned width_expr, width_op0, width_op1;
 
-  if (convert_bv(expr.op0(), operand0))
-    return true;
-  if (convert_bv(expr.op1(), operand1))
-    return true;
+  convert_bv(expr.op0(), operand0);
+  convert_bv(expr.op1(), operand1);
 
   get_type_width(expr.type(), width_expr);
   get_type_width(expr.op0().type(), width_op0);
@@ -3880,7 +3713,7 @@ z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
   else if (expr.id() == "shl")
     bv = Z3_mk_bvshl(z3_ctx, operand0, operand1);
   else
-    assert(false);
+    throw new conv_error("Non-shift operation in convert_shift", expr);
 
   if (int_encoding) {
     if (expr.type().id() == "signedbv")
@@ -3888,10 +3721,8 @@ z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
     else if (expr.type().id() == "unsignedbv")
       bv = Z3_mk_bv2int(z3_ctx, bv, false);
     else
-      throw "bitshift operations are not supported";
+      throw new conv_error("No bitshift ops for expr type", expr);
   }
-
-  return false;
 }
 
 /*******************************************************************
@@ -3905,7 +3736,7 @@ z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3918,7 +3749,7 @@ z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
   const exprt::operandst &operands = expr.operands();
 
   if (operands.size() != 1)
-    throw "abs takes one operand";
+    throw new conv_error("abs takes one operand", expr);
 
   const exprt &op0 = expr.op0();
   Z3_ast zero, is_negative, operand[2], val_mul;
@@ -3948,11 +3779,10 @@ z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
       operand[1] = convert_number(-1, width, true);
     }
   } else {
-    throw "Unexpected type in convert_abs";
+    throw new conv_error("Unexpected type in convert_abs", expr);
   }
 
-  if (convert_bv(op0, operand[0]))
-    return true;
+  convert_bv(op0, operand[0]);
 
   if (expr.type().id() == "signedbv" || expr.type().id() == "fixedbv") {
     if (int_encoding)
@@ -3972,8 +3802,6 @@ z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
     val_mul = Z3_mk_bvmul(z3_ctx, operand[0], operand[1]);
 
   bv = Z3_mk_ite(z3_ctx, is_negative, val_mul, operand[0]);
-
-  return false;
 }
 
 /*******************************************************************
@@ -3987,7 +3815,7 @@ z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3998,11 +3826,8 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
   if (expr.type().id() == "struct" || expr.type().id() == "union") {
     unsigned int idx;
 
-    if (convert_bv(expr.op0(), array_var))
-      return true;
-
-    if (convert_bv(expr.op2(), array_val))
-      return true;
+    convert_bv(expr.op0(), array_var);
+    convert_bv(expr.op2(), array_val);
 
     idx = convert_member_name(expr.op0(), expr.op1());
     bv = z3_api.mk_tuple_update(z3_ctx, array_var, idx, array_val);
@@ -4016,14 +3841,9 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
     }
   } else   {
 
-    if (convert_bv(expr.op0(), operand0))
-      return true;
-
-    if (convert_bv(expr.op1(), operand1))
-      return true;
-
-    if (convert_bv(expr.op2(), operand2))
-      return true;
+    convert_bv(expr.op0(), operand0);
+    convert_bv(expr.op1(), operand1);
+    convert_bv(expr.op2(), operand2);
 
     if (expr.op2().type().id() == "pointer") {
       select_pointer_value(operand0, operand1, operand2); //select pointer value
@@ -4031,8 +3851,6 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 
     bv = Z3_mk_store(z3_ctx, operand0, operand1, operand2);
   }
-
-  return false;
 }
 
 /*******************************************************************
@@ -4046,7 +3864,7 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4054,12 +3872,11 @@ z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 1);
   Z3_ast operand0;
 
-  if (convert_bv(expr.op0(), operand0))
-    return true;
+  convert_bv(expr.op0(), operand0);
 
   if (int_encoding && expr.op0().id() == "member") {
     bv = operand0;
-    return false;
+    return;
   }
 
 
@@ -4069,8 +3886,6 @@ z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
     bv = Z3_mk_bvnot(z3_ctx, operand0);
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -4102,6 +3917,7 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
       resp = i;
   }
 
+  // XXXjmorse - and if it wasn't found?
   return resp;
 }
 
@@ -4116,7 +3932,7 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_same_object(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4124,10 +3940,8 @@ z3_convt::convert_same_object(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 2);
   Z3_ast args[2];
 
-  if (convert_bv(expr.op0(), args[0]))
-    return true;
-  if (convert_bv(expr.op1(), args[1]))
-    return true;
+  convert_bv(expr.op0(), args[0]);
+  convert_bv(expr.op1(), args[1]);
 
   //@Lucas
   if (expr.op0().type().id() == "pointer" &&
@@ -4146,7 +3960,6 @@ z3_convt::convert_same_object(const exprt &expr, Z3_ast &bv)
   bv = Z3_mk_distinct(z3_ctx, 2, args);
 
   DEBUGLOC;
-  return false;
 }
 
 /*******************************************************************
@@ -4160,7 +3973,7 @@ z3_convt::convert_same_object(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::select_pointer_offset(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4168,12 +3981,9 @@ z3_convt::select_pointer_offset(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 1);
   Z3_ast pointer;
 
-  if (convert_bv(expr.op0(), pointer))
-    return true;
+  convert_bv(expr.op0(), pointer);
 
   bv = z3_api.mk_tuple_select(z3_ctx, pointer, 1); //select pointer offset
-
-  return false;
 }
 
 /*******************************************************************
@@ -4187,7 +3997,7 @@ z3_convt::select_pointer_offset(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4195,8 +4005,7 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
   u_int j = 0;
   Z3_ast struct_var;
 
-  if (convert_bv(expr.op0(), struct_var))
-    return true;
+  convert_bv(expr.op0(), struct_var);
 
   j = convert_member_name(expr.op0(), expr);
 
@@ -4205,15 +4014,13 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
       expr.op0().get_string("identifier").c_str());
     if (cache_result != union_vars.end()) {
       bv = z3_api.mk_tuple_select(z3_ctx, struct_var, cache_result->second);
-      return false;
+      return;
     }
   }
 
   bv = z3_api.mk_tuple_select(z3_ctx, struct_var, j);
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -4227,7 +4034,7 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4241,8 +4048,7 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
   get_type_width(expr.type(), width);
 
   if (expr.op0().id() == "symbol" || expr.op0().id() == "constant") {
-    if (convert_bv(expr.op0(), pointer_object))
-      return true;
+    convert_bv(expr.op0(), pointer_object);
     pointer_object = z3_api.mk_tuple_select(z3_ctx, pointer_object, 0);
 
     if (expr.op0().type().id() == "pointer") {
@@ -4263,17 +4069,14 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
     else
       bv = pointer_object;
 
-    return false;
+    return;
   } else if (object.id() == "index" && object.type().id() == "struct")     {
     const exprt &symbol = object.operands()[0];
     const exprt &index = object.operands()[1];
     Z3_ast array_value, array, array_index;
 
-    if (convert_bv(symbol, array))
-      return true;
-
-    if (convert_bv(index, array_index))
-      return true;
+    convert_bv(symbol, array);
+    convert_bv(index, array_index);
 
     array_value = Z3_mk_select(z3_ctx, array, array_index);
     pointer_object = z3_api.mk_tuple_select(z3_ctx, array_value, 0);
@@ -4296,19 +4099,17 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 	  Z3_mk_int(z3_ctx, i, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
     }
   } else   {
-    if (convert_bv(object, pointer_object)) {
-      // Zero is the null object. Not correct.
-      if (object.type().id() == "pointer" && object.type().subtype().id() ==
-          "symbol") {
-	if (int_encoding)
-	  bv = z3_api.mk_unsigned_int(z3_ctx, 0);
-	else
-	  bv =
-	    Z3_mk_unsigned_int(z3_ctx, 0,
-	                       Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
-	return false;
-      } else
-	return true;
+    convert_bv(object, pointer_object);
+    // Zero is the null object. Not correct.
+    if (object.type().id() == "pointer" && object.type().subtype().id() ==
+        "symbol") {
+      if (int_encoding)
+        bv = z3_api.mk_unsigned_int(z3_ctx, 0);
+      else
+        bv =
+          Z3_mk_unsigned_int(z3_ctx, 0,
+                             Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+      return;
     }
 
     if (object.type().id() == "signedbv" || object.type().id() == "unsignedbv"
@@ -4324,16 +4125,14 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
       else
 	bv = pointer_object;
 
-      return false;
+      return;
     } else if (object.type().id() == "array")     {
       Z3_ast args[2];
       const exprt &object_array = expr.op0().operands()[0];
       const exprt &object_index = expr.op0().operands()[1];
 
-      if (convert_bv(object_array, args[0]))
-	return true;
-      if (convert_bv(object_index, args[1]))
-	return true;
+      convert_bv(object_array, args[0]);
+      convert_bv(object_index, args[1]);
 
       pointer_object = Z3_mk_select(z3_ctx, args[0], args[1]);
 
@@ -4350,13 +4149,13 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
       else
 	bv = pointer_object;
 
-      return false;
+      return;
     } else if (object.type().id() == "pointer")     {
       Z3_ast args[2];
 
       if (object.type().subtype().id() == "symbol") {
 	bv = z3_api.mk_tuple_select(z3_ctx, pointer_object, 0);
-	return false;
+	return;
       }
 
       assert(object.operands().size() > 0);
@@ -4365,11 +4164,8 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
       if (object_array.type().id() == "array") {
 	const exprt &object_index = object.operands()[1];
 
-	if (convert_bv(object_array, args[0]))
-	  return true;
-
-	if (convert_bv(object_index, args[1]))
-	  return true;
+	convert_bv(object_array, args[0]);
+	convert_bv(object_index, args[1]);
 
 	pointer_object = Z3_mk_select(z3_ctx, args[0], args[1]);
 
@@ -4389,7 +4185,7 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 	else /*if (width==object_width)*/
 	  bv = pointer_object;
 
-	return false;
+	return;
       }
     } else if (object.type().id() == "struct" || object.type().id() ==
                "union")       {
@@ -4411,23 +4207,17 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 	  get_type_width(it->type(), object_width);
 
 	  if (width == object_width) {
-	    if (convert_identifier(it->get("name").c_str(), it->type(), bv))
-	      return true;
-
-	    return false;
+	    convert_identifier(it->get("name").c_str(), it->type(), bv);
+	    return;
 	  }
 	} else   {
 	  get_type_width(it->type(), object_width);
 
 	  if (width == object_width) {
-	    if (convert_identifier(it->get("name").c_str(), expr.type(), bv /*pointer_object*/))
-	      return true;
-
-	    return false;
+	    convert_identifier(it->get("name").c_str(), expr.type(), bv);
+	    return;
 	  } else if (it->type().id() == "pointer")   {
-	    if (convert_identifier(it->get("name").c_str(),
-	                           /*expr.type()*/ it->type(), bv))
-	      return true;
+	    convert_identifier(it->get("name").c_str(), it->type(), bv);
 	    pointer_object = z3_api.mk_tuple_select(z3_ctx, bv, 0);
 	  }
 	}
@@ -4440,13 +4230,11 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
       else
 	bv = pointer_object;
 
-      return false;
+      return;
     }
   }
 
   bv = pointer_object;
-
-  return false;
 }
 
 /*******************************************************************
@@ -4460,7 +4248,7 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_zero_string_length(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4468,12 +4256,9 @@ z3_convt::convert_zero_string_length(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 1);
   Z3_ast operand;
 
-  if (convert_bv(expr.op0(), operand))
-    return true;
+  convert_bv(expr.op0(), operand);
 
   bv = z3_api.mk_tuple_select(z3_ctx, operand, 0);
-
-  return false;
 }
 
 /*******************************************************************
@@ -4487,7 +4272,7 @@ z3_convt::convert_zero_string_length(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4500,10 +4285,9 @@ z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
 
   if (dynamic_objects.empty()) {
     bv = Z3_mk_false(z3_ctx);
-    return false;
+    return;
   } else   {
-    if (convert_bv(expr.op0(), operand0))
-      return true;
+    convert_bv(expr.op0(), operand0);
 
     operand0 =
       Z3_mk_extract(z3_ctx, config.ansi_c.pointer_width + BV_ADDR_BITS - 1,
@@ -4532,8 +4316,6 @@ z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
   }
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -4547,7 +4329,7 @@ z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4559,21 +4341,15 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 
   mp_integer i;
   if (to_integer(expr.op1(), i)) {
-    if (convert_bv(expr.op0(), bv))
-      return true;
-    else
-      return false;
-    //throw "byte_update takes constant as second parameter";
+    convert_bv(expr.op0(), bv);
+    return;
   }
 
   Z3_ast tuple, value;
   uint width_op0, width_op2;
 
-  if (convert_bv(expr.op0(), tuple))
-    return true;
-
-  if (convert_bv(expr.op2(), value))
-    return true;
+  convert_bv(expr.op0(), tuple);
+  convert_bv(expr.op2(), value);
 
   get_type_width(expr.op2().type(), width_op2);
 
@@ -4610,24 +4386,24 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   } else if (expr.op0().type().id() == "signedbv")     {
     if (int_encoding) {
       bv = value;
-      return false;
+      return;
     }
 
     get_type_width(expr.op0().type(), width_op0);
 
     if (width_op0 == 0)
-      throw "failed to get width of byte_update operand";
+      // XXXjmorse - can this ever happen now?
+      throw new conv_error("failed to get width of byte_update operand", expr);
 
     if (width_op0 > width_op2)
       bv = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value);
     else
-      throw "convert_byte_update: " + expr.id_string() + " is unsupported";
-  } else
-    throw "convert_byte_update: " + expr.id_string() + " is unsupported";
+      throw new conv_error("unsupported irep for conver_byte_update", expr);
+  } else {
+    throw new conv_error("unsupported irep for conver_byte_update", expr);
+  }
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -4641,7 +4417,7 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4652,7 +4428,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 
   mp_integer i;
   if (to_integer(expr.op1(), i))
-    return true;
+    throw new conv_error("byte_extract expects constant 2nd arg", expr);
 
   unsigned width, w;
 
@@ -4663,7 +4439,8 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   get_type_width(expr.type(), w);
 
   if (width == 0)
-    throw "failed to get width of byte_extract operand";
+    // XXXjmorse - can this happen any more?
+    throw new conv_error("failed to get width of byte_extract operand", expr);
 
   uint64_t upper, lower;
 
@@ -4678,8 +4455,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 
   Z3_ast op0;
 
-  if (convert_bv(expr.op0(), op0))
-    return true;
+  convert_bv(expr.op0(), op0);
 
   if (int_encoding) {
     if (expr.op0().type().id() == "fixedbv") {
@@ -4694,9 +4470,9 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	  bv = Z3_mk_bv2int(z3_ctx, bv, 1);
 	else
 	  bv = Z3_mk_bv2int(z3_ctx, bv, 0);
-      } else
-	throw "convert_byte_extract: " + expr.type().id_string() +
-	      " is unsupported";
+      } else {
+	throw new conv_error("unsupported type for byte_extract", expr);
+      }
     } else if (expr.op0().type().id() == "signedbv" ||
                expr.op0().type().id() == "unsignedbv") {
       Z3_ast tmp;
@@ -4713,9 +4489,9 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	bv = Z3_mk_bv2int(z3_ctx, bv, 1);
       else
 	bv = Z3_mk_bv2int(z3_ctx, bv, 0);
-    } else
-      throw "convert_byte_extract: " + expr.op0().type().id_string() +
-            " is unsupported";
+    } else {
+      throw new conv_error("unsupported type for byte_extract", expr);
+    }
   } else   {
     if (expr.op0().type().id() == "struct") {
       const struct_typet &struct_type = to_struct_type(expr.op0().type());
@@ -4729,8 +4505,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
            it != components.end();
            it++, i++)
       {
-	if (convert_bv(expr.op0().operands()[i], struct_elem[i]))
-	  return true;
+	convert_bv(expr.op0().operands()[i], struct_elem[i]);
       }
 
       for (unsigned k = 0; k < components.size(); k++)
@@ -4756,11 +4531,8 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       const exprt &symbol = expr.op0().operands()[0];
       const exprt &index = expr.op0().operands()[1];
 
-      if (convert_bv(symbol, args[0]))
-	return true;
-
-      if (convert_bv(index, args[1]))
-	return true;
+      convert_bv(symbol, args[0]);
+      convert_bv(index, args[1]);
 
       bv = Z3_mk_select(z3_ctx, args[0], args[1]);
 
@@ -4777,8 +4549,6 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   }
 
   DEBUGLOC;
-
-  return false;
 }
 
 /*******************************************************************
@@ -4792,7 +4562,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_isnan(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4807,8 +4577,7 @@ z3_convt::convert_isnan(const exprt &expr, Z3_ast &bv)
 
     get_type_width(op_type, width);
 
-    if (convert_bv(expr.op0(), op0))
-      return true;
+    convert_bv(expr.op0(), op0);
 
     if (int_encoding)
       bv =
@@ -4822,10 +4591,9 @@ z3_convt::convert_isnan(const exprt &expr, Z3_ast &bv)
         Z3_mk_ite(z3_ctx, Z3_mk_bvsge(z3_ctx, op0, convert_number(0, width,
                                                                   true)),
                   Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));
-  } else
-    throw "isnan with unsupported operand type";
-
-  return false;
+  } else {
+    throw new conv_error("isnan with unsupported operand type", expr);
+  }
 }
 
 /*******************************************************************
@@ -4839,95 +4607,95 @@ z3_convt::convert_isnan(const exprt &expr, Z3_ast &bv)
 
  \*******************************************************************/
 
-bool
+void
 z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
   if (expr.id() == "symbol")
-    return convert_identifier(expr.get_string("identifier"), expr.type(), bv);
+    convert_identifier(expr.get_string("identifier"), expr.type(), bv);
   else if (expr.id() == "nondet_symbol")
-    return convert_identifier("nondet$" + expr.get_string(
-                                "identifier"), expr.type(), bv);
+    convert_identifier("nondet$" + expr.get_string("identifier"),
+                       expr.type(), bv);
   else if (expr.id() == "typecast")
-    return convert_typecast(expr, bv);
+    convert_typecast(expr, bv);
   else if (expr.id() == "struct" || expr.id() == "union")
-    return convert_struct_union(expr, bv);
+    convert_struct_union(expr, bv);
   else if (expr.id() == "constant")
-    return convert_constant(expr, bv);
+    convert_constant(expr, bv);
   else if (expr.id() == "bitand" || expr.id() == "bitor" || expr.id() ==
            "bitxor"
            || expr.id() == "bitnand" || expr.id() == "bitnor" || expr.id() ==
            "bitnxor")
-    return convert_bitwise(expr, bv);
+    convert_bitwise(expr, bv);
   else if (expr.id() == "bitnot")
-    return convert_bitnot(expr, bv);
+    convert_bitnot(expr, bv);
   else if (expr.id() == "unary-")
-    return convert_unary_minus(expr, bv);
+    convert_unary_minus(expr, bv);
   else if (expr.id() == "if")
-    return convert_if(expr, bv);
+    convert_if(expr, bv);
   else if (expr.id() == "and" || expr.id() == "or" || expr.id() == "xor")
-    return convert_logical_ops(expr, bv);
+    convert_logical_ops(expr, bv);
   else if (expr.id() == "not")
-    return convert_logical_not(expr, bv);
+    convert_logical_not(expr, bv);
   else if (expr.id() == "=" || expr.id() == "notequal")
-    return convert_equality(expr, bv);
+    convert_equality(expr, bv);
   else if (expr.id() == "<=" || expr.id() == "<" || expr.id() == ">="
            || expr.id() == ">")
-    return convert_rel(expr, bv);
+    convert_rel(expr, bv);
   else if (expr.id() == "+" || expr.id() == "-")
-    return convert_add_sub(expr, bv);
+    convert_add_sub(expr, bv);
   else if (expr.id() == "/")
-    return convert_div(expr, bv);
+    convert_div(expr, bv);
   else if (expr.id() == "mod")
-    return convert_mod(expr, bv);
+    convert_mod(expr, bv);
   else if (expr.id() == "*")
-    return convert_mul(expr, bv);
+    convert_mul(expr, bv);
   else if (expr.id() == "address_of" || expr.id() == "implicit_address_of"
            || expr.id() == "reference_to")
     return convert_pointer(expr, bv);
   else if (expr.id() == "array_of")
-    return convert_array_of(expr, bv);
+    convert_array_of(expr, bv);
   else if (expr.id() == "index")
-    return convert_index(expr, bv);
+    convert_index(expr, bv);
   else if (expr.id() == "ashr" || expr.id() == "lshr" || expr.id() == "shl")
-    return convert_shift(expr, bv);
+    convert_shift(expr, bv);
   else if (expr.id() == "abs")
-    return convert_abs(expr, bv);
+    convert_abs(expr, bv);
   else if (expr.id() == "with")
-    return convert_with(expr, bv);
+    convert_with(expr, bv);
   else if (expr.id() == "member")
-    return convert_member(expr, bv);
+    convert_member(expr, bv);
   else if (expr.id() == "zero_string")
-    return convert_zero_string(expr, bv);
+    convert_zero_string(expr, bv);
   else if (expr.id() == "pointer_offset")
-    return select_pointer_offset(expr, bv);
+    select_pointer_offset(expr, bv);
   else if (expr.id() == "pointer_object")
-    return convert_pointer_object(expr, bv);
+    convert_pointer_object(expr, bv);
   else if (expr.id() == "same-object")
-    return convert_same_object(expr, bv);
+    convert_same_object(expr, bv);
   else if (expr.id() == "string-constant") {
     exprt tmp;
     string2array(expr, tmp);
-    return convert_bv(tmp, bv);
+    convert_bv(tmp, bv);
   } else if (expr.id() == "zero_string_length")
-    return convert_zero_string_length(expr.op0(), bv);
+    convert_zero_string_length(expr.op0(), bv);
   else if (expr.id() == "replication")
     assert(expr.operands().size() == 2);
   else if (expr.id() == "is_dynamic_object")
-    return convert_is_dynamic_object(expr, bv);
+    convert_is_dynamic_object(expr, bv);
   else if (expr.id() == "byte_update_little_endian" ||
            expr.id() == "byte_update_big_endian")
-    return convert_byte_update(expr, bv);
+    convert_byte_update(expr, bv);
   else if (expr.id() == "byte_extract_little_endian" ||
            expr.id() == "byte_extract_big_endian")
-    return convert_byte_extract(expr, bv);
+    convert_byte_extract(expr, bv);
 #if 1
   else if (expr.id() == "isnan")
-    return convert_isnan(expr, bv);
+    convert_isnan(expr, bv);
 #endif
-
-  return true;
+  else 
+    throw new conv_error("Unrecognized expression type", expr);
 }
 
 /*******************************************************************
@@ -5065,14 +4833,8 @@ z3_convt::set_to(const exprt &expr, bool value)
       const exprt &op1 = expr.op1();
 
       if (assign_z3_expr(expr) && ignoring_expr) {
-        if (convert_bv(op0, operand[0])) {
-          ignoring(op0);
-          return;
-        }
-        if (convert_bv(op1, operand[1])) {
-          ignoring(op1);
-          return;
-        }
+        convert_bv(op0, operand[0]);
+        convert_bv(op1, operand[1]);
 
         if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
           Z3_ast pointer[2], formula[2];
