@@ -76,7 +76,7 @@ public:
   u_int get_number_variables_z3(void);
   u_int get_number_vcs_z3(void);
 
-protected:
+private:
   virtual literalt convert_rest(const exprt &expr);
   virtual void set_to(const exprt &expr, bool value);
   bool assign_z3_expr(const exprt expr);
@@ -187,7 +187,6 @@ protected:
   typedef std::map<std::string, Z3_ast> map_varst;
   map_varst map_vars;
 
-private:
   std::string itos(int i);
   std::string fixed_point(std::string v, unsigned width);
   std::string extract_magnitude(std::string v, unsigned width);
