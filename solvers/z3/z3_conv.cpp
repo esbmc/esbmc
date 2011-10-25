@@ -457,7 +457,7 @@ z3_convt::check2_z3_properties(void)
   catch (std::bad_alloc)
   {
     error("Out of memory");
-    return Z3_L_UNDEF;
+    abort();
   }
 
 
