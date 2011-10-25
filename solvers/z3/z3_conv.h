@@ -220,14 +220,11 @@ private:
   union_varst union_vars;
 
   class conv_error {
-    std::string msg, func;
+    std::string msg;
     irept irep;
-    unsigned line;
-    conv_error(std::string msg, irept irep, std::string func, unsigned line) {
+    conv_error(std::string msg, irept irep) {
       this->msg = msg;
       this->irep = irep;
-      this->func = func;
-      this->line = line;
       return;
     }
   };
