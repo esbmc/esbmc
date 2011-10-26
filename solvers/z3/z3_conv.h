@@ -241,19 +241,19 @@ public:
     }
 
     std::string to_string(void) {
-      std::string msg;
-      msg = "Encountered Z3 conversion error: \"" + msg + "\" at:\n";
+      std::string out;
+      out = "Encountered Z3 conversion error: \"" + msg + "\" at:\n";
       for (int i = 0; i < num_frames; i++) {
-        msg += backtrace_syms[i];
-        msg += "\n";
+        out += backtrace_syms[i];
+        out += "\n";
       }
 
       if (num_frames == 0)
-        msg += "(couldn't get a backtrace)\n";
+        out += "(couldn't get a backtrace)\n";
 
-      msg += "For irep:" + irep.pretty(0);
+      out += "For irep:" + irep.pretty(0);
 
-      return msg;
+      return out;
     }
   };
 
