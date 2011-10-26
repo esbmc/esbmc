@@ -1042,7 +1042,7 @@ z3_convt::write_cache(const exprt &expr)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_lt
+   Function: z3_convt::convert_cmp
 
    Inputs:
 
@@ -1053,52 +1053,32 @@ z3_convt::write_cache(const exprt &expr)
  \*******************************************************************/
 
 Z3_ast
-z3_convt::convert_lt(const exprt &expr)
+z3_convt::convert_cmp(const exprt &expr)
 {
   DEBUGLOC;
 
-  assert(expr.operands().size() == 2);
-  Z3_ast bv, operand[2];
-  const exprt &op0 = expr.op0();
-  const exprt &op1 = expr.op1();
+  typedef Z3_ast (*calltype)(Z3_context ctx, Z3_ast op1, Z3_ast op2);
+  calltype signedbvcall, unsignedbvcall, intcall;
 
-  convert_bv(op0, operand[0]);
-  convert_bv(op1, operand[1]);
-
-  // XXXjmorse pointer comparisons require serious consideration
-  if (op0.type().id() == "pointer")
-    operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
-
-  if (op1.type().id() == "pointer")
-    operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
-
-  if (int_encoding) {
-    bv = Z3_mk_lt(z3_ctx, operand[0], operand[1]);
-  } else   {
-    if (op1.type().id() == "signedbv" || op1.type().id() == "fixedbv"
-        || op1.type().id() == "pointer")
-      bv = Z3_mk_bvslt(z3_ctx, operand[0], operand[1]);
-    else if (op1.type().id() == "unsignedbv")
-      bv = Z3_mk_bvult(z3_ctx, operand[0], operand[1]);
+  if (expr.id() == "<=") {
+    intcall = Z3_mk_le;
+    signedbvcall = Z3_mk_bvsle;
+    unsignedbvcall = Z3_mk_bvule;
+  } else if (expr.id() == ">=") {
+    intcall = Z3_mk_ge;
+    signedbvcall = Z3_mk_bvsge;
+    unsignedbvcall = Z3_mk_bvuge;
+  } else if (expr.id() == "<") {
+    intcall = Z3_mk_lt;
+    signedbvcall = Z3_mk_bvslt;
+    unsignedbvcall = Z3_mk_bvult;
+  } else if (expr.id() == ">") {
+    intcall = Z3_mk_gt;
+    signedbvcall = Z3_mk_bvsgt;
+    unsignedbvcall = Z3_mk_bvugt;
+  } else {
+    throw new conv_error("Unexpected expr in convert_cmp", expr);
   }
-
-  return bv;
-}
-
-/*******************************************************************
-   Function: z3_convt::convert_gt
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-Z3_ast
-z3_convt::convert_gt(const exprt &expr)
-{
-  DEBUGLOC;
 
   assert(expr.operands().size() == 2);
   Z3_ast bv, operand[2];
@@ -1106,6 +1086,7 @@ z3_convt::convert_gt(const exprt &expr)
   convert_bv(expr.op0(), operand[0]);
   convert_bv(expr.op1(), operand[1]);
 
+  // XXXjmorse - pointer comparison needs serious consideration
   if (expr.op0().type().id() == "pointer")
     operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
 
@@ -1113,107 +1094,15 @@ z3_convt::convert_gt(const exprt &expr)
     operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
 
   if (int_encoding) {
-    bv = Z3_mk_gt(z3_ctx, operand[0], operand[1]);
+    bv = intcall(z3_ctx, operand[0], operand[1]);
   } else   {
     if (expr.op1().type().id() == "signedbv" || expr.op1().type().id() ==
         "fixedbv" || expr.op1().type().id() == "pointer") {
-      bv = Z3_mk_bvsgt(z3_ctx, operand[0], operand[1]);
+      bv = signedbvcall(z3_ctx, operand[0], operand[1]);
     } else if (expr.op1().type().id() == "unsignedbv") {
-      bv = Z3_mk_bvugt(z3_ctx, operand[0], operand[1]);
+      bv = unsignedbvcall(z3_ctx, operand[0], operand[1]);
     } else {
-      // XXXjmorse what guarentees this isn't reached?
-      assert(false);
-    }
-  }
-
-  return bv;
-}
-
-
-/*******************************************************************
-   Function: z3_convt::convert_le
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-Z3_ast
-z3_convt::convert_le(const exprt &expr)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 2);
-  Z3_ast bv, operand[2];
-
-  convert_bv(expr.op0(), operand[0]);
-  convert_bv(expr.op1(), operand[1]);
-
-  if (expr.op0().type().id() == "pointer")
-    operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
-
-  if (expr.op1().type().id() == "pointer")
-    operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
-
-  if (int_encoding) {
-    bv = Z3_mk_le(z3_ctx, operand[0], operand[1]);
-  } else   {
-    if (expr.op1().type().id() == "signedbv" || expr.op1().type().id() ==
-        "fixedbv" || expr.op1().type().id() == "pointer") {
-      bv = Z3_mk_bvsle(z3_ctx, operand[0], operand[1]);
-    } else if (expr.op1().type().id() == "unsignedbv") {
-      bv = Z3_mk_bvule(z3_ctx, operand[0], operand[1]);
-    } else {
-      // XXXjmorse what guarentees this isn't reached?
-      assert(false);
-    }
-  }
-
-  return bv;
-}
-
-/*******************************************************************
-   Function: z3_convt::convert_ge
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-Z3_ast
-z3_convt::convert_ge(const exprt &expr)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 2);
-  Z3_ast bv, operand[2];
-
-  convert_bv(expr.op0(), operand[0]);
-  convert_bv(expr.op1(), operand[1]);
-
-  if (expr.op0().type().id() == "pointer")
-    operand[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
-
-  if (expr.op1().type().id() == "pointer")
-    operand[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
-
-  if (int_encoding) {
-    bv = Z3_mk_ge(z3_ctx, operand[0], operand[1]);
-  } else   {
-    if (expr.op1().type().id() == "signedbv" || expr.op1().type().id() ==
-        "fixedbv" || expr.op1().type().id() == "pointer") {
-      bv = Z3_mk_bvsge(z3_ctx, operand[0], operand[1]);
-    } else if (expr.op1().type().id() == "unsignedbv") {
-      bv = Z3_mk_bvuge(z3_ctx, operand[0], operand[1]);
-    } else {
-      // XXXjmorse - what guarentees this isn't reached.
-      assert(false);
+      throw new conv_error("Unexpected type in convert_cmp", expr);
     }
   }
 
@@ -1872,14 +1761,9 @@ z3_convt::convert_rest(const exprt &expr)
     if (!assign_z3_expr(expr) && !ignoring_expr)
       return l;
 
-    if (expr.id() == "<")
-      constraint = convert_lt(expr);
-    else if (expr.id() == ">")
-      constraint = convert_gt(expr);
-    else if (expr.id() == "<=")
-      constraint = convert_le(expr);
-    else if (expr.id() == ">=")
-      constraint = convert_ge(expr);
+    if (expr.id() == "<" || expr.id() == ">" || expr.id() == "<=" ||
+        expr.id() == ">=")
+      constraint = convert_cmp(expr);
     else if (expr.id() == "=" || expr.id() == "notequal")
       constraint = convert_eq(expr);
     else if (expr.id() == "invalid-pointer")

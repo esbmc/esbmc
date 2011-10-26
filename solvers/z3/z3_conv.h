@@ -94,10 +94,7 @@ private:
   }
   void create_enum_type(Z3_type_ast &bv);
   void create_pointer_type(const typet &type, Z3_type_ast &bv);
-  Z3_ast convert_lt(const exprt &expr);
-  Z3_ast convert_gt(const exprt &expr);
-  Z3_ast convert_le(const exprt &expr);
-  Z3_ast convert_ge(const exprt &expr);
+  Z3_ast convert_cmp(const exprt &expr);
   Z3_ast convert_eq(const exprt &expr);
   Z3_ast convert_invalid(const exprt &expr);
   Z3_ast convert_same_object(const exprt &expr);
