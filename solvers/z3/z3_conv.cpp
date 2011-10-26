@@ -1831,6 +1831,24 @@ z3_convt::convert_memory_leak(const exprt &expr)
   return bv;
 }
 
+Z3_ast
+z3_convt::convert_width(const exprt &expr)
+{
+  Z3_sort native_int_sort;
+  unsigned int width;
+
+  assert(expr.id() == "width");
+  assert(expr.operands().size() == 1);
+
+  get_type_width(expr.op0().type(), width);
+  if (int_encoding)
+    native_int_sort = Z3_mk_int_sort(z3_ctx);
+  else
+    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+
+  return Z3_mk_int(z3_ctx, width, native_int_sort);
+}
+
 /*******************************************************************
    Function: z3_convt::convert_rest
 
@@ -4694,6 +4712,8 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
   else if (expr.id() == "isnan")
     convert_isnan(expr, bv);
 #endif
+  else if (expr.id() == "width")
+    bv = convert_width(expr);
   else 
     throw new conv_error("Unrecognized expression type", expr);
 }
