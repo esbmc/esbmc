@@ -548,40 +548,7 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
     idx_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
   }
 
-  if (type.subtype().id() == "bool") {
-    elem_sort = Z3_mk_bool_type(z3_ctx);
-  } else if (type.subtype().id() == "fixedbv")   {
-    get_type_width(type.subtype(), width);
-
-    if (int_encoding)
-      elem_sort = Z3_mk_real_type(z3_ctx);
-    else
-      elem_sort = Z3_mk_bv_type(z3_ctx, width);
-  } else if (type.subtype().id() == "struct")   {
-    create_struct_type(type.subtype(), elem_sort);
-  } else if (type.subtype().id() == "union")   {
-    create_union_type(type.subtype(), elem_sort);
-  } else if (type.subtype().id() == "array")   { // array of array
-    create_array_type(type.subtype(), elem_sort);
-  } else   {
-    if (type.subtype().id() == "pointer") {
-      if (boolbv_get_width(type.subtype().subtype(), width)) {
-	if (type.subtype().subtype().id() == "empty"
-	    || type.subtype().subtype().id() == "symbol")
-	  width = config.ansi_c.int_width;
-	else
-          throw new conv_error("Unexpected pointer subsubtype", type);
-      }
-    } else   {
-      get_type_width(type.subtype(), width);
-    }
-
-    if (int_encoding)
-      elem_sort = Z3_mk_int_type(z3_ctx);
-    else
-      elem_sort = Z3_mk_bv_type(z3_ctx, width);
-  }
-
+  create_type(type.subtype(), elem_sort);
   bv = Z3_mk_array_type(z3_ctx, idx_sort, elem_sort);
   DEBUGLOC;
 
