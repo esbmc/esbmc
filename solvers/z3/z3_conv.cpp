@@ -3408,7 +3408,6 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   } else if (expr.type().subtype().id() == "pointer")     {
     identifier = "ARRAY_OF(0p)" + width;
     bv = z3_api.mk_var(z3_ctx, identifier.c_str(), array_type);
-    value = z3_api.mk_tuple_select(z3_ctx, value, 0);
   } else if (expr.type().id() == "array" && expr.type().subtype().id() ==
              "struct")       {
     std::string identifier;
