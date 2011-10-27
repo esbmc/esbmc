@@ -78,7 +78,7 @@ private:
 	Z3_context z3_ctx;
 	typedef std::map<std::string, Z3_ast> map_prop_varst;
 	map_prop_varst map_prop_vars;
-	std::vector<Z3_ast> assumpt;
+	std::list<Z3_ast> assumpt;
     bool smtlib;
 
 protected:

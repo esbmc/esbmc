@@ -65,6 +65,10 @@ decision_proceduret::resultt z3_dect::dec_solve()
   unsigned major, minor, build, revision;
   Z3_get_version(&major, &minor, &build, &revision);
 
+  // Add assumptions that link up literals to symbols - connections that are
+  // made at a high level by prop_conv, rather than by the Z3 backend
+  link_syms_to_literals();
+
   if (smtlib)
     return read_z3_result();
 

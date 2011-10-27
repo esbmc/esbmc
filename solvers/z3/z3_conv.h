@@ -208,13 +208,16 @@ private:
   Z3_ast convert_number_int(int64_t value, u_int width, bool type);
   Z3_ast convert_number_bv(int64_t value, u_int width, bool type);
   void generate_assumptions(const exprt &expr, const Z3_ast &result);
+public: // Hackity hack, for z3_dec
+  void link_syms_to_literals(void);
+private:
   void store_sat_assignments(Z3_model m);
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
 	    max_core_size;
   z3_capi z3_api;
   bool int_encoding, ignoring_expr, equivalence_checking, uw;
   //Z3_ast assumptions[Z3_UNSAT_CORE_LIMIT];
-  std::vector<Z3_ast> assumptions;
+  std::list<Z3_ast> assumptions;
   std::string filename;
 
   typedef std::map<std::string, unsigned int> union_varst;

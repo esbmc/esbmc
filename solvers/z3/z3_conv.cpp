@@ -30,7 +30,7 @@
 //static Z3_ast core[Z3_UNSAT_CORE_LIMIT];
 static std::vector<Z3_ast> core_vector;
 static u_int unsat_core_size = 0;
-static u_int number_of_assumptions = 0, assumptions_status = 0;
+static u_int assumptions_status = 0;
 
 extern void finalize_symbols(void);
 
@@ -62,8 +62,11 @@ z3_convt::~z3_convt()
     Z3_ast assumpt_array[z3_prop.assumpt.size() + 1], formula;
     formula = Z3_mk_true(z3_ctx);
 
-    for (unsigned i = 0; i < z3_prop.assumpt.size(); i++)
-      assumpt_array[i] = z3_prop.assumpt.at(i);
+    std::list<Z3_ast>::const_iterator it;
+    unsigned int i;
+    for (it = z3_prop.assumpt.begin(), i = 0; it != z3_prop.assumpt.end(); it++, i++) {
+      assumpt_array[i] = *it;
+    }
 
     if (int_encoding)
       logic = "QF_AUFLIRA";
@@ -356,14 +359,12 @@ z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
       if (id.find(literal.c_str()) != std::string::npos)
 	return;
     }
-    assumptions.push_back(Z3_mk_not(z3_ctx, result));
+    z3_prop.assumpt.push_back(Z3_mk_not(z3_ctx, result));
   } else if (is_first_literal)   {
     is_first_literal = false;
     return;
   } else
-    assumptions.push_back(Z3_mk_not(z3_ctx, result));
-
-  ++number_of_assumptions;
+    z3_prop.assumpt.push_back(Z3_mk_not(z3_ctx, result));
 }
 
 /*******************************************************************
@@ -418,25 +419,26 @@ z3_convt::check2_z3_properties(void)
 {
   DEBUGLOC
 
-  assert(number_of_assumptions == assumptions.size());
-
   Z3_model m = 0;
   Z3_lbool result;
   unsigned i;
-  Z3_ast proof, core[number_of_assumptions],
-         assumptions_core[number_of_assumptions];
+  Z3_ast proof, core[z3_prop.assumpt.size()],
+         assumptions_core[z3_prop.assumpt.size()];
   std::string literal;
 
-  assumptions_status = number_of_assumptions;
+  assumptions_status = z3_prop.assumpt.size();
 
-  if (uw)
-    for (i = 0; i < assumptions.size(); i++)
-      assumptions_core[i] = assumptions.at(i);
+  if (uw) {
+    std::list<Z3_ast>::const_iterator it;
+    for (it = z3_prop.assumpt.begin(), i = 0; it != z3_prop.assumpt.end(); it++, i++) {
+      assumptions_core[i] = *it;
+    }
+  }
 
   try
   {
     if (uw)
-      result = Z3_check_assumptions(z3_ctx, number_of_assumptions,
+      result = Z3_check_assumptions(z3_ctx, z3_prop.assumpt.size(),
                              assumptions_core, &m, &proof, &unsat_core_size,
                              core);
     else
@@ -481,9 +483,23 @@ z3_convt::check2_z3_properties(void)
     }
   }
 
-  number_of_assumptions = 0;
-
   return result;
+}
+
+void
+z3_convt::link_syms_to_literals(void)
+{
+
+  symbolst::const_iterator it;
+  for (it = symbols.begin(); it != symbols.end(); it++) {
+    // Generate an equivalence between the symbol and the literal
+    Z3_ast sym = z3_api.mk_var(z3_ctx, it->first.as_string().c_str(),
+                                Z3_mk_bool_sort(z3_ctx));
+    Z3_ast formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(it->second), sym);
+    Z3_assert_cnstr(z3_ctx, formula);
+    if (z3_prop.smtlib)
+      z3_prop.assumpt.push_front(formula);
+  }
 }
 
 /*******************************************************************
@@ -4629,7 +4645,7 @@ z3_convt::set_to(const exprt &expr, bool value)
 
           if (uw && expr.op0().get_string("identifier").find("guard_exec") !=
               std::string::npos
-              && number_of_assumptions < max_core_size) {
+              && z3_prop.assumpt.size() < max_core_size) {
             if (!op1.is_true())
               generate_assumptions(expr, operand[0]);
           }
