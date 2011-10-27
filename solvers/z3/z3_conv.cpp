@@ -3460,16 +3460,9 @@ z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
   convert_bv(expr.op0(), args[0]);
   convert_bv(expr.op1(), args[1]);
 
-  if (expr.op0().type().subtype().id() == "pointer") {
-
-    bv = Z3_mk_select(z3_ctx, args[0], args[1]);
-
-    convert_z3_pointer(expr.op0(), "index", pointer);
-
-    bv = z3_api.mk_tuple_update(z3_ctx, pointer, 0, bv);
-  } else   {
-    bv = Z3_mk_select(z3_ctx, args[0], args[1]);
-  }
+  // XXXjmorse - consider situation where a pointer is indexed. Should it
+  // give the address of ptroffset + (typesize * index)?
+  bv = Z3_mk_select(z3_ctx, args[0], args[1]);
 
   DEBUGLOC;
 }
