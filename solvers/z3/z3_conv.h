@@ -104,7 +104,6 @@ private:
   Z3_ast convert_overflow_typecast(const exprt &expr);
   Z3_ast convert_memory_leak(const exprt &expr);
   Z3_ast convert_width(const exprt &expr);
-  void convert_rel(const exprt &expr, Z3_ast &bv);
   void convert_typecast(const exprt &expr, Z3_ast &bv);
   void convert_typecast_bool(const exprt &expr, Z3_ast &bv);
   void convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv);

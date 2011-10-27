@@ -1437,85 +1437,6 @@ z3_convt::convert_rest(const exprt &expr)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_rel
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-z3_convt::convert_rel(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 2);
-
-  Z3_ast operand0, operand1;
-
-  // XXXjmorse - are there not also convert{gt,lt,ge,le} methods which already
-  // implement this?
-  convert_bv(expr.op0(), operand0);
-  convert_bv(expr.op1(), operand1);
-
-  if (expr.op0().type().id() == "pointer")
-    operand0 = z3_api.mk_tuple_select(z3_ctx, operand0, 1);  //select pointer
-	                                                     // index
-
-  if (expr.op1().type().id() == "pointer")
-    operand1 = z3_api.mk_tuple_select(z3_ctx, operand1, 1);  //select pointer
-	                                                     // index
-
-  const typet &op_type = expr.op0().type();
-
-  if (int_encoding) {
-    if (expr.id() == "<=")
-      bv = Z3_mk_le(z3_ctx, operand0, operand1);
-    else if (expr.id() == "<")
-      bv = Z3_mk_lt(z3_ctx, operand0, operand1);
-    else if (expr.id() == ">=")
-      bv = Z3_mk_ge(z3_ctx, operand0, operand1);
-    else if (expr.id() == ">")
-      bv = Z3_mk_gt(z3_ctx, operand0, operand1);
-  } else   {
-    if (op_type.id() == "unsignedbv" || op_type.subtype().id() == "unsignedbv"
-        || op_type.subtype().subtype().id() == "unsignedbv" ||
-        op_type.subtype().id() == "symbol") {
-      if (expr.id() == "<=")
-	bv = Z3_mk_bvule(z3_ctx, operand0, operand1);
-      else if (expr.id() == "<")
-	bv = Z3_mk_bvult(z3_ctx, operand0, operand1);
-      else if (expr.id() == ">=")
-	bv = Z3_mk_bvuge(z3_ctx, operand0, operand1);
-      else if (expr.id() == ">")
-	bv = Z3_mk_bvugt(z3_ctx, operand0, operand1);
-    } else if (op_type.id() == "signedbv" || op_type.id() == "fixedbv" ||
-               op_type.id() == "pointer" ||
-               op_type.subtype().id() == "signedbv" ||
-               op_type.subtype().id() == "fixedbv" ||
-               op_type.subtype().id() == "pointer" ||
-               op_type.subtype().subtype().id() == "signedbv" ||
-               op_type.subtype().subtype().id() == "fixedbv") {
-      if (expr.id() == "<=")
-	bv = Z3_mk_bvsle(z3_ctx, operand0, operand1);
-      else if (expr.id() == "<")
-	bv = Z3_mk_bvslt(z3_ctx, operand0, operand1);
-      else if (expr.id() == ">=")
-	bv = Z3_mk_bvsge(z3_ctx, operand0, operand1);
-      else if (expr.id() == ">")
-	bv = Z3_mk_bvsgt(z3_ctx, operand0, operand1);
-    }
-  }
-
-  DEBUGLOC;
-
-  return;
-}
-
-/*******************************************************************
    Function: z3_convt::convert_typecast
 
    Inputs:
@@ -4060,7 +3981,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_equality(expr, bv);
   else if (expr.id() == "<=" || expr.id() == "<" || expr.id() == ">="
            || expr.id() == ">")
-    convert_rel(expr, bv);
+    bv = convert_cmp(expr);
   else if (expr.id() == "+" || expr.id() == "-")
     convert_add_sub(expr, bv);
   else if (expr.id() == "/")
