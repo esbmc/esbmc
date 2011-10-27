@@ -1413,42 +1413,12 @@ z3_convt::convert_rest(const exprt &expr)
     if (!assign_z3_expr(expr) && !ignoring_expr)
       return l;
 
-    if (expr.id() == "<" || expr.id() == ">" || expr.id() == "<=" ||
-        expr.id() == ">=")
-      constraint = convert_cmp(expr);
-    else if (expr.id() == "=" || expr.id() == "notequal")
-      constraint = convert_eq(expr);
-    else if (expr.id() == "invalid-pointer")
-      constraint = convert_invalid(expr);
-    else if (expr.id() == "same-object")
-      constraint = convert_same_object(expr);
-    else if (expr.id() == "is_dynamic_object")
-      constraint = convert_is_dynamic_object(expr);
-    else if (expr.id() == "overflow-+")
-      constraint = convert_overflow_sum_sub_mul(expr);
-    else if (expr.id() == "overflow--")
-      constraint = convert_overflow_sum_sub_mul(expr);
-    else if (expr.id() == "overflow-*")
-      constraint = convert_overflow_sum_sub_mul(expr);
-    else if (expr.id() == "overflow-unary-")
-      constraint = convert_overflow_unary(expr);
-    else if (has_prefix(expr.id_string(), "overflow-typecast-"))
-      constraint = convert_overflow_typecast(expr);
-    else if (expr.id() == "member")
-      convert_bv(expr, constraint);
-    else if (expr.id() == "index")
-      convert_bv(expr, constraint);
-    else if (expr.id() == "memory-leak")
-      constraint = convert_memory_leak(expr);
-#if 0
-    else if (expr.id() == "pointer_object_has_type") //@TODO
-      ignoring(expr);
-#endif
-    else if (expr.id() == "is_zero_string") {
+    if (expr.id() == "is_zero_string") {
       ignoring(expr);
       return l;
-    } else
-      throw "convert_z3_expr: " + expr.id_string() + " is unsupported";
+    }
+
+    convert_bv(expr, constraint);
   } catch (conv_error *e) {
     std::cerr << e->to_string() << std::endl;
     ignoring(expr);
