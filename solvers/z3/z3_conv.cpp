@@ -1341,81 +1341,6 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_rest_member
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-Z3_ast
-z3_convt::convert_rest_member(const exprt &expr)
-{
-  DEBUGLOC;
-
-  Z3_ast bv;
-
-  convert_bv(expr, bv);
-
-  return bv;
-}
-
-/*******************************************************************
-   Function: z3_convt::convert_rest_index
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-Z3_ast
-z3_convt::convert_rest_index(const exprt &expr)
-{
-  DEBUGLOC;
-
-  Z3_ast bv, operand0, operand1;
-
-  if (expr.operands().size() != 2)
-    throw "index takes two operands";
-
-  const exprt &array = expr.op0();
-  const exprt &index = expr.op1();
-
-  convert_bv(array, operand0);
-  convert_bv(index, operand1);
-
-  DEBUGLOC;
-
-  // XXXjmorse - first two clauses are related to retrieving data from the
-  // __ESBMC_alloc and __ESBMC_alloc_size arrays. Not certain why they need
-  // special cases though.
-  if (expr.op1().operands()[0].operands().size() == 0) {
-    bv =
-      Z3_mk_select(z3_ctx, operand0,
-                   convert_number(0, config.ansi_c.int_width, true));
-  } else if ((expr.op0().get_string("identifier").find("__ESBMC_alloc") !=
-              std::string::npos
-              && expr.op1().operands()[0].op0().id() != "index")) {
-    bv =
-      Z3_mk_select(z3_ctx, operand0,
-                   convert_number(0, config.ansi_c.int_width, true));
-  } else   {
-    bv = Z3_mk_select(z3_ctx, operand0, operand1);
-    bv = Z3_mk_eq(z3_ctx, bv, Z3_mk_false(z3_ctx));
-  }
-
-  DEBUGLOC;
-
-  return bv;
-}
-
-/*******************************************************************
    Function: z3_convt::convert_memory_leak
 
    Inputs:
@@ -1510,9 +1435,9 @@ z3_convt::convert_rest(const exprt &expr)
     else if (has_prefix(expr.id_string(), "overflow-typecast-"))
       constraint = convert_overflow_typecast(expr);
     else if (expr.id() == "member")
-      constraint = convert_rest_member(expr);
+      convert_bv(expr, constraint);
     else if (expr.id() == "index")
-      constraint = convert_rest_index(expr);
+      convert_bv(expr, constraint);
     else if (expr.id() == "memory-leak")
       constraint = convert_memory_leak(expr);
 #if 0

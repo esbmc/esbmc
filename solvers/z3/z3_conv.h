@@ -102,8 +102,6 @@ private:
   Z3_ast convert_overflow_sum_sub_mul(const exprt &expr);
   Z3_ast convert_overflow_unary(const exprt &expr);
   Z3_ast convert_overflow_typecast(const exprt &expr);
-  Z3_ast convert_rest_index(const exprt &expr);
-  Z3_ast convert_rest_member(const exprt &expr);
   Z3_ast convert_memory_leak(const exprt &expr);
   Z3_ast convert_width(const exprt &expr);
   void convert_rel(const exprt &expr, Z3_ast &bv);
