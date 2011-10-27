@@ -135,8 +135,6 @@ private:
   void convert_abs(const exprt &expr, Z3_ast &bv);
   void convert_with(const exprt &expr, Z3_ast &bv);
   void convert_bitnot(const exprt &expr, Z3_ast &bv);
-  // XXX - this is duplicated
-  void convert_same_object(const exprt &expr, Z3_ast &bv);
   void select_pointer_offset(const exprt &expr, Z3_ast &bv);
   void convert_member(const exprt &expr, Z3_ast &bv);
   void convert_pointer_object(const exprt &expr, Z3_ast &bv);

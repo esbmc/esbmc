@@ -3656,47 +3656,6 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_same_object
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-z3_convt::convert_same_object(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 2);
-  Z3_ast args[2];
-
-  convert_bv(expr.op0(), args[0]);
-  convert_bv(expr.op1(), args[1]);
-
-  //@Lucas
-  if (expr.op0().type().id() == "pointer" &&
-      expr.op0().type().subtype().id() == "symbol"
-      && expr.op1().id() == "address_of") {
-    args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 1); //compare the offset
-    args[1] = z3_api.mk_tuple_select(z3_ctx, args[1], 1);     //compare the
-		                                              // offset
-  } else   {
-    args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);     //compare the
-		                                              // object
-    args[1] = z3_api.mk_tuple_select(z3_ctx, args[1], 0);     //compare the
-		                                              // object
-  }
-
-  bv = Z3_mk_distinct(z3_ctx, 2, args);
-
-  DEBUGLOC;
-}
-
-/*******************************************************************
    Function: z3_convt::select_pointer_offset
 
    Inputs:
@@ -4350,7 +4309,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
   else if (expr.id() == "pointer_object")
     convert_pointer_object(expr, bv);
   else if (expr.id() == "same-object")
-    convert_same_object(expr, bv);
+    bv = convert_same_object(expr);
   else if (expr.id() == "string-constant") {
     exprt tmp;
     string2array(expr, tmp);
