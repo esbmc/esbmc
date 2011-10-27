@@ -1132,55 +1132,12 @@ z3_convt::convert_invalid(const exprt &expr)
   assert(expr.op0().type().id() == "pointer");
   Z3_ast bv, pointer, operand[2];
 
-  if (expr.op0().id() == "address_of" ||
-      (expr.op0().type().id() == "pointer" &&
-       expr.op0().type().subtype().id() == "symbol"))
-    return Z3_mk_false(z3_ctx);
+  convert_bv(expr.op0(), pointer);
+  operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer, 0); //pointer obj
+  operand[1] = convert_number(pointer_logic.get_invalid_object(),
+                              config.ansi_c.int_width, true);
 
-  // XXXjmorse - what's this clause and the next about? Why does presence in the
-  // cache affect how things are handled? Plus, the cache is optional...
-  if (!is_in_cache(expr.op0()) && expr.op0().id() == "typecast")
-    return Z3_mk_true(z3_ctx);
-
-  if (!is_in_cache(expr.op0())) {
-    if (expr.op0().id() == "+" && expr.op0().type().subtype().id() != "empty")
-      return Z3_mk_true(z3_ctx);
-    else
-      return Z3_mk_false(z3_ctx);
-  }
-
-  //the subtype field of index is empty and generates seg. fault
-  // XXXjmorse, so we ignore it?
-  if (!is_in_cache(expr.op0()) && expr.op0().id() == "index")
-    return Z3_mk_false(z3_ctx);
-
-  convert_bv(expr.op0(), pointer); //return pointer tuple
-
-  //@TODO
-  if (expr.op0().id() == "member" && expr.op0().type().id() == "pointer" &&
-      expr.op0().type().subtype().id() == "signedbv")
-    return Z3_mk_false(z3_ctx);
-
-  operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer, 1); //pointer index
-
-  operand[1] = convert_number(0, config.ansi_c.int_width, true);
-
-  if (expr.op0().type().id() == "pointer" &&
-      (expr.op0().type().subtype().id() == "signedbv"
-       || expr.op0().type().subtype().id()
-       == "empty")) {
-    operand[1] = convert_number(-1, config.ansi_c.int_width, true);
-    return Z3_mk_not(z3_ctx, Z3_mk_distinct(z3_ctx, 2, operand));
-  }
-
-  if (int_encoding)
-    bv = Z3_mk_ge(z3_ctx, operand[0], operand[1]);
-  else
-    bv = Z3_mk_bvsge(z3_ctx, operand[0], operand[1]);
-
-  DEBUGLOC;
-
-  return bv;
+  return Z3_mk_not(z3_ctx, Z3_mk_distinct(z3_ctx, 2, operand));
 }
 
 /*******************************************************************
