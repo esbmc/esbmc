@@ -1122,45 +1122,44 @@ z3_convt::convert_dynamic_object(const exprt &expr)
   pointer_logic.get_dynamic_objects(dynamic_objects);
 
   if (dynamic_objects.empty())
-    return Z3_mk_true(z3_ctx);
-  else {
-    unsigned width;
+    return Z3_mk_false(z3_ctx);
 
-    convert_bv(expr.op0(), operand0);
+  unsigned width;
 
-    if (expr.op0().type().id() == "pointer") {
-      if (expr.op0().type().subtype().id() != "pointer") {
-	get_type_width(expr.op0().type().subtype(), width);
-      } else if (expr.op0().type().subtype().subtype().id() != "pointer")     {
-	get_type_width(expr.op0().type().subtype().subtype(), width);
-      } else
-	width = config.ansi_c.int_width;
-    } else   {
-      get_type_width(expr.op0().type(), width);
-    }
+  convert_bv(expr.op0(), operand0);
 
-    if (expr.op0().type().id() == "pointer")
-      operand0 = z3_api.mk_tuple_select(z3_ctx, operand0, 0);
+  if (expr.op0().type().id() == "pointer") {
+    if (expr.op0().type().subtype().id() != "pointer") {
+      get_type_width(expr.op0().type().subtype(), width);
+    } else if (expr.op0().type().subtype().subtype().id() != "pointer")     {
+      get_type_width(expr.op0().type().subtype().subtype(), width);
+    } else
+      width = config.ansi_c.int_width;
+  } else   {
+    get_type_width(expr.op0().type(), width);
+  }
 
-    if (dynamic_objects.size() == 0) {
-      // Can't be one of nil dynamic objects
-      return Z3_mk_false(z3_ctx);
-    } else if (dynamic_objects.size() == 1) {
-      operand1 = convert_number(dynamic_objects.front(), width, true);
-      bv = Z3_mk_eq(z3_ctx, operand0, operand1);
-    } else   {
-      unsigned i = 0, size;
-      size = dynamic_objects.size() + 1;
-      Z3_ast args[size];
+  if (expr.op0().type().id() == "pointer")
+    operand0 = z3_api.mk_tuple_select(z3_ctx, operand0, 0);
 
-      for (std::vector<unsigned>::const_iterator
-           it = dynamic_objects.begin();
-           it != dynamic_objects.end();
-           it++, i++)
-	args[i] = Z3_mk_eq(z3_ctx, operand0, convert_number(*it, width, true));
+  if (dynamic_objects.size() == 0) {
+    // Can't be one of nil dynamic objects
+    return Z3_mk_false(z3_ctx);
+  } else if (dynamic_objects.size() == 1) {
+    operand1 = convert_number(dynamic_objects.front(), width, true);
+    bv = Z3_mk_eq(z3_ctx, operand0, operand1);
+  } else   {
+    unsigned i = 0, size;
+    size = dynamic_objects.size() + 1;
+    Z3_ast args[size];
 
-      bv = Z3_mk_or(z3_ctx, i, args);
-    }
+    for (std::vector<unsigned>::const_iterator
+         it = dynamic_objects.begin();
+         it != dynamic_objects.end();
+         it++, i++)
+      args[i] = Z3_mk_eq(z3_ctx, operand0, convert_number(*it, width, true));
+
+    bv = Z3_mk_or(z3_ctx, i, args);
   }
 
   DEBUGLOC;
