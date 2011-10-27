@@ -795,16 +795,9 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
   Z3_sort sort;
   unsigned width;
 
-  // XXX XXX XXX - surely this can all become create_type?
-  if (type.id() == "bool") {
-    sort =  Z3_mk_bool_type(z3_ctx);
-  } else if (!int_encoding && (type.id() == "signedbv" ||
-                    type.id() == "unsignedbv" || type.id() == "fixedbv")) {
-    get_type_width(type, width);
-    sort = Z3_mk_bv_type(z3_ctx, width);
-  } else if (type.id() == "signedbv")     {
-    sort = Z3_mk_int_sort(z3_ctx);
-  } else if (type.id() == "unsignedbv")     {
+  // References to unsigned int identifiers need to be assumed to be > 0,
+  // otherwise the solver is free to assign negative nums to it.
+  if (type.id() == "unsignedbv" && int_encoding) {
     Z3_ast formula;
     bv = z3_api.mk_int_var(z3_ctx, identifier.c_str());
     formula = Z3_mk_ge(z3_ctx, bv, z3_api.mk_int(z3_ctx, 0));
@@ -812,22 +805,9 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
     if (z3_prop.smtlib)
       z3_prop.assumpt.push_back(formula);
     return;
-  } else if (type.id() == "fixedbv") {
-    sort = Z3_mk_real_sort(z3_ctx);
-  } else if (type.id() == "array") {
-    create_array_type(type, sort);
-  } else if (type.id() == "pointer" || type.id() == "code") {
-    create_pointer_type(type, sort);
-  } else if (type.id() == "struct")     {
-    create_struct_type(type, sort);
-  } else if (type.id() == "union")     {
-    create_union_type(type, sort);
-  } else if (type.id() == "c_enum")     {
-    create_enum_type(sort);
-  } else   {
-    throw new conv_error("Unexpected type in convert_identifier", type);
   }
 
+  create_type(type, sort);
   bv = z3_api.mk_var(z3_ctx, identifier.c_str(), sort);
 
   DEBUGLOC;
