@@ -1079,8 +1079,7 @@ z3_convt::convert_same_object(const exprt &expr)
 {
   DEBUGLOC;
 
-  const exprt::operandst &operands = expr.operands();
-  Z3_ast bv, operand[2], pointer[2], offset[2], formula[2], zero;
+  Z3_ast bv, pointer[2];
   const exprt &op0 = expr.op0();
   const exprt &op1 = expr.op1();
 
@@ -1088,73 +1087,11 @@ z3_convt::convert_same_object(const exprt &expr)
       || (!is_in_cache(op0) && !is_in_cache(op1))) {
     //object is not in the cache and generates spurious counter-example
     return Z3_mk_false(z3_ctx);
-  } else if (op0.id() == "address_of" && op1.id() == "constant")       {
-    return Z3_mk_false(z3_ctx);     //TODO
-  } else if (op0.id() == "symbol" && op1.id() == "address_of")       {
-    const exprt &object = op1.operands()[0];
-    const exprt &index = object.operands()[0];
-
-    convert_bv(op0, pointer[0]);
-    convert_bv(op1, pointer[1]);
-
-    if (op1.type().id() == "pointer" && op1.type().subtype().id() == "union")
-      return Z3_mk_false(z3_ctx);
-
-    operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 0);
-    operand[1] = z3_api.mk_tuple_select(z3_ctx, pointer[1], 0);
-    formula[0] = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
-
-    operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 1);
-    operand[1] = z3_api.mk_tuple_select(z3_ctx, pointer[1], 1);
-    formula[1] = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
-
-    if (object.operands().size() > 0) {
-      if (expr.op0().type().subtype().id() == "signedbv"
-          && expr.op1().type().subtype().id() == "signedbv"
-          && index.id() != "string-constant")
-	formula[1] = formula[0];
-    }
-
-    bv = Z3_mk_and(z3_ctx, 2, formula);
-  } else if (operands.size() == 2 &&
-             is_ptr(operands[0].type()) &&
-             is_ptr(operands[1].type())) {
-    convert_bv(op0, pointer[0]);
-    convert_bv(op1, pointer[1]);
-
-    operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 0);
-    operand[1] = z3_api.mk_tuple_select(z3_ctx, pointer[1], 0);
-
-    unsigned width_op0;
-
-    if (boolbv_get_width(expr.op0().type().subtype(), width_op0))
-      width_op0 = config.ansi_c.int_width;
-
-    if (!int_encoding)
-      if (op0.type().subtype().id() != "pointer" &&
-          op1.type().subtype().id() == "empty")
-	operand[1] = Z3_mk_extract(z3_ctx, width_op0 - 1, 0, operand[1]);
-
-    formula[0] = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
-
-    zero = convert_number(0, config.ansi_c.int_width, true);
-
-    operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 1);
-    operand[1] = z3_api.mk_tuple_select(z3_ctx, pointer[1], 1);
-
-    if (int_encoding) {
-      offset[0] = Z3_mk_ge(z3_ctx, operand[0], zero);
-      offset[1] = Z3_mk_ge(z3_ctx, operand[1], zero);
-    } else   {
-      offset[0] = Z3_mk_bvsge(z3_ctx, operand[0], zero);
-      offset[1] = Z3_mk_bvsge(z3_ctx, operand[1], zero);
-    }
-
-    formula[1] = Z3_mk_and(z3_ctx, 2, offset);
-    bv = Z3_mk_and(z3_ctx, 2, formula);
   } else {
-    // XXXjmorse - what guarentees this isn't reached?
-    assert(false);
+    convert_bv(op0, pointer[0]);
+    convert_bv(op1, pointer[1]);
+
+    bv = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
   }
 
   DEBUGLOC;
