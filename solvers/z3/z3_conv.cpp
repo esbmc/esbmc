@@ -614,7 +614,8 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
     create_union_type(type, bv);
   } else if (type.id() == "pointer")     {
     create_pointer_type(type, bv);
-  } else if (type.id() == "symbol" || type.id() == "empty")     {
+  } else if (type.id() == "symbol" || type.id() == "empty" ||
+             type.id() == "c_enum")     {
     if (int_encoding)
       bv = Z3_mk_int_type(z3_ctx);
     else
@@ -697,31 +698,6 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
 
   return;
 }
-
-/*******************************************************************
-   Function: z3_convt::create_enum_type
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-z3_convt::create_enum_type(Z3_type_ast &bv)
-{
-  DEBUGLOC;
-
-  if (int_encoding)
-    bv = Z3_mk_int_type(z3_ctx);
-  else
-    bv = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
-
-  return;
-}
-
 /*******************************************************************
    Function: z3_convt::create_pointer_type
 
