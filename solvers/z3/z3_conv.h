@@ -98,7 +98,7 @@ private:
   Z3_ast convert_eq(const exprt &expr);
   Z3_ast convert_invalid(const exprt &expr);
   Z3_ast convert_same_object(const exprt &expr);
-  Z3_ast convert_dynamic_object(const exprt &expr);
+  Z3_ast convert_is_dynamic_object(const exprt &expr);
   Z3_ast convert_overflow_sum_sub_mul(const exprt &expr);
   Z3_ast convert_overflow_unary(const exprt &expr);
   Z3_ast convert_overflow_typecast(const exprt &expr);

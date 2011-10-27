@@ -1101,7 +1101,7 @@ z3_convt::convert_same_object(const exprt &expr)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_dynamic_object
+   Function: z3_convt::convert_is_dynamic_object
 
    Inputs:
 
@@ -1112,7 +1112,7 @@ z3_convt::convert_same_object(const exprt &expr)
  \*******************************************************************/
 
 Z3_ast
-z3_convt::convert_dynamic_object(const exprt &expr)
+z3_convt::convert_is_dynamic_object(const exprt &expr)
 {
   DEBUGLOC;
 
@@ -1498,7 +1498,7 @@ z3_convt::convert_rest(const exprt &expr)
     else if (expr.id() == "same-object")
       constraint = convert_same_object(expr);
     else if (expr.id() == "is_dynamic_object")
-      constraint = convert_dynamic_object(expr);
+      constraint = convert_is_dynamic_object(expr);
     else if (expr.id() == "overflow-+")
       constraint = convert_overflow_sum_sub_mul(expr);
     else if (expr.id() == "overflow--")
@@ -4206,7 +4206,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
   else if (expr.id() == "replication")
     assert(expr.operands().size() == 2);
   else if (expr.id() == "is_dynamic_object")
-    bv = convert_dynamic_object(expr);
+    bv = convert_is_dynamic_object(expr);
   else if (expr.id() == "byte_update_little_endian" ||
            expr.id() == "byte_update_big_endian")
     convert_byte_update(expr, bv);
