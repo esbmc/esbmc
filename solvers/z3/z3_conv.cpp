@@ -1079,7 +1079,7 @@ z3_convt::convert_same_object(const exprt &expr)
 {
   DEBUGLOC;
 
-  Z3_ast bv, pointer[2];
+  Z3_ast bv, pointer[2], objs[2];
   const exprt &op0 = expr.op0();
   const exprt &op1 = expr.op1();
 
@@ -1090,8 +1090,9 @@ z3_convt::convert_same_object(const exprt &expr)
   } else {
     convert_bv(op0, pointer[0]);
     convert_bv(op1, pointer[1]);
-
-    bv = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
+    objs[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 0);
+    objs[1] = z3_api.mk_tuple_select(z3_ctx, pointer[1], 0);
+    bv = Z3_mk_eq(z3_ctx, objs[0], objs[1]);
   }
 
   DEBUGLOC;
