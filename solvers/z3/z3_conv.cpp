@@ -1022,43 +1022,10 @@ z3_convt::convert_eq(const exprt &expr)
   convert_bv(op0, operand[0]);
   convert_bv(op1, operand[1]);
 
-  // XXXjmorse, surely types in equality are identical?
-  if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
-    Z3_ast pointer[2], formula[2];
-
-    if (op1.id() == "address_of")
-      z3_cache.insert(std::pair<const exprt, std::string>(op1.op0(),
-                                                          op0.get_string(
-                                                            "identifier")));
-    else
-      z3_cache.insert(std::pair<const exprt, std::string>(op1,
-                                                          op0.get_string(
-                                                            "identifier")));
-
-
-    pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 0);
-    pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 0);
-
-    if (expr.id() == "=")
-      formula[0] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
-    else
-      formula[0] = Z3_mk_distinct(z3_ctx, 2, pointer);
-
-    pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);
-    pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
-
-    if (expr.id() == "=")
-      formula[1] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
-    else
-      formula[1] = Z3_mk_distinct(z3_ctx, 2, pointer);
-
-    bv = Z3_mk_and(z3_ctx, 2, formula);
-  } else   {
-    if (expr.id() == "=")
-      bv = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
-    else
-      bv = Z3_mk_distinct(z3_ctx, 2, operand);
-  }
+  if (expr.id() == "=")
+    bv = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
+  else
+    bv = Z3_mk_distinct(z3_ctx, 2, operand);
 
   DEBUGLOC;
 
