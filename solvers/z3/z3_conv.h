@@ -142,7 +142,6 @@ private:
   void convert_pointer_object(const exprt &expr, Z3_ast &bv);
   void convert_zero_string_length(const exprt &expr, Z3_ast &bv);
   void select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv);
-  void convert_is_dynamic_object(const exprt &expr, Z3_ast &bv);
   void convert_byte_update(const exprt &expr, Z3_ast &bv);
   void convert_byte_extract(const exprt &expr, Z3_ast &bv);
   void convert_isnan(const exprt &expr, Z3_ast &bv);

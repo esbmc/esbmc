@@ -1345,11 +1345,8 @@ z3_convt::convert_dynamic_object(const exprt &expr)
       // Can't be one of nil dynamic objects
       return Z3_mk_false(z3_ctx);
     } else if (dynamic_objects.size() == 1) {
-      Z3_ast tmp;
       operand1 = convert_number(dynamic_objects.front(), width, true);
-      tmp = Z3_mk_eq(z3_ctx, operand0, operand1);
-      Z3_assert_cnstr(z3_ctx, tmp);
-      bv = Z3_mk_not(z3_ctx, tmp);
+      bv = Z3_mk_eq(z3_ctx, operand0, operand1);
     } else   {
       unsigned i = 0, size;
       size = dynamic_objects.size() + 1;
@@ -4111,63 +4108,6 @@ z3_convt::convert_zero_string_length(const exprt &expr, Z3_ast &bv)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_dynamic_object
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 1);
-  Z3_ast operand0, operand1;
-
-  std::vector<unsigned> dynamic_objects;
-  pointer_logic.get_dynamic_objects(dynamic_objects);
-
-  if (dynamic_objects.empty()) {
-    bv = Z3_mk_false(z3_ctx);
-    return;
-  } else   {
-    convert_bv(expr.op0(), operand0);
-
-    operand0 =
-      Z3_mk_extract(z3_ctx, config.ansi_c.pointer_width + BV_ADDR_BITS - 1,
-                    config.ansi_c.pointer_width,
-                    operand0);
-
-    if (dynamic_objects.size() == 0) {
-      // If there are no dynamic objects, this obj can't be one of them.
-      bv = Z3_mk_false(z3_ctx);
-    } else if (dynamic_objects.size() == 1) {
-      operand1 = convert_number(dynamic_objects.front(), BV_ADDR_BITS, true);
-      bv = Z3_mk_eq(z3_ctx, operand0, operand1);
-    } else   {
-      unsigned i = 0, size;
-      size = dynamic_objects.size() + 1;
-      Z3_ast args[size];
-
-      for (std::vector<unsigned>::const_iterator
-           it = dynamic_objects.begin();
-           it != dynamic_objects.end();
-           it++, i++)
-	args[i] = convert_number(*it, BV_ADDR_BITS, true);
-
-      bv = Z3_mk_eq(z3_ctx, Z3_mk_or(z3_ctx, i, args), operand0);
-    }
-  }
-
-  DEBUGLOC;
-}
-
-/*******************************************************************
    Function: z3_convt::convert_byte_update
 
    Inputs:
@@ -4532,7 +4472,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
   else if (expr.id() == "replication")
     assert(expr.operands().size() == 2);
   else if (expr.id() == "is_dynamic_object")
-    convert_is_dynamic_object(expr, bv);
+    bv = convert_dynamic_object(expr);
   else if (expr.id() == "byte_update_little_endian" ||
            expr.id() == "byte_update_big_endian")
     convert_byte_update(expr, bv);
