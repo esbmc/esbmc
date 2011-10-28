@@ -195,7 +195,6 @@ private:
   bool is_signed(const typet &type);
   bool is_in_cache(const exprt &expr);
   void write_cache(const exprt &expr);
-  const typet select_pointer(const typet &type);
   void read_cache(const exprt &expr, Z3_ast &bv);
   static std::string ascii2int(char ch);
   void print_data_types(Z3_ast operand0, Z3_ast operand1);

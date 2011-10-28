@@ -716,7 +716,6 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
 
   // XXXjmorse - this assertion should never fail, but it does...
   //assert(type.id() == "pointer" || type.id() == "reference");
-  typet actual_type = type.subtype();
 
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_type_ast proj_types[2];
@@ -728,42 +727,10 @@ z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
   } else {
     native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
   }
-  proj_types[1] = native_int_sort;
 
-  // XXXjmorse - so how about three levels of pointers?
-  // XXXjmorse - First tuple field should be integer, always. It's an obj id.
-  if (is_ptr(actual_type)) {
-    actual_type = select_pointer(actual_type);
-    create_type(actual_type, proj_types[0]);
-  } else if (actual_type.id() == "code")     {
-    proj_types[0] = native_int_sort;
-  } else if (check_all_types(actual_type))   {
-    create_type(actual_type, proj_types[0]);
-  } else if (check_all_types(type))   {
-    actual_type = type;
-    create_type(type, proj_types[0]);
-  } else   {
-    throw new conv_error("unexpected type for pointer conversion", type);
-  }
+  proj_types[0] = proj_types[1] = native_int_sort;
 
-  DEBUGLOC;
-
-  std::string name = "pointer_tuple_";
-  name += Z3_get_symbol_string(z3_ctx, Z3_get_type_name(z3_ctx, proj_types[0]));
-
-  if (!int_encoding) {
-    if (actual_type.id() != "bool") {
-      if (actual_type.id() == "struct") {
-	name += "struct";
-      } else {
-        std::stringstream s;
-        s << Z3_get_bv_type_size(z3_ctx, proj_types[0]);
-        name += s.str();
-      }
-    }
-  }
-
-  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
+  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "pointer_tuple");
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
 

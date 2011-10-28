@@ -59,25 +59,6 @@ void z3_convt::show_bv_size(Z3_ast operand)
 }
 
 /*******************************************************************
- Function: z3_convt::select_pointer
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-const typet z3_convt::select_pointer(const typet &type)
-{
-  if (is_ptr(type))
-	return select_pointer(type.subtype());
-  else
-	return type;
-}
-
-/*******************************************************************
  Function: z3_convt::check_all_types
 
  Inputs:
