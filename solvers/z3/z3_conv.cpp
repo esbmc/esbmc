@@ -1480,6 +1480,11 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
   unsigned to_fraction_bits = fixedbv_type.get_fraction_bits();
   unsigned to_integer_bits = fixedbv_type.get_integer_bits();
 
+  if (op.type().id() == "pointer") {
+    std::cerr << "Converting pointer to a float is unsupported" << std::endl;
+    abort();
+  }
+
   if (op.type().id() == "unsignedbv" ||
       op.type().id() == "signedbv" ||
       op.type().id() == "enum") {
@@ -1527,9 +1532,6 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
 
       convert_bv(op, args[0]);
 
-      if (op.type().id() == "pointer")
-	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-
       magnitude =
         Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_integer_bits),
                        Z3_mk_extract(z3_ctx, from_width - 1, from_fraction_bits,
@@ -1539,9 +1541,6 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
     if (to_fraction_bits <= from_fraction_bits) {
       convert_bv(op, args[0]);
 
-      if (op.type().id() == "pointer")
-	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-
       fraction =
         Z3_mk_extract(z3_ctx, (from_fraction_bits - 1),
                       from_fraction_bits - to_fraction_bits,
@@ -1549,9 +1548,6 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
     } else   {
       assert(to_fraction_bits > from_fraction_bits);
       convert_bv(op, args[0]);
-
-      if (op.type().id() == "pointer")
-	args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
 
       fraction =
         Z3_mk_concat(z3_ctx,
