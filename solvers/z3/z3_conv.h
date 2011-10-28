@@ -107,7 +107,9 @@ private:
   void convert_typecast(const exprt &expr, Z3_ast &bv);
   void convert_typecast_bool(const exprt &expr, Z3_ast &bv);
   void convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv);
-  void convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv);
+  void convert_typecast_to_ints(const exprt &expr, Z3_ast &bv);
+  void convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv);
+  void convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv);
   void convert_typecast_struct(const exprt &expr, Z3_ast &bv);
   void convert_typecast_enum(const exprt &expr, Z3_ast &bv);
   void convert_struct_union(const exprt &expr, Z3_ast &bv);
