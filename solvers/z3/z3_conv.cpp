@@ -4013,6 +4013,8 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_pointer_object(expr, bv);
   else if (expr.id() == "same-object")
     bv = convert_same_object(expr);
+  else if (expr.id() == "invalid-pointer")
+    bv = convert_invalid(expr);
   else if (expr.id() == "string-constant") {
     exprt tmp;
     string2array(expr, tmp);
@@ -4035,6 +4037,14 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 #endif
   else if (expr.id() == "width")
     bv = convert_width(expr);
+  else if (expr.id() == "overflow-+" || expr.id() == "overflow--" || expr.id() == "overflow-*")
+    bv = convert_overflow_sum_sub_mul(expr);
+  else if (has_prefix(expr.id_string(), "overflow-typecast-"))
+    bv = convert_overflow_typecast(expr);
+  else if (expr.id() == "overflow-unary-")
+    bv = convert_overflow_unary(expr);
+  else if (expr.id() == "memory-leak")
+    bv = convert_memory_leak(expr);
   else 
     throw new conv_error("Unrecognized expression type", expr);
 }
