@@ -1,0 +1,4 @@
+#ifndef STL_IOMANIP
+#define STL_IOMANIP
+
+#endif
