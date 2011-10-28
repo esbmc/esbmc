@@ -1,0 +1,44 @@
+#ifndef STL_CSTRING
+#define STL_CSTRING
+
+typedef unsigned int size_t;
+
+char *strcat(char *dst, const char *src);
+char *strncat(char *dst, const char *src, size_t n);
+int strcmp(const char *s1, const char *s2);
+
+char *strcat(char *dst, const char *src)
+{
+  __ESBMC_HIDE:
+  char *ret = dst;
+  while (*dst)
+    dst++;
+  while (*dst++ = *src++)
+    ;
+  return ret;
+}
+
+
+char *strncat(char *dst, const char *src, size_t n)
+{
+  __ESBMC_HIDE:
+  char *ret = dst;
+  while (*dst)
+    dst++;
+  while (n--)
+    if (!(*dst++ = *src++))
+      return ret;
+  *dst = 0;
+  return ret;
+}
+
+int strcmp(const char *s1, const char *s2)
+{
+  __ESBMC_HIDE:
+  while(*s1 && (*s1==*s2))
+    s1++,s2++;
+  return *(const unsigned char*)s1-*(const unsigned char*)s2;
+}
+
+
+#endif
