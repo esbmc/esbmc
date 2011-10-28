@@ -19,6 +19,8 @@ namespace std
 	{
 		ostream(int id): id(id){}
 		int id;
+		void fill(char c);
+		void precision(int p);
 	private:
 		ostream(const ostream&); // disabled
 		ostream& operator=(const ostream&); // disabled
@@ -109,7 +111,7 @@ namespace std
 
 	struct setfill
 	{
-		setfill(int f);
+		setfill(char f);
 	};
 
 	struct flushStruct
@@ -134,6 +136,48 @@ namespace std
 		showpointStruct(const showpointStruct&); // disabled
 	};
 
+	struct showbaseStruct
+	{
+		showbaseStruct();
+	private:
+		showbaseStruct(const showbaseStruct&);
+	};
+
+	struct internalStruct
+	{
+		internalStruct();
+	private:
+		internalStruct(const internalStruct&);
+	};
+
+	struct showposStruct
+	{
+		showposStruct();
+	private:
+		showposStruct(const showposStruct&);
+	};
+
+	struct boolalphaStruct
+	{
+		boolalphaStruct();
+	private:
+		boolalphaStruct(const boolalphaStruct&);
+	};
+
+	struct noboolalphaStruct
+	{
+		noboolalphaStruct();
+	private:
+		noboolalphaStruct(const noboolalphaStruct&);
+	};
+
+	struct iosStruct
+	{
+		iosStruct();
+	private:
+		iosStruct(const iosStruct&);
+	};
+
 	extern istream cin;
 	extern ostream cout;
 	extern ostream cerr;
@@ -147,6 +191,12 @@ namespace std
 	extern flushStruct flush;
 	extern scientificStruct scientific;
 	extern showpointStruct showpoint;
+	extern showpointStruct showbase;
+	extern internalStruct internal;
+	extern showposStruct showpos;
+	extern boolalphaStruct boolalpha;
+	extern noboolalphaStruct noboolalpha;
+	extern iosStruct ios;
 
 	char endl = '\n';
 }
@@ -176,6 +226,11 @@ namespace std
 	inline istream& operator >> (istream& is, char& c)
 	{ 
 		esbmc::esbmc_read_char(is.id,c);
+		return is;
+	}
+
+	inline istream& operator >> (istream& is, char c[])
+	{
 		return is;
 	}
 
@@ -245,91 +300,127 @@ namespace std
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, setprecision sp)
+	inline ostream& operator << (ostream& o, setprecision)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, fixedStruct f)
+	inline ostream& operator << (ostream& o, fixedStruct)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, averageStruct a)
+	inline ostream& operator << (ostream& o, averageStruct)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, setw s)
+	inline ostream& operator << (ostream& o, setw)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, leftStruct l)
+	inline ostream& operator << (ostream& o, leftStruct)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, rightStruct r)
+	inline ostream& operator << (ostream& o, rightStruct)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, hexStruct h)
+	inline ostream& operator << (ostream& o, hexStruct)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, decStruct d)
+	inline ostream& operator << (ostream& o, decStruct)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, octStruct oc)
+	inline ostream& operator << (ostream& o, octStruct)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, setbase b)
+	inline ostream& operator << (ostream& o, setbase)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, flushStruct f)
+	inline ostream& operator << (ostream& o, flushStruct)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, setfill f)
+	inline ostream& operator << (ostream& o, setfill)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, scientificStruct s)
+	inline ostream& operator << (ostream& o, scientificStruct)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, showpointStruct sp)
+	inline ostream& operator << (ostream& o, showpointStruct)
 	{
 		return o;
 	}
 
-	int get() {
+	inline ostream& operator << (ostream& o, showbaseStruct)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, internalStruct)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, showposStruct)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, boolalphaStruct)
+	{
+		return o;
+	}
+
+	inline ostream& operator << (ostream& o, noboolalphaStruct)
+	{
+		return o;
+	}
+
+	int istream::get()
+	{
 	  if (nondet_bool())
 	    return nondet_uint();
 	  else
 	    return EOF;
 	}
 
+	void ostream::fill(char c)
+	{
+		setfill(c);
+	}
+
+	void ostream::precision(int p)
+	{
+		setprecision(p);
+	}
+
 	setw::setw(int w)
 	{
-		__ESBMC_assert(w > 0, "The width must be greater than 0");
+		__ESBMC_assert(w >= 0, "The width must be greater or equal than 0");
 	}
 
 	setprecision::setprecision(int p)
 	{
-		__ESBMC_assert(p > 0, "The precision must be greater than 0");
+		__ESBMC_assert(p >= 0, "The precision must be greater or equal than 0");
 	}
 
 	setbase::setbase(int b)
@@ -337,7 +428,7 @@ namespace std
 		// model
 	}
 
-	setfill::setfill(int f)
+	setfill::setfill(char c)
 	{
 		// model
 	}
