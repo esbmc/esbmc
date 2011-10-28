@@ -1,44 +1,72 @@
 #ifndef STL_CSTRING
 #define STL_CSTRING
 
+#undef NULL
+#if defined(__cplusplus)
+#define NULL 0
+#else
+#define NULL ((void *)0)
+#endif
+
+char* nondet_char();
+unsigned int nondet_uint();
 typedef unsigned int size_t;
 
-char *strcat(char *dst, const char *src);
-char *strncat(char *dst, const char *src, size_t n);
-int strcmp(const char *s1, const char *s2);
+char* strcpy(char* dest, char* source)
+{
+	return nondet_char();
+}
+
+char* strncpy(char* dest, char* source, int)
+{
+	return nondet_char();
+}
 
 char *strcat(char *dst, const char *src)
 {
-  __ESBMC_HIDE:
-  char *ret = dst;
-  while (*dst)
-    dst++;
-  while (*dst++ = *src++)
-    ;
-  return ret;
+	__ESBMC_HIDE:
+	char *ret = dst;
+	while (*dst)
+		dst++;
+	while (*dst++ = *src++)
+		;
+	return ret;
 }
-
 
 char *strncat(char *dst, const char *src, size_t n)
 {
-  __ESBMC_HIDE:
-  char *ret = dst;
-  while (*dst)
-    dst++;
-  while (n--)
-    if (!(*dst++ = *src++))
-      return ret;
-  *dst = 0;
-  return ret;
+	__ESBMC_HIDE:
+	char *ret = dst;
+	while (*dst)
+		dst++;
+	while (n--)
+		if (!(*dst++ = *src++))
+			return ret;
+	*dst = 0;
+	return ret;
 }
 
 int strcmp(const char *s1, const char *s2)
 {
-  __ESBMC_HIDE:
-  while(*s1 && (*s1==*s2))
-    s1++,s2++;
-  return *(const unsigned char*)s1-*(const unsigned char*)s2;
+	__ESBMC_HIDE:
+	while(*s1 && (*s1==*s2))
+		s1++,s2++;
+	return *(const unsigned char*)s1-*(const unsigned char*)s2;
 }
 
+int strncmp(char* str1, char* str2, int)
+{
+	return nondet_uint();
+}
+
+char* strtok(char* str, const char* delimiters)
+{
+	return nondet_char();
+}
+
+int strlen(const char* str)
+{
+	return nondet_uint();
+}
 
 #endif
