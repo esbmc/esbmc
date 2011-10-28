@@ -590,6 +590,8 @@ void goto_symext::symex_step(
         case ATOMIC_END:
             ex_state.decrement_active_atomic_number();
             state.source.pc++;
+            ex_state.reexecute_instruction = false;
+            art.generate_states();
             break;
         default:
             assert(false);
