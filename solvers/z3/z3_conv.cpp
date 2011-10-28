@@ -1498,21 +1498,12 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
       bv = Z3_mk_extract(z3_ctx, (from_width - 1), to_integer_bits, args[0]);
     } else   {
       assert(from_width < to_integer_bits);
-      if (expr.type().id() == "unsignedbv") {
-	convert_bv(op, args[0]);
+      convert_bv(op, args[0]);
 
-	if (op.type().id() == "pointer")
-	  args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
+      if (op.type().id() == "pointer")
+        args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
 
-	bv = Z3_mk_zero_ext(z3_ctx, (to_integer_bits - from_width), args[0]);
-      } else   {
-	convert_bv(op, args[0]);
-
-	if (op.type().id() == "pointer")
-	  args[0] = z3_api.mk_tuple_select(z3_ctx, args[0], 0);
-
-	bv = Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_width), args[0]);
-      }
+      bv = Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_width), args[0]);
     }
 
     bv = Z3_mk_concat(z3_ctx, bv, convert_number(0, to_fraction_bits, true));
