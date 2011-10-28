@@ -1,0 +1,4 @@
+#ifndef STL_STRING
+#define STL_STRING
+
+#endif
