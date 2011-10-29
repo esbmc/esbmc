@@ -2522,12 +2522,6 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
   create_pointer_type(expr.type(), pointer_type);
   offset = convert_number(0, config.ansi_c.int_width, true);
 
-  if (expr.id() == "symbol" ||
-      expr.id() == "constant" ||
-      expr.id() == "string-constant") {
-    pointer_logic.add_object(expr);
-  }
-
   if (expr.op0().id() == "index") {
     const exprt &object = expr.op0().operands()[0];
     const exprt &index = expr.op0().operands()[1];
@@ -2560,7 +2554,6 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
     }
 
   } else if (expr.op0().id() == "symbol")   {
-__asm__("int $3");
     if (expr.op0().type().id() == "signedbv" || expr.op0().type().id() ==
         "fixedbv" || expr.op0().type().id() == "unsignedbv") {
       convert_identifier_pointer(expr, expr.op0().get_string("identifier"),
