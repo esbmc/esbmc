@@ -1907,38 +1907,20 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
-  u_int width = 0, i = 0;
+  u_int i = 0;
   Z3_sort native_int_sort;
-  Z3_type_ast array_type, tuple_type;
-  Z3_ast array_cte, int_cte, val_cte, tmp_struct;
+  Z3_type_ast array_type, elem_type;
+  Z3_ast int_cte, val_cte;
   std::string value_cte;
 
   assert(expr.id() == "constant");
   native_int_sort = (int_encoding) ? Z3_mk_int_sort(z3_ctx)
                               : Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
-  width = config.ansi_c.int_width;
 
-  if (expr.type().subtype().id() == "fixedbv") {
-    get_type_width(expr.type().subtype(), width);
+  create_type(expr.type().subtype(), elem_type);
+  array_type = Z3_mk_array_type(z3_ctx, native_int_sort, elem_type);
 
-    Z3_sort fixedbvsort = (int_encoding) ? Z3_mk_real_type(z3_ctx)
-                                         : Z3_mk_real_type(z3_ctx);
-    array_type = Z3_mk_array_type(z3_ctx, native_int_sort, fixedbvsort);
-  } else if (expr.type().subtype().id() == "struct")   {
-    create_struct_type(expr.op0().type(), tuple_type);
-    array_type = Z3_mk_array_type(z3_ctx, native_int_sort, tuple_type);
-  } else if (expr.type().subtype().id() == "array")   {
-    get_type_width(expr.type().subtype().subtype(), width);
-    create_array_type(expr.type(), array_type);
-  } else   {
-    get_type_width(expr.type().subtype(), width);
-
-    Z3_sort elemsort = (int_encoding) ? Z3_mk_int_sort(z3_ctx)
-                                      : Z3_mk_bv_sort(z3_ctx, width);
-    array_type = Z3_mk_array_type(z3_ctx, native_int_sort, elemsort);
-  }
-
-  if (expr.type().subtype().id() == "struct")
+ if (expr.type().subtype().id() == "struct")
     value_cte = "constant" + expr.op0().type().get_string("tag");
   else
     value_cte = expr.get_string("identifier") +
