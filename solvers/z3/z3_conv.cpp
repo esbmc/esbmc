@@ -2943,12 +2943,6 @@ z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
 
   convert_bv(expr.op0(), operand0);
 
-  if (int_encoding && expr.op0().id() == "member") {
-    bv = operand0;
-    return;
-  }
-
-
   if (int_encoding)
     bv = Z3_mk_not(z3_ctx, operand0);
   else
