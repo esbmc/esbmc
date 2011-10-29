@@ -1959,46 +1959,38 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
-  std::string value;
+  int64_t value;
   unsigned width;
 
   if (expr.type().id() == "c_enum") {
     // jmorse: value field of C enum type is in fact base 10, wheras everything
     // else is base 2.
-    value = expr.get_string("value");
+    value = atol(expr.get_string("value").c_str());
   } else if (expr.type().id() == "bool")   {
-    // value will not actually be interpreted as number by below code
-    value = expr.get_string("value");
+    value = (expr.is_true()) ? 1 : 0;
   } else if (expr.type().id() == "pointer" && expr.get_string("value") ==
              "NULL")   {
-    // Uuugghhhh. Match what happens if we were to feed this to binary2integer.
-    value = "0";
+    value = 0;
   } else if (is_signed(expr.type()))   {
-    value = integer2string(binary2integer(expr.get_string("value"), true), 10);
+    value = binary2integer(expr.get_string("value"), true).to_long();
   } else {
-
-    value = integer2string(binary2integer(expr.get_string("value"), false), 10);
+    value = binary2integer(expr.get_string("value"), false).to_long();
   }
+
+  get_type_width(expr.type(), width);
+
+  Z3_sort int_sort;
+  if (int_encoding)
+    int_sort = Z3_mk_int_sort(z3_ctx);
+  else
+    int_sort = Z3_mk_bv_type(z3_ctx, width);
+
 
   if (expr.type().id() == "unsignedbv") {
-    get_type_width(expr.type(), width);
-
-    if (int_encoding)
-      bv = z3_api.mk_unsigned_int(z3_ctx, atoi(value.c_str()));
-    else
-      bv =
-        Z3_mk_unsigned_int(z3_ctx, atoi(value.c_str()),
-                           Z3_mk_bv_type(z3_ctx, width));
-  }
-  if (expr.type().id() == "signedbv" || expr.type().id() == "c_enum") {
-    get_type_width(expr.type(), width);
-
-    if (int_encoding)
-      bv = z3_api.mk_int(z3_ctx, atoi(value.c_str()));
-    else
-      bv = Z3_mk_int(z3_ctx, atoi(value.c_str()), Z3_mk_bv_type(z3_ctx, width));
+    bv = Z3_mk_unsigned_int64(z3_ctx, value, int_sort);
+  } else if (expr.type().id() == "signedbv" || expr.type().id() == "c_enum") {
+    bv = Z3_mk_int64(z3_ctx, value, int_sort);
   } else if (expr.type().id() == "fixedbv")    {
-    get_type_width(expr.type(), width);
 
     if (int_encoding) {
       std::string result;
@@ -2016,7 +2008,9 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
       bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
     }
   } else if (expr.type().id() == "pointer")    {
-    convert_z3_pointer(expr, value, bv);
+    std::stringstream s;
+    s << value;
+    convert_z3_pointer(expr, s.str(), bv);
   } else if (expr.type().id() == "bool")     {
     if (expr.is_false())
       bv = Z3_mk_false(z3_ctx);
