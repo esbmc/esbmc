@@ -2910,17 +2910,15 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
        bv = z3_api.mk_tuple_update(z3_ctx, bv, components_size,
                               convert_number(idx, config.ansi_c.int_width, 0));
     }
-  } else   {
+  } else if (expr.type().id() == "array") {
 
     convert_bv(expr.op0(), operand0);
     convert_bv(expr.op1(), operand1);
     convert_bv(expr.op2(), operand2);
 
-    if (expr.op2().type().id() == "pointer") {
-      select_pointer_value(operand0, operand1, operand2); //select pointer value
-    }
-
     bv = Z3_mk_store(z3_ctx, operand0, operand1, operand2);
+  } else {
+    throw new conv_error("with applied to non-struct/union/array obj", expr);
   }
 }
 
