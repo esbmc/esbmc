@@ -1836,75 +1836,30 @@ z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
   DEBUGLOC;
 
   Z3_type_ast tuple_type;
+  Z3_sort native_int_sort;
   std::string cte, identifier;
-  unsigned width;
-  char val[2];
 
-  if (check_all_types(expr.type().subtype())) {
-    if (expr.type().subtype().id() == "pointer") {
-      if (boolbv_get_width(expr.type().subtype().subtype(), width)) {
-	if (expr.type().subtype().subtype().id() == "empty"
-	    || expr.type().subtype().subtype().id() == "symbol")
-	  width = config.ansi_c.int_width;
-	else
-          throw new conv_error("Can't determine pointer width", expr);
-      }
-    } else   {
-      if (boolbv_get_width(expr.type().subtype(), width))
-	width = config.ansi_c.int_width;
-    }
+  if (int_encoding)
+    native_int_sort = Z3_mk_int_sort(z3_ctx);
+  else
+    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
 
-    if (expr.type().subtype().id() == "code") {
-      create_pointer_type(expr.type(), tuple_type);
-    } else {
-      create_pointer_type(expr.type().subtype(), tuple_type);
-    }
+  create_pointer_type(expr.type(), tuple_type);
 
-  } else if (check_all_types(expr.type()))   {
-    get_type_width(expr.type(), width);
-    create_pointer_type(expr.type(), tuple_type);
-  }
-
-  sprintf(val, "%i", width);
-  identifier = symbol;
-  identifier += val;
-
-  if (expr.type().subtype().id() == "empty")
-    identifier += "empty";
-
-  bv = z3_api.mk_var(z3_ctx, identifier.c_str(), tuple_type);
+  bv = z3_api.mk_var(z3_ctx, symbol.c_str(), tuple_type);
 
   if (expr.get("value").compare("NULL") == 0) {
-    if (int_encoding)
-      bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, z3_api.mk_int(z3_ctx, -1));
-    else
-      bv =
-        z3_api.mk_tuple_update(z3_ctx, bv, 1,
-                               Z3_mk_int(z3_ctx, -1,
-                                         Z3_mk_bv_type(z3_ctx,
-                                                       config.ansi_c.int_width)));
+    bv = z3_api.mk_tuple_update(z3_ctx, bv, 1,
+                                  Z3_mk_int(z3_ctx, -1, native_int_sort));
   } else   {
-    if (int_encoding)
-      bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, z3_api.mk_int(z3_ctx, 0));
-    else
-      bv =
-        z3_api.mk_tuple_update(z3_ctx, bv, 1,
-                               Z3_mk_int(z3_ctx, 0,
-                                         Z3_mk_bv_type(z3_ctx,
-                                                       config.ansi_c.int_width)));
+    bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, Z3_mk_int(z3_ctx, 0, native_int_sort));
   }
 
   unsigned object = pointer_logic.add_object(expr);
 
   if (object && expr.type().subtype().id() == "code") {
-    if (int_encoding)
-      bv = z3_api.mk_tuple_update(z3_ctx, bv, 0, z3_api.mk_int(z3_ctx, object));
-    else
-      bv =
-        z3_api.mk_tuple_update(z3_ctx, bv, 0,
-                               Z3_mk_int(z3_ctx, object,
-                                         Z3_mk_bv_type(z3_ctx,
-                                                       config.ansi_c.int_width)));
+    bv = z3_api.mk_tuple_update(z3_ctx, bv, 0,
+                                Z3_mk_int(z3_ctx, object, native_int_sort));
   }
 
   DEBUGLOC;
