@@ -2618,25 +2618,6 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
 
     convert_bv(expr.op0(), pointer);
-
-    if (expr.op0().type().get_string("tag").find("__pthread_mutex_s") ==
-        std::string::npos) {
-
-      if (expr.op0().type().subtype().id() == "symbol")
-	pointer_var =
-	  z3_api.mk_tuple_update(z3_ctx, pointer, 0,
-	                         convert_number(pointer_logic.add_object(expr),
-	                                        config.ansi_c.int_width,
-	                                        true));
-      else if (expr.type().subtype().id() == "symbol")
-	pointer_var = z3_api.mk_tuple_update(
-	  z3_ctx, pointer_var, 0,
-	  convert_number(pointer_logic.add_object(expr),
-	                 config.ansi_c.int_width,
-	                 true));
-      else
-	pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);
-    }
   }
 
   bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, offset);
