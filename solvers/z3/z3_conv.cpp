@@ -1497,6 +1497,8 @@ z3_convt::convert_eq(const exprt &expr)
 {
   DEBUGLOC;
 
+  //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
+
   assert(expr.operands().size() == 2);
   Z3_ast bv, operand[2];
   const exprt &op0 = expr.op0();
@@ -1505,6 +1507,12 @@ z3_convt::convert_eq(const exprt &expr)
   if (op0.type().id() == "array") {
     if (write_cache(op0))
       return Z3_mk_false(z3_ctx);
+  }
+
+  if (op0.type().subtype().id() == "code" &&
+		  op1.type().subtype().id() == "code") {
+    if (!is_in_cache(op0) && !is_in_cache(op1))
+      return Z3_mk_true(z3_ctx);
   }
 
   if (convert_bv(op0, operand[0]))
@@ -1578,7 +1586,8 @@ z3_convt::convert_invalid(const exprt &expr)
 
   if (expr.op0().id() == "address_of" ||
       (expr.op0().type().id() == "pointer" &&
-       expr.op0().type().subtype().id() == "symbol"))
+       (expr.op0().type().subtype().id() == "symbol"
+       || expr.op0().type().subtype().id() == "code")))
     return Z3_mk_false(z3_ctx);
 
   if (!is_in_cache(expr.op0()) && expr.op0().id() == "typecast")
@@ -2155,8 +2164,8 @@ z3_convt::convert_rest_member(const exprt &expr)
 
   if (expr.get_string("component_name") == "is_zero") {
     bv = Z3_mk_not(z3_ctx, Z3_mk_eq(z3_ctx, Z3_mk_false(z3_ctx), bv));
-    std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
-    std::endl;
+    //std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" <<
+    //std::endl;
   }
 
   return bv;
@@ -2265,6 +2274,8 @@ literalt
 z3_convt::convert_rest(const exprt &expr)
 {
   DEBUGLOC;
+
+  //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 
   literalt l = z3_prop.new_variable();
   Z3_ast formula, constraint;
@@ -3292,8 +3303,17 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
     if (create_array_type(expr.type(), array_type))
       return true;
   } else   {
+	DEBUGLOC;
+
     if (boolbv_get_width(expr.type().subtype(), width))
       return true;
+
+    if (expr.type().subtype().subtype().id()=="code")
+    	  width=config.ansi_c.int_width;
+
+    if (expr.type().subtype().id()=="pointer") {
+    	assert(width==config.ansi_c.int_width);
+    }
 
     if (int_encoding)
       array_type  = Z3_mk_array_type(z3_ctx, Z3_mk_int_type(
@@ -3330,19 +3350,20 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
       else
 	value_cte =
 	  integer2string(binary2integer(it->get("value").c_str(), false), 10);
-
       if (int_encoding) {
-	if (it->type().id() == "signedbv")
-	  val_cte =
-	    Z3_mk_int(z3_ctx, atoi(value_cte.c_str()), Z3_mk_int_type(z3_ctx));
-	else if (it->type().id() == "unsignedbv")
-	  val_cte = Z3_mk_unsigned_int(z3_ctx, atoi(
+	    if (it->type().id() == "signedbv" || it->type().id() == "pointer") {
+	      val_cte =
+	    		  Z3_mk_int(z3_ctx, atoi(value_cte.c_str()), Z3_mk_int_type(z3_ctx));
+	    } else if (it->type().id() == "unsignedbv") {
+	    	val_cte = Z3_mk_unsigned_int(z3_ctx, atoi(
 	                                 value_cte.c_str()),
 	                               Z3_mk_int_type(z3_ctx));
-	else if (it->type().id() == "fixedbv")
-	  val_cte =
-	    Z3_mk_int(z3_ctx, atoi(value_cte.c_str()), Z3_mk_real_type(z3_ctx));
+	    } else if (it->type().id() == "fixedbv") {
+	    	val_cte =
+	    			Z3_mk_int(z3_ctx, atoi(value_cte.c_str()), Z3_mk_real_type(z3_ctx));
+	    }
       } else   {
+    	  DEBUGLOC;
 	val_cte =
 	  Z3_mk_int(z3_ctx, atoi(value_cte.c_str()),
 	            Z3_mk_bv_type(z3_ctx, width));
@@ -3700,6 +3721,8 @@ bool
 z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
+
+  //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
 
   assert(expr.operands().size() == 2);
   assert(expr.op0().type() == expr.op1().type());
@@ -5644,6 +5667,8 @@ z3_convt::set_to(const exprt &expr, bool value)
 {
   DEBUGLOC;
 
+  //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
+
 #if 1
   if (expr.type().id() != "bool") {
     std::string msg = "prop_convt::set_to got "
@@ -5744,28 +5769,28 @@ z3_convt::set_to(const exprt &expr, bool value)
       }
 
       if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
-	Z3_ast pointer[2], formula[2];
+    	  Z3_ast pointer[2], formula[2];
 
-	pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 0);         //select
-				                                            // object
-	pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 0);
+    	  pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 0);         //select
+    	  	  	  	  	  	  	  	  	  	  	  	  	  	  	  	 // object
+    	  pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 0);
 
-	formula[0] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
+    	  formula[0] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
 
-	pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);         //select
+    	  pointer[0] = z3_api.mk_tuple_select(z3_ctx, operand[0], 1);         //select
 				                                            // index
-	pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
-	formula[1] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
+    	  pointer[1] = z3_api.mk_tuple_select(z3_ctx, operand[1], 1);
+    	  formula[1] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
 
-	if (expr.op0().type().id() == "bool")
-	  result = Z3_mk_iff(z3_ctx, formula[0], formula[1]);
-	else
-	  result = Z3_mk_and(z3_ctx, 2, formula);
+    	  if (expr.op0().type().id() == "bool")
+    		  result = Z3_mk_iff(z3_ctx, formula[0], formula[1]);
+    	  else
+    		  result = Z3_mk_and(z3_ctx, 2, formula);
 
-	Z3_assert_cnstr(z3_ctx, result);
+    	  Z3_assert_cnstr(z3_ctx, result);
 
-	if (z3_prop.smtlib)
-	  z3_prop.assumpt.push_back(result);
+    	  if (z3_prop.smtlib)
+    		  z3_prop.assumpt.push_back(result);
       } else   {
 #if 1
 	if (op0.type().id() == "union" && op1.id() == "with") {
