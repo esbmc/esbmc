@@ -113,7 +113,8 @@ private:
   void convert_typecast_struct(const exprt &expr, Z3_ast &bv);
   void convert_typecast_enum(const exprt &expr, Z3_ast &bv);
   void convert_struct_union(const exprt &expr, Z3_ast &bv);
-  void convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv);
+  void convert_identifier_pointer(const exprt &expr, std::string symbol,
+                                  Z3_ast &bv);
   void convert_zero_string(const exprt &expr, Z3_ast &bv);
   void convert_array(const exprt &expr, Z3_ast &bv);
   void convert_constant(const exprt &expr, Z3_ast &bv);
@@ -128,7 +129,7 @@ private:
   void convert_div(const exprt &expr, Z3_ast &bv);
   void convert_mod(const exprt &expr, Z3_ast &bv);
   void convert_mul(const exprt &expr, Z3_ast &bv);
-  void convert_pointer(const exprt &expr, Z3_ast &bv);
+  void convert_address_of(const exprt &expr, Z3_ast &bv);
   void convert_array_of(const exprt &expr, Z3_ast &bv);
   void convert_index(const exprt &expr, Z3_ast &bv);
   void convert_shift(const exprt &expr, Z3_ast &bv);

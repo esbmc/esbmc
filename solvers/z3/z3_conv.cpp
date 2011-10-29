@@ -1820,7 +1820,7 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_z3_pointer
+   Function: z3_convt::convert_identifier_pointer
 
    Inputs:
 
@@ -1831,7 +1831,8 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
  \*******************************************************************/
 
 void
-z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
+z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
+                                     Z3_ast &bv)
 {
   DEBUGLOC;
 
@@ -2010,7 +2011,7 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
   } else if (expr.type().id() == "pointer")    {
     std::stringstream s;
     s << value;
-    convert_z3_pointer(expr, s.str(), bv);
+    convert_identifier_pointer(expr, s.str(), bv);
   } else if (expr.type().id() == "bool")     {
     if (expr.is_false())
       bv = Z3_mk_false(z3_ctx);
@@ -2506,7 +2507,7 @@ z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
  \*******************************************************************/
 
 void
-z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
+z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
@@ -2559,15 +2560,15 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     }
 
   } else if (expr.op0().id() == "symbol")   {
-
+__asm__("int $3");
     if (expr.op0().type().id() == "signedbv" || expr.op0().type().id() ==
         "fixedbv" || expr.op0().type().id() == "unsignedbv") {
-      convert_z3_pointer(expr, expr.op0().get_string("identifier"),
+      convert_identifier_pointer(expr, expr.op0().get_string("identifier"),
                              pointer_var);
     } else if (expr.op0().type().id() == "pointer")   {
       convert_bv(expr.op0(), pointer_var);
     } else if (expr.op0().type().id() == "bool")   {
-      convert_z3_pointer(expr, expr.op0().get_string("identifier"),
+      convert_identifier_pointer(expr, expr.op0().get_string("identifier"),
                              pointer_var);
     } else if (expr.op0().type().id() == "struct"
                || expr.op0().type().id() == "union") {
@@ -2608,7 +2609,7 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 
       pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);
     }   else if (expr.op0().type().id() == "code") {
-      convert_z3_pointer(expr, expr.op0().get_string("identifier"),
+      convert_identifier_pointer(expr, expr.op0().get_string("identifier"),
                              pointer_var);
     }
   } else if (expr.op0().id() == "member")   {
@@ -3632,7 +3633,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_mul(expr, bv);
   else if (expr.id() == "address_of" || expr.id() == "implicit_address_of"
            || expr.id() == "reference_to")
-    return convert_pointer(expr, bv);
+    return convert_address_of(expr, bv);
   else if (expr.id() == "array_of")
     convert_array_of(expr, bv);
   else if (expr.id() == "index")
