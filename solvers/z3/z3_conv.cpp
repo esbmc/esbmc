@@ -2969,7 +2969,7 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 
   const struct_typet &struct_type = to_struct_type(lhs.type());
   const struct_typet::componentst &components = struct_type.components();
-  u_int i = 0, resp = 0;
+  u_int i = 0;
 
   for (struct_typet::componentst::const_iterator
        it = components.begin();
@@ -2977,11 +2977,10 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
        it++, i++)
   {
     if (it->get("name").compare(rhs.get_string("component_name")) == 0)
-      resp = i;
+      return i;
   }
 
-  // XXXjmorse - and if it wasn't found?
-  return resp;
+  throw new conv_error("component name not found in struct", lhs);
 }
 
 /*******************************************************************
