@@ -2460,60 +2460,27 @@ z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
     fraction_bits = fbt.spec.get_fraction_bits();
   }
 
-  if (expr.op0().type().id() == "pointer" || expr.op1().type().id() ==
-      "pointer") {
-    Z3_ast pointer = 0;
+  forall_operands(it, expr)
+  {
+    convert_bv(*it, args[i]);
 
-    forall_operands(it, expr)
-    {
-      convert_bv(*it, args[i]);
+    if (expr.type().id() == "fixedbv" && !int_encoding)
+      args[i] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[i]);
 
-      if (it->type().id() == "pointer") {
-	pointer = args[i];
-	args[i] = z3_api.mk_tuple_select(z3_ctx, pointer, 1); //select pointer
-				                              // index
+    if (!int_encoding) {
+      if (i == 1) {
+        args[size - 1] = Z3_mk_bvmul(z3_ctx, args[0], args[1]);
+      } else if (i > 1)     {
+        args[size - 1] = Z3_mk_bvmul(z3_ctx, args[size - 1], args[i]);
       }
-
-      if (expr.type().id() == "fixedbv" && !int_encoding)
-	args[i] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[i]);
-
-      if (!int_encoding) {
-	if (i == 1) {
-	  args[size - 1] = Z3_mk_bvmul(z3_ctx, args[0], args[1]);
-	} else if (i > 1)     {
-	  args[size - 1] = Z3_mk_bvmul(z3_ctx, args[size - 1], args[i]);
-	}
-      }
-      ++i;
     }
-
-    if (int_encoding)
-      args[i] = Z3_mk_mul(z3_ctx, i, args);
-
-    bv = z3_api.mk_tuple_update(z3_ctx, pointer, 1, args[i]);
-  } else   {
-    forall_operands(it, expr)
-    {
-      convert_bv(*it, args[i]);
-
-      if (expr.type().id() == "fixedbv" && !int_encoding)
-	args[i] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[i]);
-
-      if (!int_encoding) {
-	if (i == 1) {
-	  args[size - 1] = Z3_mk_bvmul(z3_ctx, args[0], args[1]);
-	} else if (i > 1)     {
-	  args[size - 1] = Z3_mk_bvmul(z3_ctx, args[size - 1], args[i]);
-	}
-      }
-      ++i;
-    }
-
-    if (int_encoding)
-      args[i] = Z3_mk_mul(z3_ctx, i, args);
-
-    bv = args[i];
+    ++i;
   }
+
+  if (int_encoding)
+    args[i] = Z3_mk_mul(z3_ctx, i, args);
+
+  bv = args[i];
 
   if (expr.type().id() == "fixedbv" && !int_encoding) {
     fixedbvt fbt(expr);
