@@ -2272,6 +2272,14 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
  \*******************************************************************/
 
 void
+z3_convt::convert_pointer_arith(const exprt &expr, Z3_ast &bv)
+{
+
+ throw new conv_error("Unimplemented convert_pointer_arith", expr);
+ return;
+}
+
+void
 z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -2281,6 +2289,12 @@ z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
 
   call1 bvcall;
   call2 intcall;
+
+  if (expr.type().id() == "pointer" || expr.op0().type().id() == "pointer" ||
+      expr.op1().type().id() == "pointer") {
+    convert_pointer_arith(expr, bv);
+    return;
+  }
 
   if (expr.id() == "+") {
     bvcall = Z3_mk_bvadd;
@@ -2293,65 +2307,28 @@ z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
   }
 
   assert(expr.operands().size() >= 2);
-  Z3_ast *args;
+  Z3_ast *args, accuml;
   u_int i = 0, size;
 
-  size = expr.operands().size() + 1;
+  size = expr.operands().size();
   args = new Z3_ast[size];
 
-  if (expr.type().id() == "pointer" ||
-      expr.op0().type().id() == "pointer" ||
-      expr.op1().type().id() == "pointer") {
-    Z3_ast pointer = 0;
-
-    forall_operands(it, expr)
-    {
-      convert_bv(*it, args[i]);
-
-      if (it->type().id() == "pointer") {
-	pointer = args[i];
-
-	args[i] = z3_api.mk_tuple_select(z3_ctx, pointer, 1); //select pointer
-				                              // index
-      }
-
-      if (!int_encoding) {
-	if (i == 1) {
-	  args[size - 1] = bvcall(z3_ctx, args[0], args[1]);
-	} else if (i > 1)     {
-	  args[size - 1] = bvcall(z3_ctx, args[size - 1], args[i]);
-	}
-      }
-      ++i;
-    }
-
-    if (int_encoding)
-      args[i] = intcall(z3_ctx, i, args);
-
-    bv = z3_api.mk_tuple_update(z3_ctx, pointer, 1, args[i]);
-
-    if (expr.type().id() == "signedbv")
-      bv = args[i];
- } else   {
-    forall_operands(it, expr)
-    {
-      convert_bv(*it, args[i]);
-
-      if (!int_encoding) {
-	if (i == 1) {
-	  args[size - 1] = bvcall(z3_ctx, args[0], args[1]);
-	} else if (i > 1)     {
-	  args[size - 1] = bvcall(z3_ctx, args[size - 1], args[i]);
-	}
-      }
-      ++i;
-    }
-
-    if (int_encoding)
-      args[i] = intcall(z3_ctx, i, args);
-
-    bv = args[i];
+  forall_operands(it, expr)
+  {
+    convert_bv(*it, args[i]);
+    ++i;
   }
+
+  if (!int_encoding) {
+    accuml = args[0];
+    for (i = 1; i < size; i++) {
+      accuml = bvcall(z3_ctx, accuml, args[i]);
+    }
+  } else {
+    accuml = intcall(z3_ctx, i, args);
+  }
+
+  bv = accuml;
 
   delete[] args;
 

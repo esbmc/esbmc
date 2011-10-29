@@ -123,6 +123,7 @@ private:
   void convert_logical_ops(const exprt &expr, Z3_ast &bv);
   void convert_logical_not(const exprt &expr, Z3_ast &bv);
   void convert_equality(const exprt &expr, Z3_ast &bv);
+  void convert_pointer_arith(const exprt &expr, Z3_ast &bv);
   void convert_add_sub(const exprt &expr, Z3_ast &bv);
   void convert_div(const exprt &expr, Z3_ast &bv);
   void convert_mod(const exprt &expr, Z3_ast &bv);
