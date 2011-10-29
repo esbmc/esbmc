@@ -2553,17 +2553,15 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
     if (expr.op0().type().id() != "struct" && expr.op0().type().id() !=
         "union") {
 
-      pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer); //update
-			                                                     // object
-      bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, pi); //update offset
+      pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);
+      bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, pi);
       return;
     }
 
   } else if (expr.op0().id() == "symbol")   {
 
     if (expr.op0().type().id() == "signedbv" || expr.op0().type().id() ==
-        "fixedbv"
-        || expr.op0().type().id() == "unsignedbv") {
+        "fixedbv" || expr.op0().type().id() == "unsignedbv") {
       convert_z3_pointer(expr, expr.op0().get_string("identifier"),
                              pointer_var);
     } else if (expr.op0().type().id() == "pointer")   {
@@ -2606,11 +2604,9 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	pointer = convert_number(pointer_logic.add_object(
 	                           expr), config.ansi_c.int_width, true);
 
-	//show_bv_size(pointer);
       }
 
-      pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);     //update
-			                                                         // object
+      pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);
     }   else if (expr.op0().type().id() == "code") {
       convert_z3_pointer(expr, expr.op0().get_string("identifier"),
                              pointer_var);
@@ -2623,7 +2619,6 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 
     convert_bv(expr.op0(), pointer);
 
-    //workaround
     if (expr.op0().type().get_string("tag").find("__pthread_mutex_s") ==
         std::string::npos) {
 
@@ -2632,22 +2627,19 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 	  z3_api.mk_tuple_update(z3_ctx, pointer, 0,
 	                         convert_number(pointer_logic.add_object(expr),
 	                                        config.ansi_c.int_width,
-	                                        true));                                                                                              //update
-			                                                                                                                             // object
+	                                        true));
       else if (expr.type().subtype().id() == "symbol")
 	pointer_var = z3_api.mk_tuple_update(
 	  z3_ctx, pointer_var, 0,
 	  convert_number(pointer_logic.add_object(expr),
 	                 config.ansi_c.int_width,
-	                 true));                                                                                                                         //update
-			                                                                                                                                 // object
+	                 true));
       else
-	pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);         //update
-			                                                               // object
+	pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);
     }
   }
 
-  bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, offset); //update offset
+  bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, offset);
 
   DEBUGLOC;
 }
