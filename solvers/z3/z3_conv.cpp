@@ -2351,6 +2351,11 @@ z3_convt::convert_div(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
+  if (expr.type().id() == "pointer" || expr.op0().type().id() == "pointer" ||
+      expr.op1().type().id() == "pointer") {
+    throw new conv_error("Pointer operands to mod are not permitted", expr);
+  }
+
   assert(expr.operands().size() == 2);
   Z3_ast operand0, operand1;
 
@@ -2397,6 +2402,11 @@ z3_convt::convert_mod(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
+  if (expr.type().id() == "pointer" || expr.op0().type().id() == "pointer" ||
+      expr.op1().type().id() == "pointer") {
+    throw new conv_error("Pointer operands to divide are not permitted", expr);
+  }
+
   assert(expr.operands().size() == 2);
   Z3_ast operand0, operand1;
 
@@ -2432,6 +2442,11 @@ void
 z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
+
+  if (expr.type().id() == "pointer" || expr.op0().type().id() == "pointer" ||
+      expr.op1().type().id() == "pointer") {
+    throw new conv_error("Pointer operands to mod are not permitted", expr);
+  }
 
   assert(expr.operands().size() >= 2);
   Z3_ast *args;
