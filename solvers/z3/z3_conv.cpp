@@ -3061,10 +3061,6 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 
   assert(expr.operands().size() == 1 && is_ptr(expr.op0().type()));
-  Z3_ast pointer_object = 0;
-  // XXXjmorse - this isn't always anything. See: 01_cbmc_Malloc5
-  const exprt &object = expr.op0().operands()[0];
-  unsigned width, object_width;
 
   convert_bv(expr.op0(), bv);
   bv = z3_api.mk_tuple_select(z3_ctx, bv, 0);
