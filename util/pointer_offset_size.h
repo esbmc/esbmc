@@ -14,7 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <namespace.h>
 
 mp_integer member_offset(
-  const namespacet &ns,
   const struct_typet &type,
   const irep_idt &member);
 
