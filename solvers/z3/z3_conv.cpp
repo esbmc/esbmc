@@ -2276,8 +2276,90 @@ void
 z3_convt::convert_pointer_arith(const exprt &expr, Z3_ast &bv)
 {
 
- throw new conv_error("Unimplemented convert_pointer_arith", expr);
- return;
+  if (expr.operands().size() != 2)
+    throw new conv_error("Pointer arithmatic takes two operands", expr);
+
+  // So eight cases; one for each combination of two operands and the return
+  // type, being pointer or nonpointer. So with P=pointer, N= notpointer,
+  //    return    op1        op2        action
+  //      N        N          N         Will never be fed here
+  //      N        P          N         Expected arith option, then cast to int
+  //      N        N          P            "
+  //      N        P          P         Not permitted by C spec
+  //      P        N          N         Return arith action with cast to pointer
+  //      P        P          N         Calculate expected ptr arith operation
+  //      P        N          P            "
+  //      P        P          P         Not permitted by C spec
+  //      NPP is the most dangerous - there's the possibility that an integer
+  //      arithmatic is going to lead to an invalid pointer, that falls out of
+  //      all dereference switch cases. So, we need to verify that all derefs
+  //      have a finally case that asserts the val was a valid ptr XXXjmorse.
+  int ret_is_ptr, op1_is_ptr, op2_is_ptr;
+  ret_is_ptr = (expr.type().id() == "pointer") ? 4 : 0;
+  op1_is_ptr = (expr.op0().type().id() == "pointer") ? 2 : 0;
+  op2_is_ptr = (expr.op1().type().id() == "pointer") ? 1 : 0;
+
+  const exprt *ptr_op, *non_ptr_op;
+  switch (ret_is_ptr | op1_is_ptr | op2_is_ptr) {
+    case 0:
+      assert(false);
+      break;
+    case 3:
+    case 7:
+      throw new conv_error("Pointer arithmatic with two pointer operands",expr);
+      break;
+    case 4:
+      // Artithmatic operation that has the result type of ptr.
+      // Should have been handled at a higher level
+      throw new conv_error("Non-pointer op being interpreted as pointer without"
+                           " typecast", expr);
+      break;
+    case 1:
+    case 2:
+      { // Required to give a variable lifetime to the cast/add variables
+      ptr_op = (op1_is_ptr) ? &expr.op0() : &expr.op1();
+      non_ptr_op = (op1_is_ptr) ? &expr.op1() : &expr.op0();
+
+      exprt add("+", ptr_op->type());
+      add.copy_to_operands(*ptr_op, *non_ptr_op);
+      // That'll generate the correct pointer arithmatic; now typecast
+      exprt cast("typecast", expr.type());
+      cast.copy_to_operands(add);
+      convert_bv(cast, bv);
+      break;
+      }
+    case 5:
+    case 6:
+      {
+      ptr_op = (op1_is_ptr) ? &expr.op0() : &expr.op1();
+      non_ptr_op = (op1_is_ptr) ? &expr.op1() : &expr.op0();
+
+      // Actually perform some pointer arith
+      std::string type_size =
+        integer2string(pointer_offset_size(ptr_op->type().subtype()));
+
+      exprt mul("*", signedbv_typet(config.ansi_c.int_width));
+      exprt constant("constant", unsignedbv_typet(config.ansi_c.int_width));
+      constant.set("value", type_size);
+      mul.copy_to_operands(*non_ptr_op, constant);
+
+      // Add or sub that value
+      exprt ptr_offset("pointer_offset", unsignedbv_typet(config.ansi_c.int_width));
+      ptr_offset.copy_to_operands(*ptr_op);
+      exprt arith_op(expr.id().as_string(), unsignedbv_typet(config.ansi_c.int_width));
+      arith_op.copy_to_operands(ptr_offset, mul);
+
+      // Voila, we have our pointer arithmatic
+      convert_bv(arith_op, bv);
+
+      // That calculated the offset; update field in pointer.
+      Z3_ast the_ptr;
+      convert_bv(*ptr_op, the_ptr);
+      bv = z3_api.mk_tuple_update(z3_ctx, the_ptr, 1, bv);
+
+      break;
+      }
+  }
 }
 
 void
