@@ -1860,6 +1860,8 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 
   num = Z3_mk_int(z3_ctx, obj_num, native_int_sort);
   bv = z3_api.mk_tuple_update(z3_ctx, bv, 0, num);
+  num = Z3_mk_int(z3_ctx, 0, native_int_sort);
+  bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, num);
 
   DEBUGLOC;
 }
