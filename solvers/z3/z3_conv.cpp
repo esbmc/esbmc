@@ -2523,98 +2523,44 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
   offset = convert_number(0, config.ansi_c.int_width, true);
 
   if (expr.op0().id() == "index") {
-    const exprt &object = expr.op0().operands()[0];
-    const exprt &index = expr.op0().operands()[1];
+    // Borrow an idea from CBMC; instead of munging all the pointer arith
+    // here, we instead take the address of the base object and add to it
+    // just by generating th erelevant ireps.
 
-    symbol_name = "address_of_index" + object.id_string() + object.get_string(
-      "identifier");
-    pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
+    exprt obj = expr.op0().op0();
+    exprt idx = expr.op0().op1();
 
-    if (object.id() == "zero_string") {
-      convert_zero_string(object, po);
-    } else if (object.id() == "string-constant")     {
-      convert_bv(object, po);
-    } else if (object.type().id() == "array" && object.id() != "member"
-               && object.type().subtype().id() != "struct") {
-      read_cache(object, po);
-    } else   {
-      convert_bv(object, po);
+    // Pick pointer-to array subtype; need to make pointer arith work.
+    exprt addrof("address_of", pointer_typet(obj.type().subtype()));
+    addrof.copy_to_operands(obj);
+    exprt plus("+", addrof.type());
+    plus.copy_to_operands(addrof, idx);
+    convert_bv(plus, bv);
+  } else if (expr.op0().id() == "member") {
+    const member_exprt &member_expr = to_member_expr(expr.op0());
+
+    if (expr.op0().op0().id() == "struct" || expr.op0().op0().id() == "union") {
+      const struct_typet &struct_type =to_struct_type(member_expr.op0().type());
+      const irep_idt component_name = member_expr.get_component_name();
+
+      int64_t offs = member_offset(struct_type, component_name).to_long();
+
+      exprt addrof("address_of", pointer_typet(member_expr.op0().type()));
+      addrof.copy_to_operands(member_expr.op0());
+      convert_bv(addrof, bv);
+
+      // Update pointer offset to offset to that field.
+      Z3_ast num = convert_number(offs, config.ansi_c.int_width, true);
+      bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, num);
+    } else {
+      throw new conv_error("Non struct/union operand to member", expr);
     }
-
-    convert_bv(index, pi);
-
-    select_pointer_value(po, pi, pointer);
-
-    if (expr.op0().type().id() != "struct" && expr.op0().type().id() !=
-        "union") {
-
-      pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);
-      bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, pi);
-      return;
-    }
-
-  } else if (expr.op0().id() == "symbol")   {
-    if (expr.op0().type().id() == "signedbv" || expr.op0().type().id() ==
-        "fixedbv" || expr.op0().type().id() == "unsignedbv") {
-      convert_identifier_pointer(expr, expr.op0().get_string("identifier"),
-                             pointer_var);
-    } else if (expr.op0().type().id() == "pointer")   {
-      convert_bv(expr.op0(), pointer_var);
-    } else if (expr.op0().type().id() == "bool")   {
-      convert_identifier_pointer(expr, expr.op0().get_string("identifier"),
-                             pointer_var);
-    } else if (expr.op0().type().id() == "struct"
-               || expr.op0().type().id() == "union") {
-
-      char val[2];
-      static int count = 0;
-      std::string identifier;
-      sprintf(val, "%i", count++);
-      identifier = "address_of_struct_";
-      identifier += val;
-
-      if (expr.op0().type().id() == "struct")
-	symbol_name = identifier + expr.op0().get_string("identifier");
-      else
-	symbol_name = "address_of_union" + expr.op0().get_string("identifier");
-
-      pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
-
-      convert_bv(expr.op0(), pointer);
-
-      if (expr.type().subtype().id() == "symbol"
-          && expr.op0().get_string("identifier").find("symex_dynamic") ==
-          std::string::npos) {
-	pointer = z3_api.mk_tuple_select(z3_ctx, pointer, 0);
-      }
-
-      if (expr.type().subtype().id() != "struct") {
-	const struct_typet &struct_type = to_struct_type(expr.op0().type());
-	const struct_typet::componentst &components = struct_type.components();
-
-	assert(components.size() >= expr.operands().size());
-	assert(!components.empty());
-
-	pointer = convert_number(pointer_logic.add_object(
-	                           expr), config.ansi_c.int_width, true);
-
-      }
-
-      pointer_var = z3_api.mk_tuple_update(z3_ctx, pointer_var, 0, pointer);
-    }   else if (expr.op0().type().id() == "code") {
-      convert_identifier_pointer(expr, expr.op0().get_string("identifier"),
-                             pointer_var);
-    }
-  } else if (expr.op0().id() == "member")   {
-    const exprt &object = expr.op0().operands()[0];
-
-    symbol_name = "address_of_member" + object.get_string("identifier");
-    pointer_var = z3_api.mk_var(z3_ctx, symbol_name.c_str(), pointer_type);
-
-    convert_bv(expr.op0(), pointer);
+  } else if (expr.op0().id() == "symbol" || expr.op0().id() == "code") {
+    convert_identifier_pointer(expr.op0(), expr.op0().get_string("identifier"),
+                               bv);
+  } else {
+    throw new conv_error("Unrecognized address_of operand", expr);
   }
-
-  bv = z3_api.mk_tuple_update(z3_ctx, pointer_var, 1, offset);
 
   DEBUGLOC;
 }
