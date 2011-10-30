@@ -16,6 +16,56 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
+Function: member_offset
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+mp_integer member_offset(
+  const namespacet &ns,
+  const struct_typet &type,
+  const irep_idt &member)
+{
+  const struct_typet::componentst &components=type.components();
+
+  mp_integer result=0;
+  unsigned bit_field_bits=0;
+
+  for(struct_typet::componentst::const_iterator
+      it=components.begin();
+      it!=components.end();
+      it++)
+  {
+    if(it->get_name()==member) break;
+    if(it->get_bool("#is_bit_field"))
+    {
+      bit_field_bits+=binary2integer(it->type().get("width").as_string(), 2).to_long();
+    }
+    else
+    {
+      if(bit_field_bits!=0)
+      {
+        result+=bit_field_bits/8;
+        bit_field_bits=0;
+      }
+
+      const typet &subtype=it->type();
+      mp_integer sub_size=pointer_offset_size(subtype);
+      if(sub_size==-1) return -1; // give up
+      result+=sub_size;
+    }
+  }
+
+  return result;
+}
+
+/*******************************************************************\
+
 Function: pointer_offset_size
 
   Inputs:
