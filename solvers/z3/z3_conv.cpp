@@ -1836,9 +1836,11 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 {
   DEBUGLOC;
 
+  Z3_ast num;
   Z3_type_ast tuple_type;
   Z3_sort native_int_sort;
   std::string cte, identifier;
+  unsigned int obj_num;
 
   if (int_encoding)
     native_int_sort = Z3_mk_int_sort(z3_ctx);
@@ -1850,18 +1852,14 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
   bv = z3_api.mk_var(z3_ctx, symbol.c_str(), tuple_type);
 
   if (expr.get("value").compare("NULL") == 0) {
-    bv = z3_api.mk_tuple_update(z3_ctx, bv, 1,
-                                  Z3_mk_int(z3_ctx, -1, native_int_sort));
-  } else   {
-    bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, Z3_mk_int(z3_ctx, 0, native_int_sort));
+    obj_num = pointer_logic.get_null_object();
+  } else {
+    // add object won't duplicate objs for identical exprs (it's a map)
+    obj_num = pointer_logic.add_object(expr);
   }
 
-  unsigned object = pointer_logic.add_object(expr);
-
-  if (object && expr.type().subtype().id() == "code") {
-    bv = z3_api.mk_tuple_update(z3_ctx, bv, 0,
-                                Z3_mk_int(z3_ctx, object, native_int_sort));
-  }
+  num = Z3_mk_int(z3_ctx, obj_num, native_int_sort);
+  bv = z3_api.mk_tuple_update(z3_ctx, bv, 0, num);
 
   DEBUGLOC;
 }
