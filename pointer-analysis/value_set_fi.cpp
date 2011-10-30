@@ -38,7 +38,7 @@ static std::string alloc_adapter_prefix = "alloc_adaptor::";
   for(object_map_dt::iterator (it) = (map).begin(); \
   (it)!=(map).end(); \
   (it)++)
-   
+
 /*******************************************************************\
 
 Function: value_set_fit::output
@@ -61,9 +61,9 @@ void value_set_fit::output(
       v_it++)
   {
     irep_idt identifier, display_name;
-    
+
     const entryt &e=v_it->second;
-  
+
     if(has_prefix(id2string(e.identifier), "value_set::dynamic_object"))
     {
       display_name=id2string(e.identifier)+e.suffix;
@@ -80,20 +80,20 @@ void value_set_fit::output(
       display_name=id2string(identifier)+e.suffix;
       #endif
     }
-    
+
     out << display_name;
 
     out << " = { ";
-    
+
     object_mapt object_map;
     flatten(e, object_map);
-    
-    unsigned width=0;    
-    
+
+    unsigned width=0;
+
     forall_objects(o_it, object_map.read())
     {
       const exprt &o=object_numbering[o_it->first];
-    
+
       std::string result;
 
       if(o.id()=="invalid" || o.id()=="unknown")
@@ -104,32 +104,32 @@ void value_set_fit::output(
         if (o.type().id()=="unknown")
           result+="*";
         else
-          result+=from_type(ns, identifier, o.type());        
+          result+=from_type(ns, identifier, o.type());
         result+=">";
       }
       else
       {
         result="<"+from_expr(ns, identifier, o)+", ";
-      
+
         if(o_it->second.offset_is_set)
           result+=integer2string(o_it->second.offset)+"";
         else
           result+="*";
-        
+
         result+=", ";
-        
+
         if (o.type().id()=="unknown")
           result+="*";
         else
           result+=from_type(ns, identifier, o.type());
-      
+
         result+=">";
       }
 
       out << result;
 
       width+=result.size();
-    
+
       object_map_dt::const_iterator next(o_it);
       next++;
 
@@ -157,16 +157,16 @@ Function: value_set_fit::flatten
 \*******************************************************************/
 
 void value_set_fit::flatten(
-  const entryt &e, 
-  object_mapt &dest) const 
-{  
+  const entryt &e,
+  object_mapt &dest) const
+{
   #if 0
   std::cout << "FLATTEN: " << e.identifier << e.suffix << std::endl;
   #endif
-  
+
   flatten_seent seen;
   flatten_rec(e, dest, seen);
-  
+
   #if 0
   std::cout << "FLATTEN: Done." << std::endl;
   #endif
@@ -185,25 +185,25 @@ Function: value_set_fit::flatten_rec
 \*******************************************************************/
 
 void value_set_fit::flatten_rec(
-  const entryt &e, 
+  const entryt &e,
   object_mapt &dest,
   flatten_seent &seen) const
-{    
+{
   #if 0
   std::cout << "FLATTEN_REC: " << e.identifier << e.suffix << std::endl;
   #endif
 
   std::string identifier = e.identifier.as_string();
   assert(seen.find(identifier + e.suffix)==seen.end());
-  
-  bool generalize_index = false; 
+
+  bool generalize_index = false;
 
   seen.insert(identifier + e.suffix);
 
   forall_objects(it, e.object_map.read())
   {
     const exprt& o=object_numbering[it->first];
-        
+
     if (o.type().id()=="#REF#")
     {
       if (seen.find(o.get("identifier"))!=seen.end())
@@ -211,11 +211,11 @@ void value_set_fit::flatten_rec(
         generalize_index = true;
         continue;
       }
-      
+
       valuest::const_iterator fi = values.find(o.get("identifier"));
       if (fi==values.end())
       {
-        // this is some static object, keep it in.        
+        // this is some static object, keep it in.
         exprt se("symbol", o.type().subtype());
         se.set("identifier", o.get("identifier"));
         insert(dest, se, 0);
@@ -224,37 +224,37 @@ void value_set_fit::flatten_rec(
       {
         object_mapt temp;
         flatten_rec(fi->second, temp, seen);
-        
+
         for(object_map_dt::iterator t_it=temp.write().begin();
             t_it!=temp.write().end();
             t_it++)
         {
-          if(t_it->second.offset_is_set && 
+          if(t_it->second.offset_is_set &&
              it->second.offset_is_set)
           {
-            t_it->second.offset += it->second.offset; 
+            t_it->second.offset += it->second.offset;
           }
           else
             t_it->second.offset_is_set=false;
         }
-        
+
         forall_objects(oit, temp.read())
           insert(dest, oit);
       }
-      
+
     }
-    else 
+    else
       insert(dest, it);
-  }  
-  
+  }
+
   if (generalize_index) // this means we had recursive symbols in there
-  {    
+  {
     Forall_objects(it, dest.write())
       it->second.offset_is_set = false;
   }
-  
+
   seen.erase(identifier + e.suffix);
-} 
+}
 
 /*******************************************************************\
 
@@ -271,7 +271,7 @@ Function: value_set_fit::to_expr
 exprt value_set_fit::to_expr(object_map_dt::const_iterator it) const
 {
   const exprt &object=object_numbering[it->first];
-  
+
   if(object.id()=="invalid" ||
      object.id()=="unknown")
     return object;
@@ -279,7 +279,7 @@ exprt value_set_fit::to_expr(object_map_dt::const_iterator it) const
   object_descriptor_exprt od;
 
   od.object()=object;
-  
+
   if(it->second.offset_is_set)
     od.offset()=from_integer(it->second.offset, index_type());
 
@@ -304,7 +304,7 @@ bool value_set_fit::make_union(const value_set_fit::valuest &new_values)
 {
   assert(0);
   bool result=false;
-  
+
   for(valuest::const_iterator
       it=new_values.begin();
       it!=new_values.end();
@@ -315,7 +315,7 @@ bool value_set_fit::make_union(const value_set_fit::valuest &new_values)
     if(it2==values.end())
     {
       // we always track these
-      if(has_prefix(id2string(it->second.identifier), 
+      if(has_prefix(id2string(it->second.identifier),
                     "value_set::dynamic_object") ||
          has_prefix(id2string(it->second.identifier),
                     "value_set::return_value"))
@@ -326,16 +326,16 @@ bool value_set_fit::make_union(const value_set_fit::valuest &new_values)
 
       continue;
     }
-      
+
     entryt &e=it2->second;
     const entryt &new_e=it->second;
-    
+
     if(make_union(e.object_map, new_e.object_map))
       result=true;
   }
-  
+
   changed = result;
-  
+
   return result;
 }
 
@@ -354,13 +354,13 @@ Function: value_set_fit::make_union
 bool value_set_fit::make_union(object_mapt &dest, const object_mapt &src) const
 {
   bool result=false;
-  
+
   forall_objects(it, src.read())
   {
     if(insert(dest, it))
       result=true;
   }
-  
+
   return result;
 }
 
@@ -383,16 +383,16 @@ void value_set_fit::get_value_set(
 {
   object_mapt object_map;
   get_value_set(expr, object_map, ns);
-  
+
   object_mapt flat_map;
-  
+
   forall_objects(it, object_map.read())
   {
     const exprt &object=object_numbering[it->first];
     if (object.type().id()=="#REF#")
-    {     
+    {
       assert(object.id()=="symbol");
-      
+
       const irep_idt &ident = object.get("identifier");
       valuest::const_iterator v_it = values.find(ident);
 
@@ -400,34 +400,34 @@ void value_set_fit::get_value_set(
       {
         object_mapt temp;
         flatten(v_it->second, temp);
-        
+
         for(object_map_dt::iterator t_it=temp.write().begin();
             t_it!=temp.write().end();
             t_it++)
         {
-          if(t_it->second.offset_is_set && 
+          if(t_it->second.offset_is_set &&
              it->second.offset_is_set)
           {
-            t_it->second.offset += it->second.offset; 
+            t_it->second.offset += it->second.offset;
           }
           else
             t_it->second.offset_is_set=false;
-          
+
           flat_map.write()[t_it->first]=t_it->second;
-        }        
+        }
       }
     }
     else
       flat_map.write()[it->first]=it->second;
   }
-  
+
   forall_objects(fit, flat_map.read())
     value_set.push_back(to_expr(fit));
-  
+
   #if 0
   // Sanity check!
-  for(std::list<exprt>::const_iterator it=value_set.begin(); 
-      it!=value_set.end(); 
+  for(std::list<exprt>::const_iterator it=value_set.begin();
+      it!=value_set.end();
       it++)
     assert(it->type().id()!="#REF");
   #endif
@@ -457,7 +457,7 @@ void value_set_fit::get_value_set(
 {
   exprt tmp(expr);
   simplify(tmp);
-  
+
   gvs_recursion_sett recset;
   get_value_set_rec(tmp, dest, "", tmp.type(), ns, recset);
 }
@@ -491,11 +491,11 @@ void value_set_fit::get_value_set_rec(
   if(expr.type().id()=="#REF#")
   {
     valuest::const_iterator fi = values.find(expr.get("identifier"));
-    
+
     if(fi!=values.end())
     {
-      forall_objects(it, fi->second.object_map.read())   
-        get_value_set_rec(object_numbering[it->first], dest, suffix, 
+      forall_objects(it, fi->second.object_map.read())
+        get_value_set_rec(object_numbering[it->first], dest, suffix,
                           original_type, ns, recursion_set);
       return;
     }
@@ -509,7 +509,7 @@ void value_set_fit::get_value_set_rec(
   {
     insert(dest, exprt("unknown", original_type));
     return;
-  }  
+  }
   else if(expr.id()=="index")
   {
     assert(expr.operands().size()==2);
@@ -517,33 +517,33 @@ void value_set_fit::get_value_set_rec(
     const typet &type=ns.follow(expr.op0().type());
 
     assert(type.id()=="array" ||
-           type.id()=="incomplete_array" || 
+           type.id()=="incomplete_array" ||
            type.id()=="#REF#");
-           
-    get_value_set_rec(expr.op0(), dest, "[]"+suffix, 
+
+    get_value_set_rec(expr.op0(), dest, "[]"+suffix,
                       original_type, ns, recursion_set);
-    
+
     return;
   }
   else if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
 
-    if(expr.op0().is_not_nil())   
+    if(expr.op0().is_not_nil())
     {
       const typet &type=ns.follow(expr.op0().type());
-  
+
       assert(type.id()=="struct" ||
              type.id()=="union" ||
              type.id()=="incomplete_struct" ||
              type.id()=="incomplete_union");
-             
+
       const std::string &component_name=
         expr.get_string("component_name");
-      
-      get_value_set_rec(expr.op0(), dest, "."+component_name+suffix, 
+
+      get_value_set_rec(expr.op0(), dest, "."+component_name+suffix,
                         original_type, ns, recursion_set);
-        
+
       return;
     }
   }
@@ -553,7 +553,7 @@ void value_set_fit::get_value_set_rec(
     // (if it exists)
     irep_idt ident = expr.get_string("identifier")+suffix;
     valuest::const_iterator v_it=values.find(ident);
-    
+
     if(has_prefix(id2string(ident), alloc_adapter_prefix))
     {
       insert(dest, expr, 0);
@@ -566,16 +566,16 @@ void value_set_fit::get_value_set_rec(
       symbol_exprt sym(ident, t);
       insert(dest, sym, 0);
       return;
-    }        
+    }
   }
   else if(expr.id()=="if")
   {
     if(expr.operands().size()!=3)
       throw "if takes three operands";
 
-    get_value_set_rec(expr.op1(), dest, suffix, 
+    get_value_set_rec(expr.op1(), dest, suffix,
                       original_type, ns, recursion_set);
-    get_value_set_rec(expr.op2(), dest, suffix, 
+    get_value_set_rec(expr.op2(), dest, suffix,
                       original_type, ns, recursion_set);
 
     return;
@@ -584,9 +584,9 @@ void value_set_fit::get_value_set_rec(
   {
     if(expr.operands().size()!=1)
       throw expr.id_string()+" expected to have one operand";
-      
+
     get_reference_set_sharing(expr.op0(), dest, ns);
-    
+
     return;
   }
   else if(expr.id()=="dereference" ||
@@ -595,13 +595,13 @@ void value_set_fit::get_value_set_rec(
     object_mapt reference_set;
     get_reference_set_sharing(expr, reference_set, ns);
     const object_map_dt &object_map=reference_set.read();
-    
+
     if(object_map.begin()!=object_map.end())
-    {      
+    {
       forall_objects(it1, object_map)
       {
         const exprt &object=object_numbering[it1->first];
-        get_value_set_rec(object, dest, suffix, 
+        get_value_set_rec(object, dest, suffix,
                           original_type, ns, recursion_set);
       }
 
@@ -611,17 +611,17 @@ void value_set_fit::get_value_set_rec(
   else if(expr.id()=="reference_to")
   {
     object_mapt reference_set;
-    
+
     get_reference_set_sharing(expr, reference_set, ns);
-    
+
     const object_map_dt &object_map=reference_set.read();
- 
+
     if(object_map.begin()!=object_map.end())
-    {      
+    {
       forall_objects(it, object_map)
       {
         const exprt &object=object_numbering[it->first];
-        get_value_set_rec(object, dest, suffix, 
+        get_value_set_rec(object, dest, suffix,
                           original_type, ns, recursion_set);
       }
 
@@ -643,9 +643,9 @@ void value_set_fit::get_value_set_rec(
     if(expr.operands().size()!=1)
       throw "typecast takes one operand";
 
-    get_value_set_rec(expr.op0(), dest, suffix, 
+    get_value_set_rec(expr.op0(), dest, suffix,
                       original_type, ns, recursion_set);
-    
+
     return;
   }
   else if(expr.id()=="+" || expr.id()=="-")
@@ -671,13 +671,13 @@ void value_set_fit::get_value_set_rec(
         throw "pointer type sum expected to have pointer operand";
 
       object_mapt pointer_expr_set;
-      get_value_set_rec(*ptr_operand, pointer_expr_set, "", 
+      get_value_set_rec(*ptr_operand, pointer_expr_set, "",
                         ptr_operand->type(), ns, recursion_set);
 
       forall_objects(it, pointer_expr_set.read())
       {
         objectt object=it->second;
-      
+
         if(object.offset_is_zero() &&
            expr.operands().size()==2)
         {
@@ -686,7 +686,7 @@ void value_set_fit::get_value_set_rec(
             mp_integer i;
             if(to_integer(expr.op0(), i))
               object.offset_is_set=false;
-            else              
+            else
               object.offset=(expr.id()=="+")? i : -i;
           }
           else
@@ -700,7 +700,7 @@ void value_set_fit::get_value_set_rec(
         }
         else
           object.offset_is_set=false;
-          
+
         insert(dest, it->first, object);
       }
 
@@ -710,7 +710,7 @@ void value_set_fit::get_value_set_rec(
   else if(expr.id()=="sideeffect")
   {
     const irep_idt &statement=expr.get("statement");
-    
+
     if(statement=="function_call")
     {
       // these should be gone
@@ -720,20 +720,20 @@ void value_set_fit::get_value_set_rec(
     {
       if(expr.type().id()!="pointer")
         throw "malloc expected to return pointer type";
-      
+
       assert(suffix=="");
-      
+
       const typet &dynamic_type=
         static_cast<const typet &>(expr.find("#type"));
 
       dynamic_object_exprt dynamic_object(dynamic_type);
       // let's make up a `unique' number for this object...
-      dynamic_object.instance()=from_integer( 
+      dynamic_object.instance()=from_integer(
                    (from_function << 16) | from_target_index, typet("natural"));
       dynamic_object.valid()=true_exprt();
 
       insert(dest, dynamic_object, 0);
-      return;          
+      return;
     }
     else if(statement=="cpp_new" ||
             statement=="cpp_new[]")
@@ -756,7 +756,7 @@ void value_set_fit::get_value_set_rec(
     insert(dest, address_of_exprt(expr), 0);
     return;
   }
-  else if(expr.id()=="with" ||          
+  else if(expr.id()=="with" ||
           expr.id()=="array_of" ||
           expr.id()=="array")
   {
@@ -767,12 +767,12 @@ void value_set_fit::get_value_set_rec(
   {
     const dynamic_object_exprt &dynamic_object=
       to_dynamic_object_expr(expr);
-  
+
     const std::string name=
       "value_set::dynamic_object"+
       dynamic_object.instance().get_string("value")+
       suffix;
-  
+
     // look it up
     valuest::const_iterator v_it=values.find(name);
 
@@ -809,7 +809,7 @@ void value_set_fit::dereference_rec(
 
     if(src.operands().size()!=1)
       throw "typecast expects one operand";
-    
+
     dereference_rec(src.op0(), dest);
   }
   else
@@ -834,42 +834,42 @@ void value_set_fit::get_reference_set(
   const namespacet &ns) const
 {
   object_mapt object_map;
-  get_reference_set_sharing(expr, object_map, ns);    
-  
+  get_reference_set_sharing(expr, object_map, ns);
+
   forall_objects(it, object_map.read())
-  {    
+  {
     const exprt& expr = object_numbering[it->first];
-    
+
     if (expr.type().id()=="#REF#")
     {
       const irep_idt& ident = expr.get("identifier");
       valuest::const_iterator vit = values.find(ident);
       if (vit==values.end())
       {
-        // Assume the variable never was assigned, 
+        // Assume the variable never was assigned,
         // so assume it's reference set is unknown.
         dest.insert(exprt("unknown", expr.type()));
       }
       else
-      {        
+      {
         object_mapt omt;
         flatten(vit->second, omt);
-        
+
         for(object_map_dt::iterator t_it=omt.write().begin();
             t_it!=omt.write().end();
             t_it++)
         {
-          if(t_it->second.offset_is_set && 
+          if(t_it->second.offset_is_set &&
              it->second.offset_is_set)
           {
-            t_it->second.offset += it->second.offset; 
+            t_it->second.offset += it->second.offset;
           }
           else
             t_it->second.offset_is_set=false;
         }
-        
+
         forall_objects(it, omt.read())
-          dest.insert(to_expr(it));  
+          dest.insert(to_expr(it));
       }
     }
     else
@@ -926,20 +926,20 @@ void value_set_fit::get_reference_set_sharing_rec(
   {
     valuest::const_iterator fi = values.find(expr.get("identifier"));
     if(fi!=values.end())
-    {      
-      forall_objects(it, fi->second.object_map.read())      
+    {
+      forall_objects(it, fi->second.object_map.read())
         get_reference_set_sharing_rec(object_numbering[it->first], dest, ns);
       return;
     }
-  }  
+  }
   else if(expr.id()=="symbol" ||
           expr.id()=="dynamic_object" ||
           expr.id()=="string-constant")
-  {    
+  {
     if(expr.type().id()=="array" &&
        expr.type().subtype().id()=="array")
       insert(dest, expr);
-    else    
+    else
       insert(dest, expr, 0);
 
     return;
@@ -949,11 +949,11 @@ void value_set_fit::get_reference_set_sharing_rec(
   {
     if(expr.operands().size()!=1)
       throw expr.id_string()+" expected to have one operand";
-    
+
     gvs_recursion_sett recset;
     object_mapt temp;
     get_value_set_rec(expr.op0(), temp, "", expr.op0().type(), ns, recset);
-    
+
     // REF's need to be dereferenced manually!
     forall_objects(it, temp.read())
     {
@@ -962,25 +962,25 @@ void value_set_fit::get_reference_set_sharing_rec(
       {
         const irep_idt &ident = obj.get("identifier");
         valuest::const_iterator v_it = values.find(ident);
-          
+
         if (v_it!=values.end())
         {
           object_mapt t2;
           flatten(v_it->second, t2);
-          
+
           for(object_map_dt::iterator t_it=t2.write().begin();
               t_it!=t2.write().end();
               t_it++)
           {
-            if(t_it->second.offset_is_set && 
+            if(t_it->second.offset_is_set &&
                it->second.offset_is_set)
             {
-              t_it->second.offset += it->second.offset; 
+              t_it->second.offset += it->second.offset;
             }
             else
               t_it->second.offset_is_set=false;
           }
-          
+
           forall_objects(it2, t2.read())
             insert(dest, it2);
         }
@@ -1002,17 +1002,17 @@ void value_set_fit::get_reference_set_sharing_rec(
   {
     if(expr.operands().size()!=2)
       throw "index expected to have two operands";
-  
+
     const exprt &array=expr.op0();
     const exprt &offset=expr.op1();
     const typet &array_type=ns.follow(array.type());
-    
+
     assert(array_type.id()=="array" ||
            array_type.id()=="incomplete_array");
 
     object_mapt array_references;
     get_reference_set_sharing(array, array_references, ns);
-    
+
     const object_map_dt &object_map=array_references.read();
 
     forall_objects(a_it, object_map)
@@ -1027,12 +1027,12 @@ void value_set_fit::get_reference_set_sharing_rec(
         index_expr.operands().resize(2);
         index_expr.op0()=object;
         index_expr.op1()=gen_zero(index_type());
-        
+
         // adjust type?
-        if(object.type().id()!="#REF#" && 
+        if(object.type().id()!="#REF#" &&
            ns.follow(object.type())!=array_type)
           index_expr.make_typecast(array.type());
-        
+
         objectt o=a_it->second;
         mp_integer i;
 
@@ -1044,11 +1044,11 @@ void value_set_fit::get_reference_set_sharing_rec(
           o.offset=i;
         else
           o.offset_is_set=false;
-          
+
         insert(dest, index_expr, o);
       }
     }
-    
+
     return;
   }
   else if(expr.id()=="member")
@@ -1057,25 +1057,25 @@ void value_set_fit::get_reference_set_sharing_rec(
 
     if(expr.operands().size()!=1)
       throw "member expected to have one operand";
-  
+
     const exprt &struct_op=expr.op0();
-    
+
     object_mapt struct_references;
     get_reference_set_sharing(struct_op, struct_references, ns);
-    
+
     forall_objects(it, struct_references.read())
     {
-      const exprt &object=object_numbering[it->first];    
+      const exprt &object=object_numbering[it->first];
       const typet &obj_type=ns.follow(object.type());
-      
+
       if(object.id()=="unknown")
         insert(dest, exprt("unknown", expr.type()));
       else if(object.id()=="dynamic_object" &&
-              obj_type.id()!="struct" && 
+              obj_type.id()!="struct" &&
               obj_type.id()!="union")
       {
         // we catch dynamic objects of the wrong type,
-        // to avoid non-integral typecasts.        
+        // to avoid non-integral typecasts.
         insert(dest, exprt("unknown", expr.type()));
       }
       else
@@ -1085,11 +1085,11 @@ void value_set_fit::get_reference_set_sharing_rec(
         exprt member_expr("member", expr.type());
         member_expr.copy_to_operands(object);
         member_expr.set("component_name", component_name);
-        
+
         // adjust type?
         if(ns.follow(struct_op.type())!=ns.follow(object.type()))
           member_expr.op0().make_typecast(struct_op.type());
-        
+
         insert(dest, member_expr, o);
       }
     }
@@ -1128,9 +1128,9 @@ void value_set_fit::assign(
 {
   #if 0
   std::cout << "ASSIGN LHS: " << from_expr(ns, "", lhs) << std::endl;
-  std::cout << "ASSIGN RHS: " << from_expr(ns, "", rhs) << std::endl;  
+  std::cout << "ASSIGN RHS: " << from_expr(ns, "", rhs) << std::endl;
   #endif
-  
+
   if(rhs.id()=="if")
   {
     if(rhs.operands().size()!=3)
@@ -1142,14 +1142,14 @@ void value_set_fit::assign(
   }
 
   const typet &type=ns.follow(lhs.type());
-  
+
   if(type.id()=="struct" ||
      type.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(type);
-    
+
     unsigned no=0;
-    
+
     for(struct_typet::componentst::const_iterator
         c_it=struct_type.components().begin();
         c_it!=struct_type.components().end();
@@ -1160,13 +1160,13 @@ void value_set_fit::assign(
 
       // ignore methods
       if(subtype.id()=="code") continue;
-    
+
       exprt lhs_member("member", subtype);
       lhs_member.set("component_name", name);
       lhs_member.copy_to_operands(lhs);
 
       exprt rhs_member;
-    
+
       if(rhs.id()=="unknown" ||
          rhs.id()=="invalid")
       {
@@ -1175,7 +1175,7 @@ void value_set_fit::assign(
       else
       {
         assert(base_type_eq(rhs.type(), type, ns));
-      
+
         if(rhs.id()=="struct" ||
            rhs.id()=="constant")
         {
@@ -1229,7 +1229,7 @@ void value_set_fit::assign(
     else
     {
       assert(base_type_eq(rhs.type(), type, ns));
-        
+
       if(rhs.id()=="array_of")
       {
         assert(rhs.operands().size()==1);
@@ -1240,7 +1240,7 @@ void value_set_fit::assign(
       {
         forall_operands(o_it, rhs)
         {
-          assign(lhs_index, *o_it, ns);          
+          assign(lhs_index, *o_it, ns);
         }
       }
       else if(rhs.id()=="with")
@@ -1265,9 +1265,9 @@ void value_set_fit::assign(
   {
     // basic type
     object_mapt values_rhs;
-    
+
     get_value_set(rhs, values_rhs, ns);
-    
+
     assign_recursion_sett recset;
     assign_rec(lhs, values_rhs, "", ns, recset);
   }
@@ -1293,15 +1293,15 @@ void value_set_fit::do_free(
   if(op.type().id()!="pointer")
     throw "free expected to have pointer-type operand";
 
-  // find out what it points to    
+  // find out what it points to
   object_mapt value_set;
   get_value_set(op, value_set, ns);
   entryt e; e.identifier="VP:TEMP";
   e.object_map = value_set;
   flatten(e, value_set);
-  
+
   const object_map_dt &object_map=value_set.read();
-  
+
   // find out which *instances* interest us
   expr_sett to_mark;
 
@@ -1313,12 +1313,12 @@ void value_set_fit::do_free(
     {
       const dynamic_object_exprt &dynamic_object=
         to_dynamic_object_expr(object);
-      
+
       if(dynamic_object.valid().is_true())
         to_mark.insert(dynamic_object.instance());
     }
   }
-  
+
   // mark these as 'may be invalid'
   // this, unfortunately, destroys the sharing
   for(valuest::iterator v_it=values.begin();
@@ -1329,7 +1329,7 @@ void value_set_fit::do_free(
 
     const object_map_dt &old_object_map=
       v_it->second.object_map.read();
-      
+
     bool changed=false;
 
     forall_objects(o_it, old_object_map)
@@ -1356,7 +1356,7 @@ void value_set_fit::do_free(
       else
         set(new_object_map, o_it);
     }
-    
+
     if(changed)
       v_it->second.object_map=new_object_map;
   }
@@ -1385,7 +1385,7 @@ void value_set_fit::assign_rec(
   std::cout << "ASSIGN_REC LHS: " << from_expr(ns, "", lhs) << std::endl;
   std::cout << "ASSIGN_REC SUFFIX: " << suffix << std::endl;
 
-  for(object_map_dt::const_iterator it=values_rhs.read().begin(); 
+  for(object_map_dt::const_iterator it=values_rhs.read().begin();
       it!=values_rhs.read().end(); it++)
     std::cout << "ASSIGN_REC RHS: " << to_expr(it) << std::endl;
   #endif
@@ -1396,32 +1396,32 @@ void value_set_fit::assign_rec(
     object_mapt temp;
     gvs_recursion_sett recset;
     get_value_set_rec(lhs, temp, "", lhs.type().subtype(), ns, recset);
-    
+
     if(recursion_set.find(ident)!=recursion_set.end())
     {
       recursion_set.insert(ident);
-      
+
       forall_objects(it, temp.read())
         if(object_numbering[it->first].id()!="unknown")
-          assign_rec(object_numbering[it->first], values_rhs, 
+          assign_rec(object_numbering[it->first], values_rhs,
                      suffix, ns, recursion_set);
-      
+
       recursion_set.erase(ident);
     }
   }
   else if(lhs.id()=="symbol")
   {
     const irep_idt &identifier=lhs.get("identifier");
-    
-    if(has_prefix(id2string(identifier), 
+
+    if(has_prefix(id2string(identifier),
                   "value_set::dynamic_object") ||
        has_prefix(id2string(identifier),
                   "value_set::return_value") ||
        values.find(id2string(identifier)+suffix)!=values.end())
-       // otherwise we don't track this value 
-    {    
+       // otherwise we don't track this value
+    {
       entryt &entry = get_entry(identifier, suffix);
-          
+
       if (make_union(entry.object_map, values_rhs))
         changed = true;
     }
@@ -1430,7 +1430,7 @@ void value_set_fit::assign_rec(
   {
     const dynamic_object_exprt &dynamic_object=
       to_dynamic_object_expr(lhs);
-  
+
     const std::string name=
       "value_set::dynamic_object"+
       dynamic_object.instance().get_string("value");
@@ -1443,7 +1443,7 @@ void value_set_fit::assign_rec(
   {
     if(lhs.operands().size()!=1)
       throw lhs.id_string()+" expected to have one operand";
-      
+
     object_mapt reference_set;
     get_reference_set_sharing(lhs, reference_set, ns);
 
@@ -1459,9 +1459,9 @@ void value_set_fit::assign_rec(
   {
     if(lhs.operands().size()!=2)
       throw "index expected to have two operands";
-      
+
     const typet &type=ns.follow(lhs.op0().type());
-      
+
     assert(type.id()=="array" || type.id()=="incomplete_array" || type.id()=="#REF#");
 
     assign_rec(lhs.op0(), values_rhs, "[]"+suffix, ns, recursion_set);
@@ -1470,9 +1470,9 @@ void value_set_fit::assign_rec(
   {
     if(lhs.operands().size()!=1)
       throw "member expected to have one operand";
-    
+
     if(lhs.op0().is_nil()) return;
-  
+
     const std::string &component_name=lhs.get_string("component_name");
 
     const typet &type=ns.follow(lhs.op0().type());
@@ -1481,8 +1481,8 @@ void value_set_fit::assign_rec(
            type.id()=="union" ||
            type.id()=="incomplete_struct" ||
            type.id()=="incomplete_union");
-           
-    assign_rec(lhs.op0(), values_rhs, "."+component_name+suffix, 
+
+    assign_rec(lhs.op0(), values_rhs, "."+component_name+suffix,
                ns, recursion_set);
   }
   else if(lhs.id()=="valid_object" ||
@@ -1504,7 +1504,7 @@ void value_set_fit::assign_rec(
   else if(lhs.id()=="typecast")
   {
     const typecast_exprt &typecast_expr=to_typecast_expr(lhs);
-  
+
     assign_rec(typecast_expr.op(), values_rhs, suffix, ns, recursion_set);
   }
   else if(lhs.id()=="zero_string" ||
@@ -1552,7 +1552,7 @@ void value_set_fit::do_function_call(
 
   for(unsigned i=0; i<arguments.size(); i++)
   {
-    const std::string identifier="value_set::" + function.as_string() + "::" +  
+    const std::string identifier="value_set::" + function.as_string() + "::" +
                                  "argument$"+i2string(i);
     add_var(identifier, "");
     exprt dummy_lhs=symbol_exprt(identifier, arguments[i].type());
@@ -1572,11 +1572,11 @@ void value_set_fit::do_function_call(
     if(identifier=="") continue;
 
     add_var(identifier, "");
-  
+
     const exprt v_expr=
-      symbol_exprt("value_set::" + function.as_string() + "::" + 
+      symbol_exprt("value_set::" + function.as_string() + "::" +
                    "argument$"+i2string(i), it->type());
-    
+
     exprt actual_lhs=symbol_exprt(identifier, it->type());
     assign(actual_lhs, v_expr, ns);
     i++;
@@ -1694,7 +1694,7 @@ void value_set_fit::apply_code(
   {
     // this is turned into an assignment
     if(code.operands().size()==1)
-    {      
+    {
       std::string rvs = "value_set::return_value" + i2string(from_function);
       symbol_exprt lhs(rvs, code.op0().type());
       assign(lhs, code.op0(), ns);
