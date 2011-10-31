@@ -2407,7 +2407,7 @@ z3_convt::convert_pointer_arith(const exprt &expr, Z3_ast &bv)
 
       // Actually perform some pointer arith
       std::string type_size =
-        integer2string(pointer_offset_size(ptr_op->type().subtype()));
+        integer2string(pointer_offset_size(ptr_op->type().subtype()), 2);
 
       exprt mul("*", signedbv_typet(config.ansi_c.int_width));
       exprt constant("constant", unsignedbv_typet(config.ansi_c.int_width));
