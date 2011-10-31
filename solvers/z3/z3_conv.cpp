@@ -2782,6 +2782,12 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
   } else if (expr.op0().id() == "symbol" || expr.op0().id() == "code") {
     convert_identifier_pointer(expr.op0(), expr.op0().get_string("identifier"),
                                bv);
+  } else if (expr.op0().id() == "string-constant") {
+    // XXXjmorse - we should avoid encoding invalid characters in the symbol,
+    // but this works for now.
+    std::string identifier = "address_of_str_const(" +
+                             expr.op0().get_string("value") + ")";
+    convert_identifier_pointer(expr.op0(), identifier, bv);
   } else {
     throw new conv_error("Unrecognized address_of operand", expr);
   }
