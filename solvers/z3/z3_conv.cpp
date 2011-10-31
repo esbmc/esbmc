@@ -2928,7 +2928,8 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
   } else if (expr.op0().id() == "member") {
     const member_exprt &member_expr = to_member_expr(expr.op0());
 
-    if (expr.op0().op0().id() == "struct" || expr.op0().op0().id() == "union") {
+    if (member_expr.op0().type().id() == "struct" ||
+        member_expr.op0().type().id() == "union") {
       const struct_typet &struct_type =to_struct_type(member_expr.op0().type());
       const irep_idt component_name = member_expr.get_component_name();
 
