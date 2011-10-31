@@ -1,7 +1,7 @@
 #ifndef STL_CMATH
 #define STL_CMATH
 
-float nondet_float();
+#include "definitions"
 
 float sqrt(float n)
 {
@@ -67,6 +67,5 @@ float tan(float n)
 {
 	return nondet_float();
 }
-
 
 #endif
