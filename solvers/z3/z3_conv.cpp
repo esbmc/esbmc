@@ -1962,7 +1962,7 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     for (it = obj_ids_in_addr_space_array.begin();
          it != obj_ids_in_addr_space_array.end(); it++) {
       std::stringstream s2;
-      s2 << obj_num;
+      s2 << *it;
 
       std::string obj_start_str = "__ESBMC_ptr_obj_start_" + s2.str();
       std::string obj_end_str = "__ESBMC_ptr_obj_end_" + s2.str();
