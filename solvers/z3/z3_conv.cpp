@@ -106,6 +106,8 @@ z3_convt::init_addr_space_array(void)
   Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
   Z3_sort native_int_sort;
 
+  addr_space_sym_num = 1;
+
   if (int_encoding) {
     native_int_sort = Z3_mk_int_type(z3_ctx);
   } else {
@@ -122,12 +124,14 @@ z3_convt::init_addr_space_array(void)
                                            proj_names, proj_types,
                                            &mk_tuple_decl, proj_decls);
 
-  Z3_sort arr_sort = Z3_mk_array_type(z3_ctx, native_int_sort,
-                                      addr_space_tuple_sort);
-  addr_space_array = z3_api.mk_var(z3_ctx, "__ESBMC_addrspace_arr", arr_sort);
+  // Generate free initial array
+  addr_space_arr_sort = Z3_mk_array_type(z3_ctx, native_int_sort,
+                                         addr_space_tuple_sort);
+  z3_api.mk_var(z3_ctx, "__ESBMC_addrspace_arr_0", addr_space_arr_sort);
 
   // Initialize this with the NULL object being at address zero. Associate with
   // names.
+
   Z3_ast num = convert_number(0, config.ansi_c.int_width, true);
   Z3_ast named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_start_0",
                                    native_int_sort);
@@ -152,8 +156,7 @@ z3_convt::init_addr_space_array(void)
   range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, num);
   range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, num);
 
-  addr_space_array = Z3_mk_store(z3_ctx, addr_space_array, obj_idx,
-                                 range_tuple);
+  bump_addrspace_array(pointer_logic.get_null_object(), range_tuple);
 
   // We also have to initialize the invalid object... however, I've no idea
   // what it /means/ yet, so go for some arbitary value.
@@ -171,23 +174,54 @@ z3_convt::init_addr_space_array(void)
   if (z3_prop.smtlib)
     z3_prop.assumpt.push_back(eq);
 
-
-  obj_idx = convert_number(pointer_logic.get_invalid_object(),
-                           config.ansi_c.int_width, true);
-
   range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_addr_range_1",
                               addr_space_tuple_sort);
   range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, num);
   range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, num);
 
-  addr_space_array = Z3_mk_store(z3_ctx, addr_space_array, obj_idx,
-                                 range_tuple);
+  bump_addrspace_array(pointer_logic.get_invalid_object(), range_tuple);
 
   // Record the fact that we've registered these objects
   obj_ids_in_addr_space_array.insert(0);
   obj_ids_in_addr_space_array.insert(1);
 
   return;
+}
+
+void
+z3_convt::bump_addrspace_array(unsigned int idx, Z3_ast val)
+{
+  std::stringstream s, new_s;
+  std::string str, new_str;
+
+  s << addr_space_sym_num++;
+  str = "__ESBMC_addrspace_arr_" + s.str();
+  Z3_ast addr_sym = z3_api.mk_var(z3_ctx, str.c_str(), addr_space_arr_sort);
+  Z3_ast obj_idx = convert_number(idx, config.ansi_c.int_width, true);
+
+  Z3_ast store = Z3_mk_store(z3_ctx, addr_sym, obj_idx, val);
+
+  new_s << addr_space_sym_num;
+  new_str = "__ESBMC_addrspace_arr_" + new_s.str();
+  Z3_ast new_addr_sym = z3_api.mk_var(z3_ctx, new_str.c_str(),
+                                      addr_space_arr_sort);
+
+  Z3_ast eq = Z3_mk_eq(z3_ctx, new_addr_sym, store);
+  Z3_assert_cnstr(z3_ctx, eq);
+  if (z3_prop.smtlib)
+    z3_prop.assumpt.push_back(eq);
+
+  return;
+}
+
+std::string
+z3_convt::get_cur_addrspace_ident(void)
+{
+
+  std::stringstream s;
+  s << addr_space_sym_num;
+  std::string str = "__ESBMC_addrspace_arr_" + s.str();
+  return str;
 }
 
 /*******************************************************************
@@ -425,7 +459,9 @@ z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
     z3_prop.assumpt.push_back(Z3_mk_not(z3_ctx, result));
 
   // Ensure addrspace array makes its way to the output
-  z3_prop.assumpt.push_back(addr_space_array);
+  std::string sym = get_cur_addrspace_ident();
+  Z3_ast addr_sym = z3_api.mk_var(z3_ctx, sym.c_str(), addr_space_arr_sort);
+  z3_prop.assumpt.push_back(addr_sym);
 }
 
 /*******************************************************************
@@ -1992,8 +2028,6 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     convert_bv(end_sym, end_ast);
 
     // Actually store into array
-    Z3_ast obj_idx = convert_number(obj_num, config.ansi_c.int_width, true);
-
     std::stringstream obj_num_strs;
     obj_num_strs << obj_num;
     Z3_ast range_tuple = z3_api.mk_var(z3_ctx,
@@ -2004,8 +2038,7 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, end_ast);
 
     // Update array
-    addr_space_array = Z3_mk_store(z3_ctx, addr_space_array, obj_idx,
-                                   range_tuple);
+    bump_addrspace_array(obj_num, range_tuple);
   }
 }
 

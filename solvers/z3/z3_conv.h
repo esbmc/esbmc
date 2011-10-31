@@ -210,6 +210,8 @@ private:
   Z3_ast convert_number(int64_t value, u_int width, bool type);
   Z3_ast convert_number_int(int64_t value, u_int width, bool type);
   Z3_ast convert_number_bv(int64_t value, u_int width, bool type);
+  void bump_addrspace_array(unsigned int idx, Z3_ast val);
+  std::string get_cur_addrspace_ident(void);
   void generate_assumptions(const exprt &expr, const Z3_ast &result);
 public: // Hackity hack, for z3_dec
   void link_syms_to_literals(void);
@@ -228,8 +230,9 @@ private:
   union_varst union_vars;
 
   // Array of obj ID -> address range tuples
-  Z3_ast addr_space_array;
+  unsigned int addr_space_sym_num;
   Z3_sort addr_space_tuple_sort;
+  Z3_sort addr_space_arr_sort;
   std::set<unsigned> obj_ids_in_addr_space_array;
 
 public:
