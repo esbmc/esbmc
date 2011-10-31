@@ -58,6 +58,8 @@ public:
     this->uw = uw;
     ignoring_expr=true;
     max_core_size=Z3_UNSAT_CORE_LIMIT;
+
+    init_addr_space_array();
   }
 
   virtual ~z3_convt();
@@ -209,6 +211,7 @@ private:
 public: // Hackity hack, for z3_dec
   void link_syms_to_literals(void);
 private:
+  void init_addr_space_array(void);
   void store_sat_assignments(Z3_model m);
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
 	    max_core_size;
@@ -220,6 +223,10 @@ private:
 
   typedef std::map<std::string, unsigned int> union_varst;
   union_varst union_vars;
+
+  // Array of obj ID -> address range tuples
+  Z3_ast addr_space_array;
+  Z3_sort tuple_sort;
 
 public:
   class conv_error {

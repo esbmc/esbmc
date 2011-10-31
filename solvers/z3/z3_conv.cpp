@@ -98,6 +98,61 @@ z3_convt::~z3_convt()
   }
 }
 
+void
+z3_convt::init_addr_space_array(void)
+{
+  Z3_symbol mk_tuple_name, proj_names[2];
+  Z3_type_ast proj_types[2];
+  Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
+  Z3_sort native_int_sort;
+
+  if (int_encoding) {
+    native_int_sort = Z3_mk_int_type(z3_ctx);
+  } else {
+    native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+  }
+
+  proj_types[0] = proj_types[1] = native_int_sort;
+
+  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "addr_space_tuple");
+  proj_names[0] = Z3_mk_string_symbol(z3_ctx, "start");
+  proj_names[1] = Z3_mk_string_symbol(z3_ctx, "end");
+
+  tuple_sort= Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
+                               &mk_tuple_decl, proj_decls);
+
+  Z3_sort arr_sort = Z3_mk_array_type(z3_ctx, native_int_sort, tuple_sort);
+  addr_space_array = z3_api.mk_var(z3_ctx, "__ESBMC_addrspace_arr", arr_sort);
+
+  // Initialize this with the NULL object being at address zero
+  Z3_ast num = convert_number(0, config.ansi_c.int_width, true);
+  Z3_ast obj_idx = convert_number(pointer_logic.get_null_object(),
+                                  config.ansi_c.int_width, true);
+
+  Z3_ast range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_null_addr_range",
+                                     tuple_sort);
+  range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, num);
+  range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, num);
+
+  addr_space_array = Z3_mk_store(z3_ctx, addr_space_array, obj_idx,
+                                 range_tuple);
+
+  // We also have to initialize the invalid object... however, I've no idea
+  // what it /means/ yet, so go for some arbitary value.
+  num = convert_number(1, config.ansi_c.int_width, true);
+  obj_idx = convert_number(pointer_logic.get_invalid_object(),
+                           config.ansi_c.int_width, true);
+
+  range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_invalid_addr_range", tuple_sort);
+  range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, num);
+  range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, num);
+
+  addr_space_array = Z3_mk_store(z3_ctx, addr_space_array, obj_idx,
+                                 range_tuple);
+
+  return;
+}
+
 /*******************************************************************
    Function: z3_convt::get_z3_core_size
 
