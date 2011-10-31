@@ -124,12 +124,28 @@ z3_convt::init_addr_space_array(void)
   Z3_sort arr_sort = Z3_mk_array_type(z3_ctx, native_int_sort, tuple_sort);
   addr_space_array = z3_api.mk_var(z3_ctx, "__ESBMC_addrspace_arr", arr_sort);
 
-  // Initialize this with the NULL object being at address zero
+  // Initialize this with the NULL object being at address zero. Associate with
+  // names.
   Z3_ast num = convert_number(0, config.ansi_c.int_width, true);
+  Z3_ast named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_start_0",
+                                   native_int_sort);
+  Z3_ast eq = Z3_mk_eq(z3_ctx, num, named_var);
+  Z3_assert_cnstr(z3_ctx, eq);
+  if (z3_prop.smtlib)
+    z3_prop.assumpt.push_back(eq);
+
+  named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_end_0",
+                            native_int_sort);
+  eq = Z3_mk_eq(z3_ctx, num, named_var);
+  Z3_assert_cnstr(z3_ctx, eq);
+  if (z3_prop.smtlib)
+    z3_prop.assumpt.push_back(eq);
+
+  // Actually store into array
   Z3_ast obj_idx = convert_number(pointer_logic.get_null_object(),
                                   config.ansi_c.int_width, true);
 
-  Z3_ast range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_null_addr_range",
+  Z3_ast range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_addr_range_0",
                                      tuple_sort);
   range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, num);
   range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, num);
@@ -140,10 +156,24 @@ z3_convt::init_addr_space_array(void)
   // We also have to initialize the invalid object... however, I've no idea
   // what it /means/ yet, so go for some arbitary value.
   num = convert_number(1, config.ansi_c.int_width, true);
+  named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_start_1", native_int_sort);
+  eq = Z3_mk_eq(z3_ctx, num, named_var);
+  Z3_assert_cnstr(z3_ctx, eq);
+  if (z3_prop.smtlib)
+    z3_prop.assumpt.push_back(eq);
+
+  named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_end_1",
+                            native_int_sort);
+  eq = Z3_mk_eq(z3_ctx, num, named_var);
+  Z3_assert_cnstr(z3_ctx, eq);
+  if (z3_prop.smtlib)
+    z3_prop.assumpt.push_back(eq);
+
+
   obj_idx = convert_number(pointer_logic.get_invalid_object(),
                            config.ansi_c.int_width, true);
 
-  range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_invalid_addr_range", tuple_sort);
+  range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_addr_range_1", tuple_sort);
   range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, num);
   range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, num);
 
