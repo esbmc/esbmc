@@ -423,6 +423,9 @@ z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
     return;
   } else
     z3_prop.assumpt.push_back(Z3_mk_not(z3_ctx, result));
+
+  // Ensure addrspace array makes its way to the output
+  z3_prop.assumpt.push_back(addr_space_array);
 }
 
 /*******************************************************************
