@@ -1815,6 +1815,14 @@ void
 z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
 {
 
+  // First, sanity check -- typecast from one kind of a pointer to another kind
+  // is a simple operation. Check for that first.
+  if (expr.op0().type().id() == "pointer") {
+    // Yup.
+    convert_bv(expr.op0(), bv);
+    return;
+  }
+
   // Unpleasentness; we don't know what pointer this integer is going to
   // correspond to, and there's no way of telling statically, so we have
   // to enumerate all pointers it could point at. IE, all of them. Which
