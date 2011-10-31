@@ -226,7 +226,7 @@ private:
 
   // Array of obj ID -> address range tuples
   Z3_ast addr_space_array;
-  Z3_sort tuple_sort;
+  Z3_sort addr_space_tuple_sort;
   std::set<unsigned> obj_ids_in_addr_space_array;
 
 public:
