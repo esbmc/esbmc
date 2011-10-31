@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <mp_arith.h>
 #include <expr.h>
 #include <namespace.h>
+#include <std_types.h>
 
 mp_integer member_offset(
   const struct_typet &type,
