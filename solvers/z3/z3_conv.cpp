@@ -1814,6 +1814,91 @@ z3_convt::convert_typecast_enum(const exprt &expr, Z3_ast &bv)
 void
 z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
 {
+
+  // Unpleasentness; we don't know what pointer this integer is going to
+  // correspond to, and there's no way of telling statically, so we have
+  // to enumerate all pointers it could point at. IE, all of them. Which
+  // is expensive, but here we are.
+
+  // First cast it to an unsignedbv
+  Z3_ast target;
+  unsignedbv_typet int_type(config.ansi_c.int_width);
+  typecast_exprt cast(int_type);
+  cast.op() = expr.op0();
+  convert_bv(cast, target);
+
+  // Construct array for all possible object outcomes
+  Z3_ast is_in_range[obj_ids_in_addr_space_array.size()];
+  Z3_ast obj_ids[obj_ids_in_addr_space_array.size()];
+  Z3_ast obj_starts[obj_ids_in_addr_space_array.size()];
+
+  // Get symbol for current array of addrspace data
+  std::string arr_sym_name = get_cur_addrspace_ident();
+  Z3_ast addr_sym = z3_api.mk_var(z3_ctx, arr_sym_name.c_str(),
+                                  addr_space_arr_sort);
+
+  std::set<unsigned>::const_iterator it;
+  unsigned int i;
+  for (it = obj_ids_in_addr_space_array.begin(), i = 0;
+       it != obj_ids_in_addr_space_array.end(); it++, i++)
+  {
+    Z3_ast args[2];
+
+    Z3_ast idx = convert_number(*it, config.ansi_c.int_width, true);
+    obj_ids[i] = idx;
+    Z3_ast elem = Z3_mk_select(z3_ctx, addr_sym, idx);
+    Z3_ast start = z3_api.mk_tuple_select(z3_ctx, elem, 0);
+    obj_starts[i] = start;
+    Z3_ast end = z3_api.mk_tuple_select(z3_ctx, elem, 1);
+
+    if (int_encoding) {
+      args[0] = Z3_mk_ge(z3_ctx, target, start);
+      args[1] = Z3_mk_le(z3_ctx, target, end);
+    } else {
+      args[0] = Z3_mk_bvuge(z3_ctx, target, start);
+      args[1] = Z3_mk_bvule(z3_ctx, target, end);
+    }
+
+    is_in_range[i] = Z3_mk_and(z3_ctx, 2, args);
+  }
+
+  // Generate a big ITE chain, selecing a particular pointer offset. A
+  // significant question is what happens when it's neither; in which case I
+  // suggest the ptr becomes invalid_object. However, this needs frontend
+  // support to check for invalid_object after all dereferences XXXjmorse.
+  Z3_sort pointer_sort;
+  create_pointer_type(pointer_sort);
+
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, pointer_sort);
+  Z3_ast args[2];
+  args[0] = convert_number(pointer_logic.get_invalid_object(),
+                           config.ansi_c.int_width, true);
+  args[1] = convert_number(0, config.ansi_c.int_width, true);
+  Z3_ast prev_in_chain = Z3_mk_app(z3_ctx, decl, 2, args);
+
+  // Now that big ite chain,
+  for (i = 0; i < obj_ids_in_addr_space_array.size(); i++) {
+    args[0] = obj_ids[i];
+
+    // Calculate ptr offset were it this
+    if (int_encoding) {
+      Z3_ast tmp_args[2];
+      tmp_args[0] = target;
+      tmp_args[1] = obj_starts[i];
+      args[1] = Z3_mk_sub(z3_ctx, 2, tmp_args);
+    } else {
+      args[1] = Z3_mk_bvsub(z3_ctx, target, obj_starts[i]);
+    }
+
+    Z3_ast selected_tuple = Z3_mk_app(z3_ctx, decl, 2, args);
+
+    prev_in_chain =
+      Z3_mk_ite(z3_ctx, is_in_range[i], selected_tuple, prev_in_chain);
+  }
+
+  // Finally, we're now at the point where prev_in_chain represents a pointer
+  // object. Hurrah.
+  bv = prev_in_chain;
 }
 
 void
