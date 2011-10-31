@@ -1819,6 +1819,39 @@ z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
 void
 z3_convt::convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv)
 {
+
+  // The plan: index the object id -> address-space array and pick out the
+  // start address, then add it to any additional pointer offset.
+
+  // Generate type of address space array
+  struct_typet strct;
+  struct_union_typet::componentt cmp;
+  cmp.type() = unsignedbv_typet(config.ansi_c.int_width);
+  cmp.set_name("start");
+  strct.components().push_back(cmp);
+  cmp.set_name("end");
+  strct.components().push_back(cmp);
+
+  array_typet arr;
+  arr.subtype() = strct;
+
+  exprt obj_num("pointer_object", unsignedbv_typet(config.ansi_c.int_width));
+  obj_num.copy_to_operands(expr.op0());
+
+  symbol_exprt sym_arr(get_cur_addrspace_ident(), arr);
+  index_exprt idx(strct);
+  idx.array() = sym_arr;
+  idx.index() = obj_num;
+
+  // We've now grabbed the pointer struct, now get first element
+  member_exprt memb(unsignedbv_typet(config.ansi_c.int_width));
+  memb.copy_to_operands(idx);
+  memb.set_component_name("start");
+
+  // Finally, replace typecast
+  typecast_exprt cast(expr.type());
+  cast.op() = memb;
+  convert_bv(cast, bv);
 }
 
 void
