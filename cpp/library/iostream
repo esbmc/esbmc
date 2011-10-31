@@ -1,17 +1,8 @@
-/*******************************************************************\
- *
- *
- * Author: Blanc Nicolas
- *
- *
-\*******************************************************************/
-
 #ifndef STL_IOSTREAM
 #define STL_IOSTREAM
 
-#ifndef EOF
-# define EOF (-1)
-#endif
+#include "iomanip"
+#include "definitions"
 
 namespace std
 {
@@ -30,6 +21,8 @@ namespace std
 	{
 		istream(int id): id(id){}
 		int id;
+		void ignore();
+		void ignore(int i);
 	private:
 		istream(const istream&); // disabled
 		istream& operator=(const istream&); // disabled
@@ -45,130 +38,11 @@ namespace std
 		iostream& operator=(const iostream&); // disabled
 	};
 
-	struct setprecision
-	{
-		setprecision(int p);
-	};
-
-	struct setbase
-	{
-		setbase(int b);
-	};
-
-	struct fixedStruct
-	{
-		fixedStruct();
-	private:
-		fixedStruct(const fixedStruct&); // disabled
-	};
-
 	struct averageStruct
 	{
 		averageStruct();
 	private:
 		averageStruct(const averageStruct&); // disabled
-	};
-
-	struct leftStruct
-	{
-		leftStruct();
-	private:
-		leftStruct(const leftStruct&); // disabled
-	};
-
-	struct rightStruct
-	{
-		rightStruct();
-	private:
-		rightStruct(const rightStruct&); // disabled
-	};
-
-	struct hexStruct
-	{
-		hexStruct();
-	private:
-		hexStruct(const hexStruct&); // disabled
-	};
-
-	struct decStruct
-	{
-		decStruct();
-	private:
-		decStruct(const decStruct&); // disabled
-	};
-
-	struct octStruct
-	{
-		octStruct();
-	private:
-		octStruct(const octStruct&); // disabled
-	};
-
-	struct setw
-	{
-		setw(int w);
-	};
-
-	struct setfill
-	{
-		setfill(char f);
-	};
-
-	struct flushStruct
-	{
-		flushStruct();
-	private:
-		flushStruct(const flushStruct&); // disabled
-
-	};
-
-	struct scientificStruct
-	{
-		scientificStruct();
-	private:
-		scientificStruct(const scientificStruct&); // disabled
-	};
-
-	struct showpointStruct
-	{
-		showpointStruct();
-	private:
-		showpointStruct(const showpointStruct&); // disabled
-	};
-
-	struct showbaseStruct
-	{
-		showbaseStruct();
-	private:
-		showbaseStruct(const showbaseStruct&);
-	};
-
-	struct internalStruct
-	{
-		internalStruct();
-	private:
-		internalStruct(const internalStruct&);
-	};
-
-	struct showposStruct
-	{
-		showposStruct();
-	private:
-		showposStruct(const showposStruct&);
-	};
-
-	struct boolalphaStruct
-	{
-		boolalphaStruct();
-	private:
-		boolalphaStruct(const boolalphaStruct&);
-	};
-
-	struct noboolalphaStruct
-	{
-		noboolalphaStruct();
-	private:
-		noboolalphaStruct(const noboolalphaStruct&);
 	};
 
 	struct iosStruct
@@ -181,21 +55,7 @@ namespace std
 	extern istream cin;
 	extern ostream cout;
 	extern ostream cerr;
-	extern fixedStruct fixed;
 	extern averageStruct average;
-	extern leftStruct left;
-	extern rightStruct right;
-	extern hexStruct hex;
-	extern octStruct oct;
-	extern decStruct dec;
-	extern flushStruct flush;
-	extern scientificStruct scientific;
-	extern showpointStruct showpoint;
-	extern showpointStruct showbase;
-	extern internalStruct internal;
-	extern showposStruct showpos;
-	extern boolalphaStruct boolalpha;
-	extern noboolalphaStruct noboolalpha;
 	extern iosStruct ios;
 
 	char endl = '\n';
@@ -220,9 +80,6 @@ namespace esbmc
 
 namespace std
 {
-	bool nondet_bool();
-	unsigned int nondet_uint();
-
 	inline istream& operator >> (istream& is, char& c)
 	{ 
 		esbmc::esbmc_read_char(is.id,c);
@@ -237,6 +94,11 @@ namespace std
 	inline istream& operator >> (istream& is, int& i)
 	{ 
 		esbmc::esbmc_read_int(is.id,i);
+		return is;
+	}
+
+	inline istream& operator >> (istream& is, setw)
+	{
 		return is;
 	}
 
@@ -300,12 +162,12 @@ namespace std
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, setprecision)
+	inline ostream& operator << (ostream& o, fixedStruct)
 	{
 		return o;
 	}
 
-	inline ostream& operator << (ostream& o, fixedStruct)
+	inline ostream& operator << (ostream& o, setprecision)
 	{
 		return o;
 	}
@@ -395,12 +257,27 @@ namespace std
 		return o;
 	}
 
+	inline ostream& operator << (ostream& o, uppercaseStruct)
+	{
+		return o;
+	}
+
 	int istream::get()
 	{
 	  if (nondet_bool())
 	    return nondet_uint();
 	  else
 	    return EOF;
+	}
+
+	void istream::ignore()
+	{
+		// model
+	}
+
+	void istream::ignore(int i)
+	{
+		// model
 	}
 
 	void ostream::fill(char c)
@@ -412,26 +289,5 @@ namespace std
 	{
 		setprecision(p);
 	}
-
-	setw::setw(int w)
-	{
-		__ESBMC_assert(w >= 0, "The width must be greater or equal than 0");
-	}
-
-	setprecision::setprecision(int p)
-	{
-		__ESBMC_assert(p >= 0, "The precision must be greater or equal than 0");
-	}
-
-	setbase::setbase(int b)
-	{
-		// model
-	}
-
-	setfill::setfill(char c)
-	{
-		// model
-	}
-
 }
 #endif
