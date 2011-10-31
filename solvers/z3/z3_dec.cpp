@@ -87,24 +87,6 @@ decision_proceduret::resultt z3_dect::dec_solve()
 
 /*******************************************************************\
 
-Function: z3_dect::set_smt
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void z3_dect::set_smt(bool smt)
-{
-  set_smtlib(smt);
-  smtlib = smt;
-}
-
-/*******************************************************************\
-
 Function: z3_dect::set_file
 
   Inputs:

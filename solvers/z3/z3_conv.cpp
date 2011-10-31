@@ -243,23 +243,6 @@ z3_convt::set_z3_core_size(uint val)
 }
 
 /*******************************************************************
-   Function: z3_convt::set_smtlib
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-z3_convt::set_smtlib(bool smt)
-{
-  z3_prop.smtlib = smt;
-}
-
-/*******************************************************************
    Function: z3_convt::get_z3_encoding
 
    Inputs:

@@ -40,7 +40,8 @@ protected:
 class z3_convt:protected z3_prop_wrappert, public prop_convt
 {
 public:
-  z3_convt(std::ostream &_out, bool relevancy, bool uw, bool int_encoding)
+  z3_convt(std::ostream &_out, bool relevancy, bool uw, bool int_encoding,
+           bool smt)
                                :z3_prop_wrappert(_out),
                                 prop_convt(z3_prop)
   {
@@ -53,6 +54,7 @@ public:
     }
 
     this->int_encoding = int_encoding;
+    this->z3_prop.smtlib = smt;
    s_is_uw = uw;
    s_relevancy = relevancy;
 
@@ -67,7 +69,6 @@ public:
 
   virtual ~z3_convt();
   Z3_lbool check2_z3_properties(void);
-  void set_smtlib(bool smt);
   bool get_z3_encoding(void) const;
   void set_filename(std::string file);
   void set_z3_ecp(bool ecp);
