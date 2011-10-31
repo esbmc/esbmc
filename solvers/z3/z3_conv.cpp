@@ -1934,7 +1934,92 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
   num = Z3_mk_int(z3_ctx, 0, native_int_sort);
   bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, num);
 
-  DEBUGLOC;
+  // If this object hasn't yet been put in the address space record, add it
+  if (obj_ids_in_addr_space_array.find(obj_num) ==
+      obj_ids_in_addr_space_array.end()) {
+
+    typet ptr_loc_type = unsignedbv_typet(config.ansi_c.int_width);
+
+    std::stringstream s;
+    s << obj_num;
+
+    std::string start_name = "__ESBMC_ptr_obj_start_" + s.str();
+    std::string end_name = "__ESBMC_ptr_obj_end_" + s.str();
+
+    exprt start_sym = symbol_exprt(start_name, ptr_loc_type);
+    exprt end_sym = symbol_exprt(end_name, ptr_loc_type);
+
+    // Another thing to note is that the end var must be /the size of the obj/
+    // from start. Express this in irep.
+    std::string offs = integer2string(pointer_offset_size(expr.type()), 2);
+    exprt const_offs_expr("constant", ptr_loc_type);
+    const_offs_expr.set("value", offs);
+    exprt start_plus_offs_expr("+", ptr_loc_type);
+    start_plus_offs_expr.copy_to_operands(start_sym, const_offs_expr);
+    exprt equality_expr("=", ptr_loc_type);
+    equality_expr.copy_to_operands(end_sym, start_plus_offs_expr);
+
+    // Assert that start + offs == end
+    Z3_ast offs_eq;
+    convert_bv(equality_expr, offs_eq);
+    Z3_assert_cnstr(z3_ctx, offs_eq);
+    if (z3_prop.smtlib)
+      z3_prop.assumpt.push_back(offs_eq);
+
+    // Place constraints upon these variables; the start and end need to cover
+    // a range that isn't covered by any other range. So:
+    // (start > other_end) || (end < other_start)
+
+    // These constraints have to be placed against /all/ other objects. Which
+    // makes the complexity O(x^2). Which sucks, but is necessary here.
+    std::set<unsigned>::const_iterator it;
+    for (it = obj_ids_in_addr_space_array.begin();
+         it != obj_ids_in_addr_space_array.end(); it++) {
+      std::stringstream s2;
+      s2 << obj_num;
+
+      std::string obj_start_str = "__ESBMC_ptr_obj_start_" + s2.str();
+      std::string obj_end_str = "__ESBMC_ptr_obj_end_" + s2.str();
+
+      exprt obj_start_sym = symbol_exprt(obj_start_str, ptr_loc_type);
+      exprt obj_end_sym = symbol_exprt(obj_end_str, ptr_loc_type);
+
+      exprt clause1(">", ptr_loc_type);
+      clause1.copy_to_operands(start_sym, obj_end_sym);
+      exprt clause2("<", ptr_loc_type);
+      clause2.copy_to_operands(end_sym, obj_start_sym);
+      exprt range_constraint("or", typet("bool"));
+      range_constraint.copy_to_operands(clause1, clause2);
+
+      Z3_ast constraint;
+      convert_bv(range_constraint, constraint);
+      Z3_assert_cnstr(z3_ctx, constraint);
+      if (z3_prop.smtlib)
+        z3_prop.assumpt.push_back(constraint);
+
+      obj_ids_in_addr_space_array.insert(obj_num);
+    }
+
+    Z3_ast start_ast, end_ast;
+    convert_bv(start_sym, start_ast);
+    convert_bv(end_sym, end_ast);
+
+    // Actually store into array
+    Z3_ast obj_idx = convert_number(obj_num, config.ansi_c.int_width, true);
+
+    std::stringstream obj_num_strs;
+    obj_num_strs << obj_num;
+    Z3_ast range_tuple = z3_api.mk_var(z3_ctx,
+                       ("__ESBMC_ptr_addr_range_" + obj_num_strs.str()).c_str(),
+                       addr_space_tuple_sort);
+
+    range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, start_ast);
+    range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, end_ast);
+
+    // Update array
+    addr_space_array = Z3_mk_store(z3_ctx, addr_space_array, obj_idx,
+                                   range_tuple);
+  }
 }
 
 /*******************************************************************
