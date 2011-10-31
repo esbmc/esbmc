@@ -1738,7 +1738,7 @@ z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 
   if (expr.type().id() == "pointer") {
     convert_typecast_to_ptr(expr, bv);
-  } else if (expr.type().subtype().id() == "pointer") {
+  } else if (expr.op0().type().id() == "pointer") {
     convert_typecast_from_ptr(expr, bv);
   } else if (expr.type().id() == "bool") {
     convert_typecast_bool(expr, bv);
