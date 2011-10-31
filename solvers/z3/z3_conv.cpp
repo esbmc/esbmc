@@ -1983,8 +1983,9 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
       if (z3_prop.smtlib)
         z3_prop.assumpt.push_back(constraint);
 
-      obj_ids_in_addr_space_array.insert(obj_num);
     }
+
+    obj_ids_in_addr_space_array.insert(obj_num);
 
     Z3_ast start_ast, end_ast;
     convert_bv(start_sym, start_ast);
