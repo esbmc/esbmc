@@ -1819,6 +1819,7 @@ z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
 void
 z3_convt::convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv)
 {
+  unsignedbv_typet int_type(config.ansi_c.int_width);
 
   // The plan: index the object id -> address-space array and pick out the
   // start address, then add it to any additional pointer offset.
@@ -1826,7 +1827,7 @@ z3_convt::convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv)
   // Generate type of address space array
   struct_typet strct;
   struct_union_typet::componentt cmp;
-  cmp.type() = unsignedbv_typet(config.ansi_c.int_width);
+  cmp.type() = int_type;
   cmp.set_name("start");
   strct.components().push_back(cmp);
   cmp.set_name("end");
@@ -1835,7 +1836,7 @@ z3_convt::convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv)
   array_typet arr;
   arr.subtype() = strct;
 
-  exprt obj_num("pointer_object", unsignedbv_typet(config.ansi_c.int_width));
+  exprt obj_num("pointer_object", int_type);
   obj_num.copy_to_operands(expr.op0());
 
   symbol_exprt sym_arr(get_cur_addrspace_ident(), arr);
@@ -1844,13 +1845,18 @@ z3_convt::convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv)
   idx.index() = obj_num;
 
   // We've now grabbed the pointer struct, now get first element
-  member_exprt memb(unsignedbv_typet(config.ansi_c.int_width));
+  member_exprt memb(int_type);
   memb.copy_to_operands(idx);
   memb.set_component_name("start");
 
+  exprt ptr_offs("pointer_offset", int_type);
+  ptr_offs.copy_to_operands(expr.op0());
+  exprt add("+", int_type);
+  add.copy_to_operands(memb, ptr_offs);
+
   // Finally, replace typecast
   typecast_exprt cast(expr.type());
-  cast.op() = memb;
+  cast.op() = add;
   convert_bv(cast, bv);
 }
 
