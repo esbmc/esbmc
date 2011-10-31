@@ -87,23 +87,6 @@ decision_proceduret::resultt z3_dect::dec_solve()
 
 /*******************************************************************\
 
-Function: z3_dect::set_encoding
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void z3_dect::set_encoding(bool enc)
-{
-  set_z3_encoding(enc);
-}
-
-/*******************************************************************\
-
 Function: z3_dect::set_smt
 
   Inputs:

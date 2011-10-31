@@ -243,23 +243,6 @@ z3_convt::set_z3_core_size(uint val)
 }
 
 /*******************************************************************
-   Function: z3_convt::set_z3_encoding
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-z3_convt::set_z3_encoding(bool enc)
-{
-  int_encoding = enc;
-}
-
-/*******************************************************************
    Function: z3_convt::set_smtlib
 
    Inputs:

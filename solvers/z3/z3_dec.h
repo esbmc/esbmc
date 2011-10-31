@@ -27,12 +27,12 @@ protected:
 class z3_dect:protected z3_temp_filet, public z3_convt
 {
 public:
-  z3_dect(bool rel, bool uw):z3_convt(temp_out, rel, uw)
+  z3_dect(bool rel, bool uw, bool int_encoding)
+    :z3_convt(temp_out, rel, uw, int_encoding)
   {
   }
 
   virtual resultt dec_solve();
-  void set_encoding(bool enc);
   void set_file(std::string file);
   void set_smt(bool smt);
   void set_ecp(bool ecp);
