@@ -150,6 +150,10 @@ z3_convt::init_addr_space_array(void)
   addr_space_array = Z3_mk_store(z3_ctx, addr_space_array, obj_idx,
                                  range_tuple);
 
+  // Record the fact that we've registered these objects
+  obj_ids_in_addr_space_array.insert(0);
+  obj_ids_in_addr_space_array.insert(1);
+
   return;
 }
 
