@@ -556,7 +556,6 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
   DEBUGLOC;
 
   Z3_sort elem_sort, idx_sort;
-  unsigned width;
 
   if (int_encoding) {
     idx_sort = Z3_mk_int_type(z3_ctx);
@@ -760,7 +759,6 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
   DEBUGLOC;
 
   Z3_sort sort;
-  unsigned width;
 
   // References to unsigned int identifiers need to be assumed to be > 0,
   // otherwise the solver is free to assign negative nums to it.
@@ -1020,7 +1018,7 @@ z3_convt::convert_invalid(const exprt &expr)
 
   assert(expr.operands().size() == 1);
   assert(expr.op0().type().id() == "pointer");
-  Z3_ast bv, pointer, operand[2];
+  Z3_ast pointer, operand[2];
 
   convert_bv(expr.op0(), pointer);
   operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer, 0); //pointer obj
@@ -1254,7 +1252,7 @@ z3_convt::convert_overflow_typecast(const exprt &expr)
 
   Z3_ast bv, operand[3], mid, overflow[2], tmp, minus_one, two;
   uint64_t result;
-  u_int i, width;
+  u_int width;
 
   get_type_width(expr.op0().type(), width);
 
@@ -1731,8 +1729,6 @@ z3_convt::convert_typecast(const exprt &expr, Z3_ast &bv)
 {
   assert(expr.operands().size() == 1);
   const exprt &op = expr.op0();
-
-  Z3_ast args[2];
 
   convert_bv(op, bv);
 
@@ -2596,9 +2592,8 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 1);
   assert(expr.type().id() == "pointer");
 
-  Z3_ast pointer_var, pointer;
   Z3_type_ast pointer_type;
-  Z3_ast offset, po, pi;
+  Z3_ast offset;
   std::string symbol_name, out;
 
   create_pointer_type(expr.type(), pointer_type);
@@ -2748,7 +2743,7 @@ z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
 
   assert(expr.operands().size() == 2);
 
-  Z3_ast args[2], pointer;
+  Z3_ast args[2];
   std::string identifier;
 
   convert_bv(expr.op0(), args[0]);
