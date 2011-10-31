@@ -612,7 +612,7 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
   } else if (type.id() == "union")     {
     create_union_type(type, bv);
   } else if (type.id() == "pointer")     {
-    create_pointer_type(type, bv);
+    create_pointer_type(bv);
   } else if (type.id() == "symbol" || type.id() == "empty" ||
              type.id() == "c_enum")     {
     if (int_encoding)
@@ -709,7 +709,7 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
  \*******************************************************************/
 
 void
-z3_convt::create_pointer_type(const typet &type, Z3_type_ast &bv)
+z3_convt::create_pointer_type(Z3_type_ast &bv)
 {
   DEBUGLOC;
 
@@ -1843,7 +1843,7 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
   else
     native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
 
-  create_pointer_type(expr.type(), tuple_type);
+  create_pointer_type(tuple_type);
 
   bv = z3_api.mk_var(z3_ctx, symbol.c_str(), tuple_type);
 
@@ -2596,7 +2596,7 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
   Z3_ast offset;
   std::string symbol_name, out;
 
-  create_pointer_type(expr.type(), pointer_type);
+  create_pointer_type(pointer_type);
   offset = convert_number(0, config.ansi_c.int_width, true);
 
   if (expr.op0().id() == "index") {
