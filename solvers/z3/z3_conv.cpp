@@ -1720,6 +1720,11 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
 	zero = convert_number(0, width, false);
 	one =  convert_number(1, width, false);
       }
+    } else if (expr.type().id() == "fixedbv") {
+      zero = Z3_mk_numeral(z3_ctx, "0", Z3_mk_real_type(z3_ctx));
+      one = Z3_mk_numeral(z3_ctx, "1", Z3_mk_real_type(z3_ctx));
+    } else {
+      throw new conv_error("Unexpected type in typecast of bool", expr);
     }
     bv = Z3_mk_ite(z3_ctx, bv, one, zero);
   } else   {
