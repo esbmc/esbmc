@@ -1931,7 +1931,7 @@ z3_convt::convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv)
 
   // We've now grabbed the pointer struct, now get first element
   member_exprt memb(int_type);
-  memb.copy_to_operands(idx);
+  memb.op0() = idx;
   memb.set_component_name("start");
 
   exprt ptr_offs("pointer_offset", int_type);
