@@ -1,7 +1,7 @@
 #ifndef STL_CTIME
 #define STL_CTIME
 
-#include "definitions"
+#include "definitions.h"
 
 typedef unsigned int time_t;
 

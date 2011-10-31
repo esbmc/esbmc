@@ -1,7 +1,7 @@
 #ifndef STL_CMATH
 #define STL_CMATH
 
-#include "definitions"
+#include "definitions.h"
 
 float sqrt(float n)
 {
