@@ -7,9 +7,13 @@ use warnings;
 # test.pl
 #
 # runs a test and check its output
+my $llvm = 0;
 
 sub run($$$) {
   my ($input, $options, $output) = @_;
+  if ($llvm == 1) {
+    $input =~ s/\.cpp $/.c/;
+  } 
   my $cmd = "esbmc $options $input >$output 2>&1";
 
   print LOG "Running $cmd\n";
@@ -45,9 +49,15 @@ sub run($$$) {
 
 sub load($) {
   my ($fname) = @_;
-
+  
   open FILE, "<$fname";
   my @data = <FILE>;
+#	if ($llvm==1){
+#	  system("clang++ -emit-llvm $fname -o main.bc -c");
+#	  system("llc -march=c main.bc -o main.c");
+#	
+#	}
+
   close FILE;
 
   chomp @data;
@@ -56,6 +66,7 @@ sub load($) {
 
 sub test($$) {
   my ($name, $test) = @_;
+  
   my ($input, $options, @results) = load($test);
 
   my $output = $input;
@@ -117,10 +128,16 @@ sub dirs() {
 }
 
 if(@ARGV != 0) {
-  print "Usage:\n";
-  print "  test.pl\n";
-  exit 1;
-}
+  if (@ARGV[0] eq "--llvm") {
+	 print "acertou\n";
+	 $llvm = 1;
+  } else {
+    print "Usage:\n";
+    print "  test.pl\n";
+    print "  test.pl --llvm\n";
+    exit 1;
+  }
+} 
 
 open LOG,">tests.log";
 
