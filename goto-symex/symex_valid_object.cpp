@@ -105,7 +105,7 @@ void goto_symext::replace_dynamic_allocation(
     // default behavior
     basic_symext::replace_dynamic_allocation(state, expr);
   }
-   else if(expr.id()=="invalid-object")
+   else if(expr.id()=="invalid-pointer")
   {
     // default behavior
     basic_symext::replace_dynamic_allocation(state, expr);
