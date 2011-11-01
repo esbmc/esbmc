@@ -51,6 +51,24 @@ void replace_dynamic_allocation(
 
     expr.swap(index_expr);
   }
+  if (expr.id()=="invalid-pointer")
+  {
+    assert(expr.operands().size()==1);
+    assert(expr.op0().type().id()=="pointer");
+
+    exprt object_expr("pointer_object", uint_type());
+    object_expr.move_to_operands(expr.op0());
+
+    exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "alloc"));
+
+    exprt index_expr("index", typet("bool"));
+    index_expr.move_to_operands(alloc_array, object_expr);
+
+    exprt not_expr("not", typet("bool"));
+    not_expr.move_to_operands(index_expr);
+
+    expr.swap(not_expr);
+  }
   if(expr.id()=="deallocated_object")
   {
     assert(expr.operands().size()==1);
