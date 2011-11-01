@@ -2048,8 +2048,6 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 
   create_pointer_type(tuple_type);
 
-  bv = z3_api.mk_var(z3_ctx, symbol.c_str(), tuple_type);
-
   if (expr.get("value").compare("NULL") == 0) {
     obj_num = pointer_logic.get_null_object();
   } else {
@@ -2057,14 +2055,25 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     obj_num = pointer_logic.add_object(expr);
   }
 
-  num = Z3_mk_int(z3_ctx, obj_num, native_int_sort);
-  bv = z3_api.mk_tuple_update(z3_ctx, bv, 0, num);
-  num = Z3_mk_int(z3_ctx, 0, native_int_sort);
-  bv = z3_api.mk_tuple_update(z3_ctx, bv, 1, num);
+  bv = z3_api.mk_var(z3_ctx, symbol.c_str(), tuple_type);
 
-  // If this object hasn't yet been put in the address space record, add it
+  // If this object hasn't yet been put in the address space record, we need to
+  // assert that the symbol has the object ID we've allocated, and then fill out
+  // the address space record.
   if (obj_ids_in_addr_space_array.find(obj_num) ==
       obj_ids_in_addr_space_array.end()) {
+
+    Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, tuple_type);
+
+    Z3_ast args[2];
+    args[0] = Z3_mk_int(z3_ctx, obj_num, native_int_sort);
+    args[1] = Z3_mk_int(z3_ctx, 0, native_int_sort);
+
+    Z3_ast ptr_val = Z3_mk_app(z3_ctx, decl, 2, args);
+    Z3_ast constraint = Z3_mk_eq(z3_ctx, bv, ptr_val);
+    Z3_assert_cnstr(z3_ctx, constraint);
+    if (z3_prop.smtlib)
+      z3_prop.assumpt.push_back(constraint);
 
     typet ptr_loc_type = unsignedbv_typet(config.ansi_c.int_width);
 
