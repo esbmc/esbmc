@@ -1095,37 +1095,6 @@ z3_convt::convert_eq(const exprt &expr)
 }
 
 /*******************************************************************
-   Function: z3_convt::convert_invalid
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-Z3_ast
-z3_convt::convert_invalid(const exprt &expr)
-{
-  DEBUGLOC;
-
-  // XXXjmorse - precisely what does this method /mean/ though?
-  // what's it checking
-
-  assert(expr.operands().size() == 1);
-  assert(expr.op0().type().id() == "pointer");
-  Z3_ast pointer, operand[2];
-
-  convert_bv(expr.op0(), pointer);
-  operand[0] = z3_api.mk_tuple_select(z3_ctx, pointer, 0); //pointer obj
-  operand[1] = convert_number(pointer_logic.get_invalid_object(),
-                              config.ansi_c.int_width, true);
-
-  return Z3_mk_not(z3_ctx, Z3_mk_distinct(z3_ctx, 2, operand));
-}
-
-/*******************************************************************
    Function: z3_convt::convert_same_object
 
    Inputs:
@@ -3793,8 +3762,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_pointer_object(expr, bv);
   else if (expr.id() == "same-object")
     bv = convert_same_object(expr);
-  else if (expr.id() == "invalid-pointer")
-    bv = convert_invalid(expr);
   else if (expr.id() == "string-constant") {
     exprt tmp;
     string2array(expr, tmp);

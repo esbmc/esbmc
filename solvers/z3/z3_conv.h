@@ -101,7 +101,6 @@ private:
   void create_pointer_type(Z3_type_ast &bv);
   Z3_ast convert_cmp(const exprt &expr);
   Z3_ast convert_eq(const exprt &expr);
-  Z3_ast convert_invalid(const exprt &expr);
   Z3_ast convert_same_object(const exprt &expr);
   Z3_ast convert_is_dynamic_object(const exprt &expr);
   Z3_ast convert_overflow_sum_sub_mul(const exprt &expr);
