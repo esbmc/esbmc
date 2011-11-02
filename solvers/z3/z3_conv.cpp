@@ -2104,6 +2104,17 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     if (z3_prop.smtlib)
       z3_prop.assumpt.push_back(offs_eq);
 
+    // Even better, if we're operating in bitvector mode, it's possible that
+    // Z3 will try to be clever and arrange the pointer range to cross the end
+    // of the address space (ie, wrap around). So, also assert that end > start
+    exprt wraparound_expr(">", ptr_loc_type);
+    wraparound_expr.copy_to_operands(end_sym, start_sym);
+    Z3_ast wraparound_eq;
+    convert_bv(wraparound_expr, wraparound_eq);
+    Z3_assert_cnstr(z3_ctx, wraparound_eq);
+    if (z3_prop.smtlib)
+      z3_prop.assumpt.push_back(wraparound_eq);
+
     // Place constraints upon these variables; the start and end need to cover
     // a range that isn't covered by any other range. So:
     // (start > other_end) || (end < other_start)
