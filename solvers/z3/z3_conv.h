@@ -207,6 +207,7 @@ private:
   static std::string ascii2int(char ch);
   void print_data_types(Z3_ast operand0, Z3_ast operand1);
   void print_location(const exprt &expr);
+  void debug_label_formula(std::string name, Z3_ast formula);
   void show_bv_size(Z3_ast operand);
   Z3_ast convert_number(int64_t value, u_int width, bool type);
   Z3_ast convert_number_int(int64_t value, u_int width, bool type);
@@ -235,6 +236,9 @@ private:
   Z3_sort addr_space_tuple_sort;
   Z3_sort addr_space_arr_sort;
   std::set<unsigned> obj_ids_in_addr_space_array;
+
+  // Debug map, for naming pieces of AST and auto-numbering them
+  std::map<std::string, unsigned> debug_label_map;
 
 public:
   class conv_error {
