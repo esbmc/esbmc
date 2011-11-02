@@ -191,7 +191,7 @@ z3_convt::bump_addrspace_array(unsigned int idx, Z3_ast val)
 
   Z3_ast store = Z3_mk_store(z3_ctx, addr_sym, obj_idx, val);
 
-  new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num++);
+  new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num);
   Z3_ast new_addr_sym = z3_api.mk_var(z3_ctx, new_str.c_str(),
                                       addr_space_arr_sort);
 
