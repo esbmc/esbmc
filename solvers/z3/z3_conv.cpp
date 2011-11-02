@@ -183,18 +183,15 @@ z3_convt::init_addr_space_array(void)
 void
 z3_convt::bump_addrspace_array(unsigned int idx, Z3_ast val)
 {
-  std::stringstream s, new_s;
   std::string str, new_str;
 
-  s << addr_space_sym_num++;
-  str = "__ESBMC_addrspace_arr_" + s.str();
+  str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num++);
   Z3_ast addr_sym = z3_api.mk_var(z3_ctx, str.c_str(), addr_space_arr_sort);
   Z3_ast obj_idx = convert_number(idx, config.ansi_c.int_width, true);
 
   Z3_ast store = Z3_mk_store(z3_ctx, addr_sym, obj_idx, val);
 
-  new_s << addr_space_sym_num;
-  new_str = "__ESBMC_addrspace_arr_" + new_s.str();
+  new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num++);
   Z3_ast new_addr_sym = z3_api.mk_var(z3_ctx, new_str.c_str(),
                                       addr_space_arr_sort);
 
@@ -208,9 +205,7 @@ std::string
 z3_convt::get_cur_addrspace_ident(void)
 {
 
-  std::stringstream s;
-  s << addr_space_sym_num;
-  std::string str = "__ESBMC_addrspace_arr_" + s.str();
+  std::string str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num);
   return str;
 }
 
@@ -2065,11 +2060,8 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 
     typet ptr_loc_type = unsignedbv_typet(config.ansi_c.int_width);
 
-    std::stringstream s;
-    s << obj_num;
-
-    std::string start_name = "__ESBMC_ptr_obj_start_" + s.str();
-    std::string end_name = "__ESBMC_ptr_obj_end_" + s.str();
+    std::string start_name = "__ESBMC_ptr_obj_start_" + itos(obj_num);
+    std::string end_name = "__ESBMC_ptr_obj_end_" + itos(obj_num);
 
     exprt start_sym = symbol_exprt(start_name, ptr_loc_type);
     exprt end_sym = symbol_exprt(end_name, ptr_loc_type);
@@ -2107,11 +2099,9 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     std::set<unsigned>::const_iterator it;
     for (it = obj_ids_in_addr_space_array.begin();
          it != obj_ids_in_addr_space_array.end(); it++) {
-      std::stringstream s2;
-      s2 << *it;
 
-      std::string obj_start_str = "__ESBMC_ptr_obj_start_" + s2.str();
-      std::string obj_end_str = "__ESBMC_ptr_obj_end_" + s2.str();
+      std::string obj_start_str = "__ESBMC_ptr_obj_start_" + itos(*it);
+      std::string obj_end_str = "__ESBMC_ptr_obj_end_" + itos(*it);
 
       exprt obj_start_sym = symbol_exprt(obj_start_str, ptr_loc_type);
       exprt obj_end_sym = symbol_exprt(obj_end_str, ptr_loc_type);
@@ -2135,10 +2125,8 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     convert_bv(end_sym, end_ast);
 
     // Actually store into array
-    std::stringstream obj_num_strs;
-    obj_num_strs << obj_num;
     Z3_ast range_tuple = z3_api.mk_var(z3_ctx,
-                       ("__ESBMC_ptr_addr_range_" + obj_num_strs.str()).c_str(),
+                       ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
                        addr_space_tuple_sort);
 
     range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, start_ast);
@@ -2292,9 +2280,7 @@ z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
       bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
     }
   } else if (expr.type().id() == "pointer")    {
-    std::stringstream s;
-    s << value;
-    convert_identifier_pointer(expr, s.str(), bv);
+    convert_identifier_pointer(expr, itos(value), bv);
   } else if (expr.type().id() == "bool")     {
     if (expr.is_false())
       bv = Z3_mk_false(z3_ctx);
