@@ -116,7 +116,7 @@ z3_convt::init_addr_space_array(void)
 
   proj_types[0] = proj_types[1] = native_int_sort;
 
-  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "addr_space_tuple");
+  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "struct_type_addr_space_tuple");
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "start");
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "end");
 
@@ -1899,6 +1899,7 @@ z3_convt::convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv)
   strct.components().push_back(cmp);
   cmp.set_name("end");
   strct.components().push_back(cmp);
+  strct.set("tag", "addr_space_tuple");
 
   array_typet arr;
   arr.subtype() = strct;
