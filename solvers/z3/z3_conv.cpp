@@ -3428,9 +3428,6 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 
   get_type_width(expr.op2().type(), width_op2);
 
-  std::stringstream s;
-  s << i;
-
   DEBUGLOC;
 
   if (expr.op0().type().id() == "struct") {
@@ -3455,7 +3452,7 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
     }
 
     if (has_field)
-      bv = z3_api.mk_tuple_update(z3_ctx, tuple, atoi(s.str().c_str()), value);
+      bv = z3_api.mk_tuple_update(z3_ctx, tuple, i.to_long(), value);
     else
       bv = tuple;
   } else if (expr.op0().type().id() == "signedbv")     {
