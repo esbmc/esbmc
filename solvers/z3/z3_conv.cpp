@@ -136,16 +136,12 @@ z3_convt::init_addr_space_array(void)
   Z3_ast named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_start_0",
                                    native_int_sort);
   Z3_ast eq = Z3_mk_eq(z3_ctx, num, named_var);
-  Z3_assert_cnstr(z3_ctx, eq);
-  if (z3_prop.smtlib)
-    z3_prop.assumpt.push_back(eq);
+  assert_formula(eq);
 
   named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_end_0",
                             native_int_sort);
   eq = Z3_mk_eq(z3_ctx, num, named_var);
-  Z3_assert_cnstr(z3_ctx, eq);
-  if (z3_prop.smtlib)
-    z3_prop.assumpt.push_back(eq);
+  assert_formula(eq);
 
   // Actually store into array
   Z3_ast obj_idx = convert_number(pointer_logic.get_null_object(),
@@ -163,16 +159,12 @@ z3_convt::init_addr_space_array(void)
   num = convert_number(1, config.ansi_c.int_width, true);
   named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_start_1", native_int_sort);
   eq = Z3_mk_eq(z3_ctx, num, named_var);
-  Z3_assert_cnstr(z3_ctx, eq);
-  if (z3_prop.smtlib)
-    z3_prop.assumpt.push_back(eq);
+  assert_formula(eq);
 
   named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_end_1",
                             native_int_sort);
   eq = Z3_mk_eq(z3_ctx, num, named_var);
-  Z3_assert_cnstr(z3_ctx, eq);
-  if (z3_prop.smtlib)
-    z3_prop.assumpt.push_back(eq);
+  assert_formula(eq);
 
   range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_addr_range_1",
                               addr_space_tuple_sort);
@@ -207,9 +199,7 @@ z3_convt::bump_addrspace_array(unsigned int idx, Z3_ast val)
                                       addr_space_arr_sort);
 
   Z3_ast eq = Z3_mk_eq(z3_ctx, new_addr_sym, store);
-  Z3_assert_cnstr(z3_ctx, eq);
-  if (z3_prop.smtlib)
-    z3_prop.assumpt.push_back(eq);
+  assert_formula(eq);
 
   return;
 }
@@ -593,10 +583,19 @@ z3_convt::link_syms_to_literals(void)
     Z3_ast sym = z3_api.mk_var(z3_ctx, it->first.as_string().c_str(),
                                 Z3_mk_bool_sort(z3_ctx));
     Z3_ast formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(it->second), sym);
-    Z3_assert_cnstr(z3_ctx, formula);
-    if (z3_prop.smtlib)
-      z3_prop.assumpt.push_front(formula);
-  }
+    assert_formula(formula);
+ }
+}
+
+void
+z3_convt::assert_formula(Z3_ast ast)
+{
+
+  Z3_assert_cnstr(z3_ctx, ast);
+  if (z3_prop.smtlib)
+    z3_prop.assumpt.push_front(ast);
+
+  return;
 }
 
 /*******************************************************************
@@ -863,9 +862,7 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
     Z3_ast formula;
     bv = z3_api.mk_int_var(z3_ctx, identifier.c_str());
     formula = Z3_mk_ge(z3_ctx, bv, z3_api.mk_int(z3_ctx, 0));
-    Z3_assert_cnstr(z3_ctx, formula);
-    if (z3_prop.smtlib)
-      z3_prop.assumpt.push_back(formula);
+    assert_formula(formula);
     return;
   }
 
@@ -1457,13 +1454,7 @@ z3_convt::convert_rest(const exprt &expr)
   }
 
   formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(l), constraint);
-  Z3_assert_cnstr(z3_ctx, formula);
-
-  DEBUGLOC;
-
-  if (z3_prop.smtlib)
-    z3_prop.assumpt.push_back(formula);
-
+  assert_formula(formula);
   return l;
 }
 
@@ -1760,9 +1751,7 @@ z3_convt::convert_typecast_struct(const exprt &expr, Z3_ast &bv)
     Z3_ast formula;
     formula = Z3_mk_eq(z3_ctx, z3_api.mk_tuple_select(z3_ctx, operand, i2),
                        z3_api.mk_tuple_select(z3_ctx, bv, i2));
-    Z3_assert_cnstr(z3_ctx, formula);
-    if (z3_prop.smtlib)
-      z3_prop.assumpt.push_back(formula);
+    assert_formula(formula);
   }
 
   bv = operand;
@@ -2072,9 +2061,7 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 
     Z3_ast ptr_val = Z3_mk_app(z3_ctx, decl, 2, args);
     Z3_ast constraint = Z3_mk_eq(z3_ctx, bv, ptr_val);
-    Z3_assert_cnstr(z3_ctx, constraint);
-    if (z3_prop.smtlib)
-      z3_prop.assumpt.push_back(constraint);
+    assert_formula(constraint);
 
     typet ptr_loc_type = unsignedbv_typet(config.ansi_c.int_width);
 
@@ -2100,9 +2087,7 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     // Assert that start + offs == end
     Z3_ast offs_eq;
     convert_bv(equality_expr, offs_eq);
-    Z3_assert_cnstr(z3_ctx, offs_eq);
-    if (z3_prop.smtlib)
-      z3_prop.assumpt.push_back(offs_eq);
+    assert_formula(offs_eq);
 
     // Even better, if we're operating in bitvector mode, it's possible that
     // Z3 will try to be clever and arrange the pointer range to cross the end
@@ -2111,9 +2096,7 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     wraparound_expr.copy_to_operands(end_sym, start_sym);
     Z3_ast wraparound_eq;
     convert_bv(wraparound_expr, wraparound_eq);
-    Z3_assert_cnstr(z3_ctx, wraparound_eq);
-    if (z3_prop.smtlib)
-      z3_prop.assumpt.push_back(wraparound_eq);
+    assert_formula(wraparound_eq);
 
     // Place constraints upon these variables; the start and end need to cover
     // a range that isn't covered by any other range. So:
@@ -2142,10 +2125,7 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 
       Z3_ast constraint;
       convert_bv(range_constraint, constraint);
-      Z3_assert_cnstr(z3_ctx, constraint);
-      if (z3_prop.smtlib)
-        z3_prop.assumpt.push_back(constraint);
-
+      assert_formula(constraint);
     }
 
     obj_ids_in_addr_space_array.insert(obj_num);
@@ -3972,10 +3952,7 @@ z3_convt::set_to(const exprt &expr, bool value)
           else
             result = Z3_mk_and(z3_ctx, 2, formula);
 
-          Z3_assert_cnstr(z3_ctx, result);
-
-          if (z3_prop.smtlib)
-            z3_prop.assumpt.push_back(result);
+          assert_formula(result);
         } else   {
 #if 1
           if (op0.type().id() == "union" && op1.id() == "with") {
@@ -3991,10 +3968,7 @@ z3_convt::set_to(const exprt &expr, bool value)
           else
             result = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
 
-          Z3_assert_cnstr(z3_ctx, result);
-
-          if (z3_prop.smtlib)
-            z3_prop.assumpt.push_back(result);
+          assert_formula(result);
 
           if (uw && expr.op0().get_string("identifier").find("guard_exec") !=
               std::string::npos

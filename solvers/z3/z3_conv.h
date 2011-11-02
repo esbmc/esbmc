@@ -153,6 +153,8 @@ private:
   void convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv);
   void convert_bv(const exprt &expr, Z3_ast &bv);
 
+  void assert_formula(Z3_ast ast);
+
   void get_type_width(const typet &t, unsigned &width);
 
   std::string double2string(double d) const;
