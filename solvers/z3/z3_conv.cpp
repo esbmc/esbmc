@@ -1803,6 +1803,13 @@ z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
   Z3_ast addr_sym = z3_api.mk_var(z3_ctx, arr_sym_name.c_str(),
                                   addr_space_arr_sort);
 
+  Z3_sort native_int_sort;
+  if (int_encoding) {
+    native_int_sort = Z3_mk_int_type(z3_ctx);
+  } else {
+    native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+  }
+
   std::set<unsigned>::const_iterator it;
   unsigned int i;
   for (it = obj_ids_in_addr_space_array.begin(), i = 0;
@@ -1812,10 +1819,13 @@ z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
 
     Z3_ast idx = convert_number(*it, config.ansi_c.int_width, true);
     obj_ids[i] = idx;
-    Z3_ast elem = Z3_mk_select(z3_ctx, addr_sym, idx);
-    Z3_ast start = z3_api.mk_tuple_select(z3_ctx, elem, 0);
+    Z3_ast start = z3_api.mk_var(z3_ctx,
+                                 ("__ESBMC_ptr_obj_start_" + itos(*it)).c_str(),
+                                 native_int_sort);
+    Z3_ast end = z3_api.mk_var(z3_ctx,
+                                 ("__ESBMC_ptr_obj_end_" + itos(*it)).c_str(),
+                                 native_int_sort);
     obj_starts[i] = start;
-    Z3_ast end = z3_api.mk_tuple_select(z3_ctx, elem, 1);
 
     if (int_encoding) {
       args[0] = Z3_mk_ge(z3_ctx, target, start);
