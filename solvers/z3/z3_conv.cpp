@@ -1188,9 +1188,6 @@ z3_convt::convert_overflow_sum_sub_mul(const exprt &expr)
   if (expr.op0().type().id() == "array")
     write_cache(expr.op0());
 
-  if (expr.op0().id() == "symbol" && expr.op1().id() == "address_of")
-    return Z3_mk_false(z3_ctx);
-
   convert_bv(expr.op0(), operand[0]);
 
   if (expr.op0().type().id() == "pointer")
