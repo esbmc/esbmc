@@ -103,6 +103,10 @@ void ansi_c_convert_typet::read_rec(const typet &type)
   {
     // ignore
   }
+  else if (type == get_nil_irep())
+  {
+    // ignore
+  }
   else 
     other.push_back(type);
 }
