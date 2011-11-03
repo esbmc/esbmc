@@ -3683,97 +3683,99 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
-  if (expr.id() == "symbol")
+  irep_idt exprid = expr.id();
+
+  if (exprid == "symbol")
     convert_identifier(expr.get_string("identifier"), expr.type(), bv);
-  else if (expr.id() == "nondet_symbol")
+  else if (exprid == "nondet_symbol")
     convert_identifier("nondet$" + expr.get_string("identifier"),
                        expr.type(), bv);
-  else if (expr.id() == "typecast")
+  else if (exprid == "typecast")
     convert_typecast(expr, bv);
-  else if (expr.id() == "struct" || expr.id() == "union")
+  else if (exprid == "struct" || exprid == "union")
     convert_struct_union(expr, bv);
-  else if (expr.id() == "constant")
+  else if (exprid == "constant")
     convert_constant(expr, bv);
-  else if (expr.id() == "bitand" || expr.id() == "bitor" || expr.id() ==
+  else if (exprid == "bitand" || exprid == "bitor" || exprid ==
            "bitxor"
-           || expr.id() == "bitnand" || expr.id() == "bitnor" || expr.id() ==
+           || exprid == "bitnand" || exprid == "bitnor" || exprid ==
            "bitnxor")
     convert_bitwise(expr, bv);
-  else if (expr.id() == "bitnot")
+  else if (exprid == "bitnot")
     convert_bitnot(expr, bv);
-  else if (expr.id() == "unary-")
+  else if (exprid == "unary-")
     convert_unary_minus(expr, bv);
-  else if (expr.id() == "if")
+  else if (exprid == "if")
     convert_if(expr, bv);
-  else if (expr.id() == "and" || expr.id() == "or" || expr.id() == "xor")
+  else if (exprid == "and" || exprid == "or" || exprid == "xor")
     convert_logical_ops(expr, bv);
-  else if (expr.id() == "not")
+  else if (exprid == "not")
     convert_logical_not(expr, bv);
-  else if (expr.id() == "=" || expr.id() == "notequal")
+  else if (exprid == "=" || exprid == "notequal")
     convert_equality(expr, bv);
-  else if (expr.id() == "<=" || expr.id() == "<" || expr.id() == ">="
-           || expr.id() == ">")
+  else if (exprid == "<=" || exprid == "<" || exprid == ">="
+           || exprid == ">")
     bv = convert_cmp(expr);
-  else if (expr.id() == "+" || expr.id() == "-")
+  else if (exprid == "+" || exprid == "-")
     convert_add_sub(expr, bv);
-  else if (expr.id() == "/")
+  else if (exprid == "/")
     convert_div(expr, bv);
-  else if (expr.id() == "mod")
+  else if (exprid == "mod")
     convert_mod(expr, bv);
-  else if (expr.id() == "*")
+  else if (exprid == "*")
     convert_mul(expr, bv);
-  else if (expr.id() == "address_of" || expr.id() == "implicit_address_of"
-           || expr.id() == "reference_to")
+  else if (exprid == "address_of" || exprid == "implicit_address_of"
+           || exprid == "reference_to")
     return convert_address_of(expr, bv);
-  else if (expr.id() == "array_of")
+  else if (exprid == "array_of")
     convert_array_of(expr, bv);
-  else if (expr.id() == "index")
+  else if (exprid == "index")
     convert_index(expr, bv);
-  else if (expr.id() == "ashr" || expr.id() == "lshr" || expr.id() == "shl")
+  else if (exprid == "ashr" || exprid == "lshr" || exprid == "shl")
     convert_shift(expr, bv);
-  else if (expr.id() == "abs")
+  else if (exprid == "abs")
     convert_abs(expr, bv);
-  else if (expr.id() == "with")
+  else if (exprid == "with")
     convert_with(expr, bv);
-  else if (expr.id() == "member")
+  else if (exprid == "member")
     convert_member(expr, bv);
-  else if (expr.id() == "zero_string")
+  else if (exprid == "zero_string")
     convert_zero_string(expr, bv);
-  else if (expr.id() == "pointer_offset")
+  else if (exprid == "pointer_offset")
     select_pointer_offset(expr, bv);
-  else if (expr.id() == "pointer_object")
+  else if (exprid == "pointer_object")
     convert_pointer_object(expr, bv);
-  else if (expr.id() == "same-object")
+  else if (exprid == "same-object")
     bv = convert_same_object(expr);
-  else if (expr.id() == "string-constant") {
+  else if (exprid == "string-constant") {
     exprt tmp;
     string2array(expr, tmp);
     convert_bv(tmp, bv);
-  } else if (expr.id() == "zero_string_length")
+  } else if (exprid == "zero_string_length")
     convert_zero_string_length(expr.op0(), bv);
-  else if (expr.id() == "replication")
+  else if (exprid == "replication")
     assert(expr.operands().size() == 2);
-  else if (expr.id() == "is_dynamic_object")
+  else if (exprid == "is_dynamic_object")
     bv = convert_is_dynamic_object(expr);
-  else if (expr.id() == "byte_update_little_endian" ||
-           expr.id() == "byte_update_big_endian")
+  else if (exprid == "byte_update_little_endian" ||
+           exprid == "byte_update_big_endian")
     convert_byte_update(expr, bv);
-  else if (expr.id() == "byte_extract_little_endian" ||
-           expr.id() == "byte_extract_big_endian")
+  else if (exprid == "byte_extract_little_endian" ||
+           exprid == "byte_extract_big_endian")
     convert_byte_extract(expr, bv);
 #if 1
-  else if (expr.id() == "isnan")
+  else if (exprid == "isnan")
     convert_isnan(expr, bv);
 #endif
-  else if (expr.id() == "width")
+  else if (exprid == "width")
     bv = convert_width(expr);
-  else if (expr.id() == "overflow-+" || expr.id() == "overflow--" || expr.id() == "overflow-*")
+  else if (exprid == "overflow-+" || exprid == "overflow--" || exprid == "overflow-*")
     bv = convert_overflow_sum_sub_mul(expr);
   else if (has_prefix(expr.id_string(), "overflow-typecast-"))
     bv = convert_overflow_typecast(expr);
-  else if (expr.id() == "overflow-unary-")
+  else if (exprid == "overflow-unary-")
     bv = convert_overflow_unary(expr);
-  else if (expr.id() == "memory-leak")
+  else if (exprid == "memory-leak")
     bv = convert_memory_leak(expr);
   else 
     throw new conv_error("Unrecognized expression type", expr);
