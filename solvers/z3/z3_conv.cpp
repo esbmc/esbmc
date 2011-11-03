@@ -1106,19 +1106,11 @@ z3_convt::convert_same_object(const exprt &expr)
   const exprt &op0 = expr.op0();
   const exprt &op1 = expr.op1();
 
-  if ((is_in_cache(op0) && !is_in_cache(op1))
-      || (!is_in_cache(op0) && !is_in_cache(op1))) {
-    //object is not in the cache and generates spurious counter-example
-    return Z3_mk_false(z3_ctx);
-  } else {
-    convert_bv(op0, pointer[0]);
-    convert_bv(op1, pointer[1]);
-    objs[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 0);
-    objs[1] = z3_api.mk_tuple_select(z3_ctx, pointer[1], 0);
-    bv = Z3_mk_eq(z3_ctx, objs[0], objs[1]);
-  }
-
-  DEBUGLOC;
+  convert_bv(op0, pointer[0]);
+  convert_bv(op1, pointer[1]);
+  objs[0] = z3_api.mk_tuple_select(z3_ctx, pointer[0], 0);
+  objs[1] = z3_api.mk_tuple_select(z3_ctx, pointer[1], 0);
+  bv = Z3_mk_eq(z3_ctx, objs[0], objs[1]);
 
   return bv;
 }
