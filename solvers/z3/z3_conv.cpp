@@ -1834,11 +1834,27 @@ z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
   Z3_sort pointer_sort;
   create_pointer_type(pointer_sort);
 
+  // So, what's the default value going to be if it doesn't match any existing
+  // pointers? Answer, it's going to be the invalid object identifier, but with
+  // an offset that calculates to the integer address of this object.
+  // That's so that we can store an invalid pointer in a pointer type, that
+  // eventually can be converted back via some mechanism to a valid pointer.
   Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, pointer_sort);
   Z3_ast args[2];
   args[0] = convert_number(pointer_logic.get_invalid_object(),
                            config.ansi_c.int_width, true);
-  args[1] = convert_number(0, config.ansi_c.int_width, true);
+
+  // Calculate ptr offset - target minus start of invalid range, ie 1
+  Z3_ast subargs[2];
+  subargs[0] = target;
+  subargs[1] = convert_number(1, config.ansi_c.int_width, false);
+
+  if (int_encoding) {
+    args[1] = Z3_mk_sub(z3_ctx, 2, subargs);
+  } else {
+    args[1] = Z3_mk_bvsub(z3_ctx, subargs[0], subargs[1]);
+  }
+
   Z3_ast prev_in_chain = Z3_mk_app(z3_ctx, decl, 2, args);
 
   // Now that big ite chain,
