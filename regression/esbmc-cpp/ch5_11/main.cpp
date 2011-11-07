@@ -16,8 +16,8 @@ int main()
  
    cout << *ptr << endl;
 
-   //*ptr = 7;  // error: *ptr is const; cannot assign new value
-  // ptr = &y;  // error: ptr is const; cannot assign new address
+   *ptr = 7;  // error: *ptr is const; cannot assign new value
+   ptr = &y;  // error: ptr is const; cannot assign new address
 
    return 0;  // indicates successful termination
 

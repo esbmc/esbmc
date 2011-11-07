@@ -5,7 +5,7 @@ int main()
 {
    const int x;  // Error: x must be initialized
 
-   //x = 7;        // Error: cannot modify a const variable
+   x = 7;        // Error: cannot modify a const variable
 
    return 0;     // indicates successful termination
 

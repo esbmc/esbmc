@@ -12,7 +12,7 @@ int main()
    int * const ptr = &x; 
 
    *ptr = 7;  // allowed: *ptr is not const
-   //ptr = &y;  // error: ptr is const; cannot assign new address
+   ptr = &y;  // error: ptr is const; cannot assign new address
 
    return 0;  // indicates successful termination
 

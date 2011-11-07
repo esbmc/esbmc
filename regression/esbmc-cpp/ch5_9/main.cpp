@@ -18,7 +18,7 @@ int main()
 // to which it points
 void f( const int *xPtr )
 {
-  // *xPtr = 100;  // error: cannot modify a const object
+  *xPtr = 100;  // error: cannot modify a const object
 
 } // end function f
 
