@@ -131,7 +131,7 @@ namespace std
 
 	setbase::setbase(int b)
 	{
-		// model
+		__ESBMC_assert(b == 8 || b == 10 || b ==16, "The base must be equal to 8, 10 or 16");
 	}
 
 	setfill::setfill(char c)

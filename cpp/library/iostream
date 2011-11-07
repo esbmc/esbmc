@@ -13,7 +13,7 @@ namespace std
 		void fill(char c);
 		void precision(int p);
 		void put(char c);
-		void write(char str[], int n);
+		void write(char str[], size_t n);
 
 	private:
 		ostream(const ostream&); // disabled
@@ -46,13 +46,6 @@ namespace std
 		iostream& operator=(const iostream&); // disabled
 	};
 
-	struct averageStruct
-	{
-		averageStruct();
-	private:
-		averageStruct(const averageStruct&); // disabled
-	};
-
 	struct iosStruct
 	{
 		iosStruct();
@@ -63,7 +56,6 @@ namespace std
 	extern istream cin;
 	extern ostream cout;
 	extern ostream cerr;
-	extern averageStruct average;
 	extern iosStruct ios;
 
 	char endl = '\n';
@@ -176,11 +168,6 @@ namespace std
 	}
 
 	inline ostream& operator << (ostream& o, setprecision)
-	{
-		return o;
-	}
-
-	inline ostream& operator << (ostream& o, averageStruct)
 	{
 		return o;
 	}
@@ -329,7 +316,7 @@ namespace std
 		// model
 	}
 
-	void ostream::write(char str[], int n)
+	void ostream::write(char str[], size_t n)
 	{
 		// model
 	}
