@@ -154,7 +154,12 @@ private:
   void convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv);
   void convert_bv(const exprt &expr, Z3_ast &bv);
 
-  void assert_formula(Z3_ast ast);
+  // Assert a formula; needs_literal indicates a new literal should be allocated
+  // for this assertion (Z3_check_assumptions refuses to deal with assumptions
+  // that are not "propositional variables or their negation". So we associate
+  // the ast with a literal.
+  void assert_formula(Z3_ast ast, bool needs_literal = true);
+  void assert_literal(literalt l, Z3_ast ast);
 
   void get_type_width(const typet &t, unsigned &width);
 

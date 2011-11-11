@@ -707,13 +707,18 @@ z3_convt::link_syms_to_literals(void)
 }
 
 void
-z3_convt::assert_formula(Z3_ast ast)
+z3_convt::assert_formula(Z3_ast ast, bool needs_literal)
 {
 
-  Z3_assert_cnstr(z3_ctx, ast);
-  if (z3_prop.smtlib)
-    z3_prop.assumpt.push_front(ast);
+  z3_prop.assert_formula(ast, needs_literal);
+  return;
+}
 
+void
+z3_convt::assert_literal(literalt l, Z3_ast formula)
+{
+
+  z3_prop.assert_literal(l, formula);
   return;
 }
 
@@ -1562,7 +1567,7 @@ z3_convt::convert_rest(const exprt &expr)
   }
 
   formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(l), constraint);
-  assert_formula(formula);
+  assert_literal(l, formula);
   return l;
 }
 

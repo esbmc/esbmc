@@ -98,6 +98,9 @@ protected:
     return true;
   }
 #endif
+
+  void assert_formula(Z3_ast ast, bool needs_literal = true);
+  void assert_literal(literalt l, Z3_ast formula);
 };
 
 #endif
