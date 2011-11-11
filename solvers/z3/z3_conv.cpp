@@ -585,6 +585,32 @@ z3_convt::finalize_pointer_chain(void)
     assert_formula(ge_form);
     assert_formula(le_form);
 
+    // Finally, an optimisation - Z3 spends a lot of time considering all possible
+    // ranges of addresses this lump of AST might represent, and we know for a
+    // fact that none of the addresses will extend past the first item (invalid,
+    // at addr 1) plus the total amount of memory considered. So, assert this
+    // fact, allowing to Z3 to not consider excess addresses. One the short
+    // example I'm working on at the moment this results in a 1/3 speedup.
+
+    // Total memory may be some number, but the first element will be at address
+    // two.
+    Z3_ast total_mem = convert_number(total_mem_space + 2,
+                                      config.ansi_c.int_width, true);
+
+    std::string end_name = "__ESBMC_ptr_obj_end_" + itos(*it);
+    Z3_ast end_var = z3_api.mk_var(z3_ctx, end_name.c_str(), native_int_sort);
+
+    Z3_ast start_form, end_form;
+    if (int_encoding) {
+      start_form = Z3_mk_lt(z3_ctx, start_var, total_mem);
+      end_form = Z3_mk_lt(z3_ctx, end_var, total_mem);
+    } else {
+      start_form = Z3_mk_bvult(z3_ctx, start_var, total_mem);
+      end_form = Z3_mk_bvult(z3_ctx, end_var, total_mem);
+    }
+    assert_formula(start_form);
+    assert_formula(end_form);
+
     ptr_idxs[i] = chain_name;
   }
 
@@ -2199,6 +2225,9 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     start_plus_offs_expr.copy_to_operands(start_sym, const_offs_expr);
     exprt equality_expr("=", ptr_loc_type);
     equality_expr.copy_to_operands(end_sym, start_plus_offs_expr);
+
+    // Also record the amount of memory space we're working with for later usage
+    total_mem_space += pointer_offset_size(expr.type()).to_long() + 1;
 
     // Assert that start + offs == end
     Z3_ast offs_eq;

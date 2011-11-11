@@ -57,6 +57,7 @@ public:
     this->z3_prop.smtlib = smt;
    s_is_uw = uw;
    s_relevancy = relevancy;
+   total_mem_space = 0;
 
     Z3_push(z3_ctx);
     z3_prop.z3_ctx = z3_ctx;
@@ -237,6 +238,7 @@ private:
   Z3_sort addr_space_tuple_sort;
   Z3_sort addr_space_arr_sort;
   std::set<unsigned> obj_ids_in_addr_space_array;
+  unsigned long total_mem_space;
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;
