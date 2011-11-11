@@ -2009,6 +2009,14 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
 
   // Generate a tuple of the correct form for this type
   convert_identifier(identifier, expr.type(), bv);
+  Z3_sort sort;
+  create_type(expr.type(), sort);
+
+  unsigned size = components.size();
+  if (expr.id() == "union")
+    size++;
+
+  Z3_ast args[size];
 
   // Populate tuple with members of that struct/union
   for (struct_typet::componentst::const_iterator
@@ -2016,14 +2024,17 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
        it != components.end();
        it++, i++)
   {
-    convert_bv(expr.operands()[i], value);
-    bv = z3_api.mk_tuple_update(z3_ctx, bv, i, value);
+    convert_bv(expr.operands()[i], args[i]);
   }
 
   // Update unions "last-set" member to be the last field
   if (expr.id() == "union")
-    bv = z3_api.mk_tuple_update(z3_ctx, bv, components.size(),
-                                convert_number(i, config.ansi_c.int_width, 0));
+    args[size-1] = convert_number(i, config.ansi_c.int_width, false);
+
+  // Create tuple itself and bind to sym name
+  Z3_ast init_val = z3_api.mk_tuple(z3_ctx, sort, args, size);
+  Z3_ast eq = Z3_mk_eq(z3_ctx, bv, init_val);
+  assert_formula(eq);
 
   DEBUGLOC;
 }
