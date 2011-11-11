@@ -217,6 +217,7 @@ private:
   void generate_assumptions(const exprt &expr, const Z3_ast &result);
 public: // Hackity hack, for z3_dec
   void link_syms_to_literals(void);
+  void finalize_pointer_chain(void);
 private:
   void init_addr_space_array(void);
   void store_sat_assignments(Z3_model m);

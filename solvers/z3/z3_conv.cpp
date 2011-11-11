@@ -506,6 +506,94 @@ z3_convt::store_sat_assignments(Z3_model m)
 
  \*******************************************************************/
 
+void
+z3_convt::finalize_pointer_chain(void)
+{
+
+  // We need to separate objects so that they don't overlap. This is achieved by
+  // chaining them together with the start of one object lie at the end of
+  // another object + 1. Which object, is nondeterministic. So, Z3 gets to
+  // string together objects in whatever order it wishes, _but_, with no spaces
+  // in between. XXXjmorse, write up why I think this is valid inre arbitary
+  // additions to object ptrs.
+
+  unsigned int i, num_ptrs = obj_ids_in_addr_space_array.size();
+  if (num_ptrs == 0)
+    return;
+
+  Z3_ast ptr_idxs[num_ptrs];
+
+  Z3_sort native_int_sort;
+  if (int_encoding)
+    native_int_sort = Z3_mk_int_sort(z3_ctx);
+  else
+    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+
+  i = 0;
+  for (std::set<unsigned>::const_iterator it =obj_ids_in_addr_space_array.begin();
+       it != obj_ids_in_addr_space_array.end(); it++, i++) {
+
+    std::string chain_idx_name = "__ESBMC_ptr_obj_chain_idx_" + itos(*it);
+    std::string start_name = "__ESBMC_ptr_obj_start_" + itos(*it);
+
+    Z3_ast chain_name, chain_select, addrspace_array, prev_chain_end;
+    chain_name = z3_api.mk_var(z3_ctx, chain_idx_name.c_str(), native_int_sort);
+    std::string addrspace_name = get_cur_addrspace_ident();
+    addrspace_array = z3_api.mk_var(z3_ctx, addrspace_name.c_str(),
+                                    addr_space_arr_sort);
+    chain_select = Z3_mk_select(z3_ctx, addrspace_array, chain_name);
+    prev_chain_end = z3_api.mk_tuple_select(z3_ctx, chain_select, 1);
+
+    // chain_select is now the end of the previous object, whatever it may be.
+    // Add one and assert equality.
+    Z3_ast one = convert_number(1, config.ansi_c.int_width, true);
+    Z3_ast end_plus_one;
+    if (int_encoding) {
+      Z3_ast tmp[2];
+      tmp[0] = prev_chain_end;
+      tmp[1] = one;
+      end_plus_one = Z3_mk_add(z3_ctx, 2, tmp);
+    } else {
+      end_plus_one = Z3_mk_bvadd(z3_ctx, prev_chain_end, one);
+    }
+
+    Z3_ast start_var = z3_api.mk_var(z3_ctx, start_name.c_str(), native_int_sort);
+    Z3_ast eq = Z3_mk_eq(z3_ctx, start_var, end_plus_one);
+    assert_formula(eq);
+
+    // Now assert it isn't itself
+    Z3_ast obj_idx = convert_number(*it, config.ansi_c.int_width, true);
+    eq = Z3_mk_eq(z3_ctx, obj_idx, chain_name);
+    Z3_ast neq = Z3_mk_not(z3_ctx, eq);
+    assert_formula(neq);
+
+    // Place chain idx's in the range 1 <= x <= max. That allows one to hook to
+    // the invalid object start address. Z3 must to arrange an allocation that
+    // starts with idx 1 (otherwise we end up with a circular chain, and that
+    // can't satisfy the property of start = prev_end + 1 (unless it wraps around,
+    // XXXjmorse)).
+    Z3_ast max_obj_num = convert_number(num_ptrs + 1, config.ansi_c.int_width,
+                                        true);
+    Z3_ast ge_form, le_form;
+    if (int_encoding) {
+      ge_form = Z3_mk_ge(z3_ctx, chain_name, one);
+      le_form = Z3_mk_le(z3_ctx, chain_name, max_obj_num);
+    } else {
+      ge_form = Z3_mk_bvuge(z3_ctx, chain_name, one);
+      le_form = Z3_mk_bvule(z3_ctx, chain_name, max_obj_num);
+    }
+    assert_formula(ge_form);
+    assert_formula(le_form);
+
+    ptr_idxs[i] = chain_name;
+  }
+
+  // Ensure all idx's are distinct.
+  Z3_ast neq = Z3_mk_distinct(z3_ctx, num_ptrs, ptr_idxs);
+  assert_formula(neq);
+  return;
+}
+
 Z3_lbool
 z3_convt::check2_z3_properties(void)
 {
@@ -2126,33 +2214,7 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     convert_bv(wraparound_expr, wraparound_eq);
     assert_formula(wraparound_eq);
 
-    // Place constraints upon these variables; the start and end need to cover
-    // a range that isn't covered by any other range. So:
-    // (start > other_end) || (end < other_start)
-
-    // These constraints have to be placed against /all/ other objects. Which
-    // makes the complexity O(x^2). Which sucks, but is necessary here.
-    std::set<unsigned>::const_iterator it;
-    for (it = obj_ids_in_addr_space_array.begin();
-         it != obj_ids_in_addr_space_array.end(); it++) {
-
-      std::string obj_start_str = "__ESBMC_ptr_obj_start_" + itos(*it);
-      std::string obj_end_str = "__ESBMC_ptr_obj_end_" + itos(*it);
-
-      exprt obj_start_sym = symbol_exprt(obj_start_str, ptr_loc_type);
-      exprt obj_end_sym = symbol_exprt(obj_end_str, ptr_loc_type);
-
-      exprt clause1(">", ptr_loc_type);
-      clause1.copy_to_operands(start_sym, obj_end_sym);
-      exprt clause2("<", ptr_loc_type);
-      clause2.copy_to_operands(end_sym, obj_start_sym);
-      exprt range_constraint("or", typet("bool"));
-      range_constraint.copy_to_operands(clause1, clause2);
-
-      Z3_ast constraint;
-      convert_bv(range_constraint, constraint);
-      assert_formula(constraint);
-    }
+    // We'll place constraints on those addresses later, in finalize_pointer_chain
 
     obj_ids_in_addr_space_array.insert(obj_num);
 

@@ -202,6 +202,8 @@ decision_proceduret::resultt z3_dect::read_z3_result()
 {
   Z3_lbool result;
 
+  finalize_pointer_chain();
+
   if (smtlib)
     return D_SMTLIB;
 
