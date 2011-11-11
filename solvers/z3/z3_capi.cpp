@@ -207,7 +207,7 @@ Z3_ast z3_capi::mk_binary_app(Z3_context ctx, Z3_func_decl f, Z3_ast x, Z3_ast y
     return Z3_mk_app(ctx, f, 2, args);
 }
 
-Z3_ast z3_capi::mk_tuple(Z3_context, Z3_sort sort, ...)
+Z3_ast z3_capi::mk_tuple(Z3_context ctx, Z3_sort sort, ...)
 {
   va_list args;
   unsigned int num, i;
@@ -232,9 +232,16 @@ Z3_ast z3_capi::mk_tuple(Z3_context, Z3_sort sort, ...)
   }
   va_end(args);
 
+  return mk_tuple(ctx, sort, arg_list, num);
+}
+
+Z3_ast z3_capi::mk_tuple(Z3_context ctx, Z3_sort sort, Z3_ast *args,
+                         unsigned int num)
+{
+
   // Create appl
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, sort);
-  Z3_ast val = Z3_mk_app(z3_ctx, decl, num, arg_list);
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(ctx, sort);
+  Z3_ast val = Z3_mk_app(ctx, decl, num, args);
   return val;
 }
 
