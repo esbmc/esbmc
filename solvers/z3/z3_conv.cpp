@@ -124,18 +124,29 @@ z3_convt::init_addr_space_array(void)
                                            proj_names, proj_types,
                                            &mk_tuple_decl, proj_decls);
 
-  // Generate free initial array
+  // Generate initial array with all zeros for all fields.
   addr_space_arr_sort = Z3_mk_array_type(z3_ctx, native_int_sort,
                                          addr_space_tuple_sort);
-  z3_api.mk_var(z3_ctx, "__ESBMC_addrspace_arr_0", addr_space_arr_sort);
+
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, addr_space_tuple_sort);
+  Z3_ast args[2];
+  Z3_ast num = convert_number(0, config.ansi_c.int_width, true);
+  args[0] = num;
+  args[1] = num;
+  Z3_ast initial_val = Z3_mk_app(z3_ctx, decl, 2, args);
+
+  Z3_ast initial_const = Z3_mk_const_array(z3_ctx, native_int_sort, initial_val);
+  Z3_ast first_name = z3_api.mk_var(z3_ctx, "__ESBMC_addrspace_arr_0",
+                                    addr_space_arr_sort);
+  Z3_ast eq = Z3_mk_eq(z3_ctx, first_name, initial_const);
+  assert_formula(eq);
 
   // Initialize this with the NULL object being at address zero. Associate with
   // names.
 
-  Z3_ast num = convert_number(0, config.ansi_c.int_width, true);
   Z3_ast named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_start_0",
                                    native_int_sort);
-  Z3_ast eq = Z3_mk_eq(z3_ctx, num, named_var);
+  eq = Z3_mk_eq(z3_ctx, num, named_var);
   assert_formula(eq);
 
   named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_end_0",
