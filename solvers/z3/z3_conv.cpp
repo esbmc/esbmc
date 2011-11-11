@@ -128,12 +128,9 @@ z3_convt::init_addr_space_array(void)
   addr_space_arr_sort = Z3_mk_array_type(z3_ctx, native_int_sort,
                                          addr_space_tuple_sort);
 
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, addr_space_tuple_sort);
-  Z3_ast args[2];
   Z3_ast num = convert_number(0, config.ansi_c.int_width, true);
-  args[0] = num;
-  args[1] = num;
-  Z3_ast initial_val = Z3_mk_app(z3_ctx, decl, 2, args);
+  Z3_ast initial_val = z3_api.mk_tuple(z3_ctx, addr_space_tuple_sort, num, num,
+                                       NULL);
 
   Z3_ast initial_const = Z3_mk_const_array(z3_ctx, native_int_sort, initial_val);
   Z3_ast first_name = z3_api.mk_var(z3_ctx, "__ESBMC_addrspace_arr_0",
@@ -160,8 +157,9 @@ z3_convt::init_addr_space_array(void)
 
   Z3_ast range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_addr_range_0",
                                      addr_space_tuple_sort);
-  range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, num);
-  range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, num);
+  initial_val = z3_api.mk_tuple(z3_ctx, addr_space_tuple_sort, num, num, NULL);
+  eq = Z3_mk_eq(z3_ctx, initial_val, range_tuple);
+  assert_formula(eq);
 
   bump_addrspace_array(pointer_logic.get_null_object(), range_tuple);
 
@@ -179,8 +177,9 @@ z3_convt::init_addr_space_array(void)
 
   range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_addr_range_1",
                               addr_space_tuple_sort);
-  range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, num);
-  range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, num);
+  initial_val = z3_api.mk_tuple(z3_ctx, addr_space_tuple_sort, num, num, NULL);
+  eq = Z3_mk_eq(z3_ctx, initial_val, range_tuple);
+  assert_formula(eq);
 
   bump_addrspace_array(pointer_logic.get_invalid_object(), range_tuple);
 
