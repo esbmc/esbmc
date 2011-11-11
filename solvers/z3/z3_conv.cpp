@@ -2156,6 +2156,8 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
   // Create tuple itself and bind to sym name
   Z3_ast init_val = z3_api.mk_tuple(z3_ctx, sort, args, size);
   Z3_ast eq = Z3_mk_eq(z3_ctx, bv, init_val);
+  // XXXjmorse - is this necessary?
+  // We're generating a struct, not _actually_ binding it to a name.
   assert_formula(eq);
 
   DEBUGLOC;
