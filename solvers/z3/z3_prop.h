@@ -79,6 +79,7 @@ private:
 	typedef std::map<std::string, Z3_ast> map_prop_varst;
 	map_prop_varst map_prop_vars;
 	std::list<Z3_ast> assumpt;
+    bool store_assumptions;
     bool smtlib;
 
 protected:

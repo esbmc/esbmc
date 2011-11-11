@@ -985,13 +985,13 @@ z3_propt::assert_formula(Z3_ast ast, bool needs_literal)
 
   if (!needs_literal) {
     Z3_assert_cnstr(z3_ctx, ast);
-    if (smtlib)
+    if (store_assumptions)
       assumpt.push_front(ast);
   } else {
     literalt l = new_variable();
     Z3_ast formula = Z3_mk_iff(z3_ctx, z3_literal(l), ast);
     Z3_assert_cnstr(z3_ctx, formula);
-    if (smtlib)
+    if (store_assumptions)
       assumpt.push_front(z3_literal(l));
   }
 
@@ -1003,7 +1003,7 @@ z3_propt::assert_literal(literalt l, Z3_ast formula)
 {
 
   Z3_assert_cnstr(z3_ctx, formula);
-  if (smtlib)
+  if (store_assumptions)
     assumpt.push_front(z3_literal(l));
   return;
 }

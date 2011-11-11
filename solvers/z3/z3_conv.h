@@ -55,6 +55,7 @@ public:
 
     this->int_encoding = int_encoding;
     this->z3_prop.smtlib = smt;
+    this->z3_prop.store_assumptions = smt;
    s_is_uw = uw;
    s_relevancy = relevancy;
    total_mem_space = 0;
