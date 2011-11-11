@@ -7,6 +7,7 @@ Author:
 \*******************************************************************/
 
 #include <string>
+#include <cstdarg>
 
 #include "z3_conv.h"
 #include "z3_capi.h"
@@ -204,6 +205,37 @@ Z3_ast z3_capi::mk_binary_app(Z3_context ctx, Z3_func_decl f, Z3_ast x, Z3_ast y
 {
     Z3_ast args[2] = {x, y};
     return Z3_mk_app(ctx, f, 2, args);
+}
+
+Z3_ast z3_capi::mk_tuple(Z3_context, Z3_sort sort, ...)
+{
+  va_list args;
+  unsigned int num, i;
+
+  // Count number of arguments
+  va_start(args, sort);
+  for (num = 0; ; num++) {
+    Z3_ast a = va_arg(args, Z3_ast);
+    if (a == NULL)
+      break;
+  }
+  va_end(args);
+
+  // Generate array of args
+  Z3_ast arg_list[num];
+  va_start(args, sort);
+  for (i = 0; ; i++) {
+    Z3_ast a = va_arg(args, Z3_ast);
+    if (a == NULL)
+      break;
+    arg_list[i] = a;
+  }
+  va_end(args);
+
+  // Create appl
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, sort);
+  Z3_ast val = Z3_mk_app(z3_ctx, decl, num, arg_list);
+  return val;
 }
 
 /**
