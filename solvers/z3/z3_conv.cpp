@@ -643,12 +643,15 @@ z3_convt::check2_z3_properties(void)
 
   try
   {
-    if (uw)
+    if (uw) {
+      unsat_core_size = z3_prop.assumpt.size();
+      memset(core, 0, sizeof(Z3_ast) * unsat_core_size);
       result = Z3_check_assumptions(z3_ctx, z3_prop.assumpt.size(),
                              assumptions_core, &m, &proof, &unsat_core_size,
                              core);
-    else
+    } else {
       result = Z3_check_and_get_model(z3_ctx, &m);
+    }
   }
   catch (std::string &error_str)
   {
