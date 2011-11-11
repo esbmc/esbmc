@@ -2153,9 +2153,10 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     Z3_ast range_tuple = z3_api.mk_var(z3_ctx,
                        ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
                        addr_space_tuple_sort);
-
-    range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 0, start_ast);
-    range_tuple = z3_api.mk_tuple_update(z3_ctx, range_tuple, 1, end_ast);
+    Z3_ast init_val = z3_api.mk_tuple(z3_ctx, addr_space_tuple_sort, start_ast,
+                                      end_ast, NULL);
+    Z3_ast eq = Z3_mk_eq(z3_ctx, range_tuple, init_val);
+    assert_formula(eq);
 
     // Update array
     bump_addrspace_array(obj_num, range_tuple);
