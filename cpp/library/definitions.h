@@ -15,6 +15,7 @@
 unsigned int nondet_uint();
 float nondet_float();
 bool nondet_bool();
+char* nondet_charPointer();
 char nondet_char();
 
 typedef unsigned int size_t;

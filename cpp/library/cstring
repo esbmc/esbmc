@@ -1,17 +1,6 @@
 #ifndef STL_CSTRING
 #define STL_CSTRING
 
-#undef NULL
-#if defined(__cplusplus)
-#define NULL 0
-#else
-#define NULL ((void *)0)
-#endif
-
-char* nondet_char();
-unsigned int nondet_uint();
-typedef unsigned int size_t;
-
 char *strcpy(char *dest, const char* src)
 {
 	__ESBMC_HIDE:
@@ -117,7 +106,7 @@ char* strtok(char* str, const char* delim)
 	p = *p ? *p=0,p+1 : 0;
 	return str;
 #endif
-	return nondet_char();
+	return nondet_charPointer();
 }
 
 size_t strlen(const char *s)

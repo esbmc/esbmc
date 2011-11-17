@@ -27,7 +27,7 @@ namespace std
 		istream& ignore(int i = 1, int delim = EOF);
 		bool eof();
 		int get();
-		istream& get(char *str[], int n);
+		istream& get(char str[], int n);
 		istream& getline(char str[], int size, char delim = '\n');
 		void read(char str[], int size);
 		int gcount();
@@ -264,7 +264,7 @@ namespace std
 			return EOF;
 	}
 
-	istream& get(char *str[], int n)
+	istream& get(char str[], int n)
 	{
 		#if 0
 			char *out[nondet_uint() % n];
