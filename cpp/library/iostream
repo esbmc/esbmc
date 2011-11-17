@@ -273,22 +273,18 @@ namespace std
 
 	void istream::getline(char str[], int size)
 	{
-		// model
 	}
 
 	void istream::read(char str[], int size)
 	{
-		// model
 	}
 
 	void istream::ignore()
 	{
-		// model
 	}
 
 	void istream::ignore(int i)
 	{
-		// model
 	}
 
 	int istream::eof()
@@ -313,12 +309,12 @@ namespace std
 
 	void ostream::put(char c)
 	{
-		// model
 	}
 
 	void ostream::write(char str[], size_t n)
 	{
-		// model
 	}
+
 }
+
 #endif

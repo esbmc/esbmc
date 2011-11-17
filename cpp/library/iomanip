@@ -5,103 +5,103 @@
 
 namespace std
 {
-	struct boolalphaStruct
+	struct boolalphaStruct // boolalpha
 	{
 		boolalphaStruct();
 	};
 
-	struct noboolalphaStruct
+	struct noboolalphaStruct // noboolalpha
 	{
 		noboolalphaStruct();
 	};
 
-	struct setprecision
+	struct setprecision // setprecision
 	{
 		setprecision(int p);
 	};
 
-	struct setbase
+	struct setbase // setbase
 	{
 		setbase(int b);
 	};
 
-	struct leftStruct
+	struct leftStruct // left
 	{
 		leftStruct();
 	};
-	extern leftStruct left;
 
-	struct rightStruct
+	struct rightStruct // right
 	{
 		rightStruct();
 	};
 
-	struct hexStruct
+	struct hexStruct // hex
 	{
 		hexStruct();
 	};
 
-	struct decStruct
+	struct decStruct // dec
 	{
 		decStruct();
 	};
 
-	struct octStruct
+	struct octStruct // oct
 	{
 		octStruct();
 	};
 
-	struct setw
+	struct setw // setw
 	{
 		setw(int w);
 	};
 
-	struct setfill
+	struct setfill // setfill
 	{
 		setfill(char f);
 	};
 
-	struct flushStruct
+	struct flushStruct // flush
 	{
 		flushStruct();
 	};
 
-	struct scientificStruct
+	struct scientificStruct // scientific
 	{
 		scientificStruct();
 	};
 
-	struct showpointStruct
+	struct showpointStruct // showpoint
 	{
 		showpointStruct();
 	};
 
-	struct showbaseStruct
+	struct showbaseStruct // showbase
 	{
 		showbaseStruct();
 	};
 
-	struct internalStruct
+	struct internalStruct // internal
 	{
 		internalStruct();
 	};
 
-	struct showposStruct
+	struct showposStruct // showpos
 	{
 		showposStruct();
 	};
 
-	struct uppercaseStruct
+	struct uppercaseStruct // uppercase
 	{
 		uppercaseStruct();
 	};
 
-	struct fixedStruct
+	struct fixedStruct // fixed
 	{
 		fixedStruct();
 	};
 
 	extern fixedStruct fixed;
+	extern leftStruct left;
 	extern rightStruct right;
 	extern hexStruct hex;
 	extern octStruct oct;
