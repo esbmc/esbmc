@@ -22,14 +22,13 @@ namespace std
 
 	struct istream
 	{
-		istream(int id): id(id){}
+		istream(int id = 0): id(id){}
 		int id;
-		void ignore();
-		void ignore(int i);
-		int eof();
+		istream& ignore(int i = 1, int delim = EOF);
+		bool eof();
 		int get();
-		int get(char str[], int n);
-		void getline(char str[], int size);
+		istream& get(char *str[], int n);
+		istream& getline(char str[], int size, char delim = '\n');
 		void read(char str[], int size);
 		int gcount();
 
@@ -40,7 +39,7 @@ namespace std
 
 	struct iostream: ostream, istream
 	{
-		iostream(int id): ostream(id), istream(id){}
+		iostream(int id = 0): ostream(id), istream(id){}
 	private:
 		iostream(const iostream&); // disabled
 		iostream& operator=(const iostream&); // disabled
@@ -259,37 +258,47 @@ namespace std
 
 	int istream::get()
 	{
-	  if (nondet_bool())
-	    return nondet_uint();
-	  else
-	    return EOF;
+		if (nondet_bool())
+			return (int) nondet_char();
+		else
+			return EOF;
 	}
 
-	int istream::get(char str[], int n)
+	istream& get(char *str[], int n)
 	{
-		// model
-		return nondet_uint();
+		#if 0
+			char *out[nondet_uint() % n];
+			str = out;
+		#endif
+		return istream();
 	}
 
-	void istream::getline(char str[], int size)
+	istream& getline(char str[], int size, char delim = '\n')
 	{
+		#if 0
+			char *out[nondet_uint() % n];
+			str = out;
+		#endif
+		return istream();
 	}
 
-	void istream::read(char str[], int size)
+	istream& read(char str[], int size)
 	{
+		#if 0
+			char *out[nondet_uint() % size];
+			str = out;
+		#endif
+		return istream();
 	}
 
-	void istream::ignore()
+	istream& ignore(int i = 1, int delim = EOF)
 	{
+		return istream();
 	}
 
-	void istream::ignore(int i)
+	bool istream::eof()
 	{
-	}
-
-	int istream::eof()
-	{
-		return EOF;
+		return nondet_bool();
 	}
 
 	int istream::gcount()
