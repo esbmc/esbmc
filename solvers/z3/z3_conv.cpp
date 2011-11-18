@@ -138,19 +138,6 @@ z3_convt::init_addr_space_array(void)
   Z3_ast eq = Z3_mk_eq(z3_ctx, first_name, initial_const);
   assert_formula(eq);
 
-  // Initialize this with the NULL object being at address zero. Associate with
-  // names.
-
-  Z3_ast named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_start_0",
-                                   native_int_sort);
-  eq = Z3_mk_eq(z3_ctx, num, named_var);
-  assert_formula(eq);
-
-  named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_end_0",
-                            native_int_sort);
-  eq = Z3_mk_eq(z3_ctx, num, named_var);
-  assert_formula(eq);
-
   // Actually store into array
   Z3_ast obj_idx = convert_number(pointer_logic.get_null_object(),
                                   config.ansi_c.int_width, true);
@@ -166,15 +153,6 @@ z3_convt::init_addr_space_array(void)
   // We also have to initialize the invalid object... however, I've no idea
   // what it /means/ yet, so go for some arbitary value.
   num = convert_number(1, config.ansi_c.int_width, true);
-  named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_start_1", native_int_sort);
-  eq = Z3_mk_eq(z3_ctx, num, named_var);
-  assert_formula(eq);
-
-  named_var = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_obj_end_1",
-                            native_int_sort);
-  eq = Z3_mk_eq(z3_ctx, num, named_var);
-  assert_formula(eq);
-
   range_tuple = z3_api.mk_var(z3_ctx, "__ESBMC_ptr_addr_range_1",
                               addr_space_tuple_sort);
   initial_val = z3_api.mk_tuple(z3_ctx, addr_space_tuple_sort, num, num, NULL);
@@ -184,8 +162,8 @@ z3_convt::init_addr_space_array(void)
   bump_addrspace_array(pointer_logic.get_invalid_object(), range_tuple);
 
   // Record the fact that we've registered these objects
-  obj_ids_in_addr_space_array.insert(0);
-  obj_ids_in_addr_space_array.insert(1);
+  addr_space_data[0] = 0;
+  addr_space_data[1] = 0;
 
   return;
 }
@@ -1919,9 +1897,9 @@ z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
   convert_bv(cast, target);
 
   // Construct array for all possible object outcomes
-  Z3_ast is_in_range[obj_ids_in_addr_space_array.size()];
-  Z3_ast obj_ids[obj_ids_in_addr_space_array.size()];
-  Z3_ast obj_starts[obj_ids_in_addr_space_array.size()];
+  Z3_ast is_in_range[addr_space_data.size()];
+  Z3_ast obj_ids[addr_space_data.size()];
+  Z3_ast obj_starts[addr_space_data.size()];
 
   // Get symbol for current array of addrspace data
   std::string arr_sym_name = get_cur_addrspace_ident();
@@ -1935,20 +1913,21 @@ z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
     native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
   }
 
-  std::set<unsigned>::const_iterator it;
+  std::map<unsigned,unsigned>::const_iterator it;
   unsigned int i;
-  for (it = obj_ids_in_addr_space_array.begin(), i = 0;
-       it != obj_ids_in_addr_space_array.end(); it++, i++)
+  for (it = addr_space_data.begin(), i = 0;
+       it != addr_space_data.end(); it++, i++)
   {
     Z3_ast args[2];
 
-    Z3_ast idx = convert_number(*it, config.ansi_c.int_width, true);
+    unsigned id = it->first;
+    Z3_ast idx = convert_number(id, config.ansi_c.int_width, true);
     obj_ids[i] = idx;
     Z3_ast start = z3_api.mk_var(z3_ctx,
-                                 ("__ESBMC_ptr_obj_start_" + itos(*it)).c_str(),
+                                 ("__ESBMC_ptr_obj_start_" + itos(id)).c_str(),
                                  native_int_sort);
     Z3_ast end = z3_api.mk_var(z3_ctx,
-                                 ("__ESBMC_ptr_obj_end_" + itos(*it)).c_str(),
+                                 ("__ESBMC_ptr_obj_end_" + itos(id)).c_str(),
                                  native_int_sort);
     obj_starts[i] = start;
 
@@ -1994,7 +1973,7 @@ z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
   Z3_ast prev_in_chain = Z3_mk_app(z3_ctx, decl, 2, args);
 
   // Now that big ite chain,
-  for (i = 0; i < obj_ids_in_addr_space_array.size(); i++) {
+  for (i = 0; i < addr_space_data.size(); i++) {
     args[0] = obj_ids[i];
 
     // Calculate ptr offset were it this
@@ -2209,8 +2188,7 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
-  if (obj_ids_in_addr_space_array.find(obj_num) ==
-      obj_ids_in_addr_space_array.end()) {
+  if (addr_space_data.find(obj_num) == addr_space_data.end()) {
 
     Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, tuple_type);
 
@@ -2259,7 +2237,7 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 
     // We'll place constraints on those addresses later, in finalize_pointer_chain
 
-    obj_ids_in_addr_space_array.insert(obj_num);
+    addr_space_data[obj_num] = pointer_offset_size(expr.type()).to_long() + 1;
 
     Z3_ast start_ast, end_ast;
     convert_bv(start_sym, start_ast);
