@@ -306,7 +306,7 @@ literalt z3_propt::land(const bvt &bv)
 
   result = Z3_mk_and(z3_ctx, bv.size(), args);
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  assert_literal(l, formula);
+  assert_formula(formula);
 
   return l;
 }
@@ -339,7 +339,7 @@ literalt z3_propt::lor(const bvt &bv)
   result = Z3_mk_or(z3_ctx, bv.size(), args);
 
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  assert_literal(l, formula);
+  assert_formula(formula);
 
   return l;
 }
@@ -380,7 +380,7 @@ literalt z3_propt::lxor(const bvt &bv)
   }
 
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  assert_literal(l, formula);
+  assert_formula(formula);
 
   return l;
 
@@ -416,7 +416,7 @@ literalt z3_propt::land(literalt a, literalt b)
   operand[1] = z3_literal(b);
   result = Z3_mk_and(z3_ctx, 2, operand);
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  assert_literal(l, formula);
+  assert_formula(formula);
 
   return l;
 
@@ -453,7 +453,7 @@ literalt z3_propt::lor(literalt a, literalt b)
   operand[1] = z3_literal(b);
   result = Z3_mk_or(z3_ctx, 2, operand);
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  assert_literal(l, formula);
+  assert_formula(formula);
 
 #ifdef DEBUG
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
@@ -512,7 +512,7 @@ literalt z3_propt::lxor(literalt a, literalt b)
   operand[1] = z3_literal(b);
   result = Z3_mk_xor(z3_ctx, operand[0], operand[1]);
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  assert_literal(l, formula);
+  assert_formula(formula);
 
   return l;
 
@@ -613,7 +613,7 @@ literalt z3_propt::lselect(literalt a, literalt b, literalt c)
 
   result = Z3_mk_ite(z3_ctx, z3_literal(a), z3_literal(b), z3_literal(c));
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  assert_literal(l, formula);
+  assert_formula(formula);
 
   return l;
 }

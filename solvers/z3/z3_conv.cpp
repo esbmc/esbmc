@@ -1570,7 +1570,11 @@ z3_convt::convert_rest(const exprt &expr)
   }
 
   formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(l), constraint);
-  assert_literal(l, formula);
+
+  // While we have a literal, don't assert that it's true, only the link
+  // between the formula and the literal. Otherwise, we risk asserting that a
+  // formula within a assertion-statement is true or false.
+  assert_formula(formula);
   return l;
 }
 
