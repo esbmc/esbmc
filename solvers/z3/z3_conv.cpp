@@ -83,7 +83,7 @@ z3_convt::~z3_convt()
     temp_out << smt_lib_str << std::endl;
   }
 
-  if (!uw)
+  if (!z3_prop.uw)
     Z3_pop(z3_ctx, 1);
 
   // Experimental: if we're handled say, 10,000 ileaves, refresh the z3 ctx.
@@ -634,7 +634,7 @@ z3_convt::check2_z3_properties(void)
 
   assumptions_status = z3_prop.assumpt.size();
 
-  if (uw) {
+  if (z3_prop.uw) {
     std::list<Z3_ast>::const_iterator it;
     for (it = z3_prop.assumpt.begin(), i = 0; it != z3_prop.assumpt.end(); it++, i++) {
       assumptions_core[i] = *it;
@@ -643,7 +643,7 @@ z3_convt::check2_z3_properties(void)
 
   try
   {
-    if (uw) {
+    if (z3_prop.uw) {
       unsat_core_size = z3_prop.assumpt.size();
       memset(core, 0, sizeof(Z3_ast) * unsat_core_size);
       result = Z3_check_assumptions(z3_ctx, z3_prop.assumpt.size(),
@@ -676,7 +676,7 @@ z3_convt::check2_z3_properties(void)
     store_sat_assignments(m);
     //printf("Counterexample:\n");
     //z3_api.display_model(z3_ctx, stdout, m);
-  } else if (uw && result == Z3_L_FALSE)   {
+  } else if (z3_prop.uw && result == Z3_L_FALSE)   {
     for (i = 0; i < unsat_core_size; ++i)
     {
       std::string id = Z3_ast_to_string(z3_ctx, core[i]);
@@ -4093,7 +4093,7 @@ z3_convt::set_to(const exprt &expr, bool value)
 
           assert_formula(result);
 
-          if (uw && expr.op0().get_string("identifier").find("guard_exec") !=
+          if (z3_prop.uw && expr.op0().get_string("identifier").find("guard_exec") !=
               std::string::npos
               && z3_prop.assumpt.size() < max_core_size) {
             if (!op1.is_true())

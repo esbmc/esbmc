@@ -31,7 +31,7 @@ typedef unsigned int uint;
 class z3_prop_wrappert
 {
 public:
-  z3_prop_wrappert(std::ostream &_out):z3_prop(_out) { }
+  z3_prop_wrappert(std::ostream &_out, bool uw):z3_prop(_out, uw) { }
 
 protected:
   z3_propt z3_prop;
@@ -42,7 +42,7 @@ class z3_convt:protected z3_prop_wrappert, public prop_convt
 public:
   z3_convt(std::ostream &_out, bool relevancy, bool uw, bool int_encoding,
            bool smt)
-                               :z3_prop_wrappert(_out),
+                               :z3_prop_wrappert(_out, uw),
                                 prop_convt(z3_prop)
   {
     if (z3_ctx == NULL) {
@@ -62,7 +62,6 @@ public:
 
     Z3_push(z3_ctx);
     z3_prop.z3_ctx = z3_ctx;
-    this->uw = uw;
     ignoring_expr=true;
     max_core_size=Z3_UNSAT_CORE_LIMIT;
 
@@ -231,7 +230,7 @@ private:
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
 	    max_core_size;
   z3_capi z3_api;
-  bool int_encoding, ignoring_expr, equivalence_checking, uw;
+  bool int_encoding, ignoring_expr, equivalence_checking;
   //Z3_ast assumptions[Z3_UNSAT_CORE_LIMIT];
   std::list<Z3_ast> assumptions;
   std::string filename;

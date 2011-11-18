@@ -19,7 +19,7 @@ typedef unsigned int uint;
 class z3_propt:virtual public propt
 {
 public:
-  z3_propt(std::ostream &_out);
+  z3_propt(std::ostream &_out, bool uw);
   virtual ~z3_propt();
 
 //  virtual literalt constant(bool value)
@@ -85,6 +85,8 @@ private:
 protected:
   unsigned _no_variables;
   std::ostream &out;
+  bool uw; // Are we doing underapprox+widenning?
+           // Affects how formula are constructed
 
   Z3_ast z3_literal(literalt l);
 

@@ -26,9 +26,10 @@ Function: z3_propt::z3_propt
 
 \*******************************************************************/
 
-z3_propt::z3_propt(std::ostream &_out):out(_out)
+z3_propt::z3_propt(std::ostream &_out, bool uw):out(_out)
 {
   _no_variables=1;
+  this->uw = uw;
 }
 
 /*******************************************************************\
@@ -982,6 +983,13 @@ void z3_propt::set_assignment(literalt literal, bool value)
 void
 z3_propt::assert_formula(Z3_ast ast, bool needs_literal)
 {
+
+  // If we're not going to wide, we don't need the literal at all to check
+  // assumptions. So, just assert that the assumption is true.
+  if (!uw) {
+    Z3_assert_cnstr(z3_ctx, ast);
+    return;
+  }
 
   if (!needs_literal) {
     Z3_assert_cnstr(z3_ctx, ast);
