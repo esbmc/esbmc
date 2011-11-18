@@ -27,8 +27,8 @@ protected:
 class z3_dect:protected z3_temp_filet, public z3_convt
 {
 public:
-  z3_dect(bool rel, bool uw, bool int_encoding, bool smtlib)
-    :z3_convt(temp_out, rel, uw, int_encoding, smtlib)
+  z3_dect(bool uw, bool int_encoding, bool smtlib)
+    :z3_convt(temp_out, uw, int_encoding, smtlib)
   {
     this->smtlib = smtlib;
   }

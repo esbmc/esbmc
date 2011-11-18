@@ -690,8 +690,7 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 
 #ifdef Z3
 bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
-  : solver_base(bmc), z3_dec(bmc.options.get_bool_option("no-assume-guarentee"),
-                             bmc.options.get_bool_option("uw-model"),
+  : solver_base(bmc), z3_dec(bmc.options.get_bool_option("uw-model"),
                              bmc.options.get_bool_option("int-encoding"),
                              bmc.options.get_bool_option("smt"))
 {

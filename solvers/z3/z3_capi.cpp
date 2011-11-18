@@ -83,25 +83,19 @@ Z3_context z3_capi::mk_context_custom(Z3_config cfg, Z3_error_handler err)
     return ctx;
 }
 
-Z3_context z3_capi::mk_proof_context(bool solver, unsigned int is_uw)
+Z3_context z3_capi::mk_proof_context(unsigned int is_uw)
 {
   Z3_config cfg = Z3_mk_config();
   Z3_context ctx;
-  const char *_solver;
-
-  _solver = (solver) ? "true" : "false";
 
   if (is_uw)
   {
     Z3_set_param_value(cfg,"PROOF_MODE","0");
     Z3_set_param_value(cfg,"RELEVANCY","0");
-    //Z3_set_param_value(cfg,"SOLVER","false");
-    Z3_set_param_value(cfg,"SOLVER",_solver);
   }
   else
   {
 	Z3_set_param_value(cfg,"RELEVANCY","0");
-    Z3_set_param_value(cfg,"SOLVER",_solver);
   }
 
   ctx = mk_context_custom(cfg,throw_z3_error);

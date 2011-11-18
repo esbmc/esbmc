@@ -25,7 +25,7 @@ class z3_capi {
     ~z3_capi(){}; // destructor
 
     Z3_context mk_context(char *solver);
-    Z3_context mk_proof_context(bool solver, unsigned int is_uw);
+    Z3_context mk_proof_context(unsigned int is_uw);
     Z3_ast mk_var(Z3_context ctx, const char * name, Z3_type_ast ty);
     Z3_ast mk_bool_var(Z3_context ctx, const char * name);
     Z3_ast mk_int_var(Z3_context ctx, const char * name);

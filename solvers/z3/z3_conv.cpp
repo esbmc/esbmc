@@ -94,7 +94,7 @@ z3_convt::~z3_convt()
     Z3_del_context(z3_ctx);
     finalize_symbols();
     Z3_reset_memory();
-    z3_ctx = z3_api.mk_proof_context(!s_relevancy, s_is_uw);
+    z3_ctx = z3_api.mk_proof_context(s_is_uw);
   }
 }
 
@@ -4163,5 +4163,4 @@ z3_convt::get_type_width(const typet &t, unsigned &width)
 Z3_context z3_convt::z3_ctx = NULL;
 
 unsigned int z3_convt::num_ctx_ileaves = 0;
-bool z3_convt::s_relevancy = false;
 bool z3_convt::s_is_uw = false;

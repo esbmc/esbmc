@@ -40,24 +40,19 @@ protected:
 class z3_convt:protected z3_prop_wrappert, public prop_convt
 {
 public:
-  z3_convt(std::ostream &_out, bool relevancy, bool uw, bool int_encoding,
+  z3_convt(std::ostream &_out, bool uw, bool int_encoding,
            bool smt)
                                :z3_prop_wrappert(_out, uw),
                                 prop_convt(z3_prop)
   {
     if (z3_ctx == NULL) {
-      if (relevancy) {
-        z3_ctx = z3_api.mk_proof_context(false, uw);
-      } else {
-        z3_ctx = z3_api.mk_proof_context(true, uw);
-      }
+      z3_ctx = z3_api.mk_proof_context(uw);
     }
 
     this->int_encoding = int_encoding;
     this->z3_prop.smtlib = smt;
-    this->z3_prop.store_assumptions = smt;
+    this->z3_prop.store_assumptions = (smt || uw);
    s_is_uw = uw;
-   s_relevancy = relevancy;
    total_mem_space = 0;
 
     Z3_push(z3_ctx);
@@ -285,7 +280,6 @@ public:
 public:
   static Z3_context z3_ctx;
   static bool s_is_uw;
-  static bool s_relevancy;
   static unsigned int num_ctx_ileaves; // Number of ileaves z3_ctx has handled
 };
 
