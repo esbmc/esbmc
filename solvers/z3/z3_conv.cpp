@@ -488,14 +488,7 @@ void
 z3_convt::finalize_pointer_chain(void)
 {
 
-  // We need to separate objects so that they don't overlap. This is achieved by
-  // chaining them together with the start of one object lie at the end of
-  // another object + 1. Which object, is nondeterministic. So, Z3 gets to
-  // string together objects in whatever order it wishes, _but_, with no spaces
-  // in between. XXXjmorse, write up why I think this is valid inre arbitary
-  // additions to object ptrs.
-
-  unsigned int i, num_ptrs = obj_ids_in_addr_space_array.size();
+  unsigned int offs, num_ptrs = addr_space_data.size();
   if (num_ptrs == 0)
     return;
 
@@ -507,94 +500,29 @@ z3_convt::finalize_pointer_chain(void)
   else
     native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
 
-  i = 0;
-  for (std::set<unsigned>::const_iterator it =obj_ids_in_addr_space_array.begin();
-       it != obj_ids_in_addr_space_array.end(); it++, i++) {
+  offs = 2;
+  for (std::map<unsigned,unsigned>::const_iterator it = addr_space_data.begin();
+       it != addr_space_data.end(); it++) {
 
-    std::string chain_idx_name = "__ESBMC_ptr_obj_chain_idx_" + itos(*it);
-    std::string start_name = "__ESBMC_ptr_obj_start_" + itos(*it);
-
-    Z3_ast chain_name, chain_select, addrspace_array, prev_chain_end;
-    chain_name = z3_api.mk_var(z3_ctx, chain_idx_name.c_str(), native_int_sort);
-    std::string addrspace_name = get_cur_addrspace_ident();
-    addrspace_array = z3_api.mk_var(z3_ctx, addrspace_name.c_str(),
-                                    addr_space_arr_sort);
-    chain_select = Z3_mk_select(z3_ctx, addrspace_array, chain_name);
-    prev_chain_end = z3_api.mk_tuple_select(z3_ctx, chain_select, 1);
-
-    // chain_select is now the end of the previous object, whatever it may be.
-    // Add one and assert equality.
-    Z3_ast one = convert_number(1, config.ansi_c.int_width, true);
-    Z3_ast end_plus_one;
-    if (int_encoding) {
-      Z3_ast tmp[2];
-      tmp[0] = prev_chain_end;
-      tmp[1] = one;
-      end_plus_one = Z3_mk_add(z3_ctx, 2, tmp);
-    } else {
-      end_plus_one = Z3_mk_bvadd(z3_ctx, prev_chain_end, one);
-    }
-
-    Z3_ast start_var = z3_api.mk_var(z3_ctx, start_name.c_str(), native_int_sort);
-    Z3_ast eq = Z3_mk_eq(z3_ctx, start_var, end_plus_one);
+    Z3_ast start = z3_api.mk_var(z3_ctx,
+                           ("__ESBMC_ptr_obj_start_" + itos(it->first)).c_str(),
+                           native_int_sort);
+    Z3_ast start_num = convert_number(offs, config.ansi_c.int_width, true);
+    Z3_ast eq = Z3_mk_eq(z3_ctx, start, start_num);
     assert_formula(eq);
 
-    // Now assert it isn't itself
-    Z3_ast obj_idx = convert_number(*it, config.ansi_c.int_width, true);
-    eq = Z3_mk_eq(z3_ctx, obj_idx, chain_name);
-    Z3_ast neq = Z3_mk_not(z3_ctx, eq);
-    assert_formula(neq);
+    offs += it->second - 1;
 
-    // Place chain idx's in the range 1 <= x <= max. That allows one to hook to
-    // the invalid object start address. Z3 must to arrange an allocation that
-    // starts with idx 1 (otherwise we end up with a circular chain, and that
-    // can't satisfy the property of start = prev_end + 1 (unless it wraps around,
-    // XXXjmorse)).
-    Z3_ast max_obj_num = convert_number(num_ptrs + 1, config.ansi_c.int_width,
-                                        true);
-    Z3_ast ge_form, le_form;
-    if (int_encoding) {
-      ge_form = Z3_mk_ge(z3_ctx, chain_name, one);
-      le_form = Z3_mk_le(z3_ctx, chain_name, max_obj_num);
-    } else {
-      ge_form = Z3_mk_bvuge(z3_ctx, chain_name, one);
-      le_form = Z3_mk_bvule(z3_ctx, chain_name, max_obj_num);
-    }
-    assert_formula(ge_form);
-    assert_formula(le_form);
+    Z3_ast end = z3_api.mk_var(z3_ctx,
+                           ("__ESBMC_ptr_obj_end_" + itos(it->first)).c_str(),
+                           native_int_sort);
+    Z3_ast end_num = convert_number(offs, config.ansi_c.int_width, true);
+    eq = Z3_mk_eq(z3_ctx, end, end_num);
+    assert_formula(eq);
 
-    // Finally, an optimisation - Z3 spends a lot of time considering all possible
-    // ranges of addresses this lump of AST might represent, and we know for a
-    // fact that none of the addresses will extend past the first item (invalid,
-    // at addr 1) plus the total amount of memory considered. So, assert this
-    // fact, allowing to Z3 to not consider excess addresses. One the short
-    // example I'm working on at the moment this results in a 1/3 speedup.
-
-    // Total memory may be some number, but the first element will be at address
-    // two.
-    Z3_ast total_mem = convert_number(total_mem_space + 2,
-                                      config.ansi_c.int_width, true);
-
-    std::string end_name = "__ESBMC_ptr_obj_end_" + itos(*it);
-    Z3_ast end_var = z3_api.mk_var(z3_ctx, end_name.c_str(), native_int_sort);
-
-    Z3_ast start_form, end_form;
-    if (int_encoding) {
-      start_form = Z3_mk_lt(z3_ctx, start_var, total_mem);
-      end_form = Z3_mk_lt(z3_ctx, end_var, total_mem);
-    } else {
-      start_form = Z3_mk_bvult(z3_ctx, start_var, total_mem);
-      end_form = Z3_mk_bvult(z3_ctx, end_var, total_mem);
-    }
-    assert_formula(start_form);
-    assert_formula(end_form);
-
-    ptr_idxs[i] = chain_name;
+    offs++;
   }
 
-  // Ensure all idx's are distinct.
-  Z3_ast neq = Z3_mk_distinct(z3_ctx, num_ptrs, ptr_idxs);
-  assert_formula(neq);
   return;
 }
 
