@@ -95,6 +95,7 @@ Z3_context z3_capi::mk_proof_context(unsigned int is_uw)
   }
   else
   {
+    Z3_set_param_value(cfg,"SOLVER","true");
 	Z3_set_param_value(cfg,"RELEVANCY","0");
   }
 
