@@ -399,7 +399,6 @@ z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
   DEBUGLOC
 
   std::string literal;
-  static bool is_first_literal = true;
 
   literal = expr.op0().get_string("identifier").c_str();
   int pos = 0;
@@ -425,9 +424,6 @@ z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
 	return;
     }
     z3_prop.assumpt.push_back(Z3_mk_not(z3_ctx, result));
-  } else if (is_first_literal)   {
-    is_first_literal = false;
-    return;
   } else
     z3_prop.assumpt.push_back(Z3_mk_not(z3_ctx, result));
 
