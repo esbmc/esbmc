@@ -984,22 +984,24 @@ void
 z3_propt::assert_formula(Z3_ast ast, bool needs_literal)
 {
 
-  // If we're not going to wide, we don't need the literal at all to check
-  // assumptions. So, just assert that the assumption is true.
-  if (!uw) {
+  // If we're not going to be using the assumptions (ie, for unwidening and for
+  // smtlib) then just assert the fact to be true.
+  if (!store_assumptions) {
     Z3_assert_cnstr(z3_ctx, ast);
     return;
   }
 
   if (!needs_literal) {
     Z3_assert_cnstr(z3_ctx, ast);
-    if (store_assumptions)
-      assumpt.push_front(ast);
+    assumpt.push_front(ast);
   } else {
     literalt l = new_variable();
     Z3_ast formula = Z3_mk_iff(z3_ctx, z3_literal(l), ast);
     Z3_assert_cnstr(z3_ctx, formula);
-    if (store_assumptions)
+
+    if (smtlib)
+      assumpt.push_front(ast);
+    else
       assumpt.push_front(z3_literal(l));
   }
 
@@ -1011,7 +1013,12 @@ z3_propt::assert_literal(literalt l, Z3_ast formula)
 {
 
   Z3_assert_cnstr(z3_ctx, formula);
-  if (store_assumptions)
-    assumpt.push_front(z3_literal(l));
+  if (store_assumptions) {
+    if (smtlib)
+      assumpt.push_front(formula);
+    else
+      assumpt.push_front(z3_literal(l));
+  }
+
   return;
 }
