@@ -5,6 +5,10 @@
 
 unsigned int nondet_uint();
 
+void exit ( int status ); //Felipe
+
+void abort ( void ); //Felipe
+
 #define RAND_MAX        2147483647
 
 //int seed, last_value=-1;

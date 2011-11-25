@@ -1,0 +1,21 @@
+#ifndef STL_CSIGNAL
+#define STL_CSIGNAL
+
+#include "definitions.h"
+
+namespace std {
+
+struct exception {
+
+  exception () throw();
+  exception (char* strTeste);
+  exception (const exception&) throw();
+  exception& operator= (const exception&) throw();
+  virtual ~exception() throw();
+  virtual const char* what() const throw();
+
+};
+
+}
+
+#endif

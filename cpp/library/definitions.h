@@ -12,6 +12,10 @@
 #define NULL ((void *)0)
 #endif
 
+#define SIGINT  2
+
+#define EXIT_SUCCESS 0
+
 unsigned int nondet_uint();
 float nondet_float();
 bool nondet_bool();
