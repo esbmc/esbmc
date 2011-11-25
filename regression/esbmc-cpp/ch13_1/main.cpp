@@ -18,10 +18,29 @@ class DivideByZeroException : public exception {
 public:
 
    // constructor specifies default error message
+
+#if 0 
+
+*Erro no código antigo*
+
    DivideByZeroException::DivideByZeroException()
       : exception( "attempted to divide by zero" ) {}
+#endif
+#if 1
+   DivideByZeroException()
+		:message(" Tentou dividir por zero!"){}
 
+	const char *whato() const
+		{return message;}
+
+private:
+	const char *message;
+
+#endif
 };  // end class DivideByZeroException
+
+
+
 
 // perform division and throw DivideByZeroException object if 
 // divide-by-zero exception occurs
@@ -58,7 +77,7 @@ int main()
       // exception handler handles a divide-by-zero exception
       catch ( DivideByZeroException &divideByZeroException ) {
          cout << "Exception occurred: " << 
-            divideByZeroException.what() << endl;
+            divideByZeroException.whato() << endl;
 
       } // end catch
 
