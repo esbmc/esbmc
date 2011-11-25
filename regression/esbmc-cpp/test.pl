@@ -52,12 +52,6 @@ sub load($) {
   
   open FILE, "<$fname";
   my @data = <FILE>;
-#	if ($llvm==1){
-#	  system("clang++ -emit-llvm $fname -o main.bc -c");
-#	  system("llc -march=c main.bc -o main.c");
-#	
-#	}
-
   close FILE;
 
   chomp @data;
@@ -129,7 +123,6 @@ sub dirs() {
 
 if(@ARGV != 0) {
   if (@ARGV[0] eq "--llvm") {
-	 print "acertou\n";
 	 $llvm = 1;
   } else {
     print "Usage:\n";
