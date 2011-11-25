@@ -161,6 +161,22 @@ z3_convt::init_addr_space_array(void)
 
   bump_addrspace_array(pointer_logic.get_invalid_object(), range_tuple);
 
+  // Associate the symbol "0" with the null object; this is necessary because
+  // of the situation where 0 is valid as a representation of null, but the
+  // frontend (for whatever reasons) converts it to a symbol rather than the
+  // way it handles NULL (constant with val "NULL")
+  Z3_sort pointer_type;
+  create_pointer_type(pointer_type);
+  Z3_ast zero_sym = z3_api.mk_var(z3_ctx, "0", pointer_type);
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, pointer_type);
+
+  Z3_ast args[2];
+  args[0] = Z3_mk_int(z3_ctx, 0, native_int_sort);
+  args[1] = Z3_mk_int(z3_ctx, 0, native_int_sort);
+  Z3_ast ptr_val = Z3_mk_app(z3_ctx, decl, 2, args);
+  Z3_ast constraint = Z3_mk_eq(z3_ctx, zero_sym, ptr_val);
+  assert_formula(constraint);
+
   // Record the fact that we've registered these objects
   addr_space_data[0] = 0;
   addr_space_data[1] = 0;
@@ -2100,7 +2116,8 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 
   create_pointer_type(tuple_type);
 
-  if (expr.get("value").compare("NULL") == 0) {
+  if (expr.get("value").compare("NULL") == 0 ||
+      identifier == "0") {
     obj_num = pointer_logic.get_null_object();
   } else {
     // add object won't duplicate objs for identical exprs (it's a map)
