@@ -65,7 +65,7 @@ void signalHandler( int signalValue )
 
    // call signal and pass it SIGINT and address of signalHandler
    signal( SIGINT, signalHandler );
-      
+      cout << SIGINT << endl;
 }  // end function signalHandler
 
 /**************************************************************************

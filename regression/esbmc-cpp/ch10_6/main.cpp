@@ -24,9 +24,9 @@ using std::vector;
 
 int main()
 {
+
    // set floating-point output formatting
    cout << fixed << setprecision( 2 );
-
    // create vector employees
    vector < Employee * > employees( 4 );
 
@@ -66,7 +66,7 @@ int main()
       cout << "earned $" << employees[ i ]->earnings() << endl;
 
    } // end for   
- 
+
    // release memory held by vector employees
    for ( int j = 0; j < employees.size(); j++ ) {
 

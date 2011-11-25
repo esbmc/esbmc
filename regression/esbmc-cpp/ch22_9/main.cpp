@@ -6,7 +6,7 @@ using std::cout;
 using std::endl;
 using std::boolalpha;
 
-#include <iso646.h>
+#include <iso646>
 
 int main()
 {
