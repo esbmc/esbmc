@@ -9,6 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_BASIC_SYMEX_EQUATION_H
 #define CPROVER_BASIC_SYMEX_EQUATION_H
 
+extern "C" {
+#include <stdio.h>
+}
+
 #include <list>
 #include <map>
 
@@ -19,6 +23,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "symex_target.h"
 #include "goto_trace.h"
+
+extern "C" {
+#include <stdint.h>
+#include <string.h>
+}
 
 class symex_target_equationt:public symex_targett
 {
@@ -68,7 +77,7 @@ public:
   void convert_assertions(prop_convt &prop_conv);
   void convert_guards(prop_convt &prop_conv);
   void convert_output(decision_proceduret &decision_procedure);
-  
+
   class SSA_stept
   {
   public:
@@ -112,6 +121,8 @@ public:
     void output(
       const namespacet &ns,
       std::ostream &out) const;
+
+    bool operator<(const SSA_stept s2) const;
   };
   
   unsigned count_ignored_SSA_steps() const
@@ -126,6 +137,9 @@ public:
 
   typedef std::list<SSA_stept> SSA_stepst;
   SSA_stepst SSA_steps;
+
+  exprt reconstruct_expr_from_SSA(std::string step_name);
+  exprt reconstruct_expr_from_SSA(exprt e);
   
   SSA_stepst::iterator get_SSA_step(unsigned s)
   {

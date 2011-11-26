@@ -261,10 +261,10 @@ void goto_symext::symex_function_call_code(
     if(call.lhs().is_not_nil())
     {
       exprt rhs=exprt("nondet_symbol", call.lhs().type());
-      rhs.set("identifier", "symex::"+i2string(nondet_count++));
+      rhs.set("identifier", "symex::"+i2string(ex_state.nondet_count++));
       rhs.location()=call.location();
       code_assignt code(call.lhs(), rhs);
-      basic_symext::symex(state, code,ex_state.node_id);
+      basic_symext::symex(state, ex_state, code, ex_state.node_id);
     }
 
     state.source.pc++;
@@ -416,7 +416,7 @@ Function: goto_symext::return_assignment
 
 \*******************************************************************/
 
-void goto_symext::return_assignment(statet &state,unsigned node_id)
+void goto_symext::return_assignment(statet &state, execution_statet &ex_state, unsigned node_id)
 {
   statet::framet &frame=state.top();
 
@@ -436,7 +436,7 @@ void goto_symext::return_assignment(statet &state,unsigned node_id)
     {
       code_assignt assignment(frame.return_value, value);
       assert(assignment.lhs().type()==assignment.rhs().type());
-      basic_symext::symex_assign(state, assignment, node_id);
+      basic_symext::symex_assign(state, ex_state, assignment, node_id);
     }
   }
   else
@@ -458,9 +458,9 @@ Function: goto_symext::symex_return
 
 \*******************************************************************/
 
-void goto_symext::symex_return(statet &state,unsigned node_id)
+void goto_symext::symex_return(statet &state, execution_statet &ex_state, unsigned node_id)
 {
-  return_assignment(state,node_id);
+  return_assignment(state, ex_state, node_id);
 
   // we treat this like an unconditional
   // goto to the end of the function
@@ -492,9 +492,9 @@ Function: goto_symext::symex_step_return
 
 \*******************************************************************/
 
-void goto_symext::symex_step_return(statet &state,unsigned node_id)
+void goto_symext::symex_step_return(statet &state, execution_statet &ex_state, unsigned node_id)
 {
-  return_assignment(state,node_id);
+  return_assignment(state, ex_state, node_id);
   pop_frame(state);
 }
 

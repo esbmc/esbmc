@@ -1,13 +1,8 @@
-DIRS = ansi-c big-int esbmc csp hoare \
-       infrules intrep solvers pvs separate smvlang util \
-       langapi cpp pascal symex \
-       satqe satmc explain specc \
-       goto-programs bplang simplifylang vcegar vsynth \
-       cvclang pointer-analysis \
-       goto-symex ipp prover trans bv_refinement mcp \
-       smtlang php cemc interpolation scoot floatbv
+DIRS = ansi-c big-int esbmc hoare infrules intrep solvers separate smvlang \
+	util langapi cpp symex satqe goto-programs bplang cvclang \
+	pointer-analysis goto-symex trans smtlang
 
-all: esbmc.dir \
+all: esbmc.dir
 
 include config.inc
 include common
@@ -92,10 +87,12 @@ $(patsubst %, %.dir, $(DIRS)):
 	## Entering $(basename $@)
 	$(MAKE) $(MAKEARGS) -C $(basename $@)
 
-clean: $(patsubst %, %_clean, $(DIRS))
-	rm -f *.o
-	find . -name *.o | xargs rm -f
-	find . -name *.d | xargs rm -f
+.PHONY: clean
+
+clean:
+	for dir in $(DIRS); do \
+		$(MAKE) -C $$dir clean; \
+	done
 
 dep: $(patsubst %, %_dep, $(DIRS))
 

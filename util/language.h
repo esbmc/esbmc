@@ -34,14 +34,14 @@ public:
 
   // add modules provided by currently parsed file to set
 
-  virtual void modules_provided(std::set<std::string> &modules)
+  virtual void modules_provided(std::set<std::string> &modules __attribute__((unused)))
   { }
 
   // final adjustments, e.g., initialization and call to main()
 #if 1
   virtual bool final(
-    contextt &context,
-    message_handlert &message_handler)
+    contextt &context __attribute__((unused)),
+    message_handlert &message_handler __attribute__((unused)))
   { return false; }
 #endif
   // type check interfaces of currently parsed file

@@ -23,8 +23,8 @@ Function: irep_languaget::parse
 \*******************************************************************/
 
 bool irep_languaget::parse(
-  std::istream &instream,
-  const std::string &path,
+  std::istream &instream __attribute__((unused)),
+  const std::string &path __attribute__((unused)),
   message_handlert &message_handler)
 {
   message_handler.print(1, "not implemented");
@@ -44,8 +44,8 @@ Function: irep_languaget::typecheck
 \*******************************************************************/
 
 bool irep_languaget::typecheck(
-  contextt &context,
-  const std::string &module,
+  contextt &context __attribute__((unused)),
+  const std::string &module __attribute__((unused)),
   message_handlert &message_handler)
 {
   message_handler.print(1, "not implemented");
@@ -64,7 +64,7 @@ Function: irep_languaget::show_parse
 
 \*******************************************************************/
   
-void irep_languaget::show_parse(std::ostream &out)
+void irep_languaget::show_parse(std::ostream &out __attribute__((unused)))
 {
 }
 
@@ -81,11 +81,11 @@ Function: irep_languaget::to_expr
 \*******************************************************************/
 
 bool irep_languaget::to_expr(
-  const std::string &code,
-  const std::string &module,
-  exprt &expr,
+  const std::string &code __attribute__((unused)),
+  const std::string &module __attribute__((unused)),
+  exprt &expr __attribute__((unused)),
   message_handlert &message_handler,
-  const namespacet &ns)
+  const namespacet &ns __attribute__((unused)))
 {
   messaget message(message_handler);
   message.error("not yet implemented");

@@ -13,8 +13,13 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <deque>
 #include <set>
 #include <map>
+#include <options.h>
 #include "execution_state.h"
 #include "basic_symex.h"
+
+#include "crypto_hash.h"
+
+#include <goto-programs/goto_program.h>
 
 class reachability_treet
 {
@@ -22,22 +27,28 @@ public:
   reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
-    int CS_bound,
-    bool deadlock_detection,
-    bool por):
+    optionst opts):
     _goto_functions(goto_functions),
     _cur_target_state(NULL),
-    _ns(ns)
+    _ns(ns),
+    options(opts)
 	{
+
+      _CS_bound = atoi(options.get_option("context-switch").c_str());
+      _deadlock_detection = options.get_bool_option("deadlock-check");
+      state_hashing = options.get_bool_option("state-hashing");
+
+      // XXX - in one location (goto_symext::operator()) por depends on whether
+      // control-flow-test is set, while in another
+      // (goto_symext::multi_formulas_init) it does not.
+      _por = (options.get_bool_option("no-por") && !(options.get_bool_option("control-flow-test")));
+
       _DFS=true;
 	  _go_next = false;
 	  _go_next_formula = false;
-      _CS_bound = CS_bound;
-      _actual_CS_bound = CS_bound;
-      _deadlock_detection = deadlock_detection;
-      _por = por;
+      _actual_CS_bound = _CS_bound;
       _is_same_mutex=false;
-      execution_statet ex_state(goto_functions, ns);
+      execution_statet ex_state(goto_functions, ns, this);
 	  execution_states.push_back(ex_state);
       _cur_state_it = execution_states.begin();
     };
@@ -75,16 +86,25 @@ public:
     {
       _go_next = true;
     }
+
 	const goto_functionst &_goto_functions;
     execution_statet* _cur_target_state;
 	bool _go_next_formula;
+    bool state_hashing;
 private:
 	std::list<execution_statet> execution_states;
+    /* This is derefed and returned by get_current_state */
     std::list<execution_statet>::iterator _cur_state_it;
     int _CS_bound, _actual_CS_bound;
-	bool _go_next, _DFS, _multi_formulae, _is_same_mutex,
+	bool _go_next;
+	bool _DFS, _multi_formulae, _is_same_mutex,
 		 _deadlock_detection, _por;
     const namespacet &_ns;
+
+    /* jmorse */
+    std::set<crypto_hash>hit_hashes;
+
+    optionst options;
 };
 
 #endif /* REACHABILITY_TREE_H_ */

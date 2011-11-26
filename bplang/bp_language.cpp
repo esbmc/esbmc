@@ -114,7 +114,7 @@ Function: bp_languaget::modules_provided
 
 \*******************************************************************/
 
-void bp_languaget::modules_provided(std::set<std::string> &module_set)
+void bp_languaget::modules_provided(std::set<std::string> &module_set __attribute__((unused)))
 {
 }
 
@@ -183,7 +183,7 @@ Function: bp_languaget::from_expr
 bool bp_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns __attribute__((unused)))
 {
   code=expr2bp(expr);
   return false;
@@ -204,7 +204,7 @@ Function: bp_languaget::from_type
 bool bp_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns __attribute__((unused)))
 {
   code=type2bp(type);
   return false;
@@ -223,11 +223,11 @@ Function: bp_languaget::to_expr
 \*******************************************************************/
 
 bool bp_languaget::to_expr(
-  const std::string &code,
-  const std::string &module,
-  exprt &expr,
+  const std::string &code __attribute__((unused)),
+  const std::string &module __attribute__((unused)),
+  exprt &expr __attribute__((unused)),
   message_handlert &message_handler,
-  const namespacet &ns)
+  const namespacet &ns __attribute__((unused)))
 {
   messaget message(message_handler);
   message.error("not yet implemented");

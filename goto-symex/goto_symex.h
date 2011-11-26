@@ -49,7 +49,7 @@ public:
   reachability_treet & art);
 
   // these bypass the target maps
-  virtual void symex_step_return(statet &state,unsigned node_id);
+  virtual void symex_step_return(statet &state, execution_statet &ex_state, unsigned node_id);
   virtual void symex_step_goto(statet &state, bool taken, unsigned node_id);
 
 protected:
@@ -85,10 +85,10 @@ protected:
   // symex
 
   //virtual void symex_goto(statet &state);
-  virtual void symex_goto(statet &state, unsigned node_id);
+  virtual void symex_goto(statet &state, execution_statet &ex_state, unsigned node_id);
 
   //virtual void symex_return(statet &state);
-  virtual void symex_return(statet &state,unsigned node_id);
+  virtual void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
 
   //virtual void symex_other(
   //  const goto_functionst &goto_functions,
@@ -96,6 +96,7 @@ protected:
   virtual void symex_other(
     const goto_functionst &goto_functions,
     statet &state,
+    execution_statet &ex_state,
     unsigned node_id);
 
   virtual void claim(
@@ -104,7 +105,7 @@ protected:
     statet &state, unsigned node_id);
 
   // gotos
-  void merge_gotos(statet &state, unsigned node_id);
+  void merge_gotos(statet &state, execution_statet &ex_state, unsigned node_id);
 
   void merge_value_sets(
     const statet::goto_statet &goto_state,
@@ -112,7 +113,7 @@ protected:
 
   void phi_function(
     const statet::goto_statet &goto_state,
-    statet &state, unsigned node_id);
+    statet &state, execution_statet &ex_state, unsigned node_id);
 
   virtual bool get_unwind(
     const symex_targett::sourcet &source,
@@ -123,10 +124,10 @@ protected:
   // function calls
 
   void pop_frame(statet &state);
-  void return_assignment(statet &state,unsigned node_id);
+  void return_assignment(statet &state, execution_statet &ex_state, unsigned node_id);
   //void return_assignment(statet &state);
 
-  virtual void no_body(const irep_idt &identifier)
+  virtual void no_body(const irep_idt &identifier __attribute__((unused)))
   {
   }
 

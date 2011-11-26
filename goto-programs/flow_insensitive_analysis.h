@@ -40,16 +40,16 @@ public:
   }
   
   virtual void output(
-    const namespacet &ns,
-    std::ostream &out) const
+    const namespacet &ns __attribute__((unused)),
+    std::ostream &out __attribute__((unused))) const
   {
   }
   
   typedef hash_set_cont<exprt, irep_hash> expr_sett;
   
   virtual void get_reference_set(
-    const namespacet &ns,
-    const exprt &expr,
+    const namespacet &ns __attribute__((unused)),
+    const exprt &expr __attribute__((unused)),
     expr_sett &expr_set)
   {
     // dummy, overload me!
@@ -93,7 +93,7 @@ public:
   }
   
   virtual void initialize(
-    const goto_programt &goto_program)
+    const goto_programt &goto_program __attribute__((unused)))
   {
     if(!initialized)
     {
@@ -102,7 +102,7 @@ public:
   }
     
   virtual void initialize(
-    const goto_functionst &goto_functions)
+    const goto_functionst &goto_functions __attribute__((unused)))
   {
     if(!initialized)
     {

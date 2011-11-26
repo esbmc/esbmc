@@ -7,12 +7,17 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <assert.h>
+#include <alloca.h>
 #include <map>
+#include <sstream>
 
 #include <i2string.h>
 #include "../util/expr_util.h"
 
+#include "reachability_tree.h"
+#include "execution_state.h"
 #include "goto_symex_state.h"
+#include "crypto_hash.h"
 
 /*******************************************************************\
 
@@ -368,9 +373,14 @@ void goto_symex_statet::assignment(
   const exprt &rhs,
   const namespacet &ns,
   bool record_value,
+  execution_statet &ex_state,
   unsigned exec_node_id)
 {
+  crypto_hash hash;
   assert(lhs.id()=="symbol");
+
+  if (ex_state.owning_rt->state_hashing)
+    hash = ex_state.update_hash_for_assignment(rhs);
 
   // the type might need renaming
   rename(lhs.type(), ns, exec_node_id);
@@ -380,6 +390,7 @@ void goto_symex_statet::assignment(
   // identifier should be l0 or l1, make sure it's l1
 
   const std::string l1_identifier=top().level1(identifier,exec_node_id);
+  std::string orig_name = get_original_name(l1_identifier).as_string();
 
   // do the l2 renaming
   level2t::valuet &entry=level2->current_names[l1_identifier];
@@ -389,6 +400,9 @@ void goto_symex_statet::assignment(
   level2->rename(l1_identifier, entry.count,exec_node_id);
 
   lhs.set("identifier", level2->name(l1_identifier, entry.count));
+
+  if (ex_state.owning_rt->state_hashing)
+    level2->current_hashes[orig_name] = hash;
 
   if(record_value)
   {
@@ -414,6 +428,33 @@ void goto_symex_statet::assignment(
 
     value_set.assign(l1_lhs, l1_rhs, ns);
   }
+}
+
+static std::string state_to_ignore[8] =
+{"\\guard", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
+"count_lock", "count_wait", "unlocked"};
+
+crypto_hash
+goto_symex_statet::level2t::generate_l2_state_hash()
+{
+  uint8_t *data;
+  int idx;
+
+  data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE);
+
+  idx = 0;
+  for (current_state_hashest::const_iterator it = current_hashes.begin();
+        it != current_hashes.end(); it++, idx++) {
+    int j;
+
+    for (j = 0 ; j < 8; j++)
+      if (it->first.as_string().find(state_to_ignore[j]) != std::string::npos)
+        continue;
+
+    memcpy(&data[idx * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
+  }
+
+  return crypto_hash(data, current_hashes.size() * CRYPTO_HASH_SIZE);
 }
 
 /*******************************************************************\

@@ -9,6 +9,16 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <memory>
 
+extern "C" {
+#include <ctype.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+
+#include <sys/time.h>
+#include <sys/resource.h>
+}
+
 #include <config.h>
 #include <expr_util.h>
 
@@ -32,10 +42,26 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <pointer-analysis/show_value_sets.h>
 
 #include <langapi/mode.h>
+#include <langapi/languages.h>
 
 #include "parseoptions.h"
 #include "bmc.h"
 #include "version.h"
+
+// jmorse - could be somewhere better
+
+void
+timeout_handler(int dummy __attribute__((unused)))
+{
+
+  std::cout << "Timed out" << std::endl;
+
+  // Unfortunately some highly useful pieces of code hook themselves into
+  // aexit and attempt to free some memory. That doesn't really make sense to
+  // occur on exit, but more importantly doesn't mix well with signal handlers,
+  // and results in the allocator locking against itself. So use _exit instead
+  _exit(1);
+}
 
 /*******************************************************************\
 
@@ -370,6 +396,80 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    else
      options.set_option("deadlock-check", false);
 
+  options.set_option("state-hashing", cmdline.isset("state-hashing"));
+
+  // jmorse
+  if(cmdline.isset("timeout")) {
+    int len, mult, timeout;
+
+    const char *time = cmdline.getval("timeout");
+    len = strlen(time);
+    if (!isdigit(time[len-1])) {
+      switch (time[len-1]) {
+      case 's':
+        mult = 1;
+        break;
+      case 'm':
+        mult = 60;
+        break;
+      case 'h':
+        mult = 3600;
+        break;
+      case 'd':
+        mult = 86400;
+        break;
+      default:
+        std::cerr << "Unrecognized timeout suffix" << std::endl;
+        abort();
+      }
+    } else {
+      mult = 1;
+    }
+
+    timeout = strtol(time, NULL, 10);
+    timeout *= mult;
+    signal(SIGALRM, timeout_handler);
+    alarm(timeout);
+  }
+
+  if(cmdline.isset("memlimit")) {
+    unsigned long len, mult, size;
+
+    const char *limit = cmdline.getval("memlimit");
+    len = strlen(limit);
+    if (!isdigit(limit[len-1])) {
+      switch (limit[len-1]) {
+      case 'b':
+        mult = 1;
+        break;
+      case 'k':
+        mult = 1024;
+        break;
+      case 'm':
+        mult = 1024*1024;
+        break;
+      case 'g':
+        mult = 1024*1024*1024;
+        break;
+      default:
+        std::cerr << "Unrecognized memlimit suffix" << std::endl;
+        abort();
+      }
+    } else {
+      mult = 1024*1024;
+    }
+
+    size = strtol(limit, NULL, 10);
+    size *= mult;
+
+    struct rlimit lim;
+    lim.rlim_cur = size;
+    lim.rlim_max = size;
+    if (setrlimit(RLIMIT_AS, &lim) != 0) {
+      perror("Couldn't set memory limit");
+      abort();
+    }
+  }
 }
 
 /*******************************************************************\
@@ -646,6 +746,180 @@ void cbmc_parseoptionst::preprocessing()
   }
 }
 
+void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
+{
+  std::map<std::string, std::string> strings;
+
+  symbolst::const_iterator it;
+  for (it = context.symbols.begin(); it != context.symbols.end(); it++) {
+    if (it->first.as_string().find("__ESBMC_property_") != std::string::npos) {
+      // Munge back into the shape of an actual string
+      std::string str = "";
+      forall_operands(iter2, it->second.value) {
+        char c = (char)strtol(iter2->get("value").as_string().c_str(), NULL, 2);
+        if (c != 0)
+          str += c;
+        else
+          break;
+      }
+
+      strings[it->first.as_string()] = str;
+    }
+  }
+
+  std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
+  std::map<std::string, std::string>::const_iterator str_it;
+  for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
+    if (str_it->first.find("$type") == std::string::npos) {
+      std::set<std::string> used_syms;
+      exprt main_expr;
+      std::string prop_name = str_it->first.substr(20, std::string::npos);
+      main_expr = calculate_a_property_monitor(prop_name, strings, used_syms);
+      monitors[prop_name] = std::pair<std::set<std::string>, exprt>
+                                      (used_syms, main_expr);
+    }
+  }
+
+  if (monitors.size() == 0)
+    return;
+
+  Forall_goto_functions(f_it, goto_functions) {
+    goto_functions_templatet<goto_programt>::goto_functiont &func = f_it->second;
+    goto_programt &prog = func.body;
+    Forall_goto_program_instructions(p_it, prog) {
+      add_monitor_exprs(p_it, prog.instructions, monitors);
+    }
+  }
+
+  return;
+}
+
+static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+{
+
+  if (e.id() ==  "symbol") {
+    std::string sym = e.get("identifier").as_string();
+
+// Originally this piece of code renamed all the symbols in the property
+// expression to ones specified by the user. However, there's no easy way of
+// working out what the full name of a particular symbol you're looking for
+// is, so it's unused for the moment.
+#if 0
+    // Remove leading "c::"
+    sym = sym.substr(3, sym.size() - 3);
+
+    sym = prefix + "_" + sym;
+    if (strings.find(sym) == strings.end())
+      assert(0 && "Missing symbol mapping for property monitor");
+
+    sym = strings[sym];
+    e.set("identifier", sym);
+#endif
+
+    used_syms.insert(sym);
+  } else {
+    Forall_operands(it, e)
+      replace_symbol_names(*it, prefix, strings, used_syms);
+  }
+
+  return;
+}
+
+exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+{
+  exprt main_expr;
+  std::map<std::string, std::string>::const_iterator it;
+
+  namespacet ns(context);
+  languagest languages(ns, MODE_C);
+
+  std::string expr_str = strings["c::__ESBMC_property_" + name];
+  std::string dummy_str = "";
+
+  languages.to_expr(expr_str, dummy_str, main_expr, ui_message_handler);
+
+  replace_symbol_names(main_expr, name, strings, used_syms);
+
+  return main_expr;
+}
+
+void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, exprt> >monitors)
+{
+
+  // So the plan: we've been handed an instruction, look for assignments to a
+  // symbol we're looking for. When we find one, append a goto instruction that
+  // re-evaluates a proposition expression. Because there can be more than one,
+  // we put re-evaluations in atomic blocks.
+
+  if (!insn->is_assign())
+    return;
+
+  exprt sym = insn->code.op0();
+  if (sym.id() != "symbol")
+    return;
+  // XXX - this means that we can't make propositions about things like
+  // the contents of an array and suchlike.
+
+  // Is this actually an assignment that we're interested in?
+  std::map<std::string, std::pair<std::set<std::string>, exprt> >::const_iterator it;
+  std::string sym_name = sym.get("identifier").as_string();
+  std::set<std::pair<std::string, exprt> > triggered;
+  for (it = monitors.begin(); it != monitors.end(); it++) {
+    if (it->second.first.find(sym_name) == it->second.first.end())
+      continue;
+
+    triggered.insert(std::pair<std::string, exprt>(it->first, it->second.second));
+  }
+
+  if (triggered.empty())
+    return;
+
+  goto_programt::instructiont new_insn;
+
+  new_insn.type = ATOMIC_BEGIN;
+  new_insn.function = insn->function;
+  insn_list.insert(insn, new_insn);
+
+  insn++;
+
+  new_insn.type = ASSIGN;
+  std::set<std::pair<std::string, exprt> >::const_iterator trig_it;
+  for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
+    std::string prop_name = "c::" + trig_it->first + "_status";
+    new_insn.code = code_assignt(symbol_exprt(prop_name, typet("bool")), trig_it->second);
+    new_insn.function = insn->function;
+
+    // new_insn location field not set - I believe it gets numbered later.
+    insn_list.insert(insn, new_insn);
+  }
+
+  typet uint32 = typet("unsignedbv");
+  uint32.set("width", 32);
+  new_insn.type = ASSIGN;
+  new_insn.function = insn->function;
+  constant_exprt c_expr = constant_exprt(uint32);
+  c_expr.set_value("1");
+  exprt e = plus_exprt(symbol_exprt("c::_ltl2ba_transition_count", uint32), c_expr);
+  e.type() = uint32;
+  symbol_exprt sym_expr = symbol_exprt("c::_ltl2ba_transition_count", uint32);
+  new_insn.code = code_assignt(sym_expr, e);
+  insn_list.insert(insn, new_insn);
+
+  new_insn.type = ATOMIC_END;
+  new_insn.function = insn->function;
+  insn_list.insert(insn, new_insn);
+
+  new_insn.type = FUNCTION_CALL;
+  new_insn.code = code_function_callt();
+  new_insn.function = insn->function;
+  new_insn.code.op1() = symbol_exprt("c::__ESBMC_yield");
+  insn_list.insert(insn, new_insn);
+
+  return;
+}
+
+
+
 /*******************************************************************\
 
 Function: cbmc_parseoptionst::read_goto_binary
@@ -743,6 +1017,9 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // add failed symbols
     add_failed_symbols(context);
+
+    // add re-evaluations of monitored properties
+    add_property_monitors(goto_functions);
 
     // recalculate numbers, etc.
     goto_functions.update();

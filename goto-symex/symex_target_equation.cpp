@@ -448,6 +448,80 @@ void symex_target_equationt::SSA_stept::output(
   out << "Guard: " << from_expr(ns, "", guard) << std::endl;
 }
 
+bool symex_target_equationt::SSA_stept::operator<(const SSA_stept p2) const
+{
+
+  if (type < p2.type)
+    return true;
+  else if (type != p2.type)
+    return false;
+
+  if (guard < p2.guard)
+    return true;
+  else if (p2.guard < guard)
+    return false;
+
+  switch (type) {
+  case goto_trace_stept::ASSERT:
+  case goto_trace_stept::ASSUME:
+
+    if (cond < p2.cond)
+      return true;
+    else if (p2.cond < cond)
+      return false;
+
+    if (comment < p2.comment)
+      return true;
+    return false;
+
+  case goto_trace_stept::OUTPUT:
+
+    if (format_string < p2.format_string)
+      return true;
+    else if (p2.format_string < format_string)
+      return false;
+
+    /* So the format string is the same, how on earth does one compare two
+     * lists? XXX - do this in the future. Shouldn't affect any operation for
+     * now */
+    return false;
+
+  case goto_trace_stept::LOCATION:
+
+    if (source < p2.source)
+      return true;
+    else if (p2.source < source)
+      return false;
+
+    return false; /* XXX - what else? */
+
+  case goto_trace_stept::ASSIGNMENT:
+
+    if (lhs < p2.lhs)
+      return true;
+    else if (p2.lhs < lhs)
+      return false;
+
+    if (rhs < p2.rhs)
+      return true;
+    else if (p2.rhs < rhs)
+      return false;
+
+    if (original_lhs < p2.original_lhs)
+      return true;
+    else if (p2.original_lhs < original_lhs)
+      return false;
+
+    if (assignment_type < p2.assignment_type)
+      return true;
+    else if (p2.assignment_type < assignment_type)
+      return false;
+
+    return false;
+  }
+
+  return false;
+}
 /*******************************************************************\
 
 Function: operator <<
@@ -466,4 +540,75 @@ std::ostream &operator<<(
 {
   equation.output(out);
   return out;
+}
+
+exprt
+symex_target_equationt::reconstruct_expr_from_SSA(const exprt expr)
+{
+  exprt tmp;
+
+  if (expr.id() == "symbol")
+    return reconstruct_expr_from_SSA(expr.get("identifier").as_string());
+
+  tmp = expr;
+  tmp.operands().clear();
+
+  forall_operands(it, expr) {
+    exprt ex = reconstruct_expr_from_SSA(*it);
+    tmp.move_to_operands(ex);
+  }
+
+  return tmp;
+}
+
+exprt
+symex_target_equationt::reconstruct_expr_from_SSA(std::string name)
+{
+  exprt expr;
+  size_t pos;
+  std::string step_name;
+
+  /* Unfortunately we need to sanitise the name */
+  pos = name.find("'");
+  if (pos == std::string::npos)
+    pos = name.find("&");
+
+  std::string tmp = name.substr(0, pos);
+
+  /* Do we have a trailing # character? */
+  pos = name.rfind("#");
+  if (pos != std::string::npos)
+    tmp = tmp + "#" + name[pos+1];
+
+  step_name = tmp;
+
+  /* First, find this SSA step */
+  SSA_stepst::iterator it = SSA_steps.begin();
+  for (; it != SSA_steps.end(); it++) {
+    if (it->type != goto_trace_stept::ASSIGNMENT)
+      continue;
+
+    assert(it->lhs.id() == "symbol");
+    if (it->lhs.get("identifier").as_string() == step_name)
+      break;
+  }
+
+  if (it == SSA_steps.end()) {
+    /* there's an unpleasent situation where we can reference variables that
+     * were assigned via an ASSUME instruction: that means that their value is
+     * convoluted and nondeterministic, we can't extract anything worthwhile
+     * from it, and we may as well just use the symbol as the state
+     * representation. Ugh. */
+    return symbol_exprt("nonexist(" + name + ")");
+  }
+
+  /* Duplicate its rhs, and for each symbol in there, recurse */
+  expr = it->rhs;
+  expr.operands().clear();
+  forall_operands(op_iter, it->rhs) {
+    exprt ex = reconstruct_expr_from_SSA(*op_iter);
+    expr.move_to_operands(ex);
+  }
+
+  return expr;
 }

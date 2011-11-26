@@ -22,7 +22,7 @@ public:
   virtual const std::string solver_text()
   { return "CNF clause list"; }
    
-  virtual tvt l_get(literalt literal) const
+  virtual tvt l_get(literalt literal __attribute__((unused))) const
   {
     return tvt(tvt::TV_UNKNOWN);
   }

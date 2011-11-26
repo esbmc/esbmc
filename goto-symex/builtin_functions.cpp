@@ -34,6 +34,7 @@ void basic_symext::symex_malloc(
   statet &state,
   const exprt &lhs,
   const side_effect_exprt &code,
+  execution_statet &ex_state,
         unsigned node_id)
 {
   if(code.operands().size()!=1)
@@ -59,13 +60,13 @@ void basic_symext::symex_malloc(
   if(type.is_nil())
     type=char_type();
 
-  dynamic_counter++;
+  ex_state.dynamic_counter++;
 
   // value
   symbolt symbol;
 
   symbol.base_name="dynamic_"+
-    i2string(dynamic_counter)+
+    i2string(ex_state.dynamic_counter)+
     (size_is_one?"_value":"_array");
 
   symbol.name="symex_dynamic::"+id2string(symbol.base_name);
@@ -107,7 +108,7 @@ void basic_symext::symex_malloc(
   state.rename(rhs, ns,node_id);
   
   guardt guard;
-  symex_assign_rec(state, lhs, rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
 }
 
 /*******************************************************************\
@@ -172,6 +173,7 @@ void basic_symext::symex_cpp_new(
   statet &state,
   const exprt &lhs,
   const side_effect_exprt &code,
+  execution_statet &ex_state,
         unsigned node_id)
 {
   bool do_array;
@@ -181,9 +183,9 @@ void basic_symext::symex_cpp_new(
 
   do_array=(code.get("statement")=="cpp_new[]");
       
-  dynamic_counter++;
+  ex_state.dynamic_counter++;
 
-  const std::string count_string(i2string(dynamic_counter));
+  const std::string count_string(i2string(ex_state.dynamic_counter));
 
   // value
   symbolt symbol;
@@ -225,7 +227,7 @@ void basic_symext::symex_cpp_new(
   state.rename(rhs, ns,node_id);
 
   guardt guard;
-  symex_assign_rec(state, lhs, rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
 }
 
 /*******************************************************************\

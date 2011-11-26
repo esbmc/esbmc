@@ -55,7 +55,7 @@ public:
   {
   }
 
-  virtual void print(unsigned level, const std::string &message)
+  virtual void print(unsigned level __attribute__((unused)), const std::string &message)
   { out << message << std::endl; }
 
 protected:

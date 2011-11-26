@@ -229,6 +229,17 @@ public:
           
       return false;
     }    
+
+    bool operator<(const class instructiont i1) const
+    {
+      if (function < i1.function)
+        return true;
+
+      if (location_number < i1.location_number)
+        return true;
+
+      return false;
+    }
   };
 
   typedef std::list<class instructiont> instructionst;

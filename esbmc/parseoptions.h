@@ -35,6 +35,7 @@ Author: Daniel Kroening, kroening@kroening.com
   "(round-to-nearest)(round-to-plus-inf)(round-to-minus-inf)(round-to-zero)" \
   "(qf_aufbv)(qf_auflira)(btor)" \
   "(context-switch):(no-por)(data-races-check)(DFS)(schedule)(all-runs)" \
+  "(timeout):(memlimit):(state-hashing)" \
   "(core-size):" \
   "(decide)" // legacy, and will eventually disappear
 
@@ -86,6 +87,10 @@ protected:
   }
 
   void preprocessing();
+
+  void add_property_monitors(goto_functionst &goto_functions);
+  exprt calculate_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms);
+  void add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, exprt> >monitors);
 };
 
 #endif

@@ -11,6 +11,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
 #include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <guard.h>
 #include <pointer-analysis/value_set.h>
 #include <goto-programs/goto_functions.h>
@@ -18,8 +21,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <stack>
 
 #include "symex_target.h"
+#include "crypto_hash.h"
 
 #include <i2string.h>
+
+class execution_statet; // foward dec
+
 // central data structure: state
 class goto_symex_statet
 {
@@ -141,6 +148,10 @@ public:
     current_namest current_names;
     //current_names_nodest current_names_nodes;
     //std::map<irep_idt, unsigned int> thread_ids;
+    typedef std::map<irep_idt, crypto_hash> current_state_hashest;
+    current_state_hashest current_hashes;
+
+    crypto_hash generate_l2_state_hash();
 
     void rename(const irep_idt &identifier, unsigned count, unsigned node_id)
     {
@@ -174,7 +185,7 @@ public:
 
     unsigned current_number(const irep_idt &identifier) const;
 
-    level2t() { }
+    level2t() { };
     virtual ~level2t() { }
 
     virtual void print(std::ostream &out, unsigned node_id) const;
@@ -191,6 +202,7 @@ public:
     const exprt &rhs,
     const namespacet &ns,
     bool record_value,
+    execution_statet &ex_state,
     unsigned exec_node_id);
 
   // what to propagate

@@ -4,7 +4,8 @@ SRC = symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
       symex_goto.cpp builtin_functions.cpp slice.cpp symex_other.cpp \
       slice_by_trace.cpp xml_goto_trace.cpp symex_valid_object.cpp \
       dynamic_allocation.cpp precondition.cpp postcondition.cpp \
-      execution_state.cpp reachability_tree.cpp read_write_set.cpp
+      execution_state.cpp reachability_tree.cpp read_write_set.cpp \
+      crypto_hash.cpp
 
 OBJ = $(SRC:.cpp=.o)
 

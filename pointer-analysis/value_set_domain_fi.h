@@ -34,7 +34,7 @@ public:
   }
     
   virtual void initialize(
-    const namespacet &ns)
+    const namespacet &ns __attribute__((unused)))
   {
     value_set.clear();    
   }

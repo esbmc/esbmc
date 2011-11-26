@@ -7,7 +7,10 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 \*******************************************************************/
 
 #include "execution_state.h"
+#include <string>
+#include <sstream>
 #include <i2string.h>
+#include <string2array.h>
 #include <std_expr.h>
 #include <expr_util.h>
 #include "../ansi-c/c_types.h"
@@ -236,7 +239,7 @@ void execution_statet::decreament_trds_in_run(const namespacet &ns, symex_target
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
   target.assignment(
 		  get_active_state().guard,
@@ -285,7 +288,7 @@ void execution_statet::end_thread(const namespacet &ns, symex_targett &target)
 
     exprt new_lhs = lhs_expr;
 
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true, node_id);
+    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
     target.assignment(
             get_active_state().guard,
@@ -322,7 +325,7 @@ void execution_statet::increament_trds_in_run(const namespacet &ns, symex_target
     constant_exprt rhs_expr(int_t);
     rhs_expr.set_value(integer2binary(1,config.ansi_c.int_width));
 
-    get_active_state().assignment(lhs_expr, rhs_expr, ns, true, node_id);
+    get_active_state().assignment(lhs_expr, rhs_expr, ns, true, *this, node_id);
 
     thrds_in_run_flag=0;
   }
@@ -338,7 +341,7 @@ void execution_statet::increament_trds_in_run(const namespacet &ns, symex_target
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
   target.assignment(
           get_active_state().guard,
@@ -388,7 +391,7 @@ void execution_statet::deadlock_detection(const namespacet &ns, symex_targett &t
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, this, node_id);
 
   target.assignment(
           get_active_state().guard,
@@ -430,7 +433,7 @@ void execution_statet::update_trds_count(const namespacet &ns, symex_targett &ta
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
   target.assignment(
           get_active_state().guard,
@@ -474,7 +477,7 @@ void execution_statet::update_trds_status(const namespacet &ns, symex_targett &t
 
     exprt new_lhs = lhs_expr;
 
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true,node_id);
+    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
     target.assignment(
             get_active_state().guard,
@@ -485,6 +488,159 @@ void execution_statet::update_trds_status(const namespacet &ns, symex_targett &t
 
 }
 #endif
+
+/*******************************************************************
+ Function: execution_statet::set_trd_number
+
+ Inputs:
+
+ Outputs:
+
+ Purpose:
+
+ \*******************************************************************/
+
+void execution_statet::set_active_trd_zero(const namespacet &ns, symex_targett &target)
+{
+#ifdef DEBUG
+  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
+#endif
+
+	typet uint_t = uint_type();
+
+	//std::cout << "set_active_trd _active_thread: " << _active_thread << std::endl;
+	//std::cout << "_active_thread: " << _threads_state.size()-1 << std::endl;
+
+	exprt lhs_expr = symbol_exprt("c::trd_nr", uint_t);
+    constant_exprt rhs_expr = constant_exprt(uint_t);
+    rhs_expr.set_value(integer2binary(_threads_state.size()-1, config.ansi_c.int_width));
+
+    exprt new_lhs = lhs_expr;
+
+    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
+
+    target.assignment(
+            get_active_state().guard,
+            new_lhs, lhs_expr,
+            rhs_expr,
+            get_active_state().source,
+            symex_targett::STATE);
+
+}
+
+/*******************************************************************
+ Function: execution_statet::set_trd_number
+
+ Inputs:
+
+ Outputs:
+
+ Purpose:
+
+ \*******************************************************************/
+
+void execution_statet::set_active_trd_one(const namespacet &ns, symex_targett &target)
+{
+#ifdef DEBUG
+  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
+#endif
+
+	typet uint_t = uint_type();
+
+	//std::cout << "set_active_trd _active_thread: " << _active_thread << std::endl;
+	std::cout << "_active_thread: " << _active_thread << std::endl;
+
+	exprt lhs_expr = symbol_exprt("c::trd_nr", uint_t);
+    constant_exprt rhs_expr = constant_exprt(uint_t);
+    rhs_expr.set_value(integer2binary(_active_thread, config.ansi_c.int_width));
+
+    exprt new_lhs = lhs_expr;
+
+    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
+
+    target.assignment(
+            get_active_state().guard,
+            new_lhs, lhs_expr,
+            rhs_expr,
+            get_active_state().source,
+            symex_targett::STATE);
+
+}
+
+/*******************************************************************
+ Function: execution_statet::set_trd_status_to_one
+
+ Inputs:
+
+ Outputs:
+
+ Purpose:
+
+ \*******************************************************************/
+
+void execution_statet::set_trd_status_to_one(const namespacet &ns, symex_targett &target)
+{
+#ifdef DEBUG
+  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
+#endif
+
+#if 1
+  typet uint_t = uint_type();
+
+  irep_idt tmp = "c::exit" + i2string(_active_thread);
+  exprt lhs_expr = symbol_exprt(tmp, uint_t);
+  exprt rhs_expr = gen_one(uint_t);
+
+  exprt new_lhs = lhs_expr;
+
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
+
+  target.assignment(
+          get_active_state().guard,
+          new_lhs, lhs_expr,
+          rhs_expr,
+          get_active_state().source,
+          symex_targett::STATE);
+#endif
+}
+
+/*******************************************************************
+ Function: execution_statet::set_trd_status_to_zero
+
+ Inputs:
+
+ Outputs:
+
+ Purpose:
+
+ \*******************************************************************/
+
+void execution_statet::set_trd_status_to_zero(const namespacet &ns, symex_targett &target)
+{
+#ifdef DEBUG
+  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
+#endif
+
+#if 1
+  typet uint_t = uint_type();
+
+  irep_idt tmp = "c::exit" + i2string(_threads_state.size()-1);
+  exprt lhs_expr = symbol_exprt(tmp, uint_t);
+  exprt rhs_expr = gen_zero(uint_t);
+
+  exprt new_lhs = lhs_expr;
+
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
+
+  target.assignment(
+          get_active_state().guard,
+          new_lhs, lhs_expr,
+          rhs_expr,
+          get_active_state().source,
+          symex_targett::STATE);
+#endif
+}
+
 
 /*******************************************************************
  Function: execution_statet::execute_guard
@@ -526,7 +682,7 @@ void execution_statet::execute_guard(const namespacet &ns, symex_targett &target
       new_rhs = cur_rhs; //gen_and(parent_guard, cur_rhs);
     }
 
-    get_active_state().assignment(new_lhs, new_rhs, ns, false, node_id);
+    get_active_state().assignment(new_lhs, new_rhs, ns, false, *this, node_id);
 
     assert(new_lhs.get("identifier") == get_guard_identifier());
 
@@ -916,4 +1072,244 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
   }
 
   return globals;
+}
+
+crypto_hash
+execution_statet::generate_hash(void) const
+{
+
+  crypto_hash state = _state_level2->generate_l2_state_hash();
+  std::string str = state.to_string();
+
+  for (std::vector<goto_symex_statet>::const_iterator it=_threads_state.begin();
+        it != _threads_state.end(); it++) {
+    goto_programt::const_targett pc = it->source.pc;
+    int id = pc->location_number;
+    str += "!" + id;
+  }
+
+  crypto_hash h = crypto_hash(str);
+
+  return h;
+}
+
+std::string
+unmunge_SSA_name(std::string str)
+{
+  size_t and_pos, hash_pos;
+  std::string result;
+
+  /* All SSA assignment names are of the form symname&x_x_x#n, where n is the
+   * assignment count for that symbol, and x are a variety of uninteresting
+   * but interleaving-specific numbers. So, we want to discard them. */
+  and_pos = str.find("&");
+  hash_pos = str.rfind("#");
+  result = str.substr(0, and_pos);
+  result = result + str[hash_pos+1];
+  return result;
+}
+
+static std::string state_to_ignore[8] =
+{"\\guard", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
+"count_lock", "count_wait", "unlocked"};
+
+std::string
+execution_statet::serialise_expr(const exprt &rhs)
+{
+  std::string str;
+  uint64_t val;
+  int i;
+
+  // FIXME: some way to disambiguate what's part of a hash / const /whatever,
+  // and what's part of an operator
+
+  // The plan: serialise this expression into the identifiers of its operations,
+  // replacing symbol names with the hash of their value.
+  if (rhs.id() == "symbol") {
+
+    str = rhs.get("identifier").as_string();
+    for (i = 0 ; i < 8; i++)
+      if (str.find(state_to_ignore[i]) != std::string::npos)
+        return "(ignore)";
+
+    // If this is something we've already encountered, use the hash of its
+    // value.
+    exprt tmp = rhs;
+    get_active_state().get_original_name(tmp);
+    if (_state_level2->current_hashes.find(tmp.get("identifier").as_string()) != _state_level2->current_hashes.end()) {
+      crypto_hash h = _state_level2->current_hashes.find(tmp.get("identifier").as_string())->second;
+      return "hash(" + h.to_string() + ")";
+    }
+
+    /* Otherwise, it's something that's been assumed, or some form of
+     * nondeterminism. Just return its name. */
+    return rhs.get("identifier").as_string();
+  } else if (rhs.id() == "array_of") {
+    /* An array of the same set of values: generate all of them. */
+    str = "array(";
+    irept array = rhs.find("type");
+    exprt size = (exprt&)array.find("size");
+    str += "sz(" + serialise_expr(size) + "),";
+    str += "elem(" + serialise_expr(rhs.op0()) + "))";
+  } else if (rhs.id() == "with") {
+    exprt rec = rhs;
+
+    if (rec.type().id() == "array") {
+      str = "array(";
+      str += "prev(" + serialise_expr(rec.op0()) + "),";
+      str += "idx(" + serialise_expr(rec.op1()) + "),";
+      str += "val(" + serialise_expr(rec.op2()) + "))";
+    } else if (rec.type().id() == "struct") {
+      str = "struct(";
+      str += "prev(" + serialise_expr(rec.op0()) + "),";
+      str += "member(" + serialise_expr(rec.op1()) + "),";
+      str += "val(" + serialise_expr(rec.op2()) + "),";
+    } else if (rec.type().id() ==  "union") {
+      /* We don't care about previous assignments to this union, because
+       * they're overwritten by this one, and leads to undefined side effects
+       * anyway. So, just serialise the identifier, the member assigned to,
+       * and the value assigned */
+      str = "union_set(";
+      str += "union_sym(" + rec.op0().get("identifier").as_string() + "),";
+      str += "field(" + serialise_expr(rec.op1()) + "),";
+      str += "val(" + serialise_expr(rec.op2()) + "))";
+    } else {
+      throw "Unrecognised type of with expression: " + rec.op0().type().id().as_string();
+    }
+  } else if (rhs.id() == "index") {
+    str = "index(";
+    str += serialise_expr(rhs.op0());
+    str += ",idx(" + serialise_expr(rhs.op1()) + ")";
+  } else if (rhs.id() == "member_name") {
+    str = "component(" + rhs.get("component_name").as_string() + ")";
+  } else if (rhs.id() == "member") {
+    str = "member(entity(" + serialise_expr(rhs.op0()) + "),";
+    str += "member_name(" + rhs.get("component_name").as_string() + "))";
+  } else if (rhs.id() == "nondet_symbol") {
+    /* Just return the identifier: it'll be unique to this particular piece
+     * of entropy */
+    exprt tmp = rhs;
+    get_active_state().get_original_name(tmp);
+    str = "nondet_symbol(" + tmp.get("identifier").as_string() + ")";
+  } else if (rhs.id() == "if") {
+    str = "cond(if(" + serialise_expr(rhs.op0()) + "),";
+    str += "then(" + serialise_expr(rhs.op1()) + "),";
+    str += "else(" + serialise_expr(rhs.op2()) + "))";
+  } else if (rhs.id() == "struct") {
+    str = rhs.type().get("tag").as_string();
+    str = "struct(tag(" + str + "),";
+    forall_operands(it, rhs) {
+      str = str + "(" + serialise_expr(*it) + "),";
+    }
+    str += ")";
+  } else if (rhs.id() == "union") {
+    str = rhs.type().get("tag").as_string();
+    str = "union(tag(" + str + "),";
+    forall_operands(it, rhs) {
+      str = str + "(" + serialise_expr(*it) + "),";
+    }
+  } else if (rhs.id() == "constant") {
+    // It appears constants can be "true", "false", or a bit vector. Parse that,
+    // and then print the value as a base 10 integer.
+
+    irep_idt idt_val = rhs.get("value");
+    if (idt_val == "true") {
+      val = 1;
+    } else if (idt_val == "false") {
+      val = 0;
+    } else {
+      val = strtol(idt_val.c_str(), NULL, 2);
+    }
+
+    std::stringstream tmp;
+    tmp << val;
+    str = "const(" + tmp.str() + ")";
+  } else if (rhs.id() == "pointer_offset") {
+    str = "pointer_offset(" + serialise_expr(rhs.op0()) + ")";
+  } else if (rhs.id() == "string-constant") {
+    exprt tmp;
+    string2array(rhs, tmp);
+    return serialise_expr(tmp);
+  } else if (rhs.id() == "same-object") {
+  } else if (rhs.id() == "byte_update_little_endian") {
+  } else if (rhs.id() == "byte_update_big_endian") {
+  } else if (rhs.id() == "byte_extract_little_endian") {
+  } else if (rhs.id() == "byte_extract_big_endian") {
+  } else if (rhs.id() == "infinity") {
+    return "inf";
+  } else {
+    execution_statet::expr_id_map_t::const_iterator it;
+    it = expr_id_map.find(rhs.id());
+    if (it != expr_id_map.end())
+     return it->second(*this, rhs);
+
+    std::cout << "Unrecognized expression when generating state hash:\n";
+    std::cout << rhs.pretty(0) << std::endl;
+    abort();
+  }
+
+  return str;
+}
+
+// If we have a normal expression, either arithmatic, binary, comparision,
+// or whatever, just take the operator and append its operands.
+std::string
+serialise_normal_operation(execution_statet &ex_state, const exprt &rhs)
+{
+  std::string str;
+
+  str = rhs.id().as_string();
+  forall_operands(it, rhs) {
+    str = str + "(" + ex_state.serialise_expr(*it) + ")";
+  }
+
+  return str;
+}
+
+
+crypto_hash
+execution_statet::update_hash_for_assignment(const exprt &rhs)
+{
+
+  return crypto_hash(serialise_expr(rhs));
+}
+
+const execution_statet::expr_id_map_t execution_statet::expr_id_map = execution_statet::init_expr_id_map();
+
+
+execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
+{
+  execution_statet::expr_id_map_t m;
+  m["+"] = serialise_normal_operation;
+  m["-"] = serialise_normal_operation;
+  m["*"] = serialise_normal_operation;
+  m["/"] = serialise_normal_operation;
+  m["mod"] = serialise_normal_operation;
+  m["="] = serialise_normal_operation;
+  m["and"] = serialise_normal_operation;
+  m["=>"] = serialise_normal_operation;
+  m["or"] = serialise_normal_operation;
+  m["not"] = serialise_normal_operation;
+  m["notequal"] = serialise_normal_operation;
+  m["unary-"] = serialise_normal_operation;
+  m["unary+"] = serialise_normal_operation;
+  m["abs"] = serialise_normal_operation;
+  m["isnan"] = serialise_normal_operation;
+  m[">="] = serialise_normal_operation;
+  m[">"] = serialise_normal_operation;
+  m["<="] = serialise_normal_operation;
+  m["<"] = serialise_normal_operation;
+  m["bitor"] = serialise_normal_operation;
+  m["bitxor"] = serialise_normal_operation;
+  m["bitand"] = serialise_normal_operation;
+  m["bitnot"] = serialise_normal_operation;
+  m["shl"] = serialise_normal_operation;
+  m["lshr"] = serialise_normal_operation;
+  m["ashr"] = serialise_normal_operation;
+  m["typecast"] = serialise_normal_operation;
+  m["address_of"] = serialise_normal_operation;
+  m["pointer_obj"] = serialise_normal_operation;
+  m["pointer_object"] = serialise_normal_operation;
+
+  return m;
 }

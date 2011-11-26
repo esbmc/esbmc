@@ -40,11 +40,11 @@ protected:
     post_visitor(expr);
   }
 
-  virtual void pre_visitor(exprt &expr)
+  virtual void pre_visitor(exprt &expr __attribute__((unused)))
   {
   }
 
-  virtual void post_visitor(exprt &expr)
+  virtual void post_visitor(exprt &expr __attribute__((unused)))
   {
   }
   
@@ -58,11 +58,11 @@ protected:
     post_visitor(expr);
   }
 
-  virtual void pre_visitor(const exprt &expr)
+  virtual void pre_visitor(const exprt &expr __attribute__((unused)))
   {
   }
 
-  virtual void post_visitor(const exprt &expr)
+  virtual void post_visitor(const exprt &expr __attribute__((unused)))
   {
   }
 };

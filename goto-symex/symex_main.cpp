@@ -114,11 +114,8 @@ Function: goto_symext::operator()
 
 void goto_symext::multi_formulas_init(const goto_functionst &goto_functions)
 {
-  int cs = atoi(options.get_option("context-switch").c_str());
-  bool deadlock_detection  = options.get_bool_option("deadlock-check");
-  bool por = options.get_bool_option("no-por");
 
-  art1 = new reachability_treet(goto_functions,ns,cs,deadlock_detection,por);
+  art1 = new reachability_treet(goto_functions, ns, options);
 }
 
 /*******************************************************************\
@@ -190,15 +187,8 @@ Function: goto_symext::operator()
 
 void goto_symext::operator()(const goto_functionst &goto_functions)
 {
-  int cs = atoi(options.get_option("context-switch").c_str());
-  bool deadlock_detection  = options.get_bool_option("deadlock-check");
-  bool por;
-  if (options.get_bool_option("control-flow-test"))
-	por=false;
-  else
-    por = options.get_bool_option("no-por");
 
-  reachability_treet art(goto_functions,ns,cs,deadlock_detection,por);
+  reachability_treet art(goto_functions, ns, options);
 
   int total_states = 0;
   while (art.has_more_states())
@@ -265,7 +255,7 @@ void goto_symext::symex_step(
 
   const goto_programt::instructiont &instruction = *state.source.pc;
 
-  merge_gotos(state, ex_state.node_id);
+  merge_gotos(state, ex_state, ex_state.node_id);
 
   // depth exceeded?
   {
@@ -308,7 +298,7 @@ void goto_symext::symex_step(
         	is_goto=true;
             exprt tmp(instruction.guard);
             replace_dynamic_allocation(state, tmp);
-            replace_nondet(tmp);
+            replace_nondet(tmp, ex_state);
             dereference(tmp, state, false, ex_state.node_id);
 
             if(!tmp.is_nil() && !options.get_bool_option("deadlock-check") /*&& is_main*/)
@@ -318,14 +308,14 @@ void goto_symext::symex_step(
                   return;
             }
 
-            symex_goto(art.get_cur_state().get_active_state(), ex_state.node_id);
+            symex_goto(art.get_cur_state().get_active_state(), ex_state, ex_state.node_id);
         }
             break;
         case ASSUME:
             if (!state.guard.is_false()) {
                 exprt tmp(instruction.guard);
                 replace_dynamic_allocation(state, tmp);
-                replace_nondet(tmp);
+                replace_nondet(tmp, ex_state);
                 dereference(tmp, state, false, ex_state.node_id);
 
                 exprt tmp1 = tmp;
@@ -360,7 +350,7 @@ void goto_symext::symex_step(
                     exprt tmp(instruction.guard);
 
                     replace_dynamic_allocation(state, tmp);
-                    replace_nondet(tmp);
+                    replace_nondet(tmp, ex_state);
                     dereference(tmp, state, false, ex_state.node_id);
 
                     if(ex_state._threads_state.size() > 1)
@@ -375,7 +365,7 @@ void goto_symext::symex_step(
 
         case RETURN:
         	 if(!state.guard.is_false())
-        	      symex_return(state, ex_state.node_id);
+                         symex_return(state, ex_state, ex_state.node_id);
 
             state.source.pc++;
             break;
@@ -384,13 +374,13 @@ void goto_symext::symex_step(
             if (!state.guard.is_false()) {
                 codet deref_code=instruction.code;
                 replace_dynamic_allocation(state, deref_code);
-                replace_nondet(deref_code);
+                replace_nondet(deref_code, ex_state);
                 assert(deref_code.operands().size()==2);
 
                 dereference(deref_code.op0(), state, true, ex_state.node_id);
                 dereference(deref_code.op1(), state, false, ex_state.node_id);
 
-                basic_symext::symex_assign(state, deref_code, ex_state.node_id);
+                basic_symext::symex_assign(state, ex_state, deref_code, ex_state.node_id);
 
                 state.source.pc++;
 
@@ -423,7 +413,7 @@ void goto_symext::symex_step(
                         to_code_function_call(instruction.code);
 
                 replace_dynamic_allocation(state, deref_code);
-                replace_nondet(deref_code);
+                replace_nondet(deref_code, ex_state);
 
                 if (deref_code.lhs().is_not_nil()) {
                     dereference(deref_code.lhs(), state, true,ex_state.node_id);
@@ -467,7 +457,7 @@ void goto_symext::symex_step(
                         statement == "free" ||
                         statement == "printf") {
                     replace_dynamic_allocation(state, deref_code);
-                    replace_nondet(deref_code);
+                    replace_nondet(deref_code, ex_state);
                     dereference(deref_code, state, false,ex_state.node_id);
 
                     //if(ex_state._threads_state.size() > 1)
@@ -475,7 +465,7 @@ void goto_symext::symex_step(
                         //return;
                 }
 
-                symex_other(goto_functions, state, ex_state.node_id);
+                symex_other(goto_functions, state, ex_state,  ex_state.node_id);
             }
             state.source.pc++;
             break;

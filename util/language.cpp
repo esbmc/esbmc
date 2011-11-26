@@ -24,7 +24,7 @@ Function: languaget::from_expr
 bool languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns __attribute__((unused)))
 {
   code=expr.pretty();
   return false;
@@ -45,7 +45,7 @@ Function: languaget::from_type
 bool languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns __attribute__((unused)))
 {
   code=type.pretty();
   return false;
