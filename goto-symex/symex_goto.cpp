@@ -356,7 +356,7 @@ void goto_symext::phi_function(
   std::set<irep_idt> variables;
 
   goto_state.level2.get_variables(variables);
-  state.level2->get_variables(variables);
+  state.level2.get_variables(variables);
 
   for(std::set<irep_idt>::const_iterator
       it=variables.begin();
@@ -364,7 +364,7 @@ void goto_symext::phi_function(
       it++)
   {
     if(goto_state.level2.current_number(*it)==
-       state.level2->current_number(*it))
+       state.level2.current_number(*it))
       continue; // not changed
 
     if(*it==guard_identifier(state))

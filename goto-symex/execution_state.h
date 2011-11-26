@@ -30,36 +30,91 @@ class execution_statet
 
 public:
 	execution_statet(const goto_functionst &goto_functions,
-                const namespacet &ns, const reachability_treet *art):
-                _target(ns),
+                const namespacet &ns, const reachability_treet *art,
+                goto_symex_statet::level2t &l2):
 		owning_rt(art),
+		_state_level2(l2),
+                _target(ns),
                 _goto_functions(goto_functions)
 	{
-	  reexecute_instruction = true;
-	  reexecute_atomic = false;
-      _CS_number = 0;
-      _actual_CS_number=0;
-      node_id = 0;
-      guard_execution = "execution_statet::\\guard_exec";
-      guard_thread = "execution_statet::\\trdsel";
+		reexecute_instruction = true;
+		reexecute_atomic = false;
+		_CS_number = 0;
+		_actual_CS_number=0;
+		node_id = 0;
+		guard_execution = "execution_statet::\\guard_exec";
+		guard_thread = "execution_statet::\\trdsel";
 
-	  goto_functionst::function_mapt::const_iterator it=
-		    goto_functions.function_map.find("main");
-	  if(it==goto_functions.function_map.end())
-		    throw "main symbol not found; please set an entry point";
+		goto_functionst::function_mapt::const_iterator it=
+				goto_functions.function_map.find("main");
+		if(it==goto_functions.function_map.end())
+			throw "main symbol not found; please set an entry point";
 
-	  _goto_program =&(it->second.body);
+		_goto_program =&(it->second.body);
 
-	  _state_level2 = new goto_symex_statet::level2t();
-	  add_thread((*_goto_program).instructions.begin(),(*_goto_program).instructions.end());
-	  _active_thread = 0;
-      _last_active_thread = 0;
-      generating_new_threads = 0;
-	  node_count=0;
-          nondet_count = 0;
+		add_thread((*_goto_program).instructions.begin(),(*_goto_program).instructions.end());
+		_active_thread = 0;
+		_last_active_thread = 0;
+		generating_new_threads = 0;
+		node_count=0;
+		nondet_count = 0;
 	};
 
+	execution_statet(const execution_statet &ex) :
+		owning_rt(ex.owning_rt),
+		_state_level2(ex._state_level2),
+		_target(ex._target),
+		_goto_functions(ex._goto_functions)
+	{
+		*this = ex;
+
+		// Regenerate threads state using new objects _state_level2 ref
+		_threads_state.clear();
+		std::vector<goto_symex_statet>::const_iterator it;
+		for(it = ex._threads_state.begin(); it != ex._threads_state.end(); it++) {
+			goto_symex_statet state(*it, _state_level2);
+			_threads_state.push_back(state);
+		}
+
+	}
+
+	execution_statet& operator=(const execution_statet &ex)
+	{
+		_threads_state = ex._threads_state;
+		_atomic_numbers = ex._atomic_numbers;
+		_DFS_traversed = ex._DFS_traversed;
+		_exprs = ex._exprs;
+		generating_new_threads = ex.generating_new_threads;
+		last_global_expr = ex.last_global_expr;
+		_exprs_read_write = ex._exprs_read_write;
+		last_global_read_write = ex.last_global_read_write;
+		_last_active_thread = ex._last_active_thread;
+		_state_level2 = ex._state_level2;
+		_active_thread = ex._active_thread;
+		guard_execution = ex.guard_execution;
+		guard_thread = ex.guard_thread;
+		_parent_guard_identifier = ex._parent_guard_identifier;
+		reexecute_instruction = ex.reexecute_instruction;
+		reexecute_atomic = ex.reexecute_atomic;
+		_actual_CS_number = ex._actual_CS_number;
+		nondet_count = ex.nondet_count;
+		dynamic_counter = ex.dynamic_counter;
+		node_id = ex.node_id;
+		parent_node_id = ex.parent_node_id;
+
+		_goto_program = ex._goto_program;
+		_CS_number = ex._CS_number;
+		return *this;
+	}
+
 	virtual ~execution_statet()	{};
+
+    // Types
+
+    typedef std::string (*serialise_fxn)(execution_statet &ex_state, const exprt &rhs);
+    typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
+
+    // Methods
 
     /* number of context switches we've performed to reach this state */
     void increment_context_switch()
@@ -72,18 +127,6 @@ public:
       return _CS_number;
     }
 
-	void free_level2()
-	{
-      delete _state_level2;
-	}
-
-	void copy_level2_from(execution_statet & ex_state)
-	{
-	  _state_level2 = new goto_symex_statet::level2t(*ex_state._state_level2);
-	  for(unsigned int i=0;i<_threads_state.size();i++)
-	    _threads_state.at(i).level2 = _state_level2;
-	}
-
     void reset_DFS_traversed()
     {
    	  for(unsigned int i=0;i<_threads_state.size();i++)
@@ -91,10 +134,6 @@ public:
     }
 
     void recover_global_state(const namespacet &ns, symex_targett &target);
-    static unsigned int node_count;
-    unsigned int node_id;
-    unsigned int parent_node_id;
-    symex_target_equationt _target;
 
     irep_idt get_guard_identifier();
     irep_idt get_guard_identifier_base();
@@ -119,31 +158,55 @@ public:
      * _exprs_read_write implicitly as reads: my eyes are on fire. */
     unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
 
+    //void deadlock_detection(const namespacet &ns, symex_targett &target);
+    void increament_trds_in_run(const namespacet &ns, symex_targett &target);
+    void update_trds_count(const namespacet &ns, symex_targett &target);
+    //void update_trds_status(const namespacet &ns, symex_targett &target);
+
+    crypto_hash generate_hash(void) const;
+    crypto_hash update_hash_for_assignment(const exprt &rhs);
+    std::string serialise_expr(const exprt &rhs);
+
+private:
+    void decreament_trds_in_run(const namespacet &ns, symex_targett &target);
+    const symbolt& lookup(const namespacet &ns, const irep_idt &identifier)  const;
+    bool is_in_lookup(const namespacet &ns, const irep_idt &identifier) const;
+
+    // Object state
+
+public:
+
     const reachability_treet *owning_rt;
 
-	/* jmorse - Set of current thread states, indexed by threads id number*/
-	std::vector<goto_symex_statet> _threads_state;
-	/* jmorse - appears to just be a flag indicating whether we're currently
-	 * in an atomic section */
-	std::vector<unsigned int> _atomic_numbers;
-	/* jmorse - Depth first search? */
-	std::vector<bool> _DFS_traversed;
-	/* jmorse - a set of expressions, one for each active thread, showing
-	 * where each thread is at? generate_states_base. */
-	std::vector<exprt> _exprs;
+    /* jmorse - Set of current thread states, indexed by threads id number*/
+    std::vector<goto_symex_statet> _threads_state;
+
+    /* jmorse - appears to just be a flag indicating whether we're currently
+     * in an atomic section */
+    std::vector<unsigned int> _atomic_numbers;
+
+    /* jmorse - Depth first search? */
+    std::vector<bool> _DFS_traversed;
+
+    /* jmorse - a set of expressions, one for each active thread, showing
+     * where each thread is at? generate_states_base. */
+    std::vector<exprt> _exprs;
+
     int generating_new_threads;
     /* jmorse - Presumably the last expr to be executed */
     exprt last_global_expr;
+
     /* jmorse - a set of operations (irep_idts; identifiers?) that presumably
      * occur at the top of each state. indexed by thread id no. So, it's the
      * set of most recent reads/writes of thread? */
     std::vector<read_write_set> _exprs_read_write;
+
     /* jmorse - what the name says */
     read_write_set last_global_read_write;
 
     unsigned int _last_active_thread;
-	goto_symex_statet::level2t *_state_level2;
-	unsigned int _active_thread;
+    goto_symex_statet::level2t _state_level2;
+    unsigned int _active_thread;
 
     irep_idt guard_execution;
     irep_idt guard_thread;
@@ -153,31 +216,24 @@ public:
     bool reexecute_atomic; // temporarily disable context switch for the thread inherited from the last active thread
     int _actual_CS_number; //count the actual number of context switches
 
-    //void deadlock_detection(const namespacet &ns, symex_targett &target);
-    void increament_trds_in_run(const namespacet &ns, symex_targett &target);
-    void update_trds_count(const namespacet &ns, symex_targett &target);
-    //void update_trds_status(const namespacet &ns, symex_targett &target);
-
-    crypto_hash generate_hash(void) const;
-
-    typedef std::string (*serialise_fxn)(execution_statet &ex_state, const exprt &rhs);
-    typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
-    static expr_id_map_t init_expr_id_map();
-    static const expr_id_map_t expr_id_map;
-
-    crypto_hash update_hash_for_assignment(const exprt &rhs);
-    std::string serialise_expr(const exprt &rhs);
-
     unsigned nondet_count;
     unsigned dynamic_counter;
 
+    unsigned int node_id;
+    unsigned int parent_node_id;
+    symex_target_equationt _target;
+
 private:
-    void decreament_trds_in_run(const namespacet &ns, symex_targett &target);
-    const symbolt& lookup(const namespacet &ns, const irep_idt &identifier)  const;
-    bool is_in_lookup(const namespacet &ns, const irep_idt &identifier) const;
-	const goto_functionst &_goto_functions;
+    const goto_functionst &_goto_functions;
     const goto_programt *_goto_program;
     int _CS_number;
+
+    // Static stuff:
+
+public:
+    static expr_id_map_t init_expr_id_map();
+    static const expr_id_map_t expr_id_map;
+    static unsigned int node_count;
 };
 
 #endif /* EXECUTION_STATE_H_ */

@@ -58,11 +58,10 @@ Function: goto_symex_statet::initialize
 
 \*******************************************************************/
 
-void goto_symex_statet::initialize(goto_symex_statet::level2t * pl, const goto_programt::const_targett & start, const goto_programt::const_targett & end, unsigned int thread_id)
+void goto_symex_statet::initialize(const goto_programt::const_targett & start, const goto_programt::const_targett & end, unsigned int thread_id)
 {
   new_frame(thread_id);
 
-  level2 = pl;
   source.is_set=true;
   source.thread_nr = thread_id;
   source.pc=start;//body.instructions.begin();
@@ -393,16 +392,16 @@ void goto_symex_statet::assignment(
   std::string orig_name = get_original_name(l1_identifier).as_string();
 
   // do the l2 renaming
-  level2t::valuet &entry=level2->current_names[l1_identifier];
+  level2t::valuet &entry=level2.current_names[l1_identifier];
 
   entry.count++;
 
-  level2->rename(l1_identifier, entry.count,exec_node_id);
+  level2.rename(l1_identifier, entry.count,exec_node_id);
 
-  lhs.set("identifier", level2->name(l1_identifier, entry.count));
+  lhs.set("identifier", level2.name(l1_identifier, entry.count));
 
   if (ex_state.owning_rt->state_hashing)
-    level2->current_hashes[orig_name] = hash;
+    level2.current_hashes[orig_name] = hash;
 
   if(record_value)
   {
@@ -421,7 +420,7 @@ void goto_symex_statet::assignment(
     // update value sets
     value_sett::expr_sett rhs_value_set;
     exprt l1_rhs(rhs);
-    level2->get_original_name(l1_rhs);
+    level2.get_original_name(l1_rhs);
 
     exprt l1_lhs("symbol", lhs.type());
     l1_lhs.set("identifier", l1_identifier);
@@ -435,7 +434,7 @@ static std::string state_to_ignore[8] =
 "count_lock", "count_wait", "unlocked"};
 
 crypto_hash
-goto_symex_statet::level2t::generate_l2_state_hash()
+goto_symex_statet::level2t::generate_l2_state_hash() const
 {
   uint8_t *data;
   int idx;
@@ -478,7 +477,7 @@ void goto_symex_statet::rename(exprt &expr, const namespacet &ns,unsigned node_i
   if(expr.id()=="symbol")
   {
     top().level1.rename(expr,node_id);
-    level2->rename(expr,node_id);
+    level2.rename(expr,node_id);
   }
   else if(expr.id()=="address_of" ||
           expr.id()=="implicit_address_of" ||
@@ -739,7 +738,7 @@ void goto_symex_statet::get_original_name(exprt &expr) const
   {
 //	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 2" << std::endl;
 //	  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-1 : " << expr.get("identifier") << std::endl;
-    level2->get_original_name(expr);
+    level2.get_original_name(expr);
   //  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-2 : " << expr.get("identifier") << std::endl;
     top().level1.get_original_name(expr);
     //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-3 : " << expr.get("identifier") << std::endl;
@@ -820,7 +819,7 @@ const irep_idt &goto_symex_statet::get_original_name(
 
  //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 0 : " << identifier << std::endl;
   return top().level1.get_original_name(
-         level2->get_original_name(identifier));
+         level2.get_original_name(identifier));
 }
 
 /*******************************************************************\

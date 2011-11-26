@@ -38,10 +38,7 @@ public:
       _deadlock_detection = options.get_bool_option("deadlock-check");
       state_hashing = options.get_bool_option("state-hashing");
 
-      // XXX - in one location (goto_symext::operator()) por depends on whether
-      // control-flow-test is set, while in another
-      // (goto_symext::multi_formulas_init) it does not.
-      if (options.get_bool_option("no-por"))
+      if (options.get_bool_option("no-por") || options.get_bool_option("control-flow-test"))
         _por = false;
       else
         _por = true;
@@ -51,7 +48,7 @@ public:
 	  _go_next_formula = false;
       _actual_CS_bound = _CS_bound;
       _is_same_mutex=false;
-      execution_statet ex_state(goto_functions, ns, this);
+      execution_statet ex_state(goto_functions, ns, this, initial_level2);
 	  execution_states.push_back(ex_state);
       _cur_state_it = execution_states.begin();
     };
@@ -108,6 +105,7 @@ private:
     std::set<crypto_hash>hit_hashes;
 
     optionst options;
+    goto_symex_statet::level2t initial_level2;
 };
 
 #endif /* REACHABILITY_TREE_H_ */

@@ -571,8 +571,8 @@ void execution_statet::add_thread(goto_programt::const_targett thread_start, got
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
 #endif
 
-  goto_symex_statet state;
-  state.initialize(_state_level2, thread_start, thread_end, _threads_state.size());
+  goto_symex_statet state(_state_level2);
+  state.initialize(thread_start, thread_end, _threads_state.size());
 
   _threads_state.push_back(state);
   _atomic_numbers.push_back(0);
@@ -630,9 +630,9 @@ void execution_statet::recover_global_state(const namespacet &ns, symex_targett 
 #endif
 
   std::set<irep_idt> variables;
-  _state_level2->get_variables(variables);
+  _state_level2.get_variables(variables);
 
-  _state_level2->print(std::cout,parent_node_id);
+  _state_level2.print(std::cout,parent_node_id);
 
   for (std::set<irep_idt>::const_iterator
        it = variables.begin();
@@ -925,7 +925,7 @@ crypto_hash
 execution_statet::generate_hash(void) const
 {
 
-  crypto_hash state = _state_level2->generate_l2_state_hash();
+  crypto_hash state = _state_level2.generate_l2_state_hash();
   std::string str = state.to_string();
 
   for (std::vector<goto_symex_statet>::const_iterator it=_threads_state.begin();
@@ -983,8 +983,8 @@ execution_statet::serialise_expr(const exprt &rhs)
     // value.
     exprt tmp = rhs;
     get_active_state().get_original_name(tmp);
-    if (_state_level2->current_hashes.find(tmp.get("identifier").as_string()) != _state_level2->current_hashes.end()) {
-      crypto_hash h = _state_level2->current_hashes.find(tmp.get("identifier").as_string())->second;
+    if (_state_level2.current_hashes.find(tmp.get("identifier").as_string()) != _state_level2.current_hashes.end()) {
+      crypto_hash h = _state_level2.current_hashes.find(tmp.get("identifier").as_string())->second;
       return "hash(" + h.to_string() + ")";
     }
 
