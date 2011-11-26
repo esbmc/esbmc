@@ -12,7 +12,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <iostream>
 #include <solvers/prop/prop.h>
 
-#include "../../../boolector/include/boolector.h"
+struct BtorExp;
+struct Btor;
 
 class boolector_propt:virtual public propt
 {

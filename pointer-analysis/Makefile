@@ -17,7 +17,7 @@ include ../common
 ###############################################################################
 
 pointer-analysis.o: $(OBJ)
-	$(LD) -r -o pointer-analysis.o $(OBJ)
+	$(LD) $(LDFLAGS) -r -o pointer-analysis.o $(OBJ)
 
 clean:
 	rm -f *.o

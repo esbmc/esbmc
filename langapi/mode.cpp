@@ -41,52 +41,6 @@ const char *extensions_nsf     []={ "nsf", NULL };
 const char *extensions_php     []={ "php", NULL };
 const char *extensions_mdl     []={ "mdl", NULL };
 
-languaget *new_ansi_c_language();
-languaget *new_bp_language();
-languaget *new_cpp_language();
-languaget *new_csp_language();
-languaget *new_csharp_language();
-languaget *new_cvc_language();
-languaget *new_intrep_language();
-languaget *new_netlist_language();
-languaget *new_pascal_language();
-languaget *new_promela_language();
-languaget *new_pvs_language();
-languaget *new_simplify_language();
-languaget *new_smv_language();
-languaget *new_specc_language();
-languaget *new_verilog_language();
-languaget *new_vhdl_language();
-languaget *new_smt_language();
-languaget *new_nsf_language();
-languaget *new_php_language();
-languaget *new_mdl_language();
-
-const mode_table_et mode_table[]=
-{
-  { "C",        &new_ansi_c_language,   extensions_ansi_c   }, // 0
-  { "intrep",   &new_intrep_language,   extensions_intrep   }, // 1
-  { "PVS",      &new_pvs_language,      extensions_pvs      }, // 2
-  { "VHDL",     &new_vhdl_language,     extensions_vhdl     }, // 3
-  { "Verilog",  &new_verilog_language,  extensions_verilog  }, // 4
-  { "SMV",      &new_smv_language,      extensions_smv      }, // 5
-  { "CSP",      &new_csp_language,      extensions_csp      }, // 6
-  { "Netlist",  &new_netlist_language,  extensions_netlist  }, // 7
-  { "SpecC",    &new_specc_language,    extensions_specc    }, // 8
-  { "Promela",  &new_promela_language,  extensions_promela  }, // 9
-  { "PASCAL",   &new_pascal_language,   extensions_pascal   }, // 11
-  { "C++",      &new_cpp_language,      extensions_cpp      }, // 12
-  { "Simplify", &new_simplify_language, extensions_simplify }, // 13
-  { "bp",       &new_bp_language,       extensions_bp       }, // 14
-  { "CVC",      &new_cvc_language,      extensions_cvc      }, // 15
-  { "C#",       &new_csharp_language,   extensions_csharp   }, // 16
-  { "SMT",      &new_smt_language,      extensions_smt      }, // 17
-  { "NSF",      &new_nsf_language,      extensions_nsf      }, // 18
-  { "PHP",      &new_php_language,      extensions_php      }, // 19
-  { "MDL",      &new_mdl_language,      extensions_mdl      }, // 20
-  { NULL,      NULL,                    NULL }
-};
-
 /*******************************************************************\
 
 Function: get_mode
@@ -160,8 +114,8 @@ Function: new_language
 
 \*******************************************************************/
 
-languaget *new_language(int mode)
+languaget *new_language(const char *mode)
 {
-  return (*mode_table[mode].new_language)();
+  return (*mode_table[get_mode(mode)].new_language)();
 }
 

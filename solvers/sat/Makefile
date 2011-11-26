@@ -1,0 +1,60 @@
+include ../../config.inc
+include ../../common
+include ../../local.inc
+
+CXXFLAGS+= -I../../util -I../../
+
+OBJS= cnf.o dimacs_cnf.o cnf_clause_list.o pbs_dimacs_cnf.o \
+	read_dimacs_cnf.o resolution_proof.o satcheck.o
+
+ifneq ($(CHAFF),)
+TARGETS+= chaff.o
+endif
+
+ifneq ($(BOOLEFORCE),)
+TARGETS+= booleforce.o
+endif
+
+ifneq ($(MINISAT),)
+TARGETS+= minisat.o
+CXXFLAGS+= -DHAVE_MINISAT
+endif
+
+ifneq ($(MINISAT2),)
+TARGETS+= minisat2.o
+CXXFLAGS+= -DHAVE_MINISAT2
+endif
+
+ifneq ($(SMVSAT),)
+TARGETS+= smvsat.o
+endif
+
+all: satsolvers.o
+
+satsolvers.o: $(TARGETS) $(OBJS)
+	$(LD) -r -o $@ $^ $(LDFLAGS)
+
+chaff.o: satcheck_zchaff.cpp satcheck_zcore.cpp
+	$(CXX) -c -o $@ $^ $(CXXFLAGS) -lsat -L $(CHAFF) -I $(CHAFF)
+
+booleforce.o: satcheck_booleforce.cpp
+	$(CXX) -c -o $@ $^ $(CXXFLAGS) -lbooleforce -L $(BOOLEFORCE) -I $(BOOLEFORCE)
+
+minisat.o: satcheck_minisat.cpp
+	$(CXX) -c -o minisat_tmp.o $^ $(CXXFLAGS) -I $(MINISAT) -DHAVE_MINISAT
+	$(LD) -o $@ minisat_tmp.o -r $(MINISAT)/Solver.o $(MINISAT)/Proof.o \
+		$(MINISAT)/File.o $(LDFLAGS)
+
+minisat2.o: satcheck_minisat2.cpp
+	$(CXX) -c -o minisat2_tmp.o $^ $(CXXFLAGS) -I $(MINISAT2)/core \
+		-I $(MINISAT2)/mtl -I $(MINISAT2)/simp -DHAVE_MINISAT2
+	$(LD) -o $@ minisat2_tmp.o -r $(MINISAT2)/simp/SimpSolver.o \
+		$(MINISAT2)/core/Solver.o $(LDFLAGS)
+
+smvsat.o: satcheck_smvsat.cpp
+	$(CXX) -c -o $@ $^ $(CXXFLAGS) -I $(SMVSAT)/include $(SMVSAT)/lib/libsmvsat.a
+
+clean:
+	-rm *.o
+
+.PHONY: clean

@@ -18,14 +18,14 @@ ifneq ($(MINISAT),)
 MINISAT_SRC=satcheck_minisat.cpp 
 MINISAT_INCLUDE=-I ../$(MINISAT)
 MINISAT_LIB=../$(MINISAT)/Solver.o ../$(MINISAT)/Proof.o ../$(MINISAT)/File.o
-CPLUSFLAGS += -DHAVE_MINISAT
+CXXFLAGS += -DHAVE_MINISAT
 endif
 
 ifneq ($(MINISAT2),)
 MINISAT2_SRC=satcheck_minisat2.cpp
 MINISAT2_INCLUDE=-I ../$(MINISAT2)/core -I ../$(MINISAT2)/mtl -I ../$(MINISAT2)/simp
 MINISAT2_LIB=../$(MINISAT2)/simp/SimpSolver.o ../$(MINISAT2)/core/Solver.o
-CPLUSFLAGS += -DHAVE_MINISAT2
+CXXFLAGS += -DHAVE_MINISAT2
 endif
 
 ifneq ($(SMVSAT),)
@@ -61,10 +61,10 @@ OBJ = $(SRC:.cpp=.o)
 include ../common
 
 ifneq ($(SQUOLEM2),)
-CPLUSFLAGS += -DHAVE_QBF_CORE
+CXXFLAGS += -DHAVE_QBF_CORE
 else
 ifneq ($(CUDD),)
-CPLUSFLAGS += -DHAVE_QBF_CORE
+CXXFLAGS += -DHAVE_QBF_CORE
 endif
 endif
 

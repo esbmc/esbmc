@@ -41,8 +41,8 @@ cprover_library.o: cprover_library.inc
 
 ###############################################################################
 
-libarary/converter:
-	$(CPLUS) $(LINKFLAGS) -o library/converter library/converter.cpp
+library/converter:
+	$(CXX) $(CXXFLAGS) -o library/converter library/converter.cpp
 	
 cprover_library.inc: library/converter library/*.c
 	cat library/*.c | library/converter > cprover_library.inc
@@ -50,7 +50,7 @@ cprover_library.inc: library/converter library/*.c
 ###############################################################################
 
 ansi-c.o: cprover_library.inc $(OBJ) 
-	$(LD) -r -o $@ $(OBJ)
+	$(LD) $(LDFLAGS) -r -o $@ $(OBJ)
 
 clean:
 	rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output

@@ -12,6 +12,10 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include <i2string.h>
 
+extern "C" {
+#include <boolector.h>
+}
+
 #include "boolector_prop.h"
 
 //#define DEBUG

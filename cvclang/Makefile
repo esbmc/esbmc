@@ -13,7 +13,7 @@ include ../common
 ###############################################################################
 
 cvclang.o: $(OBJ)
-	$(LD) -r -o cvclang.o $(OBJ)
+	$(LD) $(LDFLAGS) -r -o cvclang.o $(OBJ)
 
 y.tab.cpp: parser.y
 	$(YACC) $(YFLAGS) $$flags -pyycvc -d parser.y -o y.tab.cpp

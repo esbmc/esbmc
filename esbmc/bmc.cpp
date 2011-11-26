@@ -188,7 +188,7 @@ Function: bmc_baset::decide_solver_boolector
  Purpose:
 
 \*******************************************************************/
-
+#ifdef BOOLECTOR
 bool bmc_baset::decide_solver_boolector()
 {
   bool result=true;
@@ -218,7 +218,7 @@ bool bmc_baset::decide_solver_boolector()
 
   return result;
 }
-
+#endif
 /*******************************************************************\
 
 Function: bmc_baset::decide_solver_z3
@@ -704,7 +704,11 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     if(options.get_bool_option("dimacs"))
       return write_dimacs();
     else if(options.get_bool_option("bl"))
+#ifdef BOOLECTOR
       return boolector();
+#else
+	throw "This version of ESBMC was not compiled with boolector support";
+#endif
     else if(options.get_bool_option("cvc"))
       return cvc();
     //else if(options.get_bool_option("smt"))

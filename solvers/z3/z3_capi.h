@@ -14,7 +14,7 @@ Author:
 #include<stdarg.h>
 #include<memory.h>
 #include<setjmp.h>
-#include "../../../z3/include/z3.h"
+#include <z3.h>
 
 
 class z3_capi {

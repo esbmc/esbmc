@@ -1,13 +1,13 @@
 CFLAGS=	$(GCCFLAGS) $(INCLUDES)
-CPLUSFLAGS= $(GCCFLAGS) $(INCLUDES)
+CXXFLAGS= $(GCCFLAGS) $(INCLUDES)
 
 .SUFFIXES:	.C .d .cpp
 
 .C.o:
-	$(CPLUS) -c $(CPLUSFLAGS) -o $@ $<
+	$(CXX) -c $(CXXFLAGS) -o $@ $<
 
 .cpp.o:
-	$(CPLUS) -c $(CPLUSFLAGS) -o $@ $<
+	$(CXX) -c $(CXXFLAGS) -o $@ $<
 
 .c.o:
 	$(CC) -c $(CFLAGS) -o $@ $<
