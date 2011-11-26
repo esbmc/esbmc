@@ -1,9 +1,17 @@
+
 #include "crypto_hash.h"
 
 extern "C" {
-  #include <openssl/sha.h>
+  #include <dlfcn.h>
   #include <string.h>
+
+  #include <openssl/sha.h>
 }
+
+bool crypto_hash::have_pointers = false;
+int (*crypto_hash::sha_init)(SHA256_CTX *c) = 0;
+int (*crypto_hash::sha_update)(SHA256_CTX *c, const void *data, size_t len) = 0;
+int (*crypto_hash::sha_final)(unsigned char *md, SHA256_CTX *c) = 0;
 
 bool
 crypto_hash::operator<(const crypto_hash h2) const
@@ -33,9 +41,12 @@ crypto_hash::init(const uint8_t *data, int sz)
 {
   SHA256_CTX c;
 
-  SHA256_Init(&c);
-  SHA256_Update(&c, data, sz);
-  SHA256_Final(hash, &c);
+  if (!have_pointers)
+    setup_pointers();
+
+  sha_init(&c);
+  sha_update(&c, data, sz);
+  sha_final(hash, &c);
   valid = true;
   return;
 }
@@ -56,4 +67,28 @@ crypto_hash::crypto_hash()
 {
 
   valid = false;
+}
+
+void
+crypto_hash::setup_pointers()
+{
+  void *ssl_lib;
+  long (*ssleay)(void);
+
+  ssl_lib = dlopen("libcrypto.so", RTLD_LAZY);
+  if (ssl_lib == NULL)
+    throw "Couldn't open OpenSSL crypto library - can't hash state";
+
+  ssleay = (long (*)(void)) dlsym(ssl_lib, "SSLeay");
+  // Check for version 0.9.8 - I believe this is the first release with SHA256.
+  if (ssleay() < 0x000908000)
+    throw "OpenSSL >= 0.9.8 required for state hashing";
+
+  sha_init = (int (*) (SHA256_CTX *c)) dlsym(ssl_lib, "SHA256_Init");
+  sha_update = (int (*) (SHA256_CTX *c, const void *data, size_t len))
+               dlsym(ssl_lib, "SHA256_Update");
+  sha_final = (int (*) (unsigned char *md, SHA256_CTX *c))
+               dlsym(ssl_lib, "SHA256_Final");
+  have_pointers = true;
+  return;
 }
