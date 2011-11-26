@@ -32,7 +32,7 @@ OBJ = $(SRC:.cpp=.o) \
 
 INCLUDES= -I .. -I ../util
 
-LIBS=-L$(BOOLECTOR)/lib -lboolector -L../$(Z3)/lib -lz3 -lgmp -lcrypto
+LIBS=-L$(BOOLECTOR)/lib -lboolector -L../$(Z3)/lib -lz3 -lcrypto # -lgmp
 
 all: esbmc
 
