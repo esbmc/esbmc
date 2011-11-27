@@ -1,0 +1,31 @@
+include ../../common
+include ../../config.inc
+
+OBJS=cpy.o cpp.o scanner.o compat.o hooks.o
+HEADERS=cpp.h
+
+all: preproc.o
+
+preproc.o: $(OBJS) $(HEADERS)
+	$(LD) $(LDFLAGS) $(OBJS) -r -o $@
+
+.l.o:
+	$(LEX) $(LFLAGS) $<
+	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ lex.yy.c
+
+.y.o:
+	$(YACC) -d $(YFLAGS) $<
+	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ y.tab.c
+
+compat.o: compat.c
+	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ compat.c
+
+$(OBJS): $(HEADERS)
+
+cpp.o: cpy.o
+
+clean:
+	-rm *.o
+	-rm lex.yy.c
+	-rm y.tab.c
+	-rm y.tab.h

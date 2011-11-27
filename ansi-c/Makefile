@@ -16,7 +16,7 @@ OBJ = $(SRC:.cpp=.o)
 
 INCLUDES= -I .. -I ../util
 
-all: ansi-c.o
+all: cpp_dir headers_dir ansi-c.o
 
 include ../config.inc
 include ../common
@@ -46,36 +46,46 @@ cprover_blank_library.o: cprover_library.cpp
 	$(CXX) $(CXXFLAGS) -DNO_CPROVER_LIBRARY $^ -o $@ -c
 
 C2GOTO_DEPS= $(OBJ) ../util/util.o ../langapi/langapi.o ../big-int/bigint.o \
-	../goto-programs/goto-programs.o ../pointer-analysis/pointer-analysis.o
+	../goto-programs/goto-programs.o ../pointer-analysis/pointer-analysis.o\
+	cpp/preproc.o headers/headers.o
 
 c2goto: c2goto.cpp cprover_blank_library.o | $(C2GOTO_DEPS)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(C2GOTO_DEPS)
 
-clib16.o: c2goto library/*.i
-	./c2goto library/*.i --16 --output clib16.goto
-	$(LD) -b binary clib16.goto -o clib16.o -r
-
-clib32.o: c2goto library/*.i
-	./c2goto library/*.i --32 --output clib32.goto
+clib32.o: c2goto library/*.c
+	./c2goto library/*.c --32 --output clib32.goto --no-lock-check
 	$(LD) -b binary clib32.goto -o clib32.o -r
 
-clib64.o: c2goto library/*.i
-	./c2goto library/*.i --64 --output clib64.goto
+clib64.o: c2goto library/*.c
+	./c2goto library/*.c --64 --output clib64.goto --no-lock-check
 	$(LD) -b binary clib64.goto -o clib64.o -r
 
-library/*.i: library/*.c
-	$(MAKE) -C library
-
-clib.o: c2goto clib16.o clib32.o clib64.o
-	$(LD) clib16.o clib32.o clib64.o -o clib.o -r
+clib.o: c2goto clib32.o clib64.o
+	$(LD) clib32.o clib64.o -o clib.o -r
 
 ###############################################################################
 
-ansi-c.o: $(OBJ) cprover_library.o clib.o
+cpp/preproc.o: cpp_dir
+
+cpp_dir:
+	$(MAKE) -C cpp
+
+.PHONY: cpp_dir
+
+headers/headers.o: headers_dir
+
+headers_dir:
+	$(MAKE) -C headers
+
+.PHONY: headers_dir
+
+###############################################################################
+
+ansi-c.o: $(OBJ) cprover_library.o clib.o cpp/preproc.o headers/headers.o
 	$(LD) $(LDFLAGS) -r -o $@ $^
 
 clean:
-	$(MAKE) -C library clean
+	$(MAKE) -C cpp clean
 	-rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
 	-rm -f c2goto
 	-rm -f *.goto

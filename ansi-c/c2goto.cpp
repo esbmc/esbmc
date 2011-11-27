@@ -13,7 +13,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 {
   public:
   c2goto_parseopt(int argc, const char **argv):
-    parseoptions_baset("(16)(32)(64)(output):", argc, argv),
+    parseoptions_baset("(16)(32)(64)(output):(no-lock-check)", argc, argv),
     language_uit(cmdline)
   {
   }
