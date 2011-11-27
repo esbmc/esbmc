@@ -2,17 +2,10 @@
 
 Module: Symbolic Execution of ANSI-C
 
-Author: Daniel Kroening, kroening@kroening.com
+Authors: Daniel Kroening, kroening@kroening.com
+         Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
-
-extern "C" {
-#include <fcntl.h>
-#include <stdio.h>
-#include <unistd.h>
-
-#include <sys/sendfile.h>
-}
 
 #include <sstream>
 #include <fstream>
@@ -24,6 +17,14 @@ extern "C" {
 
 #include <solvers/sat/satcheck.h>
 
+#include <solvers/sat/dimacs_cnf.h>
+
+#include <solvers/cvc/cvc_dec.h>
+
+#include <solvers/boolector/boolector_dec.h>
+
+#include <solvers/smt/smt_dec.h>
+
 #include <langapi/mode.h>
 #include <langapi/languages.h>
 #include <langapi/language_util.h>
@@ -34,14 +35,11 @@ extern "C" {
 #include <goto-symex/slice_by_trace.h>
 #include <goto-symex/xml_goto_trace.h>
 
-#ifdef HAVE_BV_REFINEMENT
-#include <bv_refinement/bv_refinement_loop.h>
-#endif
-
 #include "bmc.h"
 #include "bv_cbmc.h"
-#include "counterexample_beautification_greedy.h"
+#include "counterex_pretty_greedy.h"
 #include "document_subgoals.h"
+#include "version.h"
 
 /*******************************************************************\
 
@@ -127,206 +125,6 @@ void bmc_baset::error_trace(const prop_convt &prop_conv)
 
 /*******************************************************************\
 
-Function: bmc_baset::decide_default
-
-  Inputs:
-
- Outputs:
-
- Purpose: Decide using "default" decision procedure
-
-\*******************************************************************/
-
-bool bmc_baset::decide_default()
-{
-  sat_minimizert satcheck;
-  satcheck.set_message_handler(message_handler);
-  satcheck.set_verbosity(get_verbosity());
-
-  bv_cbmct bv_cbmc(satcheck);
-
-  if(options.get_option("arrays-uf")=="never")
-    bv_cbmc.unbounded_array=bv_cbmct::U_NONE;
-  else if(options.get_option("arrays-uf")=="always")
-    bv_cbmc.unbounded_array=bv_cbmct::U_ALL;
-
-  bool result=true;
-
-  switch(run_decision_procedure(bv_cbmc))
-  {
-  case decision_proceduret::D_UNSATISFIABLE:
-    result=false;
-    report_success();
-    break;
-
-  case decision_proceduret::D_SATISFIABLE:
-    if(options.get_bool_option("beautify-pbs"))
-      throw "beautify-pbs is no longer supported";
-    else if(options.get_bool_option("beautify-greedy"))
-      counterexample_beautification_greedyt()(
-        satcheck, bv_cbmc, *equation, symex.ns);
-
-    error_trace(bv_cbmc);
-    report_failure();
-    break;
-
-  default:
-    error("decision procedure failed");
-  }
-
-  return result;
-}
-
-/*******************************************************************\
-
-Function: bmc_baset::decide_solver_boolector
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-#ifdef BOOLECTOR
-bool bmc_baset::decide_solver_boolector()
-{
-  bool result=true;
-  boolector_dect boolector_dec;
-
-  boolector_dec.set_file(options.get_option("outfile"));
-  boolector_dec.set_btor(options.get_bool_option("btor"));
-
-  switch(run_decision_procedure(boolector_dec))
-  {
-    case decision_proceduret::D_UNSATISFIABLE:
-      result=false;
-      report_success();
-      break;
-
-    case decision_proceduret::D_SATISFIABLE:
-	  error_trace(boolector_dec);
-      report_failure();
-      break;
-
-    case decision_proceduret::D_SMTLIB:
-      break;
-
-    default:
-      error("decision procedure failed");
-  }
-
-  return result;
-}
-#endif
-/*******************************************************************\
-
-Function: bmc_baset::decide_solver_z3
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool bmc_baset::decide_solver_z3()
-{
-  bool result=true;
-  z3_dect z3_dec;
-
-  z3_dec.set_encoding(options.get_bool_option("int-encoding"));
-  z3_dec.set_file(options.get_option("outfile"));
-  z3_dec.set_smt(options.get_bool_option("smt"));
-  z3_dec.set_unsat_core(atol(options.get_option("core-size").c_str()));
-  z3_dec.set_uw_models(options.get_bool_option("uw-model"));
-  z3_dec.set_ecp(options.get_bool_option("ecp"));
-  z3_dec.set_relevancy(options.get_bool_option("no-assume-guarantee"));
-
-  switch(run_decision_procedure(z3_dec))
-  {
-    case decision_proceduret::D_UNSATISFIABLE:
-      result=false;
-      report_success();
-      break;
-    case decision_proceduret::D_SATISFIABLE:
-      result=true;
-      if (!options.get_bool_option("ecp"))
-      {
-	    error_trace(z3_dec);
-        report_failure();
-      }
-      break;
-    case decision_proceduret::D_SMTLIB:
-      break;
-    default:
-      error("decision procedure failed");
-  }
-
-  _unsat_core = z3_dec.get_z3_core_size();
-  _number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
-
-  //std::cout << "_unsat_core: " << _unsat_core << std::endl;
-  //std::cout << "result: " << result << std::endl;
-
-  return result;
-}
-
-/*******************************************************************\
-
-Function: bmc_baset::bv_refinement
-
-  Inputs:
-
- Outputs:
-
- Purpose: Decide using refinement decision procedure
-
-\*******************************************************************/
-
-bool bmc_baset::bv_refinement()
-{
-  #ifdef HAVE_BV_REFINEMENT
-  satcheckt satcheck;
-  satcheck.set_message_handler(message_handler);
-  satcheck.set_verbosity(get_verbosity());
-
-  bv_refinement_loopt bv_refinement_loop(satcheck);
-  bv_refinement_loop.set_message_handler(message_handler);
-  bv_refinement_loop.set_verbosity(get_verbosity());
-
-  bool result=true;
-
-  switch(run_decision_procedure(bv_refinement_loop))
-  {
-  case decision_proceduret::D_UNSATISFIABLE:
-    result=false;
-    report_success();
-    break;
-
-  case decision_proceduret::D_SATISFIABLE:
-    if(options.get_bool_option("beautify-pbs"))
-      throw "beautify-pbs is no longer supported";
-    else if(options.get_bool_option("beautify-greedy"))
-      throw "refinement doesn't support greedy beautification";
-
-    error_trace(bv_refinement_loop);
-    report_failure();
-    break;
-
-  default:
-    error("decision procedure failed");
-  }
-
-  return result;
-  #else
-  throw "bv refinement not linked in";
-  #endif
-}
-
-/*******************************************************************\
-
 Function: bmc_baset::run_decision_procedure
 
   Inputs:
@@ -341,17 +139,18 @@ decision_proceduret::resultt
 bmc_baset::run_decision_procedure(prop_convt &prop_conv)
 {
   static bool first_uw=false;
-//  status("Passing problem to "+prop_conv.decision_procedure_text());
   std::string logic;
+
   if (options.get_bool_option("bl-bv") || options.get_bool_option("z3-bv") ||
-	  options.get_bool_option("bl") || !options.get_bool_option("int-encoding"))
-	logic = "bit-vector arithmetic";
+      options.get_bool_option("bl") || !options.get_bool_option("int-encoding"))
+    logic = "bit-vector arithmetic";
   else
-	logic = "integer/real arithmetic";
+    logic = "integer/real arithmetic";
 
   if (!(options.get_bool_option("minisat")) && !options.get_bool_option("smt")
-		  && !options.get_bool_option("btor"))
+        && !options.get_bool_option("btor"))
     std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
+
   prop_conv.set_message_handler(message_handler);
   prop_conv.set_verbosity(get_verbosity());
 
@@ -360,8 +159,6 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
 
   do_unwind_module(prop_conv);
   do_cbmc(prop_conv);
-
-//  status("Running "+prop_conv.decision_procedure_text());
 
   decision_proceduret::resultt dec_result=prop_conv.dec_solve();
 
@@ -382,7 +179,7 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
     std::cout << "size of the unsatisfiable core: " << _unsat_core << " literal(s)"<< std::endl;
   }
   else
-	first_uw=true;
+    first_uw=true;
 
   return dec_result;
 }
@@ -527,7 +324,6 @@ Function: bmc_baset::run
 
 bool bmc_baset::run(const goto_functionst &goto_functions)
 {
-  //symex.total_claims=0;
   bool resp;
   symex.set_message_handler(message_handler);
   symex.set_verbosity(get_verbosity());
@@ -540,21 +336,21 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
   if(symex.options.get_bool_option("schedule"))
   {
-	if(symex.options.get_bool_option("uw-model"))
-	  std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
+    if(symex.options.get_bool_option("uw-model"))
+        std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
 
-	resp = run_thread(goto_functions);
+    resp = run_thread(goto_functions);
 
 
-	//underapproximation-widening model
-	while (_unsat_core)
-	{
-	  equation->clear();
-	  symex.total_claims=0;
-	  symex.remaining_claims=0;
-	  std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
-	  resp = run_thread(goto_functions);
-	}
+    //underapproximation-widening model
+    while (_unsat_core)
+    {
+      equation->clear();
+      symex.total_claims=0;
+      symex.remaining_claims=0;
+      std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
+      resp = run_thread(goto_functions);
+    }
 
     return resp;
   }
@@ -564,16 +360,16 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
     while(symex.multi_formulas_has_more_formula())
     {
-  	  equation->clear();
-  	  symex.total_claims=0;
-  	  symex.remaining_claims=0;
+      equation->clear();
+      symex.total_claims=0;
+      symex.remaining_claims=0;
 
       if (++interleaving_number>1)
         std::cout << "*** Thread interleavings " << interleaving_number << " ***" << std::endl;
 
       if(run_thread(goto_functions))
       {
-    	++interleaving_failed;
+        ++interleaving_failed;
         if(!symex.options.get_bool_option("all-runs"))
         {
           return true;
@@ -588,18 +384,14 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
     std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
   }
 
-#if 0
-  std::cout << "ohai:" << std::endl;
-  int fd = open("/proc/self/status", O_RDONLY, 0);
-  sendfile(STDOUT_FILENO, fd, NULL, 4096);
-  close(fd);
-#endif
-
   return false;
 }
 
 bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 {
+  solver_base *solver;
+  bool ret;
+
   try
   {
     if(symex.options.get_bool_option("schedule"))
@@ -646,24 +438,16 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     {
       symex_slice_by_tracet symex_slice_by_trace;
       symex_slice_by_trace.slice_by_trace
-	(options.get_option("slice-by-trace"), *equation, symex.ns);
+      (options.get_option("slice-by-trace"), *equation, symex.ns);
     }
 
     if(options.get_bool_option("slice-formula"))
     {
       slice(*equation);
-#if 0
-      print(8, "slicing removed "+
-        i2string(equation.count_ignored_SSA_steps())+" assignments");
-#endif
     }
     else
     {
       simple_slice(*equation);
-#if 0
-      print(8, "simple slicing removed "+
-        i2string(equation.count_ignored_SSA_steps())+" assignments");
-#endif
     }
 
     if(options.get_bool_option("program-only"))
@@ -704,25 +488,36 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
         return false;
 
     if(options.get_bool_option("minisat"))
-      return decide_default();
+#ifdef MINISAT
+      solver = new minisat_solver(*this);
+#else
+      throw "This version of ESBMC was not compiled with minisat support";
+#endif
+
     if(options.get_bool_option("dimacs"))
-      return write_dimacs();
+      solver = new dimacs_solver(*this);
     else if(options.get_bool_option("bl"))
 #ifdef BOOLECTOR
-      return boolector();
+      solver = new boolector_solver(*this);
 #else
-	throw "This version of ESBMC was not compiled with boolector support";
+      throw "This version of ESBMC was not compiled with boolector support";
 #endif
     else if(options.get_bool_option("cvc"))
-      return cvc();
-    //else if(options.get_bool_option("smt"))
-      //return smt();
+      solver = new cvc_solver(*this);
+    else if(options.get_bool_option("smt"))
+      solver = new smt_solver(*this);
     else if(options.get_bool_option("z3"))
-      return z3();
-    else if(options.get_bool_option("refine"))
-      return bv_refinement();
+#ifdef Z3
+      solver = new z3_solver(*this);
+#else
+      throw "This version of ESBMC was not compiled with Z3 support";
+#endif
     else
-      return decide_default();
+      throw "Please specify a SAT/SMT solver to use";
+
+    ret = solver->run_solver();
+    delete solver;
+    return ret;
   }
 
   catch(std::string &error_str)
@@ -741,7 +536,6 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
   {
     error("Out of memory");
     abort();
-    //return true; jmorse
   }
 }
 
@@ -774,4 +568,169 @@ void bmc_baset::setup_unwind()
   }
 
   symex.max_unwind=atol(options.get_option("unwind").c_str());
+}
+
+bool bmc_baset::solver_base::run_solver()
+{
+
+  switch(bmc.run_decision_procedure(*conv))
+  {
+  case decision_proceduret::D_UNSATISFIABLE:
+    bmc.report_success();
+    return false;
+
+  case decision_proceduret::D_SATISFIABLE:
+    bmc.error_trace(*conv);
+    bmc.report_failure();
+    return true;
+
+  // Return failure if we didn't actually check anything, we just emitted the
+  // test information to an SMTLIB formatted file. Causes esbmc to quit
+  // immediately (with no error reported)
+  case decision_proceduret::D_SMTLIB:
+    return true;
+
+  default:
+    bmc.error("decision procedure failed");
+    return true;
+  }
+}
+
+#ifdef MINISAT
+bmc_baset::minisat_solver::minisat_solver(bmc_baset &bmc)
+  : solver_base(bmc), satcheck(), bv_cbmc(satcheck)
+{
+  satcheck.set_message_handler(bmc.message_handler);
+  satcheck.set_verbosity(bmc.get_verbosity());
+
+  if(bmc.options.get_option("arrays-uf")=="never")
+    bv_cbmc.unbounded_array=bv_cbmct::U_NONE;
+  else if(bmc.options.get_option("arrays-uf")=="always")
+    bv_cbmc.unbounded_array=bv_cbmct::U_ALL;
+
+  conv = &bv_cbmc;
+}
+
+bool bmc_baset::minisat_solver::run_solver()
+{
+  bool result = bmc_baset::solver_base::run_solver();
+
+  if (result && bmc.options.get_bool_option("beautify-greedy"))
+      counterexample_beautification_greedyt()(
+        satcheck, bv_cbmc, *bmc.equation, bmc.symex.ns);
+
+  return result;
+}
+#endif
+
+#ifdef BOOLECTOR
+bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
+  : solver_base(bmc), boolector_dec()
+{
+  boolector_dec.set_file(bmc.options.get_option("outfile"));
+  boolector_dec.set_btor(bmc.options.get_bool_option("btor"));
+  conv = &boolector_dec;
+}
+#endif
+
+#ifdef Z3
+bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
+  : solver_base(bmc), z3_dec()
+{
+  z3_dec.set_encoding(bmc.options.get_bool_option("int-encoding"));
+  z3_dec.set_file(bmc.options.get_option("outfile"));
+  z3_dec.set_smt(bmc.options.get_bool_option("smt"));
+  z3_dec.set_unsat_core(atol(bmc.options.get_option("core-size").c_str()));
+  z3_dec.set_uw_models(bmc.options.get_bool_option("uw-model"));
+  z3_dec.set_ecp(bmc.options.get_bool_option("ecp"));
+  z3_dec.set_relevancy(bmc.options.get_bool_option("no-assume-guarantee"));
+  conv = &z3_dec;
+}
+
+bool bmc_baset::z3_solver::run_solver()
+{
+  bool result = bmc_baset::solver_base::run_solver();
+  bmc._unsat_core = z3_dec.get_z3_core_size();
+  bmc._number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
+  return result;
+}
+#endif
+
+bmc_baset::output_solver::output_solver(bmc_baset &bmc)
+  : solver_base(bmc)
+{
+
+  const std::string &filename = bmc.options.get_option("outfile");
+
+  if (filename.empty() || filename=="-") {
+    out_file = &std::cout;
+  } else {
+    std::ofstream *out = new std::ofstream(filename.c_str());
+    out_file = out;
+
+    if (!out_file)
+    {
+      std::cerr << "failed to open " << filename << std::endl;
+      delete out_file;
+      return;
+    }
+  }
+
+  *out_file << "%%%\n";
+  *out_file << "%%% Generated by ESBMC " << ESBMC_VERSION << "\n";
+  *out_file << "%%%\n\n";
+
+  return;
+}
+
+bmc_baset::output_solver::~output_solver()
+{
+
+  if (out_file != &std::cout)
+    delete out_file;
+  return;
+}
+
+bool bmc_baset::output_solver::run_solver()
+{
+
+  bmc.do_unwind_module(*conv);
+  bmc.do_cbmc(*conv);
+  conv->dec_solve();
+  return write_output();
+}
+
+bmc_baset::dimacs_solver::dimacs_solver(bmc_baset &bmc)
+  : output_solver(bmc), conv_wrap(dimacs_cnf)
+{
+  dimacs_cnf.set_message_handler(bmc.message_handler);
+  conv = &conv_wrap;
+}
+
+bool bmc_baset::dimacs_solver::write_output()
+{
+  dimacs_cnf.write_dimacs_cnf(*out_file);
+  return false;
+}
+
+bmc_baset::cvc_solver::cvc_solver(bmc_baset &bmc)
+  : output_solver(bmc), cvc(*out_file)
+{
+  conv = &cvc;
+}
+
+bool bmc_baset::cvc_solver::write_output()
+{
+  return false;
+}
+
+bmc_baset::smt_solver::smt_solver(bmc_baset &bmc)
+  : output_solver(bmc), smt(*out_file)
+{
+  conv = &smt;
+}
+
+bool bmc_baset::smt_solver::write_output()
+{
+  return false;
 }

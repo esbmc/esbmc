@@ -31,10 +31,6 @@ ifdef MODULE_INTERPOLATION
 interpolation.dir: solvers.dir langapi.dir util.dir
 endif
 
-ifdef MODULE_BV_REFINEMENT
-esbmc.dir: bv_refinement.dir
-endif
-
 ifdef MODULE_SATQE
 all: satmc.dir
 endif

@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/flattening/sat_minimizer.h>
 
-#include "counterexample_beautification.h"
+#include "counterex_pretty.h"
 
 class counterexample_beautification_greedyt:
   public counterexample_beautificationt

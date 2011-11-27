@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/sat/pbs_dimacs_cnf.h>
 
-#include "counterexample_beautification.h"
+#include "counterex_pretty.h"
 
 class counterexample_beautification_pbst:
   public counterexample_beautificationt

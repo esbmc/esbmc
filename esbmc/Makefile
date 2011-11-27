@@ -1,9 +1,9 @@
-SRC = main.cpp parseoptions.cpp bmc.cpp smt.cpp z3.cpp \
-      bv_cbmc.cpp document_subgoals.cpp dimacs.cpp \
-      symex_bmc.cpp cvc.cpp show_vcc.cpp \
-      counterexample_beautification.cpp \
-      counterexample_beautification_greedy.cpp \
-      counterexample_beautification_pbs.cpp
+SRC = main.cpp parseoptions.cpp bmc.cpp  \
+      bv_cbmc.cpp document_subgoals.cpp \
+      symex_bmc.cpp show_vcc.cpp \
+      counterex_pretty.cpp \
+      counterex_pretty_greedy.cpp \
+      counterex_pretty_pbs.cpp
 OBJ = $(SRC:.cpp=.o) \
       ../ansi-c/ansi-c.o \
       ../big-int/bigint.o \
@@ -17,18 +17,13 @@ OBJ = $(SRC:.cpp=.o) \
 
 INCLUDES= -I .. -I ../util -I$(Z3)/include
 
-LIBS= -L $(Z3)/lib -lz3 -lgmp -ldl
+LIBS= -lgmp -ldl
 
 all: esbmc
 
 include ../config.inc
 include ../common
 include ../local.inc
-
-ifdef MODULE_BV_REFINEMENT
-  OBJ += ../bv_refinement/bv_refinement.o
-  CXXFLAGS += -DHAVE_BV_REFINEMENT
-endif
 
 ifdef MODULE_CPP
   OBJ += ../cpp/cpp.o
@@ -47,8 +42,16 @@ endif
 
 ifdef BOOLECTOR
 CXXFLAGS+= -DBOOLECTOR
-SRC+= boolector.cpp
 LIBS+= -L$(BOOLECTOR)/lib -lboolector
+endif
+
+ifdef Z3
+CXXFLAGS+= -DZ3
+LIBS+= -L$(Z3)/lib -lz3
+endif
+
+ifdef MINISAT
+CXXFLAGS += -DMINISAT
 endif
 
 ###############################################################################

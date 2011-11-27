@@ -231,12 +231,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("dimacs"))
     options.set_option("dimacs", true);
 
-  if(cmdline.isset("refine"))
-    options.set_option("refine", true);
-
-  if(cmdline.isset("beautify-pbs"))
-    options.set_option("beautify-pbs", true);
-
   if(cmdline.isset("beautify-greedy"))
     options.set_option("beautify-greedy", true);
 

@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <expr_util.h>
 #include <arith_tools.h>
 
-#include "counterexample_beautification_pbs.h"
+#include "counterex_pretty_pbs.h"
 
 /*******************************************************************\
 
