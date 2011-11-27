@@ -84,15 +84,17 @@ public:
 
   inline irept &operator=(const irept &irep)
   {
+    dt *tmp;
     assert(&irep!=this); // check if we assign to ourselves
 
     #ifdef IREP_DEBUG
     std::cout << "ASSIGN\n";
     #endif
 
-    remove_ref(data);
+    tmp = data;
     data=irep.data;
     if(data!=NULL) data->ref_count++;
+    remove_ref(tmp);
     return *this;
   }
 

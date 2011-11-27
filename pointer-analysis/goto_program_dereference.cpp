@@ -419,6 +419,17 @@ void goto_program_dereferencet::dereference_instruction(
     dereference_expr(function_call.function(), checks_only, dereferencet::READ);
     dereference_expr(function_call.op2(), checks_only, dereferencet::READ);
   }
+  else if (i.is_return())
+  {
+    assert(i.code.get("statement") == "return");
+    if (i.code.operands().size() == 0)
+      return;
+
+    assert(i.code.operands().size() == 1);
+
+    exprt &ret = i.code.op0();
+    dereference_expr(ret, checks_only, dereferencet::READ);
+  }
   else if(i.is_other())
   {
     const irep_idt &statement=i.code.get("statement");

@@ -6,112 +6,183 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+extern "C" {
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+}
+
 #include <sstream>
+#include <istream>
+#include <fstream>
 
 #include <config.h>
+
+#include <goto-programs/read_goto_binary.h>
 
 #include "cprover_library.h"
 #include "ansi_c_language.h"
 
-/*******************************************************************\
+#ifndef NO_CPROVER_LIBRARY
+extern uint8_t _binary_clib16_goto_start;
+extern uint8_t _binary_clib32_goto_start;
+extern uint8_t _binary_clib64_goto_start;
+extern uint8_t _binary_clib16_goto_end;
+extern uint8_t _binary_clib32_goto_end;
+extern uint8_t _binary_clib64_goto_end;
 
-Function: add_cprover_library
+uint8_t *clib_ptrs[3][2] = {
+{ &_binary_clib16_goto_start, &_binary_clib16_goto_end},
+{ &_binary_clib32_goto_start, &_binary_clib32_goto_end},
+{ &_binary_clib64_goto_start, &_binary_clib64_goto_end},
+};
+#endif
 
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-struct cprover_library_entryt
+bool
+is_in_list(std::list<irep_idt> &list, irep_idt item)
 {
-  const char *function;
-  const char *model;
-} cprover_library[]=
-#include "cprover_library.inc"
+
+  for(std::list<irep_idt>::const_iterator it = list.begin(); it != list.end();
+      it++)
+    if (*it == item)
+      return true;
+
+  return false;
+}
+
+void
+generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt> &deps)
+{
+  std::pair<irep_idt, irep_idt> type;
+
+  forall_irep(irep_it, irep.get_sub()) {
+    if (irep_it->id() == "symbol") {
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->get("identifier"));
+      deps.insert(type);
+    } else if (irep_it->id() == "argument") {
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->get("#identifier"));
+      deps.insert(type);
+    } else {
+      generate_symbol_deps(name, *irep_it, deps);
+    }
+  }
+
+  forall_named_irep(irep_it, irep.get_named_sub()) {
+    if (irep_it->second.id() == "symbol") {
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.get("identifier"));
+      deps.insert(type);
+    } else if (irep_it->second.id() == "argument") {
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.get("#identifier"));
+      deps.insert(type);
+    } else {
+      generate_symbol_deps(name, irep_it->second, deps);
+    }
+  }
+
+  return;
+}
+
+void
+ingest_symbol(irep_idt name, std::multimap<irep_idt, irep_idt> &deps, std::list<irep_idt> &to_include)
+{
+  std::pair<std::multimap<irep_idt,irep_idt>::const_iterator,
+            std::multimap<irep_idt,irep_idt>::const_iterator> range;
+  std::multimap<irep_idt, irep_idt>::const_iterator it;
+
+  range = deps.equal_range(name);
+  if (range.first == range.second)
+    return;
+
+  for (it = range.first; it != range.second; it++)
+    to_include.push_back(it->second);
+
+  deps.erase(name);
+
+  return;
+}
 
 void add_cprover_library(
   contextt &context,
   message_handlert &message_handler)
 {
+#ifdef NO_CPROVER_LIBRARY
+  return;
+#else
+  contextt new_ctx, store_ctx;
+  goto_functionst goto_functions;
+  std::multimap<irep_idt, irep_idt> symbol_deps;
+  std::list<irep_idt> to_include;
+  ansi_c_languaget ansi_c_language;
+  char symname_buffer[256];
+  FILE *f;
+  uint8_t **this_clib_ptrs;
+  unsigned long size;
+  int fd;
+
   if(config.ansi_c.lib==configt::ansi_ct::LIB_NONE)
     return;
 
-  std::ostringstream library_text;
-
-  library_text <<
-    "#line 1 \"<builtin-library>\"\n"
-    "#undef inline\n"
-    "void __ESBMC_atomic_begin();\n"
-    "void __ESBMC_atomic_end();\n"
-    "void __ESBMC_yield();\n";
-
-  // this is for the pthread locks
-  switch(config.ansi_c.os)
-  {
-  case configt::ansi_ct::OS_I386_MACOS:
-  case configt::ansi_ct::OS_PPC_MACOS:
-    library_text << "#define __ESBMC_mutex_lock_field(a) ((a).__opaque[0])\n";
-    library_text << "#define __ESBMC_rwlock_field(a) ((a).__opaque[0])\n";
-    break;
-
-  case configt::ansi_ct::OS_I386_LINUX:
-    library_text << "#define __ESBMC_mutex_lock_field(a) ((a).__data.__lock)\n";
-    library_text << "#define __ESBMC_mutex_count_field(a) ((a).__data.__count)\n";
-    library_text << "#define __ESBMC_mutex_owner_field(a) ((a).__data.__owner)\n";
-    library_text << "#define __ESBMC_cond_lock_field(a) ((a).__data.__lock)\n";
-    library_text << "#define __ESBMC_cond_futex_field(a) ((a).__data.__futex)\n";
-    library_text << "#define __ESBMC_cond_nwaiters_field(a) ((a).__data.__nwaiters)\n";
-    library_text << "#define __ESBMC_cond_broadcast_seq_field(a) ((a).__data.__broadcast_seq)\n";
-    library_text << "#define __ESBMC_rwlock_field(a) ((a).__data.__lock)\n";
-    break;
-
-  default:;
+  if (config.ansi_c.word_size == 16) {
+    this_clib_ptrs = &clib_ptrs[0][0];
+  } else if (config.ansi_c.word_size == 32) {
+    this_clib_ptrs = &clib_ptrs[1][0];
+  } else if (config.ansi_c.word_size == 64) {
+    this_clib_ptrs = &clib_ptrs[2][0];
+  } else {
+    std::cerr << "No c library for bitwidth " << config.ansi_c.int_width << std::endl;
+    abort();
   }
 
-  if(config.ansi_c.string_abstraction)
-    library_text << "#define __ESBMC_STRING_ABSTRACTION\n";
+  size = (unsigned long)this_clib_ptrs[1] - (unsigned long)this_clib_ptrs[0];
+  if (size == 0) {
+    std::cerr << "error: Zero-lengthed internal C library" << std::endl;
+    abort();
+  }
 
-  if(config.ansi_c.lock_check)
-    library_text << "#define __ESBMC_LOCK_DETECTION\n";
+  sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
+  fd = mkstemp(symname_buffer);
+  close(fd);
+  f = fopen(symname_buffer, "w");
+  if (fwrite(this_clib_ptrs[0], size, 1, f) != 1) {
+    std::cerr << "Couldn't manipulate internal C library" << std::endl;
+    abort();
+  }
+  fclose(f);
 
-  if(config.ansi_c.deadlock_check)
-    library_text << "#define __ESBMC_DEADLOCK_DETECTION\n";
+  std::ifstream infile(symname_buffer);
+  read_goto_binary(infile, new_ctx, goto_functions, message_handler);
+  unlink(symname_buffer);
 
-  unsigned count=0;
+  forall_symbols(it, new_ctx.symbols) {
+    generate_symbol_deps(it->first, it->second.value, symbol_deps);
+    generate_symbol_deps(it->first, it->second.type, symbol_deps);
+  }
 
-  for(cprover_library_entryt *e=cprover_library;
-      e->function!=NULL;
-      e++)
-  {
-    irep_idt id=e->function;
+  /* The code just pulled into store_ctx might use other symbols in the C
+   * library. So, repeatedly search for new C library symbols that we use but
+   * haven't pulled in, then pull them in. We finish when we've made a pass
+   * that adds no new symbols. */
 
-    symbolst::const_iterator old=
-      context.symbols.find(id);
-
-    if(old!=context.symbols.end() &&
-       old->second.value.is_nil())
-    {
-      count++;
-      library_text << e->model << std::endl;
+  forall_symbols(it, new_ctx.symbols) {
+    symbolst::const_iterator used_sym = context.symbols.find(it->second.name);
+    if (used_sym != context.symbols.end() && used_sym->second.value.is_nil()){
+      store_ctx.add(it->second);
+      ingest_symbol(it->first, symbol_deps, to_include);
     }
   }
 
-  if(count>0)
-  {
-    std::istringstream in(library_text.str());
-    ansi_c_languaget ansi_c_language;
-    ansi_c_language.parse(in, "", message_handler);
+  for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
+            nameit != to_include.end(); nameit++) {
 
-    contextt new_context;
-    ansi_c_language.typecheck(
-      new_context, "<built-in-library>", message_handler);
-
-    ansi_c_language.merge_context(
-      context, new_context,
-      message_handler, "<built-in-library>");
+    symbolst::const_iterator used_sym = new_ctx.symbols.find(*nameit);
+    if (used_sym != new_ctx.symbols.end()) {
+      store_ctx.add(used_sym->second);
+      ingest_symbol(used_sym->first, symbol_deps, to_include);
+    }
   }
-}
 
+  ansi_c_language.merge_context(
+      context, store_ctx, message_handler, "<built-in-library>");
+
+#endif
+}

@@ -97,6 +97,28 @@ Author: Daniel Kroening, kroening@kroening.com
   " -D __INTMAX_TYPE__=\"long long int\""\
   " -D __UINTMAX_TYPE__=\"long long unsigned int\""
 
+#define STRABS_DEFS \
+  " -Dgetopt=getopt_strabs " \
+  " -Dfopen=fopen_strabs " \
+  " -Dfgets=fgets_strabs " \
+  " -Dfputs=fputs_strabs " \
+  " -Dcalloc=calloc_strabs " \
+  " -Datoi=atoi_strabs " \
+  " -Datol=atol_strabs " \
+  " -Dgetenv=getenv_strabs " \
+  " -Dstrcpy=strcpy_strabs " \
+  " -Dstrncpy=strncpy_strabs " \
+  " -Dstrcat=strcat_strabs " \
+  " -Dstrncat=strncat_strnabs " \
+  " -Dstrcmp=strcmp_strabs " \
+  " -Dstrncmp=strncmp_strabs " \
+  " -Dstrlen=strlen_strabs " \
+  " -Dstrdup=strdup_strabs " \
+  " -Dmemcpy=memcpy_strabs " \
+  " -Dmemset=memset_strabs " \
+  " -Dmemmove=memmove_strabs " \
+  " -Dmemcmp=memcmp_strabs "
+
 /*******************************************************************\
 
 Function: c_preprocess
@@ -231,6 +253,24 @@ bool c_preprocess(
   command+=" \""+file+"\"";
   command+=" 2> \""+stderr_file+"\"";
   #endif
+
+  // Additional cruft: Depending on what locking detection is enabled, we may
+  // want to switch the behavior of pthread functions on the fly. Rather than
+  // hacking that in elsewhere, we instead preprocess relevant symbol names to
+  // whatever it should be.
+
+  #ifndef _WIN32
+  if (config.ansi_c.deadlock_check) {
+    command+=" -Dpthread_mutex_lock=pthread_mutex_lock_check ";
+  }
+  if (!config.ansi_c.deadlock_check && config.ansi_c.lock_check) {
+    command+=" -Dpthread_mutex_unlock=pthread_mutex_unlock_check ";
+    command+=" -Dpthread_cond_wait=pthread_cond_wait_check ";
+  }
+  #endif
+
+  if (config.ansi_c.string_abstraction)
+    command+=STRABS_DEFS;
 
   FILE *stream=popen(command.c_str(), "r");
 

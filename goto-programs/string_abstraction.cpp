@@ -59,7 +59,6 @@ public:
     string_struct=s;
   }
   
-  void operator()(goto_programt &dest);
   void operator()(goto_functionst &dest);
 
   exprt is_zero_string(
@@ -110,11 +109,13 @@ protected:
       dest.make_typecast(type);
   }
 
-  void abstract(goto_programt &dest, goto_programt::targett it);
+  void abstract(irep_idt name, goto_programt &dest, goto_programt::targett it);
   void abstract_assign(goto_programt &dest, goto_programt::targett it);
   void abstract_pointer_assign(goto_programt &dest, goto_programt::targett it);
   void abstract_char_assign(goto_programt &dest, goto_programt::targett it);
   void abstract_function_call(goto_programt &dest, goto_programt::targett it);
+  void abstract_return(irep_idt name, goto_programt &dest,
+                       goto_programt::targett it);
 
   typedef enum { IS_ZERO, LENGTH, SIZE } whatt;
 
@@ -163,30 +164,15 @@ protected:
 
   typedef std::map<irep_idt, irep_idt> localst;
   localst locals;
+
+  // Counter numbering the returns in a function. Required for distinguishing
+  // labels we may add when altering control flow around returns. Specifically,
+  // when assigning string struct pointer of a returned string pointer back to
+  // the calling function.
+  unsigned int func_return_num;
   
-  void abstract(goto_programt &dest);
+  void abstract(irep_idt name, goto_function_templatet<goto_programt> &dest);
 };
-
-/*******************************************************************\
-
-Function: string_abstraction
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void string_abstraction(
-  contextt &context,
-  message_handlert &message_handler,
-  goto_programt &dest)
-{
-  string_abstractiont string_abstraction(context, message_handler);
-  string_abstraction(dest);
-}
 
 /*******************************************************************\
 
@@ -227,7 +213,7 @@ void string_abstractiont::operator()(goto_functionst &dest)
       it=dest.function_map.begin();
       it!=dest.function_map.end();
       it++)
-    abstract(it->second.body);
+    abstract(it->first, it->second);
 
   // do we have a main?
   goto_functionst::function_mapt::iterator
@@ -246,28 +232,6 @@ void string_abstractiont::operator()(goto_functionst &dest)
 
 /*******************************************************************\
 
-Function: string_abstractiont::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void string_abstractiont::operator()(goto_programt &dest)
-{
-  abstract(dest);
-
-  // do initialization
-  initialization.destructive_append(dest);
-  dest.swap(initialization);
-  initialization.clear();
-}
-
-/*******************************************************************\
-
 Function: string_abstractiont::abstract
 
   Inputs:
@@ -278,17 +242,90 @@ Function: string_abstractiont::abstract
 
 \*******************************************************************/
 
-void string_abstractiont::abstract(goto_programt &dest)
+void string_abstractiont::abstract(irep_idt name,
+                                   goto_function_templatet<goto_programt> &dest)
 {
   locals.clear();
+  func_return_num = 0;
 
-  Forall_goto_program_instructions(it, dest)
-    abstract(dest, it);
+  code_typet &func_type = static_cast<code_typet &>(dest.type);
+  code_typet::argumentst &arg_types=func_type.arguments();
+  code_typet::argumentst new_args;
+
+  for(code_typet::argumentst::const_iterator it=arg_types.begin();
+      it!=arg_types.end(); it++)
+  {
+    const code_typet::argumentt &argument=
+                static_cast<const code_typet::argumentt &>(*it);
+    const typet &type = argument.type();
+
+    new_args.push_back(argument);
+
+    if(type.id()=="pointer" && is_char_type(type.subtype()))
+    {
+      code_typet::argumentt new_arg;
+
+      new_arg.type() = pointer_typet(string_struct);
+      new_arg.set_identifier(it->get_identifier().as_string() + "#str");
+      new_arg.set_base_name(it->get_base_name().as_string() + "#str");
+      new_args.push_back(new_arg);
+
+      // We also need to put this new argument into the symbol table.
+      symbolt new_sym;
+      new_sym.type = new_arg.type();
+      new_sym.value = exprt();
+      new_sym.location = locationt();
+      new_sym.location.set_file("<added_by_string_abstraction>");
+      new_sym.name = new_arg.get_identifier();
+      new_sym.base_name = new_arg.get_base_name();
+      context.add(new_sym);
+    }
+  }
+
+  // Additionally, if the return type is a char *, then the func needs to be
+  // able to provide related information about the returned string. To implement
+  // this, another pointer to a string struct is tacked onto the end of the
+  // function arguments.
+  const typet ret_type = func_type.return_type();
+  if(ret_type.id()=="pointer" && is_char_type(ret_type.subtype())) {
+    code_typet::argumentt new_arg;
+
+    new_arg.type() = pointer_typet(pointer_typet(string_struct));
+    new_arg.set_identifier(name.as_string() + "::__strabs::returned_str#str");
+    new_arg.set_base_name("returned_str#str");
+    new_args.push_back(new_arg);
+
+    symbolt new_sym;
+    new_sym.type = new_arg.type();
+    new_sym.value = exprt();
+    new_sym.location = locationt();
+    new_sym.location.set_file("<added_by_string_abstraction>");
+    new_sym.name = new_arg.get_identifier();
+    new_sym.base_name = new_arg.get_base_name();
+    context.add(new_sym);
+
+    new_sym.name = name.as_string() + "::__strabs::returned_str";
+    new_sym.base_name = "returned_str";
+    new_sym.type = pointer_typet(signedbv_typet(8));
+    context.add(new_sym);
+
+    locals[new_sym.name] = new_arg.get_identifier();
+  }
+
+  func_type.arguments() = new_args;
+
+  // Additionally, update the type of our symbol
+  symbolst::iterator it = context.symbols.find(name);
+  assert(it != context.symbols.end());
+  it->second.type = func_type;
+
+  Forall_goto_program_instructions(it, dest.body)
+    abstract(name, dest.body, it);
 
   // do it again for the locals
   if(!locals.empty())
   {
-    Forall_goto_program_instructions(it, dest)
+    Forall_goto_program_instructions(it, dest.body)
     {
       for(localst::const_iterator
           l_it=locals.begin();
@@ -332,7 +369,31 @@ void string_abstractiont::abstract(goto_programt &dest)
               goto_programt::targett it_next=it;
               it_next++;
 
-              dest.destructive_insert(it_next, tmp);
+              dest.body.destructive_insert(it_next, tmp);
+            } else if (symbol.type.id() == "pointer" &&
+                       symbol.type.subtype() == string_struct) {
+              goto_programt tmp;
+
+              constant_exprt null(typet("pointer"));
+              null.type() = symbol.type;
+              null.set_value("NULL");
+
+              goto_programt::targett decl1=tmp.add_instruction();
+              decl1->make_other();
+              decl1->code=code_declt();
+              decl1->code.copy_to_operands(symbol_expr(symbol));
+              decl1->location=it->location;
+              decl1->local_variables=it->local_variables;
+
+              goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
+              assignment1->code=code_assignt(symbol_expr(symbol), null);
+              assignment1->location=it->location;
+              assignment1->local_variables=it->local_variables;
+
+              goto_programt::targett it_next=it;
+              it_next++;
+
+              dest.body.destructive_insert(it_next, tmp);
             }
           }
         }
@@ -356,6 +417,7 @@ Function: string_abstractiont::abstract
 \*******************************************************************/
 
 void string_abstractiont::abstract(
+  irep_idt name,
   goto_programt &dest,
   goto_programt::targett it)
 {
@@ -377,12 +439,75 @@ void string_abstractiont::abstract(
     break;
     
   case RETURN:
-    if(it->code.operands().size()!=0)
-      replace_string_macros(it->code.op0(), false, it->location);
+    abstract_return(name, dest, it);
     break;
     
   default:;  
   }
+}
+
+void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
+                                          goto_programt::targett it)
+{
+  exprt ret_val;
+  irep_idt label;
+
+  if (it->code.operands().size() == 0)
+    return; // We're not interested at all.
+
+  replace_string_macros(it->code.op0(), false, it->location);
+
+  ret_val = it->code.op0();
+  while(ret_val.id()=="typecast")
+    ret_val = ret_val.op0();
+
+  if (ret_val.type().id() != "pointer" || !is_char_type(ret_val.type().subtype()))
+    return;
+
+  // We have a return type that needs to also write to the callers string
+  // struct. Insert some assignments that perform this.
+
+  // However, don't assign to NULL - which will have been passed in if the
+  // caller discards the return value
+  label = irep_idt("strabs_ret_str_" + func_return_num++);
+  it->labels.push_back(label);
+
+  goto_programt tmp;
+  goto_programt::targett branch, assignment;
+
+  typet rtype = pointer_typet(pointer_typet(string_struct));
+  typet rtype2 = pointer_typet(rtype);
+  exprt ret_sym = symbol_exprt(name.as_string() + "::__strabs::returned_str#str", rtype2);
+
+  // For the purposes of comparing the pointer against NULL, we need to typecast
+  // it: other goto convert functions rewrite the returned_str#str pointer to
+  // be a particular pointer (value set foo). Upon which it becomes another type
+  typecast_exprt cast(rtype);
+  cast.op0() = ret_sym;
+  constant_exprt null(typet("pointer"));
+  null.type() = rtype;
+  null.set_value("NULL");
+  exprt guard = equality_exprt(cast, null);
+
+  branch = tmp.add_instruction(GOTO);
+  branch->make_goto();
+  branch->guard = guard;
+  branch->targets.push_back(it);
+  branch->location = it->location;
+  branch->local_variables = it->local_variables;
+  dest.destructive_insert(it, tmp);
+
+  exprt lhs = dereference_exprt(pointer_typet(string_struct));
+  lhs.op0() = ret_sym;
+  exprt rhs = build(ret_val, false);
+  assignment = tmp.add_instruction(ASSIGN);
+  assignment->code = code_assignt(lhs, rhs);
+  assignment->location = it->location;
+  assignment->local_variables = it->local_variables;
+  assignment->guard.make_true();
+  dest.destructive_insert(it, tmp);
+
+  return;
 }
 
 /*******************************************************************\
@@ -1214,7 +1339,9 @@ void string_abstractiont::abstract_function_call(
   goto_programt &dest,
   goto_programt::targett target)
 {
-  const code_function_callt &call=to_code_function_call(target->code);
+  code_function_callt::argumentst new_args;
+
+  code_function_callt &call=to_code_function_call(target->code);
   const code_function_callt::argumentst &arguments=call.arguments();
   
   symbolst::const_iterator f_it = 
@@ -1225,48 +1352,61 @@ void string_abstractiont::abstract_function_call(
   const code_typet &fnc_type = 
     static_cast<const code_typet &>(f_it->second.type);
   const code_typet::argumentst &argument_types=fnc_type.arguments();
-  
-  exprt::operandst::const_iterator it1=arguments.begin();
 
-  for(code_typet::argumentst::const_iterator it2=argument_types.begin();
-      it2!=argument_types.end();
-      it2++)
-  {
-    if(it1==arguments.end())
-    {
-      err_location(target->location);
-      throw "function call: not enough arguments";
-    }
-    
-    const exprt &argument=static_cast<const exprt &>(*it2);
-    
+  code_typet::argumentst::const_iterator arg = argument_types.begin();
+  for(exprt::operandst::const_iterator it1=arguments.begin();
+      it1 != arguments.end(); it1++) {
     const exprt actual(*it1);
-    
-    const exprt *tcfree = &actual;
+
+    new_args.push_back(actual);
+
+    const exprt *tcfree = &*arg;
     while(tcfree->id()=="typecast")
       tcfree=&tcfree->op0();
     
     if(tcfree->type().id()=="pointer" &&
        is_char_type(tcfree->type().subtype()))
     {
-      const irep_idt &identifier=argument.get("#identifier");
-      
-      if(identifier=="") continue; // just forget it
-      
-      goto_programt tmp;
-      
-      goto_programt::targett assignment=tmp.add_instruction(ASSIGN);
-      assignment->code=code_assignt(
-                         build(symbol_exprt(identifier, argument.type()), true), 
-                         build(actual, false));
-      assignment->location=target->location;
-      assignment->local_variables=target->local_variables;
-      assignment->function=call.function().get("identifier");
+      if (actual.type().id() == "pointer")
+        new_args.push_back(build(actual, false));
+      else
+        new_args.push_back(address_of_exprt(build(actual, false)));
 
-      // inserts _before_ the call
-      dest.destructive_insert(target, tmp);
     }
-    
-    it1++;
+
+    arg++;
+    // Don't continue through var-args
+    if (arg == argument_types.end())
+      break;
+
+    // Uuugh. Arg we're pointing at may (or may not) now be a string struct ptr.
+    // Ultimately the fix to this horror is not rewriting program code and
+    // signature in the same pass.
+    if (arg->type().id() == "pointer" && arg->type().subtype() == string_struct)
+      arg++;
+
+    if (arg == argument_types.end())
+      break;
   }
+
+  // If we have a char return type, receive a returned string struct by passing
+  // a string struct pointer as the last argument.
+  typet fnc_ret_type = fnc_type.return_type();
+  if (fnc_ret_type.id() == "pointer" && is_char_type(fnc_ret_type.subtype())) {
+    if (call.lhs().is_nil()) {
+      constant_exprt null(typet("pointer"));
+      null.type().subtype() = pointer_typet(string_struct);
+      null.set_value("NULL");
+      new_args.push_back(null);
+    } else {
+      new_args.push_back(address_of_exprt(build(call.lhs(), false)));
+    }
+  }
+
+  // XXX - previously had a test to ensure that we have the same number of
+  // arguments as the function being called. However as we're now changing
+  // that number, and we can't guarentee the order these functions are processed
+  // in, it's not inpractical.
+
+  call.arguments() = new_args;
 }

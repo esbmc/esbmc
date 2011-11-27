@@ -19,11 +19,6 @@ Author: Daniel Kroening, kroening@kroening.com
 void string_abstraction(
   contextt &context,
   message_handlert &message_handler,
-  goto_programt &dest);
-
-void string_abstraction(
-  contextt &context,
-  message_handlert &message_handler,
   goto_functionst &dest);
 
 #endif

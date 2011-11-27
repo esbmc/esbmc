@@ -10,14 +10,13 @@ SRC = c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
       c_typecheck_argc_argv.cpp ansi_c_parse_tree.cpp \
       preprocessor_line.cpp convert_character_literal.cpp \
       convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp \
-      type2name.cpp cprover_library.cpp fix_symbol.cpp \
-      printf_formatter.cpp
+      type2name.cpp fix_symbol.cpp printf_formatter.cpp \
 
 OBJ = $(SRC:.cpp=.o)
 
 INCLUDES= -I .. -I ../util
 
-all: ansi-c.o library/converter
+all: ansi-c.o
 
 include ../config.inc
 include ../common
@@ -37,21 +36,56 @@ lex.yy.cpp: scanner.l
 # extra dependencies
 y.tab.o: y.tab.cpp y.tab.h
 lex.yy.o: y.tab.cpp lex.yy.cpp y.tab.h
-cprover_library.o: cprover_library.inc
 
 ###############################################################################
 
-library/converter:
-	$(CXX) $(CXXFLAGS) -o library/converter library/converter.cpp
-	
-cprover_library.inc: library/converter library/*.c
-	cat library/*.c | library/converter > cprover_library.inc
+cprover_library.o: cprover_library.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@ -c
+
+cprover_blank_library.o: cprover_library.cpp
+	$(CXX) $(CXXFLAGS) -DNO_CPROVER_LIBRARY $^ -o $@ -c
+
+C2GOTO_DEPS= $(OBJ) ../util/util.o ../langapi/langapi.o ../big-int/bigint.o \
+	../langapi/csp_dummy.o ../langapi/intrep_dummy.o ../langapi/pvs_dummy.o\
+	../langapi/smvlang_dummy.o ../langapi/promela_dummy.o \
+	../langapi/verilog_dummy.o ../langapi/vhdl_dummy.o \
+	../langapi/smtlang_dummy.o ../langapi/netlist_dummy.o \
+	../langapi/pascal_dummy.o ../langapi/bplang_dummy.o \
+	../langapi/simplifylang_dummy.o ../langapi/csharp_dummy.o \
+	../langapi/nsf_dummy.o ../langapi/mdllang_dummy.o \
+	../langapi/specc_dummy.o ../langapi/cpp_dummy.o \
+	../langapi/php_dummy.o ../cvclang/cvclang.o \
+	../goto-programs/goto-programs.o \
+	../pointer-analysis/pointer-analysis.o
+
+c2goto: c2goto.cpp cprover_blank_library.o | $(C2GOTO_DEPS)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(C2GOTO_DEPS)
+
+clib16.o: c2goto library/*.i
+	./c2goto library/*.i --16 --output clib16.goto
+	$(LD) -b binary clib16.goto -o clib16.o -r
+
+clib32.o: c2goto library/*.i
+	./c2goto library/*.i --32 --output clib32.goto
+	$(LD) -b binary clib32.goto -o clib32.o -r
+
+clib64.o: c2goto library/*.i
+	./c2goto library/*.i --64 --output clib64.goto
+	$(LD) -b binary clib64.goto -o clib64.o -r
+
+library/*.i: library/*.c
+	$(MAKE) -C library
+
+clib.o: c2goto clib16.o clib32.o clib64.o
+	$(LD) clib16.o clib32.o clib64.o -o clib.o -r
 
 ###############################################################################
 
-ansi-c.o: cprover_library.inc $(OBJ) 
-	$(LD) $(LDFLAGS) -r -o $@ $(OBJ)
+ansi-c.o: $(OBJ) cprover_library.o clib.o
+	$(LD) $(LDFLAGS) -r -o $@ $^
 
 clean:
-	rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
-	rm -f library/converter
+	$(MAKE) -C library clean
+	-rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
+	-rm -f c2goto
+	-rm -f *.goto
