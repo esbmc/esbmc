@@ -972,7 +972,10 @@ member_declarator:
 	  if(!stack($2).is_nil())
 	  {
 	    $$=$2;
-	    stack($$).add("subtype").swap(stack($1));
+	    // Shift name of member upwards
+	    stack($$).add("identifier") = stack($1).add("identifier");
+	    stack($1).remove("identifier");
+	    stack($$).add("subtype") = stack($1).add("subtype");
 	  }
 	  else
 	    $$=$1;
@@ -1806,7 +1809,7 @@ simple_paren_typedef_declarator:
 	;
 
 identifier_declarator:
-	  unary_identifier_declarator
+	unary_identifier_declarator
 	| paren_identifier_declarator
 	;
 
@@ -1814,39 +1817,70 @@ unary_identifier_declarator:
 	postfix_identifier_declarator
 	| '*' identifier_declarator
 	{
-	  $$=$2;
+	  $$ = $2;
 	  do_pointer($1, $2);
 	}
 	| '*' type_qualifier_list identifier_declarator
 	{
-	  merge_types($2, $3);
-	  $$=$2;
+	  if (stack($3).id() == "declarator") {
+	    exprt d = stack($3);
+	    stack($3) = (exprt&)d.add("subtype");
+	    merge_types($2, $3);
+	    d.add("subtype") = stack($2);
+	    stack($2) = d;
+	  } else  {
+	    merge_types($2, $3);
+	    move_decl_info_upwards((typet&)stack($2), ((typet&)stack($2)).subtypes().back());
+	  }
+	  $$ = $2;
 	  do_pointer($1, $2);
 	}
 	;
 
 postfix_identifier_declarator:
-        paren_identifier_declarator postfixing_abstract_declarator
+	paren_identifier_declarator postfixing_abstract_declarator
 	{
-	  /* note: this is a function or array ($2) with name ($1) */
-	  $$=$1;
-	  make_subtype($$, $2);
+		// postfix will be {code,array,incomplete-array}, which we
+		// wish to preserve. So discard the existing "declarator" name
+		// and move its contents into $2.
+		$$ = $2;
+		stack($$).add("identifier") = stack($1).add("identifier");
+
+		if (stack($1).id() == "declarator") {
+			stack($1).remove("identifier");
+			make_subtype((typet&)stack($$), (typet&)stack($1).add("subtype"));
+		} else {
+			stack($1).remove("identifier");
+			make_subtype($$, $1);
+		}
 	}
 	| '(' unary_identifier_declarator ')'
-	{ $$ = $2; }
+	{
+		$$ = $2;
+	}
 	| '(' unary_identifier_declarator ')' postfixing_abstract_declarator
 	{
-	  /* note: this is a pointer ($2) to a function ($4) */
-	  /* or an array ($4)! */
-	  $$=$2;
-	  make_subtype($$, $4);
+		// Given the bracketing, we preserve the existing irep id and
+		// just make $4 a subtype.
+
+		$$ = $2;
+		make_subtype($$, $4);
 	}
-	;
 
 paren_identifier_declarator:
 	identifier
+	{
+	  // All identifier_declarators are based from this.
+	  newstack($$);
+	  stack($$).id("declarator");
+	  stack($$).add("identifier") = stack($1);
+	  stack($$).add("subtype").make_nil();
+	}
 	| '(' paren_identifier_declarator ')'
-	{ $$=$2; };
+	{
+	  $$ = $2;
+	}
+	;
 
 abstract_declarator:
 	unary_abstract_declarator

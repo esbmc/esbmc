@@ -193,12 +193,17 @@ static void make_subtype(typet &dest, typet &src)
   std::cout << "S: " << src.pretty() << std::endl;
   std::cout << "src.id(): " << src.id() << std::endl;
   #endif
+
+  // Inserting a nil type makes precisely no change.
+  if (src.is_nil())
+    return;
   
   assert(src.id()=="array" ||
          src.id()=="incomplete_array" ||
          src.id()=="pointer" ||
          src.id()=="code" ||
-         src.id()=="merged_type");
+         src.id()=="merged_type" ||
+         src.id()=="declarator");
 
   typet *p=&dest;
 
@@ -217,7 +222,8 @@ static void make_subtype(typet &dest, typet &src)
     if(sub->id()=="pointer" ||
        sub->id()=="array" ||
        sub->id()=="incomplete_array" ||
-       sub->id()=="code")
+       sub->id()=="code" ||
+       sub->id()=="declarator")
     {
       // walk down
       p=&sub->subtype();    
@@ -433,4 +439,16 @@ static void create_function_scope(exprt &expr)
       }
     }
   }
+}
+
+void
+move_decl_info_upwards(typet &dest, typet &src)
+{
+
+  if (src.find("identifier").is_nil())
+    return;
+
+  dest.add("identifier") = src.add("identifier");
+  src.remove("identifier");
+  return;
 }

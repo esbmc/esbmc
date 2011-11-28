@@ -98,12 +98,68 @@ Function: ansi_c_parsert::convert_declarator
 
 \*******************************************************************/
 
+static void
+insert_base_type(typet &dest, const typet &base_type)
+{
+  typet *p = &dest;
+
+  while(true)
+  {
+    typet &t=*p;
+
+    if(t.is_nil() || t.id() == "")
+    {
+      t=base_type;
+      break;
+    }
+    else if(t.id()=="merged_type")
+    {
+      assert(!t.subtypes().empty());
+      // Is this the final point in this chain of types? It could be either a
+      // further {pointer,array,incomplete_array} or some qualifier. If the
+      // former, descend further; if not, insert type here.
+      p=&(t.subtypes().back());
+      if (p->id() != "pointer" && p->id() != "merged_type" &&
+          p->id() != "array" && p->id() !=  "incomplete_array") {
+        t.subtypes().push_back(typet());
+        p=&(t.subtypes().back());
+        p->make_nil();
+      }
+    }
+    else
+      p=&t.subtype();
+  }
+
+  return;
+}
+
 void ansi_c_parsert::convert_declarator(
   irept &declarator,
   const typet &type,
   irept &identifier)
 {
   typet *p=(typet *)&declarator;
+
+  // In aid of making ireps type safe, declarations with identifiers come in the
+  // form of ireps named {declarator,code,array,incomplete_array} with
+  // identifier subtypes.
+
+  if (!declarator.find("identifier").is_nil() && declarator.id() != "symbol") {
+    identifier = declarator.add("identifier");
+    declarator.remove("identifier");
+
+    if (declarator.id() == "merged_type")
+      insert_base_type((typet&)declarator, type);
+    else
+      insert_base_type((typet&)declarator.add("subtype"), type);
+
+    // Plain variables type is the "declarator" subtype. For code/arrays etc,
+    // the fact that it's "code" or an array makes a difference.
+    if (declarator.id() == "declarator")
+      declarator = declarator.add("subtype");
+    // else: leave it as it was.
+    return;
+  }
   
   // walk down subtype until we hit nil or symbol
   while(true)
