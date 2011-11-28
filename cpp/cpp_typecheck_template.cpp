@@ -349,7 +349,7 @@ void cpp_typecheckt::typecheck_template_function(
             id2string(new_symbol->base_name);
 
   // link the template symbol with the template scope
-  assert(template_scope.id_class = cpp_idt::TEMPLATE_SCOPE);
+  template_scope.id_class = cpp_idt::TEMPLATE_SCOPE;
   cpp_scopes.id_map[symbol_name] = &template_scope;
 }
 

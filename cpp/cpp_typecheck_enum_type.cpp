@@ -47,7 +47,8 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
       exprt &value=(exprt &)it->add("value");
       typecheck_expr(value);
       make_constant_index(value);
-      assert(!to_integer(value, i));
+      bool res = to_integer(value, i);
+      assert(!res);
     }
     
     exprt final_value("constant", enum_type);
