@@ -289,15 +289,15 @@ gotident(struct symtab *nl)
 	base = osp = stringbuf;
 	goto found;
 
-	while ((c = yylex()) != 0) {
+	while ((c = cpplex()) != 0) {
 		switch (c) {
 		case IDENT:
 			if (flslvl)
 				break;
 			osp = stringbuf;
 
-			DPRINT(("IDENT0: %s\n", yytext));
-			nl = lookup((usch *)yytext, FIND);
+			DPRINT(("IDENT0: %s\n", cpptext));
+			nl = lookup((usch *)cpptext, FIND);
 			if (nl == 0 || thisnl == 0)
 				goto found;
 			if (thisnl == nl) {
@@ -305,22 +305,22 @@ gotident(struct symtab *nl)
 				goto found;
 			}
 			ss2 = stringbuf;
-			if ((c = yylex()) == WSPACE) {
-				savstr((usch *)yytext);
-				c = yylex();
+			if ((c = cpplex()) == WSPACE) {
+				savstr((usch *)cpptext);
+				c = cpplex();
 			}
 			if (c != EXPAND) {
-				unpstr((usch *)yytext);
+				unpstr((usch *)cpptext);
 				if (ss2 != stringbuf)
 					unpstr(ss2);
 				unpstr(nl->namep);
-				(void)yylex(); /* get yytext correct */
+				(void)cpplex(); /* get cpptext correct */
 				nl = 0; /* ignore */
 			} else {
 				thisnl = NULL;
 				if (nl->value[0] == OBJCT) {
 					unpstr(nl->namep);
-					(void)yylex(); /* get yytext correct */
+					(void)cpplex(); /* get cpptext correct */
 					nl = 0;
 				}
 			}
@@ -330,7 +330,7 @@ found:			if (nl == 0 || subst(nl, NULL) == 0) {
 				if (nl)
 					savstr(nl->namep);
 				else
-					savstr((usch *)yytext);
+					savstr((usch *)cpptext);
 			} else if (osp != stringbuf) {
 				DPRINT(("IDENT1: unput osp %p stringbuf %p\n",
 				    osp, stringbuf));
@@ -353,14 +353,14 @@ found:			if (nl == 0 || subst(nl, NULL) == 0) {
 		case NUMBER:
 		case FPOINT:
 		case WSPACE:
-			savstr((usch *)yytext);
+			savstr((usch *)cpptext);
 			break;
 
 		default:
 			if (c < 256)
 				savch(c);
 			else
-				savstr((usch *)yytext);
+				savstr((usch *)cpptext);
 			break;
 		}
 		if (thisnl == NULL) {
@@ -382,33 +382,33 @@ line()
 	int c;
 
 	slow = 1;
-	if (yylex() != WSPACE)
+	if (cpplex() != WSPACE)
 		goto bad;
-	if ((c = yylex()) != IDENT || !isdigit((int)yytext[0]))
+	if ((c = cpplex()) != IDENT || !isdigit((int)cpptext[0]))
 		goto bad;
-	ifiles->lineno = atoi(yytext);
+	ifiles->lineno = atoi(cpptext);
 
-	if ((c = yylex()) != '\n' && c != WSPACE)
+	if ((c = cpplex()) != '\n' && c != WSPACE)
 		goto bad;
 	if (c == '\n') {
 		slow = 0;
 		return;
 	}
-	if (yylex() != STRING || yytext[0] == 'L')
+	if (cpplex() != STRING || cpptext[0] == 'L')
 		goto bad;
-	c = strlen((char *)yytext);
+	c = strlen((char *)cpptext);
 	if (llen < c) {
 		/* XXX may loose heap space */
 		lbuf = stringbuf;
 		stringbuf += c;
 		llen = c;
 	}
-	yytext[strlen(yytext)-1] = 0;
-	if (strlcpy((char *)lbuf, &yytext[1], SBSIZE) >= SBSIZE)
+	cpptext[strlen(cpptext)-1] = 0;
+	if (strlcpy((char *)lbuf, &cpptext[1], SBSIZE) >= SBSIZE)
 		error("line exceeded buffer size");
 
 	ifiles->fname = lbuf;
-	if (yylex() != '\n')
+	if (cpplex() != '\n')
 		goto bad;
 	slow = 0;
 	return;
@@ -435,13 +435,13 @@ include()
 	osp = stringbuf;
 	slow = 1;
 again:
-	if ((c = yylex()) == WSPACE)
-		c = yylex();
+	if ((c = cpplex()) == WSPACE)
+		c = cpplex();
 	if (c != STRING && c != '<' && c != IDENT)
 		goto bad;
 
 	if (c == IDENT) {
-		if ((nl = lookup((usch *)yytext, FIND)) == NULL)
+		if ((nl = lookup((usch *)cpptext, FIND)) == NULL)
 			goto bad;
 		if (subst(nl, NULL) == 0)
 			goto bad;
@@ -450,13 +450,13 @@ again:
 		goto again;
 	} else if (c == '<') {
 		fn = stringbuf;
-		while ((c = yylex()) != '>' && c != '\n') {
+		while ((c = cpplex()) != '>' && c != '\n') {
 			if (c == '\n')
 				goto bad;
-			savstr((usch *)yytext);
+			savstr((usch *)cpptext);
 		}
 		savch('\0');
-		while ((c = yylex()) == WSPACE)
+		while ((c = cpplex()) == WSPACE)
 			;
 		if (c != '\n')
 			goto bad;
@@ -465,8 +465,8 @@ again:
 	} else {
 		usch *nm = stringbuf;
 
-		yytext[strlen(yytext)-1] = 0;
-		fn = (usch *)&yytext[1];
+		cpptext[strlen(cpptext)-1] = 0;
+		fn = (usch *)&cpptext[1];
 		/* first try to open file relative to previous file */
 		/* but only if it is not an absolute path */
 		if (*fn != '/') {
@@ -479,7 +479,7 @@ again:
 		}
 		safefn = stringbuf;
 		savstr(fn); savch(0);
-		while ((c = yylex()) == WSPACE)
+		while ((c = cpplex()) == WSPACE)
 			;
 		if (c != '\n')
 			goto bad;
@@ -520,7 +520,7 @@ definp(void)
 	int c;
 
 	do
-		c = yylex();
+		c = cpplex();
 	while (c == WSPACE);
 	return c;
 }
@@ -538,17 +538,17 @@ define()
 	if (flslvl)
 		return;
 	slow = 1;
-	if (yylex() != WSPACE || yylex() != IDENT)
+	if (cpplex() != WSPACE || cpplex() != IDENT)
 		goto bad;
 
-	if (isdigit((int)yytext[0]))
+	if (isdigit((int)cpptext[0]))
 		goto bad;
 
-	np = lookup((usch *)yytext, ENTER);
+	np = lookup((usch *)cpptext, ENTER);
 	redef = np->value != NULL;
 
 	sbeg = stringbuf;
-	if ((c = yylex()) == '(') {
+	if ((c = cpplex()) == '(') {
 		narg = 0;
 		/* function-like macros, deal with identifiers */
 		c = definp();
@@ -564,12 +564,12 @@ define()
 			if (c == IDENT) {
 				/* make sure there is no arg of same name */
 				for (i = 0; i < narg; i++)
-					if (!strcmp((char *) args[i], yytext))
+					if (!strcmp((char *) args[i], cpptext))
 						error("Duplicate macro "
-						  "parameter \"%s\"", yytext);
-				len = strlen(yytext);
+						  "parameter \"%s\"", cpptext);
+				len = strlen(cpptext);
 				args[narg] = alloca(len+1);
-				strlcpy((char *)args[narg], yytext, len+1);
+				strlcpy((char *)args[narg], cpptext, len+1);
 				narg++;
 				if ((c = definp()) == ',') {
 					if ((c = definp()) == ')')
@@ -581,7 +581,7 @@ define()
 			}
 			goto bad;
 		}
-		c = yylex();
+		c = cpplex();
 	} else if (c == '\n') {
 		/* #define foo */
 		;
@@ -589,7 +589,7 @@ define()
 		goto bad;
 
 	while (c == WSPACE)
-		c = yylex();
+		c = cpplex();
 
 	/* replacement list cannot start with ## operator */
 	if (c == CONCAT)
@@ -602,21 +602,21 @@ define()
 		case WSPACE:
 			/* remove spaces if it surrounds a ## directive */
 			ubuf = stringbuf;
-			savstr((usch *)yytext);
-			c = yylex();
+			savstr((usch *)cpptext);
+			c = cpplex();
 			if (c == CONCAT) {
 				stringbuf = ubuf;
 				savch(CONC);
-				if ((c = yylex()) == WSPACE)
-					c = yylex();
+				if ((c = cpplex()) == WSPACE)
+					c = cpplex();
 			}
 			continue;
 
 		case CONCAT:
 			/* No spaces before concat op */
 			savch(CONC);
-			if ((c = yylex()) == WSPACE)
-				c = yylex();
+			if ((c = cpplex()) == WSPACE)
+				c = cpplex();
 			continue;
 
 		case MKSTR:
@@ -627,8 +627,8 @@ define()
 			}
 			/* remove spaces between # and arg */
 			savch(SNUFF);
-			if ((c = yylex()) == WSPACE)
-				c = yylex(); /* whitespace, ignore */
+			if ((c = cpplex()) == WSPACE)
+				c = cpplex(); /* whitespace, ignore */
 			mkstr = 1;
 			if (c == VA_ARGS)
 				continue;
@@ -639,7 +639,7 @@ define()
 				goto id; /* just add it if object */
 			/* check if its an argument */
 			for (i = 0; i < narg; i++)
-				if (strcmp(yytext, (char *)args[i]) == 0)
+				if (strcmp(cpptext, (char *)args[i]) == 0)
 					break;
 			if (i == narg) {
 				if (mkstr)
@@ -654,7 +654,7 @@ define()
 
 		case VA_ARGS:
 			if (ellips == 0)
-				error("unwanted %s", yytext);
+				error("unwanted %s", cpptext);
 			savch(VARG);
 			savch(WARN);
 			if (mkstr)
@@ -662,10 +662,10 @@ define()
 			break;
 
 		default:
-id:			savstr((usch *)yytext);
+id:			savstr((usch *)cpptext);
 			break;
 		}
-		c = yylex();
+		c = cpplex();
 	}
 	/* remove trailing whitespace */
 	while (stringbuf > sbeg) {
@@ -779,21 +779,21 @@ pragoper(void)
 
 	slow = 1;
 	putstr((usch *)"\n#pragma ");
-	if ((t = yylex()) == WSPACE)
-		t = yylex();
+	if ((t = cpplex()) == WSPACE)
+		t = cpplex();
 	if (t != '(')
 		goto bad;
-	if ((t = yylex()) == WSPACE)
-		t = yylex();
+	if ((t = cpplex()) == WSPACE)
+		t = cpplex();
 	opb = stringbuf;
-	for (plev = 0; ; t = yylex()) {
+	for (plev = 0; ; t = cpplex()) {
 		if (t == '(')
 			plev++;
 		if (t == ')')
 			plev--;
 		if (plev < 0)
 			break;
-		savstr((usch *)yytext);
+		savstr((usch *)cpptext);
 	}
 
 	savch(0);
@@ -804,12 +804,12 @@ pragoper(void)
 	cunput('\n');
 	while (stringbuf > opb)
 		cunput(*--stringbuf);
-	while ((t = yylex()) != '\n') {
+	while ((t = cpplex()) != '\n') {
 		if (t == WSPACE)
 			continue;
 		if (t != STRING)
 			goto bad;
-		opb = (usch *)yytext;
+		opb = (usch *)cpptext;
 		if (*opb++ == 'L')
 			opb++;
 		while ((t = *opb++) != '\"') {
@@ -862,7 +862,7 @@ subst(struct symtab *sp, struct recur *rp)
 		rv = 1;
 		ws = 0;
 		do {
-			c = yylex();
+			c = cpplex();
 			if (c == WARN) {
 				gotwarn++;
 				if (rp == NULL)
@@ -871,10 +871,10 @@ subst(struct symtab *sp, struct recur *rp)
 				ws = 1;
 		} while (c == WSPACE || c == '\n' || c == WARN);
 
-		cp = (usch *)yytext;
+		cp = (usch *)cpptext;
 		while (*cp)
 			cp++;
-		while (cp > (usch *)yytext)
+		while (cp > (usch *)cpptext)
 			cunput(*--cp);
 		DPRINT(("c %d\n", c));
 		if (c == '(' ) {
@@ -891,7 +891,7 @@ noid:			while (gotwarn--)
 				cp++;
 			while (cp > sp->namep)
 				cunput(*--cp);
-			if ((c = yylex()) != IDENT)
+			if ((c = cpplex()) != IDENT)
 				error("internal sync error");
 			return 0;
 		}
@@ -920,7 +920,7 @@ expmac(struct recur *rp)
 	struct symtab *nl;
 	int c, noexp = 0, orgexp;
 	usch *och, *stksv;
-	extern int yyleng;
+	extern int cppleng;
 
 #ifdef CPP_DEBUG
 	if (dflag) {
@@ -932,7 +932,7 @@ expmac(struct recur *rp)
 		}
 	}
 #endif
-	while ((c = yylex()) != WARN) {
+	while ((c = cpplex()) != WARN) {
 		switch (c) {
 		case NOEXP: noexp++; break;
 		case EXPAND: noexp--; break;
@@ -943,15 +943,15 @@ expmac(struct recur *rp)
 			 * If an identifier is found and directly 
 			 * after EXPAND or NOEXP then push the
 			 * identifier back on the input stream and
-			 * call yylex() again.
+			 * call cpplex() again.
 			 * Be careful to keep the noexp balance.
 			 */
 			och = stringbuf;
-			savstr((usch *)yytext);
+			savstr((usch *)cpptext);
 			DDPRINT(("id: str %s\n", och));
 
 			orgexp = 0;
-			while ((c = yylex()) == EXPAND || c == NOEXP)
+			while ((c = cpplex()) == EXPAND || c == NOEXP)
 				if (c == EXPAND)
 					orgexp--;
 				else
@@ -959,9 +959,9 @@ expmac(struct recur *rp)
 
 			DDPRINT(("id1: noexp %d orgexp %d\n", noexp, orgexp));
 			if (c == IDENT) { /* XXX numbers? */
-				DDPRINT(("id2: str %s\n", yytext));
+				DDPRINT(("id2: str %s\n", cpptext));
 				/* OK to always expand here? */
-				savstr((usch *)yytext);
+				savstr((usch *)cpptext);
 				switch (orgexp) {
 				case 0: /* been EXP+NOEXP */
 					if (noexp == 0)
@@ -988,7 +988,7 @@ expmac(struct recur *rp)
 				stringbuf = och;
 				continue; /* New longer identifier */
 			}
-			unpstr((usch *)yytext);
+			unpstr((usch *)cpptext);
 			if (orgexp == -1)
 				cunput(EXPAND);
 			else if (orgexp == 1)
@@ -997,9 +997,9 @@ expmac(struct recur *rp)
 			stringbuf = och;
 
 
-			yylex(); /* XXX reget last identifier */
+			cpplex(); /* XXX reget last identifier */
 
-			if ((nl = lookup((usch *)yytext, FIND)) == NULL)
+			if ((nl = lookup((usch *)cpptext, FIND)) == NULL)
 				goto def;
 
 			if (canexpand(rp, nl) == 0)
@@ -1020,10 +1020,10 @@ expmac(struct recur *rp)
 			if (noexp != 1)
 				error("bad noexp %d", noexp);
 			stksv = NULL;
-			if ((c = yylex()) == WSPACE) {
-				stksv = alloca(yyleng+1);
-				strlcpy((char *)stksv, yytext, yyleng+1);
-				c = yylex();
+			if ((c = cpplex()) == WSPACE) {
+				stksv = alloca(cppleng+1);
+				strlcpy((char *)stksv, cpptext, cppleng+1);
+				c = cpplex();
 			}
 			/* only valid for expansion if fun macro */
 			if (c == EXPAND && *nl->value != OBJCT) {
@@ -1034,7 +1034,7 @@ expmac(struct recur *rp)
 				if (stksv)
 					savstr(stksv);
 			} else {
-				unpstr((usch *)yytext);
+				unpstr((usch *)cpptext);
 				if (stksv)
 					unpstr(stksv);
 				savstr(nl->namep);
@@ -1043,9 +1043,9 @@ expmac(struct recur *rp)
 
 		case STRING:
 			/* remove EXPAND/NOEXP from strings */
-			if (yytext[1] == NOEXP) {
+			if (cpptext[1] == NOEXP) {
 				savch('"');
-				och = (usch *)&yytext[2];
+				och = (usch *)&cpptext[2];
 				while (*och != EXPAND)
 					savch(*och++);
 				savch('"');
@@ -1054,7 +1054,7 @@ expmac(struct recur *rp)
 			/* FALLTHROUGH */
 
 def:		default:
-			savstr((usch *)yytext);
+			savstr((usch *)cpptext);
 			break;
 		}
 	}
@@ -1066,7 +1066,7 @@ def:		default:
 /*
  * expand a function-like macro.
  * vp points to end of replacement-list
- * reads function arguments from yylex()
+ * reads function arguments from cpplex()
  * result is written on top of heap
  */
 void
@@ -1077,7 +1077,7 @@ expdef(usch *vp, struct recur *rp, int gotwarn)
 	int ellips = 0;
 
 	DPRINT(("expdef rp %s\n", (rp ? (char *)rp->sp->namep : "")));
-	if ((c = yylex()) != '(')
+	if ((c = cpplex()) != '(')
 		error("got %c, expected (", c);
 	if (vp[1] == VARG) {
 		narg = *vp--;
@@ -1095,7 +1095,7 @@ expdef(usch *vp, struct recur *rp, int gotwarn)
 	for (i = 0; i < narg && c != ')'; i++) {
 		args[i] = stringbuf;
 		plev = 0;
-		while ((c = yylex()) == WSPACE || c == '\n')
+		while ((c = cpplex()) == WSPACE || c == '\n')
 			;
 		for (;;) {
 			if (plev == 0 && (c == ')' || c == ','))
@@ -1104,8 +1104,8 @@ expdef(usch *vp, struct recur *rp, int gotwarn)
 				plev++;
 			if (c == ')')
 				plev--;
-			savstr((usch *)yytext);
-			while ((c = yylex()) == '\n')
+			savstr((usch *)cpptext);
+			while ((c = cpplex()) == '\n')
 				savch('\n');
 		}
 		while (args[i] < stringbuf &&
@@ -1118,7 +1118,7 @@ expdef(usch *vp, struct recur *rp, int gotwarn)
 	if (ellips && c != ')') {
 		args[i] = stringbuf;
 		plev = 0;
-		while ((c = yylex()) == WSPACE)
+		while ((c = cpplex()) == WSPACE)
 			;
 		for (;;) {
 			if (plev == 0 && c == ')')
@@ -1127,8 +1127,8 @@ expdef(usch *vp, struct recur *rp, int gotwarn)
 				plev++;
 			if (c == ')')
 				plev--;
-			savstr((usch *)yytext);
-			while ((c = yylex()) == '\n')
+			savstr((usch *)cpptext);
+			while ((c = cpplex()) == '\n')
 				savch('\n');
 		}
 		while (args[i] < stringbuf &&
@@ -1138,7 +1138,7 @@ expdef(usch *vp, struct recur *rp, int gotwarn)
 		
 	}
 	if (narg == 0 && ellips == 0)
-		while ((c = yylex()) == WSPACE || c == '\n')
+		while ((c = cpplex()) == WSPACE || c == '\n')
 			;
 
 	if (c != ')' || (i != narg && ellips == 0) || (i < narg && ellips == 1))

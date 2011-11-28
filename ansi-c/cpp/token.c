@@ -49,8 +49,8 @@ struct includ {
 
 usch *yyp, *yystr, yybuf[CPPBUF];
 
-int yylex(void);
-int yywrap(void);
+int cpplex(void);
+int cppwrap(void);
 
 static struct includ *
 getbuf(usch *file)
@@ -163,7 +163,7 @@ again:	switch (c = input()) {
 }
 
 int
-yylex()
+cpplex()
 {
 	static int wasnl = 1;
 	int c, oc, rval;
@@ -371,7 +371,7 @@ E:				ONEMORE();
 			if (Cflag)
 				putc(c, obuf);
 			if (tflag) {
-				rval = yylex();
+				rval = cpplex();
 			} else {
 				*yyp++ = ' '; *yyp = 0;
 				rval = WSPACE;

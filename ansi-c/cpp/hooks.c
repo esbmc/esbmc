@@ -53,8 +53,8 @@ handle_hooked_header(usch *name)
 			prtline(); /* Output file loc */
 
 			otrulvl = trulvl;
-			if ((c = yylex()) != 0)
-				error("yylex returned %d", c);
+			if ((c = cpplex()) != 0)
+				error("cpplex returned %d", c);
 
 			if (otrulvl != trulvl || flslvl)
 				error("Unterminated conditional");

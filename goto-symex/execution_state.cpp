@@ -577,7 +577,12 @@ void execution_statet::add_thread(goto_programt::const_targett thread_start, got
   _threads_state.push_back(state);
   _atomic_numbers.push_back(0);
 
-  _DFS_traversed.push_back(false);
+  if (_DFS_traversed.size() <= state.source.thread_nr) {
+    _DFS_traversed.push_back(false);
+  } else {
+    _DFS_traversed[state.source.thread_nr] = false;
+  }
+
   _exprs.push_back(exprt());
 
   _exprs_read_write.push_back(read_write_set());
@@ -606,7 +611,11 @@ void execution_statet::add_thread(goto_symex_statet & state)
   _threads_state.push_back(new_state);
   _atomic_numbers.push_back(0);
 
-  _DFS_traversed.push_back(false);
+  if (_DFS_traversed.size() <= new_state.source.thread_nr) {
+    _DFS_traversed.push_back(false);
+  } else {
+    _DFS_traversed[new_state.source.thread_nr] = false;
+  }
   _exprs.push_back(exprt());
 
   _exprs_read_write.push_back(read_write_set());
@@ -1163,4 +1172,19 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   m["pointer_object"] = serialise_normal_operation;
 
   return m;
+}
+
+void execution_statet::print_stack_traces(void) const
+{
+  std::vector<goto_symex_statet>::const_iterator it;
+  int i;
+
+  i = 0;
+  for (it = _threads_state.begin(); it != _threads_state.end(); it++) {
+    std::cout << "Thread " << i++ << ":" << std::endl;
+    it->print_stack_trace();
+    std::cout << std::endl;
+  }
+
+  return;
 }

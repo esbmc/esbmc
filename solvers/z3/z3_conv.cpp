@@ -3755,6 +3755,16 @@ bool z3_convt::convert_constant(const exprt &expr, Z3_ast &bv)
     // Uuugghhhh. Match what happens if we were to feed this to binary2integer.
     value = "0";
   }
+  else if (expr.type().is_bool())
+  {
+    // value will not actually be interpreted as number by below code
+    value = expr.value().as_string();
+  }
+  else if (expr.type().id() == "pointer" && expr.value() == "NULL")
+  {
+    // Uuugghhhh. Match what happens if we were to feed this to binary2integer.
+    value = "0";
+  }
   else if (is_signed(expr.type()))
   {
     value = integer2string(binary2integer(expr.value().as_string(), true),10);

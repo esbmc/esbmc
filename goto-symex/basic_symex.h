@@ -46,10 +46,12 @@ public:
   optionst options;
   contextt &new_context;
 
-protected:
+// XXX jmorse - un-protected to appease bmc.cpp. g++34 does not approve of its
+// access of this member.
   const namespacet &ns;
   symex_targett *target;
 
+protected:
   virtual void do_simplify(exprt &expr);
 
   virtual void symex_block(statet &state, execution_statet &ex_state, const codet &code, unsigned node_id);

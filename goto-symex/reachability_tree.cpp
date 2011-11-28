@@ -6,6 +6,9 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
+#include <arpa/inet.h>
+
+#include <netinet/in.h>
 
 #include "reachability_tree.h"
 #include <i2string.h>
@@ -561,12 +564,14 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     execution_states.push_back(new_state);
 
     /* Make it active, make it follow on from previous state... */
-    new_state->set_active_state(i);
+    if (new_state->get_active_state_number() != i) {
+      new_state->increment_context_switch();
+      new_state->set_active_state(i);
+    }
+
     new_state->set_parent_guard(ex_state.get_guard_identifier());
     new_state->reexecute_instruction = true;
 
-    new_state->increment_context_switch();
-    /* ^^^ What if there /wasn't/ a switch though? */
 //    execution_states.rbegin()->copy_level2_from(ex_state);
 //    Copy constructor should duplicate level2 object
     /* Reset interleavings (?) investigated in this new state */
@@ -651,35 +656,45 @@ void reachability_treet::multi_formulae_go_next_state()
   std::list<execution_statet*>::iterator it = _cur_state_it;
   it++;
 
-  if(it != execution_states.end())
+  if(it != execution_states.end()) {
     _cur_state_it++;
-  else
-  {
-    bool last_state = true;
-    while(execution_states.size() > 0 && !generate_states_base(exprt()))
-    {
-      it = _cur_state_it;
-      _cur_state_it--;
-      _go_next_formula = true;
-      if(last_state)
-      {
-        if(_cur_target_state != NULL)
-          delete _cur_target_state;
-        _cur_target_state = *it;
-        last_state = false;
-      }
-      else
-      {
-        delete *it;
-      }
-      execution_states.erase(it);
-    }
-
-    if(execution_states.size() > 0)
+  } else {
+    if (generate_states_base(exprt()))
       _cur_state_it++;
- }
+    else
+      _go_next_formula = true;
+  }
 
-	_go_next = false;
+  _go_next = false;
+}
+
+bool reachability_treet::reset_to_unexplored_state()
+{
+  std::list<execution_statet*>::iterator it;
+
+  // After executing up to a point where all threads have ended and returning
+  // that equation to the caller, free and remove fully explored execution
+  // states back to the point where there's an unexplored one.
+
+  // Eliminate final execution state, then attempt to generate another one from
+  // the last on the list. If we can, it's an unexplored state, if we can't,
+  // all depths from the current execution state are explored, so delete it.
+
+  it = _cur_state_it--;
+  delete *it;
+  execution_states.erase(it);
+
+  while(execution_states.size() > 0 && !generate_states_base(exprt())) {
+    it = _cur_state_it--;
+    delete *it;
+    execution_states.erase(it);
+  }
+
+  if (execution_states.size() > 0)
+    _cur_state_it++;
+
+  _go_next = false;
+  return execution_states.size() != 0;
 }
 
 /*******************************************************************
@@ -717,4 +732,168 @@ void reachability_treet::go_next_state()
   }
 
   _go_next = false;
+}
+
+reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
+{
+  std::list<execution_statet*>::const_iterator it;
+
+  // Iterate through each position in the DFS tree recording data into this
+  // object.
+  for (it = rt.execution_states.begin(); it != rt.execution_states.end();it++){
+    reachability_treet::dfs_position::dfs_state state;
+    execution_statet *ex = *it;
+    state.location_number = ex->get_active_state().source.pc->location_number;
+    state.num_threads = ex->_threads_state.size();
+    state.explored = ex->_DFS_traversed;
+
+    // The thread taken in this DFS path isn't decided at this execution state,
+    // instead it's whatever thread is active in the /next/ state. So, take the
+    // currently active thread no and assign it to the previous dfs state
+    // we recorded.
+    if (states.size() > 0)
+      states.back().cur_thread = ex->get_active_state_number();
+
+    states.push_back(state);
+  }
+
+  // The final execution state in a DFS is a dummy, there are no paths from it,
+  // so assign a dummy cur_thread value.
+  states.back().cur_thread = 0;
+
+  checksum = 0; // Use this in the future.
+  ileaves = 0; // Can use this depending on a future refactor.
+}
+
+reachability_treet::dfs_position::dfs_position(const std::string filename)
+{
+
+  read_from_file(filename);
+}
+
+const uint32_t reachability_treet::dfs_position::file_magic = 'ECHK';
+
+bool reachability_treet::dfs_position::write_to_file(
+                                       const std::string filename) const
+{
+  uint8_t buffer[8192];
+  reachability_treet::dfs_position::file_hdr hdr;
+  reachability_treet::dfs_position::file_entry entry;
+  std::vector<bool>::const_iterator ex_it;
+  std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
+  FILE *f;
+  unsigned int i;
+
+  f = fopen(filename.c_str(), "w");
+  if (f == NULL) {
+    std::cerr << "Couldn't open checkpoint output file" << std::endl;
+    return true;
+  }
+
+  hdr.magic = htonl(file_magic);
+  hdr.checksum = 0;
+  hdr.num_states = htonl(states.size());
+  hdr.num_ileaves = 0;
+
+  if (fwrite(&hdr, sizeof(hdr), 1, f) != 1)
+    goto fail;
+
+  for (it = states.begin(); it != states.end(); it++) {
+    entry.location_number = htonl(it->location_number);
+    entry.num_threads = htons(it->num_threads);
+    entry.cur_thread = htons(it->cur_thread);
+    
+    if (fwrite(&entry, sizeof(entry), 1, f) != 1)
+      goto fail;
+
+    assert(it->explored.size() < 65536);
+    assert(it->explored.size() == ntohs(entry.num_threads));
+
+    i = 0;
+    memset(buffer, 0, sizeof(buffer));
+    for (ex_it = it->explored.begin(); ex_it != it->explored.end(); ex_it++) {
+      if (*ex_it) {
+        buffer[i >> 3] |= (1 << i & 7);
+      }
+      i++;
+    }
+
+    // Round up
+    i += 7;
+    i >>= 3;
+
+    assert(i != 0); // Always at least one thread in _existance_.
+    if (fwrite(buffer, i, 1, f) != 1)
+      goto fail;
+  }
+
+  fclose(f);
+  return false;
+
+fail:
+  std::cerr << "Write error writing checkpoint file" << std::endl;
+  fclose(f);
+  return true;
+}
+
+bool reachability_treet::dfs_position::read_from_file(
+                                       const std::string filename)
+{
+  reachability_treet::dfs_position::file_hdr hdr;
+  reachability_treet::dfs_position::file_entry entry;
+  FILE *f;
+  unsigned int i, j;
+  char c;
+
+  f = fopen(filename.c_str(), "r");
+  if (f == NULL) {
+    std::cerr << "Couldn't open checkpoint input file" << std::endl;
+    return true;
+  }
+
+  if (fread(&hdr, sizeof(hdr), 1, f) != 1)
+    goto fail;
+
+  if (hdr.magic != htonl(file_magic)) {
+    std::cerr << "Magic number indicates that this isn't a checkpoint file"
+              << std::endl;
+    fclose(f);
+    return true;
+  }
+
+  for (i = 0; i < ntohl(hdr.num_states); i++) {
+    reachability_treet::dfs_position::dfs_state state;
+    if (fread(&entry, sizeof(entry), 1, f) != 1)
+      goto fail;
+
+    state.location_number = ntohl(entry.location_number);
+    state.num_threads = ntohs(entry.num_threads);
+    state.cur_thread = ntohs(entry.cur_thread);
+
+    assert(state.num_threads < 65536);
+    if (state.cur_thread >= state.num_threads) {
+      std::cerr << "Inconsistent checkpoint data" << std::endl;
+      fclose(f);
+      return true;
+    }
+
+    for (j = 0; j < state.num_threads; j++) {
+      if (j % 8 == 0) {
+        if (fread(&c, sizeof(c), 1, f) != 1)
+          goto fail;
+      }
+
+      state.explored.push_back(c & (1 << (j & 7)));
+    }
+
+    states.push_back(state);
+  }
+
+  fclose(f);
+  return false;
+
+fail:
+  std::cerr << "Read error on checkpoint file" << std::endl;
+  fclose(f);
+  return true;
 }

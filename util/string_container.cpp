@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <iostream>
 
+#include <assert.h>
 #include <string.h>
 
 #include "string_container.h"
@@ -117,4 +118,31 @@ unsigned string_containert::get(const std::string &s)
   string_vector.push_back(&string_list.back());
 
   return r;
+}
+
+void string_containert::restore_state_snapshot(str_snapshot &state)
+{
+  unsigned long i, to_free;
+
+  assert(state.idx != 0);
+
+  // Iterate over all strings that have been allocated since the snapshot and
+  // free them from string_containert's hash table.
+  for (i = state.idx, to_free = 0; i < string_vector.size(); i++, to_free++) {
+    std::string *foo = string_vector[i];
+    string_ptrt ptr(*foo);
+
+    hash_table.erase(ptr);
+  }
+
+  // Resize string vector to remove all string ptrs too
+  string_vector.erase(string_vector.begin() + state.idx, string_vector.end());
+  assert(string_vector.size() == state.idx);
+
+  // Finally, pop all string records themselves from the string list.
+  // It might be more efficient to use the erase method.
+  for (; to_free > 0; to_free--)
+    string_list.pop_back();
+
+  return;
 }

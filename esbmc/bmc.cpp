@@ -7,6 +7,11 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <sys/types.h>
+
+#include <signal.h>
+#include <unistd.h>
+
 #include <sstream>
 #include <fstream>
 
@@ -42,6 +47,16 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include "counterex_pretty_greedy.h"
 #include "document_subgoals.h"
 #include "version.h"
+
+static volatile bool checkpoint_sig = false;
+
+void
+sigusr1_handler(int sig)
+{
+
+  checkpoint_sig = true;
+  return;
+}
 
 /*******************************************************************\
 
@@ -326,12 +341,19 @@ Function: bmc_baset::run
 
 bool bmc_baset::run(const goto_functionst &goto_functions)
 {
+  struct sigaction act;
   bool resp;
   symex.set_message_handler(message_handler);
   symex.set_verbosity(get_verbosity());
   symex.options=options;
 
   symex.last_location.make_nil();
+
+  // Collect SIGUSR1, indicating that we're supposed to checkpoint.
+  act.sa_handler = sigusr1_handler;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = 0;
+  sigaction(SIGUSR1, &act, NULL);
 
   // get unwinding info
   setup_unwind();
@@ -360,9 +382,19 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   {
     symex.multi_formulas_init(goto_functions);
 
-    while(symex.multi_formulas_has_more_formula())
+    if (options.get_bool_option("from-checkpoint")) {
+      if (options.get_option("checkpoint-file") == "") {
+        std::cerr << "Please provide a checkpoint file" << std::endl;
+        abort();
+      }
+
+      reachability_treet::dfs_position pos(
+                                         options.get_option("checkpoint-file"));
+      symex.restore_from_dfs_state(pos);
+    }
+
+    do
     {
-      equation->clear();
       symex.total_claims=0;
       symex.remaining_claims=0;
 
@@ -377,7 +409,24 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
           return true;
         }
       }
-    }
+
+      if (checkpoint_sig) {
+        // We're supposed to perform a checkpoint now.
+        std::string f;
+
+        if (options.get_option("checkpoint-file") == "") {
+          char buffer[32];
+          sprintf(buffer, "%d", getpid());
+          f = "esbmc_checkpoint." + std::string(buffer);
+        } else {
+          f = options.get_option("checkpoint-file");
+        }
+
+        symex.save_checkpoint(f);
+
+        checkpoint_sig = false;
+      }
+    } while(symex.multi_formulas_setup_next());
   }
 
   if (symex.options.get_bool_option("all-runs"))
@@ -402,8 +451,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     }
     else
     {
-      symex.multi_formulas_get_next_formula();
-      equation = &symex.art1->_cur_target_state->_target;
+      equation = symex.multi_formulas_get_next_formula();
     }
   }
 

@@ -130,9 +130,9 @@ Function: goto_symext::multi_formulas_has_more_formula
 
 \*******************************************************************/
 
-bool goto_symext::multi_formulas_has_more_formula()
+bool goto_symext::multi_formulas_setup_next()
 {
-  return art1->has_more_states();
+  return art1->reset_to_unexplored_state();
 }
 
 
@@ -148,7 +148,7 @@ Function: goto_symext::multi_formulas_get_next_formula
 
 \*******************************************************************/
 
-bool goto_symext::multi_formulas_get_next_formula()
+symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
 {
   static unsigned int total_formulae = 0;
   static int total_states = 0;
@@ -170,7 +170,70 @@ bool goto_symext::multi_formulas_get_next_formula()
 //  if (art1->get_actual_CS_bound() > art1->get_CS_bound())
 //    std::cout << "**** WARNING: need to increase the number of context switches" << std::endl;
 
-  return true;
+  return &art1->get_cur_state()._target;
+}
+
+bool
+goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
+{
+  std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
+  unsigned int i;
+
+  // Symex repeatedly until context switch points. At each point, verify that it
+  // happened where we expected it to, and then switch to the correct thread for
+  // the history we've been provided with.
+  for (it = dfs.states.begin(), i = 0; it != dfs.states.end(); it++, i++) {
+
+    art1->_go_next = false;
+
+    while (!art1->is_go_next_state()) {
+      // Restore the DFS exploration space so that when an interleaving occurs
+      // we take the option leading to the thread we desire to run. This
+      // assumes that the DFS exploration path algorithm never changes.
+      // Has to occur here; between generating new threads, ESBMC messes with
+      // the dfs state.
+      art1->get_cur_state()._DFS_traversed = it->explored;
+      art1->get_cur_state()._DFS_traversed[it->cur_thread] = false;
+
+      symex_step(art1->_goto_functions, *art1);
+    }
+
+    if (art1->get_cur_state()._threads_state.size() != it->num_threads) {
+      std::cerr << "Unexpected number of threads when reexploring checkpoint"
+                << std::endl;
+      abort();
+    }
+
+    art1->multi_formulae_go_next_state();
+
+    // check we're on the right thread; except on the last run, where there are
+    // no more threads to be run.
+    if (i + 1 < dfs.states.size())
+      assert(art1->get_cur_state().get_active_state_number() == it->cur_thread);
+
+#if 0
+// XXX jmorse: can't quite get these sequence numbers to line up when they're
+// replayed.
+    if (art1->get_cur_state().get_active_state().source.pc->location_number !=
+        it->location_number) {
+      std::cerr << "Interleave at unexpected location when restoring checkpoint"
+                << std::endl;
+      abort();
+    }
+#endif
+  }
+
+  return false;
+}
+
+void goto_symext::save_checkpoint(const std::string fname) const
+{
+
+  reachability_treet::dfs_position pos(*art1);
+  if (pos.write_to_file(fname))
+    std::cerr << "Couldn't save checkpoint; continuing" << std::endl;
+
+  return;
 }
 
 /*******************************************************************\
@@ -246,7 +309,7 @@ void goto_symext::symex_step(
         const goto_functionst &goto_functions,
         reachability_treet & art) {
 
-  static bool is_main=false, is_goto=false;
+  static bool is_main=false;
 
   execution_statet &ex_state = art.get_cur_state();
   statet &state = ex_state.get_active_state();
@@ -302,7 +365,6 @@ void goto_symext::symex_step(
             break;
         case GOTO:
         {
-        	is_goto=true;
             exprt tmp(instruction.guard);
             replace_dynamic_allocation(state, tmp);
             replace_nondet(tmp, ex_state);
@@ -393,7 +455,7 @@ void goto_symext::symex_step(
 
                 if(ex_state._threads_state.size() > 1)
                 {
-                  if (!is_goto && !is_main)
+                  if (!is_main)
                   {
                     if (art.generate_states_before_assign(deref_code, ex_state))
                       return;
@@ -406,7 +468,6 @@ void goto_symext::symex_step(
                   	    ex_state.reexecute_instruction = false;
                   	    art.generate_states();
                     }
-                    is_goto=false;
                   }
                 }
             }
