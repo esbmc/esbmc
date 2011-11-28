@@ -58,7 +58,7 @@ Function: goto_symex_statet::initialize
 
 \*******************************************************************/
 
-void goto_symex_statet::initialize(const goto_programt::const_targett & start, const goto_programt::const_targett & end, unsigned int thread_id)
+void goto_symex_statet::initialize(const goto_programt::const_targett & start, const goto_programt::const_targett & end, const goto_programt *prog, unsigned int thread_id)
 {
   new_frame(thread_id);
 
@@ -71,7 +71,7 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
 	  end_pc++;
 */
   top().end_of_function=end;
-  top().calling_location=top().end_of_function;
+  top().calling_location=symex_targett::sourcet(top().end_of_function, prog);
 }
 
 /*******************************************************************\
@@ -867,24 +867,34 @@ void goto_symex_statet::level2t::print(std::ostream &out, unsigned node_id) cons
 
 }
 
-void goto_symex_statet::print_stack_trace(void) const
+void goto_symex_statet::print_stack_trace(const namespacet &ns, unsigned int indent) const
 {
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
+  std::string spaces = std::string("");
+  int i;
+
+  for (i = 0; i < indent; i++)
+    spaces += " ";
 
   // Iterate through each call frame printing func name and location.
   src = source;
   for (it = call_stack.rbegin(); it != call_stack.rend(); it++) {
     if (it->function_identifier == "") { // Top level call
-      std::cout << "init" << std::endl;
+      std::cout << spaces << "init" << std::endl;
     } else {
-      std::cout << it->function_identifier.as_string();
+      std::cout << spaces << it->function_identifier.as_string();
       std::cout << " at " << src.pc->location.get_file();
       std::cout << " line " << src.pc->location.get_line();
-      std::cout << std::endl;
+      std::cout << std::endl << std::endl;
     }
 
     src = it->calling_location;
+  }
+
+  if (!thread_ended) {
+    std::cout << spaces << "Next instruction to be executed:" << std::endl;
+    source.prog->output_instruction(ns, "", std::cout, source.pc, true, false);
   }
 
   return;

@@ -300,6 +300,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
       abort();
     }
   }
+
+  config.options = options;
 }
 
 /*******************************************************************\

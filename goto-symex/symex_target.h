@@ -24,14 +24,15 @@ public:
   {
     unsigned thread_nr;
     goto_programt::const_targett pc;
+    const goto_programt *prog;
     bool is_set;
 
     sourcet():thread_nr(0), is_set(false)
     {
     }
 
-    sourcet(goto_programt::const_targett _pc):
-      thread_nr(0), pc(_pc), is_set(true)
+    sourcet(goto_programt::const_targett _pc, const goto_programt *_prog):
+      thread_nr(0), pc(_pc), prog(_prog), is_set(true)
     {
       is_set=true;
     }

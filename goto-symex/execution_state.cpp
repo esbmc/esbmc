@@ -44,6 +44,11 @@ goto_symex_statet & execution_statet::get_active_state() {
     return _threads_state.at(_active_thread);
 }
 
+const goto_symex_statet & execution_statet::get_active_state() const
+{
+    return _threads_state.at(_active_thread);
+}
+
 /*******************************************************************
  Function: execution_statet::all_threads_ended
 
@@ -565,14 +570,14 @@ void execution_statet::execute_guard(const namespacet &ns, symex_targett &target
 
  \*******************************************************************/
 
-void execution_statet::add_thread(goto_programt::const_targett thread_start, goto_programt::const_targett thread_end)
+void execution_statet::add_thread(goto_programt::const_targett thread_start, goto_programt::const_targett thread_end, const goto_programt *prog)
 {
 #ifdef DEBUG
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
 #endif
 
   goto_symex_statet state(_state_level2);
-  state.initialize(thread_start, thread_end, _threads_state.size());
+  state.initialize(thread_start, thread_end, prog, _threads_state.size());
 
   _threads_state.push_back(state);
   _atomic_numbers.push_back(0);
@@ -1170,15 +1175,19 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   return m;
 }
 
-void execution_statet::print_stack_traces(void) const
+void execution_statet::print_stack_traces(const namespacet &ns, unsigned int indent) const
 {
   std::vector<goto_symex_statet>::const_iterator it;
+  std::string spaces = std::string("");
   int i;
+
+  for (i = 0; i < indent; i++)
+    spaces += " ";
 
   i = 0;
   for (it = _threads_state.begin(); it != _threads_state.end(); it++) {
-    std::cout << "Thread " << i++ << ":" << std::endl;
-    it->print_stack_trace();
+    std::cout << spaces << "Thread " << i++ << ":" << std::endl;
+    it->print_stack_trace(ns, indent+2);
     std::cout << std::endl;
   }
 
