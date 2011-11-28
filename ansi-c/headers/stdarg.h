@@ -1,3 +1,5 @@
+#ifndef __ESBMC_HEADERS_STDARG_H_
+#define __ESBMC_HEADERS_STDARG_H_
 /* Define standard macros; esbmc currently copes with gcc internal forms,
  * so we'll just replicate those */
 
@@ -7,3 +9,5 @@
 #define va_copy(d,s)    __builtin_va_copy(d,s)
 #define __gnuc_va_list	__builtin_va_list
 #define va_list		__builtin_va_list
+
+#endif /* __ESBMC_HEADERS_STDARG_H_ */

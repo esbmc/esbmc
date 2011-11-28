@@ -1,6 +1,5 @@
 #ifndef __ESBMC_HEADERS_STDDEF_H_
 #define __ESBMC_HEADERS_STDDEF_H_
-
 /* stddef.h is supposed to contain various compiler specific types and
  * facilities: */
 
