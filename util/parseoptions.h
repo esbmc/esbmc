@@ -16,13 +16,11 @@ Author: Daniel Kroening, kroening@kroening.com
 class parseoptions_baset
 {
 public:
-  parseoptions_baset(
-    const std::string &optstring, int argc, const char **argv);
+  parseoptions_baset(const struct opt_templ *opts, int argc, const char **argv);
 
   cmdlinet cmdline;
   
   virtual void help();
-  virtual void usage_error();
   
   virtual int doit()=0;
   

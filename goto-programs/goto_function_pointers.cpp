@@ -360,7 +360,7 @@ void goto_convert_functionst::remove_function_pointer(
 
   //exStbDemo
 #if 1
-  if(options.get_bool_option("pointer-check"))
+  if(!options.get_bool_option("no-pointer-check"))
   {
     // make sure the pointer is correct
     exprt expr_or=build_or_expr(function.op0(), new_value_set);

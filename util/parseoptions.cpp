@@ -32,10 +32,9 @@ Function: parseoptions_baset::parseoptions_baset
 \*******************************************************************/
 
 parseoptions_baset::parseoptions_baset(
-  const std::string &_optstring, int argc, const char **argv)
+  const struct opt_templ *opts, int argc, const char **argv)
 {
-  std::string optstring=std::string("?hb:(help)")+_optstring;
-  parse_result=cmdline.parse(argc, argv, optstring.c_str());
+  parse_result = cmdline.parse(argc, argv, opts);
 }
 
 /*******************************************************************\
@@ -56,24 +55,6 @@ void parseoptions_baset::help()
 
 /*******************************************************************\
 
-Function: parseoptions_baset::usage_error
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void parseoptions_baset::usage_error()
-{
-  std::cerr << "Usage error!\n\n";
-  help();
-}
-
-/*******************************************************************\
-
 Function: parseoptions_baset::main
 
   Inputs:
@@ -88,7 +69,8 @@ int parseoptions_baset::main()
 {
   if(parse_result)
   {
-    usage_error();
+    std::cerr << "Unrecognized option \"" << cmdline.failing_option << "\"";
+    std::cerr << std::endl;
     return EX_USAGE;
   }
 

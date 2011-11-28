@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string>
 #include <list>
 #include <map>
+#include "cmdline.h"
 
 class optionst
 {
@@ -26,6 +27,8 @@ public:
   virtual void set_option(const std::string &option, const char *value);
   virtual void set_option(const std::string &option, const int value);
   virtual void set_option(const std::string &option, const std::string &value);
+
+  virtual void cmdline(cmdlinet &cmds);
   
   optionst() { }
   virtual ~optionst() { }

@@ -3,7 +3,7 @@ SRC = main.cpp parseoptions.cpp bmc.cpp  \
       symex_bmc.cpp show_vcc.cpp \
       counterex_pretty.cpp \
       counterex_pretty_greedy.cpp \
-      counterex_pretty_pbs.cpp
+      counterex_pretty_pbs.cpp options.cpp
 OBJ = $(SRC:.cpp=.o) \
       ../ansi-c/ansi-c.o \
       ../big-int/bigint.o \

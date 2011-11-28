@@ -70,7 +70,7 @@ Function: basic_symext::do_simplify
 
 void basic_symext::do_simplify(exprt &expr)
 {
-  if(options.get_bool_option("simplify"))
+  if(!options.get_bool_option("no-simplify"))
   {
     base_type(expr, ns);
     simplify(expr);

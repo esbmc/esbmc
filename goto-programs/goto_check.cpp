@@ -71,7 +71,7 @@ void goto_checkt::div_by_zero_check(
   const exprt &expr,
   const guardt &guard)
 {
-  if(!options.get_bool_option("div-by-zero-check"))
+  if(options.get_bool_option("no-div-by-zero-check"))
     return;
 
   if(expr.operands().size()!=2)
@@ -224,7 +224,7 @@ void goto_checkt::pointer_rel_check(
   {
     // add same-object subgoal
 
-    if(options.get_bool_option("pointer-check"))
+    if(!options.get_bool_option("no-pointer-check"))
     {
       exprt same_object("same-object", bool_typet());
       same_object.copy_to_operands(expr.op0(), expr.op1());
@@ -272,7 +272,7 @@ void goto_checkt::bounds_check(
   const exprt &expr,
   const guardt &guard)
 {
-  if(!options.get_bool_option("bounds-check"))
+  if(options.get_bool_option("no-bounds-check"))
     return;
 
   if(expr.id()!="index")
@@ -434,7 +434,7 @@ void goto_checkt::add_guarded_claim(
   exprt expr(_expr);
 
   // first try simplifier on it
-  if(options.get_bool_option("simplify"))
+  if(!options.get_bool_option("no-simplify"))
   {
     base_type(expr, ns);
     simplify(expr);

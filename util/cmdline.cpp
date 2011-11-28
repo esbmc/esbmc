@@ -246,49 +246,30 @@ Function: cmdlinet::parse
 
 \*******************************************************************/
 
-bool cmdlinet::parse(int argc, const char **argv, const char *optstring)
+bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
 {
+  unsigned int i;
+
   clear();
 
-  while(optstring[0]!=0)
+  for (i = 0; opts[i].optchar != 0 || opts[i].optstring != ""; i++)
   {
     optiont option;
 
-    if(optstring[0]==':')
-    {
-      std::cerr << "cmdlinet::parse: Invalid option string" << std::endl;
-      abort();
-    }
+    option.optchar = opts[i].optchar;
+    option.optstring = opts[i].optstring;
 
-    if(optstring[0]=='(')
-    {
-      option.islong=true;
-      option.optchar=0;
-      option.isset=false;
-      option.optstring="";
-
-      for(optstring++; optstring[0]!=')' && optstring[0]!=0; optstring++)
-        option.optstring+=optstring[0];
-
-      if(optstring[0]==')') optstring++;
-    }
+    if (option.optchar == 0)
+      option.islong = true;
     else
-    {
-      option.islong=false;
-      option.optchar=optstring[0];
-      option.optstring="";
-      option.isset=false;
+      option.islong = false;
 
-      optstring++;
-    }
+    option.isset = false;
 
-    if(optstring[0]==':')
-    {
-      option.hasval=true;
-      optstring++;
-    }
+    if (opts[i].type != switc)
+      option.hasval = true;
     else
-      option.hasval=false;
+      option.hasval = false;
 
     options.push_back(option);
   }
@@ -306,7 +287,12 @@ bool cmdlinet::parse(int argc, const char **argv, const char *optstring)
       else
         optnr=getoptnr(argv[i][1]);
    
-      if(optnr<0) return true;
+      if(optnr<0)
+      {
+        failing_option = std::string(argv[i]);
+        return true;
+      }
+
       options[optnr].isset=true;
       if(options[optnr].hasval)
       {
@@ -321,6 +307,24 @@ bool cmdlinet::parse(int argc, const char **argv, const char *optstring)
           options[optnr].values.push_back(argv[i]+2);
       }
     }
+  }
+
+  for (i = 0; opts[i].optchar != 0 || opts[i].optstring != ""; i++)
+  {
+    int optnr;
+
+    if (opts[i].init == "")
+      continue;
+
+    if (opts[i].optchar != 0)
+      optnr = getoptnr(opts[i].optchar);
+    else
+      optnr = getoptnr(opts[i].optstring.c_str());
+
+    if (options[optnr].values.size() != 0)
+      continue;
+
+    options[optnr].values.push_back(opts[i].init);
   }
 
   return false;

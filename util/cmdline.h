@@ -13,10 +13,22 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <list>
 #include <string>
 
+enum opt_types {
+  switc, number, string
+};
+
+struct opt_templ
+{
+  char optchar;
+  std::string optstring;
+  opt_types type;
+  std::string init;
+};
+
 class cmdlinet
 {
 public:
-  bool parse(int argc, const char **argv, const char *optstring);
+  bool parse(int argc, const char **argv, const struct opt_templ *opts);
   const char *getval(char option) const;
   const char *getval(const char *option) const;
   const std::list<std::string> &get_values(const char *option) const;
@@ -28,6 +40,7 @@ public:
 
   typedef std::vector<std::string> argst;
   argst args;
+  std::string failing_option;
   
   cmdlinet();
   ~cmdlinet();
@@ -45,6 +58,8 @@ protected:
 
   int getoptnr(char option) const;
   int getoptnr(const char *option) const;
+
+  friend class optionst;
 };
 
 #endif

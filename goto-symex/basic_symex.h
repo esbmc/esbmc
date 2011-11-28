@@ -33,7 +33,7 @@ public:
     ns(_ns),
     target(&_target)
   {
-    options.set_option("simplify", true);
+    options.set_option("no-simplify", false);
   }
 
   virtual ~basic_symext() { }
