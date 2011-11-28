@@ -119,8 +119,8 @@ insert_base_type(typet &dest, const typet &base_type)
       // further {pointer,array,incomplete_array} or some qualifier. If the
       // former, descend further; if not, insert type here.
       p=&(t.subtypes().back());
-      if (!p->is_pointer() && p->id() != "merged_type" &&
-          !p->is_array() && !p->is_incomplete_array()) {
+      if (p->id() != "pointer" && p->id() != "merged_type" &&
+          !p->is_array() && p->id() !=  "incomplete_array") {
         t.subtypes().push_back(typet());
         p=&(t.subtypes().back());
         p->make_nil();
@@ -144,7 +144,7 @@ void ansi_c_parsert::convert_declarator(
   // form of ireps named {declarator,code,array,incomplete_array} with
   // identifier subtypes.
 
-  if (declarator.is_decl_ident_set() && !declarator.is_symbol()) {
+  if (declarator.is_decl_ident_set() && declarator.id() != "symbol") {
     identifier = declarator.decl_ident();
     declarator.remove("decl_ident");
 
@@ -166,7 +166,7 @@ void ansi_c_parsert::convert_declarator(
   {
     typet &t=*p;
 
-    if(t.is_symbol())
+    if(t.id()=="symbol")
     {
       identifier=t;
       t=type;
@@ -280,9 +280,9 @@ ansi_c_id_classt ansi_c_parsert::get_class(const typet &type)
 {
   if(type.id()=="typedef")
     return ANSI_C_TYPEDEF;
-  else if(type.is_struct() ||
-          type.is_union() ||
-          type.is_c_enum())
+  else if(type.id()=="struct" ||
+          type.id()=="union" ||
+          type.id()=="c_enum")
     return ANSI_C_TAG;
   else if(type.id()=="merged_type")
   {

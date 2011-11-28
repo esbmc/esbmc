@@ -82,13 +82,13 @@ void boolbvt::convert_with(
 
   if(type.is_array())
     return convert_with_array(to_array_type(type), op1, op2, prev_bv, next_bv);
-  else if(type.is_bv() ||
-          type.is_unsignedbv() ||
-          type.is_signedbv())
+  else if(type.id()=="bv" ||
+          type.id()=="unsignedbv" ||
+          type.id()=="signedbv")
     return convert_with_bv(type, op1, op2, prev_bv, next_bv);
-  else if(type.is_struct())
+  else if(type.id()=="struct")
     return convert_with_struct(type, op1, op2, prev_bv, next_bv);
-  else if(type.is_union())
+  else if(type.id()=="union")
     return convert_with_union(type, op1, op2, prev_bv, next_bv);
 
   throw "unexpected with type";

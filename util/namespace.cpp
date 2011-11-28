@@ -118,7 +118,7 @@ Function: namespacet::follow_symbol
 
 void namespacet::follow_symbol(irept &irep) const
 {
-  while(irep.is_symbol())
+  while(irep.id()=="symbol")
   {
     const symbolt &symbol=lookup(irep);
 
@@ -153,7 +153,7 @@ Function: namespacet::follow
 
 const typet &namespacet::follow(const typet &src) const
 {
-  if(!src.is_symbol()) return src;
+  if(src.id()!="symbol") return src;
 
   const symbolt *symbol=&lookup(src);
 
@@ -161,7 +161,7 @@ const typet &namespacet::follow(const typet &src) const
   while(true)
   {
     assert(symbol->is_type);
-    if(!symbol->type.is_symbol()) return symbol->type;
+    if(symbol->type.id()!="symbol") return symbol->type;
     symbol=&lookup(symbol->type);
   }
 }
@@ -180,7 +180,7 @@ Function: namespacet::follow_macros
 
 void namespacet::follow_macros(exprt &expr) const
 {
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
   {
     const symbolt &symbol=lookup(expr);
 

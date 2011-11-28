@@ -30,15 +30,15 @@ std::string type2name(const typet &type)
   std::string result;
   if(type.id()=="")
     throw "Empty type encountered.";
-  else if(type.is_empty())
+  else if(type.id()=="empty")
     result+="V";   
-  else if(type.is_signedbv())
+  else if(type.id()=="signedbv")
     result+="S" + type.width().as_string(); 
-  else if(type.is_unsignedbv())
+  else if(type.id()=="unsignedbv")
     result+="U" + type.width().as_string(); 
   else if(type.is_bool()) 
     result+="B";
-  else if(type.is_integer()) 
+  else if(type.id()=="integer") 
     result+="I";
   else if(type.id()=="real") 
     result+="R";
@@ -46,17 +46,17 @@ std::string type2name(const typet &type)
     result+="C";
   else if(type.id()=="float") 
     result+="F";
-  else if(type.is_floatbv()) 
+  else if(type.id()=="floatbv") 
     result+="F" + type.width().as_string();
   else if(type.id()=="fixed") 
     result+="X";
-  else if(type.is_fixedbv()) 
+  else if(type.id()=="fixedbv") 
     result+="X" + type.width().as_string(); 
   else if(type.id()=="natural")
     result+="N";
-  else if(type.is_pointer())
+  else if(type.id()=="pointer")
     result+="*";
-  else if(type.is_reference())
+  else if(type.id()=="reference")
     result+="&";
   else if(type.is_code())
   {
@@ -78,19 +78,19 @@ std::string type2name(const typet &type)
     const array_typet &t = to_array_type(type);
     result+="ARR" + t.size().value().as_string();
   }
-  else if(type.is_incomplete_array())
+  else if(type.id()=="incomplete_array")
   {    
     result+="ARR?"; 
   }
-  else if(type.is_symbol())
+  else if(type.id()=="symbol")
   {
     result+="SYM#" + type.identifier().as_string() + "#";
   }
-  else if(type.is_struct() || 
-          type.is_union())
+  else if(type.id()=="struct" || 
+          type.id()=="union")
   {
-    if(type.is_struct()) result +="ST";
-    if(type.is_union()) result +="UN";
+    if(type.id()=="struct") result +="ST";
+    if(type.id()=="union") result +="UN";
     const struct_typet &t = to_struct_type(type);
     const struct_typet::componentst &components = t.components();
     result+="[";
@@ -104,13 +104,13 @@ std::string type2name(const typet &type)
     result.resize(result.size()-1);
     result+="]";
   }
-  else if(type.is_incomplete_struct())
+  else if(type.id()=="incomplete_struct")
     result +="ST?";
-  else if(type.is_incomplete_union())
+  else if(type.id()=="incomplete_union")
     result +="UN?";
-  else if(type.is_c_enum())
+  else if(type.id()=="c_enum")
     result +="EN" + type.width().as_string();
-  else if(type.is_incomplete_c_enum())
+  else if(type.id()=="incomplete_c_enum")
     result +="EN?";
   else if(type.id()=="c_bitfield")
   {

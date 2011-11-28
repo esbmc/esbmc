@@ -116,8 +116,8 @@ protected:
 
   bool is_string_type(const typet &t) const
   {
-    return ((t.is_pointer() || t.is_array()) &&
-            (t.subtype().is_signedbv() || t.subtype().is_unsignedbv()) &&
+    return ((t.id()=="pointer" || t.is_array()) &&
+            (t.subtype().id()=="signedbv" || t.subtype().id()=="unsignedbv") &&
             (bv_width(t.subtype())==config.ansi_c.char_width));
   }
 
@@ -262,7 +262,7 @@ void string_instrumentationt::do_function_call(
   exprt &function=call.function();
   //const exprt &lhs=call.lhs();
 
-  if(function.is_symbol())
+  if(function.id()=="symbol")
   {
     const irep_idt &identifier=
       to_symbol_expr(function).get_identifier();
@@ -484,8 +484,8 @@ void string_instrumentationt::do_format_string_read(
   const exprt &format_arg = arguments[format_string_inx];
 
   if(format_arg.is_address_of() &&
-     format_arg.op0().is_index() &&
-     format_arg.op0().op0().is_string_constant())
+     format_arg.op0().id()=="index" &&
+     format_arg.op0().op0().id()=="string-constant")
   {
     format_token_listt token_list;
     parse_format_string(format_arg.op0().op0(), token_list);
@@ -501,7 +501,7 @@ void string_instrumentationt::do_format_string_read(
         const exprt &arg = arguments[argument_start_inx+args];
         const typet &arg_type = ns.follow(arg.type());
 
-        if(!arg.is_string_constant()) // we don't need to check constants
+        if(arg.id()!="string-constant") // we don't need to check constants
         {
           goto_programt::targett assertion=dest.add_instruction();
           assertion->location=target->location;
@@ -513,7 +513,7 @@ void string_instrumentationt::do_format_string_read(
 
           exprt temp(arg);
 
-          if(!arg_type.is_pointer())
+          if(arg_type.id()!="pointer")
           {
             index_exprt index;
             index.array()=temp;
@@ -550,7 +550,7 @@ void string_instrumentationt::do_format_string_read(
       const exprt &arg = arguments[i];
       const typet &arg_type=ns.follow(arguments[i].type());
 
-      if(!arguments[i].is_string_constant() &&
+      if(arguments[i].id()!="string-constant" &&
          is_string_type(arg_type))
       {
         goto_programt::targett assertion=dest.add_instruction();
@@ -563,7 +563,7 @@ void string_instrumentationt::do_format_string_read(
 
         exprt temp(arg);
 
-        if(!arg_type.is_pointer())
+        if(arg_type.id()!="pointer")
         {
           index_exprt index;
           index.array()=temp;
@@ -601,8 +601,8 @@ void string_instrumentationt::do_format_string_write(
   const exprt &format_arg = arguments[format_string_inx];
 
   if(format_arg.is_address_of() &&
-     format_arg.op0().is_index() &&
-     format_arg.op0().op0().is_string_constant()) // constant format
+     format_arg.op0().id()=="index" &&
+     format_arg.op0().op0().id()=="string-constant") // constant format
   {
     format_token_listt token_list;
     parse_format_string(format_arg.op0().op0(), token_list);
@@ -643,7 +643,7 @@ void string_instrumentationt::do_format_string_write(
 
             exprt fw_lt_bs;
 
-            if(arg_type.is_pointer())
+            if(arg_type.id()=="pointer")
               fw_lt_bs=binary_relation_exprt(fw_1, "<=", buffer_size(argument));
             else
             {
@@ -1111,7 +1111,7 @@ void string_instrumentationt::invalidate_buffer(
 
   exprt cnt_bs, bufp;
 
-  if(buf_type.is_pointer())
+  if(buf_type.id()=="pointer")
     bufp = buffer;
   else
   {

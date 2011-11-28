@@ -22,9 +22,9 @@ Function: pointer_offset_sum
 
 exprt pointer_offset_sum(const exprt &a, const exprt &b)
 {
-  if(a.is_unknown())
+  if(a.id()=="unknown")
     return a;
-  else if(b.is_unknown())
+  else if(b.id()=="unknown")
     return b;
   else if(a.is_zero())
     return b;

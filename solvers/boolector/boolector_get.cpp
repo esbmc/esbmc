@@ -34,8 +34,8 @@ Function: boolector_convt::get
 
 exprt boolector_convt::get(const exprt &expr) const
 {
-  if(expr.is_symbol() ||
-     expr.is_nondet_symbol())
+  if(expr.id()=="symbol" ||
+     expr.id()=="nondet_symbol")
   {
 	std::string tmp;
 	std::vector<exprt> unknown;
@@ -50,7 +50,7 @@ exprt boolector_convt::get(const exprt &expr) const
 
 	return bv_get_rec(bv, unknown, false, expr.type());
   }
-  else if(expr.is_constant())
+  else if(expr.id()=="constant")
     return expr;
 
   return expr;
@@ -139,7 +139,7 @@ exprt boolector_convt::bv_get_rec(
 #endif
       return nil_exprt();
     }
-    else if(type.is_struct())
+    else if(type.id()=="struct")
     {
 #if 0
       const irept &components=type.components();
@@ -182,7 +182,7 @@ exprt boolector_convt::bv_get_rec(
 #endif
       return nil_exprt();
     }
-    else if(type.is_union())
+    else if(type.id()=="union")
     {
       //@TODO: reconstruct the counter-example for unions
       return nil_exprt();

@@ -109,13 +109,13 @@ exprt z3_convt::get(const exprt &expr) const
   //std::cout << "expr.pretty(): " << expr.pretty() << "\n";
 
   if ((expr.type().is_array() && expr.type().subtype().is_array()) ||
-      (expr.type().is_array() && expr.type().subtype().is_pointer()) ||
-      (expr.type().is_array() && expr.type().subtype().is_union()) ||
-      (expr.type().is_array() && expr.type().subtype().is_struct()))
+      (expr.type().is_array() && expr.type().subtype().id() =="pointer") ||
+      (expr.type().is_array() && expr.type().subtype().id() =="union") ||
+      (expr.type().is_array() && expr.type().subtype().id() =="struct"))
     return expr;
 
   if(expr.id()==exprt::symbol ||
-     expr.is_nondet_symbol())
+     expr.id()=="nondet_symbol")
   {
 	std::string identifier, tmp;
 	std::vector<exprt> unknown;
@@ -123,7 +123,7 @@ exprt z3_convt::get(const exprt &expr) const
 
 	identifier = expr.identifier().as_string();
 #if 1
-	if (expr.type().is_pointer())
+	if (expr.type().id()=="pointer")
 	{
 	  for(z3_cachet::const_iterator it = z3_cache.begin();
 	      it != z3_cache.end(); it++)
@@ -268,7 +268,7 @@ exprt z3_convt::bv_get_rec(
       unsigned sub_width;
       const typet &subtype=type.subtype();
 
-      if (subtype.is_struct()) //@TODO
+      if (subtype.id()=="struct") //@TODO
         return nil_exprt();
 
       if(!boolbv_get_width(subtype, sub_width))
@@ -311,7 +311,7 @@ exprt z3_convt::bv_get_rec(
         return dest;
       }
     }
-    else if(type.is_struct())
+    else if(type.id()=="struct")
     {
       const irept &components=type.components();
       exprt::operandst op;
@@ -334,7 +334,7 @@ exprt z3_convt::bv_get_rec(
       {
         const typet &subtype=it->type();
         op.push_back(nil_exprt());
-        if (!subtype.is_pointer()) //@TODO: beautify counter-examples that contain pointers
+        if (subtype.id()!="pointer") //@TODO: beautify counter-examples that contain pointers
         {
           unsigned sub_width;
 
@@ -358,7 +358,7 @@ exprt z3_convt::bv_get_rec(
       dest.operands().swap(op);
       return dest;
     }
-    else if(type.is_union())
+    else if(type.id()=="union")
     {
       const irept &components=type.components();
 
@@ -400,7 +400,7 @@ exprt z3_convt::bv_get_rec(
         {
           const typet &subtype=it->type();
           //op.push_back(nil_exprt());
-          if (!subtype.is_pointer()) //@TODO
+          if (subtype.id()!="pointer") //@TODO
           {
             unsigned sub_width;
             if(!boolbv_get_width(subtype, sub_width))
@@ -424,7 +424,7 @@ exprt z3_convt::bv_get_rec(
       return value;
     }
 #if 0
-    else if (type.is_pointer())
+    else if (type.id()=="pointer")
     {
       exprt object, offset;
       Z3_app app = Z3_to_app(z3_ctx, bv);
@@ -474,7 +474,7 @@ exprt z3_convt::bv_get_rec(
   else
     return nil_exprt();
 
-  if (type.is_fixedbv() && int_encoding)
+  if (type.id()=="fixedbv" && int_encoding)
   {
     if (boolbv_get_width(type, width))
 	  return nil_exprt();

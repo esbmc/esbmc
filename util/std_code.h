@@ -458,13 +458,13 @@ public:
 
   friend side_effect_exprt &to_side_effect_expr(exprt &expr)
   {
-    assert(expr.is_sideeffect());
+    assert(expr.id()=="sideeffect");
     return static_cast<side_effect_exprt &>(expr);
   }
 
   friend const side_effect_exprt &to_side_effect_expr(const exprt &expr)
   {
-    assert(expr.is_sideeffect());
+    assert(expr.id()=="sideeffect");
     return static_cast<const side_effect_exprt &>(expr);
   }
   
@@ -526,14 +526,14 @@ public:
 
   friend side_effect_expr_function_callt &to_side_effect_expr_function_call(exprt &expr)
   {
-    assert(expr.is_sideeffect());
+    assert(expr.id()=="sideeffect");
     assert(expr.statement()=="function_call");
     return static_cast<side_effect_expr_function_callt &>(expr);
   }
 
   friend const side_effect_expr_function_callt &to_side_effect_expr_function_call(const exprt &expr)
   {
-    assert(expr.is_sideeffect());
+    assert(expr.id()=="sideeffect");
     assert(expr.statement()=="function_call");
     return static_cast<const side_effect_expr_function_callt &>(expr);
   }

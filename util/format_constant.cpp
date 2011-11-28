@@ -28,25 +28,25 @@ std::string format_constantt::operator()(const exprt &expr)
   if(expr.is_constant())
   {
     if(expr.type().id()=="natural" ||
-       expr.type().is_integer() ||
-       expr.type().is_unsignedbv() ||
-       expr.type().is_signedbv())
+       expr.type().id()=="integer" ||
+       expr.type().id()=="unsignedbv" ||
+       expr.type().id()=="signedbv")
     {
       mp_integer i;
       if(to_integer(expr, i)) return "(number conversion failed)";
 
       return integer2string(i);
     }
-    else if(expr.type().is_fixedbv())
+    else if(expr.type().id()=="fixedbv")
     {
       return fixedbvt(expr).format(*this);
     }
-    else if(expr.type().is_floatbv())
+    else if(expr.type().id()=="floatbv")
     {
       return ieee_floatt(expr).format(*this);
     }
   }
-  else if(expr.is_string_constant())
+  else if(expr.id()=="string-constant")
     return expr.value().as_string();
 
   return "(format-constant failed: "+expr.id_string()+")";

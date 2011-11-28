@@ -55,7 +55,7 @@ Function: replace_symbolt::replace
 
 bool replace_symbolt::replace(exprt &dest)
 {
-  if(dest.is_symbol())
+  if(dest.id()=="symbol")
   {
     expr_mapt::const_iterator it=
       expr_map.find(dest.identifier());
@@ -97,8 +97,8 @@ bool replace_symbolt::replace(typet &dest)
   Forall_subtypes(it, dest)
     replace(*it);
     
-  if(dest.is_struct() ||
-     dest.is_union())
+  if(dest.id()=="struct" ||
+     dest.id()=="union")
   {
     struct_typet &struct_type = to_struct_type(dest);    
     struct_typet::componentst &components = struct_type.components();
@@ -117,7 +117,7 @@ bool replace_symbolt::replace(typet &dest)
       replace(*it);
   }
   
-  if(dest.is_symbol())
+  if(dest.id()=="symbol")
   {
     type_mapt::const_iterator it=
       type_map.find(dest.identifier());

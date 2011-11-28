@@ -31,7 +31,7 @@ void boolbvt::convert_member(const exprt &expr, bvt &bv)
 
   convert_bv(expr.op0(), op0_bv);
 
-  if(operands[0].type().is_union())
+  if(operands[0].type().id()=="union")
   {
     unsigned width;
 
@@ -49,7 +49,7 @@ void boolbvt::convert_member(const exprt &expr, bvt &bv)
     return;
   }
 
-  if(!operands[0].type().is_struct())
+  if(operands[0].type().id()!="struct")
     throw "member takes struct operand";
 
   const irep_idt &component_name=expr.component_name();

@@ -31,7 +31,7 @@ bool prop_convt::literal(const exprt &expr, literalt &dest) const
 {
   assert(expr.type().is_bool());
 
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
   {
     const irep_idt &identifier=expr.identifier();
 
@@ -99,7 +99,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
     value=tvt(false);
     return false;
   }
-  else if(expr.is_symbol())
+  else if(expr.id()=="symbol")
   {
     symbolst::const_iterator result=symbols.find(expr.identifier());
     if(result==symbols.end()) return true;
@@ -110,7 +110,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 
   // sub-expressions
 
-  if(expr.is_not())
+  if(expr.id()=="not")
   {
     if(expr.type().is_bool() &&
        expr.operands().size()==1)
@@ -120,7 +120,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
       return false;
     }
   }
-  else if(expr.is_and() || expr.is_or())
+  else if(expr.is_and() || expr.id()=="or")
   {
     if(expr.type().is_bool() &&
        expr.operands().size()>=1)
@@ -174,8 +174,8 @@ Function: prop_convt::convert
 literalt prop_convt::convert(const exprt &expr, bool do_cache)
 {
   if(!do_cache ||
-     expr.is_symbol() ||
-     expr.is_constant())
+     expr.id()=="symbol" ||
+     expr.id()=="constant")
     return convert_bool(expr);
 
   // check cache first
@@ -232,7 +232,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
     else
       throw "unknown boolean constant: "+expr.to_string();
   }
-  else if(expr.is_symbol())
+  else if(expr.id()=="symbol")
   {
     return get_literal(expr.identifier());
   }
@@ -242,7 +242,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
     l.set(atoi(expr.literal().c_str()));
     return l;
   }
-  else if(expr.is_nondet_symbol())
+  else if(expr.id()=="nondet_symbol")
   {
     return prop.new_variable();
   }
@@ -253,7 +253,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     return prop.limplies(convert(op[0]), convert(op[1]));
   }
-  else if(expr.is_if())
+  else if(expr.id()=="if")
   {
     if(op.size()!=3)
       throw "if takes three operands";
@@ -284,7 +284,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     return op_bv[0];
   }
-  else if(expr.is_or() || expr.is_and() || expr.id()=="xor" ||
+  else if(expr.id()=="or" || expr.is_and() || expr.id()=="xor" ||
           expr.id()=="nor" || expr.id()=="nand")
   {
     if(op.size()==0)
@@ -297,7 +297,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     if(!bv.empty())
     {
-      if(expr.is_or())
+      if(expr.id()=="or")
         return prop.lor(bv);
       else if(expr.id()=="nor")
         return prop.lnot(prop.lor(bv));
@@ -309,14 +309,14 @@ literalt prop_convt::convert_bool(const exprt &expr)
         return prop.lxor(bv);
     }
   }
-  else if(expr.is_not())
+  else if(expr.id()=="not")
   {
     if(op.size()!=1)
       throw "not takes one operand";
 
     return prop.lnot(convert(op[0]));
   }
-  else if(expr.id()=="=" || expr.is_notequal())
+  else if(expr.id()=="=" || expr.id()=="notequal")
   {
     if(op.size()!=2)
       throw "equality takes two operands";
@@ -376,7 +376,7 @@ bool prop_convt::set_equality_to_true(const exprt &expr)
     // optimization for constraint of the form
     // new_variable = value
 
-    if(expr.op0().is_symbol())
+    if(expr.op0().id()=="symbol")
     {
       const irep_idt &identifier=
         expr.op0().identifier();
@@ -429,7 +429,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
 
   if(boolean)
   {
-    if(expr.is_not())
+    if(expr.id()=="not")
     {
       if(expr.operands().size()==1)
       {
@@ -450,7 +450,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
 
           return;
         }
-        else if(expr.is_or())
+        else if(expr.id()=="or")
         {
           if(expr.operands().size()>0)
           {
@@ -493,7 +493,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
             set_to_false(expr.op1());
           }
         }
-        else if(expr.is_or()) // !(a || b)  ==  (!a && !b)
+        else if(expr.id()=="or") // !(a || b)  ==  (!a && !b)
         {
           forall_operands(it, expr)
             set_to_false(*it);

@@ -75,7 +75,7 @@ void rw_sett::read_write_rec(
   const std::string &suffix,
   const guardt &guard)
 {
-  if(expr.is_symbol() && !expr.has_operands())
+  if(expr.id()=="symbol" && !expr.has_operands())
   {
     const symbol_exprt &symbol_expr=to_symbol_expr(expr);
 
@@ -85,7 +85,7 @@ void rw_sett::read_write_rec(
       //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
       //std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
 
-      if(!symbol->static_lifetime /*&& expr.type().is_pointer()*/)
+      if(!symbol->static_lifetime /*&& expr.type().id()=="pointer"*/)
       {
         //std::cout << "entrou aqui 1" << std::endl;
         return; // ignore for now
@@ -111,13 +111,13 @@ void rw_sett::read_write_rec(
     entry.w=entry.w || w;
     entry.guard=guard.as_expr();
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
     const std::string &component_name=expr.component_name().as_string();
     read_write_rec(expr.op0(), r, w, "."+component_name+suffix, guard);
   }
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     // we don't distinguish the array elements for now
     assert(expr.operands().size()==2);
@@ -131,7 +131,7 @@ void rw_sett::read_write_rec(
     read_write_rec(expr.op0(), r, w, "["+suffix+tmp+"]", guard);
     read(expr.op1(), guard);
   }
-  else if(expr.is_dereference())
+  else if(expr.id()=="dereference")
   {
     assert(expr.operands().size()==1);
     read(expr.op0(), guard);
@@ -142,12 +142,12 @@ void rw_sett::read_write_rec(
     read_write_rec(tmp, r, w, suffix, guard);
   }
   else if(expr.is_address_of() ||
-          expr.is_implicit_address_of())
+          expr.id()=="implicit_address_of")
   {
     assert(expr.operands().size()==1);
 
   }
-  else if(expr.is_if())
+  else if(expr.id()=="if")
   {
     assert(expr.operands().size()==3);
     read(expr.op0(), guard);

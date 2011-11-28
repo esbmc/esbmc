@@ -66,8 +66,8 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.type().is_c_enum() ||
-          expr.type().is_incomplete_c_enum())
+  else if(expr.type().id()=="c_enum" ||
+          expr.type().id()=="incomplete_c_enum")
   {
     mp_integer value=string2integer(expr.value().as_string());
     std::string binary=integer2binary(value, width);
@@ -81,11 +81,11 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.type().is_unsignedbv() ||
-          expr.type().is_signedbv() ||
-          expr.type().is_bv() ||
-          expr.type().is_fixedbv() ||
-          expr.type().is_floatbv())
+  else if(expr.type().id()=="unsignedbv" ||
+          expr.type().id()=="signedbv" ||
+          expr.type().id()=="bv" ||
+          expr.type().id()=="fixedbv" ||
+          expr.type().id()=="floatbv")
   {
     const std::string &binary=expr.value().as_string();
 

@@ -35,9 +35,9 @@ void boolbvt::convert_byte_update(const exprt &expr, bvt &bv)
 
   bool little_endian;
   
-  if(expr.is_byte_update_little_endian())
+  if(expr.id()=="byte_update_little_endian")
     little_endian=true;
-  else if(expr.is_byte_update_big_endian())
+  else if(expr.id()=="byte_update_big_endian")
     little_endian=false;
   else
     assert(false);

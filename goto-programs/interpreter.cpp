@@ -569,7 +569,7 @@ Function: interpretert::get_size
 
 unsigned interpretert::get_size(const typet &type) const
 {
-  if(type.is_struct())
+  if(type.id()=="struct")
   {
     const irept::subt &components=
       type.components().get_sub();
@@ -586,7 +586,7 @@ unsigned interpretert::get_size(const typet &type) const
     
     return sum;
   }
-  else if(type.is_union())
+  else if(type.id()=="union")
   {
     const irept::subt &components=
       type.components().get_sub();
@@ -615,7 +615,7 @@ unsigned interpretert::get_size(const typet &type) const
     else
       return subtype_size;
   }
-  else if(type.is_symbol())
+  else if(type.id()=="symbol")
   {
     return get_size(ns.follow(type));
   }

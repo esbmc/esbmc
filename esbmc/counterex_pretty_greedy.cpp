@@ -110,7 +110,7 @@ void counterexample_beautification_greedyt::minimize(
       offset+=width;
     }    
   }
-  else if(type.is_struct())
+  else if(type.id()=="struct")
   {
     const irept::subt &components=type.components().get_sub();
 
@@ -127,17 +127,17 @@ void counterexample_beautification_greedyt::minimize(
       offset+=width;
     }
   }
-  else if(type.is_symbol())
+  else if(type.id()=="symbol")
   {
     const symbolt &s=ns.lookup(type.identifier());
     minimize(solver, bv_cbmc, ns, expr, s.type, offset, bit_nr);
   }
-  else if(type.is_pointer())
+  else if(type.id()=="pointer")
   {
     // no beautification for pointers right now
   }
-  else if(type.is_signedbv() ||
-          type.is_unsignedbv())
+  else if(type.id()=="signedbv" ||
+          type.id()=="unsignedbv")
   {
     unsigned width;
 
@@ -151,7 +151,7 @@ void counterexample_beautification_greedyt::minimize(
     // std::cout << "XX: " << expr.identifier()
     //           << " bit=" << bit_nr <<std::endl;
 
-    if(type.is_signedbv()) // signed?
+    if(type.id()=="signedbv") // signed?
     {
       if(bit_nr==0) // is it the sign bit?
       {
@@ -228,7 +228,7 @@ unsigned counterexample_beautification_greedyt::get_max_width(
   {
     return get_max_width(ns, type.subtype());
   }
-  else if(type.is_struct())
+  else if(type.id()=="struct")
   {
     const irept::subt &components=type.components().get_sub();
     unsigned max_width=0;
@@ -241,12 +241,12 @@ unsigned counterexample_beautification_greedyt::get_max_width(
 
     return max_width;
   }
-  else if(type.is_symbol())
+  else if(type.id()=="symbol")
   {
     const symbolt &s=ns.lookup(type.identifier());
     return get_max_width(ns, s.type);
   }
-  else if(type.is_pointer())
+  else if(type.id()=="pointer")
   {
   }
   else

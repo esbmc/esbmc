@@ -58,7 +58,7 @@ Function: goto_symex_statet::initialize
 
 \*******************************************************************/
 
-void goto_symex_statet::initialize(const goto_programt::const_targett & start, const goto_programt::const_targett & end, unsigned int thread_id)
+void goto_symex_statet::initialize(const goto_programt::const_targett & start, const goto_programt::const_targett & end, const goto_programt *prog, unsigned int thread_id)
 {
   new_frame(thread_id);
 
@@ -71,7 +71,7 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
 	  end_pc++;
 */
   top().end_of_function=end;
-  top().calling_location=top().end_of_function;
+  top().calling_location=symex_targett::sourcet(top().end_of_function, prog);
 }
 
 /*******************************************************************\
@@ -274,7 +274,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
     return true;
   }
 #endif
-  else if(expr.is_struct())
+  else if(expr.id()=="struct")
   {
     forall_operands(it, expr)
       if(!constant_propagation(expr.op0()))
@@ -283,7 +283,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
     return true;
   }
 
-  else if(expr.is_union())
+  else if(expr.id()=="union")
   {
     if(expr.operands().size()==1)
       return constant_propagation(expr.op0());
@@ -344,7 +344,7 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
     return constant_propagation_reference(expr.op0());
   }
 #if 1
-  else if(expr.is_string_constant())
+  else if(expr.id()=="string-constant")
     return true;
 #endif
 #if 0
@@ -376,7 +376,7 @@ void goto_symex_statet::assignment(
   unsigned exec_node_id)
 {
   crypto_hash hash;
-  assert(lhs.is_symbol());
+  assert(lhs.id()=="symbol");
   assert(lhs.id()==exprt::symbol);
 
   if (ex_state.owning_rt->state_hashing)
@@ -481,8 +481,8 @@ void goto_symex_statet::rename(exprt &expr, const namespacet &ns,unsigned node_i
     level2.rename(expr,node_id);
   }
   else if(expr.id()==exprt::addrof ||
-          expr.is_implicit_address_of() ||
-          expr.is_reference_to())
+          expr.id()=="implicit_address_of" ||
+          expr.id()=="reference_to")
   {
     assert(expr.operands().size()==1);
     rename_address(expr.op0(), ns,node_id);
@@ -569,8 +569,8 @@ void goto_symex_statet::level1t::rename(exprt &expr,unsigned node_id)
       expr.identifier(name(identifier, it->second,node_id));
   }
   else if(expr.id()==exprt::addrof ||
-          expr.is_implicit_address_of() ||
-          expr.is_reference_to())
+          expr.id()=="implicit_address_of" ||
+          expr.id()=="reference_to")
   {
     assert(expr.operands().size()==1);
     rename(expr.op0(),node_id);
@@ -628,8 +628,8 @@ void goto_symex_statet::level2t::rename(exprt &expr, unsigned node_id)
     }
   }
   else if(expr.id()==exprt::addrof ||
-          expr.is_implicit_address_of() ||
-          expr.is_reference_to())
+          expr.id()=="implicit_address_of" ||
+          expr.id()=="reference_to")
   {
     // do nothing
   }
@@ -872,24 +872,34 @@ void goto_symex_statet::level2t::print(std::ostream &out, unsigned node_id) cons
 
 }
 
-void goto_symex_statet::print_stack_trace(void) const
+void goto_symex_statet::print_stack_trace(const namespacet &ns, unsigned int indent) const
 {
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
+  std::string spaces = std::string("");
+  int i;
+
+  for (i = 0; i < indent; i++)
+    spaces += " ";
 
   // Iterate through each call frame printing func name and location.
   src = source;
   for (it = call_stack.rbegin(); it != call_stack.rend(); it++) {
     if (it->function_identifier == "") { // Top level call
-      std::cout << "init" << std::endl;
+      std::cout << spaces << "init" << std::endl;
     } else {
-      std::cout << it->function_identifier.as_string();
+      std::cout << spaces << it->function_identifier.as_string();
       std::cout << " at " << src.pc->location.get_file();
       std::cout << " line " << src.pc->location.get_line();
-      std::cout << std::endl;
+      std::cout << std::endl << std::endl;
     }
 
     src = it->calling_location;
+  }
+
+  if (!thread_ended) {
+    std::cout << spaces << "Next instruction to be executed:" << std::endl;
+    source.prog->output_instruction(ns, "", std::cout, source.pc, true, false);
   }
 
   return;

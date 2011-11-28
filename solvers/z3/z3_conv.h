@@ -104,6 +104,11 @@ protected:
   Z3_ast convert_memory_leak(const exprt &expr);
   bool convert_rel(const exprt &expr, Z3_ast &bv);
   bool convert_typecast(const exprt &expr, Z3_ast &bv);
+  bool convert_typecast_bool(const exprt &expr, Z3_ast &bv);
+  bool convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv);
+  bool convert_typecast_ints_ptrs(const exprt &expr, Z3_ast &bv);
+  bool convert_typecast_struct(const exprt &expr, Z3_ast &bv);
+  bool convert_typecast_enum(const exprt &expr, Z3_ast &bv);
   bool convert_struct(const exprt &expr, Z3_ast &bv);
   bool convert_union(const exprt &expr, Z3_ast &bv);
   bool convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv);

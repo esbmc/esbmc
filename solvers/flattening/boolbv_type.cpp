@@ -22,18 +22,18 @@ Function: get_bvtype
 
 bvtypet get_bvtype(const typet &type)
 {
-  if(type.is_signedbv())
+  if(type.id()=="signedbv")
     return IS_SIGNED;
-  else if(type.is_unsignedbv())
+  else if(type.id()=="unsignedbv")
     return IS_UNSIGNED;
-  else if(type.is_c_enum() ||
-          type.is_incomplete_c_enum())
+  else if(type.id()=="c_enum" ||
+          type.id()=="incomplete_c_enum")
     return IS_C_ENUM;
-  else if(type.is_floatbv())
+  else if(type.id()=="floatbv")
     return IS_FLOAT;
-  else if(type.is_fixedbv())
+  else if(type.id()=="fixedbv")
     return IS_FIXED;
-  else if(type.is_bv())
+  else if(type.id()=="bv")
     return IS_BV;
   else if(type.id()=="verilogbv")
     return IS_VERILOGBV;

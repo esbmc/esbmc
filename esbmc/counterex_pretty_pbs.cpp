@@ -56,7 +56,7 @@ void counterexample_beautification_pbst::beautify(
       offset+=width;
     }    
   }
-  else if(type.is_struct())
+  else if(type.id()=="struct")
   {
     const irept::subt &components=type.components().get_sub();
 
@@ -73,20 +73,20 @@ void counterexample_beautification_pbst::beautify(
       offset+=width;
     }
   }
-  else if(type.is_symbol())
+  else if(type.id()=="symbol")
   {
     const symbolt &s=ns.lookup(type.identifier());
     beautify(pbs, bv_cbmc, ns, expr, s.type, offset);
   }
-  else if(type.is_pointer())
+  else if(type.id()=="pointer")
   {
     // no beautification for pointers right now
   }
-  else if(type.is_signedbv() ||
-          type.is_unsignedbv())
+  else if(type.id()=="signedbv" ||
+          type.id()=="unsignedbv")
   {
     unsigned width;
-    bool is_signed=type.is_signedbv();
+    bool is_signed=type.id()=="signedbv";
 
     if(boolbv_get_width(type, width))
       return;

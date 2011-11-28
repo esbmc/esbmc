@@ -28,7 +28,7 @@ void string2array(const exprt &src, exprt &dest)
   const std::string &str=src.value().as_string();
   unsigned string_size=str.size()+1; // zero
   const typet &char_type=src.type().subtype();
-  bool char_is_unsigned=char_type.is_unsignedbv();
+  bool char_is_unsigned=char_type.id()=="unsignedbv";
 
   exprt size("constant", typet("signedbv"));
   size.type().width(config.ansi_c.int_width);

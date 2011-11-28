@@ -135,6 +135,7 @@ s_char [^"\\\n]|{escape_sequence}
 %x MSC_ASM2
 %x MSC_DECLSPEC
 %x GCC_ATTRIBUTE
+%x GCC_ASM
 
 %{
 void ansi_c_scanner_init()
@@ -281,7 +282,9 @@ void ansi_c_scanner_init()
                   }
                 }
 "asm"           { loc(); return TOK_GCC_ASM; }
-"__asm__"       { loc(); return TOK_GCC_ASM; }
+"__asm__"       {
+                  BEGIN(GCC_ASM);
+                }
 
 "__declspec"    { BEGIN(MSC_DECLSPEC); PARSER.parenthesis_counter=0; }
 
@@ -346,6 +349,17 @@ void ansi_c_scanner_init()
                           BEGIN(GRAMMAR); }
 <GCC_ATTRIBUTE>"("    { PARSER.parenthesis_counter++; }
 <GCC_ATTRIBUTE>.      { /* Throw away */ }
+
+<GCC_ASM>{
+  {ws}            { /* ignore */ }
+  {newline}       { /* ignore */ }
+  "{"             { yyless(0); BEGIN(GRAMMAR); loc(); PARSER.asm_block_following=true; return TOK_GCC_ASM_PAREN; }
+  "("             { yyless(0); BEGIN(GRAMMAR); loc(); return TOK_GCC_ASM_PAREN; }
+  "volatile"      { yyless(0); BEGIN(GRAMMAR); loc(); return TOK_GCC_ASM_PAREN; }
+  "__volatile__"  { yyless(0); BEGIN(GRAMMAR); loc(); return TOK_GCC_ASM_PAREN; }
+  .               { yyless(0); BEGIN(GRAMMAR); loc(); PARSER.asm_block_following=true; return TOK_GCC_ASM; }
+}
+
 
 <GRAMMAR>{
 "->"		{ loc(); return TOK_ARROW; }

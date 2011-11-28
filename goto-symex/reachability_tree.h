@@ -56,13 +56,16 @@ public:
   virtual ~reachability_treet() { };
 
   execution_statet & get_cur_state();
+  const execution_statet & get_cur_state() const;
   bool reset_to_unexplored_state();
   bool has_more_states();
   bool check_CS_bound();
   int get_CS_bound();
   int get_actual_CS_bound();
+  int get_ileave_direction_from_user(const exprt &expr) const;
+  bool check_thread_viable(int tid, const exprt &expr, bool quiet) const;
   bool generate_states_base(const exprt & expr);
-  bool apply_static_por(execution_statet &ex_state, const exprt &expr, int i);
+  bool apply_static_por(const execution_statet &ex_state, const exprt &expr, int i) const;
   bool generate_states_after_start_thread();
   bool generate_states();
 
@@ -76,6 +79,7 @@ public:
   bool is_global_assign(const exprt &code);
 
   const symbolt &lookup(const namespacet &ns, const irep_idt &identifier) const;
+  void print_ileave_trace(void) const;
   bool is_go_next_state();
   bool is_go_next_formula();
   void go_next_state();

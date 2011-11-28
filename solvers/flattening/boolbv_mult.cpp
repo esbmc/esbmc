@@ -42,7 +42,7 @@ void boolbvt::convert_mult(const exprt &expr, bvt &bv)
 
   bool no_overflow=expr.id()=="no-overflow-mult";
   
-  if(expr.type().is_fixedbv())
+  if(expr.type().id()=="fixedbv")
   {
     if(op0.type()!=expr.type())
       throw "multiplication with mixed types";
@@ -81,7 +81,7 @@ void boolbvt::convert_mult(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.type().is_floatbv())
+  else if(expr.type().id()=="floatbv")
   {
     #ifdef HAVE_FLOATBV
     if(op0.type()!=expr.type())
@@ -114,14 +114,14 @@ void boolbvt::convert_mult(const exprt &expr, bvt &bv)
     return;
     #endif
   }
-  else if(expr.type().is_unsignedbv() ||
-          expr.type().is_signedbv())
+  else if(expr.type().id()=="unsignedbv" ||
+          expr.type().id()=="signedbv")
   {
     if(op0.type()!=expr.type())
       throw "multiplication with mixed types";
       
     bv_utilst::representationt rep=
-      expr.type().is_signedbv()?bv_utilst::SIGNED:
+      expr.type().id()=="signedbv"?bv_utilst::SIGNED:
                                    bv_utilst::UNSIGNED;
     
     convert_bv(op0, bv);

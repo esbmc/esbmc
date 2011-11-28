@@ -54,8 +54,8 @@ bool boolbvt::literal(
   }
   else
   {
-    if(expr.is_symbol() ||
-       expr.is_nondet_symbol())
+    if(expr.id()=="symbol" ||
+       expr.id()=="nondet_symbol")
     {
       const irep_idt &identifier=expr.identifier();
 
@@ -72,7 +72,7 @@ bool boolbvt::literal(
       dest=map_entry.literal_map[bit].l;
       return false;
     }
-    else if(expr.is_index())
+    else if(expr.id()=="index")
     {
       if(expr.operands().size()!=2)
         throw "index takes two operands";
@@ -90,7 +90,7 @@ bool boolbvt::literal(
 
       return literal(expr.op0(), bit+offset, dest);
     }
-    else if(expr.is_member())
+    else if(expr.id()=="member")
     {
       if(expr.operands().size()!=1)
         throw "member takes one operand";
@@ -207,13 +207,13 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return;
   }
 
-  if(expr.is_index())
+  if(expr.id()=="index")
     return convert_index(to_index_expr(expr), bv);
   else if(expr.id()=="constraint_select_one")
     return convert_constraint_select_one(expr, bv);
-  else if(expr.is_member())
+  else if(expr.id()=="member")
     return convert_member(expr, bv);
-  else if(expr.is_with())
+  else if(expr.id()=="with")
     return convert_with(expr, bv);
   else if(expr.id()=="width")
   {
@@ -230,8 +230,8 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
 
     bv.resize(result_width);
 
-    if(expr.type().is_unsignedbv() ||
-       expr.type().is_signedbv())
+    if(expr.type().id()=="unsignedbv" ||
+       expr.type().id()=="signedbv")
     {
       std::string binary=integer2binary(op_width/8, result_width);
 
@@ -248,13 +248,13 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_case(expr, bv);
   else if(expr.id()=="cond")
     return convert_cond(expr, bv);
-  else if(expr.is_if())
+  else if(expr.id()=="if")
     return convert_if(expr, bv);
-  else if(expr.is_constant())
+  else if(expr.id()=="constant")
     return convert_constant(expr, bv);
-  else if(expr.is_typecast())
+  else if(expr.id()=="typecast")
     return convert_typecast(expr, bv);
-  else if(expr.is_symbol())
+  else if(expr.id()=="symbol")
     return convert_symbol(expr, bv);
   else if(expr.id()=="bv_literals")
     return convert_bv_literals(expr, bv);
@@ -269,7 +269,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_div(expr, bv);
   else if(expr.id()=="mod")
     return convert_mod(expr, bv);
-  else if(expr.id()=="shl" || expr.is_ashr() || expr.id()=="lshr")
+  else if(expr.id()=="shl" || expr.id()=="ashr" || expr.id()=="lshr")
     return convert_shift(expr, bv);
   else if(expr.id()=="concatenation")
     return convert_concatenation(expr, bv);
@@ -277,10 +277,10 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_replication(expr, bv);
   else if(expr.id()=="extractbits")
     return convert_extractbits(expr, bv);
-  else if(expr.is_bitnot() || expr.is_bitand() ||
-          expr.is_bitor() || expr.is_bitxor())
+  else if(expr.id()=="bitnot" || expr.id()=="bitand" ||
+          expr.id()=="bitor" || expr.id()=="bitxor")
     return convert_bitwise(expr, bv);
-  else if(expr.is_unary_sub() ||
+  else if(expr.id()=="unary-" ||
           expr.id()=="no-overflow-unary-minus")
     return convert_unary_minus(expr, bv);
   else if(expr.id()=="abs")
@@ -289,14 +289,14 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_byte_extract(expr, bv);
   else if(has_prefix(expr.id_string(), "byte_update"))
     return convert_byte_update(expr, bv);
-  else if(expr.is_nondet_symbol() ||
+  else if(expr.id()=="nondet_symbol" ||
           expr.id()=="quant_symbol")
     return convert_symbol(expr, bv);
-  else if(expr.is_struct())
+  else if(expr.id()=="struct")
     return convert_struct(expr, bv);
-  else if(expr.is_union())
+  else if(expr.id()=="union")
     return convert_union(expr, bv);
-  else if(expr.is_string_constant())
+  else if(expr.id()=="string-constant")
   {
     exprt tmp;
     string2array(expr, tmp);
@@ -306,7 +306,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_array(expr, bv);
   else if(expr.id()=="lambda")
     return convert_lambda(expr, bv);
-  else if(expr.is_array_of())
+  else if(expr.id()=="array_of")
     return convert_array_of(expr, bv);
 
   return conversion_failed(expr, bv);
@@ -488,7 +488,7 @@ Function: boolbvt::convert_struct
 
 void boolbvt::convert_struct(const exprt &expr, bvt &bv)
 {
-  if(!expr.type().is_struct())
+  if(expr.type().id()!="struct")
     return conversion_failed(expr, bv);
 
   unsigned width;
@@ -642,11 +642,11 @@ literalt boolbvt::convert_rest(const exprt &expr)
 
   const exprt::operandst &operands=expr.operands();
 
-  if(expr.is_typecast())
+  if(expr.id()=="typecast")
     return convert_typecast(expr);
   else if(expr.id()=="=")
     return convert_equality(to_equality_expr(expr));
-  else if(expr.is_notequal())
+  else if(expr.id()=="notequal")
   {
     if(expr.operands().size()!=2)
       throw "notequal expects two operands";
@@ -666,7 +666,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     return convert_quantifier(expr);
   else if(expr.id()=="exists")
     return convert_quantifier(expr);
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     bvt bv;
     convert_index(to_index_expr(expr), bv);
@@ -676,7 +676,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
 
     return bv[0];
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     bvt bv;
     convert_member(expr, bv);
@@ -717,13 +717,13 @@ literalt boolbvt::convert_rest(const exprt &expr)
     if(bv.size()<1)
       throw "sign operator takes one non-empty operand";
 
-    if(operands[0].type().is_signedbv())
+    if(operands[0].type().id()=="signedbv")
       return bv[bv.size()-1];
-    else if(operands[0].type().is_unsignedbv())
+    else if(operands[0].type().id()=="unsignedbv")
       return const_literal(false);
-    else if(operands[0].type().is_fixedbv())
+    else if(operands[0].type().id()=="fixedbv")
       return bv[bv.size()-1];
-    else if(operands[0].type().is_floatbv())
+    else if(operands[0].type().id()=="floatbv")
       return bv[bv.size()-1];
   }
   else if(expr.id()=="reduction_or"  || expr.id()=="reduction_and"  ||
@@ -740,7 +740,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     bvt bv;
     convert_bv(operands[0], bv);
     
-    if(expr.op0().type().is_floatbv())
+    if(expr.op0().type().id()=="floatbv")
     {
       #ifdef HAVE_FLOATBV
       float_utilst float_utils(prop);
@@ -757,7 +757,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     bvt bv;
     convert_bv(operands[0], bv);
     
-    if(expr.op0().type().is_floatbv())
+    if(expr.op0().type().id()=="floatbv")
     {
       #ifdef HAVE_FLOATBV
       float_utilst float_utils(prop);
@@ -776,7 +776,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     bvt bv;
     convert_bv(operands[0], bv);
     
-    if(expr.op0().type().is_floatbv())
+    if(expr.op0().type().id()=="floatbv")
     {
       #ifdef HAVE_FLOATBV
       float_utilst float_utils(prop);
@@ -793,7 +793,7 @@ literalt boolbvt::convert_rest(const exprt &expr)
     bvt bv;
     convert_bv(operands[0], bv);
     
-    if(expr.op0().type().is_floatbv())
+    if(expr.op0().type().id()=="floatbv")
     {
       #ifdef HAVE_FLOATBV
       float_utilst float_utils(prop);
@@ -826,7 +826,7 @@ bool boolbvt::boolbv_set_equality_to_true(const exprt &expr)
 
   if(operands.size()==2)
   {
-    if(operands[0].is_symbol() &&
+    if(operands[0].id()=="symbol" &&
        operands[0].type()==operands[1].type() &&
        operands[0].type().id()!="bool")
     {

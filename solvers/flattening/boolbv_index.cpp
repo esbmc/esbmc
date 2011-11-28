@@ -27,7 +27,7 @@ Function: boolbvt::convert_index
 
 void boolbvt::convert_index(const index_exprt &expr, bvt &bv)
 {
-  if(!expr.is_index())
+  if(expr.id()!="index")
     throw "expected index expression";
 
   if(expr.operands().size()!=2)
@@ -59,7 +59,7 @@ void boolbvt::convert_index(const index_exprt &expr, bvt &bv)
 
     // record type if array is a symbol
 
-    if(array.is_symbol())
+    if(array.id()=="symbol")
       map.get_map_entry(
         to_symbol_expr(array).get_identifier(), array.type());
 
@@ -189,7 +189,7 @@ void boolbvt::convert_index(
 
   mp_integer offset=index*width;
 
-  if(array.is_symbol())
+  if(array.id()=="symbol")
   {
     // optimization: only generate necessary literals
 

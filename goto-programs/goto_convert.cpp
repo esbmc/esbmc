@@ -228,7 +228,7 @@ void goto_convertt::convert_label(
     t->location=code.location();
     t->location.property("error label");
     t->location.comment("error label");
-    t->location.user_provided(true);
+    t->location.user_provided(false);
 
     target=t;
     dest.destructive_append(tmp);
@@ -390,7 +390,7 @@ void goto_convertt::convert_block(
     if(code.get_statement()=="decl")
     {
       const exprt &op0=code.op0();
-      assert(op0.is_symbol());
+      assert(op0.id()=="symbol");
       const irep_idt &identifier=op0.identifier();
       const symbolt &symbol=lookup(identifier);
 
@@ -536,8 +536,8 @@ void goto_convertt::convert_sideeffect(
       rhs.type()=int_type();
       rhs.make_typecast(typet("bool"));
     }
-    else if(op_type.is_c_enum() ||
-            op_type.is_incomplete_c_enum())
+    else if(op_type.id()=="c_enum" ||
+            op_type.id()=="incomplete_c_enum")
     {
       rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
       rhs.op0().make_typecast(int_type());
@@ -548,7 +548,7 @@ void goto_convertt::convert_sideeffect(
     {
       typet constant_type;
 
-      if(op_type.is_pointer())
+      if(op_type.id()=="pointer")
         constant_type=index_type();
       else if(is_number(op_type))
         constant_type=op_type;
@@ -723,7 +723,7 @@ void goto_convertt::convert_expression(
 
   exprt expr=code.op0();
 
-  if(expr.is_sideeffect())
+  if(expr.id()=="sideeffect")
   {
     Forall_operands(it, expr)
       remove_sideeffects(*it, dest);
@@ -770,7 +770,7 @@ void goto_convertt::convert_decl(
 
   const exprt &op0=code.op0();
 
-  if(!op0.is_symbol())
+  if(op0.id()!="symbol")
   {
     err_location(op0);
     throw "decl statement expects symbol as first operand";
@@ -843,7 +843,7 @@ void goto_convertt::convert_assign(
 
   remove_sideeffects(lhs, dest);
 
-  if(rhs.is_sideeffect() &&
+  if(rhs.id()=="sideeffect" &&
      rhs.statement()=="function_call")
   {
     if(rhs.operands().size()!=2)
@@ -857,7 +857,7 @@ void goto_convertt::convert_assign(
 
     do_function_call(lhs, rhs.op0(), rhs.op1().operands(), dest);
   }
-  else if(rhs.is_sideeffect() &&
+  else if(rhs.id()=="sideeffect" &&
           (rhs.statement()=="cpp_new" ||
            rhs.statement()=="cpp_new[]"))
   {
@@ -870,7 +870,7 @@ void goto_convertt::convert_assign(
   {
     remove_sideeffects(rhs, dest);
 
-    if(lhs.is_typecast())
+    if(lhs.id()=="typecast")
     {
       assert(lhs.operands().size()==1);
 
@@ -1054,18 +1054,18 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   if(!options.get_bool_option("atomicity-check"))
     return;
 
-  if(rhs.is_dereference()
-	|| rhs.is_implicit_dereference()
-	|| rhs.is_index()
-	|| rhs.is_member())
+  if(rhs.id() == "dereference"
+	|| rhs.id() == "implicit_dereference"
+	|| rhs.id() == "index"
+	|| rhs.id() == "member")
   {
     irep_idt identifier=rhs.op0().identifier();
-    if (rhs.is_member())
+    if (rhs.id() == "member")
     {
       const exprt &object=rhs.operands()[0];
       identifier=object.identifier();
     }
-    else if (rhs.is_index())
+    else if (rhs.id() == "index")
     {
       identifier=rhs.op1().identifier();
     }
@@ -1100,7 +1100,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 
     }
   }
-  else if(rhs.is_symbol())
+  else if(rhs.id() == "symbol")
   {
 	const irep_idt &identifier=rhs.identifier();
 	const symbolt &symbol=lookup(identifier);
@@ -1162,7 +1162,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   if(expr.is_address_of())
   	return 0;
 
-  else if(expr.is_symbol())
+  else if(expr.id() == "symbol")
   {
     const irep_idt &identifier=expr.identifier();
   	const symbolt &symbol=lookup(identifier);
@@ -1993,7 +1993,7 @@ void goto_convertt::convert_specc_event(
   const exprt &op,
   std::set<irep_idt> &events)
 {
-  if(op.is_or() || op.is_and())
+  if(op.id()=="or" || op.is_and())
   {
     forall_operands(it, op)
       convert_specc_event(*it, events);
@@ -2041,7 +2041,7 @@ void goto_convertt::convert_specc_wait(
 
   const exprt &op=code.op0();
 
-  if(op.is_or())
+  if(op.id()=="or")
     t->or_semantics=true;
 
   convert_specc_event(op, t->events);
@@ -2532,8 +2532,8 @@ void goto_convertt::convert_ifthenelse(
 	  //std::cout << "2: " << code.pretty() << std::endl;
 	  exprt tmp_guard;
 	  if (options.get_bool_option("control-flow-test")
-		  && !code.op0().is_notequal() && !code.op0().is_symbol()
-		  && !code.op0().is_typecast() && code.op0().id() != "="
+		  && code.op0().id() != "notequal" && code.op0().id() != "symbol"
+		  && code.op0().id() != "typecast" && code.op0().id() != "="
 		  && !is_thread
 		  && !options.get_bool_option("deadlock-check"))
 	  {
@@ -2663,7 +2663,7 @@ void goto_convertt::generate_conditional_branch(
   const locationt &location,
   goto_programt &dest)
 {
-  if(guard.is_not())
+  if(guard.id()=="not")
   {
     assert(guard.operands().size()==1);
     // swap targets
@@ -2718,7 +2718,7 @@ void goto_convertt::generate_conditional_branch(
 
     return;
   }
-  else if(guard.is_or())
+  else if(guard.id()=="or")
   {
     // turn
     //   if(a || b) goto target_true; else goto target_false;
@@ -2778,15 +2778,15 @@ Function: goto_convertt::get_string_constant
 const std::string &goto_convertt::get_string_constant(
   const exprt &expr)
 {
-  if(expr.is_typecast() &&
+  if(expr.id()=="typecast" &&
      expr.operands().size()==1)
     return get_string_constant(expr.op0());
 
   if(!expr.is_address_of() ||
      expr.operands().size()!=1 ||
-     !expr.op0().is_index() ||
+     expr.op0().id()!="index" ||
      expr.op0().operands().size()!=2 ||
-     !expr.op0().op0().is_string_constant())
+     expr.op0().op0().id()!="string-constant")
   {
     err_location(expr);
 //    str << "expected string constant, but got: "

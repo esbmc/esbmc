@@ -49,10 +49,10 @@ bool dereferencet::has_dereference(const exprt &expr) const
     if(has_dereference(*it))
       return true;
 
-  if(expr.is_dereference() ||
-     expr.is_implicit_dereference() ||
-     (expr.is_index() && expr.operands().size()==2 &&
-      expr.op0().type().is_pointer()))
+  if(expr.id()=="dereference" ||
+     expr.id()=="implicit_dereference" ||
+     (expr.id()=="index" && expr.operands().size()==2 &&
+      expr.op0().type().id()=="pointer"))
     return true;
 
   return false;
@@ -72,7 +72,7 @@ Function: dereferencet::get_symbol
 
 const exprt& dereferencet::get_symbol(const exprt &expr)
 {
-  if(expr.is_member() || expr.is_index())
+  if(expr.id()=="member" || expr.id()=="index")
     return get_symbol(expr.op0());
 
   return expr;
@@ -95,7 +95,7 @@ void dereferencet::dereference(
   const guardt &guard,
   const modet mode)
 {
-  if(!dest.type().is_pointer())
+  if(dest.type().id()!="pointer")
     throw "dereference expected pointer type, but got "+
           dest.type().pretty();
 
@@ -213,7 +213,7 @@ void dereferencet::add_checks(
   const guardt &guard,
   const modet mode)
 {
-  if(!dest.type().is_pointer())
+  if(dest.type().id()!="pointer")
     throw "dereference expected pointer type, but got "+
           dest.type().pretty();
 
@@ -272,7 +272,7 @@ bool dereferencet::dereference_type_compare(
 {
   const typet &object_type=object.type();
 
-  if(dereference_type.is_empty())
+  if(dereference_type.id()=="empty")
     return true; // always ok
 
   if(base_type_eq(object_type, dereference_type, ns))
@@ -286,8 +286,8 @@ bool dereferencet::dereference_type_compare(
   base_type(ot_base, ns);
   base_type(dt_base, ns);
 
-  if(ot_base.is_struct() &&
-     dt_base.is_struct())
+  if(ot_base.id()=="struct" &&
+     dt_base.id()=="struct")
   {
     if(to_struct_type(dt_base).is_prefix_of(
          to_struct_type(ot_base)))
@@ -331,8 +331,8 @@ void dereferencet::build_reference_to(
   value.make_nil();
   pointer_guard.make_false();
 
-  if(what.is_unknown() ||
-     what.is_invalid())
+  if(what.id()=="unknown" ||
+     what.id()=="invalid")
   {
     if(!options.get_bool_option("no-pointer-check"))
     {
@@ -362,7 +362,7 @@ void dereferencet::build_reference_to(
   const exprt &root_object=o.root_object();
   const exprt &object=o.object();
 
-  if(root_object.is_null_object())
+  if(root_object.id()=="NULL-object")
   {
     if(!options.get_bool_option("no-pointer-check"))
     {
@@ -381,7 +381,7 @@ void dereferencet::build_reference_to(
         "NULL pointer", tmp_guard);
     }
   }
-  else if(root_object.is_dynamic_object())
+  else if(root_object.id()=="dynamic_object")
   {
     const dynamic_object_exprt &dynamic_object=
       to_dynamic_object_expr(root_object);
@@ -536,8 +536,8 @@ void dereferencet::build_reference_to(
         if(!options.get_bool_option("no-pointer-check"))
         {
           //nec: ex29
-          if (value.type().subtype().is_empty() ||
-        		  type.subtype().is_empty())
+          if (value.type().subtype().id()=="empty" ||
+        		  type.subtype().id()=="empty")
             return;
           std::string msg="memory model not applicable (got `";
           msg+=from_type(ns, "", value.type());
@@ -557,7 +557,7 @@ void dereferencet::build_reference_to(
     else
     {
       //std::cout << "value.id(): " << value.id() << std::endl;
-      if(value.is_index())
+      if(value.id()=="index")
       {
         index_exprt &index_expr=to_index_expr(value);
         index_expr.index()=offset;
@@ -618,7 +618,7 @@ void dereferencet::valid_check(
 
   const exprt &symbol=get_symbol(object);
 
-  if(symbol.is_string_constant())
+  if(symbol.id()=="string-constant")
   {
     // always valid, but can't write
 
@@ -636,7 +636,7 @@ void dereferencet::valid_check(
     // always "valid", shut up
     return;
   }
-  else if(symbol.is_symbol())
+  else if(symbol.id()=="symbol")
   {
     const irep_idt identifier=symbol.identifier();
 
@@ -702,7 +702,7 @@ void dereferencet::bounds_check(
   exprt size_expr=
     to_array_type(array_type).size();
 
-  if (expr.op0().is_index())
+  if (expr.op0().id() == "index")
   {
 	std::string val1, val2, tot;
 	int total;
@@ -764,11 +764,11 @@ static unsigned bv_width(const typet &type)
 
 static bool is_a_bv_type(const typet &type)
 {
-  return type.is_unsignedbv() ||
-         type.is_signedbv() ||
-         type.is_bv() ||
-         type.is_fixedbv() ||
-         type.is_floatbv();
+  return type.id()=="unsignedbv" ||
+         type.id()=="signedbv" ||
+         type.id()=="bv" ||
+         type.id()=="fixedbv" ||
+         type.id()=="floatbv";
 }
 
 bool dereferencet::memory_model(
@@ -816,7 +816,7 @@ bool dereferencet::memory_model_conversion(
   // avoid semantic conversion in case of
   // cast to float
   if(from_type.id()!="bv" &&
-     (to_type.is_fixedbv() || to_type.is_floatbv()))
+     (to_type.id()=="fixedbv" || to_type.id()=="floatbv"))
   {
     value.make_typecast(bv_typet(bv_width(from_type)));
     value.make_typecast(to_type);
@@ -876,9 +876,9 @@ bool dereferencet::memory_model_bytes(
   // But anything else we will try!
 
   // We allow reading more or less anything as bit-vector.
-  if(to_type.is_bv() ||
-     to_type.is_unsignedbv() ||
-     to_type.is_signedbv())
+  if(to_type.id()=="bv" ||
+     to_type.id()=="unsignedbv" ||
+     to_type.id()=="signedbv")
   {
     const char *byte_extract_id=NULL;
 

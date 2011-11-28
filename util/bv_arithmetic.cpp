@@ -83,9 +83,9 @@ Function: bv_spect::from_type
 
 void bv_spect::from_type(const typet &type)
 {
-  if(type.is_unsignedbv())
+  if(type.id()=="unsignedbv")
     is_signed=false;
-  else if(type.is_signedbv())
+  else if(type.id()=="signedbv")
     is_signed=true;
   else
     assert(0);

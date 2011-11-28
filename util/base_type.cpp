@@ -26,7 +26,7 @@ Function: base_type
 
 void base_type(typet &type, const namespacet &ns)
 {
-  if(type.is_symbol())
+  if(type.id()=="symbol")
   {
     const symbolt *symbol;
 
@@ -70,9 +70,9 @@ void base_type(typet &type, const namespacet &ns)
   {
     base_type(type.subtype(), ns);
   }
-  else if(type.is_struct() ||
+  else if(type.id()=="struct" ||
           type.id()=="class" ||
-          type.is_union())
+          type.id()=="union")
   {
     // New subt for manipulating components
     irept::subt components=type.components().get_sub();
@@ -135,8 +135,8 @@ bool base_type_eqt::base_type_eq_rec(
   #endif
   
   // loop avoidance
-  if(type1.is_symbol() &&
-     type2.is_symbol())
+  if(type1.id()=="symbol" &&
+     type2.id()=="symbol")
   {
     // already in same set?
     if(identifiers.make_union(
@@ -145,7 +145,7 @@ bool base_type_eqt::base_type_eq_rec(
       return true;
   }
 
-  if(type1.is_symbol())
+  if(type1.id()=="symbol")
   {
     const symbolt &symbol=ns.lookup(type1.identifier());
 
@@ -155,7 +155,7 @@ bool base_type_eqt::base_type_eq_rec(
     return base_type_eq_rec(symbol.type, type2);
   }
 
-  if(type2.is_symbol())
+  if(type2.id()=="symbol")
   {
     const symbolt &symbol=ns.lookup(type2.identifier());
 
@@ -168,9 +168,9 @@ bool base_type_eqt::base_type_eq_rec(
   if(type1.id()!=type2.id())
     return false;
 
-  if(type1.is_struct() ||
+  if(type1.id()=="struct" ||
      type1.id()=="class" ||
-     type1.is_union())
+     type1.id()=="union")
   {
     const struct_union_typet::componentst &components1=
       to_struct_union_type(type1).components();
@@ -191,7 +191,7 @@ bool base_type_eqt::base_type_eq_rec(
     
     return true;
   }
-  else if(type1.is_incomplete_struct())
+  else if(type1.id()=="incomplete_struct")
   {
     return true;
   }
@@ -219,7 +219,7 @@ bool base_type_eqt::base_type_eq_rec(
     
     return true;
   }
-  else if(type1.is_pointer())
+  else if(type1.id()=="pointer")
   {
     return base_type_eq_rec(type1.subtype(), type2.subtype());
   }
@@ -232,7 +232,7 @@ bool base_type_eqt::base_type_eq_rec(
       
     return true;
   }
-  else if(type1.is_incomplete_array())
+  else if(type1.id()=="incomplete_array")
   {
     return base_type_eq_rec(type1.subtype(), type2.subtype());
   }

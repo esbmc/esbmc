@@ -16,7 +16,7 @@ OBJ = $(SRC:.cpp=.o) \
 
 INCLUDES= -I .. -I ../util -I$(Z3)/include
 
-LIBS= -lgmp -ldl
+LIBS= -lgmp -ldl -lgomp
 
 all: esbmc
 

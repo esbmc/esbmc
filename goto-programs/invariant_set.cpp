@@ -154,15 +154,15 @@ Function: inv_object_storet::build_string
 std::string inv_object_storet::build_string(const exprt &expr) const
 {
   // we ignore some casts
-  if(expr.is_typecast())
+  if(expr.id()=="typecast")
   {
     assert(expr.operands().size()==1);
     
-    if(expr.type().is_signedbv() ||
-       expr.type().is_unsignedbv())
+    if(expr.type().id()=="signedbv" ||
+       expr.type().id()=="unsignedbv")
     {
-      if(expr.op0().type().is_signedbv() ||
-         expr.op0().type().is_unsignedbv())
+      if(expr.op0().type().id()=="signedbv" ||
+         expr.op0().type().id()=="unsignedbv")
       {
         if(bv_width(expr.type())>=bv_width(expr.op0().type()))
           return build_string(expr.op0());
@@ -179,7 +179,7 @@ std::string inv_object_storet::build_string(const exprt &expr) const
   if(expr.is_constant())
   {
     // NULL?
-    if(expr.type().is_pointer())
+    if(expr.type().id()=="pointer")
       if(expr.value()=="NULL")
         return "0";
   
@@ -194,13 +194,13 @@ std::string inv_object_storet::build_string(const exprt &expr) const
   if(is_constant_address(expr))
     return from_expr(ns, "", expr);
   
-  if(expr.is_member())
+  if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
     return build_string(expr.op0())+"."+expr.component_name().as_string();
   }
   
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
     return expr.identifier().as_string();
 
   return "";
@@ -241,8 +241,8 @@ Function: inv_object_storet::is_constant_address
 bool inv_object_storet::is_constant_address(const exprt &expr)
 {
   if(expr.is_address_of() ||
-     expr.is_implicit_address_of() ||
-     expr.is_reference_to())
+     expr.id()=="implicit_address_of" ||
+     expr.id()=="reference_to")
     if(expr.operands().size()==1)
       return is_constant_address_rec(expr.op0());
   
@@ -263,14 +263,14 @@ Function: inv_object_storet::is_constant_address_rec
 
 bool inv_object_storet::is_constant_address_rec(const exprt &expr)
 {
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
     return true;
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
     return is_constant_address_rec(expr.op0());
   }
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     assert(expr.operands().size()==2);
     if(expr.op1().is_constant())
@@ -552,7 +552,7 @@ void invariant_sett::add_type_bounds(const exprt &expr, const typet &type)
 {
   if(expr.type()==type) return;
 
-  if(type.is_unsignedbv())
+  if(type.id()=="unsignedbv")
   {
     unsigned op_width=bv_width(type);
 
@@ -621,7 +621,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     // wow, that's strong
     make_false();
   }
-  else if(expr.is_not())
+  else if(expr.id()=="not")
   {
     // give up, we expect NNF
   }
@@ -638,7 +638,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     // special rule: x <= (a & b)
     // implies:      x<=a && x<=b
 
-    if(expr.op1().is_bitand())
+    if(expr.op1().id()=="bitand")
     {
       const exprt &bitand_op=expr.op1();
       
@@ -692,7 +692,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     
     const typet &op_type=ns->follow(expr.op0().type());
     
-    if(op_type.is_struct())
+    if(op_type.id()=="struct")
     {
       const struct_typet &struct_type=to_struct_type(op_type);
   
@@ -729,7 +729,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     // special rule: x = (a & b)
     // implies:      x<=a && x<=b
 
-    if(expr.op1().is_bitand())
+    if(expr.op1().id()=="bitand")
     {
       const exprt &bitand_op=expr.op1();
       
@@ -743,7 +743,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
       
       return;
     }
-    else if(expr.op0().is_bitand())
+    else if(expr.op0().id()=="bitand")
     {
       exprt tmp(expr);
       std::swap(tmp.op0(), tmp.op1());
@@ -752,12 +752,12 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     }
     
     // special rule: x = (type) y
-    if(expr.op1().is_typecast())
+    if(expr.op1().id()=="typecast")
     {
       assert(expr.op1().operands().size()==1);
       add_type_bounds(expr.op0(), expr.op1().op0().type());
     }
-    else if(expr.op0().is_typecast())
+    else if(expr.op0().id()=="typecast")
     {
       assert(expr.op0().operands().size()==1);
       add_type_bounds(expr.op1(), expr.op0().op0().type());
@@ -785,7 +785,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
     else if(!has_eq(p))
       add_eq(p);
   }
-  else if(expr.is_notequal())
+  else if(expr.id()=="notequal")
   {
     assert(expr.operands().size()==2);
     
@@ -848,7 +848,7 @@ tvt invariant_sett::implies_rec(const exprt &expr) const
 
   if(expr.is_true())
     return tvt(true);
-  else if(expr.is_not())
+  else if(expr.id()=="not")
   {
     // give up, we expect NNF
   }
@@ -860,7 +860,7 @@ tvt invariant_sett::implies_rec(const exprt &expr) const
       
     return tvt(true);
   }
-  else if(expr.is_or())
+  else if(expr.id()=="or")
   {
     forall_operands(it, expr)
       if(implies_rec(*it)==tvt(true))
@@ -869,7 +869,7 @@ tvt invariant_sett::implies_rec(const exprt &expr) const
   else if(expr.id()=="<=" ||
           expr.id()=="<" ||
           expr.id()=="=" ||
-          expr.is_notequal())
+          expr.id()=="notequal")
   {
     assert(expr.operands().size()==2);
 
@@ -906,7 +906,7 @@ tvt invariant_sett::implies_rec(const exprt &expr) const
     }
     else if(expr.id()=="=")
       return is_eq(p);
-    else if(expr.is_notequal())
+    else if(expr.id()=="notequal")
       return is_ne(p);
     else
       assert(false);
@@ -941,7 +941,7 @@ void invariant_sett::get_bounds(unsigned a, boundst &bounds) const
       return;
     }
     
-    if(e_a.type().is_unsignedbv())
+    if(e_a.type().id()=="unsignedbv")
       bounds=lower_interval(mp_integer(0));
   }
 
@@ -975,7 +975,7 @@ void invariant_sett::nnf(exprt &expr, bool negate)
   {
     if(negate) expr.make_true();
   }
-  else if(expr.is_not())
+  else if(expr.id()=="not")
   {
     assert(expr.operands().size()==1);
     nnf(expr.op0(), !negate);
@@ -990,19 +990,19 @@ void invariant_sett::nnf(exprt &expr, bool negate)
     Forall_operands(it, expr)
       nnf(*it, negate);
   }
-  else if(expr.is_or())
+  else if(expr.id()=="or")
   {
     if(negate) expr.id("and");
     
     Forall_operands(it, expr)
       nnf(*it, negate);
   }
-  else if(expr.is_typecast())
+  else if(expr.id()=="typecast")
   {
     assert(expr.operands().size()==1);
 
-    if(expr.op0().type().is_unsignedbv() ||
-       expr.op0().type().is_signedbv())
+    if(expr.op0().type().id()=="unsignedbv" ||
+       expr.op0().type().id()=="signedbv")
     {
       equality_exprt tmp;
       tmp.lhs()=expr.op0();
@@ -1057,7 +1057,7 @@ void invariant_sett::nnf(exprt &expr, bool negate)
   {
     if(negate) expr.id("notequal");
   }
-  else if(expr.is_notequal())
+  else if(expr.id()=="notequal")
   {
     if(negate) expr.id("=");
   }
@@ -1084,15 +1084,15 @@ void invariant_sett::simplify(
   exprt &expr) const
 {
   if(expr.is_address_of() ||
-     expr.is_implicit_address_of() ||
-     expr.is_reference_to())
+     expr.id()=="implicit_address_of" ||
+     expr.id()=="reference_to")
     return;
 
   Forall_operands(it, expr)
     simplify(*it);
 
-  if(expr.is_symbol() ||
-     expr.is_member())
+  if(expr.id()=="symbol" ||
+     expr.id()=="member")
   {
     exprt tmp=get_constant(expr);
     if(tmp.is_not_nil())
@@ -1140,7 +1140,7 @@ exprt invariant_sett::get_constant(const exprt &expr) const
           mp_integer value;
           assert(!to_integer(e, value));
           
-          if(expr.type().is_pointer())
+          if(expr.type().id()=="pointer")
           {
             if(value==0)
             {
@@ -1346,17 +1346,17 @@ Function: invariant_sett::modifies
 
 void invariant_sett::modifies(const exprt &lhs)
 {
-  if(lhs.is_symbol() ||
-     lhs.is_member())
+  if(lhs.id()=="symbol" ||
+     lhs.id()=="member")
   {
     unsigned a;
     if(!get_object(lhs, a)) modifies(a);
   }
-  else if(lhs.is_index())
+  else if(lhs.id()=="index")
   {
     // we don't track arrays
   }
-  else if(lhs.is_dereference())
+  else if(lhs.id()=="dereference")
   {
     // be very, very conservative for now
     make_true();
@@ -1366,14 +1366,14 @@ void invariant_sett::modifies(const exprt &lhs)
     // be very, very conservative for now
     make_true();
   }
-  else if(lhs.is_if())
+  else if(lhs.id()=="if")
   {
     // we just assume both are changed
     assert(lhs.operands().size()==3);
     modifies(lhs.op1());
     modifies(lhs.op2());
   }
-  else if(lhs.is_typecast())
+  else if(lhs.id()=="typecast")
   {
     // just go down
     assert(lhs.operands().size()==1);
@@ -1385,17 +1385,17 @@ void invariant_sett::modifies(const exprt &lhs)
   else if(lhs.id()=="deallocated_object")
   {
   }
-  else if(lhs.is_dynamic_size())
+  else if(lhs.id()=="dynamic_size")
   {
   }
-  else if(lhs.is_byte_extract_little_endian() ||
-          lhs.is_byte_extract_big_endian())
+  else if(lhs.id()=="byte_extract_little_endian" ||
+          lhs.id()=="byte_extract_big_endian")
   {
     // just go down
     assert(lhs.operands().size()==2);
     modifies(lhs.op0());
   }
-  else if(lhs.is_null_object())
+  else if(lhs.id()=="NULL-object")
   {
     // ignore
   }

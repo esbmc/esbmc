@@ -106,8 +106,8 @@ static void make_subtype(typet &dest, typet &src)
     return;
   
   assert(src.is_array() ||
-         src.is_incomplete_array() ||
-         src.is_pointer() ||
+         src.id()=="incomplete_array" ||
+         src.id()=="pointer" ||
          src.is_code() ||
          src.id()=="merged_type" ||
          src.id()=="declarator");
@@ -126,9 +126,9 @@ static void make_subtype(typet &dest, typet &src)
       sub=&(p->subtypes().back());
     }
 
-    if(sub->is_pointer() ||
+    if(sub->id()=="pointer" ||
        sub->is_array() ||
-       sub->is_incomplete_array() ||
+       sub->id()=="incomplete_array" ||
        sub->is_code() ||
        sub->id()=="declarator")
     {
@@ -261,7 +261,7 @@ static void create_function_scope(exprt &expr)
       {
         ansi_c_declarationt &arg_decl=to_ansi_c_declaration(*it);
         
-        if(arg_decl.type().is_incomplete_array())
+        if(arg_decl.type().id()=="incomplete_array")
           arg_decl.type().id("pointer");
 
         if(arg_decl.get_base_name()=="")

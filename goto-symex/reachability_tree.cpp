@@ -14,6 +14,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <i2string.h>
 #include <expr_util.h>
 #include <std_expr.h>
+#include <config.h>
 
 #include "crypto_hash.h"
 
@@ -35,6 +36,12 @@ execution_statet & reachability_treet::get_cur_state()
 #ifdef DEBUG
   std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
 #endif
+
+  return **_cur_state_it;
+}
+
+const execution_statet & reachability_treet::get_cur_state() const
+{
 
   return **_cur_state_it;
 }
@@ -288,11 +295,13 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
   if(code.operands().size()!=2)
     throw "assignment expects two operands";
 
+#if 0
   if (!_deadlock_detection)
     check_mutex(code, ex_state);
 
   if (get_is_same_mutex())
     return false;
+#endif
 
   if(check_CS_bound())
     return false;
@@ -415,7 +424,7 @@ bool reachability_treet::generate_states()
 
  \*******************************************************************/
 
-bool reachability_treet::apply_static_por(execution_statet &ex_state, const exprt &expr, int i)
+bool reachability_treet::apply_static_por(const execution_statet &ex_state, const exprt &expr, int i) const
 {
   bool consider = true;
 
@@ -535,38 +544,53 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   }
 #endif
 
-  bool generated = false;
+  unsigned int tid = 0, user_tid = 0;
 
-  for(unsigned int i = 0; i < ex_state._threads_state.size(); i++)
+  if (config.options.get_bool_option("interactive-ileaves")) {
+    user_tid = tid = get_ileave_direction_from_user(expr);
+  }
+
+  for(; tid < ex_state._threads_state.size(); tid++)
   {
     /* For all threads: */
 
-    /* DFS -> depth first search? Check whether we've searched this... thing? */
-    if(ex_state._DFS_traversed.at(i))
+    if(ex_state._DFS_traversed.at(tid))
       continue;
 
-    ex_state._DFS_traversed.at(i) = true;
+    ex_state._DFS_traversed.at(tid) = true;
 
     /* Presumably checks whether this thread isn't in user code yet? */
-    if(ex_state._threads_state.at(i).call_stack.empty())
+    if(ex_state._threads_state.at(tid).call_stack.empty())
       continue;
 
     /* Is it even still running? */
-    if(ex_state._threads_state.at(i).thread_ended)
+    if(ex_state._threads_state.at(tid).thread_ended)
       continue;
 
     //apply static partial-order reduction
-    if(!apply_static_por(ex_state, expr, i))
+    if(!apply_static_por(ex_state, expr, tid))
       continue;
+
+    break;
+  }
+
+  if (config.options.get_bool_option("interactive-ileaves") && tid != user_tid){
+    std::cerr << "Ileave code selected different thread from user choice";
+    std::cerr << std::endl;
+  }
+
+  _go_next = true;
+
+  if (tid != ex_state._threads_state.size()) {
 
     /* Generate a new execution state, duplicate of previous? */
     execution_statet *new_state = new execution_statet(ex_state);
     execution_states.push_back(new_state);
 
     /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_state_number() != i) {
+    if (new_state->get_active_state_number() != tid) {
       new_state->increment_context_switch();
-      new_state->set_active_state(i);
+      new_state->set_active_state(tid);
     }
 
     new_state->set_parent_guard(ex_state.get_guard_identifier());
@@ -577,21 +601,15 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     /* Reset interleavings (?) investigated in this new state */
     new_state->reset_DFS_traversed();
 
-    generated = true;
-    break;
+    return true;
+  } else {
+    /* Once we've generated all interleavings from this state, increment hit
+     * count so that we don't come back here again */
+    if (state_hashing)
+      hit_hashes.insert(hash);
 
+    return false;
   }
-
-  /* Once we've generated all interleavings from this state, increment hit count
-   * so that we don't come back here again */
-  if (generated == false && state_hashing)
-    hit_hashes.insert(hash);
-
-  _go_next = true;
-
-  return generated;
-
-  return true;
 }
 
 /*******************************************************************
@@ -659,10 +677,13 @@ void reachability_treet::multi_formulae_go_next_state()
   if(it != execution_states.end()) {
     _cur_state_it++;
   } else {
-    if (generate_states_base(exprt()))
+    if (generate_states_base(exprt())) {
       _cur_state_it++;
-    else
+    } else {
+      if (config.options.get_bool_option("print-stack-traces"))
+        print_ileave_trace();
       _go_next_formula = true;
+    }
   }
 
   _go_next = false;
@@ -895,5 +916,109 @@ bool reachability_treet::dfs_position::read_from_file(
 fail:
   std::cerr << "Read error on checkpoint file" << std::endl;
   fclose(f);
+  return true;
+}
+
+void
+reachability_treet::print_ileave_trace(void) const
+{
+  std::list<execution_statet*>::const_iterator it;
+  int i = 0;
+
+  std::cout << "Context switch trace for interleaving:" << std::endl;
+  for (it = execution_states.begin(); it != execution_states.end(); it++, i++) {
+    std::cout << "Context switch point " << i << std::endl;
+    (*it)->print_stack_traces(_ns, 4);
+  }
+}
+
+int
+reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
+{
+  std::string input;
+  unsigned int tid;
+
+  // If the guard on this execution trace is false, no context switches are
+  // going to be run over in the future and just general randomness is going to
+  // occur. So there's absolutely no reason exploring further.
+  if (get_cur_state().get_active_state().guard.is_false()) {
+    std::cout << "This trace's guard is false; it will not be evaulated." << std::endl;
+    exit(1);
+  }
+
+  // First of all, are there actually any valid context switch targets?
+  for (tid = 0; tid < get_cur_state()._threads_state.size(); tid++) {
+    if (check_thread_viable(tid, expr, true))
+      break;
+  }
+
+  // If no threads were viable, don't present a choice.
+  if (tid == get_cur_state()._threads_state.size())
+    return get_cur_state()._threads_state.size();
+
+  std::cout << "Context switch point encountered; please select a thread to run" << std::endl;
+  std::cout << "Current thread states:" << std::endl;
+  execution_states.back()->print_stack_traces(_ns, 4);
+
+  while (std::cout << "Input: ", std::getline(std::cin, input)) {
+    if (input == "b") {
+      std::cout << "Back unimplemented" << std::endl;
+    } else if (input == "q") {
+      exit(1);
+    } else if (input.size() <= 0) {
+      ;
+    } else {
+      const char *start;
+      char *end;
+      start = input.c_str();
+      tid = strtol(start, &end, 10);
+      if (start == end) {
+        std::cout << "Not a valid input" << std::endl;
+      } else if (tid >= get_cur_state()._threads_state.size()) {
+        std::cout << "Number out of range";
+      } else {
+        if (check_thread_viable(tid, expr, false))
+          break;
+      }
+    }
+  }
+
+  if (std::cin.eof()) {
+    std::cout << std::endl;
+    exit(1);
+  }
+
+  return tid;
+}
+
+bool
+reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) const
+{
+  const execution_statet &ex = get_cur_state();
+
+  if (ex._DFS_traversed.at(tid) == true) {
+    if (!quiet)
+      std::cout << "Thread unschedulable as it's already been explored" << std::endl;
+    return false;
+  }
+
+  if (ex._threads_state.at(tid).call_stack.empty()) {
+    if (!quiet)
+      std::cout << "Thread unschedulable due to empty call stack" << std::endl;
+    return false;
+  }
+
+  if (ex._threads_state.at(tid).thread_ended) {
+    if (!quiet)
+      std::cout << "That thread has ended" << std::endl;
+    return false;
+  }
+
+  if (!apply_static_por(ex, expr, tid)) {
+    if (!quiet)
+      std::cout << "Thread unschedulable due to POR" << std::endl;
+    return false;
+  }
+
   return true;
 }

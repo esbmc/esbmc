@@ -125,7 +125,7 @@ void cfgt<T>::compute_edges(
     const exprt &function=
       to_code_function_call(instruction.code).function();
 
-    if(function.is_symbol())
+    if(function.id()=="symbol")
     {
       const irep_idt &identifier=
         to_symbol_expr(function).get_identifier();

@@ -284,7 +284,7 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   }
 
   // op0 must be symbol
-  if(!code.op0().is_symbol())
+  if(code.op0().id()!="symbol")
   {
     err_location(code);
     throw "decl expected to have symbol as first operand";
@@ -334,8 +334,8 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   const typet &type=follow(code.op0().type());
 
   // this must not be an incomplete type
-  if(type.is_incomplete_struct() ||
-     type.is_incomplete_array())
+  if(type.id()=="incomplete_struct" ||
+     type.id()=="incomplete_array")
   {
     err_location(code);
     throw "incomplete type not permitted here";
@@ -362,7 +362,7 @@ void c_typecheck_baset::typecheck_expression(codet &code)
   exprt &op=code.op0();
   typecheck_expr(op);
 
-  if(op.is_sideeffect())
+  if(op.id()=="sideeffect")
   {
     const irep_idt &statement=op.statement();
     
@@ -376,7 +376,7 @@ void c_typecheck_baset::typecheck_expression(codet &code)
       code.statement("assign");
       code.operands().swap(operands);
       
-      if(code.op1().is_sideeffect() &&
+      if(code.op1().id()=="sideeffect" &&
          code.op1().statement()=="function_call")
       {
         assert(code.op1().operands().size()==2);
@@ -562,7 +562,7 @@ void c_typecheck_baset::typecheck_ifthenelse(codet &code)
 
   typecheck_expr(cond);
 
-  if(cond.is_sideeffect() &&
+  if(cond.id()=="sideeffect" &&
      cond.statement()=="assign")
   {
     err_location(cond);
@@ -624,7 +624,7 @@ void c_typecheck_baset::typecheck_return(codet &code)
   {
     typecheck_expr(code.op0());
 
-    if(return_type.is_empty())
+    if(return_type.id()=="empty")
     {
       if(code.op0().type().id()!="empty")
       {

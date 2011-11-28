@@ -115,7 +115,7 @@ static exprt build_or_expr(
 
       exprt address;
 
-      if(o.object().is_null_object())
+      if(o.object().id()=="NULL-object")
       {
         address=constant_exprt(pointer_type);
         address.value("NULL");
@@ -240,8 +240,8 @@ bool goto_convert_functionst::have_function_pointers(
       const code_function_callt &code=
         to_code_function_call(target->code);
     
-      if(code.function().is_dereference() ||
-         code.function().is_implicit_dereference())
+      if(code.function().id()=="dereference" ||
+         code.function().id()=="implicit_dereference")
         return true;
     }
 
@@ -274,8 +274,8 @@ bool goto_convert_functionst::remove_function_pointers(
       const code_function_callt &code=
         to_code_function_call(target->code);
     
-      if(code.function().is_dereference() ||
-         code.function().is_implicit_dereference())
+      if(code.function().id()=="dereference" ||
+         code.function().id()=="implicit_dereference")
       {
         remove_function_pointer(value_sets, goto_program, target); 
         did_something=true;
@@ -314,7 +314,7 @@ void goto_convert_functionst::remove_function_pointer(
   const exprt &lhs=code.lhs();
   const exprt &function=code.function();
 
-  assert(function.is_dereference());  
+  assert(function.id()=="dereference");  
   assert(function.operands().size()==1);
 
   value_setst::valuest value_set;
@@ -330,7 +330,7 @@ void goto_convert_functionst::remove_function_pointer(
       it!=value_set.end();
       it++)
   {
-    if(it->is_unknown())
+    if(it->id()=="unknown")
       has_unknown=true;
     else
       new_value_set.insert(*it);

@@ -22,8 +22,8 @@ Function: boolbvt::convert_mod
 
 void boolbvt::convert_mod(const exprt &expr, bvt &bv)
 {
-  if(!expr.type().is_unsignedbv() &&
-     !expr.type().is_signedbv())
+  if(expr.type().id()!="unsignedbv" &&
+     expr.type().id()!="signedbv")
     return conversion_failed(expr, bv);
 
   unsigned width;
@@ -38,7 +38,7 @@ void boolbvt::convert_mod(const exprt &expr, bvt &bv)
     throw "mod got mixed-type operands";
     
   bv_utilst::representationt rep=
-    expr.type().is_signedbv()?bv_utilst::SIGNED:
+    expr.type().id()=="signedbv"?bv_utilst::SIGNED:
                                  bv_utilst::UNSIGNED;
 
   bvt op0, op1;

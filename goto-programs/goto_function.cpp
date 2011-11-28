@@ -83,20 +83,20 @@ void goto_convertt::do_function_call(
 //    	break_globals2assignments(*it, dest);
   }
   // split on the function
-  if(new_function.is_dereference() ||
-     new_function.is_implicit_dereference())
+  if(new_function.id()=="dereference" ||
+     new_function.id()=="implicit_dereference")
   {
     do_function_call_dereference(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.is_if())
+  else if(new_function.id()=="if")
   {
     do_function_call_if(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.is_symbol())
+  else if(new_function.id()=="symbol")
   {
     do_function_call_symbol(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.is_null_object())
+  else if(new_function.id()=="NULL-object")
   {
   }
   else

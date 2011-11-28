@@ -30,8 +30,8 @@ Function: boolbvt::get
 
 exprt boolbvt::get(const exprt &expr) const
 {
-  if(expr.is_symbol() ||
-     expr.is_nondet_symbol())
+  if(expr.id()=="symbol" ||
+     expr.id()=="nondet_symbol")
   {
     const irep_idt &identifier=expr.identifier();
 
@@ -71,7 +71,7 @@ exprt boolbvt::get(const exprt &expr) const
       return bv_get_rec(bv, unknown, 0, map_entry.type);
     }
   }
-  else if(expr.is_constant())
+  else if(expr.id()=="constant")
     return expr;
 
   return SUB::get(expr);
@@ -144,7 +144,7 @@ exprt boolbvt::bv_get_rec(
         return dest;
       }
     }
-    else if(type.is_struct())
+    else if(type.id()=="struct")
     {
       const irept &components=type.components();
       unsigned new_offset=0;
@@ -168,7 +168,7 @@ exprt boolbvt::bv_get_rec(
       dest.operands().swap(op);
       return dest;
     }
-    else if(type.is_union())
+    else if(type.id()=="union")
     {
       const irept &components=type.components();
 

@@ -181,9 +181,9 @@ void printf_formattert::process_format(std::ostream &out)
       const exprt &op=*(next_operand++);
       if(op.is_address_of() &&
          op.operands().size()==1 &&
-         op.op0().is_index() &&
+         op.op0().id()=="index" &&
          op.op0().operands().size()==2 &&
-         op.op0().op0().is_string_constant())
+         op.op0().op0().id()=="string-constant")
         out << format_constant(op.op0().op0());
     }
     break;

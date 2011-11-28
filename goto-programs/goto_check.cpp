@@ -115,7 +115,7 @@ void goto_checkt::overflow_check(
     return;
 
   // first, check type
-  if(!expr.type().is_signedbv())
+  if(expr.type().id()!="signedbv")
     return;
 
   // add overflow subgoal
@@ -123,7 +123,7 @@ void goto_checkt::overflow_check(
   exprt overflow("overflow-"+expr.id_string(), bool_typet());
   overflow.operands()=expr.operands();
 
-  if(expr.is_typecast())
+  if(expr.id()=="typecast")
   {
     if(expr.operands().size()!=1)
       throw "typecast takes one operand";
@@ -133,7 +133,7 @@ void goto_checkt::overflow_check(
     unsigned new_width=atoi(expr.type().width().c_str());
     unsigned old_width=atoi(old_type.width().c_str());
 
-    if(old_type.is_unsignedbv()) new_width--;
+    if(old_type.id()=="unsignedbv") new_width--;
     if(new_width>=old_width) return;
 
     overflow.id(overflow.id_string()+"-"+i2string(new_width));
@@ -176,7 +176,7 @@ void goto_checkt::nan_check(
     return;
 
   // first, check type
-  if(!expr.type().is_floatbv())
+  if(expr.type().id()!="floatbv")
     return;
 
   if(expr.id()!="+" &&
@@ -219,8 +219,8 @@ void goto_checkt::pointer_rel_check(
   if(expr.operands().size()!=2)
     throw expr.id_string()+" takes one argument";
 
-  if(expr.op0().type().is_pointer() &&
-     expr.op1().type().is_pointer())
+  if(expr.op0().type().id()=="pointer" &&
+     expr.op1().type().id()=="pointer")
   {
     // add same-object subgoal
 
@@ -275,7 +275,7 @@ void goto_checkt::bounds_check(
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  if(!expr.is_index())
+  if(expr.id()!="index")
     return;
 
   if(expr.is_bounds_check_set() && !expr.bounds_check())
@@ -286,9 +286,9 @@ void goto_checkt::bounds_check(
 
   typet array_type=ns.follow(expr.op0().type());
 
-  if(array_type.is_pointer())
+  if(array_type.id()=="pointer")
     return; // done by the pointer code
-  else if(array_type.is_incomplete_array())
+  else if(array_type.id()=="incomplete_array")
   {
     std::cerr << expr.pretty() << std::endl;
     throw "index got incomplete array";
@@ -300,12 +300,12 @@ void goto_checkt::bounds_check(
 
   const exprt &index=expr.op1();
 
-  if(!index.type().is_unsignedbv())
+  if(index.type().id()!="unsignedbv")
   {
     // we undo typecasts to signedbv
-    if(index.is_typecast() &&
+    if(index.id()=="typecast" &&
        index.operands().size()==1 &&
-       index.op0().type().is_unsignedbv())
+       index.op0().type().id()=="unsignedbv")
     {
       // ok
     }
@@ -386,7 +386,7 @@ void goto_checkt::array_size_check(
   {
     const exprt &size=(exprt &)expr.type().size_irep();
 
-    if(size.type().is_unsignedbv())
+    if(size.type().id()=="unsignedbv")
     {
       // nothing to do
     }
@@ -485,12 +485,12 @@ void goto_checkt::check_rec(
 {
   if(address)
   {
-    if(expr.is_dereference())
+    if(expr.id()=="dereference")
     {
       assert(expr.operands().size()==1);
       check_rec(expr.op0(), guard, false);
     }
-    else if(expr.is_index())
+    else if(expr.id()=="index")
     {
       assert(expr.operands().size()==2);
       check_rec(expr.op0(), guard, true);
@@ -510,7 +510,7 @@ void goto_checkt::check_rec(
     check_rec(expr.op0(), guard, true);
     return;
   }
-  else if(expr.is_and() || expr.is_or())
+  else if(expr.is_and() || expr.id()=="or")
   {
     if(!expr.is_boolean())
       throw expr.id_string()+" must be Boolean, but got "+
@@ -528,7 +528,7 @@ void goto_checkt::check_rec(
 
       check_rec(op, guard, false);
 
-      if(expr.is_or())
+      if(expr.id()=="or")
       {
         exprt tmp(op);
         tmp.make_not();
@@ -542,7 +542,7 @@ void goto_checkt::check_rec(
 
     return;
   }
-  else if(expr.is_if())
+  else if(expr.id()=="if")
   {
     if(expr.operands().size()!=3)
       throw "if takes three arguments";
@@ -580,7 +580,7 @@ void goto_checkt::check_rec(
     check_rec(*it, guard, false);
 
   //std::cout << "expr.id(): " << expr.id() << std::endl;
-  if(expr.is_index())
+  if(expr.id()=="index")
   {
     bounds_check(expr, guard);
   }
@@ -591,13 +591,13 @@ void goto_checkt::check_rec(
   }
   else if(expr.id()=="+" || expr.id()=="-" ||
           expr.id()=="*" ||
-          expr.is_unary_sub() ||
-          expr.is_typecast())
+          expr.id()=="unary-" ||
+          expr.id()=="typecast")
   {
-    if(expr.type().is_signedbv())
+    if(expr.type().id()=="signedbv")
     {
       overflow_check(expr, guard);
-      if (expr.is_typecast() && !expr.op0().type().is_signedbv())
+      if (expr.id()=="typecast" && expr.op0().type().id()!="signedbv")
       {
    		if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
    			&& !options.get_bool_option("z3-ir"))
@@ -606,7 +606,7 @@ void goto_checkt::check_rec(
    		}
       }
     }
-    else if(expr.type().is_floatbv())
+    else if(expr.type().id()=="floatbv")
       nan_check(expr, guard);
   }
   else if(expr.id()=="<=" || expr.id()=="<" ||
@@ -616,7 +616,7 @@ void goto_checkt::check_rec(
 
   }
 
-  if (expr.is_ashr() || expr.id() == "lshr" ||
+  if (expr.id() == "ashr" || expr.id() == "lshr" ||
 	  expr.id() == "shl")
   {
     if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
@@ -628,8 +628,8 @@ void goto_checkt::check_rec(
         options.set_option("int-encoding", false);
     }
   }
-  else if (expr.is_bitand() || expr.is_bitor() ||
-		   expr.is_bitxor() || expr.id() == "bitnand" ||
+  else if (expr.id() == "bitand" || expr.id() == "bitor" ||
+		   expr.id() == "bitxor" || expr.id() == "bitnand" ||
 		   expr.id() == "bitnor" || expr.id() == "bitnxor")
   {
 	if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
@@ -653,15 +653,15 @@ void goto_checkt::check_rec(
         options.set_option("int-encoding", false);
 	}
   }
-  else if (expr.is_struct() || expr.is_union()
-		    || expr.type().is_pointer() || expr.is_member() ||
+  else if (expr.id() == "struct" || expr.id() == "union"
+		    || expr.type().id()=="pointer" || expr.id()=="member" ||
 		    (expr.type().is_array() && expr.type().subtype().is_array()))
   {
 	use_boolector=false; //always deactivate boolector
 	options.set_option("bl", false);
 	options.set_option("z3", true); //activate Z3 for solving the VCs
   }
-  else if (expr.type().is_fixedbv())
+  else if (expr.type().id()=="fixedbv")
   {
 	use_boolector=false;
 	options.set_option("bl", false);

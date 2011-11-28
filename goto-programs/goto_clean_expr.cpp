@@ -264,7 +264,7 @@ void goto_convertt::address_of_replace_objects(
     make_temp_symbol(expr, dest);
     return;
   }
-  else if(expr.is_string_constant())
+  else if(expr.id()=="string-constant")
   {
   }
   else

@@ -204,6 +204,6 @@ Function: is_reference
 
 bool is_reference(const typet &type)
 {
-  return type.is_pointer() && type.reference();
+  return type.id()=="pointer" && type.reference();
 }
 

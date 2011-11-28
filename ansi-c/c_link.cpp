@@ -144,30 +144,30 @@ void c_linkt::duplicate_type(
   // check if it is the same -- use base_type_eq, not c_link_type_eq
   if(!base_type_eq(in_context.type, new_symbol.type, ns))
   {
-    if(in_context.type.is_incomplete_struct() &&
-       new_symbol.type.is_struct())
+    if(in_context.type.id()=="incomplete_struct" &&
+       new_symbol.type.id()=="struct")
     {
       // replace old symbol
       in_context.type=new_symbol.type;
     }
-    else if(in_context.type.is_struct() &&
-            new_symbol.type.is_incomplete_struct())
+    else if(in_context.type.id()=="struct" &&
+            new_symbol.type.id()=="incomplete_struct")
     {
       // ignore
     }
-    else if(in_context.type.is_struct() &&
-            new_symbol.type.is_incomplete_struct())
+    else if(in_context.type.id()=="struct" &&
+            new_symbol.type.id()=="incomplete_struct")
     {
       // ignore
     }
-    else if(ns.follow(in_context.type).is_incomplete_array() &&
+    else if(ns.follow(in_context.type).id()=="incomplete_array" &&
             ns.follow(new_symbol.type).is_array())
     {
       // store new type
       in_context.type=new_symbol.type;
     }
     else if(ns.follow(in_context.type).is_array() &&
-            ns.follow(new_symbol.type).is_incomplete_array())
+            ns.follow(new_symbol.type).id()=="incomplete_array")
     {
       // ignore
     }
@@ -270,30 +270,30 @@ void c_linkt::duplicate_symbol(
 
     if(!base_type_eq(in_context.type, new_symbol.type, ns))
     {
-      if(ns.follow(in_context.type).is_incomplete_array() &&
+      if(ns.follow(in_context.type).id()=="incomplete_array" &&
          ns.follow(new_symbol.type).is_array())
       {
         // store new type
         in_context.type=new_symbol.type;
       }
       else if(ns.follow(in_context.type).is_array() &&
-              ns.follow(new_symbol.type).is_incomplete_array())
+              ns.follow(new_symbol.type).id()=="incomplete_array")
       {
         // ignore
       }
-      else if(in_context.type.is_incomplete_struct() &&
-              new_symbol.type.is_struct())
+      else if(in_context.type.id()=="incomplete_struct" &&
+              new_symbol.type.id()=="struct")
       {
         // store new type
         in_context.type=new_symbol.type;
       }
-      else if(in_context.type.is_struct() &&
-              new_symbol.type.is_incomplete_struct())
+      else if(in_context.type.id()=="struct" &&
+              new_symbol.type.id()=="incomplete_struct")
       {
         // ignore
       }
-      else if(ns.follow(in_context.type).is_pointer() &&
-              ns.follow(new_symbol.type).is_incomplete_array())
+      else if(ns.follow(in_context.type).id()=="pointer" &&
+              ns.follow(new_symbol.type).id()=="incomplete_array")
       {
         // ignore
       }

@@ -29,8 +29,8 @@ void boolbvt::convert_extractbits(const exprt &expr, bvt &bv)
   if(boolbv_get_width(expr.type(), width))
     return conversion_failed(expr, bv);
   
-  if(!expr.type().is_signedbv() &&
-     !expr.type().is_unsignedbv() &&
+  if(expr.type().id()!="signedbv" &&
+     expr.type().id()!="unsignedbv" &&
      expr.type().id()!="bv")
     return conversion_failed(expr, bv);
 

@@ -42,7 +42,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       code_type.make_ellipsis();
     }
     else if(arguments.size()==1 &&
-            arguments[0].type().is_empty())
+            arguments[0].type().id()=="empty")
     {
       // if we just have one argument of type void, remove it
       arguments.clear();
@@ -108,7 +108,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     typecheck_expr(size);
     typecheck_type(array_type.subtype());
 
-    bool size_is_unsigned=(size.type().is_unsignedbv());
+    bool size_is_unsigned=(size.type().id()=="unsignedbv");
 
     typet integer_type(size_is_unsigned?"unsignedbv":"signedbv");
     integer_type.width(config.ansi_c.int_width);
@@ -138,16 +138,16 @@ void c_typecheck_baset::typecheck_type(typet &type)
       }
     }
   }
-  else if(type.is_incomplete_array())
+  else if(type.id()=="incomplete_array")
   {
     typecheck_type(type.subtype());
   }
-  else if(type.is_pointer())
+  else if(type.id()=="pointer")
   {
     typecheck_type(type.subtype());
   }
-  else if(type.is_struct() ||
-          type.is_union())
+  else if(type.id()=="struct" ||
+          type.id()=="union")
   {
     struct_typet &struct_type=to_struct_type(type);
     struct_typet::componentst &components=struct_type.components();
@@ -162,7 +162,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       typecheck_type(type);
       
       // incomplete arrays become arrays of size 0
-      if(type.is_incomplete_array())
+      if(type.id()=="incomplete_array")
       {
         type.id("array");
         type.size(gen_zero(int_type()));
@@ -181,8 +181,8 @@ void c_typecheck_baset::typecheck_type(typet &type)
       {
         const typet &final_type=follow(it->type());
 
-        if(final_type.is_struct() ||
-           final_type.is_union())
+        if(final_type.id()=="struct" ||
+           final_type.id()=="union")
         {
           struct_typet::componentt c;
           c.swap(*it);
@@ -190,8 +190,8 @@ void c_typecheck_baset::typecheck_type(typet &type)
 
           // copy child's records
           const typet &final_type=follow(c.type());
-          if(!final_type.is_struct() &&
-             !final_type.is_union())
+          if(final_type.id()!="struct" &&
+             final_type.id()!="union")
           {
             err_location(type);
             str << "expected struct or union as anonymous member, but got `"
@@ -220,7 +220,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
         it++;
     }
   }
-  else if(type.is_c_enum())
+  else if(type.id()=="c_enum")
   {
   }
   else if(type.id()=="c_bitfield")
@@ -245,9 +245,9 @@ void c_typecheck_baset::typecheck_type(typet &type)
 
     const typet &base_type=follow(type.subtype());
 
-    if(!base_type.is_signedbv() &&
-       !base_type.is_unsignedbv() &&
-       !base_type.is_c_enum())
+    if(base_type.id()!="signedbv" &&
+       base_type.id()!="unsignedbv" &&
+       base_type.id()!="c_enum")
     {
       err_location(type);
       str << "Bit-field with non-integer type: "
@@ -289,7 +289,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       type.swap(t);
     }
   }
-  else if(type.is_symbol())
+  else if(type.id()=="symbol")
   {
     // adjust identifier, if needed
     replace_symbol(type);
@@ -333,7 +333,7 @@ Function: c_typecheck_baset::adjust_function_argument
 void c_typecheck_baset::adjust_function_argument(typet &type) const
 {
   if(type.is_array() ||
-     type.is_incomplete_array())
+     type.id()=="incomplete_array")
   {
     type.id("pointer");
     type.remove("size");

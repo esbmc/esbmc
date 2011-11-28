@@ -152,7 +152,7 @@ void c_typecheck_baset::do_initializer(
   typet &type,
   bool force_constant)
 {
-  if(type.is_symbol())
+  if(type.id()=="symbol")
   {     
     const irep_idt &identifier=type.identifier();
     symbolst::iterator sit=context.symbols.find(identifier);
@@ -169,7 +169,7 @@ void c_typecheck_baset::do_initializer(
   
   value=do_initializer_rec(value, type, force_constant);
     
-  if(type.is_incomplete_array())
+  if(type.id()=="incomplete_array")
   {
     assert(value.type().is_array());
     type=value.type();
@@ -195,7 +195,7 @@ exprt c_typecheck_baset::do_initializer_rec(
 {
   const typet &full_type=follow(type);
 
-  if(full_type.is_incomplete_struct())
+  if(full_type.id()=="incomplete_struct")
   {
     err_location(value);
     str << "type `"
@@ -205,7 +205,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   
   if(value.id()=="designated_list")
   {
-    if(!full_type.is_struct())
+    if(full_type.id()!="struct")
     {
       err_location(value);
       str << "designated initializers cannot initialize `"
@@ -216,22 +216,22 @@ exprt c_typecheck_baset::do_initializer_rec(
     return do_designated_initializer(value, to_struct_type(full_type), force_constant);
   }
   
-  if(full_type.is_incomplete_array() ||
+  if(full_type.id()=="incomplete_array" ||
      full_type.is_array() ||
-     full_type.is_struct() ||
-     full_type.is_union())
+     full_type.id()=="struct" ||
+     full_type.id()=="union")
   {
-    if(value.is_constant() &&
-       follow(value.type()).is_incomplete_array())
+    if(value.id()=="constant" &&
+       follow(value.type()).id()=="incomplete_array")
     {
       init_statet state(value);
       return do_initializer_rec(state, type, force_constant, false);
     }
-    else if(value.is_string_constant())
+    else if(value.id()=="string-constant")
     {
       // we only do this for arrays, not for structs
       if(full_type.is_array() ||
-         full_type.is_incomplete_array())
+         full_type.id()=="incomplete_array")
       {
         exprt tmp;
         string2array(value, tmp);
@@ -285,8 +285,8 @@ exprt c_typecheck_baset::do_initializer_rec(
   // we may go down one level, but we don't have to
   if(go_down &&
      state.has_next() &&
-     state->type().is_incomplete_array() &&
-     state->is_constant())
+     state->type().id()=="incomplete_array" &&
+     state->id()=="constant")
   {
     init_statet tmp_state(*state);
     state++;
@@ -298,11 +298,11 @@ exprt c_typecheck_baset::do_initializer_rec(
 
   if(full_type.is_array())
     return do_initializer_array(state, to_array_type(full_type), force_constant);
-  else if(full_type.is_incomplete_array())
+  else if(full_type.id()=="incomplete_array")
     return do_initializer_incomplete_array(state, full_type, force_constant);
-  else if(full_type.is_struct())
+  else if(full_type.id()=="struct")
     return do_initializer_struct(state, to_struct_type(full_type), force_constant);
-  else if(full_type.is_union())
+  else if(full_type.id()=="union")
     return do_initializer_union(state, to_union_type(full_type), force_constant);
   else
   {
@@ -572,8 +572,8 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
     {
       const typet &final_type=follow(symbol.type);
       
-      if(!final_type.is_incomplete_struct() &&
-         !final_type.is_incomplete_array())
+      if(final_type.id()!="incomplete_struct" &&
+         final_type.id()!="incomplete_array")
       {
         // zero initializer
         if(zero_initializer(symbol.value, symbol.type))
@@ -598,8 +598,8 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
   {
     const typet &final_type=follow(symbol.type);
     
-    if(final_type.is_incomplete_c_enum() ||
-       final_type.is_c_enum())
+    if(final_type.id()=="incomplete_c_enum" ||
+       final_type.id()=="c_enum")
     {
       if(symbol.is_macro)
       {

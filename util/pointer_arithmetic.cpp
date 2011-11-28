@@ -48,7 +48,7 @@ void pointer_arithmetict::read(const exprt &src)
   {
     forall_operands(it, src)
     {
-      if(it->type().is_pointer())
+      if(it->type().id()=="pointer")
         read(*it);
       else
         add_to_offset(*it);
@@ -65,7 +65,7 @@ void pointer_arithmetict::read(const exprt &src)
   else if(src.is_address_of())
   {
     assert(src.operands().size()==1);
-    if(src.op0().is_index())
+    if(src.op0().id()=="index")
     {
       const index_exprt &index_expr=
         to_index_expr(src.op0());

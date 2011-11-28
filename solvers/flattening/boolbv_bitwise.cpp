@@ -26,7 +26,7 @@ void boolbvt::convert_bitwise(const exprt &expr, bvt &bv)
   if(boolbv_get_width(expr.type(), width))
     return conversion_failed(expr, bv);
 
-  if(expr.is_bitnot())
+  if(expr.id()=="bitnot")
   {
     if(expr.operands().size()!=1)
       throw "bitnot takes one operand";
@@ -46,13 +46,13 @@ void boolbvt::convert_bitwise(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.is_bitand() || expr.is_bitor() ||
-          expr.is_bitxor())
+  else if(expr.id()=="bitand" || expr.id()=="bitor" ||
+          expr.id()=="bitxor")
   {
     bv.resize(width);
 
     for(unsigned i=0; i<width; i++)
-      bv[i]=const_literal(expr.is_bitand());
+      bv[i]=const_literal(expr.id()=="bitand");
     
     forall_operands(it, expr)
     {
@@ -65,11 +65,11 @@ void boolbvt::convert_bitwise(const exprt &expr, bvt &bv)
 
       for(unsigned i=0; i<width; i++)
       {
-        if(expr.is_bitand())
+        if(expr.id()=="bitand")
           bv[i]=prop.land(bv[i], op[i]);
-        else if(expr.is_bitor())
+        else if(expr.id()=="bitor")
           bv[i]=prop.lor(bv[i], op[i]);
-        else if(expr.is_bitxor())
+        else if(expr.id()=="bitxor")
           bv[i]=prop.lxor(bv[i], op[i]);
         else
           throw "unexpected operand";

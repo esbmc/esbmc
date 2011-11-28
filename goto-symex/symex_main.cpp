@@ -309,14 +309,21 @@ void goto_symext::symex_step(
         const goto_functionst &goto_functions,
         reachability_treet & art) {
 
-  static bool is_main=false;
-
   execution_statet &ex_state = art.get_cur_state();
   statet &state = ex_state.get_active_state();
 
   assert(!state.call_stack.empty());
 
   const goto_programt::instructiont &instruction = *state.source.pc;
+
+  if (config.options.get_option("break-at") != "") {
+    int insn_num = strtol(config.options.get_option("break-at").c_str(), NULL, 10);
+    if (instruction.location_number == insn_num) {
+      // If you're developing ESBMC on a machine that isn't x86, I'll send you
+      // cookies.
+      __asm__("int $3");
+    }
+  }
 
   merge_gotos(state, ex_state, ex_state.node_id);
 
@@ -351,7 +358,6 @@ void goto_symext::symex_step(
                 ex_state.reexecute_instruction = false;
                 art.generate_states_base(exprt());
                 art.set_go_next_state();
-                is_main=false;
             }
             else
             {
@@ -370,7 +376,7 @@ void goto_symext::symex_step(
             replace_nondet(tmp, ex_state);
             dereference(tmp, state, false, ex_state.node_id);
 
-            if(!tmp.is_nil() && !options.get_bool_option("deadlock-check") /*&& is_main*/)
+            if(!tmp.is_nil() && !options.get_bool_option("deadlock-check"))
             {
               if(ex_state._threads_state.size() > 1)
                 if (art.generate_states_before_read(tmp))
@@ -455,20 +461,8 @@ void goto_symext::symex_step(
 
                 if(ex_state._threads_state.size() > 1)
                 {
-                  if (!is_main)
-                  {
-                    if (art.generate_states_before_assign(deref_code, ex_state))
-                      return;
-                  }
-                  else
-                  {
-                	if (is_main && (options.get_bool_option("control-flow-test")) &&
-              			  (ex_state.get_expr_write_globals(ns,deref_code.op0())>0))
-                	{
-                  	    ex_state.reexecute_instruction = false;
-                  	    art.generate_states();
-                    }
-                  }
+                  if (art.generate_states_before_assign(deref_code, ex_state))
+                    return;
                 }
             }
             else
@@ -489,9 +483,6 @@ void goto_symext::symex_step(
 
                 dereference(deref_code.function(), state, false, ex_state.node_id);
 
-                if(deref_code.function().identifier() == "c::main")
-                  is_main=true;
-
                 if(deref_code.function().identifier() == "c::__ESBMC_yield")
                 {
                    state.source.pc++;
@@ -509,7 +500,7 @@ void goto_symext::symex_step(
 
                   // Switch to other thread.
                   exprt &num = deref_code.arguments()[0];
-                  if (!num.is_constant())
+                  if (num.id() != "constant")
                     throw "Can't switch to non-constant thread id no";
 
                   unsigned int tid = binary2integer(num.value().as_string(), false).to_long();

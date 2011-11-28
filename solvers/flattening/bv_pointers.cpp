@@ -176,17 +176,17 @@ void bv_pointerst::convert_address_of_rec(
   const exprt &expr,
   bvt &bv)
 {
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
   {
     add_addr(expr, bv);
     return;
   }
-  else if(expr.is_null_object())
+  else if(expr.id()=="NULL-object")
   {
     encode(pointer_logic.get_null_object(), bv);
     return;
   }
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     if(expr.operands().size()!=2)
       throw "index takes two operands";
@@ -196,7 +196,7 @@ void bv_pointerst::convert_address_of_rec(
     
     // recursive call
 
-    if(array.type().is_pointer())
+    if(array.type().id()=="pointer")
       convert_pointer_type(array, bv);
     else
       convert_address_of_rec(array, bv);
@@ -204,7 +204,7 @@ void bv_pointerst::convert_address_of_rec(
     // get size
     mp_integer size;
     
-    if(array.type().is_string_constant())
+    if(array.type().id()=="string-constant")
       size=1;
     else
       size=pointer_offset_size(array.type().subtype());
@@ -213,7 +213,7 @@ void bv_pointerst::convert_address_of_rec(
     
     return increase_offset(bv, size, index);
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     if(expr.operands().size()!=1)
       throw "member takes one operand";
@@ -250,9 +250,9 @@ void bv_pointerst::convert_address_of_rec(
     
     return;
   }
-  else if(expr.is_constant() ||
-          expr.is_string_constant() ||
-          expr.is_zero_string())
+  else if(expr.id()=="constant" ||
+          expr.id()=="string-constant" ||
+          expr.id()=="zero_string")
   { // constant
     add_addr(expr, bv);
     return;
@@ -280,7 +280,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
   bv.resize(bits);
 
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
   {
     const irep_idt &identifier=expr.identifier();
     const typet &type=expr.type();
@@ -290,21 +290,21 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.is_nondet_symbol())
+  else if(expr.id()=="nondet_symbol")
   {
     for(unsigned i=0; i<bits; i++)
       bv[i]=prop.new_variable();
 
     return;
   }
-  else if(expr.is_typecast())
+  else if(expr.id()=="typecast")
   {
     if(expr.operands().size()!=1)
       throw "typecast takes one operand";
 
     const exprt &op=expr.op0();
 
-    if(op.type().is_pointer())
+    if(op.type().id()=="pointer")
       return convert_pointer_type(op, bv);
     else
     {
@@ -318,28 +318,28 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
       return;
     }
   }
-  else if(expr.is_if())
+  else if(expr.id()=="if")
   {
     return SUB::convert_if(expr, bv);
   }
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     return SUB::convert_index(to_index_expr(expr), bv);
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     return SUB::convert_member(expr, bv);
   }
   else if(expr.is_address_of() ||
-          expr.is_implicit_address_of() ||
-          expr.is_reference_to())
+          expr.id()=="implicit_address_of" ||
+          expr.id()=="reference_to")
   {
     if(expr.operands().size()!=1)
       throw expr.id_string()+" takes one operand";
       
     return convert_address_of_rec(expr.op0(), bv);
   }
-  else if(expr.is_constant())
+  else if(expr.id()=="constant")
   {
     if(expr.value().as_string()!="NULL")
       throw "found non-NULL pointer constant";
@@ -358,7 +358,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
     forall_operands(it, expr)
     {
-      if(it->type().is_pointer())
+      if(it->type().id()=="pointer")
       {
         if(found)
           throw "found two pointers in sum";
@@ -383,14 +383,14 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
     {
       bvt op;
 
-      if(it->type().is_pointer()) continue;
+      if(it->type().id()=="pointer") continue;
 
-      if(!it->type().is_unsignedbv() &&
-         !it->type().is_signedbv())
+      if(it->type().id()!="unsignedbv" &&
+         it->type().id()!="signedbv")
         return conversion_failed(expr, bv);
 
       bv_utilst::representationt rep=
-        it->type().is_signedbv()?bv_utilst::SIGNED:
+        it->type().id()=="signedbv"?bv_utilst::SIGNED:
                                     bv_utilst::UNSIGNED;
 
       convert_bv(*it, op);
@@ -412,7 +412,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
     if(expr.operands().size()!=2)
       throw "operator "+expr.id_string()+" takes two operands";
 
-    if(!expr.op0().type().is_pointer())
+    if(expr.op0().type().id()!="pointer")
       throw "found no pointer in pointer type in difference";
 
     bvt bv0, bv1;
@@ -426,15 +426,15 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
     for(unsigned i=0; i<offset_bits; i++)
       sum[i]=bv0[i];
 
-    if(!expr.op1().type().is_unsignedbv() &&
-       !expr.op1().type().is_signedbv())
+    if(expr.op1().type().id()!="unsignedbv" &&
+       expr.op1().type().id()!="signedbv")
       return conversion_failed(expr, bv);
 
     if(bv1.size()>offset_bits || bv1.size()==0)
       throw "unexpected pointer arithmetic operand width";
 
     bv_utilst::representationt rep=
-      expr.op1().type().is_signedbv()?bv_utilst::SIGNED:
+      expr.op1().type().id()=="signedbv"?bv_utilst::SIGNED:
                                          bv_utilst::UNSIGNED;
  
     bv1=bv_utils.extension(bv1, offset_bits, rep);
@@ -468,8 +468,8 @@ void bv_pointerst::convert_bitvector(const exprt &expr, bvt &bv)
     return convert_pointer_type(expr, bv);
 
   if(expr.id()=="-" && expr.operands().size()==2 &&
-     expr.op0().type().is_pointer() &&
-     expr.op1().type().is_pointer())
+     expr.op0().type().id()=="pointer" &&
+     expr.op1().type().id()=="pointer")
   {
     bvt op0, op1;
 
@@ -531,9 +531,9 @@ void bv_pointerst::convert_bitvector(const exprt &expr, bvt &bv)
 
     return;
   }
-  else if(expr.is_typecast() &&
+  else if(expr.id()=="typecast" &&
           expr.operands().size()==1 &&
-          expr.op0().type().is_pointer())
+          expr.op0().type().id()=="pointer")
   {
     bvt op0;
     convert_pointer_type(expr.op0(), op0);
@@ -690,7 +690,7 @@ void bv_pointerst::increase_offset(
   convert_bv(index, bv_index);
 
   bv_utilst::representationt rep=
-    index.type().is_signedbv()?bv_utilst::SIGNED:
+    index.type().id()=="signedbv"?bv_utilst::SIGNED:
                                   bv_utilst::UNSIGNED;
 
   bv_index=bv_utils.extension(bv_index, offset_bits, rep);
@@ -785,7 +785,7 @@ void bv_pointerst::do_is_dynamic_object(
     
     bool is_dynamic=
       expr.type().dynamic() ||
-      (expr.is_symbol() &&
+      (expr.id()=="symbol" &&
        has_prefix(expr.identifier().as_string(), "symex_dynamic::"));
     
     // only compare object part

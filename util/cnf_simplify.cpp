@@ -50,8 +50,8 @@ void cnf_join_binary(exprt &expr)
   Forall_operands(it, expr)
     cnf_join_binary(*it);
 
-  if(expr.is_and() || expr.is_or() || expr.id()=="xor" ||
-     expr.is_bitand() || expr.is_bitor() || expr.is_bitxor())
+  if(expr.is_and() || expr.id()=="or" || expr.id()=="xor" ||
+     expr.id()=="bitand" || expr.id()=="bitor" || expr.id()=="bitxor")
   {
     exprt tmp;
 
@@ -131,8 +131,8 @@ Function: cnf_join_binary
 
 void cnf_join_binary(exprt &expr)
 {
-  if(expr.is_and() || expr.is_or() || expr.id()=="xor" ||
-     expr.is_bitand() || expr.is_bitor() || expr.is_bitxor())
+  if(expr.is_and() || expr.id()=="or" || expr.id()=="xor" ||
+     expr.id()=="bitand" || expr.id()=="bitor" || expr.id()=="bitxor")
   {
     exprt::operandst list;
 
@@ -162,7 +162,7 @@ Function: cnf_propagate_not
 
 void cnf_propagate_not(exprt &expr)
 {
-  if(expr.is_not())
+  if(expr.id()=="not")
   {
     if(expr.operands().size()==1)
     {
@@ -210,7 +210,7 @@ Function: propagate_not
 
 void propagate_not(exprt &expr)
 {
-  if(expr.is_and() || expr.is_or())
+  if(expr.is_and() || expr.id()=="or")
   {
     if(expr.is_and())
       expr.id("or");
@@ -224,7 +224,7 @@ void propagate_not(exprt &expr)
     expr.id("or");
   else if(expr.id()=="nand")
     expr.id("and");
-  else if(expr.is_not())
+  else if(expr.id()=="not")
   {
     assert(expr.operands().size()==1);
     exprt tmp;
@@ -233,7 +233,7 @@ void propagate_not(exprt &expr)
   }
   else if(expr.id()=="=")
     expr.id("notequal");
-  else if(expr.is_notequal())
+  else if(expr.id()=="notequal")
     expr.id("=");
   else
   {

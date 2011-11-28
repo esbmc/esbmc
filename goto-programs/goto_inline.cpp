@@ -100,19 +100,19 @@ void goto_inlinet::parameter_assignments(
         const typet &f_acttype = ns.follow(actual.type());
         
         // we are willing to do some conversion
-        if((f_argtype.is_pointer() &&
-            f_acttype.is_pointer()) ||
+        if((f_argtype.id()=="pointer" &&
+            f_acttype.id()=="pointer") ||
            (f_argtype.is_array() &&
-            f_acttype.is_pointer() &&
+            f_acttype.id()=="pointer" &&
             f_argtype.subtype()==f_acttype.subtype()))
         {
           actual.make_typecast(arg_type);
         }
-        else if((f_argtype.is_signedbv() ||
-            f_argtype.is_unsignedbv() ||
+        else if((f_argtype.id()=="signedbv" ||
+            f_argtype.id()=="unsignedbv" ||
             f_argtype.is_bool()) &&
-           (f_acttype.is_signedbv() ||
-            f_acttype.is_unsignedbv() ||
+           (f_acttype.id()=="signedbv" ||
+            f_acttype.id()=="unsignedbv" ||
             f_acttype.is_bool()))  
         {
           actual.make_typecast(arg_type);
@@ -254,7 +254,7 @@ void goto_inlinet::expand_function_call(
   bool full)
 {
   // look it up
-  if(!function.is_symbol())
+  if(function.id()!="symbol")
   {
     err_location(function);
     throw "function_call expects symbol as function operand, "
@@ -491,7 +491,7 @@ bool goto_inlinet::inline_instruction(
   {
     const code_function_callt &call=to_code_function_call(it->code);
 
-    if(call.function().is_symbol())
+    if(call.function().id()=="symbol")
     {
       expand_function_call(
         dest, it, call.lhs(), call.function(), call.arguments(),

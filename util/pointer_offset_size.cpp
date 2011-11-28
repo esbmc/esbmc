@@ -43,8 +43,8 @@ mp_integer pointer_offset_size(const typet &type)
     
     return sub*i;
   }
-  else if(type.is_struct() ||
-          type.is_union())
+  else if(type.id()=="struct" ||
+          type.id()=="union")
   {
     const irept::subt &components=type.components().get_sub();
     
@@ -79,9 +79,9 @@ mp_integer compute_pointer_offset(
   const namespacet &ns,
   const exprt &expr)
 {
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
     return 0;
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     assert(expr.operands().size()==2);
     assert(expr.op0().type().is_array());
@@ -94,13 +94,13 @@ mp_integer compute_pointer_offset(
     
     return 0; // TODO
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
     const typet &type=ns.follow(expr.op0().type());
     
-    assert(type.is_struct() ||
-           type.is_union());
+    assert(type.id()=="struct" ||
+           type.id()=="union");
 
     const irep_idt &component_name=expr.component_name();
     const struct_union_typet::componentst &components=
@@ -120,7 +120,7 @@ mp_integer compute_pointer_offset(
     
     assert(false);
   }
-  else if(expr.is_string_constant())
+  else if(expr.id()=="string-constant")
   {
     return 0;
   }

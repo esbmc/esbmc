@@ -46,7 +46,7 @@ bool bv_minimizing_dect::minimize(const minimization_listt &symbols)
     status("Minimizing... ");
 
     // FIXME: be more gener[ous|al] here!
-    assert(symbol.type().is_unsignedbv());
+    assert(symbol.type().id()=="unsignedbv");
 
     boolbv_get_width(symbol.type(), width);
     

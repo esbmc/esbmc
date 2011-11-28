@@ -65,11 +65,11 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
     width=1;
     return false;
   }
-  else if(type.is_signedbv() ||
-          type.is_unsignedbv() ||
-          type.is_floatbv() ||
-          type.is_fixedbv() ||
-          type.is_bv())
+  else if(type.id()=="signedbv" ||
+          type.id()=="unsignedbv" ||
+          type.id()=="floatbv" ||
+          type.id()=="fixedbv" ||
+          type.id()=="bv")
   {
     width=atoi(type.width().c_str());
     assert(width!=0);
@@ -118,7 +118,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 
     return false;
   }
-  else if(type.is_struct())
+  else if(type.id()=="struct")
   {
     const irept &components=type.components();
 
@@ -142,7 +142,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
     width=0;
     return false;
   }
-  else if(type.is_union())
+  else if(type.id()=="union")
   {
     const irept &components=type.components();
 
@@ -176,15 +176,15 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 
     return false;
   }
-  else if(type.is_c_enum() ||
-          type.is_incomplete_c_enum())
+  else if(type.id()=="c_enum" ||
+          type.id()=="incomplete_c_enum")
   {
     width=atoi(type.width().c_str());
     assert(width!=0);
     return false;
   }
-  else if(type.is_pointer() ||
-          type.is_reference())
+  else if(type.id()=="pointer" ||
+          type.id()=="reference")
   {
     width=config.ansi_c.pointer_width+BV_ADDR_BITS;
     return false;

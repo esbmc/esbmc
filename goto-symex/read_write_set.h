@@ -23,12 +23,12 @@ public:
     std::set<irep_idt> read_set;
     std::set<irep_idt> write_set;
 
-    bool empty()
+    bool empty() const
     {
         return read_set.empty() && write_set.empty();
     }
 
-    bool has_write_intersect(const std::set<irep_idt> & _set)
+    bool has_write_intersect(const std::set<irep_idt> & _set) const
     {
         if(write_set.empty() || _set.empty())
           return false;
@@ -44,7 +44,7 @@ public:
         return false;
     }
 
-    bool has_read_intersect(const std::set<irep_idt> & _set)
+    bool has_read_intersect(const std::set<irep_idt> & _set) const
     {
     	//std::cout << "read_set.empty(): " << read_set.empty() << std::endl;
     	//std::cout << "_set.empty(): " << _set.empty() << std::endl;

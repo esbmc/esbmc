@@ -28,7 +28,7 @@ bool goto_program_dereferencet::has_failed_symbol(
   const exprt &expr,
   const symbolt *&symbol)
 {
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
   {
     if(expr.invalid_object())
       return false;
@@ -139,7 +139,7 @@ void goto_program_dereferencet::dereference_rec(
   if(!dereference.has_dereference(expr))
     return;
 
-  if(expr.is_and() || expr.is_or())
+  if(expr.is_and() || expr.id()=="or")
   {
     if(!expr.is_boolean())
       throw expr.id_string()+" must be Boolean, but got "+
@@ -158,7 +158,7 @@ void goto_program_dereferencet::dereference_rec(
       if(dereference.has_dereference(op))
         dereference_rec(op, guard, dereferencet::READ);
 
-      if(expr.is_or())
+      if(expr.id()=="or")
       {
         exprt tmp(op);
         tmp.make_not();
@@ -172,7 +172,7 @@ void goto_program_dereferencet::dereference_rec(
 
     return;
   }
-  else if(expr.is_if())
+  else if(expr.id()=="if")
   {
     if(expr.operands().size()!=3)
       throw "if takes three arguments";
@@ -212,15 +212,15 @@ void goto_program_dereferencet::dereference_rec(
   }
 
   if(expr.is_address_of() ||
-     expr.is_reference_to())
+     expr.id()=="reference_to")
   {
     // turn &*p to p
     // this has *no* side effect!
 
     assert(expr.operands().size()==1);
 
-    if(expr.op0().is_dereference() ||
-       expr.op0().is_implicit_dereference())
+    if(expr.op0().id()=="dereference" ||
+       expr.op0().id()=="implicit_dereference")
     {
       assert(expr.op0().operands().size()==1);
 
@@ -237,8 +237,8 @@ void goto_program_dereferencet::dereference_rec(
   Forall_operands(it, expr)
     dereference_rec(*it, guard, mode);
 
-  if(expr.is_dereference() ||
-     expr.is_implicit_dereference())
+  if(expr.id()=="dereference" ||
+     expr.id()=="implicit_dereference")
   {
     if(expr.operands().size()!=1)
       throw "dereference expects one operand";
@@ -250,12 +250,12 @@ void goto_program_dereferencet::dereference_rec(
     dereference.dereference(tmp, guard, mode);
     expr.swap(tmp);
   }
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     if(expr.operands().size()!=2)
       throw "index expects two operands";
 
-    if(expr.op0().type().is_pointer())
+    if(expr.op0().type().id()=="pointer")
     {
       dereference_location=expr.find_location();
 

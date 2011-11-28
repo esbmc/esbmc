@@ -103,7 +103,7 @@ Function: arrayst::collect_arrays
 
 void arrayst::collect_arrays(const exprt &a)
 {
-  if(a.is_with())
+  if(a.id()=="with")
   {
     if(a.operands().size()!=3)
       throw "with expected to have three operands";
@@ -125,7 +125,7 @@ void arrayst::collect_arrays(const exprt &a)
     index_expr.index()=a.op1();
     record_array_index(index_expr);
   }
-  else if(a.is_if())
+  else if(a.id()=="if")
   {
     if(a.operands().size()!=3)
       throw "if expected to have three operands";
@@ -149,16 +149,16 @@ void arrayst::collect_arrays(const exprt &a)
     collect_arrays(a.op1());
     collect_arrays(a.op2());
   }
-  else if(a.is_symbol())
+  else if(a.id()=="symbol")
   {
   }
-  else if(a.is_nondet_symbol())
+  else if(a.id()=="nondet_symbol")
   {
   }
-  else if(a.is_constant() || a.is_array())
+  else if(a.id()=="constant" || a.is_array())
   {
   }
-  else if(a.is_array_of())
+  else if(a.id()=="array_of")
   {
   }
   else
@@ -366,15 +366,15 @@ void arrayst::add_array_constraints(
   const index_sett &index_set,
   const exprt &expr)
 {
-  if(expr.is_with())
+  if(expr.id()=="with")
     return add_array_constraints_with(index_set, to_with_expr(expr));
-  else if(expr.is_if())
+  else if(expr.id()=="if")
     return add_array_constraints_if(index_set, to_if_expr(expr));
-  else if(expr.is_array_of())
+  else if(expr.id()=="array_of")
     return add_array_constraints_array_of(index_set, to_array_of_expr(expr));
-  else if(expr.is_symbol() ||
-          expr.is_nondet_symbol() ||
-          expr.is_constant() ||
+  else if(expr.id()=="symbol" ||
+          expr.id()=="nondet_symbol" ||
+          expr.id()=="constant" ||
           expr.is_array())
   {
   }

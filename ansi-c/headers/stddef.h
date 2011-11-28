@@ -7,7 +7,7 @@ typedef long int ptrdiff_t;
 
 typedef short wchar_t;
 
-typedef unsigned long int size_t;
+typedef unsigned int size_t;
 
 #define NULL ((void *)0)
 

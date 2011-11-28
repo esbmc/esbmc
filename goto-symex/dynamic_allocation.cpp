@@ -68,7 +68,7 @@ void replace_dynamic_allocation(
 
     expr.swap(index_expr);
   }
-  else if(expr.is_dynamic_size())
+  else if(expr.id()=="dynamic_size")
   {
     assert(expr.operands().size()==1);
     assert(expr.op0().type().id()==typet::t_pointer);

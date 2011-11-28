@@ -181,7 +181,7 @@ void basic_symext::symex_assign(statet &state, execution_statet &ex_state, const
   replace_nondet(lhs, ex_state);
   replace_nondet(rhs, ex_state);
 
-  if(rhs.is_sideeffect())
+  if(rhs.id()=="sideeffect")
   {
     const side_effect_exprt &side_effect_expr=to_side_effect_expr(rhs);
     const irep_idt &statement=side_effect_expr.get_statement();
@@ -263,14 +263,14 @@ void basic_symext::symex_assign_rec(
     symex_assign_if(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()==exprt::typecast)
     symex_assign_typecast(state, ex_state, lhs, rhs, guard,node_id);
-  else if(lhs.is_string_constant() ||
-          lhs.is_null_object() ||
-          lhs.is_zero_string())
+  else if(lhs.id()=="string-constant" ||
+          lhs.id()=="NULL-object" ||
+          lhs.id()=="zero_string")
   {
     // ignore
   }
-  else if(lhs.is_byte_extract_little_endian() ||
-          lhs.is_byte_extract_big_endian())
+  else if(lhs.id()=="byte_extract_little_endian" ||
+          lhs.id()=="byte_extract_big_endian")
     symex_assign_byte_extract(state, ex_state, lhs, rhs, guard,node_id);
   else
     throw "assignment to "+lhs.id_string()+" not handled";
@@ -451,7 +451,7 @@ void basic_symext::symex_assign_member(
   {
     assert(lhs_struct.operands().size()==1);
 
-    if(lhs_struct.op0().is_null_object())
+    if(lhs_struct.op0().id()=="NULL-object")
     {
       // ignore
     }
@@ -553,9 +553,9 @@ void basic_symext::symex_assign_byte_extract(
 
   exprt new_rhs;
 
-  if(lhs.is_byte_extract_little_endian())
+  if(lhs.id()=="byte_extract_little_endian")
     new_rhs.id("byte_update_little_endian");
-  else if(lhs.is_byte_extract_big_endian())
+  else if(lhs.id()=="byte_extract_big_endian")
     new_rhs.id("byte_update_big_endian");
   else
     assert(false);
@@ -599,7 +599,7 @@ Function: basic_symext::replace_nondet
 
 void basic_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
 {
-  if(expr.is_sideeffect() && expr.statement()=="nondet")
+  if(expr.id()=="sideeffect" && expr.statement()=="nondet")
   {
     exprt new_expr("nondet_symbol", expr.type());
     new_expr.identifier("symex::nondet"+i2string(ex_state.nondet_count++));

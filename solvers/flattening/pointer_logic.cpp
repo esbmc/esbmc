@@ -32,7 +32,7 @@ bool pointer_logict::is_dynamic_object(const exprt &expr) const
 {
   if(expr.type().dynamic()) return true;
   
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
     if(has_prefix(id2string(to_symbol_expr(expr).get_identifier()),
                   "symex_dynamic::"))
       return true;
@@ -81,12 +81,12 @@ unsigned pointer_logict::add_object(const exprt &expr)
 {
   // remove any index/member
   
-  if(expr.is_index())
+  if(expr.id()=="index")
   {
     assert(expr.operands().size()==2);
     return add_object(expr.op0());
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
     return add_object(expr.op0());
@@ -157,9 +157,9 @@ exprt pointer_logict::pointer_expr(
   
   exprt result;
   
-  if(type.is_pointer())
+  if(type.id()=="pointer")
     result=exprt("address_of", type);
-  else if(type.is_reference())
+  else if(type.id()=="reference")
     result=exprt("reference_to", type);
   else
     assert(0);
@@ -202,8 +202,8 @@ exprt pointer_logict::object_rec(
     
     return object_rec(rest, pointer_type, tmp);
   }
-  else if(src.type().is_struct() ||
-          src.type().is_union())
+  else if(src.type().id()=="struct" ||
+          src.type().id()=="union")
   {
     assert(offset>=0);
   

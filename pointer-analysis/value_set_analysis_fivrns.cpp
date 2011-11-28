@@ -150,8 +150,8 @@ void value_set_analysis_fivrnst::get_entries_rec(
 {
   const typet &t=ns.follow(type);
 
-  if(t.is_struct() ||
-     t.is_union())
+  if(t.id()=="struct" ||
+     t.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(t);
     
@@ -258,17 +258,17 @@ Function: value_set_analysis_fivrnst::check_type
 
 bool value_set_analysis_fivrnst::check_type(const typet &type)
 {
-    if(type.is_pointer())
+    if(type.id()=="pointer")
     {
       switch(track_options) {
         case TRACK_ALL_POINTERS:
           { return true; break; }
         case TRACK_FUNCTION_POINTERS:
         {
-          if(type.is_pointer())
+          if(type.id()=="pointer")
           {
             const typet *t = &type;
-            while (t->is_pointer()) t = &(t->subtype());
+            while (t->id()=="pointer") t = &(t->subtype());
                     
             return (t->is_code());
           }
@@ -279,8 +279,8 @@ bool value_set_analysis_fivrnst::check_type(const typet &type)
           break;
       }
     }
-    else if(type.is_struct() ||
-            type.is_union())
+    else if(type.id()=="struct" ||
+            type.id()=="union")
     {
       const struct_typet &struct_type=to_struct_type(type);
       
@@ -297,7 +297,7 @@ bool value_set_analysis_fivrnst::check_type(const typet &type)
     }
     else if(type.is_array())
       return check_type(type.subtype());
-    else if(type.is_symbol())
+    else if(type.id()=="symbol")
       return check_type(ns.follow(type));
   
   return false;      

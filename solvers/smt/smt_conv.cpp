@@ -137,9 +137,9 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
 {
   assert(false && "Construct not supported yet");
 
-  if(expr.is_symbol() ||
-     expr.is_constant() ||
-     expr.is_string_constant())
+  if(expr.id()=="symbol" ||
+     expr.id()=="constant" ||
+     expr.id()=="string-constant")
   {
     smt_prop.out
       << "(# object:="
@@ -147,7 +147,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
       << ", offset:="
       << bin_zero(config.ansi_c.pointer_width) << " #)";
   }
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     if(expr.operands().size()!=2)
       throw "index takes two operands";
@@ -157,7 +157,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
 
     if(index.is_zero())
     {
-      if(array.type().is_pointer())
+      if(array.type().id()=="pointer")
         convert_smt_expr(array);
       else if(array.type().is_array())
         convert_address_of_rec(array);
@@ -170,7 +170,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
       smt_prop.out << smt_pointer_type();
       smt_prop.out << " = ";
       
-      if(array.type().is_pointer())
+      if(array.type().id()=="pointer")
         convert_smt_expr(array);
       else if(array.type().is_array())
         convert_address_of_rec(array);
@@ -184,7 +184,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
       smt_prop.out << "))";
     }
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     if(expr.operands().size()!=1)
       throw "member takes one operand";
@@ -363,15 +363,15 @@ Function: smt_convt::convert_smt_expr
 
 void smt_convt::convert_smt_expr(const exprt &expr)
 {
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
   {
     convert_identifier(expr.identifier().as_string());
   }
-  else if(expr.is_nondet_symbol())
+  else if(expr.id()=="nondet_symbol")
   {
     convert_identifier("nondet"+expr.identifier().as_string());
   }
-  else if(expr.is_typecast())
+  else if(expr.id()=="typecast")
   {
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==1);
@@ -379,9 +379,9 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     
     if(expr.type().is_bool())
     {
-      if(op.type().is_signedbv() ||
-         op.type().is_unsignedbv() ||
-         op.type().is_pointer())
+      if(op.type().id()=="signedbv" ||
+         op.type().id()=="unsignedbv" ||
+         op.type().id()=="pointer")
       {
         convert_smt_expr(op);
         smt_prop.out << "/=";
@@ -392,12 +392,12 @@ void smt_convt::convert_smt_expr(const exprt &expr)
         throw "TODO typecast1 "+op.type().id_string()+" -> bool";
       }
     }
-    else if(expr.type().is_signedbv() ||
-            expr.type().is_unsignedbv())
+    else if(expr.type().id()=="signedbv" ||
+            expr.type().id()=="unsignedbv")
     {
       unsigned to_width=atoi(expr.type().width().c_str());
       
-      if(op.type().is_signedbv())
+      if(op.type().id()=="signedbv")
       {
         unsigned from_width=atoi(op.type().width().c_str());
         
@@ -416,7 +416,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
           smt_prop.out << ")[" << (to_width-1) << ":0]";
         }
       }
-      else if(op.type().is_unsignedbv())
+      else if(op.type().id()=="unsignedbv")
       {
         unsigned from_width=atoi(op.type().width().c_str());
         
@@ -470,9 +470,9 @@ void smt_convt::convert_smt_expr(const exprt &expr)
               " -> "+expr.type().id_string();
       }
     }
-    else if(expr.type().is_pointer())
+    else if(expr.type().id()=="pointer")
     {
-      if(op.type().is_pointer())
+      if(op.type().id()=="pointer")
       {
         convert_smt_expr(op);
       }
@@ -482,7 +482,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else
       throw "TODO typecast4 ? -> "+expr.type().id_string();
   }
-  else if(expr.is_struct())
+  else if(expr.id()=="struct")
   {
     assert(false && "Construct not supported yet");
     smt_prop.out << "(# ";
@@ -508,11 +508,11 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     
     smt_prop.out << " #)";
   }
-  else if(expr.is_constant())
+  else if(expr.id()=="constant")
   {
-    if(expr.type().is_unsignedbv() ||
-       expr.type().is_signedbv() ||
-       expr.type().is_bv())
+    if(expr.type().id()=="unsignedbv" ||
+       expr.type().id()=="signedbv" ||
+       expr.type().id()=="bv")
     {
       // RB: decimal conversion ... some solvers do not
       // support binary constants ...
@@ -540,7 +540,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
 
       smt_prop.out << "bv" << value << "[" << len << "]";
     }
-    else if(expr.type().is_pointer())
+    else if(expr.type().id()=="pointer")
     {
       assert( false && "Construct not supported yet" );
       const irep_idt &value=expr.value();
@@ -596,8 +596,8 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     }
   }
   else if(expr.id()=="concatenation" || 
-          expr.is_bitand() ||
-          expr.is_bitor())
+          expr.id()=="bitand" ||
+          expr.id()=="bitor")
   {
     assert( false && "Construct not supported yet" );
     smt_prop.out << "(";
@@ -608,9 +608,9 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       {
         if(expr.id()=="concatenation")
           smt_prop.out << " @ ";
-        else if(expr.is_bitand())
+        else if(expr.id()=="bitand")
           smt_prop.out << " & ";
-        else if(expr.is_bitor())
+        else if(expr.id()=="bitor")
           smt_prop.out << " | ";
       }
 
@@ -619,7 +619,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
 
     smt_prop.out << ")";
   }
-  else if(expr.is_bitxor())
+  else if(expr.id()=="bitxor")
   {
     assert( false && "Construct not supported yet" );
     assert(!expr.operands().empty());
@@ -661,7 +661,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     convert_smt_expr(expr.op1());
     smt_prop.out << ")";
   }
-  else if(expr.is_bitnot())
+  else if(expr.id()=="bitnot")
   {
     assert( false && "Construct not supported yet" );
     assert(expr.operands().size()==1);
@@ -669,12 +669,12 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     convert_smt_expr(expr.op0());
     smt_prop.out << ")";
   }
-  else if(expr.is_unary_sub())
+  else if(expr.id()=="unary-")
   {
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==1);
-    if(expr.type().is_unsignedbv() ||
-       expr.type().is_signedbv())
+    if(expr.type().id()=="unsignedbv" ||
+       expr.type().id()=="signedbv")
     {
       smt_prop.out << "BVUMINUS(";
       convert_smt_expr(expr.op0());
@@ -683,7 +683,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else
       throw "unsupported type for unary-: "+expr.type().id_string();
   }
-  else if(expr.is_if())
+  else if(expr.id()=="if")
   {
     assert(expr.operands().size()==3);
     // smt_prop.out << "(if_then_else ";
@@ -696,7 +696,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     smt_prop.out << ")";
   }
   else if(expr.is_and() ||
-          expr.is_or() ||
+          expr.id()=="or" ||
           expr.id()=="xor")
   {
     assert(false && "Construct not supported yet");
@@ -710,7 +710,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
         {
           if(expr.is_and())
             smt_prop.out << " AND ";
-          else if(expr.is_or())
+          else if(expr.id()=="or")
             smt_prop.out << " OR ";
           else if(expr.id()=="xor")
             smt_prop.out << " XOR ";
@@ -728,7 +728,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else
       assert(false);
   }
-  else if(expr.is_not())
+  else if(expr.id()=="not")
   {
     assert(expr.operands().size()==1);
     smt_prop.out << "(not ";
@@ -736,14 +736,14 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     smt_prop.out << ")";
   }
   else if(expr.id()=="=" ||
-          expr.is_notequal())
+          expr.id()=="notequal")
   {
     assert(expr.operands().size()==2);
     assert(expr.op0().type()==expr.op1().type());
 
     if(expr.op0().type().is_bool())
     {
-      if(expr.is_notequal()) 
+      if(expr.id()=="notequal") 
 	smt_prop.out << "(xor ";
       else 
 	smt_prop.out << "(iff ";
@@ -755,14 +755,14 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     }
     else
     {
-      if(expr.is_notequal()) 
+      if(expr.id()=="notequal") 
 	smt_prop.out << "(not ";
       smt_prop.out << "(= ";
       convert_smt_expr(expr.op0());
       smt_prop.out << " ";
       convert_smt_expr(expr.op1());
       smt_prop.out << ")";
-      if(expr.is_notequal()) 
+      if(expr.id()=="notequal") 
 	smt_prop.out << ")";
     }
   }
@@ -775,7 +775,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     
     const typet &op_type=expr.op0().type();
 
-    if(op_type.is_unsignedbv())
+    if(op_type.id()=="unsignedbv")
     {
       smt_prop.out << "(";
 
@@ -794,7 +794,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       convert_smt_expr(expr.op1());
       smt_prop.out << ")";
     }
-    else if(op_type.is_signedbv())
+    else if(op_type.id()=="signedbv")
     {
       smt_prop.out << "(";
 
@@ -820,8 +820,8 @@ void smt_convt::convert_smt_expr(const exprt &expr)
   {
     if(expr.operands().size()>=2)
     {
-      if(expr.type().is_unsignedbv() ||
-	 expr.type().is_signedbv())
+      if(expr.type().id()=="unsignedbv" ||
+	 expr.type().id()=="signedbv")
       {
         smt_prop.out << "(bvadd ";
 
@@ -833,19 +833,19 @@ void smt_convt::convert_smt_expr(const exprt &expr)
           
         smt_prop.out << ")";
       }
-      else if(expr.type().is_pointer())
+      else if(expr.type().id()=="pointer")
       {
         if(expr.operands().size()!=2)
           throw "pointer arithmetic with more than two operands";
         
         const exprt *p, *i;
         
-        if(expr.op0().type().is_pointer())
+        if(expr.op0().type().id()=="pointer")
         {
           p=&expr.op0();
           i=&expr.op1();
         }
-        else if(expr.op1().type().is_pointer())
+        else if(expr.op1().type().id()=="pointer")
         {
           p=&expr.op1();
           i=&expr.op0();
@@ -876,8 +876,8 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     if(expr.operands().size()==2)
     {
-      if(expr.type().is_unsignedbv() ||
-         expr.type().is_signedbv())
+      if(expr.type().id()=="unsignedbv" ||
+         expr.type().id()=="signedbv")
       {
         smt_prop.out << "BVSUB(" << expr.type().width() << ", ";
         convert_smt_expr(expr.op0());
@@ -900,10 +900,10 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==2);
 
-    if(expr.type().is_unsignedbv() ||
-       expr.type().is_signedbv())
+    if(expr.type().id()=="unsignedbv" ||
+       expr.type().id()=="signedbv")
     {
-      if(expr.type().is_unsignedbv())
+      if(expr.type().id()=="unsignedbv")
         smt_prop.out << "BVDIV";
       else
         smt_prop.out << "SBVDIV";
@@ -922,10 +922,10 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==2);
 
-    if(expr.type().is_unsignedbv() ||
-       expr.type().is_signedbv())
+    if(expr.type().id()=="unsignedbv" ||
+       expr.type().id()=="signedbv")
     {
-      if(expr.type().is_unsignedbv())
+      if(expr.type().id()=="unsignedbv")
         smt_prop.out << "BVMOD";
       else
         smt_prop.out << "SBVMOD";
@@ -944,8 +944,8 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     if(expr.operands().size()==2)
     {
-      if(expr.type().is_unsignedbv() ||
-         expr.type().is_signedbv())
+      if(expr.type().id()=="unsignedbv" ||
+         expr.type().id()=="signedbv")
       {
         smt_prop.out << "BVMULT(" << expr.type().width() << ", ";
         convert_smt_expr(expr.op0());
@@ -964,15 +964,15 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       assert(false);
   }
   else if(expr.is_address_of() ||
-          expr.is_implicit_address_of() ||
-          expr.is_reference_to())
+          expr.id()=="implicit_address_of" ||
+          expr.id()=="reference_to")
   {
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==1);
-    assert(expr.type().is_pointer());
+    assert(expr.type().id()=="pointer");
     convert_address_of_rec(expr.op0());
   }
-  else if(expr.is_array_of())
+  else if(expr.id()=="array_of")
   {
     //
     // Not supported but it does not work otherwise
@@ -985,7 +985,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     // convert_array_value(expr.op0());
     // smt_prop.out << ")";
   }
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     assert(expr.operands().size()==2);
     smt_prop.out << "(select ";
@@ -1005,17 +1005,17 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     
     smt_prop.out << ")";
   }
-  else if(expr.is_ashr() ||
+  else if(expr.id()=="ashr" ||
           expr.id()=="lshr" ||
           expr.id()=="shl")
   {
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==2);
 
-    if(expr.type().is_unsignedbv() ||
-       expr.type().is_signedbv())
+    if(expr.type().id()=="unsignedbv" ||
+       expr.type().id()=="signedbv")
     {
-      if(expr.is_ashr())
+      if(expr.id()=="ashr")
         smt_prop.out << "BVASHR";
       else if(expr.id()=="lshr")
         smt_prop.out << "BVLSHR";
@@ -1033,7 +1033,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else
       throw "unsupported type for "+expr.id_string()+": "+expr.type().id_string();
   }
-  else if(expr.is_with())
+  else if(expr.id()=="with")
   {
     assert(expr.operands().size()>=1);
     smt_prop.out << "(store ";
@@ -1045,7 +1045,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       const exprt &index=expr.operands()[i];
       const exprt &value=expr.operands()[i+1];
 
-      if(expr.type().is_struct())
+      if(expr.type().id()=="struct")
       {
 	assert(false && "operator not supported yet");
         smt_prop.out << " WITH ." << index.component_name();
@@ -1053,7 +1053,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
         convert_array_value(value);
         smt_prop.out << ")";
       }
-      else if(expr.type().is_union())
+      else if(expr.type().id()=="union")
       {
 	assert(false && "operator not supported yet");
         smt_prop.out << " WITH ." << index.component_name();
@@ -1074,7 +1074,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
 
     smt_prop.out << ")";
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==1);
@@ -1110,7 +1110,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     convert_smt_expr(expr.op1());
     smt_prop.out << ").object";
   }
-  else if(expr.is_string_constant())
+  else if(expr.id()=="string-constant")
   {
     assert(false && "Construct not supported yet");
     exprt tmp;
@@ -1122,8 +1122,8 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(false && "Construct not supported yet");
     assert(expr.operands().size()==2);
 
-    if(expr.op0().type().is_unsignedbv() ||
-       expr.op0().type().is_signedbv())
+    if(expr.op0().type().id()=="unsignedbv" ||
+       expr.op0().type().id()=="signedbv")
     {
       smt_prop.out << "(";
       convert_smt_expr(expr.op0());
@@ -1194,7 +1194,7 @@ void smt_convt::set_to(const exprt &expr, bool value)
   {
     assert(expr.operands().size()==2);
     
-    if(expr.op0().is_symbol())
+    if(expr.op0().id()=="symbol")
     {
       const irep_idt &identifier=expr.op0().identifier();
       
@@ -1245,7 +1245,7 @@ void smt_convt::find_symbols(const exprt &expr)
   forall_operands(it, expr)
     find_symbols(*it);
     
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
   {
     if(expr.type().is_code())
       return;
@@ -1264,7 +1264,7 @@ void smt_convt::find_symbols(const exprt &expr)
       smt_prop.out << ")) " << std::endl;
     }
   }  
-  else if(expr.is_nondet_symbol())
+  else if(expr.id()=="nondet_symbol")
   {
     if(expr.type().is_code())
       return;
@@ -1327,8 +1327,8 @@ void smt_convt::convert_smt_type(const typet &type)
     smt_prop.out << "BOOLEAN";
   }
   */
-  else if(type.is_struct() ||
-          type.is_union())
+  else if(type.id()=="struct" ||
+          type.id()=="union")
   {
     assert(false && "Construct not supported yet");
     const struct_typet &struct_type=to_struct_type(type);
@@ -1352,13 +1352,13 @@ void smt_convt::convert_smt_type(const typet &type)
     
     smt_prop.out << " #]";
   }
-  else if(type.is_pointer() ||
-          type.is_reference())
+  else if(type.id()=="pointer" ||
+          type.id()=="reference")
   {
     assert(false && "Construct not supported yet");
     smt_prop.out << smt_pointer_type();
   }
-  else if(type.is_integer())
+  else if(type.id()=="integer")
   {
     smt_prop.out << "Int";
   }
@@ -1395,8 +1395,8 @@ void smt_convt::find_symbols(const typet &type)
     const array_typet &array_type=to_array_type(type);
     find_symbols(array_type.size());
   }
-  else if(type.is_struct() ||
-          type.is_union())
+  else if(type.id()=="struct" ||
+          type.id()=="union")
   {
   }
 }

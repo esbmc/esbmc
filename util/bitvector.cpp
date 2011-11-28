@@ -24,11 +24,11 @@ Function: bv_sem
 
 bv_semt bv_sem(const typet &type)
 {
-  if(type.is_bv())
+  if(type.id()=="bv")
     return BV_NONE;
-  else if(type.is_unsignedbv())
+  else if(type.id()=="unsignedbv")
     return BV_UNSIGNED;
-  else if(type.is_signedbv())
+  else if(type.id()=="signedbv")
     return BV_SIGNED;
 
   return BV_UNKNOWN;

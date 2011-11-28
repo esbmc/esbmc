@@ -124,25 +124,25 @@ void value_set_fivrt::output(
     
       std::string result="<"; //+i2string(o_it->first) + ",";
 
-      if(o.is_invalid())
+      if(o.id()=="invalid")
       {
         result+="#";
         result+=", *, "; // offset unknown
-        if (o.type().is_unknown())
+        if (o.type().id()=="unknown")
           result+="*";
-        else if (o.type().is_invalid())
+        else if (o.type().id()=="invalid")
           result+="#";
         else
           result+=from_type(ns, identifier, o.type());        
         result+=">";
       }
-      else if (o.is_unknown())
+      else if (o.id()=="unknown")
       {
         result+="*";
         result+=", *, "; // offset unknown
-        if (o.type().is_unknown())
+        if (o.type().id()=="unknown")
           result+="*";
-        else if (o.type().is_invalid())
+        else if (o.type().id()=="invalid")
           result+="#";
         else
           result+=from_type(ns, identifier, o.type());        
@@ -159,7 +159,7 @@ void value_set_fivrt::output(
         
         result+=", ";
         
-        if (o.type().is_unknown())
+        if (o.type().id()=="unknown")
           result+="*";
         else
         {
@@ -391,8 +391,8 @@ exprt value_set_fivrt::to_expr(object_map_dt::const_iterator it) const
 {
   const exprt &object=object_numbering[it->first];
   
-  if(object.is_invalid() ||
-     object.is_unknown())
+  if(object.id()=="invalid" ||
+     object.id()=="unknown")
     return object;
 
   object_descriptor_exprt od;
@@ -514,7 +514,7 @@ void value_set_fivrt::get_value_set(
     const exprt &object=object_numbering[it->first];
     if (object.type().id()=="#REF#")
     {
-      assert(object.is_symbol());
+      assert(object.id()=="symbol");
 			
 			const irep_idt &ident = object.identifier();
 			valuest::const_iterator v_it = values.find(ident);
@@ -628,19 +628,19 @@ void value_set_fivrt::get_value_set_rec(
       return;
     }
   }
-  else if(expr.is_unknown() || expr.is_invalid())
+  else if(expr.id()=="unknown" || expr.id()=="invalid")
   {
     insert_from(dest, exprt("unknown", original_type));
     return;
   }  
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     assert(expr.operands().size()==2);
 
     const typet &type=ns.follow(expr.op0().type());
 
     assert(type.is_array() ||
-           type.is_incomplete_array() || 
+           type.id()=="incomplete_array" || 
            type.id()=="#REF#");
            
     get_value_set_rec(expr.op0(), dest, "[]"+suffix, 
@@ -648,7 +648,7 @@ void value_set_fivrt::get_value_set_rec(
     
     return;
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
     
@@ -656,10 +656,10 @@ void value_set_fivrt::get_value_set_rec(
     {
       const typet &type=ns.follow(expr.op0().type());
       
-      assert(type.is_struct() ||
-             type.is_union() ||
-             type.is_incomplete_struct() ||
-             type.is_incomplete_union());
+      assert(type.id()=="struct" ||
+             type.id()=="union" ||
+             type.id()=="incomplete_struct" ||
+             type.id()=="incomplete_union");
              
       const std::string &component_name=
         expr.component_name().as_string();
@@ -670,7 +670,7 @@ void value_set_fivrt::get_value_set_rec(
       return;
     }
   }
-  else if(expr.is_symbol())
+  else if(expr.id()=="symbol")
   {
     // just keep a reference to the ident in the set
     // (if it exists)
@@ -695,7 +695,7 @@ void value_set_fivrt::get_value_set_rec(
 			}
 		}
   }
-  else if(expr.is_if())
+  else if(expr.id()=="if")
   {
     if(expr.operands().size()!=3)
       throw "if takes three operands";
@@ -716,8 +716,8 @@ void value_set_fivrt::get_value_set_rec(
     
     return;
   }
-  else if(expr.is_dereference() ||
-          expr.is_implicit_dereference())
+  else if(expr.id()=="dereference" ||
+          expr.id()=="implicit_dereference")
   {
     object_mapt reference_set;
     get_reference_set_sharing(expr, reference_set, ns);
@@ -735,7 +735,7 @@ void value_set_fivrt::get_value_set_rec(
       return;
     }
   }
-  else if(expr.is_reference_to())
+  else if(expr.id()=="reference_to")
   {
     object_mapt reference_set;
     
@@ -758,13 +758,13 @@ void value_set_fivrt::get_value_set_rec(
   else if(expr.is_constant())
   {
     // check if NULL
-    if(expr.value()=="NULL" && expr.type().is_pointer())
+    if(expr.value()=="NULL" && expr.type().id()=="pointer")
     {
       insert_from(dest, exprt("NULL-object", expr.type().subtype()), 0);
       return;
     }
   }
-  else if(expr.is_typecast())
+  else if(expr.id()=="typecast")
   {
     if(expr.operands().size()!=1)
       throw "typecast takes one operand";
@@ -779,13 +779,13 @@ void value_set_fivrt::get_value_set_rec(
     if(expr.operands().size()<2)
       throw expr.id_string()+" expected to have at least two operands";
 
-    if(expr.type().is_pointer())
+    if(expr.type().id()=="pointer")
     {
       // find the pointer operand
       const exprt *ptr_operand=NULL;
 
       forall_operands(it, expr)
-        if(it->type().is_pointer())
+        if(it->type().id()=="pointer")
         {
           if(ptr_operand==NULL)
             ptr_operand=&(*it);
@@ -807,7 +807,7 @@ void value_set_fivrt::get_value_set_rec(
         if(object.offset_is_zero() &&
            expr.operands().size()==2)
         {
-          if(!expr.op0().type().is_pointer())
+          if(expr.op0().type().id()!="pointer")
           {
             mp_integer i;
             if(to_integer(expr.op0(), i))
@@ -833,7 +833,7 @@ void value_set_fivrt::get_value_set_rec(
       return;
     }
   }
-  else if(expr.is_sideeffect())
+  else if(expr.id()=="sideeffect")
   {
     const irep_idt &statement=expr.statement();
     
@@ -844,7 +844,7 @@ void value_set_fivrt::get_value_set_rec(
     }
     else if(statement=="malloc")
     {
-      if(!expr.type().is_pointer())
+      if(expr.type().id()!="pointer")
         throw "malloc expected to return pointer type";
       
       assert(suffix=="");
@@ -865,7 +865,7 @@ void value_set_fivrt::get_value_set_rec(
             statement=="cpp_new[]")
     {
       assert(suffix=="");
-      assert(expr.type().is_pointer());
+      assert(expr.type().id()=="pointer");
 
       dynamic_object_exprt dynamic_object(expr.type().subtype());
       // let's make up a unique number for this object...
@@ -877,20 +877,20 @@ void value_set_fivrt::get_value_set_rec(
       return;
     }
   }
-  else if(expr.is_struct())
+  else if(expr.id()=="struct")
   {
     // this is like a static struct object
     insert_from(dest, address_of_exprt(expr), 0);
     return;
   }
-  else if(expr.is_with() ||
-          expr.is_array_of() ||
+  else if(expr.id()=="with" ||
+          expr.id()=="array_of" ||
           expr.is_array())
   {
     // these are supposed to be done by assign()
     throw "unexpected value in get_value_set: "+expr.id_string();
   }
-  else if(expr.is_dynamic_object())
+  else if(expr.id()=="dynamic_object")
   {
     const dynamic_object_exprt &dynamic_object=
       to_dynamic_object_expr(expr);
@@ -930,9 +930,9 @@ void value_set_fivrt::dereference_rec(
   exprt &dest) const
 {
   // remove pointer typecasts
-  if(src.is_typecast())
+  if(src.id()=="typecast")
   {
-    assert(src.type().is_pointer());
+    assert(src.type().id()=="pointer");
 
     if(src.operands().size()!=1)
       throw "typecast expects one operand";
@@ -1059,9 +1059,9 @@ void value_set_fivrt::get_reference_set_sharing_rec(
       return;
     }
   }
-  else if(expr.is_symbol() ||
-          expr.is_dynamic_object() ||
-          expr.is_string_constant())
+  else if(expr.id()=="symbol" ||
+          expr.id()=="dynamic_object" ||
+          expr.id()=="string-constant")
   {
     if(expr.type().is_array() &&
        expr.type().subtype().is_array())
@@ -1071,8 +1071,8 @@ void value_set_fivrt::get_reference_set_sharing_rec(
 
     return;
   }
-  else if(expr.is_dereference() ||
-          expr.is_implicit_dereference())
+  else if(expr.id()=="dereference" ||
+          expr.id()=="implicit_dereference")
   {
     if(expr.operands().size()!=1)
       throw expr.id_string()+" expected to have one operand";
@@ -1125,7 +1125,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
 
     return;
   }
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     if(expr.operands().size()!=2)
       throw "index expected to have two operands";
@@ -1135,7 +1135,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
     const typet &array_type=ns.follow(array.type());
     
     assert(array_type.is_array() ||
-           array_type.is_incomplete_array());
+           array_type.id()=="incomplete_array");
 
     object_mapt array_references;
     get_reference_set_sharing(array, array_references, ns);
@@ -1146,7 +1146,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
     {
       const exprt &object=object_numbering[a_it->first];
 
-      if(object.is_unknown())
+      if(object.id()=="unknown")
         insert_from(dest, exprt("unknown", expr.type()));
       else
       {
@@ -1178,7 +1178,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
     
     return;
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     const irep_idt &component_name=expr.component_name();
 
@@ -1197,11 +1197,11 @@ void value_set_fivrt::get_reference_set_sharing_rec(
       const exprt &object=object_numbering[it->first];
       const typet &obj_type=ns.follow(object.type());
       
-      if(object.is_unknown())
+      if(object.id()=="unknown")
         insert_from(dest, exprt("unknown", expr.type()));
-      else if(object.is_dynamic_object() &&
-              !obj_type.is_struct() && 
-              !obj_type.is_union())
+      else if(object.id()=="dynamic_object" &&
+              obj_type.id()!="struct" && 
+              obj_type.id()!="union")
       {
         // we catch dynamic objects of the wrong type,
         // to avoid non-integral typecasts.        
@@ -1225,7 +1225,7 @@ void value_set_fivrt::get_reference_set_sharing_rec(
 
     return;
   }
-  else if(expr.is_if())
+  else if(expr.id()=="if")
   {
     if(expr.operands().size()!=3)
       throw "if takes three operands";
@@ -1262,7 +1262,7 @@ void value_set_fivrt::assign(
   std::cout << "ASSIGN RHS: " << from_expr(ns, "", rhs) << std::endl;  
   #endif
 
-  if(rhs.is_if())
+  if(rhs.id()=="if")
   {
     if(rhs.operands().size()!=3)
       throw "if takes three operands";
@@ -1274,8 +1274,8 @@ void value_set_fivrt::assign(
 
   const typet &type=ns.follow(lhs.type());
   
-  if(type.is_struct() ||
-     type.is_union())
+  if(type.id()=="struct" ||
+     type.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(type);
     
@@ -1298,8 +1298,8 @@ void value_set_fivrt::assign(
 
       exprt rhs_member;
     
-      if(rhs.is_unknown() ||
-         rhs.is_invalid())
+      if(rhs.id()=="unknown" ||
+         rhs.id()=="invalid")
       {
         rhs_member=exprt(rhs.id(), subtype);
       }
@@ -1313,13 +1313,13 @@ void value_set_fivrt::assign(
         
         assert(base_type_eq(rhs.type(), type, ns));
       
-        if(rhs.is_struct() ||
-           rhs.is_constant())
+        if(rhs.id()=="struct" ||
+           rhs.id()=="constant")
         {
           assert(no<rhs.operands().size());
           rhs_member=rhs.operands()[no];
         }
-        else if(rhs.is_with())
+        else if(rhs.id()=="with")
         {
           assert(rhs.operands().size()==3);
 
@@ -1358,8 +1358,8 @@ void value_set_fivrt::assign(
     exprt lhs_index("index", type.subtype());
     lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
 
-    if(rhs.is_unknown() ||
-       rhs.is_invalid())
+    if(rhs.id()=="unknown" ||
+       rhs.id()=="invalid")
     {
       assign(lhs_index, exprt(rhs.id(), type.subtype()), ns, add_to_sets);
     }    
@@ -1367,21 +1367,21 @@ void value_set_fivrt::assign(
     {
       assert(base_type_eq(rhs.type(), type, ns));
         
-      if(rhs.is_array_of())
+      if(rhs.id()=="array_of")
       {
         assert(rhs.operands().size()==1);
 //        std::cout << "AOF: " << rhs.op0() << std::endl;
         assign(lhs_index, rhs.op0(), ns, add_to_sets);
       }
       else if(rhs.is_array() ||
-              rhs.is_constant())
+              rhs.id()=="constant")
       {
         forall_operands(o_it, rhs)
         {
           assign(lhs_index, *o_it, ns, add_to_sets);
         }
       }
-      else if(rhs.is_with())
+      else if(rhs.id()=="with")
       {
         assert(rhs.operands().size()==3);
 
@@ -1428,7 +1428,7 @@ void value_set_fivrt::do_free(
   const namespacet &ns)
 {  
   // op must be a pointer
-  if(!op.type().is_pointer())
+  if(op.type().id()!="pointer")
     throw "free expected to have pointer-type operand";
 
   // find out what it points to    
@@ -1447,7 +1447,7 @@ void value_set_fivrt::do_free(
   {
     const exprt &object=object_numbering[it->first];
 
-    if(object.is_dynamic_object())
+    if(object.id()=="dynamic_object")
     {
       const dynamic_object_exprt &dynamic_object=
         to_dynamic_object_expr(object);
@@ -1474,7 +1474,7 @@ void value_set_fivrt::do_free(
     {
       const exprt &object=object_numbering[o_it->first];
 
-      if(object.is_dynamic_object())
+      if(object.id()=="dynamic_object")
       {
         const exprt &instance=
           to_dynamic_object_expr(object).instance();
@@ -1551,7 +1551,7 @@ void value_set_fivrt::assign_rec(
       recursion_set.erase(ident);
     }
   }
-  else if(lhs.is_symbol())
+  else if(lhs.id()=="symbol")
   {
     const irep_idt &identifier=lhs.identifier();        
 
@@ -1578,7 +1578,7 @@ void value_set_fivrt::assign_rec(
       make_union(temp_entry.object_map, values_rhs);
     }
   }
-  else if(lhs.is_dynamic_object())
+  else if(lhs.id()=="dynamic_object")
   {
     const dynamic_object_exprt &dynamic_object=
       to_dynamic_object_expr(lhs);
@@ -1602,8 +1602,8 @@ void value_set_fivrt::assign_rec(
     
     make_union(temp_entry.object_map, values_rhs);
   }
-  else if(lhs.is_dereference() ||
-          lhs.is_implicit_dereference())
+  else if(lhs.id()=="dereference" ||
+          lhs.id()=="implicit_dereference")
   {
     if(lhs.operands().size()!=1)
       throw lhs.id_string()+" expected to have one operand";
@@ -1615,22 +1615,22 @@ void value_set_fivrt::assign_rec(
     {
       const exprt &object=object_numbering[it->first];
 
-      if(!object.is_unknown())
+      if(object.id()!="unknown")
         assign_rec(object, values_rhs, suffix, ns, recursion_set, add_to_sets);
     }
   }
-  else if(lhs.is_index())
+  else if(lhs.id()=="index")
   {
     if(lhs.operands().size()!=2)
       throw "index expected to have two operands";
       
     const typet &type=ns.follow(lhs.op0().type());
       
-    assert(type.is_array() || type.is_incomplete_array() || type.id()=="#REF#");
+    assert(type.is_array() || type.id()=="incomplete_array" || type.id()=="#REF#");
 
     assign_rec(lhs.op0(), values_rhs, "[]"+suffix, ns, recursion_set, add_to_sets);
   }
-  else if(lhs.is_member())
+  else if(lhs.id()=="member")
   {
     if(lhs.operands().size()!=1)
       throw "member expected to have one operand";
@@ -1641,45 +1641,45 @@ void value_set_fivrt::assign_rec(
 
     const typet &type=ns.follow(lhs.op0().type());
 
-    assert(type.is_struct() ||
-           type.is_union() ||
-           type.is_incomplete_struct() ||
-           type.is_incomplete_union());
+    assert(type.id()=="struct" ||
+           type.id()=="union" ||
+           type.id()=="incomplete_struct" ||
+           type.id()=="incomplete_union");
            
     assign_rec(lhs.op0(), values_rhs, "."+component_name+suffix, 
                ns, recursion_set, add_to_sets);
   }
   else if(lhs.id()=="valid_object" ||
 		  lhs.id()=="deallocated_object" ||
-          lhs.is_dynamic_size() ||
+          lhs.id()=="dynamic_size" ||
           lhs.id()=="dynamic_type")
   {
     // we ignore this here
   }
-  else if(lhs.is_string_constant())
+  else if(lhs.id()=="string-constant")
   {
     // someone writes into a string-constant
     // evil guy
   }
-  else if(lhs.is_null_object())
+  else if(lhs.id()=="NULL-object")
   {
     // evil as well
   }
-  else if(lhs.is_typecast())
+  else if(lhs.id()=="typecast")
   {
     const typecast_exprt &typecast_expr=to_typecast_expr(lhs);
   
     assign_rec(typecast_expr.op(), values_rhs, suffix, 
                ns, recursion_set, add_to_sets);
   }
-  else if(lhs.is_zero_string() ||
+  else if(lhs.id()=="zero_string" ||
           lhs.id()=="is_zero_string" ||
-          lhs.is_zero_string_length())
+          lhs.id()=="zero_string_length")
   {
     // ignore
   }
-  else if(lhs.is_byte_extract_little_endian() ||
-          lhs.is_byte_extract_big_endian())
+  else if(lhs.id()=="byte_extract_little_endian" ||
+          lhs.id()=="byte_extract_big_endian")
   {
     assert(lhs.operands().size()==2);
     assign_rec(lhs.op0(), values_rhs, suffix, ns, recursion_set, true);
@@ -1833,7 +1833,7 @@ void value_set_fivrt::apply_code(
 
     const exprt &lhs=code.op0();
 
-    if(!lhs.is_symbol())
+    if(lhs.id()!="symbol")
       throw "decl expected to have symbol on lhs";
     
     assign(lhs, exprt("invalid", lhs.type()), ns);
@@ -2163,7 +2163,7 @@ bool value_set_fivrt::recursive_find(
   {
     const exprt &o = object_numbering[it->first];
     
-    if (o.is_symbol() && o.identifier()==ident)
+    if (o.id()=="symbol" && o.identifier()==ident)
       return true;
     else if (o.type().id()=="#REF#")
     {      

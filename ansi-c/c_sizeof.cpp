@@ -29,22 +29,22 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
 {
   exprt dest;
 
-  if(type.is_signedbv() ||
-     type.is_unsignedbv() ||
-     type.is_floatbv() ||
-     type.is_fixedbv())
+  if(type.id()=="signedbv" ||
+     type.id()=="unsignedbv" ||
+     type.id()=="floatbv" ||
+     type.id()=="fixedbv")
   {
     unsigned bits=atoi(type.width().c_str());
     unsigned bytes=bits/8;
     if((bits%8)!=0) bytes++;
     dest=from_integer(bits/8, uint_type());
   }
-  else if(type.is_c_enum() ||
-          type.is_incomplete_c_enum())
+  else if(type.id()=="c_enum" ||
+          type.id()=="incomplete_c_enum")
   {
     dest=from_integer(config.ansi_c.int_width/8, uint_type());
   }
-  else if(type.is_pointer())
+  else if(type.id()=="pointer")
   {
     if(type.reference())
       return sizeof_rec(type.subtype());
@@ -84,7 +84,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
       c_implicit_typecast(dest.op1(), dest.type(), ns);
     }
   }
-  else if(type.is_struct())
+  else if(type.id()=="struct")
   {
     const irept::subt &components=
       type.components().get_sub();
@@ -115,7 +115,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
 
     dest=from_integer(sum, uint_type());
   }
-  else if(type.is_union())
+  else if(type.id()=="union")
   {
     const irept::subt &components=
       type.components().get_sub();
@@ -147,7 +147,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
 
     dest=from_integer(max_size, uint_type());
   }
-  else if(type.is_symbol())
+  else if(type.id()=="symbol")
   {
     return sizeof_rec(ns.follow(type));
   }

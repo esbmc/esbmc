@@ -91,7 +91,7 @@ void ansi_c_convertt::convert_expr(exprt &expr)
   Forall_operands(it, expr)
     convert_expr(*it);
 
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
   {
     expr.identifier(final_id(expr.identifier()));
     expr.remove("#id_class");
@@ -116,7 +116,7 @@ void ansi_c_convertt::convert_expr(exprt &expr)
     convert_type(offsetof_type);
     expr.offsetof_type(offsetof_type);
   }
-  else if(expr.is_typecast())
+  else if(expr.id()=="typecast")
   {
     convert_type(expr.type());
   }
@@ -295,7 +295,7 @@ void ansi_c_convertt::convert_type(
 
   c_storage_spec=ansi_c_convert_type.c_storage_spec;
 
-  if(type.is_pointer())
+  if(type.id()=="pointer")
   {
     c_storage_spect sub_storage_spec;
 
@@ -311,7 +311,7 @@ void ansi_c_convertt::convert_type(
     // XXX jmorse - does this reveal a condition where c_bitfield doesn't have
     // a size field?
   }
-  else if(type.is_symbol())
+  else if(type.id()=="symbol")
   {
     irep_idt identifier=final_id(type.identifier());
     type.identifier(identifier);
@@ -392,15 +392,15 @@ void ansi_c_convertt::convert_type(
 
     convert_expr(array_type.size());
   }
-  else if(type.is_incomplete_array())
+  else if(type.id()=="incomplete_array")
   {
     c_storage_spect sub_storage_spec;
 
     convert_type(type.subtype(), sub_storage_spec);
     c_storage_spec|=sub_storage_spec;
   }
-  else if(type.is_struct() ||
-          type.is_union() ||
+  else if(type.id()=="struct" ||
+          type.id()=="union" ||
           type.id()=="ansi_c_interface" ||
           type.id()=="ansi_c_channel" ||
           type.id()=="ansi_c_behavior")
@@ -438,8 +438,8 @@ void ansi_c_convertt::convert_type(
     else
       convert_type(type.subtype());
   }
-  else if(type.is_c_enum() ||
-          type.is_incomplete_c_enum())
+  else if(type.id()=="c_enum" ||
+          type.id()=="incomplete_c_enum")
   {
     // add width
     type.width(config.ansi_c.int_width);

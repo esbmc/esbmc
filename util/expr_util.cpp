@@ -416,7 +416,7 @@ void make_next_state(exprt &expr)
   Forall_operands(it, expr)
     make_next_state(*it);
     
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
     expr.id("next_symbol");
 }
 

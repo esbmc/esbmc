@@ -28,10 +28,10 @@ Function: boolbvt::convert_add_sub
 
 void boolbvt::convert_add_sub(const exprt &expr, bvt &bv)
 {
-  if(!expr.type().is_unsignedbv() &&
-     !expr.type().is_signedbv() &&
-     !expr.type().is_fixedbv() &&
-     !expr.type().is_floatbv() &&
+  if(expr.type().id()!="unsignedbv" &&
+     expr.type().id()!="signedbv" &&
+     expr.type().id()!="fixedbv" &&
+     expr.type().id()!="floatbv" &&
      expr.type().id()!="range")
     return conversion_failed(expr, bv);
 
@@ -64,8 +64,8 @@ void boolbvt::convert_add_sub(const exprt &expr, bvt &bv)
                     expr.id()=="no-overflow-minus");
 
   bv_utilst::representationt rep=
-    (expr.type().is_signedbv() ||
-     expr.type().is_fixedbv())?bv_utilst::SIGNED:
+    (expr.type().id()=="signedbv" ||
+     expr.type().id()=="fixedbv")?bv_utilst::SIGNED:
                                   bv_utilst::UNSIGNED;
 
   for(exprt::operandst::const_iterator it=operands.begin()+1;
@@ -84,7 +84,7 @@ void boolbvt::convert_add_sub(const exprt &expr, bvt &bv)
     if(op.size()!=width)
       throw "convert_add_sub: unexpected operand width";
 
-    if(expr.type().is_floatbv())
+    if(expr.type().id()=="floatbv")
     {
       #ifdef HAVE_FLOATBV
       float_utilst float_utils(prop);

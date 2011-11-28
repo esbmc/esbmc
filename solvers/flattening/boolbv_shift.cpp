@@ -22,8 +22,8 @@ Function: boolbvt::convert_shift
 
 void boolbvt::convert_shift(const exprt &expr, bvt &bv)
 {
-  if(!expr.type().is_unsignedbv() &&
-     !expr.type().is_signedbv())
+  if(expr.type().id()!="unsignedbv" &&
+     expr.type().id()!="signedbv")
     return conversion_failed(expr, bv);
 
   unsigned width;
@@ -48,7 +48,7 @@ void boolbvt::convert_shift(const exprt &expr, bvt &bv)
 
   if(expr.id()=="shl")
     shift=bv_utilst::LEFT;
-  else if(expr.is_ashr())
+  else if(expr.id()=="ashr")
     shift=bv_utilst::ARIGHT;
   else if(expr.id()=="lshr")
     shift=bv_utilst::LRIGHT;

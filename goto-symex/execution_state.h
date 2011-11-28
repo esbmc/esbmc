@@ -53,7 +53,7 @@ public:
 
 		_goto_program =&(it->second.body);
 
-		add_thread((*_goto_program).instructions.begin(),(*_goto_program).instructions.end());
+		add_thread((*_goto_program).instructions.begin(),(*_goto_program).instructions.end(), _goto_program);
 		_active_thread = 0;
 		_last_active_thread = 0;
 		generating_new_threads = 0;
@@ -160,6 +160,7 @@ public:
     void set_parent_guard(const irep_idt & parent_guard);
     bool all_threads_ended();
 	goto_symex_statet & get_active_state();
+	const goto_symex_statet & get_active_state() const;
 	unsigned int get_active_state_number() { return _active_thread; }
 	unsigned int get_active_atomic_number();
 	void increment_active_atomic_number();
@@ -168,7 +169,7 @@ public:
 	void set_active_state(unsigned int i);
     void execute_guard(const namespacet & ns, symex_targett &target);
 
-	void add_thread(goto_programt::const_targett start, goto_programt::const_targett end);
+	void add_thread(goto_programt::const_targett start, goto_programt::const_targett end, const goto_programt *prog);
 	void add_thread(goto_symex_statet & state);
     void end_thread(const namespacet &ns, symex_targett &target);
     /* Presumably this does the same as read_globals, see below */
@@ -188,7 +189,7 @@ public:
     crypto_hash update_hash_for_assignment(const exprt &rhs);
     std::string serialise_expr(const exprt &rhs);
 
-    void print_stack_traces(void) const;
+    void print_stack_traces(const namespacet &ns, unsigned int indent = 0) const;
 
 private:
     void decreament_trds_in_run(const namespacet &ns, symex_targett &target);

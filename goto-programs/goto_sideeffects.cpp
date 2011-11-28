@@ -64,7 +64,7 @@ void goto_convertt::read(exprt &expr, goto_programt &dest)
   if(expr.is_constant())
     return;
 
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
   {
     // see if we already renamed it
 
@@ -103,7 +103,7 @@ bool goto_convertt::has_sideeffect(const exprt &expr)
     if(has_sideeffect(*it))
       return true;
 
-  if(expr.is_sideeffect())
+  if(expr.id()=="sideeffect")
     return true;
 
   return false;
@@ -127,7 +127,7 @@ bool goto_convertt::has_function_call(const exprt &expr)
     if(has_function_call(*it))
       return true;
 
-  if(expr.is_sideeffect() &&
+  if(expr.id()=="sideeffect" &&
      expr.statement()=="function_call")
     return true;
 
@@ -176,7 +176,7 @@ void goto_convertt::remove_sideeffects(
   if(!has_sideeffect(expr))
     return;
 
-  if(expr.is_and() || expr.is_or())
+  if(expr.is_and() || expr.id()=="or")
   {
     if(!expr.is_boolean())
       throw expr.id_string()+" must be Boolean, but got "+
@@ -212,7 +212,7 @@ void goto_convertt::remove_sideeffects(
         remove_sideeffects(op, guard, dest);
       }
 
-      if(expr.is_or())
+      if(expr.id()=="or")
       {
         exprt tmp(op);
         tmp.make_not();
@@ -226,7 +226,7 @@ void goto_convertt::remove_sideeffects(
 
     return;
   }
-  else if(expr.is_if())
+  else if(expr.id()=="if")
   {
     if(expr.operands().size()!=3)
       throw "if takes three arguments";
@@ -288,7 +288,7 @@ void goto_convertt::remove_sideeffects(
 
     return;
   }
-  else if(expr.is_typecast())
+  else if(expr.id()=="typecast")
   {
     if(expr.operands().size()!=1)
       throw "typecast takes one argument";
@@ -298,7 +298,7 @@ void goto_convertt::remove_sideeffects(
 
     return;
   }
-  else if(expr.is_sideeffect() &&
+  else if(expr.id()=="sideeffect" &&
           expr.statement()=="gcc_conditional_expression")
   {
     remove_gcc_conditional_expression(expr, guard, dest);
@@ -309,7 +309,7 @@ void goto_convertt::remove_sideeffects(
   Forall_operands(it, expr)
     remove_sideeffects(*it, guard, dest);
 
-  if(expr.is_sideeffect())
+  if(expr.id()=="sideeffect")
   {
     const irep_idt &statement=expr.statement();
 
@@ -377,14 +377,14 @@ void goto_convertt::address_of_replace_objects(
   exprt &expr,
   goto_programt &dest)
 {
-  if(expr.is_struct() ||
-     expr.is_union() ||
+  if(expr.id()=="struct" ||
+     expr.id()=="union" ||
      expr.is_array())
   {
     make_temp_symbol(expr, dest);
     return;
   }
-  else if(expr.is_string_constant())
+  else if(expr.id()=="string-constant")
   {
   }
   else
@@ -539,7 +539,7 @@ void goto_convertt::remove_function_call(
     if(expr.operands().empty())
       throw "function_call expects at least one operand";
 
-    if(expr.op0().is_symbol())
+    if(expr.op0().id()=="symbol")
     {
       const irep_idt &identifier=expr.op0().identifier();
       const symbolt &symbol=lookup(identifier);

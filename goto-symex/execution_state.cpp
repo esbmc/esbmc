@@ -44,6 +44,11 @@ goto_symex_statet & execution_statet::get_active_state() {
     return _threads_state.at(_active_thread);
 }
 
+const goto_symex_statet & execution_statet::get_active_state() const
+{
+    return _threads_state.at(_active_thread);
+}
+
 /*******************************************************************
  Function: execution_statet::all_threads_ended
 
@@ -565,14 +570,14 @@ void execution_statet::execute_guard(const namespacet &ns, symex_targett &target
 
  \*******************************************************************/
 
-void execution_statet::add_thread(goto_programt::const_targett thread_start, goto_programt::const_targett thread_end)
+void execution_statet::add_thread(goto_programt::const_targett thread_start, goto_programt::const_targett thread_end, const goto_programt *prog)
 {
 #ifdef DEBUG
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
 #endif
 
   goto_symex_statet state(_state_level2);
-  state.initialize(thread_start, thread_end, _threads_state.size());
+  state.initialize(thread_start, thread_end, prog, _threads_state.size());
 
   _threads_state.push_back(state);
   _atomic_numbers.push_back(0);
@@ -746,11 +751,11 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 
   if (expr.id() == exprt::addrof ||
       expr.id() == "valid_object" ||
-      expr.is_dynamic_size() ||
+      expr.id() == "dynamic_size" ||
       expr.id() == "dynamic_type" ||
       expr.id() == "is_zero_string" ||
-      expr.is_zero_string() ||
-      expr.is_zero_string_length())
+      expr.id() == "zero_string" ||
+      expr.id() == "zero_string_length")
       return 0;
   else if (expr.id() == exprt::symbol)
   {
@@ -847,11 +852,11 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
   if (expr.id() == exprt::addrof ||
             expr.type().id() == typet::t_pointer ||
             expr.id() == "valid_object" ||
-            expr.is_dynamic_size() ||
+            expr.id() == "dynamic_size" ||
             expr.id() == "dynamic_type" ||
             expr.id() == "is_zero_string" ||
-            expr.is_zero_string() ||
-            expr.is_zero_string_length())
+            expr.id() == "zero_string" ||
+            expr.id() == "zero_string_length")
     return 0;
   else if (expr.id() == exprt::symbol)
   {
@@ -1041,7 +1046,7 @@ execution_statet::serialise_expr(const exprt &rhs)
   } else if (rhs.id() == exprt::member) {
     str = "member(entity(" + serialise_expr(rhs.op0()) + "),";
     str += "member_name(" + rhs.component_name().as_string() + "))";
-  } else if (rhs.is_nondet_symbol()) {
+  } else if (rhs.id() == "nondet_symbol") {
     /* Just return the identifier: it'll be unique to this particular piece
      * of entropy */
     exprt tmp = rhs;
@@ -1051,14 +1056,14 @@ execution_statet::serialise_expr(const exprt &rhs)
     str = "cond(if(" + serialise_expr(rhs.op0()) + "),";
     str += "then(" + serialise_expr(rhs.op1()) + "),";
     str += "else(" + serialise_expr(rhs.op2()) + "))";
-  } else if (rhs.is_struct()) {
+  } else if (rhs.id() == "struct") {
     str = rhs.type().tag().as_string();
     str = "struct(tag(" + str + "),";
     forall_operands(it, rhs) {
       str = str + "(" + serialise_expr(*it) + "),";
     }
     str += ")";
-  } else if (rhs.is_union()) {
+  } else if (rhs.id() == "union") {
     str = rhs.type().tag().as_string();
     str = "union(tag(" + str + "),";
     forall_operands(it, rhs) {
@@ -1082,15 +1087,15 @@ execution_statet::serialise_expr(const exprt &rhs)
     str = "const(" + tmp.str() + ")";
   } else if (rhs.id() == "pointer_offset") {
     str = "pointer_offset(" + serialise_expr(rhs.op0()) + ")";
-  } else if (rhs.is_string_constant()) {
+  } else if (rhs.id() == "string-constant") {
     exprt tmp;
     string2array(rhs, tmp);
     return serialise_expr(tmp);
   } else if (rhs.id() == "same-object") {
-  } else if (rhs.is_byte_update_little_endian()) {
-  } else if (rhs.is_byte_update_big_endian()) {
-  } else if (rhs.is_byte_extract_little_endian()) {
-  } else if (rhs.is_byte_extract_big_endian()) {
+  } else if (rhs.id() == "byte_update_little_endian") {
+  } else if (rhs.id() == "byte_update_big_endian") {
+  } else if (rhs.id() == "byte_extract_little_endian") {
+  } else if (rhs.id() == "byte_extract_big_endian") {
   } else if (rhs.id() == "infinity") {
     return "inf";
   } else {
@@ -1174,15 +1179,19 @@ execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
   return m;
 }
 
-void execution_statet::print_stack_traces(void) const
+void execution_statet::print_stack_traces(const namespacet &ns, unsigned int indent) const
 {
   std::vector<goto_symex_statet>::const_iterator it;
+  std::string spaces = std::string("");
   int i;
+
+  for (i = 0; i < indent; i++)
+    spaces += " ";
 
   i = 0;
   for (it = _threads_state.begin(); it != _threads_state.end(); it++) {
-    std::cout << "Thread " << i++ << ":" << std::endl;
-    it->print_stack_trace();
+    std::cout << spaces << "Thread " << i++ << ":" << std::endl;
+    it->print_stack_trace(ns, indent+2);
     std::cout << std::endl;
   }
 

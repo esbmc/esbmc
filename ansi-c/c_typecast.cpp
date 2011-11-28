@@ -104,7 +104,7 @@ bool check_c_implicit_typecast(
 {
   // check qualifiers  
 
-  if(src_type.is_pointer() && dest_type.is_pointer() &&
+  if(src_type.id()=="pointer" && dest_type.id()=="pointer" &&
      src_type.subtype().cmt_constant() &&
      !dest_type.subtype().cmt_constant())
     return true;
@@ -116,99 +116,99 @@ bool check_c_implicit_typecast(
   if(src_type_id=="natural")
   {
     if(dest_type.is_bool()) return false;
-    if(dest_type.is_integer()) return false;
+    if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
-    if(dest_type.is_unsignedbv()) return false;
-    if(dest_type.is_signedbv()) return false;
-    if(dest_type.is_floatbv()) return false;
+    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.id()=="floatbv") return false;
   }
   else if(src_type_id=="integer")
   {
     if(dest_type.is_bool()) return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
-    if(dest_type.is_unsignedbv()) return false;
-    if(dest_type.is_signedbv()) return false;
-    if(dest_type.is_floatbv()) return false;
-    if(dest_type.is_fixedbv()) return false;
-    if(dest_type.is_pointer()) return false;
+    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.id()=="fixedbv") return false;
+    if(dest_type.id()=="pointer") return false;
   }
   else if(src_type_id=="real")
   {
     if(dest_type.is_bool()) return false;
     if(dest_type.id()=="complex") return false;
-    if(dest_type.is_floatbv()) return false;
-    if(dest_type.is_fixedbv()) return false;
+    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.id()=="fixedbv") return false;
   }
   else if(src_type_id=="rational")
   {
     if(dest_type.is_bool()) return false;
     if(dest_type.id()=="complex") return false;
-    if(dest_type.is_floatbv()) return false;
-    if(dest_type.is_fixedbv()) return false;
+    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.id()=="fixedbv") return false;
   }
   else if(src_type_id=="bool")
   {
-    if(dest_type.is_integer()) return false;
+    if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
-    if(dest_type.is_unsignedbv()) return false;
-    if(dest_type.is_signedbv()) return false;
-    if(dest_type.is_pointer()) return false;
-    if(dest_type.is_floatbv()) return false;
-    if(dest_type.is_fixedbv()) return false;
-    if(dest_type.is_c_enum()) return false;
+    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.id()=="pointer") return false;
+    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.id()=="fixedbv") return false;
+    if(dest_type.id()=="c_enum") return false;
   }
   else if(src_type_id=="unsignedbv" ||
           src_type_id=="signedbv" ||
           src_type_id=="c_enum" ||
           src_type_id=="incomplete_c_enum")
   {
-    if(dest_type.is_unsignedbv()) return false;
+    if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.is_bool()) return false;
-    if(dest_type.is_integer()) return false;
+    if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
-    if(dest_type.is_signedbv()) return false;
-    if(dest_type.is_floatbv()) return false;
-    if(dest_type.is_fixedbv()) return false;
-    if(dest_type.is_pointer()) return false;
-    if(dest_type.is_c_enum()) return false;
-    if(dest_type.is_incomplete_c_enum()) return false;
+    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.id()=="fixedbv") return false;
+    if(dest_type.id()=="pointer") return false;
+    if(dest_type.id()=="c_enum") return false;
+    if(dest_type.id()=="incomplete_c_enum") return false;
   }
   else if(src_type_id=="floatbv" ||
           src_type_id=="fixedbv")
   {
     if(dest_type.is_bool()) return false;
-    if(dest_type.is_integer()) return false;
+    if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
-    if(dest_type.is_signedbv()) return false;
-    if(dest_type.is_unsignedbv()) return false;
-    if(dest_type.is_floatbv()) return false;
-    if(dest_type.is_fixedbv()) return false;
+    if(dest_type.id()=="signedbv") return false;
+    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.id()=="floatbv") return false;
+    if(dest_type.id()=="fixedbv") return false;
   }
   else if(src_type_id=="array" ||
           src_type_id=="incomplete_array" ||
           src_type_id=="pointer")
   {
-    if(dest_type.is_pointer())
+    if(dest_type.id()=="pointer")
     {
       const irept &dest_subtype=dest_type.subtype();
       const irept &src_subtype =src_type.subtype();
 
       if(src_subtype==dest_subtype)
         return false;
-      else if(src_subtype.is_empty() || // from void to anything
-              dest_subtype.is_empty())  // to void from anything
+      else if(src_subtype.id()=="empty" || // from void to anything
+              dest_subtype.id()=="empty")  // to void from anything
         return false;
     }
     
     if((dest_type.is_array() ||
-        dest_type.is_incomplete_array()) &&
+        dest_type.id()=="incomplete_array") &&
        (src_type.subtype()==dest_type.subtype())) return false;
 
     if(dest_type.is_bool()) return false;
-    if(dest_type.is_unsignedbv()) return false;
-    if(dest_type.is_signedbv()) return false;
+    if(dest_type.id()=="unsignedbv") return false;
+    if(dest_type.id()=="signedbv") return false;
   }
 
   return true;
@@ -228,7 +228,7 @@ Function: c_typecastt::follow_with_qualifiers
 
 typet c_typecastt::follow_with_qualifiers(const typet &src_type)
 {
-  if(!src_type.is_symbol()) return src_type;
+  if(src_type.id()!="symbol") return src_type;
   
   c_qualifierst qualifiers(src_type);
   
@@ -255,7 +255,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
 {
   unsigned width=atoi(type.width().c_str());
   
-  if(type.is_signedbv())
+  if(type.id()=="signedbv")
   {
     if(width<=config.ansi_c.char_width)
       return CHAR;
@@ -266,7 +266,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
     else if(width<=config.ansi_c.long_long_int_width)
       return LONGLONG;
   }
-  else if(type.is_unsignedbv())
+  else if(type.id()=="unsignedbv")
   {
     if(width<=config.ansi_c.char_width)
       return UCHAR;
@@ -279,8 +279,8 @@ c_typecastt::c_typet c_typecastt::get_c_type(
   }
   else if(type.is_bool())
     return BOOL;
-  else if(type.is_floatbv() ||
-          type.is_fixedbv())
+  else if(type.id()=="floatbv" ||
+          type.id()=="fixedbv")
   {
     if(width<=config.ansi_c.single_width)
       return SINGLE;
@@ -289,24 +289,24 @@ c_typecastt::c_typet c_typecastt::get_c_type(
     else if(width<=config.ansi_c.long_double_width)
       return LONGDOUBLE;
   }
-  else if(type.is_pointer())
+  else if(type.id()=="pointer")
   {
-    if(type.subtype().is_empty())
+    if(type.subtype().id()=="empty")
       return VOIDPTR;
     else
       return PTR;
   }
   else if(type.is_array() ||
-          type.is_incomplete_array())
+          type.id()=="incomplete_array")
   {
     return PTR;
   }
-  else if(type.is_c_enum() ||
-          type.is_incomplete_c_enum())
+  else if(type.id()=="c_enum" ||
+          type.id()=="incomplete_c_enum")
   {
     return INT;
   }
-  else if(type.is_symbol())
+  else if(type.id()=="symbol")
     return get_c_type(ns.follow(type));
     
   return OTHER;  
@@ -336,7 +336,7 @@ void c_typecastt::implicit_typecast_arithmetic(
   {
   case PTR:
     if(expr_type.is_array() ||
-       expr_type.is_incomplete_array())
+       expr_type.id()=="incomplete_array")
     {
       new_type.id("pointer");
       new_type.subtype()=expr_type.subtype();
@@ -361,9 +361,9 @@ void c_typecastt::implicit_typecast_arithmetic(
 
   if(new_type!=expr_type)
   {
-    if(new_type.is_pointer() &&
+    if(new_type.id()=="pointer" &&
        (expr_type.is_array() ||
-        expr_type.is_incomplete_array()))
+        expr_type.id()=="incomplete_array"))
     {
       exprt index_expr("index", expr_type.subtype());
       index_expr.reserve_operands(2);
@@ -435,32 +435,32 @@ void c_typecastt::implicit_typecast_followed(
   const typet &src_type,
   const typet &dest_type)
 {
-  if(dest_type.is_pointer())
+  if(dest_type.id()=="pointer")
   {
     // special case: 0 == NULL
 
     if(expr.is_zero() && (
-       src_type.is_unsignedbv() ||
-       src_type.is_signedbv() ||
+       src_type.id()=="unsignedbv" ||
+       src_type.id()=="signedbv" ||
        src_type.id()=="natural" ||
-       src_type.is_integer()))
+       src_type.id()=="integer"))
     {
       expr=exprt("constant", dest_type);
       expr.value("NULL");
       return; // ok
     }
   
-    if(src_type.is_pointer() ||
+    if(src_type.id()=="pointer" ||
        src_type.is_array() ||
-       src_type.is_incomplete_array())
+       src_type.id()=="incomplete_array")
     {
       // we are quite generous about pointers
       
       const typet &src_sub=ns.follow(src_type.subtype());
       const typet &dest_sub=ns.follow(dest_type.subtype());
 
-      if(src_sub.is_empty() ||
-         dest_sub.is_empty())
+      if(src_sub.id()=="empty" ||
+         dest_sub.id()=="empty")
       {
         // from/to void is always good
       }
@@ -566,7 +566,7 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
   const typet &dest_type=ns.follow(dest.type());
 
   if(dest_type.is_array() || 
-     dest_type.is_incomplete_array())
+     dest_type.id()=="incomplete_array")
   {
     index_exprt index;
     index.array()=dest;

@@ -441,7 +441,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
 { 
   bool new_data = false;
   
-  if(function.is_symbol())
+  if(function.id()=="symbol")
   {
     const irep_idt &identifier=function.identifier();
     
@@ -472,7 +472,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
     
     recursion_set.erase(identifier);
   }
-  else if(function.is_if())
+  else if(function.id()=="if")
   {
     if(function.operands().size()!=3)
       throw "if takes three arguments";
@@ -493,7 +493,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
         state,
         goto_functions) || new_data;
   }
-  else if(function.is_dereference())
+  else if(function.id()=="dereference")
   {
     // get value set
     expr_sett values;
@@ -526,11 +526,11 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
       }
     }
   }
-  else if(function.is_null_object())
+  else if(function.id()=="NULL-object")
   {
     // ignore, can't be a function
   }
-  else if(function.is_member() || function.is_index())
+  else if(function.id()=="member" || function.id()=="index")
   {
     // ignore, can't be a function
   }

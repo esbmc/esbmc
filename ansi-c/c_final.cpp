@@ -28,9 +28,9 @@ void c_finalize_expression(
   exprt &expr,
   message_handlert &message_handler)
 {
-  if(expr.is_symbol())
+  if(expr.id()=="symbol")
   {
-    if(expr.type().is_incomplete_array())
+    if(expr.type().id()=="incomplete_array")
     {
       symbolst::const_iterator it=
         context.symbols.find(expr.identifier());
@@ -49,7 +49,7 @@ void c_finalize_expression(
 
       if(symbol.type.is_array())
         expr.type()=symbol.type;
-      else if(symbol.type.is_incomplete_array())
+      else if(symbol.type.id()=="incomplete_array")
       {
         message_streamt message_stream(message_handler);
         message_stream.err_location(symbol.location);

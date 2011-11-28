@@ -43,7 +43,7 @@ literalt boolbvt::convert_overflow(const exprt &expr)
       return SUB::convert_rest(expr);
 
     bv_utilst::representationt rep=
-      expr.op0().type().is_signedbv()?bv_utilst::SIGNED:
+      expr.op0().type().id()=="signedbv"?bv_utilst::SIGNED:
                                          bv_utilst::UNSIGNED;
 
     return expr.id()=="overflow--"?
@@ -55,8 +55,8 @@ literalt boolbvt::convert_overflow(const exprt &expr)
     if(operands.size()!=2)
       throw "operand "+expr.id_string()+" takes two operands";
 
-    if(!operands[0].type().is_unsignedbv() &&
-       !operands[0].type().is_signedbv())
+    if(operands[0].type().id()!="unsignedbv" &&
+       operands[0].type().id()!="signedbv")
       return SUB::convert_rest(expr);
 
     bvt bv0, bv1;
@@ -68,7 +68,7 @@ literalt boolbvt::convert_overflow(const exprt &expr)
       throw "operand size mismatch on overflow-*";
 
     bv_utilst::representationt rep=
-      operands[0].type().is_signedbv()?bv_utilst::SIGNED:
+      operands[0].type().id()=="signedbv"?bv_utilst::SIGNED:
                                           bv_utilst::UNSIGNED;
 
     if(operands[0].type()!=operands[1].type())
@@ -124,7 +124,7 @@ literalt boolbvt::convert_overflow(const exprt &expr)
       throw "overflow-typecast got wrong number of bits";
       
     // signed or unsigned?
-    if(op.type().is_signedbv())
+    if(op.type().id()=="signedbv")
     {
       bvt tmp_bv;
       for(unsigned i=bits; i<bv.size(); i++)

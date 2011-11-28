@@ -91,7 +91,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
   }
 
   // eliminate typecasts from NULL
-  if(expr.type().is_pointer() &&
+  if(expr.type().id()=="pointer" &&
      expr.op0().is_constant() &&
      expr.op0().value().as_string()=="NULL")
   {
@@ -102,9 +102,9 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
   }
 
   // eliminate duplicate pointer typecasts
-  if(expr.type().is_pointer() &&
-     expr.op0().is_typecast() &&
-     expr.op0().type().is_pointer() &&
+  if(expr.type().id()=="pointer" &&
+     expr.op0().id()=="typecast" &&
+     expr.op0().type().id()=="pointer" &&
      expr.op0().operands().size()==1)
   {
     exprt tmp;
@@ -322,7 +322,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
       }
     }
   }
-  else if(operand.is_typecast()) // typecast of typecast
+  else if(operand.id()=="typecast") // typecast of typecast
   {
     if(operand.operands().size()==1 &&
        op_type_id==expr_type_id &&
@@ -341,7 +341,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
   if((op_type_id=="unsignedbv" || op_type_id=="signedbv") &&
      (expr_type_id=="unsignedbv" || expr_type_id=="signedbv") &&
      (operand.id()=="+" || operand.id()=="-" ||
-      operand.is_unary_sub() || operand.id()=="*") &&
+      operand.id()=="unary-" || operand.id()=="*") &&
      expr_width<=op_width)
   {
     exprt new_expr;
@@ -378,7 +378,7 @@ bool simplify_exprt::simplify_dereference(exprt &expr)
 {
   if(expr.operands().size()!=1) return true;
 
-  if(!expr.op0().type().is_pointer()) return true;
+  if(expr.op0().type().id()!="pointer") return true;
 
   if(expr.op0().is_address_of())
   {
@@ -410,16 +410,16 @@ bool simplify_exprt::simplify_address_of(exprt &expr)
 {
   if(expr.operands().size()!=1) return true;
 
-  if(!expr.type().is_pointer()) return true;
+  if(expr.type().id()!="pointer") return true;
 
-  if(expr.op0().is_null_object())
+  if(expr.op0().id()=="NULL-object")
   {
     exprt constant("constant", expr.type());
     constant.value("NULL");
     expr.swap(constant);
     return false;
   }
-  else if(expr.op0().is_index())
+  else if(expr.op0().id()=="index")
   {
     exprt &index_expr=expr.op0();
 
@@ -460,18 +460,18 @@ exprt simplify_exprt::pointer_offset(
   const exprt &expr,
   const typet &type)
 {
-  if(expr.is_symbol() ||
-     expr.is_string_constant())
+  if(expr.id()=="symbol" ||
+     expr.id()=="string-constant")
   {
     return gen_zero(type);
   }
-  else if(expr.is_member())
+  else if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
     // need to count members here
     return nil_exprt();
   }
-  else if(expr.is_index())
+  else if(expr.id()=="index")
   {
     const index_exprt &index_expr=to_index_expr(expr);
     const exprt &array=index_expr.array();
@@ -514,7 +514,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
 
   exprt &ptr=expr.op0();
 
-  if(!ptr.type().is_pointer()) return true;
+  if(ptr.type().id()!="pointer") return true;
 
   if(ptr.is_address_of())
   {
@@ -529,7 +529,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
       return false;
     }
   }
-  else if(ptr.is_typecast()) // pointer typecast
+  else if(ptr.id()=="typecast") // pointer typecast
   {
     // need to be careful here
     if(ptr.operands().size()!=1) return true;
@@ -552,7 +552,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
 
     forall_operands(it, ptr)
     {
-      if(it->type().is_pointer())
+      if(it->type().id()=="pointer")
         ptr_expr.push_back(*it);
       else if(!it->is_zero())
         int_expr.push_back(*it);
@@ -720,10 +720,10 @@ bool simplify_exprt::simplify_division(exprt &expr)
      expr.type()!=expr.op1().type())
     return true;
 
-  if(expr.type().is_signedbv() ||
-     expr.type().is_unsignedbv() ||
+  if(expr.type().id()=="signedbv" ||
+     expr.type().id()=="unsignedbv" ||
      expr.type().id()=="natural" ||
-     expr.type().is_integer())
+     expr.type().id()=="integer")
   {
     mp_integer int_value0, int_value1;
     bool ok0, ok1;
@@ -769,7 +769,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
       }
     }
   }
-  else if(expr.type().is_fixedbv())
+  else if(expr.type().id()=="fixedbv")
   {
     // division by one?
     if(expr.op1().is_constant() &&
@@ -794,7 +794,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
       }
     }
   }
-  else if(expr.type().is_floatbv())
+  else if(expr.type().id()=="floatbv")
   {
     // division by one?
     if(expr.op1().is_constant() &&
@@ -843,10 +843,10 @@ bool simplify_exprt::simplify_modulo(exprt &expr)
   if(expr.operands().size()!=2)
     return true;
 
-  if(expr.type().is_signedbv() ||
-     expr.type().is_unsignedbv() ||
+  if(expr.type().id()=="signedbv" ||
+     expr.type().id()=="unsignedbv" ||
      expr.type().id()=="natural" ||
-     expr.type().is_integer())
+     expr.type().id()=="integer")
   {
     if(expr.type()==expr.op0().type() &&
        expr.type()==expr.op1().type())
@@ -900,7 +900,7 @@ bool simplify_exprt::simplify_addition_substraction(
   exprt &expr, modet mode)
 {
   if(!is_number(expr.type()) &&
-     !expr.type().is_pointer())
+     expr.type().id()!="pointer")
     return true;
 
   bool result=true;
@@ -1028,17 +1028,17 @@ bool simplify_exprt::simplify_bitwise(exprt &expr)
     std::string new_value;
     new_value.resize(width);
 
-    if(expr.is_bitand())
+    if(expr.id()=="bitand")
     {
       for(unsigned i=0; i<width; i++)
         new_value[i]=(a_str[i]=='1' && b_str[i]=='1')?'1':'0';
     }
-    else if(expr.is_bitor())
+    else if(expr.id()=="bitor")
     {
       for(unsigned i=0; i<width; i++)
         new_value[i]=(a_str[i]=='1' || b_str[i]=='1')?'1':'0';
     }
-    else if(expr.is_bitxor())
+    else if(expr.id()=="bitxor")
     {
       for(unsigned i=0; i<width; i++)
         new_value[i]=((a_str[i]=='1')!=(b_str[i]=='1'))?'1':'0';
@@ -1220,8 +1220,8 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
   if(to_integer(expr.op0(), value))
     return true;
 
-  if(expr.op0().type().is_unsignedbv() ||
-     expr.op0().type().is_signedbv())
+  if(expr.op0().type().id()=="unsignedbv" ||
+     expr.op0().type().id()=="signedbv")
   {
     mp_integer width=
       string2integer(id2string(expr.op0().type().width()));
@@ -1241,7 +1241,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
         return false;
       }
     }
-    else if(expr.is_ashr())
+    else if(expr.id()=="ashr")
     {
       // this is to simulate an arithmetic right shift
       if(distance>=0)
@@ -1270,7 +1270,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
       }
     }
   }
-  else if(expr.op0().type().is_integer() ||
+  else if(expr.op0().type().id()=="integer" ||
 	  expr.op0().type().id()=="natural")
   {
     if(expr.id()=="lshr")
@@ -1282,7 +1282,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
         return false;
       }
     }
-    else if(expr.is_ashr())
+    else if(expr.id()=="ashr")
     {
       // this is to simulate an arithmetic right shift
       if(distance>=0)
@@ -1546,7 +1546,7 @@ bool simplify_exprt::simplify_if_branch(
     tresult = simplify_if_conj(trueexpr, cond) && tresult;
     fresult = simplify_if_recursive(falseexpr, cond, false) && fresult;
   }
-  else if(cond.is_or())
+  else if(cond.id()=="or")
   {
     tresult = simplify_if_recursive(trueexpr, cond, true) && tresult;
     fresult = simplify_if_disj(falseexpr, cond) && fresult;
@@ -1643,7 +1643,7 @@ bool simplify_exprt::simplify_if(exprt &expr)
 
     if(do_simplify_if)
     {
-      if(cond.is_not())
+      if(cond.id()=="not")
       {
         exprt tmp;
         tmp.swap(cond.op0());
@@ -1734,7 +1734,7 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
   if(!expr.type().is_bool() ||
      !op.type().is_bool()) return true;
 
-  if(op.is_not()) // (not not a) == a
+  if(op.id()=="not") // (not not a) == a
   {
     if(op.operands().size()==1)
     {
@@ -1755,7 +1755,7 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
     return false;
   }
   else if(op.is_and() ||
-          op.is_or())
+          op.id()=="or")
   {
     exprt tmp;
     tmp.swap(op);
@@ -1842,7 +1842,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
       return false;
     }
   }
-  else if(expr.is_or() ||
+  else if(expr.id()=="or" ||
           expr.is_and() ||
           expr.id()=="xor")
   {
@@ -1866,7 +1866,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
         expr.make_false();
         return false;
       }
-      else if(expr.is_or() && is_true)
+      else if(expr.id()=="or" && is_true)
       {
         expr.make_true();
         return false;
@@ -1880,7 +1880,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
         erase=is_false;
 
       if(last_set && *it==*last &&
-         (expr.is_or() || expr.is_and()))
+         (expr.id()=="or" || expr.is_and()))
         erase=true; // erase duplicate operands
 
       if(erase)
@@ -1897,14 +1897,14 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
     }
 
     // search for a and !a
-    if(expr.is_and() || expr.is_or())
+    if(expr.is_and() || expr.id()=="or")
     {
       // first gather all the a's with !a
 
       std::set<exprt> expr_set;
 
       forall_operands(it, expr)
-        if(it->is_not() &&
+        if(it->id()=="not" &&
            it->operands().size()==1 &&
            it->type().is_bool())
           expr_set.insert(it->op0());
@@ -1914,7 +1914,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
       forall_operands(it, expr)
         if(expr_set.find(*it)!=expr_set.end())
         {
-          expr.make_bool(expr.is_or());
+          expr.make_bool(expr.id()=="or");
           return false;
         }
     }
@@ -1937,7 +1937,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
 
     return result;
   }
-  else if(expr.id()=="=" || expr.is_notequal())
+  else if(expr.id()=="=" || expr.id()=="notequal")
   {
     if(operands.size()==2 && operands.front()==operands.back())
     {
@@ -1979,13 +1979,13 @@ bool simplify_exprt::simplify_bitnot(exprt &expr)
 
   exprt &op=operands.front();
 
-  if(expr.type().is_bv() ||
-     expr.type().is_unsignedbv() ||
-     expr.type().is_signedbv())
+  if(expr.type().id()=="bv" ||
+     expr.type().id()=="unsignedbv" ||
+     expr.type().id()=="signedbv")
   {
     if(op.type()==expr.type())
     {
-      if(op.is_constant())
+      if(op.id()=="constant")
       {
         std::string value=op.value().as_string();
 
@@ -2029,7 +2029,7 @@ bool simplify_exprt::get_values(
 
     return false;
   }
-  else if(expr.is_if())
+  else if(expr.id()=="if")
   {
     if(expr.operands().size()!=3)
       return true;
@@ -2082,18 +2082,18 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
         expr.make_bool(v0==v1);
         return false;
       }
-      else if(expr.is_notequal())
+      else if(expr.id()=="notequal")
       {
         expr.make_bool(v0!=v1);
         return false;
       }
     }
-    else if(expr.op0().type().is_fixedbv())
+    else if(expr.op0().type().id()=="fixedbv")
     {
       fixedbvt f0(expr.op0());
       fixedbvt f1(expr.op1());
 
-      if(expr.is_notequal())
+      if(expr.id()=="notequal")
         expr.make_bool(f0!=f1);
       else if(expr.id()=="=")
         expr.make_bool(f0==f1);
@@ -2110,12 +2110,12 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
 
       return false;
     }
-    else if(expr.op0().type().is_floatbv())
+    else if(expr.op0().type().id()=="floatbv")
     {
       ieee_floatt f0(expr.op0());
       ieee_floatt f1(expr.op1());
 
-      if(expr.is_notequal())
+      if(expr.id()=="notequal")
         expr.make_bool(f0!=f1);
       else if(expr.id()=="=")
         expr.make_bool(f0==f1);
@@ -2142,7 +2142,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
       if(to_integer(expr.op1(), v1))
         return true;
 
-      if(expr.is_notequal())
+      if(expr.id()=="notequal")
         expr.make_bool(v0!=v1);
       else if(expr.id()=="=")
         expr.make_bool(v0==v1);
@@ -2257,7 +2257,7 @@ bool simplify_exprt::simplify_inequality_not_constant(
   exprt::operandst &operands=expr.operands();
 
   // eliminate strict inequalities
-  if(expr.is_notequal())
+  if(expr.id()=="notequal")
   {
     expr.id("=");
     simplify_inequality_not_constant(expr, mode);
@@ -2385,7 +2385,7 @@ bool simplify_exprt::simplify_inequality_constant(
 {
   assert(expr.op1().is_constant());
 
-  if(expr.op1().type().is_pointer())
+  if(expr.op1().type().id()=="pointer")
     return true;
 
   // is it a separation predicate?
@@ -2394,7 +2394,7 @@ bool simplify_exprt::simplify_inequality_constant(
   {
     // see if there is a constant in the sum
 
-    if(expr.id()=="=" || expr.is_notequal())
+    if(expr.id()=="=" || expr.id()=="notequal")
     {
       mp_integer constant=0;
       bool changed=false;
@@ -2433,7 +2433,7 @@ bool simplify_exprt::simplify_inequality_constant(
   if(expr.op1().is_zero())
   {
     if(expr.id()==">=" &&
-       expr.op0().type().is_unsignedbv())
+       expr.op0().type().id()=="unsignedbv")
     {
       // zero is always smaller or equal something unsigned
       expr.make_true();
@@ -2445,7 +2445,7 @@ bool simplify_exprt::simplify_inequality_constant(
     if(expr.id()=="=")
     {
       // rules below do not hold for >=
-      if(operand.is_unary_sub())
+      if(operand.id()=="unary-")
       {
         if(operand.operands().size()!=1) return true;
         exprt tmp;
@@ -2461,10 +2461,10 @@ bool simplify_exprt::simplify_inequality_constant(
         {
           // if we have -b+a=0, make that a+(-b)=0
 
-          if(operand.op0().is_unary_sub())
+          if(operand.op0().id()=="unary-")
             operand.op0().swap(operand.op1());
 
-          if(operand.op1().is_unary_sub() &&
+          if(operand.op1().id()=="unary-" &&
              operand.op1().operands().size()==1)
           {
             exprt tmp(expr.id(), expr.type());
@@ -2499,9 +2499,9 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
   bool result=true;
 
   // special case
-  if((expr.id()=="=" || expr.is_notequal()) &&
+  if((expr.id()=="=" || expr.id()=="notequal") &&
      expr.operands().size()==2 &&
-     expr.op0().type().is_pointer())
+     expr.op0().type().id()=="pointer")
   {
     const exprt *other=NULL;
 
@@ -2517,8 +2517,8 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
       if(other->is_address_of() &&
          other->operands().size()==1)
       {
-        if(other->op0().is_symbol() ||
-           other->op0().is_member())
+        if(other->op0().id()=="symbol" ||
+           other->op0().id()=="member")
         {
           expr.make_bool(expr.id()!="=");
           return false;
@@ -2527,7 +2527,7 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
     }
   }
 
-  if(expr.id()=="="  || expr.is_notequal() ||
+  if(expr.id()=="="  || expr.id()=="notequal" ||
      expr.id()==">=" || expr.id()=="<=" ||
      expr.id()==">"  || expr.id()=="<")
     result=simplify_inequality(expr, mode) && result;
@@ -2641,10 +2641,10 @@ bool simplify_exprt::simplify_with(exprt &expr)
 
   // now look at first operand
 
-  if(expr.op0().type().is_struct())
+  if(expr.op0().type().id()=="struct")
   {
-    if(expr.op0().is_struct() ||
-       expr.op0().is_constant())
+    if(expr.op0().id()=="struct" ||
+       expr.op0().id()=="constant")
     {
       while(expr.operands().size()>1)
       {
@@ -2670,7 +2670,7 @@ bool simplify_exprt::simplify_with(exprt &expr)
   else if(expr.op0().type().is_array())
   {
     if(expr.op0().is_array() ||
-       expr.op0().is_constant())
+       expr.op0().id()=="constant")
     {
       while(expr.operands().size()>1)
       {
@@ -2742,7 +2742,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       return false;
     }
   }
-  else if(expr.op0().is_with())
+  else if(expr.op0().id()=="with")
   {
     exprt &with_expr=expr.op0();
 
@@ -2787,7 +2787,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       return false;
     }
   }
-  else if(expr.op0().is_constant() ||
+  else if(expr.op0().id()=="constant" ||
           expr.op0().is_array())
   {
     if(mode==NORMAL)
@@ -2811,7 +2811,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       }
     }
   }
-  else if(expr.op0().is_string_constant())
+  else if(expr.op0().id()=="string-constant")
   {
     if(mode==NORMAL)
     {
@@ -2836,7 +2836,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       }
     }
   }
-  else if(expr.op0().is_array_of())
+  else if(expr.op0().id()=="array_of")
   {
     if(expr.op0().operands().size()==1)
     {
@@ -2866,11 +2866,11 @@ bool simplify_exprt::simplify_object(exprt &expr)
 {
   if(expr.id()=="+")
   {
-    if(expr.type().is_pointer())
+    if(expr.type().id()=="pointer")
     {
       // kill integers from sum
       for(unsigned i=0; i<expr.operands().size(); i++)
-        if(expr.operands()[i].type().is_pointer())
+        if(expr.operands()[i].type().id()=="pointer")
         {
           exprt tmp=expr.operands()[i];
           expr.swap(tmp);
@@ -2879,10 +2879,10 @@ bool simplify_exprt::simplify_object(exprt &expr)
         }
     }
   }
-  else if(expr.is_typecast())
+  else if(expr.id()=="typecast")
   {
     if(expr.operands().size()==1 &&
-       expr.op0().type().is_pointer())
+       expr.op0().type().id()=="pointer")
     {
       exprt tmp;
       tmp.swap(expr.op0());
@@ -2957,7 +2957,7 @@ tvt simplify_exprt::objects_equal(const exprt &a, const exprt &b)
      a.operands().size()==1 && b.operands().size()==1)
     return objects_equal_address_of(a.op0(), b.op0());
 
-  if(a.is_constant() && b.is_constant() &&
+  if(a.id()=="constant" && b.id()=="constant" &&
      a.value().as_string()=="NULL" && b.value().as_string()=="NULL")
     return tvt(true);
 
@@ -2980,17 +2980,17 @@ tvt simplify_exprt::objects_equal_address_of(const exprt &a, const exprt &b)
 {
   if(a==b) return tvt(true);
 
-  if(a.is_symbol() && b.is_symbol())
+  if(a.id()=="symbol" && b.id()=="symbol")
   {
     if(a.identifier()==b.identifier())
       return tvt(true);
   }
-  else if(a.is_index() && b.is_index())
+  else if(a.id()=="index" && b.id()=="index")
   {
     if(a.operands().size()==2 && b.operands().size()==2)
       return objects_equal_address_of(a.op0(), b.op0());
   }
-  else if(a.is_member() && b.is_member())
+  else if(a.id()=="member" && b.id()=="member")
   {
     if(a.operands().size()==1 && b.operands().size()==1)
       return objects_equal_address_of(a.op0(), b.op0());
@@ -3098,7 +3098,7 @@ bool simplify_exprt::simplify_member(member_exprt &expr)
 
   exprt &op=expr.op0();
 
-  if(op.is_with())
+  if(op.id()=="with")
   {
     if(op.operands().size()>=3)
     {
@@ -3133,10 +3133,10 @@ bool simplify_exprt::simplify_member(member_exprt &expr)
       return false;
     }
   }
-  else if(op.is_struct() ||
-          op.is_constant())
+  else if(op.id()=="struct" ||
+          op.id()=="constant")
   {
-    if(op.type().is_struct())
+    if(op.type().id()=="struct")
     {
       const struct_typet &struct_type=to_struct_type(op.type());
       if(struct_type.has_component(component_name))
@@ -3357,7 +3357,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
   //std::cout << "simplify_unary_minus expr.pretty(): " << expr.pretty() << std::endl;
   //std::cout << "operand.id(): " << operand.id() << std::endl;
 
-  if(operand.is_unary_sub())
+  if(operand.id()=="unary-")
   {
     if(operand.operands().size()!=1)
       return true;
@@ -3370,7 +3370,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
     expr.swap(tmp);
     return false;
   }
-  else if(operand.is_constant())
+  else if(operand.id()=="constant")
   {
     const irep_idt &type_id=expr.type().id();
 //    std::cout << "type_id: " << type_id << std::endl;
@@ -3439,21 +3439,21 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
 
   result=sort_and_join(expr) && result;
 
-  if(expr.is_typecast())
+  if(expr.id()=="typecast")
     result=simplify_typecast(expr, mode) && result;
-  else if(expr.id()=="=" || expr.is_notequal() ||
+  else if(expr.id()=="=" || expr.id()=="notequal" ||
           expr.id()==">" || expr.id()=="<" ||
           expr.id()==">=" || expr.id()=="<=")
     result=simplify_relation(expr, mode) && result;
-  else if(expr.is_if())
+  else if(expr.id()=="if")
     result=simplify_if(expr) && result;
   else if(expr.id()=="lambda")
     result=simplify_lambda(expr) && result;
-  else if(expr.is_with())
+  else if(expr.id()=="with")
     result=simplify_with(expr) && result;
-  else if(expr.is_index())
+  else if(expr.id()=="index")
     result=simplify_index(to_index_expr(expr), mode) && result;
-  else if(expr.is_member())
+  else if(expr.id()=="member")
     result=simplify_member(to_member_expr(expr)) && result;
   else if(expr.id()=="pointer_object")
     result=simplify_pointer_object(expr) && result;
@@ -3461,7 +3461,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_is_dynamic_object(expr) && result;
   else if(expr.id()=="same-object")
     result=simplify_same_object(expr) && result;
-  else if(expr.is_dynamic_size())
+  else if(expr.id()=="dynamic_size")
     result=simplify_dynamic_size(expr) && result;
   else if(expr.id()=="valid_object")
     result=simplify_valid_object(expr) && result;
@@ -3471,28 +3471,28 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_division(expr) && result;
   else if(expr.id()=="mod")
     result=simplify_modulo(expr) && result;
-  else if(expr.is_bitnot())
+  else if(expr.id()=="bitnot")
     result=simplify_bitnot(expr) && result;
   else if(expr.id()=="mod")
   {
   }
-  else if(expr.is_bitnot() ||
-          expr.is_bitand() ||
-          expr.is_bitor() ||
-          expr.is_bitxor())
+  else if(expr.id()=="bitnot" ||
+          expr.id()=="bitand" ||
+          expr.id()=="bitor" ||
+          expr.id()=="bitxor")
     result=simplify_bitwise(expr) && result;
-  else if(expr.is_ashr() || expr.id()=="lshr" || expr.id()=="shl")
+  else if(expr.id()=="ashr" || expr.id()=="lshr" || expr.id()=="shl")
     result=simplify_shifts(expr) && result;
   else if(expr.id()=="+" || expr.id()=="-")
     result=simplify_addition_substraction(expr, mode) && result;
   else if(expr.id()=="*")
     result=simplify_multiplication(expr) && result;
-  else if(expr.is_unary_sub())
+  else if(expr.id()=="unary-")
     result=simplify_unary_minus(expr) && result;
-  else if(expr.is_not())
+  else if(expr.id()=="not")
     result=simplify_not(expr, mode) && result;
   else if(expr.id()=="=>"  || expr.id()=="<=>" ||
-          expr.is_or()  || expr.id()=="xor" ||
+          expr.id()=="or"  || expr.id()=="xor" ||
           expr.is_and())
     result=simplify_boolean(expr, mode) && result;
   else if(expr.id()=="comma")
@@ -3505,7 +3505,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
       result=false;
     }
   }
-  else if(expr.is_dereference())
+  else if(expr.id()=="dereference")
     result=simplify_dereference(expr) && result;
   else if(expr.is_address_of())
     result=simplify_address_of(expr) && result;

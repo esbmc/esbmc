@@ -300,6 +300,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
       abort();
     }
   }
+
+  config.options = options;
 }
 
 /*******************************************************************\
@@ -616,7 +618,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
 static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
 
-  if (e.is_symbol()) {
+  if (e.id() ==  "symbol") {
     std::string sym = e.identifier().as_string();
 
 // Originally this piece of code renamed all the symbols in the property
@@ -674,7 +676,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
     return;
 
   exprt sym = insn->code.op0();
-  if (!sym.is_symbol())
+  if (sym.id() != "symbol")
     return;
   // XXX - this means that we can't make propositions about things like
   // the contents of an array and suchlike.
@@ -743,7 +745,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
 {
   std::string identifier = expr.identifier().as_string();
 
-  if (!expr.is_symbol()) {
+  if (expr.id() != "symbol") {
     unsigned int globals = 0;
 
     forall_operands(it, expr)
