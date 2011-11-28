@@ -3,6 +3,7 @@ void __ESBMC_assume(_Bool x);
 void __ESBMC_atomic_begin(void);
 void __ESBMC_atomic_end(void);
 void __ESBMC_yield(void);
+void __ESBMC_switch_to(bool cond, unsigned int tid);
 
 int __ESBMC_buffer_size(void *b);
 _Bool __ESBMC_is_zero_string(char *s);

@@ -439,6 +439,30 @@ void goto_symext::symex_step(
                    return;
                 }
 
+                if (deref_code.function().get("identifier") == "c::__ESBMC_switch_to")
+                {
+                  state.source.pc++;
+                  ex_state.reexecute_instruction = false;
+
+                  // Context switch can be guarded. If the guard isn't explicit
+                  // state however, this defeats the object of directing
+                  // interleavings. So, only switches with explicitly true
+                  // guards are honoured.
+                  assert(deref_code.arguments().size() == 2);
+                  exprt &g = deref_code.arguments()[0];
+                  if (!g.is_true())
+                    return;
+
+                  // Switch to other thread.
+                  exprt &num = deref_code.arguments()[1];
+                  if (num.id() != "constant")
+                    throw "Can't switch to non-constant thread id no";
+
+                  unsigned int tid = binary2integer(num.get("value").as_string(), false).to_long();
+                  ex_state.set_active_state(tid);
+                  return;
+                }
+
                 Forall_expr(it, deref_code.arguments()) {
                     dereference(*it, state, false,ex_state.node_id);
                 }
