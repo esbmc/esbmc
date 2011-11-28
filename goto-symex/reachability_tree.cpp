@@ -288,11 +288,13 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
   if(code.operands().size()!=2)
     throw "assignment expects two operands";
 
+#if 0
   if (!_deadlock_detection)
     check_mutex(code, ex_state);
 
   if (get_is_same_mutex())
     return false;
+#endif
 
   if(check_CS_bound())
     return false;

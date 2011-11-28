@@ -1,3 +1,4 @@
-Z3 = $(SATDIR)/z3
-BOOLECTOR = $(SATDIR)/boolector
-MINISAT = $(SATDIR)/MiniSat-p_v1.14
+HOMEDIR = /home/lucas
+Z3 = $(HOMEDIR)/z3
+BOOLECTOR = $(HOMEDIR)/boolector
+MINISAT = $(HOMEDIR)/MiniSat-p_v1.14
