@@ -32,6 +32,8 @@ static std::vector<Z3_ast> core_vector;
 static u_int unsat_core_size=0;
 static u_int number_of_assumptions=0, assumptions_status=0;
 
+extern void finalize_symbols(void);
+
 //#define DEBUG
 
 /*******************************************************************
@@ -74,8 +76,18 @@ z3_convt::~z3_convt()
   }
 
   if (!uw)
-	  Z3_del_context(z3_ctx);
+	  Z3_pop(z3_ctx, 1);
 
+  // Experimental: if we're handled say, 10,000 ileaves, refresh the z3 ctx.
+  num_ctx_ileaves++;
+
+  if (num_ctx_ileaves == 10000) {
+    num_ctx_ileaves = 0;
+    Z3_del_context(z3_ctx);
+    finalize_symbols();
+    Z3_reset_memory();
+    z3_ctx = z3_api.mk_proof_context(!s_relevancy, s_is_uw);
+  }
 }
 
 /*******************************************************************
@@ -157,43 +169,6 @@ void z3_convt::set_z3_encoding(bool enc)
 void z3_convt::set_smtlib(bool smt)
 {
   z3_prop.smtlib = smt;
-}
-
-/*******************************************************************
- Function: z3_convt::set_z3_uw_models
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void z3_convt::set_z3_uw_models(bool uw_model)
-{
-  uw = uw_model;
-}
-
-/*******************************************************************
- Function: z3_convt::set_z3_relevancy
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void z3_convt::set_z3_relevancy(bool rel)
-{
-  if (rel)
-    z3_ctx = z3_api.mk_proof_context("false", uw);
-  else
-  	z3_ctx = z3_api.mk_proof_context("true", uw);
-
-  z3_prop.z3_ctx = z3_ctx;
 }
 
 /*******************************************************************
@@ -6729,3 +6704,9 @@ u_int z3_convt::get_number_variables_z3(void)
 {
   return number_variables_z3;
 }
+
+Z3_context z3_convt::z3_ctx = NULL;
+
+unsigned int z3_convt::num_ctx_ileaves = 0;
+bool z3_convt::s_relevancy = false;
+bool z3_convt::s_is_uw = false;

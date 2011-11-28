@@ -47,10 +47,9 @@ static void ifdefstmt(void);
 static void ifndefstmt(void);
 static void endifstmt(void);
 static void ifstmt(void);
-static void cpperror(void);
 static void pragmastmt(void);
 static void undefstmt(void);
-static void cpperror(void);
+static void cpplexerror(void);
 static void elifstmt(void);
 static void storepb(void);
 static void badop(const char *);
@@ -87,7 +86,7 @@ yyinput(char *b, int m)
 #define	YY_BUF_SIZE 32768
 #define YY_INPUT(b,r,m) (r = yyinput(b, m))
 #define fprintf(x, ...) error(__VA_ARGS__)
-#define	ECHO putstr((usch *)yytext)
+#define	ECHO putstr((usch *)cpptext)
 #undef fileno
 #define fileno(x) 0
 
@@ -101,7 +100,7 @@ void yyset_in (FILE *  in_str );
 void yyset_out (FILE *	out_str );
 int yyget_debug  (void);
 void yyset_debug (int  bdebug );
-int yylex_destroy  (void);
+int cpplex_destroy  (void);
 #endif
 #else	/* Assume lex here */
 #undef input
@@ -109,7 +108,7 @@ int yylex_destroy  (void);
 #define input() inch()
 #define unput(ch) unch(ch)
 #endif
-#define PRTOUT(x) if (YYSTATE || slow) return x; if (!flslvl) putstr((usch *)yytext);
+#define PRTOUT(x) if (YYSTATE || slow) return x; if (!flslvl) putstr((usch *)cpptext);
 int inclevel;
 %}
 
@@ -126,9 +125,9 @@ WS	[\t ]
 
 %%
 
-{WS}*#{WS}+[0-9]+{WS}+	{ contr = 0; BEGIN LINEINFO; putstr((usch*)yytext); }
-<LINEINFO>\".*\"{WS}*	{ putstr((usch*)yytext); }
-<LINEINFO>[0-9]{WS}*	{ putstr((usch*)yytext); }
+{WS}*#{WS}+[0-9]+{WS}+	{ contr = 0; BEGIN LINEINFO; putstr((usch*)cpptext); }
+<LINEINFO>\".*\"{WS}*	{ putstr((usch*)cpptext); }
+<LINEINFO>[0-9]{WS}*	{ putstr((usch*)cpptext); }
 <LINEINFO>"\n"		{ putstr("\n"); BEGIN 0; }
 
 
@@ -161,25 +160,25 @@ WS	[\t ]
 <IFR>"&&"		{ return ANDAND; }
 <IFR>"defined"		{	int p, c;
 				gotdef = 1;
-				if ((p = c = yylex()) == '(')
-					c = yylex();
+				if ((p = c = cpplex()) == '(')
+					c = cpplex();
 				if (c != IDENT || (p != IDENT && p != '('))
 					error("syntax error");
-				if (p == '(' && yylex() != ')')
+				if (p == '(' && cpplex() != ')')
 					error("syntax error");
 				return NUMBER;
 			}
 
 <IFR>{WS}+		{ ; }
 <IFR>{L}({L}|{D})*	{
-				yylval.node.op = NUMBER;
+				cpplval.node.op = NUMBER;
 				if (gotdef) {
-					yylval.node.nd_val
-					    = lookup((usch *)yytext, FIND) != 0;
+					cpplval.node.nd_val
+					    = lookup((usch *)cpptext, FIND) != 0;
 					gotdef = 0;
 					return IDENT;
 				}
-				yylval.node.nd_val = 0;
+				cpplval.node.nd_val = 0;
 				return NUMBER;
 			}
 
@@ -193,13 +192,13 @@ WS	[\t ]
 0{D}+{IS}?		{ scale = 8; goto num; }
 {D}+{IS}?		{ scale = 10; goto num; }
 L?'(\\.|[^\\'])+'	{	if (YYSTATE) {
-					yylval.node.op = NUMBER;
-					yylval.node.nd_val = charcon();
+					cpplval.node.op = NUMBER;
+					cpplval.node.nd_val = charcon();
 				}
 				PRTOUT(NUMBER);
 			}
 
-<IFR>.			{ return yytext[0]; }
+<IFR>.			{ return cpptext[0]; }
 
 {D}+{E}{FS}?		{ PRTOUT(FPOINT); }
 {D}*"."{D}+({E})?{FS}?	{ PRTOUT(FPOINT); }
@@ -221,7 +220,7 @@ L?'(\\.|[^\\'])+'	{	if (YYSTATE) {
 <CONTR>"include"	{ contr = 0; BEGIN 0; include(); prtline(); }
 <CONTR>"else"		{ contr = 0; elsestmt(); }
 <CONTR>"endif"		{ contr = 0; endifstmt(); }
-<CONTR>"error"		{ contr = 0; if (slow) return IDENT; cpperror(); BEGIN 0; }
+<CONTR>"error"		{ contr = 0; if (slow) return IDENT; cpplexerror(); BEGIN 0; }
 <CONTR>"define"		{ contr = 0; BEGIN DEF; define(); BEGIN 0; }
 <CONTR>"undef"		{ contr = 0; if (slow) return IDENT; undefstmt(); }
 <CONTR>"line"		{ contr = 0; storepb(); BEGIN 0; line(); }
@@ -232,13 +231,13 @@ L?'(\\.|[^\\'])+'	{	if (YYSTATE) {
 
 "//".*$			{ /* if (tflag) yyless(..) */
 				if (Cflag)
-					putstr((usch *)yytext);
+					putstr((usch *)cpptext);
 				else if (!flslvl)
 					putch(' ');
 			}
 "/*"			{	int c, wrn;
 				if (Cflag)
-					putstr((usch *)yytext);
+					putstr((usch *)cpptext);
 				wrn = 0;
 			more:	while ((c = input()) && c != '*') {
 					if (c == '\n')
@@ -292,24 +291,24 @@ L?\"(\\.|[^\\"])*\"	{ PRTOUT(STRING); }
 				}
 				if (flslvl) {
 					; /* do nothing */
-				} else if (isdigit((int)yytext[0]) == 0 &&
-				    (nl = lookup((usch *)yytext, FIND)) != 0) {
+				} else if (isdigit((int)cpptext[0]) == 0 &&
+				    (nl = lookup((usch *)cpptext, FIND)) != 0) {
 					usch *op = stringbuf;
 					putstr(gotident(nl));
 					stringbuf = op;
 				} else
-					putstr((usch *)yytext);
+					putstr((usch *)cpptext);
 				xx: ;
 			}
 
-.			{ PRTOUT(yytext[0]); }
+.			{ PRTOUT(cpptext[0]); }
 
 
 %%
 
 usch *yyp, yybuf[CPPBUF];
 
-int yylex(void);
+int cpplex(void);
 int yywrap(void);
 
 static int
@@ -464,8 +463,8 @@ pushfile(usch *file)
 
 	otrulvl = trulvl;
 
-	if ((c = yylex()) != 0)
-		error("yylex returned %d", c);
+	if ((c = cpplex()) != 0)
+		error("cpplex returned %d", c);
 
 	if (otrulvl != trulvl || flslvl)
 		error("unterminated conditional");
@@ -528,7 +527,7 @@ cvtdig(int rad)
 {
 	unsigned long long rv = 0;
 	unsigned long long rv2 = 0;
-	char *y = yytext;
+	char *y = cpptext;
 	int c;
 
 	c = *y++;
@@ -538,26 +537,26 @@ cvtdig(int rad)
 		rv = rv * rad + dig2num(c);
 		/* check overflow */
 		if (rv / rad < rv2)
-			error("Constant \"%s\" is out of range", yytext);
+			error("Constant \"%s\" is out of range", cpptext);
 		rv2 = rv;
 		c = *y++;
 	}
 	y--;
 	while (*y == 'l' || *y == 'L')
 		y++;
-	yylval.node.op = *y == 'u' || *y == 'U' ? UNUMBER : NUMBER;
-	yylval.node.nd_uval = rv;
-	if ((rad == 8 || rad == 16) && yylval.node.nd_val < 0)
-		yylval.node.op = UNUMBER;
-	if (yylval.node.op == NUMBER && yylval.node.nd_val < 0)
+	cpplval.node.op = *y == 'u' || *y == 'U' ? UNUMBER : NUMBER;
+	cpplval.node.nd_uval = rv;
+	if ((rad == 8 || rad == 16) && cpplval.node.nd_val < 0)
+		cpplval.node.op = UNUMBER;
+	if (cpplval.node.op == NUMBER && cpplval.node.nd_val < 0)
 		/* too large for signed */
-		error("Constant \"%s\" is out of range", yytext);
+		error("Constant \"%s\" is out of range", cpptext);
 }
 
 static int
 charcon(void)
 {
-	usch *p = (usch *)yytext;
+	usch *p = (usch *)cpptext;
 	int val, c;
 
 	if (*p == 'L')
@@ -604,10 +603,10 @@ chknl(void)
 	int t;
 
 	slow = 1;
-	while ((t = yylex()) == WSPACE)
+	while ((t = cpplex()) == WSPACE)
 		;
 	if (t != '\n')
-		error("newline expected, got \"%s\"", yytext);
+		error("newline expected, got \"%s\"", cpptext);
 	slow = 0;
 }
 
@@ -644,18 +643,18 @@ ifdefstmt(void)
 		while (input() != '\n')
 			;
 		unput('\n');
-		yylex();
+		cpplex();
 		flslvl++;
 		return;
 	}
 	slow = 1;
 	do
-		t = yylex();
+		t = cpplex();
 	while (t == WSPACE);
 	if (t != IDENT)
 		error("bad ifdef");
 	slow = 0;
-	if (flslvl == 0 && lookup((usch *)yytext, FIND) != 0)
+	if (flslvl == 0 && lookup((usch *)cpptext, FIND) != 0)
 		trulvl++;
 	else
 		flslvl++;
@@ -669,12 +668,12 @@ ifndefstmt(void)
 
 	slow = 1;
 	do
-		t = yylex();
+		t = cpplex();
 	while (t == WSPACE);
 	if (t != IDENT)
 		error("bad ifndef");
 	slow = 0;
-	if (flslvl == 0 && lookup((usch *)yytext, FIND) == 0)
+	if (flslvl == 0 && lookup((usch *)cpptext, FIND) == 0)
 		trulvl++;
 	else
 		flslvl++;
@@ -744,7 +743,7 @@ fixdefined(usch *s)
  * get the full line of identifiers after an #if, pushback a WARN and
  * the line and prepare for expmac() to expand.
  * This is done before switching state.  When expmac is finished,
- * pushback the expanded line, change state and call yyparse.
+ * pushback the expanded line, change state and call cppparse.
  */
 static void
 storepb(void)
@@ -773,7 +772,7 @@ ifstmt(void)
 {
 	if (flslvl == 0) {
 		slow = 1;
-		if (yyparse())
+		if (cppparse())
 			++trulvl;
 		else
 			++flslvl;
@@ -794,7 +793,7 @@ elifstmt(void)
 			++flslvl;
 		else {
 			slow = 1;
-			if (yyparse()) {
+			if (cppparse()) {
 				++trulvl;
 				prtline();
 			} else
@@ -823,14 +822,14 @@ svinp(void)
 }
 
 static void
-cpperror(void)
+cpplexerror(void)
 {
 	usch *cp;
 	int c;
 
 	if (flslvl)
 		return;
-	c = yylex();
+	c = cpplex();
 	if (c != WSPACE && c != '\n')
 		error("bad error");
 	cp = svinp();
@@ -846,9 +845,9 @@ undefstmt(void)
 	struct symtab *np;
 
 	slow = 1;
-	if (yylex() != WSPACE || yylex() != IDENT)
+	if (cpplex() != WSPACE || cpplex() != IDENT)
 		error("bad undef");
-	if (flslvl == 0 && (np = lookup((usch *)yytext, FIND)))
+	if (flslvl == 0 && (np = lookup((usch *)cpptext, FIND)))
 		np->value = 0;
 	slow = 0;
 	chknl();
@@ -860,7 +859,7 @@ pragmastmt(void)
 	int c;
 
 	slow = 1;
-	if (yylex() != WSPACE)
+	if (cpplex() != WSPACE)
 		error("bad pragma");
 	if (!flslvl)
 		putstr((usch *)"#pragma ");

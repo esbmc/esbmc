@@ -7,6 +7,11 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <sys/types.h>
+
+#include <signal.h>
+#include <unistd.h>
+
 #include <sstream>
 #include <fstream>
 
@@ -19,7 +24,9 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/sat/dimacs_cnf.h>
 
+#ifdef USE_CVC
 #include <solvers/cvc/cvc_dec.h>
+#endif
 
 #include <solvers/boolector/boolector_dec.h>
 
@@ -40,6 +47,16 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include "counterex_pretty_greedy.h"
 #include "document_subgoals.h"
 #include "version.h"
+
+static volatile bool checkpoint_sig = false;
+
+void
+sigusr1_handler(int sig)
+{
+
+  checkpoint_sig = true;
+  return;
+}
 
 /*******************************************************************\
 
@@ -324,12 +341,19 @@ Function: bmc_baset::run
 
 bool bmc_baset::run(const goto_functionst &goto_functions)
 {
+  struct sigaction act;
   bool resp;
   symex.set_message_handler(message_handler);
   symex.set_verbosity(get_verbosity());
   symex.options=options;
 
   symex.last_location.make_nil();
+
+  // Collect SIGUSR1, indicating that we're supposed to checkpoint.
+  act.sa_handler = sigusr1_handler;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = 0;
+  sigaction(SIGUSR1, &act, NULL);
 
   // get unwinding info
   setup_unwind();
@@ -358,9 +382,19 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   {
     symex.multi_formulas_init(goto_functions);
 
-    while(symex.multi_formulas_has_more_formula())
+    if (options.get_bool_option("from-checkpoint")) {
+      if (options.get_option("checkpoint-file") == "") {
+        std::cerr << "Please provide a checkpoint file" << std::endl;
+        abort();
+      }
+
+      reachability_treet::dfs_position pos(
+                                         options.get_option("checkpoint-file"));
+      symex.restore_from_dfs_state(pos);
+    }
+
+    do
     {
-      equation->clear();
       symex.total_claims=0;
       symex.remaining_claims=0;
 
@@ -375,7 +409,24 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
           return true;
         }
       }
-    }
+
+      if (checkpoint_sig) {
+        // We're supposed to perform a checkpoint now.
+        std::string f;
+
+        if (options.get_option("checkpoint-file") == "") {
+          char buffer[32];
+          sprintf(buffer, "%d", getpid());
+          f = "esbmc_checkpoint." + std::string(buffer);
+        } else {
+          f = options.get_option("checkpoint-file");
+        }
+
+        symex.save_checkpoint(f);
+
+        checkpoint_sig = false;
+      }
+    } while(symex.multi_formulas_setup_next());
   }
 
   if (symex.options.get_bool_option("all-runs"))
@@ -400,8 +451,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     }
     else
     {
-      symex.multi_formulas_get_next_formula();
-      equation = &symex.art1->_cur_target_state->_target;
+      equation = symex.multi_formulas_get_next_formula();
     }
   }
 
@@ -502,7 +552,11 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       throw "This version of ESBMC was not compiled with boolector support";
 #endif
     else if(options.get_bool_option("cvc"))
+#ifdef USE_CVC
       solver = new cvc_solver(*this);
+#else
+      throw "This version of ESBMC was not compiled with CVC support";
+#endif
 #if 0
     else if(options.get_bool_option("smt"))
       solver = new smt_solver(*this);
@@ -636,15 +690,13 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 
 #ifdef Z3
 bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
-  : solver_base(bmc), z3_dec()
+  : solver_base(bmc), z3_dec(bmc.options.get_bool_option("no-assume-guarentee"), bmc.options.get_bool_option("uw-model"))
 {
   z3_dec.set_encoding(bmc.options.get_bool_option("int-encoding"));
   z3_dec.set_file(bmc.options.get_option("outfile"));
   z3_dec.set_smt(bmc.options.get_bool_option("smt"));
   z3_dec.set_unsat_core(atol(bmc.options.get_option("core-size").c_str()));
-  z3_dec.set_uw_models(bmc.options.get_bool_option("uw-model"));
   z3_dec.set_ecp(bmc.options.get_bool_option("ecp"));
-  z3_dec.set_relevancy(bmc.options.get_bool_option("no-assume-guarantee"));
   conv = &z3_dec;
 }
 
@@ -714,6 +766,7 @@ bool bmc_baset::dimacs_solver::write_output()
   return false;
 }
 
+#ifdef USE_CVC
 bmc_baset::cvc_solver::cvc_solver(bmc_baset &bmc)
   : output_solver(bmc), cvc(*out_file)
 {
@@ -724,7 +777,9 @@ bool bmc_baset::cvc_solver::write_output()
 {
   return false;
 }
+#endif
 
+#ifdef USE_SMT
 bmc_baset::smt_solver::smt_solver(bmc_baset &bmc)
   : output_solver(bmc), smt(*out_file)
 {
@@ -735,3 +790,4 @@ bool bmc_baset::smt_solver::write_output()
 {
   return false;
 }
+#endif

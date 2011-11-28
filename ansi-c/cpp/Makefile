@@ -10,11 +10,11 @@ preproc.o: $(OBJS) $(HEADERS)
 	$(LD) $(LDFLAGS) $(OBJS) -r -o $@
 
 .l.o:
-	$(LEX) $(LFLAGS) $<
-	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ lex.yy.c
+	$(LEX) -Pcpp $(LFLAGS) $<
+	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ lex.cpp.c
 
 .y.o:
-	$(YACC) -d $(YFLAGS) $<
+	$(YACC) -d $(YFLAGS) -pcpp $<
 	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ y.tab.c
 
 compat.o: compat.c
@@ -26,7 +26,8 @@ cpp.o: cpy.o
 
 clean:
 	-rm *.o
-	-rm lex.yy.c
+	-rm lex.cpp.c
 	-rm y.tab.c
 	-rm y.tab.h
+	-rm y.output
 	-rm *.d

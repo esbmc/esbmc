@@ -54,14 +54,14 @@ c2goto: c2goto.cpp cprover_blank_library.o | $(C2GOTO_DEPS)
 
 clib32.o: c2goto library/*.c
 	./c2goto library/*.c --32 --output clib32.goto --no-lock-check
-	$(LD) -b binary clib32.goto -o clib32.o -r
+	$(LD) $(LDFLAGS) -b binary clib32.goto -o clib32.o -r
 
 clib64.o: c2goto library/*.c
 	./c2goto library/*.c --32 --output clib64.goto --no-lock-check
-	$(LD) -b binary clib64.goto -o clib64.o -r
+	$(LD) $(LDFLAGS) -b binary clib64.goto -o clib64.o -r
 
 clib.o: c2goto clib32.o clib64.o
-	$(LD) clib32.o clib64.o -o clib.o -r
+	$(LD) $(LDFLAGS) clib32.o clib64.o -o clib.o -r
 
 ###############################################################################
 
@@ -86,6 +86,7 @@ ansi-c.o: $(OBJ) cprover_library.o clib.o cpp/preproc.o headers/headers.o
 
 clean:
 	$(MAKE) -C cpp clean
+	$(MAKE) -C headers clean
 	-rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
 	-rm -f c2goto
 	-rm -f *.goto

@@ -16,7 +16,7 @@ OBJ = $(SRC:.cpp=.o) \
 
 INCLUDES= -I .. -I ../util -I$(Z3)/include
 
-LIBS= -lgmp -ldl
+LIBS= -lgmp -ldl -lgomp
 
 all: esbmc
 
@@ -51,6 +51,14 @@ endif
 
 ifdef MINISAT
 CXXFLAGS += -DMINISAT
+endif
+
+ifdef USE_CVC
+CXXFLAGS+= -DUSE_CVC
+endif
+
+ifdef USE_SMT
+CXXFLAGS+= USE_SMT
 endif
 
 ###############################################################################

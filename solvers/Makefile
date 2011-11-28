@@ -4,67 +4,48 @@ include ../config.inc
 include ../common
 include ../local.inc
 
+OBJS= sat/satsolvers.o flattening/flattening.o prop/propobj.o
+
+DIRS= sat flattening prop
+
+###############################################################################
+
 ifdef BOOLECTOR
-BOOLBUILD= boolector/boolector.o
+OBJS+= boolector/boolector.o
+DIRS+= boolector
 endif
 
 ifdef Z3
-Z3BUILD= z3/z3.o
+OBJS+= z3/z3.o
+DIRS+= z3
+endif
+
+ifdef USE_CVC
+OBJS+= cvc/cvc.o
+DIRS+= cvc
+endif
+
+ifdef USE_DPLIB
+OBJS+= dplib/dplib.o
+DIRS+= dplib
+endif
+
+ifdef USE_SMT
+OBJS+= smt/smt.o
+DIRS+= smt
+endif
+
+ifdef USE_QBF
+OBJS+= qbf/qbfsolvers.o
+DIRS+= qbf
 endif
 
 ###############################################################################
 
-sat/satsolvers.o: satdir
+$(DIRS):
+	$(MAKE) -C $@
 
-satdir:
-	$(MAKE) -C sat
-
-qbf/qbfsolvers.o: qbfdir
-
-qbfdir:
-	$(MAKE) -C qbf
-
-flattening/flattening.o: flatteningdir
-
-flatteningdir:
-	$(MAKE) -C flattening
-
-prop/propobj.o: propdir
-
-propdir:
-	$(MAKE) -C prop
-
-boolector/boolector.o: boolectordir
-
-boolectordir:
-	$(MAKE) -C boolector
-
-z3/z3.o: z3dir
-
-z3dir:
-	$(MAKE) -C z3
-
-cvc/cvc.o: cvcdir
-
-cvcdir:
-	$(MAKE) -C cvc
-
-smt/smt.o: smtdir
-
-smtdir:
-	$(MAKE) -C smt
-
-dplib/dplib.o: dplibdir
-
-dplibdir:
-	$(MAKE) -C dplib
-
-OBJS= sat/satsolvers.o flattening/flattening.o qbf/qbfsolvers.o \
-	prop/propobj.o cvc/cvc.o smt/smt.o  dplib/dplib.o \
-	$(BOOLBUILD) $(Z3BUILD)
-
-DIRS= satdir flatteningdir qbfdir propdir cvcdir smtdir dplibdir boolectordir \
-	z3dir
+$(OBJS): $(DIRS)
 
 .PHONY: $(DIRS)
 

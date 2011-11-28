@@ -101,6 +101,8 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"smtlib-ileave-num",	number,		""	},
 { 0,	"direct-interleavings",	switc,		""	},
 { 0,	"show-ileave-points",	switc,		""	},
+{ 0,	"checkpoint-file",	string,		""	},
+{ 0,	"from-checkpoint",	switc,		""	},
 { 0,	"decide",		switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},

@@ -1348,6 +1348,10 @@ void string_abstractiont::abstract_function_call(
     context.symbols.find(call.function().get("identifier"));
   if(f_it==context.symbols.end())
     throw "invalid function call";
+
+  // Don't attempt to strabs an absent function.
+  if (f_it->second.value.is_nil())
+    return;
   
   const code_typet &fnc_type = 
     static_cast<const code_typet &>(f_it->second.type);

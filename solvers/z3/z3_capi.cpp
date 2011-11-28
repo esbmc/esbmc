@@ -6,6 +6,8 @@ Author:
 
 \*******************************************************************/
 
+#include <string>
+
 #include "z3_capi.h"
 
 /**
@@ -43,7 +45,6 @@ void error_handler(Z3_error_code e)
     exitf("incorrect use of Z3");
 }
 
-static jmp_buf g_catch_buffer;
 /**
    \brief Low tech exceptions.
 
@@ -51,7 +52,12 @@ static jmp_buf g_catch_buffer;
 */
 void throw_z3_error(Z3_error_code c)
 {
-    longjmp(g_catch_buffer, c);
+  char buffer[16];
+
+  snprintf(buffer, 15, "%d", c);
+  buffer[15] = '\0';
+
+  throw std::string("Z3 Error ") + buffer;
 }
 
 /**
@@ -75,22 +81,25 @@ Z3_context z3_capi::mk_context_custom(Z3_config cfg, Z3_error_handler err)
     return ctx;
 }
 
-Z3_context z3_capi::mk_proof_context(char *solver, unsigned int is_uw)
+Z3_context z3_capi::mk_proof_context(bool solver, unsigned int is_uw)
 {
   Z3_config cfg = Z3_mk_config();
   Z3_context ctx;
+  const char *_solver;
+
+  _solver = (solver) ? "true" : "false";
 
   if (is_uw)
   {
     Z3_set_param_value(cfg,"PROOF_MODE","0");
     Z3_set_param_value(cfg,"RELEVANCY","0");
     //Z3_set_param_value(cfg,"SOLVER","false");
-    Z3_set_param_value(cfg,"SOLVER",solver);
+    Z3_set_param_value(cfg,"SOLVER",_solver);
   }
   else
   {
 	Z3_set_param_value(cfg,"RELEVANCY","0");
-    Z3_set_param_value(cfg,"SOLVER",solver);
+    Z3_set_param_value(cfg,"SOLVER",_solver);
   }
 
   ctx = mk_context_custom(cfg,throw_z3_error);

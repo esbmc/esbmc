@@ -27,7 +27,7 @@ protected:
 class z3_dect:protected z3_temp_filet, public z3_convt
 {
 public:
-  z3_dect():z3_convt(temp_out)
+  z3_dect(bool rel, bool uw):z3_convt(temp_out, rel, uw)
   {
   }
 
@@ -35,8 +35,6 @@ public:
   void set_encoding(bool enc);
   void set_file(std::string file);
   void set_smt(bool smt);
-  void set_uw_models(bool uw_models);
-  void set_relevancy(bool enc);
   void set_ecp(bool ecp);
   bool get_unsat_core(void);
   bool get_number_of_assumptions(void);
