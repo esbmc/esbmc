@@ -651,35 +651,45 @@ void reachability_treet::multi_formulae_go_next_state()
   std::list<execution_statet*>::iterator it = _cur_state_it;
   it++;
 
-  if(it != execution_states.end())
+  if(it != execution_states.end()) {
     _cur_state_it++;
-  else
-  {
-    bool last_state = true;
-    while(execution_states.size() > 0 && !generate_states_base(exprt()))
-    {
-      it = _cur_state_it;
-      _cur_state_it--;
-      _go_next_formula = true;
-      if(last_state)
-      {
-        if(_cur_target_state != NULL)
-          delete _cur_target_state;
-        _cur_target_state = *it;
-        last_state = false;
-      }
-      else
-      {
-        delete *it;
-      }
-      execution_states.erase(it);
-    }
-
-    if(execution_states.size() > 0)
+  } else {
+    if (generate_states_base(exprt()))
       _cur_state_it++;
- }
+    else
+      _go_next_formula = true;
+  }
 
-	_go_next = false;
+  _go_next = false;
+}
+
+bool reachability_treet::reset_to_unexplored_state()
+{
+  std::list<execution_statet*>::iterator it;
+
+  // After executing up to a point where all threads have ended and returning
+  // that equation to the caller, free and remove fully explored execution
+  // states back to the point where there's an unexplored one.
+
+  // Eliminate final execution state, then attempt to generate another one from
+  // the last on the list. If we can, it's an unexplored state, if we can't,
+  // all depths from the current execution state are explored, so delete it.
+
+  it = _cur_state_it--;
+  delete *it;
+  execution_states.erase(it);
+
+  while(execution_states.size() > 0 && !generate_states_base(exprt())) {
+    it = _cur_state_it--;
+    delete *it;
+    execution_states.erase(it);
+  }
+
+  if (execution_states.size() > 0)
+    _cur_state_it++;
+
+  _go_next = false;
+  return execution_states.size() != 0;
 }
 
 /*******************************************************************

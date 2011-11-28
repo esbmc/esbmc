@@ -130,9 +130,9 @@ Function: goto_symext::multi_formulas_has_more_formula
 
 \*******************************************************************/
 
-bool goto_symext::multi_formulas_has_more_formula()
+bool goto_symext::multi_formulas_setup_next()
 {
-  return art1->has_more_states();
+  return art1->reset_to_unexplored_state();
 }
 
 
@@ -148,7 +148,7 @@ Function: goto_symext::multi_formulas_get_next_formula
 
 \*******************************************************************/
 
-bool goto_symext::multi_formulas_get_next_formula()
+symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
 {
   static unsigned int total_formulae = 0;
   static int total_states = 0;
@@ -170,7 +170,7 @@ bool goto_symext::multi_formulas_get_next_formula()
 //  if (art1->get_actual_CS_bound() > art1->get_CS_bound())
 //    std::cout << "**** WARNING: need to increase the number of context switches" << std::endl;
 
-  return true;
+  return &art1->get_cur_state()._target;
 }
 
 /*******************************************************************\

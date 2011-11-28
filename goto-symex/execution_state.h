@@ -31,12 +31,13 @@ class execution_statet
 public:
 	execution_statet(const goto_functionst &goto_functions,
                 const namespacet &ns, const reachability_treet *art,
-                goto_symex_statet::level2t &l2):
+                goto_symex_statet::level2t &l2, bool _is_schedule):
 		owning_rt(art),
 		_state_level2(l2),
                 _target(ns),
                 _goto_functions(goto_functions)
 	{
+		is_schedule = _is_schedule;
 		reexecute_instruction = true;
 		reexecute_atomic = false;
 		_CS_number = 0;
@@ -59,6 +60,8 @@ public:
 		node_count=0;
 		nondet_count = 0;
 		dynamic_counter = 0;
+
+		str_state = string_container.take_state_snapshot();
 	};
 
 	execution_statet(const execution_statet &ex) :
@@ -68,6 +71,12 @@ public:
 		_goto_functions(ex._goto_functions)
 	{
 		*this = ex;
+
+		// Don't copy string state in this copy constructor - instead
+		// take another snapshot to represent what string state was
+		// like when we began the exploration this execution_statet will
+		// perform.
+		str_state = string_container.take_state_snapshot();
 
 		// Regenerate threads state using new objects _state_level2 ref
 		_threads_state.clear();
@@ -81,6 +90,7 @@ public:
 
 	execution_statet& operator=(const execution_statet &ex)
 	{
+		is_schedule = ex.is_schedule;
 		_threads_state = ex._threads_state;
 		_atomic_numbers = ex._atomic_numbers;
 		_DFS_traversed = ex._DFS_traversed;
@@ -108,7 +118,14 @@ public:
 		return *this;
 	}
 
-	virtual ~execution_statet()	{};
+	virtual ~execution_statet() {
+		// Free all name strings and suchlike we generated on this run
+		// and no longer require
+		// But, not if we're running with --schedule, as we'll need all
+		// that information later.
+		if (!is_schedule)
+			string_container.restore_state_snapshot(str_state);
+	};
 
     // Types
 
@@ -213,6 +230,9 @@ public:
     irep_idt guard_thread;
     irep_idt _parent_guard_identifier;
 
+    // Is the "--schedule" option enabled?
+    bool is_schedule;
+
     bool reexecute_instruction; // temporarily disable context switch for the thread inherited from the last active thread
     bool reexecute_atomic; // temporarily disable context switch for the thread inherited from the last active thread
     int _actual_CS_number; //count the actual number of context switches
@@ -228,6 +248,7 @@ private:
     const goto_functionst &_goto_functions;
     const goto_programt *_goto_program;
     int _CS_number;
+    string_containert::str_snapshot str_state;
 
     // Static stuff:
 
