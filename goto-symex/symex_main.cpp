@@ -309,7 +309,7 @@ void goto_symext::symex_step(
         const goto_functionst &goto_functions,
         reachability_treet & art) {
 
-  static bool is_main=false, is_goto=false;
+  static bool is_main=false;
 
   execution_statet &ex_state = art.get_cur_state();
   statet &state = ex_state.get_active_state();
@@ -365,7 +365,6 @@ void goto_symext::symex_step(
             break;
         case GOTO:
         {
-        	is_goto=true;
             exprt tmp(instruction.guard);
             replace_dynamic_allocation(state, tmp);
             replace_nondet(tmp, ex_state);
@@ -456,7 +455,7 @@ void goto_symext::symex_step(
 
                 if(ex_state._threads_state.size() > 1)
                 {
-                  if (!is_goto && !is_main)
+                  if (!is_main)
                   {
                     if (art.generate_states_before_assign(deref_code, ex_state))
                       return;
@@ -469,7 +468,6 @@ void goto_symext::symex_step(
                   	    ex_state.reexecute_instruction = false;
                   	    art.generate_states();
                     }
-                    is_goto=false;
                   }
                 }
             }

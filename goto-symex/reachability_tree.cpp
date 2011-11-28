@@ -564,12 +564,14 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     execution_states.push_back(new_state);
 
     /* Make it active, make it follow on from previous state... */
-    new_state->set_active_state(i);
+    if (new_state->get_active_thread_no() != i) {
+      new_state->increment_context_switch();
+      new_state->set_active_state(i);
+    }
+
     new_state->set_parent_guard(ex_state.get_guard_identifier());
     new_state->reexecute_instruction = true;
 
-    new_state->increment_context_switch();
-    /* ^^^ What if there /wasn't/ a switch though? */
 //    execution_states.rbegin()->copy_level2_from(ex_state);
 //    Copy constructor should duplicate level2 object
     /* Reset interleavings (?) investigated in this new state */
