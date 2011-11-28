@@ -721,6 +721,7 @@ bool bmc_baset::cvc_solver::write_output()
   return false;
 }
 
+#ifdef USE_SMT
 bmc_baset::smt_solver::smt_solver(bmc_baset &bmc)
   : output_solver(bmc), smt(*out_file)
 {
@@ -731,3 +732,4 @@ bool bmc_baset::smt_solver::write_output()
 {
   return false;
 }
+#endif
