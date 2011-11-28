@@ -41,11 +41,13 @@ public:
   {
     if (z3_ctx == NULL) {
       if (relevancy) {
-        z3_ctx = z3_api.mk_proof_context(false, uw);
+        z3_ctx = z3_capi::mk_proof_context(false, uw);
       } else {
-        z3_ctx = z3_api.mk_proof_context(true, uw);
+        z3_ctx = z3_capi::mk_proof_context(true, uw);
       }
     }
+
+    z3_api.set_ctx(z3_ctx);
 
    s_is_uw = uw;
    s_relevancy = relevancy;

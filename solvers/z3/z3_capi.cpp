@@ -148,6 +148,7 @@ Z3_ast z3_capi::mk_var(Z3_context ctx, const char * name, Z3_sort ty)
 Z3_ast z3_capi::mk_bool_var(Z3_context ctx, const char * name)
 {
     Z3_sort ty = Z3_mk_bool_sort(ctx);
+    // Inexplicably, Z3 crashes if we use the fixed bool sort.
     return mk_var(ctx, name, ty);
 }
 
@@ -156,8 +157,7 @@ Z3_ast z3_capi::mk_bool_var(Z3_context ctx, const char * name)
 */
 Z3_ast z3_capi::mk_int_var(Z3_context ctx, const char * name)
 {
-    Z3_sort ty = Z3_mk_int_sort(ctx);
-    return mk_var(ctx, name, ty);
+    return mk_var(ctx, name, z3_int_sort);
 }
 
 /**
@@ -165,8 +165,7 @@ Z3_ast z3_capi::mk_int_var(Z3_context ctx, const char * name)
 */
 Z3_ast z3_capi::mk_unsigned_int(Z3_context ctx, unsigned int v)
 {
-    Z3_sort ty = Z3_mk_int_sort(ctx);
-    return Z3_mk_unsigned_int(ctx, v, ty);
+    return Z3_mk_unsigned_int(ctx, v, z3_int_sort);
 }
 
 /**
@@ -174,8 +173,7 @@ Z3_ast z3_capi::mk_unsigned_int(Z3_context ctx, unsigned int v)
 */
 Z3_ast z3_capi::mk_int(Z3_context ctx, int v)
 {
-    Z3_sort ty = Z3_mk_int_sort(ctx);
-    return Z3_mk_int(ctx, v, ty);
+    return Z3_mk_int(ctx, v, z3_int_sort);
 }
 
 /**
@@ -183,8 +181,28 @@ Z3_ast z3_capi::mk_int(Z3_context ctx, int v)
 */
 Z3_ast z3_capi::mk_real_var(Z3_context ctx, const char * name)
 {
-    Z3_sort ty = Z3_mk_real_sort(ctx);
-    return mk_var(ctx, name, ty);
+    return mk_var(ctx, name, z3_real_sort);
+}
+
+Z3_sort z3_capi::mk_bv_sort(Z3_context ctx, unsigned int width)
+{
+  if (width == 8) {
+    return z3_bvsort_8;
+  } else if (width == 16) {
+    return z3_bvsort_16;
+  } else if (width == 32) {
+    return z3_bvsort_32;
+  } else if (width == 64) {
+    return z3_bvsort_64;
+  } else {
+    assert(width <= 64);
+    if (z3_bvsort_array[width] != NULL) {
+      return z3_bvsort_array[width];
+    } else {
+      z3_bvsort_array[width] = Z3_mk_bv_type(z3_ctx, width);
+      return z3_bvsort_array[width];
+    }
+  }
 }
 
 /**
