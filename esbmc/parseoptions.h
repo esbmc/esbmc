@@ -63,6 +63,8 @@ protected:
   void add_property_monitors(goto_functionst &goto_functions);
   exprt calculate_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms);
   void add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, exprt> >monitors);
+
+  void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
 };
 
 #endif
