@@ -76,6 +76,7 @@ public:
   bool is_global_assign(const exprt &code);
 
   const symbolt &lookup(const namespacet &ns, const irep_idt &identifier) const;
+  void print_ileave_trace(void) const;
   bool is_go_next_state();
   bool is_go_next_formula();
   void go_next_state();
