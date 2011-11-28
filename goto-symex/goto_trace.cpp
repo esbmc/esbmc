@@ -97,9 +97,9 @@ void goto_trace_stept::output(
     irep_idt identifier;
 
     if(original_lhs.is_not_nil())
-      identifier=original_lhs.get("identifier");
+      identifier=original_lhs.get(exprt::a_identifier);
     else
-      identifier=lhs.get("identifier");
+      identifier=lhs.get(exprt::a_identifier);
 
     out << "  " << identifier
         << " = " << from_expr(ns, identifier, value)
@@ -142,7 +142,7 @@ void counterexample_value(
   const exprt &value,
   const pretty_namest &pretty_names)
 {
-  const irep_idt &identifier=lhs.get("identifier");
+  const irep_idt &identifier=lhs.get(exprt::a_identifier);
   std::string value_string;
 
   if(value.is_nil())
@@ -152,14 +152,14 @@ void counterexample_value(
     value_string=from_expr(ns, identifier, value);
     if(value.is_constant())
     {
-      if(value.type().id()=="signedbv" ||
-    	 value.type().id()=="unsignedbv" ||
-    	 value.type().id()=="fixedbv" ||
-    	 value.type().id()=="floatbv")
-        value_string+= " ("+value.get_string("value")+")";
+      if(value.type().id()==typet::t_signedbv ||
+	 value.type().id()==typet::t_unsignedbv ||
+    	 value.type().id()==typet::t_fixedbv ||
+    	 value.type().id()==typet::t_floatbv)
+        value_string+= " ("+value.get_string(exprt::a_value)+")";
     }
 #if 0
-    else if (lhs.type().id()=="pointer")
+    else if (lhs.type().id()==typet::t_pointer)
     {
       size_t found;
       found=value_string.find_first_of("@");
@@ -227,9 +227,9 @@ void show_goto_trace_gui(
       irep_idt identifier;
 
       if(it->original_lhs.is_not_nil())
-        identifier=it->original_lhs.get("identifier");
+        identifier=it->original_lhs.get(exprt::a_identifier);
       else
-        identifier=it->lhs.get("identifier");
+        identifier=it->lhs.get(exprt::a_identifier);
 
       std::string value_string=from_expr(ns, identifier, it->value);
 

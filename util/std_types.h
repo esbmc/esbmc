@@ -19,7 +19,7 @@ class bool_typet:public typet
 public:
   bool_typet()
   {
-    id("bool");
+    id(t_bool);
   }
 };
 
@@ -28,30 +28,30 @@ class empty_typet:public typet
 public:
   empty_typet()
   {
-    id("empty");
+    id(t_empty);
   }
 };
 
 class symbol_typet:public typet
 {
 public:
-  symbol_typet():typet("symbol")
+  symbol_typet():typet(t_symbol)
   {
   }
   
-  explicit symbol_typet(const irep_idt &identifier):typet("symbol")
+  explicit symbol_typet(const irep_idt &identifier):typet(t_symbol)
   {
     set_identifier(identifier);
   }
 
   void set_identifier(const irep_idt &identifier)
   {
-    set("identifier", identifier);
+    set(a_identifier, identifier);
   }
 
   const irep_idt &get_identifier() const
   {
-    return get("identifier");
+    return get(a_identifier);
   }  
 };
 
@@ -69,12 +69,12 @@ public:
   public:
     const irep_idt &get_name() const
     {
-      return get("name");
+      return get(a_name);
     }
 
     void set_name(const irep_idt &name)
     {
-      return set("name", name);
+      return set(a_name, name);
     }
   };
 
@@ -82,12 +82,12 @@ public:
   
   const componentst &components() const
   {
-    return (const componentst &)(find("components").get_sub());
+    return (const componentst &)(find(a_components).get_sub());
   }
   
   componentst &components()
   {
-    return (componentst &)(add("components").get_sub());
+    return (componentst &)(add(a_components).get_sub());
   }
   
   bool has_component(const irep_idt &component_name) const
@@ -104,17 +104,17 @@ public:
 
 extern inline const struct_union_typet &to_struct_union_type(const typet &type)
 {
-  assert(type.id()=="struct" ||
-         type.id()=="union" ||
-         type.id()=="class");
+  assert(type.id()==typet::t_struct ||
+         type.id()==typet::t_union ||
+         type.id()==typet::t_class);
   return static_cast<const struct_union_typet &>(type);
 }
 
 extern inline struct_union_typet &to_struct_union_type(typet &type)
 {
-  assert(type.id()=="struct" ||
-         type.id()=="union" ||
-         type.id()=="class");
+  assert(type.id()==typet::t_struct ||
+         type.id()==typet::t_union ||
+         type.id()==typet::t_class);
   return static_cast<struct_union_typet &>(type);
 }
 
@@ -123,35 +123,35 @@ class struct_typet:public struct_union_typet
 public:
   struct_typet()
   {
-    id("struct");
+    id(t_struct);
   }
     
   bool is_prefix_of(const struct_typet &other) const;
 
   const componentst &methods() const
   {
-    return (const componentst &)(find("methods").get_sub());
+    return (const componentst &)(find(a_methods).get_sub());
   }
      
   componentst &methods()
   {
-    return (componentst &)(add("methods").get_sub());
+    return (componentst &)(add(a_methods).get_sub());
   }
 };
 
 extern inline const struct_typet &to_struct_type(const typet &type)
 {
-  assert(type.id()=="struct" ||
-         type.id()=="union" ||
-         type.id()=="class");
+  assert(type.id()==typet::t_struct ||
+         type.id()==typet::t_union ||
+         type.id()==typet::t_class);
   return static_cast<const struct_typet &>(type);
 }
 
 extern inline struct_typet &to_struct_type(typet &type)
 {
-  assert(type.id()=="struct" ||
-         type.id()=="union" ||
-         type.id()=="class");
+  assert(type.id()==typet::t_struct ||
+         type.id()==typet::t_union ||
+         type.id()==typet::t_class);
   return static_cast<struct_typet &>(type);
 }
 
@@ -160,19 +160,19 @@ class union_typet:public struct_union_typet
 public:
   union_typet()
   {
-    id("union");
+    id(t_union);
   }
 };
 
 extern inline const union_typet &to_union_type(const typet &type)
 {
-  assert(type.id()=="union");
+  assert(type.id()==typet::t_union);
   return static_cast<const union_typet &>(type);
 }
 
 extern inline union_typet &to_union_type(typet &type)
 {
-  assert(type.id()=="union");
+  assert(type.id()==typet::t_union);
   return static_cast<union_typet &>(type);
 }
 
@@ -183,17 +183,17 @@ class code_typet:public typet
 public:
   code_typet()
   {
-    id("code");
+    id(t_code);
   }
   
   class argumentt:public exprt
   {
   public:
-    argumentt():exprt("argument")
+    argumentt():exprt(argument)
     {
     }
     
-    argumentt(const typet &type):exprt("argument", type)
+    argumentt(const typet &type):exprt(argument, type)
     {
     }
     
@@ -235,12 +235,12 @@ public:
   
   bool has_ellipsis() const
   {
-    return find("arguments").get_bool("ellipsis");
+    return find(a_arguments).get_bool("ellipsis");
   }
 
   void make_ellipsis()
   {
-    add("arguments").set("ellipsis", true);
+    add(a_arguments).set("ellipsis", true);
   }
 
   typedef std::vector<argumentt> argumentst;
@@ -257,24 +257,24 @@ public:
 
   const argumentst &arguments() const
   {
-    return (const argumentst &)find("arguments").get_sub();
+    return (const argumentst &)find(a_arguments).get_sub();
   }
 
   argumentst &arguments()
   {
-    return (argumentst &)add("arguments").get_sub();
+    return (argumentst &)add(a_arguments).get_sub();
   }
 };
 
 extern inline const code_typet &to_code_type(const typet &type)
 {
-  assert(type.id()=="code");
+  assert(type.id()==typet::t_code);
   return static_cast<const code_typet &>(type);
 }
 
 extern inline code_typet &to_code_type(typet &type)
 {
-  assert(type.id()=="code");
+  assert(type.id()==typet::t_code);
   return static_cast<code_typet &>(type);
 }
 
@@ -283,30 +283,30 @@ class array_typet:public typet
 public:
   array_typet()
   {
-    id("array");
+    id(t_array);
   }
   
   const exprt &size() const
   {
-    return (const exprt &)find("size");
+    return (const exprt &)find(a_size);
   }
   
   exprt &size()
   {
-    return (exprt &)add("size");
+    return (exprt &)add(a_size);
   }
 
 };
 
 extern inline const array_typet &to_array_type(const typet &type)
 {
-  assert(type.id()=="array");
+  assert(type.id()==typet::t_array);
   return static_cast<const array_typet &>(type);
 }
 
 extern inline array_typet &to_array_type(typet &type)
 {
-  assert(type.id()=="array");
+  assert(type.id()==typet::t_array);
   return static_cast<array_typet &>(type);
 }
 
@@ -315,12 +315,12 @@ class pointer_typet:public typet
 public:
   pointer_typet()
   {
-    id("pointer");
+    id(t_pointer);
   }
 
   explicit pointer_typet(const typet &_subtype)
   {
-    id("pointer");
+    id(t_pointer);
     subtype()=_subtype;
   }
 };
@@ -330,7 +330,7 @@ class reference_typet:public pointer_typet
 public:
   reference_typet()
   {
-    set("#reference", true);
+    set(t_reference, true);
   }
 };
 
@@ -341,12 +341,12 @@ class bv_typet:public typet
 public:
   bv_typet()
   {
-    id("bv");
+    id(t_bv);
   }
 
   explicit bv_typet(unsigned width)
   {
-    id("bv");
+    id(t_bv);
     set_width(width);
   }
 
@@ -354,7 +354,7 @@ public:
 
   void set_width(unsigned width)
   {
-    set("width", width);
+    set(a_width, width);
   }
 };
 
@@ -363,12 +363,12 @@ class unsignedbv_typet:public bv_typet
 public:
   unsignedbv_typet()
   {
-    id("unsignedbv");
+    id(t_unsignedbv);
   }
 
   explicit unsignedbv_typet(unsigned width)
   {
-    id("unsignedbv");
+    id(t_unsignedbv);
     set_width(width);
   }
 };
@@ -378,12 +378,12 @@ class signedbv_typet:public bv_typet
 public:
   signedbv_typet()
   {
-    id("signedbv");
+    id(t_signedbv);
   }
 
   explicit signedbv_typet(unsigned width)
   {
-    id("signedbv");
+    id(t_signedbv);
     set_width(width);
   }
 };
@@ -393,7 +393,7 @@ class fixedbv_typet:public bv_typet
 public:
   fixedbv_typet()
   {
-    id("fixedbv");
+    id(t_fixedbv);
   }
 
   unsigned get_fraction_bits() const
@@ -405,12 +405,12 @@ public:
 
   void set_integer_bits(unsigned b)
   {
-    set("integer_bits", b);
+    set(a_integer_bits, b);
   }
 
   friend const fixedbv_typet &to_fixedbv_type(const typet &type)
   {
-    assert(type.id()=="fixedbv");
+    assert(type.id()==t_fixedbv);
     return static_cast<const fixedbv_typet &>(type);
   }
 };
@@ -422,7 +422,7 @@ class floatbv_typet:public bv_typet
 public:
   floatbv_typet()
   {
-    id("floatbv");
+    id(t_floatbv);
   }
 
   unsigned get_e() const
@@ -434,12 +434,12 @@ public:
 
   void set_f(unsigned b)
   {
-    set("f", b);
+    set(a_f, b);
   }
 
   friend const floatbv_typet &to_floatbv_type(const typet &type)
   {
-    assert(type.id()=="floatbv");
+    assert(type.id()==t_floatbv);
     return static_cast<const floatbv_typet &>(type);
   }
 };
@@ -449,13 +449,13 @@ const floatbv_typet &to_floatbv_type(const typet &type);
 class string_typet:public typet
 {
 public:
-  string_typet():typet("string")
+  string_typet():typet(t_string)
   {
   }
 
   friend const string_typet &to_string_type(const typet &type)
   {
-    assert(type.id()=="string");
+    assert(type.id()==t_string);
     return static_cast<const string_typet &>(type);
   }
 };

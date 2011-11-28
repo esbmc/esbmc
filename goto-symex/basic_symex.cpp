@@ -104,7 +104,7 @@ void basic_symext::symex(statet &state, execution_statet &ex_state, const codet 
       throw "decl expected to have one operand";
 
     exprt rhs("nondet_symbol", code.op0().type());
-    rhs.set("identifier", "symex::nondet"+i2string(ex_state.nondet_count++));
+    rhs.set(exprt::a_identifier, "symex::nondet"+i2string(ex_state.nondet_count++));
     rhs.location()=code.location();
 
     exprt new_lhs(code.op0());
@@ -190,7 +190,7 @@ void basic_symext::symex_assign(statet &state, execution_statet &ex_state, const
     {
       assert(side_effect_expr.operands().size()!=0);
 
-      if(side_effect_expr.op0().id()!="symbol")
+      if(side_effect_expr.op0().id()!=exprt::symbol)
         throw "symex_assign: expected symbol as function";
 
       const irep_idt &identifier=
@@ -253,15 +253,15 @@ void basic_symext::symex_assign_rec(
   guardt &guard,
         unsigned node_id)
 {
-  if(lhs.id()=="symbol")
+  if(lhs.id()==exprt::symbol)
     symex_assign_symbol(state, ex_state, lhs, rhs, guard,node_id);
-  else if(lhs.id()=="index" || lhs.id()=="memory-leak")
+  else if(lhs.id()==exprt::index || lhs.id()=="memory-leak")
     symex_assign_array(state, ex_state, lhs, rhs, guard,node_id);
-  else if(lhs.id()=="member")
+  else if(lhs.id()==exprt::member)
     symex_assign_member(state, ex_state, lhs, rhs, guard,node_id);
-  else if(lhs.id()=="if")
+  else if(lhs.id()==exprt::i_if)
     symex_assign_if(state, ex_state, lhs, rhs, guard,node_id);
-  else if(lhs.id()=="typecast")
+  else if(lhs.id()==exprt::typecast)
     symex_assign_typecast(state, ex_state, lhs, rhs, guard,node_id);
   else if(lhs.id()=="string-constant" ||
           lhs.id()=="NULL-object" ||
@@ -299,7 +299,7 @@ void basic_symext::symex_assign_symbol(
   // put assignment guard in rhs
   if(!guard.empty())
   {
-    exprt new_rhs("if", rhs.type());
+    exprt new_rhs(exprt::i_if, rhs.type());
     new_rhs.operands().resize(3);
     new_rhs.op0()=guard.as_expr();
     new_rhs.op1().swap(rhs);
@@ -390,7 +390,7 @@ void basic_symext::symex_assign_array(
   const exprt &lhs_index=lhs.op1();
   const typet &lhs_type=ns.follow(lhs_array.type());
 
-  if(lhs_type.id()!="array")
+  if(lhs_type.id()!=typet::t_array)
     throw "index must take array type operand";
 
   // turn
@@ -398,7 +398,7 @@ void basic_symext::symex_assign_array(
   // into
   //   a'==a WITH [i:=e]
 
-  exprt new_rhs("with", lhs_type);
+  exprt new_rhs(exprt::with, lhs_type);
 
   new_rhs.reserve_operands(3);
   new_rhs.copy_to_operands(lhs_array);
@@ -439,15 +439,15 @@ void basic_symext::symex_assign_member(
   exprt lhs_struct=lhs.op0();
   typet struct_type=ns.follow(lhs_struct.type());
 
-  if(struct_type.id()!="struct" &&
-     struct_type.id()!="union")
+  if(struct_type.id()!=typet::t_struct &&
+     struct_type.id()!=typet::t_union)
     throw "member must take struct/union type operand but got "
           +struct_type.pretty();
 
   const irep_idt &component_name=lhs.get("component_name");
 
   // typecasts involved? C++ does that for inheritance.
-  if(lhs_struct.id()=="typecast")
+  if(lhs_struct.id()==exprt::typecast)
   {
     assert(lhs_struct.operands().size()==1);
 
@@ -460,7 +460,7 @@ void basic_symext::symex_assign_member(
       // remove the type cast, we assume that the member is there
       exprt tmp(lhs_struct.op0());
       struct_type=ns.follow(tmp.type());
-      assert(struct_type.id()=="struct" || struct_type.id()=="union");
+      assert(struct_type.id()==typet::t_struct || struct_type.id()==typet::t_union);
       lhs_struct=tmp;
     }
   }
@@ -470,7 +470,7 @@ void basic_symext::symex_assign_member(
   // into
   //   a'==a WITH [c:=e]
 
-  exprt new_rhs("with", struct_type);
+  exprt new_rhs(exprt::with, struct_type);
 
   new_rhs.reserve_operands(3);
   new_rhs.copy_to_operands(lhs_struct);
@@ -602,7 +602,7 @@ void basic_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
   if(expr.id()=="sideeffect" && expr.get("statement")=="nondet")
   {
     exprt new_expr("nondet_symbol", expr.type());
-    new_expr.set("identifier", "symex::nondet"+i2string(ex_state.nondet_count++));
+    new_expr.set(exprt::a_identifier, "symex::nondet"+i2string(ex_state.nondet_count++));
     new_expr.location()=expr.location();
     expr.swap(new_expr);
   }

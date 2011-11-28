@@ -221,13 +221,13 @@ Function: goto_symext::get_symbol
 \*******************************************************************/
 
 irep_idt goto_symext::get_symbol(const exprt & expr) {
-  if (expr.id() != "symbol") {
+  if (expr.id() != exprt::symbol) {
     forall_operands(it, expr) {
       return get_symbol(*it);
     }
   }
 
-  return expr.get("identifier");
+  return expr.get(exprt::a_identifier);
 }
 
 /*******************************************************************\
@@ -428,10 +428,10 @@ void goto_symext::symex_step(
 
                 dereference(deref_code.function(), state, false, ex_state.node_id);
 
-                if(deref_code.function().get("identifier") == "c::main")
+                if(deref_code.function().get(exprt::a_identifier) == "c::main")
                   is_main=true;
 
-                if(deref_code.function().get("identifier") == "c::__ESBMC_yield")
+                if(deref_code.function().get(exprt::a_identifier) == "c::__ESBMC_yield")
                 {
                    state.source.pc++;
                    ex_state.reexecute_instruction = false;

@@ -114,14 +114,14 @@ exprt z3_convt::get(const exprt &expr) const
       (expr.type().id() =="array" && expr.type().subtype().id() =="struct"))
     return expr;
 
-  if(expr.id()=="symbol" ||
+  if(expr.id()==exprt::symbol ||
      expr.id()=="nondet_symbol")
   {
 	std::string identifier, tmp;
 	std::vector<exprt> unknown;
 	Z3_ast bv;
 
-	identifier = expr.get_string("identifier");
+	identifier = expr.get_string(exprt::a_identifier);
 #if 1
 	if (expr.type().id()=="pointer")
 	{
@@ -131,7 +131,7 @@ exprt z3_convt::get(const exprt &expr) const
 	    if (identifier.compare((*it).second.c_str())==0)
 	    {
 	      //std::cout << expr.pretty() << std::endl;
-	      if ((*it).first.id()=="symbol" || (*it).first.id()=="constant")
+	      if ((*it).first.id()==exprt::symbol || (*it).first.id()==exprt::constant)
 		    return (*it).first;
 	      else
 	        return nil_exprt();
@@ -150,7 +150,7 @@ exprt z3_convt::get(const exprt &expr) const
 
 	return bv_get_rec(bv, unknown, false, expr.type());
   }
-  else if(expr.id()=="constant")
+  else if(expr.id()==exprt::constant)
     return expr;
 
   return expr;
@@ -297,7 +297,7 @@ exprt z3_convt::bv_get_rec(
         {
           expr = unknown[i];
 
-          if (expr.get_string("value").compare("")==0)
+          if (expr.get_string(exprt::a_value).compare("")==0)
             op.push_back(zero_expr);
           else
             op.push_back(expr);

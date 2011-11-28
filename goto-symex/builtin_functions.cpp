@@ -76,7 +76,7 @@ void basic_symext::symex_malloc(
     symbol.type=type;
   else
   {
-    symbol.type=typet("array");
+    symbol.type=typet(typet::t_array);
     symbol.type.subtype()=type;
     symbol.type.set("size", size);
   }
@@ -87,7 +87,7 @@ void basic_symext::symex_malloc(
 
   new_context.add(symbol);
   
-  exprt rhs("address_of", typet("pointer"));
+  exprt rhs(exprt::addrof, typet(typet::t_pointer));
   
   if(size_is_one)
   {
@@ -96,7 +96,7 @@ void basic_symext::symex_malloc(
   }
   else
   {
-    exprt index_expr("index", symbol.type.subtype());
+    exprt index_expr(exprt::index, symbol.type.subtype());
     index_expr.copy_to_operands(symbol_expr(symbol), gen_zero(int_type()));
     rhs.type().subtype()=symbol.type.subtype();
     rhs.move_to_operands(index_expr);
@@ -143,15 +143,15 @@ void basic_symext::symex_printf(
 
   const exprt &format=operands[0];
   
-  if(format.id()=="address_of" &&
+  if(format.id()==exprt::addrof &&
      format.operands().size()==1 &&
-     format.op0().id()=="index" &&
+     format.op0().id()==exprt::index &&
      format.op0().operands().size()==2 &&
      format.op0().op0().id()=="string-constant" &&
      format.op0().op1().is_zero())
   {
     const exprt &fmt_str=format.op0().op0();
-    const std::string &fmt=fmt_str.get_string("value");
+    const std::string &fmt=fmt_str.get_string(exprt::a_value);
 
     target->output(state.guard, state.source, fmt, args);
   }
@@ -178,7 +178,7 @@ void basic_symext::symex_cpp_new(
 {
   bool do_array;
 
-  if(code.type().id()!="pointer")
+  if(code.type().id()!=typet::t_pointer)
     throw "new expected to return pointer";
 
   do_array=(code.get("statement")=="cpp_new[]");
@@ -212,12 +212,12 @@ void basic_symext::symex_cpp_new(
 
   // make symbol expression
 
-  exprt rhs("address_of", typet("pointer"));
+  exprt rhs(exprt::addrof, typet(typet::t_pointer));
   rhs.type().subtype()=code.type().subtype();
   
   if(do_array)
   {
-    exprt index_expr("index", code.type().subtype());
+    exprt index_expr(exprt::index, code.type().subtype());
     index_expr.copy_to_operands(symbol_expr(symbol), gen_zero(int_type()));
     rhs.move_to_operands(index_expr);
   }
@@ -286,7 +286,7 @@ void basic_symext::symex_trace(
     std::list<exprt> vars;
     
     exprt trace_event("trave_event");
-    trace_event.set("event", code.arguments()[1].op0().get("value"));
+    trace_event.set("event", code.arguments()[1].op0().get(exprt::a_value));
     
     vars.push_back(trace_event);
 
@@ -327,7 +327,7 @@ void basic_symext::symex_fkt(
   Forall_operands(it, fc)
     if(first) first=false; else new_fc.move_to_operands(*it);
 
-  new_fc.set("identifier", fc.op0().get("identifier"));
+  new_fc.set(exprt::a_identifier, fc.op0().get(exprt::a_identifier));
 
   fc.swap(new_fc);
   #endif
@@ -349,7 +349,7 @@ void basic_symext::symex_macro(
   statet &state,
   const code_function_callt &code)
 {
-  const irep_idt &identifier=code.op0().get("identifier");
+  const irep_idt &identifier=code.op0().get(exprt::a_identifier);
 
   if(identifier==CPROVER_MACRO_PREFIX "waitfor")
   {
@@ -363,7 +363,7 @@ void basic_symext::symex_macro(
     exprt &bound=fc.op2();
     exprt &predicate=fc.op3();
 
-    if(cycle_var.id()!="symbol")
+    if(cycle_var.id()!=exprt::symbol)
       throw "waitfor expects symbol as first operand but got "+
             cycle_var.id();
 

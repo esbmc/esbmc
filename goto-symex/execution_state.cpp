@@ -231,7 +231,7 @@ void execution_statet::decreament_trds_in_run(const namespacet &ns, symex_target
   exprt one_expr = gen_one(int_t);
   exprt lhs_expr = symbol_exprt("c::trds_in_run", int_t);
   exprt op1 = lhs_expr;
-  exprt rhs_expr = gen_binary("-", int_t, op1, one_expr);
+  exprt rhs_expr = gen_binary(exprt::minus, int_t, op1, one_expr);
 
   get_active_state().rename(rhs_expr, ns,node_id);
   base_type(rhs_expr, ns);
@@ -333,7 +333,7 @@ void execution_statet::increament_trds_in_run(const namespacet &ns, symex_target
   exprt one_expr = gen_one(int_t);
   exprt lhs_expr = symbol_exprt("c::trds_in_run", int_t);
   exprt op1 = lhs_expr;
-  exprt rhs_expr = gen_binary("+", int_t, op1, one_expr);
+  exprt rhs_expr = gen_binary(exprt::plus, int_t, op1, one_expr);
 
   get_active_state().rename(rhs_expr, ns, node_id);
   base_type(rhs_expr, ns);
@@ -531,7 +531,7 @@ void execution_statet::execute_guard(const namespacet &ns, symex_targett &target
 
     get_active_state().assignment(new_lhs, new_rhs, ns, false, *this, node_id);
 
-    assert(new_lhs.get("identifier") == get_guard_identifier());
+    assert(new_lhs.get(exprt::a_identifier) == get_guard_identifier());
 
     guardt old_guard;
     old_guard.add(parent_guard);
@@ -733,9 +733,9 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
   std::cout << "expr.pretty(): " << expr.pretty() << "\n";
 #endif
 
-  std::string identifier = expr.get_string("identifier");
+  std::string identifier = expr.get_string(exprt::a_identifier);
 
-  if (expr.id() == "address_of" ||
+  if (expr.id() == exprt::addrof ||
       expr.id() == "valid_object" ||
       expr.id() == "dynamic_size" ||
       expr.id() == "dynamic_type" ||
@@ -743,9 +743,9 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
       expr.id() == "zero_string" ||
       expr.id() == "zero_string_length")
       return 0;
-  else if (expr.id() == "symbol")
+  else if (expr.id() == exprt::symbol)
   {
-    const irep_idt &id = expr.get("identifier");
+    const irep_idt &id = expr.get(exprt::a_identifier);
     const irep_idt &identifier = get_active_state().get_original_name(id);
     const symbolt &symbol = lookup(ns, identifier);
 
@@ -762,19 +762,19 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
       return 0;
   }
 #if 0
-  else if (expr.id() == "index")
+  else if (expr.id() == exprt::index)
   {
-	if (expr.op0().id() == "symbol" && expr.op1().id()=="constant")
+	if (expr.op0().id() == exprt::symbol && expr.op1().id()==exprt::constant)
 	{
-      const irep_idt &id = expr.op0().get("identifier");
+      const irep_idt &id = expr.op0().get(exprt::a_identifier);
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
 	  const symbolt &symbol = lookup(ns, identifier);
 
 	  if ((symbol.static_lifetime || symbol.type.get("#dynamic") != ""))
 	  {
 	    std::string value, array_name;
-	    value = integer2string(binary2integer(expr.op1().get_string("value"), true),10);
-	    array_name = expr.op0().get_string("identifier") + "::" + value;
+	    value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), true),10);
+	    array_name = expr.op0().get_string(exprt::a_identifier) + "::" + value;
 	    const irep_idt &array_identifier = array_name;
 	    //std::cout << "write_globals identifier: " << array_identifier.c_str() << std::endl;
 	    _exprs_read_write.at(_active_thread).write_set.insert(array_identifier);
@@ -785,9 +785,9 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 	}
   }
 
-  else if (expr.id() == "member")
+  else if (expr.id() == exprt::member)
   {
-      const irep_idt &id = expr.op0().get("identifier");
+      const irep_idt &id = expr.op0().get(exprt::a_identifier);
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
 	  const symbolt &symbol = lookup(ns, identifier);
 
@@ -795,7 +795,7 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
 	  {
 	    std::string value, array_name;
 	    value = expr.get_string("component_name");
-	    array_name = expr.op0().get_string("identifier") + "::" + value;
+	    array_name = expr.op0().get_string(exprt::a_identifier) + "::" + value;
 	    const irep_idt &array_identifier = array_name;
 	    std::cout << "write_globals identifier: " << array_identifier.c_str() << std::endl;
 	    _exprs_read_write.at(_active_thread).write_set.insert(array_identifier);
@@ -833,10 +833,10 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
   std::cout << "expr.pretty(): " << expr.pretty() << "\n";
 #endif
 
-  std::string identifier = expr.get_string("identifier");
+  std::string identifier = expr.get_string(exprt::a_identifier);
 
-  if (expr.id() == "address_of" ||
-            expr.type().id() == "pointer" ||
+  if (expr.id() == exprt::addrof ||
+            expr.type().id() == typet::t_pointer ||
             expr.id() == "valid_object" ||
             expr.id() == "dynamic_size" ||
             expr.id() == "dynamic_type" ||
@@ -844,9 +844,9 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
             expr.id() == "zero_string" ||
             expr.id() == "zero_string_length")
     return 0;
-  else if (expr.id() == "symbol")
+  else if (expr.id() == exprt::symbol)
   {
-    const irep_idt &id = expr.get("identifier");
+    const irep_idt &id = expr.get(exprt::a_identifier);
     const irep_idt &identifier = get_active_state().get_original_name(id);
 
     if (identifier == "goto_symex::\\guard!" + i2string(get_active_state().top().level1._thread_id))
@@ -869,19 +869,19 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
       return 0;
   }
 #if 0
-  else if (expr.id() == "index")
+  else if (expr.id() == exprt::index)
   {
-	if (expr.op0().id() == "symbol" && expr.op1().id()=="constant")
+	if (expr.op0().id() == exprt::symbol && expr.op1().id()==exprt::constant)
 	{
-      const irep_idt &id = expr.op0().get("identifier");
+      const irep_idt &id = expr.op0().get(exprt::a_identifier);
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
 	  const symbolt &symbol = lookup(ns, identifier);
 
 	  if ((symbol.static_lifetime || symbol.type.get("#dynamic") != ""))
 	  {
 	    std::string value, array_name;
-        value = integer2string(binary2integer(expr.op1().get_string("value"), true),10);
-        array_name = expr.op0().get_string("identifier") + "::" + value;
+        value = integer2string(binary2integer(expr.op1().get_string(exprt::a_value), true),10);
+        array_name = expr.op0().get_string(exprt::a_identifier) + "::" + value;
         const irep_idt &array_identifier = array_name;
         //std::cout << "read_globals identifier: " << array_identifier.c_str() << std::endl;
         _exprs_read_write.at(_active_thread).read_set.insert(array_identifier);
@@ -892,9 +892,9 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 	}
   }
 
-  else if (expr.id() == "member")
+  else if (expr.id() == exprt::member)
   {
-      const irep_idt &id = expr.op0().get("identifier");
+      const irep_idt &id = expr.op0().get(exprt::a_identifier);
 	  const irep_idt &identifier = get_active_state().get_original_name(id);
 	  const symbolt &symbol = lookup(ns, identifier);
 
@@ -902,7 +902,7 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
 	  {
 	    std::string value, array_name;
         value = expr.get_string("component_name");
-        array_name = expr.op0().get_string("identifier") + "::" + value;
+        array_name = expr.op0().get_string(exprt::a_identifier) + "::" + value;
         const irep_idt &array_identifier = array_name;
         std::cout << "read_globals identifier: " << array_identifier.c_str() << std::endl;
         _exprs_read_write.at(_active_thread).read_set.insert(array_identifier);
@@ -972,9 +972,9 @@ execution_statet::serialise_expr(const exprt &rhs)
 
   // The plan: serialise this expression into the identifiers of its operations,
   // replacing symbol names with the hash of their value.
-  if (rhs.id() == "symbol") {
+  if (rhs.id() == exprt::symbol) {
 
-    str = rhs.get("identifier").as_string();
+    str = rhs.get(exprt::a_identifier).as_string();
     for (i = 0 ; i < 8; i++)
       if (str.find(state_to_ignore[i]) != std::string::npos)
         return "(ignore)";
@@ -983,53 +983,53 @@ execution_statet::serialise_expr(const exprt &rhs)
     // value.
     exprt tmp = rhs;
     get_active_state().get_original_name(tmp);
-    if (_state_level2.current_hashes.find(tmp.get("identifier").as_string()) != _state_level2.current_hashes.end()) {
-      crypto_hash h = _state_level2.current_hashes.find(tmp.get("identifier").as_string())->second;
+    if (_state_level2.current_hashes.find(tmp.get(exprt::a_identifier).as_string()) != _state_level2.current_hashes.end()) {
+      crypto_hash h = _state_level2.current_hashes.find(tmp.get(exprt::a_identifier).as_string())->second;
       return "hash(" + h.to_string() + ")";
     }
 
     /* Otherwise, it's something that's been assumed, or some form of
      * nondeterminism. Just return its name. */
-    return rhs.get("identifier").as_string();
-  } else if (rhs.id() == "array_of") {
+    return rhs.get(exprt::a_identifier).as_string();
+  } else if (rhs.id() == exprt::arrayof) {
     /* An array of the same set of values: generate all of them. */
     str = "array(";
     irept array = rhs.find("type");
     exprt size = (exprt&)array.find("size");
     str += "sz(" + serialise_expr(size) + "),";
     str += "elem(" + serialise_expr(rhs.op0()) + "))";
-  } else if (rhs.id() == "with") {
+  } else if (rhs.id() == exprt::with) {
     exprt rec = rhs;
 
-    if (rec.type().id() == "array") {
+    if (rec.type().id() == typet::t_array) {
       str = "array(";
       str += "prev(" + serialise_expr(rec.op0()) + "),";
       str += "idx(" + serialise_expr(rec.op1()) + "),";
       str += "val(" + serialise_expr(rec.op2()) + "))";
-    } else if (rec.type().id() == "struct") {
+    } else if (rec.type().id() == typet::t_struct) {
       str = "struct(";
       str += "prev(" + serialise_expr(rec.op0()) + "),";
       str += "member(" + serialise_expr(rec.op1()) + "),";
       str += "val(" + serialise_expr(rec.op2()) + "),";
-    } else if (rec.type().id() ==  "union") {
+    } else if (rec.type().id() ==  typet::t_union) {
       /* We don't care about previous assignments to this union, because
        * they're overwritten by this one, and leads to undefined side effects
        * anyway. So, just serialise the identifier, the member assigned to,
        * and the value assigned */
       str = "union_set(";
-      str += "union_sym(" + rec.op0().get("identifier").as_string() + "),";
+      str += "union_sym(" + rec.op0().get(exprt::a_identifier).as_string() + "),";
       str += "field(" + serialise_expr(rec.op1()) + "),";
       str += "val(" + serialise_expr(rec.op2()) + "))";
     } else {
       throw "Unrecognised type of with expression: " + rec.op0().type().id().as_string();
     }
-  } else if (rhs.id() == "index") {
+  } else if (rhs.id() == exprt::index) {
     str = "index(";
     str += serialise_expr(rhs.op0());
     str += ",idx(" + serialise_expr(rhs.op1()) + ")";
   } else if (rhs.id() == "member_name") {
     str = "component(" + rhs.get("component_name").as_string() + ")";
-  } else if (rhs.id() == "member") {
+  } else if (rhs.id() == exprt::member) {
     str = "member(entity(" + serialise_expr(rhs.op0()) + "),";
     str += "member_name(" + rhs.get("component_name").as_string() + "))";
   } else if (rhs.id() == "nondet_symbol") {
@@ -1037,8 +1037,8 @@ execution_statet::serialise_expr(const exprt &rhs)
      * of entropy */
     exprt tmp = rhs;
     get_active_state().get_original_name(tmp);
-    str = "nondet_symbol(" + tmp.get("identifier").as_string() + ")";
-  } else if (rhs.id() == "if") {
+    str = "nondet_symbol(" + tmp.get(exprt::a_identifier).as_string() + ")";
+  } else if (rhs.id() == exprt::i_if) {
     str = "cond(if(" + serialise_expr(rhs.op0()) + "),";
     str += "then(" + serialise_expr(rhs.op1()) + "),";
     str += "else(" + serialise_expr(rhs.op2()) + "))";
@@ -1055,14 +1055,14 @@ execution_statet::serialise_expr(const exprt &rhs)
     forall_operands(it, rhs) {
       str = str + "(" + serialise_expr(*it) + "),";
     }
-  } else if (rhs.id() == "constant") {
+  } else if (rhs.id() == exprt::constant) {
     // It appears constants can be "true", "false", or a bit vector. Parse that,
     // and then print the value as a base 10 integer.
 
-    irep_idt idt_val = rhs.get("value");
-    if (idt_val == "true") {
+    irep_idt idt_val = rhs.get(exprt::a_value);
+    if (idt_val == exprt::i_true) {
       val = 1;
-    } else if (idt_val == "false") {
+    } else if (idt_val == exprt::i_false) {
       val = 0;
     } else {
       val = strtol(idt_val.c_str(), NULL, 2);
@@ -1127,34 +1127,38 @@ const execution_statet::expr_id_map_t execution_statet::expr_id_map = execution_
 execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
 {
   execution_statet::expr_id_map_t m;
-  m["+"] = serialise_normal_operation;
-  m["-"] = serialise_normal_operation;
-  m["*"] = serialise_normal_operation;
-  m["/"] = serialise_normal_operation;
-  m["mod"] = serialise_normal_operation;
-  m["="] = serialise_normal_operation;
-  m["and"] = serialise_normal_operation;
-  m["=>"] = serialise_normal_operation;
-  m["or"] = serialise_normal_operation;
-  m["not"] = serialise_normal_operation;
-  m["notequal"] = serialise_normal_operation;
+  m[exprt::plus] = serialise_normal_operation;
+  m[exprt::minus] = serialise_normal_operation;
+  m[exprt::mult] = serialise_normal_operation;
+  m[exprt::div] = serialise_normal_operation;
+  m[exprt::mod] = serialise_normal_operation;
+  m[exprt::equality] = serialise_normal_operation;
+  m[exprt::implies] = serialise_normal_operation;
+  m[exprt::i_and] = serialise_normal_operation;
+  m[exprt::i_xor] = serialise_normal_operation;
+  m[exprt::i_or] = serialise_normal_operation;
+  m[exprt::i_not] = serialise_normal_operation;
+  m[exprt::notequal] = serialise_normal_operation;
   m["unary-"] = serialise_normal_operation;
   m["unary+"] = serialise_normal_operation;
-  m["abs"] = serialise_normal_operation;
-  m["isnan"] = serialise_normal_operation;
-  m[">="] = serialise_normal_operation;
-  m[">"] = serialise_normal_operation;
-  m["<="] = serialise_normal_operation;
-  m["<"] = serialise_normal_operation;
-  m["bitor"] = serialise_normal_operation;
-  m["bitxor"] = serialise_normal_operation;
-  m["bitand"] = serialise_normal_operation;
-  m["bitnot"] = serialise_normal_operation;
-  m["shl"] = serialise_normal_operation;
-  m["lshr"] = serialise_normal_operation;
-  m["ashr"] = serialise_normal_operation;
-  m["typecast"] = serialise_normal_operation;
-  m["address_of"] = serialise_normal_operation;
+  m[exprt::abs] = serialise_normal_operation;
+  m[exprt::isnan] = serialise_normal_operation;
+  m[exprt::i_ge] = serialise_normal_operation;
+  m[exprt::i_gt] = serialise_normal_operation;
+  m[exprt::i_le] = serialise_normal_operation;
+  m[exprt::i_lt] = serialise_normal_operation;
+  m[exprt::i_bitand] = serialise_normal_operation;
+  m[exprt::i_bitor] = serialise_normal_operation;
+  m[exprt::i_bitxor] = serialise_normal_operation;
+  m[exprt::i_bitnand] = serialise_normal_operation;
+  m[exprt::i_bitnor] = serialise_normal_operation;
+  m[exprt::i_bitnxor] = serialise_normal_operation;
+  m[exprt::i_bitnot] = serialise_normal_operation;
+  m[exprt::i_shl] = serialise_normal_operation;
+  m[exprt::i_lshr] = serialise_normal_operation;
+  m[exprt::i_ashr] = serialise_normal_operation;
+  m[exprt::typecast] = serialise_normal_operation;
+  m[exprt::addrof] = serialise_normal_operation;
   m["pointer_obj"] = serialise_normal_operation;
   m["pointer_object"] = serialise_normal_operation;
 
