@@ -310,6 +310,8 @@ void value_sett::get_value_set_rec(
   std::cout << std::endl;
   #endif
 
+  const typet &expr_type=ns.follow(expr.type());
+
   if(expr.id()=="unknown" || expr.id()=="invalid")
   {
     insert(dest, exprt("unknown", original_type));
@@ -543,8 +545,59 @@ void value_sett::get_value_set_rec(
     insert(dest, address_of_exprt(expr), 0);
     return;
   }
-  else if(expr.id()=="with" ||
-          expr.id()=="array_of" ||
+
+  else if(expr.id()=="with")
+  {
+    assert(expr.operands().size()==3);
+
+    // this is the array/struct
+    object_mapt tmp_map0;
+    get_value_set_rec(expr.op0(), tmp_map0, suffix, original_type, ns);
+
+    // this is the update value -- note NO SUFFIX
+    object_mapt tmp_map2;
+    get_value_set_rec(expr.op2(), tmp_map2, "", original_type, ns);
+
+    if(expr_type.id()=="struct")
+    {
+      #if 0
+      const object_map_dt &object_map0=tmp_map0.read();
+      irep_idt component_name=expr.op1().get(ID_component_name);
+
+      bool insert=true;
+
+      for(object_map_dt::const_iterator
+          it=object_map0.begin();
+          it!=object_map0.end();
+          it++)
+      {
+        const exprt &e=to_expr(it);
+
+        if(e.id()==ID_member &&
+           e.get(ID_component_name)==component_name)
+        {
+          if(insert)
+          {
+            dest.write().insert(tmp_map2.read().begin(), tmp_map2.read().end());
+            insert=false;
+          }
+        }
+        else
+          dest.write().insert(*it);
+      }
+      #else
+      // Should be more precise! We only want "suffix"
+      make_union(dest, tmp_map0);
+      make_union(dest, tmp_map2);
+      #endif
+    }
+    else
+    {
+      make_union(dest, tmp_map0);
+      make_union(dest, tmp_map2);
+    }
+  }
+  else if(expr.id()=="array_of" ||
           expr.is_array())
   {
     // these are supposed to be done by assign()

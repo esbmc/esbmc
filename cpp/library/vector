@@ -1,0 +1,59 @@
+/*******************************************************************\
+ *
+ *
+ * Author: Blanc Nicolas
+ *
+ * 
+\*******************************************************************/
+
+
+#ifndef STL_VECTOR
+#define STL_VECTOR
+
+namespace std
+{
+
+	#define VECTOR_CAPACITY 20
+
+	template<class T> class vector
+	{
+	
+		T buf[VECTOR_CAPACITY];
+		int _size;
+	
+	public:
+		vector():_size(0){}
+
+		void push_back(const T& t)
+		{
+			assert(0 <= _size && _size < VECTOR_CAPACITY);
+			buf[_size++] = t;
+		}
+
+		T& operator[] (int i)
+		{
+			assert(0 <= i && i < _size && _size <= VECTOR_CAPACITY);
+			return buf[i];
+		}
+	
+		const T& operator[] (int i) const
+		{
+			assert(0 <= i && i < _size && _size <= VECTOR_CAPACITY);
+			return buf[i];
+		}
+
+		int size() const
+		{
+			assert(0 <= _size && _size <= VECTOR_CAPACITY);
+			return _size;
+		}
+	
+		int capacity() const
+		{
+			assert(0 <= _size && _size <= VECTOR_CAPACITY);
+			return VECTOR_CAPACITY;
+		}
+	};
+}
+
+#endif

@@ -1,0 +1,4 @@
+#ifndef STL_NEW
+#define STL_NEW
+
+#endif

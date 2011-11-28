@@ -7,6 +7,7 @@ YFLAGS = -v
 LEX    = flex
 
 # Linux etc.
+#you need to install the packages glibc-static and gmp-static to compile statically
 GCCFLAGS = -Wall -MMD -Wextra -O3 -finline-limit=1000000 -Wno-deprecated
 LDFLAGS=
 

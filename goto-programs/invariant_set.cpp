@@ -1138,7 +1138,8 @@ exprt invariant_sett::get_constant(const exprt &expr) const
         if(e.is_constant())
         {
           mp_integer value;
-          assert(!to_integer(e, value));
+          bool res = to_integer(e, value);
+          assert(!res);
           
           if(expr.type().id()=="pointer")
           {

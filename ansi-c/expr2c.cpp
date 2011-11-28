@@ -1334,8 +1334,10 @@ std::string expr2ct::convert_constant(
       const ansi_c_declarationt &decl = (const ansi_c_declarationt&)*it;
       const exprt &v = decl.decl_value();
 
-      if(v.is_not_nil())
-        assert(!to_integer(v, i));
+      if(v.is_not_nil()) {
+        bool res = to_integer(v, i);
+        assert(!res);
+      }
 
       ++i;
     }

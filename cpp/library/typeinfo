@@ -1,0 +1,4 @@
+#ifndef STL_TYPEINFO
+#define STL_TYPEINFO
+
+#endif

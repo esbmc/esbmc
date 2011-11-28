@@ -1,0 +1,71 @@
+#ifndef STL_CMATH
+#define STL_CMATH
+
+#include "definitions.h"
+
+float sqrt(float n)
+{
+	return nondet_float();
+}
+
+float exp(float n)
+{
+	return nondet_float();
+}
+
+float pow(float n)
+{
+	return nondet_float();
+}
+
+float pow(float n1, float n2)
+{
+	return nondet_float();
+}
+
+float log(float n)
+{
+	return nondet_float();
+}
+
+float log10(float n)
+{
+	return nondet_float();
+}
+
+float fabs(float n)
+{
+	return nondet_float();
+}
+
+float ceil(float n)
+{
+	return nondet_float();
+}
+
+float floor(float n)
+{
+	return nondet_float();
+}
+
+float fmod (float numerator, float denominator)
+{
+	return nondet_float();
+}
+
+float sin(float n)
+{
+	return nondet_float();
+}
+
+float cos(float n)
+{
+	return nondet_float();
+}
+
+float tan(float n)
+{
+	return nondet_float();
+}
+
+#endif

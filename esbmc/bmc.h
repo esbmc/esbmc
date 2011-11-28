@@ -176,6 +176,7 @@ protected:
   virtual void show_program();
   virtual void report_success();
   virtual void report_failure();
+  virtual void write_checkpoint();
 
   virtual void error_trace(
     const prop_convt &prop_conv);

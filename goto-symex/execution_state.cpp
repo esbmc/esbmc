@@ -946,7 +946,9 @@ execution_statet::generate_hash(void) const
         it != _threads_state.end(); it++) {
     goto_programt::const_targett pc = it->source.pc;
     int id = pc->location_number;
-    str += "!" + id;
+    std::stringstream s;
+    s << id;
+    str += "!" + s.str();
   }
 
   crypto_hash h = crypto_hash(str);

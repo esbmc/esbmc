@@ -3,6 +3,7 @@
 Module: Symbolic Execution of ANSI-C
 
 Author: Daniel Kroening, kroening@kroening.com
+		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
@@ -437,6 +438,11 @@ void goto_symext::return_assignment(statet &state, execution_statet &ex_state, u
     if(frame.return_value.is_not_nil())
     {
       code_assignt assignment(frame.return_value, value);
+
+      if (assignment.lhs().type()!=assignment.rhs().type())
+        assignment.rhs().make_typecast(assignment.lhs().type());
+
+      //make sure that we assign two expressions of the same type
       assert(assignment.lhs().type()==assignment.rhs().type());
       basic_symext::symex_assign(state, ex_state, assignment, node_id);
     }

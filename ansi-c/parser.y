@@ -1641,8 +1641,7 @@ jump_statement:
 gcc_asm_statement:
 	TOK_GCC_ASM_PAREN volatile_opt '(' gcc_asm_commands ')' ';'
 	{ $$=$1;
-	  statement(*$$, "asm");
-	  $$->flavor("gcc");
+
 	  statement(*$$, "asm");
 	  $$->flavor("gcc");
 	  $$->operands().swap($4->operands());
@@ -1650,6 +1649,8 @@ gcc_asm_statement:
 	| TOK_GCC_ASM_PAREN '{' TOK_ASM_STRING '}'
 	{
 	  $$=$1;
+	  statement(*$$, "asm");
+	  $$->flavor("gcc");
 	  statement(*$$, "asm");
 	  $$->flavor("gcc");
 	  mto($$, $3);

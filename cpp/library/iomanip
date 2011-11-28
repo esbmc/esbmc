@@ -1,0 +1,143 @@
+#ifndef STL_IOMANIP
+#define STL_IOMANIP
+
+#include "definitions.h"
+
+namespace std
+{
+	struct boolalphaStruct
+	{
+		boolalphaStruct();
+	};
+
+	struct noboolalphaStruct
+	{
+		noboolalphaStruct();
+	};
+
+	struct setprecision
+	{
+		setprecision(int p);
+	};
+
+	struct setbase
+	{
+		setbase(int b);
+	};
+
+	struct leftStruct
+	{
+		leftStruct();
+	};
+	extern leftStruct left;
+
+	struct rightStruct
+	{
+		rightStruct();
+	};
+
+	struct hexStruct
+	{
+		hexStruct();
+	};
+
+	struct decStruct
+	{
+		decStruct();
+	};
+
+	struct octStruct
+	{
+		octStruct();
+	};
+
+	struct setw
+	{
+		setw(int w);
+	};
+
+	struct setfill
+	{
+		setfill(char f);
+	};
+
+	struct flushStruct
+	{
+		flushStruct();
+	};
+
+	struct scientificStruct
+	{
+		scientificStruct();
+	};
+
+	struct showpointStruct
+	{
+		showpointStruct();
+	};
+
+	struct showbaseStruct
+	{
+		showbaseStruct();
+	};
+
+	struct internalStruct
+	{
+		internalStruct();
+	};
+
+	struct showposStruct
+	{
+		showposStruct();
+	};
+
+	struct uppercaseStruct
+	{
+		uppercaseStruct();
+	};
+
+	struct fixedStruct
+	{
+		fixedStruct();
+	};
+
+	extern fixedStruct fixed;
+	extern rightStruct right;
+	extern hexStruct hex;
+	extern octStruct oct;
+	extern decStruct dec;
+	extern flushStruct flush;
+	extern scientificStruct scientific;
+	extern showpointStruct showpoint;
+	extern showbaseStruct showbase;
+	extern internalStruct internal;
+	extern showposStruct showpos;
+	extern boolalphaStruct boolalpha;
+	extern noboolalphaStruct noboolalpha;
+	extern uppercaseStruct uppercase;
+}
+
+namespace std
+{
+	setw::setw(int w)
+	{
+		__ESBMC_assert(w >= 0, "The width must be greater or equal than 0");
+	}
+
+	setprecision::setprecision(int p)
+	{
+		__ESBMC_assert(p >= 0, "The precision must be greater or equal than 0");
+	}
+
+	setbase::setbase(int b)
+	{
+		// model
+	}
+
+	setfill::setfill(char c)
+	{
+		// model
+	}
+}
+
+#endif

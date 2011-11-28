@@ -26,6 +26,11 @@ all: util.o ieee_float_test
 include ../config.inc
 include ../common
 
+GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `gcc -dumpversion`)
+ifeq "$(GCCVERSIONGTEQ460)" "1"
+  CXXFLAGS += -fpermissive
+endif
+
 ifdef MODULE_FLOATBV
   CXXFLAGS += -DHAVE_FLOATBV
 endif
