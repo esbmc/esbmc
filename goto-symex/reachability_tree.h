@@ -37,6 +37,7 @@ public:
       _CS_bound = atoi(options.get_option("context-switch").c_str());
       _deadlock_detection = options.get_bool_option("deadlock-check");
       state_hashing = options.get_bool_option("state-hashing");
+      directed_interleavings = options.get_bool_option("direct-interleavings");
 
       if (options.get_bool_option("no-por") || options.get_bool_option("control-flow-test"))
         _por = false;
@@ -53,7 +54,11 @@ public:
 	_cur_state_it = execution_states.begin();
     };
 
-	virtual ~reachability_treet() {};
+	virtual ~reachability_treet() {
+		assert(execution_states.size() == 0);
+		if (_cur_target_state != NULL)
+			delete _cur_target_state;
+	};
 
 	execution_statet & get_cur_state();
 	bool has_more_states();
@@ -75,9 +80,6 @@ public:
     bool is_global_assign(const exprt &code);
 
     const symbolt &lookup(const namespacet &ns, const irep_idt &identifier) const;
-    unsigned int get_write_globals(const namespacet &ns, const exprt & expr);
-    unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
-
 	bool is_go_next_state();
 	bool is_go_next_formula();
 	void go_next_state();
@@ -99,6 +101,7 @@ private:
 	bool _go_next;
 	bool _DFS, _multi_formulae, _is_same_mutex,
 		 _deadlock_detection, _por;
+    bool directed_interleavings;
     const namespacet &_ns;
 
     /* jmorse */

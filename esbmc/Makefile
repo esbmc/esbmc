@@ -12,8 +12,7 @@ OBJ = $(SRC:.cpp=.o) \
       ../pointer-analysis/pointer-analysis.o \
       ../langapi/langapi.o \
       ../solvers/solvers.o \
-      ../util/util.o \
-      ../cvclang/cvclang.o
+      ../util/util.o
 
 INCLUDES= -I .. -I ../util -I$(Z3)/include
 

@@ -480,6 +480,12 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   if(_CS_bound  != -1 && get_cur_state().get_context_switch() >= _CS_bound)
     return false;
 
+  if (directed_interleavings)
+    // Don't generate interleavings automatically - instead, the user will
+    // inserts intrinsics identifying where they want interleavings to occur,
+    // and to what thread.
+    return false;
+
   execution_statet &ex_state = get_cur_state();
 
   ex_state._exprs.at(ex_state._active_thread) = expr;
@@ -658,9 +664,13 @@ void reachability_treet::multi_formulae_go_next_state()
       if(last_state)
       {
         if(_cur_target_state != NULL)
-        delete _cur_target_state;
+          delete _cur_target_state;
         _cur_target_state = *it;
         last_state = false;
+      }
+      else
+      {
+        delete *it;
       }
       execution_states.erase(it);
     }

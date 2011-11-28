@@ -439,6 +439,23 @@ void goto_symext::symex_step(
                    return;
                 }
 
+                if (deref_code.function().get("identifier") == "c::__ESBMC_switch_to")
+                {
+                  state.source.pc++;
+                  ex_state.reexecute_instruction = false;
+
+                  assert(deref_code.arguments().size() == 1);
+
+                  // Switch to other thread.
+                  exprt &num = deref_code.arguments()[0];
+                  if (num.id() != "constant")
+                    throw "Can't switch to non-constant thread id no";
+
+                  unsigned int tid = binary2integer(num.get("value").as_string(), false).to_long();
+                  ex_state.set_active_state(tid);
+                  return;
+                }
+
                 Forall_expr(it, deref_code.arguments()) {
                     dereference(*it, state, false,ex_state.node_id);
                 }

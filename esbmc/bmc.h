@@ -85,6 +85,7 @@ protected:
   class solver_base {
   public:
     virtual bool run_solver();
+    virtual ~solver_base() {}
 
   protected:
     solver_base(bmc_baset &_bmc) : bmc(_bmc)

@@ -1,4 +1,4 @@
-OBJS= stddef.o stdarg.o
+OBJS= stddef.o stdarg.o stdbool.o
 
 all: headers.o
 

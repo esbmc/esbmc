@@ -75,7 +75,7 @@ decision_proceduret::resultt boolector_dect::dec_solve()
     return read_boolector_result();
 
   post_process();
-  status("Solving with SMT solver Boolector v1.4");
+  status("Solving with SMT solver Boolector v1.1");
 
   return read_boolector_result();
 }

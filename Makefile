@@ -1,8 +1,10 @@
-DIRS = big-int esbmc hoare infrules intrep solvers separate smvlang \
-	util langapi cpp symex satqe goto-programs bplang cvclang \
-	pointer-analysis goto-symex trans smtlang ansi-c
-
 all: esbmc
+
+ifndef SATDIR
+SATDIR= $(shell pwd)
+endif
+
+export SATDIR
 
 include config.inc
 include local.inc
@@ -10,22 +12,34 @@ include common
 
 ###############################################################################
 
-$(DIRS):
-	$(MAKE) -C $@
-
-.PHONY: $(DIRS) infrastructure langauges
-
 util: big-int
 
 infrastructure: util langapi solvers goto-symex pointer-analysis \
-		goto-programs goto-symex
+		goto-programs
 
-languages: intrep cvclang smvlang bplang ansi-c
+languages: ansi-c
 
 # Ansi-c builds its library using infrastructure facilities.
 ansi-c: infrastructure
 
+###############################################################################
+
+DIRS= big-int util langapi solvers goto-symex pointer-analysis goto-programs \
+      ansi-c esbmc cpp
+
+$(DIRS):
+	$(MAKE) -C $@
+
+clean:
+	for dir in $(DIRS); do \
+		$(MAKE) -C $$dir clean; \
+	done
+
+.PHONY: $(DIRS) clean
+
 esbmc: infrastructure languages
+
+###############################################################################
 
 ifdef MODULE_INTERPOLATION
 interpolation.dir: solvers.dir langapi.dir util.dir
@@ -40,7 +54,7 @@ languages: smtlang.dir
 endif
 
 ifdef MODULE_CPP
-languages: cpp.dir
+languages: cpp
 endif
 
 ifdef MODULE_PHP
@@ -74,10 +88,3 @@ endif
 ifdef MODULE_FLOATBV
 solvers.dir: floatbv.dir
 endif
-
-.PHONY: clean
-
-clean:
-	for dir in $(DIRS); do \
-		$(MAKE) -C $$dir clean; \
-	done
