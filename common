@@ -12,13 +12,6 @@ CXXFLAGS= $(GCCFLAGS) $(INCLUDES)
 .c.o:
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-# this one is for Visual Studio's compiler:
-#%.obj:%.cpp
-#	cl $(INCLUDES) -nologo -c -GF -EHsc $<
-#
-#%.obj:%.c
-#	cl $(INCLUDES) -nologo -c -GF -EHsc $<
-
 #
 # include a dependency file if one exists
 #
