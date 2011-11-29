@@ -31,6 +31,7 @@ namespace std
 		istream& getline(char str[], int size, char delim = '\n');
 		void read(char str[], int size);
 		int gcount();
+		int rdstate();
 
 	private:
 		istream(const istream&); // disabled
@@ -302,6 +303,11 @@ namespace std
 	}
 
 	int istream::gcount()
+	{
+		return nondet_uint();
+	}
+
+	int istream::rdstate()
 	{
 		return nondet_uint();
 	}
