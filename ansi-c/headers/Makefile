@@ -1,7 +1,5 @@
 ESBMCDIR= $(shell pwd)/../..
-
-include ../../config.inc
-include ../../local.inc
+include $(ESBMCDIR)/common
 
 OBJS= stddef.o stdarg.o stdbool.o
 

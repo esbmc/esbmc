@@ -1,4 +1,5 @@
 ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/common
 
 SRC = symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
       symex_main.cpp goto_trace.cpp build_goto_trace.cpp \
@@ -14,9 +15,6 @@ OBJ = $(SRC:.cpp=.o)
 INCLUDES= -I .. -I ../util
 
 all: goto-symex.o
-
-include ../config.inc
-include ../common
 
 ###############################################################################
 

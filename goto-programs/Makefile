@@ -1,4 +1,5 @@
 ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/common
 
 SRC = goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       goto_program.cpp basic_blocks.cpp goto_threads.cpp goto_check.cpp \
@@ -19,9 +20,6 @@ OBJ = $(SRC:.cpp=.o)
 INCLUDES= -I .. -I ../util
 
 all: goto-programs.o
-
-include ../config.inc
-include ../common
 
 ###############################################################################
 

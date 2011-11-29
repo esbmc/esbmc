@@ -1,14 +1,7 @@
+ESBMCDIR = $(shell pwd)
+include $(ESBMCDIR)/common
+
 all: esbmc
-
-ifndef SATDIR
-SATDIR= $(shell pwd)
-endif
-
-export SATDIR
-
-include config.inc
-include local.inc
-include common
 
 ###############################################################################
 

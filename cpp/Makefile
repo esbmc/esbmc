@@ -1,4 +1,5 @@
 ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/common
 
 SRC = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       lex.yy.cpp cpp_typecheck.cpp cpp_convert_type.cpp \
@@ -24,9 +25,6 @@ OBJ = $(SRC:.cpp=.o)
 INCLUDES= -I .. -I ../util
 
 all: cpp.o
-
-include ../config.inc
-include ../common
 
 GCCFLAGS += -D CPP_SYSTEMC_EXTENSION
 

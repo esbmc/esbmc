@@ -1,7 +1,5 @@
 ESBMCDIR= $(shell pwd)/..
-
-include ../config.inc
-include ../common
+include $(ESBMCDIR)/common
 
 RM = rm -f
 OBJ = bigint-test.o bigint-func.o bigint.o

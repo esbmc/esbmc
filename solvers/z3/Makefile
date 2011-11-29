@@ -1,8 +1,6 @@
 ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/common
 
-include ../../config.inc
-include ../../common
-include ../../local.inc
 
 CXXFLAGS+= -I../.. -I../../util -I$(Z3)/include
 

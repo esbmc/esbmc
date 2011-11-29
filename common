@@ -1,3 +1,6 @@
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+
 CFLAGS=	$(GCCFLAGS) $(INCLUDES)
 CXXFLAGS= $(GCCFLAGS) $(INCLUDES)
 

@@ -1,10 +1,7 @@
 ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/common
 
 all: solvers.o
-
-include ../config.inc
-include ../common
-include ../local.inc
 
 OBJS= sat/satsolvers.o flattening/flattening.o prop/propobj.o
 

@@ -1,7 +1,5 @@
 ESBMCDIR= $(shell pwd)/../..
-
-include ../../common
-include ../../config.inc
+include $(ESBMCDIR)/common
 
 OBJS=cpy.o cpp.o scanner.o compat.o hooks.o
 HEADERS=cpp.h

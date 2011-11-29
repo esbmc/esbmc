@@ -1,4 +1,5 @@
 ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/common
 
 SRC = main.cpp parseoptions.cpp bmc.cpp  \
       bv_cbmc.cpp document_subgoals.cpp \
@@ -21,10 +22,6 @@ INCLUDES= -I .. -I ../util -I$(Z3)/include
 LIBS= -lgmp -ldl -lgomp
 
 all: esbmc
-
-include ../config.inc
-include ../common
-include ../local.inc
 
 ifdef MODULE_CPP
   OBJ += ../cpp/cpp.o

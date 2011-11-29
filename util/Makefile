@@ -1,4 +1,5 @@
 ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/common
 
 SRC = arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr.cpp expr_util.cpp i2string.cpp irep.cpp language.cpp \
@@ -24,9 +25,6 @@ OBJ = $(SRC:.cpp=.o)
 INCLUDES= -I .. -I ../util
 
 all: util.o ieee_float_test
-
-include ../config.inc
-include ../common
 
 GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `gcc -dumpversion`)
 ifeq "$(GCCVERSIONGTEQ460)" "1"

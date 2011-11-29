@@ -1,4 +1,5 @@
 ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/common
 
 SRC = c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \
@@ -19,9 +20,6 @@ OBJ = $(SRC:.cpp=.o)
 INCLUDES= -I .. -I ../util
 
 all: cpp_dir headers_dir ansi-c.o
-
-include ../config.inc
-include ../common
 
 ###############################################################################
 
