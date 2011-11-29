@@ -1,6 +1,7 @@
 // Fig. 12.4: fig12_04.cpp 
 // Using member functions get, put and eof.
 #include <iostream>
+#include <cstdio>
 
 using std::cout;
 using std::cin;
