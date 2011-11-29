@@ -43,4 +43,14 @@ $(MAINOBJ): $(OBJS)
 
 #clean defined by includer
 
-.PHONY: clean
+ifdef DIRS
+depend:
+	for dir in $(DIRS); do \
+		$(MAKE) -C $$dir depend; \
+	done
+else
+depend: $(SRCS)
+	$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+endif
+
+.PHONY: clean depend

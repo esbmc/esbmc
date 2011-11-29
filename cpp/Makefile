@@ -3,7 +3,7 @@ MAINOBJ= cpp.o
 all: $(MAINOBJ)
 
 SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
-      lex.yy.cpp cpp_typecheck.cpp cpp_convert_type.cpp \
+      cpp_typecheck.cpp cpp_convert_type.cpp \
       cpp_typecheck_expr.cpp cpp_typecheck_code.cpp \
       cpp_typecheck_type.cpp parse.cpp cpp_parse_tree.cpp \
       cpp_token_buffer.cpp cpp_typecheck_fargs.cpp \
@@ -22,6 +22,10 @@ SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck_constructor.cpp cpp_typecheck_virtual_table.cpp
 
 GCCFLAGS += -D CPP_SYSTEMC_EXTENSION
+
+# lex.yy.cpp isn't a source file we actually have for dependancy purposes,
+# so instead put it in the object list.
+OBJS= lex.yy.o
 
 ###############################################################################
 
