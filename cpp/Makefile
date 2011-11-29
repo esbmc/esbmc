@@ -1,3 +1,5 @@
+ESBMCDIR= $(shell pwd)/..
+
 SRC = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       lex.yy.cpp cpp_typecheck.cpp cpp_convert_type.cpp \
       cpp_typecheck_expr.cpp cpp_typecheck_code.cpp \

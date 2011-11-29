@@ -1,3 +1,5 @@
+ESBMCDIR= $(shell pwd)/../..
+
 include ../../config.inc
 include ../../local.inc
 

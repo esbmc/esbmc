@@ -1,3 +1,5 @@
+ESBMCDIR= $(shell pwd)/..
+
 all: solvers.o
 
 include ../config.inc

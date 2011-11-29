@@ -1,3 +1,5 @@
+ESBMCDIR= $(shell pwd)/..
+
 SRC = main.cpp parseoptions.cpp bmc.cpp  \
       bv_cbmc.cpp document_subgoals.cpp \
       symex_bmc.cpp show_vcc.cpp \

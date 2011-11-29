@@ -1,3 +1,5 @@
+ESBMCDIR= $(shell pwd)/..
+
 SRC = mode.cpp language_ui.cpp languages.cpp language_util.cpp
 
 OBJ = $(SRC:.cpp=.o)

@@ -1,3 +1,5 @@
+ESBMCDIR= $(shell pwd)/..
+
 SRC = symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
       symex_main.cpp goto_trace.cpp build_goto_trace.cpp \
       symex_function.cpp goto_symex_state.cpp symex_dereference.cpp \

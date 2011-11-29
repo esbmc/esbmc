@@ -1,3 +1,5 @@
+ESBMCDIR= $(shell pwd)/..
+
 SRC = c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \
       c_types.cpp c_final.cpp trans_unit.cpp ansi_c_typecheck.cpp \

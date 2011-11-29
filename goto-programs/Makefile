@@ -1,3 +1,5 @@
+ESBMCDIR= $(shell pwd)/..
+
 SRC = goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       goto_program.cpp basic_blocks.cpp goto_threads.cpp goto_check.cpp \
       goto_function_pointers.cpp goto_functions.cpp goto_inline.cpp \
