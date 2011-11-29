@@ -537,7 +537,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #endif
     else if(options.get_bool_option("dimacs"))
       solver = new dimacs_solver(*this);
-    else if(options.get_bool_option("bl"))
+    else if(options.get_bool_option("boolector-bv"))
 #ifdef BOOLECTOR
       solver = new boolector_solver(*this);
 #else
