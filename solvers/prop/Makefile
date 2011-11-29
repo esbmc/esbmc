@@ -1,17 +1,10 @@
 ESBMCDIR= $(shell pwd)/../..
-include $(ESBMCDIR)/common
-
-CXXFLAGS+= -I../.. -I ../../util
+MAINOBJ= propobj.o
+all: propobj.o
 
 SRCS= prop.cpp prop_conv.cpp prop_conv_store.cpp aig_formula.cpp aig.cpp aig_prop.cpp
 
-all: propobj.o
-
-propobj.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
-
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f *.o *.d
 
-.PHONY: clean
+include $(ESBMCDIR)/common

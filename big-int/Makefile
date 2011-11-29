@@ -1,5 +1,4 @@
 ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/common
 
 RM = rm -f
 OBJ = bigint-test.o bigint-func.o bigint.o
@@ -15,3 +14,5 @@ $(PRG) : $(OBJ)
 	$(CXX) $(CXXFLAGS) -o $(PRG) $(OBJ)
 
 dep:
+
+include $(ESBMCDIR)/common

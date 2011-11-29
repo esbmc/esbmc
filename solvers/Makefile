@@ -1,6 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/common
-
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
 all: solvers.o
 
 OBJS= sat/satsolvers.o flattening/flattening.o prop/propobj.o
@@ -62,3 +62,5 @@ clean:
 	-$(MAKE) -C cvc clean
 	-$(MAKE) -C smt clean
 	-$(MAKE) -C dplib clean
+
+include $(ESBMCDIR)/common

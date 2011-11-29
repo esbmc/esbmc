@@ -2,10 +2,13 @@ include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 
 OBJS1 = $(SRCS:.c=.o)
-OBJS = $(OBJS1:.cpp=.o)
+OBJS+= $(OBJS1:.cpp=.o)
 
-CFLAGS=	$(GCCFLAGS) $(INCLUDES)
-CXXFLAGS= $(GCCFLAGS) $(INCLUDES)
+# list of includes, potentially modified by includer
+INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
+
+CFLAGS+= $(GCCFLAGS) $(INCLUDES)
+CXXFLAGS+= $(GCCFLAGS) $(INCLUDES)
 
 .SUFFIXES:	.C .d .cpp
 
@@ -31,3 +34,13 @@ D_FILES = $(D_FILES1:.cpp=.d)
 
 -include $(D_FILES)
 
+# A generic target; potentially overwritten by the includer
+
+all: $(MAINOBJ)
+
+$(MAINOBJ): $(OBJS)
+	$(LD) $(LDFLAGS) -r -o $@ $^
+
+#clean defined by includer
+
+.PHONY: clean

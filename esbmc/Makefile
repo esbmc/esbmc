@@ -1,5 +1,4 @@
 ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/common
 
 SRCS = main.cpp parseoptions.cpp bmc.cpp  \
       bv_cbmc.cpp document_subgoals.cpp \
@@ -7,6 +6,11 @@ SRCS = main.cpp parseoptions.cpp bmc.cpp  \
       counterex_pretty.cpp \
       counterex_pretty_greedy.cpp \
       counterex_pretty_pbs.cpp options.cpp
+
+# Additional include for Z3, as z3_conv.h depends on it.
+INCLUDES= -I $(Z3)/include
+
+include $(ESBMCDIR)/common
 
 # additional objects for esbmc binary
 OBJS+=../ansi-c/ansi-c.o \
@@ -17,8 +21,6 @@ OBJS+=../ansi-c/ansi-c.o \
       ../langapi/langapi.o \
       ../solvers/solvers.o \
       ../util/util.o
-
-INCLUDES= -I .. -I ../util -I$(Z3)/include
 
 LIBS= -lgmp -ldl -lgomp
 

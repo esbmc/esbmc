@@ -1,5 +1,4 @@
 ESBMCDIR= $(shell pwd)/../..
-include $(ESBMCDIR)/common
 
 OBJS= stddef.o stdarg.o stdbool.o
 
@@ -16,3 +15,5 @@ clean:
 	-rm *.d
 
 .PHONY: clean
+
+include $(ESBMCDIR)/common

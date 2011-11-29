@@ -1,5 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/common
+MAINOBJ = util.o
+all: $(MAINOBJ)
 
 SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr.cpp expr_util.cpp i2string.cpp irep.cpp language.cpp \
@@ -20,10 +21,6 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       pointer_arithmetic.cpp ieee_float.cpp signal_catcher.cpp \
       bv_arithmetic.cpp tempdir.cpp var_name.cpp
 
-INCLUDES= -I .. -I ../util
-
-all: util.o ieee_float_test
-
 GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `gcc -dumpversion`)
 ifeq "$(GCCVERSIONGTEQ460)" "1"
   CXXFLAGS += -fpermissive
@@ -33,14 +30,11 @@ ifdef MODULE_FLOATBV
   CXXFLAGS += -DHAVE_FLOATBV
 endif
 
-###############################################################################
-
-util.o: $(OBJS)
-	$(LD) $(LDFLAGS) -r -o util.o $(OBJS)
-
 clean:
-	rm -f *.o ieee_float_test
-	-rm *.d
+	-rm -f *.o ieee_float_test
+	-rm -f *.d
+#
+#ieee_float_test: ieee_float_test.o ieee_float.o util.o
+#	$(CXX) $(CXXFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o
 
-ieee_float_test: ieee_float_test.o ieee_float.o util.o
-	$(CXX) $(CXXFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o
+include $(ESBMCDIR)/common

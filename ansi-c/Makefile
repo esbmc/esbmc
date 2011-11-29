@@ -1,5 +1,4 @@
 ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/common
 
 SRCS= c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \
@@ -16,6 +15,8 @@ SRCS= c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp \
 
 INCLUDES= -I .. -I ../util
+
+include $(ESBMCDIR)/common
 
 all: cpp_dir headers_dir ansi-c.o
 

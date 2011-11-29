@@ -1,7 +1,6 @@
 ESBMCDIR= $(shell pwd)/../..
-include $(ESBMCDIR)/common
-
-CXXFLAGS+= -I../../ -I../../util
+MAINOBJ= qbfsolvers.o
+all: $(MAINOBJ)
 
 SRCS= qdimacs_cnf.cpp qbf_quantor.cpp qbf_skizzo.cpp qdimacs_core.cpp \
       qbf_qube.cpp qbf_qube_core.cpp
@@ -16,9 +15,6 @@ SRCS+= qbf_cudd.cpp
 CXXFLAGS+= -DHAVE_QBF_CORE
 endif
 
-qbfsolvers.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
-
 qbf_squolem.o: qbf_squolem.cpp qbf_squolem_core.cpp
 	$(CXX) -c -o qbf_squolem_tmp.o $^ $(CXXFLAGS) -I $(SQUOLEM2)
 	$(LD) -r -o $@ qbf_squolem_tmp.o $(LDFLAGS) -L $(SQUOLEM2) -lsquolem2
@@ -31,7 +27,6 @@ qbf_cudd.o: qbf_bdd_core.cpp qbf_skizzo_core.cpp
 		-lepd -ldddmp
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f *.o *.d
 
-.PHONY: clean
+include $(ESBMCDIR)/common

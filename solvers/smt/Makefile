@@ -1,17 +1,10 @@
 ESBMCDIR= $(shell pwd)/../..
-include $(ESBMCDIR)/common
-
-CXXFLAGS+= -I../.. -I../../util
+MAINOBJ= smt.o
+all: $(MAINOBJ)
 
 SRCS = smt_dec.cpp smt_prop.cpp smt_conv.cpp
 
-all: smt.o
-
-smt.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
-
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f *.o *.d
 
-.PHONY: clean
+include $(ESBMCDIR)/common

@@ -1,5 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/common
+MAINOBJ= goto-programs.o
+all: $(MAINOBJ)
 
 SRCS= goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       goto_program.cpp basic_blocks.cpp goto_threads.cpp goto_check.cpp \
@@ -15,15 +16,7 @@ SRCS= goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       format_strings.cpp loop_numbers.cpp \
       goto_program_template.cpp write_goto_binary.cpp
 
-INCLUDES= -I .. -I ../util
-
-all: goto-programs.o
-
-###############################################################################
-
-goto-programs.o: $(OBJS)
-	$(LD) $(LDFLAGS) -r -o goto-programs.o $(OBJS)
-
 clean:
-	rm -f *.o
-	-rm *.d
+	-rm -f *.o *.d
+
+include $(ESBMCDIR)/common

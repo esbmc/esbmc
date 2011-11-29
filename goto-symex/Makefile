@@ -1,5 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/common
+MAINOBJ= goto-symex.o
+all: $(MAINOBJ)
 
 SRCS= symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
       symex_main.cpp goto_trace.cpp build_goto_trace.cpp \
@@ -10,16 +11,7 @@ SRCS= symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
       execution_state.cpp reachability_tree.cpp read_write_set.cpp \
       crypto_hash.cpp
 
-INCLUDES= -I .. -I ../util
-
-all: goto-symex.o
-
-###############################################################################
-
-goto-symex.o: $(OBJS)
-	$(LD) $(LDFLAGS) -r -o $@ $(OBJS)
-
 clean:
-	rm -f *.o
-	rm -f *.d
+	rm -f *.o *.d
 
+include $(ESBMCDIR)/common

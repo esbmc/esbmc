@@ -1,5 +1,4 @@
 ESBMCDIR= $(shell pwd)/../..
-include $(ESBMCDIR)/common
 
 OBJS=cpy.o cpp.o scanner.o compat.o hooks.o
 HEADERS=cpp.h
@@ -31,3 +30,5 @@ clean:
 	-rm y.tab.h
 	-rm y.output
 	-rm *.d
+
+include $(ESBMCDIR)/common

@@ -1,17 +1,10 @@
 ESBMCDIR= $(shell pwd)/../..
-include $(ESBMCDIR)/common
-
-CXXFLAGS+= -I../.. -I../../util
+MAINOBJ= cvc.o
+all: $(MAINOBJ)
 
 SRCS = cvc_prop.cpp cvc_conv.cpp cvc_dec.cpp
 
-all: cvc.o
-
-cvc.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
-
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f *.o *.d
 
-.PHONY: clean
+include $(ESBMCDIR)/common

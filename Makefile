@@ -1,5 +1,4 @@
 ESBMCDIR = $(shell pwd)
-include $(ESBMCDIR)/common
 
 all: esbmc
 
@@ -81,3 +80,5 @@ endif
 ifdef MODULE_FLOATBV
 solvers.dir: floatbv.dir
 endif
+
+include $(ESBMCDIR)/common

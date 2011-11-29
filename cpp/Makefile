@@ -1,5 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/common
+MAINOBJ= cpp.o
+all: $(MAINOBJ)
 
 SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       lex.yy.cpp cpp_typecheck.cpp cpp_convert_type.cpp \
@@ -20,16 +21,9 @@ SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck_enum_type.cpp cpp_typecheck_bases.cpp \
       cpp_typecheck_constructor.cpp cpp_typecheck_virtual_table.cpp
 
-INCLUDES= -I .. -I ../util
-
-all: cpp.o
-
 GCCFLAGS += -D CPP_SYSTEMC_EXTENSION
 
 ###############################################################################
-
-cpp.o: $(OBJS)
-	$(LD) -r -o cpp.o $(OBJS)
 
 lex.yy.cpp: scanner.l
 	$(LEX) -Pyycpp -olex.yy.cpp scanner.l
@@ -37,7 +31,6 @@ lex.yy.cpp: scanner.l
 lex.yy.o: lex.yy.cpp
 
 clean:
-	rm -f $(OBJS) *.o lex.yy.cpp y.tab.cpp.output *.d
+	-rm -f *.o lex.yy.cpp y.tab.cpp.output *.d
 
-dep: lex.yy.cpp
-
+include $(ESBMCDIR)/common

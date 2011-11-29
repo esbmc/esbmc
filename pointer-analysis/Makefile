@@ -1,5 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/common
+MAINOBJ= pointer-analysis.o
+all: $(MAINOBJ)
 
 SRCS= value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp \
       dereference.cpp pointer_offset_sum.cpp add_failed_symbols.cpp \
@@ -9,20 +10,12 @@ SRCS= value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp \
       value_set_domain_fivr.cpp value_set_analysis_fivrns.cpp \
       value_set_fivrns.cpp value_set_domain_fivrns.cpp
 
-INCLUDES= -I .. -I ../util
-
-all: pointer-analysis.o
-
 GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `gcc -dumpversion`)
 ifeq "$(GCCVERSIONGTEQ460)" "1"
   CXXFLAGS += -fpermissive
 endif
 
-###############################################################################
-
-pointer-analysis.o: $(OBJS)
-	$(LD) $(LDFLAGS) -r -o pointer-analysis.o $(OBJS)
-
 clean:
-	rm -f *.o *.d
+	-rm -f *.o *.d
 
+include $(ESBMCDIR)/common

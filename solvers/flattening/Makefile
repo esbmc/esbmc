@@ -1,7 +1,6 @@
 ESBMCDIR= $(shell pwd)/../..
-include $(ESBMCDIR)/common
-
-CXXFLAGS+= -I../../util -I../../
+MAINOBJ= flattening.o
+all: $(MAINOBJ)
 
 SRCS= equality.cpp arrays.cpp functions.cpp boolbv_width.cpp \
 	boolbv.cpp bv_pointers.cpp bv_utils.cpp boolbv_abs.cpp \
@@ -23,16 +22,10 @@ endif
 
 ifdef MODULE_FLOATBV
 CXXFLAGS += -DHAVE_FLOATBV
-FLOATBVOBJ = ../../floatbv/floatbv.o
+OBJS = ../../floatbv/floatbv.o
 endif
 
-all: flattening.o
-
-flattening.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS) $(FLOATBVOBJ)
-
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f *.o *.d
 
-.PHONY: clean
+include $(ESBMCDIR)/common

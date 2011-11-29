@@ -1,37 +1,33 @@
 ESBMCDIR= $(shell pwd)/../..
-include $(ESBMCDIR)/common
-
-CXXFLAGS+= -I../../util -I../../
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= satsolvers.o
+all: $(MAINOBJ)
 
 SRCS= cnf.cpp dimacs_cnf.cpp cnf_clause_list.cpp pbs_dimacs_cnf.cpp \
 	read_dimacs_cnf.cpp resolution_proof.cpp satcheck.cpp
 
-ifneq ($(CHAFF),)
-SRCS+= chaff.cpp
+ifdef CHAFF
+OBJS+= chaff.o
 endif
 
-ifneq ($(BOOLEFORCE),)
-SRCS+= booleforce.cpp
+ifdef BOOLEFORCE
+OBJS+= booleforce.o
 endif
 
-ifneq ($(MINISAT),)
-SRCS+= minisat.cpp
+ifdef MINISAT
+OBJS+= minisat.o
 CXXFLAGS+= -DHAVE_MINISAT
 endif
 
-ifneq ($(MINISAT2),)
-SRCS+= minisat2.cpp
+ifdef MINISAT2
+OBJS+= minisat2.cpp
 CXXFLAGS+= -DHAVE_MINISAT2
 endif
 
-ifneq ($(SMVSAT),)
-SRCS+= smvsat.cpp
+ifdef SMVSAT
+OBJS+= smvsat.cpp
 endif
-
-all: satsolvers.o
-
-satsolvers.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
 
 chaff.o: satcheck_zchaff.cpp satcheck_zcore.cpp
 	$(CXX) -c -o $@ $^ $(CXXFLAGS) -lsat -L $(CHAFF) -I $(CHAFF)
@@ -54,7 +50,6 @@ smvsat.o: satcheck_smvsat.cpp
 	$(CXX) -c -o $@ $^ $(CXXFLAGS) -I $(SMVSAT)/include $(SMVSAT)/lib/libsmvsat.a
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f *.o *.d
 
-.PHONY: clean
+include $(ESBMCDIR)/common
