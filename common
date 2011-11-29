@@ -1,6 +1,9 @@
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 
+OBJS1 = $(SRCS:.c=.o)
+OBJS = $(OBJS1:.cpp=.o)
+
 CFLAGS=	$(GCCFLAGS) $(INCLUDES)
 CXXFLAGS= $(GCCFLAGS) $(INCLUDES)
 
