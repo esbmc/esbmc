@@ -3,7 +3,7 @@ include $(ESBMCDIR)/common
 
 CXXFLAGS+= -I../.. -I../../util
 
-OBJS = cvc_prop.o cvc_conv.o cvc_dec.o
+SRCS = cvc_prop.cpp cvc_conv.cpp cvc_dec.cpp
 
 all: cvc.o
 

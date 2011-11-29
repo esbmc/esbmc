@@ -1,10 +1,9 @@
 ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/common
 
-
 CXXFLAGS+= -I../.. -I../../util -I$(Z3)/include
 
-OBJS= z3_capi.o  z3_conv.o  z3_dec.o  z3_get.o  z3_prop.o  z3_util.o
+SRCS= z3_capi.cpp  z3_conv.cpp  z3_dec.cpp  z3_get.cpp  z3_prop.cpp  z3_util.cpp
 
 all:z3.o
 

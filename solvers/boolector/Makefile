@@ -3,7 +3,7 @@ include $(ESBMCDIR)/common
 
 CXXFLAGS+= -I../.. -I../../util -I$(BOOLECTOR)/include
 
-OBJS= boolector_dec.o boolector_prop.o boolector_conv.o boolector_get.o
+SRCS= boolector_dec.cpp boolector_prop.cpp boolector_conv.cpp boolector_get.cpp
 
 all: boolector.o
 

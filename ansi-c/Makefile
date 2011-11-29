@@ -1,7 +1,7 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/common
 
-SRC = c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
+SRCS= c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \
       c_types.cpp c_final.cpp trans_unit.cpp ansi_c_typecheck.cpp \
       c_link.cpp c_preprocess.cpp c_link_type_eq.cpp \
@@ -14,8 +14,6 @@ SRC = c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
       preprocessor_line.cpp convert_character_literal.cpp \
       convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp \
-
-OBJ = $(SRC:.cpp=.o)
 
 INCLUDES= -I .. -I ../util
 
@@ -45,7 +43,7 @@ cprover_library.o: cprover_library.cpp
 cprover_blank_library.o: cprover_library.cpp
 	$(CXX) $(CXXFLAGS) -DNO_CPROVER_LIBRARY $^ -o $@ -c
 
-C2GOTO_DEPS= $(OBJ) ../util/util.o ../langapi/langapi.o ../big-int/bigint.o \
+C2GOTO_DEPS= $(OBJS) ../util/util.o ../langapi/langapi.o ../big-int/bigint.o \
 	../goto-programs/goto-programs.o ../pointer-analysis/pointer-analysis.o\
 	cpp/preproc.o headers/headers.o
 
@@ -81,13 +79,13 @@ headers_dir:
 
 ###############################################################################
 
-ansi-c.o: $(OBJ) cprover_library.o clib.o cpp/preproc.o headers/headers.o
+ansi-c.o: $(OBJS) cprover_library.o clib.o cpp/preproc.o headers/headers.o
 	$(LD) $(LDFLAGS) -r -o $@ $^
 
 clean:
 	$(MAKE) -C cpp clean
 	$(MAKE) -C headers clean
-	-rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
+	-rm -f $(OBJS) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
 	-rm -f c2goto
 	-rm -f *.goto
 	-rm *.d

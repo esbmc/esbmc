@@ -3,34 +3,34 @@ include $(ESBMCDIR)/common
 
 CXXFLAGS+= -I../../util -I../../
 
-OBJS= cnf.o dimacs_cnf.o cnf_clause_list.o pbs_dimacs_cnf.o \
-	read_dimacs_cnf.o resolution_proof.o satcheck.o
+SRCS= cnf.cpp dimacs_cnf.cpp cnf_clause_list.cpp pbs_dimacs_cnf.cpp \
+	read_dimacs_cnf.cpp resolution_proof.cpp satcheck.cpp
 
 ifneq ($(CHAFF),)
-TARGETS+= chaff.o
+SRCS+= chaff.cpp
 endif
 
 ifneq ($(BOOLEFORCE),)
-TARGETS+= booleforce.o
+SRCS+= booleforce.cpp
 endif
 
 ifneq ($(MINISAT),)
-TARGETS+= minisat.o
+SRCS+= minisat.cpp
 CXXFLAGS+= -DHAVE_MINISAT
 endif
 
 ifneq ($(MINISAT2),)
-TARGETS+= minisat2.o
+SRCS+= minisat2.cpp
 CXXFLAGS+= -DHAVE_MINISAT2
 endif
 
 ifneq ($(SMVSAT),)
-TARGETS+= smvsat.o
+SRCS+= smvsat.cpp
 endif
 
 all: satsolvers.o
 
-satsolvers.o: $(TARGETS) $(OBJS)
+satsolvers.o: $(OBJS)
 	$(LD) -r -o $@ $^ $(LDFLAGS)
 
 chaff.o: satcheck_zchaff.cpp satcheck_zcore.cpp

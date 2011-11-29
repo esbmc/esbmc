@@ -3,7 +3,7 @@ include $(ESBMCDIR)/common
 
 CXXFLAGS+= -I../.. -I../../util
 
-OBJS = smt_dec.o smt_prop.o smt_conv.o
+SRCS = smt_dec.cpp smt_prop.cpp smt_conv.cpp
 
 all: smt.o
 

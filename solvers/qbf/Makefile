@@ -3,20 +3,20 @@ include $(ESBMCDIR)/common
 
 CXXFLAGS+= -I../../ -I../../util
 
-OBJS= qdimacs_cnf.o qbf_quantor.o qbf_skizzo.o qdimacs_core.o qbf_qube.o \
-	qbf_qube_core.o
+SRCS= qdimacs_cnf.cpp qbf_quantor.cpp qbf_skizzo.cpp qdimacs_core.cpp \
+      qbf_qube.cpp qbf_qube_core.cpp
 
 ifneq ($(SQUOLEM2),)
-TARGETS+= qbf_squolem.o
+SRCS+= qbf_squolem.cpp
 CXXFLAGS+= -DHAVE_QBF_CORE
 endif
 
 ifneq ($(CUDD),)
-TARGETS+= qbf_cudd.o
+SRCS+= qbf_cudd.cpp
 CXXFLAGS+= -DHAVE_QBF_CORE
 endif
 
-qbfsolvers.o: $(TARGETS) $(OBJS)
+qbfsolvers.o: $(OBJS)
 	$(LD) -r -o $@ $^ $(LDFLAGS)
 
 qbf_squolem.o: qbf_squolem.cpp qbf_squolem_core.cpp

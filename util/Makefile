@@ -1,7 +1,7 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/common
 
-SRC = arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
+SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr.cpp expr_util.cpp i2string.cpp irep.cpp language.cpp \
       lispexpr.cpp lispirep.cpp location.cpp message.cpp language_file.cpp \
       mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp \
@@ -20,8 +20,6 @@ SRC = arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       pointer_arithmetic.cpp ieee_float.cpp signal_catcher.cpp \
       bv_arithmetic.cpp tempdir.cpp var_name.cpp
 
-OBJ = $(SRC:.cpp=.o)
-
 INCLUDES= -I .. -I ../util
 
 all: util.o ieee_float_test
@@ -37,8 +35,8 @@ endif
 
 ###############################################################################
 
-util.o: $(OBJ)
-	$(LD) $(LDFLAGS) -r -o util.o $(OBJ)
+util.o: $(OBJS)
+	$(LD) $(LDFLAGS) -r -o util.o $(OBJS)
 
 clean:
 	rm -f *.o ieee_float_test

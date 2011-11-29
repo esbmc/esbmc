@@ -3,7 +3,7 @@ include $(ESBMCDIR)/common
 
 CXXFLAGS+= -I../.. -I../../util
 
-OBJS = dplib_dec.o dplib_prop.o dplib_conv.o
+SRCS = dplib_dec.cpp dplib_prop.cpp dplib_conv.cpp
 
 all: dplib.o
 

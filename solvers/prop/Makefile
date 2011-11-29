@@ -3,7 +3,7 @@ include $(ESBMCDIR)/common
 
 CXXFLAGS+= -I../.. -I ../../util
 
-OBJS= prop.o prop_conv.o prop_conv_store.o aig_formula.o aig.o aig_prop.o
+SRCS= prop.cpp prop_conv.cpp prop_conv_store.cpp aig_formula.cpp aig.cpp aig_prop.cpp
 
 all: propobj.o
 
