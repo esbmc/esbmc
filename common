@@ -75,13 +75,13 @@ endif
 # builds.
 
 debug:
-	env OBJDIR=.debugobjs $(MAKE)
+	env OBJDIR=.debugobjs OPTS=-O0 GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
 
 debugclean:
 	env OBJDIR=.debugobjs $(MAKE) clean
 
 debugfast:
-	env OBJDIR=.debugfastobjs $(MAKE)
+	env OBJDIR=.debugfastobjs GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
 
 debugfastclean:
 	env OBJDIR=.debugfastobjs $(MAKE) clean
