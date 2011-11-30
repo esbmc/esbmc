@@ -11,8 +11,7 @@ headers.o: $(OBJS)
 	$(LD) $(LDFLAGS) -b binary $< -o $@ -r
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm *.o .deps
 
 .PHONY: clean
 

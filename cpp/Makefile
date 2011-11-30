@@ -35,6 +35,6 @@ lex.yy.cpp: scanner.l
 lex.yy.o: lex.yy.cpp
 
 clean:
-	-rm -f *.o lex.yy.cpp y.tab.cpp.output *.d
+	-rm -f *.o lex.yy.cpp y.tab.cpp.output .deps
 
 include $(ESBMCDIR)/common

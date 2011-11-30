@@ -29,6 +29,6 @@ clean:
 	-rm y.tab.c
 	-rm y.tab.h
 	-rm y.output
-	-rm *.d
+	-rm .deps
 
 include $(ESBMCDIR)/common

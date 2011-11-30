@@ -27,6 +27,6 @@ qbf_cudd.o: qbf_bdd_core.cpp qbf_skizzo_core.cpp
 		-lepd -ldddmp
 
 clean:
-	-rm -f *.o *.d
+	-rm -f *.o .deps
 
 include $(ESBMCDIR)/common

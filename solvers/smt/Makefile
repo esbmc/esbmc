@@ -5,6 +5,6 @@ all: $(MAINOBJ)
 SRCS = smt_dec.cpp smt_prop.cpp smt_conv.cpp
 
 clean:
-	-rm -f *.o *.d
+	-rm -f *.o .deps
 
 include $(ESBMCDIR)/common

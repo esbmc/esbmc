@@ -8,7 +8,7 @@ all : $(PRG)
 
 clean :
 	$(RM) $(OBJ) $(PRG)
-	-rm *.d
+	-rm .deps
 
 $(PRG) : $(OBJ)
 	$(CXX) $(CXXFLAGS) -o $(PRG) $(OBJ)

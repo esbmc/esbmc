@@ -9,7 +9,7 @@ SRCS= boolector_dec.cpp boolector_prop.cpp boolector_conv.cpp boolector_get.cpp
 INCLUDES= -I$(BOOLECTOR)/include
 
 clean:
-	-rm -f *.o *.d
+	-rm -f *.o .deps
 
 include $(ESBMCDIR)/common
 

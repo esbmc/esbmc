@@ -12,6 +12,6 @@ SRCS= symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
       crypto_hash.cpp
 
 clean:
-	rm -f *.o *.d
+	-rm -f *.o .deps
 
 include $(ESBMCDIR)/common

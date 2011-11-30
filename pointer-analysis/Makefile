@@ -16,6 +16,6 @@ ifeq "$(GCCVERSIONGTEQ460)" "1"
 endif
 
 clean:
-	-rm -f *.o *.d
+	-rm -f *.o .deps
 
 include $(ESBMCDIR)/common

@@ -57,4 +57,4 @@ esbmc: $(OBJS)
 #	$(CXX) $(LDFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
 
 clean:
-	rm -f *.o *.d esbmc
+	-rm -f *.o .deps esbmc

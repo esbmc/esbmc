@@ -17,6 +17,6 @@ SRCS= goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       goto_program_template.cpp write_goto_binary.cpp
 
 clean:
-	-rm -f *.o *.d
+	-rm -f *.o .deps
 
 include $(ESBMCDIR)/common
