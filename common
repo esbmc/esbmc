@@ -21,19 +21,6 @@ CXXFLAGS+= $(GCCFLAGS) $(INCLUDES)
 .c.o:
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-#
-# include a dependency file if one exists
-#
-
-# ifeq (.depend,$(wildcard .depend))
-# include .depend
-# endif
-
-D_FILES1 = $(SRC:.c=.d)
-D_FILES = $(D_FILES1:.cpp=.d)
-
--include $(D_FILES)
-
 # A generic target; potentially overwritten by the includer
 
 all: $(MAINOBJ)
@@ -54,3 +41,5 @@ depend: $(SRCS)
 endif
 
 .PHONY: clean depend
+
+-include .deps
