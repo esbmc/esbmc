@@ -26,10 +26,17 @@ clean:
 	for dir in $(DIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
+	rm .depends
 
 .PHONY: $(DIRS) clean
 
-esbmc: infrastructure languages
+# Shunt to get .deps files built on first compilation
+.depends:
+	echo "Making dependancies"
+	$(MAKE) depend
+	touch .depends
+
+esbmc: .depends infrastructure languages
 
 ###############################################################################
 
