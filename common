@@ -31,10 +31,10 @@ $(MAINOBJ): $(OBJS)
 #clean defined by includer
 
 ifdef DIRS
-depend:
-	for dir in $(DIRS); do \
-		$(MAKE) -C $$dir depend; \
-	done
+$(patsubst %,%/.deps,$(DIRS)):
+	$(MAKE) -C $(patsubst %/.deps,%,$@) depend
+
+depend: $(patsubst %,%/.deps,$(DIRS))
 else
 depend: $(SRCS)
 	$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
