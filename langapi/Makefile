@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/langapi.o
-all: $(MAINOBJ)
+all: .deps $(MAINOBJ)
 
 SRCS = mode.cpp language_ui.cpp languages.cpp language_util.cpp
 

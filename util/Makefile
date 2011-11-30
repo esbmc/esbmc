@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ = $(OBJDIR)/util.o
-all: $(MAINOBJ)
+all: .deps $(MAINOBJ)
 
 SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr.cpp expr_util.cpp i2string.cpp irep.cpp language.cpp \

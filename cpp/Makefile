@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/cpp.o
-all: $(MAINOBJ)
+all: .deps $(MAINOBJ)
 
 SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck.cpp cpp_convert_type.cpp \

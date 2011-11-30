@@ -1,7 +1,7 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
-all: test-bigint
+all: .deps test-bigint
 
 RM = rm -f
 SRCS= bigint-test.cpp bigint-func.cpp bigint.cpp

@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/smt.o
-all: $(MAINOBJ)
+all: .deps $(MAINOBJ)
 
 SRCS = smt_dec.cpp smt_prop.cpp smt_conv.cpp
 

@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/goto-programs.o
-all: $(MAINOBJ)
+all: .deps $(MAINOBJ)
 
 SRCS= goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       goto_program.cpp basic_blocks.cpp goto_threads.cpp goto_check.cpp \

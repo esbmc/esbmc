@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/z3.o
-all: $(MAINOBJ)
+all: .deps $(MAINOBJ)
 
 SRCS= z3_capi.cpp  z3_conv.cpp  z3_dec.cpp  z3_get.cpp  z3_prop.cpp  z3_util.cpp
 

@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/goto-symex.o
-all: $(MAINOBJ)
+all: .deps $(MAINOBJ)
 
 SRCS= symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
       symex_main.cpp goto_trace.cpp build_goto_trace.cpp \

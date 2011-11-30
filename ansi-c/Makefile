@@ -20,7 +20,7 @@ OBJS= y.tab.o lex.yy.o
 
 INCLUDES= -I .. -I ../util
 
-all: cpp_dir headers_dir $(OBJDIR)/ansi-c.o
+all: .deps cpp_dir headers_dir $(OBJDIR)/ansi-c.o
 
 include $(ESBMCDIR)/common
 

@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/satsolvers.o
-all: $(MAINOBJ)
+all: .deps $(MAINOBJ)
 
 SRCS= cnf.cpp dimacs_cnf.cpp cnf_clause_list.cpp pbs_dimacs_cnf.cpp \
 	read_dimacs_cnf.cpp resolution_proof.cpp satcheck.cpp

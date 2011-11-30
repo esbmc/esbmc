@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/dplib.o
-all: $(MAINOBJ)
+all: .deps $(MAINOBJ)
 
 SRCS = dplib_dec.cpp dplib_prop.cpp dplib_conv.cpp
 

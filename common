@@ -66,4 +66,7 @@ endif
 
 .PHONY: clean depend
 
--include .deps
+DEPFILEEXISTS := $(shell stat .deps 2>/dev/null)
+ifneq "$(DEPFILEEXISTS)" ""
+include .deps
+endif

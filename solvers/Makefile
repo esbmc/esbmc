@@ -1,7 +1,7 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
-all: $(OBJDIR)/solvers.o
+all: .depends $(OBJDIR)/solvers.o
 
 OBJS= sat/$(OBJDIR)/satsolvers.o flattening/$(OBJDIR)/flattening.o \
       prop/$(OBJDIR)/propobj.o

@@ -22,7 +22,7 @@ OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
 
 LIBS= -lgmp -ldl -lgomp
 
-all: esbmc
+all: .deps esbmc
 
 include $(ESBMCDIR)/common
 

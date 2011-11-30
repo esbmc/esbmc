@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/pointer-analysis.o
-all: $(MAINOBJ)
+all: .deps $(MAINOBJ)
 
 SRCS= value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp \
       dereference.cpp pointer_offset_sum.cpp add_failed_symbols.cpp \
