@@ -11,6 +11,10 @@ LEX    = flex
 GCCFLAGS = -Wall -MMD -Wextra -O3 -finline-limit=1000000 -Wno-deprecated
 LDFLAGS=
 
+# Unless someone else has set OBJDIR, default to `pwd`/.objs
+# Danger: evaluating expression creates directory :o
+OBJDIR?= $(shell mkdir -p `pwd`/.objs; echo `pwd`/.objs)
+
 # use these for Cygwin:
 # GCCFLAGS = -Wall -MMD -O2 -mno-cygwin
 # LDFLAGS = -mno-cygwin

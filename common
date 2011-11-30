@@ -1,9 +1,10 @@
+# This file contains common build rules; to be included at the _end_ of a
+# makefile. Configuration options that are needed during the makefile itself
+# should be put in another config file.
+
+# In case includer hasn't included yet,
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
-
-# Unless someone else has set OBJDIR, default to `pwd`/.objs
-# Danger: evaluating expression creates directory :o
-OBJDIR?= $(shell mkdir -p `pwd`/.objs; echo `pwd`/.objs)
 
 OBJS1 = $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
@@ -25,9 +26,7 @@ CXXFLAGS+= $(GCCFLAGS) $(INCLUDES)
 .c.o:
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-# A generic target; potentially overwritten by the includer
-
-all: $(MAINOBJ)
+# A generic target; potentially not defined by the includer
 
 $(MAINOBJ): $(OBJS)
 	$(LD) $(LDFLAGS) -r -o $@ $^
