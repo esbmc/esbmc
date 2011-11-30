@@ -897,9 +897,13 @@ void value_sett::assign(
       exprt rhs_member;
 
       if(rhs.id()=="unknown" ||
-         rhs.id()=="invalid")
+         rhs.id()=="invalid" )
       {
         rhs_member=exprt(rhs.id(), subtype);
+      }
+      else if (rhs.id()=="index") {
+    	  //it should be fixed!
+    	  std::cout << "ignoring: " << rhs.pretty() << std::endl;
       }
       else
       {
