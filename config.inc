@@ -8,7 +8,7 @@ LEX    = flex
 
 # Linux etc.
 #you need to install the packages glibc-static and gmp-static to compile statically
-GCCFLAGS = -Wall -MMD -Wextra -O3 -finline-limit=1000000 -Wno-deprecated
+GCCFLAGS = -Wall -Wextra -O3 -finline-limit=1000000 -Wno-deprecated
 LDFLAGS=
 
 # Unless someone else has set OBJDIR, default to `pwd`/.objs
@@ -16,7 +16,7 @@ LDFLAGS=
 OBJDIR?= $(shell mkdir .objs; echo .objs)
 
 # use these for Cygwin:
-# GCCFLAGS = -Wall -MMD -O2 -mno-cygwin
+# GCCFLAGS = -Wall -O2 -mno-cygwin
 # LDFLAGS = -mno-cygwin
 
 # SMT and SAT solver locations. Put your own machine-specific absolute paths to
