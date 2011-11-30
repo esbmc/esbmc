@@ -18,8 +18,9 @@ ifeq "$(GCCVERSIONGTEQ460)" "1"
 endif
 
 # Unless someone else has set OBJDIR, default to `pwd`/.objs
+OBJDIR?= .objs
 # Danger: evaluating expression creates directory :o
-OBJDIR?= $(shell mkdir .objs 2>/dev/null; echo .objs)
+CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
 
 # use these for Cygwin:
 # GCCFLAGS = -Wall -O2 -mno-cygwin

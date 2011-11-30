@@ -70,3 +70,18 @@ DEPFILEEXISTS := $(shell stat .deps 2>/dev/null)
 ifneq "$(DEPFILEEXISTS)" ""
 include .deps
 endif
+
+# Finally, some special rules for various pieces of hackery for performing debug
+# builds.
+
+debug:
+	env OBJDIR=.debugobjs $(MAKE)
+
+debugclean:
+	env OBJDIR=.debugobjs $(MAKE) clean
+
+debugfast:
+	env OBJDIR=.debugfastobjs $(MAKE)
+
+debugfastclean:
+	env OBJDIR=.debugfastobjs $(MAKE) clean
