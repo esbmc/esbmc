@@ -8,7 +8,7 @@ LEX    = flex
 
 # Linux etc.
 #you need to install the packages glibc-static and gmp-static to compile statically
-GCCFLAGS = -Wall -Wextra -O3 -finline-limit=1000000 -Wno-deprecated
+GCCFLAGS = -Wall -Wextra -O3 -Wno-deprecated
 LDFLAGS=
 
 # Work with latest version of gcc
