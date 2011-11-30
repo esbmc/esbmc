@@ -13,7 +13,7 @@ LDFLAGS=
 
 # Unless someone else has set OBJDIR, default to `pwd`/.objs
 # Danger: evaluating expression creates directory :o
-OBJDIR?= $(shell mkdir .objs; echo .objs)
+OBJDIR?= $(shell mkdir .objs 2>/dev/null; echo .objs)
 
 # use these for Cygwin:
 # GCCFLAGS = -Wall -O2 -mno-cygwin
