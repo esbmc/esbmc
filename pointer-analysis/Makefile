@@ -12,11 +12,6 @@ SRCS= value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp \
       value_set_domain_fivr.cpp value_set_analysis_fivrns.cpp \
       value_set_fivrns.cpp value_set_domain_fivrns.cpp
 
-GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `gcc -dumpversion`)
-ifeq "$(GCCVERSIONGTEQ460)" "1"
-  CXXFLAGS += -fpermissive
-endif
-
 clean:
 	-rm -f $(OBJS) .deps
 

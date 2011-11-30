@@ -23,11 +23,6 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       pointer_arithmetic.cpp ieee_float.cpp signal_catcher.cpp \
       bv_arithmetic.cpp tempdir.cpp var_name.cpp
 
-GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `gcc -dumpversion`)
-ifeq "$(GCCVERSIONGTEQ460)" "1"
-  CXXFLAGS += -fpermissive
-endif
-
 ifdef MODULE_FLOATBV
   CXXFLAGS += -DHAVE_FLOATBV
 endif

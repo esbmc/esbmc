@@ -11,6 +11,12 @@ LEX    = flex
 GCCFLAGS = -Wall -Wextra -O3 -finline-limit=1000000 -Wno-deprecated
 LDFLAGS=
 
+# Work with latest version of gcc
+GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `gcc -dumpversion`)
+ifeq "$(GCCVERSIONGTEQ460)" "1"
+  CXXFLAGS += -fpermissive
+endif
+
 # Unless someone else has set OBJDIR, default to `pwd`/.objs
 # Danger: evaluating expression creates directory :o
 OBJDIR?= $(shell mkdir .objs 2>/dev/null; echo .objs)
