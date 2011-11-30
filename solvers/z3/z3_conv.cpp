@@ -2203,7 +2203,11 @@ z3_convt::convert_rest_index(const exprt &expr)
 
   DEBUGLOC;
 
-  if (expr.op1().operands()[0].operands().size() == 0) {
+  if (expr.op1().operands().size() == 0) {
+    bv =
+      Z3_mk_select(z3_ctx, operand0,
+                   convert_number(0, config.ansi_c.int_width, true));
+  } else  if (expr.op1().operands()[0].operands().size() == 0) {
     bv =
       Z3_mk_select(z3_ctx, operand0,
                    convert_number(0, config.ansi_c.int_width, true));
