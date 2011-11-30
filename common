@@ -9,6 +9,15 @@ include $(ESBMCDIR)/local.inc
 OBJS1 = $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 
+# Given the presence of OBJDIR, $(OBJS) can't now automatically infer
+# dependancies between .o's and .cpp's etc
+
+$(OBJDIR)/%.o : %.cpp
+	$(CXX) -c $(CXXFLAGS) -o $@ $<
+
+$(OBJDIR)/%.o : %.c
+	$(CC) -c $(CLAGS) -o $@ $<
+
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 
