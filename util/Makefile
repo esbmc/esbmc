@@ -1,4 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
 MAINOBJ = util.o
 all: $(MAINOBJ)
 
@@ -31,7 +33,7 @@ ifdef MODULE_FLOATBV
 endif
 
 clean:
-	-rm -f *.o ieee_float_test
+	-rm -f $(OBJS) ieee_float_test
 	-rm -f .deps
 #
 #ieee_float_test: ieee_float_test.o ieee_float.o util.o
