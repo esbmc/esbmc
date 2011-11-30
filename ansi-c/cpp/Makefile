@@ -16,6 +16,10 @@ preproc.o: $(OBJS) $(HEADERS)
 	$(YACC) -d $(YFLAGS) -pcpp $<
 	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ y.tab.c
 
+y.tab.h: cpy.o
+
+scanner.l: y.tab.h
+
 compat.o: compat.c
 	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ compat.c
 
