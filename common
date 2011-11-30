@@ -1,8 +1,12 @@
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 
-OBJS1 = $(SRCS:.c=.o)
-OBJS+= $(OBJS1:.cpp=.o)
+# Unless someone else has set OBJDIR, default to `pwd`/.objs
+# Danger: evaluating expression creates directory :o
+OBJDIR?= $(shell mkdir -p `pwd`/.objs; echo `pwd`/.objs)
+
+OBJS1 = $(SRCS:%.c=$(OBJDIR)/%.o)
+OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
