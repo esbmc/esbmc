@@ -50,6 +50,6 @@ $(OBJDIR)/smvsat.o: satcheck_smvsat.cpp
 	$(CXX) -c -o $@ $^ $(CXXFLAGS) -I $(SMVSAT)/include $(SMVSAT)/lib/libsmvsat.a
 
 clean:
-	-rm -f $(MAINOBJ) $(OBJS) minisat_tmp.o .deps
+	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/minisat_tmp.o .deps
 
 include $(ESBMCDIR)/common
