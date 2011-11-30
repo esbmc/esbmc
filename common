@@ -55,12 +55,12 @@ $(patsubst %,%/.deps,$(DIRS)):
 depend: $(patsubst %,%/.deps,$(DIRS))
 else
 depend: $(SRCS)
-	echo "Making dependancies"
-	$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+	@echo "Making dependancies"
+	@$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
 
 .deps:
-	echo "Making dependancies"
-	$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+	@echo "Making dependancies"
+	@$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
 
 endif
 
