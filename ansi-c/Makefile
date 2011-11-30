@@ -1,6 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
 
-SRCS= c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
+SRCS= c_typecast.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \
       c_types.cpp c_final.cpp trans_unit.cpp ansi_c_typecheck.cpp \
       c_link.cpp c_preprocess.cpp c_link_type_eq.cpp \
@@ -13,6 +13,8 @@ SRCS= c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
       preprocessor_line.cpp convert_character_literal.cpp \
       convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp \
+
+OBJS= y.tab.o lex.yy.o
 
 INCLUDES= -I .. -I ../util
 
