@@ -43,13 +43,25 @@ $(MAINOBJ): $(OBJS)
 #clean defined by includer
 
 ifdef DIRS
+# Rule for making dependancies on first execution
+.depends:
+	echo "Making dependancies"
+	$(MAKE) depend
+	touch .depends
+
 $(patsubst %,%/.deps,$(DIRS)):
 	$(MAKE) -C $(patsubst %/.deps,%,$@) depend
 
 depend: $(patsubst %,%/.deps,$(DIRS))
 else
 depend: $(SRCS)
+	echo "Making dependancies"
 	$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+
+.deps:
+	echo "Making dependancies"
+	$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+
 endif
 
 .PHONY: clean depend

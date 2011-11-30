@@ -30,12 +30,6 @@ clean:
 
 .PHONY: $(DIRS) clean
 
-# Shunt to get .deps files built on first compilation
-.depends:
-	echo "Making dependancies"
-	$(MAKE) depend
-	touch .depends
-
 esbmc: .depends infrastructure languages
 
 ###############################################################################
