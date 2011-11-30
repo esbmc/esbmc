@@ -1,10 +1,12 @@
 ESBMCDIR= $(shell pwd)/../..
-MAINOBJ= propobj.o
-all: propobj.o
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/propobj.o
+all: $(MAINOBJ)
 
 SRCS= prop.cpp prop_conv.cpp prop_conv_store.cpp aig_formula.cpp aig.cpp aig_prop.cpp
 
 clean:
-	-rm -f *.o .deps
+	-rm -f $(MAINOBJ) $(OBJS) .deps
 
 include $(ESBMCDIR)/common

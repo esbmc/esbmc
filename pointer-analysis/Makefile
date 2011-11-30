@@ -1,5 +1,7 @@
 ESBMCDIR= $(shell pwd)/..
-MAINOBJ= pointer-analysis.o
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/pointer-analysis.o
 all: $(MAINOBJ)
 
 SRCS= value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp \
@@ -16,6 +18,6 @@ ifeq "$(GCCVERSIONGTEQ460)" "1"
 endif
 
 clean:
-	-rm -f *.o .deps
+	-rm -f $(OBJS) .deps
 
 include $(ESBMCDIR)/common

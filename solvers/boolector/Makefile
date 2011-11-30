@@ -1,7 +1,7 @@
 ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
-MAINOBJ= boolector.o
+MAINOBJ= $(OBJDIR)/boolector.o
 all: $(MAINOBJ)
 
 SRCS= boolector_dec.cpp boolector_prop.cpp boolector_conv.cpp boolector_get.cpp
@@ -9,7 +9,6 @@ SRCS= boolector_dec.cpp boolector_prop.cpp boolector_conv.cpp boolector_get.cpp
 INCLUDES= -I$(BOOLECTOR)/include
 
 clean:
-	-rm -f *.o .deps
+	-rm -f $(MAINOBJ) $(OBJS) .deps
 
 include $(ESBMCDIR)/common
-

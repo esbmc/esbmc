@@ -1,5 +1,7 @@
 ESBMCDIR= $(shell pwd)/..
-MAINOBJ= cpp.o
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/cpp.o
 all: $(MAINOBJ)
 
 SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
@@ -32,9 +34,9 @@ OBJS= lex.yy.o
 lex.yy.cpp: scanner.l
 	$(LEX) -Pyycpp -olex.yy.cpp scanner.l
 
-lex.yy.o: lex.yy.cpp
+$(OBJDIR)/lex.yy.o: lex.yy.cpp
 
 clean:
-	-rm -f *.o lex.yy.cpp y.tab.cpp.output .deps
+	-rm -f $(OBJS) lex.yy.cpp y.tab.cpp.output .deps
 
 include $(ESBMCDIR)/common

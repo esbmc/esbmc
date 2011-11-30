@@ -1,41 +1,42 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
-all: solvers.o
+all: $(OBJDIR)/solvers.o
 
-OBJS= sat/satsolvers.o flattening/flattening.o prop/propobj.o
+OBJS= sat/$(OBJDIR)/satsolvers.o flattening/$(OBJDIR)/flattening.o \
+      prop/$(OBJDIR)/propobj.o
 
 DIRS= sat flattening prop
 
 ###############################################################################
 
 ifdef BOOLECTOR
-OBJS+= boolector/boolector.o
+OBJS+= boolector/$(OBJDIR)/boolector.o
 DIRS+= boolector
 endif
 
 ifdef Z3
-OBJS+= z3/z3.o
+OBJS+= z3/$(OBJDIR)/z3.o
 DIRS+= z3
 endif
 
 ifdef USE_CVC
-OBJS+= cvc/cvc.o
+OBJS+= cvc/$(OBJDIR)/cvc.o
 DIRS+= cvc
 endif
 
 ifdef USE_DPLIB
-OBJS+= dplib/dplib.o
+OBJS+= dplib/$(OBJDIR)/dplib.o
 DIRS+= dplib
 endif
 
 ifdef USE_SMT
-OBJS+= smt/smt.o
+OBJS+= smt/$(OBJDIR)/smt.o
 DIRS+= smt
 endif
 
 ifdef USE_QBF
-OBJS+= qbf/qbfsolvers.o
+OBJS+= qbf/$(OBJDIR)/qbfsolvers.o
 DIRS+= qbf
 endif
 
@@ -48,8 +49,8 @@ $(OBJS): $(DIRS)
 
 .PHONY: $(DIRS)
 
-solvers.o: $(OBJS)
-	$(LD) $(LDFLAGS) -r -o solvers.o $(OBJS)
+$(OBJDIR)/solvers.o: $(OBJS)
+	$(LD) $(LDFLAGS) -r -o $(OBJDIR)/solvers.o $(OBJS)
 
 clean:
 	-rm solvers.o

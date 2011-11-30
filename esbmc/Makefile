@@ -10,21 +10,21 @@ SRCS = main.cpp parseoptions.cpp bmc.cpp  \
 # Additional include for Z3, as z3_conv.h depends on it.
 INCLUDES= -I $(Z3)/include
 
-include $(ESBMCDIR)/common
-
 # additional objects for esbmc binary
-OBJS+=../ansi-c/ansi-c.o \
-      ../big-int/bigint.o \
-      ../goto-programs/goto-programs.o \
-      ../goto-symex/goto-symex.o \
-      ../pointer-analysis/pointer-analysis.o \
-      ../langapi/langapi.o \
-      ../solvers/solvers.o \
-      ../util/util.o
+OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
+      ../big-int/$(OBJDIR)/bigint.o \
+      ../goto-programs/$(OBJDIR)/goto-programs.o \
+      ../goto-symex/$(OBJDIR)/goto-symex.o \
+      ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \
+      ../langapi/$(OBJDIR)/langapi.o \
+      ../solvers/$(OBJDIR)/solvers.o \
+      ../util/$(OBJDIR)/util.o
 
 LIBS= -lgmp -ldl -lgomp
 
 all: esbmc
+
+include $(ESBMCDIR)/common
 
 ifdef BOOLECTOR
 CXXFLAGS+= -DBOOLECTOR
@@ -57,4 +57,4 @@ esbmc: $(OBJS)
 #	$(CXX) $(LDFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
 
 clean:
-	-rm -f *.o .deps esbmc
+	-rm -f $(OBJS) .deps esbmc
