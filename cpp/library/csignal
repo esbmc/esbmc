@@ -9,5 +9,4 @@ void signal(int sig, func *f);
 
 int raise(int sig);
 
-
 #endif

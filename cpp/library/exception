@@ -3,6 +3,7 @@
 
 #include "definitions.h"
 
+
 namespace std {
 
 struct exception {
@@ -14,10 +15,12 @@ struct exception {
   const char* what() const throw(){
 	 
 	 return "";
-  };
+
+  }
 
 };
 
 }
+
 
 #endif
