@@ -531,8 +531,8 @@ void goto_symext::symex_step(
             if (!state.guard.is_false()) {
                 codet deref_code(instruction.code);
                 const irep_idt &statement = deref_code.get_statement();
-                if (/*statement == "cpp_delete" ||
-                        statement == "cpp_delete[]" ||*/
+                if (statement == "cpp_delete" ||
+                        statement == "cpp_delete[]" ||
                         statement == "free" ||
                         statement == "printf") {
                     replace_dynamic_allocation(state, deref_code);
