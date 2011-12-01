@@ -8,6 +8,7 @@ use warnings;
 #
 # runs a test and check its output
 my $llvm = 0;
+my $testdesc = "test.desc";
 
 sub run($$$) {
   my ($input, $options, $output) = @_;
@@ -124,6 +125,7 @@ sub dirs() {
 if(@ARGV != 0) {
   if (@ARGV[0] eq "--llvm") {
 	 $llvm = 1;
+     $testdesc = "testllvm.desc";
   } else {
     print "Usage:\n";
     print "  test.pl\n";
@@ -149,7 +151,7 @@ foreach my $test (@tests) {
   print "  Running $test";
 
   chdir $test;
-  my $failed = test($test, "test.desc");
+  my $failed = test($test, $testdesc);
   chdir "..";
 
   if($failed) {

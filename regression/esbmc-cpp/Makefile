@@ -7,7 +7,7 @@ tests.log: test.pl
 	@./test.pl
 
 llvm: test.pl
-	@./llvm.sh
+	@./llvmconvert.sh
 	@./test.pl --llvm
 
 show:
@@ -35,6 +35,7 @@ clean:
 	find . -name *.txt | xargs rm -f
 	find . -name *.log | xargs rm -f
 	find . -name *.trace | xargs rm -f
+	find . -name *.o | xargs rm -f
 	find . -name *.bc | xargs rm -f
 	find . -name *.c | xargs rm -f
 	rm -f tests.log	
