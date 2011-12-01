@@ -6,7 +6,7 @@ using std::cout;
 using std::endl;
 using std::boolalpha;
 
-#include <iso646>
+//#include <iso646> Este arquivo de cabeçalho só é necessário quando compilamos no MSV C++, para o linux não é precisa.
 
 int main()
 {

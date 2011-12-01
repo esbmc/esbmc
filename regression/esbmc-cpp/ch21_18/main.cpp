@@ -16,7 +16,7 @@ int main()
    int a[ SIZE ] = { 10, 2, 17, 5, 16, 8, 13, 11, 20, 7 };
 
    std::vector< int > v( a, a + SIZE );
-   std::ostream_iterator< int > output( cout, " " );
+   std::ostream_iterator< int > output( cout, " " ); //ostreambuf_iterator antes era ostream_iterator
 
    cout << "Vector v contains: ";
    std::copy( v.begin(), v.end(), output );

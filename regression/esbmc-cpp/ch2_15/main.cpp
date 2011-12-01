@@ -1,6 +1,7 @@
 // Fig. 2.22: fig02_22.cpp
 // Counting letter grades.
 #include <iostream>
+#include <cstdio>
 
 using std::cout;
 using std::cin;

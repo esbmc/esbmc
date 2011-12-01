@@ -14,7 +14,7 @@ char nextLetter();    // prototype
 int main()
 {
    std::vector< char > chars( 10 );
-   std::ostream_iterator< char > output( cout, " " );
+   std::ostreambuf_iterator< char > output( cout );
 
    // fill chars with 5s
    std::fill( chars.begin(), chars.end(), '5' );

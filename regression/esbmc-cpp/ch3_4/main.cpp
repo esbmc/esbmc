@@ -1,6 +1,7 @@
 // Exercise 3.49: ex03_49.cpp
 // What is wrong with this program?
 #include <iostream>
+#include <cstdio>
 
 using std::cin;
 using std::cout;

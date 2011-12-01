@@ -1,7 +1,7 @@
 // Fig. 21.20: fig21_20.cpp
 // Standard library class set test program.
 #include <iostream>
-
+#include <iterator>
 using std::cout;
 using std::endl;
 
@@ -12,13 +12,19 @@ typedef std::set< double, std::less< double > > double_set;
 
 #include <algorithm>
 
+
+#include <ostream>
+
+
+
+
 int main()
 {
    const int SIZE = 5;
    double a[ SIZE ] = { 2.1, 4.2, 9.5, 2.1, 3.7 };   
 
    double_set doubleSet( a, a + SIZE );;
-   std::ostream_iterator< double > output( cout, " " );
+  std::ostreambuf_iterator< double > output( cout );
 
    cout << "doubleSet contains: ";
    std::copy( doubleSet.begin(), doubleSet.end(), output );
