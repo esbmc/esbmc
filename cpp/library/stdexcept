@@ -8,7 +8,7 @@ namespace std {
 
 struct runtime_error{
 public:
-  runtime_error(const char* what_arg);
+  runtime_error(const char* what_arg) {__ESBMC_assert(0, "Exception occurred: runtime_error");}
 };
 
 }
