@@ -20,7 +20,7 @@ int main()
       // allocate memory for ptr[ i ]; new throws bad_alloc 
       // on failure
       for ( int i = 0; i < 50; i++ ) {
-         ptr[ i ] = new double[ 5000000 ];
+         ptr[ i ] = new double[ 50000000000 ];
          cout << "Allocated 5000000 doubles in ptr[ " 
               << i << " ]\n";
       }
