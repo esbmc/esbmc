@@ -509,8 +509,9 @@ void value_sett::get_value_set_rec(
 
     if(statement=="function_call")
     {
+      std::cout << "value_sett: expr.pretty(): " << expr.pretty() << std::endl;
       // these should be gone
-      throw "unexpected function_call sideeffect";
+      throw "value_sett: unexpected function_call sideeffect";
     }
     else if(statement=="malloc")
     {
@@ -1382,6 +1383,10 @@ void value_sett::apply_code(
       symbol_exprt lhs("value_set::return_value", code.op0().type());
       assign(lhs, code.op0(), ns);
     }
+  }
+  else if(statement=="cpp-try")
+  {
+    // doesn't do anything
   }
   else
   {
