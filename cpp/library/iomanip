@@ -1,0 +1,143 @@
+#ifndef STL_IOMANIP
+#define STL_IOMANIP
+
+#include "definitions.h"
+
+namespace std
+{
+	struct boolalphaStruct // boolalpha
+	{
+		boolalphaStruct();
+	};
+
+	struct noboolalphaStruct // noboolalpha
+	{
+		noboolalphaStruct();
+	};
+
+	struct setprecision // setprecision
+	{
+		setprecision(int p);
+	};
+
+	struct setbase // setbase
+	{
+		setbase(int b);
+	};
+
+	struct leftStruct // left
+	{
+		leftStruct();
+	};
+
+	struct rightStruct // right
+	{
+		rightStruct();
+	};
+
+	struct hexStruct // hex
+	{
+		hexStruct();
+	};
+
+	struct decStruct // dec
+	{
+		decStruct();
+	};
+
+	struct octStruct // oct
+	{
+		octStruct();
+	};
+
+	struct setw // setw
+	{
+		setw(int w);
+	};
+
+	struct setfill // setfill
+	{
+		setfill(char f);
+	};
+
+	struct flushStruct // flush
+	{
+		flushStruct();
+	};
+
+	struct scientificStruct // scientific
+	{
+		scientificStruct();
+	};
+
+	struct showpointStruct // showpoint
+	{
+		showpointStruct();
+	};
+
+	struct showbaseStruct // showbase
+	{
+		showbaseStruct();
+	};
+
+	struct internalStruct // internal
+	{
+		internalStruct();
+	};
+
+	struct showposStruct // showpos
+	{
+		showposStruct();
+	};
+
+	struct uppercaseStruct // uppercase
+	{
+		uppercaseStruct();
+	};
+
+	struct fixedStruct // fixed
+	{
+		fixedStruct();
+	};
+
+	extern fixedStruct fixed;
+	extern leftStruct left;
+	extern rightStruct right;
+	extern hexStruct hex;
+	extern octStruct oct;
+	extern decStruct dec;
+	extern flushStruct flush;
+	extern scientificStruct scientific;
+	extern showpointStruct showpoint;
+	extern showbaseStruct showbase;
+	extern internalStruct internal;
+	extern showposStruct showpos;
+	extern boolalphaStruct boolalpha;
+	extern noboolalphaStruct noboolalpha;
+	extern uppercaseStruct uppercase;
+}
+
+namespace std
+{
+	setw::setw(int w)
+	{
+		__ESBMC_assert(w >= 0, "The width must be greater or equal than 0");
+	}
+
+	setprecision::setprecision(int p)
+	{
+		__ESBMC_assert(p >= 0, "The precision must be greater or equal than 0");
+	}
+
+	setbase::setbase(int b)
+	{
+		__ESBMC_assert(b == 8 || b == 10 || b ==16, "The base must be equal to 8, 10 or 16");
+	}
+
+	setfill::setfill(char c)
+	{
+		// model
+	}
+}
+
+#endif

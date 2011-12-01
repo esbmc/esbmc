@@ -1,0 +1,16 @@
+#ifndef STL_STDEXCEPT
+#define STL_STDEXCEPT
+
+#include "definitions.h"
+#include "exception"
+
+namespace std {
+
+struct runtime_error{
+public:
+  runtime_error(const char* what_arg);
+};
+
+}
+
+#endif

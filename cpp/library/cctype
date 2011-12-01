@@ -1,0 +1,129 @@
+#ifndef STL_CCTYPE
+#define STL_CCTYPE
+
+int islower (int c);
+int toupper (int c);
+
+int islower (int c) {
+  int res=0;
+  switch(c) {
+    case 'a':
+    case 'b':
+    case 'c':
+    case 'd':
+    case 'e': 
+    case 'f':
+    case 'g': 
+    case 'h': 
+    case 'i': 
+    case 'j': 
+    case 'k': 
+    case 'l': 
+    case 'm': 
+    case 'n': 
+    case 'o': 
+    case 'p': 
+    case 'q': 
+    case 'r': 
+    case 's': 
+    case 't': 
+    case 'u': 
+    case 'v': 
+    case 'w': 
+    case 'x': 
+    case 'y': 
+    case 'z':
+      res=1;
+      break;
+  }
+  return res;
+}
+
+int toupper (int c) {
+  int res=c;
+  switch(c) {
+    case 'a':
+	res='A';
+	break;
+    case 'b':
+	res='B';
+	break;
+    case 'c':
+	res='C';
+	break;
+    case 'd':
+	res='D';
+	break;
+    case 'e': 
+	res='E';
+	break;
+    case 'f':
+	res='F';
+	break;
+    case 'g': 
+	res='G';
+	break;
+    case 'h': 
+	res='H';
+	break;
+    case 'i': 
+	res='I';
+	break;
+    case 'j': 
+	res='J';
+	break;
+    case 'k': 
+	res='K';
+	break;
+    case 'l': 
+	res='L';
+	break;
+    case 'm': 
+	res='M';
+	break;
+    case 'n': 
+	res='N';
+	break;
+    case 'o': 
+	res='O';
+	break;
+    case 'p': 
+	res='P';
+	break;
+    case 'q': 
+	res='Q';
+	break;
+    case 'r': 
+	res='R';
+	break;
+    case 's': 
+	res='S';
+	break;
+    case 't': 
+	res='T';
+	break;
+    case 'u': 
+	res='U';
+	break;
+    case 'v': 
+	res='V';
+	break;
+    case 'w': 
+	res='W';
+	break;
+    case 'x': 
+	res='X';
+	break;
+    case 'y': 
+	res='Y';
+	break;
+    case 'z':
+	res='Z';
+	break;
+      break;
+  }
+  return res;
+}
+
+#endif
+
