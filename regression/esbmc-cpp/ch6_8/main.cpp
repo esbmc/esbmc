@@ -22,7 +22,7 @@ int main()
 
    static CreateAndDestroy third( 
       3, "(local static in main)" );
-   
+
    create();  // call function to create objects
 
    cout << "\nMAIN FUNCTION: EXECUTION RESUMES" << endl;
