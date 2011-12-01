@@ -901,12 +901,19 @@ void value_sett::assign(
       {
         rhs_member=exprt(rhs.id(), subtype);
       }
-      else if (rhs.id()=="index") {
+      //else if (rhs.id()=="index") {
     	  //it should be fixed!
-    	  std::cout << "ignoring: " << rhs.pretty() << std::endl;
-      }
+    	  //std::cout << "ignoring: " << rhs.pretty() << std::endl;
+      //}
       else
       {
+    	if (rhs.id() == "index") {
+          if (lhs.id() == "symbol") {
+            assign(lhs_member, rhs.op0(), ns, add_to_sets);
+            return;
+    	  }
+    	}
+
         assert(base_type_eq(rhs.type(), type, ns));
 
         rhs_member=make_member(rhs, name, ns);
