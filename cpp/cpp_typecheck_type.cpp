@@ -30,6 +30,10 @@ void cpp_typecheckt::typecheck_type(typet &type)
   assert(type.id()!="");
   assert(type.is_not_nil());
 
+  //std::cout << "passou aqui!!!" << std::endl;
+  //std::cout << "type.id(): " << type.id() << std::endl;
+  //std::cout << "type.pretty(): " << type.pretty() << std::endl;
+
   try
   {
     cpp_convert_plain_type(type);
