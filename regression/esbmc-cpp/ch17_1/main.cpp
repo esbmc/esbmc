@@ -11,6 +11,18 @@ using std::string;
 
 #include "list.h"  // List class definition
 
+// display program instructions to user
+void instructions()
+{
+   cout << "Enter one of the following:\n"
+        << "  1 to insert at beginning of list\n" 
+        << "  2 to insert at end of list\n" 
+        << "  3 to delete from beginning of list\n" 
+        << "  4 to delete from end of list\n" 
+        << "  5 to end list processing\n";
+
+} // end function instructions
+
 // function to test a List
 template< class T >
 void testList( List< T > &listObject, const string &typeName )
@@ -63,17 +75,6 @@ void testList( List< T > &listObject, const string &typeName )
 
 } // end function testList
 
-// display program instructions to user
-void instructions()
-{
-   cout << "Enter one of the following:\n"
-        << "  1 to insert at beginning of list\n" 
-        << "  2 to insert at end of list\n" 
-        << "  3 to delete from beginning of list\n" 
-        << "  4 to delete from end of list\n" 
-        << "  5 to end list processing\n";
-
-} // end function instructions
 
 int main()
 {

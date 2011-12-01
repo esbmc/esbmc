@@ -33,7 +33,7 @@ public:
    // printStack calls List function print
    void printStack() const 
    { 
-      print(); 
+   // print(); 
    
    } // end function print 
 

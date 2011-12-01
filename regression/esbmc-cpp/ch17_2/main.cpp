@@ -25,7 +25,7 @@ int main()
    while ( !intStack.isStackEmpty() ) {
       intStack.pop( popInteger );
       cout << popInteger << " popped from stack" << endl;
-      intStack.printStack();
+//    intStack.printStack();
 
    } // end while
 
