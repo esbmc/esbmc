@@ -1,7 +1,7 @@
 // Fig. 21.18: fig21_18.cpp
 // Standard library class deque test program.
 #include <iostream>
-
+#include <iterator>
 using std::cout;
 using std::endl;
 

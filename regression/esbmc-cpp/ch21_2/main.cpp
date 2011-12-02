@@ -1,7 +1,7 @@
 // Fig. 21.14: fig21_14.cpp
 // Demonstrating standard library vector class template.
 #include <iostream>
-
+#include <iterator>
 using std::cout;
 using std::cin;
 using std::endl;
