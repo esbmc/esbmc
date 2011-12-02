@@ -11,7 +11,7 @@ using std::endl;
 int main()
 { 
    std::deque< double > values;
-   std::ostreambuf_iterator < double > output( cout, " " );
+   std::ostream_iterator < double > output( cout, " " );
 
    // insert elements in values
    values.push_front( 2.2 );

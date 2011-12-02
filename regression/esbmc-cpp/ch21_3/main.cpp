@@ -16,7 +16,7 @@ int main()
    int array[ SIZE ] = { 1, 2, 3, 4, 5, 6 };
 
    std::vector< int > integers( array, array + SIZE );
-   std::ostreambuf_iterator< int > output( cout, " " );
+   std::ostream_iterator< int > output( cout, " " );
 
    cout << "Vector integers contains: ";
    std::copy( integers.begin(), integers.end(), output );
