@@ -2,7 +2,7 @@
 // Standard library algorithms includes, set_difference, 
 // set_intersection, set_symmetric_difference and set_union.
 #include <iostream>
-
+#include <iterator> //Foi adicionada a biblioteca "iterator".
 using std::cout;
 using std::endl;
 

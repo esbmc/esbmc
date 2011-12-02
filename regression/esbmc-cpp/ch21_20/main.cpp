@@ -2,7 +2,7 @@
 // Standard library functions copy_backward, merge,
 // unique and reverse.
 #include <iostream>
-
+#include <iterator> //Foi adicionada a biblioteca "iterator".
 using std::cout;
 using std::endl;
 

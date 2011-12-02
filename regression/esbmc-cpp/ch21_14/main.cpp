@@ -2,7 +2,7 @@
 // Standard library functions equal, 
 // mismatch and lexicographical_compare.
 #include <iostream>
-
+#include <iterator> //Foi adicionada a biblioteca "iterator".
 using std::cout;
 using std::endl;
 

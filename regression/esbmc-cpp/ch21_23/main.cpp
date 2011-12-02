@@ -2,7 +2,7 @@
 // Standard library functions lower_bound, upper_bound and 
 // equal_range for a sorted sequence of values.
 #include <iostream>
-
+#include <iterator> //Foi adicionada a biblioteca "iterator".
 using std::cout;
 using std::endl;
 

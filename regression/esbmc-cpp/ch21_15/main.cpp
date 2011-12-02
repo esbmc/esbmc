@@ -2,7 +2,7 @@
 // Standard library functions remove, remove_if,
 // remove_copy and remove_copy_if.
 #include <iostream>
-
+#include <iterator> //Foi adicionada a biblioteca "iterator".
 using std::cout;
 using std::endl;
 

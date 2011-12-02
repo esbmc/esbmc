@@ -1,7 +1,7 @@
 // Fig. 21.32: fig21_32.cpp
 // Standard library algorithms iter_swap, swap and swap_ranges.
 #include <iostream>
-
+#include <iterator> //Foi adicionada a biblioteca "iterator".
 using std::cout;
 using std::endl;
 

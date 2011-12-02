@@ -1,7 +1,7 @@
 // Fig. 21.22: fig21_22.cpp
 // Standard library class map test program.
 #include <iostream>
-
+#include <iterator>
 using std::cout;
 using std::endl;
 

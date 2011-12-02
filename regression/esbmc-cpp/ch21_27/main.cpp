@@ -1,7 +1,7 @@
 // Fig. 21.42: fig21_42.cpp
 // Demonstrating function objects.
 #include <iostream>
-
+#include <iterator>
 using std::cout;
 using std::endl;
 

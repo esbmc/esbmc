@@ -1,7 +1,7 @@
 // Fig. 21.30: fig21_30.cpp
 // Mathematical algorithms of the standard library.
 #include <iostream>
-
+#include <iterator> 
 using std::cout;
 using std::endl;
 

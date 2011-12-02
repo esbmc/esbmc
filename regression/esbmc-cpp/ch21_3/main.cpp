@@ -2,12 +2,13 @@
 // Testing Standard Library vector class template 
 // element-manipulation functions.
 #include <iostream>
-
+#include <iterator>
 using std::cout;
 using std::endl;
 
 #include <vector>     // vector class-template definition
 #include <algorithm>  // copy algorithm
+
 
 int main()
 {
@@ -15,7 +16,7 @@ int main()
    int array[ SIZE ] = { 1, 2, 3, 4, 5, 6 };
 
    std::vector< int > integers( array, array + SIZE );
-   std::ostream_iterator< int > output( cout, " " );
+   std::ostreambuf_iterator< int > output( cout, " " );
 
    cout << "Vector integers contains: ";
    std::copy( integers.begin(), integers.end(), output );

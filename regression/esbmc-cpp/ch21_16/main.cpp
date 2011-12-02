@@ -2,7 +2,7 @@
 // Standard library functions replace, replace_if,
 // replace_copy and replace_copy_if.
 #include <iostream>
-
+#include <iterator> //Foi adicionada a biblioteca "iterator".
 using std::cout;
 using std::endl;
 

@@ -1,7 +1,7 @@
 // Fig. 21.31: fig21_31.cpp
 // Standard library search and sort algorithms.
 #include <iostream>
-
+#include <iterator> //Foi adicionada a biblioteca "iterator".
 using std::cout;
 using std::endl;
 
@@ -16,7 +16,7 @@ int main()
    int a[ SIZE ] = { 10, 2, 17, 5, 16, 8, 13, 11, 20, 7 };
 
    std::vector< int > v( a, a + SIZE );
-   std::ostream_iterator< int > output( cout, " " ); //ostreambuf_iterator antes era ostream_iterator
+   std::ostream_iterator< int > output( cout, " " ); 
 
    cout << "Vector v contains: ";
    std::copy( v.begin(), v.end(), output );

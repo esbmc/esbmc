@@ -2,7 +2,7 @@
 // Standard library algorithms push_heap, pop_heap, 
 // make_heap and sort_heap.
 #include <iostream>
-
+#include <iterator> //Foi adicionada a biblioteca "iterator".
 using std::cout;
 using std::endl;
 
