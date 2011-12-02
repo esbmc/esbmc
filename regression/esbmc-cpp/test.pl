@@ -12,9 +12,6 @@ my $testdesc = "test.desc";
 
 sub run($$$) {
   my ($input, $options, $output) = @_;
-  if ($llvm == 1) {
-    $input =~ s/\.cpp $/.c/;
-  } 
   my $cmd = "esbmc $options $input >$output 2>&1";
 
   print LOG "Running $cmd\n";
@@ -66,6 +63,7 @@ sub test($$) {
 
   my $output = $input;
   $output =~ s/\.cpp $/.out/;
+  $output =~ s/\.c $/.out/;
 
   if($output eq $input) {
     print("Error in test file -- $test\n");
