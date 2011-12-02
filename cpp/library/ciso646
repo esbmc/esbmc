@@ -1,5 +1,5 @@
-#ifndef STL_ISO646
-#define STL_ISO646
+#ifndef STL_CISO646
+#define STL_CISO646
 
 #define and &&
 
