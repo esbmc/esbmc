@@ -1,5 +1,4 @@
-include ../../common
-include ../../config.inc
+ESBMCDIR= $(shell pwd)/../..
 
 OBJS=cpy.o cpp.o scanner.o compat.o hooks.o
 HEADERS=cpp.h
@@ -17,6 +16,10 @@ preproc.o: $(OBJS) $(HEADERS)
 	$(YACC) -d $(YFLAGS) -pcpp $<
 	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ y.tab.c
 
+y.tab.h: cpy.o
+
+scanner.l: y.tab.h
+
 compat.o: compat.c
 	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ compat.c
 
@@ -30,4 +33,6 @@ clean:
 	-rm y.tab.c
 	-rm y.tab.h
 	-rm y.output
-	-rm *.d
+	-rm .deps
+
+include $(ESBMCDIR)/common

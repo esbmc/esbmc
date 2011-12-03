@@ -1,14 +1,6 @@
+ESBMCDIR = $(shell pwd)
+
 all: esbmc
-
-ifndef SATDIR
-SATDIR= $(shell pwd)
-endif
-
-export SATDIR
-
-include config.inc
-include local.inc
-include common
 
 ###############################################################################
 
@@ -34,10 +26,11 @@ clean:
 	for dir in $(DIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
+	rm .depends
 
 .PHONY: $(DIRS) clean
 
-esbmc: infrastructure languages
+esbmc: .depends infrastructure languages
 
 ###############################################################################
 
@@ -88,3 +81,5 @@ endif
 ifdef MODULE_FLOATBV
 solvers.dir: floatbv.dir
 endif
+
+include $(ESBMCDIR)/common

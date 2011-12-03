@@ -1,18 +1,12 @@
-include ../../config.inc
-include ../../common
-include ../../local.inc
+ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/smt.o
+all: .deps $(MAINOBJ)
 
-CXXFLAGS+= -I../.. -I../../util
-
-OBJS = smt_dec.o smt_prop.o smt_conv.o
-
-all: smt.o
-
-smt.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
+SRCS = smt_dec.cpp smt_prop.cpp smt_conv.cpp
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f $(MAINOBJ) $(OBJS) .deps
 
-.PHONY: clean
+include $(ESBMCDIR)/common

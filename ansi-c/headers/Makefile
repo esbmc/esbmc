@@ -1,5 +1,4 @@
-include ../../config.inc
-include ../../local.inc
+ESBMCDIR= $(shell pwd)/../..
 
 OBJS= stddef.o stdarg.o stdbool.o
 
@@ -12,7 +11,8 @@ headers.o: $(OBJS)
 	$(LD) $(LDFLAGS) -b binary $< -o $@ -r
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm *.o .deps
 
 .PHONY: clean
+
+include $(ESBMCDIR)/common
