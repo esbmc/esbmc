@@ -133,7 +133,7 @@ void basic_symext::symex(statet &state, execution_statet &ex_state, const codet 
   else
   {
     std::cerr << code.pretty() << std::endl;
-    throw "unexpected statement: "+id2string(statement);
+    throw "basic_symext: unexpected statement: "+id2string(statement);
   }
 }
 
@@ -151,8 +151,9 @@ Function: basic_symext::symex_block
 
 void basic_symext::symex_block(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
 {
-  forall_operands(it, code)
+  forall_operands(it, code) {
     symex(state, ex_state, to_code(*it),node_id);
+  }
 }
 
 /*******************************************************************\

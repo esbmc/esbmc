@@ -3,6 +3,7 @@
 Module: Symbolic Execution
 
 Author: Daniel Kroening, kroening@kroening.com
+		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
@@ -437,23 +438,24 @@ crypto_hash
 goto_symex_statet::level2t::generate_l2_state_hash() const
 {
   uint8_t *data;
-  int idx;
+  unsigned int total;
 
   data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE);
 
-  idx = 0;
+  total = 0;
   for (current_state_hashest::const_iterator it = current_hashes.begin();
-        it != current_hashes.end(); it++, idx++) {
+        it != current_hashes.end(); it++) {
     int j;
 
     for (j = 0 ; j < 8; j++)
       if (it->first.as_string().find(state_to_ignore[j]) != std::string::npos)
         continue;
 
-    memcpy(&data[idx * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
+    memcpy(&data[total * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
+    total++;
   }
 
-  return crypto_hash(data, current_hashes.size() * CRYPTO_HASH_SIZE);
+  return crypto_hash(data, total * CRYPTO_HASH_SIZE);
 }
 
 /*******************************************************************\

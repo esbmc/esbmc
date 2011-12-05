@@ -404,6 +404,11 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       if(run_thread(goto_functions))
       {
         ++interleaving_failed;
+
+        if (symex.options.get_bool_option("checkpoint-on-cex")) {
+          write_checkpoint();
+        }
+
         if(!symex.options.get_bool_option("all-runs"))
         {
           return true;
@@ -411,20 +416,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       }
 
       if (checkpoint_sig) {
-        // We're supposed to perform a checkpoint now.
-        std::string f;
-
-        if (options.get_option("checkpoint-file") == "") {
-          char buffer[32];
-          sprintf(buffer, "%d", getpid());
-          f = "esbmc_checkpoint." + std::string(buffer);
-        } else {
-          f = options.get_option("checkpoint-file");
-        }
-
-        symex.save_checkpoint(f);
-
-        checkpoint_sig = false;
+        write_checkpoint();
       }
     } while(symex.multi_formulas_setup_next());
   }
@@ -545,7 +537,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #endif
     else if(options.get_bool_option("dimacs"))
       solver = new dimacs_solver(*this);
-    else if(options.get_bool_option("bl"))
+    else if(options.get_bool_option("boolector-bv"))
 #ifdef BOOLECTOR
       solver = new boolector_solver(*this);
 #else
@@ -568,7 +560,13 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       throw "This version of ESBMC was not compiled with Z3 support";
 #endif
     else
+      // If we have Z3, default to Z3. Otherwise, user needs to explicitly
+      // select an SMT solver
+#ifdef Z3
+      solver = new z3_solver(*this);
+#else
       throw "Please specify a SAT/SMT solver to use";
+#endif
 
     ret = solver->run_solver();
     delete solver;
@@ -791,3 +789,19 @@ bool bmc_baset::smt_solver::write_output()
   return false;
 }
 #endif
+
+void bmc_baset::write_checkpoint(void)
+{
+  std::string f;
+
+  if (options.get_option("checkpoint-file") == "") {
+    char buffer[32];
+    sprintf(buffer, "%d", getpid());
+    f = "esbmc_checkpoint." + std::string(buffer);
+  } else {
+    f = options.get_option("checkpoint-file");
+  }
+
+  symex.save_checkpoint(f);
+  return;
+}

@@ -1,0 +1,57 @@
+#ifndef STL_STRING
+#define STL_STRING
+
+#include "definitions.h"
+
+namespace std
+{
+	struct string
+	{
+		string();
+		string(char[]);
+		string ( const char * s, size_t n );
+		string ( size_t n, char c );
+		static bool operator ==(string& a ,string& b);
+		static bool operator !=(string& a ,string& b);
+		static bool operator >(string& a ,string& b);
+		static bool operator <(string& a ,string& b);
+		static bool operator >=(string& a ,string& b);
+		static bool operator <=(string& a ,string& b);
+		bool empty ( ) const;
+		string& operator+= ( const string& str );
+		string& operator+= ( const char* s );
+		string& operator+= ( char c );
+		char& operator[] ( size_t pos ) const;
+		char& at ( size_t pos ) const;
+		int compare ( const string& str ) const;
+		int compare ( const char* s ) const;
+		int compare ( size_t pos1, size_t n1, const string& str ) const;
+		int compare ( size_t pos1, size_t n1, const char* s) const;
+		int compare ( size_t pos1, size_t n1, const string& str, size_t pos2, size_t n2 ) const;
+		int compare ( size_t pos1, size_t n1, const char* s, size_t n2) const;
+		size_t length() const;
+		string substr ( size_t pos = 0, size_t n = npos ) const;
+
+
+		string& operator+(string&, string&);
+	};
+}
+
+namespace std
+{
+	string& nondet_string();
+
+	string& operator+(string& str1, string& str2)
+	{
+		return nondet_string();
+	}
+
+	inline ostream& operator << (ostream& o, string)
+	{
+		return o;
+	}
+
+
+}
+
+#endif

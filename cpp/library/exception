@@ -1,0 +1,26 @@
+#ifndef STL_CSIGNAL
+#define STL_CSIGNAL
+
+#include "definitions.h"
+
+
+namespace std {
+
+struct exception {
+
+  exception () throw() {__ESBMC_assert(0, "exception");}
+  exception (const exception&) throw();
+  exception& operator= (const exception&) throw();
+  ~exception() throw();
+  const char* what() const throw(){
+	 
+	 return "";
+
+  }
+
+};
+
+}
+
+
+#endif

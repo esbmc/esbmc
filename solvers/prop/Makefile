@@ -1,18 +1,12 @@
-include ../../config.inc
-include ../../common
-include ../../local.inc
+ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/propobj.o
+all: .deps $(MAINOBJ)
 
-CXXFLAGS+= -I../.. -I ../../util
-
-OBJS= prop.o prop_conv.o prop_conv_store.o aig_formula.o aig.o aig_prop.o
-
-all: propobj.o
-
-propobj.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
+SRCS= prop.cpp prop_conv.cpp prop_conv_store.cpp aig_formula.cpp aig.cpp aig_prop.cpp
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f $(MAINOBJ) $(OBJS) .deps
 
-.PHONY: clean
+include $(ESBMCDIR)/common

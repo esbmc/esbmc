@@ -1,0 +1,74 @@
+#ifndef STL_CMATH
+#define STL_CMATH
+
+#include "definitions.h"
+
+float sqrt(float n)
+{
+	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
+	return nondet_float();
+}
+
+float exp(float n)
+{
+	// model: buffer overflow check.
+	return nondet_float();
+}
+
+float pow(float n1, float n2)
+{
+	// model: buffer overflow check
+	// model: base negative and exponent is not a integer value
+	// model: base zero and exponent is negative
+	return nondet_float();
+}
+
+float log(float n)
+{
+	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
+	return nondet_float();
+}
+
+float log10(float n)
+{
+	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
+	return nondet_float();
+}
+
+float fabs(float n)
+{
+	return nondet_float();
+}
+
+float ceil(float n)
+{
+	return nondet_float();
+}
+
+float floor(float n)
+{
+	return nondet_float();
+}
+
+float fmod(float numerator, float denominator)
+{
+	__ESBMC_assert(denominator != 0, "The number must not be equal to 0");
+	return nondet_float();
+}
+
+float sin(float n)
+{
+	return nondet_float();
+}
+
+float cos(float n)
+{
+	return nondet_float();
+}
+
+float tan(float n)
+{
+	return nondet_float();
+}
+
+#endif

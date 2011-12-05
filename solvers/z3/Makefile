@@ -1,18 +1,14 @@
-include ../../config.inc
-include ../../common
-include ../../local.inc
+ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/z3.o
+all: .deps $(MAINOBJ)
 
-CXXFLAGS+= -I../.. -I../../util -I$(Z3)/include
+SRCS= z3_capi.cpp  z3_conv.cpp  z3_dec.cpp  z3_get.cpp  z3_prop.cpp  z3_util.cpp
 
-OBJS= z3_capi.o  z3_conv.o  z3_dec.o  z3_get.o  z3_prop.o  z3_util.o
-
-all:z3.o
-
-z3.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
+INCLUDES= -I$(Z3)/include
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f $(MAINOBJ) $(OBJS) .deps
 
-.PHONY: clean
+include $(ESBMCDIR)/common

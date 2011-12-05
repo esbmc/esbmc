@@ -1,0 +1,3 @@
+test.c
+account.c --no-slice --context-switch 1
+^VERIFICATION FAILED$

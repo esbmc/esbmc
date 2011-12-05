@@ -1,18 +1,12 @@
-include ../../config.inc
-include ../../common
-include ../../local.inc
+ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/cvc.o
+all: .deps $(MAINOBJ)
 
-CXXFLAGS+= -I../.. -I../../util
-
-OBJS = cvc_prop.o cvc_conv.o cvc_dec.o
-
-all: cvc.o
-
-cvc.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
+SRCS = cvc_prop.cpp cvc_conv.cpp cvc_dec.cpp
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f $(MAINOBJ) $(OBJS) .deps
 
-.PHONY: clean
+include $(ESBMCDIR)/common

@@ -166,6 +166,7 @@ protected:
   virtual void start_typecheck_code();
   virtual void typecheck_code(codet &code);
 
+  virtual void typecheck_cpptry(codet &expr);
   virtual void typecheck_assign(codet &expr);
   virtual void typecheck_asm(codet &code);
   virtual void typecheck_block(codet &code);

@@ -103,6 +103,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"show-ileave-points",	switc,		""	},
 { 0,	"checkpoint-file",	string,		""	},
 { 0,	"from-checkpoint",	switc,		""	},
+{ 0,    "checkpoint-on-cex",    switc,          ""      },
 { 0,	"print-stack-traces",	switc,		""	},
 { 0,	"interactive-ileaves",	switc,		""	},
 { 0,	"break-at",		string,		""	},
