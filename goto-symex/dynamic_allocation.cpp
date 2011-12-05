@@ -79,7 +79,7 @@ void replace_dynamic_allocation(
     exprt object_expr("pointer_object", uint_type());
     object_expr.move_to_operands(expr.op0());
 
-    exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "alloc"));
+    exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "deallocated"));
 
     exprt index_expr("memory-leak", typet("bool"));
     index_expr.move_to_operands(alloc_array, object_expr);
