@@ -1,19 +1,12 @@
-include ../../config.inc
-include ../../common
-include ../../local.inc
+ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/dplib.o
+all: .deps $(MAINOBJ)
 
-CXXFLAGS+= -I../.. -I../../util
-
-OBJS = dplib_dec.o dplib_prop.o dplib_conv.o
-
-all: dplib.o
-
-dplib.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
+SRCS = dplib_dec.cpp dplib_prop.cpp dplib_conv.cpp
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f $(MAINOBJ) $(OBJS).deps
 
-.PHONY: clean
-
+include $(ESBMCDIR)/common

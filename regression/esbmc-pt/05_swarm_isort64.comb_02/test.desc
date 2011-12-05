@@ -1,0 +1,3 @@
+main.c
+--unwind 1 --depth 400 --z3-ir
+^VERIFICATION FAILED$

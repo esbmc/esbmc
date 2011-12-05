@@ -1,0 +1,7 @@
+#ifndef STL_CSTDIO
+#define STL_CSTDIO
+
+#include "definitions.h"
+
+#endif
+

@@ -1,0 +1,3 @@
+#define PICOSAT_CC "gcc"
+#define PICOSAT_CFLAGS "-E #-DSTATS -DTRACE -Wall -DNDEBUG -O2"
+#define PICOSAT_VERSION "846"

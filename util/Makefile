@@ -1,4 +1,10 @@
-SRC = arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
+ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ = $(OBJDIR)/util.o
+all: .deps $(MAINOBJ)
+
+SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr.cpp expr_util.cpp i2string.cpp irep.cpp language.cpp \
       lispexpr.cpp lispirep.cpp location.cpp message.cpp language_file.cpp \
       mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp \
@@ -17,27 +23,15 @@ SRC = arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       pointer_arithmetic.cpp ieee_float.cpp signal_catcher.cpp \
       bv_arithmetic.cpp tempdir.cpp var_name.cpp
 
-OBJ = $(SRC:.cpp=.o)
-
-INCLUDES= -I .. -I ../util
-
-all: util.o ieee_float_test
-
-include ../config.inc
-include ../common
-
 ifdef MODULE_FLOATBV
   CXXFLAGS += -DHAVE_FLOATBV
 endif
 
-###############################################################################
-
-util.o: $(OBJ)
-	$(LD) $(LDFLAGS) -r -o util.o $(OBJ)
-
 clean:
-	rm -f *.o ieee_float_test
-	-rm *.d
+	-rm -f $(OBJS) ieee_float_test
+	-rm -f .deps
+#
+#ieee_float_test: ieee_float_test.o ieee_float.o util.o
+#	$(CXX) $(CXXFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o
 
-ieee_float_test: ieee_float_test.o ieee_float.o util.o
-	$(CXX) $(CXXFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o
+include $(ESBMCDIR)/common

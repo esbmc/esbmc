@@ -1,43 +1,30 @@
-SRC = main.cpp parseoptions.cpp bmc.cpp  \
+ESBMCDIR= $(shell pwd)/..
+
+SRCS = main.cpp parseoptions.cpp bmc.cpp  \
       bv_cbmc.cpp document_subgoals.cpp \
       symex_bmc.cpp show_vcc.cpp \
       counterex_pretty.cpp \
       counterex_pretty_greedy.cpp \
       counterex_pretty_pbs.cpp options.cpp
-OBJ = $(SRC:.cpp=.o) \
-      ../ansi-c/ansi-c.o \
-      ../big-int/bigint.o \
-      ../goto-programs/goto-programs.o \
-      ../goto-symex/goto-symex.o \
-      ../pointer-analysis/pointer-analysis.o \
-      ../langapi/langapi.o \
-      ../solvers/solvers.o \
-      ../util/util.o
 
-INCLUDES= -I .. -I ../util -I$(Z3)/include
+# Additional include for Z3, as z3_conv.h depends on it.
+INCLUDES= -I $(Z3)/include
+
+# additional objects for esbmc binary
+OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
+      ../big-int/$(OBJDIR)/bigint.o \
+      ../goto-programs/$(OBJDIR)/goto-programs.o \
+      ../goto-symex/$(OBJDIR)/goto-symex.o \
+      ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \
+      ../langapi/$(OBJDIR)/langapi.o \
+      ../solvers/$(OBJDIR)/solvers.o \
+      ../util/$(OBJDIR)/util.o
 
 LIBS= -lgmp -ldl -lgomp
 
-all: esbmc
+all: .deps esbmc
 
-include ../config.inc
-include ../common
-include ../local.inc
-
-ifdef MODULE_CPP
-  OBJ += ../cpp/cpp.o
-  CXXFLAGS += -DUSE_CPP
-endif
-
-ifdef MODULE_SPECC
-  OBJ += ../specc/specc.o
-  CXXFLAGS += -DUSE_SPECC
-endif
-
-ifdef MODULE_PHP
-  OBJ += ../php/php.o
-  CXXFLAGS += -DUSE_PHP
-endif
+include $(ESBMCDIR)/common
 
 ifdef BOOLECTOR
 CXXFLAGS+= -DBOOLECTOR
@@ -63,11 +50,11 @@ endif
 
 ###############################################################################
 
-esbmc: $(OBJ)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o esbmc $(OBJ) $(LIBS)
+esbmc: $(OBJS)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o esbmc $(OBJS) $(LIBS)
 
-#cbmc-static: $(OBJ)
-#	$(CXX) $(LDFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJ) $(LIBS)
+#cbmc-static: $(OBJS)
+#	$(CXX) $(LDFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
 
 clean:
-	rm -f *.o *.d esbmc
+	-rm -f $(OBJS) .deps esbmc

@@ -1,5 +1,28 @@
-CFLAGS=	$(GCCFLAGS) $(INCLUDES)
-CXXFLAGS= $(GCCFLAGS) $(INCLUDES)
+# This file contains common build rules; to be included at the _end_ of a
+# makefile. Configuration options that are needed during the makefile itself
+# should be put in another config file.
+
+# In case includer hasn't included yet,
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+
+OBJS1 = $(SRCS:%.c=$(OBJDIR)/%.o)
+OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
+
+# Given the presence of OBJDIR, $(OBJS) can't now automatically infer
+# dependancies between .o's and .cpp's etc
+
+$(OBJDIR)/%.o : %.cpp
+	$(CXX) -c $(CXXFLAGS) -o $@ $<
+
+$(OBJDIR)/%.o : %.c
+	$(CC) -c $(CLAGS) -o $@ $<
+
+# list of includes, potentially modified by includer
+INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
+
+CFLAGS+= $(GCCFLAGS) $(INCLUDES)
+CXXFLAGS+= $(GCCFLAGS) $(INCLUDES)
 
 .SUFFIXES:	.C .d .cpp
 
@@ -12,23 +35,53 @@ CXXFLAGS= $(GCCFLAGS) $(INCLUDES)
 .c.o:
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-# this one is for Visual Studio's compiler:
-#%.obj:%.cpp
-#	cl $(INCLUDES) -nologo -c -GF -EHsc $<
-#
-#%.obj:%.c
-#	cl $(INCLUDES) -nologo -c -GF -EHsc $<
+# A generic target; potentially not defined by the includer
 
-#
-# include a dependency file if one exists
-#
+$(MAINOBJ): $(OBJS)
+	$(LD) $(LDFLAGS) -r -o $@ $^
 
-# ifeq (.depend,$(wildcard .depend))
-# include .depend
-# endif
+#clean defined by includer
 
-D_FILES1 = $(SRC:.c=.d)
-D_FILES = $(D_FILES1:.cpp=.d)
+ifdef DIRS
+# Rule for making dependancies on first execution
+.depends:
+	echo "Making dependancies"
+	$(MAKE) depend
+	touch .depends
 
--include $(D_FILES)
+$(patsubst %,%/.deps,$(DIRS)):
+	$(MAKE) -C $(patsubst %/.deps,%,$@) depend
 
+depend: $(patsubst %,%/.deps,$(DIRS))
+else
+depend: $(SRCS)
+	@echo "Making dependancies"
+	@$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+
+.deps:
+	@echo "Making dependancies"
+	@$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+
+endif
+
+.PHONY: clean depend
+
+DEPFILEEXISTS := $(shell stat .deps 2>/dev/null)
+ifneq "$(DEPFILEEXISTS)" ""
+include .deps
+endif
+
+# Finally, some special rules for various pieces of hackery for performing debug
+# builds.
+
+debug:
+	env OBJDIR=.debugobjs OPTS=-O0 GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
+
+debugclean:
+	env OBJDIR=.debugobjs $(MAKE) clean
+
+debugfast:
+	env OBJDIR=.debugfastobjs GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
+
+debugfastclean:
+	env OBJDIR=.debugfastobjs $(MAKE) clean
