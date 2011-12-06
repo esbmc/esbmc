@@ -1,4 +1,6 @@
 ESBMCDIR = $(shell pwd)
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
 
 all: esbmc
 
