@@ -48,6 +48,10 @@ ifdef USE_SMT
 CXXFLAGS+= USE_SMT
 endif
 
+ifdef MODULE_CPP
+OBJS += ../cpp/$(OBJDIR)/cpp.o
+endif
+
 ###############################################################################
 
 esbmc: $(OBJS)
