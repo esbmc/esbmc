@@ -50,6 +50,7 @@ endif
 
 ifdef MODULE_CPP
 OBJS += ../cpp/$(OBJDIR)/cpp.o
+CXXFLAGS+= -DUSE_CPP
 endif
 
 ###############################################################################
