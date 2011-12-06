@@ -37,6 +37,6 @@ lex.yy.cpp: scanner.l
 $(OBJDIR)/lex.yy.o: lex.yy.cpp
 
 clean:
-	-rm -f $(OBJS) lex.yy.cpp y.tab.cpp.output .deps
+	-rm -f $(OBJS) lex.yy.cpp y.tab.cpp.output .deps $(MAINOBJ)
 
 include $(ESBMCDIR)/common
