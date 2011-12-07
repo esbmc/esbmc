@@ -55,12 +55,17 @@ $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS)):
 depend: $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS))
 else
 depend: $(SRCS)
-	@echo "Making dependancies"
-	@$(CXX) $(INCLUDES) -MM $(SRCS) > $(OBJDIR)/.deps
+	@echo "Making dependancies in $(shell basename $(shell pwd))"
+	@truncate -s 0 $(OBJDIR)/.deps
+	@touch $(OBJDIR)/.deps
+	@for src in $(SRCS); do \
+		src1=$${src//\.cpp/}; \
+		src2=$${src1//\.c/}; \
+		$(CXX) $(INCLUDES) -MM -MT $(OBJDIR)/$$src2.o $$src >> $(OBJDIR)/.deps; \
+	done
 
 $(OBJDIR)/.deps:
-	@echo "Making dependancies"
-	@$(CXX) $(INCLUDES) -MM $(SRCS) > $(OBJDIR)/.deps
+	$(MAKE) depend
 
 endif
 
