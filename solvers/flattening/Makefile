@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/flattening.o
-all: .deps $(MAINOBJ)
+all: $(OBJDIR)/.deps $(MAINOBJ)
 
 SRCS= equality.cpp arrays.cpp functions.cpp boolbv_width.cpp \
 	boolbv.cpp bv_pointers.cpp bv_utils.cpp boolbv_abs.cpp \
@@ -28,6 +28,6 @@ OBJS = ../../floatbv/floatbv.o
 endif
 
 clean:
-	-rm -f $(MAINOBJ) $(OBJS) .deps
+	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
 include $(ESBMCDIR)/common

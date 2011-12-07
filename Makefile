@@ -31,11 +31,11 @@ clean:
 	for dir in $(DIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
-	rm .depends
+	rm $(OBJDIR)/.depends
 
 .PHONY: $(DIRS) clean
 
-esbmc: .depends infrastructure languages
+esbmc: $(OBJDIR)/.depends infrastructure languages
 
 ###############################################################################
 

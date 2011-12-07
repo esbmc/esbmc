@@ -44,31 +44,31 @@ $(MAINOBJ): $(OBJS)
 
 ifdef DIRS
 # Rule for making dependancies on first execution
-.depends:
+$(OBJDIR)/.depends:
 	echo "Making dependancies"
 	$(MAKE) depend
-	touch .depends
+	touch $(OBJDIR)/.depends
 
-$(patsubst %,%/.deps,$(DIRS)):
-	$(MAKE) -C $(patsubst %/.deps,%,$@) depend
+$(patsubst %,%/$(OBJDIR)/.deps,$(DIRS)):
+	$(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
 
-depend: $(patsubst %,%/.deps,$(DIRS))
+depend: $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS))
 else
 depend: $(SRCS)
 	@echo "Making dependancies"
-	@$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+	@$(CXX) $(INCLUDES) -MM $(SRCS) > $(OBJDIR)/.deps
 
-.deps:
+$(OBJDIR)/.deps:
 	@echo "Making dependancies"
-	@$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+	@$(CXX) $(INCLUDES) -MM $(SRCS) > $(OBJDIR)/.deps
 
 endif
 
 .PHONY: clean depend
 
-DEPFILEEXISTS := $(shell stat .deps 2>/dev/null)
+DEPFILEEXISTS := $(shell stat $(OBJDIR)/.deps 2>/dev/null)
 ifneq "$(DEPFILEEXISTS)" ""
-include .deps
+include $(OBJDIR)/.deps
 endif
 
 # Finally, some special rules for various pieces of hackery for performing debug

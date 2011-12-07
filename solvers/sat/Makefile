@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/satsolvers.o
-all: .deps $(MAINOBJ)
+all: $(OBJDIR)/.deps $(MAINOBJ)
 
 SRCS= cnf.cpp dimacs_cnf.cpp cnf_clause_list.cpp pbs_dimacs_cnf.cpp \
 	read_dimacs_cnf.cpp resolution_proof.cpp satcheck.cpp
@@ -50,6 +50,6 @@ $(OBJDIR)/smvsat.o: satcheck_smvsat.cpp
 	$(CXX) -c -o $@ $^ $(CXXFLAGS) -I $(SMVSAT)/include $(SMVSAT)/lib/libsmvsat.a
 
 clean:
-	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/minisat_tmp.o .deps
+	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/minisat_tmp.o $(OBJDIR)/.deps
 
 include $(ESBMCDIR)/common

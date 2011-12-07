@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/goto-symex.o
-all: .deps $(MAINOBJ)
+all: $(OBJDIR)/.deps $(MAINOBJ)
 
 SRCS= symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
       symex_main.cpp goto_trace.cpp build_goto_trace.cpp \
@@ -14,6 +14,6 @@ SRCS= symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
       crypto_hash.cpp
 
 clean:
-	-rm -f $(OBJS) .deps
+	-rm -f $(OBJS) $(OBJDIR)/.deps
 
 include $(ESBMCDIR)/common
