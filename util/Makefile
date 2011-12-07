@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ = $(OBJDIR)/util.o
-all: .deps $(MAINOBJ)
+all: $(OBJDIR)/.deps $(MAINOBJ)
 
 SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr.cpp expr_util.cpp i2string.cpp irep.cpp language.cpp \
@@ -29,7 +29,7 @@ endif
 
 clean:
 	-rm -f $(OBJS) ieee_float_test
-	-rm -f .deps
+	-rm -f $(OBJDIR)/.deps
 #
 #ieee_float_test: ieee_float_test.o ieee_float.o util.o
 #	$(CXX) $(CXXFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o

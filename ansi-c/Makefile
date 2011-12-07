@@ -20,7 +20,7 @@ OBJS= y.tab.o lex.yy.o
 
 INCLUDES= -I .. -I ../util
 
-all: .deps cpp_dir headers_dir $(OBJDIR)/ansi-c.o
+all: $(OBJDIR)/.deps cpp_dir headers_dir $(OBJDIR)/ansi-c.o
 
 include $(ESBMCDIR)/common
 
@@ -98,4 +98,4 @@ clean:
 	-rm -f *.goto
 	-rm -f $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(OBJDIR)/clib.o
 	-rm -f $(OBJDIR)/cprover_blank_library.o $(OBJDIR)/cprover_library.o
-	-rm .deps
+	-rm $(OBJDIR)/.deps
