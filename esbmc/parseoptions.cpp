@@ -123,18 +123,15 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("boolector-bv"))
   {
-    options.set_option("bl", true);
     options.set_option("boolector-bv", true);
+    options.set_option("int-encoding", false);
   }
-
-  //options.set_option("bl", true);
 
   if(cmdline.isset("z3-bv"))
   {
     options.set_option("z3", true);
     options.set_option("z3-bv", true);
     options.set_option("int-encoding", false);
-    options.set_option("bl", false);
   }
 
   if (cmdline.isset("lazy"))
@@ -158,7 +155,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("z3", true);
     options.set_option("z3-ir", true);
     options.set_option("int-encoding", true);
-    options.set_option("bl", false);
   }
 
   if(cmdline.isset("no-slice"))

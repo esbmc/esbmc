@@ -625,10 +625,7 @@ void goto_checkt::check_rec(
     if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
 		&& !options.get_bool_option("z3-ir"))
     {
-      if (use_boolector)
-        options.set_option("bl", true);
-      else
-        options.set_option("int-encoding", false);
+      options.set_option("int-encoding", false);
     }
   }
   else if (expr.id() == "bitand" || expr.id() == "bitor" ||
@@ -638,8 +635,7 @@ void goto_checkt::check_rec(
 	if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
 		&& !options.get_bool_option("z3-ir"))
 	{
-	  if (use_boolector)
-        options.set_option("bl", true);
+          options.set_option("int-encoding", false);
     }
   }
   else if (expr.id() == "mod")
@@ -650,10 +646,7 @@ void goto_checkt::check_rec(
 	if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
 		&& !options.get_bool_option("z3-ir"))
 	{
-	  if (use_boolector)
-	    options.set_option("bl", true);
-	  else
-        options.set_option("int-encoding", false);
+          options.set_option("int-encoding", false);
 	}
   }
   else if (expr.id() == "struct" || expr.id() == "union"
@@ -661,16 +654,14 @@ void goto_checkt::check_rec(
 		    (expr.type().id() == "array" && expr.type().subtype().id() == "array"))
   {
 	use_boolector=false; //always deactivate boolector
-	options.set_option("bl", false);
 	options.set_option("z3", true); //activate Z3 for solving the VCs
   }
   else if (expr.type().id()=="fixedbv")
   {
 	use_boolector=false;
-	options.set_option("bl", false);
 	options.set_option("z3", true);
 	if (!options.get_bool_option("z3-bv"))
-      options.set_option("int-encoding", true);
+          options.set_option("int-encoding", true);
 
 	if (!options.get_bool_option("eager"))
 	  options.set_option("no-assume-guarantee", false);
@@ -679,7 +670,6 @@ void goto_checkt::check_rec(
   if (options.get_bool_option("qf_aufbv"))
   {
 	use_boolector=false; //always deactivate boolector
-	options.set_option("bl", false);
     options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
     options.set_option("int-encoding", false);
   }
@@ -687,7 +677,6 @@ void goto_checkt::check_rec(
   if (options.get_bool_option("qf_auflira"))
   {
 	use_boolector=false; //always deactivate boolector
-	options.set_option("bl", false);
     options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
     options.set_option("int-encoding", true);
   }
