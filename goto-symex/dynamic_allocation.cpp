@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cprover_prefix.h>
 #include <expr_util.h>
+#include <std_expr.h>
 
 #include <ansi-c/c_types.h>
 
@@ -56,6 +57,8 @@ void replace_dynamic_allocation(
     assert(expr.operands().size()==1);
     assert(expr.op0().type().id()=="pointer");
 
+    exprt theptr = expr.op0();
+
     exprt object_expr("pointer_object", uint_type());
     object_expr.move_to_operands(expr.op0());
 
@@ -64,10 +67,22 @@ void replace_dynamic_allocation(
     exprt index_expr("index", typet("bool"));
     index_expr.move_to_operands(alloc_array, object_expr);
 
-    exprt not_expr("not", typet("bool"));
-    not_expr.move_to_operands(index_expr);
+    exprt notindex("not", bool_typet());
+    notindex.move_to_operands(index_expr);
 
-    expr.swap(not_expr);
+    // XXXjmorse - currently we don't correctly track the fact that stack
+    // objects change validity as the program progresses, and the solver is
+    // free to guess that a stack ptr is invalid, as we never update
+    // __ESBMC_alloc for stack ptrs.
+    // So, add the precondition that invalid_ptr only ever applies to dynamic
+    // objects.
+
+    exprt is_dyn("is_dynamic_object", bool_typet());
+    is_dyn.move_to_operands(theptr);
+    exprt is_valid_ptr("and", bool_typet());
+    is_valid_ptr.move_to_operands(notindex, is_dyn);
+
+    expr.swap(is_valid_ptr);
   }
   if(expr.id()=="deallocated_object")
   {
