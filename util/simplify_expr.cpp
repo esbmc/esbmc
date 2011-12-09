@@ -962,23 +962,51 @@ bool simplify_exprt::simplify_addition_substraction(
   }
   else if(expr.id()=="-")
   {
-    if(operands.size()==2 &&
-       is_number(expr.type()) &&
-       is_number(operands.front().type()) &&
-       is_number(operands.back().type()))
+    // XXXjmorse - duplicated from above, could be further abstracted
+    exprt::operandst::iterator const_sum;
+    bool const_sum_set=false;
+
+    for(exprt::operandst::iterator it=operands.begin();
+        it!=operands.end();)
     {
+      bool do_erase=false;
 
-      exprt tmp2("unary-", expr.type());
-      tmp2.move_to_operands(operands.back());
-      simplify_node(tmp2, mode);
+      if(is_number(it->type()))
+      {
+        if(it->is_zero())
+          do_erase=true;
+        else if(it->is_constant())
+        {
+          if(!const_sum_set)
+          {
+            const_sum=it;
+            const_sum_set=true;
+          }
+          else
+          {
+            if(!const_sum->subtract(*it)) do_erase=true;
+          }
+        }
+      }
 
-      exprt tmp("+", expr.type());
-      tmp.move_to_operands(operands.front());
-      tmp.move_to_operands(tmp2);
+      if(do_erase)
+      {
+        it=operands.erase(it);
+        result=false;
+      }
+      else
+        it++;
+    }
 
+    if(operands.size()==0)
+    {
+      expr=gen_zero(expr.type());
+      return false;
+    }
+    else if(operands.size()==1)
+    {
+      exprt tmp(operands.front());
       expr.swap(tmp);
-      simplify_node(expr, mode);
-
       return false;
     }
   }
