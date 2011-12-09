@@ -2,55 +2,305 @@
 #define STL_STRING
 
 #include "definitions.h"
+#include "cstring"
 
 namespace std
 {
 	struct string
 	{
-		string();
-		string(char[]);
-		string ( const char * s, size_t n );
-		string ( size_t n, char c );
-		static bool operator ==(string& a ,string& b);
-		static bool operator !=(string& a ,string& b);
-		static bool operator >(string& a ,string& b);
-		static bool operator <(string& a ,string& b);
-		static bool operator >=(string& a ,string& b);
-		static bool operator <=(string& a ,string& b);
-		bool empty ( ) const;
-		string& operator+= ( const string& str );
-		string& operator+= ( const char* s );
-		string& operator+= ( char c );
+	public:
+
+		string ();
+		string (char*);
+		string (const char * s, size_t n);
+		string (size_t n, char c);
+		char* c_str();
+		bool operator ==(string& a ,string& b);
+		bool operator !=(string& a ,string& b);
+		bool operator >(string& a ,string& b);
+		bool operator <(string& a ,string& b);
+		bool operator >=(string& a ,string& b);
+		bool operator <=(string& a ,string& b);
+		string& operator = (char *d, const char *s);
+		string& operator += (char *d, const char *s);
+		string& operator += ( const string& str);
+		string& operator+(string&, string&);
 		char& operator[] ( size_t pos ) const;
+		bool empty ( ) const;
 		char& at ( size_t pos ) const;
 		int compare ( const string& str ) const;
-		int compare ( const char* s ) const;
 		int compare ( size_t pos1, size_t n1, const string& str ) const;
-		int compare ( size_t pos1, size_t n1, const char* s) const;
 		int compare ( size_t pos1, size_t n1, const string& str, size_t pos2, size_t n2 ) const;
-		int compare ( size_t pos1, size_t n1, const char* s, size_t n2) const;
 		size_t length() const;
-		string substr ( size_t pos = 0, size_t n = npos ) const;
+		string substr ( size_t pos, size_t npos ) const;
+		string substr ( size_t npos ) const;
 
-
-		string& operator+(string&, string&);
+		// todo: make str const
+		char* str;
 	};
 }
 
 namespace std
 {
-	string& nondet_string();
 
+	string () : s(NULL);
+	string (char* s) : str(s);
+	string (const char * s, size_t n) : str(s);
+	//string (size_t n, char c);
+
+	char* c_str()
+	{
+		// after str becomes const, use const_cast<char*>(str) to remove const
+		return str;
+	}
+	
 	string& operator+(string& str1, string& str2)
 	{
-		return nondet_string();
+		return string(strcat(str1.c_str(), str2.c_str()));
 	}
 
 	inline ostream& operator << (ostream& o, string)
 	{
 		return o;
 	}
+ 
+	size_t length()
+	{
+		return strlen(str.c_str());
+	}
 
+	string& operator += (string& d, string& s)
+	{
+		return string(strcat(d.c_str(), s.c_str()));
+	}
+
+	bool operator == (string& a ,string& b)
+	{
+		int aux;
+		
+		aux = strcmp(a.c_str(), b.c_str());
+
+		if (aux == 0){
+			return true;
+		}else{
+			return false;
+		}		
+	}
+
+	bool operator !=(string& a ,string& b)
+	{
+		int aux;
+		
+		aux = strcmp(a.c_str(), b.c_str());
+
+		if (aux == 0){
+			return false;
+		}else{
+			return true;
+		}		
+	}
+
+	bool operator >(string& a ,string& b)
+	{
+	   if ( strlen(a.c_str()) > strlen(b.c_str()) )
+	      return true;
+
+		return false;
+	}
+
+	bool operator <(string& a ,string& b)
+	{
+		size_t i;
+
+	   if ( strlen(a.c_str()) < strlen(b.c_str()) )
+	      return true;
+
+		return false;
+	}
+
+	bool operator >=(string& a ,string& b)
+	{
+		size_t i;
+
+	   if ( strlen(a.c_str()) >= strlen(b.c_str()) )
+	      return true;
+
+		return false;
+	}
+
+	bool operator <=(string& a ,string& b)
+	{
+		size_t i;
+
+	   if ( strlen(a.c_str()) <= strlen(b.c_str()) )
+	      return true;
+
+		return false;
+	}
+
+	bool empty ( ) const
+	{
+		if ( srtlen(s.str())==0 ){
+			return true;
+		}else{
+			return false;		
+		}
+	}
+
+	string& operator = (char *d, const char *s)
+	{
+		size_t i;
+	
+		for (i = 0; s[i] != '\0'; i++) {
+			d[i] = s[i];
+		}
+	
+		d[i] = '\0';
+	
+		return (string&)d;
+	}
+
+	char* operator[] ( size_t pos ) const
+	{
+#if 0
+		if (s[i] == '\0') {
+			return NULL;
+		}
+		else {
+			return (char*) &s[i];
+		}
+#endif
+		return nondet_charPointer();
+	}
+
+	char* at ( size_t pos ) const
+	{
+#if 0
+		if (s[i] == '\0') {
+			return out_of_range;
+		}
+		else {
+			return (char*) &s[i];
+		}
+#endif
+		return nondet_charPointer();
+	}
+
+	string* substr ( size_t pos, size_t npos ) const
+	{
+#if 0
+		size_t i,j=0
+		string& s;
+
+		for(i=pos; i>npos; i++){
+			j++;	
+			s[j] = str[i]; 
+		}
+#endif
+		return new string();
+	}
+
+	string* substr ( size_t pos) const
+	{
+#if 0
+		size_t i,j=0;
+		string& s;
+
+		for(i=pos; str[i]; i++){
+			j++;	
+			s[j] = str[i]; 
+		}
+#endif
+	 return new string();
+	}
+
+	int compare ( const string& str ) const
+	{
+#if 0
+		size_t i;
+
+	   if ( s[i] != str[i] ){
+			if(s[i] < str[i] ){
+				return -2;
+			}else{
+				return 1;
+			}
+		}
+
+	   for ( int i = 0; i < str[i] ; i++ )
+
+      if ( s[ i ] != str[ i ] )
+         return -1;
+
+   	return 1;
+#endif
+
+		return nondet_uint();
+	}
+
+	int compare ( size_t pos1, size_t n1, const string& str ) const
+	{
+#if 0
+		size_t i,j;
+		char* aux;
+
+		for(i=pos1; i=n1; i++){
+			j++;
+			aux[j] = s[i];
+		}	
+
+	   if ( aux[i] != str[i] ){
+			if(aux[i] < str[i] ){
+				return -2;
+			}else{
+				return 1;
+			}
+		}
+
+	   for ( int i = 0; i < str[i] ; i++ )
+
+      if ( aux[ i ] != str[ i ] )
+         return -1;
+
+   	return 1;
+#endif
+		return nondet_uint();
+	}
+
+	int compare ( size_t pos1, size_t n1, const string& str, size_t pos2, size_t n2 ) const
+	{
+#if 0
+		size_t i,j;
+		char* aux;
+		char* aux2;
+
+		for(i=pos1; i=n1; i++){
+			j++;
+			aux[j] = s[i];
+		}	
+
+		for(i=pos1; i=n1; i++){
+			j++;
+			aux2[j] = str[i];
+		}
+
+	   if ( aux[i] != aux2[i] ){
+			if(aux[i] < aux2[i] ){
+				return -2;
+			}else{
+				return 1;
+			}
+		}
+
+	   for ( int i = 0; i < aux2[i] ; i++ )
+
+      if ( aux[ i ] != aux2[ i ] )
+         return -1;
+
+   	return 1;
+#endif
+		return nondet_uint();
+	}
 
 }
 
