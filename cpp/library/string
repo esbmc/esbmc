@@ -14,7 +14,9 @@ namespace std
 		string (char*);
 		string (const char * s, size_t n);
 		string (size_t n, char c);
-		char* c_str();
+		//char* c_str();
+		const char* c_str ( ) const;
+		char* string::c_str2 ();
 		bool operator ==(string& a ,string& b);
 		bool operator !=(string& a ,string& b);
 		bool operator >(string& a ,string& b);
@@ -22,8 +24,8 @@ namespace std
 		bool operator >=(string& a ,string& b);
 		bool operator <=(string& a ,string& b);
 		string& operator = (char *d, const char *s);
-		string& operator += (char *d, const char *s);
 		string& operator += ( const string& str);
+		string& operator += (string& d, string& s);
 		string& operator+(string&, string&);
 		char& operator[] ( size_t pos ) const;
 		bool empty ( ) const;
@@ -34,47 +36,61 @@ namespace std
 		size_t length() const;
 		string substr ( size_t pos, size_t npos ) const;
 		string substr ( size_t npos ) const;
-
-		// todo: make str const
-		char* str;
 	};
 }
 
 namespace std
 {
+	const char* str;
+	char* str2;
 
-	string () : s(NULL);
-	string (char* s) : str(s);
-	string (const char * s, size_t n) : str(s);
-	//string (size_t n, char c);
-
-	char* c_str()
+	string::string () 
 	{
-		// after str becomes const, use const_cast<char*>(str) to remove const
+	}
+
+	string::string (char* s) 
+	{
+		str=s;
+		str2=s;
+	}
+
+	string::string (const char * s, size_t n) 
+	{
+		str=s;
+	}
+
+	const char* string::c_str () const
+	{
 		return str;
 	}
-	
-	string& operator+(string& str1, string& str2)
+
+	char* string::c_str2 ()
 	{
-		return string(strcat(str1.c_str(), str2.c_str()));
+		return str2;
 	}
 
-	inline ostream& operator << (ostream& o, string)
+	size_t  string::length() const
+	{
+		return strlen(str);
+	}
+
+
+	string& string::operator+(string& str1, string& str2)
+	{
+		return string(strcat(str1.c_str2(), str2.c_str()));
+	}
+
+	inline string::ostream& operator << (ostream& o, string)
 	{
 		return o;
 	}
  
-	size_t length()
+	string& string::operator += (string& d, string& s)
 	{
-		return strlen(str.c_str());
+		return string(strcat(d.c_str2(), s.c_str()));
 	}
 
-	string& operator += (string& d, string& s)
-	{
-		return string(strcat(d.c_str(), s.c_str()));
-	}
-
-	bool operator == (string& a ,string& b)
+	bool string::operator == (string& a ,string& b)
 	{
 		int aux;
 		
@@ -87,7 +103,7 @@ namespace std
 		}		
 	}
 
-	bool operator !=(string& a ,string& b)
+	bool string::operator !=(string& a ,string& b)
 	{
 		int aux;
 		
@@ -100,7 +116,7 @@ namespace std
 		}		
 	}
 
-	bool operator >(string& a ,string& b)
+	bool string::operator >(string& a ,string& b)
 	{
 	   if ( strlen(a.c_str()) > strlen(b.c_str()) )
 	      return true;
@@ -108,7 +124,7 @@ namespace std
 		return false;
 	}
 
-	bool operator <(string& a ,string& b)
+	bool string::operator <(string& a ,string& b)
 	{
 		size_t i;
 
@@ -118,7 +134,7 @@ namespace std
 		return false;
 	}
 
-	bool operator >=(string& a ,string& b)
+	bool string::operator >=(string& a ,string& b)
 	{
 		size_t i;
 
@@ -128,7 +144,7 @@ namespace std
 		return false;
 	}
 
-	bool operator <=(string& a ,string& b)
+	bool string::operator <=(string& a ,string& b)
 	{
 		size_t i;
 
@@ -138,16 +154,16 @@ namespace std
 		return false;
 	}
 
-	bool empty ( ) const
+	bool string::empty ( ) const
 	{
-		if ( srtlen(s.str())==0 ){
+		if ( strlen(str)==0 ){
 			return true;
 		}else{
 			return false;		
 		}
 	}
 
-	string& operator = (char *d, const char *s)
+	string& string::operator = (char *d, const char *s)
 	{
 		size_t i;
 	
@@ -160,7 +176,7 @@ namespace std
 		return (string&)d;
 	}
 
-	char* operator[] ( size_t pos ) const
+	char* string::operator[] ( size_t pos ) const
 	{
 #if 0
 		if (s[i] == '\0') {
@@ -169,11 +185,12 @@ namespace std
 		else {
 			return (char*) &s[i];
 		}
-#endif
+
 		return nondet_charPointer();
+#endif
 	}
 
-	char* at ( size_t pos ) const
+	char* string::at ( size_t pos ) const
 	{
 #if 0
 		if (s[i] == '\0') {
@@ -182,11 +199,12 @@ namespace std
 		else {
 			return (char*) &s[i];
 		}
-#endif
+
 		return nondet_charPointer();
+#endif
 	}
 
-	string* substr ( size_t pos, size_t npos ) const
+	string* string::substr ( size_t pos, size_t npos ) const
 	{
 #if 0
 		size_t i,j=0
@@ -200,7 +218,7 @@ namespace std
 		return new string();
 	}
 
-	string* substr ( size_t pos) const
+	string* string::substr ( size_t pos) const
 	{
 #if 0
 		size_t i,j=0;
@@ -214,7 +232,7 @@ namespace std
 	 return new string();
 	}
 
-	int compare ( const string& str ) const
+	int string::compare ( const string& str ) const
 	{
 #if 0
 		size_t i;
@@ -238,7 +256,7 @@ namespace std
 		return nondet_uint();
 	}
 
-	int compare ( size_t pos1, size_t n1, const string& str ) const
+	int string::compare ( size_t pos1, size_t n1, const string& str ) const
 	{
 #if 0
 		size_t i,j;
@@ -267,7 +285,7 @@ namespace std
 		return nondet_uint();
 	}
 
-	int compare ( size_t pos1, size_t n1, const string& str, size_t pos2, size_t n2 ) const
+	int string::compare ( size_t pos1, size_t n1, const string& str, size_t pos2, size_t n2 ) const
 	{
 #if 0
 		size_t i,j;
@@ -301,7 +319,6 @@ namespace std
 #endif
 		return nondet_uint();
 	}
-
 }
 
 #endif
