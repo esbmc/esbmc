@@ -1,4 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
 
 SRCS = main.cpp parseoptions.cpp bmc.cpp  \
       bv_cbmc.cpp document_subgoals.cpp \
@@ -22,7 +24,7 @@ OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
 
 LIBS= -lgmp -ldl -lgomp
 
-all: .deps esbmc
+all: $(OBJDIR)/.deps esbmc
 
 include $(ESBMCDIR)/common
 
@@ -48,6 +50,11 @@ ifdef USE_SMT
 CXXFLAGS+= USE_SMT
 endif
 
+ifdef MODULE_CPP
+OBJS += ../cpp/$(OBJDIR)/cpp.o
+CXXFLAGS+= -DUSE_CPP
+endif
+
 ###############################################################################
 
 esbmc: $(OBJS)
@@ -57,4 +64,4 @@ esbmc: $(OBJS)
 #	$(CXX) $(LDFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
 
 clean:
-	-rm -f $(OBJS) .deps esbmc
+	-rm -f $(OBJS) $(OBJDIR)/.deps esbmc

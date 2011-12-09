@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/qbfsolvers.o
-all: .deps $(MAINOBJ)
+all: $(OBJDIR)/.deps $(MAINOBJ)
 
 SRCS= qdimacs_cnf.cpp qbf_quantor.cpp qbf_skizzo.cpp qdimacs_core.cpp \
       qbf_qube.cpp qbf_qube_core.cpp
@@ -29,6 +29,6 @@ $(OBJDIR)/qbf_cudd.o: qbf_bdd_core.cpp qbf_skizzo_core.cpp
 		-lepd -ldddmp
 
 clean:
-	-rm -f $(MAINOBJ) $(OBJS) .deps
+	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
 include $(ESBMCDIR)/common

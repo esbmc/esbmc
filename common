@@ -44,31 +44,36 @@ $(MAINOBJ): $(OBJS)
 
 ifdef DIRS
 # Rule for making dependancies on first execution
-.depends:
+$(OBJDIR)/.depends:
 	echo "Making dependancies"
 	$(MAKE) depend
-	touch .depends
+	touch $(OBJDIR)/.depends
 
-$(patsubst %,%/.deps,$(DIRS)):
-	$(MAKE) -C $(patsubst %/.deps,%,$@) depend
+$(patsubst %,%/$(OBJDIR)/.deps,$(DIRS)):
+	$(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
 
-depend: $(patsubst %,%/.deps,$(DIRS))
+depend: $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS))
 else
 depend: $(SRCS)
-	@echo "Making dependancies"
-	@$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+	@echo "Making dependancies in $(shell basename $(shell pwd))"
+	@truncate -s 0 $(OBJDIR)/.deps
+	@touch $(OBJDIR)/.deps
+	@for src in $(SRCS); do \
+		src1=$${src//\.cpp/}; \
+		src2=$${src1//\.c/}; \
+		$(CXX) $(INCLUDES) -MM -MT $(OBJDIR)/$$src2.o $$src >> $(OBJDIR)/.deps; \
+	done
 
-.deps:
-	@echo "Making dependancies"
-	@$(CXX) $(INCLUDES) -MM $(SRCS) > .deps
+$(OBJDIR)/.deps:
+	$(MAKE) depend
 
 endif
 
 .PHONY: clean depend
 
-DEPFILEEXISTS := $(shell stat .deps 2>/dev/null)
+DEPFILEEXISTS := $(shell stat $(OBJDIR)/.deps 2>/dev/null)
 ifneq "$(DEPFILEEXISTS)" ""
-include .deps
+include $(OBJDIR)/.deps
 endif
 
 # Finally, some special rules for various pieces of hackery for performing debug
