@@ -37,6 +37,15 @@ public:
                 _target(ns),
                 _goto_functions(goto_functions)
 	{
+
+          // XXXjmorse - C++s static initialization order trainwreck means
+          // we can't initialize the id -> serializer map statically. Instead,
+          // manually inspect and initialize. This is not thread safe.
+          if (!execution_statet::expr_id_map_initialized) {
+            execution_statet::expr_id_map_initialized = true;
+            execution_statet::expr_id_map = init_expr_id_map();
+          }
+
 		is_schedule = _is_schedule;
 		reexecute_instruction = true;
 		reexecute_atomic = false;
@@ -260,7 +269,8 @@ private:
 
 public:
     static expr_id_map_t init_expr_id_map();
-    static const expr_id_map_t expr_id_map;
+    static bool expr_id_map_initialized;
+    static expr_id_map_t expr_id_map;
     static unsigned int node_count;
 };
 
