@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <assert.h>
 
 #include <algorithm>
+#include <config.h>
+#include <options.h>
 
 #include "simplify_expr_class.h"
 #include "simplify_expr.h"
@@ -3343,6 +3345,23 @@ Function:
 
 bool simplify_exprt::simplify_unary_minus(exprt &expr)
 {
+
+  if (config.options.get_bool_option("int-encoding"))
+    // Never simplify a unary minus if we're using integer encoding. The SMT
+    // solver is going to have its own negative representation, and this
+    // conflicts with the current irep representation of binary-in-a-string.
+    // Specifically, the current 01_cmbc_Malloc1 test encodes:
+    //
+    // o = n - 1;
+    //
+    // as
+    //
+    // o = n + 4294967295
+    //
+    // Which may be fine in bit-vector mode, but that calculation does _not_
+    // wrap around in integer mode. So, block such simplification of unary-'s.
+    return true;
+
   if(expr.operands().size()!=1)
     return true;
 
