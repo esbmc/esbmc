@@ -1137,8 +1137,7 @@ execution_statet::update_hash_for_assignment(const exprt &rhs)
   return crypto_hash(serialise_expr(rhs));
 }
 
-const execution_statet::expr_id_map_t execution_statet::expr_id_map = execution_statet::init_expr_id_map();
-
+execution_statet::expr_id_map_t execution_statet::expr_id_map;
 
 execution_statet::expr_id_map_t execution_statet::init_expr_id_map()
 {
@@ -1195,3 +1194,5 @@ void execution_statet::print_stack_traces(const namespacet &ns, unsigned int ind
 
   return;
 }
+
+bool execution_statet::expr_id_map_initialized = false;
