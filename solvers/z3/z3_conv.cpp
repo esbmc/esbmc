@@ -1182,36 +1182,18 @@ z3_convt::convert_is_dynamic_object(const exprt &expr)
   DEBUGLOC;
 
   assert(expr.operands().size() == 1);
-  Z3_ast bv, operand0, operand1;
-  std::vector<unsigned> dynamic_objects;
-  pointer_logic.get_dynamic_objects(dynamic_objects);
 
-  if (dynamic_objects.empty())
-    return Z3_mk_false(z3_ctx);
+  exprt sym("symbol", array_typet());
+  sym.type().subtype() = bool_typet();
+  sym.set("identifier", "__ESBMC_is_dynamic");
+  exprt pointerobj("pointer_object", signedbv_typet());
+  exprt ptrsrc = expr.op0();
+  pointerobj.move_to_operands(ptrsrc);
+  exprt index("index", bool_typet());
+  index.move_to_operands(sym, pointerobj);
 
-  convert_bv(expr.op0(), operand0);
-
-  operand0 = z3_api.mk_tuple_select(z3_ctx, operand0, 0);
-
-  if (dynamic_objects.size() == 1) {
-    operand1 = convert_number(dynamic_objects.front(), config.ansi_c.int_width, true);
-    bv = Z3_mk_eq(z3_ctx, operand0, operand1);
-  } else   {
-    unsigned i = 0, size;
-    size = dynamic_objects.size() + 1;
-    Z3_ast args[size];
-
-    for (std::vector<unsigned>::const_iterator
-         it = dynamic_objects.begin();
-         it != dynamic_objects.end();
-         it++, i++)
-      args[i] = Z3_mk_eq(z3_ctx, operand0, convert_number(*it, config.ansi_c.int_width, true));
-
-    bv = Z3_mk_or(z3_ctx, i, args);
-  }
-
-  DEBUGLOC;
-
+  Z3_ast bv;
+  convert_bv(index, bv);
   return bv;
 }
 
