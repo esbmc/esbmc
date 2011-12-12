@@ -111,7 +111,9 @@ public:
   inline void id(const irep_idt &_data)
   { write().data=_data; }
 
-protected:
+  // These methods should be protected; however to make things play nice with
+  // the C++ frontend right now, they're made public.
+//protected:
   // This class has to be able to fiddle with ireps directly. Ewww.
   friend class irep_serializationt;
 
@@ -131,7 +133,7 @@ protected:
   
   void set(const irep_namet &name, const long value);
   void set(const irep_namet &name, const irept &irep);
-public:
+//public:
   void remove(const irep_namet &name);
   void move_to_sub(irept &irep);
   void move_to_named_sub(const irep_namet &name, irept &irep);
