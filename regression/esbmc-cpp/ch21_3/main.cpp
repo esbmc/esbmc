@@ -1,14 +1,17 @@
 // Fig. 21.15: fig21_15.cpp
 // Testing Standard Library vector class template 
 // element-manipulation functions.
+
 #include <iostream>
-#include <iterator>
 using std::cout;
 using std::endl;
 
 #include <vector>     // vector class-template definition
 #include <algorithm>  // copy algorithm
 
+
+#include <iterator> // ostream_iterator iterator
+#include <stdexcept> // out_of_range exception
 
 int main()
 {
