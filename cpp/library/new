@@ -1,4 +1,24 @@
 #ifndef STL_NEW
 #define STL_NEW
 
+#include "definitions.h"
+
+namespace std {
+
+typedef void (*new_handler)();
+
+new_handler set_new_handler (new_handler new_p) throw();
+
+}
+
+namespace std {
+
+struct bad_alloc{
+   bad_alloc(const char *_Message);
+   bad_alloc() {__ESBMC_assert(0, "Exception occurred: std::bad_alloc");}
+   virtual ~bad_alloc();
+};
+
+}
+
 #endif

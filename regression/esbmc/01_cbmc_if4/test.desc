@@ -1,0 +1,3 @@
+main.c
+--decide --boolector-bv
+^VERIFICATION SUCCESSFUL$

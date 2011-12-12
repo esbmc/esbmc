@@ -1,4 +1,8 @@
-SRC = c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
+ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+
+SRCS= c_typecast.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \
       c_types.cpp c_final.cpp trans_unit.cpp ansi_c_typecheck.cpp \
       c_link.cpp c_preprocess.cpp c_link_type_eq.cpp \
@@ -12,56 +16,57 @@ SRC = c_typecast.cpp y.tab.cpp lex.yy.cpp ansi_c_parser.cpp \
       convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp \
 
-OBJ = $(SRC:.cpp=.o)
+OBJS= y.tab.o lex.yy.o
 
 INCLUDES= -I .. -I ../util
 
-all: cpp_dir headers_dir ansi-c.o
+all: $(OBJDIR)/.deps cpp_dir headers_dir $(OBJDIR)/ansi-c.o
 
-include ../config.inc
-include ../common
+include $(ESBMCDIR)/common
 
 ###############################################################################
 
 y.tab.cpp: parser.y
 	$(YACC) $(YFLAGS) $$flags -pyyansi_c -d parser.y -o y.tab.cpp
-
-y.tab.h: y.tab.cpp
 	if [ -e y.tab.hpp ] ; then mv y.tab.hpp y.tab.h ; else \
         mv y.tab.cpp.h y.tab.h ; fi
+
+y.tab.h: y.tab.cpp
 
 lex.yy.cpp: scanner.l
 	$(LEX) -Pyyansi_c -olex.yy.cpp scanner.l
 
 # extra dependencies
-y.tab.o: y.tab.cpp y.tab.h
-lex.yy.o: y.tab.cpp lex.yy.cpp y.tab.h
+$(OBJDIR)/y.tab.o: y.tab.cpp y.tab.h
+$(OBJDIR)/lex.yy.o: y.tab.cpp lex.yy.cpp y.tab.h
 
 ###############################################################################
 
-cprover_library.o: cprover_library.cpp
+$(OBJDIR)/cprover_library.o: cprover_library.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@ -c
 
-cprover_blank_library.o: cprover_library.cpp
+$(OBJDIR)/cprover_blank_library.o: cprover_library.cpp
 	$(CXX) $(CXXFLAGS) -DNO_CPROVER_LIBRARY $^ -o $@ -c
 
-C2GOTO_DEPS= $(OBJ) ../util/util.o ../langapi/langapi.o ../big-int/bigint.o \
-	../goto-programs/goto-programs.o ../pointer-analysis/pointer-analysis.o\
-	cpp/preproc.o headers/headers.o
+C2GOTO_DEPS= $(OBJS) ../util/$(OBJDIR)/util.o ../langapi/$(OBJDIR)/langapi.o \
+	     ../big-int/$(OBJDIR)/bigint.o \
+	     ../goto-programs/$(OBJDIR)/goto-programs.o \
+	     ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \
+	     cpp/preproc.o headers/headers.o
 
-c2goto: c2goto.cpp cprover_blank_library.o | $(C2GOTO_DEPS)
+c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(C2GOTO_DEPS)
 
-clib32.o: c2goto library/*.c
+$(OBJDIR)/clib32.o: c2goto library/*.c
 	./c2goto library/*.c --32 --output clib32.goto --no-lock-check
-	$(LD) $(LDFLAGS) -b binary clib32.goto -o clib32.o -r
+	$(LD) $(LDFLAGS) -b binary clib32.goto -o $(OBJDIR)/clib32.o -r
 
-clib64.o: c2goto library/*.c
+$(OBJDIR)/clib64.o: c2goto library/*.c
 	./c2goto library/*.c --32 --output clib64.goto --no-lock-check
-	$(LD) $(LDFLAGS) -b binary clib64.goto -o clib64.o -r
+	$(LD) $(LDFLAGS) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
 
-clib.o: c2goto clib32.o clib64.o
-	$(LD) $(LDFLAGS) clib32.o clib64.o -o clib.o -r
+$(OBJDIR)/clib.o: c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
+	$(LD) $(LDFLAGS) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o -o $(OBJDIR)/clib.o -r
 
 ###############################################################################
 
@@ -81,13 +86,16 @@ headers_dir:
 
 ###############################################################################
 
-ansi-c.o: $(OBJ) cprover_library.o clib.o cpp/preproc.o headers/headers.o
+$(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/preproc.o headers/headers.o
 	$(LD) $(LDFLAGS) -r -o $@ $^
 
 clean:
 	$(MAKE) -C cpp clean
 	$(MAKE) -C headers clean
-	-rm -f $(OBJ) *.o y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
+	-rm -f $(MAINOBJ)
+	-rm -f $(OBJS) y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
 	-rm -f c2goto
 	-rm -f *.goto
-	-rm *.d
+	-rm -f $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(OBJDIR)/clib.o
+	-rm -f $(OBJDIR)/cprover_blank_library.o $(OBJDIR)/cprover_library.o
+	-rm $(OBJDIR)/.deps

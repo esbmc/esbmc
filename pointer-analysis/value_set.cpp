@@ -508,8 +508,9 @@ void value_sett::get_value_set_rec(
     
     if(statement=="function_call")
     {
+      std::cout << "value_sett: expr.pretty(): " << expr.pretty() << std::endl;
       // these should be gone
-      throw "unexpected function_call sideeffect";
+      throw "value_sett: unexpected function_call sideeffect";
     }
     else if(statement=="malloc")
     {
@@ -896,12 +897,23 @@ void value_sett::assign(
       exprt rhs_member;
 
       if(rhs.id()=="unknown" ||
-         rhs.id()=="invalid")
+         rhs.id()=="invalid" )
       {
         rhs_member=exprt(rhs.id(), subtype);
       }
+      //else if (rhs.id()=="index") {
+    	  //it should be fixed!
+    	  //std::cout << "ignoring: " << rhs.pretty() << std::endl;
+      //}
       else
       {
+    	if (rhs.id() == "index") {
+          if (lhs.id() == "symbol") {
+            assign(lhs_member, rhs.op0(), ns, add_to_sets);
+            return;
+    	  }
+    	}
+
         assert(base_type_eq(rhs.type(), type, ns));
 
         rhs_member=make_member(rhs, name, ns);
@@ -1370,6 +1382,10 @@ void value_sett::apply_code(
       symbol_exprt lhs("value_set::return_value", code.op0().type());
       assign(lhs, code.op0(), ns);
     }
+  }
+  else if(statement=="cpp-try")
+  {
+    // doesn't do anything
   }
   else
   {

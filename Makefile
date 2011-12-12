@@ -1,14 +1,8 @@
+ESBMCDIR = $(shell pwd)
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+
 all: esbmc
-
-ifndef SATDIR
-SATDIR= $(shell pwd)
-endif
-
-export SATDIR
-
-include config.inc
-include local.inc
-include common
 
 ###############################################################################
 
@@ -27,17 +21,21 @@ ansi-c: infrastructure
 DIRS= big-int util langapi solvers goto-symex pointer-analysis goto-programs \
       ansi-c esbmc cpp
 
+NJOBS := $(shell if [ -f /proc/cpuinfo ]; \
+                    then echo `cat /proc/cpuinfo | grep 'processor' | wc -l`; \
+                    else echo 1; fi)
 $(DIRS):
-	$(MAKE) -C $@
+	$(MAKE) -j$(NJOBS) -C $@
 
 clean:
 	for dir in $(DIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
+	rm $(OBJDIR)/.depends
 
 .PHONY: $(DIRS) clean
 
-esbmc: infrastructure languages
+esbmc: $(OBJDIR)/.depends infrastructure languages
 
 ###############################################################################
 
@@ -88,3 +86,5 @@ endif
 ifdef MODULE_FLOATBV
 solvers.dir: floatbv.dir
 endif
+
+include $(ESBMCDIR)/common

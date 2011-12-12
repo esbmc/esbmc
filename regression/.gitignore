@@ -1,0 +1,5 @@
+*.out
+.smv*
+main
+main.out
+tests.log

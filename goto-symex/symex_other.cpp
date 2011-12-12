@@ -122,7 +122,15 @@ void goto_symext::symex_other(
   {
     // we ignore this for now
   }
+  else if (statement=="assign"){
+	  assert(0);
+  }
+  else if(statement=="cpp-try")
+  {
+	  //try to symbolically execute the try block
+	  symex(state, ex_state, to_code(code.op0()), node_id);
+  }
   else
-    throw "unexpected statement: "+id2string(statement);
+    throw "goto_symext: unexpected statement: "+id2string(statement);
 }
 

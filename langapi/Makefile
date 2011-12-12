@@ -1,20 +1,12 @@
-SRC = mode.cpp language_ui.cpp languages.cpp language_util.cpp
+ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/langapi.o
+all: $(OBJDIR)/.deps $(MAINOBJ)
 
-OBJ = $(SRC:.cpp=.o)
+SRCS = mode.cpp language_ui.cpp languages.cpp language_util.cpp
 
-INCLUDES= -I .. -I ../util
-
-all: langapi.o
-
-include ../config.inc
-include ../common
-
-###############################################################################
-
-langapi.o: $(OBJ)
-	$(LD) $(LDFLAGS) -r -o langapi.o $(OBJ)
-	
 clean:
-	rm -f *.o
-	rm -f *.d
+	-rm -f $(OBJS) $(OBJDIR)/.deps
 
+include $(ESBMCDIR)/common

@@ -1,0 +1,3 @@
+main.c
+--unwind 1 --z3-bv --context-switch 2 --schedule --depth 300
+^VERIFICATION FAILED$

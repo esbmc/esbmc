@@ -332,8 +332,8 @@ int cbmc_parseoptionst::doit()
     cmdline.isset("gen-interface"))
 
   {
-    error("This version of CBMC has no support for "
-          " hardware modules. Please use hw-cbmc.");
+    error("This version has no support for "
+          " hardware modules.");
     return 1;
   }
 

@@ -1,25 +1,26 @@
 #ifndef STL_CSTRING
 #define STL_CSTRING
 
-#undef NULL
-#if defined(__cplusplus)
-#define NULL 0
-#else
-#define NULL ((void *)0)
-#endif
-
-char* nondet_char();
-unsigned int nondet_uint();
-typedef unsigned int size_t;
-
-char* strcpy(char* dest, char* source)
+char *strcpy(char *dest, const char* src)
 {
-	return nondet_char();
+	__ESBMC_HIDE:
+	char *ret = dest;
+    while (*dest++ = *src++)
+        ;
+    return ret;
 }
 
-char* strncpy(char* dest, char* source, int)
+char *strncpy(char *dest, const char *src, size_t n)
 {
-	return nondet_char();
+	__ESBMC_HIDE:
+	char *ret = dest;
+    do {
+        if (!n--)
+            return ret;
+    } while (*dest++ = *src++);
+    while (n--)
+        *dest++ = 0;
+    return ret;
 }
 
 char *strcat(char *dst, const char *src)
@@ -54,19 +55,66 @@ int strcmp(const char *s1, const char *s2)
 	return *(const unsigned char*)s1-*(const unsigned char*)s2;
 }
 
-int strncmp(char* str1, char* str2, int)
+int strncmp(const char* s1, const char* s2, size_t n)
 {
-	return nondet_uint();
+	__ESBMC_HIDE:
+    while(n--)
+        if(*s1++!=*s2++)
+            return *(unsigned char*)(s1 - 1) - *(unsigned char*)(s2 - 1);
+    return 0;
 }
 
-char* strtok(char* str, const char* delimiters)
+char *strchr(const char *s, int c)
 {
-	return nondet_char();
+    while (*s != (char)c)
+        if (!*s++)
+            return 0;
+    return (char *)s;
 }
 
-int strlen(const char* str)
+size_t strcspn(const char *s1, const char *s2)
 {
-	return nondet_uint();
+    size_t ret=0;
+    while(*s1)
+        if(strchr(s2,*s1))
+            return ret;
+        else
+            s1++,ret++;
+    return ret;
+}
+
+size_t strspn(const char *s1, const char *s2)
+{
+    size_t ret=0;
+    while(*s1 && strchr(s2,*s1++))
+        ret++;
+    return ret;
+}
+
+char* strtok(char* str, const char* delim)
+{
+#if 0
+	static char* p=0;
+	if(str)
+		p=str;
+	else if(!p)
+		return 0;
+	str=p+strspn(p,delim);
+	p=str+strcspn(str,delim);
+	if(p==str)
+		return p=0;
+	p = *p ? *p=0,p+1 : 0;
+	return str;
+#endif
+	return nondet_charPointer();
+}
+
+size_t strlen(const char *s)
+{
+	__ESBMC_HIDE:
+	const char *p = s;
+	while (*s) ++s;
+	return s - p;
 }
 
 #endif

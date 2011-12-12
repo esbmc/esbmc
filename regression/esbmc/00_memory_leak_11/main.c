@@ -1,0 +1,16 @@
+//#include <stdio.h>
+#include <stdlib.h>
+
+void really ( void );
+
+int main ( void )
+{ 
+  char *memoryArea = malloc(10);
+  char *newArea = malloc(10);
+
+  memoryArea[3]= newArea;
+
+  free(memoryArea);
+
+  return 0;
+}

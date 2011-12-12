@@ -1,0 +1,3 @@
+main.c
+--string-abstraction --unwind 5
+^VERIFICATION SUCCESSFUL$

@@ -713,7 +713,7 @@ void value_set_fit::get_value_set_rec(
     if(statement=="function_call")
     {
       // these should be gone
-      throw "unexpected function_call sideeffect";
+      throw "value_set_fit: unexpected function_call sideeffect";
     }
     else if(statement=="malloc")
     {

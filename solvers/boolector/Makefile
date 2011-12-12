@@ -1,18 +1,14 @@
-include ../../config.inc
-include ../../common
-include ../../local.inc
+ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/boolector.o
+all: $(OBJDIR)/.deps $(MAINOBJ)
 
-CXXFLAGS+= -I../.. -I../../util -I$(BOOLECTOR)/include
+SRCS= boolector_dec.cpp boolector_prop.cpp boolector_conv.cpp boolector_get.cpp
 
-OBJS= boolector_dec.o boolector_prop.o boolector_conv.o boolector_get.o
-
-all: boolector.o
-
-boolector.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
+INCLUDES= -I$(BOOLECTOR)/include
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
-.PHONY: clean
+include $(ESBMCDIR)/common

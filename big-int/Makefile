@@ -1,17 +1,16 @@
-include ../config.inc
-include ../common
+ESBMCDIR= $(shell pwd)/..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+all: $(OBJDIR)/.deps test-bigint
 
 RM = rm -f
-OBJ = bigint-test.o bigint-func.o bigint.o
-PRG = test-bigint
+SRCS= bigint-test.cpp bigint-func.cpp bigint.cpp
 
-all : $(PRG)
+include $(ESBMCDIR)/common
 
-clean :
-	$(RM) $(OBJ) $(PRG)
-	-rm *.d
+clean:
+	-$(RM) $(OBJS)
+	-rm -f $(OBJDIR)/.deps
 
-$(PRG) : $(OBJ)
-	$(CXX) $(CXXFLAGS) -o $(PRG) $(OBJ)
-
-dep:
+test-bigint: $(OBJS)
+	$(CXX) $(CXXFLAGS) -o test-bigint $(OBJS)

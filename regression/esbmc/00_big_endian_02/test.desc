@@ -1,0 +1,3 @@
+main.c
+--big-endian --z3-bv
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,7 @@
+main.c
+--decide
+^SIGNAL=0$
+^EXIT=0$
+^VERIFICATION SUCCESSFUL$
+--
+^warning: ignoring

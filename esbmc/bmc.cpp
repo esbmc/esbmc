@@ -541,7 +541,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #endif
     else if(options.get_bool_option("dimacs"))
       solver = new dimacs_solver(*this);
-    else if(options.get_bool_option("bl"))
+    else if(options.get_bool_option("boolector-bv"))
 #ifdef BOOLECTOR
       solver = new boolector_solver(*this);
 #else
@@ -564,7 +564,13 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       throw "This version of ESBMC was not compiled with Z3 support";
 #endif
     else
+      // If we have Z3, default to Z3. Otherwise, user needs to explicitly
+      // select an SMT solver
+#ifdef Z3
+      solver = new z3_solver(*this);
+#else
       throw "Please specify a SAT/SMT solver to use";
+#endif
 
     ret = solver->run_solver();
     delete solver;

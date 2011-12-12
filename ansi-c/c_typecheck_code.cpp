@@ -85,10 +85,16 @@ void c_typecheck_baset::typecheck_code(codet &code)
     typecheck_asm(code);
   else if(statement=="start_thread")
     typecheck_start_thread(code);
+  else if(statement=="cpp-try") {
+	//flag=true;
+	//std::cout << "!!!!!!!!!!!!!statement: " << statement << std::endl;
+	//std::cout << "!!!!!!!!!!!!!typecheck_code::code.pretty(): " << code.pretty() << std::endl;
+	typecheck_cpptry(code);
+  }
   else
   {
     err_location(code);
-    str << "unexpected statement: " << statement;
+    str << "c_typecheck_baset: unexpected statement: " << statement;
     throw 0;
   }
 }
@@ -107,6 +113,26 @@ Function: c_typecheck_baset::typecheck_asm
 
 void c_typecheck_baset::typecheck_asm(codet &code __attribute__((unused)))
 {
+}
+
+/*******************************************************************\
+
+Function: c_typecheck_baset::typecheck_cpptry
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void c_typecheck_baset::typecheck_cpptry(codet &code)
+{
+    Forall_operands(it, code) {
+    	//std::cout << "!!!!!!!!!!!!!typecheck_code::to_code(*it).pretty(): " << to_code(*it).pretty() << std::endl;
+      typecheck_code(to_code(*it));
+    }
 }
 
 /*******************************************************************\

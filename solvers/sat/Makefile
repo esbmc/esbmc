@@ -1,61 +1,55 @@
-include ../../config.inc
-include ../../common
-include ../../local.inc
+ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/satsolvers.o
+all: $(OBJDIR)/.deps $(MAINOBJ)
 
-CXXFLAGS+= -I../../util -I../../
+SRCS= cnf.cpp dimacs_cnf.cpp cnf_clause_list.cpp pbs_dimacs_cnf.cpp \
+	read_dimacs_cnf.cpp resolution_proof.cpp satcheck.cpp
 
-OBJS= cnf.o dimacs_cnf.o cnf_clause_list.o pbs_dimacs_cnf.o \
-	read_dimacs_cnf.o resolution_proof.o satcheck.o
-
-ifneq ($(CHAFF),)
-TARGETS+= chaff.o
+ifdef CHAFF
+OBJS+= $(OBJDIR)/chaff.o
 endif
 
-ifneq ($(BOOLEFORCE),)
-TARGETS+= booleforce.o
+ifdef BOOLEFORCE
+OBJS+= $(OBJDIR)/booleforce.o
 endif
 
-ifneq ($(MINISAT),)
-TARGETS+= minisat.o
+ifdef MINISAT
+OBJS+= $(OBJDIR)/minisat.o
 CXXFLAGS+= -DHAVE_MINISAT
 endif
 
-ifneq ($(MINISAT2),)
-TARGETS+= minisat2.o
+ifdef MINISAT2
+OBJS+= $(OBJDIR)/minisat2.o
 CXXFLAGS+= -DHAVE_MINISAT2
 endif
 
-ifneq ($(SMVSAT),)
-TARGETS+= smvsat.o
+ifdef SMVSAT
+OBJS+= $(OBJDIR)/smvsat.o
 endif
 
-all: satsolvers.o
-
-satsolvers.o: $(TARGETS) $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS)
-
-chaff.o: satcheck_zchaff.cpp satcheck_zcore.cpp
+$(OBJDIR)/chaff.o: satcheck_zchaff.cpp satcheck_zcore.cpp
 	$(CXX) -c -o $@ $^ $(CXXFLAGS) -lsat -L $(CHAFF) -I $(CHAFF)
 
-booleforce.o: satcheck_booleforce.cpp
+$(OBJDIR)/booleforce.o: satcheck_booleforce.cpp
 	$(CXX) -c -o $@ $^ $(CXXFLAGS) -lbooleforce -L $(BOOLEFORCE) -I $(BOOLEFORCE)
 
-minisat.o: satcheck_minisat.cpp
-	$(CXX) -c -o minisat_tmp.o $^ $(CXXFLAGS) -I $(MINISAT) -DHAVE_MINISAT
-	$(LD) -o $@ minisat_tmp.o -r $(MINISAT)/Solver.o $(MINISAT)/Proof.o \
+$(OBJDIR)/minisat.o: satcheck_minisat.cpp
+	$(CXX) -c -o $(OBJDIR)/minisat_tmp.o $^ $(CXXFLAGS) -I $(MINISAT) -DHAVE_MINISAT
+	$(LD) -o $@ $(OBJDIR)/minisat_tmp.o -r $(MINISAT)/Solver.o $(MINISAT)/Proof.o \
 		$(MINISAT)/File.o $(LDFLAGS)
 
-minisat2.o: satcheck_minisat2.cpp
-	$(CXX) -c -o minisat2_tmp.o $^ $(CXXFLAGS) -I $(MINISAT2)/core \
+$(OBJDIR)/minisat2.o: satcheck_minisat2.cpp
+	$(CXX) -c -o $(OBJDIR)/minisat2_tmp.o $^ $(CXXFLAGS) -I $(MINISAT2)/core \
 		-I $(MINISAT2)/mtl -I $(MINISAT2)/simp -DHAVE_MINISAT2
-	$(LD) -o $@ minisat2_tmp.o -r $(MINISAT2)/simp/SimpSolver.o \
+	$(LD) -o $@ $(OBJDIR)/minisat2_tmp.o -r $(MINISAT2)/simp/SimpSolver.o \
 		$(MINISAT2)/core/Solver.o $(LDFLAGS)
 
-smvsat.o: satcheck_smvsat.cpp
+$(OBJDIR)/smvsat.o: satcheck_smvsat.cpp
 	$(CXX) -c -o $@ $^ $(CXXFLAGS) -I $(SMVSAT)/include $(SMVSAT)/lib/libsmvsat.a
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/minisat_tmp.o $(OBJDIR)/.deps
 
-.PHONY: clean
+include $(ESBMCDIR)/common

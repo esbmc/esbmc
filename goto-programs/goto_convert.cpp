@@ -285,6 +285,7 @@ void goto_convertt::convert(
 {
   const irep_idt &statement=code.get_statement();
   //std::cout << "goto_convertt::convert : " << statement << " : " << from_expr(ns,"",code) << std::endl;
+  //std::cout << "goto_convertt::convert code.pretty(): " << code.pretty() << std::endl;
 
   dest.instructions.clear();
 
@@ -351,18 +352,39 @@ void goto_convertt::convert(
   else if(statement=="cpp_delete" ||
           statement=="cpp_delete[]")
     convert_cpp_delete(code, dest);
+  else if(statement=="cpp-try")
+    convert_cpp_try(code, dest);
   else
   {
 //std::cout << "goto_convertt::convert::copy other code : " << statement  << std::endl;
     copy(code, OTHER, dest);
   }
 
-  // ben: if there is no instruction in the program, add skip to it
+  // if there is no instruction in the program, add skip to it
   if(dest.instructions.empty())
   {
     dest.add_instruction(SKIP);
     dest.instructions.back().code.make_nil();
   }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::convert_block
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::convert_cpp_try(
+  const codet &code,
+  goto_programt &dest)
+{
+	convert(to_code(code.op0()), dest);
 }
 
 /*******************************************************************\

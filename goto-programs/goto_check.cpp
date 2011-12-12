@@ -3,6 +3,7 @@
 Module: GOTO Programs
 
 Author: Daniel Kroening, kroening@kroening.com
+		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
@@ -483,6 +484,8 @@ void goto_checkt::check_rec(
   guardt &guard,
   bool address)
 {
+  //std::cout << "check_rec::expr.pretty(): " << expr.pretty() << std::endl;
+
   if(address)
   {
     if(expr.id()=="dereference")
@@ -579,7 +582,6 @@ void goto_checkt::check_rec(
   forall_operands(it, expr)
     check_rec(*it, guard, false);
 
-  //std::cout << "expr.id(): " << expr.id() << std::endl;
   if(expr.id()=="index")
   {
     bounds_check(expr, guard);
@@ -743,7 +745,8 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       {
         check(i.code);
       }
-      else if(statement=="printf")
+      else if(statement=="printf"
+    		  || statement=="cpp-try")
       {
         forall_operands(it, i.code)
           check(*it);
