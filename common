@@ -2,6 +2,9 @@
 # makefile. Configuration options that are needed during the makefile itself
 # should be put in another config file.
 
+# Make ubuntu happy (which uses dash by default)
+SHELL := /bin/bash
+
 # In case includer hasn't included yet,
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
