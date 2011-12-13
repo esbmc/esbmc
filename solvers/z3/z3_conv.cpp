@@ -4196,6 +4196,8 @@ z3_convt::convert_pointer(const exprt &expr, Z3_ast &bv)
 
   offset = convert_number(0, config.ansi_c.int_width, true);
 
+  //DEBUGLOC;
+
   if (expr.id() == "symbol" ||
       expr.id() == "constant" ||
       expr.id() == "string-constant") {
