@@ -63,5 +63,6 @@ clean:
 	-$(MAKE) -C cvc clean
 	-$(MAKE) -C smt clean
 	-$(MAKE) -C dplib clean
+	-rm $(OBJDIR)/.depends
 
 include $(ESBMCDIR)/common
