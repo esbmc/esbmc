@@ -31,7 +31,7 @@ clean:
 	for dir in $(DIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
-	rm $(OBJDIR)/.depends
+	-rm $(OBJDIR)/.depends
 
 .PHONY: $(DIRS) clean
 

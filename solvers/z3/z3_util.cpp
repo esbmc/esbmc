@@ -160,7 +160,7 @@ Z3_ast z3_convt::convert_number(int value, u_int width, bool type)
   std::string out;
   out = "j: "+ 2;
   static Z3_ast number_var;
-  char val[2];
+  char val[16];
 
   sprintf(val,"%i", value);
 
