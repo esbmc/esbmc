@@ -57,6 +57,16 @@ static void make_integer(std::string value)
   PARSER.set_location(*yyansi_clval.expr);
   yyansi_clval.expr->type()=typet("integer");
   yyansi_clval.expr->cformat(yytext);
+
+  // Unfortunately the value may have a "U", "L", or "UL" or even "ULL" suffix
+  int i;
+  for (i = value.size() - 1; i != 0; i--) {
+    if (!isdigit(value.at(i)))
+      value.erase(i);
+    else
+      break;
+  }
+
   yyansi_clval.expr->value(value);
   return;
 }
