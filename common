@@ -24,8 +24,8 @@ $(OBJDIR)/%.o : %.c
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 
-CFLAGS+= $(GCCFLAGS) $(INCLUDES)
-CXXFLAGS+= $(GCCFLAGS) $(INCLUDES)
+CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES)
+CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES)
 
 .SUFFIXES:	.C .d .cpp
 
