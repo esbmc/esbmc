@@ -19,6 +19,14 @@ irept nil_rep_storage;
 const irept::dt empty_d;
 #endif
 
+void
+irept::dump(void) const
+{
+
+  std::cout << pretty(0) << std::endl;
+  return;
+}
+
 /*******************************************************************\
 
 Function: get_nil_irep

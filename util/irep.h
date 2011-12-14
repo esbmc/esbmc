@@ -60,6 +60,9 @@ public:
   
   typedef std::map<irep_namet, irept> named_subt;
 
+  // Dump contents of irep to stdout. Debugging only.
+  void dump() const;
+
   bool is_nil() const { return id()=="nil"; }
   bool is_not_nil() const { return id()!="nil"; }
 
