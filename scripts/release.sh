@@ -135,7 +135,7 @@ fi
 git reset --hard
 
 # Check back out whatever ref we had before.
-git checkout $(CURHEAD)
+git checkout $CURHEAD
 git stash pop
 
 # fini
