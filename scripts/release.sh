@@ -44,6 +44,10 @@ if test $? != 0; then
   exit 1
 fi
 
+# Install our configuration files.
+cp ./scripts/config.inc .
+cp ./scripts/local.inc .
+
 # And build build build
 rm -rf .release
 mkdir .release
