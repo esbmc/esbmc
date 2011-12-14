@@ -1,6 +1,6 @@
 #!/bin/bash
 
-$(clang++ -w -emit-llvm *.cpp -c)
+$(clang++ -w -emit-llvm *.cpp -c -g)
 #if [ -e main.o ]
 #  then {
 
