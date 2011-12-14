@@ -58,10 +58,10 @@ endif
 ###############################################################################
 
 esbmc: $(OBJS)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o esbmc $(OBJS) $(LIBS)
+	$(CXX) $(CXXFLAGS) -o esbmc $(OBJS) $(LIBS)
 
 #cbmc-static: $(OBJS)
-#	$(CXX) $(LDFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
+#	$(CXX) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
 
 clean:
 	-rm -f $(OBJS) $(OBJDIR)/.deps esbmc
