@@ -51,70 +51,91 @@ if test $? != 0; then
   exit 1
 fi
 
-# Install our configuration files.
-cp ./scripts/config.inc .
-cp ./scripts/local.inc .
+# And wrap all our modifications into a function, so that upon error we can
+# cleanly remove all changes to the checked out copy.
 
-# And build build build
-rm -rf .release
-mkdir .release
+function dobuild () {
 
-# Use 64 bit libraries
-export SATDIR=$satdir64
+  # Install our configuration files.
+  cp ./scripts/config.inc .
+  cp ./scripts/local.inc .
 
-echo "Building 64 bit ESBMC"
-make clean > /dev/null 2>&1
-make > /dev/null 2>&1
+  # And build build build
+  rm -rf .release
+  mkdir .release
 
-if test $? != 0; then
-  echo "Build failed."
-  exit 1
-fi
+  # Use 64 bit libraries
+  export SATDIR=$satdir64
 
-cp esbmc/esbmc .release/esbmc
-
-if test $buildcompat = 1; then
-  echo "Building compat 64 bit ESBMC"
+  echo "Building 64 bit ESBMC"
   make clean > /dev/null 2>&1
-  env CC=gcc34 CXX=g++34 make > /dev/null 2>&1
+  make > /dev/null 2>&1
 
   if test $? != 0; then
     echo "Build failed."
-    exit 1
+    return 1
   fi
 
-  cp esbmc/esbmc .release/esbmc_compat
-fi
+  cp esbmc/esbmc .release/esbmc
 
-# Try for 32 bits
-echo "Building 32 bit ESBMC"
-export SATDIR=$satdir32
-
-buildfor32bits=0
-make clean > /dev/null 2>&1
-
-env EXTRACFLAGS="-m32" EXTRACXXFLAGS="-m32" LDFLAGS="-m elf_i386" make > /dev/null 2>&1
-
-if test $? != 0; then
-  echo "Buildling 32 bits failed; do you have the right headers and libraries?"
-  exit 1
-else
-  buildfor32bits=1
-  cp esbmc/esbmc .release/esbmc32
   if test $buildcompat = 1; then
-    echo "Building 32 bit compat ESBMC"
-
+    echo "Building compat 64 bit ESBMC"
     make clean > /dev/null 2>&1
-
-    env CC=gcc34 CXX=g++34 EXTRACFLAGS="-m32" EXTRACXXFLAGS="-m32" LDFLAGS="-m elf_i386" make > /dev/null 2>&1
+    env CC=gcc34 CXX=g++34 make > /dev/null 2>&1
 
     if test $? != 0; then
-      echo "Building 32 bit compat ESBMC failed"
-      exit 1
+      echo "Build failed."
+      return 1
     fi
 
-    cp esbmc/esbmc .release/esbmc32_compat
+    cp esbmc/esbmc .release/esbmc_compat
   fi
+
+  # Try for 32 bits
+  echo "Building 32 bit ESBMC"
+  export SATDIR=$satdir32
+
+  buildfor32bits=0
+  make clean > /dev/null 2>&1
+
+  env EXTRACFLAGS="-m32" EXTRACXXFLAGS="-m32" LDFLAGS="-m elf_i386" make > /dev/null 2>&1
+
+  if test $? != 0; then
+    echo "Buildling 32 bits failed; do you have the right headers and libraries?"
+    return 1
+  else
+    buildfor32bits=1
+    cp esbmc/esbmc .release/esbmc32
+    if test $buildcompat = 1; then
+      echo "Building 32 bit compat ESBMC"
+
+      make clean > /dev/null 2>&1
+
+      env CC=gcc34 CXX=g++34 EXTRACFLAGS="-m32" EXTRACXXFLAGS="-m32" LDFLAGS="-m elf_i386" make > /dev/null 2>&1
+
+      if test $? != 0; then
+        echo "Building 32 bit compat ESBMC failed"
+        return 1
+      fi
+
+      cp esbmc/esbmc .release/esbmc32_compat
+    fi
+  fi
+
+}
+
+dobuild
+
+# We now have a set of binaries (or an error)
+if test $? != 0; then
+  echo "Build failed"
 fi
 
-# We now have a set of binaries.
+# Clear anything we left behind
+git reset --hard
+
+# Check back out whatever ref we had before.
+git checkout $(CURHEAD)
+git stash pop
+
+# fini
