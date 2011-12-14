@@ -75,7 +75,7 @@ void goto_convert_functionst::goto_convert()
 
   forall_symbols(it, context.symbols)
   {
-    if(!it->second.is_type && it->second.type.id()=="code")
+    if(!it->second.is_type && it->second.type.is_code())
       symbol_list.push_back(it->first);
   }
 
@@ -160,7 +160,7 @@ void goto_convert_functionst::add_return(
   t->location=location;
 
   exprt rhs=exprt("sideeffect", f.type.return_type());
-  rhs.set("statement", "nondet");
+  rhs.statement("nondet");
   t->code.move_to_operands(rhs);
 }
 
@@ -205,7 +205,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
       arg_ids.push_back(identifier);
     }
 
-    if(symbol.value.id()!="code")
+    if(!symbol.value.is_code())
     {
       err_location(symbol.value);
       throw "got invalid code for function `"+id2string(identifier)+"'";
@@ -217,7 +217,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
 
     if(to_code(symbol.value).get_statement()=="block")
       end_location=static_cast<const locationt &>(
-        symbol.value.find("#end_location"));
+        symbol.value.end_location());
     else
       end_location.make_nil();
 
@@ -239,11 +239,11 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
     goto_programt::targett t=f.body.add_instruction();
     t->type=END_FUNCTION;
     t->location=end_location;
-    t->code.set("identifier", identifier);
+    t->code.identifier(identifier);
 
     if(to_code(symbol.value).get_statement()=="block")
       t->location=static_cast<const locationt &>(
-        symbol.value.find("#end_location"));
+        symbol.value.end_location());
 
     // do local variables
     Forall_goto_program_instructions(i_it, f.body)
@@ -256,7 +256,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
     f.body.number_targets();
 
     if(hide(f.body))
-      f.type.set("#hide", true);
+      f.type.hide(true);
   }
 
 }

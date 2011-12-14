@@ -22,24 +22,24 @@ class typet:public irept
   explicit typet(const irep_idt &_id):irept(_id) { }
   
   const typet &subtype() const
-  { return (typet &)find("subtype"); }
+  { return (typet &)find(f_subtype); }
    
   typet &subtype()
-  { return (typet &)add("subtype"); }
+  { return (typet &)add(f_subtype); }
    
   typedef std::vector<typet> subtypest;
 
   subtypest &subtypes()
-  { return (subtypest &)add("subtypes").get_sub(); }
+  { return (subtypest &)add(f_subtypes).get_sub(); }
   
   const subtypest &subtypes() const
-  { return (const subtypest &)find("subtypes").get_sub(); }
+  { return (const subtypest &)find(f_subtypes).get_sub(); }
    
   bool has_subtypes() const
-  { return !find("subtypes").is_nil(); }
+  { return !find(f_subtypes).is_nil(); }
    
   bool has_subtype() const
-  { return !find("subtype").is_nil(); }
+  { return !find(f_subtype).is_nil(); }
 
   void move_to_subtypes(typet &type); // destroys expr
 
@@ -47,12 +47,12 @@ class typet:public irept
 
   const locationt &location() const
   {
-    return (const locationt &)find("#location");
+    return (const locationt &)find(f_location);
   }
 
   locationt &location()
   {
-    return (locationt &)add("#location");
+    return (locationt &)add(f_location);
   }
   
   typet &add_type(const std::string &name)
@@ -64,6 +64,45 @@ class typet:public irept
   {
     return (const typet &)find(name);
   }
+
+  static irep_idt t_integer;
+  static irep_idt t_signedbv;
+  static irep_idt t_unsignedbv;
+  static irep_idt t_rational;
+  static irep_idt t_real;
+  static irep_idt t_natural;
+  static irep_idt t_complex;
+  static irep_idt t_floatbv;
+  static irep_idt t_fixedbv;
+  static irep_idt t_bool;
+  static irep_idt t_empty;
+  static irep_idt t_symbol; // So there're expressions of id "symbol" and types
+                            // of id "symbol". Great.
+  static irep_idt t_struct;
+  static irep_idt t_union;
+  static irep_idt t_class;
+  static irep_idt t_code;
+  static irep_idt t_array;
+  static irep_idt t_pointer;
+  static irep_idt t_reference;
+  static irep_idt t_bv;
+  static irep_idt t_string;
+
+  static irep_idt a_identifier;
+  static irep_idt a_name;
+  static irep_idt a_components;
+  static irep_idt a_methods;
+  static irep_idt a_arguments;
+  static irep_idt a_return_type;
+  static irep_idt a_size;
+  static irep_idt a_width;
+  static irep_idt a_integer_bits;
+  static irep_idt a_f;
+
+protected:
+  static irep_idt f_subtype;
+  static irep_idt f_subtypes;
+  static irep_idt f_location;
 };
 
 typedef std::list<typet> type_listt;

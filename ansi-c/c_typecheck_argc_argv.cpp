@@ -25,8 +25,7 @@ Function: c_typecheck_baset::add_argc_argv
 
 void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
 {
-  const irept &arguments=
-    main_symbol.type.find("arguments");
+  const irept &arguments=main_symbol.type.arguments();
 
   if(arguments.get_sub().size()==0)
     return;
@@ -84,7 +83,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     
     exprt size_expr("+", argc_new_symbol->type);
     size_expr.copy_to_operands(symbol_expr(*argc_new_symbol), one_expr);
-    argv_type.add("size").swap(size_expr);
+    argv_type.size(size_expr);
 
     symbolt argv_symbol;
 
@@ -124,7 +123,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     exprt size_expr = symbol_expr(*envp_new_size_symbol);
 
     envp_symbol.type.id("array");
-    envp_symbol.type.add("size").swap(size_expr);
+    envp_symbol.type.size(size_expr);
     
     symbolt *envp_new_symbol;
     move_symbol(envp_symbol, envp_new_symbol);

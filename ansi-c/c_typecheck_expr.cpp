@@ -86,9 +86,9 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_unary_arithmetic(expr);
   else if(expr.id()=="not")
     typecheck_expr_unary_boolean(expr);
-  else if(expr.id()=="and" || expr.id()=="or")
+  else if(expr.is_and() || expr.id()=="or")
     typecheck_expr_binary_boolean(expr);
-  else if(expr.id()=="address_of")
+  else if(expr.is_address_of())
     typecheck_expr_address_of(expr);
   else if(expr.id()=="dereference")
     typecheck_expr_dereference(expr);
@@ -119,7 +119,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_comma(expr);
   else if(expr.id()=="if")
     typecheck_expr_trinary(expr);
-  else if(expr.id()=="code")
+  else if(expr.is_code())
     typecheck_code(to_code(expr));
   else if(expr.id()=="builtin_va_arg")
     typecheck_expr_builtin_va_arg(expr);
@@ -176,8 +176,8 @@ void c_typecheck_baset::typecheck_expr_comma(exprt &expr)
   expr.type()=expr.op1().type();
 
   // make this an l-value if the last operand is one
-  if(expr.op1().get_bool("#lvalue"))
-    expr.set("#lvalue", true);
+  if(expr.op1().cmt_lvalue())
+    expr.cmt_lvalue(true);
 }
 
 /*******************************************************************\
@@ -224,8 +224,9 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
     throw "builtin_offsetof expects no operands";
   }
 
-  typet &type=static_cast<typet &>(expr.add("offsetof_type"));
+  typet type=static_cast<const typet &>(expr.offsetof_type());
   typecheck_type(type);
+  expr.offsetof_type(type);
 
   if(type.id()!="symbol")
   {
@@ -233,7 +234,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
     throw "builtin_offsetof expects struct type";
   }
 
-  const irep_idt &identifier=type.get("identifier");
+  const irep_idt &identifier=type.identifier();
   symbolst::const_iterator s_it=context.symbols.find(identifier);
 
   if(s_it==context.symbols.end())
@@ -245,22 +246,22 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
 
   // found it
   const symbolt &symbol=s_it->second;
-  const irept &components=symbol.type.find("components");
-  const irep_idt &member=expr.find("member").get("identifier");
+  const irept &components=symbol.type.components();
+  const irep_idt &member=expr.member_irep().identifier();
   bool found=false;
   mp_integer offset=0;
 
   c_sizeoft csize(*this);
   forall_irep(it, components.get_sub())
   {
-    if(it->get("name")==member)
+    if(it->name()==member)
     {
       found=true;
       break;
     }
     else
     {
-      const typet &type=static_cast<const typet &>(it->find("type"));
+      const typet &type=it->type();
       exprt size_expr=csize(type);
 
       mp_integer i;
@@ -295,7 +296,7 @@ Function: c_typecheck_baset::typecheck_expr_operands
 void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
 {
   if(expr.id()=="sideeffect" &&
-     expr.get("statement")=="function_call")
+     expr.statement()=="function_call")
   {
     // don't do function operand
     assert(expr.operands().size()==2);
@@ -303,7 +304,7 @@ void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
     typecheck_expr(expr.op1()); // arguments
   }
   else if(expr.id()=="sideeffect" &&
-          expr.get("statement")=="statement_expression")
+          expr.statement()=="statement_expression")
   {
     typecheck_code(to_code(expr.op0()));
   }
@@ -331,7 +332,7 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   // adjust identifier, if needed
   replace_symbol(expr);
 
-  const irep_idt &identifier=expr.get("identifier");
+  const irep_idt &identifier=expr.identifier();
 
   // look it up
   symbolst::const_iterator s_it=context.symbols.find(identifier);
@@ -387,12 +388,12 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
     expr.location()=location;
 
     if(symbol.lvalue)
-      expr.set("#lvalue", true);
+      expr.cmt_lvalue(true);
 
-    if(expr.type().id()=="code") // function designator
+    if(expr.type().is_code()) // function designator
     { // special case: this is sugar for &f
       exprt tmp("address_of", pointer_typet());
-      tmp.set("#implicit", true);
+      tmp.implicit(true);
       tmp.type().subtype()=expr.type();
       tmp.location()=expr.location();
       tmp.move_to_operands(expr);
@@ -425,7 +426,7 @@ void c_typecheck_baset::typecheck_side_effect_statement_expression(
 
   codet &code=to_code(expr.op0());
 
-  assert(code.get("statement")=="block");
+  assert(code.statement()=="block");
 
   // the type is the type of the last statement in the
   // block
@@ -451,7 +452,7 @@ void c_typecheck_baset::typecheck_side_effect_statement_expression(
     sideeffect.location()=fc.location();
 
     sideeffect.type()=
-      static_cast<const typet &>(fc.function().type().find("return_type"));
+      static_cast<const typet &>(fc.function().type().return_type());
 
     expr.type()=sideeffect.type();
 
@@ -468,7 +469,7 @@ void c_typecheck_baset::typecheck_side_effect_statement_expression(
       code_expr.location() = fc.location();
 
       exprt assign("sideeffect");
-      assign.set("statement", "assign");
+      assign.statement("assign");
       assign.location()=fc.location();
       assign.move_to_operands(fc.lhs(), sideeffect);
       assign.type()=assign.op1().type();
@@ -499,7 +500,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 
   if(expr.operands().size()==0)
   {
-    type.swap((typet &)expr.add("sizeof-type"));
+    type = ((typet &)expr.sizeof_type());
     typecheck_type(type);
   }
   else if(expr.operands().size()==1)
@@ -526,11 +527,11 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 
     // special case: ANSI-C 99 section 6.3.2.1 paragraph 4
 
-    if(expr.id()=="address_of" &&
-       expr.get_bool("#implicit") &&
+    if(expr.is_address_of() &&
+       expr.implicit() &&
        expr.operands().size()==1 &&
        expr.op0().id()=="symbol" &&
-       expr.op0().type().id()=="code")
+       expr.op0().type().is_code())
     {
       // undo implicit address_of
       exprt tmp;
@@ -561,7 +562,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 
   new_expr.swap(expr);
 
-  expr.add("#c_sizeof_type")=type;
+  expr.cmt_c_sizeof_type(type);
 }
 
 /*******************************************************************\
@@ -615,9 +616,9 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   }
 
   if(!is_number(expr_type) &&
-     expr_type.id()!="bool" &&
+     !expr_type.is_bool() &&
      expr_type.id()!="pointer" &&
-     expr_type.id()!="array" &&
+     !expr_type.is_array() &&
      expr_type.id()!="empty" &&
      expr_type.id()!="c_enum" &&
      expr_type.id()!="incomplete_c_enum")
@@ -633,11 +634,11 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   if(is_number(op_type) ||
      op_type.id()=="c_enum" ||
      op_type.id()=="incomplete_c_enum" ||
-     op_type.id()=="bool" ||
+     op_type.is_bool() ||
      op_type.id()=="pointer")
   {
   }
-  else if(op_type.id()=="array" ||
+  else if(op_type.is_array() ||
           op_type.id()=="incomplete_array")
   {
     index_exprt index;
@@ -671,17 +672,17 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   {
     // zero typecasted to a pointer is NULL
     expr.id("constant");
-    expr.set("value", "NULL");
     expr.remove("operands");
+    expr.value("NULL");
     return;
   }
 
   // the new thing is an lvalue if the previous one is
   // an lvalue, and it's just a pointer type cast
-  if(expr.op0().get_bool("#lvalue"))
+  if(expr.op0().cmt_lvalue())
   {
     if(expr_type.id()=="pointer")
-      expr.set("#lvalue", true);
+      expr.cmt_lvalue(true);
   }
 }
 
@@ -701,7 +702,7 @@ void c_typecheck_baset::make_index_type(exprt &expr)
 {
   const typet &full_type=follow(expr.type());
 
-  if(full_type.id()=="bool")
+  if(full_type.is_bool())
   {
     expr.make_typecast(index_type());
   }
@@ -759,10 +760,10 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
     const typet &array_full_type=follow(array_expr.type());
     const typet &index_full_type=follow(index_expr.type());
 
-    if(array_full_type.id()!="array" &&
+    if(!array_full_type.is_array() &&
        array_full_type.id()!="incomplete_array" &&
        array_full_type.id()!="pointer" &&
-       (index_full_type.id()=="array" ||
+       (index_full_type.is_array() ||
         index_full_type.id()=="incomplete_array" ||
         index_full_type.id()=="pointer"))
       std::swap(array_expr, index_expr);
@@ -772,11 +773,11 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
 
   const typet &final_array_type=follow(array_expr.type());
 
-  if(final_array_type.id()=="array" ||
+  if(final_array_type.is_array() ||
      final_array_type.id()=="incomplete_array")
   {
-    if(array_expr.get_bool("#lvalue"))
-      expr.set("#lvalue", true);
+    if(array_expr.cmt_lvalue())
+      expr.cmt_lvalue(true);
   }
   else if(final_array_type.id()=="pointer")
   {
@@ -786,7 +787,7 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
     addition.operands().swap(expr.operands());
     expr.move_to_operands(addition);
     expr.id("dereference");
-    expr.set("#lvalue", true);
+    expr.cmt_lvalue(true);
   }
   else
   {
@@ -860,7 +861,7 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
     if(follow(o_type0)==follow(o_type1))
     {
       const typet &final_type=follow(o_type0);
-      if(final_type.id()!="array" &&
+      if(!final_type.is_array() &&
          final_type.id()!="incomplete_array" &&
          final_type.id()!="incomplete_struct")
       {
@@ -905,14 +906,14 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
     if(type0.id()=="pointer" && op1.is_zero())
     {
       op1=exprt("constant", type0);
-      op1.set("value", "NULL");
+      op1.value("NULL");
       return;
     }
 
     if(type1.id()=="pointer" && op0.is_zero())
     {
       op0=exprt("constant", type1);
-      op0.set("value", "NULL");
+      op0.value("NULL");
       return;
     }
 
@@ -968,7 +969,7 @@ void c_typecheck_baset::typecheck_expr_ptrmember(exprt &expr)
   const typet &final_op0_type=follow(expr.op0().type());
 
   if(final_op0_type.id()!="pointer" &&
-     final_op0_type.id()!="array")
+     !final_op0_type.is_array())
   {
     err_location(expr);
     str << "ptrmember operator requires pointer type "
@@ -1038,17 +1039,17 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
   }
 
   const irep_idt &component_name=
-    expr.get("component_name");
+    expr.component_name();
 
   const irept &components=
-    type.find("components");
+    type.components();
 
   irept component;
 
   component.make_nil();
 
   forall_irep(it, components.get_sub())
-    if(it->get("name")==component_name)
+    if(it->name()==component_name)
     {
       component=*it;
       break;
@@ -1062,7 +1063,7 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
     throw 0;
   }
 
-  const irep_idt &access=component.get("access");
+  const irep_idt &access=component.access();
 
   if(access=="private")
   {
@@ -1072,20 +1073,19 @@ void c_typecheck_baset::typecheck_expr_member(exprt &expr)
     throw 0;
   }
 
-  expr.type()=
-    static_cast<const typet &>(component.find("type"));
+  expr.type()=component.type();
 
-  if(op0.get_bool("#lvalue"))
-    expr.set("#lvalue", true);
+  if(op0.cmt_lvalue())
+    expr.cmt_lvalue(true);
 
-  if(op0.get_bool("#constant"))
-    expr.set("#constant", true);
+  if(op0.cmt_constant())
+    expr.cmt_constant(true);
 
   // copy method identifier
-  const irep_idt &identifier=component.get("#identifier");
+  const irep_idt &identifier=component.cmt_identifier();
 
   if(identifier!="")
-    expr.set("#identifier", identifier);
+    expr.cmt_identifier(identifier);
 }
 
 /*******************************************************************\
@@ -1224,24 +1224,24 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
   // special case: address of function designator
   // ANSI-C 99 section 6.3.2.1 paragraph 4
 
-  if(op.id()=="address_of" &&
-     op.get_bool("#implicit") &&
+  if(op.is_address_of() &&
+     op.implicit() &&
      op.operands().size()==1 &&
      op.op0().id()=="symbol" &&
-     op.op0().type().id()=="code")
+     op.op0().type().is_code())
   {
     // make the implicit address_of an explicit address_of
     exprt tmp;
     tmp.swap(op);
-    tmp.set("#implicit", false);
+    tmp.implicit(false);
     expr.swap(tmp);
     return;
   }
 
   expr.type()=typet("pointer");
 
-  if(op.type().id()!="code" &&
-     !op.get_bool("#lvalue"))
+  if(!op.type().is_code() &&
+     !op.cmt_lvalue())
   {
     err_location(expr);
     str << "address_of error: `" << to_string(op)
@@ -1250,7 +1250,7 @@ void c_typecheck_baset::typecheck_expr_address_of(exprt &expr)
   }
 
   // turn &array into &(array[0])
-  if(follow(op.type()).id()=="array")
+  if(follow(op.type()).is_array())
   {
     index_exprt index;
     index.array()=op;
@@ -1288,7 +1288,7 @@ void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
 
   const typet op_type=follow(op.type());
 
-  if(op_type.id()=="array" ||
+  if(op_type.is_array() ||
      op_type.id()=="incomplete_array")
   {
     // *a is the same as a[0]
@@ -1316,7 +1316,7 @@ void c_typecheck_baset::typecheck_expr_dereference(exprt &expr)
     throw 0;
   }
 
-  expr.set("#lvalue", true);
+  expr.cmt_lvalue(true);
 
   // if you dereference a pointer pointing to
   // a function, you get a pointer again
@@ -1339,10 +1339,10 @@ Function: c_typecheck_baset::typecheck_expr_function_identifier
 
 void c_typecheck_baset::typecheck_expr_function_identifier(exprt &expr)
 {
-  if(expr.type().id()=="code")
+  if(expr.type().is_code())
   {
     exprt tmp("address_of", pointer_typet());
-    tmp.set("#implicit", true);
+    tmp.implicit(true);
     tmp.type().subtype()=expr.type();
     tmp.location()=expr.location();
     tmp.move_to_operands(expr);
@@ -1381,7 +1381,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
     const typet &type0=op0.type();
     const typet &final_type0=follow(type0);
 
-    if(!op0.get_bool("#lvalue"))
+    if(!op0.cmt_lvalue())
     {
       err_location(op0);
       str << "prefix operator error: `" << to_string(op0)
@@ -1389,7 +1389,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
       throw 0;
     }
 
-    if(type0.get_bool("#constant"))
+    if(type0.cmt_constant())
     {
       err_location(op0);
       str << "error: `" << to_string(op0)
@@ -1398,7 +1398,7 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
     }
 
     if(is_number(final_type0) ||
-       final_type0.id()=="bool" ||
+       final_type0.is_bool() ||
        final_type0.id()=="c_enum" ||
        final_type0.id()=="incomplete_c_enum" ||
        final_type0.id()=="pointer")
@@ -1460,11 +1460,11 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   {
     replace_symbol(f_op);
 
-    if(context.symbols.find(f_op.get("identifier"))==context.symbols.end())
+    if(context.symbols.find(f_op.identifier())==context.symbols.end())
     {
       // maybe this is an undeclared function
       // let's just add it
-      const irep_idt &identifier=f_op.get("identifier");
+      const irep_idt &identifier=f_op.identifier();
 
       symbolt new_symbol;
 
@@ -1472,8 +1472,8 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
       new_symbol.base_name=std::string(id2string(identifier), 3, std::string::npos);
       new_symbol.location=expr.location();
       new_symbol.type=code_typet();
-      new_symbol.type.set("#incomplete", true);
-      new_symbol.type.add("return_type")=int_type();
+      new_symbol.type.incomplete(true);
+      new_symbol.type.return_type(int_type());
       // TODO: should add arguments
 
       symbolt *symbol_ptr;
@@ -1500,8 +1500,8 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   }
 
   // do implicit dereference
-  if(f_op.id()=="address_of" &&
-     f_op.get_bool("#implicit") &&
+  if(f_op.is_address_of() &&
+     f_op.implicit() &&
      f_op.operands().size()==1)
   {
     exprt tmp;
@@ -1511,13 +1511,13 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   else
   {
     exprt tmp("dereference", f_op_type.subtype());
-    tmp.set("#implicit", true);
+    tmp.implicit(true);
     tmp.location()=f_op.location();
     tmp.move_to_operands(f_op);
     f_op.swap(tmp);
   }
 
-  if(f_op.type().id()!="code")
+  if(!f_op.type().is_code())
   {
     err_location(f_op);
     throw "expected code as argument";
@@ -1569,7 +1569,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
       exprt is_zero_string_expr("is_zero_string", bool_typet());
       is_zero_string_expr.operands()=expr.arguments();
-      is_zero_string_expr.set("#lvalue", true); // make it an lvalue
+      is_zero_string_expr.cmt_lvalue(true); // make it an lvalue
       expr.swap(is_zero_string_expr);
     }
     else if(identifier==CPROVER_PREFIX "zero_string_length")
@@ -1582,7 +1582,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
       exprt zero_string_length_expr("zero_string_length", uint_type());
       zero_string_length_expr.operands()=expr.arguments();
-      zero_string_length_expr.set("#lvalue", true); // make it an lvalue
+      zero_string_length_expr.cmt_lvalue(true); // make it an lvalue
       expr.swap(zero_string_length_expr);
     }
     else if(identifier==CPROVER_PREFIX "POINTER_OFFSET")
@@ -1716,7 +1716,7 @@ void c_typecheck_baset::typecheck_function_call_arguments(
 
   // no. of arguments test
 
-  if(code_type.get_bool("#incomplete"))
+  if(code_type.incomplete())
   {
     // can't check
   }
@@ -1746,13 +1746,12 @@ void c_typecheck_baset::typecheck_function_call_arguments(
       const code_typet::argumentt &argument_type=
         argument_types[i];
 
-      const typet &op_type=
-        static_cast<const typet &>(argument_type.find("type"));
+      const typet &op_type=argument_type.type();
 
-      if(op_type.id()=="bool" &&
+      if(op_type.is_bool() &&
          op.id()=="sideeffect" &&
-         op.get("statement")=="assign" &&
-         op.type().id()!="bool")
+         op.statement()=="assign" &&
+         !op.type().is_bool())
       {
         err_location(expr);
         warning("assignment where Boolean argument is expected");
@@ -1765,7 +1764,7 @@ void c_typecheck_baset::typecheck_function_call_arguments(
       // don't know type, just do standard conversion
 
       const typet &type=follow(op.type());
-      if(type.id()=="array" || type.id()=="incomplete_array")
+      if(type.is_array() || type.id()=="incomplete_array")
         implicit_typecast(op, pointer_typet(empty_typet()));
     }
   }
@@ -1792,11 +1791,11 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
     // save location
     locationt location=expr.location();
 
-    mp_integer value=string2integer(expr.get_string("value"));
-    const std::string &given_width=expr.type().get_string("#width");
-    bool is_unsigned=expr.type().get_bool("#unsigned");
-    bool is_hex_or_oct=expr.get_bool("#hex_or_oct");
-    const std::string cformat=expr.get_string("#cformat");
+    mp_integer value=string2integer(expr.value().as_string());
+    const std::string &given_width=expr.type().cmt_width().as_string();
+    bool is_unsigned=expr.type().cmt_unsigned();
+    bool is_hex_or_oct=expr.hex_or_oct();
+    const std::string cformat=expr.cformat().as_string();
 
     if(value<0)
       throw "unexpected value";
@@ -1861,15 +1860,15 @@ void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
     }
 
     typet value_type(is_signed?"signedbv":"unsignedbv");
-    value_type.set("width", width);
+    value_type.width(width);
 
     expr=from_integer(value, value_type);
     expr.location()=location;
 
     if(!cformat.empty())
-      expr.set("#cformat", cformat);
+      expr.cformat(cformat);
   }
-  else if(type.id()=="array" ||
+  else if(type.is_array() ||
           type.id()=="incomplete_array")
   {
     // nothing to do
@@ -2078,7 +2077,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
   const typet &type1=op1.type();
 
   if(expr.id()=="-" ||
-     (expr.id()=="sideeffect" && expr.get("statement")=="assign-"))
+     (expr.id()=="sideeffect" && expr.statement()=="assign-"))
   {
     if(type0.id()=="pointer" &&
        type1.id()=="pointer")
@@ -2086,7 +2085,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
       typet pointer_diff_type;
 
       pointer_diff_type=typet("signedbv");
-      pointer_diff_type.set("width", config.ansi_c.pointer_diff_width);
+      pointer_diff_type.width(config.ansi_c.pointer_diff_width);
 
       expr.type()=pointer_diff_type;
       return;
@@ -2100,7 +2099,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
     }
   }
   else if(expr.id()=="+" ||
-          (expr.id()=="sideeffect" && expr.get("statement")=="assign+"))
+          (expr.id()=="sideeffect" && expr.statement()=="assign+"))
   {
     exprt *pop, *intop;
 
@@ -2175,12 +2174,12 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
   if(expr.operands().size()!=2)
   {
     err_location(expr);
-    str << "operator `" << expr.get("statement")
+    str << "operator `" << expr.statement()
         << "' expects two operands";
     throw 0;
   }
 
-  const irep_idt &statement=expr.get("statement");
+  const irep_idt &statement=expr.statement();
 
   exprt &op0=expr.op0();
   exprt &op1=expr.op1();
@@ -2191,8 +2190,8 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
     assert(op0.operands().size()==1);
 
     // set #lvalue and #constant
-    op0.set("#lvalue", op0.op0().get_bool("#lvalue"));
-    op0.set("#constant", op0.op0().get_bool("#constant"));
+    op0.cmt_lvalue(op0.op0().cmt_lvalue());
+    op0.cmt_constant(op0.op0().cmt_constant());
   }
 
   const typet o_type0=op0.type();
@@ -2204,7 +2203,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
 
   expr.type()=type0;
 
-  if(!op0.get_bool("#lvalue"))
+  if(!op0.cmt_lvalue())
   {
     err_location(expr);
     str << "assignment error: `" << to_string(op0)
@@ -2212,7 +2211,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
     throw 0;
   }
 
-  if(o_type0.get_bool("#constant"))
+  if(o_type0.cmt_constant())
   {
     err_location(expr);
     str << "error: `" << to_string(op0)
@@ -2242,12 +2241,12 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
       {
         if(type0.id()=="unsignedbv")
         {
-          expr.set("statement", "assign_lshr");
+          expr.statement("assign_lshr");
           return;
         }
         else if(type0.id()=="signedbv")
         {
-          expr.set("statement", "assign_ashr");
+          expr.statement("assign_ashr");
           return;
         }
       }
@@ -2261,7 +2260,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
       typecheck_expr_pointer_arithmetic(expr);
       return;
     }
-    else if(final_type0.id()=="bool" ||
+    else if(final_type0.is_bool() ||
             final_type0.id()=="c_enum" ||
             final_type0.id()=="incomplete_c_enum")
     {

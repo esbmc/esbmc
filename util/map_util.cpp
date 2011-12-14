@@ -87,7 +87,7 @@ void tuple_component(const exprt &src, unsigned nr, exprt &dest)
   else
   {
     dest.id("member");
-    dest.set("component", nr);
+    dest.component(nr);
     dest.copy_to_operands(src);
   }
 }

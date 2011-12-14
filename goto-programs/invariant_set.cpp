@@ -167,7 +167,7 @@ std::string inv_object_storet::build_string(const exprt &expr) const
         if(bv_width(expr.type())>=bv_width(expr.op0().type()))
           return build_string(expr.op0());
       }
-      else if(expr.op0().type().id()=="bool")
+      else if(expr.op0().type().is_bool())
       {
         return build_string(expr.op0());
       }
@@ -180,7 +180,7 @@ std::string inv_object_storet::build_string(const exprt &expr) const
   {
     // NULL?
     if(expr.type().id()=="pointer")
-      if(expr.get("value")=="NULL")
+      if(expr.value()=="NULL")
         return "0";
   
     mp_integer i;
@@ -197,11 +197,11 @@ std::string inv_object_storet::build_string(const exprt &expr) const
   if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
-    return build_string(expr.op0())+"."+expr.get_string("component_name");
+    return build_string(expr.op0())+"."+expr.component_name().as_string();
   }
   
   if(expr.id()=="symbol")
-    return expr.get_string("identifier");
+    return expr.identifier().as_string();
 
   return "";
 }
@@ -240,7 +240,7 @@ Function: inv_object_storet::is_constant_address
 
 bool inv_object_storet::is_constant_address(const exprt &expr)
 {
-  if(expr.id()=="address_of" ||
+  if(expr.is_address_of() ||
      expr.id()=="implicit_address_of" ||
      expr.id()=="reference_to")
     if(expr.operands().size()==1)
@@ -599,7 +599,7 @@ Function: invariant_sett::strengthen_rec
 
 void invariant_sett::strengthen_rec(const exprt &expr)
 {
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
     throw "non-Boolean argument to strengthen()";
 
   #if 0
@@ -625,7 +625,7 @@ void invariant_sett::strengthen_rec(const exprt &expr)
   {
     // give up, we expect NNF
   }
-  else if(expr.id()=="and")
+  else if(expr.is_and())
   {
     forall_operands(it, expr)
       strengthen_rec(*it);
@@ -708,10 +708,10 @@ void invariant_sett::strengthen_rec(const exprt &expr)
           it!=c.end();
           it++)
       {
-        const irep_idt &component_name=it->get("name");
+        const irep_idt &component_name=it->name();
 
-        lhs_member_expr.set("component_name", component_name);
-        rhs_member_expr.set("component_name", component_name);
+        lhs_member_expr.component_name(component_name);
+        rhs_member_expr.component_name(component_name);
         lhs_member_expr.type()=it->type();
         rhs_member_expr.type()=it->type();
 
@@ -836,7 +836,7 @@ Function: invariant_sett::implies
 
 tvt invariant_sett::implies_rec(const exprt &expr) const
 {
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
     throw "implies: non-Boolean expression";
     
   #if 0
@@ -852,7 +852,7 @@ tvt invariant_sett::implies_rec(const exprt &expr) const
   {
     // give up, we expect NNF
   }
-  else if(expr.id()=="and")
+  else if(expr.is_and())
   {
     forall_operands(it, expr)
       if(implies_rec(*it)!=tvt(true))
@@ -964,7 +964,7 @@ Function: invariant_sett::nnf
 
 void invariant_sett::nnf(exprt &expr, bool negate)
 {
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
     throw "nnf: non-Boolean expression";
 
   if(expr.is_true())
@@ -983,7 +983,7 @@ void invariant_sett::nnf(exprt &expr, bool negate)
     tmp.swap(expr.op0());
     expr.swap(tmp);
   }
-  else if(expr.id()=="and")
+  else if(expr.is_and())
   {
     if(negate) expr.id("or");
     
@@ -1083,7 +1083,7 @@ Function: invariant_sett::simplify
 void invariant_sett::simplify(
   exprt &expr) const
 {
-  if(expr.id()=="address_of" ||
+  if(expr.is_address_of() ||
      expr.id()=="implicit_address_of" ||
      expr.id()=="reference_to")
     return;
@@ -1146,7 +1146,7 @@ exprt invariant_sett::get_constant(const exprt &expr) const
             if(value==0)
             {
               exprt tmp("constant", expr.type());
-              tmp.set("value", "NULL");
+              tmp.value("NULL");
               return tmp;
             }
           }
@@ -1449,7 +1449,7 @@ Function: invariant_sett::apply_code
 
 void invariant_sett::apply_code(const codet &code)
 {
-  const irep_idt &statement=code.get("statement");
+  const irep_idt &statement=code.statement();
 
   if(statement=="block")
   {

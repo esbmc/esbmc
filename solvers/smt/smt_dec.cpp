@@ -102,9 +102,9 @@ decision_proceduret::resultt smt_dect::dec_solve()
 
     // Insert the identifier in the set of defines
     if(defines[i].second)
-      let_id.insert(expr.op0().get_string("identifier"));
+      let_id.insert(expr.op0().identifier().as_string());
     else
-      flet_id.insert(expr.op0().get_string("identifier"));
+      flet_id.insert(expr.op0().identifier().as_string());
 
     convert_smt_expr(expr.op0());
     temp_out << " ";

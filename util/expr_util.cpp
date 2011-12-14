@@ -37,7 +37,7 @@ exprt gen_zero(const typet &type)
      type_id=="natural" ||
      type_id=="complex")
   {
-    result.set("value", "0");
+    result.value("0");
   }
   else if(type_id=="unsignedbv" ||
           type_id=="signedbv" ||
@@ -52,7 +52,7 @@ exprt gen_zero(const typet &type)
     for(unsigned i=0; i<width; i++)
       value+='0';
 
-    result.set("value", value);
+    result.value(value);
   }
   else if(type_id=="bool")
   {
@@ -60,7 +60,7 @@ exprt gen_zero(const typet &type)
   }
   else if(type_id=="pointer")
   {
-    result.set("value", "NULL");
+    result.value("NULL");
   }
   else
     result.make_nil();
@@ -92,16 +92,16 @@ exprt gen_one(const typet &type)
      type_id=="natural" ||
      type_id=="complex")
   {
-    result.set("value", "1");
+    result.value("1");
   }
   else if(type_id=="unsignedbv" ||
           type_id=="signedbv")
   {
     std::string value;
-    for(int i=0; i<atoi(type.get("width").c_str())-1; i++)
+    for(int i=0; i<atoi(type.width().c_str())-1; i++)
       value+='0';
     value+='1';
-    result.set("value", value);
+    result.value(value);
   }
   else if(type_id=="fixedbv")
   {
@@ -172,6 +172,13 @@ Function: gen_binary
 \*******************************************************************/
 
 exprt gen_binary(const std::string &id, const typet &type, const exprt &op1, const exprt &op2)
+{
+  exprt result(id, type);
+  result.copy_to_operands(op1, op2);
+  return result;
+}
+
+exprt gen_binary(irep_idt &id, const typet &type, const exprt &op1, const exprt &op2)
 {
   exprt result(id, type);
   result.copy_to_operands(op1, op2);
@@ -350,7 +357,7 @@ Function: symbol_expr
 exprt symbol_expr(const symbolt &symbol)
 {
   exprt tmp("symbol", symbol.type);
-  tmp.set("identifier", symbol.name);
+  tmp.identifier(symbol.name);
   return tmp;
 }
 

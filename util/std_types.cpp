@@ -25,6 +25,7 @@ Function: bv_typet::get_width
 unsigned bv_typet::get_width() const
 {
   return atoi(get("width").c_str());
+
 }
 
 /*******************************************************************\
@@ -41,7 +42,7 @@ Function: fixedbv_typet::get_integer_bits
 
 unsigned fixedbv_typet::get_integer_bits() const
 {
-  const std::string &integer_bits=get_string("integer_bits");
+  const std::string &integer_bits=get("integer_bits").as_string();
   assert(integer_bits!="");
   return atoi(integer_bits.c_str());
 }
@@ -178,7 +179,7 @@ bool struct_typet::is_prefix_of(const struct_typet &other) const
       tt_it++)
   {
     if(ot_it->type()!=tt_it->type() ||
-       ot_it->get("name")!=tt_it->get("name"))
+       ot_it->name()!=tt_it->name())
     {
       return false; // they just don't match
     }
@@ -203,6 +204,6 @@ Function: is_reference
 
 bool is_reference(const typet &type)
 {
-  return type.id()=="pointer" && type.get_bool("#reference");
+  return type.id()=="pointer" && type.reference();
 }
 

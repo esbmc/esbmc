@@ -48,7 +48,7 @@ Function: bv_width
 
 unsigned bv_width(const typet &type)
 {
-  return atoi(type.get("width").c_str());
+  return atoi(type.width().c_str());
 }
 
 

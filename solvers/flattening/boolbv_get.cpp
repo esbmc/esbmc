@@ -33,7 +33,7 @@ exprt boolbvt::get(const exprt &expr) const
   if(expr.id()=="symbol" ||
      expr.id()=="nondet_symbol")
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
 
     boolbv_mapt::mappingt::const_iterator it=
       map.mapping.find(identifier);
@@ -102,7 +102,7 @@ exprt boolbvt::bv_get_rec(
   assert(bv.size()==unknown.size());
   assert(bv.size()>=offset+width);
 
-  if(type.id()=="bool")
+  if(type.is_bool())
   {
     if(!unknown[offset])
     {
@@ -121,7 +121,7 @@ exprt boolbvt::bv_get_rec(
 
   if(bvtype==IS_UNKNOWN)
   {
-    if(type.id()=="array")
+    if(type.is_array())
     {
       unsigned sub_width;
       const typet &subtype=type.subtype();
@@ -146,14 +146,14 @@ exprt boolbvt::bv_get_rec(
     }
     else if(type.id()=="struct")
     {
-      const irept &components=type.find("components");
+      const irept &components=type.components();
       unsigned new_offset=0;
       exprt::operandst op;
       op.reserve(components.get_sub().size());
 
       forall_irep(it, components.get_sub())
       {
-        const typet &subtype=static_cast<const typet &>(it->find("type"));
+        const typet &subtype=it->type();
         op.push_back(nil_exprt());
 
         unsigned sub_width;
@@ -170,7 +170,7 @@ exprt boolbvt::bv_get_rec(
     }
     else if(type.id()=="union")
     {
-      const irept &components=type.find("components");
+      const irept &components=type.components();
 
       unsigned component_bits=
         integer2long(address_bits(components.get_sub().size()));
@@ -196,12 +196,9 @@ exprt boolbvt::bv_get_rec(
       exprt value("union", type);
       value.operands().resize(1);
 
-      value.set("component_name",
-                components.get_sub()[component_nr].get("name"));
+      value.component_name(components.get_sub()[component_nr].name());
       
-      const typet &subtype=
-        static_cast<const typet &>(
-          components.get_sub()[component_nr].find("type"));
+      const typet &subtype=components.get_sub()[component_nr].type();
 
       value.op0()=bv_get_rec(bv, unknown, offset, subtype);
 
@@ -244,7 +241,7 @@ exprt boolbvt::bv_get_rec(
   case IS_RANGE:
     {
       mp_integer int_value=binary2integer(value, false);
-      mp_integer from=string2integer(type.get_string("from"));
+      mp_integer from=string2integer(type.from().as_string());
 
       constant_exprt value_expr(type);
       value_expr.set_value(integer2string(int_value+from));
@@ -294,7 +291,7 @@ Function: boolbvt::bv_get_cache
 
 exprt boolbvt::bv_get_cache(const exprt &expr) const
 {
-  if(expr.type().id()=="bool") // boolean?
+  if(expr.type().is_bool()) // boolean?
     return get(expr);
     
   // look up literals in cache
@@ -389,7 +386,7 @@ exprt boolbvt::bv_get_unbounded_array(
   if(size_mpint>100)
   {
     result=exprt("array-list", type);
-    result.type().set("size", integer2string(size_mpint));
+    result.type().size(integer2string(size_mpint));
 
     result.operands().reserve(values.size()*2);
 
@@ -406,7 +403,7 @@ exprt boolbvt::bv_get_unbounded_array(
   {
     // set the size
     result=exprt("array", type);
-    result.type().set("size", size);
+    result.type().size(size);
 
     unsigned long size_int=integer2long(size_mpint);
 

@@ -6,138 +6,73 @@
 
 #include <ansi-c/c_types.h>
 
-#define YYSTYPE unsigned
-#define YYSTYPE_IS_TRIVIAL 1
+#define mto(x, y) (x)->move_to_operands(*(y))
+#define mts(x, y) (x)->move_to_subtypes(*(y))
+#define binary(x, y, l, id, z) { init(&(x), (id)); \
+  (x)->location()=(l)->location(); \
+  (x)->reserve_operands(2); mto((x), (y)); mto((x), (z)); }
 
-#define mto(x, y) stack(x).move_to_operands(stack(y))
-#define mts(x, y) ((typet &)stack(x)).move_to_subtypes((typet &)stack(y))
-#define binary(x, y, l, id, z) { init(x, id); \
-  stack(x).location()=stack(l).location(); \
-  stack(x).reserve_operands(2); mto(x, y); mto(x, z); }
-
-/*******************************************************************\
-
-Function: init
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void init(YYSTYPE &expr)
+static void init(exprt **e)
 {
-  newstack(expr);
+  *e = new exprt();
 }
 
-/*******************************************************************\
-
-Function: init
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void init(YYSTYPE &expr, const std::string &id)
+static void init(typet **e)
 {
-  newstack(expr);
-  stack(expr).id(id);
+  *e = new typet();
 }
 
-/*******************************************************************\
-
-Function: set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void set(YYSTYPE expr, const std::string &id)
+static void init(ansi_c_declarationt **d)
 {
-  stack(expr).id(id);
+
+  *d = new ansi_c_declarationt();
 }
 
-/*******************************************************************\
+static void init(exprt **expr, const std::string &id)
+{
+  init(expr);
+  (*expr)->id(id);
+}
 
-Function: statement
+static void init(typet **type, const std::string &id)
+{
+  init(type);
+  (*type)->id(id);
+}
 
-  Inputs:
+static void set(irept &expr, const std::string &id)
+{
+  expr.id(id);
+}
 
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void statement(YYSTYPE &expr, const std::string &id)
+static void statement(exprt &expr, const std::string &id)
 {
   set(expr, "code");
-  stack(expr).set("statement", id);
+  expr.statement(id);
 }
 
-/*******************************************************************\
-
-Function: decl_statement
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void decl_statement(
-  YYSTYPE &dest,
-  YYSTYPE &decl,
-  YYSTYPE &initializer)
+static void decl_statement(exprt &dest, ansi_c_declarationt &decl, exprt &initializer)
 {
   codet decl_statement("decl");
   
   symbol_exprt symbol;
-  symbol.set_identifier(stack(decl).get("name"));
+  symbol.set_identifier(decl.name());
   
   decl_statement.move_to_operands(symbol);
   
-  if(stack(initializer).is_not_nil())
+  if(initializer.is_not_nil())
   {
-    stack(decl).add("value")=stack(initializer);
-    decl_statement.move_to_operands(stack(initializer));
+    decl.decl_value()=initializer;
+    decl_statement.move_to_operands(initializer);
   }
   
-  PARSER.move_declaration(stack(decl));
+  PARSER.move_declaration(decl);
   
-  stack(dest).move_to_operands(decl_statement);
+  dest.move_to_operands(decl_statement);
 }
 
-/*******************************************************************\
-
-Function: merge_types
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void merge_types(exprt &dest, exprt &src)
+static void merge_types(typet &dest, typet &src)
 {
-  #if 0
-  std::cout << "D: " << dest.pretty() << std::endl;
-  std::cout << "S: " << src.pretty() << std::endl;
-  #endif
 
   if(dest.id()!="merged_type")
   {
@@ -151,34 +86,12 @@ static void merge_types(exprt &dest, exprt &src)
   ((typet &)dest).move_to_subtypes((typet &)(src));
 }
 
-/*******************************************************************\
-
-Function: merge_types
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void merge_types(const YYSTYPE dest, const YYSTYPE src)
+static void merge_types(typet *dest, typet *src)
 {
-  merge_types(stack(dest), stack(src));
+
+  merge_types(*dest, *src);
+  return;
 }
-
-/*******************************************************************\
-
-Function: make_subtype
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void make_subtype(typet &dest, typet &src)
 {  
@@ -188,17 +101,16 @@ static void make_subtype(typet &dest, typet &src)
   
   // find spot where to insert this
   
-  #if 0
-  std::cout << "D: " << dest.pretty() << std::endl;
-  std::cout << "S: " << src.pretty() << std::endl;
-  std::cout << "src.id(): " << src.id() << std::endl;
-  #endif
+  // Inserting a nil type makes precisely no change.
+  if (src.is_nil())
+    return;
   
-  assert(src.id()=="array" ||
+  assert(src.is_array() ||
          src.id()=="incomplete_array" ||
          src.id()=="pointer" ||
-         src.id()=="code" ||
-         src.id()=="merged_type");
+         src.is_code() ||
+         src.id()=="merged_type" ||
+         src.id()=="declarator");
 
   typet *p=&dest;
 
@@ -215,9 +127,10 @@ static void make_subtype(typet &dest, typet &src)
     }
 
     if(sub->id()=="pointer" ||
-       sub->id()=="array" ||
+       sub->is_array() ||
        sub->id()=="incomplete_array" ||
-       sub->id()=="code")
+       sub->is_code() ||
+       sub->id()=="declarator")
     {
       // walk down
       p=&sub->subtype();    
@@ -261,54 +174,14 @@ static void make_subtype(typet &dest, typet &src)
   }
 }
 
-/*******************************************************************\
-
-Function: make_subtype
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void make_subtype(YYSTYPE dest, YYSTYPE src)
-{
-  make_subtype((typet &)stack(dest), (typet &)stack(src));
-}
-    
-/*******************************************************************\
-
-Function: do_pointer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void do_pointer(const YYSTYPE ptr, const YYSTYPE dest)
+static void do_pointer(typet &ptr, typet &dest)
 {  
   set(ptr, "pointer");
-  stack(ptr).add("subtype").make_nil();
+  ptr.subtype().make_nil();
   make_subtype(dest, ptr);
 }
 
-/*******************************************************************\
-
-Function: do_enum_members
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
+// XXX - fix type
 static void do_enum_members(
   const typet &enum_type,
   exprt &members)
@@ -321,13 +194,14 @@ static void do_enum_members(
   Forall_operands(it, members)
   {
     it->type()=enum_type;
-    
-    exprt &v=(exprt &)it->add("value");
+
+    ansi_c_declarationt &decl = (ansi_c_declarationt&)*it; // Casting you say...
+    exprt &v=decl.decl_value();
     if(v.is_nil())
       v=value;
 
     exprt symbol_expr("symbol");
-    symbol_expr.set("identifier", it->get("name"));
+    symbol_expr.identifier(it->name());
     
     value=exprt("+");
     value.copy_to_operands(symbol_expr, gen_one(int_type()));    
@@ -336,21 +210,9 @@ static void do_enum_members(
   }
 }
 
-/*******************************************************************\
-
-Function: do_tag
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-static void do_tag(YYSTYPE &key, YYSTYPE &tag)
+static void do_tag(typet &key, typet &tag)
 {
-  irep_idt id_class_str=stack(tag).get("#id_class");
+  irep_idt id_class_str=tag.id_class();
 
   ansi_c_id_classt id_class=
     (ansi_c_id_classt)atoi(id_class_str.c_str());
@@ -360,28 +222,16 @@ static void do_tag(YYSTYPE &key, YYSTYPE &tag)
 
   // it's new
   ansi_c_declarationt declaration;
-  PARSER.new_declaration(stack(key), stack(tag), declaration, true);
+  PARSER.new_declaration(key, tag, declaration, true);
 
   // grab symbol
-  stack(tag).id("symbol");
-  stack(tag).set("identifier", declaration.get_name());
-  stack(tag).location()=declaration.location();
+  tag.id("symbol");
+  tag.identifier(declaration.get_name());
+  tag.location()=declaration.location();
 
   declaration.type().id("incomplete_"+declaration.type().id_string());
   PARSER.move_declaration(declaration);                    
 }
-
-/*******************************************************************\
-
-Function: create_function_scope
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void create_function_scope(exprt &expr)
 {
@@ -393,7 +243,7 @@ static void create_function_scope(exprt &expr)
                      id2string(declaration.get_base_name())+"::";
   PARSER.new_scope(prefix);
   
-  if(declaration.type().id()=="code")
+  if(declaration.type().is_code())
   {
     code_typet &code_type=to_code_type(declaration.type());
     
@@ -433,4 +283,16 @@ static void create_function_scope(exprt &expr)
       }
     }
   }
+}
+
+static void
+move_decl_info_upwards(typet &dest, typet &src)
+{
+
+  if (!src.is_decl_ident_set())
+    return;
+
+  dest.decl_ident(src.decl_ident());
+  src.remove("decl_ident");
+  return;
 }

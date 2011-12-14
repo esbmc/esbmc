@@ -34,7 +34,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
      type.id()=="floatbv" ||
      type.id()=="fixedbv")
   {
-    unsigned bits=atoi(type.get("width").c_str());
+    unsigned bits=atoi(type.width().c_str());
     unsigned bytes=bits/8;
     if((bits%8)!=0) bytes++;
     dest=from_integer(bits/8, uint_type());
@@ -46,21 +46,21 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   }
   else if(type.id()=="pointer")
   {
-    if(type.get_bool("#reference"))
+    if(type.reference())
       return sizeof_rec(type.subtype());
 
     unsigned bits=config.ansi_c.pointer_width;
     dest=from_integer(bits/8, uint_type());
     if((bits%8)!=0) dest.make_nil();
   }
-  else if(type.id()=="bool")
+  else if(type.is_bool())
   {
     dest=from_integer(1, uint_type());
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     const exprt &size_expr=
-      static_cast<const exprt &>(type.find("size"));
+      static_cast<const exprt &>(type.size_irep());
 
     exprt tmp_dest(sizeof_rec(type.subtype()));
 
@@ -87,15 +87,15 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   else if(type.id()=="struct")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     mp_integer sum=0;
 
     forall_irep(it, components)
     {
-      const typet &sub_type=static_cast<const typet &>(it->find("type"));
+      const typet &sub_type=it->type();
 
-      if(sub_type.id()=="code")
+      if(sub_type.is_code())
       {
       }
       else
@@ -118,15 +118,15 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   else if(type.id()=="union")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     mp_integer max_size=0;
 
     forall_irep(it, components)
     {
-      const typet &sub_type=static_cast<const typet &>(it->find("type"));
+      const typet &sub_type=it->type();
 
-      if(sub_type.id()=="code")
+      if(sub_type.is_code())
       {
       }
       else

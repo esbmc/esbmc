@@ -60,7 +60,7 @@ Function: fixedbvt::from_expr
 void fixedbvt::from_expr(const exprt &expr)
 {
   spec=to_fixedbv_type(expr.type());
-  v=binary2integer(id2string(expr.get("value")), true);
+  v=binary2integer(id2string(expr.value().as_string()), true);
 }
 
 /*******************************************************************\
@@ -117,7 +117,7 @@ exprt fixedbvt::to_expr() const
   type.set_integer_bits(spec.integer_bits);
   exprt expr=exprt("constant", type);
   assert(spec.width!=0);
-  expr.set("value", integer2binary(v, spec.width));
+  expr.value(integer2binary(v, spec.width));
   return expr;
 }
 

@@ -164,12 +164,12 @@ void value_set_analysis_fivrt::get_entries_rec(
     {
       get_entries_rec(
         identifier,
-        suffix+"."+it->get_string("name"),
+        suffix+"."+it->name().as_string(),
         it->type(),
         dest);
     }
   }
-  else if(t.id()=="array")
+  else if(t.is_array())
   {
     get_entries_rec(identifier, suffix+"[]", t.subtype(), dest);
   }
@@ -270,7 +270,7 @@ bool value_set_analysis_fivrt::check_type(const typet &type)
           const typet *t = &type;
           while (t->id()=="pointer") t = &(t->subtype());
                   
-          return (t->id()=="code");
+          return (t->is_code());
         }
         
         break;
@@ -295,7 +295,7 @@ bool value_set_analysis_fivrt::check_type(const typet &type)
       if(check_type(it->type())) return true;
     }    
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
     return check_type(type.subtype());
   else if(type.id()=="symbol")
     return check_type(ns.follow(type));

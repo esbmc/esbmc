@@ -30,7 +30,7 @@ void base_type(typet &type, const namespacet &ns)
   {
     const symbolt *symbol;
 
-    if(!ns.lookup(type.get("identifier"), symbol) &&
+    if(!ns.lookup(type.identifier(), symbol) &&
        symbol->is_type &&
        !symbol->type.is_nil())
     {
@@ -47,6 +47,8 @@ void base_type(typet &type, const namespacet &ns)
     tmp.swap(type.subtype());
     type.swap(tmp);
   }
+#if 0
+// Disabled by jmorse - no-where else in ESBMC is "predicate" used.
   else if(type.id()=="predicate")
   {
     exprt &predicate=(exprt &)type.add("predicate");
@@ -57,13 +59,14 @@ void base_type(typet &type, const namespacet &ns)
     type.swap(tmp);
     base_type(type, ns); // recursive call
   }
+#endif
   else if(type.id()=="mapping")
   {
     assert(type.subtypes().size()==2);
     base_type(type.subtypes()[0], ns);
     base_type(type.subtypes()[1], ns);
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     base_type(type.subtype(), ns);
   }
@@ -71,13 +74,19 @@ void base_type(typet &type, const namespacet &ns)
           type.id()=="class" ||
           type.id()=="union")
   {
-    irept::subt &components=type.add("components").get_sub();
+    // New subt for manipulating components
+    irept::subt components=type.components().get_sub();
 
     Forall_irep(it, components)
     {
-      typet &subtype=(typet &)it->find("type");
+      typet &subtype=it->type();
       base_type(subtype, ns);
     }
+
+    // Set back into type
+    irept tmp = type.components();
+    tmp.get_sub() = components;
+    type.components(tmp);
   }
 }
 
@@ -131,14 +140,14 @@ bool base_type_eqt::base_type_eq_rec(
   {
     // already in same set?
     if(identifiers.make_union(
-         type1.get("identifier"),
-         type2.get("identifier")))
+         type1.identifier(),
+         type2.identifier()))
       return true;
   }
 
   if(type1.id()=="symbol")
   {
-    const symbolt &symbol=ns.lookup(type1.get("identifier"));
+    const symbolt &symbol=ns.lookup(type1.identifier());
 
     if(!symbol.is_type)
       throw "symbol "+id2string(symbol.name)+" is not a type";
@@ -148,7 +157,7 @@ bool base_type_eqt::base_type_eq_rec(
 
   if(type2.id()=="symbol")
   {
-    const symbolt &symbol=ns.lookup(type2.get("identifier"));
+    const symbolt &symbol=ns.lookup(type2.identifier());
 
     if(!symbol.is_type)
       throw "symbol "+id2string(symbol.name)+" is not a type";
@@ -186,26 +195,24 @@ bool base_type_eqt::base_type_eq_rec(
   {
     return true;
   }
-  else if(type1.id()=="code")
+  else if(type1.is_code())
   {
-    const irept::subt &arguments1=
-      type1.find("arguments").get_sub();
+    const irept::subt &arguments1=type1.arguments().get_sub();
 
-    const irept::subt &arguments2=
-      type2.find("arguments").get_sub();
+    const irept::subt &arguments2=type2.arguments().get_sub();
     
     if(arguments1.size()!=arguments2.size())
       return false;
       
     for(unsigned i=0; i<arguments1.size(); i++)
     {
-      const typet &subtype1=(const typet &)arguments1[i].find("type");
-      const typet &subtype2=(const typet &)arguments2[i].find("type");
+      const typet &subtype1=arguments1[i].type();
+      const typet &subtype2=arguments2[i].type();
       if(!base_type_eq_rec(subtype1, subtype2)) return false;
     }
     
-    const typet &return_type1=(typet &)type1.find("return_type");
-    const typet &return_type2=(typet &)type2.find("return_type");
+    const typet &return_type1=(typet &)type1.return_type();
+    const typet &return_type2=(typet &)type2.return_type();
     
     if(!base_type_eq_rec(return_type1, return_type2))
       return false;
@@ -216,7 +223,7 @@ bool base_type_eqt::base_type_eq_rec(
   {
     return base_type_eq_rec(type1.subtype(), type2.subtype());
   }
-  else if(type1.id()=="array")
+  else if(type1.is_array())
   {
     if(!base_type_eq_rec(type1.subtype(), type2.subtype()))
       return false;

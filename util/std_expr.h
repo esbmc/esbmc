@@ -18,7 +18,7 @@ class transt:public exprt
 public:
   transt()
   {
-    id("trans");
+    id(exprt::trans);
     operands().resize(3);
   }
 
@@ -34,37 +34,37 @@ public:
 
 extern inline const transt &to_trans(const exprt &expr)
 {
-  assert(expr.id()=="trans" && expr.operands().size()==3);
+  assert(expr.id()==exprt::trans && expr.operands().size()==3);
   return static_cast<const transt &>(expr);
 }
 
 extern inline transt &to_trans(exprt &expr)
 {
-  assert(expr.id()=="trans" && expr.operands().size()==3);
+  assert(expr.id()==exprt::trans && expr.operands().size()==3);
   return static_cast<transt &>(expr);
 }
 
 class symbol_exprt:public exprt
 {
 public:
-  symbol_exprt():exprt("symbol")
+  symbol_exprt():exprt(exprt::symbol)
   {
   }
 
-  explicit symbol_exprt(const irep_idt &identifier):exprt("symbol")
+  explicit symbol_exprt(const irep_idt &identifier):exprt(exprt::symbol)
   {
     set_identifier(identifier);
   }
 
   symbol_exprt(const irep_idt &identifier,
-               const typet &type):exprt("symbol", type)
+               const typet &type):exprt(exprt::symbol, type)
   {
     set_identifier(identifier);
   }
 
   void set_identifier(const irep_idt &identifier)
   {
-    set("identifier", identifier);
+    this->identifier(identifier);
   }
 
   const irep_idt &get_identifier() const
@@ -76,13 +76,13 @@ public:
 
 extern inline const symbol_exprt &to_symbol_expr(const exprt &expr)
 {
-  assert(expr.id()=="symbol" && !expr.has_operands());
+  assert(expr.id()==exprt::symbol && !expr.has_operands());
   return static_cast<const symbol_exprt &>(expr);
 }
 
 extern inline symbol_exprt &to_symbol_expr(exprt &expr)
 {
-  assert(expr.id()=="symbol" && !expr.has_operands());
+  assert(expr.id()==exprt::symbol && !expr.has_operands());
   return static_cast<symbol_exprt &>(expr);
 }
 
@@ -182,14 +182,14 @@ public:
 class plus_exprt:public binary_exprt
 {
 public:
-  plus_exprt():binary_exprt("+")
+  plus_exprt():binary_exprt(exprt::plus)
   {
   }
 
   plus_exprt(
     const exprt &_lhs,
     const exprt &_rhs):
-    binary_exprt(_lhs, "+", _rhs)
+    binary_exprt(_lhs, exprt::plus, _rhs)
   {
   }
 };
@@ -197,14 +197,14 @@ public:
 class minus_exprt:public binary_exprt
 {
 public:
-  minus_exprt():binary_exprt("-")
+  minus_exprt():binary_exprt(exprt::minus)
   {
   }
 
   minus_exprt(
     const exprt &_lhs,
     const exprt &_rhs):
-    binary_exprt(_lhs, "-", _rhs)
+    binary_exprt(_lhs, exprt::minus, _rhs)
   {
   }
 };
@@ -212,14 +212,14 @@ public:
 class mult_exprt:public binary_exprt
 {
 public:
-  mult_exprt():binary_exprt("*")
+  mult_exprt():binary_exprt(exprt::mult)
   {
   }
 
   mult_exprt(
     const exprt &_lhs,
     const exprt &_rhs):
-    binary_exprt(_lhs, "*", _rhs)
+    binary_exprt(_lhs, exprt::mult, _rhs)
   {
   }
 };
@@ -227,14 +227,14 @@ public:
 class div_exprt:public binary_exprt
 {
 public:
-  div_exprt():binary_exprt("/")
+  div_exprt():binary_exprt(exprt::div)
   {
   }
 
   div_exprt(
     const exprt &_lhs,
     const exprt &_rhs):
-    binary_exprt(_lhs, "/", _rhs)
+    binary_exprt(_lhs, exprt::div, _rhs)
   {
   }
 };
@@ -242,14 +242,14 @@ public:
 class mod_exprt:public binary_exprt
 {
 public:
-  mod_exprt():binary_exprt("mod")
+  mod_exprt():binary_exprt(exprt::mod)
   {
   }
 
   mod_exprt(
     const exprt &_lhs,
     const exprt &_rhs):
-    binary_exprt(_lhs, "mod", _rhs)
+    binary_exprt(_lhs, exprt::mod, _rhs)
   {
   }
 };
@@ -257,37 +257,37 @@ public:
 class equality_exprt:public binary_relation_exprt
 {
 public:
-  equality_exprt():binary_relation_exprt("=")
+  equality_exprt():binary_relation_exprt(exprt::equality)
   {
   }
 
   equality_exprt(const exprt &_lhs, const exprt &_rhs):
-    binary_relation_exprt(_lhs, "=", _rhs)
+    binary_relation_exprt(_lhs, exprt::equality, _rhs)
   {
   }
 };
 
 extern inline const equality_exprt &to_equality_expr(const exprt &expr)
 {
-  assert(expr.id()=="=" && expr.operands().size()==2);
+  assert(expr.id()==exprt::equality && expr.operands().size()==2);
   return static_cast<const equality_exprt &>(expr);
 }
 
 extern inline equality_exprt &to_equality_expr(exprt &expr)
 {
-  assert(expr.id()=="=" && expr.operands().size()==2);
+  assert(expr.id()==exprt::equality && expr.operands().size()==2);
   return static_cast<equality_exprt &>(expr);
 }
 
 class index_exprt:public exprt
 {
 public:
-  index_exprt():exprt("index")
+  index_exprt():exprt(exprt::index)
   {
     operands().resize(2);
   }
  
-  index_exprt(const typet &_type):exprt("index", _type)
+  index_exprt(const typet &_type):exprt(exprt::index, _type)
   {
     operands().resize(2);
   }
@@ -314,13 +314,13 @@ public:
 
   friend inline const index_exprt &to_index_expr(const exprt &expr)
   {
-    assert(expr.id()=="index" && expr.operands().size()==2);
+    assert(expr.id()==exprt::index && expr.operands().size()==2);
     return static_cast<const index_exprt &>(expr);
   }
 
   friend inline index_exprt &to_index_expr(exprt &expr)
   {
-    assert(expr.id()=="index" && expr.operands().size()==2);
+    assert(expr.id()==exprt::index && expr.operands().size()==2);
     return static_cast<index_exprt &>(expr);
   }
 };
@@ -331,7 +331,7 @@ index_exprt &to_index_expr(exprt &expr);
 class array_of_exprt:public exprt
 {
 public:
-  array_of_exprt():exprt("array_of")
+  array_of_exprt():exprt(exprt::arrayof)
   {
     operands().resize(1);
   }
@@ -348,13 +348,13 @@ public:
 
   friend inline const array_of_exprt &to_array_of_expr(const exprt &expr)
   {
-    assert(expr.id()=="array_of" && expr.operands().size()==1);
+    assert(expr.id()==exprt::arrayof && expr.operands().size()==1);
     return static_cast<const array_of_exprt &>(expr);
   }
 
   friend inline array_of_exprt &to_array_of_expr(exprt &expr)
   {
-    assert(expr.id()=="array_of" && expr.operands().size()==1);
+    assert(expr.id()==exprt::arrayof && expr.operands().size()==1);
     return static_cast<array_of_exprt &>(expr);
   }
 };
@@ -365,7 +365,7 @@ array_of_exprt &to_array_of_expr(exprt &expr);
 class object_descriptor_exprt:public exprt
 {
 public:
-  object_descriptor_exprt():exprt("object_descriptor")
+  object_descriptor_exprt():exprt(exprt::objdesc)
   {
     operands().resize(2);
     op0().id("unknown");
@@ -386,7 +386,7 @@ public:
   {
     const exprt *p=&object();
 
-    while(p->id()=="member" || p->id()=="index")
+    while(p->id()==exprt::member || p->id()==exprt::index)
     {
       assert(p->operands().size()!=0);
       p=&p->op0();
@@ -407,13 +407,13 @@ public:
 
   friend inline const object_descriptor_exprt &to_object_descriptor_expr(const exprt &expr)
   {
-    assert(expr.id()=="object_descriptor" && expr.operands().size()==2);
+    assert(expr.id()==exprt::objdesc && expr.operands().size()==2);
     return static_cast<const object_descriptor_exprt &>(expr);
   }
 
   friend inline object_descriptor_exprt &to_object_descriptor_expr(exprt &expr)
   {
-    assert(expr.id()=="object_descriptor" && expr.operands().size()==2);
+    assert(expr.id()==exprt::objdesc && expr.operands().size()==2);
     return static_cast<object_descriptor_exprt &>(expr);
   }
 };
@@ -424,14 +424,14 @@ object_descriptor_exprt &to_object_descriptor_expr(exprt &expr);
 class dynamic_object_exprt:public exprt
 {
 public:
-  dynamic_object_exprt():exprt("dynamic_object")
+  dynamic_object_exprt():exprt(exprt::dynobj)
   {
     operands().resize(2);
     op0().id("unknown");
     op1().id("unknown");
   }
 
-  explicit dynamic_object_exprt(const typet &type):exprt("dynamic_object", type)
+  explicit dynamic_object_exprt(const typet &type):exprt(dynobj, type)
   {
     operands().resize(2);
     op0().id("unknown");
@@ -460,13 +460,13 @@ public:
 
   friend inline const dynamic_object_exprt &to_dynamic_object_expr(const exprt &expr)
   {
-    assert(expr.id()=="dynamic_object" && expr.operands().size()==2);
+    assert(expr.id()==exprt::dynobj && expr.operands().size()==2);
     return static_cast<const dynamic_object_exprt &>(expr);
   }
 
   friend inline dynamic_object_exprt &to_dynamic_object_expr(exprt &expr)
   {
-    assert(expr.id()=="dynamic_object" && expr.operands().size()==2);
+    assert(expr.id()==exprt::dynobj && expr.operands().size()==2);
     return static_cast<dynamic_object_exprt &>(expr);
   }
 };
@@ -477,7 +477,7 @@ dynamic_object_exprt &to_dynamic_object_expr(exprt &expr);
 class typecast_exprt:public exprt
 {
 public:
-  explicit typecast_exprt(const typet &_type):exprt("typecast", _type)
+  explicit typecast_exprt(const typet &_type):exprt(exprt::typecast, _type)
   {
     operands().resize(1);
   }
@@ -495,29 +495,29 @@ public:
 
 extern inline const typecast_exprt &to_typecast_expr(const exprt &expr)
 {
-  assert(expr.id()=="typecast" && expr.operands().size()==1);
+  assert(expr.id()==exprt::typecast && expr.operands().size()==1);
   return static_cast<const typecast_exprt &>(expr);
 }
 
 extern inline typecast_exprt &to_typecast_expr(exprt &expr)
 {
-  assert(expr.id()=="typecast" && expr.operands().size()==1);
+  assert(expr.id()==exprt::typecast && expr.operands().size()==1);
   return static_cast<typecast_exprt &>(expr);
 }
 
 class and_exprt:public exprt
 {
 public:
-  and_exprt():exprt("and", typet("bool"))
+  and_exprt():exprt(exprt::i_and, typet("bool"))
   {
   }
 
-  and_exprt(const exprt &op0, const exprt &op1):exprt("and", typet("bool"))
+  and_exprt(const exprt &op0, const exprt &op1):exprt(exprt::i_and, typet("bool"))
   {
     copy_to_operands(op0, op1);
   }
 
-  and_exprt(const exprt::operandst &op):exprt("and", typet("bool"))
+  and_exprt(const exprt::operandst &op):exprt(exprt::i_and, typet("bool"))
   {
     if(op.empty())
       make_true();
@@ -531,12 +531,12 @@ public:
 class implies_exprt:public exprt
 {
 public:
-  implies_exprt():exprt("=>", typet("bool"))
+  implies_exprt():exprt(exprt::implies, typet("bool"))
   {
     operands().resize(2);
   }
 
-  implies_exprt(const exprt &op0, const exprt &op1):exprt("=>", typet("bool"))
+  implies_exprt(const exprt &op0, const exprt &op1):exprt(exprt::implies, typet("bool"))
   {
     copy_to_operands(op0, op1);
   }
@@ -545,16 +545,16 @@ public:
 class or_exprt:public exprt
 {
 public:
-  or_exprt():exprt("or", typet("bool"))
+  or_exprt():exprt(exprt::i_or, typet("bool"))
   {
   }
 
-  or_exprt(const exprt &op0, const exprt &op1):exprt("or", typet("bool"))
+  or_exprt(const exprt &op0, const exprt &op1):exprt(exprt::i_or, typet("bool"))
   {
     copy_to_operands(op0, op1);
   }
 
-  or_exprt(const exprt::operandst &op):exprt("or", typet("bool"))
+  or_exprt(const exprt::operandst &op):exprt(exprt::i_or, typet("bool"))
   {
     if(op.empty())
       make_false();
@@ -569,14 +569,14 @@ class address_of_exprt:public exprt
 {
 public:
   explicit address_of_exprt(const exprt &op):
-    exprt("address_of", typet("pointer"))
+    exprt(exprt::addrof, typet("pointer"))
   {
     type().subtype()=op.type();
     copy_to_operands(op);
   }
 
   explicit address_of_exprt():
-    exprt("address_of", typet("pointer"))
+    exprt(exprt::addrof, typet("pointer"))
   {
     operands().resize(1);
   }
@@ -595,12 +595,12 @@ public:
 class not_exprt:public exprt
 {
 public:
-  explicit not_exprt(const exprt &op):exprt("not", typet("bool"))
+  explicit not_exprt(const exprt &op):exprt(exprt::i_not, typet("bool"))
   {
     copy_to_operands(op);
   }
 
-  not_exprt():exprt("not", typet("bool"))
+  not_exprt():exprt(exprt::i_not, typet("bool"))
   {
     operands().resize(1);
   }
@@ -609,12 +609,12 @@ public:
 class dereference_exprt:public exprt
 {
 public:
-  explicit dereference_exprt(const typet &type):exprt("dereference", type)
+  explicit dereference_exprt(const typet &type):exprt(exprt::deref, type)
   {
     operands().resize(1);
   }
 
-  dereference_exprt():exprt("dereference")
+  dereference_exprt():exprt(exprt::deref)
   {
     operands().resize(1);
   }
@@ -624,13 +624,13 @@ class if_exprt:public exprt
 {
 public:
   if_exprt(const exprt &cond, const exprt &t, const exprt &f):
-    exprt("if")
+    exprt(exprt::i_if)
   {
     copy_to_operands(cond, t, f);
     type()=t.type();
   }
 
-  if_exprt():exprt("if")
+  if_exprt():exprt(exprt::i_if)
   {
     operands().resize(3);
   }
@@ -668,13 +668,13 @@ public:
 
 extern inline const if_exprt &to_if_expr(const exprt &expr)
 {
-  assert(expr.id()=="if" && expr.operands().size()==3);
+  assert(expr.id()==exprt::i_if && expr.operands().size()==3);
   return static_cast<const if_exprt &>(expr);
 }
 
 extern inline if_exprt &to_if_expr(exprt &expr)
 {
-  assert(expr.id()=="if" && expr.operands().size()==3);
+  assert(expr.id()==exprt::i_if && expr.operands().size()==3);
   return static_cast<if_exprt &>(expr);
 }
 
@@ -682,13 +682,13 @@ class with_exprt:public exprt
 {
 public:
   with_exprt(const exprt &_old, const exprt &_where, const exprt &_new_value):
-    exprt("with")
+    exprt(exprt::with)
   {
     copy_to_operands(_old, _where, _new_value);
     type()=_old.type();
   }
 
-  with_exprt():exprt("with")
+  with_exprt():exprt(exprt::with)
   {
     operands().resize(3);
   }
@@ -726,36 +726,36 @@ public:
 
 extern inline const with_exprt &to_with_expr(const exprt &expr)
 {
-  assert(expr.id()=="with" && expr.operands().size()==3);
+  assert(expr.id()==exprt::with && expr.operands().size()==3);
   return static_cast<const with_exprt &>(expr);
 }
 
 extern inline with_exprt &to_with_expr(exprt &expr)
 {
-  assert(expr.id()=="with" && expr.operands().size()==3);
+  assert(expr.id()==exprt::with && expr.operands().size()==3);
   return static_cast<with_exprt &>(expr);
 }
 
 class member_exprt:public exprt
 {
 public:
-  explicit member_exprt(const exprt &op):exprt("member")
+  explicit member_exprt(const exprt &op):exprt(exprt::member)
   {
     copy_to_operands(op);
   }
 
-  explicit member_exprt(const typet &type):exprt("member", type)
+  explicit member_exprt(const typet &type):exprt(exprt::member, type)
   {
     operands().resize(1);
   }
 
-  member_exprt(const exprt &op, const irep_idt &component_name):exprt("member")
+  member_exprt(const exprt &op, const irep_idt &component_name):exprt(exprt::member)
   {
     copy_to_operands(op);
     set_component_name(component_name);
   }
 
-  member_exprt():exprt("member")
+  member_exprt():exprt(exprt::member)
   {
     operands().resize(1);
   }
@@ -767,30 +767,30 @@ public:
 
   void set_component_name(const irep_idt &component_name)
   {
-    set("component_name", component_name);
+    this->component_name(component_name);
   }
 };
 
 inline const member_exprt &to_member_expr(const exprt &expr)
 {
-  assert(expr.id()=="member");
+  assert(expr.id()==exprt::member);
   return static_cast<const member_exprt &>(expr);
 }
 
 inline member_exprt &to_member_expr(exprt &expr)
 {
-  assert(expr.id()=="member");
+  assert(expr.id()==exprt::member);
   return static_cast<member_exprt &>(expr);
 }
 
 class isnan_exprt:public predicate_exprt
 {
 public:
-  explicit isnan_exprt(const exprt &op):predicate_exprt("isnan", op)
+  explicit isnan_exprt(const exprt &op):predicate_exprt(exprt::isnan, op)
   {
   }
 
-  isnan_exprt():predicate_exprt("isnan")
+  isnan_exprt():predicate_exprt(exprt::isnan)
   {
     operands().resize(1);
   }
@@ -799,12 +799,12 @@ public:
 class ieee_float_equal_exprt:public binary_relation_exprt
 {
 public:
-  ieee_float_equal_exprt():binary_relation_exprt("ieee_float_equal")
+  ieee_float_equal_exprt():binary_relation_exprt(exprt::ieee_floateq)
   {
   }
 
   ieee_float_equal_exprt(const exprt &_lhs, const exprt &_rhs):
-    binary_relation_exprt(_lhs, "ieee_float_equal", _rhs)
+    binary_relation_exprt(_lhs, exprt::ieee_floateq, _rhs)
   {
   }
 };
@@ -812,11 +812,11 @@ public:
 class type_exprt:public exprt
 {
 public:
-  type_exprt():exprt("type")
+  type_exprt():exprt(exprt::i_type)
   {
   }
 
-  explicit type_exprt(const typet &type):exprt("type", type)
+  explicit type_exprt(const typet &type):exprt(exprt::i_type, type)
   {
   }
 };
@@ -824,11 +824,11 @@ public:
 class constant_exprt:public exprt
 {
 public:
-  constant_exprt():exprt("constant")
+  constant_exprt():exprt(exprt::constant)
   {
   }
 
-  explicit constant_exprt(const typet &type):exprt("constant", type)
+  explicit constant_exprt(const typet &type):exprt(exprt::constant, type)
   {
   }
   
@@ -849,7 +849,7 @@ class true_exprt:public constant_exprt
 public:
   true_exprt():constant_exprt(typet("bool"))
   {
-    set_value("true");
+    set_value(exprt::i_true);
   }
 };
 
@@ -858,7 +858,7 @@ class false_exprt:public constant_exprt
 public:
   false_exprt():constant_exprt(typet("bool"))
   {
-    set_value("false");
+    set_value(exprt::i_false);
   }
 };
 

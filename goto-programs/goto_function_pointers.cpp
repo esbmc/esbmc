@@ -107,7 +107,7 @@ static exprt build_or_expr(
       const object_descriptor_exprt &o=
         to_object_descriptor_expr(*it);
 
-      if(o.object().type().id()!="code") // bad pointer
+      if(!o.object().type().is_code()) // bad pointer
         continue;
 
       pointer_typet pointer_type;
@@ -118,7 +118,7 @@ static exprt build_or_expr(
       if(o.object().id()=="NULL-object")
       {
         address=constant_exprt(pointer_type);
-        address.set("value", "NULL");
+        address.value("NULL");
       }
       else
       {
@@ -368,7 +368,7 @@ void goto_convert_functionst::remove_function_pointer(
       new_code.add_instruction(ASSERT);
     t->guard=expr_or;
     t->location=function.location();
-    t->location.set("comment", "unexpected target function");
+    t->location.comment("unexpected target function");
   }
 #endif
 

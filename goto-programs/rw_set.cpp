@@ -114,7 +114,7 @@ void rw_sett::read_write_rec(
   else if(expr.id()=="member")
   {
     assert(expr.operands().size()==1);
-    const std::string &component_name=expr.get_string("component_name");
+    const std::string &component_name=expr.component_name().as_string();
     read_write_rec(expr.op0(), r, w, "."+component_name+suffix, guard);
   }
   else if(expr.id()=="index")
@@ -125,7 +125,7 @@ void rw_sett::read_write_rec(
 
     //std::cout << "index: " << expr.pretty() << std::endl;
     //std::cout << "antes suffix: " << suffix << std::endl;
-    tmp = integer2string(binary2integer(expr.op1().get_string("value"), true),10);
+    tmp = integer2string(binary2integer(expr.op1().value().as_string(), true),10);
     //std::cout << "depois tmp: " << tmp << std::endl;
 
     read_write_rec(expr.op0(), r, w, "["+suffix+tmp+"]", guard);
@@ -141,7 +141,7 @@ void rw_sett::read_write_rec(
 
     read_write_rec(tmp, r, w, suffix, guard);
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.is_address_of() ||
           expr.id()=="implicit_address_of")
   {
     assert(expr.operands().size()==1);

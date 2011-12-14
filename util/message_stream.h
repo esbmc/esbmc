@@ -33,7 +33,7 @@ public:
 
   void err_location(const exprt &expr) { saved_error_location=expr.find_location(); }
   void err_location(const typet &type) { saved_error_location=type.location(); }
-  void err_location(const irept &irep) { saved_error_location=(const locationt &)irep.find("#location"); }
+  void err_location(const irept &irep) { saved_error_location=(const locationt &)irep.cmt_location(); }
   void err_location(const locationt &_location) { saved_error_location=_location; }
 
   void error(const std::string &message)

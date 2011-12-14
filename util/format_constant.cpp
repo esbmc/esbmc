@@ -47,7 +47,7 @@ std::string format_constantt::operator()(const exprt &expr)
     }
   }
   else if(expr.id()=="string-constant")
-    return expr.get_string("value");
+    return expr.value().as_string();
 
   return "(format-constant failed: "+expr.id_string()+")";
 }

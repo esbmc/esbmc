@@ -58,7 +58,7 @@ void boolbvt::convert_typecast(const exprt &expr, bvt &bv)
   case IS_RANGE:
     if(op_bvtype==IS_UNSIGNED || op_bvtype==IS_SIGNED)
     {
-      mp_integer from=string2integer(expr.type().get_string("from"));
+      mp_integer from=string2integer(expr.type().from().as_string());
 
       if(from==0)
       {
@@ -99,7 +99,7 @@ void boolbvt::convert_typecast(const exprt &expr, bvt &bv)
         return;
 
       default:
-        if(op.type().id()=="bool")
+        if(op.type().is_bool())
         {
           // bool to float
           
@@ -191,7 +191,7 @@ void boolbvt::convert_typecast(const exprt &expr, bvt &bv)
 
       return;
     }
-    else if(op.type().id()=="bool")
+    else if(op.type().is_bool())
     {
       // bool to fixed
       unsigned fraction_bits=
@@ -268,7 +268,7 @@ void boolbvt::convert_typecast(const exprt &expr, bvt &bv)
       }
 
     default:
-      if(op.type().id()=="bool")
+      if(op.type().is_bool())
       {
         // bool to integer
 
@@ -310,7 +310,7 @@ void boolbvt::convert_typecast(const exprt &expr, bvt &bv)
     return;
     
   default:
-    if(expr.type().id()=="array")
+    if(expr.type().is_array())
     {
       assert(op_width==dest_width);
       bv=op_bv;
@@ -415,8 +415,8 @@ literalt boolbvt::convert_typecast(const exprt &expr)
   {
     if(expr.op0().type().id()=="range")
     {
-      mp_integer from=string2integer(expr.op0().type().get_string("from"));
-      mp_integer to=string2integer(expr.op0().type().get_string("to"));
+      mp_integer from=string2integer(expr.op0().type().from().as_string());
+      mp_integer to=string2integer(expr.op0().type().to().as_string());
 
       if(from==1 && to==1)
         return const_literal(true);

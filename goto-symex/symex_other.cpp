@@ -80,11 +80,11 @@ void goto_symext::symex_other(
     if(deref_code.operands().size()!=1)
       throw "decl expects one operand";
 
-    if(deref_code.op0().id()!="symbol")
+    if(deref_code.op0().id()!=exprt::symbol)
       throw "decl expects symbol as first operand";
 
     // just do the L2 renaming to preseve locality
-    const irep_idt &identifier=deref_code.op0().get("identifier");
+    const irep_idt &identifier=deref_code.op0().identifier();
 
     std::string l1_identifier=state.top().level1(identifier,node_id);
 

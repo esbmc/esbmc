@@ -128,7 +128,7 @@ bool goto_convertt::has_function_call(const exprt &expr)
       return true;
 
   if(expr.id()=="sideeffect" &&
-     expr.get("statement")=="function_call")
+     expr.statement()=="function_call")
     return true;
 
   return false;
@@ -176,7 +176,7 @@ void goto_convertt::remove_sideeffects(
   if(!has_sideeffect(expr))
     return;
 
-  if(expr.id()=="and" || expr.id()=="or")
+  if(expr.is_and() || expr.id()=="or")
   {
     if(!expr.is_boolean())
       throw expr.id_string()+" must be Boolean, but got "+
@@ -299,7 +299,7 @@ void goto_convertt::remove_sideeffects(
     return;
   }
   else if(expr.id()=="sideeffect" &&
-          expr.get("statement")=="gcc_conditional_expression")
+          expr.statement()=="gcc_conditional_expression")
   {
     remove_gcc_conditional_expression(expr, guard, dest);
     return;
@@ -311,7 +311,7 @@ void goto_convertt::remove_sideeffects(
 
   if(expr.id()=="sideeffect")
   {
-    const irep_idt &statement=expr.get("statement");
+    const irep_idt &statement=expr.statement();
 
     if(statement=="function_call") // might do anything
       remove_function_call(expr, guard, dest, result_is_used);
@@ -352,7 +352,7 @@ void goto_convertt::remove_sideeffects(
     }
   }
 #if 0
-  else if(expr.id()=="address_of")
+  else if(expr.is_address_of())
   {
 	std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
     assert(expr.operands().size()==1);
@@ -379,7 +379,7 @@ void goto_convertt::address_of_replace_objects(
 {
   if(expr.id()=="struct" ||
      expr.id()=="union" ||
-     expr.id()=="array")
+     expr.is_array())
   {
     make_temp_symbol(expr, dest);
     return;
@@ -533,7 +533,7 @@ void goto_convertt::remove_function_call(
     // get name of function, if available
 
     if(expr.id()!="sideeffect" ||
-       expr.get("statement")!="function_call")
+       expr.statement()!="function_call")
       throw "expected function call";
 
     if(expr.operands().empty())
@@ -541,7 +541,7 @@ void goto_convertt::remove_function_call(
 
     if(expr.op0().id()=="symbol")
     {
-      const irep_idt &identifier=expr.op0().get("identifier");
+      const irep_idt &identifier=expr.op0().identifier();
       const symbolt &symbol=lookup(identifier);
 
       std::string new_base_name=id2string(new_symbol.base_name);
@@ -671,7 +671,7 @@ void goto_convertt::remove_temporary_object(
 
   symbolt &new_symbol=new_tmp_symbol(expr.type());
 
-  new_symbol.mode=expr.get("mode");
+  new_symbol.mode=expr.mode();
 
   if(expr.operands().size()==1)
   {
@@ -685,10 +685,10 @@ void goto_convertt::remove_temporary_object(
     dest.destructive_append(tmp_program);
   }
 
-  if(expr.find("initializer").is_not_nil())
+  if(expr.initializer().is_not_nil())
   {
     assert(expr.operands().empty());
-    exprt initializer=static_cast<const exprt &>(expr.find("initializer"));
+    exprt initializer=static_cast<const exprt &>(expr.initializer());
     replace_new_object(symbol_expr(new_symbol), initializer);
 
     goto_programt tmp_program;
@@ -720,7 +720,7 @@ void goto_convertt::remove_statement_expression(
   if(expr.operands().size()!=1)
     throw "statement_expression takes 1 operand";
 
-  if(expr.op0().id()!="code")
+  if(!expr.op0().is_code())
     throw "statement_expression takes code as operand";
 
   codet &code=to_code(expr.op0());
@@ -754,7 +754,7 @@ void goto_convertt::remove_statement_expression(
     goto_programt tmp;
     remove_sideeffects(last, guard, tmp, true);
 
-    if(last.get("statement")=="expression" &&
+    if(last.statement()=="expression" &&
        last.operands().size()==1)
       expr=last.op0();
     else

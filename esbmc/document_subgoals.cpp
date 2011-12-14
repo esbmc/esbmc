@@ -177,8 +177,8 @@ void get_code(const irept &location, std::string &dest)
 {
   dest="";
 
-  const irep_idt &file=location.get("file");
-  const irep_idt &line=location.get("line");
+  const irep_idt &file=location.file();
+  const irep_idt &line=location.line();
 
   if(file=="" || line=="") return;
 
@@ -294,9 +294,9 @@ void document_subgoals(
     {
       locationt new_location;
 
-      new_location.set("file", it->source.pc->location.get("file"));
-      new_location.set("line", it->source.pc->location.get("line"));
-      new_location.set("function", it->source.pc->location.get("function"));
+      new_location.file(it->source.pc->location.file());
+      new_location.line(it->source.pc->location.line());
+      new_location.function(it->source.pc->location.function());
 
       claim_set[new_location].comment_set.insert(it->comment);
     }
@@ -310,9 +310,9 @@ void document_subgoals(
     get_code(location, code);
 
     out << "\\claimlocation{File "
-        << escape_latex(location.get_string("file"), false)
+        << escape_latex(location.file().as_string(), false)
         << " function "
-        << escape_latex(location.get_string("function"), false)
+        << escape_latex(location.function().as_string(), false)
         << "}" << std::endl;
 
     out << std::endl;

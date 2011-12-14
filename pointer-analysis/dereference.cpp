@@ -190,7 +190,7 @@ void dereferencet::dereference(
       new_context.move(symbol);
     }
 
-    value.set("#invalid_object", true);
+    value.invalid_object(true);
   }
 
   dest.swap(value);
@@ -298,8 +298,8 @@ bool dereferencet::dereference_type_compare(
   }
 
   // we are generous about code pointers
-  if(dereference_type.id()=="code" &&
-     object_type.id()=="code")
+  if(dereference_type.is_code() &&
+     object_type.is_code())
     return true;
 
   // really different
@@ -468,7 +468,7 @@ void dereferencet::build_reference_to(
       {
         exprt type_expr=exprt("pointer_object_has_type", typet("bool"));
         type_expr.copy_to_operands(deref_expr);
-        type_expr.set("object_type", type);
+        type_expr.object_type(type);
         type_expr.make_not();
 
         guardt tmp_guard(guard);
@@ -631,14 +631,14 @@ void dereferencet::valid_check(
     }
   }
   else if(symbol.is_nil() ||
-          symbol.get_bool("#invalid_object"))
+          symbol.invalid_object())
   {
     // always "valid", shut up
     return;
   }
   else if(symbol.id()=="symbol")
   {
-    const irep_idt identifier=symbol.get("identifier");
+    const irep_idt identifier=symbol.identifier();
 
     if(dereference_callback.is_valid_object(identifier))
       return; // always ok
@@ -666,7 +666,7 @@ void dereferencet::bounds_check(
   //std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
   const typet &array_type=ns.follow(expr.op0().type());
   //std::cout << "array_type.pretty(): " << array_type.pretty() << std::endl;
-  if(array_type.id()!="array")
+  if(!array_type.is_array())
     throw "bounds check expected array type";
 
   std::string name=array_name(ns, expr.array());
@@ -711,13 +711,13 @@ void dereferencet::bounds_check(
 	const typet array_type2=ns.follow(expr.op0().operands()[0].type());
 	const exprt &size_expr2=to_array_type(array_type2).size();
 
-	val1 = integer2string(binary2integer(size_expr.get_string("value"), true),10);
-	val2 = integer2string(binary2integer(size_expr2.get_string("value"), true),10);
+	val1 = integer2string(binary2integer(size_expr.value().as_string(), true),10);
+	val2 = integer2string(binary2integer(size_expr2.value().as_string(), true),10);
     total = atoi(val1.c_str())*atoi(val2.c_str());
 
     s << total;
     unsigned width;
-    width = atoi(size_expr.type().get_string("width").c_str());
+    width = atoi(size_expr.type().width().as_string().c_str());
     constant_exprt value_expr(size_expr.type());
     value_expr.set_value(integer2binary(string2integer(s.str()),width));
     size_expr.swap(value_expr);
@@ -759,7 +759,7 @@ Function: dereferencet::memory_model
 
 static unsigned bv_width(const typet &type)
 {
-  return atoi(type.get("width").c_str());
+  return atoi(type.width().c_str());
 }
 
 static bool is_a_bv_type(const typet &type)
@@ -866,7 +866,7 @@ bool dereferencet::memory_model_bytes(
   const typet from_type=value.type();
 
   // we won't try to convert to/from code
-  if(from_type.id()=="code" || to_type.id()=="code")
+  if(from_type.is_code() || to_type.is_code())
     return false;
 
   // won't do this without a committment to an endianess

@@ -105,8 +105,8 @@ bool check_c_implicit_typecast(
   // check qualifiers  
 
   if(src_type.id()=="pointer" && dest_type.id()=="pointer" &&
-     src_type.subtype().get_bool("#constant") &&
-     !dest_type.subtype().get_bool("#constant"))
+     src_type.subtype().cmt_constant() &&
+     !dest_type.subtype().cmt_constant())
     return true;
 
   if(src_type==dest_type) return false;
@@ -115,7 +115,7 @@ bool check_c_implicit_typecast(
 
   if(src_type_id=="natural")
   {
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
@@ -125,7 +125,7 @@ bool check_c_implicit_typecast(
   }
   else if(src_type_id=="integer")
   {
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="unsignedbv") return false;
@@ -136,14 +136,14 @@ bool check_c_implicit_typecast(
   }
   else if(src_type_id=="real")
   {
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="floatbv") return false;
     if(dest_type.id()=="fixedbv") return false;
   }
   else if(src_type_id=="rational")
   {
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="floatbv") return false;
     if(dest_type.id()=="fixedbv") return false;
@@ -165,7 +165,7 @@ bool check_c_implicit_typecast(
           src_type_id=="incomplete_c_enum")
   {
     if(dest_type.id()=="unsignedbv") return false;
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
@@ -178,7 +178,7 @@ bool check_c_implicit_typecast(
   else if(src_type_id=="floatbv" ||
           src_type_id=="fixedbv")
   {
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
@@ -202,11 +202,11 @@ bool check_c_implicit_typecast(
         return false;
     }
     
-    if((dest_type.id()=="array" ||
+    if((dest_type.is_array() ||
         dest_type.id()=="incomplete_array") &&
        (src_type.subtype()==dest_type.subtype())) return false;
 
-    if(dest_type.id()=="bool") return false;
+    if(dest_type.is_bool()) return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="signedbv") return false;
   }
@@ -253,7 +253,7 @@ Function: c_typecastt::get_c_type
 c_typecastt::c_typet c_typecastt::get_c_type(
   const typet &type)
 {
-  unsigned width=atoi(type.get("width").c_str());
+  unsigned width=atoi(type.width().c_str());
   
   if(type.id()=="signedbv")
   {
@@ -277,7 +277,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
     else if(width<=config.ansi_c.long_long_int_width)
       return ULONGLONG;
   }
-  else if(type.id()=="bool")
+  else if(type.is_bool())
     return BOOL;
   else if(type.id()=="floatbv" ||
           type.id()=="fixedbv")
@@ -296,7 +296,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
     else
       return PTR;
   }
-  else if(type.id()=="array" ||
+  else if(type.is_array() ||
           type.id()=="incomplete_array")
   {
     return PTR;
@@ -335,7 +335,7 @@ void c_typecastt::implicit_typecast_arithmetic(
   switch(c_type)
   {
   case PTR:
-    if(expr_type.id()=="array" ||
+    if(expr_type.is_array() ||
        expr_type.id()=="incomplete_array")
     {
       new_type.id("pointer");
@@ -362,7 +362,7 @@ void c_typecastt::implicit_typecast_arithmetic(
   if(new_type!=expr_type)
   {
     if(new_type.id()=="pointer" &&
-       (expr_type.id()=="array" ||
+       (expr_type.is_array() ||
         expr_type.id()=="incomplete_array"))
     {
       exprt index_expr("index", expr_type.subtype());
@@ -446,12 +446,12 @@ void c_typecastt::implicit_typecast_followed(
        src_type.id()=="integer"))
     {
       expr=exprt("constant", dest_type);
-      expr.set("value", "NULL");
+      expr.value("NULL");
       return; // ok
     }
   
     if(src_type.id()=="pointer" ||
-       src_type.id()=="array" ||
+       src_type.is_array() ||
        src_type.id()=="incomplete_array")
     {
       // we are quite generous about pointers
@@ -468,8 +468,8 @@ void c_typecastt::implicit_typecast_followed(
         dest_type.subtype(), src_type.subtype(), ns))
       {
       }
-      else if(src_sub.id()=="code" &&
-              dest_sub.id()=="code")
+      else if(src_sub.is_code() &&
+              dest_sub.is_code())
       {
         // very generous:
         // between any two function pointers it's ok
@@ -483,12 +483,12 @@ void c_typecastt::implicit_typecast_followed(
 
       // check qualifiers
 
-      if(src_type.subtype().get_bool("#constant") &&
-         !dest_type.subtype().get_bool("#constant"))
+      if(src_type.subtype().cmt_constant() &&
+         !dest_type.subtype().cmt_constant())
         warnings.push_back("disregarding const");
 
-      if(src_type.subtype().get_bool("#volatile") &&
-         !dest_type.subtype().get_bool("#volatile"))
+      if(src_type.subtype().cmt_volatile() &&
+         !dest_type.subtype().cmt_volatile())
         warnings.push_back("disregarding volatile");
 
       if(src_type==dest_type)
@@ -565,7 +565,7 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
   
   const typet &dest_type=ns.follow(dest.type());
 
-  if(dest_type.id()=="array" || 
+  if(dest_type.is_array() || 
      dest_type.id()=="incomplete_array")
   {
     index_exprt index;
@@ -586,13 +586,13 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
     {
       // preserve #c_sizeof_type -- don't make it a reference!
       const irept c_sizeof_type=
-        dest.op0().find("#c_sizeof_type");
+        dest.op0().c_sizeof_type();
 
       simplify_exprt simplify_expr;
       simplify_expr.simplify_typecast(dest, simplify_exprt::NORMAL);
 
       if(c_sizeof_type.is_not_nil())
-        dest.add("#c_sizeof_type")=c_sizeof_type;
+        dest.cmt_c_sizeof_type(c_sizeof_type);
     }
   }
 }

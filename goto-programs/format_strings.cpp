@@ -230,7 +230,7 @@ bool parse_format_string(
 
   if(format_arg.id()=="string-constant")
   {
-    const std::string &arg_string = format_arg.get("value").as_string();
+    const std::string &arg_string = format_arg.value().as_string();
 
     std::string::const_iterator it=arg_string.begin();
 

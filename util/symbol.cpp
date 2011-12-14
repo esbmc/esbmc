@@ -94,32 +94,32 @@ Function: symbolt::to_irep
 void symbolt::to_irep(irept &dest) const
 {
   dest.clear();
-  dest.add("type")=type;
-  dest.add("value")=value;
-  dest.add("location")=location;
-  dest.set("name", name);
-  dest.set("module", module);
-  dest.set("base_name", base_name);
-  dest.set("mode", mode);
-  dest.set("pretty_name", pretty_name);
-  dest.set("ordering", ordering);
+  dest.type()=type;
+  dest.symvalue(value);
+  dest.location(location);
+  dest.name(name);
+  dest.module(module);
+  dest.base_name(base_name);
+  dest.mode(mode);
+  dest.pretty_name(pretty_name);
+  dest.ordering(ordering);
 
-  if (theorem) dest.set("theorem", true);
-  if (axiom) dest.set("axiom", true);
-  if (is_type) dest.set("is_type", true);
-  if (is_macro) dest.set("is_macro", true);
-  if (is_exported) dest.set("is_exported", true);
-  if (is_input) dest.set("is_input", true);
-  if (is_output) dest.set("is_output", true);
-  if (is_statevar) dest.set("is_statevar", true);
-  if (is_actual) dest.set("is_actual", true);
-  if (free_var) dest.set("free_var", true);
-  if (binding) dest.set("binding", true);
-  if (lvalue) dest.set("lvalue", true);
-  if (static_lifetime) dest.set("static_lifetime", true);
-  if (file_local) dest.set("file_local", true);
-  if (is_extern) dest.set("is_extern", true);
-  if (is_volatile) dest.set("is_volatile", true);       
+  if (theorem) dest.theorem(true);
+  if (axiom) dest.axiom(true);
+  if (is_type) dest.is_type(true);
+  if (is_macro) dest.is_macro(true);
+  if (is_exported) dest.is_exported(true);
+  if (is_input) dest.is_input(true);
+  if (is_output) dest.is_output(true);
+  if (is_statevar) dest.is_statevar(true);
+  if (is_actual) dest.is_actual(true);
+  if (free_var) dest.free_var(true);
+  if (binding) dest.binding(true);
+  if (lvalue) dest.lvalue(true);
+  if (static_lifetime) dest.static_lifetime(true);
+  if (file_local) dest.file_local(true);
+  if (is_extern) dest.is_extern(true);
+  if (is_volatile) dest.is_volatile(true);       
 }
 
 /*******************************************************************\
@@ -136,31 +136,31 @@ Function: symbolt::from_irep
 
 void symbolt::from_irep(const irept &src)
 {
-  type=static_cast<const typet &>(src.find("type"));
-  value=static_cast<const exprt &>(src.find("value"));
-  location=static_cast<const locationt &>(src.find("location"));
+  type=src.type();
+  value=static_cast<const exprt &>(src.symvalue());
+  location=static_cast<const locationt &>(src.location());
 
-  name=src.get("name");
-  module=src.get("module");
-  base_name=src.get("base_name");
-  mode=src.get("mode");
-  pretty_name=src.get("pretty_name");
-  ordering=atoi(src.get("ordering").c_str());
+  name=src.name();
+  module=src.module();
+  base_name=src.base_name();
+  mode=src.mode();
+  pretty_name=src.pretty_name();
+  ordering=atoi(src.ordering().c_str());
 
-  theorem=src.get_bool("theorem");
-  axiom=src.get_bool("axiom");
-  is_type=src.get_bool("is_type");
-  is_macro=src.get_bool("is_macro");
-  is_exported=src.get_bool("is_exported");
-  is_input=src.get_bool("is_input");
-  is_output=src.get_bool("is_output");
-  is_statevar=src.get_bool("is_statevar");
-  is_actual=src.get_bool("is_actual");
-  free_var=src.get_bool("free_var");
-  binding=src.get_bool("binding");
-  lvalue=src.get_bool("lvalue");
-  static_lifetime=src.get_bool("static_lifetime");
-  file_local=src.get_bool("file_local");
-  is_extern=src.get_bool("is_extern");
-  is_volatile=src.get_bool("is_volatile");
+  theorem=src.theorem();
+  axiom=src.axiom();
+  is_type=src.is_type();
+  is_macro=src.is_macro();
+  is_exported=src.is_exported();
+  is_input=src.is_input();
+  is_output=src.is_output();
+  is_statevar=src.is_statevar();
+  is_actual=src.is_actual();
+  free_var=src.free_var();
+  binding=src.binding();
+  lvalue=src.lvalue();
+  static_lifetime=src.static_lifetime();
+  file_local=src.file_local();
+  is_extern=src.is_extern();
+  is_volatile=src.is_volatile();
 }

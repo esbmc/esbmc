@@ -99,7 +99,7 @@ Function: smt_convt::array_index_type
 typet smt_convt::gen_array_index_type()
 {
   typet t("signedbv");
-  t.set("width", 32);
+  t.width(32);
   return t;
 }
 
@@ -159,7 +159,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
     {
       if(array.type().id()=="pointer")
         convert_smt_expr(array);
-      else if(array.type().id()=="array")
+      else if(array.type().is_array())
         convert_address_of_rec(array);
       else
         assert(false);
@@ -172,7 +172,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
       
       if(array.type().id()=="pointer")
         convert_smt_expr(array);
-      else if(array.type().id()=="array")
+      else if(array.type().is_array())
         convert_address_of_rec(array);
       else
         assert(false);
@@ -198,9 +198,9 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
     convert_address_of_rec(struct_op);
 
     const irept::subt &components=
-      struct_op.type().find("components").get_sub();
+      struct_op.type().components().get_sub();
     
-    const irep_idt &component_name=expr.get("component_name");
+    const irep_idt &component_name=expr.component_name();
     
     bool found=false;
     
@@ -208,8 +208,8 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
 
     forall_irep(it, components)
     {
-      if(component_name==it->get("name")) { found=true; break; }
-      const typet &subtype=(typet &)it->find("type");
+      if(component_name==it->name()) { found=true; break; }
+      const typet &subtype=it->type();
       mp_integer sub_size=pointer_offset_size(subtype);
       if(sub_size==0) assert(false);
       offset+=sub_size;
@@ -218,7 +218,7 @@ void smt_convt::convert_address_of_rec(const exprt &expr)
     assert(found);
     
     typet index_type("unsignedbv");
-    index_type.set("width", config.ansi_c.pointer_width);
+    index_type.width(config.ansi_c.pointer_width);
 
     exprt index=from_integer(offset, index_type);
 
@@ -322,7 +322,7 @@ Function: smt_convt::convert_as_bv
 
 void smt_convt::convert_as_bv(const exprt &expr)
 {
-  if(expr.type().id()=="bool")
+  if(expr.type().is_bool())
   {
     smt_prop.out << "IF ";
     convert_smt_expr(expr);
@@ -365,11 +365,11 @@ void smt_convt::convert_smt_expr(const exprt &expr)
 {
   if(expr.id()=="symbol")
   {
-    convert_identifier(expr.get_string("identifier"));
+    convert_identifier(expr.identifier().as_string());
   }
   else if(expr.id()=="nondet_symbol")
   {
-    convert_identifier("nondet"+expr.get_string("identifier"));
+    convert_identifier("nondet"+expr.identifier().as_string());
   }
   else if(expr.id()=="typecast")
   {
@@ -377,7 +377,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(expr.operands().size()==1);
     const exprt &op=expr.op0();
     
-    if(expr.type().id()=="bool")
+    if(expr.type().is_bool())
     {
       if(op.type().id()=="signedbv" ||
          op.type().id()=="unsignedbv" ||
@@ -395,11 +395,11 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else if(expr.type().id()=="signedbv" ||
             expr.type().id()=="unsignedbv")
     {
-      unsigned to_width=atoi(expr.type().get("width").c_str());
+      unsigned to_width=atoi(expr.type().width().c_str());
       
       if(op.type().id()=="signedbv")
       {
-        unsigned from_width=atoi(op.type().get("width").c_str());
+        unsigned from_width=atoi(op.type().width().c_str());
         
         if(from_width==to_width)
           convert_smt_expr(op);
@@ -418,7 +418,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       }
       else if(op.type().id()=="unsignedbv")
       {
-        unsigned from_width=atoi(op.type().get("width").c_str());
+        unsigned from_width=atoi(op.type().width().c_str());
         
         if(from_width==to_width)
           convert_smt_expr(op);
@@ -442,7 +442,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
           smt_prop.out << ")[" << (to_width-1) << ":0]";
         }
       }
-      else if(op.type().id()=="bool")
+      else if(op.type().is_bool())
       {
         if(to_width>1)
         {
@@ -501,7 +501,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
         it++, i++)
     {
       if(i!=0) smt_prop.out << ", ";
-      smt_prop.out << it->get("name");
+      smt_prop.out << it->name();
       smt_prop.out << ":=";
       convert_smt_expr(expr.operands()[i]);
     }
@@ -516,7 +516,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     {
       // RB: decimal conversion ... some solvers do not
       // support binary constants ...
-      const char *str=expr.get("value").c_str();
+      const char *str=expr.value().as_string().c_str();
       unsigned len=strlen(str);
       unsigned long value = 0;
       //
@@ -543,7 +543,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else if(expr.type().id()=="pointer")
     {
       assert( false && "Construct not supported yet" );
-      const irep_idt &value=expr.get("value");
+      const irep_idt &value=expr.value();
       
       if(value=="NULL")
       {
@@ -555,7 +555,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else
         throw "unknown pointer constant: "+id2string(value);
     }
-    else if(expr.type().id()=="bool")
+    else if(expr.type().is_bool())
     {
       if(expr.is_true())
         smt_prop.out << "true";
@@ -564,7 +564,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else
         throw "unknown boolean constant";
     }
-    else if(expr.type().id()=="array")
+    else if(expr.type().is_array())
     {
       assert( false && "Construct not supported yet" );
       smt_prop.out << "ARRAY (i: " << array_index_type() << "):";
@@ -695,12 +695,12 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     convert_smt_expr(expr.op2());
     smt_prop.out << ")";
   }
-  else if(expr.id()=="and" ||
+  else if(expr.is_and() ||
           expr.id()=="or" ||
           expr.id()=="xor")
   {
     assert(false && "Construct not supported yet");
-    assert(expr.type().id()=="bool");
+    assert(expr.type().is_bool());
     
     if(expr.operands().size()>=2)
     {
@@ -708,7 +708,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       {
         if(it!=expr.operands().begin())
         {
-          if(expr.id()=="and")
+          if(expr.is_and())
             smt_prop.out << " AND ";
           else if(expr.id()=="or")
             smt_prop.out << " OR ";
@@ -741,7 +741,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(expr.operands().size()==2);
     assert(expr.op0().type()==expr.op1().type());
 
-    if(expr.op0().type().id()=="bool")
+    if(expr.op0().type().is_bool())
     {
       if(expr.id()=="notequal") 
 	smt_prop.out << "(xor ";
@@ -879,7 +879,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       if(expr.type().id()=="unsignedbv" ||
          expr.type().id()=="signedbv")
       {
-        smt_prop.out << "BVSUB(" << expr.type().get("width") << ", ";
+        smt_prop.out << "BVSUB(" << expr.type().width() << ", ";
         convert_smt_expr(expr.op0());
         smt_prop.out << ", ";
         convert_smt_expr(expr.op1());
@@ -908,7 +908,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else
         smt_prop.out << "SBVDIV";
 
-      smt_prop.out << "(" << expr.type().get("width") << ", ";
+      smt_prop.out << "(" << expr.type().width() << ", ";
       convert_smt_expr(expr.op0());
       smt_prop.out << ", ";
       convert_smt_expr(expr.op1());
@@ -930,7 +930,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else
         smt_prop.out << "SBVMOD";
 
-      smt_prop.out << "(" << expr.type().get("width") << ", ";
+      smt_prop.out << "(" << expr.type().width() << ", ";
       convert_smt_expr(expr.op0());
       smt_prop.out << ", ";
       convert_smt_expr(expr.op1());
@@ -947,7 +947,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       if(expr.type().id()=="unsignedbv" ||
          expr.type().id()=="signedbv")
       {
-        smt_prop.out << "BVMULT(" << expr.type().get("width") << ", ";
+        smt_prop.out << "BVMULT(" << expr.type().width() << ", ";
         convert_smt_expr(expr.op0());
         smt_prop.out << ", ";
         convert_smt_expr(expr.op1());
@@ -963,7 +963,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     else
       assert(false);
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.is_address_of() ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {
@@ -978,7 +978,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     // Not supported but it does not work otherwise
     //
     // assert(false && "Construct not supported yet");
-    assert(expr.type().id()=="array");
+    assert(expr.type().is_array());
     assert(expr.operands().size()==1);
     smt_prop.out << "bv0[32]";
     // smt_prop.out << "(ARRAY (i: " << array_index_type() << "): ";
@@ -1024,7 +1024,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else
         assert(false);
 
-      smt_prop.out << "(" << expr.type().get("width") << ", ";
+      smt_prop.out << "(" << expr.type().width() << ", ";
       convert_smt_expr(expr.op0());
       smt_prop.out << ", ";
       convert_smt_expr(expr.op1());
@@ -1048,7 +1048,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       if(expr.type().id()=="struct")
       {
 	assert(false && "operator not supported yet");
-        smt_prop.out << " WITH ." << index.get("component_name");
+        smt_prop.out << " WITH ." << index.component_name();
         smt_prop.out << ":=(";
         convert_array_value(value);
         smt_prop.out << ")";
@@ -1056,12 +1056,12 @@ void smt_convt::convert_smt_expr(const exprt &expr)
       else if(expr.type().id()=="union")
       {
 	assert(false && "operator not supported yet");
-        smt_prop.out << " WITH ." << index.get("component_name");
+        smt_prop.out << " WITH ." << index.component_name();
         smt_prop.out << ":=(";
         convert_array_value(value);
         smt_prop.out << ")";
       }
-      else if(expr.type().id()=="array")
+      else if(expr.type().is_array())
       {
         smt_prop.out << " ";
         convert_smt_expr(index);
@@ -1080,7 +1080,7 @@ void smt_convt::convert_smt_expr(const exprt &expr)
     assert(expr.operands().size()==1);
     convert_smt_expr(expr.op0());
     smt_prop.out << ".";
-    smt_prop.out << expr.get("component_name");
+    smt_prop.out << expr.component_name();
   }
   else if(expr.id()=="pointer_offset")
   {
@@ -1178,7 +1178,7 @@ Function: smt_convt::set_to
 
 void smt_convt::set_to(const exprt &expr, bool value)
 {
-  if(value && expr.id()=="and")
+  if(value && expr.is_and())
   {
     forall_operands(it, expr)
       set_to(*it, true);
@@ -1196,7 +1196,7 @@ void smt_convt::set_to(const exprt &expr, bool value)
     
     if(expr.op0().id()=="symbol")
     {
-      const irep_idt &identifier=expr.op0().get("identifier");
+      const irep_idt &identifier=expr.op0().identifier();
       
       identifiert &id=identifier_map[identifier];
 
@@ -1247,10 +1247,10 @@ void smt_convt::find_symbols(const exprt &expr)
     
   if(expr.id()=="symbol")
   {
-    if(expr.type().id()=="code")
+    if(expr.type().is_code())
       return;
 
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
     identifiert &id=identifier_map[identifier];
 
     if(id.type.is_nil())
@@ -1266,10 +1266,10 @@ void smt_convt::find_symbols(const exprt &expr)
   }  
   else if(expr.id()=="nondet_symbol")
   {
-    if(expr.type().id()=="code")
+    if(expr.type().is_code())
       return;
 
-    const irep_idt identifier="nondet"+expr.get_string("identifier");
+    const irep_idt identifier="nondet"+expr.identifier().as_string();
 
     identifiert &id=identifier_map[identifier];
 
@@ -1307,13 +1307,13 @@ Function: smt_convt::convert_smt_type
 
 void smt_convt::convert_smt_type(const typet &type)
 {
-  if(type.id()=="array")
+  if(type.is_array())
   {
     const array_typet &array_type=to_array_type(type);
     
     smt_prop.out << "Array[32:";
                  
-    if(array_type.subtype().id()=="bool")
+    if(array_type.subtype().is_bool())
       smt_prop.out << "1";
     else
       smt_prop.out << "32";
@@ -1321,7 +1321,7 @@ void smt_convt::convert_smt_type(const typet &type)
     smt_prop.out << "]";
   }
   /*
-  else if(type.id()=="bool")
+  else if(type.is_bool())
   {
     assert(false && "Construct not supported yet");
     smt_prop.out << "BOOLEAN";
@@ -1345,7 +1345,7 @@ void smt_convt::convert_smt_type(const typet &type)
     {
       if(it!=components.begin()) smt_prop.out << ",";
       smt_prop.out << " ";
-      smt_prop.out << it->get("name");
+      smt_prop.out << it->name();
       smt_prop.out << ": ";
       convert_smt_type(it->type());
     }
@@ -1390,7 +1390,7 @@ Function: smt_convt::find_symbols
 
 void smt_convt::find_symbols(const typet &type)
 {
-  if(type.id()=="array")
+  if(type.is_array())
   {
     const array_typet &array_type=to_array_type(type);
     find_symbols(array_type.size());

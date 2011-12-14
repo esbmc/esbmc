@@ -58,7 +58,7 @@ bool replace_symbolt::replace(exprt &dest)
   if(dest.id()=="symbol")
   {
     expr_mapt::const_iterator it=
-      expr_map.find(dest.get("identifier"));
+      expr_map.find(dest.identifier());
 
     if(it!=expr_map.end())
     {
@@ -107,7 +107,7 @@ bool replace_symbolt::replace(typet &dest)
          it++)
       replace(*it);
   } 
-  else if(dest.id()=="code")
+  else if(dest.is_code())
   {
     code_typet &code_type=to_code_type(dest);
     code_typet::argumentst &arguments=code_type.arguments();
@@ -120,7 +120,7 @@ bool replace_symbolt::replace(typet &dest)
   if(dest.id()=="symbol")
   {
     type_mapt::const_iterator it=
-      type_map.find(dest.get("identifier"));
+      type_map.find(dest.identifier());
 
     if(it!=type_map.end())
     {

@@ -163,12 +163,12 @@ void value_propagationt::get_entries_rec(
     {
       get_entries_rec(
         identifier,
-        suffix+"."+it->get_string("name"),
+        suffix+"."+it->name().as_string(),
         it->type(),
         dest);
     }
   }
-  else if(t.id()=="array")
+  else if(t.is_array())
   {
     get_entries_rec(identifier, suffix+"[]", t.subtype(), dest);
   }
@@ -275,7 +275,7 @@ bool value_propagationt::check_type(const typet &type)
       if(check_type(it->type())) return true;
     }    
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
     return check_type(type.subtype());
   else if(type.id()=="symbol")
     return check_type(ns.follow(type));
