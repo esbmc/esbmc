@@ -12,6 +12,13 @@ if test `uname -m` != "x86_64"; then
   exit 1
 fi
 
+# You also need to be running it in the root ESBMC dir
+stat .git > /dev/null 2>/dev/null
+if test $? != 0; then
+  echo "Please run release.sh in the root dir of ESBMC"
+  exit 1
+fi
+
 satdir64=$2
 satdir32=$3
 
