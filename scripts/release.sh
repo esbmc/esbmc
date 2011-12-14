@@ -44,7 +44,7 @@ fi
 
 # Then, checkout whatever we've been told to release
 git stash > /dev/null
-git co $1 > /dev/null
+git checkout $1 > /dev/null
 
 if test $? != 0; then
   echo "Couldn't checkout $1"
