@@ -137,6 +137,21 @@ function dobuild () {
 
 }
 
+function cleanup () {
+  echo "Cleaning up"
+  make clean > /dev/null 2>&1
+
+  # Clear anything we left behind
+  git reset --hard
+
+  # Check back out whatever ref we had before.
+  git checkout $CURHEAD
+  git stash pop
+}
+
+# If we get sigint/term/hup, cleanup before quitting.
+trap "echo 'Exiting'; cleanup; exit 1" SIGHUP SIGINT SIGTERM
+
 dobuild
 
 # We now have a set of binaries (or an error)
@@ -144,11 +159,6 @@ if test $? != 0; then
   echo "Build failed"
 fi
 
-# Clear anything we left behind
-git reset --hard
-
-# Check back out whatever ref we had before.
-git checkout $CURHEAD
-git stash pop
+cleanup
 
 # fini
