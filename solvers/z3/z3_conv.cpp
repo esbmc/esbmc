@@ -3255,7 +3255,7 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
   Z3_type_ast array_type, tuple_type;
   Z3_ast array_cte, int_cte, val_cte, tmp_struct;
   std::string value_cte;
-  char i_str[2];
+  char i_str[32];
 
   width = config.ansi_c.int_width;
 
