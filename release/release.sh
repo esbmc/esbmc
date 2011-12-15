@@ -70,8 +70,8 @@ fi
 function dobuild () {
 
   # Install our configuration files.
-  cp ./scripts/config.inc .
-  cp ./scripts/local.inc .
+  cp ./release/config.inc .
+  cp ./release/local.inc .
 
   # And build build build
   rm -rf .release
