@@ -39,9 +39,7 @@ int main(int argc, const char **argv)
 const mode_table_et mode_table[] =
 {
   LANGAPI_HAVE_MODE_C,
-#ifdef USE_CPP
   LANGAPI_HAVE_MODE_CPP,
-#endif
 #ifdef USE_SPECC
   LANGAPI_HAVE_MODE_SPECC,
 #endif

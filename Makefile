@@ -11,7 +11,7 @@ util: big-int
 infrastructure: util langapi solvers goto-symex pointer-analysis \
 		goto-programs
 
-languages: ansi-c
+languages: ansi-c cpp
 
 # Ansi-c builds its library using infrastructure facilities.
 ansi-c: infrastructure
@@ -38,9 +38,5 @@ clean:
 esbmc: $(OBJDIR)/.depends infrastructure languages
 
 ###############################################################################
-
-ifdef MODULE_CPP
-languages: cpp
-endif
 
 include $(ESBMCDIR)/common

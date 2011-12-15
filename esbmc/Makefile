@@ -20,7 +20,8 @@ OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
       ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \
       ../langapi/$(OBJDIR)/langapi.o \
       ../solvers/$(OBJDIR)/solvers.o \
-      ../util/$(OBJDIR)/util.o
+      ../util/$(OBJDIR)/util.o \
+      ../cpp/$(OBJDIR)/cpp.o
 
 LIBS= -lgmp -ldl -lgomp
 
@@ -48,11 +49,6 @@ endif
 
 ifdef USE_SMT
 CXXFLAGS+= USE_SMT
-endif
-
-ifdef MODULE_CPP
-OBJS += ../cpp/$(OBJDIR)/cpp.o
-CXXFLAGS+= -DUSE_CPP
 endif
 
 ###############################################################################

@@ -33,6 +33,3 @@ CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
 # point at a directory containing such solvers in your environment.
 #
 # Currently only Z3 is required for building ESBMC.
-
-# Optionally disable C++
-MODULE_CPP = 1
