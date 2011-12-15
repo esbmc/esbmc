@@ -42,6 +42,9 @@ if test $? != 0; then
   CURHEAD=`cat .git/HEAD`
 fi
 
+# Strip "refs/heads/" or suchlike from CURHEAD
+CURHEAD=`basename $CURHEAD`
+
 # Then, checkout whatever we've been told to release
 git stash > /dev/null
 git checkout $1 > /dev/null
