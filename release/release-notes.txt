@@ -1,5 +1,10 @@
 Release Notes of the ESBMC model checker
 
+*** Version 1.17 ***
+Date 15/10/2011
++ Release for TACAS 2012 Software Verification competition
++ Numerous minor bug fixes related to the Z3 solver backend
+
 *** Version 1.16 ***
 Date: 10/05/2011
 + New Feature
