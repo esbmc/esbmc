@@ -58,11 +58,16 @@ if test $buildcompat = 1; then
   satdir64compat=$4
   satdir32compat=$5
   if test "$satdir64compat" = ""; then
-    satdir64compat=$sat64dir
+    satdir64compat=$satdir64
   fi
   if test "$satdir32compat" = ""; then
-    satdir32compat=$sat32dir
+    satdir32compat=$satdir32
   fi
+
+  sat64compatz3vernum=`$satdir64compat/z3/bin/z3 -version | cut "--delim= " -f 3`
+  sat32compatz3vernum=`$satdir32compat/z3/bin/z3 -version | cut "--delim= " -f 3`
+
+  echo "For compat version, using Z3 versions $sat64compatz3vernum and $sat32compatz3vernum for 64 and 32 bits"
 fi
 
 # Find whatever the current head is
