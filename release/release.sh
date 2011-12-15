@@ -36,7 +36,7 @@ satdir32=$3
 
 sat64z3vernum=`$2/z3/bin/z3 -version | cut "--delim= " -f 3`
 sat32z3vernum=`$3/z3/bin/z3 -version | cut "--delim= " -f 3`
-echo "Compilng with Z3 versions $sat64z3vernum and $sat32z3vernum for 64 and 32 bits"
+echo "Compiling with Z3 versions $sat64z3vernum and $sat32z3vernum for 64 and 32 bits"
 
 # Work out whether we're going to build compat versions.
 
