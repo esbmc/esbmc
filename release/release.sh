@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if test "$#" != 3; then
-  echo "Usage: release.sh refname solvers64dir solvers32dir"
+if test "$#" -lt 3; then
+  echo "Usage: release.sh refname solvers64dir solvers32dir [compat64dir compat32dir]"
   exit 1
 fi
 
@@ -47,6 +47,21 @@ if test $? = 0; then
   which g++34 > /dev/null 2>&1
   if test $? = 0; then
     buildcompat=1
+  fi
+fi
+
+# If we're compiling compat, work out whether we'll be re-using the normal
+# SMT solver directories, or whether there are compat-specific ones on the
+# command line.
+# Protip: gcc34 won't link against libgomp for some reason.
+if test $buildcompat = 1; then
+  satdir64compat=$4
+  satdir32compat=$5
+  if test "$satdir64compat" = ""; then
+    satdir64compat=$sat64dir
+  fi
+  if test "$satdir32compat" = ""; then
+    satdir32compat=$sat32dir
   fi
 fi
 
@@ -99,6 +114,7 @@ function dobuild () {
 
   if test $buildcompat = 1; then
     echo "Building compat 64 bit ESBMC"
+    export SATDIR=$satdir64compat
     make clean > /dev/null 2>&1
     env CC=gcc34 CXX=g++34 make > /dev/null 2>&1
 
@@ -127,6 +143,8 @@ function dobuild () {
     cp esbmc/esbmc .release/esbmc32
     if test $buildcompat = 1; then
       echo "Building 32 bit compat ESBMC"
+
+      export SATDIR=$satdir32compat
 
       make clean > /dev/null 2>&1
 
