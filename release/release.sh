@@ -19,6 +19,16 @@ if test $? != 0; then
   exit 1
 fi
 
+# Check to see whether or not there's an instance for
+# this version in release notes
+# (Start by removing leading v)
+vernum=`echo $1 | sed s#v\(.*\)#\1#`
+grep "\*\*\*.*$vernum.*\*\*\*" ./release/release-notes.txt
+if test $? != 0; then
+  echo "Can't find an entry for $1 in release-notes.txt; you need to write one"
+  exit 1
+fi
+
 satdir64=$2
 satdir32=$3
 
