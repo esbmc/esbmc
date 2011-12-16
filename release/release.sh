@@ -182,6 +182,38 @@ function cleanup () {
   git stash pop
 }
 
+function buildtgz {
+  suffix=$1
+  binpath=$2
+
+  tmpdirname=`mktemp -d`
+  projname="esbmc-$1-linux-$suffix"
+  dirname="$tmpdirname/$projname"
+  mkdir $dirname
+  mkdir $dirname/bin
+  mkdir $dirname/licenses
+  mkdir $dirname/smoke-tests
+
+  # Copy data in
+  cp release/README $dirname
+  cp release/release-notes.txt $dirname
+  cp $binpath $dirname/bin/esbmc
+  cp release/licenses/* $dirname/licenses
+  cp regression/smoke-tests/* $dirname/smoke-tests/
+
+  # Create a tarball
+  tar -czf .release/$projname.tgz -C $tmpdirname $projname
+}
+
+function buildtarballs() {
+  buildtgz "64" ".release/esbmc"
+  buildtgz "32" ".release/esbmc32"
+  if test $buildcompat = 1; then
+    buildtgz "64-compat" ".release/esbmc_compat"
+    buildtgz "32-compat" ".release/esbmc32_compat"
+  fi
+}
+
 # If we get sigint/term/hup, cleanup before quitting.
 trap "echo 'Exiting'; cleanup; exit 1" SIGHUP SIGINT SIGTERM
 
@@ -191,6 +223,8 @@ dobuild
 if test $? != 0; then
   echo "Build failed"
 fi
+
+buildtarballs
 
 cleanup
 
