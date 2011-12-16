@@ -103,6 +103,10 @@ function dobuild () {
   rm -rf .release
   mkdir .release
 
+  # For release builds, no debug information
+  export EXTRACFLAGS="-DNDEBUG"
+  export EXTRACXXFLAGS="-DNDEBUG"
+
   # Use 64 bit libraries
   export SATDIR=$satdir64
 
@@ -138,7 +142,7 @@ function dobuild () {
   buildfor32bits=0
   make clean > /dev/null 2>&1
 
-  env EXTRACFLAGS="-m32" EXTRACXXFLAGS="-m32" LDFLAGS="-m elf_i386" make > /dev/null 2>&1
+  env EXTRACFLAGS="-m32 -DNDEBUG" EXTRACXXFLAGS="-m32 -DNDEBUG" LDFLAGS="-m elf_i386" make > /dev/null 2>&1
 
   if test $? != 0; then
     echo "Buildling 32 bits failed; do you have the right headers and libraries?"
@@ -153,7 +157,7 @@ function dobuild () {
 
       make clean > /dev/null 2>&1
 
-      env CC=gcc34 CXX=g++34 EXTRACFLAGS="-m32" EXTRACXXFLAGS="-m32" LDFLAGS="-m elf_i386" make > /dev/null 2>&1
+      env CC=gcc34 CXX=g++34 EXTRACFLAGS="-m32 -DNDEBUG" EXTRACXXFLAGS="-m32 -DNDEBUG" LDFLAGS="-m elf_i386" make > /dev/null 2>&1
 
       if test $? != 0; then
         echo "Building 32 bit compat ESBMC failed"
