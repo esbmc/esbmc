@@ -22,7 +22,7 @@ public:
     std::ostream& out,
     instructionst::const_iterator it,
     bool show_location=true,
-    bool show_variables=true) const;
+    bool show_variables=false) const;
 
   goto_programt() { }  
 };
