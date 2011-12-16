@@ -577,7 +577,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
       // Munge back into the shape of an actual string
       std::string str = "";
       forall_operands(iter2, it->second.value) {
-        char c = (char)strtol(iter2->get("value").as_string().c_str(), NULL, 2);
+        char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
         if (c != 0)
           str += c;
         else
@@ -619,7 +619,7 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
 {
 
   if (e.id() ==  "symbol") {
-    std::string sym = e.get("identifier").as_string();
+    std::string sym = e.identifier().as_string();
 
 // Originally this piece of code renamed all the symbols in the property
 // expression to ones specified by the user. However, there's no easy way of
@@ -634,7 +634,7 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
       assert(0 && "Missing symbol mapping for property monitor");
 
     sym = strings[sym];
-    e.set("identifier", sym);
+    e.identifier(sym);
 #endif
 
     used_syms.insert(sym);
@@ -683,7 +683,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
   // Is this actually an assignment that we're interested in?
   std::map<std::string, std::pair<std::set<std::string>, exprt> >::const_iterator it;
-  std::string sym_name = sym.get("identifier").as_string();
+  std::string sym_name = sym.identifier().as_string();
   std::set<std::pair<std::string, exprt> > triggered;
   for (it = monitors.begin(); it != monitors.end(); it++) {
     if (it->second.first.find(sym_name) == it->second.first.end())
@@ -715,7 +715,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   }
 
   typet uint32 = typet("unsignedbv");
-  uint32.set("width", 32);
+  uint32.width(32);
   new_insn.type = ASSIGN;
   new_insn.function = insn->function;
   constant_exprt c_expr = constant_exprt(uint32);
@@ -743,7 +743,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
 static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
 {
-  std::string identifier = expr.get_string("identifier");
+  std::string identifier = expr.identifier().as_string();
 
   if (expr.id() != "symbol") {
     unsigned int globals = 0;
@@ -759,7 +759,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
   if (identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
     return 0;
 
-  if (sym.static_lifetime || sym.type.get("#dynamic") != "")
+  if (sym.static_lifetime || sym.type.is_dynamic_set())
     return 1;
 
   return 0;
@@ -787,7 +787,7 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
         case FUNCTION_CALL:
           {
             code_function_callt deref_code = to_code_function_call(pit->code);
-            if (deref_code.function().get("identifier") == "c::__ESBMC_yield")
+            if (deref_code.function().identifier() == "c::__ESBMC_yield")
               print_insn = true;
           }
           break;

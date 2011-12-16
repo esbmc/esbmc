@@ -47,7 +47,7 @@ bool boolbvt::literal(
   const unsigned bit,
   literalt &dest) const
 {
-  if(expr.type().id()=="bool")
+  if(expr.type().is_bool())
   {
     assert(bit==0);
     return prop_convt::literal(expr, dest);
@@ -57,7 +57,7 @@ bool boolbvt::literal(
     if(expr.id()=="symbol" ||
        expr.id()=="nondet_symbol")
     {
-      const irep_idt &identifier=expr.get("identifier");
+      const irep_idt &identifier=expr.identifier();
 
       boolbv_mapt::mappingt::const_iterator it_m=
         map.mapping.find(identifier);
@@ -95,16 +95,16 @@ bool boolbvt::literal(
       if(expr.operands().size()!=1)
         throw "member takes one operand";
 
-      const irept &components=expr.type().find("components");
-      const irep_idt &component_name=expr.get("component_name");
+      const irept &components=expr.type().components();
+      const irep_idt &component_name=expr.component_name();
 
       unsigned offset=0;
 
       forall_irep(it, components.get_sub())
       {
-        const typet &subtype=(typet &)it->find("type");
+        const typet &subtype=it->type();
 
-        if(it->get("name")==component_name)
+        if(it->name()==component_name)
           return literal(expr.op0(), bit+offset, dest);
 
         unsigned element_width;
@@ -200,7 +200,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
   std::cout << "BV: " << expr.pretty() << std::endl;
   #endif
 
-  if(expr.type().id()=="bool")
+  if(expr.type().is_bool())
   {
     bv.resize(1);
     bv[0]=convert(expr);
@@ -302,7 +302,7 @@ void boolbvt::convert_bitvector(const exprt &expr, bvt &bv)
     string2array(expr, tmp);
     return convert_bitvector(tmp, bv);
   }
-  else if(expr.id()=="array")
+  else if(expr.is_array())
     return convert_array(expr, bv);
   else if(expr.id()=="lambda")
     return convert_lambda(expr, bv);
@@ -332,7 +332,7 @@ void boolbvt::convert_array(const exprt &expr, bvt &bv)
     
   bv.resize(width);
 
-  if(expr.type().id()=="array")
+  if(expr.type().is_array())
   {
     unsigned op_width=width/expr.operands().size();
     unsigned offset=0;
@@ -379,7 +379,7 @@ void boolbvt::convert_lambda(const exprt &expr, bvt &bv)
   if(expr.operands().size()!=2)
     throw "lambda takes two operands";
 
-  if(expr.type().id()!="array")
+  if(!expr.type().is_array())
     return conversion_failed(expr, bv);
 
   const exprt &array_size=
@@ -432,7 +432,7 @@ void boolbvt::convert_bv_literals(const exprt &expr, bvt &bv)
 
   bv.resize(width);
 
-  const irept::subt &bv_sub=expr.find("bv").get_sub();
+  const irept::subt &bv_sub=expr.bv().get_sub();
 
   if(bv_sub.size()!=width)
     throw "bv_literals with wrong size";
@@ -461,7 +461,7 @@ void boolbvt::convert_symbol(const exprt &expr, bvt &bv)
 
   bv.resize(width);
   
-  const irep_idt &identifier=expr.get("identifier");
+  const irep_idt &identifier=expr.identifier();
 
   if(identifier.empty())
     throw "got empty identifier";
@@ -495,7 +495,7 @@ void boolbvt::convert_struct(const exprt &expr, bvt &bv)
   if(boolbv_get_width(expr.type(), width))
     return conversion_failed(expr, bv);
 
-  const irept &components=expr.type().find("components");
+  const irept &components=expr.type().components();
 
   if(expr.operands().size()!=components.get_sub().size())
     throw "struct: wrong number of arguments";
@@ -506,7 +506,7 @@ void boolbvt::convert_struct(const exprt &expr, bvt &bv)
   
   forall_irep(it, components.get_sub())
   {
-    const typet &subtype=(typet &)it->find("type");
+    const typet &subtype=it->type();
     const exprt &op=expr.operands()[i];
 
     if(subtype!=op.type())
@@ -838,7 +838,7 @@ bool boolbvt::boolbv_set_equality_to_true(const exprt &expr)
       convert_bv(operands[1], bv1);
       
       const irep_idt &identifier=
-        operands[0].get("identifier");
+        operands[0].identifier();
 
       const typet &type=operands[0].type();
 
@@ -899,12 +899,15 @@ Function: boolbvt::make_bv_expr
 void boolbvt::make_bv_expr(const typet &type, const bvt &bv, exprt &dest)
 {
   dest=exprt("bv_literals", type);
-  irept::subt &bv_sub=dest.add("bv").get_sub();
+  irept _bv;
+  irept::subt &bv_sub = _bv.get_sub();
 
   bv_sub.resize(bv.size());
 
   for(unsigned i=0; i<bv.size(); i++)
     bv_sub[i].id(i2string(bv[i].get()));
+
+  dest.bv(_bv);
 }
 
 /*******************************************************************\
@@ -949,11 +952,11 @@ Function: boolbvt::is_unbounded_array
 
 bool boolbvt::is_unbounded_array(const typet &type) const
 {
-  if(type.id()!="array") return false;
+  if(!type.is_array()) return false;
   
   if(unbounded_array==U_ALL) return true;
   
-  const exprt &size=(exprt &)type.find("size");
+  const exprt &size=(exprt &)type.size_irep();
   
   mp_integer s;
   if(to_integer(size, s)) return true;

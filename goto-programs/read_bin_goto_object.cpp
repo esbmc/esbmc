@@ -99,7 +99,7 @@ bool read_bin_goto_object(
     symbol.from_irep(t);
     
     if(!symbol.is_type &&
-       symbol.type.id()=="code")
+       symbol.type.is_code())
     {
       // makes sure there is an empty function
       // for every function symbol and fixes

@@ -20,19 +20,19 @@ public:
   {
   }
   
-  exprt &value()
+  exprt &decl_value()
   {
-    return static_cast<exprt &>(add("value"));
+    return static_cast<exprt &>(add("decl_value"));
   }
   
-  const exprt &value() const
+  const exprt &decl_value() const
   {
-    return static_cast<const exprt &>(find("value"));
+    return static_cast<const exprt &>(irept::decl_value());
   }
   
   void set_name(const irep_idt &name)
   {
-    return set("name", name);
+    return this->name(name);
   }
   
   irep_idt get_name() const
@@ -42,22 +42,22 @@ public:
   
   irep_idt get_base_name() const
   {
-    return get("base_name");
+    return this->base_name();
   }
   
   void set_base_name(const irep_idt &base_name)
   {
-    return set("base_name", base_name);
+    return this->base_name(base_name);
   }
   
   bool get_is_type() const
   {
-    return get_bool("is_type");
+    return is_type();
   }
   
   void set_is_type(bool is_type)
   {
-    set("is_type", is_type);
+    this->is_type(is_type);
   }
   
   bool get_is_typedef() const
@@ -72,12 +72,12 @@ public:
   
   bool get_is_macro() const
   {
-    return get_bool("is_macro");
+    return this->is_macro();
   }
   
   void set_is_macro(bool is_macro)
   {
-    set("is_macro", is_macro);
+    this->is_macro(is_macro);
   }
   
   bool get_is_static() const
@@ -132,19 +132,19 @@ public:
   
   bool get_is_extern() const
   {
-    return get_bool("is_extern");
+    return is_extern();
   }
   
   void set_is_extern(bool is_extern)
   {
-    set("is_extern", is_extern);
+    this->is_extern(is_extern);
   }
   
   void to_symbol(symbolt &symbol) const
   {
     symbol.clear();    
     symbol.location=location();
-    symbol.value=value();
+    symbol.value=decl_value();
     symbol.type=type();
     symbol.name=get_name();
     symbol.base_name=get_base_name();
@@ -153,7 +153,7 @@ public:
     symbol.is_macro=get_is_macro();
     symbol.is_actual=get_is_argument();
 
-    bool is_code=symbol.type.id()=="code";
+    bool is_code=symbol.type.is_code();
   
     symbol.static_lifetime=
       !symbol.is_macro &&
@@ -166,7 +166,7 @@ public:
       (!get_is_global() && !get_is_extern() && !is_code);
     
     if(get_is_inline())
-      symbol.type.set("#inlined", true);
+      symbol.type.inlined(true);
   }
 };
 

@@ -80,7 +80,7 @@ void interpretert::evaluate(
       dest.push_back(f.get_value());
       return;
     }
-    else if(expr.type().id()=="bool")
+    else if(expr.type().is_bool())
     {
       dest.push_back(expr.is_true());
       return;
@@ -102,7 +102,7 @@ void interpretert::evaluate(
 
     forall_operands(it, expr)
     {
-      if(it->type().id()=="code") continue;
+      if(it->type().is_code()) continue;
 
       unsigned sub_size=get_size(it->type());
       if(sub_size==0) continue;
@@ -203,7 +203,7 @@ void interpretert::evaluate(
 
     return;
   }
-  else if(expr.id()=="and")
+  else if(expr.is_and())
   {
     if(expr.operands().size()<1)
       throw id2string(expr.id())+" expects at least one operand";
@@ -348,7 +348,7 @@ void interpretert::evaluate(
       dest.push_back(-tmp0.front());
     return;
   }
-  else if(expr.id()=="address_of")
+  else if(expr.is_address_of())
   {
     if(expr.operands().size()!=1)
       throw "address_of expects one operand";
@@ -395,7 +395,7 @@ void interpretert::evaluate(
         dest.push_back(binary2integer(s, false));        
         return;
       }
-      else if(expr.type().id()=="bool")
+      else if(expr.type().is_bool())
       {
         dest.push_back(value!=0);
         return;
@@ -438,7 +438,7 @@ mp_integer interpretert::evaluate_address(const exprt &expr) const
 {
   if(expr.id()=="symbol")
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
     
     interpretert::memory_mapt::const_iterator m_it1=
       memory_map.find(identifier);

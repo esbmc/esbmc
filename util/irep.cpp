@@ -19,6 +19,14 @@ irept nil_rep_storage;
 const irept::dt empty_d;
 #endif
 
+void
+irept::dump(void) const
+{
+
+  std::cout << pretty(0) << std::endl;
+  return;
+}
+
 /*******************************************************************\
 
 Function: get_nil_irep
@@ -817,3 +825,131 @@ std::string irept::pretty(unsigned indent) const
   return result;
 }
 
+const irep_idt irept::a_width = dstring("width");
+const irep_idt irept::a_name = dstring("name");
+const irep_idt irept::a_statement = dstring("statement");
+const irep_idt irept::a_identifier = dstring("identifier");
+const irep_idt irept::a_comp_name = dstring("component_name");
+const irep_idt irept::a_tag = dstring("tag");
+const irep_idt irept::a_from = dstring("from");
+const irep_idt irept::a_file = dstring("file");
+const irep_idt irept::a_line = dstring("line");
+const irep_idt irept::a_function = dstring("function");
+const irep_idt irept::a_column = dstring("column");
+const irep_idt irept::a_access = dstring("access");
+const irep_idt irept::a_destination = dstring("destination");
+const irep_idt irept::a_base_name = dstring("base_name");
+const irep_idt irept::a_comment = dstring("comment");
+const irep_idt irept::a_event = dstring("event");
+const irep_idt irept::a_literal = dstring("literal");
+const irep_idt irept::a_loopid = dstring("loop-id");
+const irep_idt irept::a_mode = dstring("mode");
+const irep_idt irept::a_module = dstring("module");
+const irep_idt irept::a_ordering = dstring("ordering");
+const irep_idt irept::a_pretty_name = dstring("pretty_name");
+const irep_idt irept::a_property = dstring("property");
+const irep_idt irept::a_size = dstring("size");
+const irep_idt irept::a_integer_bits = dstring("integer_bits");
+const irep_idt irept::a_to = dstring("to");
+const irep_idt irept::a_failed_symbol = dstring("#failed_symbol");
+const irep_idt irept::a_dynamic = dstring("#dynamic");
+const irep_idt irept::a_cmt_base_name = dstring("#base_name");
+const irep_idt irept::a_id_class = dstring("#id_class");
+const irep_idt irept::a_cmt_identifier = dstring("#identifier");
+const irep_idt irept::a_cformat = dstring("#cformat");
+const irep_idt irept::a_cmt_width = dstring("#width");
+const irep_idt irept::a_axiom = dstring("axiom");
+const irep_idt irept::a_binding = dstring("binding");
+const irep_idt irept::a_bounds_check = dstring("bounds_check");
+const irep_idt irept::a_cmt_constant = dstring("#constant");
+const irep_idt irept::a_default = dstring("default");
+const irep_idt irept::a_ellipsis = dstring("ellipsis");
+const irep_idt irept::a_explicit = dstring("explicit");
+const irep_idt irept::a_file_local = dstring("file_local");
+const irep_idt irept::a_free_var = dstring("free_var");
+const irep_idt irept::a_hex_or_oct = dstring("#hex_or_oct");
+const irep_idt irept::a_hide = dstring("#hide");
+const irep_idt irept::a_implicit = dstring("#implicit");
+const irep_idt irept::a_incomplete = dstring("#incomplete");
+const irep_idt irept::a_initialization = dstring("initialization");
+const irep_idt irept::a_inlined = dstring("#inlined");
+const irep_idt irept::a_invalid_object = dstring("#invalid_object");
+const irep_idt irept::a_is_actual = dstring("is_actual");
+const irep_idt irept::a_is_exported = dstring("is_exported");
+const irep_idt irept::a_is_expression = dstring("#is_expression");
+const irep_idt irept::a_is_extern = dstring("is_extern");
+const irep_idt irept::a_is_input = dstring("is_input");
+const irep_idt irept::a_is_macro = dstring("is_macro");
+const irep_idt irept::a_is_output = dstring("is_output");
+const irep_idt irept::a_is_statevar = dstring("is_statevar");
+const irep_idt irept::a_is_type = dstring("is_type");
+const irep_idt irept::a_is_volatile = dstring("is_volatile");
+const irep_idt irept::a_cmt_lvalue = dstring("#lvalue");
+const irep_idt irept::a_lvalue = dstring("lvalue");
+const irep_idt irept::a_reference = dstring("#reference");
+const irep_idt irept::a_restricted = dstring("#restricted");
+const irep_idt irept::a_static_lifetime = dstring("static_lifetime");
+const irep_idt irept::a_theorem = dstring("theorem");
+const irep_idt irept::a_cmt_unsigned = dstring("#unsigned");
+const irep_idt irept::a_user_provided = dstring("user-provided");
+const irep_idt irept::a_cmt_volatile = dstring("#volatile");
+const irep_idt irept::a_zero_initializer = dstring("#zero_initializer");
+const irep_idt irept::a_flavor = dstring("flavor");
+const irep_idt irept::a_cmt_active = dstring("#active");
+const irep_idt irept::a_code = dstring("code");
+const irep_idt irept::a_component = dstring("component");
+const irep_idt irept::a_c_size_type = dstring("#c_size_type");
+const irep_idt irept::a_end_location = dstring("#end_location");
+const irep_idt irept::a_guard = dstring("guard");
+const irep_idt irept::a_label = dstring("label");
+const irep_idt irept::a_lhs = dstring("lhs");
+const irep_idt irept::a_location = dstring("location");
+const irep_idt irept::a_object_type = dstring("object_type");
+const irep_idt irept::a_cmt_size = dstring("#size");
+const irep_idt irept::a_cmt_type = dstring("#type");
+const irep_idt irept::a_type_id = dstring("typeid");
+
+const irep_idt irept::s_type = dstring("type");
+const irep_idt irept::s_arguments = dstring("arguments");
+const irep_idt irept::s_components = dstring("components");
+const irep_idt irept::s_case = dstring("case");
+const irep_idt irept::s_return_type = dstring("return_type");
+const irep_idt irept::s_body = dstring("body");
+const irep_idt irept::s_member = dstring("member");
+const irep_idt irept::s_labels = dstring("labels");
+const irep_idt irept::s_c_sizeof_type = dstring("#c_sizeof_type");
+const irep_idt irept::s_bv = dstring("bv");
+const irep_idt irept::s_targets = dstring("targets");
+const irep_idt irept::s_variables = dstring("variables");
+const irep_idt irept::s_initializer = dstring("initializer");
+const irep_idt irept::s_declaration_type = dstring("declaration_type");
+const irep_idt irept::s_decl_value = dstring("decl_value");
+const irep_idt irept::s_symvalue = dstring("symvalue");
+const irep_idt irept::s_cmt_location = dstring("#location");
+const irep_idt irept::s_decl_ident = dstring("decl_ident");
+const irep_idt irept::s_elements = dstring("elements");
+const irep_idt irept::s_sizeof_type = dstring("sizeof-type");
+const irep_idt irept::s_offsetof_type = dstring("offsetof_type");
+
+const irep_idt irept::id_address_of = dstring("address_of");
+const irep_idt irept::id_and = dstring("and");
+const irep_idt irept::id_array = dstring("array");
+const irep_idt irept::id_bool = dstring("bool");
+const irep_idt irept::id_code = dstring("code");
+const irep_idt irept::id_constant = dstring("constant");
+const irep_idt irept::id_dereference = dstring("dereference");
+const irep_idt irept::id_empty = dstring("empty");
+const irep_idt irept::id_fixedbv = dstring("fixedbv");
+const irep_idt irept::id_floatbv = dstring("floatbv");
+const irep_idt irept::id_incomplete_array = dstring("incomplete_array");
+const irep_idt irept::id_index = dstring("index");
+const irep_idt irept::id_member = dstring("member");
+const irep_idt irept::id_not = dstring("not");
+const irep_idt irept::id_notequal = dstring("notequal");
+const irep_idt irept::id_pointer = dstring("pointer");
+const irep_idt irept::id_signedbv = dstring("signedbv");
+const irep_idt irept::id_struct = dstring("struct");
+const irep_idt irept::id_symbol = dstring("symbol");
+const irep_idt irept::id_typecast = dstring("typecast");
+const irep_idt irept::id_union = dstring("union");
+const irep_idt irept::id_unsignedbv = dstring("unsignedbv");

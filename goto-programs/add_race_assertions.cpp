@@ -79,8 +79,8 @@ public:
 
   const bool not_valid_assign(goto_programt::instructiont &instruction)
   {
-	std::string identifier=instruction.code.op0().get_string("identifier");
-	std::string type=instruction.code.op0().type().get_string("identifier");
+	std::string identifier=instruction.code.op0().identifier().as_string();
+	std::string type=instruction.code.op0().type().identifier().as_string();
 
 	//these assignments come from the buil-in-libraries
     if (identifier.find("built-in-library")!= std::string::npos
@@ -243,7 +243,7 @@ void add_race_assertions(
           else
             t->location=original_instruction.code.op1().location();
         }
-        t->location.set("comment", e_it->second.get_comment());
+        t->location.comment(e_it->second.get_comment());
         i_it=++t;
       }
 

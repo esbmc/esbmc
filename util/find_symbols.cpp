@@ -47,7 +47,7 @@ void find_symbols(
 {
   if((src.id()=="symbol" && current) ||
      (src.id()=="next_symbol" && next))
-    dest.insert(src.get("identifier"));
+    dest.insert(src.identifier());
   else
   {
     forall_operands(it, src)
@@ -75,7 +75,7 @@ bool has_symbol(
 {
   if((src.id()=="symbol" && current) ||
      (src.id()=="next_symbol" && next))
-    return symbols.count(src.get("identifier"))!=0;
+    return symbols.count(src.identifier())!=0;
   else
   {
     forall_operands(it, src)

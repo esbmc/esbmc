@@ -54,10 +54,10 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
 
   forall_irep(irep_it, irep.get_sub()) {
     if (irep_it->id() == "symbol") {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->get("identifier"));
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->identifier());
       deps.insert(type);
     } else if (irep_it->id() == "argument") {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->get("#identifier"));
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->cmt_identifier());
       deps.insert(type);
     } else {
       generate_symbol_deps(name, *irep_it, deps);
@@ -66,10 +66,10 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
 
   forall_named_irep(irep_it, irep.get_named_sub()) {
     if (irep_it->second.id() == "symbol") {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.get("identifier"));
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.identifier());
       deps.insert(type);
     } else if (irep_it->second.id() == "argument") {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.get("#identifier"));
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.cmt_identifier());
       deps.insert(type);
     } else {
       generate_symbol_deps(name, irep_it->second, deps);

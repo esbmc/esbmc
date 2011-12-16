@@ -65,12 +65,12 @@ void ansi_c_convertt::convert_declaration(ansi_c_declarationt &declaration)
   // add language prefix
   declaration.set_name(language_prefix+id2string(declaration.get_name()));
 
-  if(declaration.value().is_not_nil())
+  if(declaration.decl_value().is_not_nil())
   {
-    if(declaration.type().id()=="code")
-      convert_code(to_code(declaration.value()));
+    if(declaration.type().is_code())
+      convert_code(to_code(declaration.decl_value()));
     else
-      convert_expr(declaration.value());
+      convert_expr(declaration.decl_value());
   }
 }
 
@@ -93,7 +93,7 @@ void ansi_c_convertt::convert_expr(exprt &expr)
 
   if(expr.id()=="symbol")
   {
-    expr.set("identifier", final_id(expr.get("identifier")));
+    expr.identifier(final_id(expr.identifier()));
     expr.remove("#id_class");
     expr.remove("#base_name");
   }
@@ -101,8 +101,9 @@ void ansi_c_convertt::convert_expr(exprt &expr)
   {
     if(expr.operands().size()==0)
     {
-      typet &type=static_cast<typet &>(expr.add("sizeof-type"));
+      typet type=static_cast<const typet &>(expr.sizeof_type());
       convert_type(type);
+      expr.sizeof_type(type);
     }
   }
   else if(expr.id()=="builtin_va_arg")
@@ -111,8 +112,9 @@ void ansi_c_convertt::convert_expr(exprt &expr)
   }
   else if(expr.id()=="builtin_offsetof")
   {
-    typet &offsetof_type=static_cast<typet &>(expr.add("offsetof_type"));
+    typet offsetof_type=static_cast<const typet &>(expr.offsetof_type());
     convert_type(offsetof_type);
+    expr.offsetof_type(offsetof_type);
   }
   else if(expr.id()=="typecast")
   {
@@ -156,8 +158,11 @@ void ansi_c_convertt::convert_code(codet &code)
     assert(code.operands().size()==1);
     convert_code(to_code(code.op0()));
 
-    if(code.find("case").is_not_nil())
-      convert_expr(static_cast<exprt &>(code.add("case")));
+    if(code.case_irep().is_not_nil()) {
+      exprt tmp = (exprt&)code.case_irep();
+      convert_expr(tmp);
+      code.case_irep(tmp);
+    }
   }
   else if(statement=="block" ||
           statement=="decl-block")
@@ -300,12 +305,16 @@ void ansi_c_convertt::convert_type(
   else if(type.id()=="c_bitfield")
   {
     convert_type(type.subtype());
-    convert_expr(static_cast<exprt &>(type.add("size")));
+    exprt tmp = static_cast<const exprt &>(type.size_irep());
+    convert_expr(tmp);
+    type.size(tmp);
+    // XXX jmorse - does this reveal a condition where c_bitfield doesn't have
+    // a size field?
   }
   else if(type.id()=="symbol")
   {
-    irep_idt identifier=final_id(type.get("identifier"));
-    type.set("identifier", identifier);
+    irep_idt identifier=final_id(type.identifier());
+    type.identifier(identifier);
     type.remove("#id_class");
     type.remove("#base_name");
   }
@@ -317,7 +326,7 @@ void ansi_c_convertt::convert_type(
       throw "no qualifiers permitted for event type";
     }
   }
-  else if(type.id()=="code")
+  else if(type.is_code())
   {
     c_storage_spect sub_storage_spec;
 
@@ -372,7 +381,7 @@ void ansi_c_convertt::convert_type(
         throw "unexpected argument: "+it->id_string();
     }
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     array_typet &array_type=to_array_type(type);
 
@@ -396,7 +405,8 @@ void ansi_c_convertt::convert_type(
           type.id()=="ansi_c_channel" ||
           type.id()=="ansi_c_behavior")
   {
-    irept::subt &components=type.add("components").get_sub();
+    // Create new components subt to operate upon
+    irept::subt components=type.components().get_sub();
 
     Forall_irep(it, components)
     {
@@ -407,18 +417,23 @@ void ansi_c_convertt::convert_type(
       exprt new_component("component");
 
       new_component.location()=component.location();
-      new_component.set("name", component.get_base_name());
-      new_component.set("pretty_name", component.get_base_name());
+      new_component.name(component.get_base_name());
+      new_component.pretty_name(component.get_base_name());
       new_component.type().swap(component.type());
 
       convert_type(new_component.type());
 
       component.swap(new_component);
     }
+
+    // Set into type
+    irept tmp = type.components();
+    tmp.get_sub() = components;
+    type.components(tmp);
   }
   else if(type.id()=="type_of")
   {
-    if(type.get_bool("#is_expression"))
+    if(type.is_expression())
       convert_expr((exprt&)type.subtype());
     else
       convert_type(type.subtype());
@@ -427,7 +442,7 @@ void ansi_c_convertt::convert_type(
           type.id()=="incomplete_c_enum")
   {
     // add width
-    type.set("width", config.ansi_c.int_width);
+    type.width(config.ansi_c.int_width);
   }
   else if(type.id()=="void")
   {

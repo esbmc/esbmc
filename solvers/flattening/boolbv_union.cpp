@@ -46,8 +46,8 @@ void boolbvt::convert_union(const exprt &expr, bvt &bv)
   for(unsigned i=op_bv.size(); i<bv.size(); i++)
     bv[i]=prop.new_variable();
 
-  const irep_idt &component_name=expr.get("component_name");
-  const irept &components=expr.type().find("components");
+  const irep_idt &component_name=expr.component_name();
+  const irept &components=expr.type().components();
 
   const union_typet &union_type=to_union_type(expr.type());
 

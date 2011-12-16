@@ -25,18 +25,18 @@ Function: string2array
 
 void string2array(const exprt &src, exprt &dest)
 {
-  const std::string &str=src.get_string("value");
+  const std::string &str=src.value().as_string();
   unsigned string_size=str.size()+1; // zero
   const typet &char_type=src.type().subtype();
   bool char_is_unsigned=char_type.id()=="unsignedbv";
 
   exprt size("constant", typet("signedbv"));
-  size.type().set("width", config.ansi_c.int_width);
-  size.set("value", integer2binary(string_size, config.ansi_c.int_width));
+  size.type().width(config.ansi_c.int_width);
+  size.value(integer2binary(string_size, config.ansi_c.int_width));
 
   dest=exprt("constant", typet("array"));
   dest.type().subtype()=char_type;
-  dest.type().set("size", size);
+  dest.type().size(size);
 
   dest.operands().resize(string_size);
 
@@ -58,7 +58,7 @@ void string2array(const exprt &src, exprt &dest)
       ch_str[0]=ch;
       ch_str[1]=0;
 
-      op.set("#cformat", "'"+std::string(ch_str)+"'");
+      op.cformat("'"+std::string(ch_str)+"'");
     }
   }
 }

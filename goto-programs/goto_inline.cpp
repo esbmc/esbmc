@@ -62,7 +62,7 @@ void goto_inlinet::parameter_assignments(
     // this is the type the n-th argument should be
     const typet &arg_type=ns.follow(argument.type());
 
-    const irep_idt &identifier=argument.get("#identifier");
+    const irep_idt &identifier=argument.cmt_identifier();
 
     if(identifier=="")
     {
@@ -102,7 +102,7 @@ void goto_inlinet::parameter_assignments(
         // we are willing to do some conversion
         if((f_argtype.id()=="pointer" &&
             f_acttype.id()=="pointer") ||
-           (f_argtype.id()=="array" &&
+           (f_argtype.is_array() &&
             f_acttype.id()=="pointer" &&
             f_argtype.subtype()==f_acttype.subtype()))
         {
@@ -110,10 +110,10 @@ void goto_inlinet::parameter_assignments(
         }
         else if((f_argtype.id()=="signedbv" ||
             f_argtype.id()=="unsignedbv" ||
-            f_argtype.id()=="bool") &&
+            f_argtype.is_bool()) &&
            (f_acttype.id()=="signedbv" ||
             f_acttype.id()=="unsignedbv" ||
-            f_acttype.id()=="bool"))  
+            f_acttype.is_bool()))  
         {
           actual.make_typecast(arg_type);
         }
@@ -261,7 +261,7 @@ void goto_inlinet::expand_function_call(
           "but got `"+function.id_string()+"'";
   }
   
-  const irep_idt &identifier=function.get("identifier");
+  const irep_idt &identifier=function.identifier();
   
   // see if we are already expanding it
   if(recursion_set.find(identifier)!=recursion_set.end())
@@ -327,7 +327,7 @@ void goto_inlinet::expand_function_call(
       it->local_variables.insert(target->local_variables.begin(),
                                  target->local_variables.end());
 
-    if(f.type.get_bool("#hide"))
+    if(f.type.hide())
     {
       const locationt &new_location=function.find_location();
     
@@ -389,7 +389,7 @@ void goto_inlinet::expand_function_call(
     if(lhs.is_not_nil())
     {
       exprt rhs=exprt("sideeffect", lhs.type());
-      rhs.set("statement", "nondet");
+      rhs.statement("nondet");
       rhs.location()=target->location;
 
       code_assignt code(lhs, rhs);
@@ -502,10 +502,10 @@ bool goto_inlinet::inline_instruction(
   }
   else if(it->is_other())
   {
-    if(it->code.get("statement")=="bp_constrain" &&
+    if(it->code.statement()=="bp_constrain" &&
        it->code.operands().size()==2 &&
        it->code.op0().operands().size()==2 &&
-       it->code.op0().op1().get("statement")=="function_call")
+       it->code.op0().op1().statement()=="function_call")
     {
       expand_function_call(
         dest, it,

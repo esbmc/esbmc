@@ -26,24 +26,24 @@ Function: convert
 
 void convert( const goto_programt::instructiont &instruction, irept &irep ) 
 {  
-  irep.set("code", instruction.code);
+  irep.code(instruction.code);
     
   if (instruction.function!="")
-    irep.set("function", instruction.function);
+    irep.function(instruction.function);
     
   if (instruction.location.is_not_nil())
-    irep.set("location", instruction.location);
+    irep.location(instruction.location);
     
-  irep.set("type", (long) instruction.type);    
+  irep.type_id((long) instruction.type);
 
-  irep.set("guard", instruction.guard);
+  irep.guard(instruction.guard);
     
   if (instruction.event!="")
-    irep.set("event", instruction.event);
+    irep.event(instruction.event);
   
   if(! instruction.targets.empty())
   {
-    irept &tgts = irep.add("targets");        
+    irept tgts;
     for(goto_programt::targetst::const_iterator it=
           instruction.targets.begin();
         it!=instruction.targets.end();
@@ -52,11 +52,13 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
       irept t(i2string((*it)->location_number));
       tgts.move_to_sub(t);      
     }
+
+    irep.targets(tgts);
   }  
     
   if(! instruction.labels.empty())
   {
-    irept &lbls = irep.add("labels");
+    irept lbls;
     irept::subt &subs = lbls.get_sub();
     subs.reserve(instruction.labels.size());
     for(goto_programt::instructiont::labelst::const_iterator it=
@@ -66,11 +68,13 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
     {
       subs.push_back(irept(*it));
     }
+
+    irep.labels(lbls);
   }
   
   if (! instruction.local_variables.empty())
   {
-    irept &vars = irep.add("variables");
+    irept vars;
     irept::subt &subs = vars.get_sub();
     subs.reserve(instruction.local_variables.size());
     for(goto_programt::local_variablest::const_iterator it=
@@ -80,6 +84,8 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
     {
       subs.push_back(irept(*it));
     }
+
+    irep.variables(vars);
   }
 }
 
@@ -97,17 +103,17 @@ Function: convert
 
 void convert(const irept &irep, goto_programt::instructiont &instruction)
 {
-  instruction.code=static_cast<const codet &>(irep.find("code"));
-  instruction.function = irep.find("function").id();
-  instruction.location = static_cast<const locationt&>(irep.find("location"));    
+  instruction.code=static_cast<const codet &>(irep.code());
+  instruction.function = irep.function_irep().id();
+  instruction.location = static_cast<const locationt&>(irep.location());    
   instruction.type = static_cast<goto_program_instruction_typet>(
-                  atoi(irep.find("type").id_string().c_str()));
-  instruction.guard = static_cast<const exprt&>(irep.find("guard"));
-  instruction.event = irep.find("event").id();
+                  atoi(irep.type_id().c_str()));
+  instruction.guard = static_cast<const exprt&>(irep.guard());
+  instruction.event = irep.event_irep().id();
   
   // don't touch the targets, the goto_programt conversion does that
     
-  const irept &lbls=irep.find("labels");
+  const irept &lbls=irep.labels_irep();
   const irept::subt &lsubs=lbls.get_sub();  
   for (irept::subt::const_iterator it=lsubs.begin();
        it!=lsubs.end();
@@ -116,7 +122,7 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
     instruction.labels.push_back(it->id());
   }
   
-  const irept &vars=irep.find("variables");
+  const irept &vars=irep.variables();
   const irept::subt &vsubs=vars.get_sub();  
   for (irept::subt::const_iterator it=vsubs.begin();
        it!=vsubs.end();
@@ -182,7 +188,7 @@ void convert( const irept &irep, goto_programt &program )
     convert(*it, program.instructions.back());
     
     number_targets_list.push_back(std::list<unsigned>());
-    const irept &targets=it->find("targets");
+    const irept &targets=it->targets();
     const irept::subt &tsubs=targets.get_sub();
     for (irept::subt::const_iterator tit=tsubs.begin();
          tit!=tsubs.end();

@@ -23,7 +23,7 @@ Function: is_skip
 static bool is_skip(goto_programt::instructionst::iterator it)
 {
   if(it->is_skip())
-    return !it->code.get_bool("explicit");
+    return !it->code.explict();
  
   if(it->is_goto())
   {
@@ -41,7 +41,7 @@ static bool is_skip(goto_programt::instructionst::iterator it)
   if(it->is_other())
   {
     return it->code.is_nil() ||
-           it->code.get("statement")=="skip";
+           it->code.statement()=="skip";
   }
   
   return false;

@@ -43,7 +43,7 @@ code_function_callt get_destructor(
         it!=components.end();
         it++)
     {
-      if(it->type().id()=="code")
+      if(it->type().is_code())
       {
         const code_typet &code_type=to_code_type(it->type());
         
@@ -56,7 +56,7 @@ code_function_callt get_destructor(
              ns.follow(arg_type.subtype())==type)
           {
             exprt symbol_expr("symbol", it->type());
-            symbol_expr.set("identifier", it->get("name"));      
+            symbol_expr.identifier(it->name());      
 
             code_function_callt function_call;
             function_call.function()=symbol_expr;

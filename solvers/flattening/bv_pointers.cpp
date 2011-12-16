@@ -224,9 +224,9 @@ void bv_pointerst::convert_address_of_rec(
     convert_address_of_rec(struct_op, bv);
 
     const irept::subt &components=
-      struct_op.type().find("components").get_sub();
+      struct_op.type().components().get_sub();
     
-    const irep_idt &component_name=expr.get("component_name");
+    const irep_idt &component_name=expr.component_name();
     
     bool found=false;
     
@@ -234,8 +234,8 @@ void bv_pointerst::convert_address_of_rec(
 
     forall_irep(it, components)
     {
-      if(component_name==it->get("name")) { found=true; break; }
-      const typet &subtype=(typet &)it->find("type");
+      if(component_name==it->name()) { found=true; break; }
+      const typet &subtype=it->type();
       mp_integer sub_size=pointer_offset_size(subtype);
       if(sub_size==0)
         return conversion_failed(expr, bv);
@@ -282,7 +282,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
 
   if(expr.id()=="symbol")
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
     const typet &type=expr.type();
 
     for(unsigned i=0; i<bits; i++)
@@ -330,7 +330,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
   {
     return SUB::convert_member(expr, bv);
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.is_address_of() ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {
@@ -341,7 +341,7 @@ void bv_pointerst::convert_pointer_type(const exprt &expr, bvt &bv)
   }
   else if(expr.id()=="constant")
   {
-    if(expr.get("value")!="NULL")
+    if(expr.value().as_string()!="NULL")
       throw "found non-NULL pointer constant";
 
     encode(pointer_logic.get_null_object(), bv);
@@ -784,9 +784,9 @@ void bv_pointerst::do_is_dynamic_object(
     const exprt &expr=*it;
     
     bool is_dynamic=
-      expr.type().get_bool("#dynamic") ||
+      expr.type().dynamic() ||
       (expr.id()=="symbol" &&
-       has_prefix(expr.get_string("identifier"), "symex_dynamic::"));
+       has_prefix(expr.identifier().as_string(), "symex_dynamic::"));
     
     // only compare object part
     bvt bv;

@@ -36,10 +36,10 @@ void counterexample_beautification_pbst::beautify(
 {
   // array or struct?
 
-  if(type.id()=="array")
+  if(type.is_array())
   {
     // get size
-    const exprt &size_expr=(exprt &)type.find("size");
+    const exprt &size_expr=(exprt &)type.size_irep();
     mp_integer size_int, i;
 
     if(to_integer(size_expr, size_int)) return;
@@ -58,11 +58,11 @@ void counterexample_beautification_pbst::beautify(
   }
   else if(type.id()=="struct")
   {
-    const irept::subt &components=type.find("components").get_sub();
+    const irept::subt &components=type.components().get_sub();
 
     forall_irep(it, components)
     {
-      const typet &subtype=(typet &)it->find("type");
+      const typet &subtype=(typet &)it->type();
       unsigned width;
 
       if(boolbv_get_width(subtype, width))
@@ -75,7 +75,7 @@ void counterexample_beautification_pbst::beautify(
   }
   else if(type.id()=="symbol")
   {
-    const symbolt &s=ns.lookup(type.get("identifier"));
+    const symbolt &s=ns.lookup(type.identifier());
     beautify(pbs, bv_cbmc, ns, expr, s.type, offset);
   }
   else if(type.id()=="pointer")

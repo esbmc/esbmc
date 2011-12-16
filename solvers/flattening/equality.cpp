@@ -57,7 +57,7 @@ literalt equalityt::equality2(const exprt &e1, const exprt &e2)
 
   // check for boolean equality
 
-  if(type.id()=="bool")
+  if(type.is_bool())
     throw "equalityt got boolean equality";
   // return lequal(convert(e1), convert(e2));
 

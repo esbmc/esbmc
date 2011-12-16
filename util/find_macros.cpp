@@ -40,7 +40,7 @@ void find_macros(
     if(e.id()=="symbol" ||
        e.id()=="next_symbol")
     {
-      const irep_idt &identifier=e.get("identifier");
+      const irep_idt &identifier=e.identifier();
     
       const symbolt &symbol=ns.lookup(identifier);
       

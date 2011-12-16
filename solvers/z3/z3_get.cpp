@@ -108,20 +108,20 @@ exprt z3_convt::get(const exprt &expr) const
 
   //std::cout << "expr.pretty(): " << expr.pretty() << "\n";
 
-  if ((expr.type().id() =="array" && expr.type().subtype().id() =="array") ||
-      (expr.type().id() =="array" && expr.type().subtype().id() =="pointer") ||
-      (expr.type().id() =="array" && expr.type().subtype().id() =="union") ||
-      (expr.type().id() =="array" && expr.type().subtype().id() =="struct"))
+  if ((expr.type().is_array() && expr.type().subtype().is_array()) ||
+      (expr.type().is_array() && expr.type().subtype().id() =="pointer") ||
+      (expr.type().is_array() && expr.type().subtype().id() =="union") ||
+      (expr.type().is_array() && expr.type().subtype().id() =="struct"))
     return expr;
 
-  if(expr.id()=="symbol" ||
+  if(expr.id()==exprt::symbol ||
      expr.id()=="nondet_symbol")
   {
 	std::string identifier, tmp;
 	std::vector<exprt> unknown;
 	Z3_ast bv;
 
-	identifier = expr.get_string("identifier");
+	identifier = expr.identifier().as_string();
 #if 1
 	if (expr.type().id()=="pointer")
 	{
@@ -131,7 +131,7 @@ exprt z3_convt::get(const exprt &expr) const
 	    if (identifier.compare((*it).second.c_str())==0)
 	    {
 	      //std::cout << expr.pretty() << std::endl;
-	      if ((*it).first.id()=="symbol" || (*it).first.id()=="constant")
+	      if ((*it).first.id()==exprt::symbol || (*it).first.id()==exprt::constant)
 		    return (*it).first;
 	      else
 	        return nil_exprt();
@@ -150,7 +150,7 @@ exprt z3_convt::get(const exprt &expr) const
 
 	return bv_get_rec(bv, unknown, false, expr.type());
   }
-  else if(expr.id()=="constant")
+  else if(expr.id()==exprt::constant)
     return expr;
 
   return expr;
@@ -236,7 +236,7 @@ exprt z3_convt::bv_get_rec(
   if(boolbv_get_width(type, width))
     return nil_exprt();
 
-  if(type.id()=="bool")
+  if(type.is_bool())
   {
 	std::string value;
 	size_t found;
@@ -263,7 +263,7 @@ exprt z3_convt::bv_get_rec(
 
   if(bvtype==IS_UNKNOWN)
   {
-    if(type.id()=="array")
+    if(type.is_array())
     {
       unsigned sub_width;
       const typet &subtype=type.subtype();
@@ -297,7 +297,7 @@ exprt z3_convt::bv_get_rec(
         {
           expr = unknown[i];
 
-          if (expr.get_string("value").compare("")==0)
+          if (expr.value().as_string().compare("")==0)
             op.push_back(zero_expr);
           else
             op.push_back(expr);
@@ -313,7 +313,7 @@ exprt z3_convt::bv_get_rec(
     }
     else if(type.id()=="struct")
     {
-      const irept &components=type.find("components");
+      const irept &components=type.components();
       exprt::operandst op;
       op.reserve(components.get_sub().size());
       unsigned int size;
@@ -332,7 +332,7 @@ exprt z3_convt::bv_get_rec(
 
       forall_irep(it, components.get_sub())
       {
-        const typet &subtype=static_cast<const typet &>(it->find("type"));
+        const typet &subtype=it->type();
         op.push_back(nil_exprt());
         if (subtype.id()!="pointer") //@TODO: beautify counter-examples that contain pointers
         {
@@ -360,7 +360,7 @@ exprt z3_convt::bv_get_rec(
     }
     else if(type.id()=="union")
     {
-      const irept &components=type.find("components");
+      const irept &components=type.components();
 
       unsigned component_nr=0;
 
@@ -370,8 +370,7 @@ exprt z3_convt::bv_get_rec(
       exprt value("union", type);
       value.operands().resize(1);
 
-      value.set("component_name",
-                components.get_sub()[component_nr].get("name"));
+      value.component_name(components.get_sub()[component_nr].name());
 
       exprt::operandst op;
       op.reserve(1);
@@ -399,7 +398,7 @@ exprt z3_convt::bv_get_rec(
 
         forall_irep(it, components.get_sub())
         {
-          const typet &subtype=static_cast<const typet &>(it->find("type"));
+          const typet &subtype=it->type();
           //op.push_back(nil_exprt());
           if (subtype.id()!="pointer") //@TODO
           {
@@ -447,9 +446,9 @@ exprt z3_convt::bv_get_rec(
       std::cout << "offset: " << offset.pretty() << std::endl;
 
       pointer_logict::pointert pointer;
-      pointer.object=integer2long(binary2integer(object.get_string("value"), false));
+      pointer.object=integer2long(binary2integer(object.value().as_string(), false));
       std::cout << "pointer.object: " << pointer.object << std::endl;
-      pointer.offset=binary2integer(offset.get_string("value"), true);
+      pointer.offset=binary2integer(offset.value().as_string(), true);
       std::cout << "pointer.offset: " << pointer.offset << std::endl;
       if (pointer.offset < 0)
       {
@@ -501,7 +500,7 @@ exprt z3_convt::bv_get_rec(
   case IS_RANGE:
     {
       mp_integer int_value=string2integer(value, false);
-      mp_integer from=string2integer(type.get_string("from"));
+      mp_integer from=string2integer(type.from().as_string());
 
       constant_exprt value_expr(type);
       value_expr.set_value(integer2string(int_value+from));

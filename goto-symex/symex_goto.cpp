@@ -134,10 +134,10 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
     // produce new guard symbol
     exprt guard_expr;
 
-    if(new_guard.id()=="symbol" ||
-           (new_guard.id()=="not" &&
+    if(new_guard.id()==exprt::symbol ||
+           (new_guard.id()==exprt::i_not &&
             new_guard.operands().size()==1 &&
-            new_guard.op0().id()=="symbol"))
+            new_guard.op0().id()==exprt::symbol))
       guard_expr=new_guard;
     else
     {
@@ -446,7 +446,7 @@ void goto_symext::loop_bound_exceeded(
   statet &state,
   const exprt &guard, unsigned node_id)
 {
-  const irep_idt &loop_id=state.source.pc->location.get("loop-id");
+  const irep_idt &loop_id=state.source.pc->location.loopid();
 
   exprt negated_cond;
 

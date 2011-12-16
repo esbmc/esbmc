@@ -172,13 +172,13 @@ void invariant_propagationt::get_objects_rec(
         it!=c.end();
         it++)
     {
-      member_expr.set("component_name", it->get_string("name"));
+      member_expr.component_name(it->name().as_string());
       member_expr.type()=it->type();
       // recursive call
       get_objects_rec(member_expr, dest);
     }
   }
-  else if(t.id()=="array")
+  else if(t.is_array())
   {
     //get_objects_rec(identifier, suffix+"[]", t.subtype(), dest);
     //we don't track these
@@ -252,14 +252,14 @@ bool invariant_propagationt::check_type(const typet &type) const
   else if(type.id()=="struct" ||
           type.id()=="union")
     return false;
-  else if(type.id()=="array")
+  else if(type.is_array())
     return false;
   else if(type.id()=="symbol")
     return check_type(ns.follow(type));
   else if(type.id()=="unsignedbv" ||
           type.id()=="signedbv")
     return true;
-  else if(type.id()=="bool")
+  else if(type.is_bool())
     return true;
   
   return false;

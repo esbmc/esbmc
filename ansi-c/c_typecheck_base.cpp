@@ -63,10 +63,10 @@ Function: c_typecheck_baset::replace_symbol
 void c_typecheck_baset::replace_symbol(irept &symbol)
 {
   id_replace_mapt::const_iterator it=
-    id_replace_map.find(symbol.get("identifier"));
+    id_replace_map.find(symbol.identifier());
   
   if(it!=id_replace_map.end())
-    symbol.set("identifier", it->second);
+    symbol.identifier(it->second);
 }
 
 /*******************************************************************\
@@ -132,7 +132,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
       return; // bail out, we have an appropriate symbol already.
 
     irep_idt newtag((std::string("#anon#") + typestr).c_str());
-    symbol.type.set("tag", newtag);
+    symbol.type.tag(newtag);
   }
   else if(symbol.file_local) // rename file-local stuff
   {
@@ -142,14 +142,14 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     new_name=prefix+module+"::"+
       std::string(id2string(symbol.name), prefix.size(), std::string::npos);
   }
-  else if(symbol.is_extern && final_type.id()!="code")
+  else if(symbol.is_extern && !final_type.is_code())
   {
     // variables mared as "extern" go into the global namespace
     // and have static lifetime
     new_name=root_name;
     symbol.static_lifetime=true;
   }
-  else if(final_type.id()=="code")
+  else if(final_type.is_code())
   {
     // functions always go into the global namespace
     // code doesn't have lifetime
@@ -224,7 +224,7 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
 
   // check initializer, if needed
 
-  if(symbol.type.id()=="code")
+  if(symbol.type.is_code())
   {
     if(symbol.value.is_not_nil())
       typecheck_function_body(symbol);
@@ -240,7 +240,7 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
     }
   }
   else if(symbol.type.id()=="incomplete_array" || 
-          symbol.type.id()=="array")
+          symbol.type.is_array())
   {
     // insert a new type symbol for the array
     {
@@ -292,7 +292,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
   if(old_symbol.type.id()=="KnR")
   {
     // check the type
-    if(final_new.id()=="code")
+    if(final_new.is_code())
     {
       err_location(new_symbol.location);
       throw "function type not allowed for K&R function argument";
@@ -366,13 +366,13 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
   }
   else
   {
-    bool inlined=new_symbol.type.id()=="code" &&
-         (new_symbol.type.get_bool("#inlined") ||
-          old_symbol.type.get_bool("#inlined"));
+    bool inlined=new_symbol.type.is_code() &&
+         (new_symbol.type.inlined() ||
+          old_symbol.type.inlined());
 
     if(final_old!=final_new)
     {
-      if(final_old.id()=="array" &&
+      if(final_old.is_array() &&
          final_new.id()=="incomplete_array" &&
          final_old.subtype()==final_new.subtype())
       {
@@ -380,14 +380,14 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         new_symbol.type=old_symbol.type;
       }
       else if(final_old.id()=="incomplete_array" &&
-              final_new.id()=="array" &&
+              final_new.is_array() &&
               final_old.subtype()==final_new.subtype())
       {
         // this is also ok
         if (old_symbol.type.id()=="symbol")
         {
           // fix the symbol, not just the type
-          const irep_idt ident = old_symbol.type.get("identifier");
+          const irep_idt ident = old_symbol.type.identifier();
           symbolst::iterator s_it=context.symbols.find(ident);
     
           if(s_it==context.symbols.end())
@@ -404,8 +404,8 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         else
           old_symbol.type=new_symbol.type;
       }
-      else if(old_symbol.type.id()=="code" &&
-              new_symbol.type.id()=="code")
+      else if(old_symbol.type.is_code() &&
+              new_symbol.type.is_code())
       {
         code_typet &old_ct=to_code_type(old_symbol.type);
         code_typet &new_ct=to_code_type(new_symbol.type);
@@ -439,12 +439,12 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
 
     if(inlined)
     {
-      old_symbol.type.set("#inlined", true);
-      new_symbol.type.set("#inlined", true);
+      old_symbol.type.inlined(true);
+      new_symbol.type.inlined(true);
     }
     
     // do value
-    if(old_symbol.type.id()=="code")
+    if(old_symbol.type.is_code())
     {
       if(new_symbol.value.is_not_nil())
       {      
@@ -480,11 +480,11 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         // see if we already have one
         if(old_symbol.value.is_not_nil())
         {
-          if(new_symbol.value.get_bool("#zero_initializer"))
+          if(new_symbol.value.zero_initializer())
           {
             // do nothing
           }
-          else if(old_symbol.value.get_bool("#zero_initializer"))
+          else if(old_symbol.value.zero_initializer())
           {
             old_symbol.value=new_symbol.value;
             old_symbol.type=new_symbol.type;
@@ -496,7 +496,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
                 final_new.id()=="c_enum") &&
                 old_symbol.value.is_constant() &&
                 new_symbol.value.is_constant() &&
-                old_symbol.value.get("value")==new_symbol.value.get("value"))
+                old_symbol.value.value()==new_symbol.value.value())
             {
               // ignore
             }

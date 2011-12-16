@@ -27,7 +27,7 @@ public:
   
   void set_statement(const irep_idt &statement)
   {
-    set("statement", statement);
+    this->statement(statement);
   }
 
   const irep_idt &get_statement() const
@@ -44,13 +44,13 @@ public:
 
 extern inline const codet &to_code(const exprt &expr)
 {
-  assert(expr.id()=="code");
+  assert(expr.is_code());
   return static_cast<const codet &>(expr);
 }
 
 extern inline codet &to_code(exprt &expr)
 {
-  assert(expr.id()=="code");
+  assert(expr.is_code());
   return static_cast<codet &>(expr);
 }
 
@@ -353,12 +353,12 @@ public:
 
   inline bool is_default() const
   {
-    return get_bool("default");
+    return dfault();
   }
 
   const exprt::operandst &case_op() const
   {
-    return static_cast<const exprt &>(find("case")).operands();
+    return static_cast<const exprt &>(case_irep()).operands();
   }
   
   const irep_idt &get_label() const
@@ -368,7 +368,7 @@ public:
 
   void set_label(const irep_idt &label)
   {
-    set("label", label);
+    this->label(label);
   }
 };
 
@@ -475,7 +475,7 @@ public:
 
   void set_statement(const irep_idt &statement)
   {
-    return set("statement", statement);
+    return this->statement(statement);
   }
 };
 
@@ -527,14 +527,14 @@ public:
   friend side_effect_expr_function_callt &to_side_effect_expr_function_call(exprt &expr)
   {
     assert(expr.id()=="sideeffect");
-    assert(expr.get("statement")=="function_call");
+    assert(expr.statement()=="function_call");
     return static_cast<side_effect_expr_function_callt &>(expr);
   }
 
   friend const side_effect_expr_function_callt &to_side_effect_expr_function_call(const exprt &expr)
   {
     assert(expr.id()=="sideeffect");
-    assert(expr.get("statement")=="function_call");
+    assert(expr.statement()=="function_call");
     return static_cast<const side_effect_expr_function_callt &>(expr);
   }
 };

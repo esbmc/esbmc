@@ -472,7 +472,7 @@ void interpretert::execute_function_call()
     {
       const code_typet::argumentt &a=arguments[i];
       exprt symbol_expr("symbol", a.type());
-      symbol_expr.set("identifier", a.get_identifier());
+      symbol_expr.identifier(a.get_identifier());
       assert(i<argument_values.size());
       assign(evaluate_address(symbol_expr), argument_values[i]);
     }
@@ -530,7 +530,7 @@ void interpretert::build_memory_map(const symbolt &symbol)
 {
   unsigned size=0;
 
-  if(symbol.type.id()=="code")
+  if(symbol.type.is_code())
   {
     size=1;
   }
@@ -572,15 +572,15 @@ unsigned interpretert::get_size(const typet &type) const
   if(type.id()=="struct")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     unsigned sum=0;
 
     forall_irep(it, components)
     {
-      const typet &sub_type=static_cast<const typet &>(it->find("type"));
+      const typet &sub_type=it->type();
 
-      if(sub_type.id()!="code")
+      if(!sub_type.is_code())
         sum+=get_size(sub_type);
     }
     
@@ -589,23 +589,23 @@ unsigned interpretert::get_size(const typet &type) const
   else if(type.id()=="union")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     unsigned max_size=0;
 
     forall_irep(it, components)
     {
-      const typet &sub_type=static_cast<const typet &>(it->find("type"));
+      const typet &sub_type=it->type();
 
-      if(sub_type.id()!="code")
+      if(!sub_type.is_code())
         max_size=std::max(max_size, get_size(sub_type));
     }
 
     return max_size;    
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
-    const exprt &size_expr=static_cast<const exprt &>(type.find("size"));
+    const exprt &size_expr=static_cast<const exprt &>(type.size_irep());
 
     unsigned subtype_size=get_size(type.subtype());
 

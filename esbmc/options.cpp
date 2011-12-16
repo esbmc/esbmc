@@ -107,6 +107,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"print-stack-traces",	switc,		""	},
 { 0,	"interactive-ileaves",	switc,		""	},
 { 0,	"break-at",		string,		""	},
+{ 0,    "no-lit-cache",         switc,          ""      },
 { 0,	"decide",		switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},

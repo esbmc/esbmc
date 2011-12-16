@@ -29,31 +29,7 @@ CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
 # LDFLAGS = -mno-cygwin
 
 # SMT and SAT solver locations. Put your own machine-specific absolute paths to
-# these in "local.inc". Z3, BOOLECTOR and MINISAT are currently required.
-#Z3=
-#BOOLECTOR=
-#CHAFF=
-#BOOLEFORCE=
-#MINISAT=
-#MINISAT2=
-#SMVSAT=
-
-LANGUAGES = ansi-c csp intrep pvs smvlang verilog vhdl netlist cpp specc \
-            pascal bplang simplifylang cvclang csharp \
-            smtlang nsf mdllang
-
-# modules that we have
-##MODULE_PROVER = 1
-##MODULE_IPP = 1
-#MODULE_INTERPOLATION = 1
-##MODULE_SATQE = 1
-MODULE_CPP = 1
-##MODULE_SMTLANG = 1
-##MODULE_SPECC = 1
-##MODULE_VERILOG = 1
-##MODULE_VHDL = 1
-##MODULE_PASCAL = 1
-#MODULE_PHP = 1
-##MODULE_SIMPLIFYLANG = 1
-##MODULE_HW_CBMC = 1
-##MODULE_CEMC = 1
+# these in "local.inc", and then don't commit it. Alternately, set SATDIR to
+# point at a directory containing such solvers in your environment.
+#
+# Currently only Z3 is required for building ESBMC.

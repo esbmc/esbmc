@@ -506,7 +506,7 @@ void static_analysis_baset::do_function_call_rec(
 {
   if(function.id()=="symbol")
   {
-    const irep_idt &identifier=function.get("identifier");
+    const irep_idt &identifier=function.identifier();
     
     if(recursion_set.find(identifier)!=recursion_set.end())
     {

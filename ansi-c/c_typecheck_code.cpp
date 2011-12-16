@@ -42,15 +42,12 @@ Function: c_typecheck_baset::typecheck_code
 
 void c_typecheck_baset::typecheck_code(codet &code)
 {
-  static bool flag=false;
-  if(code.id()!="code")
+  if(!code.is_code())
     throw "expected code, got "+code.pretty();
 
   code.type()=typet("code");
 
-  const irep_idt &statement=code.get("statement");
-  //if (flag)
-  //std::cout << "typecheck_code::code.pretty(): " << code.pretty() << std::endl;
+  const irep_idt &statement=code.statement();
 
   if(statement=="expression")
     typecheck_expression(code);
@@ -323,7 +320,7 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   replace_symbol(code.op0());
 
   // look it up
-  const irep_idt &identifier=code.op0().get("identifier");
+  const irep_idt &identifier=code.op0().identifier();
 
   symbolst::iterator s_it=context.symbols.find(identifier);
 
@@ -339,7 +336,7 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   // or a function
   // or static
   if(symbol.is_type ||
-     symbol.type.id()=="code" ||
+     symbol.type.is_code() ||
      symbol.static_lifetime)
   {
     locationt location=code.location();
@@ -393,7 +390,7 @@ void c_typecheck_baset::typecheck_expression(codet &code)
 
   if(op.id()=="sideeffect")
   {
-    const irep_idt &statement=op.get("statement");
+    const irep_idt &statement=op.statement();
     
     if(statement=="assign")
     {
@@ -402,11 +399,11 @@ void c_typecheck_baset::typecheck_expression(codet &code)
       // pull assignment statements up
       exprt::operandst operands;
       operands.swap(op.operands());
-      code.set("statement", "assign");
+      code.statement("assign");
       code.operands().swap(operands);
       
       if(code.op1().id()=="sideeffect" &&
-         code.op1().get("statement")=="function_call")
+         code.op1().statement()=="function_call")
       {
         assert(code.op1().operands().size()==2);
   
@@ -533,7 +530,7 @@ void c_typecheck_baset::typecheck_label(code_labelt &code)
     }
   }
 
-  if(code.find("case").is_not_nil())
+  if(code.case_irep().is_not_nil())
   {
     if(!case_is_allowed)
     {
@@ -541,13 +538,15 @@ void c_typecheck_baset::typecheck_label(code_labelt &code)
       throw "did not expect `case' here";
     }
 
-    exprt &case_expr=static_cast<exprt &>(code.add("case"));
+    exprt case_expr=static_cast<const exprt &>(code.case_irep());
 
     Forall_operands(it, case_expr)
     {
       typecheck_expr(*it);
       implicit_typecast(*it, switch_op_type);
     }
+
+    code.case_irep(case_expr);
   }
 }
 
@@ -590,7 +589,7 @@ void c_typecheck_baset::typecheck_ifthenelse(codet &code)
   typecheck_expr(cond);
 
   if(cond.id()=="sideeffect" &&
-     cond.get("statement")=="assign")
+     cond.statement()=="assign")
   {
     err_location(cond);
     warning("warning: assignment in if condition");

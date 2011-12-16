@@ -90,7 +90,7 @@ void bv_spect::from_type(const typet &type)
   else
     assert(0);
   
-  width=atoi(type.get("width").c_str());
+  width=atoi(type.width().c_str());
 }
 
 /*******************************************************************\
@@ -472,5 +472,5 @@ void bv_arithmetict::from_expr(const exprt &expr)
 {
   assert(expr.is_constant());
   spec=expr.type();
-  value=binary2integer(expr.get_string("value"), spec.is_signed);
+  value=binary2integer(expr.value().as_string(), spec.is_signed);
 }

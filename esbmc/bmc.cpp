@@ -95,6 +95,10 @@ void bmc_baset::do_cbmc(prop_convt &solver)
 
   forall_expr_list(it, bmc_constraints)
     solver.set_to_true(*it);
+
+  // After all conversions, clear cache, which tends to contain a large
+  // amount of stuff.
+  solver.clear_cache();
 }
 
 /*******************************************************************\

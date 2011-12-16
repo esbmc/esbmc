@@ -28,12 +28,12 @@ Function: pointer_offset_size
 
 mp_integer pointer_offset_size(const typet &type)
 {
-  if(type.id()=="array")
+  if(type.is_array())
   {
     mp_integer sub=pointer_offset_size(type.subtype());
   
     // get size
-    const exprt &size=(const exprt &)type.find("size");
+    const exprt &size=(const exprt &)type.size_irep();
 
     // constant?
     mp_integer i;
@@ -46,13 +46,13 @@ mp_integer pointer_offset_size(const typet &type)
   else if(type.id()=="struct" ||
           type.id()=="union")
   {
-    const irept::subt &components=type.find("components").get_sub();
+    const irept::subt &components=type.components().get_sub();
     
     mp_integer result=1; // for the struct itself
 
     forall_irep(it, components)
     {
-      const typet &subtype=(typet &)it->find("type");
+      const typet &subtype=it->type();
       mp_integer sub_size=pointer_offset_size(subtype);
       result+=sub_size;
     }
@@ -84,7 +84,7 @@ mp_integer compute_pointer_offset(
   else if(expr.id()=="index")
   {
     assert(expr.operands().size()==2);
-    assert(expr.op0().type().id()=="array");
+    assert(expr.op0().type().is_array());
     mp_integer sub_size=pointer_offset_size(expr.op0().type().subtype());
 
     mp_integer i;
@@ -102,7 +102,7 @@ mp_integer compute_pointer_offset(
     assert(type.id()=="struct" ||
            type.id()=="union");
 
-    const irep_idt &component_name=expr.get("component_name");
+    const irep_idt &component_name=expr.component_name();
     const struct_union_typet::componentst &components=
       to_struct_union_type(type).components();
     

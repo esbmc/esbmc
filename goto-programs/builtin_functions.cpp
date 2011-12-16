@@ -44,7 +44,7 @@ static void get_alloc_type_rec(
 {
   static bool is_mul=false;
 
-  const irept &sizeof_type=src.find("#c_sizeof_type");
+  const irept &sizeof_type=src.c_sizeof_type();
   //nec: ex33.c
   if(!sizeof_type.is_nil() && !is_mul)
   {
@@ -175,7 +175,7 @@ void goto_convertt::do_pthread_create(
       throw "create_thread expects function pointer as third argument";
     }
 
-    if(thread_function.type().subtype().id()!="code")
+    if(!thread_function.type().subtype().is_code())
     {
       // cast it to code type
       code_typet ct;
@@ -192,7 +192,7 @@ void goto_convertt::do_pthread_create(
 
     // do dereferencing
     if(thread_function.id()=="implicit_address_of" ||
-       thread_function.id()=="address_of")
+       thread_function.is_address_of())
     {
       exprt tmp;
       assert(thread_function.operands().size()==1);
@@ -285,15 +285,15 @@ void goto_convertt::do_printf(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  const irep_idt &f_id=function.get("identifier");
+  const irep_idt &f_id=function.identifier();
 
   if(f_id==CPROVER_PREFIX "printf" ||
      f_id=="c::printf")
   {
     exprt printf_code("sideeffect",
-      static_cast<const typet &>(function.type().find("return_type")));
+      static_cast<const typet &>(function.type().return_type()));
 
-    printf_code.set("statement", "printf");
+    printf_code.statement("printf");
 
     printf_code.operands()=arguments;
     printf_code.location()=function.location();
@@ -469,10 +469,10 @@ void goto_convertt::do_malloc(
   // produce new object
 
   exprt new_expr("sideeffect", lhs.type());
-  new_expr.set("statement", "malloc");
+  new_expr.statement("malloc");
   new_expr.copy_to_operands(arguments[0]);
-  new_expr.set("#size", alloc_size);
-  new_expr.set("#type", alloc_type);
+  new_expr.cmt_size(alloc_size);
+  new_expr.cmt_type(alloc_type);
   new_expr.location()=location;
 
   goto_programt::targett t_n=dest.add_instruction(ASSIGN);
@@ -592,9 +592,9 @@ void goto_convertt::do_cpp_new(
 
   exprt alloc_size;
 
-  if(rhs.get("statement")=="cpp_new[]")
+  if(rhs.statement()=="cpp_new[]")
   {
-    alloc_size=static_cast<const exprt &>(rhs.find("size"));
+    alloc_size=static_cast<const exprt &>(rhs.size_irep());
     if(alloc_size.type()!=uint_type())
       alloc_size.make_typecast(uint_type());
   }
@@ -639,12 +639,12 @@ void goto_convertt::cpp_new_initializer(
   // grab initializer
   exprt initializer;
 
-  if(rhs.find("initializer").is_nil())
+  if(rhs.initializer().is_nil())
     initializer.make_nil();
   else
   {
     initializer.make_nil();
-    rhs.add("initializer").swap(initializer);
+    rhs.initializer(initializer);
   }
 
   if(initializer.is_not_nil())
@@ -752,7 +752,7 @@ void goto_convertt::do_array_set(
   if(array_ptr.id()!="implicit_address_of")
     throw "array_set expects array-pointer as first argument";
 
-  if(array_ptr.op0().type().id()!="array")
+  if(!array_ptr.op0().type().is_array())
     throw "array_set expects array as first argument";
 
   const exprt &array=array_ptr.op0();
@@ -894,11 +894,11 @@ void goto_convertt::do_function_call_symbol(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  if(function.get_bool("#invalid_object"))
+  if(function.invalid_object())
     return; // ignore
 
   // lookup symbol
-  const irep_idt &identifier=function.get("identifier");
+  const irep_idt &identifier=function.identifier();
 
   const symbolt *symbol;
   if(ns.lookup(identifier, symbol))
@@ -907,7 +907,7 @@ void goto_convertt::do_function_call_symbol(
     throw "error: function `"+id2string(identifier)+"' not found";
   }
 
-  if(symbol->type.id()!="code")
+  if(!symbol->type.is_code())
   {
     err_location(function);
     throw "error: function `"+id2string(identifier)+"' type mismatch: expected code";
@@ -934,10 +934,10 @@ void goto_convertt::do_function_call_symbol(
       is_assume?ASSUME:ASSERT);
     t->guard=arguments.front();
     t->location=function.location();
-    t->location.set("user-provided", true);
+    t->location.user_provided(true);
 
     if(is_assert)
-      t->location.set("property", "assertion");
+      t->location.property("assertion");
 
     if(lhs.is_not_nil())
     {
@@ -963,9 +963,9 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t=dest.add_instruction(ASSERT);
     t->guard=arguments[0];
     t->location=function.location();
-    t->location.set("user-provided", true);
-    t->location.set("property", "assertion");
-    t->location.set("comment", description);
+    t->location.user_provided(true);
+    t->location.property("assertion");
+    t->location.comment(description);
 
     if(lhs.is_not_nil())
     {
@@ -1057,9 +1057,9 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t=dest.add_instruction(ASSERT);
     t->guard=false_exprt();
     t->location=function.location();
-    t->location.set("user-provided", true);
-    t->location.set("property", "assertion");
-    t->location.set("comment", description);
+    t->location.user_provided(true);
+    t->location.property("assertion");
+    t->location.comment(description);
     // we ignore any LHS
   }
   else if(identifier=="c::__assert_rtn")
@@ -1081,9 +1081,9 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t=dest.add_instruction(ASSERT);
     t->guard=false_exprt();
     t->location=function.location();
-    t->location.set("user-provided", true);
-    t->location.set("property", "assertion");
-    t->location.set("comment", description);
+    t->location.user_provided(true);
+    t->location.property("assertion");
+    t->location.comment(description);
     // we ignore any LHS
   }
   else if(identifier=="c::_wassert")
@@ -1105,9 +1105,9 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t=dest.add_instruction(ASSERT);
     t->guard=false_exprt();
     t->location=function.location();
-    t->location.set("user-provided", true);
-    t->location.set("property", "assertion");
-    t->location.set("comment", description);
+    t->location.user_provided(true);
+    t->location.property("assertion");
+    t->location.comment(description);
     // we ignore any LHS
   }
   else

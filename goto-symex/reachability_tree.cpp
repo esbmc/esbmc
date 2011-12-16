@@ -251,26 +251,26 @@ void reachability_treet::check_mutex(const exprt &code, const execution_statet &
   const exprt &value=code.op1();
   std::string val;
 
-  if (object.id() == "member")
+  if (object.id() == exprt::member)
   {
-	if (object.op0().type().get_string("identifier").find("pthread_mutex") != std::string::npos)
+	if (object.op0().type().identifier().as_string().find("pthread_mutex") != std::string::npos)
 	{
 	  if (is_first_assign)
 	  {
 		if (object.op0().operands().size()==0)
 		  return;
-	    identifier = object.op0().op0().get_string("identifier");
+	    identifier = object.op0().op0().identifier().as_string();
 	    is_first_assign=false;
 	  }
 
-	  val = integer2string(binary2integer(value.get_string("value"), true),10);
+	  val = integer2string(binary2integer(value.value().as_string(), true),10);
 
-	  if (identifier.find(object.op0().op0().get_string("identifier")) != std::string::npos)
+	  if (identifier.find(object.op0().op0().identifier().as_string()) != std::string::npos)
 	    _is_same_mutex=true;
 	  else if (val.find("0") == std::string::npos)
 	    _is_same_mutex=false;
 
-	  identifier = object.op0().op0().get_string("identifier");
+	  identifier = object.op0().op0().identifier().as_string();
     }
   }
 }

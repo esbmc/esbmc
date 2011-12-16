@@ -24,16 +24,16 @@ Function: get_object
 
 static irep_idt get_object(const exprt &expr)
 {
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     return to_symbol_expr(expr).get_identifier();
   }
-  else if(expr.id()=="member")
+  else if(expr.id()==exprt::member)
   {
     assert(expr.operands().size()==1);
     return get_object(expr.op0());
   }
-  else if(expr.id()=="index")
+  else if(expr.id()==exprt::index)
   {
     assert(expr.operands().size()==2);
     return get_object(expr.op0());
@@ -65,10 +65,10 @@ void goto_symext::replace_dynamic_allocation(
   {
 	//std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
     assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()=="pointer");
+    assert(expr.op0().type().id()==typet::t_pointer);
     
     // check what we have
-    if(expr.op0().id()=="address_of" ||
+    if(expr.op0().id()==exprt::addrof ||
        expr.op0().id()=="implicit_address_of")
     {
       assert(expr.op0().operands().size()==1);
@@ -85,7 +85,7 @@ void goto_symext::replace_dynamic_allocation(
         const symbolt &symbol=ns.lookup(l0_identifier);
         
         // dynamic?
-        if(symbol.type.get_bool("#dynamic"))
+        if(symbol.type.dynamic())
         {
           // TODO
         }
@@ -108,7 +108,7 @@ void goto_symext::replace_dynamic_allocation(
   else if(expr.id()=="object_value")
   {
     assert(expr.operands().size()==1);
-    expr.id("dereference");
+    expr.id(exprt::deref);
   }
 }
 
@@ -131,7 +131,7 @@ bool goto_symext::is_valid_object(
   if(symbol.static_lifetime) return true; // global
   
   // dynamic?
-  if(symbol.type.get_bool("#dynamic"))
+  if(symbol.type.dynamic())
     return false;
 
   // current location?

@@ -25,7 +25,7 @@ public:
 
   bool is_inlined() const
   {
-    return type.get_bool("#inlined");
+    return type.inlined();
   }
 
   goto_function_templatet():body_available(false)

@@ -36,7 +36,7 @@ void counterexample_beautificationt::get_minimization_symbols(
        it->assignment_type==symex_targett::STATE)
     {
       if(!bv_cbmc.prop.l_get(it->guard_literal).is_false())
-        if(it->original_lhs.type().id()!="bool")
+        if(!it->original_lhs.type().is_bool())
           minimization_symbols.insert(it->lhs);
     }
 

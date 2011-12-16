@@ -55,7 +55,7 @@ void fix_symbolt::fix_context(contextt &context)
     assert(s_it!=context.symbols.end());
 
     symbolt s=s_it->second;
-    s.name=t_it->second.get("identifier");
+    s.name=t_it->second.identifier();
     context.symbols.erase(s_it);
     context.move(s);
   }

@@ -287,13 +287,13 @@ Function: goto_symext::get_symbol
 \*******************************************************************/
 
 irep_idt goto_symext::get_symbol(const exprt & expr) {
-  if (expr.id() != "symbol") {
+  if (expr.id() != exprt::symbol) {
     forall_operands(it, expr) {
       return get_symbol(*it);
     }
   }
 
-  return expr.get("identifier");
+  return expr.identifier();
 }
 
 /*******************************************************************\
@@ -420,10 +420,10 @@ void goto_symext::symex_step(
         case ASSERT:
             if (!state.guard.is_false()) {
                 if (!options.get_bool_option("no-assertions") ||
-                        !state.source.pc->location.get_bool("user-provided")
+                        !state.source.pc->location.user_provided()
                         || options.get_bool_option("deadlock-check")) {
 
-                    std::string msg = state.source.pc->location.get_string("comment");
+                    std::string msg = state.source.pc->location.comment().as_string();
                     if (msg == "") msg = "assertion";
                     exprt tmp(instruction.guard);
 
@@ -486,7 +486,7 @@ void goto_symext::symex_step(
 
                 dereference(deref_code.function(), state, false, ex_state.node_id);
 
-                if(deref_code.function().get("identifier") == "c::__ESBMC_yield")
+                if(deref_code.function().identifier() == "c::__ESBMC_yield")
                 {
                    state.source.pc++;
                    ex_state.reexecute_instruction = false;
@@ -494,7 +494,7 @@ void goto_symext::symex_step(
                    return;
                 }
 
-                if (deref_code.function().get("identifier") == "c::__ESBMC_switch_to")
+                if (deref_code.function().identifier() == "c::__ESBMC_switch_to")
                 {
                   state.source.pc++;
                   ex_state.reexecute_instruction = false;
@@ -506,7 +506,7 @@ void goto_symext::symex_step(
                   if (num.id() != "constant")
                     throw "Can't switch to non-constant thread id no";
 
-                  unsigned int tid = binary2integer(num.get("value").as_string(), false).to_long();
+                  unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
                   ex_state.set_active_state(tid);
                   return;
                 }

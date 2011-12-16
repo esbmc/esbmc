@@ -71,15 +71,15 @@ bool rename(exprt &expr, const irep_idt &old_name,
 
   if(expr.id()=="symbol")
   {
-    if(expr.get("identifier")==old_name)
+    if(expr.identifier()==old_name)
     {
-      expr.set("identifier", new_name);
+      expr.identifier(new_name);
       result=false;
     }
   }
   else
   {
-    if(expr.id()=="address_of" ||
+    if(expr.is_address_of() ||
        expr.id()=="implicit_adress_of")
     {
       // TODO

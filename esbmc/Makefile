@@ -20,7 +20,8 @@ OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
       ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \
       ../langapi/$(OBJDIR)/langapi.o \
       ../solvers/$(OBJDIR)/solvers.o \
-      ../util/$(OBJDIR)/util.o
+      ../util/$(OBJDIR)/util.o \
+      ../cpp/$(OBJDIR)/cpp.o
 
 LIBS= -lgmp -ldl -lgomp
 
@@ -50,18 +51,13 @@ ifdef USE_SMT
 CXXFLAGS+= USE_SMT
 endif
 
-ifdef MODULE_CPP
-OBJS += ../cpp/$(OBJDIR)/cpp.o
-CXXFLAGS+= -DUSE_CPP
-endif
-
 ###############################################################################
 
 esbmc: $(OBJS)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o esbmc $(OBJS) $(LIBS)
+	$(CXX) $(CXXFLAGS) -o esbmc $(OBJS) $(LIBS)
 
 #cbmc-static: $(OBJS)
-#	$(CXX) $(LDFLAGS) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
+#	$(CXX) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
 
 clean:
 	-rm -f $(OBJS) $(OBJDIR)/.deps esbmc
