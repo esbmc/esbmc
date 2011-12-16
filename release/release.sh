@@ -183,11 +183,12 @@ function cleanup () {
 }
 
 function buildtgz {
-  suffix=$1
-  binpath=$2
+  version=$1
+  suffix=$2
+  binpath=$3
 
   tmpdirname=`mktemp -d`
-  projname="esbmc-$1-linux-$suffix"
+  projname="esbmc-$version-linux-$suffix"
   dirname="$tmpdirname/$projname"
   mkdir $dirname
   mkdir $dirname/bin
@@ -206,11 +207,13 @@ function buildtgz {
 }
 
 function buildtarballs() {
-  buildtgz "64" ".release/esbmc"
-  buildtgz "32" ".release/esbmc32"
+  version=$1
+
+  buildtgz $version "64" ".release/esbmc"
+  buildtgz $version "32" ".release/esbmc32"
   if test $buildcompat = 1; then
-    buildtgz "64-compat" ".release/esbmc_compat"
-    buildtgz "32-compat" ".release/esbmc32_compat"
+    buildtgz $version "64-compat" ".release/esbmc_compat"
+    buildtgz $version "32-compat" ".release/esbmc32_compat"
   fi
 }
 
@@ -224,7 +227,7 @@ if test $? != 0; then
   echo "Build failed"
 fi
 
-buildtarballs
+buildtarballs $1
 
 cleanup
 
