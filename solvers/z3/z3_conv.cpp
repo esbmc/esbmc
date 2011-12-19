@@ -3132,7 +3132,7 @@ z3_convt::convert_z3_pointer(const exprt &expr, std::string symbol, Z3_ast &bv)
   Z3_type_ast tuple_type;
   std::string cte, identifier;
   unsigned width;
-  char val[2];
+  char val[16];
 
   if (check_all_types(expr.type().subtype())) {
     if (expr.type().subtype().id() == "pointer") {
