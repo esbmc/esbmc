@@ -63,7 +63,7 @@ char *strcat_strabs(char *dst, const char *src)
   size_t old_size=__ESBMC_zero_string_length(dst);
   //"  for(size_t i=0; i<__ESBMC_zero_string_length(src); i++)
   //"    dst[old_size+i];
-  dst[new_size - 1]=0;
+  dst[new_size]=0;
   __ESBMC_is_zero_string(dst)=1;
   __ESBMC_zero_string_length(dst)=new_size;
   return dst;
