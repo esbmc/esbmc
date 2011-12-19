@@ -3391,7 +3391,8 @@ Function:
 bool simplify_exprt::simplify_unary_minus(exprt &expr)
 {
 
-  if (config.options.get_bool_option("int-encoding"))
+  if (config.options.get_bool_option("int-encoding") &&
+      expr.type().id() != "fixedbv" && expr.type().id() != "signedbv")
     // Never simplify a unary minus if we're using integer encoding. The SMT
     // solver is going to have its own negative representation, and this
     // conflicts with the current irep representation of binary-in-a-string.
@@ -3405,6 +3406,11 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
     //
     // Which may be fine in bit-vector mode, but that calculation does _not_
     // wrap around in integer mode. So, block such simplification of unary-'s.
+    //
+    // Update: After further thought that kind of overflowing is fine for
+    // _signed_ types. This is because the binary2integer routine will observe
+    // that the expr is signed, and interpret its value as negative. Which is
+    // ok.
     return true;
 
   if(expr.operands().size()!=1)
