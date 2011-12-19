@@ -962,52 +962,69 @@ bool simplify_exprt::simplify_addition_substraction(
   }
   else if(expr.id()=="-")
   {
-    // XXXjmorse - duplicated from above, could be further abstracted
-    exprt::operandst::iterator const_sum;
-    bool const_sum_set=false;
+    exprt::operandst subtrahends;
+    exprt minuend;
+    // Sum the subtrahend portions, then if the minuend is constant, attempt to
+    // subtract from it.
 
-    for(exprt::operandst::iterator it=operands.begin();
-        it!=operands.end();)
-    {
-      bool do_erase=false;
+    exprt::operandst ops = expr.operands();
+    if (ops.size() == 0)
+      return true;
 
-      if(is_number(it->type()))
-      {
-        if(it->is_zero())
-          do_erase=true;
-        else if(it->is_constant())
-        {
-          if(!const_sum_set)
-          {
-            const_sum=it;
-            const_sum_set=true;
-          }
-          else
-          {
-            if(!const_sum->subtract(*it)) do_erase=true;
-          }
+    assert(ops.size() > 1); // This should probably have become a unary-
+
+    // Remove minuend
+    exprt::operandst::iterator it;
+    it = ops.begin();
+    minuend = *it;
+    it++;
+
+    // If this is a binary operation, we might be able to solve right now.
+    if (ops.size() == 2) {
+      if (minuend.id() == "constant" && it->id() == "constant") {
+        minuend.subtract(*it);
+        expr.swap(minuend);
+        return false;
+      } else {
+        return true;
+      }
+    }
+
+    // A large subtract; so collect subtrahend portions
+    for (; it != ops.end(); it++)
+      subtrahends.push_back(*it);
+
+    exprt an_add("+", expr.type());
+    an_add.operands() = subtrahends;
+    simplify_rec(an_add, mode);
+
+    // We should now have a list of operands, one of which might be constant. If
+    // the minuend is constant, and a subtracting operand is constant, perform
+    // that subtraction.
+    if (minuend.id() == "constant") {
+      subtrahends = an_add.operands();
+      for (it = subtrahends.begin(); it != subtrahends.end(); it++) {
+        if (it->id() == "constant") {
+          // Hurrah, we can perform a constant subtraction.
+          minuend.subtract(*it);
+          subtrahends.erase(it);
+          result = false;
         }
       }
-
-      if(do_erase)
-      {
-        it=operands.erase(it);
-        result=false;
-      }
-      else
-        it++;
     }
 
-    if(operands.size()==0)
+    if (subtrahends.size()==0)
     {
-      expr=gen_zero(expr.type());
-      return false;
-    }
-    else if(operands.size()==1)
-    {
-      exprt tmp(operands.front());
+      exprt tmp(minuend);
       expr.swap(tmp);
       return false;
+    } else {
+      // Reconstruct a subtract expr
+      expr.operands().clear();
+      expr.operands().push_back(minuend);
+      for (it = subtrahends.begin(); it != subtrahends.end(); it++)
+        expr.operands().push_back(*it);
+      // result variable will determine whether we've simplified at all.
     }
   }
 
