@@ -3452,6 +3452,8 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
+  assert(!int_encoding && "byte operation in integer encoding mode is invalid");
+
   assert(expr.operands().size() == 3);
   // op0 is the object to update
   // op1 is the byte number
@@ -3536,6 +3538,8 @@ void
 z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
+
+  assert(!int_encoding && "byte operation in integer encoding mode is invalid");
 
   assert(expr.operands().size() == 2);
   // op0 is object to extract from

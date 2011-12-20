@@ -666,6 +666,15 @@ void goto_checkt::check_rec(
 	if (!options.get_bool_option("eager"))
 	  options.set_option("no-assume-guarantee", false);
   }
+  else if (expr.id().as_string().find("byte_extract") != std::string::npos ||
+           expr.id().as_string().find("byte_update") != std::string::npos)
+  {
+    // There is no byte representation in integer mode; force bitvector mode.
+    options.set_option("int-encoding", false);
+    // And set z3-bv to prevent it switching back.
+    options.set_option("z3", true);
+    options.set_option("z3-bv", true);
+  }
 
   if (options.get_bool_option("qf_aufbv"))
   {
