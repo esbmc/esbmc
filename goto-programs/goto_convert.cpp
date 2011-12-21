@@ -286,6 +286,7 @@ void goto_convertt::convert(
   const irep_idt &statement=code.get_statement();
   //std::cout << "goto_convertt::convert : " << statement << " : " << from_expr(ns,"",code) << std::endl;
   //std::cout << "goto_convertt::convert code.pretty(): " << code.pretty() << std::endl;
+  //std::cout << "statement: " << statement << std::endl;
 
   dest.instructions.clear();
 

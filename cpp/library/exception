@@ -6,16 +6,38 @@
 
 namespace std {
 
-struct exception {
+const char* message;
+int status;
 
-  exception () throw() {__ESBMC_assert(0, "exception");}
+struct exception {
+#if 0
+  exception () throw() {/*__ESBMC_assert(0, "exception");*/}
   exception (const exception&) throw();
   exception& operator= (const exception&) throw();
   ~exception() throw();
-  const char* what() const throw(){
-	 
-	 return "";
+#endif
 
+public:
+
+#if 0
+  exception( char* _Message, int status){
+	  message = _Message;
+	  status = status;
+  }
+  exception( const char* _Message){
+	  message = (char*)_Message;
+  }
+#endif
+
+  exception( ) throw( );
+  exception(const exception& right) throw( );
+  exception& operator=(const exception& right) throw( );
+  ~exception( ) throw( );
+  const char* what() const throw() {
+	  return message;
+	  //Returns a null terminated character sequence containing a generic description of the exception.
+	  //Both the wording of such description and the character width are implementation-defined.
+	  //source: http://www.cplusplus.com/reference/std/exception/exception/
   }
 
 };

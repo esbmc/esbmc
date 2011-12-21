@@ -49,6 +49,9 @@ void c_typecheck_baset::typecheck_code(codet &code)
 
   const irep_idt &statement=code.statement();
 
+  //std::cout << "statement: " << statement << std::endl;
+  //std::cout << "typecheck_code::code.pretty(): " << code.pretty() << std::endl;
+
   if(statement=="expression")
     typecheck_expression(code);
   else if(statement=="label")
@@ -86,9 +89,6 @@ void c_typecheck_baset::typecheck_code(codet &code)
   else if(statement=="start_thread")
     typecheck_start_thread(code);
   else if(statement=="cpp-try") {
-	//flag=true;
-	//std::cout << "!!!!!!!!!!!!!statement: " << statement << std::endl;
-	//std::cout << "!!!!!!!!!!!!!typecheck_code::code.pretty(): " << code.pretty() << std::endl;
 	typecheck_cpptry(code);
   }
   else

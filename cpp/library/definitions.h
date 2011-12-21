@@ -16,7 +16,7 @@
 
 #define EXIT_SUCCESS 0
 
-#define npos -1
+//#define npos -1
 
 #ifdef _WIN64
     typedef __int64 streamsize;
