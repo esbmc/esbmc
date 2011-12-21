@@ -3673,6 +3673,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 Z3_ast z3_convt::to_bv(const typet &type, Z3_ast src)
 {
 
+  // XXXjmorse - endianness concerns?
   if (type.id() == "struct")
     return struct_to_bv(type, src);
   else if (type.id() == "union")
@@ -3757,6 +3758,7 @@ Z3_ast z3_convt::array_to_bv(const typet &type, unsigned int startidx,
 Z3_ast z3_convt::from_bv(const typet &type, Z3_ast src)
 {
 
+  // XXXjmorse - endianness concerns.
   if (type.id() == "struct")
     return struct_from_bv(type, src);
   else if (type.id() == "union")
