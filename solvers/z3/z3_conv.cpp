@@ -3670,6 +3670,17 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 }
 
+Z3_ast z3_convt::to_bv(const typet &type, Z3_ast src)
+{
+
+  if (type.id() == "struct")
+    return struct_to_bv(type, src);
+  else if (type.id() == "union")
+    return union_to_bv(type, src);
+  else
+    throw new conv_error("unsupported to-bitvector conversion type", type);
+}
+
 Z3_ast z3_convt::struct_to_bv(const typet &type, Z3_ast src)
 {
   // Convert input struct to a bit vector, using src, which should be a tuple.
