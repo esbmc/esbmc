@@ -3679,7 +3679,18 @@ Z3_ast z3_convt::to_bv(const typet &type, Z3_ast src)
     return union_to_bv(type, src);
   else if (type.id() == "array")
     return array_to_bv(type, 0, 0, src);
-  else
+  else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
+           type.id() == "fixedbv")
+    return src; // Should already be in a bitvector format.
+  else if (type.id() == "bool") {
+    // XXXjmorse - here we're defining a boolean to be a single bit in an 8 bit
+    // integer. This is something that should be configurable from the top level.
+    Z3_sort sort = Z3_mk_bv_sort(z3_ctx, 8);
+    Z3_ast true_bit = Z3_mk_unsigned_int(z3_ctx, 1, sort);
+    Z3_ast false_bit = Z3_mk_unsigned_int(z3_ctx, 0, sort);
+    Z3_ast result = Z3_mk_ite(z3_ctx, src, true_bit, false_bit);
+    return result;
+  } else
     throw new conv_error("unsupported to-bitvector conversion type", type);
 }
 
