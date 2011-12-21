@@ -3782,6 +3782,27 @@ Z3_ast z3_convt::from_bv(const typet &type, Z3_ast src)
 
 Z3_ast z3_convt::struct_from_bv(const typet &type, Z3_ast src)
 {
+  const struct_typet &struct_type = to_struct_type(type);
+  const struct_typet::componentst &components = struct_type.components();
+
+  Z3_sort our_struct_type;
+  create_struct_union_type(type, false, our_struct_type);
+
+  unsigned int size = components.size(), offset = 0, idx = 0;
+  Z3_ast args[size];
+  for (struct_typet::componentst::const_iterator it = components.begin();
+       it != components.end(); it++)
+  {
+    unsigned width;
+    const typet &item_type = struct_type.component_type(it->get_name());
+    get_type_width(item_type, width);
+
+    Z3_ast bv = Z3_mk_extract(z3_ctx, offset, offset + width - 1, src);
+    Z3_ast item = from_bv(item_type, bv);
+    args[idx++] = item;
+  }
+
+  return z3_api.mk_tuple(z3_ctx, our_struct_type, args, size);
 }
 
 Z3_ast z3_convt::union_from_bv(const typet &type, Z3_ast src)
