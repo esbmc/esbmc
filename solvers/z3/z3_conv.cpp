@@ -3754,6 +3754,42 @@ Z3_ast z3_convt::array_to_bv(const typet &type, unsigned int startidx,
   return chain;
 }
 
+Z3_ast z3_convt::from_bv(const typet &type, Z3_ast src)
+{
+
+  if (type.id() == "struct")
+    return struct_from_bv(type, src);
+  else if (type.id() == "union")
+    return union_from_bv(type, src);
+  else if (type.id() == "array")
+    return array_from_bv(type, 0, 0, src);
+  else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
+           type.id() == "fixedbv")
+    return src; // Should already be in a bitvector format.
+  else if (type.id() == "bool") {
+    // XXXjmorse - here we're defining a boolean to be a single bit in an 8 bit
+    // integer. This is something that should be configurable from the top level.
+    Z3_sort sort = Z3_mk_bv_sort(z3_ctx, 8);
+    Z3_ast false_bit = Z3_mk_unsigned_int(z3_ctx, 0, sort);
+    Z3_ast eq = Z3_mk_eq(z3_ctx, false_bit, src);
+    Z3_ast result = Z3_mk_ite(z3_ctx, eq, Z3_mk_true(z3_ctx),Z3_mk_false(z3_ctx));
+    return result;
+  } else
+    throw new conv_error("unsupported from-bitvector conversion type", type);
+}
+
+Z3_ast z3_convt::struct_from_bv(const typet &type, Z3_ast src)
+{
+}
+
+Z3_ast z3_convt::union_from_bv(const typet &type, Z3_ast src)
+{
+}
+
+Z3_ast z3_convt::array_from_bv(const typet &type, unsigned int startidx,
+                               unsigned int endidx, Z3_ast src)
+{
+}
 /*******************************************************************
    Function: z3_convt::convert_isnan
 
