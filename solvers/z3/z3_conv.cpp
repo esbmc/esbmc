@@ -3798,6 +3798,7 @@ Z3_ast z3_convt::struct_from_bv(const typet &type, Z3_ast src)
     get_type_width(item_type, width);
 
     Z3_ast bv = Z3_mk_extract(z3_ctx, offset, offset + width - 1, src);
+    offset += width;
     Z3_ast item = from_bv(item_type, bv);
     args[idx++] = item;
   }
