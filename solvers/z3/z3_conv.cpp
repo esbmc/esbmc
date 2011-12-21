@@ -3670,6 +3670,31 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 }
 
+Z3_ast z3_convt::struct_to_bv(const typet &type, Z3_ast src)
+{
+  // Convert input struct to a bit vector, using src, which should be a tuple.
+
+  Z3_ast chain = NULL;
+  unsigned int i;
+  const struct_typet &struct_type = to_struct_type(type);
+  const struct_typet::componentst &components = struct_type.components();
+
+  for (i = 0; i < components.size(); i++)
+  {
+    Z3_ast tmp;
+
+    // Extract each member from the tuple; concatenate.
+    tmp = z3_api.mk_tuple_select(z3_ctx, src, i);
+
+    if (chain == NULL)
+      chain = tmp;
+    else
+      chain = Z3_mk_concat(z3_ctx, chain, tmp);
+  }
+
+  return chain;
+}
+
 /*******************************************************************
    Function: z3_convt::convert_isnan
 
