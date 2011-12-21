@@ -3695,6 +3695,14 @@ Z3_ast z3_convt::struct_to_bv(const typet &type, Z3_ast src)
   return chain;
 }
 
+Z3_ast z3_convt::union_to_bv(const typet &type, Z3_ast src)
+{
+
+  std::cerr << "Union <=> bitvector byte operations currently unsupported"
+  std::cerr << std::endl;
+  abort();
+}
+
 /*******************************************************************
    Function: z3_convt::convert_isnan
 

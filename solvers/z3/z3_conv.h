@@ -160,6 +160,7 @@ private:
 
   // Utilities for converting complex types to and from bit vectors
   Z3_ast struct_to_bv(const typet& type, Z3_ast src);
+  Z3_ast union_to_bv(const typet& type, Z3_ast src);
 
   std::string double2string(double d) const;
 
