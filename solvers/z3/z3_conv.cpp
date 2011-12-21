@@ -3807,6 +3807,10 @@ Z3_ast z3_convt::struct_from_bv(const typet &type, Z3_ast src)
 
 Z3_ast z3_convt::union_from_bv(const typet &type, Z3_ast src)
 {
+
+  std::cerr << "Converting to union from bitvector currently unsupported";
+  std::cerr << std::endl;
+  abort();
 }
 
 Z3_ast z3_convt::array_from_bv(const typet &type, unsigned int startidx,
