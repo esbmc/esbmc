@@ -162,6 +162,8 @@ private:
   Z3_ast to_bv(const typet& type, Z3_ast src);
   Z3_ast struct_to_bv(const typet& type, Z3_ast src);
   Z3_ast union_to_bv(const typet& type, Z3_ast src);
+  Z3_ast array_to_bv(const typet& type, unsigned int startidx,
+                     unsigned int endidx, Z3_ast src);
 
   std::string double2string(double d) const;
 

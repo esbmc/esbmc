@@ -3677,6 +3677,8 @@ Z3_ast z3_convt::to_bv(const typet &type, Z3_ast src)
     return struct_to_bv(type, src);
   else if (type.id() == "union")
     return union_to_bv(type, src);
+  else if (type.id() == "array")
+    return array_to_bv(type, 0, 0, src);
   else
     throw new conv_error("unsupported to-bitvector conversion type", type);
 }
@@ -3712,6 +3714,33 @@ Z3_ast z3_convt::union_to_bv(const typet &type, Z3_ast src)
   std::cerr << "Union <=> bitvector byte operations currently unsupported";
   std::cerr << std::endl;
   abort();
+}
+
+Z3_ast z3_convt::array_to_bv(const typet &type, unsigned int startidx,
+                             unsigned int endidx, Z3_ast src)
+{
+
+  if (startidx == 0 && endidx == 0) {
+    // Determine size - I'm assuming it's in elements.
+    unsigned int tmp = string2integer(type.get("size").as_string(), 10).to_long();
+    endidx = tmp - 1;
+  }
+
+  // Here startidx and endidx indicate how much of the array we wish to extract.
+  unsigned int i;
+  Z3_ast chain = NULL;
+  for (i = startidx; i <= endidx; i++) {
+    Z3_ast tmp;
+    Z3_ast idx = convert_number(i, config.ansi_c.int_width, true);
+    tmp = Z3_mk_select(z3_ctx, src, idx);
+
+    if (chain == NULL)
+      chain = tmp;
+    else
+      chain = Z3_mk_concat(z3_ctx, chain, tmp);
+  }
+
+  return chain;
 }
 
 /*******************************************************************
