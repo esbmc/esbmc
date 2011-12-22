@@ -3473,52 +3473,7 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 
   get_type_width(expr.op2().type(), width_op2);
 
-  DEBUGLOC;
-
-  if (expr.op0().type().id() == "struct") {
-    const struct_typet &struct_type = to_struct_type(expr.op0().type());
-    const struct_typet::componentst &components = struct_type.components();
-    bool has_field = false;
-
-    // XXXjmorse, this isn't going to be the case if it's a with.
-    assert(components.size() >= expr.op0().operands().size());
-    assert(!components.empty());
-
-    for (struct_typet::componentst::const_iterator
-         it = components.begin();
-         it != components.end();
-         it++)
-    {
-      get_type_width(it->type(), width_op0);
-
-      if ((it->type().id() == expr.op2().type().id()) &&
-          (width_op0 == width_op2))
-	has_field = true;
-    }
-
-    if (has_field)
-      bv = z3_api.mk_tuple_update(z3_ctx, tuple, i.to_long(), value);
-    else
-      bv = tuple;
-  } else if (expr.op0().type().id() == "signedbv")     {
-    if (int_encoding) {
-      bv = value;
-      return;
-    }
-
-    get_type_width(expr.op0().type(), width_op0);
-
-    if (width_op0 == 0)
-      // XXXjmorse - can this ever happen now?
-      throw new conv_error("failed to get width of byte_update operand", expr);
-
-    if (width_op0 > width_op2)
-      bv = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value);
-    else
-      throw new conv_error("unsupported irep for conver_byte_update", expr);
-  } else {
-    throw new conv_error("unsupported irep for conver_byte_update", expr);
-  }
+  abort();
 
   DEBUGLOC;
 }
