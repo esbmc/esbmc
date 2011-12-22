@@ -107,7 +107,9 @@ int cpp_token_buffert::LookAhead(unsigned offset, cpp_tokent &token)
     read_token();
 
   token=*token_vector[offset];
-
+//  if ((token.filename == "main.cpp")){
+ //	std::cout << "\n########## " << token.text << "   " << token.pos << "  " << token.filename <<"  " << token.line_no << "\n" << std::endl;
+  //}
   return token.kind;
 }
 
@@ -141,6 +143,7 @@ void cpp_token_buffert::read_token()
 
   tokens.back().kind=kind;
   tokens.back().pos=token_vector.size()-1;
+
   //std::cout << "II: " << token_vector.back()->kind << std::endl;
   //std::cout << "I2: " << token_vector.size() << std::endl;
 }

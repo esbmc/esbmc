@@ -278,7 +278,6 @@ bool Parser::rProgram(cpp_itemt &item)
     else
     {
       Token tk;
-
       if(!SyntaxError())
         return false;                // too many errors
 
@@ -434,6 +433,7 @@ bool Parser::isTypeSpecifier()
 #endif
        || t==TYPEOF
      )
+
     return true;
 
   return false;
@@ -470,7 +470,6 @@ bool Parser::rLinkageSpec(cpp_linkage_spect &linkage_spec)
 
     if(!rDefinition(item))
       return false;
-
     linkage_spec.items().push_back(item);
   }
 
@@ -573,6 +572,7 @@ bool Parser::rLinkageBody(cpp_linkage_spect::itemst &items)
     }
 
     items.push_back(item);
+
   }
 
   lex->GetToken(cp);
@@ -5924,7 +5924,7 @@ bool Parser::parse()
 
 /*******************************************************************\
 
-Function: cpp_parse
+Funcion: cpp_parse
 
   Inputs:
 
