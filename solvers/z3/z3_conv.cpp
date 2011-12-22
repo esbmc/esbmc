@@ -3510,38 +3510,40 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 void
 z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 {
-  DEBUGLOC;
+  Z3_ast op0;
+  unsigned width;
+
+  get_type_width(expr.type(), width);
+  convert_bv(expr.op0(), op0);
+  op0 = to_bv(expr.op0().type(), op0);
 
   assert(!int_encoding && "byte operation in integer encoding mode is invalid");
-
   assert(expr.operands().size() == 2);
   // op0 is object to extract from
   // op1 is byte field to extract from.
 
   mp_integer i;
-  if (to_integer(expr.op1(), i))
-    throw new conv_error("byte_extract expects constant 2nd arg", expr);
+  if (to_integer(expr.op1(), i)) {
+    // Non-constant byte extract. Shift symbolic distance and extract the lower
+    // portion of the bit vector.
+    Z3_ast byteoffset, bitoffset, shifted, zeros;
+    convert_bv(expr.op1(), byteoffset);
 
-  unsigned width;
+    // Tack three zeros on the end, shifting the byte offset to be a bit offset
+    Z3_sort sort = Z3_mk_bv_sort(z3_ctx, 3);
+    zeros = Z3_mk_unsigned_int(z3_ctx, 0, sort);
+    bitoffset = Z3_mk_concat(z3_ctx, byteoffset, zeros);
+    shifted = Z3_mk_bvlshr(z3_ctx, op0, bitoffset);
+    bv = Z3_mk_extract(z3_ctx, width-1, 0, shifted);
+  } else {
+    // Constant byte extract. Pick the byte range and extract it.
+    uint64_t upper, lower;
 
-  get_type_width(expr.type(), width);
+    lower = i.to_long() * 8;
+    upper = lower + width - 1;
 
-  if (width == 0)
-    // XXXjmorse - can this happen any more?
-    throw new conv_error("failed to get width of byte_extract operand", expr);
-
-  uint64_t upper, lower;
-
-  lower = i.to_long() * 8;
-  upper = lower + width - 1;
-
-  Z3_ast op0;
-
-  convert_bv(expr.op0(), op0);
-  op0 = to_bv(expr.op0().type(), op0);
-  bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
-
-  DEBUGLOC;
+    bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
+  }
 }
 
 Z3_ast z3_convt::to_bv(const typet &type, Z3_ast src)
