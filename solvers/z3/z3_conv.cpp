@@ -3528,13 +3528,9 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   if (to_integer(expr.op1(), i))
     throw new conv_error("byte_extract expects constant 2nd arg", expr);
 
-  unsigned width, w;
+  unsigned width;
 
-  get_type_width(expr.op0().type(), width);
-
-  // XXXjmorse - looks like this only ever reads a single byte, not the desired
-  // number of bytes to fill the type.
-  get_type_width(expr.type(), w);
+  get_type_width(expr.type(), width);
 
   if (width == 0)
     // XXXjmorse - can this happen any more?
@@ -3542,14 +3538,8 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 
   uint64_t upper, lower;
 
-  if (expr.id() == "byte_extract_little_endian") {
-    upper = ((i.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
-    lower = i.to_long() * 8; //i*w;
-  } else   {
-    uint64_t max = width - 1;
-    upper = max - (i.to_long() * 8); //max-(i*w);
-    lower = max - ((i.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
-  }
+  lower = i.to_long() * 8;
+  upper = lower + width - 1;
 
   Z3_ast op0;
 
