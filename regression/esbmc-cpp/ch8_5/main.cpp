@@ -33,6 +33,8 @@ int main()
         << "\ns2 >= s1 yields "
         << ( s2 >= s1 ? "true" : "false" )
         << "\ns2 <= s1 yields " 
+		  << s2.length()
+		  << s1+s2
         << ( s2 <= s1 ? "true" : "false" );
 
    // test string member function empty 
@@ -52,7 +54,7 @@ int main()
    // test overloaded string concatenation operator 
    // with C-style string
    cout << "\n\ns1 += \" to you\" yields\n";
-   s1 += " to you";  
+   s1 += " to you"; 
    cout << "s1 = " << s1 << "\n\n";
 
    // test string member function substr

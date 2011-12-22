@@ -10,8 +10,9 @@ using std::endl;  // program uses endl
 // function main begins program execution
 int main()
 {
-   int num1;  // first number to be read from user
-   int num2;  // second number to be read from user
+
+   int num1, num2;  // first number to be read from user
+  // int num2;  // second number to be read from user
 
    cout << "Enter two integers, and I will tell you\n"
         << "the relationships they satisfy: ";
