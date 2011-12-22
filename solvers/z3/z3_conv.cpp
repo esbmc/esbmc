@@ -19,6 +19,7 @@
 #include <pointer_offset_size.h>
 #include <find_symbols.h>
 #include <prefix.h>
+#include <simplify_expr.h>
 #include <solvers/flattening/boolbv_width.h>
 #include <fixedbv.h>
 #include <solvers/flattening/boolbv.h>
@@ -3610,7 +3611,11 @@ Z3_ast z3_convt::array_to_bv(const typet &type, unsigned int startidx,
 
   if (startidx == 0 && endidx == 0) {
     // Determine size - I'm assuming it's in elements.
-    unsigned int tmp = string2integer(type.get("size").as_string(), 10).to_long();
+    exprt &size = (exprt&)type.find("size");
+    assert(size != get_nil_irep());
+    simplify(size); // Inefficient; should be simplified earlier.
+    assert(size.id() == "constant");
+    unsigned int tmp = binary2integer(size.get("value").as_string(), false).to_long();
     endidx = tmp - 1;
   }
 
