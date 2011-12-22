@@ -3755,7 +3755,7 @@ Z3_ast z3_convt::array_to_bv(const typet &type, unsigned int startidx,
   return chain;
 }
 
-Z3_ast z3_convt::from_bv(const typet &type, Z3_ast src)
+Z3_ast z3_convt::from_bv(const typet &type, Z3_ast src, Z3_ast orig)
 {
 
   // XXXjmorse - endianness concerns.
@@ -3764,7 +3764,7 @@ Z3_ast z3_convt::from_bv(const typet &type, Z3_ast src)
   else if (type.id() == "union")
     return union_from_bv(type, src);
   else if (type.id() == "array")
-    return array_from_bv(type, 0, 0, src);
+    return array_from_bv(type, 0, 0, src, orig);
   else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
            type.id() == "fixedbv")
     return src; // Should already be in a bitvector format.
@@ -3799,7 +3799,7 @@ Z3_ast z3_convt::struct_from_bv(const typet &type, Z3_ast src)
 
     Z3_ast bv = Z3_mk_extract(z3_ctx, offset, offset + width - 1, src);
     offset += width;
-    Z3_ast item = from_bv(item_type, bv);
+    Z3_ast item = from_bv(item_type, bv, NULL);
     args[idx++] = item;
   }
 
@@ -3815,7 +3815,7 @@ Z3_ast z3_convt::union_from_bv(const typet &type, Z3_ast src)
 }
 
 Z3_ast z3_convt::array_from_bv(const typet &type, unsigned int startidx,
-                               unsigned int endidx, Z3_ast src)
+                               unsigned int endidx, Z3_ast src, Z3_ast orig)
 {
 }
 /*******************************************************************
