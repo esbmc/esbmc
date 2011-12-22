@@ -3817,6 +3817,35 @@ Z3_ast z3_convt::union_from_bv(const typet &type, Z3_ast src)
 Z3_ast z3_convt::array_from_bv(const typet &type, unsigned int startidx,
                                unsigned int endidx, Z3_ast src, Z3_ast orig)
 {
+
+  // Again, if no size given, assume whole array.
+  if (startidx == 0 && endidx == 0) {
+    unsigned int tmp = string2integer(type.get("size").as_string(), 10).to_long();
+    endidx = tmp - 1;
+
+    // Also, create a unique new array to update all the elements into.
+    Z3_sort array_sort;
+    create_type(type, array_sort);
+    orig = Z3_mk_fresh_const(z3_ctx, NULL, array_sort);
+  }
+
+  unsigned int width;
+  get_type_width(type.subtype(), width);
+
+  // Loop through bit vector, extracting elements and updating.
+  Z3_ast chain = NULL;
+  unsigned int offset = 0, i = 0;
+  for (i = startidx; i <= endidx; i++) {
+    Z3_ast tmp;
+    Z3_ast val = Z3_mk_extract(z3_ctx, offset, offset + width - 1, src);
+    offset += width;
+
+    orig = Z3_mk_store(z3_ctx, orig,
+                       convert_number(i, config.ansi_c.int_width, true),
+                       val);
+  }
+
+  return orig;
 }
 /*******************************************************************
    Function: z3_convt::convert_isnan
