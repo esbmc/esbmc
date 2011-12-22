@@ -27,6 +27,9 @@
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
 
+#define min(a,b) ((a) < (b) ? (a) : (b))
+#define max(a,b) ((a) > (b) ? (a) : (b))
+
 //static Z3_ast core[Z3_UNSAT_CORE_LIMIT];
 static std::vector<Z3_ast> core_vector;
 static u_int unsat_core_size = 0;
@@ -3465,17 +3468,38 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
     return;
   }
 
-  Z3_ast tuple, value;
-  uint width_op0, width_op2;
+  Z3_ast orig_val, the_bv, update_value;
 
-  convert_bv(expr.op0(), tuple);
-  convert_bv(expr.op2(), value);
+  convert_bv(expr.op0(), orig_val);
+  the_bv = to_bv(expr.op0().type(), orig_val);
 
+  convert_bv(expr.op2(), update_value);
+
+  uint width_op2;
   get_type_width(expr.op2().type(), width_op2);
 
-  abort();
+  // Irritatingly, there's no way of performing a bit update, so instead extract
+  // the bits either side of the portion we want, and concatonate it all.
+  uint64_t upper, lower;
 
-  DEBUGLOC;
+  if (expr.id() == "byte_update_little_endian") {
+    upper = ((i.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
+    lower = i.to_long() * 8; //i*w;
+  } else   {
+    uint64_t max = width_op2 - 1;
+    upper = max - (i.to_long() * 8); //max-(i*w);
+    lower = max - ((i.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
+  }
+
+  Z3_ast lowerbv = Z3_mk_extract(z3_ctx, min(upper,lower)-1, 0, orig_val);
+  Z3_ast upperbv = Z3_mk_extract(z3_ctx,
+                 Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val)) - 1,
+                 max(upper,lower), orig_val);
+
+  Z3_ast updatedval = Z3_mk_concat(z3_ctx, lowerbv, update_value);
+  updatedval = Z3_mk_concat(z3_ctx, updatedval, upperbv);
+
+  bv = from_bv(expr.type(), updatedval, NULL);
 }
 
 /*******************************************************************
