@@ -3482,14 +3482,8 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   // the bits either side of the portion we want, and concatonate it all.
   uint64_t upper, lower;
 
-  if (expr.id() == "byte_update_little_endian") {
-    upper = ((i.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
-    lower = i.to_long() * 8; //i*w;
-  } else   {
-    uint64_t max = width_op2 - 1;
-    upper = max - (i.to_long() * 8); //max-(i*w);
-    lower = max - ((i.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
-  }
+  lower = i.to_long() * 8;
+  upper = lower + width_op2 - 1;
 
   Z3_ast lowerbv = Z3_mk_extract(z3_ctx, min(upper,lower)-1, 0, orig_val);
   Z3_ast upperbv = Z3_mk_extract(z3_ctx,
