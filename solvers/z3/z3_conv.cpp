@@ -3512,11 +3512,22 @@ void
 z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 {
   Z3_ast op0;
+  const typet *conv_type;
   unsigned width;
 
   get_type_width(expr.type(), width);
-  convert_bv(expr.op0(), op0);
-  op0 = to_bv(expr.op0().type(), op0);
+  if (expr.op0().id() == "member" || expr.op0().id() == "index") {
+    // the point-to analysis hands us the first /thing/ in an object, so that
+    // the address of it gives the address of the object?
+    // Thus, extract the actual object or struct from that expression.
+    convert_bv(expr.op0().op0(), op0);
+    conv_type = &expr.op0().op0().type();
+  } else {
+    // Or, it's just some entirely usable object.
+    convert_bv(expr.op0(), op0);
+    conv_type = &expr.op0().type();
+  }
+  op0 = to_bv(*conv_type, op0);
 
   assert(!int_encoding && "byte operation in integer encoding mode is invalid");
   assert(expr.operands().size() == 2);
