@@ -3760,7 +3760,7 @@ Z3_ast z3_convt::array_from_bv(const typet &type, unsigned int startidx,
   unsigned int offset = 0, i = 0;
   for (i = startidx; i <= endidx; i++) {
     Z3_ast tmp;
-    Z3_ast val = Z3_mk_extract(z3_ctx, offset, offset + width - 1, src);
+    Z3_ast val = Z3_mk_extract(z3_ctx, offset + width - 1, offset, src);
     offset += width;
 
     orig = Z3_mk_store(z3_ctx, orig,
