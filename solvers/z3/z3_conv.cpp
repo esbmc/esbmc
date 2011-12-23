@@ -3596,8 +3596,17 @@ Z3_ast z3_convt::to_bv(const typet &type, Z3_ast src)
   else if (type.id() == "array")
     return array_to_bv(type, 0, 0, src);
   else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
-           type.id() == "fixedbv")
-    return src; // Should already be in a bitvector format.
+           type.id() == "fixedbv") {
+    // Should already be in a bitvector format. May need byte swapping.
+    // The default Z3 behaviour appears to be little-endian; so swap if the
+    // endianness is forced to big.
+    if (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN)
+      return byte_swap(src);
+    else if (config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN)
+      return src;
+    else
+      assert(false && "No endianness set when performing byte operations");
+  }
   else if (type.id() == "bool") {
     // XXXjmorse - here we're defining a boolean to be a single bit in an 8 bit
     // integer. This is something that should be configurable from the top level.
@@ -3685,8 +3694,17 @@ Z3_ast z3_convt::from_bv(const typet &type, Z3_ast src, Z3_ast orig)
   else if (type.id() == "array")
     return array_from_bv(type, 0, 0, src, orig);
   else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
-           type.id() == "fixedbv")
-    return src; // Should already be in a bitvector format.
+           type.id() == "fixedbv") {
+    // Should already be in a bitvector format. May need byte swapping.
+    // The default Z3 behaviour appears to be little-endian; so swap if the
+    // endianness is forced to big.
+    if (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN)
+      return byte_swap(src);
+    else if (config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN)
+      return src;
+    else
+      assert(false && "No endianness set when performing byte operations");
+  }
   else if (type.id() == "bool") {
     // XXXjmorse - here we're defining a boolean to be a single bit in an 8 bit
     // integer. This is something that should be configurable from the top level.
@@ -3770,6 +3788,26 @@ Z3_ast z3_convt::array_from_bv(const typet &type, unsigned int startidx,
 
   return orig;
 }
+
+Z3_ast
+z3_convt::byte_swap(Z3_ast src)
+{
+  Z3_ast tmp, chain;
+  unsigned int width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, src));
+  assert(width % 8 == 0 && "byte-swapping integer size must be multiple of 8");
+
+  chain = NULL;
+  for (unsigned int i = 0; i < width; i += 8) {
+    tmp = Z3_mk_extract(z3_ctx, i + 7, i, src);
+    if (chain == NULL)
+      chain = tmp;
+    else
+      chain = Z3_mk_concat(z3_ctx, chain, tmp);
+  }
+
+  return chain;
+}
+
 /*******************************************************************
    Function: z3_convt::convert_isnan
 
