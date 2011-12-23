@@ -3538,14 +3538,24 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   if (to_integer(expr.op1(), i)) {
     // Non-constant byte extract. Shift symbolic distance and extract the lower
     // portion of the bit vector.
-    Z3_ast byteoffset, bitoffset, shifted, zeros;
+    Z3_sort offs_sort;
+    Z3_ast byteoffset, bitoffset, full_bitoffset, eight, shifted;
     convert_bv(expr.op1(), byteoffset);
 
-    // Tack three zeros on the end, shifting the byte offset to be a bit offset
-    Z3_sort sort = Z3_mk_bv_sort(z3_ctx, 3);
-    zeros = Z3_mk_unsigned_int(z3_ctx, 0, sort);
-    bitoffset = Z3_mk_concat(z3_ctx, byteoffset, zeros);
-    shifted = Z3_mk_bvlshr(z3_ctx, op0, bitoffset);
+    // Multiply by 8, then coerce shift value to be same width as op0, for shrs
+    // purpose. We don't have to worry about overflow here: if it's big enough
+    // to overflow in the minimum size (8 bits), or indeed any other size, then
+    // it should violate the pointer bound checks introduced by dereference.
+    offs_sort = Z3_get_sort(z3_ctx, byteoffset);
+    eight = Z3_mk_unsigned_int(z3_ctx, 8, offs_sort);
+    bitoffset = Z3_mk_bvmul(z3_ctx, byteoffset, eight);
+    // Now for the extension,
+    unsigned int width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, op0));
+    width -= Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, bitoffset));
+    full_bitoffset = Z3_mk_zero_ext(z3_ctx, width, bitoffset);
+    shifted = Z3_mk_bvlshr(z3_ctx, op0, full_bitoffset);
+
+    // And after all that, pick out the part of the data that we want.
     bv = Z3_mk_extract(z3_ctx, width-1, 0, shifted);
   } else {
     // Constant byte extract. Pick the byte range and extract it.
