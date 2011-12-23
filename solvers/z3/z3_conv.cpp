@@ -3491,12 +3491,21 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 
   // Irritatingly, there's no way of performing a bit update, so instead extract
   // the bits either side of the portion we want, and concatonate it all.
-  uint64_t upper, lower;
+  int64_t upper, lower;
   unsigned int width;
 
   width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val));
   lower = i.to_long() * 8;
   upper = lower + width_op2 - 1;
+
+  if (upper >= Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val)) ||
+      lower < 0) {
+    // Bounds violations; just fill the return value with zeros to satisfy the
+    // typechecker.
+    Z3_sort tmpsort = Z3_get_sort(z3_ctx, orig_val);
+    bv = Z3_mk_unsigned_int(z3_ctx, 0, tmpsort);
+    return;
+  }
 
   Z3_ast lowerbv = NULL, upperbv = NULL, updatedval;
   if (lower != 0)
