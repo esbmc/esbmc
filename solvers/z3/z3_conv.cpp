@@ -3621,9 +3621,9 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
     eight = Z3_mk_unsigned_int(z3_ctx, 8, offs_sort);
     bitoffset = Z3_mk_bvmul(z3_ctx, byteoffset, eight);
     // Now for the extension,
-    unsigned int width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, op0));
-    width -= Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, bitoffset));
-    full_bitoffset = Z3_mk_zero_ext(z3_ctx, width, bitoffset);
+    unsigned int op0width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, op0));
+    op0width -= Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, bitoffset));
+    full_bitoffset = Z3_mk_zero_ext(z3_ctx, op0width, bitoffset);
     shifted = Z3_mk_bvlshr(z3_ctx, op0, full_bitoffset);
 
     // And after all that, pick out the part of the data that we want.
