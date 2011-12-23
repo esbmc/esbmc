@@ -28,9 +28,6 @@
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
 
-#define min(a,b) ((a) < (b) ? (a) : (b))
-#define max(a,b) ((a) > (b) ? (a) : (b))
-
 //static Z3_ast core[Z3_UNSAT_CORE_LIMIT];
 static std::vector<Z3_ast> core_vector;
 static u_int unsat_core_size = 0;
@@ -3482,17 +3479,23 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   // Irritatingly, there's no way of performing a bit update, so instead extract
   // the bits either side of the portion we want, and concatonate it all.
   uint64_t upper, lower;
+  unsigned int width;
 
+  width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val));
   lower = i.to_long() * 8;
   upper = lower + width_op2 - 1;
 
-  Z3_ast lowerbv = Z3_mk_extract(z3_ctx, min(upper,lower)-1, 0, orig_val);
-  Z3_ast upperbv = Z3_mk_extract(z3_ctx,
-                 Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val)) - 1,
-                 max(upper,lower), orig_val);
+  Z3_ast lowerbv = NULL, upperbv = NULL, updatedval;
+  if (lower != 0)
+    lowerbv = Z3_mk_extract(z3_ctx, lower-1, 0, orig_val);
+  if (upper != 0)
+    upperbv = Z3_mk_extract(z3_ctx, width-1, upper, orig_val);
 
-  Z3_ast updatedval = Z3_mk_concat(z3_ctx, lowerbv, update_value);
-  updatedval = Z3_mk_concat(z3_ctx, updatedval, upperbv);
+  updatedval = update_value;
+  if (lowerbv != NULL)
+    updatedval = Z3_mk_concat(z3_ctx, lowerbv, update_value);
+  if (upperbv != NULL)
+    updatedval = Z3_mk_concat(z3_ctx, updatedval, upperbv);
 
   bv = from_bv(expr.type(), updatedval, NULL);
 }
