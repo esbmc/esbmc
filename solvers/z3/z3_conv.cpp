@@ -3462,12 +3462,6 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   // op1 is the byte number
   // op2 is the value to update with
 
-  mp_integer i;
-  if (to_integer(expr.op1(), i)) {
-    convert_bv(expr.op0(), bv);
-    return;
-  }
-
   const typet *conv_type;
   Z3_ast orig_val, update_value;
 
@@ -3491,37 +3485,44 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   uint width_op2;
   get_type_width(expr.op2().type(), width_op2);
 
-  // Irritatingly, there's no way of performing a bit update, so instead extract
-  // the bits either side of the portion we want, and concatonate it all.
-  int64_t upper, lower;
-  unsigned int width;
+  mp_integer i;
+  if (!to_integer(expr.op1(), i)) {
 
-  width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val));
-  lower = i.to_long() * 8;
-  upper = lower + width_op2 - 1;
+    // Irritatingly, there's no way of performing a bit update, so instead extract
+    // the bits either side of the portion we want, and concatonate it all.
+    int64_t upper, lower;
+    unsigned int width;
 
-  if (upper >= Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val)) ||
-      lower < 0) {
-    // Bounds violations; just fill the return value with zeros to satisfy the
-    // typechecker.
-    Z3_sort tmpsort = Z3_get_sort(z3_ctx, orig_val);
-    bv = Z3_mk_unsigned_int(z3_ctx, 0, tmpsort);
-    return;
+    width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val));
+    lower = i.to_long() * 8;
+    upper = lower + width_op2 - 1;
+
+    if (upper >= Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val)) ||
+        lower < 0) {
+      // Bounds violations; just fill the return value with zeros to satisfy the
+      // typechecker.
+      Z3_sort tmpsort = Z3_get_sort(z3_ctx, orig_val);
+      bv = Z3_mk_unsigned_int(z3_ctx, 0, tmpsort);
+      return;
+    }
+
+    Z3_ast lowerbv = NULL, upperbv = NULL, updatedval;
+    if (lower != 0)
+      lowerbv = Z3_mk_extract(z3_ctx, lower-1, 0, orig_val);
+    if (upper != width-1)
+      upperbv = Z3_mk_extract(z3_ctx, width-1, upper+1, orig_val);
+
+    updatedval = update_value;
+    if (lowerbv != NULL)
+      updatedval = Z3_mk_concat(z3_ctx, updatedval, lowerbv);
+    if (upperbv != NULL)
+      updatedval = Z3_mk_concat(z3_ctx, upperbv, updatedval);
+
+    bv = from_bv(expr.type(), updatedval, NULL);
+  } else {
+    std::cerr << "Error, dynamic update location" << std::endl;
+    abort();
   }
-
-  Z3_ast lowerbv = NULL, upperbv = NULL, updatedval;
-  if (lower != 0)
-    lowerbv = Z3_mk_extract(z3_ctx, lower-1, 0, orig_val);
-  if (upper != width-1)
-    upperbv = Z3_mk_extract(z3_ctx, width-1, upper+1, orig_val);
-
-  updatedval = update_value;
-  if (lowerbv != NULL)
-    updatedval = Z3_mk_concat(z3_ctx, updatedval, lowerbv);
-  if (upperbv != NULL)
-    updatedval = Z3_mk_concat(z3_ctx, upperbv, updatedval);
-
-  bv = from_bv(expr.type(), updatedval, NULL);
 }
 
 /*******************************************************************
