@@ -3576,10 +3576,19 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
     bv = Z3_mk_extract(z3_ctx, width-1, 0, shifted);
   } else {
     // Constant byte extract. Pick the byte range and extract it.
-    uint64_t upper, lower;
+    int64_t upper, lower;
 
     lower = i.to_long() * 8;
     upper = lower + width - 1;
+
+    if (upper >= Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, op0)) ||
+        lower < 0) {
+      // This access rolls off the end of the bv: this Should (TM) trigger a
+      // bounds violation elsewhere. In the meantime, just return all zeros.
+      Z3_sort tmpsort = Z3_mk_bv_sort(z3_ctx, width);
+      bv = Z3_mk_unsigned_int(z3_ctx, 0, tmpsort);
+      return;
+    }
 
     bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
   }
