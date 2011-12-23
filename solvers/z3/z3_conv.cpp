@@ -3628,6 +3628,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 
     // And after all that, pick out the part of the data that we want.
     bv = Z3_mk_extract(z3_ctx, width-1, 0, shifted);
+    bv = from_bv(expr.type(), bv, NULL);
   } else {
     // Constant byte extract. Pick the byte range and extract it.
     int64_t upper, lower;
@@ -3645,6 +3646,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
     }
 
     bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
+    bv = from_bv(expr.type(), bv, NULL);
   }
 }
 
