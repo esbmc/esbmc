@@ -1427,6 +1427,8 @@ z3_convt::convert_width(const exprt &expr)
   assert(expr.operands().size() == 1);
 
   get_type_width(expr.op0().type(), width);
+  width /= 8; // bit size to byte size; which is what symex uses this irep with
+
   if (int_encoding)
     native_int_sort = Z3_mk_int_sort(z3_ctx);
   else
