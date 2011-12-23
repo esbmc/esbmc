@@ -3629,7 +3629,7 @@ Z3_ast z3_convt::struct_to_bv(const typet &type, Z3_ast src)
     if (chain == NULL)
       chain = tmp;
     else
-      chain = Z3_mk_concat(z3_ctx, chain, tmp);
+      chain = Z3_mk_concat(z3_ctx, tmp, chain);
   }
 
   return chain;
@@ -3668,7 +3668,7 @@ Z3_ast z3_convt::array_to_bv(const typet &type, unsigned int startidx,
     if (chain == NULL)
       chain = tmp;
     else
-      chain = Z3_mk_concat(z3_ctx, chain, tmp);
+      chain = Z3_mk_concat(z3_ctx, tmp, chain);
   }
 
   return chain;
