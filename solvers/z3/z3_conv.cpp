@@ -3739,7 +3739,11 @@ Z3_ast z3_convt::array_from_bv(const typet &type, unsigned int startidx,
 
   // Again, if no size given, assume whole array.
   if (startidx == 0 && endidx == 0) {
-    unsigned int tmp = string2integer(type.get("size").as_string(), 10).to_long();
+    exprt &size = (exprt&)type.find("size");
+    assert(size != get_nil_irep());
+    simplify(size); // Inefficient; should be simplified earlier.
+    assert(size.id() == "constant");
+    unsigned int tmp = binary2integer(size.get("value").as_string(), false).to_long();
     endidx = tmp - 1;
 
     // Also, create a unique new array to update all the elements into.
