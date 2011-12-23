@@ -3520,8 +3520,46 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 
     bv = from_bv(expr.type(), updatedval, NULL);
   } else {
-    std::cerr << "Error, dynamic update location" << std::endl;
-    abort();
+    unsigned int output_width, bvwidth, widthwidth, widthtopwidth, updatewidth;
+    Z3_sort tmpsort;
+    Z3_ast offset, width, one, widthtop, topbit, lowerbit, mask, output;
+    Z3_ast newvalue_extd, newvalue_shifted;
+
+    convert_bv(expr.op1(), offset);
+    get_type_width(expr.type(), output_width);
+    width = convert_number(output_width, config.ansi_c.int_width, true);
+    widthtop = Z3_mk_bvadd(z3_ctx, offset,
+                     convert_number(output_width, config.ansi_c.int_width, true));
+    widthwidth = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, width));
+    widthtopwidth = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, widthtop));
+
+    // Dynamic updates are particularly upleasent, as we can't extract and
+    // concatonate bits together (as we don't know what the sizes will be).
+    // So go for mask-and-or approach.
+    // Produce a mask for the portion we want to keep first.
+    tmpsort = Z3_get_sort(z3_ctx, orig_val);
+    bvwidth = Z3_get_bv_sort_size(z3_ctx, tmpsort);
+    one = Z3_mk_unsigned_int(z3_ctx, 1, tmpsort);
+
+    // Two integers of 2^(offs+width+1), and 2^(offs+width). So for a byte,
+    // 2^32 - 2^24 would make 0xFF000000. First pump width and widthtop to be same
+    // width as orig_val and "one".
+    widthtop = Z3_mk_zero_ext(z3_ctx, bvwidth - widthtopwidth, widthtop);
+    width = Z3_mk_zero_ext(z3_ctx, bvwidth - widthwidth, width);
+    topbit = Z3_mk_bvshl(z3_ctx, one, widthtop);
+    lowerbit = Z3_mk_bvshl(z3_ctx, one, offset);
+
+    // Create mask to zero out a portion of the source data.
+    mask = Z3_mk_bvsub(z3_ctx, topbit, lowerbit);
+    mask = Z3_mk_bvnot(z3_ctx, mask);
+    // And mask.
+    output = Z3_mk_bvand(z3_ctx, orig_val, mask);
+
+    // Then shift update value, and or it in.
+    updatewidth = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, update_value));
+    newvalue_extd = Z3_mk_zero_ext(z3_ctx, bvwidth-updatewidth, update_value);
+    newvalue_shifted = Z3_mk_bvshl(z3_ctx, newvalue_extd, offset);
+    bv = Z3_mk_bvor(z3_ctx, newvalue_shifted, output);
   }
 }
 
