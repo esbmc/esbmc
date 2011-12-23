@@ -3506,9 +3506,9 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 
   updatedval = update_value;
   if (lowerbv != NULL)
-    updatedval = Z3_mk_concat(z3_ctx, lowerbv, update_value);
+    updatedval = Z3_mk_concat(z3_ctx, updatedval, lowerbv);
   if (upperbv != NULL)
-    updatedval = Z3_mk_concat(z3_ctx, updatedval, upperbv);
+    updatedval = Z3_mk_concat(z3_ctx, upperbv, updatedval);
 
   bv = from_bv(expr.type(), updatedval, NULL);
 }
