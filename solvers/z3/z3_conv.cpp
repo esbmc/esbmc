@@ -3502,7 +3502,7 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   if (lower != 0)
     lowerbv = Z3_mk_extract(z3_ctx, lower-1, 0, orig_val);
   if (upper != 0)
-    upperbv = Z3_mk_extract(z3_ctx, width-1, upper, orig_val);
+    upperbv = Z3_mk_extract(z3_ctx, width-1, upper+1, orig_val);
 
   updatedval = update_value;
   if (lowerbv != NULL)
