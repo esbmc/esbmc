@@ -3474,8 +3474,9 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   // the first element the pointer we were dealing with points at.
   if (expr.op0().id() == "member" || expr.op0().id() == "index") {
     // extract the actual object or struct from this expression.
-    convert_bv(expr.op0().op0(), orig_val);
-    conv_type = &expr.op0().op0().type();
+    const exprt &theobj = fetch_base_object(expr.op0());
+    convert_bv(theobj, orig_val);
+    conv_type = &theobj.type();
   } else {
     // Or, it's just some entirely usable object.
     convert_bv(expr.op0(), orig_val);
@@ -3535,8 +3536,9 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
     // the point-to analysis hands us the first /thing/ in an object, so that
     // the address of it gives the address of the object?
     // Thus, extract the actual object or struct from that expression.
-    convert_bv(expr.op0().op0(), op0);
-    conv_type = &expr.op0().op0().type();
+    const exprt &theobj = fetch_base_object(expr.op0());
+    convert_bv(theobj, op0);
+    conv_type = &theobj.type();
   } else {
     // Or, it's just some entirely usable object.
     convert_bv(expr.op0(), op0);
