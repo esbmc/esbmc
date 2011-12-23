@@ -3526,6 +3526,10 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
     Z3_ast newvalue_extd, newvalue_shifted;
 
     convert_bv(expr.op1(), offset);
+    // Multiply offset by 8, to make bitwidth from byteoffset. Overflow here
+    // should also trigger a bounds violation elsewhere.
+    offset = Z3_mk_bvmul(z3_ctx, offset,
+                         convert_number(8, config.ansi_c.int_width, true));
     get_type_width(expr.type(), output_width);
     width = convert_number(output_width, config.ansi_c.int_width, true);
     widthtop = Z3_mk_bvadd(z3_ctx, offset,
