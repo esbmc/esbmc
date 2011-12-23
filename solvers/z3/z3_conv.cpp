@@ -3466,10 +3466,22 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
     return;
   }
 
-  Z3_ast orig_val, the_bv, update_value;
+  const typet *conv_type;
+  Z3_ast orig_val, update_value;
 
-  convert_bv(expr.op0(), orig_val);
-  the_bv = to_bv(expr.op0().type(), orig_val);
+  // Generate bitvector of the datastructure we'll be dealing with. This needs to
+  // be extracted from the fact that the points-to analysis gives us an expr for
+  // the first element the pointer we were dealing with points at.
+  if (expr.op0().id() == "member" || expr.op0().id() == "index") {
+    // extract the actual object or struct from this expression.
+    convert_bv(expr.op0().op0(), orig_val);
+    conv_type = &expr.op0().op0().type();
+  } else {
+    // Or, it's just some entirely usable object.
+    convert_bv(expr.op0(), orig_val);
+    conv_type = &expr.op0().type();
+  }
+  orig_val = to_bv(*conv_type, orig_val);
 
   convert_bv(expr.op2(), update_value);
 
