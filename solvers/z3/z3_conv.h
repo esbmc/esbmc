@@ -81,7 +81,6 @@ public:
 private:
   virtual literalt convert_rest(const exprt &expr);
   virtual void set_to(const exprt &expr, bool value);
-  bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
   void create_array_type(const typet &type, Z3_type_ast &bv);

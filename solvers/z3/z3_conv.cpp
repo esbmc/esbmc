@@ -1457,7 +1457,7 @@ z3_convt::convert_rest(const exprt &expr)
   Z3_ast formula, constraint;
 
   try {
-    if (!assign_z3_expr(expr) && !ignoring_expr)
+    if (!ignoring_expr)
       return l;
 
     if (expr.id() == "is_zero_string") {
@@ -3799,7 +3799,7 @@ Z3_ast z3_convt::struct_from_bv(const typet &type, Z3_ast src)
     const typet &item_type = struct_type.component_type(it->get_name());
     get_type_width(item_type, width);
 
-    Z3_ast bv = Z3_mk_extract(z3_ctx, offset, offset + width - 1, src);
+    Z3_ast bv = Z3_mk_extract(z3_ctx, offset + width - 1, offset, src);
     offset += width;
     Z3_ast item = from_bv(item_type, bv, NULL);
     args[idx++] = item;
@@ -4028,37 +4028,11 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     bv = convert_overflow_unary(expr);
   else if (exprid == "memory-leak")
     bv = convert_memory_leak(expr);
+  else if (exprid == "unary+")
+    convert_z3_expr(expr.op0(), bv);
   else 
     throw new conv_error("Unrecognized expression type", expr);
 }
-
-/*******************************************************************
-   Function: z3_convt::assign_z3_expr
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-bool
-z3_convt::assign_z3_expr(const exprt expr)
-{
-  u_int size = expr.operands().size();
-
-  //ignore these IRep expressions for now. I don't know what they mean.
-
-  if (size == 2 && expr.op1().id() == "unary+") {
-    ignoring(expr.op1());
-    ignoring_expr = false;
-    return false;
-  }
-
-  return true;
-}
-
 
 /*******************************************************************
    Function: z3_convt::set_to
@@ -4166,7 +4140,7 @@ z3_convt::set_to(const exprt &expr, bool value)
       const exprt &op0 = expr.op0();
       const exprt &op1 = expr.op1();
 
-      if (assign_z3_expr(expr) && ignoring_expr) {
+      if (true && ignoring_expr) {
         convert_bv(op0, operand[0]);
         convert_bv(op1, operand[1]);
 
