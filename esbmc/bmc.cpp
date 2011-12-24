@@ -15,6 +15,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <sstream>
 #include <fstream>
 
+#include <config.h>
 #include <i2string.h>
 #include <location.h>
 #include <time_stopping.h>
@@ -689,7 +690,8 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 #ifdef Z3
 bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
   : solver_base(bmc), z3_dec(bmc.options.get_bool_option("uw-model"),
-                             bmc.options.get_bool_option("int-encoding"),
+                             config.ansi_c.late_byte_operations ? false :
+                                     bmc.options.get_bool_option("int-encoding"),
                              bmc.options.get_bool_option("smt"))
 {
   z3_dec.set_file(bmc.options.get_option("outfile"));
