@@ -3462,23 +3462,10 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   // op1 is the byte number
   // op2 is the value to update with
 
-  const typet *conv_type;
   Z3_ast orig_val, update_value;
 
-  // Generate bitvector of the datastructure we'll be dealing with. This needs to
-  // be extracted from the fact that the points-to analysis gives us an expr for
-  // the first element the pointer we were dealing with points at.
-  if (expr.op0().id() == "member" || expr.op0().id() == "index") {
-    // extract the actual object or struct from this expression.
-    const exprt &theobj = fetch_base_object(expr.op0());
-    convert_bv(theobj, orig_val);
-    conv_type = &theobj.type();
-  } else {
-    // Or, it's just some entirely usable object.
-    convert_bv(expr.op0(), orig_val);
-    conv_type = &expr.op0().type();
-  }
-  orig_val = to_bv(*conv_type, orig_val);
+  convert_bv(expr.op0(), orig_val);
+  orig_val = to_bv(expr.op0().type(), orig_val);
 
   convert_bv(expr.op2(), update_value);
 
@@ -3582,23 +3569,11 @@ void
 z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 {
   Z3_ast op0;
-  const typet *conv_type;
   unsigned width;
 
   get_type_width(expr.type(), width);
-  if (expr.op0().id() == "member" || expr.op0().id() == "index") {
-    // the point-to analysis hands us the first /thing/ in an object, so that
-    // the address of it gives the address of the object?
-    // Thus, extract the actual object or struct from that expression.
-    const exprt &theobj = fetch_base_object(expr.op0());
-    convert_bv(theobj, op0);
-    conv_type = &theobj.type();
-  } else {
-    // Or, it's just some entirely usable object.
-    convert_bv(expr.op0(), op0);
-    conv_type = &expr.op0().type();
-  }
-  op0 = to_bv(*conv_type, op0);
+  convert_bv(expr.op0(), op0);
+  op0 = to_bv(expr.op0().type(), op0);
 
   assert(!int_encoding && "byte operation in integer encoding mode is invalid");
   assert(expr.operands().size() == 2);
