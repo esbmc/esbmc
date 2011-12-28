@@ -562,9 +562,9 @@ void basic_symext::symex_assign_byte_extract(
     assert(false);
 
   // XXXjmorse - seriously updated meaning, altered from CBMC. Be warned.
-  new_rhs.copy_to_operands(lhs.op0(), lhs.op1(), rhs);
   exprt base_obj = fetch_base_object(lhs.op0());
   new_rhs.type()=base_obj.type();
+  new_rhs.copy_to_operands(base_obj, lhs.op1(), rhs);
 
   symex_assign_rec(state, ex_state, base_obj, new_rhs, guard,node_id);
 }
