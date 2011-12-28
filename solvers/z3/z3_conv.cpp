@@ -3468,6 +3468,7 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
   orig_val = to_bv(expr.op0().type(), orig_val);
 
   convert_bv(expr.op2(), update_value);
+  update_value = to_bv(expr.op2().type(), update_value);
 
   uint width_op2;
   get_type_width(expr.op2().type(), width_op2);
