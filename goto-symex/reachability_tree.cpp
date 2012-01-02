@@ -549,6 +549,26 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   if (config.options.get_bool_option("interactive-ileaves")) {
     user_tid = tid = get_ileave_direction_from_user(expr);
   }
+  //begin - H.Savino
+  else if (config.options.get_bool_option("round-robin")) {
+
+    user_tid = tid = get_ileave_direction_from_scheduling(expr);
+    if(tid != ex_state._active_thread){
+        ex_state._DFS_traversed.at(ex_state._active_thread)=true;
+    }
+    if(tid == ex_state._active_thread){
+        for(tid=0; tid < ex_state._threads_state.size(); tid++)
+        {
+          if(tid==user_tid)
+              continue;
+          if(ex_state._DFS_traversed.at(tid))
+            continue;
+          ex_state._DFS_traversed.at(tid) = true;
+        }
+       tid=user_tid;
+    }
+  }
+  //end - H.Savino
 
   for(; tid < ex_state._threads_state.size(); tid++)
   {
@@ -586,6 +606,15 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     /* Generate a new execution state, duplicate of previous? */
     execution_statet *new_state = new execution_statet(ex_state);
     execution_states.push_back(new_state);
+
+    //begin - H.Savino
+    if (config.options.get_bool_option("round-robin")){
+        if(tid == ex_state._active_thread)
+            new_state->increment_time_slice();
+        else
+            new_state->reset_time_slice();
+    }
+    //end - H.Savino
 
     /* Make it active, make it follow on from previous state... */
     if (new_state->get_active_state_number() != tid) {
@@ -990,6 +1019,47 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
 
   return tid;
 }
+
+//begin - H.Savino
+int
+reachability_treet::get_ileave_direction_from_scheduling(const exprt &expr) const
+{
+  unsigned int tid;
+
+    // If the guard on this execution trace is false, no context switches are
+    // going to be run over in the future and just general randomness is going to
+    // occur. So there's absolutely no reason exploring further.
+    if ((expr.operands().size() > 0) &&
+      get_cur_state().get_active_state().guard.is_false()) {
+          std::cout << "This trace's guard is false; it will not be evaulated." << std::endl;
+          exit(1);
+    }
+
+    // First of all, are there actually any valid context switch targets?
+    for (tid = 0; tid < get_cur_state()._threads_state.size(); tid++) {
+      if (check_thread_viable(tid, expr, true))
+        break;
+    }
+
+    // If no threads were viable, don't present a choice.
+    if (tid == get_cur_state()._threads_state.size())
+      return get_cur_state()._threads_state.size();
+
+  tid=get_cur_state()._active_thread;
+
+  if(get_cur_state()._TS_number < this->_TS_slice-1){
+      if (check_thread_viable(tid, expr, true))
+          return tid;
+  }
+      while(1){
+        tid=(tid + 1)%get_cur_state()._threads_state.size();
+        if (check_thread_viable(tid, expr, true)){
+            break;
+        }
+      }
+  return tid;
+}
+//end - H.Savino
 
 bool
 reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) const
