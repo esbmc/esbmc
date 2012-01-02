@@ -34,7 +34,8 @@ namespace std
 		string& operator+= ( const string& d); //TEST
 		string& operator += (const char* d); //TEST
 		//string& operator+= (string& d, string& s);
-		string operator+ (const string str1,const string str3);
+		string operator+ (const string& str1, const string& str3);
+		string operator+(char lhs, const string& rhs);
 		string operator+ (const string& d); //TEST
 		char& operator[] ( size_t pos );
 		bool empty ( ) const;
@@ -94,10 +95,21 @@ namespace std
 		return strlen(str);
 	}
 
-#if 0
-	string string::operator+(const string str1,const string str3)
+#if 1
+	string string::operator+(char lhs, const string& rhs)
 	{
-		return string(strcat(str1.c_str2(), str2.c_str()));
+		return string(strcat(&lhs, rhs.c_str()));
+	}
+#endif
+
+#if 1
+	string string::operator+(const string& str1,const string& str3)
+	{
+		string tmp;
+		strcat(tmp.c_str2(), str1.c_str());
+		strcat(tmp.c_str2(), str3.c_str());
+		return tmp;
+		//return string(strcat(str1.c_str2(), str3.c_str()));
 	}
 #endif
 

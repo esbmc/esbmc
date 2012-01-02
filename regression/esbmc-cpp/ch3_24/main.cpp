@@ -1,16 +1,10 @@
 // Fig. 3.27: fig03_27.cpp
 // Using a function template.
-//#include <iostream>
-#include <assert.h>
-//using std::cout;
-//using std::cin;
-//using std::endl;
-
-void __ESBMC_assert (int expression, char* message);
-void __ESBMC_assert (int expression, char* message)
-{
-  assert(expression);
-}
+#include <iostream>
+#include <cassert>
+using std::cout;
+using std::cin;
+using std::endl;
 
 // definition of function template maximum
 template < class T >  // or template< typename T >
@@ -31,10 +25,10 @@ T maximum( T value1, T value2, T value3 )
 int main()
 {
    // demonstrate maximum with int values
-//   int int1, int2, int3;
+   int int1, int2, int3;
 //maximum( 2, 3, 4 );
- __ESBMC_assert(maximum( 2, 3, 4 )==4, "test"); 
-#if 0
+ assert(maximum( 2, 3, 4 )==2); 
+#if 1
    cout << "Input three integer values: ";
    cin >> int1 >> int2 >> int3;
 
