@@ -16,4 +16,10 @@ SRCS= symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
 clean:
 	-rm -f $(OBJS) $(OBJDIR)/.deps
 
+CXXFLAGS+=$(shell i686-pc-mingw32-gcc -v 2>&1 | grep MinGW > /dev/null; \
+                  if test $$? -eq 0; \
+                  then echo "-DNO_OPENSSL"; \
+                  else echo ""; \
+                  fi)
+
 include $(ESBMCDIR)/common
