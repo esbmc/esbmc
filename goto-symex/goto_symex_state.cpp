@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <assert.h>
-#include <alloca.h>
 #include <map>
 #include <sstream>
 
@@ -438,10 +437,9 @@ static std::string state_to_ignore[8] =
 crypto_hash
 goto_symex_statet::level2t::generate_l2_state_hash() const
 {
-  uint8_t *data;
   unsigned int total;
 
-  data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE);
+  uint8_t data[current_hashes.size() * CRYPTO_HASH_SIZE];
 
   total = 0;
   for (current_state_hashest::const_iterator it = current_hashes.begin();
