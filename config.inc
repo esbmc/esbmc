@@ -1,7 +1,7 @@
-CC     = gcc
-CXX    = g++
-LD     = ld
-AR     = ar
+CC     = i686-pc-mingw32-gcc
+CXX    = i686-pc-mingw32-g++
+LD     = i686-pc-mingw32-ld
+AR     = i686-pc-mingw32-ar
 YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
