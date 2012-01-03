@@ -10,10 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <stdlib.h>
 #include <string.h>
 
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-
 #include <fstream>
 
 #include <config.h>
@@ -168,6 +164,8 @@ static const char *cpp_ansic_defs[] = {
 NULL
 };
 
+int configure_and_run_cpp(const char *out_file_buf, std::string path);
+
 void setup_cpp_defs(const char **defs)
 {
 
@@ -179,6 +177,12 @@ void setup_cpp_defs(const char **defs)
   return;
 }
 
+#ifndef __WIN32__
+
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 bool c_preprocess(
   std::istream &instream,
   const std::string &path,
@@ -187,7 +191,7 @@ bool c_preprocess(
 {
   char out_file_buf[32], stderr_file_buf[32];
   pid_t pid;
-  int fd, status, ret;
+  int fd, status;
 
   message_streamt message_stream(message_handler);
 
@@ -237,6 +241,46 @@ bool c_preprocess(
   dup2(fd, STDERR_FILENO);
   close(fd);
 
+  exit(configure_and_run_cpp(out_file_buf, path));
+}
+
+#else /* __WIN32__ */
+
+#include <io.h>
+
+bool c_preprocess(
+  std::istream &instream,
+  const std::string &path,
+  std::ostream &outstream,
+  message_handlert &message_handler)
+{
+  int err, ret;
+  char out_file_buf[32];
+
+  // For Windows, we can't fork and run the preprocessor in a seperate process.
+  // Instead, just run it within the existing ESBMC process.
+
+  message_streamt message_stream(message_handler);
+
+  sprintf(out_file_buf, "/tmp/ESBMC_XXXXXX");
+  mktemp(out_file_buf);
+
+  ret = configure_and_run_cpp(out_file_buf, path);
+  if (ret != 0) {
+    message_stream.error("Preprocessor returned an error");
+    return true;
+  }
+
+  return false;
+}
+
+#endif
+
+int
+configure_and_run_cpp(const char *out_file_buf, std::string path)
+{
+  int ret;
+
   if(config.ansi_c.word_size==16)
     setup_cpp_defs(cpp_defines_16);
   else if(config.ansi_c.word_size==32)
@@ -281,5 +325,5 @@ bool c_preprocess(
   ret = pushfile((unsigned char *)strdup(path.c_str()));
   fin();
 
-  exit(ret);
+  return ret;
 }
