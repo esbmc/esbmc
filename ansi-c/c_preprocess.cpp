@@ -277,6 +277,9 @@ bool c_preprocess(
     return true;
   }
 
+  std::ifstream output_input(out_file_buf);
+  outstream << output_input.rdbuf();
+
   return false;
 }
 
