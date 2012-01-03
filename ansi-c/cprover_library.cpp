@@ -10,6 +10,10 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+
+#ifdef __WIN32__
+#include <io.h>
+#endif
 }
 
 #include <sstream>
@@ -141,8 +145,12 @@ void add_cprover_library(
   }
 
   sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
+#ifndef __WIN32__
   fd = mkstemp(symname_buffer);
   close(fd);
+#else
+  mktemp(symname_buffer);
+#endif
   f = fopen(symname_buffer, "w");
   if (fwrite(this_clib_ptrs[0], size, 1, f) != 1) {
     std::cerr << "Couldn't manipulate internal C library" << std::endl;
