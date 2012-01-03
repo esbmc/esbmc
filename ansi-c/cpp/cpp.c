@@ -137,6 +137,9 @@ int	elflvl;
 int	elslvl;
 usch *stringbuf = sbf;
 
+static usch	sbf[SBSIZE];
+/* C command */
+
 /*
  * Macro replacement list syntax:
  * - For object-type macros, replacement strings are stored as-is.
@@ -1497,3 +1500,25 @@ lookup(usch *key, int enterf)
 	return (struct symtab *)new->lr[bit];
 }
 
+void
+cpp_clear(void)
+{
+
+  /* No attempt at memory managmenet */
+  stringbuf = sbf;
+  trulvl = flslvl = elflvl = elslvl = 0;
+  filloc = linloc = pragloc = NULL;
+  incdir[0] = NULL;
+  incdir[1] = NULL;
+  ofd = 0;
+  memset(outbuf, 0, sizeof(outbuf));
+  obufp = istty = inmac = Cflag = Mflag = dMflag = 0;
+  Mfile = NULL;
+  initar = NULL;
+  memset(sbf, 0, sizeof(sbf));
+  tflag = 0;
+  sympole = NULL;
+  numsyms = 0;
+
+  return;
+}

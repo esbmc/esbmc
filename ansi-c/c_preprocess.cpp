@@ -281,6 +281,8 @@ bool c_preprocess(
   outstream << output_input.rdbuf();
   DeleteFile(out_file_buf);
 
+  cpp_clear(); // Reset cpp state
+
   return false;
 }
 
