@@ -1,9 +1,21 @@
 /* This file defines pointers to the locations in ESBMC of headers-as-object
  * files */
 
-extern char _binary_stddef_h_start;
-extern char _binary_stddef_h_end;
-extern char _binary_stdarg_h_start;
-extern char _binary_stdarg_h_end;
-extern char _binary_stdbool_h_start;
-extern char _binary_stdbool_h_end;
+/* There's additional pain in that the number of '_' characters at the start of
+ * the symbol varies when compiling for windows, but doesn't when using LD to
+ * produce the header blobs. So, hacks: */
+
+#ifdef __WIN32__
+#define p(x) (x)
+#else
+#define p(x) _##(x)
+#endif
+
+extern char p(binary_stddef_h_start);
+extern char p(binary_stddef_h_end);
+extern char p(binary_stdarg_h_start);
+extern char p(binary_stdarg_h_end);
+extern char p(binary_stdbool_h_start);
+extern char p(binary_stdbool_h_end);
+
+#undef p
