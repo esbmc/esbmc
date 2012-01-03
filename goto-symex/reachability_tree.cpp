@@ -6,9 +6,15 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
+/* Byte order includes, for context switch checkpoint files */
+#ifndef __WIN32__
 #include <arpa/inet.h>
-
 #include <netinet/in.h>
+#else
+#include <winsock2.h>
+#undef small // The mingw32 headers are /absolutely rubbish/, or perhaps the
+             // windows headers by themselves.
+#endif
 
 #include "reachability_tree.h"
 #include <i2string.h>
