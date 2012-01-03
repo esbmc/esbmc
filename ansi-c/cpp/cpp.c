@@ -68,8 +68,6 @@
 
 #include "config.h"
 
-#include <sys/wait.h>
-
 #include <stdbool.h>
 
 #include <errno.h>
