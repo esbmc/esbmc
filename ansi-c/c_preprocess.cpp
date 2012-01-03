@@ -279,6 +279,7 @@ bool c_preprocess(
 
   std::ifstream output_input(out_file_buf);
   outstream << output_input.rdbuf();
+  DeleteFile(out_file_buf);
 
   return false;
 }
