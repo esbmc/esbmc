@@ -246,6 +246,7 @@ bool c_preprocess(
 
 #else /* __WIN32__ */
 
+#include <windows.h>
 #include <io.h>
 
 bool c_preprocess(
@@ -255,14 +256,19 @@ bool c_preprocess(
   message_handlert &message_handler)
 {
   int err, ret;
-  char out_file_buf[32];
+  char out_file_buf[288], tmpdir[256];
 
   // For Windows, we can't fork and run the preprocessor in a seperate process.
   // Instead, just run it within the existing ESBMC process.
 
   message_streamt message_stream(message_handler);
 
-  sprintf(out_file_buf, "/tmp/ESBMC_XXXXXX");
+  if (!GetEnvironmentVariable("TEMP", tmpdir, sizeof(tmpdir))) {
+    std::cerr << "TEMP environmental variable not set; where are you?";
+    std::cerr << std::endl;
+    abort();
+  }
+  snprintf(out_file_buf, sizeof(out_file_buf), "%s\\ESBMC_XXXXXX", tmpdir);
   mktemp(out_file_buf);
 
   ret = configure_and_run_cpp(out_file_buf, path);

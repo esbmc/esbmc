@@ -12,7 +12,9 @@ extern "C" {
 #include <stdint.h>
 
 #ifdef __WIN32__
+#include <windows.h>
 #include <io.h>
+#undef small // MinGW headers are terrible (alternately; windows).
 #endif
 }
 
@@ -114,7 +116,7 @@ void add_cprover_library(
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
   ansi_c_languaget ansi_c_language;
-  char symname_buffer[256];
+  char symname_buffer[288];
   FILE *f;
   uint8_t **this_clib_ptrs;
   unsigned long size;
@@ -144,11 +146,18 @@ void add_cprover_library(
     abort();
   }
 
-  sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
 #ifndef __WIN32__
+  sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
   fd = mkstemp(symname_buffer);
   close(fd);
 #else
+  char tmpdir[256];
+  if (!GetEnvironmentVariable("TEMP", tmpdir, sizeof(tmpdir))) {
+    std::cerr << "TEMP environmental variable not set; where are you?";
+    std::cerr << std::endl;
+    abort();
+  }
+  snprintf(symname_buffer, sizeof(symname_buffer), "%s\\ESBMC_XXXXXX", tmpdir);
   mktemp(symname_buffer);
 #endif
   f = fopen(symname_buffer, "w");
