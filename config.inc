@@ -5,6 +5,7 @@ AR     = i686-pc-mingw32-ar
 YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
+WINDOWS= 1
 
 # Linux etc.
 #you need to install the packages glibc-static and gmp-static to compile statically

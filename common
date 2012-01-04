@@ -80,11 +80,9 @@ include $(OBJDIR)/.deps
 endif
 
 # Special purpose features,
-CXXFLAGS+=$(shell i686-pc-mingw32-gcc -v 2>&1 | grep MinGW > /dev/null; \
-                  if test $$? -eq 0; \
-                  then echo "-DNO_OPENSSL"; \
-                  else echo ""; \
-                  fi)
+ifdef WINDOWS
+CXXFLAGS+=-DNO_OPENSSL
+endif
 
 # Finally, some special rules for various pieces of hackery for performing debug
 # builds.
