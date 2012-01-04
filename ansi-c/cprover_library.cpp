@@ -152,13 +152,8 @@ void add_cprover_library(
   close(fd);
 #else
   char tmpdir[256];
-  if (!GetEnvironmentVariable("TEMP", tmpdir, sizeof(tmpdir))) {
-    std::cerr << "TEMP environmental variable not set; where are you?";
-    std::cerr << std::endl;
-    abort();
-  }
-  snprintf(symname_buffer, sizeof(symname_buffer), "%s\\ESBMC_XXXXXX", tmpdir);
-  mktemp(symname_buffer);
+  GetTempPath(sizeof(tmpdir), tmpdir);
+  GetTempFileName(tmpdir, "bmc", 0, symname_buffer);
 #endif
   f = fopen(symname_buffer, "w");
   if (fwrite(this_clib_ptrs[0], size, 1, f) != 1) {

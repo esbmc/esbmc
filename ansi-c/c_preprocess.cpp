@@ -263,13 +263,8 @@ bool c_preprocess(
 
   message_streamt message_stream(message_handler);
 
-  if (!GetEnvironmentVariable("TEMP", tmpdir, sizeof(tmpdir))) {
-    std::cerr << "TEMP environmental variable not set; where are you?";
-    std::cerr << std::endl;
-    abort();
-  }
-  snprintf(out_file_buf, sizeof(out_file_buf), "%s\\ESBMC_XXXXXX", tmpdir);
-  mktemp(out_file_buf);
+  GetTempPath(sizeof(tmpdir), tmpdir);
+  GetTempFileName(tmpdir, "bmc", 0, out_file_buf);
 
   ret = configure_and_run_cpp(out_file_buf, path);
   if (ret != 0) {
