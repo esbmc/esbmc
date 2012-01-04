@@ -272,6 +272,10 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 
   if(cmdline.isset("memlimit")) {
+#ifdef __WIN32__
+    std::cerr << "Can't memlimit on Windows, sorry" << std::endl;
+    abort();
+#else
     unsigned long len, mult, size;
 
     const char *limit = cmdline.getval("memlimit");
@@ -308,6 +312,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
       perror("Couldn't set memory limit");
       abort();
     }
+#endif
   }
 
   config.options = options;
