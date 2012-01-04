@@ -113,6 +113,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"decide",		switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
+{ 'I',	"",			string,		""	},
 { 0,	"help",			switc,		""	},
 { 0,	"",			switc,		""	}
 };
