@@ -345,7 +345,9 @@ Function: bmc_baset::run
 
 bool bmc_baset::run(const goto_functionst &goto_functions)
 {
+#ifndef __WIN32__
   struct sigaction act;
+#endif
   bool resp;
   symex.set_message_handler(message_handler);
   symex.set_verbosity(get_verbosity());
@@ -353,11 +355,13 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
   symex.last_location.make_nil();
 
+#ifndef __WIN32__
   // Collect SIGUSR1, indicating that we're supposed to checkpoint.
   act.sa_handler = sigusr1_handler;
   sigemptyset(&act.sa_mask);
   act.sa_flags = 0;
   sigaction(SIGUSR1, &act, NULL);
+#endif
 
   // get unwinding info
   setup_unwind();

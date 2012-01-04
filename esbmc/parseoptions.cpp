@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <memory>
 
+#ifndef __WIN32__
 extern "C" {
 #include <ctype.h>
 #include <stdlib.h>
@@ -18,6 +19,7 @@ extern "C" {
 #include <sys/time.h>
 #include <sys/resource.h>
 }
+#endif
 
 #include <config.h>
 #include <expr_util.h>
@@ -52,6 +54,7 @@ extern "C" {
 
 // jmorse - could be somewhere better
 
+#ifndef __WIN32__
 void
 timeout_handler(int dummy __attribute__((unused)))
 {
@@ -64,6 +67,7 @@ timeout_handler(int dummy __attribute__((unused)))
   // and results in the allocator locking against itself. So use _exit instead
   _exit(1);
 }
+#endif
 
 /*******************************************************************\
 
@@ -230,6 +234,10 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   // jmorse
   if(cmdline.isset("timeout")) {
+#ifdef __WIN32__
+    std::cerr << "Timeout unimplemented on Windows, sorry" << std::endl;
+    abort();
+#else
     int len, mult, timeout;
 
     const char *time = cmdline.getval("timeout");
@@ -260,6 +268,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     timeout *= mult;
     signal(SIGALRM, timeout_handler);
     alarm(timeout);
+#endif
   }
 
   if(cmdline.isset("memlimit")) {
