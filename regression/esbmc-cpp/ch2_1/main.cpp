@@ -1,6 +1,7 @@
 // Ex. 2.5: ex02_05.cpp
 // Calculate the sum of the integers from 1 to 10.
 #include <iostream>
+#include <cassert>
 
 using std::cout;
 using std::endl;
@@ -17,7 +18,7 @@ int main()
    while ( x <= 10 ) { 
       sum += x;          // add x to sum
       ++x;               // increment x
-
+      assert(x==2);
    } // end while
 
    cout << "The sum is: " << sum << endl;
