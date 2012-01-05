@@ -6,7 +6,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
-#include <unistd.h>
 #include <assert.h>
 
 #include <i2string.h>
