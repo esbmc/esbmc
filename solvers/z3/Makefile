@@ -6,7 +6,7 @@ all: $(OBJDIR)/.deps $(MAINOBJ)
 
 SRCS= z3_capi.cpp  z3_conv.cpp  z3_dec.cpp  z3_get.cpp  z3_prop.cpp  z3_util.cpp
 
-INCLUDES= -I$(Z3)/include
+INCLUDES= /I$(Z3)\\include
 
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
