@@ -33,6 +33,8 @@ typedef std::set<T1> hash_set_cont;
 template<class T1, class T2>
 typedef std::multiset<T1> hash_multiset_cont;
 
+#define hash_map_hasher_superclass(type)
+
 #else
 #ifdef STDEXT_HASH_CONT
 #include <hash_map>
@@ -43,6 +45,7 @@ typedef std::multiset<T1> hash_multiset_cont;
 #define hash_map_cont stdext::hash_map
 #define hash_set_cont stdext::hash_set
 #define hash_multiset_cont stdext::hash_multiset
+#define hash_map_hasher_superclass(type) : public stdext::hash_compare<type>
 
 #else
 
@@ -56,6 +59,7 @@ typedef std::multiset<T1> hash_multiset_cont;
 #define hash_map_cont __gnu_cxx::hash_map
 #define hash_set_cont __gnu_cxx::hash_set
 #define hash_multiset_cont __gnu_cxx::hash_multiset
+#define hash_map_hasher_superclass(type)
 
 #else
 
@@ -72,6 +76,7 @@ typedef std::multiset<T1> hash_multiset_cont;
 #define hash_map_cont std::tr1::unordered_map
 #define hash_set_cont std::tr1::unordered_set
 #define hash_multiset_cont std::tr1::unordered_multiset
+#define hash_map_hasher_superclass(type)
 
 #else
 

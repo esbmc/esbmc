@@ -128,7 +128,7 @@ protected:
   unsigned no;
 };
 
-struct dstring_hash
+struct dstring_hash hash_map_hasher_superclass(dstring)
 {
   size_t operator()(const dstring &s) const { return s.hash(); }
 };
