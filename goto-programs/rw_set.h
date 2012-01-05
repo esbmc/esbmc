@@ -19,8 +19,6 @@ Date: February 2006
 
 #include <pointer-analysis/value_sets.h>
 
-#include "var_name.h"
-
 class rw_sett
 {
 public:

@@ -20,7 +20,6 @@ Date: February 2006
 #include "remove_skip.h"
 #include "add_race_assertions.h"
 #include "rw_set.h"
-#include "var_name.h"
 
 class w_guardst
 {

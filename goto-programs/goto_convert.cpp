@@ -20,7 +20,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_convert_class.h"
 #include "remove_skip.h"
 #include "destructor.h"
-#include "var_name.h"
 
 //#define DEBUG 1
 
