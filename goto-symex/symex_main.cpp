@@ -324,7 +324,12 @@ void goto_symext::symex_step(
     if (instruction.location_number == insn_num) {
       // If you're developing ESBMC on a machine that isn't x86, I'll send you
       // cookies.
+#ifndef _WIN32
       __asm__("int $3");
+#else
+      std::cerr << "Can't trap on windows, sorry" << std::endl;
+      abort();
+#endif
     }
   }
 
