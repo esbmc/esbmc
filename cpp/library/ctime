@@ -17,5 +17,9 @@ time_t time (time_t *timer)
   return t;
 }
 
+struct tm * localtime ( const time_t * timer );
+
+char * asctime ( const struct tm * timeptr );
+
 #endif
 

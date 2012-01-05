@@ -10,37 +10,12 @@ new_handler func;
 
 namespace std {
 
-//new_handler set_new_handler (new_handler new_p) throw() {
+	//new_handler set_new_handler (new_handler new_p) throw() {
 	void set_new_handler (new_handler new_p) throw() {
-	func = new_p;
+		func = new_p;
 	}
 
 }
-
-namespace std {
-
-#if 0
-const char* _Message = "Exception occurred: std::bad_alloc";
-
-struct bad_alloc : exception{
-   bad_alloc(const char *_Message);
-   bad_alloc(){
-	   func;
-   }
-   virtual ~bad_alloc();
-};
-#endif
-
-#if 0
-struct bad_alloc : public exception {
-   bad_alloc(const char *_Message): exception(_Message) {}
-   bad_alloc(): exception("bad allocation", 1) {}
-   virtual ~bad_alloc() {}
-};
-#endif
-
-}
-
 
 namespace std
 {
@@ -51,11 +26,9 @@ namespace std
       bad_alloc(const bad_alloc&) throw()
       {
     	  func;
-    	  //return func;
       }
       bad_alloc& operator=(const bad_alloc&) throw();
       const char* what() const throw(): message("std::bad_alloc"){
-    	  __ESBMC_assert(0, "ok");
     	  return message;
       }
    };

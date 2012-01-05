@@ -117,4 +117,24 @@ size_t strlen(const char *s)
 	return s - p;
 }
 
+const char * strpbrk ( const char * str1, const char * str2 );
+      char * strpbrk (       char * str1, const char * str2 );
+
+const char * strrchr ( const char * str, int character );
+      char * strrchr (       char * str, int character );
+
+const char * strstr ( const char * str1, const char * str2 );
+      char * strstr (       char * str1, const char * str2 );
+
+void * memcpy ( void * destination, const void * source, size_t num );
+
+void * memmove ( void * destination, const void * source, size_t num );
+
+int memcmp ( const void * ptr1, const void * ptr2, size_t num );
+
+const void * memchr ( const void * ptr, int value, size_t num );
+      void * memchr (       void * ptr, int value, size_t num );
+
+void * memset ( void * ptr, int value, size_t num );
+
 #endif

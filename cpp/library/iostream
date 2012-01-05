@@ -22,6 +22,8 @@ namespace std
 
 	struct istream
 	{
+		streamsize width ( ) const;
+		streamsize width ( streamsize wide );
 		istream(int id = 0): id(id){}
 		int id;
 		istream& ignore(int i = 1, int delim = EOF);
@@ -63,14 +65,14 @@ namespace std
 
 namespace esbmc
 {
-	void esbmc_print_cstr(int o, const char* cstr) {};
-	void esbmc_print_char(int o, char c) {};
-	void esbmc_print_int(int o, int i) {};
-	void esbmc_print_double(int o, double d) {}; //Felipe Rodrigues
-	void esbmc_print_unsigned(int o, unsigned i) {};
-	void esbmc_print_bool(int o, bool b) {};
-	void esbmc_print_long_long(int o, long long i) {};
-	void esbmc_print_unsigned_long_long(int o, unsigned long long i) {};
+	void esbmc_print_cstr(int o, const char* cstr);
+	void esbmc_print_char(int o, char c);
+	void esbmc_print_int(int o, int i);
+	void esbmc_print_double(int o, double d); //Felipe Rodrigues
+	void esbmc_print_unsigned(int o, unsigned i); 
+	void esbmc_print_bool(int o, bool b);
+	void esbmc_print_long_long(int o, long long i);       	
+	void esbmc_print_unsigned_long_long(int o, unsigned long long i);
 
 	void esbmc_read_char(int is, char& c);
 	void esbmc_read_int(int is,  int& i);
@@ -331,6 +333,5 @@ namespace std
 	}
 
 }
-
 
 #endif
