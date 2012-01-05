@@ -49,7 +49,7 @@ CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 # A generic target; potentially not defined by the includer
 
 $(MAINOBJ): $(OBJS)
-	$(LD) $(LDFLAGS) /INCREMENTAL /OUT:$@ $^
+	$(VCBINS)\\lib.exe /OUT:$@ $^
 
 #clean defined by includer
 
