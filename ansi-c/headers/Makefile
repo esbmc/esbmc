@@ -1,6 +1,6 @@
 ESBMCDIR= $(shell pwd)/../..
 
-OBJS= stddef.o stdarg.o stdbool.o
+OBJS= stddef.o stdarg.o stdbool.o pthread.o pthreadtypes.o
 
 all: headers.o
 

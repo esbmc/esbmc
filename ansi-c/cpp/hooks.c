@@ -30,6 +30,12 @@ struct hooked_header headers[] = {
 /* Fairly self explanatory */
 { "bits/wordsize.h",	NULL,				NULL},
 /* Defines __WORDSIZE, which we define ourselves */
+{ "pthread.h",		&p(binary_pthread_h_start),	&p(binary_pthread_h_end)
+},
+/* Pthreads header */
+{ "pthreadtypes.h",	&p(binary_pthreadtypes_h_start),&p(binary_pthreadtypes_h_end)
+},
+/*  Additional pthread data header */
 { NULL, NULL, NULL}
 };
 
