@@ -138,7 +138,9 @@ static const char *cpp_normal_defs[] = {
 "__null=0",
 "__STRICT_ANSI__=1",
 "_POSIX_SOURCE=1",
+#ifndef __WIN32__ // mingw sched/pthread headers choke and die upon this.
 "_POSIX_C_SOURCE=200112L",
+#endif
 "__PCC__", // Makes mingw headers a lot happier; as we're using PCC.
 NULL
 };
