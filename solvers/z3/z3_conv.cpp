@@ -59,7 +59,9 @@ z3_convt::~z3_convt()
   if (z3_prop.smtlib) {
     std::ofstream temp_out;
     Z3_string smt_lib_str, logic;
-    Z3_ast assumpt_array[z3_prop.assumpt.size() + 1], formula;
+    Z3_ast *assumpt_array =
+	          (Z3_ast *)alloca((z3_prop.assumpt.size() + 1) * sizeof(Z3_ast));
+    Z3_ast formula;
     formula = Z3_mk_true(z3_ctx);
 
     for (unsigned i = 0; i < z3_prop.assumpt.size(); i++)
@@ -433,8 +435,8 @@ z3_convt::check2_z3_properties(void)
   Z3_model m = 0;
   Z3_lbool result;
   unsigned i;
-  Z3_ast proof, core[number_of_assumptions],
-         assumptions_core[number_of_assumptions];
+  Z3_ast proof, *core = (Z3_ast *)alloca(number_of_assumptions * sizeof(Z3_ast)),
+         *assumptions_core = (Z3_ast *)alloca(number_of_assumptions * sizeof(Z3_ast));
   std::string literal;
 
   assumptions_status = number_of_assumptions;
@@ -1813,7 +1815,7 @@ z3_convt::convert_dynamic_object(const exprt &expr)
     } else   {
       unsigned i = 0, size;
       size = dynamic_objects.size() + 1;
-      Z3_ast args[size];
+      Z3_ast *args = (Z3_ast*)alloca(size * sizeof(Z3_ast));
 
       for (std::vector<unsigned>::const_iterator
            it = dynamic_objects.begin();
@@ -5226,7 +5228,7 @@ z3_convt::convert_is_dynamic_object(const exprt &expr, Z3_ast &bv)
     } else   {
       unsigned i = 0, size;
       size = dynamic_objects.size() + 1;
-      Z3_ast args[size];
+      Z3_ast *args = (Z3_ast*)alloca(size * sizeof(Z3_ast));
 
       for (std::vector<unsigned>::const_iterator
            it = dynamic_objects.begin();
@@ -5433,8 +5435,8 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       const struct_typet &struct_type = to_struct_type(expr.op0().type());
       const struct_typet::componentst &components = struct_type.components();
       unsigned i = 0;
-      Z3_ast struct_elem[components.size() + 1],
-             struct_elem_inv[components.size() + 1];
+      Z3_ast *struct_elem = (Z3_ast*)alloca((components.size() + 1) * sizeof(Z3_ast));
+      Z3_ast *struct_elem_inv = (Z3_ast*)alloca((components.size() + 1) * sizeof(Z3_ast));
 
       for (struct_typet::componentst::const_iterator
            it = components.begin();
