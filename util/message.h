@@ -13,6 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string>
 #include <iostream>
 
+#include "global.h"
 #include "location.h"
 
 class message_handlert

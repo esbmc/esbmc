@@ -15,6 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string>
 
 #include <assert.h>
+#include "global.h"
 
 #define USE_DSTRING
 #define SHARING
