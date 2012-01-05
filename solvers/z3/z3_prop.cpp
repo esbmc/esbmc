@@ -298,7 +298,8 @@ literalt z3_propt::land(const bvt &bv)
 
   literalt l=new_variable();
   uint size=bv.size();
-  Z3_ast args[size], result, formula;
+  Z3_ast *args = (Z3_ast*)alloca(size * sizeof(Z3_ast));
+  Z3_ast result, formula;
 
   for(unsigned int i=0; i<bv.size(); i++)
 	args[i] = z3_literal(bv[i]);
@@ -332,7 +333,8 @@ literalt z3_propt::lor(const bvt &bv)
 
   literalt l=new_variable();
   uint size=bv.size();
-  Z3_ast args[size], result, formula;
+  Z3_ast *args = (Z3_ast*)alloca(size * sizeof(Z3_ast));
+  Z3_ast result, formula;
 
   for(unsigned int i=0; i<bv.size(); i++)
 	args[i] = z3_literal(bv[i]);
@@ -371,7 +373,8 @@ literalt z3_propt::lxor(const bvt &bv)
 
   literalt l=new_variable();
   uint size=bv.size();
-  Z3_ast args[size], result=0, formula;
+  Z3_ast *args = (Z3_ast *)alloca(size * sizeof(Z3_ast));
+  Z3_ast result=0, formula;
 
   for(unsigned int i=0; i<bv.size(); i++)
   {
@@ -767,7 +770,7 @@ void z3_propt::lcnf(const bvt &bv)
   if (new_bv.size()==0)
     return;
 
-  Z3_ast lor_var, args[new_bv.size()];
+  Z3_ast lor_var, *args = (Z3_ast*)alloca(new_bv.size() * sizeof(Z3_ast));
   unsigned int i=0;
 
   for(bvt::const_iterator it=new_bv.begin(); it!=new_bv.end(); it++, i++)
