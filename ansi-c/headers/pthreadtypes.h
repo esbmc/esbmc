@@ -144,7 +144,8 @@ typedef unsigned int pthread_key_t;
 typedef int pthread_once_t;
 
 
-#if defined __USE_UNIX98 || defined __USE_XOPEN2K
+//#if defined __USE_UNIX98 || defined __USE_XOPEN2K
+//jmorse - we always want this, regardless of feature flags.
 /* Data structure for read-write lock variable handling.  The
    structure of the attribute type is not exposed on purpose.  */
 typedef union
@@ -193,7 +194,7 @@ typedef union
   char __size[__SIZEOF_PTHREAD_RWLOCKATTR_T];
   long int __align;
 } pthread_rwlockattr_t;
-#endif
+//#endif
 
 
 #ifdef __USE_XOPEN2K
