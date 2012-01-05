@@ -13,7 +13,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <hash_cont.h>
 #include <solvers/prop/prop_conv.h>
 #include <solvers/flattening/pointer_logic.h>
-#include <ext/hash_map>
 #include <vector>
 #include <string.h>
 
