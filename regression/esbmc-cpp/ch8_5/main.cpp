@@ -13,9 +13,8 @@ int main()
 {
    string s1( "happy" );
    string s2( " birthday" );
-//   string s3;
-   string s3( "happy birthday" );
-   assert(s2>s1);
+   string s3("happy birthday");
+
    assert(s1+s2 == s3);
 #if 0
    // test overloaded equality and relational operators
