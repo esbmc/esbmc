@@ -63,6 +63,8 @@ namespace std
 	char endl = '\n';
 }
 
+
+
 namespace esbmc
 {
 	void esbmc_print_cstr(int o, const char* cstr);
