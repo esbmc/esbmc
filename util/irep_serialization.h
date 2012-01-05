@@ -38,11 +38,15 @@ private:
     }
   };
 
-  struct irep_full_hash
+  struct irep_full_hash hash_map_hasher_superclass(irept)
   {
     size_t operator()(const irept &i) const 
     { 
       return i.full_hash(); 
+    }
+    bool operator()(const irept &i1, const irept &i2) const
+    {
+      return i1.full_hash() < i2.full_hash();
     }
   };
 
