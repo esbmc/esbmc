@@ -15,11 +15,19 @@ OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 # Given the presence of OBJDIR, $(OBJS) can't now automatically infer
 # dependancies between .o's and .cpp's etc
 
+ifndef WINDOWS
 $(OBJDIR)/%.o : %.cpp
 	$(CXX) -c $(CXXFLAGS) -o $@ $<
 
 $(OBJDIR)/%.o : %.c
 	$(CC) -c $(CLAGS) -o $@ $<
+else
+$(OBJDIR)/%o : %cpp
+	$(VCBINS)/cl.exe /TP /I$(VCDIR)/include /Fo$@ $< /c
+
+$(OBJDIR)/%o : %c
+	$(VCBINS)/cl.exe /Tc /I$(VCDIR)/include /Fo$@ $< /c
+endif
 
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util

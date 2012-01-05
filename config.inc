@@ -1,17 +1,22 @@
-CC     = i686-pc-mingw32-gcc
-CXX    = i686-pc-mingw32-g++
-LD     = i686-pc-mingw32-ld
-AR     = i686-pc-mingw32-ar
+#CC     = i686-pc-mingw32-gcc
+#CXX    = i686-pc-mingw32-g++
+#LD     = i686-pc-mingw32-ld
+#AR     = i686-pc-mingw32-ar
 YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
 WINDOWS= 1
-C2GOTO_INCDIR=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
+#C2GOTO_INCDIR=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
+VCDIR="C:\\Program Files (x86)\\Microsoft Visual Studio 10.0\\VC"
+CYGVCDIR="/cygdrive/c/Program Files (x86)/Microsoft Visual Studio 10.0/VC"
+VCINCLUDES+=/I$(VCDIR)\\include
+VCBINS=$(VCDIR)/bin/amd64
+
 
 # Linux etc.
 #you need to install the packages glibc-static and gmp-static to compile statically
 OPTS ?= -O3
-GCCFLAGS ?= -Wall -Wextra -Wno-deprecated
+GCCFLAGS ?= #-Wall -Wextra -Wno-deprecated
 #LDFLAGS=
 
 # Work with latest version of gcc
