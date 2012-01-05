@@ -66,7 +66,7 @@ public:
     ireps_on_readt ireps_on_read;
 
     typedef hash_map_cont<
-      irept, unsigned long, irep_full_hash, irep_content_eq> ireps_on_writet;
+      irept, unsigned long, irep_full_hash> ireps_on_writet;
     ireps_on_writet ireps_on_write;
     
     typedef std::vector<bool> string_mapt;
