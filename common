@@ -49,7 +49,7 @@ CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 # A generic target; potentially not defined by the includer
 
 $(MAINOBJ): $(OBJS)
-	$(LD) $(LDFLAGS) -r -o $@ $^
+	$(LD) $(LDFLAGS) /INCREMENTAL /OUT:$@ $^
 
 #clean defined by includer
 

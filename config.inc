@@ -13,6 +13,7 @@ VCINCLUDES+=/I$(VCDIR)\\include
 VCBINS=$(VCDIR)/bin/amd64
 WINESBMCDIR= $(shell cygpath -w $(ESBMCDIR) | sed s/\\\\/\\\\\\\\/g )
 WINSDKDIR=C:\\Program\ Files\ \(x86\)\\Microsoft\ SDKs\\Windows\\v7.0A
+LD= $(VCBINS)\\link.exe
 
 # Linux etc.
 #you need to install the packages glibc-static and gmp-static to compile statically
