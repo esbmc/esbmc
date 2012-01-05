@@ -111,6 +111,7 @@ crypto_hash::operator<(const crypto_hash h2) const
 {
 
   abort();
+  return false;
 }
 
 std::string
@@ -118,6 +119,7 @@ crypto_hash::to_string() const
 {
 
   abort();
+  return false;
 }
 
 void
