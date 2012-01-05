@@ -1,17 +1,17 @@
 #ifndef _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 #define _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 
-#ifndef NO_OPENSSL
 
 extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 
+#ifndef NO_OPENSSL
 #include <openssl/sha.h>
+#endif /* NO_OPENSSL */
 }
 
-#endif /* NO_OPENSSL */
 
 #include <string>
 
