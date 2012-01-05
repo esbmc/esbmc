@@ -829,6 +829,4 @@ __NTH (pthread_equal (pthread_t __thread1, pthread_t __thread2))
 }
 #endif
 
-__END_DECLS
-
 #endif	/* pthread.h */
