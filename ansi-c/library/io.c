@@ -1,3 +1,4 @@
+#define _MT // Don't define putchar/getc/getchar in mingw
 #include <stdio.h>
 
 /* The mingw headers _really_ don't like us. At some point in the future, stdio
