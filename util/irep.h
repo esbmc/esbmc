@@ -1142,7 +1142,7 @@ extern inline const std::string &name2string(const irep_namet &n)
   return n.as_string();
 }
 
-struct irep_hash
+struct irep_hash hash_map_hasher_superclass(irept)
 {
   size_t operator()(const irept &irep) const { return irep.hash(); }
 };
