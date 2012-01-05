@@ -6,6 +6,7 @@ using std::cout;
 using std::endl;
 
 #include <string>
+#include <cassert>
 
 using std::string;
 
@@ -19,6 +20,8 @@ int main()
    cout << "string1: " << string1 << "\nstring2: " << string2
         << "\nstring3: " << string3 << "\nstring4: " << string4
         << "\n\n";
+
+   assert(string1 == string2);
 
    // comparing string1 and string4
    if ( string1 == string4 )

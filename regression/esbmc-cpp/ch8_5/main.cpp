@@ -13,8 +13,11 @@ int main()
 {
    string s1( "happy" );
    string s2( " birthday" );
-   string s3;
-
+//   string s3;
+   string s3( "happy birthday" );
+   assert(s2>s1);
+   assert(s1+s2 == s3);
+#if 0
    // test overloaded equality and relational operators
    cout << "s1 is \"" << s1 << "\"; s2 is \"" << s2
         << "\"; s3 is \"" << s3 << '\"' 
@@ -83,7 +86,7 @@ int main()
    // test subscript out of range with string member function "at"
    cout << "Attempt to assign 'd' to s1.at( 30 ) yields:" << endl;
    s1.at( 30 ) = 'd';     // ERROR: subscript out of range
-
+#endif
    return 0;
 
 } // end main

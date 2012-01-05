@@ -34,6 +34,7 @@ public:
     options(opts)
   {
     _CS_bound = atoi(options.get_option("context-switch").c_str());
+    _TS_slice = atoi(options.get_option("time-slice").c_str());
     _deadlock_detection = options.get_bool_option("deadlock-check");
     state_hashing = options.get_bool_option("state-hashing");
     directed_interleavings = options.get_bool_option("direct-interleavings");
@@ -63,6 +64,7 @@ public:
   int get_CS_bound();
   int get_actual_CS_bound();
   int get_ileave_direction_from_user(const exprt &expr) const;
+  int get_ileave_direction_from_scheduling(const exprt &expr) const;
   bool check_thread_viable(int tid, const exprt &expr, bool quiet) const;
   bool generate_states_base(const exprt & expr);
   bool apply_static_por(const execution_statet &ex_state, const exprt &expr, int i) const;
@@ -143,6 +145,7 @@ private:
   /* This is derefed and returned by get_current_state */
   std::list<execution_statet*>::iterator _cur_state_it;
   int _CS_bound, _actual_CS_bound;
+  int _TS_slice;
   bool _DFS, _multi_formulae, _is_same_mutex, _deadlock_detection, _por;
   bool directed_interleavings;
   const namespacet &_ns;

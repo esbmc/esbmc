@@ -212,9 +212,9 @@ static void do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex,
     __ESBMC_assert(__ESBMC_mutex_lock_field(*mutex),"pthread_cond_wait must hold lock upon unlock");
   __ESBMC_mutex_lock_field(*mutex)=0;
   ++count_wait;
-  __ESBMC_atomic_end();
+  //__ESBMC_atomic_end();
 
-  __ESBMC_atomic_begin();
+  //__ESBMC_atomic_begin();
   if (assrt) {
     deadlock_wait = (count_wait == trds_in_run);
     __ESBMC_assert(!deadlock_wait,"deadlock detected with pthread_cond_wait");

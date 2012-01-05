@@ -3,24 +3,26 @@
 
 #include "definitions.h"
 
-
 namespace std {
+
+const char* message;
 
 struct exception {
 
-  exception () throw() {__ESBMC_assert(0, "exception");}
-  exception (const exception&) throw();
-  exception& operator= (const exception&) throw();
-  ~exception() throw();
-  const char* what() const throw(){
-	 
-	 return "";
+public:
 
+  exception( ) throw( );
+  exception(const exception& right) throw( );
+  exception& operator=(const exception& right) throw( );
+  ~exception( ) throw( );
+  const char* what() const throw() {
+	  return (const char*)message;
+	  //Returns a null terminated character sequence containing a generic description of the exception.
+	  //Both the wording of such description and the character width are implementation-defined.
+	  //source: http://www.cplusplus.com/reference/std/exception/exception/
   }
-
 };
 
 }
-
 
 #endif

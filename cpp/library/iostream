@@ -22,6 +22,8 @@ namespace std
 
 	struct istream
 	{
+		streamsize width ( ) const;
+		streamsize width ( streamsize wide );
 		istream(int id = 0): id(id){}
 		int id;
 		istream& ignore(int i = 1, int delim = EOF);
@@ -331,6 +333,5 @@ namespace std
 	}
 
 }
-
 
 #endif

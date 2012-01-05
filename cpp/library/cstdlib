@@ -5,9 +5,25 @@
 
 unsigned int nondet_uint();
 
+double atof ( const char * str );
+
+int atoi ( const char * str );
+
+long int atol ( const char * str );
+
+double strtod ( const char * str, char ** endptr );
+
+long int strtol ( const char * str, char ** endptr, int base );
+
+unsigned long int strtoul ( const char * str, char ** endptr, int base );
+
+char * getenv ( const char * name );
+
 void exit ( int status ); //Felipe
 
 void abort ( void ); //Felipe
+
+int atexit ( void ( * function ) (void) );
 
 #define RAND_MAX        2147483647
 

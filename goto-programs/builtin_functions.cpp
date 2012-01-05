@@ -1041,6 +1041,8 @@ void goto_convertt::do_function_call_symbol(
           identifier=="c::__assert_fail")
   {
     // __assert_fail is Linux
+    // These take four arguments:
+    // "expression", "file.c", line, __func__
 
     if(arguments.size()!=4)
     {
@@ -1048,8 +1050,17 @@ void goto_convertt::do_function_call_symbol(
       throw "`"+id2string(identifier)+"' expected to have four arguments";
     }
 
-    const std::string description=
-      "assertion "+get_string_constant(arguments[0]);
+    std::string description;
+
+    //std::cout << "arguments[0]: " << arguments[0].pretty() << std::endl;
+    //std::cout << "arguments[0].is_address_of(): " << arguments[0].is_address_of() << std::endl;
+    //std::cout << "arguments[0]: " << arguments[0].op0().op0().id() << std::endl;
+    //check whether the assert does not contain a member
+    if (arguments[0].id() == "address_of" &&
+    	arguments[0].op0().op0().id() == "member")
+    	description = id2string(identifier);
+    else
+    	description = "assertion "+get_string_constant(arguments[0]);
 
     if(options.get_bool_option("no-assertions"))
       return;

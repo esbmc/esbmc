@@ -13,7 +13,7 @@ using std::bad_alloc;
 int main()
 {
    double *ptr[ 50 ];
-   
+
    // attempt to allocate memory
    try {
 
@@ -23,8 +23,7 @@ int main()
          ptr[ i ] = new double[ 50000000000 ];
          cout << "Allocated 5000000 doubles in ptr[ " 
               << i << " ]\n";
-      }
-
+      }	
    } // end try
 
    // handle bad_alloc exception
@@ -33,7 +32,7 @@ int main()
            << memoryAllocationException.what() << endl;
 
    } // end catch
-   
+
    return 0;
 
 }  // end main

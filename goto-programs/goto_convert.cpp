@@ -286,6 +286,7 @@ void goto_convertt::convert(
   const irep_idt &statement=code.get_statement();
   //std::cout << "goto_convertt::convert : " << statement << " : " << from_expr(ns,"",code) << std::endl;
   //std::cout << "goto_convertt::convert code.pretty(): " << code.pretty() << std::endl;
+  //std::cout << "statement: " << statement << std::endl;
 
   dest.instructions.clear();
 
@@ -2801,6 +2802,8 @@ Function: goto_convertt::get_string_constant
 const std::string &goto_convertt::get_string_constant(
   const exprt &expr)
 {
+  //std::cout << "expr.id(): " << expr.id() << std::endl;
+
   if(expr.id()=="typecast" &&
      expr.operands().size()==1)
     return get_string_constant(expr.op0());

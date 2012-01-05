@@ -100,6 +100,11 @@ namespace std
 		fixedStruct();
 	};
 
+	struct setiosflags //setiosflags
+	{
+	   //model
+	};
+
 	extern fixedStruct fixed;
 	extern leftStruct left;
 	extern rightStruct right;
