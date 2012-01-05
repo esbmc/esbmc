@@ -17,6 +17,8 @@ const struct opt_templ c2goto_options[] = {
 { 0,	"64",		switc,		"" },
 { 0,	"output",	string,		"" },
 { 0,	"no-lock-check",switc,		"" },
+{ 'I',	"",		string,		"" },
+{ 'D',	"",		string,		"" },
 { 0,	"",		switc,		"" }
 };
 
