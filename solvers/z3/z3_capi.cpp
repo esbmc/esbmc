@@ -7,6 +7,7 @@ Author:
 \*******************************************************************/
 
 #include <string>
+#include <global.h>
 
 #include "z3_capi.h"
 

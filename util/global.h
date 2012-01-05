@@ -8,6 +8,9 @@
  * any attributes to be supported cross platform, they need o have their own
  * macros. */
 #define __attribute__(x)
+
+#define snprintf _snprintf
+
 #endif
 
 #endif
