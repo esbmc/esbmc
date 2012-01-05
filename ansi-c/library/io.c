@@ -1,4 +1,16 @@
 #include <stdio.h>
+
+/* The mingw headers _really_ don't like us. At some point in the future, stdio
+ * should _really_ become an ESBMC provided header */
+#ifdef __MINGW32_VERSION
+#ifdef feof
+#undef feof
+#endif
+#ifdef ferror
+#undef ferror
+#endif
+#endif
+
 #include <stdlib.h>
 
 #include <sys/types.h>
