@@ -8,13 +8,11 @@ all: preproc.o
 preproc.o: $(OBJS) $(HEADERS)
 	$(LD) $(LDFLAGS) $(OBJS) -r -o $@
 
-.l.o:
+lex.cpp.c: scanner.l
 	$(LEX) -Pcpp $(LFLAGS) $<
-	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ lex.cpp.c
 
-.y.o:
+y.tab.c: cpy.y
 	$(YACC) -d $(YFLAGS) -pcpp $<
-	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ y.tab.c
 
 y.tab.h: cpy.o
 
