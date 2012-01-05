@@ -7,6 +7,11 @@ typedef long int ptrdiff_t;
 
 typedef short wchar_t;
 
+// Appease mingw
+#ifdef __need_wint_t
+typedef short wint_t;
+#endif
+
 typedef unsigned int size_t;
 
 #define NULL ((void *)0)
