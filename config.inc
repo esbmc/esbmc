@@ -6,6 +6,7 @@ YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
 WINDOWS= 1
+C2GOTO_INCDIR=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
 
 # Linux etc.
 #you need to install the packages glibc-static and gmp-static to compile statically
