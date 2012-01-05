@@ -471,13 +471,6 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     return true;
   }
 
-  catch(std::bad_alloc)
-  {
-    message_streamt message_stream(*get_message_handler());
-    message_stream.error("Out of memory");
-    return true;
-  }
-
   print(8, "size of program expression: "+
            i2string(equation->SSA_steps.size())+
            " assignments");
@@ -591,12 +584,6 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
   {
     error(error_str);
     return true;
-  }
-
-  catch(std::bad_alloc)
-  {
-    error("Out of memory");
-    abort();
   }
 }
 
