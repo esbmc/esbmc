@@ -212,8 +212,6 @@ enum
 #endif
 
 
-__BEGIN_DECLS
-
 /* Create a new thread, starting with execution of START-ROUTINE
    getting passed ARG.  Creation attributed come from ATTR.  The new
    handle is stored in *NEWTHREAD.  */
