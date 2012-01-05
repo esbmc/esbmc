@@ -1,0 +1,9 @@
+#ifndef STL_DEQUE
+#define STL_DEQUE
+
+namespace std
+{
+
+}
+
+#endif

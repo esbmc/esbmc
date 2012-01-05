@@ -1,0 +1,6 @@
+#ifndef STL_CASSERT
+#define STL_CASSERT
+
+void assert (int expression);
+
+#endif

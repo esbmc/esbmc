@@ -1,0 +1,9 @@
+#ifndef STL_SET
+#define STL_SET
+
+namespace std
+{
+
+}
+
+#endif

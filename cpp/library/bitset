@@ -1,0 +1,9 @@
+#ifndef STL_BITSET
+#define STL_BITSET
+
+namespace std
+{
+
+}
+
+#endif

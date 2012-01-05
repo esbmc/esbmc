@@ -1,0 +1,9 @@
+#ifndef STL_ALGORITHM
+#define STL_ALGORITHM
+
+namespace std
+{
+
+}
+
+#endif

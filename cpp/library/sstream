@@ -1,0 +1,9 @@
+#ifndef STL_SSTREAM
+#define STL_SSTREAM
+
+namespace std
+{
+
+}
+
+#endif

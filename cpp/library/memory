@@ -1,0 +1,9 @@
+#ifndef STL_MEMORY
+#define STL_MEMORY
+
+namespace std
+{
+
+}
+
+#endif

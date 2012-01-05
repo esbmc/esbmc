@@ -1,0 +1,9 @@
+#ifndef STL_QUEUE
+#define STL_QUEUE
+
+namespace std
+{
+
+}
+
+#endif

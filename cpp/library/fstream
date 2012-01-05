@@ -1,0 +1,15 @@
+#ifndef STL_FSTREAM
+#define STL_FSTREAM
+
+namespace std
+{
+struct ofstream{
+	ofstream ( );
+};
+
+struct ifstream{
+	ifstream ( );
+};
+}
+
+#endif

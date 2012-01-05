@@ -1,0 +1,9 @@
+#ifndef STL_LIST
+#define STL_LIST
+
+namespace std
+{
+
+}
+
+#endif

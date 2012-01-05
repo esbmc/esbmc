@@ -1,0 +1,9 @@
+#ifndef STL_STACK
+#define STL_STACK
+
+namespace std
+{
+
+}
+
+#endif

@@ -1,0 +1,9 @@
+#ifndef STL_MAP
+#define STL_MAP
+
+namespace std
+{
+
+}
+
+#endif
