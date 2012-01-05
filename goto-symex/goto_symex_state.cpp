@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <assert.h>
+#include <global.h>
 #include <map>
 #include <sstream>
 
@@ -439,7 +440,7 @@ goto_symex_statet::level2t::generate_l2_state_hash() const
 {
   unsigned int total;
 
-  uint8_t data[current_hashes.size() * CRYPTO_HASH_SIZE];
+  uint8_t *data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE * sizeof(uint8_t));
 
   total = 0;
   for (current_state_hashest::const_iterator it = current_hashes.begin();
