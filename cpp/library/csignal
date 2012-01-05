@@ -3,31 +3,10 @@
 
 #include "definitions.h"
 
-typedef void (*sighandler)(int);
+typedef void (func)(int argumento);
 
-sighandler vetor[16];
+void signal(int sig, func *f);
 
-void signal(int sig, sighandler func) {
-
-	__ESBMC_assert( (sig == 2) || (sig == 6) || (sig == 8) || (sig == 4) ||
-						 (sig == 11) || (sig == 15),
-						 "Signal must be equal to defined at lib csignal");
-
-	vetor[sig] = func;
-}
-
-int raise(int sig) {
-
-	__ESBMC_assert( (sig == 2) || (sig == 6) || (sig == 8) || (sig == 4) ||
-						 (sig == 11) || (sig == 15),
-						 "Signal must be equal to defined at lib csignal");
-
-	if (vetor[sig] != 0) {
-		vetor[sig];
-		return 0;	
-	}
-	
-	return nondet_uint();
-}
+int raise(int sig);
 
 #endif

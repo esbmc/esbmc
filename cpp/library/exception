@@ -12,7 +12,11 @@ struct exception {
   exception (const exception&) throw();
   exception& operator= (const exception&) throw();
   ~exception() throw();
-  const char* what() const throw();
+  const char* what() const throw(){
+	 
+	 return "";
+
+  }
 
 };
 
