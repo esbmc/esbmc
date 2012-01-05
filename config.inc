@@ -11,6 +11,7 @@ VCDIR="C:\\Program Files (x86)\\Microsoft Visual Studio 10.0\\VC"
 CYGVCDIR="/cygdrive/c/Program Files (x86)/Microsoft Visual Studio 10.0/VC"
 VCINCLUDES+=/I$(VCDIR)\\include
 VCBINS=$(VCDIR)/bin/amd64
+WINESBMCDIR= $(shell cygpath -w $(ESBMCDIR) | sed s/\\\\/\\\\\\\\/g )
 
 
 # Linux etc.
