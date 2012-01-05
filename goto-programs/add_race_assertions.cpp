@@ -33,13 +33,6 @@ public:
 
   const symbolt &get_guard_symbol(const irep_idt &object)
   {
-    //std::stringstream ss;
-	//std::string temp;
-
-    //ss << get_variable_name(id2string(object));
-	//ss >> temp;
-
-    //const irep_idt identifier="tmp_"+temp;
 	const irep_idt identifier="tmp_"+id2string(object);
 
     const symbolst::const_iterator it=context.symbols.find(identifier);

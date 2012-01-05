@@ -982,20 +982,9 @@ void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rh
 	  dest.add_instruction(ATOMIC_BEGIN);
 	  atomic = -1;
 	}
-	std::stringstream ss;
-	std::string s;
 	goto_programt::targett t=dest.add_instruction(ASSERT);
 	t->guard.swap(atomic_dest);
 	t->location=location;
-	ss << get_variable_name(lhs.identifier().as_string());
-	ss >> s;
-	//std::cout << "s.c_str(): " << s.c_str() << std::endl;
-	//std::cout << "s.empty(): " << s.empty() << std::endl;
-	//std::cout << "lhs.pretty(): " << lhs.identifier().as_string() << std::endl;
-	//std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
-	//if (lhs.identifier().as_string().find("atomicity") == std::string::npos)
-	  //t->location.comment("atomicity violation on assignment to " + s);
-	//else
 	  t->location.comment("atomicity violation on assignment to " + lhs.identifier().as_string());
   }
 
