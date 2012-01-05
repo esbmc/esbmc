@@ -23,7 +23,7 @@ $(OBJDIR)/%.o : %.c
 	$(CC) -c $(CLAGS) -o $@ $<
 else
 $(OBJDIR)/%o : %cpp
-	$(VCBINS)/cl.exe /TP /I$(VCDIR)\\include /I$(WINESBMCDIR)\\util /I$(WINESBMCDIR) /Fo$@ $< /c
+	$(VCBINS)/cl.exe /TP /I$(VCDIR)\\include /I$(WINESBMCDIR)\\util /I$(WINESBMCDIR) /Fo$@ $< /c /I$(WINSDKDIR)\\include
 
 $(OBJDIR)/%o : %c
 	$(VCBINS)/cl.exe /Tc /I$(VCDIR)/include /Fo$@ $< /c

@@ -12,7 +12,7 @@ CYGVCDIR="/cygdrive/c/Program Files (x86)/Microsoft Visual Studio 10.0/VC"
 VCINCLUDES+=/I$(VCDIR)\\include
 VCBINS=$(VCDIR)/bin/amd64
 WINESBMCDIR= $(shell cygpath -w $(ESBMCDIR) | sed s/\\\\/\\\\\\\\/g )
-
+WINSDKDIR=C:\\Program\ Files\ \(x86\)\\Microsoft\ SDKs\\Windows\\v7.0A
 
 # Linux etc.
 #you need to install the packages glibc-static and gmp-static to compile statically
