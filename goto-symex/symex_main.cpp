@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 #include <iostream>
+#include <vector>
 
 #include <std_expr.h>
 #include <rename.h>
@@ -21,7 +22,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "../ansi-c/c_types.h"
 #include <base_type.h>
 #include <simplify_expr.h>
-#include <bits/stl_vector.h>
 #include "config.h"
 
 /*******************************************************************\
