@@ -12,8 +12,11 @@ Author: Daniel Kroening, kroening@kroening.com
 // you need to pick one of the following three options
 
 // #define NO_HASH_CONT
-// #define STDEXT_HASH_CONT
+#if defined(_WIN32) || defined(__WIN32__)
+#define STDEXT_HASH_CONT
+#else
 #define GNU_HASH_CONT
+#endif
 // #define TR1_HASH_CONT
 
 #ifdef NO_HASH_CONT
