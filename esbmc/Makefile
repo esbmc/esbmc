@@ -31,8 +31,6 @@ endif
 
 all: $(OBJDIR)/.deps esbmc
 
-include $(ESBMCDIR)/common
-
 ifdef BOOLECTOR
 CXXFLAGS+= -DBOOLECTOR
 LIBS+= -L$(BOOLECTOR)/lib -lboolector
@@ -58,10 +56,12 @@ endif
 ###############################################################################
 
 esbmc: $(OBJS)
-	$(CXX) $(CXXFLAGS) -o esbmc $(OBJS) $(LIBS)
+	$(CXX) $(CXXFLAGS) -o esbmc $(OBJS) $(LIBS) /link /LIBPATH:$(WINSDKDIR)\\lib\\x64 /LIBPATH:$(VCDIR)\\lib\\amd64
 
 #cbmc-static: $(OBJS)
 #	$(CXX) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
 
 clean:
 	-rm -f $(OBJS) $(OBJDIR)/.deps esbmc
+
+include $(ESBMCDIR)/common
