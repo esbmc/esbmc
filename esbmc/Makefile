@@ -55,6 +55,8 @@ endif
 
 ###############################################################################
 
+include $(ESBMCDIR)/common
+
 esbmc: $(OBJS)
 	$(CXX) $(CXXFLAGS) /OUT:esbmc $(OBJS) $(LIBS) /link /LIBPATH:$(WINSDKDIR)\\lib\\x64 /LIBPATH:$(VCDIR)\\lib\\amd64
 
@@ -63,5 +65,3 @@ esbmc: $(OBJS)
 
 clean:
 	-rm -f $(OBJDIR)/* esbmc
-
-include $(ESBMCDIR)/common
