@@ -13,6 +13,22 @@
 #undef fabs
 #undef fabsl
 #undef fabsf
+
+// Whipped out of glibc headers. Don't exactly know how these work, but they're
+// what the linux version works upon.
+enum
+  {
+    FP_NAN,
+# define FP_NAN FP_NAN
+    FP_INFINITE,
+# define FP_INFINITE FP_INFINITE
+    FP_ZERO,
+# define FP_ZERO FP_ZERO
+    FP_SUBNORMAL,
+# define FP_SUBNORMAL FP_SUBNORMAL
+    FP_NORMAL
+# define FP_NORMAL FP_NORMAL
+  };
 #endif
 
 int abs(int i) { return __ESBMC_abs(i); }
