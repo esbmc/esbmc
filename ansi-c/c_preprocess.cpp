@@ -159,6 +159,11 @@ static const char *cpp_linux_defs[] = {
 NULL
 };
 
+static const char *cpp_windows_defs[] = {
+"_WIN32",
+NULL
+};
+
 static const char *cpp_ansic_defs[] = {
 "__STDC_VERSION__=199901L",
 "__STDC_IEC_559__=1",
@@ -167,7 +172,8 @@ static const char *cpp_ansic_defs[] = {
 NULL
 };
 
-int configure_and_run_cpp(const char *out_file_buf, std::string path);
+int configure_and_run_cpp(const char *out_file_buf, std::string path,
+		          const char **platformdefs);
 
 void setup_cpp_defs(const char **defs)
 {
@@ -244,7 +250,7 @@ bool c_preprocess(
   dup2(fd, STDERR_FILENO);
   close(fd);
 
-  exit(configure_and_run_cpp(out_file_buf, path));
+  exit(configure_and_run_cpp(out_file_buf, path, cpp_linux_defs));
 }
 
 #else /* __WIN32__ */
@@ -269,7 +275,7 @@ bool c_preprocess(
   GetTempPath(sizeof(tmpdir), tmpdir);
   GetTempFileName(tmpdir, "bmc", 0, out_file_buf);
 
-  ret = configure_and_run_cpp(out_file_buf, path);
+  ret = configure_and_run_cpp(out_file_buf, path, cpp_windows_defs);
   if (ret != 0) {
     message_stream.error("Preprocessor returned an error");
     return true;
@@ -287,7 +293,8 @@ bool c_preprocess(
 #endif
 
 int
-configure_and_run_cpp(const char *out_file_buf, std::string path)
+configure_and_run_cpp(const char *out_file_buf, std::string path,
+		      const char **platform_defs)
 {
   int ret;
 
@@ -309,7 +316,7 @@ configure_and_run_cpp(const char *out_file_buf, std::string path)
     setup_cpp_defs(cpp_defines_strabs);
 
   setup_cpp_defs(cpp_normal_defs);
-  setup_cpp_defs(cpp_linux_defs);
+  setup_cpp_defs(platform_defs);
   setup_cpp_defs(cpp_ansic_defs);
 
   for(std::list<std::string>::const_iterator
