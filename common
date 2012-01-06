@@ -61,7 +61,7 @@ depend: $(SRCS)
 	@for src in $(SRCS); do \
 		src1=$${src//\.cpp/}; \
 		src2=$${src1//\.c/}; \
-		$(CXX) $(INCLUDES) -I $(Z3GCC)/include $(CXXFLAGS) -MM -MT $(OBJDIR)/$$src2.o $$src >> $(OBJDIR)/.deps; \
+		$(DEPCXX) $(INCLUDES) -I $(Z3GCC)/include $(CXXFLAGS) -MM -MT $(OBJDIR)/$$src2.o $$src >> $(OBJDIR)/.deps; \
 	done
 
 $(OBJDIR)/.deps:
