@@ -2,7 +2,8 @@ ESBMCDIR= $(shell pwd)/../..
 MAINOBJ=preproc.o
 include $(ESBMCDIR)/config.inc
 
-SRCS=cpy.c cpp.c scanner.c compat.c hooks.c
+SRCS=cpp.c compat.c hooks.c
+OBJS=$(OBJDIR)/y.tab.o $(OBJDIR)/lex.cpp.o
 HEADERS=cpp.h
 
 all: preproc.o
