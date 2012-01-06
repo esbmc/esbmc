@@ -71,6 +71,10 @@
 #ifndef _WIN32
 #include <stdbool.h>
 #include <unistd.h>
+#else
+#include <windows.h>
+#define false 0
+#define true !0
 #endif
 
 #include <errno.h>
@@ -106,6 +110,11 @@ int dflag;	/* debug printouts */
 #else
 #define DPRINT(x)
 #define DDPRINT(x)
+#endif
+
+/* Hacks for appeasing Windows */
+#ifdef _WIN32
+const char *optarg = "(no optarg on windows)";
 #endif
 
 int ofd;
