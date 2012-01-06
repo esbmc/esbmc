@@ -22,8 +22,6 @@ INCLUDES= -I .. -I ../util
 
 all: $(OBJDIR)/.deps cpp_dir headers_dir $(OBJDIR)/ansi-c.o
 
-include $(ESBMCDIR)/common
-
 ###############################################################################
 
 y.tab.cpp: parser.y
@@ -63,6 +61,8 @@ $(OBJDIR)/clib.o: c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
 	$(LD) $(LDFLAGS) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o -o $(OBJDIR)/clib.o -r
 
 ###############################################################################
+
+include $(ESBMCDIR)/common
 
 cpp/preproc.o: cpp_dir
 
