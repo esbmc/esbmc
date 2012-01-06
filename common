@@ -35,17 +35,6 @@ INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
 CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 
-.SUFFIXES:	.C .d .cpp
-
-.C.o:
-	$(CXX) -c $(CXXFLAGS) -o $@ $<
-
-.cpp.o:
-	$(CXX) -c $(CXXFLAGS) -o $@ $<
-
-.c.o:
-	$(CC) -c $(CFLAGS) -o $@ $<
-
 # A generic target; potentially not defined by the includer
 
 $(MAINOBJ): $(OBJS)
