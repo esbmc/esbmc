@@ -91,7 +91,7 @@ z3_convt::~z3_convt()
   if (num_ctx_ileaves == 10000) {
     num_ctx_ileaves = 0;
     Z3_del_context(z3_ctx);
-#ifndef __WIN32__
+#ifndef _WIN32
     // This call is an undocumented internal api of Z3's: it causes Z3 to free its
     // internal symbol table, which it otherwise doesn't, leading to vast
     // quantities of leaked memory. This will stop work/linking when Microsoft
