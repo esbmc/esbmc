@@ -62,6 +62,6 @@ esbmc: $(OBJS)
 #	$(CXX) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
 
 clean:
-	-rm -f $(OBJS) $(OBJDIR)/.deps esbmc
+	-rm -f $(OBJDIR)/* esbmc
 
 include $(ESBMCDIR)/common
