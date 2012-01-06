@@ -345,7 +345,7 @@ Function: bmc_baset::run
 
 bool bmc_baset::run(const goto_functionst &goto_functions)
 {
-#ifndef __WIN32__
+#ifndef _WIN32
   struct sigaction act;
 #endif
   bool resp;
@@ -355,7 +355,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
   symex.last_location.make_nil();
 
-#ifndef __WIN32__
+#ifndef _WIN32
   // Collect SIGUSR1, indicating that we're supposed to checkpoint.
   act.sa_handler = sigusr1_handler;
   sigemptyset(&act.sa_mask);
@@ -472,7 +472,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
   }
 
   print(8, "size of program expression: "+
-           i2string(equation->SSA_steps.size())+
+           i2string((unsigned long)equation->SSA_steps.size())+
            " assignments");
 
   try
