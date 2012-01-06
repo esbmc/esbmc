@@ -16,7 +16,7 @@ SRCS= c_typecast.cpp ansi_c_parser.cpp \
       convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp \
 
-OBJS= y.tab.o lex.yy.o
+OBJS= $(OBJDIR)/y.tab.o $(OBJDIR)/lex.yy.o
 
 INCLUDES= -I .. -I ../util
 
