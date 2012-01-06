@@ -1,5 +1,4 @@
 ESBMCDIR= $(shell pwd)/../..
-MAINOBJ=preproc.o
 include $(ESBMCDIR)/config.inc
 
 SRCS=cpp.c compat.c hooks.c
@@ -33,3 +32,6 @@ clean:
 	-rm .deps
 
 include $(ESBMCDIR)/common
+
+preproc.o: $(OBJS)
+	x86_64-w64-mingw32-ld $^ -o $@ -r
