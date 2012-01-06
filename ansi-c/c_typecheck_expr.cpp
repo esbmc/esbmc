@@ -1528,6 +1528,27 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
 
   typecheck_function_call_arguments(expr);
 
+  do_special_functions(expr);
+}
+
+/*******************************************************************\
+
+Function: c_typecheck_baset::do_special_functions
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void c_typecheck_baset::do_special_functions(
+  side_effect_expr_function_callt &expr)
+{
+  const exprt &f_op=expr.function();
+  const locationt &location=expr.location();
+
   // some built-in functions
   if(f_op.id()=="symbol")
   {

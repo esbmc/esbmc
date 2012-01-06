@@ -23,5 +23,7 @@ typet char_type();
 typet float_type();
 typet double_type();
 typet long_double_type();
+typet size_type();
+typet signed_size_type();
 
 #endif

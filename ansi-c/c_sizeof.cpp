@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <config.h>
 #include <arith_tools.h>
+#include <simplify_expr.h>
 
 #include "c_sizeof.h"
 #include "c_typecast.h"
@@ -155,4 +156,25 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
     dest.make_nil();
 
   return dest;
+}
+
+/*******************************************************************\
+
+Function: c_sizeof
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+exprt c_sizeof(const typet &src, const namespacet &ns)
+{
+  c_sizeoft c_sizeof_inst(ns);
+  exprt tmp=c_sizeof_inst(src);
+  // TODO: cbmc: simplify(tmp, ns);
+  simplify(tmp);
+  return tmp;
 }
