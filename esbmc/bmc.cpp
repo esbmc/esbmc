@@ -14,7 +14,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <unistd.h>
 #else
 // Including windows.h here offends bigint.hh
-extern unsigned int GetProcessId(unsigned long Process);
+extern "C" unsigned int GetProcessId(unsigned long Process);
 #endif
 
 #include <sstream>

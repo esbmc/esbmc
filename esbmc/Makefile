@@ -38,7 +38,7 @@ endif
 
 ifdef Z3
 CXXFLAGS+= -DZ3
-LIBS+= $(Z3)\\x64\\z3.lib
+LIBS+= $(Z3)\\x64\\z3.lib $(WINSDKDIR)\\lib\\x64\\Kernel32.lib
 endif
 
 ifdef MINISAT
