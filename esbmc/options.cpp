@@ -21,6 +21,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"bl",			switc,		""	},
 { 0,	"smt",			switc,		""	},
 { 0,	"outfile",		string,		""	},
+{ 0,	"llvm-metadata",		string,		""	},
 { 0,	"no-pointer-check",	switc,		""	},
 { 0,	"document-subgoals",	switc,		""	},
 { 0,	"all-claims",		switc,		""	},

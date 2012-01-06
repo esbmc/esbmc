@@ -14,6 +14,10 @@ Date: July 2005
 #include <iostream>
 #include <vector>
 
+#include <fstream>
+#include <map>
+#include "VarMap.h"
+
 #include <pretty_names.h>
 
 #include <goto-programs/goto_program.h>
@@ -76,20 +80,57 @@ class goto_tracet
 {
 public:
   typedef std::list<goto_trace_stept> stepst;
+  typedef std::map< std::string, std::string, std::less< std::string > > mid;
   stepst steps;
-  
-  std::string mode;
+  mid llvm_varmap;
+  char* FileName;
+  char* LineNumber;
+
+  std::string mode, metadata_filename;
   
   void clear()
   {
     mode.clear();
     steps.clear();
   }
-  
+
   void output(
     const class namespacet &ns,
     std::ostream &out) const;
+
+  void open_llvm_varmap() {
+	  std::ifstream inVarMap(metadata_filename.c_str(), std::ios::in);
+	  if ( !inVarMap ) {
+	     std::cerr << "Metadata File could not be opened." << std::endl;
+	     exit( 1 );
+
+      } // end if
+	  VarMap vmap; // create record
+
+	  // read first record from file
+	  inVarMap.read( reinterpret_cast< char * >( &vmap ),
+	     sizeof( VarMap ) );
+
+	  // read all records from file
+	  while ( inVarMap && !inVarMap.eof() ) {
+
+	     // display record
+	     if ( vmap.getVarName() != "" )
+	    	llvm_varmap.insert( mid::value_type( vmap.getVarName() , vmap.getVarInfo() ) );
+
+	      // read next from file
+	     inVarMap.read( reinterpret_cast< char * >( &vmap ),
+	        sizeof( VarMap ) );
+
+	   } // end while
+
+  }
+
 };
+
+void get_metada_from_llvm(
+  goto_tracet::stepst::const_iterator &it,
+  const goto_tracet &goto_trace);
 
 void show_goto_trace_gui(
   std::ostream &out,

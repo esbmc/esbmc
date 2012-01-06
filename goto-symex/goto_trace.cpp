@@ -9,12 +9,15 @@ Author: Daniel Kroening
 \*******************************************************************/
 
 #include <assert.h>
+#include <string.h>
 
 #include <ansi-c/printf_formatter.h>
 #include <langapi/language_util.h>
 #include <arith_tools.h>
 
+
 #include "goto_trace.h"
+#include "VarMap.h"
 
 /*******************************************************************\
 
@@ -335,6 +338,59 @@ void show_goto_trace(
 
 /*******************************************************************\
 
+Function: get_metada_from_llvm
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void get_metada_from_llvm(
+  goto_tracet::stepst::const_iterator &it,
+  const goto_tracet &goto_trace)
+{
+  int j=0;
+  char str[it->original_lhs.identifier().as_string().length()];
+  strcpy(str,it->original_lhs.identifier().c_str());
+  char * pch;
+  pch = strtok (str,"::");
+  while (pch != NULL)
+  {
+    if (j==4) {
+      if (goto_trace.llvm_varmap.find(pch) != goto_trace.llvm_varmap.end()) {
+
+   	    char VarInfo[goto_trace.llvm_varmap.find(pch)->second.length()];
+
+        if(!goto_trace.llvm_varmap.find(pch)->second.empty()) {
+       	  //std::cout<<"  VarName "<<pch;
+       	  strcpy(VarInfo,goto_trace.llvm_varmap.find(pch)->second.c_str());
+        }
+
+        char * pch2;
+        pch2 = strtok (VarInfo,"@#");
+        int k=0;
+        while (pch2 != NULL) {
+          if (k==0) const_cast<goto_tracet*>(&goto_trace)->FileName = pch2;
+          if (k==1) const_cast<goto_tracet*>(&goto_trace)->LineNumber = pch2;
+          pch2 = strtok (NULL, "@#");
+          k++;
+        }
+        if(!goto_trace.llvm_varmap.find(pch)->second.empty()) {
+          const_cast<locationt*>(&it->pc->location)->set_file(goto_trace.FileName);
+          const_cast<locationt*>(&it->pc->location)->set_line(goto_trace.LineNumber);
+         }
+       }
+     }
+     pch = strtok (NULL, "::");
+     j++;
+  }
+}
+
+/*******************************************************************\
+
 Function: show_goto_trace
 
   Inputs:
@@ -354,6 +410,9 @@ void show_goto_trace(
   unsigned prev_step_nr=0;
   bool first_step=true;
 
+  if (!goto_trace.metadata_filename.empty())
+    const_cast<goto_tracet*>(&goto_trace)->open_llvm_varmap();
+
   for(goto_tracet::stepst::const_iterator
       it=goto_trace.steps.begin();
       it!=goto_trace.steps.end();
@@ -366,8 +425,11 @@ void show_goto_trace(
       {
         out << std::endl;
         out << "Violated property:" << std::endl;
-        if(!it->pc->location.is_nil())
-          out << "  " << it->pc->location << std::endl;
+        if(!it->pc->location.is_nil()) {
+            if (!goto_trace.metadata_filename.empty())
+              get_metada_from_llvm(it, goto_trace);
+        	out << "  " << it->pc->location << std::endl;
+        }
         out << "  " << it->comment << std::endl;
 
         if(it->pc->is_assert())
@@ -397,6 +459,9 @@ void show_goto_trace(
         {
           first_step=false;
           prev_step_nr=it->step_nr;
+          if (!goto_trace.metadata_filename.empty()) {
+            get_metada_from_llvm(it, goto_trace);
+          }
           show_state_header(out, *it, it->pc->location, it->step_nr);
         }
         counterexample_value(out, ns, it->original_lhs,
