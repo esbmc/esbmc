@@ -15,9 +15,7 @@ lex.cpp.c: scanner.l
 y.tab.c: cpy.y lex.cpp.c
 	$(YACC) -d $(YFLAGS) -pcpp $<
 
-y.tab.h: cpy.o
-
-scanner.l: y.tab.h
+cpp.c: y.tab.c # Includes y.tab.h
 
 compat.o: compat.c
 	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ compat.c
