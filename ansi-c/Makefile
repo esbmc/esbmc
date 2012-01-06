@@ -42,12 +42,6 @@ $(OBJDIR)/lex.yy.o: y.tab.cpp lex.yy.cpp y.tab.h
 
 ###############################################################################
 
-$(OBJDIR)/cprover_library.o: cprover_library.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@ -c
-
-$(OBJDIR)/cprover_blank_library.o: cprover_library.cpp
-	$(CXX) $(CXXFLAGS) -DNO_CPROVER_LIBRARY $^ -o $@ -c
-
 C2GOTO_DEPS= $(OBJS) ../util/$(OBJDIR)/util.o ../langapi/$(OBJDIR)/langapi.o \
 	     ../big-int/$(OBJDIR)/bigint.o \
 	     ../goto-programs/$(OBJDIR)/goto-programs.o \
