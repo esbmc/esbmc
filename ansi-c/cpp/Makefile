@@ -1,12 +1,10 @@
 ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
 
-OBJS=cpy.o cpp.o scanner.o compat.o hooks.o
+SRCS=cpy.c cpp.c scanner.c compat.c hooks.c
 HEADERS=cpp.h
 
 all: preproc.o
-
-preproc.o: $(OBJS) $(HEADERS)
-	$(LD) $(LDFLAGS) $(OBJS) -r -o $@
 
 lex.cpp.c: scanner.l
 	$(LEX) -Pcpp $(LFLAGS) $<
@@ -25,7 +23,7 @@ $(OBJS): $(HEADERS)
 cpp.o: cpy.o
 
 clean:
-	-rm *.o
+	-rm $(OBJDIR)/*.o
 	-rm lex.cpp.c
 	-rm y.tab.c
 	-rm y.tab.h
@@ -33,3 +31,6 @@ clean:
 	-rm .deps
 
 include $(ESBMCDIR)/common
+
+preproc.o: $(OBJS) $(HEADERS)
+	$(LD) $(LDFLAGS) $(OBJS) -r -o $@
