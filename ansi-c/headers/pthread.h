@@ -20,7 +20,6 @@
 #ifndef _PTHREAD_H
 #define _PTHREAD_H	1
 
-#include <sched.h>
 #include <time.h>
 
 #include <pthreadtypes.h>
