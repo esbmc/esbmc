@@ -10,7 +10,12 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <sys/types.h>
 
 #include <signal.h>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+// Including windows.h here offends bigint.hh
+extern unsigned int GetProcessId(unsigned long Process);
+#endif
 
 #include <sstream>
 #include <fstream>
@@ -791,7 +796,12 @@ void bmc_baset::write_checkpoint(void)
 
   if (options.get_option("checkpoint-file") == "") {
     char buffer[32];
-    sprintf(buffer, "%d", getpid());
+#ifndef _WIN32
+    pid_t pid = getpid();
+#else
+    unsigned long pid = GetProcessId(-1);
+#endif
+    sprintf(buffer, "%d", pid);
     f = "esbmc_checkpoint." + std::string(buffer);
   } else {
     f = options.get_option("checkpoint-file");
