@@ -50,11 +50,11 @@ c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
 	$(CYGVCDIR)/bin/amd64/cl.exe $(CXXFLAGS) $^ /Fe$@ $(C2GOTO_DEPS) /I$(VCDIR)\\include /I$(WINESBMCDIR)\\util /I$(WINESBMCDIR) /I$(WINSDKDIR)\\include /link /LIBPATH:$(VCDIR)\\lib\\amd64 /LIBPATH:"C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\"
 
 $(OBJDIR)/clib32.o: c2goto library/*.c
-	./c2goto library/*.c --32 --output clib32.goto --no-lock-check -I $(C2GOTO_INCDIR)
+	./c2goto library/*.c --32 --output clib32.goto --no-lock-check $(C2GOTO_INCS)
 	$(LD) $(LDFLAGS) -b binary clib32.goto -o $(OBJDIR)/clib32.o -r
 
 $(OBJDIR)/clib64.o: c2goto library/*.c
-	./c2goto library/*.c --32 --output clib64.goto --no-lock-check -I $(C2GOTO_INCDIR)
+	./c2goto library/*.c --32 --output clib64.goto --no-lock-check $(C2GOTO_INCS)
 	$(LD) $(LDFLAGS) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
 
 $(OBJDIR)/clib.o: c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
