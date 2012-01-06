@@ -31,26 +31,18 @@ extern "C" {
 
 #ifndef NO_CPROVER_LIBRARY
 
-// Handle the varying number of underscores prefixing symbols between windows
-// and unix :|
-
-#ifdef _WIN32
-#define p(x) x
-#else
-#define p(x) _##(x)
-#endif
-
-extern uint8_t p(binary_clib32_goto_start);
-extern uint8_t p(binary_clib64_goto_start);
-extern uint8_t p(binary_clib32_goto_end);
-extern uint8_t p(binary_clib64_goto_end);
+extern "C" {
+extern uint8_t _binary_clib32_goto_start;
+extern uint8_t _binary_clib64_goto_start;
+extern uint8_t _binary_clib32_goto_end;
+extern uint8_t _binary_clib64_goto_end;
 
 uint8_t *clib_ptrs[2][2] = {
-{ &p(binary_clib32_goto_start), &p(binary_clib32_goto_end)},
-{ &p(binary_clib64_goto_start), &p(binary_clib64_goto_end)},
+{ &_binary_clib32_goto_start, &_binary_clib32_goto_end},
+{ &_binary_clib64_goto_start, &_binary_clib64_goto_end},
 };
+}
 
-#undef p
 #endif
 
 bool
