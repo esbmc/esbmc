@@ -8,7 +8,7 @@ headers.o: $(OBJS)
 	$(VCBINS)\\lib.exe $(LDFLAGS) $^ /OUT:$@
 
 .h.o:
-	ld -b binary $< -o $@ -r
+	x86_64-w64-mingw32-ld -b binary $< -o $@ -r
 
 clean:
 	-rm *.o .deps
