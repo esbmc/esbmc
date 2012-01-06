@@ -51,14 +51,14 @@ c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
 
 $(OBJDIR)/clib32.o: c2goto library/*.c
 	./c2goto library/*.c --32 --output clib32.goto --no-lock-check $(C2GOTO_INCS)
-	$(LD) $(LDFLAGS) -b binary clib32.goto -o $(OBJDIR)/clib32.o -r
+	x86_64-w64-mingw32-ld -b binary clib32.goto -o $(OBJDIR)/clib32.o -r
 
 $(OBJDIR)/clib64.o: c2goto library/*.c
 	./c2goto library/*.c --32 --output clib64.goto --no-lock-check $(C2GOTO_INCS)
-	$(LD) $(LDFLAGS) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
+	x86_64-w64-mingw32-ld -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
 
 $(OBJDIR)/clib.o: c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
-	$(LD) $(LDFLAGS) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o -o $(OBJDIR)/clib.o -r
+	$(VCBINS)\\lib.exe $(LDFLAGS) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o /OUT:$(OBJDIR)/clib.o
 
 ###############################################################################
 
@@ -81,7 +81,7 @@ headers_dir:
 ###############################################################################
 
 $(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/preproc.o headers/headers.o
-	$(LD) $(LDFLAGS) -r -o $@ $^
+	$(VCBINS)\\lib.exe $(LDFLAGS) /OUT:$@ $^
 
 clean:
 	$(MAKE) -C cpp clean
