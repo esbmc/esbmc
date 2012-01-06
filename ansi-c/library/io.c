@@ -4,6 +4,11 @@
 
 #include "intrinsics.h"
 
+#ifdef _WIN32
+#include <BaseTsd.h>
+#define ssize_t SSIZE_T
+#endif
+
 int putchar(int c)
 {
   _Bool error;

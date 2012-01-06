@@ -9,6 +9,12 @@
 
 #include "intrinsics.h"
 
+#ifdef _WIN32
+#undef fabs
+#undef fabsl
+#undef fabsf
+#endif
+
 int abs(int i) { return __ESBMC_abs(i); }
 long int labs(long int i) { return __ESBMC_labs(i); }
 double fabs(double d) { return __ESBMC_fabs(d); }
