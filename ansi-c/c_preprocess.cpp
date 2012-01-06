@@ -135,7 +135,6 @@ NULL
 
 static const char *cpp_normal_defs[] = {
 "__ESBMC__",
-"__null=0",
 "__STRICT_ANSI__=1",
 "_POSIX_SOURCE=1",
 #ifndef __WIN32__ // mingw sched/pthread headers choke and die upon this.
@@ -156,6 +155,7 @@ static const char *cpp_linux_defs[] = {
 "unix",
 "__unix",
 "__unix__",
+"__null=0",
 NULL
 };
 
