@@ -11,7 +11,8 @@ preproc.o: $(OBJS) $(HEADERS)
 lex.cpp.c: scanner.l
 	$(LEX) -Pcpp $(LFLAGS) $<
 
-y.tab.c: cpy.y
+# Warcrime: yacc/bison won't produce y.tab.h unless lex/flex was already run :|
+y.tab.c: cpy.y lex.cpp.c
 	$(YACC) -d $(YFLAGS) -pcpp $<
 
 y.tab.h: cpy.o
