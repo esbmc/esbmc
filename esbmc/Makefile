@@ -38,7 +38,7 @@ endif
 
 ifdef Z3
 CXXFLAGS+= -DZ3
-LIBS+= $(Z3)\\x64
+LIBS+= $(Z3)\\x64\\z3.lib
 endif
 
 ifdef MINISAT
