@@ -73,6 +73,7 @@
 #include <unistd.h>
 #else
 #include <windows.h>
+#include <malloc.h>
 #define false 0
 #define true !0
 #endif
