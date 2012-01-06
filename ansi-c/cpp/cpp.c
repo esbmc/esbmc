@@ -226,6 +226,7 @@ record_builtin_macros()
 {
 	time_t t;
 	struct symtab *nl;
+	usch *n;
 
 	filloc = lookup((usch *)"__FILE__", ENTER);
 	linloc = lookup((usch *)"__LINE__", ENTER);
@@ -234,7 +235,7 @@ record_builtin_macros()
 	pragloc->value = (usch *)"";
 
 	t = time(NULL);
-	usch *n = (usch *)ctime(&t);
+	n = (usch *)ctime(&t);
 
 	/*
 	 * Manually move in the predefined macros.
