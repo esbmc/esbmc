@@ -5,7 +5,7 @@
  * the symbol varies when compiling for windows, but doesn't when using LD to
  * produce the header blobs. So, hacks: */
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #define p(x) (x)
 #else
 #define p(x) _##(x)
