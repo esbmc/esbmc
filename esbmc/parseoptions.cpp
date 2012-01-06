@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <memory>
 
-#ifndef __WIN32__
+#ifndef _WIN32
 extern "C" {
 #include <ctype.h>
 #include <stdlib.h>
@@ -54,7 +54,7 @@ extern "C" {
 
 // jmorse - could be somewhere better
 
-#ifndef __WIN32__
+#ifndef _WIN32
 void
 timeout_handler(int dummy __attribute__((unused)))
 {
@@ -234,7 +234,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   // jmorse
   if(cmdline.isset("timeout")) {
-#ifdef __WIN32__
+#ifdef _WIN32
     std::cerr << "Timeout unimplemented on Windows, sorry" << std::endl;
     abort();
 #else
@@ -272,7 +272,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 
   if(cmdline.isset("memlimit")) {
-#ifdef __WIN32__
+#ifdef _WIN32
     std::cerr << "Can't memlimit on Windows, sorry" << std::endl;
     abort();
 #else
