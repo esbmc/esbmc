@@ -11,7 +11,7 @@ extern "C" {
 #include <stdlib.h>
 #include <stdint.h>
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #include <windows.h>
 #include <io.h>
 #undef small // MinGW headers are terrible (alternately; windows).
@@ -34,8 +34,8 @@ extern "C" {
 // Handle the varying number of underscores prefixing symbols between windows
 // and unix :|
 
-#ifdef __WIN32__
-#define p(x) (x)
+#ifdef _WIN32
+#define p(x) x
 #else
 #define p(x) _##(x)
 #endif
@@ -158,7 +158,7 @@ void add_cprover_library(
     abort();
   }
 
-#ifndef __WIN32__
+#ifndef _WIN32
   sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
   fd = mkstemp(symname_buffer);
   close(fd);
