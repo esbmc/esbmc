@@ -8,8 +8,7 @@ if [ "$RESULT" = "^CONVERSION ERROR$" ]
 	}
    else {
    	$(clang++ -w -emit-llvm *.cpp -c -g)
-	$(llvm-ld *.o -o main)
-	$(opt -std-compile-opts main.bc -o main.bc)
-	$(llc -march=c main.bc -o main.c)
+	$(llvm-link *.o -o main.ll -S)
+	$(llc -march=c main.ll -o main.c)
    }
 fi

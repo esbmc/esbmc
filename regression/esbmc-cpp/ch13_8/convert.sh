@@ -1,15 +1,14 @@
 #!/bin/bash
+RESULT=`cat testllvm.desc |head -n 3 | tail -n 1`
+#echo $RESULT
 
-$(clang++ -w -emit-llvm *.cpp -c -g)
-#if [ -e main.o ]
-#  then {
-
-	$(llvm-ld *.o -o main)
-	$(opt -std-compile-opts main.bc -o main.bc)
-	$(llc -march=c main.bc -o main.c)
-#   }
-#   else {
-#     echo "Arquivo não compilável."
-#   }
-#fi
-
+if [ "$RESULT" = "^CONVERSION ERROR$" ]
+  then {
+	 $(cd ..)
+	}
+   else {
+   	$(clang++ -w -emit-llvm *.cpp -c -g)
+	$(llvm-link *.o -o main.ll -S)
+	$(llc -march=c main.ll -o main.c)
+   }
+fi
