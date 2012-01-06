@@ -26,7 +26,7 @@ OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
 ifndef WINDOWS
 LIBS= -lgmp -ldl -lgomp
 else
-LIBS= -lws2_32
+LIBS= wsock32.lib
 endif
 
 all: $(OBJDIR)/.deps esbmc
