@@ -27,10 +27,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _WIN32
+#include <unistd.h>
+#else
+#include <windows.h>
+#define YY_NO_UNISTD_H
+// I am going to gnaw my own leg off.
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 
