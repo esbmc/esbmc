@@ -50,7 +50,7 @@ $(OBJS): $(DIRS)
 .PHONY: $(DIRS)
 
 $(OBJDIR)/solvers.o: $(OBJS)
-	$(VCBINS)/lib.exe /OUT:$(OBJDIR)/solvers.o $(OBJS)
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
 
 clean:
 	-rm solvers.o
