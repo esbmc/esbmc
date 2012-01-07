@@ -58,7 +58,7 @@ endif
 include $(ESBMCDIR)/common
 
 esbmc: $(OBJS)
-	$(CXX) $(CXXFLAGS) /Feesbmc $(OBJS) $(LIBS) /link /LIBPATH:$(WINSDKDIR)\\lib\\x64 /LIBPATH:$(VCDIR)\\lib\\amd64
+	$(FINLINKBIN) $(FINLINKOUT) esbmc $(OBJS) $(FINLINKTAIL)
 
 #cbmc-static: $(OBJS)
 #	$(CXX) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)
