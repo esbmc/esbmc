@@ -853,7 +853,20 @@ subst(struct symtab *sp, struct recur *rp)
 	 * First check for special macros.
 	 */
 	if (sp == filloc) {
-		(void)sheap("\"%s\"", ifiles->fname);
+		usch *put;
+		unsigned int i, idx, len;
+		len = strlen(ifiles->fname);
+		put = malloc(len * 2 + 2);
+		for (i = 0, idx = 0; i < len; i++) {
+			if (ifiles->fname[i] == '\\') {
+				put[idx++] = '\\';
+				put[idx++] = '\\';
+			} else {
+				put[idx++] = ifiles->fname[i];
+			}
+		}
+		(void)sheap("\"%s\"", put);
+
 		return 1;
 	} else if (sp == linloc) {
 		(void)sheap("%d", ifiles->lineno);
