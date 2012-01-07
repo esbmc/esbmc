@@ -34,11 +34,17 @@ INCCMD=-I
 PATHSEP=/
 
 ifdef WIN_MINGW32 
+# mingw doesn't seem to have pkg-config.
+MINGWROOTDIR= /usr/i686-pc-mingw32/sys-root/mingw
 CC     = i686-pc-mingw32-gcc
 CXX    = i686-pc-mingw32-g++
 LD     = i686-pc-mingw32-ld
 AR     = i686-pc-mingw32-ar
+CFLAGS= -I$(MINGWROOTDIR)/include
+CXXFLAGS= -I$(MINGWROOTDIR)/include
+LDFLAGS= -lkernel32 -L $(MINGWROOTDIR)/lib
 PARTLINKLD= $(LD)
+FINLINKTAIL= $(LDFLAGS)
 BLOBGENLD= $(LD)
 C2GOTO_INCDIR=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
 WINDOWS= 1
