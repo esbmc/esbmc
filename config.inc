@@ -1,12 +1,32 @@
-#CC     = i686-pc-mingw32-gcc
-#CXX    = i686-pc-mingw32-g++
-#LD     = i686-pc-mingw32-ld
-#AR     = i686-pc-mingw32-ar
+# Default configuration is linux; alternately, uncomment one of the following
+# variables. If building on windows, you must have g++ installed for dependancy
+# generation, and build in a cygwin environment.
+
+#LINUXCOMPAT=1
+#WIN_MSVC=1
+WIN_MINGW32=1
+
+# Defaults:
+
+CC=     gcc
+CXX=    g++
+DEPCXX= g++
+LD=     ld
+AR=     ar
 YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
+
+ifdef WIN_MINGW32 
+CC     = i686-pc-mingw32-gcc
+CXX    = i686-pc-mingw32-g++
+LD     = i686-pc-mingw32-ld
+AR     = i686-pc-mingw32-ar
+C2GOTO_INCDIR=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
 WINDOWS= 1
-#C2GOTO_INCDIR=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
+endif
+
+ifdef WIN_MSVC
 VCDIR="C:\\Program Files (x86)\\Microsoft Visual Studio 10.0\\VC"
 CYGVCDIR="/cygdrive/c/Program Files (x86)/Microsoft Visual Studio 10.0/VC"
 VCINCLUDES+=/I$(VCDIR)\\include
@@ -15,9 +35,9 @@ WINESBMCDIR= $(shell cygpath -w $(ESBMCDIR) | sed s/\\\\/\\\\\\\\/g )
 WINSDKDIR=C:\\Program\ Files\ \(x86\)\\Microsoft\ SDKs\\Windows\\v7.0A
 LD= $(VCBINS)\\link.exe
 C2GOTO_INCS=-I$(VCDIR)\\include -I$(WINSDKDIR)\\include
-DEPCXX=g++
 CXX=$(VCBINS)\\cl.exe
 CC=$(VCBINS)\\cl.exe
+endif
 
 # Linux etc.
 #you need to install the packages glibc-static and gmp-static to compile statically
