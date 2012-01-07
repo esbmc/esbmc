@@ -49,11 +49,11 @@ C2GOTO_DEPS= $(OBJS) ../util/$(OBJDIR)/util.o ../langapi/$(OBJDIR)/langapi.o \
 c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
 	$(FINLINKBIN) $(CXXFLAGS) $^ $(FINLINKOUT) $@ $(C2GOTO_DEPS) $(FINLINKTAIL)
 
-$(OBJDIR)/clib32.o: c2goto library/*.c $(MINGWRUNTIME)
+$(OBJDIR)/clib32.o: c2goto library/*.c | $(MINGWRUNTIME)
 	./c2goto library/*.c --32 --output clib32.goto --no-lock-check $(C2GOTO_INCS)
 	$(BLOBGENLD) -b binary clib32.goto -o $(OBJDIR)/clib32.o -r
 
-$(OBJDIR)/clib64.o: c2goto library/*.c $(MINGWRUNTIME)
+$(OBJDIR)/clib64.o: c2goto library/*.c | $(MINGWRUNTIME)
 	./c2goto library/*.c --32 --output clib64.goto --no-lock-check $(C2GOTO_INCS)
 	$(BLOBGENLD) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
 
