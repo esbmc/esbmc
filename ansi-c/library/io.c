@@ -4,7 +4,7 @@
 
 #include "intrinsics.h"
 
-#ifdef _WIN32
+#ifdef _MSVC_VER
 #include <BaseTsd.h>
 #define ssize_t SSIZE_T
 #endif
