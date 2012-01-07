@@ -6,6 +6,13 @@
 #WIN_MSVC=1
 WIN_MINGW32=1
 
+# Detect cygwin
+
+AMONCYGWIN= $(shell uname -a | grep CYGWIN; echo $$?)
+ifeq ($(AMONCYGWIN), 0)
+ONCYGWIN=1
+endif
+
 # Defaults:
 
 CC=     gcc
