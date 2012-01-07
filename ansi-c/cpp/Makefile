@@ -34,4 +34,4 @@ clean:
 include $(ESBMCDIR)/common
 
 preproc.o: $(OBJS)
-	x86_64-w64-mingw32-ld $^ -o $@ -r
+	$(BLOBGENLD) $^ -o $@ -r

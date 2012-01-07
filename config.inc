@@ -23,6 +23,7 @@ AR=     ar
 YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
+BLOBGENLD= ld
 PARTLINKLD= ld
 PARTLINKOUT= -o
 PARTLINKOPTS= -r
@@ -38,6 +39,7 @@ CXX    = i686-pc-mingw32-g++
 LD     = i686-pc-mingw32-ld
 AR     = i686-pc-mingw32-ar
 PARTLINKLD= $(LD)
+BLOBGENLD= $(LD)
 C2GOTO_INCDIR=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
 WINDOWS= 1
 endif
@@ -56,6 +58,7 @@ CC=$(VCBINS)\\cl.exe
 FINLINKBIN= $(CYGVCDIR)/bin/amd64/cl.exe
 FINLINKOUT= /Fe $(CXXFLAGS) /link /LIBPATH:$(VCDIR)\\lib\\amd64 /LIBPATH:"C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\"
 FINLINKTAIL=
+BLOBGENLD=x86_64-w64-mingw32-ld
 endif
 
 # Linux etc.
