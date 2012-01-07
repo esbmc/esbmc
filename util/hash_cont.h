@@ -11,8 +11,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 // you need to pick one of the following three options
 
+// Use STDEXT hashes on MSVC, gnu otherwise.
+
 // #define NO_HASH_CONT
-#if defined(_WIN32) || defined(__WIN32__)
+#ifdef _MSC_VER
 #define STDEXT_HASH_CONT
 #else
 #define GNU_HASH_CONT
