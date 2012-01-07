@@ -48,6 +48,8 @@ FINLINKTAIL= $(LDFLAGS)
 BLOBGENLD= $(LD)
 C2GOTO_INCDIR=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
 WINDOWS= 1
+MINGWRUNTIME= mingw_runtime_bodge
+MINGWRUNOBJS=libstdc++-6.dll libgcc_s_sjlj-1.dll
 endif
 
 ifdef WIN_MSVC
