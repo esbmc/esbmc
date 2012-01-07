@@ -33,7 +33,7 @@ PARTLINKOUT= -o
 PARTLINKOPTS= -r
 FINLINKBIN= $(CXX)
 FINLINKOUT= -o
-FINLINKTAIL=
+FINLINKTAIL= $(LDFLAGS) $(LIBS)
 INCCMD=-I
 PATHSEP=/
 
@@ -48,7 +48,7 @@ CFLAGS+= -I$(MINGWROOTDIR)/include
 CXXFLAGS+= -I$(MINGWROOTDIR)/include
 LDFLAGS+= -lkernel32 -L $(MINGWROOTDIR)/lib
 PARTLINKLD= $(LD)
-FINLINKTAIL= $(LDFLAGS)
+FINLINKTAIL= $(LDFLAGS) $(LIBS)
 BLOBGENLD= $(LD)
 C2GOTO_INCDIR=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
 WINDOWS= 1
@@ -71,6 +71,8 @@ FINLINKBIN= $(CYGVCDIR)/bin/amd64/cl.exe
 FINLINKOUT= /Fe $(CXXFLAGS) /link /LIBPATH:$(VCDIR)\\lib\\amd64 /LIBPATH:"C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\"
 FINLINKTAIL=
 BLOBGENLD=x86_64-w64-mingw32-ld
+INCCMD=/I
+PATHSEP=\\
 endif
 
 # Linux etc.
