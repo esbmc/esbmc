@@ -17,7 +17,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/prop/prop.h>
 #include <solvers/prop/prop_conv.h>
+#ifdef BOOLECTOR
 #include <solvers/boolector/boolector_dec.h>
+#endif
 #ifdef Z3
 #include <solvers/z3/z3_dec.h>
 #endif
@@ -107,12 +109,14 @@ protected:
     bv_cbmct bv_cbmc;
   };
 
+#ifdef BOOLECTOR
   class boolector_solver : public solver_base {
   public:
     boolector_solver(bmc_baset &bmc);
   protected:
     boolector_dect boolector_dec;
   };
+#endif
 
 #ifdef Z3
   class z3_solver : public solver_base {
