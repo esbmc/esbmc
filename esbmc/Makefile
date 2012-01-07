@@ -9,9 +9,6 @@ SRCS = main.cpp parseoptions.cpp bmc.cpp  \
       counterex_pretty_greedy.cpp \
       counterex_pretty_pbs.cpp options.cpp
 
-# Additional include for Z3, as z3_conv.h depends on it.
-INCLUDES= -I $(Z3)/include
-
 # additional objects for esbmc binary
 OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
       ../big-int/$(OBJDIR)/bigint.o \
@@ -31,8 +28,14 @@ LIBS+= -L$(BOOLECTOR)/lib -lboolector
 endif
 
 ifdef Z3
+INCLUDES= $(INCCMD)$(Z3)$(PATHSEP)include
 CXXFLAGS+= -DZ3
+endif
+
+ifdef WIN_MSVC
 LIBS+= $(Z3)\\x64\\z3.lib $(WINSDKDIR)\\lib\\x64\\Kernel32.lib
+else
+LIBS+= -L $(Z3)/lib -lz3
 endif
 
 ifdef MINISAT
