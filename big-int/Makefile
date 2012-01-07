@@ -13,4 +13,4 @@ clean:
 	-rm -f $(OBJDIR)/.deps
 
 test-bigint: $(OBJS)
-	$(CYGVCDIR)/bin/amd64/cl.exe $(CXXFLAGS) /Fetest-bigint $(OBJS) /link /LIBPATH:$(VCDIR)\\lib\\amd64 /LIBPATH:"C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\"
+	$(FINLINKBIN) $(FINLINKOUT) test-bigint $(OBJS) $(FINLINKTAIL)

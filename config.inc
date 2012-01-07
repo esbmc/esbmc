@@ -16,6 +16,9 @@ AR=     ar
 YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
+FINLINKBIN= $(CXX)
+FINLINKOUT= -o
+FINLINKTAIL=
 
 ifdef WIN_MINGW32 
 CC     = i686-pc-mingw32-gcc
@@ -37,6 +40,9 @@ LD= $(VCBINS)\\link.exe
 C2GOTO_INCS=-I$(VCDIR)\\include -I$(WINSDKDIR)\\include
 CXX=$(VCBINS)\\cl.exe
 CC=$(VCBINS)\\cl.exe
+FINLINKBIN= $(CYGVCDIR)/bin/amd64/cl.exe
+FINLINKOUT= /Fe $(CXXFLAGS) /link /LIBPATH:$(VCDIR)\\lib\\amd64 /LIBPATH:"C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\"
+FINLINKTAIL=
 endif
 
 # Linux etc.
