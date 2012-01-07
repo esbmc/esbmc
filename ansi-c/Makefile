@@ -47,7 +47,7 @@ C2GOTO_DEPS= $(OBJS) ../util/$(OBJDIR)/util.o ../langapi/$(OBJDIR)/langapi.o \
 	     cpp/preproc.o headers/headers.o
 
 c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
-	$(CYGVCDIR)/bin/amd64/cl.exe $(CXXFLAGS) $^ /Fe$@ $(C2GOTO_DEPS) /I$(VCDIR)\\include /I$(WINESBMCDIR)\\util /I$(WINESBMCDIR) /I$(WINSDKDIR)\\include /link /LIBPATH:$(VCDIR)\\lib\\amd64 /LIBPATH:"C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\"
+	$(FINLINKBIN) $(CXXFLAGS) $^ $(FINLINKOUT) $@ $(C2GOTO_DEPS) $(FINLINKTAIL)
 
 $(OBJDIR)/clib32.o: c2goto library/*.c
 	./c2goto library/*.c --32 --output clib32.goto --no-lock-check $(C2GOTO_INCS)
