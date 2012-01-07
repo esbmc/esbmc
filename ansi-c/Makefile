@@ -81,7 +81,7 @@ headers_dir:
 ###############################################################################
 
 $(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/preproc.o headers/headers.o
-	$(VCBINS)\\lib.exe $(LDFLAGS) /OUT:$@ $^
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
 
 clean:
 	$(MAKE) -C cpp clean
