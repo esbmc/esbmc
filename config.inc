@@ -16,6 +16,9 @@ AR=     ar
 YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
+PARTLINKLD= ld
+PARTLINKOUT= -o
+PARTLINKOPTS= -r
 FINLINKBIN= $(CXX)
 FINLINKOUT= -o
 FINLINKTAIL=
@@ -25,6 +28,7 @@ CC     = i686-pc-mingw32-gcc
 CXX    = i686-pc-mingw32-g++
 LD     = i686-pc-mingw32-ld
 AR     = i686-pc-mingw32-ar
+PARTLINKLD= $(LD)
 C2GOTO_INCDIR=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
 WINDOWS= 1
 endif
