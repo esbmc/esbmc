@@ -44,7 +44,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
     if (parse()) return 1;
     if (typecheck()) return 1;
 
-    std::ofstream out(cmdline.getval("output"));
+    std::ofstream out(cmdline.getval("output"), std::ios::out | std::ios::binary);
 
     if (write_goto_binary(out, context, goto_functions)) {
       std::cerr << "Failed to write C library to binary obj" << std::endl;;
