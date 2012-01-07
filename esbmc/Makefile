@@ -23,12 +23,6 @@ OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
       ../util/$(OBJDIR)/util.o \
       ../cpp/$(OBJDIR)/cpp.o
 
-ifndef WINDOWS
-LIBS= -lgmp -ldl -lgomp
-else
-LIBS= wsock32.lib
-endif
-
 all: $(OBJDIR)/.deps esbmc
 
 ifdef BOOLECTOR
