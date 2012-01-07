@@ -7,6 +7,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 \*******************************************************************/
 
 #include <assert.h>
+#include <malloc.h>
 #include <set>
 #include <i2string.h>
 

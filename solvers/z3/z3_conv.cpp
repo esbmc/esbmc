@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <malloc.h>
 #include <fstream>
 #include <sstream>
 #include <std_expr.h>
