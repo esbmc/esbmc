@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 #include <global.h>
+#include <malloc.h>
 #include <map>
 #include <sstream>
 
