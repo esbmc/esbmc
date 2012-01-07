@@ -840,7 +840,7 @@ bool reachability_treet::dfs_position::write_to_file(
   FILE *f;
   unsigned int i;
 
-  f = fopen(filename.c_str(), "w");
+  f = fopen(filename.c_str(), "wb");
   if (f == NULL) {
     std::cerr << "Couldn't open checkpoint output file" << std::endl;
     return true;
@@ -901,7 +901,7 @@ bool reachability_treet::dfs_position::read_from_file(
   unsigned int i, j;
   char c;
 
-  f = fopen(filename.c_str(), "r");
+  f = fopen(filename.c_str(), "rb");
   if (f == NULL) {
     std::cerr << "Couldn't open checkpoint input file" << std::endl;
     return true;

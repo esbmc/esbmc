@@ -159,7 +159,7 @@ void add_cprover_library(
   GetTempPath(sizeof(tmpdir), tmpdir);
   GetTempFileName(tmpdir, "bmc", 0, symname_buffer);
 #endif
-  f = fopen(symname_buffer, "w");
+  f = fopen(symname_buffer, "wb");
   if (fwrite(this_clib_ptrs[0], size, 1, f) != 1) {
     std::cerr << "Couldn't manipulate internal C library" << std::endl;
     abort();
