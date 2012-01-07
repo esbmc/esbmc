@@ -2,9 +2,13 @@
 # variables. If building on windows, you must have g++ installed for dependancy
 # generation, and build in a cygwin environment.
 
-#LINUXCOMPAT=1
+#LINUX=1
 #WIN_MSVC=1
 WIN_MINGW32=1
+
+# Enable linux compatibility (gcc34), not yet implemented
+
+#LINUXCOMPAT=1
 
 # Detect cygwin
 

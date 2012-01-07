@@ -5,10 +5,15 @@ SATDIR ?= $(HOME)
 ifdef WIN_MSVC
 Z31 = $(SATDIR)/z3
 Z3 = $(shell cygpath -w $(Z31) | sed s/\\\\/\\\\\\\\/g )
-else
-Z3 = $(SATDIR)/z3
 endif
+
+ifdef WIN_MINGW32
+Z3 = $(SATDIR)/z3_win
+endif
+
+ifdef LINUX
 Z3GCC = $(SATDIR)/z3
+endif
 
 # Only use these solvers on linux
 ifndef WIN_MSVC
