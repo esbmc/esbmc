@@ -33,7 +33,7 @@ CXXFLAGS+= -DZ3
 endif
 
 ifdef WIN_MSVC
-LIBS+= $(Z3)\\x64\\z3.lib $(WINSDKDIR)\\lib\\x64\\Kernel32.lib
+LIBS+= $(Z3)\\x64\\z3.lib "$(WINSDKDIR)\\lib\\x64\\Kernel32.lib"
 else
 LIBS+= -L $(Z3)/lib -lz3
 endif
