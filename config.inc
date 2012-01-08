@@ -70,7 +70,7 @@ ifdef WIN_MSVC
 
 WINSDKDIR="$(shell reg query HKLM\\SOFTWARE\\Microsoft\\Microsoft\ SDKs\\Windows /v CurrentInstallFolder | grep REG_SZ | sed "s\# *CurrentInstallFolder *REG_SZ *\(.*\)\#\1\#" | sed s/\\\\/\\\\\\\\/g)"
 
-VCDIR="$(shell reg query HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\10.0\\InstalledProducts\\Instrumentation /v Location | grep REG_SZ | sed "s\# *Location *REG_SZ *\(.*\)\#\1\#" | sed s/\\\\/\\\\\\\\/g)"
+VCDIR="$(shell reg query HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\VisualStudio\\10.0 /v ShellFolder | grep REG_SZ | sed "s\# *ShellFolder *REG_SZ *\(.*\)\#\1\#" | sed s/\\\\/\\\\\\\\/g)VC"
 
 CYGVCDIR=$(shell cygpath -u $(VCDIR))
 VCINCLUDES+=/I$(VCDIR)\\include
