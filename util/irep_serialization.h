@@ -62,11 +62,10 @@ public:
   class ireps_containert
   {
   public:
-    typedef std::vector<std::pair<bool, irept> > ireps_on_readt;
+    typedef numbering<irept> ireps_on_readt;
     ireps_on_readt ireps_on_read;
 
-    typedef hash_map_cont<
-      irept, unsigned long, irep_full_hash> ireps_on_writet;
+    typedef numbering<irept> irepts_on_writet;
     ireps_on_writet ireps_on_write;
     
     typedef std::vector<bool> string_mapt;
