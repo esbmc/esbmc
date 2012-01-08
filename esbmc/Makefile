@@ -54,7 +54,7 @@ endif
 
 include $(ESBMCDIR)/common
 
-esbmc: $(OBJS) mingw_runtime_bodge
+esbmc: $(OBJS) $(MINGWRUNTIME)
 	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(FINLINKTAIL)
 
 #cbmc-static: $(OBJS)
