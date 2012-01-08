@@ -58,7 +58,7 @@ endif
 WINDOWS= 1
 MINGWRUNTIME= mingw_runtime_bodge
 MINGWRUNOBJS=libstdc++-6.dll libgcc_s_sjlj-1.dll
-PLATLIBS=
+PLATLIBS=-lws2_32 -lkernel32
 FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS)
 endif
 
