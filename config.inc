@@ -50,7 +50,11 @@ CXXFLAGS+= -I$(MINGWROOTDIR)/include
 LDFLAGS+= -lkernel32 -L $(MINGWROOTDIR)/lib
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
-C2GOTO_INCS=C:\\cygwin\\usr\\i686-pc-mingw32\\sys-root\\mingw\\include
+ifdef ONCYGWIN
+C2GOTO_INCS=-I$(shell cygpath -w $(MINGWROOTDIR)/include)
+else
+C2GOTO_INCS=-I$(MINGWROOTDIR)/include
+endif
 WINDOWS= 1
 MINGWRUNTIME= mingw_runtime_bodge
 MINGWRUNOBJS=libstdc++-6.dll libgcc_s_sjlj-1.dll
