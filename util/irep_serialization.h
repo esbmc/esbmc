@@ -62,7 +62,7 @@ public:
   class ireps_containert
   {
   public:
-    typedef numbering<irept> ireps_on_readt;
+    typedef std::map<unsigned, irept> irepts_on_readt;
     ireps_on_readt ireps_on_read;
 
     typedef numbering<irept> irepts_on_writet;

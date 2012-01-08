@@ -72,8 +72,8 @@ void irep_serializationt::reference_convert(
 {
   unsigned id = read_long(in);
   
-  if (id < ireps_container.ireps_on_read.size() && 
-      ireps_container.ireps_on_read[id].first)
+  if (ireps_container.ireps_on_read.find(id) !=
+      ireps_container.ireps_on_read.end())
   {
     irep = ireps_container.ireps_on_read[id].second;
   }
@@ -199,18 +199,7 @@ Function: irep_serializationt::insert_on_read
 
 unsigned long irep_serializationt::insert_on_read(unsigned id, const irept& i) 
 {
-  if (id>=ireps_container.ireps_on_read.size())
-    ireps_container.ireps_on_read.resize(1+id*2, 
-      std::pair<bool, irept>(false, get_nil_irep()));
-    
-  if (ireps_container.ireps_on_read[id].first)
-    throw "irep id read twice.";
-  else
-  {
-    ireps_container.ireps_on_read[id]=
-      std::pair<bool,irept>(true, i);
-  }  
-
+  ireps_container.ireps_on_read[id] = i;
   return id;
 }
 
