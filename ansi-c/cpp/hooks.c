@@ -15,10 +15,10 @@ struct hooked_header {
  * ansi-c/headers will only ever have one '_' character at the start. So, some
  * hackery is required */
 
-#ifdef _WIN32
+#ifdef __MINGW32__
 #define p(x) x
 #else
-#define p(x) _##(x)
+#define p(x) _##x
 #endif
 
 struct hooked_header headers[] = {

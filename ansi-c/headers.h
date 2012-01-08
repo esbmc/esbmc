@@ -5,10 +5,10 @@
  * the symbol varies when compiling for windows, but doesn't when using LD to
  * produce the header blobs. So, hacks: */
 
-#ifdef _WIN32
+#ifdef __MINGW32__
 #define p(x) (x)
 #else
-#define p(x) _##(x)
+#define p(x) _##x
 #endif
 
 extern char p(binary_stddef_h_start);
