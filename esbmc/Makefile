@@ -55,7 +55,7 @@ endif
 include $(ESBMCDIR)/common
 
 esbmc: $(OBJS)
-	$(FINLINKBIN) $(FINLINKOUT) esbmc $(OBJS) $(FINLINKTAIL)
+	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(FINLINKTAIL)
 
 #cbmc-static: $(OBJS)
 #	$(CXX) -static -static-libgcc -Wl,-Bstatic -o cbmc-static $(OBJS) $(LIBS)

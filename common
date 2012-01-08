@@ -38,7 +38,7 @@ CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 # A generic target; potentially not defined by the includer
 
 $(MAINOBJ): $(OBJS)
-	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
+	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
 #clean defined by includer
 

@@ -58,7 +58,7 @@ $(OBJDIR)/clib64.o: c2goto library/*.c | $(MINGWRUNTIME)
 	$(BLOBGENLD) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
 
 $(OBJDIR)/clib.o: c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
-	$(PARTLINKLD) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(PARTLINKOUT) $(OBJDIR)/clib.o $(PARTLINKOPTS)
+	$(PARTLINKLD) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(PARTLINKOUT)$(OBJDIR)/clib.o $(PARTLINKOPTS)
 
 ###############################################################################
 
@@ -81,7 +81,7 @@ headers_dir:
 ###############################################################################
 
 $(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/preproc.o headers/headers.o
-	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
+	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
 clean:
 	$(MAKE) -C cpp clean
