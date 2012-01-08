@@ -39,7 +39,9 @@ INCCMD=-I
 PATHSEP=/
 
 ifdef LINUX
-CXXFLAGS+= -Wno-deprecated
+CXXFLAGS += -Wall -Wextra -Wno-deprecated
+GCCFLAGS += -Wall -Wextra -Wno-deprecated
+OPTS ?= -O3
 endif
 
 ifdef WIN_MINGW32 
@@ -50,7 +52,11 @@ CXX    = i686-pc-mingw32-g++
 LD     = i686-pc-mingw32-ld
 AR     = i686-pc-mingw32-ar
 CFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501
-CXXFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501 -Wno-deprecated
+CXXFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501
+CXXFLAGS += -Wall -Wextra -Wno-deprecated
+GCCFLAGS += -Wall -Wextra -Wno-deprecated
+OPTS ?= -O3
+
 LDFLAGS+= -lkernel32 -L $(MINGWROOTDIR)/lib
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
@@ -95,8 +101,6 @@ endif
 
 # Linux etc.
 #you need to install the packages glibc-static and gmp-static to compile statically
-OPTS ?= -O3
-GCCFLAGS ?= #-Wall -Wextra -Wno-deprecated
 #LDFLAGS=
 
 # Work with latest version of gcc
