@@ -26,7 +26,7 @@ $(OBJDIR)/%.o : %.cpp
 	$(VCBINS)/cl.exe /TP $(VCINCLUDES) /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
 
 $(OBJDIR)/%.o : %.c
-	$(VCBINS)/cl.exe /TC /I$(VCDIR)\\include /I$(WINESBMCDIR)\\util /I$(WINESBMCDIR) /I$(WINSDKDIR)\\include $(INCLUDES) $(CFLAGS) /Fo$@ $< /c
+	$(VCBINS)/cl.exe /TC $(VCINCLUDES) /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
 endif
 
 # list of includes, potentially modified by includer
