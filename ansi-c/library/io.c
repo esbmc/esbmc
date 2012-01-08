@@ -1,3 +1,7 @@
+#ifdef _MINGW
+#define _MT /* Don't define putchar/getc/getchar for us */
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
