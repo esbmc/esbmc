@@ -77,7 +77,7 @@ include $(OBJDIR)/.deps
 endif
 
 # Special purpose features,
-ifdef WINDOWS
+ifndef LINUX
 CXXFLAGS+=-DNO_OPENSSL
 endif
 
