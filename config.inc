@@ -45,8 +45,8 @@ CC     = i686-pc-mingw32-gcc
 CXX    = i686-pc-mingw32-g++
 LD     = i686-pc-mingw32-ld
 AR     = i686-pc-mingw32-ar
-CFLAGS+= -I$(MINGWROOTDIR)/include
-CXXFLAGS+= -I$(MINGWROOTDIR)/include
+CFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501
+CXXFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501
 LDFLAGS+= -lkernel32 -L $(MINGWROOTDIR)/lib
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
