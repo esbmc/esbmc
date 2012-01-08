@@ -16,6 +16,7 @@
 
 // Whipped out of glibc headers. Don't exactly know how these work, but they're
 // what the linux version works upon.
+#ifdef _MSVC
 enum
   {
     FP_NAN,
@@ -29,6 +30,7 @@ enum
     FP_NORMAL
 # define FP_NORMAL FP_NORMAL
   };
+#endif
 #endif
 
 int abs(int i) { return __ESBMC_abs(i); }
