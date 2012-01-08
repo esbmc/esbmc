@@ -67,6 +67,11 @@ FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS)
 endif
 
 ifdef WIN_MSVC
+
+SDKDIR=$(shell reg query HKLM\\SOFTWARE\\Microsoft\\Microsoft\ SDKs\\Windows /v CurrentInstallFolder | grep REG_SZ | sed "s\# *CurrentInstallFolder *REG_SZ *\(.*\)\#\1\#" | sed s\#\\\#\\\\\#)
+
+VCDIR=$(shell reg query HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\10.0\\InstalledProducts\\Instrumentation /v Location | grep REG_SZ | sed "s\# *Instrumentation *REG_SZ *\(.*\)\#\1\#" | sed s\#\\\#\\\\\#)
+
 VCDIR="C:\\Program Files (x86)\\Microsoft Visual Studio 10.0\\VC"
 CYGVCDIR="/cygdrive/c/Program Files (x86)/Microsoft Visual Studio 10.0/VC"
 VCINCLUDES+=/I$(VCDIR)\\include
