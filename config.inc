@@ -53,7 +53,7 @@ BLOBGENLD= $(LD)
 ifdef ONCYGWIN
 C2GOTO_INCS=-I$(shell cygpath -w $(MINGWROOTDIR)/include)
 else
-C2GOTO_INCS=-I$(MINGWROOTDIR)/include
+C2GOTO_INCS=-I$(MINGWROOTDIR)/include -D_MINGW
 endif
 WINDOWS= 1
 MINGWRUNTIME= mingw_runtime_bodge

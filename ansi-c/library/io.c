@@ -9,6 +9,11 @@
 #define ssize_t SSIZE_T
 #endif
 
+#ifdef _MINGW
+#undef feof
+#undef ferror
+#endif
+
 int putchar(int c)
 {
   _Bool error;
