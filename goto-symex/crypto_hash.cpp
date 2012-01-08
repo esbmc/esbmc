@@ -145,8 +145,9 @@ crypto_hash::crypto_hash(std::string str)
 
 crypto_hash::crypto_hash()
 {
-
-  init(NULL, 0);
+  // Valid; some exist as default constructions within other parts of ESBMC.
+  // Preventing this constructor running leads to *all* runtimes being blocked
+  // by errors thrown from here.
 }
 
 #endif /* NO_OPENSSL */
