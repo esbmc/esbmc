@@ -68,16 +68,14 @@ endif
 
 ifdef WIN_MSVC
 
-SDKDIR=$(shell reg query HKLM\\SOFTWARE\\Microsoft\\Microsoft\ SDKs\\Windows /v CurrentInstallFolder | grep REG_SZ | sed "s\# *CurrentInstallFolder *REG_SZ *\(.*\)\#\1\#" | sed s\#\\\#\\\\\#)
+WINSDKDIR=$(shell reg query HKLM\\SOFTWARE\\Microsoft\\Microsoft\ SDKs\\Windows /v CurrentInstallFolder | grep REG_SZ | sed "s\# *CurrentInstallFolder *REG_SZ *\(.*\)\#\1\#" | sed s/\\\\/\\\\\\\\/g)
 
-VCDIR=$(shell reg query HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\10.0\\InstalledProducts\\Instrumentation /v Location | grep REG_SZ | sed "s\# *Instrumentation *REG_SZ *\(.*\)\#\1\#" | sed s\#\\\#\\\\\#)
+VCDIR=$(shell reg query HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\10.0\\InstalledProducts\\Instrumentation /v Location | grep REG_SZ | sed "s\# *Instrumentation *REG_SZ *\(.*\)\#\1\#" | sed s/\\\\/\\\\\\\\/g)
 
-VCDIR="C:\\Program Files (x86)\\Microsoft Visual Studio 10.0\\VC"
-CYGVCDIR="/cygdrive/c/Program Files (x86)/Microsoft Visual Studio 10.0/VC"
+CYGVCDIR=$(shell cygpath -u $(VCDIR))
 VCINCLUDES+=/I$(VCDIR)\\include
 VCBINS=$(VCDIR)/bin/amd64
 WINESBMCDIR= $(shell cygpath -w $(ESBMCDIR) | sed s/\\\\/\\\\\\\\/g )
-WINSDKDIR=C:\\Program\ Files\ \(x86\)\\Microsoft\ SDKs\\Windows\\v7.0A
 LD= $(VCBINS)\\link.exe
 C2GOTO_INCS=-I$(VCDIR)\\include -I$(WINSDKDIR)\\include -D_MSVC
 CXX=$(VCBINS)\\cl.exe
