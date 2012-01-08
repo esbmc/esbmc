@@ -38,6 +38,10 @@ FINLINKTAIL= $(LDFLAGS) $(PLATLIBS) $(LIBS)
 INCCMD=-I
 PATHSEP=/
 
+ifdef LINUX
+CXXFLAGS+= -Wno-deprecated
+endif
+
 ifdef WIN_MINGW32 
 # mingw doesn't seem to have pkg-config.
 MINGWROOTDIR= /usr/i686-pc-mingw32/sys-root/mingw
@@ -46,7 +50,7 @@ CXX    = i686-pc-mingw32-g++
 LD     = i686-pc-mingw32-ld
 AR     = i686-pc-mingw32-ar
 CFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501
-CXXFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501
+CXXFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501 -Wno-deprecated
 LDFLAGS+= -lkernel32 -L $(MINGWROOTDIR)/lib
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
