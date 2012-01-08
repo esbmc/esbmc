@@ -31,6 +31,12 @@ clean:
 	-rm y.output
 	-rm .deps
 
+ifdef WIN_MSVC
+# For no reason I can detect, if opts are enabled in this dir, some linking
+# conflict occurs with msvc and i2string.o. Increadibly bizare.
+OPTS= /Od
+endif
+
 include $(ESBMCDIR)/common
 
 preproc.o: $(OBJS)
