@@ -75,7 +75,7 @@ void irep_serializationt::reference_convert(
   if (ireps_container.ireps_on_read.find(id) !=
       ireps_container.ireps_on_read.end())
   {
-    irep = ireps_container.ireps_on_read[id].second;
+    irep = ireps_container.ireps_on_read[id];
   }
   else
   {

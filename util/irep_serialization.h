@@ -63,10 +63,10 @@ public:
   {
   public:
     typedef std::map<unsigned, irept> irepts_on_readt;
-    ireps_on_readt ireps_on_read;
+    irepts_on_readt ireps_on_read;
 
     typedef std::vector<irept> irepts_on_writet;
-    ireps_on_writet ireps_on_write;
+    irepts_on_writet ireps_on_write;
     
     typedef std::vector<bool> string_mapt;
     string_mapt string_map;
