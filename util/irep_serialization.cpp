@@ -146,16 +146,20 @@ void irep_serializationt::reference_convert(
   const irept &irep,
   std::ostream &out)
 {
-  ireps_containert::ireps_on_writet::const_iterator fi = 
-    ireps_container.ireps_on_write.find(irep);
-  if (fi==ireps_container.ireps_on_write.end()) 
-  {           
-    unsigned id=insert_on_write(irep);
-    write_long(out, id);
-    write_irep(out, irep);
-  } else {
-    write_long(out, fi->second);
+  // Do we have this irep already? Horrible complexity here.
+  unsigned int i;
+  for (i = 0; i < ireps_container.ireps_on_write.size(); i++) {
+    if (full_eq(ireps_container.ireps_on_write[i], irep)) {
+      // Match, at idx i
+      write_long(out, i);
+      return;
+    }
   }
+
+  i = ireps_container.ireps_on_write.size();
+  ireps_container.ireps_on_write.push_back(irep);
+  write_long(out, i);
+  write_irep(out, irep);
 }
 
 /*******************************************************************\
@@ -172,16 +176,8 @@ Function: irep_serializationt::insert_on_write
 
 unsigned long irep_serializationt::insert_on_write( const irept& i ) 
 {
-  std::pair<ireps_containert::ireps_on_writet::const_iterator,bool> res=
-    ireps_container.ireps_on_write.insert(
-      std::pair<irept, unsigned long>
-      (i, ireps_container.ireps_on_write.size()));
-  if (!res.second)
-  {
-    return ireps_container.ireps_on_write.size();
-  } else {
-    return res.first->second;
-  }      
+  // This will lookup or autonumber ireps.
+  return ireps_container.ireps_on_write.number(i);
 }
 
 /*******************************************************************\

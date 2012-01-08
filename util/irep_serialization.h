@@ -65,7 +65,7 @@ public:
     typedef std::map<unsigned, irept> irepts_on_readt;
     ireps_on_readt ireps_on_read;
 
-    typedef numbering<irept> irepts_on_writet;
+    typedef std::vector<irept> irepts_on_writet;
     ireps_on_writet ireps_on_write;
     
     typedef std::vector<bool> string_mapt;
