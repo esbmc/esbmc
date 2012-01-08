@@ -90,9 +90,6 @@ public:
     clear(); 
   };
   
-  unsigned long insert_on_write(const irept&);
-  unsigned long insert_on_read(unsigned id, const irept&);
-  
   void reference_convert(std::istream&, irept &irep);
   void reference_convert(const irept &irep, std::ostream&);
 

@@ -80,7 +80,7 @@ void irep_serializationt::reference_convert(
   else
   {
     read_irep(in, irep);
-    insert_on_read(id, irep);
+    ireps_container.ireps_on_read[id] = irep;
   }
 }
 
@@ -160,43 +160,6 @@ void irep_serializationt::reference_convert(
   ireps_container.ireps_on_write.push_back(irep);
   write_long(out, i);
   write_irep(out, irep);
-}
-
-/*******************************************************************\
- 
-Function: irep_serializationt::insert_on_write
- 
-  Inputs: an unsigned long and an irep
- 
- Outputs: true on success, false otherwise
- 
- Purpose: inserts an irep into the hashtable 
- 
-\*******************************************************************/
-
-unsigned long irep_serializationt::insert_on_write( const irept& i ) 
-{
-  // This will lookup or autonumber ireps.
-  return ireps_container.ireps_on_write.number(i);
-}
-
-/*******************************************************************\
- 
-Function: irep_serializationt::insert_on_read
- 
-  Inputs: an unsigned long and an irep
- 
- Outputs: true on success, false otherwise
- 
- Purpose: inserts an irep into the hashtable, but only the id-hashtable
-          (only to be used upon reading ireps from a file) 
- 
-\*******************************************************************/
-
-unsigned long irep_serializationt::insert_on_read(unsigned id, const irept& i) 
-{
-  ireps_container.ireps_on_read[id] = i;
-  return id;
 }
 
 /*******************************************************************\
