@@ -97,6 +97,8 @@ FINLINKTAIL= $(CXXFLAGS) /link /LIBPATH:"$(VCDIR)\\lib\\amd64" /LIBPATH:"C:\\Pro
 PARTLINKLD=$(VCBINS)/lib.exe
 PARTLINKOUT= /OUT:
 PARTLINKOPTS= 
+
+OPTS ?= /O2
 endif
 
 # Linux etc.
