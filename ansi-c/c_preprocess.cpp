@@ -141,6 +141,7 @@ static const char *cpp_normal_defs[] = {
 "_POSIX_C_SOURCE=200112L",
 #endif
 "__PCC__", // Makes mingw headers a lot happier; as we're using PCC.
+"__restrict__=/**/",
 NULL
 };
 
