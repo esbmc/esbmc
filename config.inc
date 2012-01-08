@@ -109,14 +109,3 @@ endif
 OBJDIR?= .objs
 # Danger: evaluating expression creates directory :o
 CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
-
-# use these for Cygwin:
-# OPTS = -O2
-# GCCFLAGS = -Wall -mno-cygwin
-# LDFLAGS = -mno-cygwin
-
-# SMT and SAT solver locations. Put your own machine-specific absolute paths to
-# these in "local.inc", and then don't commit it. Alternately, set SATDIR to
-# point at a directory containing such solvers in your environment.
-#
-# Currently only Z3 is required for building ESBMC.
