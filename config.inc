@@ -88,7 +88,7 @@ PATHSEP=\\
 CXXFLAGS+=/I"$(VCDIR)\\include"
 PLATLIBS="C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\wsock32.lib"
 FINLINKTAIL= $(CXXFLAGS) /link /LIBPATH:"$(VCDIR)\\lib\\amd64" /LIBPATH:"C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\" $(PLATLIBS) $(LIBS)
-PARTLINKLD="$(VCBINS)\\lib.exe"
+PARTLINKLD=$(VCBINS)/lib.exe
 PARTLINKOUT= /OUT:
 PARTLINKOPTS= 
 endif
