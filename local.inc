@@ -11,6 +11,10 @@ ifdef WIN_MINGW32
 Z3 = $(SATDIR)/z3_win
 endif
 
+ifdef LINUX
+Z3 = $(SATDIR)/z3
+endif
+
 Z3GCC = $(SATDIR)/z3_win
 
 # Only use these solvers on linux
