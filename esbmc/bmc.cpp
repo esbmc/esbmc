@@ -13,8 +13,10 @@ Authors: Daniel Kroening, kroening@kroening.com
 #ifndef _WIN32
 #include <unistd.h>
 #else
-// Including windows.h here offends bigint.hh
-extern "C" unsigned int GetProcessId(unsigned long Process);
+#include <windows.h>
+#include <winbase.h>
+#undef ERROR
+#undef small
 #endif
 
 #include <sstream>
@@ -799,7 +801,7 @@ void bmc_baset::write_checkpoint(void)
 #ifndef _WIN32
     pid_t pid = getpid();
 #else
-    unsigned long pid = GetProcessId(-1);
+    unsigned long pid = GetCurrentProcessId();
 #endif
     sprintf(buffer, "%d", pid);
     f = "esbmc_checkpoint." + std::string(buffer);
