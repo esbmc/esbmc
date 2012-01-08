@@ -71,14 +71,14 @@ CXX=$(VCBINS)\\cl.exe
 CC=$(VCBINS)\\cl.exe
 FINLINKBIN= $(CYGVCDIR)/bin/amd64/cl.exe
 FINLINKOUT= /Fe
-FINLINKTAIL= $(CXXFLAGS) /link /LIBPATH:$(VCDIR)\\lib\\amd64 /LIBPATH:"C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\"
 BLOBGENLD=x86_64-w64-mingw32-ld
 INCCMD=/I
 PATHSEP=\\
-PLATLIBS=wsock32.lib
-FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS)
+CXXFLAGS+=/I$(VCDIR)\\include
+PLATLIBS="C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\wsock32.lib"
+FINLINKTAIL= $(CXXFLAGS) /link /LIBPATH:$(VCDIR)\\lib\\amd64 /LIBPATH:"C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\" $(PLATLIBS) $(LIBS)
 PARTLINKLD= $(VCBINS)\\lib.exe
-PARTLINKOUT= /OUT
+PARTLINKOUT= /OUT:
 PARTLINKOPTS= 
 endif
 
