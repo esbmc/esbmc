@@ -6,6 +6,7 @@ Author:
 
 \*******************************************************************/
 
+#include <stdio.h>
 #include <string>
 #include <global.h>
 
