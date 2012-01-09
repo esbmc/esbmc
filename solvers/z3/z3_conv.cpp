@@ -518,7 +518,7 @@ z3_convt::finalize_pointer_chain(void)
   if (num_ptrs == 0)
     return;
 
-  Z3_ast ptr_idxs[num_ptrs];
+  Z3_ast *ptr_idxs = (Z3_ast*)alloca(sizeof(Z3_ast) * num_ptrs);
 
   Z3_sort native_int_sort;
   if (int_encoding)
@@ -1837,9 +1837,9 @@ z3_convt::convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv)
   convert_bv(cast, target);
 
   // Construct array for all possible object outcomes
-  Z3_ast is_in_range[addr_space_data.size()];
-  Z3_ast obj_ids[addr_space_data.size()];
-  Z3_ast obj_starts[addr_space_data.size()];
+  Z3_ast *is_in_range = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
+  Z3_ast *obj_ids = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
+  Z3_ast *obj_starts = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
 
   // Get symbol for current array of addrspace data
   std::string arr_sym_name = get_cur_addrspace_ident();
@@ -2061,7 +2061,7 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
   if (expr.id() == "union")
     size++;
 
-  Z3_ast args[size];
+  Z3_ast *args = (Z3_ast*)alloca(sizeof(Z3_ast) * size);
 
   // Populate tuple with members of that struct/union
   for (struct_typet::componentst::const_iterator
@@ -3794,7 +3794,7 @@ Z3_ast z3_convt::struct_from_bv(const typet &type, Z3_ast src)
   create_struct_union_type(type, false, our_struct_type);
 
   unsigned int size = components.size(), offset = 0, idx = 0;
-  Z3_ast args[size];
+  Z3_ast *args = (Z3_ast*)alloca(sizeof(Z3_ast) * size);
   for (struct_typet::componentst::const_iterator it = components.begin();
        it != components.end(); it++)
   {

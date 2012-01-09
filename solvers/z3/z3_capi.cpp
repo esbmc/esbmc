@@ -220,7 +220,7 @@ Z3_ast z3_capi::mk_tuple(Z3_context ctx, Z3_sort sort, ...)
   va_end(args);
 
   // Generate array of args
-  Z3_ast arg_list[num];
+  Z3_ast *arg_list = (Z3_ast*)alloca(sizeof(Z3_ast) * num);
   va_start(args, sort);
   for (i = 0; ; i++) {
     Z3_ast a = va_arg(args, Z3_ast);
