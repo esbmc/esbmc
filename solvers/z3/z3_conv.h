@@ -9,7 +9,9 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef CPROVER_PROP_Z3_CONV_H
 #define CPROVER_PROP_Z3_CONV_H
 
+#ifndef _WIN32
 #include <execinfo.h>
+#endif
 #include <stdint.h>
 
 #include <map>
@@ -266,8 +268,13 @@ public:
     conv_error(std::string msg, irept irep) {
       this->msg = msg;
       this->irep = irep;
+#ifndef _WIN32
       num_frames = backtrace(backtrace_ptrs, 50);
       backtrace_syms = backtrace_symbols(backtrace_ptrs, num_frames);
+#else
+      num_frames = 0;
+      backtrace_syms = NULL;
+#endif
       return;
     }
 
