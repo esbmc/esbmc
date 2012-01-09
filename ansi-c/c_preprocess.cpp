@@ -6,6 +6,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#ifdef _WIN32
+#include <windows.h>
+#undef small
+#undef ERROR
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -256,7 +262,6 @@ bool c_preprocess(
 
 #else /* __WIN32__ */
 
-#include <windows.h>
 #include <io.h>
 
 bool c_preprocess(
