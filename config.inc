@@ -61,7 +61,7 @@ LDFLAGS+= -lkernel32 -L $(MINGWROOTDIR)/lib
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
 ifdef ONCYGWIN
-C2GOTO_INCS=-I$(shell cygpath -w $(MINGWROOTDIR)/include | sed s/\\\\/\\\\\\\\/g)
+C2GOTO_INCS=-I$(shell cygpath -w $(MINGWROOTDIR)/include | sed s/\\\\/\\\\\\\\/g) -D_MINGW
 else
 C2GOTO_INCS=-I$(MINGWROOTDIR)/include -D_MINGW
 endif
