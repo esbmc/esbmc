@@ -12,8 +12,8 @@ WIN_MINGW32=1
 
 # Detect cygwin
 
-AMONCYGWIN= $(shell uname -a | grep CYGWIN; echo $$?)
-ifeq ($(AMONCYGWIN), 0)
+AMONCYGWIN:= $(shell uname -a | grep -o CYGWIN)
+ifeq "$(AMONCYGWIN)" "CYGWIN"
 ONCYGWIN=1
 endif
 
@@ -61,7 +61,7 @@ LDFLAGS+= -lkernel32 -L $(MINGWROOTDIR)/lib
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
 ifdef ONCYGWIN
-C2GOTO_INCS=-I$(shell cygpath -w $(MINGWROOTDIR)/include)
+C2GOTO_INCS=-I$(shell cygpath -w $(MINGWROOTDIR)/include | sed s/\\\\/\\\\\\\\/g)
 else
 C2GOTO_INCS=-I$(MINGWROOTDIR)/include -D_MINGW
 endif
