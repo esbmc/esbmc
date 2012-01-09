@@ -1,3 +1,4 @@
+#define __CRT__NO_INLINE
 #define __declspec /* hacks */
 
 #include <time.h>
