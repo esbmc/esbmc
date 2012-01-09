@@ -20,7 +20,7 @@
 #ifndef _PTHREAD_H
 #define _PTHREAD_H	1
 
-#include <time.h>
+#include <stddef.h>
 
 #include <pthreadtypes.h>
 
