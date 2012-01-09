@@ -3509,10 +3509,12 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
     bv = from_bv(expr.type(), updatedval, NULL);
   } else {
     unsigned int output_width, bvwidth, widthwidth, widthtopwidth, updatewidth;
+    unsigned int orig_width;
     Z3_sort tmpsort;
     Z3_ast offset, width, one, widthtop, topbit, lowerbit, mask, output;
-    Z3_ast newvalue_extd, newvalue_shifted;
+    Z3_ast newvalue_extd, newvalue_shifted, one_shiftoffs;
 
+    orig_width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val));
     convert_bv(expr.op1(), offset);
     // Multiply offset by 8, to make bitwidth from byteoffset. Overflow here
     // should also trigger a bounds violation elsewhere.
@@ -3539,7 +3541,9 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
     widthtop = Z3_mk_zero_ext(z3_ctx, bvwidth - widthtopwidth, widthtop);
     width = Z3_mk_zero_ext(z3_ctx, bvwidth - widthwidth, width);
     topbit = Z3_mk_bvshl(z3_ctx, one, widthtop);
-    lowerbit = Z3_mk_bvshl(z3_ctx, one, offset);
+    one_shiftoffs = Z3_mk_zero_ext(z3_ctx, orig_width - config.ansi_c.int_width,
+                                   offset);
+    lowerbit = Z3_mk_bvshl(z3_ctx, one, one_shiftoffs);
 
     // Create mask to zero out a portion of the source data.
     mask = Z3_mk_bvsub(z3_ctx, topbit, lowerbit);
