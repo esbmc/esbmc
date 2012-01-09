@@ -73,6 +73,7 @@ static const char *cpp_defines_32[] ={
 "__INTMAX_TYPE__=\"long long int\"",
 "__UINTMAX_TYPE__=\"long long unsigned int\"",
 "__WORDSIZE=32",
+"_X86_",
 NULL
 };
 
@@ -101,6 +102,8 @@ static const char *cpp_defines_64[] ={
 "__INTMAX_TYPE__=\"long long int\"",
 "__UINTMAX_TYPE__=\"long long unsigned int\"",
 "__WORDSIZE=64",
+"__x86_64",
+"__x86_64__",
 NULL
 };
 
