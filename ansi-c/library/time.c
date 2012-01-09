@@ -1,3 +1,5 @@
+#define __declspec /* hacks */
+
 #include <time.h>
 #undef time
 
