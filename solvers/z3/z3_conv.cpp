@@ -3718,6 +3718,7 @@ Z3_ast z3_convt::union_to_bv(const typet &type, Z3_ast src)
   std::cerr << "Union <=> bitvector byte operations currently unsupported";
   std::cerr << std::endl;
   abort();
+  return NULL;
 }
 
 Z3_ast z3_convt::array_to_bv(const typet &type, unsigned int startidx,
@@ -3817,6 +3818,7 @@ Z3_ast z3_convt::union_from_bv(const typet &type, Z3_ast src)
   std::cerr << "Converting to union from bitvector currently unsupported";
   std::cerr << std::endl;
   abort();
+  return NULL;
 }
 
 Z3_ast z3_convt::array_from_bv(const typet &type, unsigned int startidx,
