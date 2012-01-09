@@ -13,4 +13,9 @@
 
 #endif
 
+#include <malloc.h>
+#ifndef _WIN32
+#include <alloca.h>
+#endif
+
 #endif
