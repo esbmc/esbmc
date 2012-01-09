@@ -130,7 +130,7 @@ void add_cprover_library(
   char symname_buffer[288];
   FILE *f;
   uint8_t **this_clib_ptrs;
-  unsigned long size;
+  uint64_t size;
   int fd;
 
   if(config.ansi_c.lib==configt::ansi_ct::LIB_NONE)
@@ -151,7 +151,7 @@ void add_cprover_library(
     abort();
   }
 
-  size = (unsigned long)this_clib_ptrs[1] - (unsigned long)this_clib_ptrs[0];
+  size = this_clib_ptrs[1] - this_clib_ptrs[0];
   if (size == 0) {
     std::cerr << "error: Zero-lengthed internal C library" << std::endl;
     abort();
