@@ -27,9 +27,10 @@ Function: z3_propt::z3_propt
 
 \*******************************************************************/
 
-z3_propt::z3_propt(std::ostream &_out):out(_out)
+z3_propt::z3_propt(std::ostream &_out, bool uw):out(_out)
 {
   _no_variables=1;
+  this->uw = uw;
 }
 
 /*******************************************************************\
@@ -307,9 +308,7 @@ literalt z3_propt::land(const bvt &bv)
 
   result = Z3_mk_and(z3_ctx, bv.size(), args);
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  Z3_assert_cnstr(z3_ctx, formula);
-  if (smtlib)
-    assumpt.push_back(formula);
+  assert_formula(formula);
 
   return l;
 }
@@ -343,10 +342,7 @@ literalt z3_propt::lor(const bvt &bv)
   result = Z3_mk_or(z3_ctx, bv.size(), args);
 
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  Z3_assert_cnstr(z3_ctx, formula);
-
-  if (smtlib)
-    assumpt.push_back(formula);;
+  assert_formula(formula);
 
   return l;
 }
@@ -388,10 +384,7 @@ literalt z3_propt::lxor(const bvt &bv)
   }
 
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  Z3_assert_cnstr(z3_ctx, formula);
-
-  if (smtlib)
-    assumpt.push_back(formula);
+  assert_formula(formula);
 
   return l;
 
@@ -427,9 +420,7 @@ literalt z3_propt::land(literalt a, literalt b)
   operand[1] = z3_literal(b);
   result = Z3_mk_and(z3_ctx, 2, operand);
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  Z3_assert_cnstr(z3_ctx, formula);
-  if (smtlib)
-    assumpt.push_back(formula);
+  assert_formula(formula);
 
   return l;
 
@@ -466,9 +457,8 @@ literalt z3_propt::lor(literalt a, literalt b)
   operand[1] = z3_literal(b);
   result = Z3_mk_or(z3_ctx, 2, operand);
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  Z3_assert_cnstr(z3_ctx, formula);
-  if (smtlib)
-    assumpt.push_back(formula);
+  assert_formula(formula);
+
 #ifdef DEBUG
   std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
 #endif
@@ -526,10 +516,8 @@ literalt z3_propt::lxor(literalt a, literalt b)
   operand[1] = z3_literal(b);
   result = Z3_mk_xor(z3_ctx, operand[0], operand[1]);
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  Z3_assert_cnstr(z3_ctx, formula);
+  assert_formula(formula);
 
-  if (smtlib)
-    assumpt.push_back(formula);
   return l;
 
 }
@@ -629,10 +617,8 @@ literalt z3_propt::lselect(literalt a, literalt b, literalt c)
 
   result = Z3_mk_ite(z3_ctx, z3_literal(a), z3_literal(b), z3_literal(c));
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  Z3_assert_cnstr(z3_ctx, formula);
+  assert_formula(formula);
 
-  if (smtlib)
-    assumpt.push_back(formula);
   return l;
 }
 
@@ -780,15 +766,11 @@ void z3_propt::lcnf(const bvt &bv)
   if (i>1)
   {
     lor_var = Z3_mk_or(z3_ctx, i, args);
-    Z3_assert_cnstr(z3_ctx, lor_var);
-    if (smtlib)
-      assumpt.push_back(lor_var);
+    assert_formula(lor_var);
   }
   else
   {
-	Z3_assert_cnstr(z3_ctx, args[0]);
-	if (smtlib)
-	  assumpt.push_back(args[0]);
+    assert_formula(args[0]);
   }
 }
 
@@ -1001,3 +983,46 @@ void z3_propt::set_assignment(literalt literal, bool value)
   std::cout << "value: " << value << std::endl;
 }
 #endif
+
+void
+z3_propt::assert_formula(Z3_ast ast, bool needs_literal)
+{
+
+  // If we're not going to be using the assumptions (ie, for unwidening and for
+  // smtlib) then just assert the fact to be true.
+  if (!store_assumptions) {
+    Z3_assert_cnstr(z3_ctx, ast);
+    return;
+  }
+
+  if (!needs_literal) {
+    Z3_assert_cnstr(z3_ctx, ast);
+    assumpt.push_front(ast);
+  } else {
+    literalt l = new_variable();
+    Z3_ast formula = Z3_mk_iff(z3_ctx, z3_literal(l), ast);
+    Z3_assert_cnstr(z3_ctx, formula);
+
+    if (smtlib)
+      assumpt.push_front(ast);
+    else
+      assumpt.push_front(z3_literal(l));
+  }
+
+  return;
+}
+
+void
+z3_propt::assert_literal(literalt l, Z3_ast formula)
+{
+
+  Z3_assert_cnstr(z3_ctx, formula);
+  if (store_assumptions) {
+    if (smtlib)
+      assumpt.push_front(formula);
+    else
+      assumpt.push_front(z3_literal(l));
+  }
+
+  return;
+}

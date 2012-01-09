@@ -9,7 +9,9 @@ Author:
 #include <stdio.h>
 #include <string>
 #include <global.h>
+#include <cstdarg>
 
+#include "z3_conv.h"
 #include "z3_capi.h"
 
 /**
@@ -59,7 +61,8 @@ void throw_z3_error(Z3_error_code c)
   snprintf(buffer, 15, "%d", c);
   buffer[15] = '\0';
 
-  throw std::string("Z3 Error ") + buffer;
+  std::cerr << "Z3 Error " << buffer << std::endl;
+  abort();
 }
 
 /**
@@ -83,25 +86,20 @@ Z3_context z3_capi::mk_context_custom(Z3_config cfg, Z3_error_handler err)
     return ctx;
 }
 
-Z3_context z3_capi::mk_proof_context(bool solver, unsigned int is_uw)
+Z3_context z3_capi::mk_proof_context(unsigned int is_uw)
 {
   Z3_config cfg = Z3_mk_config();
   Z3_context ctx;
-  const char *_solver;
-
-  _solver = (solver) ? "true" : "false";
 
   if (is_uw)
   {
     Z3_set_param_value(cfg,"PROOF_MODE","0");
     Z3_set_param_value(cfg,"RELEVANCY","0");
-    //Z3_set_param_value(cfg,"SOLVER","false");
-    Z3_set_param_value(cfg,"SOLVER",_solver);
   }
   else
   {
+    Z3_set_param_value(cfg,"SOLVER","true");
 	Z3_set_param_value(cfg,"RELEVANCY","0");
-    Z3_set_param_value(cfg,"SOLVER",_solver);
   }
 
   ctx = mk_context_custom(cfg,throw_z3_error);
@@ -205,6 +203,44 @@ Z3_ast z3_capi::mk_binary_app(Z3_context ctx, Z3_func_decl f, Z3_ast x, Z3_ast y
 {
     Z3_ast args[2] = {x, y};
     return Z3_mk_app(ctx, f, 2, args);
+}
+
+Z3_ast z3_capi::mk_tuple(Z3_context ctx, Z3_sort sort, ...)
+{
+  va_list args;
+  unsigned int num, i;
+
+  // Count number of arguments
+  va_start(args, sort);
+  for (num = 0; ; num++) {
+    Z3_ast a = va_arg(args, Z3_ast);
+    if (a == NULL)
+      break;
+  }
+  va_end(args);
+
+  // Generate array of args
+  Z3_ast arg_list[num];
+  va_start(args, sort);
+  for (i = 0; ; i++) {
+    Z3_ast a = va_arg(args, Z3_ast);
+    if (a == NULL)
+      break;
+    arg_list[i] = a;
+  }
+  va_end(args);
+
+  return mk_tuple(ctx, sort, arg_list, num);
+}
+
+Z3_ast z3_capi::mk_tuple(Z3_context ctx, Z3_sort sort, Z3_ast *args,
+                         unsigned int num)
+{
+
+  // Create appl
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(ctx, sort);
+  Z3_ast val = Z3_mk_app(ctx, decl, num, args);
+  return val;
 }
 
 /**
@@ -698,13 +734,14 @@ Z3_ast z3_capi::mk_tuple_select(Z3_context c, Z3_ast t, unsigned i)
     ty = Z3_get_type(c, t);
 
     if (Z3_get_type_kind(c, ty) != Z3_TUPLE_TYPE) {
-        exitf("argument must be a tuple");
+      throw new z3_convt::conv_error("argument must be a tuple", irept());
     }
 
     num_fields = Z3_get_tuple_type_num_fields(c, ty);
 
     if (i >= num_fields) {
-        exitf("invalid tuple select, index is too big");
+      throw new z3_convt::conv_error("invalid tuple select, index is too big",
+                                     irept());
     }
 
     Z3_const_decl_ast proj_decl = Z3_get_tuple_type_field_decl(c, ty, i);

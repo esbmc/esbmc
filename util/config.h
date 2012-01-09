@@ -60,6 +60,7 @@ public:
     bool string_abstraction;
     bool deadlock_check;
     bool lock_check;
+    bool late_byte_operations; // Symex encountered a deref that became a byte op.
   } ansi_c;
 
   struct verilogt

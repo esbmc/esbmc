@@ -22,6 +22,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <sstream>
 #include <fstream>
 
+#include <config.h>
 #include <i2string.h>
 #include <location.h>
 #include <time_stopping.h>
@@ -170,7 +171,7 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
   std::string logic;
 
   if (options.get_bool_option("bl-bv") || options.get_bool_option("z3-bv") ||
-      options.get_bool_option("bl") || !options.get_bool_option("int-encoding"))
+      !options.get_bool_option("int-encoding"))
     logic = "bit-vector arithmetic";
   else
     logic = "integer/real arithmetic";
@@ -690,11 +691,12 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 
 #ifdef Z3
 bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
-  : solver_base(bmc), z3_dec(bmc.options.get_bool_option("no-assume-guarentee"), bmc.options.get_bool_option("uw-model"))
+  : solver_base(bmc), z3_dec(bmc.options.get_bool_option("uw-model"),
+                             config.ansi_c.late_byte_operations ? false :
+                                     bmc.options.get_bool_option("int-encoding"),
+                             bmc.options.get_bool_option("smt"))
 {
-  z3_dec.set_encoding(bmc.options.get_bool_option("int-encoding"));
   z3_dec.set_file(bmc.options.get_option("outfile"));
-  z3_dec.set_smt(bmc.options.get_bool_option("smt"));
   z3_dec.set_unsat_core(atol(bmc.options.get_option("core-size").c_str()));
   z3_dec.set_ecp(bmc.options.get_bool_option("ecp"));
   conv = &z3_dec;

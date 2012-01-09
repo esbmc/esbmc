@@ -620,6 +620,12 @@ bool exprt::subtract(const exprt &expr)
       binary2integer(expr.get_string(a_value), false),
       atoi(type().width().c_str())));
     return false;
+  } else if(type_id=="fixedbv") {
+    set("value", integer2binary(
+      binary2integer(get_string("value"), false)-
+      binary2integer(expr.get_string("value"), false),
+      atoi(type().get("width").c_str())));
+    return false;
   }
 
   return true;

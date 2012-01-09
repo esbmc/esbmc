@@ -27,14 +27,14 @@ protected:
 class z3_dect:protected z3_temp_filet, public z3_convt
 {
 public:
-  z3_dect(bool rel, bool uw):z3_convt(temp_out, rel, uw)
+  z3_dect(bool uw, bool int_encoding, bool smtlib)
+    :z3_convt(temp_out, uw, int_encoding, smtlib)
   {
+    this->smtlib = smtlib;
   }
 
   virtual resultt dec_solve();
-  void set_encoding(bool enc);
   void set_file(std::string file);
-  void set_smt(bool smt);
   void set_ecp(bool ecp);
   bool get_unsat_core(void);
   bool get_number_of_assumptions(void);
