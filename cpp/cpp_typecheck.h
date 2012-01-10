@@ -141,6 +141,9 @@ protected:
     const typet &final_type);
 
   void convert_template_declaration(cpp_declarationt &declaration);
+
+  void convert_non_template_declaration(cpp_declarationt &declaration);
+
   const symbolt& convert_template_specialization(cpp_declarationt &declaration);
   void typecheck_template_class(cpp_declarationt &declaration);
   void typecheck_template_function(cpp_declarationt &declaration);
@@ -257,15 +260,15 @@ protected:
   void clean_up();
 
   void add_base_components(
-        const struct_typet& from,
+        const struct_typet &from,
         const irep_idt& access,
-        struct_typet& to,
+        struct_typet &to,
         std::set<irep_idt>& bases,
         std::set<irep_idt>& vbases,
         bool is_virtual);
 
-  bool cast_away_constness(const typet& t1,
-                           const typet& t2) const;
+  bool cast_away_constness(const typet &t1,
+                           const typet &t2) const;
 
   void do_virtual_table(const symbolt& symbol);
 
@@ -308,6 +311,14 @@ protected:
   void typecheck_compound_type(typet &type);
   void check_array_types(typet &type);
   void typecheck_enum_type(typet &type);
+
+  // determine the scope into which a tag goes
+  // (enums, structs, union, classes)
+  cpp_scopet &tag_scope(
+    const irep_idt &_elaborated_base_name, // includes template instance
+    const irep_idt &_base_name,
+    bool has_body,
+    bool tag_only_declaration);
 
   irep_idt compound_identifier(
     const irep_idt &_identifier,
