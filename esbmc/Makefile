@@ -34,8 +34,14 @@ endif
 
 ifdef WIN_MSVC
 LIBS+= $(Z3)\\x64\\z3.lib "$(WINSDKDIR)\\lib\\x64\\Kernel32.lib"
-else
-LIBS+= -L $(Z3)/lib -lz3
+endif
+ifdef WIN_MINGW32
+# Vastly irritating, is that mingw linking against z3.lib causes silent linking
+# errors at runtime. So, link directly against the dll.
+LIBS+= $(Z3)/x64/z3.dll
+endif
+ifdef LINUX
+LIBS+= -L $(Z3)/x64 -lz3
 endif
 
 ifdef MINISAT
