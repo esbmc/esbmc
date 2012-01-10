@@ -6,13 +6,15 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <assert.h>
+#include <cassert>
 
 #include <std_types.h>
 
 #include <ansi-c/expr2c.h>
 
 #include "expr2cpp.h"
+
+#include <symbol.h>
 
 class expr2cppt:public expr2ct
 {
@@ -87,7 +89,7 @@ std::string expr2cppt::convert_struct(
       c_it!=components.end();
       c_it++)
   {
-    if(c_it->find("type").id()=="code")
+    if(c_it->type().id()=="code")
     {
     }
     else
@@ -174,13 +176,55 @@ std::string expr2cppt::convert_rec(
   {
     return new_qualifiers.as_string()+convert(src.subtype())+" &";
   }
+  else if(is_rvalue_reference(src))
+  {
+    return new_qualifiers.as_string()+convert(src.subtype())+" &&";
+  }
+  else if(src.get("#cpp_type")!="")
+  {
+    const irep_idt cpp_type=src.get("#cpp_type");
+
+    if(cpp_type=="signed_char")
+      return new_qualifiers.as_string()+"signed char";
+    else if(cpp_type=="unsigned_char")
+      return new_qualifiers.as_string()+"unsigned char";
+    else if(cpp_type=="char")
+      return new_qualifiers.as_string()+"char";
+    else if(cpp_type=="signed_short_int")
+      return new_qualifiers.as_string()+"short";
+    else if(cpp_type=="signed_short_int")
+      return new_qualifiers.as_string()+"unsigned short";
+    else if(cpp_type=="signed_int")
+      return new_qualifiers.as_string()+"int";
+    else if(cpp_type=="unsigned_int")
+      return new_qualifiers.as_string()+"unsigned";
+    else if(cpp_type=="signed_long_int")
+      return new_qualifiers.as_string()+"long";
+    else if(cpp_type=="unsigned_long_int")
+      return new_qualifiers.as_string()+"unsigned long";
+    else if(cpp_type=="signed_long_long_int")
+      return new_qualifiers.as_string()+"long long";
+    else if(cpp_type=="unsigned_long_long_int")
+      return new_qualifiers.as_string()+"unsigned long long";
+    else if(cpp_type=="wchar_t")
+      return new_qualifiers.as_string()+"wchar_t";
+    else if(cpp_type=="float")
+      return new_qualifiers.as_string()+"float";
+    else if(cpp_type=="double")
+      return new_qualifiers.as_string()+"double";
+    else if(cpp_type=="long_double")
+      return new_qualifiers.as_string()+"long double";
+    else
+      return expr2ct::convert_rec(src, qualifiers);
+  }
   else if(src.id()=="symbol")
   {
     const irep_idt &identifier=src.get("identifier");
 
     const symbolt &symbol=ns.lookup(identifier);
 
-    if(symbol.type.id()=="struct")
+    if(symbol.type.id()=="struct" ||
+       symbol.type.id()=="incomplete_struct")
     {
       std::string dest=new_qualifiers.as_string();
 
@@ -208,7 +252,8 @@ std::string expr2cppt::convert_rec(
     else
       return expr2ct::convert_rec(src, qualifiers);
   }
-  else if(src.id()=="struct")
+  else if(src.id()=="struct" ||
+          src.id()=="incomplete_struct")
   {
     std::string dest=new_qualifiers.as_string();
 
@@ -225,7 +270,7 @@ std::string expr2cppt::convert_rec(
   }
   else if(src.id()=="destructor")
   {
-    return "destructor";
+    return "destructor ";
   }
   else if(src.id()=="cpp-template-type")
   {
@@ -264,6 +309,7 @@ std::string expr2cppt::convert_rec(
     member.swap(tmp.add("to-member"));
 
     std::string dest = "(" + convert_rec(member, c_qualifierst()) + ":: *)";
+
     if(src.subtype().id()=="code")
     {
       const code_typet& code_type = to_code_type(src.subtype());
@@ -287,7 +333,9 @@ std::string expr2cppt::convert_rec(
     return dest;
   }
   else if(src.id() == "verilogbv")
-      return "sc_lv["+id2string(src.get("width"))+"]";
+    return "sc_lv["+id2string(src.get("width"))+"]";
+  else if(src.id()=="unassigned")
+    return "?";
   else
     return expr2ct::convert_rec(src, qualifiers);
 }
@@ -333,7 +381,8 @@ std::string expr2cppt::convert_cpp_new(
   {
     dest="new";
 
-    std::string tmp_size=convert((const exprt &)(src.find("size")));
+    std::string tmp_size=
+      convert(static_cast<const exprt &>(src.find("size")));
 
     dest+=" ";
     dest+=convert(src.type().subtype());
@@ -405,7 +454,11 @@ std::string expr2cppt::convert(
            src.get("statement")=="cpp_new[]"))
     return convert_cpp_new(src, precedence=15);
   else if(src.is_constant() && src.type().id() == "verilogbv")
-       return "'" + id2string(src.get("value")) + "'";
+    return "'" + id2string(src.get("value")) + "'";
+  else if(src.id()=="unassigned")
+    return "?";
+  else if(src.id()=="pod_constructor")
+    return "pod_constructor";
   else
     return expr2ct::convert(src, precedence);
 }
@@ -435,7 +488,6 @@ std::string expr2cppt::convert_code(
   if(statement=="cpp_new" ||
      statement=="cpp_new[]")
     return convert_cpp_new(src,indent);
-
 
   return expr2ct::convert_code(src, indent);
 }
@@ -481,8 +533,6 @@ std::string expr2cppt::convert_extractbits(
   return convert(src.op0()) + ".range(" + convert(src.op1()) + ","
          + convert(src.op2()) + ")";
 }
-
-
 
 /*******************************************************************\
 
