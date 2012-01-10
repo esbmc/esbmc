@@ -46,18 +46,23 @@ public:
   {
     return find("body").is_not_nil();
   }
+
+  bool get_tag_only_declaration() const
+  {
+    return get_bool("#tag_only_declaration");
+  }
 };
 
 extern inline const cpp_enum_typet &to_cpp_enum_type(const irept &irep)
 {
   assert(irep.id()=="c_enum");
-  return (const cpp_enum_typet &)irep;
+  return static_cast<const cpp_enum_typet &>(irep);
 }
 
 extern inline cpp_enum_typet &to_cpp_enum_type(irept &irep)
 {
   assert(irep.id()=="c_enum");
-  return (cpp_enum_typet &)irep;    
+  return static_cast<cpp_enum_typet &>(irep);
 }
 
 #endif
