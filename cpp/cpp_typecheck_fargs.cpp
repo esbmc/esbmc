@@ -77,56 +77,100 @@ Function: cpp_typecheck_fargst::exact_match
 \*******************************************************************/
 
 bool cpp_typecheck_fargst::match(
-  const code_typet::argumentst &arguments,
+  const code_typet &code_type,
   unsigned &distance,
   cpp_typecheckt &cpp_typecheck) const
 {
   distance=0;
 
   exprt::operandst ops = operands;
+  const code_typet::argumentst &arguments=code_type.arguments();
 
-  if(arguments.size() > ops.size())
+  if(arguments.size()>ops.size())
   {
-    // do ellipsis
+    // Check for default values.
     ops.reserve(arguments.size());
-    for(unsigned i = ops.size(); i < arguments.size();i++)
+
+    for(unsigned i=ops.size(); i<arguments.size(); i++)
     {
-      const exprt& default_value =
+      const exprt &default_value=
         arguments[i].default_value();
 
       if(default_value.is_nil())
         return false;
+
       ops.push_back(default_value);
     }
   }
-  else if(arguments.size() < ops.size())
-    return false;
+  else if(arguments.size()<ops.size())
+  {
+    // check for ellipsis
+    if(!code_type.has_ellipsis())
+      return false;
+  }
 
   for(unsigned i=0; i<ops.size(); i++)
   {
-    exprt argument = arguments[i];
+    // read
+    // http://publib.boulder.ibm.com/infocenter/comphelp/v8v101/topic/com.ibm.xlcpp8a.doc/language/ref/implicit_conversion_sequences.htm
+    //
+    // The following are the three categories of conversion sequences in order from best to worst:
+    // * Standard conversion sequences
+    // * User-defined conversion sequences
+    // * Ellipsis conversion sequences
 
-    exprt& operand=ops[i];
+    if(i>=arguments.size())
+    {
+      // Ellipsis is the 'worst' of the conversion sequences
+      distance+=1000;
+      continue;
+    }
 
-   assert(!is_reference(operand.type()));
+    exprt argument=arguments[i];
 
-    // "this" is a special case
+    exprt &operand=ops[i];
+
+    #if 0
+    // unclear, todo
+    if(is_reference(operand.type()))
+      std::cout << "O: " << operand.pretty() << std::endl;
+
+    assert(!is_reference(operand.type()));
+    #endif
+
+    // "this" is a special case -- we turn the pointer type
+    // into a reference type to do the type matching
     if(i==0 && argument.get("#base_name")=="this")
     {
-      argument.type().set("#reference",true);
-      argument.type().set("#this",true);
+      argument.type().set("#reference", true);
+      argument.type().set("#this", true);
     }
 
     unsigned rank = 0;
     exprt new_expr;
 
-    if(!cpp_typecheck.implicit_conversion_sequence(operand,
-          argument.type(),
-          new_expr, rank))
+    #if 0
+    std::cout << "C: " << cpp_typecheck.to_string(operand.type())
+              << " -> " << cpp_typecheck.to_string(argument.type()) << std::endl;
+    #endif
+
+    // can we do the standard conversion sequence?
+    if(cpp_typecheck.implicit_conversion_sequence(
+        operand, argument.type(), new_expr, rank))
     {
-      return false;
+      // ok
+      distance+=rank;
+      #if 0
+      std::cout << "OK " << rank << std::endl;
+      #endif
     }
-    distance += rank;
+    else
+    {
+      #if 0
+      std::cout << "NOT OK" << std::endl;
+      #endif
+      return false; // no conversion possible
+    }
   }
 
   return true;

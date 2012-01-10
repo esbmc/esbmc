@@ -1294,20 +1294,16 @@ bool cpp_typecheck_resolvet::disambiguate(
   if(expr.type().id()!="code" || !fargs.in_use)
     return true;
 
-  const code_typet &type= to_code_type(expr.type());
+  const code_typet &type=to_code_type(expr.type());
 
-
-  const code_typet::argumentst &arguments =  type.arguments();
-
-
-
-  if(expr.id()=="member"
-     || type.return_type().id() == "constructor")
+  if(expr.id()=="member" ||
+     type.return_type().id() == "constructor")
   {
     // if it's a member, but does not have an object yet,
     // we add one
     if(!fargs.has_object)
     {
+      const code_typet::argumentst &arguments=type.arguments();
       const code_typet::argumentt &argument = arguments.front();
 
       assert(argument.get("#base_name")=="this");
@@ -1317,23 +1313,23 @@ bool cpp_typecheck_resolvet::disambiguate(
         // it's a constructor
         const typet &object_type = argument.type().subtype();
         exprt object("symbol", object_type);
-        object.set("#lvalue",true);
+        object.set("#lvalue", true);
 
         cpp_typecheck_fargst new_fargs(fargs);
         new_fargs.add_object(object);
-        return new_fargs.match(arguments, distance, cpp_typecheck);
+        return new_fargs.match(type, distance, cpp_typecheck);
       }
       else
       {
         if(expr.type().get_bool("#is_operator") &&
            fargs.operands.size() == arguments.size())
         {
-          return fargs.match(arguments, distance, cpp_typecheck);
+          return fargs.match(type, distance, cpp_typecheck);
         }
 
         cpp_typecheck_fargst new_fargs(fargs);
         new_fargs.add_object(expr.op0());
-        return new_fargs.match(arguments, distance, cpp_typecheck);
+        return new_fargs.match(type, distance, cpp_typecheck);
       }
     }
   }
@@ -1342,11 +1338,11 @@ bool cpp_typecheck_resolvet::disambiguate(
     // if it's not a member then we shall remove the object
     cpp_typecheck_fargst new_fargs(fargs);
     new_fargs.remove_object();
-    return new_fargs.match(arguments, distance, cpp_typecheck);
+    return new_fargs.match(type, distance, cpp_typecheck);
   }
 
 
-  return fargs.match(arguments, distance, cpp_typecheck);
+  return fargs.match(type, distance, cpp_typecheck);
 }
 
 /*******************************************************************\
