@@ -30,7 +30,6 @@ public:
     exprt &expr2);
 
 protected:
-
   virtual void implicit_typecast_followed(
     exprt &expr,
     const typet &src_type,
@@ -41,7 +40,6 @@ protected:
     std::map<irep_idt, unsigned> &base_count);
 
 public:
-
   void check_qualifiers(
     const typet &from,
     const typet &to);
@@ -64,7 +62,7 @@ public:
       const typet & src_type,
       const typet & dest_type);
 
-  cpp_typecheckt& cpp_typecheck;
+  cpp_typecheckt &cpp_typecheck;
 };
 
 #endif

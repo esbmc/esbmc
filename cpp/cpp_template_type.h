@@ -11,37 +11,53 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <type.h>
 
-class template_typet:public typet
+class template_parametert:public exprt
 {
 public:
-  template_typet()
+  inline exprt &default_parameter()
   {
-    id("template");
+    return static_cast<exprt &>(add("#default"));
   }
 
-  irept &arguments()
+  inline const exprt &default_parameter() const
   {
-    return add("arguments");
-  }
-
-  const irept &arguments() const
-  {
-    return find("arguments");
+    return static_cast<const exprt &>(find("#default"));
   }
 };
 
-inline template_typet& to_template_type(typet &type)
+class template_typet:public typet
 {
-    assert(type.id()=="template");
-    return static_cast<template_typet&>(type);
+public:
+  inline template_typet():typet("template")
+  {
+  }
+
+  typedef std::vector<template_parametert> parameterst;
+
+  inline parameterst &parameters()
+  {
+    // todo: will change to 'parameters'
+    return (parameterst &)add("arguments").get_sub();
+  }
+
+  inline const parameterst &parameters() const
+  {
+    // todo: will change to 'parameters'
+    return (const parameterst &)find("arguments").get_sub();
+  }
+};
+
+inline template_typet &to_template_type(typet &type)
+{
+  assert(type.id()=="template");
+  return static_cast<template_typet &>(type);
 }
 
-inline const template_typet& to_template_type(const typet &type)
+inline const template_typet &to_template_type(const typet &type)
 {
-    assert(type.id()=="template");
-    return static_cast<const template_typet&>(type);
+  assert(type.id()=="template");
+  return static_cast<const template_typet &>(type);
 }
-
 
 inline const typet &template_subtype(const typet &type)
 {
