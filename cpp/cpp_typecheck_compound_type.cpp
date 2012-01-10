@@ -1003,18 +1003,18 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         if(declarator.find("value").is_not_nil())
         {
           if(declarator.find("member_initializers").is_nil())
-            declarator.set("member_initializers","member_initializers");
+            declarator.set("member_initializers", "member_initializers");
 
-            check_member_initializers(
-                                      type.add("bases"),
-                                      type.add("components"),
-                                      declarator.add("member_initializers")
-                                      );
+          check_member_initializers(
+            type.add("bases"),
+            type.components(),
+            declarator.member_initializers()
+            );
 
-            full_member_initialization(
-                                       to_struct_type(type),
-                                       declarator.add("member_initializers")
-                                       );
+          full_member_initialization(
+            to_struct_type(type),
+            declarator.add("member_initializers")
+            );
         }
 
         // Finally, we typecheck the constructor with the
@@ -1024,9 +1024,9 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         bool is_typedef=convert_typedef(declaration.type());      // Shall be false
 
         typecheck_compound_declarator(
-                                      symbol,
-                                      declaration, declarator, components,
-                                      access, is_static, is_typedef, is_mutable);
+          symbol,
+          declaration, declarator, components,
+          access, is_static, is_typedef, is_mutable);
       }
     }
     else if(it->id()=="cpp-public")

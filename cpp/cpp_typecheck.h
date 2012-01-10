@@ -17,6 +17,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <std_code.h>
 #include <std_types.h>
+#include <std_expr.h>
 
 #include <ansi-c/c_typecheck_base.h>
 
@@ -203,16 +204,16 @@ protected:
   codet dtor(const symbolt &symb);
 
   void check_member_initializers(
-      const irept &bases,
-      const irept &components,
-      const irept &initializers);
+    const irept &bases,
+    const struct_typet::componentst &components,
+    const irept &initializers);
 
   bool check_component_access(const irept &component,
          const struct_typet &struct_type);
 
   void full_member_initialization(
-      const struct_typet &struct_type,
-      irept &initializers);
+    const struct_typet &struct_type,
+    irept &initializers);
 
   bool find_cpctor(const symbolt& symbol)const;
   bool find_assignop(const symbolt& symbol)const;

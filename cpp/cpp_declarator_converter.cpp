@@ -159,23 +159,22 @@ symbolt &cpp_declarator_convertert::convert(
          symbol_expr.type().id()!="symbol")
       {
         cpp_typecheck.err_location(name.location());
-        cpp_typecheck.str << "error: expected type" << std::endl;
+        cpp_typecheck.str << "error: expected type";
         throw 0;
       }
 
       irep_idt identifier=symbol_expr.type().get("identifier");
       const symbolt &symb=cpp_typecheck.lookup(identifier);
-      const typet& type = symb.type;
+      const typet &type = symb.type;
       assert(type.id()=="struct");
 
       if(declarator.find("member_initializers").is_nil())
-            declarator.set("member_initializers","member_initializers");
+        declarator.set("member_initializers", "member_initializers");
 
       cpp_typecheck.check_member_initializers(
         type.find("bases"),
-        type.find("components"),
-        declarator.add("member_initializers")
-        );
+        to_struct_type(type).components(),
+        declarator.member_initializers());
 
       cpp_typecheck.full_member_initialization(
         to_struct_type(type),
@@ -184,7 +183,7 @@ symbolt &cpp_declarator_convertert::convert(
     }
 
     if(!storage_spec.is_extern())
-      symbol.is_extern = false;
+      symbol.is_extern=false;
 
     // initializer?
     handle_initializer(symbol, declarator);
@@ -196,7 +195,7 @@ symbolt &cpp_declarator_convertert::convert(
     // no, it's no way a method
 
     // already there?
-    symbolst::iterator c_it=
+    contextt::symbolst::iterator c_it=
       cpp_typecheck.context.symbols.find(final_identifier);
 
     if(c_it==cpp_typecheck.context.symbols.end())
