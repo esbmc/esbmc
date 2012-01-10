@@ -10,6 +10,11 @@ WIN_MINGW32=1
 
 #LINUXCOMPAT=1
 
+# For mingw, pick the former for 32 bit output, the latter for 64.
+
+#MINGWID=i686-pc-mingw32
+MINGWID=x86_64-w64-mingw32
+
 # Detect cygwin
 
 AMONCYGWIN:= $(shell uname -a | grep -o CYGWIN)
@@ -46,11 +51,11 @@ endif
 
 ifdef WIN_MINGW32 
 # mingw doesn't seem to have pkg-config.
-MINGWROOTDIR= /usr/i686-pc-mingw32/sys-root/mingw
-CC     = i686-pc-mingw32-gcc
-CXX    = i686-pc-mingw32-g++
-LD     = i686-pc-mingw32-ld
-AR     = i686-pc-mingw32-ar
+MINGWROOTDIR= /usr/$(MINGWID)/sys-root/mingw
+CC     = $(MINGWID)-gcc
+CXX    = $(MINGWID)-g++
+LD     = $(MINGWID)-ld
+AR     = $(MINGWID)-ar
 CFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501
 CXXFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501
 CXXFLAGS += -Wall -Wextra -Wno-deprecated
