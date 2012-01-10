@@ -348,26 +348,29 @@ void cpp_declarator_convertert::handle_initializer(
 {
   exprt &value=declarator.value();
 
+  // moves member initializers into 'value'
   cpp_typecheck.move_member_initializers(
     declarator.member_initializers(),
     symbol.type,
     value);
 
+  // any initializer to be done?
   if(value.is_nil())
     return;
 
   if(symbol.is_extern)
   {
-    // the symbol is located here
-    symbol.is_extern = false;
+    // the symbol is really located here
+    symbol.is_extern=false;
   }
 
   if(symbol.value.is_nil())
   {
+    // no initial value yet
     symbol.value.swap(value);
 
     if(is_code && declarator.type().id()!="template")
-      cpp_typecheck.function_bodies.push_back(&symbol);
+      cpp_typecheck.add_function_body(&symbol);
 
     if(!is_code)
       cpp_typecheck.convert_initializer(symbol);
@@ -457,7 +460,7 @@ symbolt& cpp_declarator_convertert::convert_new_symbol(
   symbol.mode=cpp_typecheck.current_mode;
 
   if(member_spec.is_inline())
-    symbol.type.set("#inlined",true);
+    symbol.type.set("#inlined", true);
 
   if(!symbol.is_type)
   {
@@ -516,7 +519,7 @@ symbolt& cpp_declarator_convertert::convert_new_symbol(
   cpp_idt &identifier=
     cpp_typecheck.cpp_scopes.put_into_scope(*new_symbol, *scope, is_friend);
 
-  if (is_template)
+  if(is_template)
     identifier.id_class=cpp_idt::TEMPLATE;
   else if(is_template_argument)
     identifier.id_class=cpp_idt::TEMPLATE_ARGUMENT;
@@ -525,12 +528,11 @@ symbolt& cpp_declarator_convertert::convert_new_symbol(
   else
     identifier.id_class=cpp_idt::SYMBOL;
 
-
   // do the value
   if(!new_symbol->is_type)
   {
     if(is_code && declarator.type().id() != "template")
-      cpp_typecheck.function_bodies.push_back(new_symbol);
+      cpp_typecheck.add_function_body(new_symbol);
 
     if(!is_code)
       cpp_typecheck.convert_initializer(*new_symbol);

@@ -121,9 +121,10 @@ protected:
   void convert_function(symbolt &symbol);
 
   void convert_pmop(exprt& expr);
+
   void convert_anonymous_union(
-        cpp_declarationt &declaration,
-        codet& new_code);
+    cpp_declarationt &declaration,
+    codet &new_code);
 
   void convert_compound_ano_union(
        const cpp_declarationt &declaration,
@@ -151,6 +152,17 @@ protected:
                                            const typet &return_type);
 
   void typecheck_template_args(irept &template_args);
+
+  class instantiationt
+  {
+  public:
+    locationt location;
+    irep_idt identifier;
+    cpp_template_args_tct full_template_args;
+  };
+
+  typedef std::list<instantiationt> instantiation_stackt;
+  instantiation_stackt instantiation_stack;
 
   const symbolt &instantiate_template(
     const locationt &location,
@@ -257,10 +269,37 @@ protected:
 
   void do_virtual_table(const symbolt& symbol);
 
+  // we need to be able to delay the typechecking
+  // of function bodies to handle methods with
+  // bodies in the class definition
+  struct function_bodyt
+  {
+  public:
+    function_bodyt(
+      symbolt *_function_symbol,
+      const template_mapt &_template_map,
+      const instantiation_stackt &_instantiation_stack):
+      function_symbol(_function_symbol),
+      template_map(_template_map),
+      instantiation_stack(_instantiation_stack)
+    {
+    }
+
+    symbolt *function_symbol;
+    template_mapt template_map;
+    instantiation_stackt instantiation_stack;
+  };
+
+  typedef std::list<function_bodyt> function_bodiest;
+  function_bodiest function_bodies;
+
+  void add_function_body(symbolt *_function_symbol)
+  {
+    function_bodies.push_back(function_bodyt(
+      _function_symbol, template_map, instantiation_stack));
+  }
 
   // types
-  typedef std::list<symbolt *> function_bodiest;
-  function_bodiest function_bodies;
 
   bool convert_typedef(typet &type);
   void typecheck_type(typet &type);

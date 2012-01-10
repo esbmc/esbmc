@@ -24,10 +24,15 @@ Function: cpp_typecheckt::typecheck_function_bodies
 
 void cpp_typecheckt::typecheck_function_bodies()
 {
+  instantiation_stackt old_instantiation_stack;
+  old_instantiation_stack.swap(instantiation_stack);
 
   while(!function_bodies.empty())
   {
-    symbolt& function_symbol = *function_bodies.front();
+    symbolt &function_symbol=*function_bodies.front().function_symbol;
+    template_map.swap(function_bodies.front().template_map);
+    instantiation_stack.swap(function_bodies.front().instantiation_stack);
+
     function_bodies.pop_front();
 
     if(function_symbol.name=="c::main")
@@ -43,5 +48,7 @@ void cpp_typecheckt::typecheck_function_bodies()
       convert_function(function_symbol);
     }
   }
+
+  old_instantiation_stack.swap(instantiation_stack);
 }
 

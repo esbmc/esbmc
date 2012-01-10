@@ -1218,7 +1218,6 @@ void cpp_typecheckt::typecheck_member_function(
   symbol.name=identifier;
   symbol.base_name=component.get("base_name");
   symbol.value.swap(value);
-  //symbol.location=declarator.location();
   symbol.mode=current_mode;
   symbol.module=module;
   symbol.type=type;
@@ -1227,9 +1226,7 @@ void cpp_typecheckt::typecheck_member_function(
   symbol.theorem=true;
   symbol.location=component.location();
 
-
   // move early, it must be visible before doing any value
-
   symbolt *new_symbol;
 
   if(context.move(symbol, new_symbol))
@@ -1237,7 +1234,9 @@ void cpp_typecheckt::typecheck_member_function(
     err_location(symbol.location);
     str << "failed to insert new symbol: " << symbol.name.c_str() << std::endl;
 
-    symbolst::iterator symb_it = context.symbols.find(symbol.name);
+    contextt::symbolst::iterator symb_it =
+      context.symbols.find(symbol.name);
+
     if(symb_it != context.symbols.end())
     {
       str << "name of previous symbol: " << symb_it->second.name << std::endl;
@@ -1249,7 +1248,7 @@ void cpp_typecheckt::typecheck_member_function(
   }
 
   // remember for later typechecking of body
-  function_bodies.push_back(new_symbol);
+  add_function_body(new_symbol);
 }
 
 /*******************************************************************\
@@ -1497,20 +1496,20 @@ Purpose:
 bool cpp_typecheckt::check_component_access(const irept& component,
                                             const struct_typet& struct_type)
 {
-
   const irep_idt &access=component.get("access");
 
-  if(access == "noaccess")
+  if(access=="noaccess")
     return true; // not ok
 
   if(access == "public")
     return false; // ok
 
-  assert(access == "private" || access == "protected");
+  assert(access == "private" ||
+         access == "protected");
 
   const irep_idt &struct_identifier = struct_type.get("name");
 
-  cpp_scopet* pscope = &(cpp_scopes.current_scope());
+  cpp_scopet *pscope = &(cpp_scopes.current_scope());
   while(!(pscope->is_root_scope()))
   {
     if(pscope->is_class())
@@ -1518,8 +1517,8 @@ bool cpp_typecheckt::check_component_access(const irept& component,
       if(pscope->identifier == struct_identifier)
         return false; // ok
 
-      const struct_typet& scope_struct =
-      to_struct_type(lookup(pscope->identifier).type);
+      const struct_typet &scope_struct=
+        to_struct_type(lookup(pscope->identifier).type);
 
       if(subtype_typecast(struct_type,scope_struct))
         return false; // ok
@@ -1534,7 +1533,8 @@ bool cpp_typecheckt::check_component_access(const irept& component,
   {
     const irept& friend_symb = *f_it;
 
-    const cpp_scopet& friend_scope = cpp_scopes.get_scope(friend_symb.get("identifier"));
+    const cpp_scopet& friend_scope =
+      cpp_scopes.get_scope(friend_symb.get("identifier"));
 
     cpp_scopet* pscope = &(cpp_scopes.current_scope());
 
@@ -1566,10 +1566,9 @@ Purpose:
 \*******************************************************************/
 
 void cpp_typecheckt::get_bases(
-                               const struct_typet& type,
-                               std::set<irep_idt> &set_bases) const
+  const struct_typet &type,
+  std::set<irep_idt> &set_bases) const
 {
-
   const irept::subt &bases=type.find("bases").get_sub();
 
   forall_irep(it, bases)
