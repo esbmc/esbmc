@@ -51,7 +51,7 @@ public:
 
   void output(std::ostream &out) const;
   
-  typet convert(const typet &declaration_type) const;
+  typet merge_type(const typet &declaration_type) const;
 };
 
 #define forall_cpp_declarators(it, expr) \

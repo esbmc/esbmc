@@ -70,7 +70,7 @@ symbolt &cpp_declarator_convertert::convert(
   }
 
   assert(declarator.id()=="cpp-declarator");
-  final_type=declarator.convert(type);
+  final_type=declarator.merge_type(type);
 
   irept template_args;
 

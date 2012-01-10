@@ -1618,12 +1618,7 @@ bool Parser::optIntegralTypeOrClassSpec(typet &p)
       Token tk;
       typet kw;
       lex->GetToken(tk);
-
-      // TODO: update
-      if(t==VOID)
-        kw=typet("empty");
-      else
-        kw=typet(tk.text);
+      kw=typet(tk.text);
 
       set_location(kw, tk);
 

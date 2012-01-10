@@ -222,7 +222,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
   }
 
   typet final_type=
-  declarator.convert(declaration.type());
+  declarator.merge_type(declaration.type());
 
   cpp_namet cpp_name;
   cpp_name.swap(declarator.name());
