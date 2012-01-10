@@ -36,7 +36,8 @@ public:
     contextt &dest,
     contextt &src,
     message_handlert &message_handler,
-    const std::string &module) const;
+    const std::string &module,
+    class replace_symbolt &replace_symbol) const;
 
   virtual bool final(
     contextt &context,
@@ -71,8 +72,9 @@ public:
   virtual languaget *new_language()
   { return new cpp_languaget; }
 
-  virtual std::string id() { return "cpp"; }
-  virtual std::string description() { return "C++"; }
+  virtual std::string id() const { return "cpp"; }
+  virtual std::string description() const { return "C++"; }
+  virtual std::set<std::string> extensions() const;
 
   virtual void modules_provided(std::set<std::string> &modules);
 
