@@ -27,6 +27,16 @@ public:
   {
     return (cpp_namet &)find("name");
   }
+
+  bool get_namespace() const
+  {
+    return get_bool("namespace");
+  }
+
+  void set_namespace(bool value)
+  {
+    set("namespace", value);
+  }
 };
 
 #endif

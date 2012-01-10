@@ -52,6 +52,7 @@ public:
       forall_irep(it, get_sub())
       if(it->id()=="template_args")
         return true;
+
     return false;
   }
 
@@ -59,10 +60,12 @@ public:
   {
     forall_irep(it, get_sub())
     {
-      if(it->id()=="::")str += "::";
+      if(it->id()=="::")
+        str += it->id_string();
       else if(it->id()=="template_args")
         str += "<...>";
-      else str += it->get("identifier").as_string();
+      else
+        str += it->get("identifier").as_string();
     }
   }
 };
