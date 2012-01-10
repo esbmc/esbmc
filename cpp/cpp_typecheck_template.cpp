@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <simplify_expr_class.h>
 #include <simplify_expr.h>
 
-#include "irep2name.h"
+#include "cpp_type2name.h"
 #include "cpp_typecheck.h"
 #include "cpp_declarator_converter.h"
 #include "cpp_template_type.h"
@@ -151,7 +151,7 @@ void cpp_typecheckt::typecheck_template_class(
   symbol.module=module;
   symbol.type.swap(declaration);
   symbol.is_macro=false;
-  symbol.value = exprt("template_decls");
+  symbol.value=exprt("template_decls");
 
   symbol.pretty_name=
     cpp_scopes.current_scope().prefix+id2string(symbol.base_name);
@@ -160,15 +160,15 @@ void cpp_typecheckt::typecheck_template_class(
   if(context.move(symbol, new_symbol))
     throw "cpp_typecheckt::typecheck_compound_type: context.move() failed";
 
-  // put into scope
+  // put into current scope
   cpp_idt &id=cpp_scopes.put_into_scope(*new_symbol);
   id.id_class=cpp_idt::TEMPLATE;
   id.prefix=cpp_scopes.current_scope().prefix+
             id2string(new_symbol->base_name);
 
   // link the template symbol with the template scope
-  cpp_scopes.id_map[symbol_name] = &template_scope;
-  assert(cpp_scopes.id_map[symbol_name]->id_class == cpp_idt::TEMPLATE_SCOPE);
+  cpp_scopes.id_map[symbol_name]=&template_scope;
+  assert(cpp_scopes.id_map[symbol_name]->id_class==cpp_idt::TEMPLATE_SCOPE);
 }
 
 /*******************************************************************\
@@ -407,19 +407,19 @@ Function: cpp_typecheckt::template_function_identifier
 
 \*******************************************************************/
 
-std::string cpp_typecheckt::template_function_identifier(const irep_idt& base_name,
-                                           const template_typet& template_type,
-                                           const typet &function_type,
-                                           const typet &return_type)
+std::string cpp_typecheckt::template_function_identifier(
+  const irep_idt &base_name,
+  const template_typet &template_type,
+  const typet &function_type,
+  const typet &return_type)
 {
-  std::string identifier = template_class_identifier(base_name,template_type);
+  // we first build something without function arguments
+  cpp_template_args_non_tct partial_specialization_args;
+  std::string identifier = template_class_identifier(base_name, template_type);
 
-  // we musst also add the signature of the function to the identifier
-  std::string function_type_string;
-  irep2name(function_type, function_type_string);
-  std::string return_type_string;
-  irep2name(return_type, return_type_string);
-  identifier += "(" + function_type_string + ")" + return_type_string;
+  // we must also add the signature of the function to the identifier
+  identifier+=cpp_type2name(function_type);
+
   return identifier;
 }
 
@@ -901,9 +901,9 @@ std::string cpp_typecheckt::template_suffix(
         result+=type.get_string("identifier");
       else
       {
-        std::string tmp;
-        irep2name(type, tmp);
-        result+=tmp;
+//        std::string tmp;
+//        irep2name(type, tmp);
+//        result+=tmp;
       }
     }
     else // expression

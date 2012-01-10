@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_typecheck.h"
 #include "cpp_typecheck_resolve.h"
 #include "cpp_template_type.h"
-#include "irep2name.h"
+#include "cpp_type2name.h"
 #include "cpp_util.h"
 
 /*******************************************************************\
@@ -32,8 +32,8 @@ Purpose:
 \*******************************************************************/
 
 cpp_typecheck_resolvet::cpp_typecheck_resolvet(cpp_typecheckt &_cpp_typecheck):
-cpp_typecheck(_cpp_typecheck),
-this_expr(_cpp_typecheck.cpp_scopes.current_scope().this_expr)
+  cpp_typecheck(_cpp_typecheck),
+  this_expr(_cpp_typecheck.cpp_scopes.current_scope().this_expr)
 {
 }
 
@@ -50,11 +50,11 @@ Purpose:
 \*******************************************************************/
 
 void cpp_typecheck_resolvet::convert_identifiers(
-                                                 const cpp_scopest::id_sett &id_set,
-                                                 const locationt &location,
-                                                 const irept &template_args,
-                                                 const cpp_typecheck_fargst &fargs,
-                                                 resolve_identifierst &identifiers)
+  const cpp_scopest::id_sett &id_set,
+  const locationt &location,
+  const irept &template_args,
+  const cpp_typecheck_fargst &fargs,
+  resolve_identifierst &identifiers)
 {
   for(cpp_scopest::id_sett::const_iterator
       it=id_set.begin();
@@ -780,9 +780,7 @@ void cpp_typecheck_resolvet::resolve_scope(
         typet op_name;
         op_name.swap(next_ir);
         cpp_typecheck.typecheck_type(op_name);
-        std::string tmp;
-        irep2name(op_name,tmp);
-        base_name += "("+tmp+")";
+        base_name+="("+cpp_type2name(op_name)+")";
         pos++;
       }
 

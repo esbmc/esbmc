@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <expr_util.h>
 #include <simplify_expr_class.h>
 
-#include "irep2name.h"
+#include "cpp_type2name.h"
 #include "cpp_declarator_converter.h"
 #include "cpp_typecheck.h"
 #include "cpp_convert_type.h"
@@ -150,6 +150,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
 
     // move early, must be visible before doing body
     symbolt *new_symbol;
+
     if(context.move(symbol, new_symbol))
       throw "cpp_typecheckt::typecheck_compound_type: context.move() failed";
 
@@ -159,7 +160,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     id.id_class=cpp_idt::CLASS;
     id.is_scope=true;
     id.prefix=cpp_scopes.current_scope().prefix+
-    id2string(new_symbol->base_name)+"::";
+              id2string(new_symbol->base_name)+"::";
     id.class_identifier=new_symbol->name;
     id.id_class=cpp_idt::CLASS;
 
@@ -192,37 +193,33 @@ Purpose:
 \*******************************************************************/
 
 void cpp_typecheckt::typecheck_compound_declarator(
-                                                   const symbolt &symbol,
-                                                   const cpp_declarationt &declaration,
-                                                   cpp_declaratort &declarator,
-                                                   struct_typet::componentst &components,
-                                                   const irep_idt &access,
-                                                   bool is_static,
-                                                   bool is_typedef,
-                                                   bool is_mutable)
+  const symbolt &symbol,
+  const cpp_declarationt &declaration,
+  cpp_declaratort &declarator,
+  struct_typet::componentst &components,
+  const irep_idt &access,
+  bool is_static,
+  bool is_typedef,
+  bool is_mutable)
 {
-  bool is_cast_operator = declaration.type().id()=="cpp-cast-operator";
+  bool is_cast_operator=
+    declaration.type().id()=="cpp-cast-operator";
+
   if(is_cast_operator)
   {
     assert(declarator.name().get_sub().size()==2 &&
            declarator.name().get_sub().front().id() == "operator");
 
-    typet type = static_cast<typet&>(declarator.name().get_sub()[1]);
-    declarator.type().subtype() = type;
-
-
-    std::string tmp;
-    typecheck_type(type);
-    irep2name(type, tmp);
-    tmp = "("+tmp+")";
+    typet type=static_cast<typet &>(declarator.name().get_sub()[1]);
+    declarator.type().subtype()=type;
 
     irept name("name");
-    name.set("identifier", tmp);
+    name.set("identifier", "("+cpp_type2name(type)+")");
     declarator.name().get_sub().back().swap(name);
   }
 
   typet final_type=
-  declarator.merge_type(declaration.type());
+    declarator.merge_type(declaration.type());
 
   cpp_namet cpp_name;
   cpp_name.swap(declarator.name());

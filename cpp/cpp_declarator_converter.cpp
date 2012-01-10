@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <std_types.h>
 #include <ansi-c/c_types.h>
 
-#include "irep2name.h"
+#include "cpp_type2name.h"
 #include "cpp_declarator_converter.h"
 #include "cpp_typecheck.h"
 
@@ -62,10 +62,8 @@ symbolt &cpp_declarator_convertert::convert(
     declarator.type().subtype()=type;
     std::string tmp;
     cpp_typecheck.typecheck_type(type);
-    irep2name(type, tmp);
-    tmp="("+tmp+")";
     irept name("name");
-    name.set("identifier", tmp);
+    name.set("identifier", "("+cpp_type2name(type)+")");
     declarator.name().get_sub().back().swap(name);
   }
 
@@ -78,6 +76,7 @@ symbolt &cpp_declarator_convertert::convert(
     cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
 
     cpp_typecheck_resolvet cpp_typecheck_resolve(cpp_typecheck);
+
     cpp_typecheck_resolve.resolve_scope(
       declarator.name(), base_name, template_args);
 
@@ -110,12 +109,11 @@ symbolt &cpp_declarator_convertert::convert(
     }
 
     // try static first
-    symbolst::iterator c_it=
+    contextt::symbolst::iterator c_it=
       cpp_typecheck.context.symbols.find(final_identifier);
 
     if(c_it==cpp_typecheck.context.symbols.end())
     {
-
       // adjust type if it's a non-static member function
       if(final_type.id()=="code")
         cpp_typecheck.adjust_method_type(
@@ -252,14 +250,13 @@ void cpp_declarator_convertert::combine_types(
      decl_type.id()=="code")
   {
     // functions need special treatment due
-    // to argument names and default values
+    // to argument names, default values, and inlined-ness
     const code_typet &decl_code_type=to_code_type(decl_type);
     code_typet &symbol_code_type=to_code_type(symbol.type);
 
     if(decl_code_type.return_type()==symbol_code_type.return_type() &&
        decl_code_type.arguments().size()==symbol_code_type.arguments().size())
     {
-
       for(unsigned i=0; i<decl_code_type.arguments().size(); i++)
       {
         const code_typet::argumentt &decl_argument=decl_code_type.arguments()[i];
@@ -410,8 +407,10 @@ void cpp_declarator_convertert::get_final_identifier()
 {
   std::string identifier=base_name;
 
-  // main is always "C" linkage
-  if(is_code && base_name=="main" && scope->prefix=="")
+  // main is always "C" linkage, as a matter of principle
+  if(is_code &&
+     base_name=="main" &&
+     scope->prefix=="")
   {
     mode="C";
   }
@@ -438,12 +437,12 @@ Function: cpp_declarator_convertert::convert_new_symbol
 
 \*******************************************************************/
 
-symbolt& cpp_declarator_convertert::convert_new_symbol(
+symbolt &cpp_declarator_convertert::convert_new_symbol(
   const cpp_storage_spect &storage_spec,
   const cpp_member_spect &member_spec,
   cpp_declaratort &declarator)
 {
-  std::string pretty_name(get_pretty_name());
+  irep_idt pretty_name=get_pretty_name();
 
   symbolt symbol;
 
@@ -555,7 +554,7 @@ Function: cpp_declarator_convertert::get_pretty_name
 
 \*******************************************************************/
 
-std::string cpp_declarator_convertert::get_pretty_name()
+irep_idt cpp_declarator_convertert::get_pretty_name()
 {
   if(is_code)
   {
@@ -624,7 +623,8 @@ void cpp_declarator_convertert::main_function_rules(
     }
 
     const typet &return_type=
-      (const typet &)symbol.type.find("return_type");
+      static_cast<const typet &>(
+        symbol.type.find("return_type"));
 
     if(return_type!=int_type())
     {
