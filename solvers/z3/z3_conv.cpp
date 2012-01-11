@@ -547,6 +547,9 @@ z3_convt::finalize_pointer_chain(void)
       offs++;
     }
   } else {
+    // Floating model - we assert that all objects don't overlap each other,
+    // but otherwise their locations are entirely defined by Z3. Inefficient,
+    // but necessary for accuracy. Unfortunately, has high complexity (O(n^2))
     assert(0);
   }
 
