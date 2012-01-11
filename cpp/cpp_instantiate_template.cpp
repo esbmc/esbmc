@@ -208,8 +208,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
   cpp_save_scopet saved_scope(cpp_scopes);
 
   // mapping from template parameters to values/types
-  build_template_map(template_type,
-                     tc_template_args);
+  //template_map.build(template_type, tc_template_args);
+  build_template_map(template_type, tc_template_args);
 
   // enter the template scope
   cpp_scopes.go_to(*template_scope);
@@ -337,6 +337,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
       cpp_scopes.go_to(method_scope);
 
       // mapping from template arguments to values/types
+      //template_map.build(method_type, tc_template_args);
       build_template_map(method_type, tc_template_args);
 
       method_decl.remove("template_type");

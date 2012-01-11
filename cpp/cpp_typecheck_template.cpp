@@ -18,6 +18,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_typecheck.h"
 #include "cpp_declarator_converter.h"
 #include "cpp_template_type.h"
+#include "cpp_convert_type.h"
+#include "cpp_template_args.h"
 
 /*******************************************************************\
 
@@ -210,6 +212,11 @@ void cpp_typecheckt::typecheck_function_template(
   }
 
   template_typet &template_type=declaration.template_type();
+
+  typet function_type=
+    declarator.merge_type(declaration.type());
+
+  cpp_convert_plain_type(function_type);
 
   irep_idt symbol_name=
     template_function_identifier(
@@ -408,14 +415,15 @@ Function: cpp_typecheckt::template_class_identifier
 \*******************************************************************/
 
 std::string cpp_typecheckt::template_class_identifier(
-                                       const irep_idt& base_name,
-                                       const template_typet& template_type)
+  const irep_idt &base_name,
+  const template_typet &template_type)
 {
-  std::string identifier =  cpp_identifier_prefix(current_mode)+"::"+
+  std::string identifier=
+    cpp_identifier_prefix(current_mode)+"::"+
       cpp_scopes.current_scope().prefix+
       "template."+id2string(base_name) + "<";
 
-  int counter = 0;
+  int counter=0;
 
   forall_irep(it, template_type.arguments().get_sub())
   {
@@ -456,7 +464,8 @@ std::string cpp_typecheckt::template_function_identifier(
 {
   // we first build something without function arguments
   cpp_template_args_non_tct partial_specialization_args;
-  std::string identifier = template_class_identifier(base_name, template_type);
+  std::string identifier=
+    template_class_identifier(base_name, template_type);
 
   // we must also add the signature of the function to the identifier
   identifier+=cpp_type2name(function_type);
@@ -493,19 +502,11 @@ void cpp_typecheckt::convert_template_declaration(
     throw 0;
   }
 
-  // template specialization
-  if((declaration.template_type().find("arguments")).get_sub().size() == 0)
-  {
-    convert_template_specialization(declaration);
-    return;
-  }
-
   typet &type=declaration.type();
 
-  // there are template functions
-  // and template classes
+  // there are 1) function templates and 2) template classes
 
-  if(declaration.declarators().empty())
+  if(declaration.is_template_class())
   {
     if(type.id()!="struct")
     {
