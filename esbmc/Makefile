@@ -38,7 +38,7 @@ endif
 ifdef WIN_MINGW32
 # Vastly irritating, is that mingw linking against z3.lib causes silent linking
 # errors at runtime. So, link directly against the dll.
-LIBS+= $(Z3)/x64/z3.dll
+LIBS+= $(Z3)/$(Z3LIBDIR)/z3.dll
 endif
 ifdef LINUX
 LIBS+= -L $(Z3)/lib -lz3

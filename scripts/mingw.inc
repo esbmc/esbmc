@@ -1,7 +1,9 @@
 ifdef TARGET64
 MINGWID=x86_64-w64-mingw32
+Z3LIBDIR=x64
 else
 MINGWID=i686-pc-mingw32
+Z3LIBDIR=lib
 endif
 
 # mingw doesn't seem to have pkg-config.
