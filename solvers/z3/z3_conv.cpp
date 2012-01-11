@@ -520,6 +520,10 @@ z3_convt::finalize_pointer_chain(void)
   // Default - false, non-fixed model.
 
   if (fixed_model) {
+    // Generate fixed model - take each pointer object and ensure that the end
+    // of one is immediatetly followed by the start of another. The ordering is
+    // in whatever order we originally created the pointer objects. (Or rather,
+    // the order that they reached the Z3 backend in).
     offs = 2;
     std::map<unsigned,unsigned>::const_iterator it;
     for (it = addr_space_data.begin(); it != addr_space_data.end(); it++) {
