@@ -21,7 +21,9 @@ char * getenv ( const char * name );
 
 void exit ( int status ); //Felipe
 
-void abort ( void ); //Felipe
+void abort ( void ){
+	  __ESBMC_assert(0, "Sudden stop of the program");
+}
 
 int atexit ( void ( * function ) (void) );
 

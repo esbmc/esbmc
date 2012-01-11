@@ -19,10 +19,13 @@ namespace std
 		char* c_str();
 		const char* c_str ( ) const;
 		char* c_str2 ();
+		bool operator== (string& b);
+		bool operator== ( const char* lhs);
 		bool operator== (string& a, string& b);
 		bool operator== ( const char* lhs, string& rhs );
 		bool operator== ( string& lhs, const char* rhs );
 		bool operator!= (string& a);
+		bool operator!= ( const char* lhs );
 		bool operator!= ( const char* lhs, string& rhs );
 		bool operator!= ( string& lhs, const char* rhs );
 		bool operator> (string& a);
@@ -37,8 +40,13 @@ namespace std
 		bool operator<= (string& a);
 		bool operator<= ( const char* lhs, string& rhs );
 		bool operator<= ( string& lhs, const char* rhs );
+#if 0
 		string& operator= ( string& str );
 		string& operator= ( const char* s );
+#endif
+		string& operator= ( const string& str );
+		string& operator= ( const char* s );
+		string& operator= ( char c );
 		string& operator+= (const string& d);
 		string operator += (string& d, string& s);
 		string& operator += (const char* d); //TEST
