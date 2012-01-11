@@ -41,7 +41,7 @@ ifdef WIN_MINGW32
 LIBS+= $(Z3)/x64/z3.dll
 endif
 ifdef LINUX
-LIBS+= -L $(Z3)/x64 -lz3
+LIBS+= -L $(Z3)/lib -lz3
 endif
 
 ifdef MINISAT
