@@ -4,8 +4,21 @@
 #include "iomanip"
 #include "definitions.h"
 
+
+typedef int iostate;
+typedef int fmtflags;
+static const iostate badbit = 3;
+static const iostate eofbit = 2;
+static const iostate failbit = 1;
+static const iostate goodbit = 0;
+
 namespace std
 {
+	struct ios_base {
+		typedef int openmode;
+		static const openmode app, ate, binary, in, out, trunc;
+	};
+
 	struct ostream
 	{
 		ostream(int id): id(id){}
@@ -14,6 +27,8 @@ namespace std
 		void precision(int p);
 		void put(char c);
 		void write(char str[], size_t n);
+		fmtflags flags ( ) const;
+		fmtflags flags ( fmtflags fmtfl );
 
 	private:
 		ostream(const ostream&); // disabled
@@ -34,6 +49,10 @@ namespace std
 		void read(char str[], int size);
 		int gcount();
 		int rdstate();
+		bool fail ( ) const;
+		bool bad ( ) const;
+		bool good ( ) const;
+		void clear ( iostate state = goodbit );
 
 	private:
 		istream(const istream&); // disabled
@@ -94,6 +113,11 @@ namespace std
 	{
 		return is;
 	}
+
+//	inline bool operator >> (istream& is, char c[])
+//	{
+//		return true;
+//	}
 
 	inline istream& operator >> (istream& is, int& i)
 	{ 
