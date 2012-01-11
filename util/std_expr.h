@@ -870,14 +870,4 @@ public:
   }
 };
 
-static inline const exprt &
-fetch_base_object(const exprt &src)
-{
-
-  if (src.id() == "index" || src.id() == "member")
-    return fetch_base_object(src.op0());
-  else
-    return src;
-}
-
 #endif

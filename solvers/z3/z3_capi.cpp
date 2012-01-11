@@ -62,7 +62,7 @@ void throw_z3_error(Z3_error_code c)
   snprintf(buffer, 15, "%d", c);
   buffer[15] = '\0';
 
-  std::cerr << "Z3 Error " << buffer << std::endl;
+  std::cout << "Z3 Error " << buffer << std::endl;
   abort();
 }
 

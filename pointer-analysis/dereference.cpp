@@ -876,9 +876,6 @@ bool dereferencet::memory_model_bytes(
   // But anything else we will try!
 
   // We allow reading more or less anything as bit-vector.
-  // Force bit-vector mode in this case. XXXjmorse, can this be any earlier?
-  config.ansi_c.late_byte_operations = true;
-
   if(to_type.id()=="bv" ||
      to_type.id()=="unsignedbv" ||
      to_type.id()=="signedbv")

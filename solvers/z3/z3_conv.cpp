@@ -20,7 +20,6 @@
 #include <pointer_offset_size.h>
 #include <find_symbols.h>
 #include <prefix.h>
-#include <simplify_expr.h>
 #include <solvers/flattening/boolbv_width.h>
 #include <fixedbv.h>
 #include <solvers/flattening/boolbv.h>
@@ -513,7 +512,7 @@ z3_convt::store_sat_assignments(Z3_model m)
 void
 z3_convt::finalize_pointer_chain(void)
 {
-
+  bool fixed_model = false;
   unsigned int offs, num_ptrs = addr_space_data.size();
   if (num_ptrs == 0)
     return;
@@ -526,27 +525,80 @@ z3_convt::finalize_pointer_chain(void)
   else
     native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
 
-  offs = 2;
-  for (std::map<unsigned,unsigned>::const_iterator it = addr_space_data.begin();
-       it != addr_space_data.end(); it++) {
+  // Work out which pointer model to take
+  if (config.options.get_bool_option("fixed-pointer-model"))
+    fixed_model = true;
+  else if (config.options.get_bool_option("floating-pointer-model"))
+    fixed_model = false;
+  // Default - false, non-fixed model.
 
-    Z3_ast start = z3_api.mk_var(z3_ctx,
+  if (fixed_model) {
+    // Generate fixed model - take each pointer object and ensure that the end
+    // of one is immediatetly followed by the start of another. The ordering is
+    // in whatever order we originally created the pointer objects. (Or rather,
+    // the order that they reached the Z3 backend in).
+    offs = 2;
+    std::map<unsigned,unsigned>::const_iterator it;
+    for (it = addr_space_data.begin(); it != addr_space_data.end(); it++) {
+
+      Z3_ast start = z3_api.mk_var(z3_ctx,
                            ("__ESBMC_ptr_obj_start_" + itos(it->first)).c_str(),
                            native_int_sort);
-    Z3_ast start_num = convert_number(offs, config.ansi_c.int_width, true);
-    Z3_ast eq = Z3_mk_eq(z3_ctx, start, start_num);
-    assert_formula(eq);
+      Z3_ast start_num = convert_number(offs, config.ansi_c.int_width, true);
+      Z3_ast eq = Z3_mk_eq(z3_ctx, start, start_num);
+      assert_formula(eq);
 
-    offs += it->second - 1;
+      offs += it->second - 1;
 
-    Z3_ast end = z3_api.mk_var(z3_ctx,
-                           ("__ESBMC_ptr_obj_end_" + itos(it->first)).c_str(),
+      Z3_ast end = z3_api.mk_var(z3_ctx,
+                             ("__ESBMC_ptr_obj_end_" + itos(it->first)).c_str(),
+                             native_int_sort);
+      Z3_ast end_num = convert_number(offs, config.ansi_c.int_width, true);
+      eq = Z3_mk_eq(z3_ctx, end, end_num);
+      assert_formula(eq);
+
+      offs++;
+    }
+  } else {
+    // Floating model - we assert that all objects don't overlap each other,
+    // but otherwise their locations are entirely defined by Z3. Inefficient,
+    // but necessary for accuracy. Unfortunately, has high complexity (O(n^2))
+
+    // Implementation: iterate through all objects; assert that those with lower
+    // object nums don't overlap the current one. So for every particular pair
+    // of object numbers in the set there'll be a doesn't-overlap clause.
+
+    unsigned num_objs = addr_space_data.size();
+    for (unsigned i = 0; i < num_objs; i++) {
+       Z3_ast i_start = z3_api.mk_var(z3_ctx,
+                           ("__ESBMC_ptr_obj_start_" + itos(i)).c_str(),
                            native_int_sort);
-    Z3_ast end_num = convert_number(offs, config.ansi_c.int_width, true);
-    eq = Z3_mk_eq(z3_ctx, end, end_num);
-    assert_formula(eq);
+      Z3_ast i_end = z3_api.mk_var(z3_ctx,
+                           ("__ESBMC_ptr_obj_end_" + itos(i)).c_str(),
+                           native_int_sort);
 
-    offs++;
+      for (unsigned j = 0; j < i; j++) {
+        Z3_ast j_start = z3_api.mk_var(z3_ctx,
+                           ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
+                           native_int_sort);
+        Z3_ast j_end = z3_api.mk_var(z3_ctx,
+                           ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
+                           native_int_sort);
+
+        // Formula: (i_end < j_start) || (i_start > j_end)
+        // Previous assertions ensure start < end for all objs.
+        Z3_ast args[2], formula;
+        if (int_encoding) {
+          args[0] = Z3_mk_lt(z3_ctx, i_end, j_start);
+          args[1] = Z3_mk_gt(z3_ctx, i_start, j_end);
+        } else {
+          args[0] = Z3_mk_bvult(z3_ctx, i_end, j_start);
+          args[1] = Z3_mk_bvugt(z3_ctx, i_start, j_end);
+        }
+        formula = Z3_mk_or(z3_ctx, 2, args);
+        assert_formula(formula);
+      }
+    }
   }
 
   return;
@@ -1442,8 +1494,6 @@ z3_convt::convert_width(const exprt &expr)
   assert(expr.operands().size() == 1);
 
   get_type_width(expr.op0().type(), width);
-  width /= 8; // bit size to byte size; which is what symex uses this irep with
-
   if (int_encoding)
     native_int_sort = Z3_mk_int_sort(z3_ctx);
   else
@@ -1472,7 +1522,7 @@ z3_convt::convert_rest(const exprt &expr)
   Z3_ast formula, constraint;
 
   try {
-    if (!ignoring_expr)
+    if (!assign_z3_expr(expr) && !ignoring_expr)
       return l;
 
     if (expr.id() == "is_zero_string") {
@@ -3470,104 +3520,73 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
 
-  assert(!int_encoding && "byte operation in integer encoding mode is invalid");
-
   assert(expr.operands().size() == 3);
   // op0 is the object to update
   // op1 is the byte number
   // op2 is the value to update with
 
-  Z3_ast orig_val, update_value;
+  mp_integer i;
+  if (to_integer(expr.op1(), i)) {
+    convert_bv(expr.op0(), bv);
+    return;
+  }
 
-  convert_bv(expr.op0(), orig_val);
-  orig_val = to_bv(expr.op0().type(), orig_val);
+  Z3_ast tuple, value;
+  uint width_op0, width_op2;
 
-  convert_bv(expr.op2(), update_value);
-  update_value = to_bv(expr.op2().type(), update_value);
+  convert_bv(expr.op0(), tuple);
+  convert_bv(expr.op2(), value);
 
-  uint width_op2;
   get_type_width(expr.op2().type(), width_op2);
 
-  mp_integer i;
-  if (!to_integer(expr.op1(), i)) {
+  DEBUGLOC;
 
-    // Irritatingly, there's no way of performing a bit update, so instead extract
-    // the bits either side of the portion we want, and concatonate it all.
-    int64_t upper, lower;
-    unsigned int width;
+  if (expr.op0().type().id() == "struct") {
+    const struct_typet &struct_type = to_struct_type(expr.op0().type());
+    const struct_typet::componentst &components = struct_type.components();
+    bool has_field = false;
 
-    width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val));
-    lower = i.to_long() * 8;
-    upper = lower + width_op2 - 1;
+    // XXXjmorse, this isn't going to be the case if it's a with.
+    assert(components.size() >= expr.op0().operands().size());
+    assert(!components.empty());
 
-    if (upper >= Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, orig_val)) ||
-        lower < 0) {
-      // Bounds violations; just fill the return value with zeros to satisfy the
-      // typechecker.
-      Z3_sort tmpsort = Z3_get_sort(z3_ctx, orig_val);
-      bv = Z3_mk_unsigned_int(z3_ctx, 0, tmpsort);
+    for (struct_typet::componentst::const_iterator
+         it = components.begin();
+         it != components.end();
+         it++)
+    {
+      get_type_width(it->type(), width_op0);
+
+      if ((it->type().id() == expr.op2().type().id()) &&
+          (width_op0 == width_op2))
+	has_field = true;
+    }
+
+    if (has_field)
+      bv = z3_api.mk_tuple_update(z3_ctx, tuple, i.to_long(), value);
+    else
+      bv = tuple;
+  } else if (expr.op0().type().id() == "signedbv")     {
+    if (int_encoding) {
+      bv = value;
       return;
     }
 
-    Z3_ast lowerbv = NULL, upperbv = NULL, updatedval;
-    if (lower != 0)
-      lowerbv = Z3_mk_extract(z3_ctx, lower-1, 0, orig_val);
-    if (upper != width-1)
-      upperbv = Z3_mk_extract(z3_ctx, width-1, upper+1, orig_val);
+    get_type_width(expr.op0().type(), width_op0);
 
-    updatedval = update_value;
-    if (lowerbv != NULL)
-      updatedval = Z3_mk_concat(z3_ctx, updatedval, lowerbv);
-    if (upperbv != NULL)
-      updatedval = Z3_mk_concat(z3_ctx, upperbv, updatedval);
+    if (width_op0 == 0)
+      // XXXjmorse - can this ever happen now?
+      throw new conv_error("failed to get width of byte_update operand", expr);
 
-    bv = from_bv(expr.type(), updatedval, NULL);
+    if (width_op0 > width_op2)
+      bv = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value);
+    else
+      throw new conv_error("unsupported irep for conver_byte_update", expr);
   } else {
-    unsigned int output_width, bvwidth, widthwidth, widthtopwidth, updatewidth;
-    Z3_sort tmpsort;
-    Z3_ast offset, width, one, widthtop, topbit, lowerbit, mask, output;
-    Z3_ast newvalue_extd, newvalue_shifted;
-
-    convert_bv(expr.op1(), offset);
-    // Multiply offset by 8, to make bitwidth from byteoffset. Overflow here
-    // should also trigger a bounds violation elsewhere.
-    offset = Z3_mk_bvmul(z3_ctx, offset,
-                         convert_number(8, config.ansi_c.int_width, true));
-    get_type_width(expr.type(), output_width);
-    width = convert_number(output_width, config.ansi_c.int_width, true);
-    widthtop = Z3_mk_bvadd(z3_ctx, offset,
-                     convert_number(output_width, config.ansi_c.int_width, true));
-    widthwidth = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, width));
-    widthtopwidth = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, widthtop));
-
-    // Dynamic updates are particularly upleasent, as we can't extract and
-    // concatonate bits together (as we don't know what the sizes will be).
-    // So go for mask-and-or approach.
-    // Produce a mask for the portion we want to keep first.
-    tmpsort = Z3_get_sort(z3_ctx, orig_val);
-    bvwidth = Z3_get_bv_sort_size(z3_ctx, tmpsort);
-    one = Z3_mk_unsigned_int(z3_ctx, 1, tmpsort);
-
-    // Two integers of 2^(offs+width+1), and 2^(offs+width). So for a byte,
-    // 2^32 - 2^24 would make 0xFF000000. First pump width and widthtop to be same
-    // width as orig_val and "one".
-    widthtop = Z3_mk_zero_ext(z3_ctx, bvwidth - widthtopwidth, widthtop);
-    width = Z3_mk_zero_ext(z3_ctx, bvwidth - widthwidth, width);
-    topbit = Z3_mk_bvshl(z3_ctx, one, widthtop);
-    lowerbit = Z3_mk_bvshl(z3_ctx, one, offset);
-
-    // Create mask to zero out a portion of the source data.
-    mask = Z3_mk_bvsub(z3_ctx, topbit, lowerbit);
-    mask = Z3_mk_bvnot(z3_ctx, mask);
-    // And mask.
-    output = Z3_mk_bvand(z3_ctx, orig_val, mask);
-
-    // Then shift update value, and or it in.
-    updatewidth = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, update_value));
-    newvalue_extd = Z3_mk_zero_ext(z3_ctx, bvwidth-updatewidth, update_value);
-    newvalue_shifted = Z3_mk_bvshl(z3_ctx, newvalue_extd, offset);
-    bv = Z3_mk_bvor(z3_ctx, newvalue_shifted, output);
+    throw new conv_error("unsupported irep for conver_byte_update", expr);
   }
+
+  DEBUGLOC;
 }
 
 /*******************************************************************
@@ -3584,298 +3603,135 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
 void
 z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 {
-  Z3_ast op0;
-  const typet *conv_type;
-  unsigned width;
+  DEBUGLOC;
 
-  get_type_width(expr.type(), width);
-  if (expr.op0().id() == "member" || expr.op0().id() == "index") {
-    // the point-to analysis hands us the first /thing/ in an object, so that
-    // the address of it gives the address of the object?
-    // Thus, extract the actual object or struct from that expression.
-    const exprt &theobj = fetch_base_object(expr.op0());
-    convert_bv(theobj, op0);
-    conv_type = &theobj.type();
-  } else {
-    // Or, it's just some entirely usable object.
-    convert_bv(expr.op0(), op0);
-    conv_type = &expr.op0().type();
-  }
-  op0 = to_bv(*conv_type, op0);
-
-  assert(!int_encoding && "byte operation in integer encoding mode is invalid");
   assert(expr.operands().size() == 2);
   // op0 is object to extract from
   // op1 is byte field to extract from.
 
   mp_integer i;
-  if (to_integer(expr.op1(), i)) {
-    // Non-constant byte extract. Shift symbolic distance and extract the lower
-    // portion of the bit vector.
-    Z3_sort offs_sort;
-    Z3_ast byteoffset, bitoffset, full_bitoffset, eight, shifted;
-    convert_bv(expr.op1(), byteoffset);
+  if (to_integer(expr.op1(), i))
+    throw new conv_error("byte_extract expects constant 2nd arg", expr);
 
-    // Multiply by 8, then coerce shift value to be same width as op0, for shrs
-    // purpose. We don't have to worry about overflow here: if it's big enough
-    // to overflow in the minimum size (8 bits), or indeed any other size, then
-    // it should violate the pointer bound checks introduced by dereference.
-    offs_sort = Z3_get_sort(z3_ctx, byteoffset);
-    eight = Z3_mk_unsigned_int(z3_ctx, 8, offs_sort);
-    bitoffset = Z3_mk_bvmul(z3_ctx, byteoffset, eight);
-    // Now for the extension,
-    unsigned int op0width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, op0));
-    op0width -= Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, bitoffset));
-    full_bitoffset = Z3_mk_zero_ext(z3_ctx, op0width, bitoffset);
-    shifted = Z3_mk_bvlshr(z3_ctx, op0, full_bitoffset);
+  unsigned width, w;
 
-    // And after all that, pick out the part of the data that we want.
-    bv = Z3_mk_extract(z3_ctx, width-1, 0, shifted);
-    bv = from_bv(expr.type(), bv, NULL);
-  } else {
-    // Constant byte extract. Pick the byte range and extract it.
-    int64_t upper, lower;
+  get_type_width(expr.op0().type(), width);
 
-    lower = i.to_long() * 8;
-    upper = lower + width - 1;
+  // XXXjmorse - looks like this only ever reads a single byte, not the desired
+  // number of bytes to fill the type.
+  get_type_width(expr.type(), w);
 
-    if (upper >= Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, op0)) ||
-        lower < 0) {
-      // This access rolls off the end of the bv: this Should (TM) trigger a
-      // bounds violation elsewhere. In the meantime, just return all zeros.
-      Z3_sort tmpsort = Z3_mk_bv_sort(z3_ctx, width);
-      bv = Z3_mk_unsigned_int(z3_ctx, 0, tmpsort);
-      return;
+  if (width == 0)
+    // XXXjmorse - can this happen any more?
+    throw new conv_error("failed to get width of byte_extract operand", expr);
+
+  uint64_t upper, lower;
+
+  if (expr.id() == "byte_extract_little_endian") {
+    upper = ((i.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
+    lower = i.to_long() * 8; //i*w;
+  } else   {
+    uint64_t max = width - 1;
+    upper = max - (i.to_long() * 8); //max-(i*w);
+    lower = max - ((i.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
+  }
+
+  Z3_ast op0;
+
+  convert_bv(expr.op0(), op0);
+
+  if (int_encoding) {
+    if (expr.op0().type().id() == "fixedbv") {
+      if (expr.type().id() == "signedbv" ||
+          expr.type().id() == "unsignedbv") {
+	Z3_ast tmp;
+	op0 = Z3_mk_real2int(z3_ctx, op0);
+	tmp = Z3_mk_int2bv(z3_ctx, width, op0);
+	bv =
+	  Z3_mk_extract(z3_ctx, upper, lower, tmp);
+	if (expr.type().id() == "signedbv")
+	  bv = Z3_mk_bv2int(z3_ctx, bv, 1);
+	else
+	  bv = Z3_mk_bv2int(z3_ctx, bv, 0);
+      } else {
+	throw new conv_error("unsupported type for byte_extract", expr);
+      }
+    } else if (expr.op0().type().id() == "signedbv" ||
+               expr.op0().type().id() == "unsignedbv") {
+      Z3_ast tmp;
+      tmp = Z3_mk_int2bv(z3_ctx, width, op0);
+
+      if (width >= upper)
+	bv =
+	  Z3_mk_extract(z3_ctx, upper, lower, tmp);
+      else
+	bv =
+	  Z3_mk_extract(z3_ctx, upper - lower, 0, tmp);
+
+      if (expr.op0().type().id() == "signedbv")
+	bv = Z3_mk_bv2int(z3_ctx, bv, 1);
+      else
+	bv = Z3_mk_bv2int(z3_ctx, bv, 0);
+    } else {
+      throw new conv_error("unsupported type for byte_extract", expr);
+    }
+  } else   {
+    if (expr.op0().type().id() == "struct") {
+      const struct_typet &struct_type = to_struct_type(expr.op0().type());
+      const struct_typet::componentst &components = struct_type.components();
+      unsigned i = 0;
+      Z3_ast struct_elem[components.size() + 1],
+             struct_elem_inv[components.size() + 1];
+
+      for (struct_typet::componentst::const_iterator
+           it = components.begin();
+           it != components.end();
+           it++, i++)
+      {
+	convert_bv(expr.op0().operands()[i], struct_elem[i]);
+      }
+
+      for (unsigned k = 0; k < components.size(); k++)
+        struct_elem_inv[(components.size() - 1) - k] = struct_elem[k];
+
+      for (unsigned k = 0; k < components.size(); k++)
+      {
+	if (k == 1)
+	  struct_elem_inv[components.size()] = Z3_mk_concat(
+	    z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]);
+	else if (k > 1)
+	  struct_elem_inv[components.size()] = Z3_mk_concat(
+	    z3_ctx, struct_elem_inv[components.size()], struct_elem_inv[k]);
+      }
+      op0 = struct_elem_inv[components.size()];
     }
 
     bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
-    bv = from_bv(expr.type(), bv, NULL);
-  }
-}
 
-Z3_ast z3_convt::to_bv(const typet &type, Z3_ast src)
-{
+    if (expr.op0().id() == "index") {
+      Z3_ast args[2];
 
-  // XXXjmorse - endianness concerns?
-  if (type.id() == "struct")
-    return struct_to_bv(type, src);
-  else if (type.id() == "union")
-    return union_to_bv(type, src);
-  else if (type.id() == "array")
-    return array_to_bv(type, 0, 0, src);
-  else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
-           type.id() == "fixedbv") {
-    // Should already be in a bitvector format. May need byte swapping.
-    // The default Z3 behaviour appears to be little-endian; so swap if the
-    // endianness is forced to big.
-    if (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN)
-      return byte_swap(src);
-    else if (config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN)
-      return src;
-    else
-      assert(false && "No endianness set when performing byte operations");
-  }
-  else if (type.id() == "bool") {
-    // XXXjmorse - here we're defining a boolean to be a single bit in an 8 bit
-    // integer. This is something that should be configurable from the top level.
-    Z3_sort sort = Z3_mk_bv_sort(z3_ctx, 8);
-    Z3_ast true_bit = Z3_mk_unsigned_int(z3_ctx, 1, sort);
-    Z3_ast false_bit = Z3_mk_unsigned_int(z3_ctx, 0, sort);
-    Z3_ast result = Z3_mk_ite(z3_ctx, src, true_bit, false_bit);
-    return result;
-  } else
-    throw new conv_error("unsupported to-bitvector conversion type", type);
-}
+      const exprt &symbol = expr.op0().operands()[0];
+      const exprt &index = expr.op0().operands()[1];
 
-Z3_ast z3_convt::struct_to_bv(const typet &type, Z3_ast src)
-{
-  // Convert input struct to a bit vector, using src, which should be a tuple.
+      convert_bv(symbol, args[0]);
+      convert_bv(index, args[1]);
 
-  Z3_ast chain = NULL;
-  unsigned int i;
-  const struct_typet &struct_type = to_struct_type(type);
-  const struct_typet::componentst &components = struct_type.components();
+      bv = Z3_mk_select(z3_ctx, args[0], args[1]);
 
-  for (i = 0; i < components.size(); i++)
-  {
-    Z3_ast tmp;
+      unsigned width_expr;
+      get_type_width(expr.type(), width_expr);
 
-    // Extract each member from the tuple; concatenate.
-    tmp = z3_api.mk_tuple_select(z3_ctx, src, i);
+      if (width_expr > width) {
+	if (expr.type().id() == "unsignedbv") {
+	  bv = Z3_mk_zero_ext(z3_ctx, (width_expr - width), bv);
+	}
+      }
 
-    if (chain == NULL)
-      chain = tmp;
-    else
-      chain = Z3_mk_concat(z3_ctx, tmp, chain);
+    }
   }
 
-  return chain;
-}
-
-Z3_ast z3_convt::union_to_bv(const typet &type, Z3_ast src)
-{
-
-  std::cerr << "Union <=> bitvector byte operations currently unsupported";
-  std::cerr << std::endl;
-  abort();
-  return NULL;
-}
-
-Z3_ast z3_convt::array_to_bv(const typet &type, unsigned int startidx,
-                             unsigned int endidx, Z3_ast src)
-{
-
-  if (startidx == 0 && endidx == 0) {
-    // Determine size - I'm assuming it's in elements.
-    exprt &size = (exprt&)type.find("size");
-    assert(size != get_nil_irep());
-    simplify(size); // Inefficient; should be simplified earlier.
-    assert(size.id() == "constant");
-    unsigned int tmp = binary2integer(size.get("value").as_string(), false).to_long();
-    endidx = tmp - 1;
-  }
-
-  // Here startidx and endidx indicate how much of the array we wish to extract.
-  unsigned int i;
-  Z3_ast chain = NULL;
-  for (i = startidx; i <= endidx; i++) {
-    Z3_ast tmp;
-    Z3_ast idx = convert_number(i, config.ansi_c.int_width, true);
-    tmp = Z3_mk_select(z3_ctx, src, idx);
-
-    if (chain == NULL)
-      chain = tmp;
-    else
-      chain = Z3_mk_concat(z3_ctx, tmp, chain);
-  }
-
-  return chain;
-}
-
-Z3_ast z3_convt::from_bv(const typet &type, Z3_ast src, Z3_ast orig)
-{
-
-  // XXXjmorse - endianness concerns.
-  if (type.id() == "struct")
-    return struct_from_bv(type, src);
-  else if (type.id() == "union")
-    return union_from_bv(type, src);
-  else if (type.id() == "array")
-    return array_from_bv(type, 0, 0, src, orig);
-  else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
-           type.id() == "fixedbv") {
-    // Should already be in a bitvector format. May need byte swapping.
-    // The default Z3 behaviour appears to be little-endian; so swap if the
-    // endianness is forced to big.
-    if (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN)
-      return byte_swap(src);
-    else if (config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN)
-      return src;
-    else
-      assert(false && "No endianness set when performing byte operations");
-  }
-  else if (type.id() == "bool") {
-    // XXXjmorse - here we're defining a boolean to be a single bit in an 8 bit
-    // integer. This is something that should be configurable from the top level.
-    Z3_sort sort = Z3_mk_bv_sort(z3_ctx, 8);
-    Z3_ast false_bit = Z3_mk_unsigned_int(z3_ctx, 0, sort);
-    Z3_ast eq = Z3_mk_eq(z3_ctx, false_bit, src);
-    Z3_ast result = Z3_mk_ite(z3_ctx, eq, Z3_mk_true(z3_ctx),Z3_mk_false(z3_ctx));
-    return result;
-  } else
-    throw new conv_error("unsupported from-bitvector conversion type", type);
-}
-
-Z3_ast z3_convt::struct_from_bv(const typet &type, Z3_ast src)
-{
-  const struct_typet &struct_type = to_struct_type(type);
-  const struct_typet::componentst &components = struct_type.components();
-
-  Z3_sort our_struct_type;
-  create_struct_union_type(type, false, our_struct_type);
-
-  unsigned int size = components.size(), offset = 0, idx = 0;
-  Z3_ast *args = (Z3_ast*)alloca(sizeof(Z3_ast) * size);
-  for (struct_typet::componentst::const_iterator it = components.begin();
-       it != components.end(); it++)
-  {
-    unsigned width;
-    const typet &item_type = struct_type.component_type(it->get_name());
-    get_type_width(item_type, width);
-
-    Z3_ast bv = Z3_mk_extract(z3_ctx, offset + width - 1, offset, src);
-    offset += width;
-    Z3_ast item = from_bv(item_type, bv, NULL);
-    args[idx++] = item;
-  }
-
-  return z3_api.mk_tuple(z3_ctx, our_struct_type, args, size);
-}
-
-Z3_ast z3_convt::union_from_bv(const typet &type, Z3_ast src)
-{
-
-  std::cerr << "Converting to union from bitvector currently unsupported";
-  std::cerr << std::endl;
-  abort();
-  return NULL;
-}
-
-Z3_ast z3_convt::array_from_bv(const typet &type, unsigned int startidx,
-                               unsigned int endidx, Z3_ast src, Z3_ast orig)
-{
-
-  // Again, if no size given, assume whole array.
-  if (startidx == 0 && endidx == 0) {
-    exprt &size = (exprt&)type.find("size");
-    assert(size != get_nil_irep());
-    simplify(size); // Inefficient; should be simplified earlier.
-    assert(size.id() == "constant");
-    unsigned int tmp = binary2integer(size.get("value").as_string(), false).to_long();
-    endidx = tmp - 1;
-
-    // Also, create a unique new array to update all the elements into.
-    Z3_sort array_sort;
-    create_type(type, array_sort);
-    orig = Z3_mk_fresh_const(z3_ctx, NULL, array_sort);
-  }
-
-  unsigned int width;
-  get_type_width(type.subtype(), width);
-
-  // Loop through bit vector, extracting elements and updating.
-  Z3_ast chain = NULL;
-  unsigned int offset = 0, i = 0;
-  for (i = startidx; i <= endidx; i++) {
-    Z3_ast tmp;
-    Z3_ast val = Z3_mk_extract(z3_ctx, offset + width - 1, offset, src);
-    offset += width;
-
-    orig = Z3_mk_store(z3_ctx, orig,
-                       convert_number(i, config.ansi_c.int_width, true),
-                       val);
-  }
-
-  return orig;
-}
-
-Z3_ast
-z3_convt::byte_swap(Z3_ast src)
-{
-  Z3_ast tmp, chain;
-  unsigned int width = Z3_get_bv_sort_size(z3_ctx, Z3_get_sort(z3_ctx, src));
-  assert(width % 8 == 0 && "byte-swapping integer size must be multiple of 8");
-
-  chain = NULL;
-  for (unsigned int i = 0; i < width; i += 8) {
-    tmp = Z3_mk_extract(z3_ctx, i + 7, i, src);
-    if (chain == NULL)
-      chain = tmp;
-    else
-      chain = Z3_mk_concat(z3_ctx, chain, tmp);
-  }
-
-  return chain;
+  DEBUGLOC;
 }
 
 /*******************************************************************
@@ -4033,11 +3889,37 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     bv = convert_overflow_unary(expr);
   else if (exprid == "memory-leak")
     bv = convert_memory_leak(expr);
-  else if (exprid == "unary+")
-    convert_z3_expr(expr.op0(), bv);
   else 
     throw new conv_error("Unrecognized expression type", expr);
 }
+
+/*******************************************************************
+   Function: z3_convt::assign_z3_expr
+
+   Inputs:
+
+   Outputs:
+
+   Purpose:
+
+ \*******************************************************************/
+
+bool
+z3_convt::assign_z3_expr(const exprt expr)
+{
+  u_int size = expr.operands().size();
+
+  //ignore these IRep expressions for now. I don't know what they mean.
+
+  if (size == 2 && expr.op1().id() == "unary+") {
+    ignoring(expr.op1());
+    ignoring_expr = false;
+    return false;
+  }
+
+  return true;
+}
+
 
 /*******************************************************************
    Function: z3_convt::set_to
@@ -4145,7 +4027,7 @@ z3_convt::set_to(const exprt &expr, bool value)
       const exprt &op0 = expr.op0();
       const exprt &op1 = expr.op1();
 
-      if (true && ignoring_expr) {
+      if (assign_z3_expr(expr) && ignoring_expr) {
         convert_bv(op0, operand[0]);
         convert_bv(op1, operand[1]);
 
