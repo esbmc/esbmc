@@ -522,11 +522,9 @@ void prop_convt::ignoring(const exprt &expr)
 {
   // fall through
 
-  std::string msg="error: couldn't encode the following irep: "+expr.pretty();
+  std::string msg="warning: ignoring "+expr.pretty();
 
   print(2, msg);
-
-  abort();
 }
 
 /*******************************************************************\

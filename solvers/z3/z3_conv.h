@@ -81,6 +81,7 @@ public:
 private:
   virtual literalt convert_rest(const exprt &expr);
   virtual void set_to(const exprt &expr, bool value);
+  bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
   void create_array_type(const typet &type, Z3_type_ast &bv);
@@ -156,19 +157,6 @@ private:
   void assert_literal(literalt l, Z3_ast ast);
 
   void get_type_width(const typet &t, unsigned &width);
-
-  // Utilities for converting complex types to and from bit vectors
-  Z3_ast to_bv(const typet& type, Z3_ast src);
-  Z3_ast struct_to_bv(const typet& type, Z3_ast src);
-  Z3_ast union_to_bv(const typet& type, Z3_ast src);
-  Z3_ast array_to_bv(const typet& type, unsigned int startidx,
-                     unsigned int endidx, Z3_ast src);
-  Z3_ast from_bv(const typet& type, Z3_ast src, Z3_ast orig);
-  Z3_ast struct_from_bv(const typet& type, Z3_ast src);
-  Z3_ast union_from_bv(const typet& type, Z3_ast src);
-  Z3_ast array_from_bv(const typet& type, unsigned int startidx,
-                     unsigned int endidx, Z3_ast src, Z3_ast orig);
-  Z3_ast byte_swap(Z3_ast src);
 
   std::string double2string(double d) const;
 
