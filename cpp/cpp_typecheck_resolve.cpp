@@ -683,9 +683,9 @@ Purpose:
 \*******************************************************************/
 
 void cpp_typecheck_resolvet::resolve_scope(
-                                           const cpp_namet &cpp_name,
-                                           std::string &base_name,
-                                           irept &template_args)
+  const cpp_namet &cpp_name,
+  std::string &base_name,
+  irept &template_args)
 {
   assert(cpp_name.id()=="cpp-name");
   assert(!cpp_name.get_sub().empty());
@@ -727,8 +727,8 @@ void cpp_typecheck_resolvet::resolve_scope(
     }
     else if(pos->id()=="::")
     {
-
       cpp_scopest::id_sett id_set;
+
       if(template_args.is_not_nil())
         cpp_typecheck.cpp_scopes.get_ids(base_name,cpp_idt::TEMPLATE, id_set, false);
       else
@@ -739,6 +739,7 @@ void cpp_typecheck_resolvet::resolve_scope(
 
       if(id_set.empty())
       {
+        cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
         cpp_typecheck.err_location(location);
         cpp_typecheck.str << "scope `" << base_name << "' not found";
         throw 0;
@@ -760,11 +761,14 @@ void cpp_typecheck_resolvet::resolve_scope(
       }
       else
       {
+        cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
         cpp_typecheck.err_location(location);
-        cpp_typecheck.str << "scope `" << base_name << "' is ambiguous";
+        cpp_typecheck.str << "scope `"
+                          << base_name << "' is ambiguous";
         throw 0;
       }
 
+      // we start from fresh
       base_name.clear();
     }
     else if(pos->id()=="operator")
