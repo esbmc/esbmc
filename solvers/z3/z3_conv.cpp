@@ -499,7 +499,7 @@ z3_convt::store_sat_assignments(Z3_model m)
 void
 z3_convt::finalize_pointer_chain(void)
 {
-
+  bool fixed_model = false;
   unsigned int offs, num_ptrs = addr_space_data.size();
   if (num_ptrs == 0)
     return;
@@ -512,27 +512,38 @@ z3_convt::finalize_pointer_chain(void)
   else
     native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
 
-  offs = 2;
-  for (std::map<unsigned,unsigned>::const_iterator it = addr_space_data.begin();
-       it != addr_space_data.end(); it++) {
+  // Work out which pointer model to take
+  if (config.options.get_bool_option("fixed-pointer-model"))
+    fixed_model = true;
+  else if (config.options.get_bool_option("floating-pointer-model"))
+    fixed_model = false;
+  // Default - false, non-fixed model.
 
-    Z3_ast start = z3_api.mk_var(z3_ctx,
+  if (fixed_model) {
+    offs = 2;
+    std::map<unsigned,unsigned>::const_iterator it;
+    for (it = addr_space_data.begin(); it != addr_space_data.end(); it++) {
+
+      Z3_ast start = z3_api.mk_var(z3_ctx,
                            ("__ESBMC_ptr_obj_start_" + itos(it->first)).c_str(),
                            native_int_sort);
-    Z3_ast start_num = convert_number(offs, config.ansi_c.int_width, true);
-    Z3_ast eq = Z3_mk_eq(z3_ctx, start, start_num);
-    assert_formula(eq);
+      Z3_ast start_num = convert_number(offs, config.ansi_c.int_width, true);
+      Z3_ast eq = Z3_mk_eq(z3_ctx, start, start_num);
+      assert_formula(eq);
 
-    offs += it->second - 1;
+      offs += it->second - 1;
 
-    Z3_ast end = z3_api.mk_var(z3_ctx,
-                           ("__ESBMC_ptr_obj_end_" + itos(it->first)).c_str(),
-                           native_int_sort);
-    Z3_ast end_num = convert_number(offs, config.ansi_c.int_width, true);
-    eq = Z3_mk_eq(z3_ctx, end, end_num);
-    assert_formula(eq);
+      Z3_ast end = z3_api.mk_var(z3_ctx,
+                             ("__ESBMC_ptr_obj_end_" + itos(it->first)).c_str(),
+                             native_int_sort);
+      Z3_ast end_num = convert_number(offs, config.ansi_c.int_width, true);
+      eq = Z3_mk_eq(z3_ctx, end, end_num);
+      assert_formula(eq);
 
-    offs++;
+      offs++;
+    }
+  } else {
+    assert(0);
   }
 
   return;
