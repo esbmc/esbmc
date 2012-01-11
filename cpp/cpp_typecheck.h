@@ -127,9 +127,9 @@ protected:
     codet &new_code);
 
   void convert_compound_ano_union(
-       const cpp_declarationt &declaration,
-       const irep_idt &access,
-       struct_typet::componentst &components);
+    const cpp_declarationt &declaration,
+    const irep_idt &access,
+    struct_typet::componentst &components);
 
   //
   // Templates
@@ -166,6 +166,27 @@ protected:
 
   typedef std::list<instantiationt> instantiation_stackt;
   instantiation_stackt instantiation_stack;
+
+  void show_instantiation_stack(std::ostream &);
+
+  class instantiation_levelt
+  {
+  public:
+    instantiation_levelt(
+      instantiation_stackt &_instantiation_stack):
+      instantiation_stack(_instantiation_stack)
+    {
+      instantiation_stack.push_back(instantiationt());
+    }
+
+    ~instantiation_levelt()
+    {
+      instantiation_stack.pop_back();
+    }
+
+  private:
+    instantiation_stackt &instantiation_stack;
+  };
 
   const symbolt &instantiate_template(
     const locationt &location,
@@ -389,7 +410,6 @@ protected:
   void typecheck_side_effect_increment(side_effect_exprt &expr);
   void typecheck_function_expr(exprt &expr,
                       const cpp_typecheck_fargst &fargs);
-
   void typecheck_expr_cpp_name(exprt &expr,
                       const cpp_typecheck_fargst &fargs);
   void typecheck_expr_member(exprt &expr,
@@ -447,107 +467,115 @@ protected:
   //
 
   bool standard_conversion_lvalue_to_rvalue(
-          const exprt& expr, exprt& new_expr) const;
+    const exprt &expr, exprt &new_expr) const;
 
   bool standard_conversion_array_to_pointer(
-          const exprt& expr, exprt& new_expr) const;
+    const exprt &expr, exprt &new_expr) const;
 
   bool standard_conversion_function_to_pointer(
-          const exprt& expr, exprt& new_expr) const;
+    const exprt &expr, exprt &new_expr) const;
 
   bool standard_conversion_qualification(
-          const exprt& expr, const typet&, exprt& new_expr) const;
+    const exprt &expr, const typet&, exprt &new_expr) const;
 
   bool standard_conversion_integral_promotion(
-          const exprt& expr, exprt& new_expr) const;
+    const exprt &expr, exprt &new_expr) const;
 
   bool standard_conversion_floating_point_promotion(
-          const exprt& expr, exprt& new_expr) const;
+    const exprt &expr, exprt &new_expr) const;
 
   bool standard_conversion_integral_conversion(
-          const exprt& expr, const typet& type, exprt& new_expr) const;
+    const exprt &expr, const typet &type, exprt &new_expr) const;
 
   bool standard_conversion_floating_integral_conversion(
-          const exprt& expr, const typet& type, exprt& new_expr) const;
+    const exprt &expr, const typet &type, exprt &new_expr) const;
 
   bool standard_conversion_floating_point_conversion(
-          const exprt& expr, const typet& type, exprt& new_expr) const;
+    const exprt &expr, const typet &type, exprt &new_expr) const;
 
   bool standard_conversion_pointer(
-          const exprt& expr, const typet& type, exprt& new_expr);
+    const exprt &expr, const typet &type, exprt &new_expr);
 
   bool standard_conversion_pointer_to_member(
-          const exprt& expr,  const typet& type, exprt& new_expr);
+    const exprt &expr, const typet &type, exprt &new_expr);
 
   bool standard_conversion_boolean(
-          const exprt& expr, exprt& new_expr) const;
+    const exprt &expr, exprt &new_expr) const;
 
   #ifdef CPP_SYSTEMC_EXTENSION
   bool standard_conversion_verilogbv(
-          const exprt& expr, const typet& type,exprt& new_expr) const;
+          const exprt &expr, const typet &type, exprt &new_expr) const;
   #endif
 
   bool standard_conversion_sequence(
-          const exprt& expr,  const typet& type,
-          exprt& new_expr, unsigned& rank);
+    const exprt &expr, const typet &type, exprt &new_expr, unsigned &rank);
 
   bool user_defined_conversion_sequence(
-          const exprt& expr,  const typet& type,
-          exprt& new_expr, unsigned& rank);
+    const exprt &expr, const typet &type, exprt &new_expr, unsigned &rank);
 
   bool reference_related(
-          const exprt& expr, const typet& type) const;
+    const exprt &expr, const typet &type) const;
 
   bool reference_compatible(
-          const exprt& expr, const typet& type
-          , unsigned& rank) const;
+    const exprt &expr, const typet &type, unsigned &rank) const;
 
   bool reference_binding(
-          exprt expr, const typet& type,
-          exprt& new_expr, unsigned& rank);
+    exprt expr, const typet &type, exprt &new_expr, unsigned &rank);
 
   bool implicit_conversion_sequence(
-          const exprt& expr,  const typet& type, exprt& new_expr,
-          unsigned& rank);
+    const exprt &expr, const typet &type, exprt &new_expr, unsigned &rank);
 
   bool implicit_conversion_sequence(
-          const exprt& expr,  const typet& type,
-          unsigned& rank);
+    const exprt &expr, const typet &type, unsigned &rank);
 
   bool implicit_conversion_sequence(
-          const exprt& expr,  const typet& type,
-          exprt& new_expr);
+    const exprt &expr, const typet &type, exprt &new_expr);
 
-  void reference_initializer(exprt& expr, const typet& type);
+  void reference_initializer(exprt &expr, const typet &type);
 
   virtual void implicit_typecast(exprt &expr, const typet &type);
 
-  void get_bases(const struct_typet& type,
+  void get_bases(const struct_typet &type,
      std::set<irep_idt> &set_bases) const;
 
-  void get_virtual_bases(const struct_typet& type,
+  void get_virtual_bases(const struct_typet &type,
      std::list<irep_idt> &vbases) const;
 
-  bool subtype_typecast(const struct_typet &from,
-                        const struct_typet &to) const;
+  bool subtype_typecast(
+    const struct_typet &from,
+    const struct_typet &to) const;
 
   void make_ptr_typecast(
-      exprt &expr,
-      const typet & dest_type);
+    exprt &expr,
+    const typet & dest_type);
 
+  // the C++ typecasts
 
-  bool const_typecast(const exprt& expr, const typet& type, exprt& new_expr);
-  bool dynamic_typecast(const exprt& expr, const typet& type, exprt& new_expr);
-  bool reinterpret_typecast(const exprt& expr, const typet& type,
-                            exprt& new_expr, bool check_constantness = true);
+  bool const_typecast(
+    const exprt &expr,
+    const typet &type,
+    exprt &new_expr);
 
-  bool static_typecast(const exprt& expr, const typet& type,
-                       exprt& new_expr, bool check_constantness = true);
+  bool dynamic_typecast(
+    const exprt &expr,
+    const typet &type,
+    exprt &new_expr);
 
+  bool reinterpret_typecast(
+    const exprt &expr,
+    const typet &type,
+    exprt &new_expr,
+    bool check_constantness=true);
+
+  bool static_typecast(
+    const exprt &expr,
+    const typet &type,
+    exprt &new_expr,
+    bool check_constantness=true);
 
 private:
   std::list<irep_idt> dinis;        // Static Default-Initialization List
-  bool disable_access_control;      //  Disable protect and private
+  bool disable_access_control;      // Disable protect and private
 };
 
 std::string cpp_identifier_prefix(const irep_idt &mode);
