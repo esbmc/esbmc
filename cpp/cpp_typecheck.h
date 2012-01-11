@@ -147,13 +147,16 @@ protected:
 
   const symbolt& convert_template_specialization(cpp_declarationt &declaration);
   void typecheck_template_class(cpp_declarationt &declaration);
-  void typecheck_template_function(cpp_declarationt &declaration);
 
   std::string template_class_identifier(const irep_idt& base_name, const template_typet& template_type);
   std::string template_function_identifier(const irep_idt& base_name,
                                            const template_typet& template_type,
                                            const typet &function_type,
                                            const typet &return_type);
+
+  void typecheck_function_template(cpp_declarationt &declaration);
+
+  void typecheck_template_member_function(cpp_declarationt &declaration);
 
   void typecheck_template_args(irept &template_args);
 
