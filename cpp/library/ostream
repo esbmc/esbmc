@@ -1,11 +1,10 @@
-#ifndef STL_ISTREAM
-#define STL_ISTREAM
+#ifndef STL_OSTREAM
+#define STL_OSTREAM
 
 #include "ios"
 
 namespace std
 {
-
 }
 
 #endif

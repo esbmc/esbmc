@@ -1,8 +1,12 @@
 #ifndef STL_FSTREAM
 #define STL_FSTREAM
 
+#include "streambuf"
+
 namespace std
 {
+struct fstream{};
+
 struct ofstream{
 	ofstream ( );
 };
@@ -10,6 +14,8 @@ struct ofstream{
 struct ifstream{
 	ifstream ( );
 };
+
+struct filebuf{};
 }
 
 #endif

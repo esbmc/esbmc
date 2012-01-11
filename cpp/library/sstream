@@ -1,9 +1,17 @@
 #ifndef STL_SSTREAM
 #define STL_SSTREAM
 
+#include "streambuf"
+
 namespace std
 {
+struct istringstream{};
 
+struct stringstream{};
+
+struct ostringstream{};
+
+struct stringbuf{};
 }
 
 #endif

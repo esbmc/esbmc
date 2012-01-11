@@ -1,0 +1,11 @@
+#ifndef STL_IOS
+#define STL_IOS
+
+namespace std
+{
+struct ios_base{};
+
+struct ios{};
+}
+
+#endif
