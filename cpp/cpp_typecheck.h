@@ -331,7 +331,9 @@ protected:
 
   bool convert_typedef(typet &type);
   void typecheck_type(typet &type);
-  cpp_scopet& typecheck_template_arguments(typet &type);
+
+  cpp_scopet &typecheck_template_parameters(
+    template_typet &type);
 
   void typecheck_compound_type(typet &type);
   void check_array_types(typet &type);

@@ -66,17 +66,17 @@ Function: cpp_typecheckt::typecheck_template_class
 void cpp_typecheckt::typecheck_template_class(
   cpp_declarationt &declaration)
 {
-  //ps_irep("typecheck_template_class",declaration);
-  // do tempalte arguments
-  // this also sets up the template scope
-  cpp_scopet& template_scope = typecheck_template_arguments(declaration.template_type());
+  // Do template arguments. This also sets up the template scope.
+  cpp_scopet &template_scope=
+    typecheck_template_parameters(declaration.template_type());
 
   typet &type=declaration.type();
-  template_typet &template_type = to_template_type(declaration.template_type());
+  template_typet &template_type=declaration.template_type();
 
-  bool has_body = type.find("body").is_not_nil();
+  bool has_body=type.find("body").is_not_nil();
 
-  cpp_namet &cpp_name=(cpp_namet &)type.add("tag");
+  cpp_namet &cpp_name=
+    (cpp_namet &)type.add("tag");
 
   std::string identifier, base_name;
   cpp_name.convert(identifier, base_name);
@@ -198,7 +198,7 @@ void cpp_typecheckt::typecheck_function_template(
   // do template arguments
   // this also sets up the template scope
   cpp_scopet &template_scope=
-    typecheck_template_arguments(declaration.template_type());
+    typecheck_template_parameters(declaration.template_type());
 
   std::string identifier, base_name;
   cpp_name.convert(identifier, base_name);
@@ -380,7 +380,7 @@ void cpp_typecheckt::typecheck_template_member_function(
     // do template arguments
     // this also sets up the template scope of the method
     cpp_scopet &method_scope=
-      typecheck_template_arguments(decl_tmp.template_type());
+      typecheck_template_parameters(decl_tmp.template_type());
 
     cpp_scopes.go_to(method_scope);
 
@@ -656,7 +656,7 @@ const symbolt& cpp_typecheckt::convert_template_specialization(
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::typecheck_template_arguments
+Function: cpp_typecheckt::typecheck_template_parameters
 
   Inputs:
 
@@ -666,46 +666,46 @@ Function: cpp_typecheckt::typecheck_template_arguments
 
 \*******************************************************************/
 
-cpp_scopet& cpp_typecheckt::typecheck_template_arguments(typet &type)
+cpp_scopet &cpp_typecheckt::typecheck_template_parameters(
+  template_typet &type)
 {
   cpp_save_scopet cpp_saved_scope(cpp_scopes);
 
-
   assert(type.id()=="template");
 
-  std::string id_suffix = "template::"+i2string(template_counter++);
+  std::string id_suffix="template::"+i2string(template_counter++);
 
-  // produce a new scope
+  // produce a new scope for the template parameters
   cpp_scopet &template_scope=
-    cpp_scopes.current_scope().new_scope(cpp_scopes.current_scope().prefix + id_suffix);
-  cpp_scopes.go_to(template_scope);
+    cpp_scopes.current_scope().new_scope(
+      cpp_scopes.current_scope().prefix+id_suffix);
 
-  template_scope.prefix=template_scope.get_parent().prefix + id_suffix;
-
+  template_scope.prefix=template_scope.get_parent().prefix+id_suffix;
   template_scope.id_class=cpp_idt::TEMPLATE_SCOPE;
 
+  cpp_scopes.go_to(template_scope);
 
-  // put template arguments into this scope
-
-  irept::subt &arguments=type.add("arguments").get_sub();
+  // put template parameters into this scope
+  template_typet::parameterst &parameters=type.parameters();
 
   unsigned anon_count=0;
 
-  forall_irep(it, arguments)
+  for(template_typet::parameterst::iterator
+      it=parameters.begin();
+      it!=parameters.end();
+      it++)
   {
-    exprt &arg=(exprt &)*it;
+    exprt &parameter=*it;
+
     cpp_declarationt declaration;
-    declaration.swap((cpp_declarationt &)arg);
+    declaration.swap(static_cast<cpp_declarationt &>(parameter));
 
     cpp_declarator_convertert cpp_declarator_converter(*this);
 
-    // there must be one declarator
+    // there must be _one_ declarator
     assert(declaration.declarators().size()==1);
 
     cpp_declaratort &declarator=declaration.declarators().front();
-
-    // there might be a default type
-    exprt default_value = static_cast<const exprt&>(declarator.find("value"));
 
     // it may be anonymous
     if(declarator.name().is_nil())
@@ -719,24 +719,29 @@ cpp_scopet& cpp_typecheckt::typecheck_template_arguments(typet &type)
     cpp_declarator_converter.is_typedef=declaration.get_bool("is_type");
     cpp_declarator_converter.is_template_argument=true;
 
+    // There might be a default type or value.
+    // We store it for later, as it can't be typechecked now
+    // because of dependencies on earlier parameters!
+    exprt default_value=declarator.value();
+    declarator.value().make_nil();
+
     const symbolt &symbol=
       cpp_declarator_converter.convert(declaration, declarator);
 
     if(cpp_declarator_converter.is_typedef)
     {
-      arg=exprt("type", typet("symbol"));
-      arg.type().set("identifier", symbol.name);
-
-      	arg.type().location()=declaration.find_location();
-
-     }
+      parameter=exprt("type", typet("symbol"));
+      parameter.type().set("identifier", symbol.name);
+      parameter.type().location()=declaration.find_location();
+    }
     else
-      arg=symbol_expr(symbol);
+      parameter=symbol_expr(symbol);
 
+    // set (non-typechecked) default value
     if(default_value.is_not_nil())
-	    arg.add("#default") = default_value;
+      parameter.add("#default")=default_value;
 
-    arg.location()=declaration.find_location();
+    parameter.location()=declaration.find_location();
   }
 
   // continue without adding to the prefix

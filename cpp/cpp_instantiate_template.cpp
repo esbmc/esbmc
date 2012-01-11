@@ -332,7 +332,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
       // do template arguments
       // this also sets up the template scope of the method
       cpp_scopet &method_scope=
-        typecheck_template_arguments(method_type);
+        typecheck_template_parameters(method_type);
+
       cpp_scopes.go_to(method_scope);
 
       // mapping from template arguments to values/types
