@@ -360,7 +360,7 @@ protected:
   void typecheck_compound_body(symbolt &symbol);
   void typecheck_enum_body(symbolt &symbol);
   void typecheck_function_bodies();
-  void typecheck_compound_bases(typet &type);
+  void typecheck_compound_bases(struct_typet &type);
 
   void move_member_initializers(
     irept &initializers,
