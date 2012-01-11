@@ -22,7 +22,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_convert_type.h"
 #include "expr2cpp.h"
 
-
 /*******************************************************************\
 
 Function: cpp_typecheckt::find_parent
@@ -312,14 +311,12 @@ void cpp_typecheckt::typecheck_expr_sizeof(exprt &expr)
       // this may be ambiguous -- it can be either a type or
       // an expression
 
-      exprt symbol_expr;
       cpp_typecheck_fargst fargs;
 
-      resolve(
-        static_cast<cpp_namet &>(static_cast<irept &>(type)),
+      exprt symbol_expr=resolve(
+        to_cpp_name(static_cast<const irept &>(type)),
         cpp_typecheck_resolvet::BOTH,
-        fargs,
-        symbol_expr);
+        fargs);
 
       if(symbol_expr.id()!="type")
       {
@@ -1029,16 +1026,14 @@ void cpp_typecheckt::typecheck_expr_member(
     cpp_save_scopet save_scope(cpp_scopes);
     cpp_scopes.set_scope(struct_identifier);
 
-    // resolve member
-    exprt symbol_expr;
+    // resolve the member name in this scope
     cpp_typecheck_fargst new_fargs(fargs);
     new_fargs.add_object(op0);
 
-    resolve(
-            component_cpp_name,
-            cpp_typecheck_resolvet::VAR,
-            new_fargs,
-            symbol_expr);
+    exprt symbol_expr=resolve(
+                        component_cpp_name,
+                        cpp_typecheck_resolvet::VAR,
+                        new_fargs);
 
     if(symbol_expr.id()== "dereference")
     {
@@ -1355,12 +1350,11 @@ void cpp_typecheckt::typecheck_expr_cpp_name(
     }
   }
 
-  symbol_exprt symbol_expr;
-
-  resolve(to_cpp_name(expr),
-          cpp_typecheck_resolvet::VAR,
-          fargs,
-          symbol_expr);
+  exprt symbol_expr=
+    resolve(
+      to_cpp_name(expr),
+      cpp_typecheck_resolvet::VAR,
+      fargs);
 
   // if symbol_expr is a type and not an expr, then the type
   // has to be a POD

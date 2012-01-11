@@ -25,6 +25,7 @@ Function: cpp_typecheckt::typecheck_type
  Purpose:
 
 \*******************************************************************/
+
 void cpp_typecheckt::typecheck_type(typet &type)
 {
   assert(type.id()!="");
@@ -38,28 +39,28 @@ void cpp_typecheckt::typecheck_type(typet &type)
   catch(const char *error)
   {
     err_location(type);
-    str << error << std::endl;
+    str << error;
     throw 0;
   }
 
   catch(const std::string &error)
   {
     err_location(type);
-    str << error << std::endl;
+    str << error;
     throw 0;
   }
 
   if(type.id()=="cpp-name")
   {
     c_qualifierst qualifiers(type);
+
     cpp_namet cpp_name;
     cpp_name.swap(type);
-    exprt symbol_expr;
-    resolve(
+
+    exprt symbol_expr=resolve(
       cpp_name,
       cpp_typecheck_resolvet::TYPE,
-      cpp_typecheck_fargst(),
-      symbol_expr);
+      cpp_typecheck_fargst());
 
     if(symbol_expr.id()!="type")
     {

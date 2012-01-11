@@ -46,12 +46,11 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
     const cpp_namet &name=
       to_cpp_name(base_it->find("name"));
 
-    exprt base_symbol_expr;
-    resolve(
-      name,
-      cpp_typecheck_resolvet::TYPE,
-      cpp_typecheck_fargst(),
-      base_symbol_expr);
+    exprt base_symbol_expr=
+      resolve(
+        name,
+        cpp_typecheck_resolvet::TYPE,
+        cpp_typecheck_fargst());
 
     if(base_symbol_expr.id()!="type" ||
        base_symbol_expr.type().id()!="symbol")

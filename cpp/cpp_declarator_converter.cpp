@@ -146,12 +146,12 @@ symbolt &cpp_declarator_convertert::convert(
     if(final_type.get("return_type")=="constructor")
     {
       const cpp_namet &name = (const cpp_namet&) declarator.find("name");
-      exprt symbol_expr;
-      cpp_typecheck.resolve(
-        name,
-        cpp_typecheck_resolvet::TYPE,
-        cpp_typecheck_fargst(),
-        symbol_expr);
+
+      exprt symbol_expr=
+        cpp_typecheck.resolve(
+          name,
+          cpp_typecheck_resolvet::TYPE,
+          cpp_typecheck_fargst());
 
       if(symbol_expr.id()!="type" ||
          symbol_expr.type().id()!="symbol")

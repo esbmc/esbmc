@@ -83,14 +83,15 @@ public:
   friend class cpp_typecheck_resolvet;
   friend class cpp_declarator_convertert;
 
-  void resolve(
+  exprt resolve(
     const cpp_namet &cpp_name,
-    cpp_typecheck_resolvet::wantt want,
+    const cpp_typecheck_resolvet::wantt want,
     const cpp_typecheck_fargst &fargs,
-    exprt &dest)
+    bool fail_with_exception=true)
   {
     cpp_typecheck_resolvet cpp_typecheck_resolve(*this);
-    cpp_typecheck_resolve.resolve(cpp_name, want, fargs, dest);
+    return cpp_typecheck_resolve.resolve(
+      cpp_name, want, fargs, fail_with_exception);
   }
 
   virtual void typecheck_expr(exprt &expr);

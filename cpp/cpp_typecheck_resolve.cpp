@@ -526,14 +526,14 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::do_builtin(
-                                        const locationt &location,
-                                        const irep_idt &base_name,
-                                        irept &template_args,
-                                        exprt &dest)
+exprt cpp_typecheck_resolvet::do_builtin(
+  const irep_idt &base_name,
+  irept &template_args)
 {
+  exprt dest;
+
   irept::subt &arguments=
-  template_args.add("arguments").get_sub();
+    template_args.add("arguments").get_sub();
 
   if(base_name=="unsignedbv" ||
      base_name=="signedbv")
@@ -595,7 +595,7 @@ void cpp_typecheck_resolvet::do_builtin(
     {
       cpp_typecheck.err_location(argument1);
       throw id2string(base_name)+" expects two integer template arguments, "
-      "but got type";
+        "but got type";
     }
 
     cpp_typecheck.typecheck_expr(argument0);
@@ -663,9 +663,11 @@ void cpp_typecheck_resolvet::do_builtin(
   {
     cpp_typecheck.err_location(location);
     cpp_typecheck.str
-      << "unknown built-in identifier: " << base_name << std::endl;
+      << "unknown built-in identifier: " << base_name;
     throw 0;
   }
+
+  return dest;
 }
 
 /*******************************************************************\
@@ -704,7 +706,6 @@ void cpp_typecheck_resolvet::resolve_scope(
 
   base_name="";
   template_args.make_nil();
-
 
   while(pos!=cpp_name.get_sub().end())
   {
@@ -805,7 +806,7 @@ Purpose:
 \*******************************************************************/
 
 cpp_scopet &cpp_typecheck_resolvet::resolve_namespace(
-                                                      const cpp_namet &cpp_name)
+  const cpp_namet &cpp_name)
 {
   std::string base_name;
   irept template_args(get_nil_irep());
@@ -857,65 +858,69 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::resolve(
-                                     const cpp_namet &cpp_name,
-                                     wantt want,
-                                     const cpp_typecheck_fargst &fargs,
-                                     exprt &dest)
+exprt cpp_typecheck_resolvet::resolve(
+  const cpp_namet &cpp_name,
+  const wantt want,
+  const cpp_typecheck_fargst &fargs,
+  bool fail_with_exception)
 {
   std::string base_name;
   exprt template_args;
   template_args.make_nil();
 
   // save 'this_expr' before resolving the scopes
-  this_expr = cpp_typecheck.cpp_scopes.current_scope().this_expr;
+  this_expr=cpp_typecheck.cpp_scopes.current_scope().this_expr;
 
   cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
+
+  // this changes the scope
   resolve_scope(cpp_name, base_name, template_args);
 
   #ifdef CPP_SYSTEMC_EXTENSION
   // SystemC extension
-  if(base_name == "sc_uint" || base_name == "sc_int" || base_name == "sc_bv" ||
-     base_name == "sc_lv" || base_name == "sc_logic")
-  {
-    if(base_name == "sc_uint" || base_name == "sc_bv")
-      do_builtin_sc_uint_extension(cpp_name,template_args,dest);
-    else if(base_name == "sc_int")
-      do_builtin_sc_int_extension(cpp_name,template_args,dest);
-    else if(base_name == "sc_logic")
-      do_builtin_sc_logic_extension(cpp_name,template_args, dest);
-    else if(base_name == "sc_lv")
-      do_builtin_sc_lv_extension(cpp_name,template_args,dest);
-    else
-      assert(0);
-    return;
-  }
+//  if(base_name == "sc_uint" || base_name == "sc_int" || base_name == "sc_bv" ||
+//     base_name == "sc_lv" || base_name == "sc_logic")
+//  {
+  if(base_name == "sc_uint" || base_name == "sc_bv")
+    return do_builtin_sc_uint_extension(cpp_name, template_args);
+  else if(base_name == "sc_int")
+    return do_builtin_sc_int_extension(cpp_name, template_args);
+  else if(base_name == "sc_logic")
+    return do_builtin_sc_logic_extension(cpp_name, template_args);
+  else if(base_name == "sc_lv")
+    return do_builtin_sc_lv_extension(cpp_name, template_args);
+//    else
+//      assert(0);
+//    return;
+//  }
   else if (base_name == "SC_LOGIC_0" || base_name == "SC_LOGIC_1" ||
            base_name == "SC_LOGIC_Z" || base_name == "SC_LOGIC_X")
   {
-    exprt constant("constant",typet("verilogbv"));
+    exprt constant("constant", typet("verilogbv"));
     constant.type().set("width", "1");
     if(base_name == "SC_LOGIC_0")
-       constant.set("value","0");
+       constant.set("value", "0");
     else if(base_name == "SC_LOGIC_1")
-      constant.set("value","1");
+      constant.set("value", "1");
     else if(base_name == "SC_LOGIC_Z")
       constant.set("value", "z");
     else if(base_name == "SC_LOGIC_X")
-      constant.set("value","x");
+      constant.set("value", "x");
     else
       assert(0);
-    dest = constant;
 
-    if(want == TYPE)
+    if(want==TYPE)
     {
+      if(!fail_with_exception) return nil_exprt();
+
       cpp_typecheck.err_location(cpp_name);
       cpp_typecheck.str
         << "error: expected type, but got expression `"
-        << cpp_typecheck.to_string(dest) << "'";
+        << cpp_typecheck.to_string(constant) << "'";
       throw 0;
     }
-    return;
+
+    return constant;
   }
   #endif
 
@@ -927,24 +932,23 @@ void cpp_typecheck_resolvet::resolve(
   {
     if(cpp_typecheck.cpp_scopes.current_scope().identifier==
        "cpp::__CPROVER")
-    {
-      do_builtin(location, base_name, template_args, dest);
-      return;
-    }
+      return do_builtin(base_name, template_args);
   }
   else
   {
     if(base_name=="true")
     {
-      dest.make_true();
-      dest.location()=location;
-      return;
+      exprt result;
+      result.make_true();
+      result.location()=location;
+      return result;
     }
     else if(base_name=="false")
     {
-      dest.make_false();
-      dest.location()=location;
-      return;
+      exprt result;
+      result.make_false();
+      result.location()=location;
+      return result;
     }
   }
 
@@ -960,9 +964,10 @@ void cpp_typecheck_resolvet::resolve(
     resolve_with_arguments(id_set, base_name, fargs);
   }
 
-  // see if we need to disambiguate
   if(id_set.empty())
   {
+    if(!fail_with_exception) return nil_exprt();
+
     cpp_typecheck.err_location(location);
     cpp_typecheck.str
       << "symbol `"
@@ -973,9 +978,12 @@ void cpp_typecheck_resolvet::resolve(
       if(cpp_typecheck.cpp_scopes.current_scope().is_root_scope())
         cpp_typecheck.str << " in root scope";
       else
-        cpp_typecheck.str << " in scope " <<
-      cpp_typecheck.cpp_scopes.current_scope().prefix;
+        cpp_typecheck.str << " in scope `"
+                          <<
+          cpp_typecheck.cpp_scopes.current_scope().prefix
+                          << "'";
     }
+
     //cpp_typecheck.cpp_scopes.get_root_scope().print(std::cout);
     throw 0;
   }
@@ -989,6 +997,8 @@ void cpp_typecheck_resolvet::resolve(
   if(want==VAR)
     make_constructors(identifiers);
 
+  exprt result;
+
   // see if we need to disambiguate
   if(identifiers.empty())
   {
@@ -1000,14 +1010,7 @@ void cpp_typecheck_resolvet::resolve(
   }
   else if(identifiers.size()==1)
   {
-    dest=*identifiers.begin();
-    if(dest.get_bool("#not_accessible"))
-    {
-      cpp_typecheck.err_location(dest.location());
-      cpp_typecheck.str << "error: member `" << dest.get("component_name").c_str()
-        << "' is not accessible";
-      throw 0;
-    }
+    result=*identifiers.begin();
   }
   else
   {
@@ -1017,14 +1020,7 @@ void cpp_typecheck_resolvet::resolve(
 
     if(new_identifiers.size()==1)
     {
-      dest=*new_identifiers.begin();
-      if(dest.get_bool("#not_accessible"))
-      {
-        cpp_typecheck.err_location(dest.location());
-        cpp_typecheck.str << "error: member `" << dest.get("component_name").c_str()
-          << "' is not accessible";
-        throw 0;
-      }
+      result=*new_identifiers.begin();
     }
     else
     {
@@ -1119,33 +1115,39 @@ void cpp_typecheck_resolvet::resolve(
   switch(want)
   {
   case VAR:
-    if(dest.id()=="type" && !cpp_typecheck.cpp_is_pod(dest.type()))
+    if(result.id()=="type" && !cpp_typecheck.cpp_is_pod(result.type()))
     {
+      if(!fail_with_exception) return nil_exprt();
+
       cpp_typecheck.err_location(location);
 
       cpp_typecheck.str
         << "error: expected expression, but got type `"
-        << cpp_typecheck.to_string(dest.type()) << "'";
+        << cpp_typecheck.to_string(result.type()) << "'";
 
       throw 0;
     }
     break;
 
   case TYPE:
-    if(dest.id()!="type")
+    if(result.id()!="type")
     {
+      if(!fail_with_exception) return nil_exprt();
+
       cpp_typecheck.err_location(location);
 
       cpp_typecheck.str
         << "error: expected type, but got expression `"
-        << cpp_typecheck.to_string(dest) << "'";
+        << cpp_typecheck.to_string(result) << "'";
 
       throw 0;
     }
     break;
 
-    default:;
+  default:;
   }
+
+  return result;
 }
 
 /*******************************************************************\
@@ -1358,11 +1360,11 @@ Purpose:
 \*******************************************************************/
 
 void cpp_typecheck_resolvet::filter_for_named_scopes(
-                                                     cpp_scopest::id_sett &id_set)
+  cpp_scopest::id_sett &id_set)
 {
   cpp_scopest::id_sett new_set;
 
-  // we only want scopes
+  // We only want scopes!
   for(cpp_scopest::id_sett::const_iterator
       it=id_set.begin();
       it!=id_set.end();
@@ -1387,7 +1389,8 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
         assert(type.id()!="struct");
         if(type.id()=="symbol")
           identifier = type.get("identifier");
-        else continue;
+        else
+          continue;
       }
 
       while(true)
@@ -1466,7 +1469,7 @@ Purpose:
 \*******************************************************************/
 
 void cpp_typecheck_resolvet::filter_for_namespaces(
-                                                   cpp_scopest::id_sett &id_set)
+  cpp_scopest::id_sett &id_set)
 {
   // we only want namespaces
   for(cpp_scopest::id_sett::iterator
@@ -1498,9 +1501,9 @@ Purpose:
 \*******************************************************************/
 
 void cpp_typecheck_resolvet::resolve_with_arguments(
-                                                    cpp_scopest::id_sett& id_set,
-                                                    const std::string& base_name,
-                                                    const cpp_typecheck_fargst &fargs)
+  cpp_scopest::id_sett &id_set,
+  const std::string &base_name,
+  const cpp_typecheck_fargst &fargs)
 {
   cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
 
@@ -1532,10 +1535,9 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::do_builtin_sc_uint_extension(
-  const cpp_namet cpp_name,
-  exprt& template_args,
-  exprt& dest)
+exprt cpp_typecheck_resolvet::do_builtin_sc_uint_extension(
+  const cpp_namet &cpp_name,
+  exprt& template_args)
 {
   if(template_args.is_nil())
   {
@@ -1573,7 +1575,7 @@ void cpp_typecheck_resolvet::do_builtin_sc_uint_extension(
   // this won't work for hex etc
   unsignedbv.add("width")=arg0.find("#cformat");
 
-  dest=type_exprt(unsignedbv);
+  return type_exprt(unsignedbv);
 }
 
 /*******************************************************************\
@@ -1588,10 +1590,9 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::do_builtin_sc_int_extension(
-  const cpp_namet cpp_name,
-  exprt& template_args,
-  exprt& dest)
+exprt cpp_typecheck_resolvet::do_builtin_sc_int_extension(
+  const cpp_namet &cpp_name,
+  exprt& template_args)
 {
  if(template_args.is_nil())
   {
@@ -1627,8 +1628,10 @@ void cpp_typecheck_resolvet::do_builtin_sc_int_extension(
   typet unsignedbv("signedbv");
   unsignedbv.add("width") = arg0.find("#cformat");
 
-  dest = type_exprt(unsignedbv);
-  dest.type().set("#sc_int",true);
+  exprt dest=type_exprt(unsignedbv);
+  dest.type().set("#sc_int", true);
+
+  return dest;
 }
 
 /*******************************************************************\
@@ -1643,10 +1646,9 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::do_builtin_sc_logic_extension(
-  const cpp_namet cpp_name,
-  const exprt &template_args,
-  exprt &dest)
+exprt cpp_typecheck_resolvet::do_builtin_sc_logic_extension(
+  const cpp_namet &cpp_name,
+  const exprt &template_args)
 {
   if(template_args.is_not_nil())
   {
@@ -1658,7 +1660,7 @@ void cpp_typecheck_resolvet::do_builtin_sc_logic_extension(
   typet verilogbv("verilogbv");
   verilogbv.set("width", "1");
 
-  dest=type_exprt(verilogbv);
+  return type_exprt(verilogbv);
 }
 
 /*******************************************************************\
@@ -1673,10 +1675,9 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::do_builtin_sc_lv_extension(
-  const cpp_namet cpp_name,
-  exprt &template_args,
-  exprt &dest)
+exprt cpp_typecheck_resolvet::do_builtin_sc_lv_extension(
+  const cpp_namet &cpp_name,
+  exprt &template_args)
 {
   if(template_args.is_nil())
   {
@@ -1712,7 +1713,7 @@ void cpp_typecheck_resolvet::do_builtin_sc_lv_extension(
   typet verilogbv("verilogbv");
   verilogbv.add("width") = arg0.find("#cformat");
 
-  dest=type_exprt(verilogbv);
+  return type_exprt(verilogbv);
 }
 
 #endif

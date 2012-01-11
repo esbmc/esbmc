@@ -742,11 +742,11 @@ void cpp_typecheckt::typecheck_template_args(
     else if(t.id() == "ambiguous")
     {
       // it can be either a template argument or a type
-      exprt res;
-      resolve(
-        to_cpp_name(t.type()),
-        cpp_typecheck_resolvet::BOTH,
-        cpp_typecheck_fargst(), res);
+      exprt res=
+        resolve(
+          to_cpp_name(t.type()),
+          cpp_typecheck_resolvet::BOTH,
+          cpp_typecheck_fargst());
 
        t.swap(res);
     }

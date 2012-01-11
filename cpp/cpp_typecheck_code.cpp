@@ -99,9 +99,9 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
 
   // The initializer may be a data member
   // or a parent class
-  exprt symbol_expr;
   cpp_typecheck_fargst fargs;
-  resolve(member, cpp_typecheck_resolvet::BOTH, fargs, symbol_expr);
+  exprt symbol_expr=
+    resolve(member, cpp_typecheck_resolvet::BOTH, fargs);
 
   if(symbol_expr.id() == "type" &&
      follow(symbol_expr.type()).id() == "struct")
@@ -156,15 +156,16 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
   else
   {
     if(symbol_expr.id() == "dereference" &&
-          symbol_expr.op0().id() == "member" &&
-          symbol_expr.get_bool("#implicit") == true)
+       symbol_expr.op0().id() == "member" &&
+       symbol_expr.get_bool("#implicit") == true)
     {
       // treat references as normal pointers
       exprt tmp = symbol_expr.op0();
       symbol_expr.swap(tmp);
     }
 
-    if(symbol_expr.id() == "symbol" && symbol_expr.type().id() != "code")
+    if(symbol_expr.id() == "symbol" &&
+       symbol_expr.type().id()!="code")
     {
       // maybe the name of the member collides with a parameter of the constructor
       symbol_expr.make_nil();
@@ -176,12 +177,12 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
       {
         cpp_save_scopet cpp_saved_scope(cpp_scopes);
         cpp_scopes.go_to(*(cpp_scopes.id_map[cpp_scopes.current_scope().class_identifier]));
-        resolve(member, cpp_typecheck_resolvet::VAR, fargs, symbol_expr);
+        symbol_expr=resolve(member, cpp_typecheck_resolvet::VAR, fargs);
       }
 
       if(symbol_expr.id() == "dereference" &&
-      symbol_expr.op0().id() == "member" &&
-      symbol_expr.get_bool("#implicit") == true)
+         symbol_expr.op0().id() == "member" &&
+         symbol_expr.get_bool("#implicit") == true)
       {
         // treat references as normal pointers
         exprt tmp = symbol_expr.op0();
@@ -189,14 +190,14 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
       }
     }
 
-    if (symbol_expr.id() == "member" &&
-        symbol_expr.op0().id() == "dereference" &&
-        symbol_expr.op0().op0() == cpp_scopes.current_scope().this_expr)
+    if(symbol_expr.id() == "member" &&
+       symbol_expr.op0().id() == "dereference" &&
+       symbol_expr.op0().op0() == cpp_scopes.current_scope().this_expr)
     {
       if(is_reference(symbol_expr.type()))
       {
         // it's a reference member
-        if(code.operands().size() != 1)
+        if(code.operands().size()!=1)
         {
           err_location(code);
           str << " reference `" + base_name + "' expects one initializer";
