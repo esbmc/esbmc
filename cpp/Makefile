@@ -13,7 +13,7 @@ SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck_function.cpp cpp_typecheck_namespace.cpp \
       cpp_name.cpp cpp_is_pod.cpp cpp_scope.cpp \
       cpp_typecheck_find_constructor.cpp template_map.cpp \
-      cpp_scopes.cpp \
+      cpp_scopes.cpp cpp_typecheck_linkage_spec.cpp \
       cpp_declarator.cpp cpp_type2name.cpp cpp_instantiate_template.cpp \
       cpp_typecheck_template.cpp cpp_typecheck_function_bodies.cpp \
       cpp_typecheck_initializer.cpp cpp_typecheck_compound_type.cpp \
