@@ -3,6 +3,7 @@
 Module: Main Module
 
 Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
+		Jeremy Morse, jcmm106@ecs.soton.ac.uk
 
 \*******************************************************************/
 
