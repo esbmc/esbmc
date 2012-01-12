@@ -2,15 +2,18 @@
 
 Module: Main Module
 
-Author: Daniel Kroening, kroening@kroening.com
+Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
 /*
 
-  CBMC
-  Bounded Model Checking for ANSI-C
-  Copyright (C) 2001-2005 Daniel Kroening <kroening@kroening.com>
+  ESBMC
+  SMT-based Context-Bounded Model Checking for ANSI-C/C++
+  Copyright (c) 2009-2011, Lucas Cordeiro, Federal University of Amazonas
+  Jeremy Morse, Denis Nicole, Bernd Fischer, University of Southampton,
+  Joao Marques Silva, University College Dublin.
+  All rights reserved.
 
 */
 
