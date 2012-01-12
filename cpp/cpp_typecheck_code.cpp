@@ -261,7 +261,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
   if(code.operands().size()!=1)
   {
     err_location(code);
-    throw "declaration expected to have 1 operand";
+    throw "declaration expected to have one operand";
   }
 
   assert(code.op0().id()=="cpp-declaration");
@@ -273,6 +273,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     convert_typedef(declaration.type());
 
   typecheck_type(declaration.type());
+  assert(declaration.type().is_not_nil());
 
   if(declaration.declarators().empty() &&
      follow(declaration.type()).get_bool("#is_anonymous"))
@@ -280,7 +281,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     if(follow(declaration.type()).id()!="union")
     {
       err_location(code);
-      throw "declaration does not declare anything";
+      throw "declaration statement does not declare anything";
     }
 
     convert_anonymous_union(declaration, code);
@@ -290,10 +291,10 @@ void cpp_typecheckt::typecheck_decl(codet &code)
   codet new_code("decl-block");
   new_code.reserve_operands(declaration.declarators().size());
 
-  // do the declarators (optional)
+  // Do the declarators (optional).
   Forall_cpp_declarators(it, declaration)
   {
-    cpp_declaratort& declarator = *it;
+    cpp_declaratort &declarator=*it;
     cpp_declarator_convertert cpp_declarator_converter(*this);
 
     cpp_declarator_converter.is_typedef=is_typedef;
@@ -308,19 +309,15 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     decl_statement.location()=symbol.location;
     decl_statement.copy_to_operands(cpp_symbol_expr(symbol));
 
-    // do we have an initializer?
-    // and please, it's not code?
-    if(symbol.value.is_not_nil())
+    // Do we have an initializer that's not code?
+    if(symbol.value.is_not_nil() &&
+       symbol.value.id()!="code")
     {
-      if(symbol.value.id()!="code")
-      {
-        decl_statement.copy_to_operands(symbol.value);
-        assert(follow(decl_statement.op1().type()) == follow(symbol.type));
-      }
+      decl_statement.copy_to_operands(symbol.value);
+      assert(follow(decl_statement.op1().type())==follow(symbol.type));
     }
 
     new_code.move_to_operands(decl_statement);
-
 
     // is there a constructor to be called?
     if(symbol.value.is_not_nil())
@@ -331,10 +328,14 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     }
     else
     {
+      exprt object_expr=cpp_symbol_expr(symbol);
+
+      already_typechecked(object_expr);
+
       exprt constructor_call=
         cpp_constructor(
           symbol.location,
-          cpp_symbol_expr(symbol),
+          object_expr,
           declarator.init_args().operands());
 
       if(constructor_call.is_not_nil())
@@ -356,6 +357,7 @@ Function: cpp_typecheck_codet::typecheck_block
  Purpose:
 
 \*******************************************************************/
+
 void cpp_typecheckt::typecheck_block(codet &code)
 {
   cpp_save_scopet saved_scope(cpp_scopes);
@@ -363,7 +365,6 @@ void cpp_typecheckt::typecheck_block(codet &code)
 
   c_typecheck_baset::typecheck_block(code);
 }
-
 
 /*******************************************************************\
 
@@ -376,6 +377,7 @@ Function: cpp_typecheckt::typecheck_assign
  Purpose:
 
 \*******************************************************************/
+
 void cpp_typecheckt::typecheck_assign(codet &code)
 {
 
