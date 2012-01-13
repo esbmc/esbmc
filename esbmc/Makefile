@@ -68,3 +68,4 @@ esbmc: $(OBJS) $(MINGWRUNTIME)
 
 clean:
 	-rm -f $(OBJDIR)/* esbmc
+	-rm $(MINGWRUNOBJS)
