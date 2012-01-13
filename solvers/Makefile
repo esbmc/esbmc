@@ -1,7 +1,7 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
-all: $(OBJDIR)/.depends $(OBJDIR)/solvers.o
+all: $(OBJDIR)/.depends dummy $(OBJDIR)/solvers.o
 
 OBJS= sat/$(OBJDIR)/satsolvers.o flattening/$(OBJDIR)/flattening.o \
       prop/$(OBJDIR)/propobj.o
@@ -42,15 +42,14 @@ endif
 
 ###############################################################################
 
-$(DIRS):
-	$(MAKE) -C $@
-
-$(OBJS): $(DIRS)
-
-.PHONY: $(DIRS)
+FORCEDIRSMAKE:= $(shell for dir in $(DIRS); do \
+                       $(MAKE) -C $$dir;\
+                       done)
 
 $(OBJDIR)/solvers.o: $(OBJS)
 	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
+
+dummy: $(OBJDIRS)
 
 clean:
 	-rm solvers.o
