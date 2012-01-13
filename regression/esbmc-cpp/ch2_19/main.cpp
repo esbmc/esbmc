@@ -17,8 +17,9 @@ int main()
    while ( x <= 10 ) { 
       sum += x;          // add x to sum
       ++x;               // increment x
-	  //assert(0);
-	a[3]=1;
+	  
+		/**Array error simulation**/
+		a[3]=1;
    } // end while
 
    cout << "The sum is: " << sum << endl;
