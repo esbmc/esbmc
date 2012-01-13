@@ -26,8 +26,8 @@ int main()
 {
    // demonstrate maximum with int values
    int int1, int2, int3;
-//maximum( 2, 3, 4 );
- assert(maximum( 2, 3, 4 )==2); 
+	maximum( 2, 3, 4 );
+
 #if 1
    cout << "Input three integer values: ";
    cin >> int1 >> int2 >> int3;

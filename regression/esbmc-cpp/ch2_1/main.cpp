@@ -18,8 +18,7 @@ int main()
    while ( x <= 10 ) { 
       sum += x;          // add x to sum
       ++x;               // increment x
-      assert(x==2);
-   } // end while
+    } // end while
 
    cout << "The sum is: " << sum << endl;
 
