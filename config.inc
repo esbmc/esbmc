@@ -2,6 +2,8 @@
 # variables. If building on windows, you must have g++ installed for dependancy
 # generation, and build in a cygwin environment.
 
+ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
+
 LINUX=1
 #WIN_MSVC=1
 #WIN_MINGW32=1
@@ -13,6 +15,8 @@ TARGET64=1
 # Enable linux compatibility (gcc34), not yet implemented
 
 #LINUXCOMPAT=1
+
+endif #EXTERN_ESBMC_CONFIG
 
 # Detect cygwin
 
