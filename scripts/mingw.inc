@@ -6,8 +6,21 @@ MINGWID=i686-pc-mingw32
 Z3LIBDIR=lib
 endif
 
-# mingw doesn't seem to have pkg-config.
 MINGWROOTDIR= /usr/$(MINGWID)/sys-root/mingw
+MINGWBINDIR=$(MINGWROOTDIR)/bin
+
+ifndef ONCYGWIN
+ifdef TARGET64
+# There are no fedora packages for 64 bit mingw, therefore there's no standard
+# location (unless you can show me a distribution that does have such packages).
+# So, if we have this target (linux, 64 bit, mingw) then assume that what we
+# have is a minw32-w64 tarball extracted to /usr/$(MINGWID).
+MINGWROOTDIR=/usr/x86_64-w64-mingw32/x86_64-w64-mingw32
+# Also, by default libstdc++ is in lib. Which is, after all, correct.
+MINGWBINDIR=$(MINGWROOTDIR)/lib
+endif
+endif
+
 CC     = $(MINGWID)-gcc
 CXX    = $(MINGWID)-g++
 LD     = $(MINGWID)-ld

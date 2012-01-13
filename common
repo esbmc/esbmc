@@ -83,10 +83,10 @@ endif
 
 ifdef WIN_MINGW32
 libstdc++-6.dll:
-	cp $(MINGWROOTDIR)/bin/libstdc++-6.dll .
+	cp $(MINGWBINDIR)/libstdc++-6.dll .
 
 libgcc_s_sjlj-1.dll:
-	cp $(MINGWROOTDIR)/bin/libgcc_s_sjlj-1.dll .
+	cp $(MINGWBINDIR)/libgcc_s_sjlj-1.dll .
 
 mingw_runtime_bodge: libstdc++-6.dll libgcc_s_sjlj-1.dll
 endif
