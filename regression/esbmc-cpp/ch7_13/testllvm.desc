@@ -1,3 +1,3 @@
 main.c 
---unwind 1 --no-pointer-check --no-unwinding-assertions -I ~/libraries/
+--z3-ir --unwind 1 --no-pointer-check --no-unwinding-assertions -I ~/libraries/
 ^VERIFICATION FAILED$
