@@ -29,14 +29,13 @@ y.tab.cpp: parser.y
 	if [ -e y.tab.hpp ] ; then mv y.tab.hpp y.tab.h ; else \
         mv y.tab.cpp.h y.tab.h ; fi
 
-y.tab.h: y.tab.cpp
-
 lex.yy.cpp: scanner.l
 	$(LEX) -Pyyansi_c -olex.yy.cpp scanner.l
 
 # extra dependencies
-$(OBJDIR)/y.tab.o: y.tab.cpp y.tab.h
-$(OBJDIR)/lex.yy.o: y.tab.cpp lex.yy.cpp y.tab.h
+$(OBJDIR)/y.tab.o: y.tab.cpp
+# Blocking on y.tab.o ensures y.tab.h exists and has been moved.
+$(OBJDIR)/lex.yy.o: lex.yy.cpp  $(OBJDIR)/y.tab.o
 
 ###############################################################################
 
