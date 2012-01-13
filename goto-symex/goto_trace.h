@@ -82,9 +82,11 @@ public:
   typedef std::list<goto_trace_stept> stepst;
   typedef std::map< std::string, std::string, std::less< std::string > > mid;
   stepst steps;
+  mid llvm_linemap;
   mid llvm_varmap;
-  char* FileName;
-  char* LineNumber;
+  std::string FileName;
+  std::string LineNumber;
+  std::string VarName, OrigVarName;
 
   std::string mode, metadata_filename;
   
@@ -114,9 +116,10 @@ public:
 	  // read all records from file
 	  while ( inVarMap && !inVarMap.eof() ) {
 
-	     // display record
-	     if ( vmap.getVarName() != "" )
-	    	llvm_varmap.insert( mid::value_type( vmap.getVarName() , vmap.getVarInfo() ) );
+	     // read record
+	     if ( vmap.getLineNumber() != "" )
+	    	llvm_linemap.insert( mid::value_type( vmap.getLineNumber() , vmap.getLineInfo() ) );
+	        llvm_varmap.insert( mid::value_type( vmap.getVarName() , vmap.getVarInfo() ) );
 
 	      // read next from file
 	     inVarMap.read( reinterpret_cast< char * >( &vmap ),
@@ -129,6 +132,10 @@ public:
 };
 
 void get_metada_from_llvm(
+  goto_tracet::stepst::const_iterator &it,
+  const goto_tracet &goto_trace);
+
+std::string get_varname_from_guard(
   goto_tracet::stepst::const_iterator &it,
   const goto_tracet &goto_trace);
 

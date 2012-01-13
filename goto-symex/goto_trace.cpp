@@ -338,6 +338,41 @@ void show_goto_trace(
 
 /*******************************************************************\
 
+Function: get_varname_from_guard
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string get_varname_from_guard (
+	goto_tracet::stepst::const_iterator &it,
+	const goto_tracet &goto_trace) {
+
+    std::string varname;
+    if (!it->pc->guard.op0().operands().empty()) {
+		if(!it->pc->guard.op0().op0().identifier().as_string().empty()) {
+		  char identstr[it->pc->guard.op0().op0().identifier().as_string().length()];
+		  strcpy(identstr,it->pc->guard.op0().op0().identifier().c_str());
+		  //std::cout<<"Guard "<<it->pc->guard<<std::endl;
+		  int j=0;
+		  char * tok;
+			tok = strtok (identstr,"::");
+			while (tok != NULL) {
+			  if (j==4) varname = tok;
+			   tok = strtok (NULL, "::");
+			   j++;
+			}
+		}
+    }
+	return varname;
+
+}
+/*******************************************************************\
+
 Function: get_metada_from_llvm
 
   Inputs:
@@ -352,40 +387,54 @@ void get_metada_from_llvm(
   goto_tracet::stepst::const_iterator &it,
   const goto_tracet &goto_trace)
 {
-  int j=0;
-  char str[it->original_lhs.identifier().as_string().length()];
-  strcpy(str,it->original_lhs.identifier().c_str());
-  char * pch;
-  pch = strtok (str,"::");
-  while (pch != NULL)
-  {
-    if (j==4) {
-      if (goto_trace.llvm_varmap.find(pch) != goto_trace.llvm_varmap.end()) {
+  char line[it->pc->location.get_line().as_string().length()];
+  strcpy(line,it->pc->location.get_line().c_str());
 
-   	    char VarInfo[goto_trace.llvm_varmap.find(pch)->second.length()];
+  if (goto_trace.llvm_linemap.find(line) != goto_trace.llvm_linemap.end()){
+ 	  char VarInfo[goto_trace.llvm_linemap.find(line)->second.length()];
 
-        if(!goto_trace.llvm_varmap.find(pch)->second.empty()) {
-       	  //std::cout<<"  VarName "<<pch;
-       	  strcpy(VarInfo,goto_trace.llvm_varmap.find(pch)->second.c_str());
+      if(!goto_trace.llvm_linemap.find(line)->second.empty()) {
+     	  strcpy(VarInfo,goto_trace.llvm_linemap.find(line)->second.c_str());
+      }
+      char * pch;
+      pch = strtok (VarInfo,"@#");
+      int k=0;
+      while (pch != NULL) {
+        if (k==0) const_cast<goto_tracet*>(&goto_trace)->FileName = pch;
+        if (k==1) const_cast<goto_tracet*>(&goto_trace)->LineNumber = pch;
+        if (k==2) const_cast<goto_tracet*>(&goto_trace)->VarName = pch;
+        //std::cout<<"varname - "<<goto_trace.VarName<<std::endl;
+        if (k==3) {
+        	  const_cast<goto_tracet*>(&goto_trace)->OrigVarName = pch;
+        	  //std::cout<<"varname - "<<goto_trace.VarName<<"origvarname - "<<goto_trace.OrigVarName<<std::endl;
+        	  exprt* lhs = const_cast<exprt*>(&it->original_lhs);
+        	  //********************change varname************************************/
+        	  char identstr[it->original_lhs.identifier().as_string().length()];
+        	  strcpy(identstr,it->original_lhs.identifier().c_str());
+        	  //std::cout<<"Guard "<<it->pc->guard<<std::endl;
+        	  int j=0;
+        	  char * tok;
+              tok = strtok (identstr,"::");
+              std::string newidentifier;
+              while (tok != NULL) {
+            	  //std::cout<<"("<<j<<")"<<tok<<std::endl;
+            	  if (j<=3) newidentifier = newidentifier + tok + "::";
+            	  if (j==4) newidentifier = newidentifier + goto_trace.OrigVarName;
+                 tok = strtok (NULL, "::");
+                 j++;
+              }
+        	  //**********************************************************************/
+        	  lhs->identifier(newidentifier);
         }
+        pch = strtok (NULL, "@#");
+        k++;
+      }
+      //std::cout<<"VarName "<<goto_trace.VarName<<std::endl;
+      if(!goto_trace.llvm_linemap.find(line)->second.empty()) {
+        const_cast<locationt*>(&it->pc->location)->set_file(goto_trace.FileName);
+        const_cast<locationt*>(&it->pc->location)->set_line(goto_trace.LineNumber);
 
-        char * pch2;
-        pch2 = strtok (VarInfo,"@#");
-        int k=0;
-        while (pch2 != NULL) {
-          if (k==0) const_cast<goto_tracet*>(&goto_trace)->FileName = pch2;
-          if (k==1) const_cast<goto_tracet*>(&goto_trace)->LineNumber = pch2;
-          pch2 = strtok (NULL, "@#");
-          k++;
-        }
-        if(!goto_trace.llvm_varmap.find(pch)->second.empty()) {
-          const_cast<locationt*>(&it->pc->location)->set_file(goto_trace.FileName);
-          const_cast<locationt*>(&it->pc->location)->set_line(goto_trace.LineNumber);
-         }
        }
-     }
-     pch = strtok (NULL, "::");
-     j++;
   }
 }
 
@@ -426,15 +475,27 @@ void show_goto_trace(
         out << std::endl;
         out << "Violated property:" << std::endl;
         if(!it->pc->location.is_nil()) {
-            if (!goto_trace.metadata_filename.empty())
+            if (!goto_trace.metadata_filename.empty()) {
               get_metada_from_llvm(it, goto_trace);
-        	out << "  " << it->pc->location << std::endl;
+             }
+            out << "  " << it->pc->location << std::endl;
         }
+        //std::cout<<"comment "<<it->comment<<std::endl;
         out << "  " << it->comment << std::endl;
 
         if(it->pc->is_assert())
-          out << "  " << from_expr(ns, "", it->pc->guard) << std::endl;
-
+        	if (!goto_trace.metadata_filename.empty() && !it->pc->guard.operands().empty()) {
+				std::string assertsrt, varname;
+				assertsrt = from_expr(ns, "", it->pc->guard);
+				varname=get_varname_from_guard(it,goto_trace);
+				if(!goto_trace.llvm_varmap.find(varname)->second.empty()) {
+					assertsrt.replace(assertsrt.find(varname),varname.length(),goto_trace.llvm_varmap.find(varname)->second);
+					out << "  " << assertsrt<< std::endl;
+				}
+        	}
+        	else
+        		out << "  " << from_expr(ns, "", it->pc->guard)<< std::endl;
+        //std::cout<<"VarName "<<goto_trace.VarName<<" OrigVarName "<<goto_trace.OrigVarName<<std::endl;
         out << std::endl;
       }
       break;
@@ -464,7 +525,7 @@ void show_goto_trace(
           }
           show_state_header(out, *it, it->pc->location, it->step_nr);
         }
-        counterexample_value(out, ns, it->original_lhs,
+         counterexample_value(out, ns, it->original_lhs,
                              it->value, pretty_names);
       }
       break;
@@ -483,3 +544,4 @@ void show_goto_trace(
     }
   }
 }
+
