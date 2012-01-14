@@ -42,9 +42,12 @@ endif
 
 ###############################################################################
 
+# Don't rebuild if we're `make clean`ing :|
+ifndef CLEANRULE
 FORCEDIRSMAKE:= $(shell for dir in $(DIRS); do \
                        $(MAKE) -C $$dir;\
                        done)
+endif
 
 $(OBJDIR)/solvers.o: $(OBJS)
 	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
