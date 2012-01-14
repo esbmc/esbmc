@@ -12,6 +12,9 @@ LINUX=1
 TARGET64=1
 #TARGET32=1
 
+# Static? (Linux only)
+#STATICLINK=1
+
 # Enable linux compatibility (gcc34), not yet implemented
 
 #LINUXCOMPAT=1
