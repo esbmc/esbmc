@@ -40,10 +40,16 @@ else
 C2GOTO_INCS=-I$(MINGWROOTDIR)/include -D_MINGW
 endif
 WINDOWS= 1
-MINGWRUNTIME= mingw_runtime_bodge
-MINGWRUNOBJS=libstdc++-6.dll libgcc_s_sjlj-1.dll
 PLATLIBS=-lws2_32 -lkernel32
 FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS)
+
+# Always add -static to the command line; this causes things like libstdc++ and
+# the GCC runtime library to be linked in statically rather than dynamically,
+# which means we don't have to cart around the mingw runtime libraries. And,
+# they're public domain, so no GPL worries.
+# This doesn't result in an actual static binary, because there's no such thing
+# on windows, just no additional dependancies
+FINLINKTAIL+= -static
 
 # Work with latest version of gcc
 GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `$(CC) -dumpversion`)

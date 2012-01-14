@@ -60,7 +60,7 @@ endif
 
 include $(ESBMCDIR)/common
 
-esbmc: $(OBJS) $(MINGWRUNTIME)
+esbmc: $(OBJS)
 	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(FINLINKTAIL)
 
 #cbmc-static: $(OBJS)
@@ -68,4 +68,3 @@ esbmc: $(OBJS) $(MINGWRUNTIME)
 
 clean:
 	-rm -f $(OBJDIR)/* esbmc
-	-rm $(MINGWRUNOBJS)
