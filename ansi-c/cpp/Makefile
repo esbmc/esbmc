@@ -14,6 +14,10 @@ lex.cpp.c: scanner.l
 y.tab.c: cpy.y lex.cpp.c
 	$(YACC) -d $(YFLAGS) -pcpp $<
 
+# Another dependancy: can only build lex.cpp.o after bison has run to generate
+# y.tab.h
+$(OBJDIR)/lex.cpp.o: y.tab.c
+
 cpp.c: y.tab.c # Includes y.tab.h
 
 compat.o: compat.c
