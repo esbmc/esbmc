@@ -43,10 +43,12 @@ endif
 ###############################################################################
 
 # Don't rebuild if we're `make clean`ing :|
+ifndef DEPENDMAKE
 ifndef CLEANRULE
 FORCEDIRSMAKE:= $(shell for dir in $(DIRS); do \
                        $(MAKE) -C $$dir;\
                        done)
+endif
 endif
 
 $(OBJDIR)/solvers.o: $(OBJS)
