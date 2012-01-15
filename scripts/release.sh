@@ -220,6 +220,8 @@ function buildstep () {
   enabled=$2
   suffix=$3
 
+  if test $enabled = "0"; then return 1; fi
+
   make clean > /dev/null 2>&1
   env $envstr make > /dev/null 2>&1
 
