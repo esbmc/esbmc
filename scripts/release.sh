@@ -1,5 +1,15 @@
 #!/bin/bash
 
+function usage() {
+  echo "Usage: ./scripts/release.sh [OPTS]" >&2
+  echo "Options:" >&2
+  echo "  -3 dir    Specify directory containing 32 bit solvers" >&2
+  echo "  -6 dir       ''       ''        ''     64 bit solvers" >&2
+  echo "  -2 dir       ''       ''        ''     32 bit compatibility solvers" >&2
+  echo "  -5 dir       ''       ''        ''     64 bit compatibility solvers" >&2
+  echo "  -h ref    Checkout and build the git reference 'ref'" >&2
+}
+
 function checksanity() {
   # You need a 64 bit machine to fully build a release
   if test `uname -m` != "x86_64"; then
