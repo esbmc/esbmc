@@ -82,7 +82,7 @@ void convert_character_literal(
   }
   else
   {
-    throw "literals with "+i2string(value.size())+
+    throw "literals with "+i2string((unsigned long)value.size())+
           " characters are not supported";
   }
 }

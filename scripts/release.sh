@@ -23,7 +23,7 @@ fi
 # this version in release notes
 # (Start by removing leading v)
 vernum=`echo $1 | sed s#v\(.*\)#\1#`
-grep "\*\*\*.*$vernum.*\*\*\*" ./release/release-notes.txt
+grep "\*\*\*.*$vernum.*\*\*\*" ./scripts/release-notes.txt
 if test $? != 0; then
   echo "Can't find an entry for $1 in release-notes.txt; you need to write one"
   exit 1
@@ -96,8 +96,8 @@ fi
 function dobuild () {
 
   # Install our configuration files.
-  cp ./release/config.inc .
-  cp ./release/local.inc .
+  cp ./scripts/release_config.inc .
+  cp ./scripts/release_local.inc .
 
   # And build build build
   rm -rf .release
@@ -196,10 +196,10 @@ function buildtgz {
   mkdir $dirname/smoke-tests
 
   # Copy data in
-  cp release/README $dirname
-  cp release/release-notes.txt $dirname
+  cp scripts/README $dirname
+  cp scripts/release-notes.txt $dirname
   cp $binpath $dirname/bin/esbmc
-  cp release/licenses/* $dirname/licenses
+  cp scripts/licenses/* $dirname/licenses
   cp regression/smoke-tests/* $dirname/smoke-tests/
 
   # Create a tarball

@@ -59,25 +59,6 @@ void z3_convt::show_bv_size(Z3_ast operand)
 }
 
 /*******************************************************************
- Function: z3_convt::select_pointer
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-const typet z3_convt::select_pointer(const typet &type)
-{
-  if (is_ptr(type))
-	return select_pointer(type.subtype());
-  else
-	return type;
-}
-
-/*******************************************************************
  Function: z3_convt::check_all_types
 
  Inputs:
@@ -151,35 +132,31 @@ bool z3_convt::is_signed(const typet &type)
 
  \*******************************************************************/
 
-Z3_ast z3_convt::convert_number(int value, u_int width, bool type)
+Z3_ast z3_convt::convert_number(int64_t value, u_int width, bool type)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
-  std::string out;
-  out = "j: "+ 2;
-  static Z3_ast number_var;
-  char val[16];
+  if (int_encoding)
+    return convert_number_int(value, width, type);
+  else
+    return convert_number_bv(value, width, type);
+}
 
-  sprintf(val,"%i", value);
+Z3_ast z3_convt::convert_number_int(int64_t value, u_int width, bool type)
+{
 
-  if (type==false)
-  {
-    if (int_encoding)
-	  number_var = z3_api.mk_unsigned_int(z3_ctx, atoi(val));
-    else
-	  number_var = Z3_mk_unsigned_int(z3_ctx, atoi(val), Z3_mk_bv_type(z3_ctx, width));
-  }
-  else if (type==true)
-  {
-    if (int_encoding)
-	  number_var = z3_api.mk_int(z3_ctx, atoi(val));
-	else
-	  number_var = Z3_mk_int(z3_ctx, atoi(val), Z3_mk_bv_type(z3_ctx, width));
-  }
+  if (type)
+    return z3_api.mk_int(z3_ctx, value);
+  else
+    return z3_api.mk_unsigned_int(z3_ctx, value);
+}
 
-  return number_var;
+Z3_ast z3_convt::convert_number_bv(int64_t value, u_int width, bool type)
+{
+
+  if (type)
+    return Z3_mk_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
+  else
+    return Z3_mk_unsigned_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
 }
 
 /*******************************************************************
@@ -199,4 +176,18 @@ std::string z3_convt::itos(int i)
   s << i;
 
   return s.str();
+}
+
+void
+z3_convt::debug_label_formula(std::string name, Z3_ast formula)
+{
+  unsigned &num = debug_label_map[name];
+  std::string the_name = "__ESBMC_" + name + itos(num);
+  num++;
+
+  Z3_sort sort = Z3_get_sort(z3_ctx, formula);
+  Z3_ast sym = z3_api.mk_var(z3_ctx, the_name.c_str(), sort);
+  Z3_ast eq = Z3_mk_eq(z3_ctx, sym, formula);
+  assert_formula(eq);
+  return;
 }

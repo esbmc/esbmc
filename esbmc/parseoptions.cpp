@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <memory>
 
+#ifndef _WIN32
 extern "C" {
 #include <ctype.h>
 #include <stdlib.h>
@@ -18,6 +19,7 @@ extern "C" {
 #include <sys/time.h>
 #include <sys/resource.h>
 }
+#endif
 
 #include <config.h>
 #include <expr_util.h>
@@ -52,6 +54,7 @@ extern "C" {
 
 // jmorse - could be somewhere better
 
+#ifndef _WIN32
 void
 timeout_handler(int dummy __attribute__((unused)))
 {
@@ -64,6 +67,7 @@ timeout_handler(int dummy __attribute__((unused)))
   // and results in the allocator locking against itself. So use _exit instead
   _exit(1);
 }
+#endif
 
 /*******************************************************************\
 
@@ -123,18 +127,15 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("boolector-bv"))
   {
-    options.set_option("bl", true);
     options.set_option("boolector-bv", true);
+    options.set_option("int-encoding", false);
   }
-
-  //options.set_option("bl", true);
 
   if(cmdline.isset("z3-bv"))
   {
     options.set_option("z3", true);
     options.set_option("z3-bv", true);
     options.set_option("int-encoding", false);
-    options.set_option("bl", false);
   }
 
   if (cmdline.isset("lazy"))
@@ -147,12 +148,17 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
   	options.set_option("no-assume-guarantee", false);
 
+  if(cmdline.isset("btor"))
+  {
+    options.set_option("btor", true);
+    options.set_option("boolector-bv", true);
+  }
+
   if(cmdline.isset("z3-ir"))
   {
     options.set_option("z3", true);
     options.set_option("z3-ir", true);
     options.set_option("int-encoding", true);
-    options.set_option("bl", false);
   }
 
   if(cmdline.isset("no-slice"))
@@ -161,8 +167,9 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.set_option("string-abstraction", true);
   options.set_option("fixedbv", true);
 
-  if (!options.get_bool_option("z3") && !options.get_bool_option("bl"))
+  if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3"))
   {
+    // If no solver options given, default to z3 integer encoding
     options.set_option("z3", true);
     options.set_option("int-encoding", true);
   }
@@ -182,12 +189,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", true);
   }
 
-  if(cmdline.isset("btor"))
-  {
-	options.set_option("btor", true);
-    options.set_option("bl", true);
-    options.set_option("boolector-bv", true);
-  }
 
    if(cmdline.isset("context-switch"))
      options.set_option("context-switch", cmdline.getval("context-switch"));
@@ -230,6 +231,10 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   // jmorse
   if(cmdline.isset("timeout")) {
+#ifdef _WIN32
+    std::cerr << "Timeout unimplemented on Windows, sorry" << std::endl;
+    abort();
+#else
     int len, mult, timeout;
 
     const char *time = cmdline.getval("timeout");
@@ -260,9 +265,14 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     timeout *= mult;
     signal(SIGALRM, timeout_handler);
     alarm(timeout);
+#endif
   }
 
   if(cmdline.isset("memlimit")) {
+#ifdef _WIN32
+    std::cerr << "Can't memlimit on Windows, sorry" << std::endl;
+    abort();
+#else
     unsigned long len, mult, size;
 
     const char *limit = cmdline.getval("memlimit");
@@ -299,6 +309,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
       perror("Couldn't set memory limit");
       abort();
     }
+#endif
   }
 
   config.options = options;
@@ -502,12 +513,6 @@ bool cbmc_parseoptionst::get_goto_program(
     return true;
   }
 
-  catch(std::bad_alloc)
-  {
-    error("Out of memory");
-    return true;
-  }
-
   return false;
 }
 
@@ -559,11 +564,6 @@ void cbmc_parseoptionst::preprocessing()
 
   catch(int)
   {
-  }
-
-  catch(std::bad_alloc)
-  {
-    error("Out of memory");
   }
 }
 
@@ -966,12 +966,6 @@ bool cbmc_parseoptionst::process_goto_program(
 
   catch(int)
   {
-    return true;
-  }
-
-  catch(std::bad_alloc)
-  {
-    error("Out of memory");
     return true;
   }
 

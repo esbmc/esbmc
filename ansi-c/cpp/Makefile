@@ -1,38 +1,44 @@
 ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
 
-OBJS=cpy.o cpp.o scanner.o compat.o hooks.o
+SRCS=cpp.c compat.c hooks.c
+OBJS=$(OBJDIR)/y.tab.o $(OBJDIR)/lex.cpp.o
 HEADERS=cpp.h
 
 all: preproc.o
 
-preproc.o: $(OBJS) $(HEADERS)
-	$(LD) $(LDFLAGS) $(OBJS) -r -o $@
-
-.l.o:
+lex.cpp.c: scanner.l
 	$(LEX) -Pcpp $(LFLAGS) $<
-	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ lex.cpp.c
 
-.y.o:
+# Warcrime: yacc/bison won't produce y.tab.h unless lex/flex was already run :|
+y.tab.c: cpy.y lex.cpp.c
 	$(YACC) -d $(YFLAGS) -pcpp $<
-	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ y.tab.c
 
-y.tab.h: cpy.o
+# Another dependancy: can only build lex.cpp.o after bison has run to generate
+# y.tab.h
+$(OBJDIR)/lex.cpp.o: y.tab.c
 
-scanner.l: y.tab.h
-
-compat.o: compat.c
-	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ compat.c
+cpp.c: y.tab.c # Includes y.tab.h
 
 $(OBJS): $(HEADERS)
 
 cpp.o: cpy.o
 
 clean:
-	-rm *.o
+	-rm $(OBJDIR)/*.o
 	-rm lex.cpp.c
 	-rm y.tab.c
 	-rm y.tab.h
 	-rm y.output
 	-rm .deps
 
+ifdef WIN_MSVC
+# For no reason I can detect, if opts are enabled in this dir, some linking
+# conflict occurs with msvc and i2string.o. Increadibly bizare.
+OPTS= /Od
+endif
+
 include $(ESBMCDIR)/common
+
+preproc.o: $(OBJS)
+	$(BLOBGENLD) $(LDFLAGS) $^ -o $@ -r

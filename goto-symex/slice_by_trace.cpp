@@ -309,7 +309,7 @@ void symex_slice_by_tracet::compute_ts_back(
 	} else {
 	  exprt merge_sym =exprt(exprt::symbol, typet(typet::t_bool));
 	  merge_sym.identifier(id2string(merge_identifier)+"#"+
-			i2string(merge_count++));
+			i2string((unsigned long)merge_count++));
 	  exprt t_copy (t[j]);
 	  merge_map_back.push_back(t_copy);
 	  std::set<exprt> empty_impls;
@@ -557,7 +557,7 @@ void symex_slice_by_tracet::assign_merges(
   for (std::vector<exprt>::reverse_iterator i = merge_map_back.rbegin();
        i != merge_map_back.rend(); i++) {
     exprt merge_sym =exprt(exprt::symbol, typet(typet::t_bool));
-    merge_sym.identifier(id2string(merge_identifier)+"#"+i2string(merge_count));
+    merge_sym.identifier(id2string(merge_identifier)+"#"+i2string((unsigned long)merge_count));
     merge_count--;
     guardt t_guard;
     t_guard.make_true();

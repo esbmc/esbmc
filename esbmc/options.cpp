@@ -1,5 +1,7 @@
 #include <cmdline.h>
 
+#include <fstream>
+
 #include "parseoptions.h"
 
 const struct opt_templ esbmc_options[] = {
@@ -18,7 +20,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"z3-ir",		switc,		""	},
 { 0,	"boolector-bv",		switc,		""	},
 { 0,	"z3",			switc,		""	},
-{ 0,	"bl",			switc,		""	},
 { 0,	"smt",			switc,		""	},
 { 0,	"outfile",		string,		""	},
 { 0,	"no-pointer-check",	switc,		""	},
@@ -111,8 +112,11 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"break-at",		string,		""	},
 { 0,    "no-lit-cache",         switc,          ""      },
 { 0,	"decide",		switc,		""	},
+{ 0,	"fixed-pointer-model",	switc,		""	},
+{ 0,	"floating-pointer-model",switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
+{ 'I',	"",			string,		""	},
 { 0,	"help",			switc,		""	},
 { 0,	"",			switc,		""	}
 };

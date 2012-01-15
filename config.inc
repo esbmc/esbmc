@@ -1,35 +1,66 @@
-CC     = gcc
-CXX    = g++
-LD     = ld
-AR     = ar
+# Default configuration is linux; alternately, uncomment one of the following
+# variables. If building on windows, you must have g++ installed for dependancy
+# generation, and build in a cygwin environment.
+
+ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
+
+LINUX=1
+#WIN_MSVC=1
+#WIN_MINGW32=1
+
+# 32 or 64 bits?
+TARGET64=1
+#TARGET32=1
+
+# Static? (Linux only)
+#STATICLINK=1
+
+# Enable linux compatibility (gcc34), not yet implemented
+
+#LINUXCOMPAT=1
+
+endif #EXTERN_ESBMC_CONFIG
+
+# Detect cygwin
+
+AMONCYGWIN:= $(shell uname -a | grep -o CYGWIN)
+ifeq "$(AMONCYGWIN)" "CYGWIN"
+ONCYGWIN=1
+endif
+
+# Defaults:
+
+CC=     gcc
+CXX=    g++
+DEPCXX= g++
+LD=     ld
+AR=     ar
 YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
+BLOBGENLD= ld
+PARTLINKLD= ld
+PARTLINKOUT= -o
+PARTLINKOPTS= -r $(LDFLAGS)
+FINLINKBIN= $(CXX)
+FINLINKOUT= -o
+FINLINKTAIL= $(CXXFLAGS) $(LIBS) $(PLATLIBS)
+INCCMD=-I
+PATHSEP=/
 
-# Linux etc.
-#you need to install the packages glibc-static and gmp-static to compile statically
-OPTS ?= -O3
-GCCFLAGS ?= -Wall -Wextra -Wno-deprecated
-#LDFLAGS=
+ifdef LINUX
+include $(ESBMCDIR)/scripts/linux.inc
+endif
 
-# Work with latest version of gcc
-GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `gcc -dumpversion`)
-ifeq "$(GCCVERSIONGTEQ460)" "1"
-  CXXFLAGS += -fpermissive
+ifdef WIN_MINGW32 
+include $(ESBMCDIR)/scripts/mingw.inc
+endif
+
+ifdef WIN_MSVC
+include $(ESBMCDIR)/scripts/msvc.inc
 endif
 
 # Unless someone else has set OBJDIR, default to `pwd`/.objs
 OBJDIR?= .objs
 # Danger: evaluating expression creates directory :o
 CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
-
-# use these for Cygwin:
-# OPTS = -O2
-# GCCFLAGS = -Wall -mno-cygwin
-# LDFLAGS = -mno-cygwin
-
-# SMT and SAT solver locations. Put your own machine-specific absolute paths to
-# these in "local.inc", and then don't commit it. Alternately, set SATDIR to
-# point at a directory containing such solvers in your environment.
-#
-# Currently only Z3 is required for building ESBMC.

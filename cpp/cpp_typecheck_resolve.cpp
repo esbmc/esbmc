@@ -542,7 +542,7 @@ void cpp_typecheck_resolvet::do_builtin(
     {
       cpp_typecheck.err_location(location);
       throw id2string(base_name)+" expects one template argument, "
-        "but got "+i2string(arguments.size());
+        "but got "+i2string((unsigned long)arguments.size());
     }
 
     exprt &argument=static_cast<exprt &>(arguments.front());
@@ -578,7 +578,7 @@ void cpp_typecheck_resolvet::do_builtin(
     {
       cpp_typecheck.err_location(location);
       throw id2string(base_name)+" expects two template arguments, "
-        "but got "+i2string(arguments.size());
+        "but got "+i2string((unsigned long)arguments.size());
     }
 
     exprt &argument0=static_cast<exprt &>(arguments.front());

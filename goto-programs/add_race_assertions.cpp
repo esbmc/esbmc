@@ -20,7 +20,6 @@ Date: February 2006
 #include "remove_skip.h"
 #include "add_race_assertions.h"
 #include "rw_set.h"
-#include "var_name.h"
 
 class w_guardst
 {
@@ -33,13 +32,6 @@ public:
 
   const symbolt &get_guard_symbol(const irep_idt &object)
   {
-    //std::stringstream ss;
-	//std::string temp;
-
-    //ss << get_variable_name(id2string(object));
-	//ss >> temp;
-
-    //const irep_idt identifier="tmp_"+temp;
 	const irep_idt identifier="tmp_"+id2string(object);
 
     const symbolst::const_iterator it=context.symbols.find(identifier);

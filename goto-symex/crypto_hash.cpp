@@ -1,6 +1,8 @@
 
 #include "crypto_hash.h"
 
+#ifndef NO_OPENSSL
+
 extern "C" {
   #include <dlfcn.h>
   #include <string.h>
@@ -92,3 +94,60 @@ crypto_hash::setup_pointers()
   have_pointers = true;
   return;
 }
+
+#else /* !NO_OPENSSL */
+
+extern "C" {
+  #include <stdlib.h>
+  #include <string.h>
+};
+
+#include <iostream>
+
+/* Generate some dummy implementations that complain and abort if used */
+
+bool
+crypto_hash::operator<(const crypto_hash h2) const
+{
+
+  abort();
+  return false;
+}
+
+std::string
+crypto_hash::to_string() const
+{
+
+  abort();
+  return false;
+}
+
+void
+crypto_hash::init(const uint8_t *data, int sz)
+{
+
+  std::cerr << "This version of ESBMC was not built with OpenSSL support";
+  std::cerr << std::endl;
+  abort();
+}
+
+crypto_hash::crypto_hash(const uint8_t *data, int sz)
+{
+
+  init(NULL, 0);
+}
+
+crypto_hash::crypto_hash(std::string str)
+{
+
+  init(NULL, 0);
+}
+
+crypto_hash::crypto_hash()
+{
+  // Valid; some exist as default constructions within other parts of ESBMC.
+  // Preventing this constructor running leads to *all* runtimes being blocked
+  // by errors thrown from here.
+}
+
+#endif /* NO_OPENSSL */

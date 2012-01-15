@@ -9,6 +9,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "execution_state.h"
 #include <string>
 #include <sstream>
+#include <vector>
 #include <i2string.h>
 #include <string2array.h>
 #include <std_expr.h>
@@ -16,7 +17,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "../ansi-c/c_types.h"
 #include <base_type.h>
 #include <simplify_expr.h>
-#include <bits/stl_vector.h>
 #include "config.h"
 
 #include "basic_symex.h"

@@ -10,7 +10,14 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <sys/types.h>
 
 #include <signal.h>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+#include <windows.h>
+#include <winbase.h>
+#undef ERROR
+#undef small
+#endif
 
 #include <sstream>
 #include <fstream>
@@ -163,7 +170,7 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
   std::string logic;
 
   if (options.get_bool_option("bl-bv") || options.get_bool_option("z3-bv") ||
-      options.get_bool_option("bl") || !options.get_bool_option("int-encoding"))
+      !options.get_bool_option("int-encoding"))
     logic = "bit-vector arithmetic";
   else
     logic = "integer/real arithmetic";
@@ -345,7 +352,9 @@ Function: bmc_baset::run
 
 bool bmc_baset::run(const goto_functionst &goto_functions)
 {
+#ifndef _WIN32
   struct sigaction act;
+#endif
   bool resp;
   symex.set_message_handler(message_handler);
   symex.set_verbosity(get_verbosity());
@@ -353,11 +362,13 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
   symex.last_location.make_nil();
 
+#ifndef _WIN32
   // Collect SIGUSR1, indicating that we're supposed to checkpoint.
   act.sa_handler = sigusr1_handler;
   sigemptyset(&act.sa_mask);
   act.sa_flags = 0;
   sigaction(SIGUSR1, &act, NULL);
+#endif
 
   // get unwinding info
   setup_unwind();
@@ -467,15 +478,8 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     return true;
   }
 
-  catch(std::bad_alloc)
-  {
-    message_streamt message_stream(*get_message_handler());
-    message_stream.error("Out of memory");
-    return true;
-  }
-
   print(8, "size of program expression: "+
-           i2string(equation->SSA_steps.size())+
+           i2string((unsigned long)equation->SSA_steps.size())+
            " assignments");
 
   try
@@ -588,12 +592,6 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     error(error_str);
     return true;
   }
-
-  catch(std::bad_alloc)
-  {
-    error("Out of memory");
-    abort();
-  }
 }
 
 /*******************************************************************\
@@ -692,11 +690,11 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 
 #ifdef Z3
 bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
-  : solver_base(bmc), z3_dec(bmc.options.get_bool_option("no-assume-guarentee"), bmc.options.get_bool_option("uw-model"))
+  : solver_base(bmc), z3_dec(bmc.options.get_bool_option("uw-model"),
+                             bmc.options.get_bool_option("int-encoding"),
+                             bmc.options.get_bool_option("smt"))
 {
-  z3_dec.set_encoding(bmc.options.get_bool_option("int-encoding"));
   z3_dec.set_file(bmc.options.get_option("outfile"));
-  z3_dec.set_smt(bmc.options.get_bool_option("smt"));
   z3_dec.set_unsat_core(atol(bmc.options.get_option("core-size").c_str()));
   z3_dec.set_ecp(bmc.options.get_bool_option("ecp"));
   conv = &z3_dec;
@@ -800,7 +798,12 @@ void bmc_baset::write_checkpoint(void)
 
   if (options.get_option("checkpoint-file") == "") {
     char buffer[32];
-    sprintf(buffer, "%d", getpid());
+#ifndef _WIN32
+    pid_t pid = getpid();
+#else
+    unsigned long pid = GetCurrentProcessId();
+#endif
+    sprintf(buffer, "%d", pid);
     f = "esbmc_checkpoint." + std::string(buffer);
   } else {
     f = options.get_option("checkpoint-file");

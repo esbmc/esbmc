@@ -6,7 +6,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
-#include <unistd.h>
 #include <assert.h>
 
 #include <i2string.h>
@@ -65,6 +64,10 @@ decision_proceduret::resultt z3_dect::dec_solve()
   unsigned major, minor, build, revision;
   Z3_get_version(&major, &minor, &build, &revision);
 
+  // Add assumptions that link up literals to symbols - connections that are
+  // made at a high level by prop_conv, rather than by the Z3 backend
+  link_syms_to_literals();
+
   if (smtlib)
     return read_z3_result();
 
@@ -79,41 +82,6 @@ decision_proceduret::resultt z3_dect::dec_solve()
   post_process();
 
   return read_z3_result();
-}
-
-/*******************************************************************\
-
-Function: z3_dect::set_encoding
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void z3_dect::set_encoding(bool enc)
-{
-  set_z3_encoding(enc);
-}
-
-/*******************************************************************\
-
-Function: z3_dect::set_smt
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void z3_dect::set_smt(bool smt)
-{
-  set_smtlib(smt);
-  smtlib = smt;
 }
 
 /*******************************************************************\
@@ -232,6 +200,8 @@ Function: z3_dect::read_z3_result
 decision_proceduret::resultt z3_dect::read_z3_result()
 {
   Z3_lbool result;
+
+  finalize_pointer_chain();
 
   if (smtlib)
     return D_SMTLIB;

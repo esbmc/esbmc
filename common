@@ -15,33 +15,30 @@ OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 # Given the presence of OBJDIR, $(OBJS) can't now automatically infer
 # dependancies between .o's and .cpp's etc
 
-$(OBJDIR)/%.o : %.cpp
-	$(CXX) -c $(CXXFLAGS) -o $@ $<
-
-$(OBJDIR)/%.o : %.c
-	$(CC) -c $(CLAGS) -o $@ $<
-
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
 CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 
-.SUFFIXES:	.C .d .cpp
-
-.C.o:
+ifndef WIN_MSVC
+$(OBJDIR)/%.o : %.cpp
 	$(CXX) -c $(CXXFLAGS) -o $@ $<
 
-.cpp.o:
-	$(CXX) -c $(CXXFLAGS) -o $@ $<
-
-.c.o:
+$(OBJDIR)/%.o : %.c
 	$(CC) -c $(CFLAGS) -o $@ $<
+else
+$(OBJDIR)/%.o : %.cpp
+	$(VCBINS)/cl.exe /TP /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" $(VCINCLUDES) /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
+
+$(OBJDIR)/%.o : %.c
+	$(VCBINS)/cl.exe /TC /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" $(VCINCLUDES) /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
+endif
 
 # A generic target; potentially not defined by the includer
 
 $(MAINOBJ): $(OBJS)
-	$(LD) $(LDFLAGS) -r -o $@ $^
+	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
 #clean defined by includer
 
@@ -49,11 +46,11 @@ ifdef DIRS
 # Rule for making dependancies on first execution
 $(OBJDIR)/.depends:
 	echo "Making dependancies"
-	$(MAKE) depend
+	env DEPENDMAKE=1 $(MAKE) depend
 	touch $(OBJDIR)/.depends
 
 $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS)):
-	$(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
+	env DEPENDMAKE=1 $(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
 
 depend: $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS))
 else
@@ -64,7 +61,7 @@ depend: $(SRCS)
 	@for src in $(SRCS); do \
 		src1=$${src//\.cpp/}; \
 		src2=$${src1//\.c/}; \
-		$(CXX) $(INCLUDES) -MM -MT $(OBJDIR)/$$src2.o $$src >> $(OBJDIR)/.deps; \
+		$(DEPCXX) -DNO_OPENSSL -I $(ESBMCDIR)/util -I$(ESBMCDIR) -I $(Z3GCC)/include -MM -MT $(OBJDIR)/$$src2.o $$src >> $(OBJDIR)/.deps; \
 	done
 
 $(OBJDIR)/.deps:
@@ -77,6 +74,11 @@ endif
 DEPFILEEXISTS := $(shell stat $(OBJDIR)/.deps 2>/dev/null)
 ifneq "$(DEPFILEEXISTS)" ""
 include $(OBJDIR)/.deps
+endif
+
+# Special purpose features,
+ifndef LINUX
+CXXFLAGS+=-DNO_OPENSSL
 endif
 
 # Finally, some special rules for various pieces of hackery for performing debug

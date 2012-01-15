@@ -29,7 +29,7 @@ $(DIRS):
 
 clean:
 	for dir in $(DIRS); do \
-		$(MAKE) -C $$dir clean; \
+		env CLEANRULE=1 $(MAKE) -C $$dir clean; \
 	done
 	-rm $(OBJDIR)/.depends
 

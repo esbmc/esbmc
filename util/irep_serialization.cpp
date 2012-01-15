@@ -72,15 +72,15 @@ void irep_serializationt::reference_convert(
 {
   unsigned id = read_long(in);
   
-  if (id < ireps_container.ireps_on_read.size() && 
-      ireps_container.ireps_on_read[id].first)
+  if (ireps_container.ireps_on_read.find(id) !=
+      ireps_container.ireps_on_read.end())
   {
-    irep = ireps_container.ireps_on_read[id].second;
+    irep = ireps_container.ireps_on_read[id];
   }
   else
   {
     read_irep(in, irep);
-    insert_on_read(id, irep);
+    ireps_container.ireps_on_read[id] = irep;
   }
 }
 
@@ -146,72 +146,20 @@ void irep_serializationt::reference_convert(
   const irept &irep,
   std::ostream &out)
 {
-  ireps_containert::ireps_on_writet::const_iterator fi = 
-    ireps_container.ireps_on_write.find(irep);
-  if (fi==ireps_container.ireps_on_write.end()) 
-  {           
-    unsigned id=insert_on_write(irep);
-    write_long(out, id);
-    write_irep(out, irep);
-  } else {
-    write_long(out, fi->second);
+  // Do we have this irep already? Horrible complexity here.
+  unsigned int i;
+  for (i = 0; i < ireps_container.ireps_on_write.size(); i++) {
+    if (full_eq(ireps_container.ireps_on_write[i], irep)) {
+      // Match, at idx i
+      write_long(out, i);
+      return;
+    }
   }
-}
 
-/*******************************************************************\
- 
-Function: irep_serializationt::insert_on_write
- 
-  Inputs: an unsigned long and an irep
- 
- Outputs: true on success, false otherwise
- 
- Purpose: inserts an irep into the hashtable 
- 
-\*******************************************************************/
-
-unsigned long irep_serializationt::insert_on_write( const irept& i ) 
-{
-  std::pair<ireps_containert::ireps_on_writet::const_iterator,bool> res=
-    ireps_container.ireps_on_write.insert(
-      std::pair<irept, unsigned long>
-      (i, ireps_container.ireps_on_write.size()));
-  if (!res.second)
-  {
-    return ireps_container.ireps_on_write.size();
-  } else {
-    return res.first->second;
-  }      
-}
-
-/*******************************************************************\
- 
-Function: irep_serializationt::insert_on_read
- 
-  Inputs: an unsigned long and an irep
- 
- Outputs: true on success, false otherwise
- 
- Purpose: inserts an irep into the hashtable, but only the id-hashtable
-          (only to be used upon reading ireps from a file) 
- 
-\*******************************************************************/
-
-unsigned long irep_serializationt::insert_on_read(unsigned id, const irept& i) 
-{
-  if (id>=ireps_container.ireps_on_read.size())
-    ireps_container.ireps_on_read.resize(1+id*2, 
-      std::pair<bool, irept>(false, get_nil_irep()));
-    
-  if (ireps_container.ireps_on_read[id].first)
-    throw "irep id read twice.";
-  else
-  {
-    ireps_container.ireps_on_read[id]=
-      std::pair<bool,irept>(true, i);
-  }  
-
-  return id;
+  i = ireps_container.ireps_on_write.size();
+  ireps_container.ireps_on_write.push_back(irep);
+  write_long(out, i);
+  write_irep(out, irep);
 }
 
 /*******************************************************************\
