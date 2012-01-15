@@ -127,8 +127,9 @@ function dobuild () {
   export EXTRACFLAGS="-DNDEBUG"
   export EXTRACXXFLAGS="-DNDEBUG"
 
-  # Use 64 bit libraries
-  export SATDIR=$satdir64
+  # Configure sat...
+  export SATDIR32=$satdir32
+  export SATDIR64=$satdir64
 
   echo "Building 64 bit ESBMC"
   buildstep ".release/esbmc"
