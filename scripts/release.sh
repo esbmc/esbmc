@@ -106,11 +106,15 @@ else
   treeisdirty=0
 fi
 
-git checkout $targetrefname > /dev/null
-
-if test $? != 0; then
-  echo "Couldn't checkout $targetrefname"
-  exit 1
+if test -z "$targetrefname"; then
+  switchedref=0
+else
+  switcheref=1
+  git checkout $targetrefname > /dev/null
+  if test $? != 0; then
+    echo "Couldn't checkout $targetrefname"
+    exit 1
+  fi
 fi
 
 # And wrap all our modifications into a function, so that upon error we can
