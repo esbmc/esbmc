@@ -252,8 +252,8 @@ function buildstep () {
     echo "Building 64 bit $targetname"
     TARGET64=1
     buildstep2 $envstr
+    if test $? != 0; then return 1; fi
     unset TARGET64
-    if test $? != 0; then return $?; fi
     cp esbmc/esbmc "esbmc$suffix"
   fi
 
@@ -261,8 +261,8 @@ function buildstep () {
     echo "Building 32 bit $targetname"
     TARGET32=1
     buildstep2 $envstr
+    if test $? != 0; then return 1; fi
     unset TARGET32
-    if test $? != 0; then return $?; fi
     cp esbmc/esbmc "esbmc32$suffix"
   fi
 
