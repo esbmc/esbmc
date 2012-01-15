@@ -249,11 +249,11 @@ function buildstep () {
 
 # IDX for different config options
 buildopt_linux=0; buildopt_mingw=1; buildopt_static=2; buildopt_compat=3;
-buildopt_fname_suffix=4, buildopt_isenabled=5;
-buildconfig_linuxplain=( 1, 0, 0, 0, "", $target_linuxplain )
-buildconfig_linuxcompat=( 1, 0, 0, 1, "_compat", $target_linuxcompat )
-buildconfig_linuxstatic=( 1, 0, 1, 0, "_static", $target_linuxstatic )
-buildconfig_windows=( 0, 1, 0, 0, "_windows", $target_windows )
+buildopt_fname_suffix=4; buildopt_isenabled=5; buildopt_name=6;
+buildconfig_linuxplain=( 1, 0, 0, 0, "", $target_linuxplain, "linux plain" )
+buildconfig_linuxcompat=( 1, 0, 0, 1, "_compat", $target_linuxcompat, "linux compat" )
+buildconfig_linuxstatic=( 1, 0, 1, 0, "_static", $target_linuxstatic, "linux static" )
+buildconfig_windows=( 0, 1, 0, 0, "_windows", $target_windows, "mingw windows" )
 
 function dobuild () {
 
