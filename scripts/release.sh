@@ -216,7 +216,7 @@ fi
 # cleanly remove all changes to the checked out copy.
 
 function buildstep () {
-  target=$1
+  outputbin=$1
 
   make clean > /dev/null 2>&1
   make > /dev/null 2>&1
@@ -226,7 +226,7 @@ function buildstep () {
     return 1
   fi
 
-  cp esbmc/esbmc $target
+  cp esbmc/esbmc $outputbin
 }
 
 # Array of mappings between what target we're building and the set of config
