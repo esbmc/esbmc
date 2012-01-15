@@ -46,6 +46,18 @@ function checksanity() {
 
 checksanity
 
+# 2d Array of build targets with the following indicies:
+target_linuxplain=0
+target_linuxcompat=1
+target_linuxstatic=2
+target_windows=3
+
+# 2nd dimension
+target_32bit=0
+target_64bit=1
+
+targetarray= { {0,0}, {0,0}, {0,0}, {0,0} }
+
 while getopts ":3:6:2:5:r:" opt; do
   case $opt in
     3)
