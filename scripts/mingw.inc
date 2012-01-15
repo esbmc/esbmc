@@ -31,7 +31,6 @@ CXXFLAGS += -Wall -Wextra -Wno-deprecated
 GCCFLAGS += -Wall -Wextra -Wno-deprecated
 OPTS ?= -O3
 
-LDFLAGS+= -lkernel32 -L $(MINGWROOTDIR)/lib
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
 ifdef ONCYGWIN
