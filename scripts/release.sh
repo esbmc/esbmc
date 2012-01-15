@@ -74,10 +74,10 @@ function printz3 {
   echo "Z3 for $2: $z3ver"
 }
 
-printz3 satdir64 "Linux64"
-printz3 satdir32 "Linux32"
-printz3 satdir64compat "LinuxCompat64"
-printz3 satdir32compat "LinuxCompat32"
+printz3 $satdir64 "Linux64"
+printz3 $satdir32 "Linux32"
+printz3 $satdir64compat "LinuxCompat64"
+printz3 $satdir32compat "LinuxCompat32"
 
 # Find whatever the current head is
 CURHEAD=`git symbolic-ref HEAD`
