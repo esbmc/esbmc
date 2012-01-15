@@ -268,7 +268,12 @@ if test $? != 0; then
   echo "Build failed"
 fi
 
-buildtarballs $targetrefname
+# If there's no target ref name, use current branch or hash.
+if test -z $targetrefname; then
+  buildtarballs $CURHEAD
+else
+  buildtarballs $targetrefname
+fi
 
 cleanup
 
