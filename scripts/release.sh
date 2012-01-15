@@ -30,6 +30,18 @@ function checksanity() {
   fi
 }
 
+while getopts "" opt; do
+  case $opt in
+    \?)
+      echo "Invalid option -$OPTARG" >&2
+      exit 1
+      ;;
+    :)
+      echo "Option -$OPTARG requires argument" >&2
+      exit 1
+      ;;
+  esac
+done
 
 checksanity
 
