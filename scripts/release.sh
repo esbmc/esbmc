@@ -30,8 +30,14 @@ function checksanity() {
   fi
 }
 
-while getopts "" opt; do
+while getopts ":3:6:" opt; do
   case $opt in
+    3)
+      satdir32=$OPTARG
+      ;;
+    6)
+      satdir64=$OPTARG
+      ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
       exit 1
@@ -44,9 +50,6 @@ while getopts "" opt; do
 done
 
 checksanity
-
-satdir64=$2
-satdir32=$3
 
 # Tell the user about what version of Z3 we're about to compile with
 
