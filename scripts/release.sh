@@ -165,6 +165,19 @@ function dobuild () {
   export TARGET32=1
   echo "Building 32 bit compat ESBMC"
   buildstep ".release/esbmc32_compat"
+
+  unset LINUXCOMPAT
+  unset TARGET32
+  unset LINUX
+  export WIN_MINGW32=1
+  export TARGET64=1
+  echo "Building 64 bit Windows binary"
+  buildstep ".release/esbmc_windows"
+
+  unset TARGET64
+  export TARGET32=1
+  echo "Building 32 bit Windows binary"
+  buildstep ".release/esbmc32_windows"
 }
 
 function cleanup () {
