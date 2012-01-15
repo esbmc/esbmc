@@ -250,7 +250,7 @@ function buildstep () {
 
   if test $target_64bit != "0"; then
     echo "Building 64 bit $targetname"
-    TARGET64=1
+    export TARGET64=1
     buildstep2 $envstr
     if test $? != 0; then return 1; fi
     unset TARGET64
@@ -259,7 +259,7 @@ function buildstep () {
 
   if test $target_32bit != "0"; then
     echo "Building 32 bit $targetname"
-    TARGET32=1
+    export TARGET32=1
     buildstep2 $envstr
     if test $? != 0; then return 1; fi
     unset TARGET32
