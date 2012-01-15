@@ -125,8 +125,8 @@ fi
 function dobuild () {
 
   # Install our configuration files.
-  cp ./scripts/release_config.inc .
-  cp ./scripts/release_local.inc .
+  cp ./scripts/release_config.inc ./config.inc
+  cp ./scripts/release_local.inc ./local.inc
 
   # And build build build
   rm -rf .release
