@@ -81,7 +81,7 @@ function settarget() {
   return 0
 }
 
-while getopts ":3:6:2:5:r:t:" opt; do
+while getopts ":3:6:2:5:r:t:onON" opt; do
   case $opt in
     3)
       satdir32=$OPTARG
@@ -111,6 +111,18 @@ while getopts ":3:6:2:5:r:t:" opt; do
       ;;
     T)
       settarget $OPTARG 0
+      ;;
+    o)
+      target_32bit=1
+      ;;
+    n)
+      target_64bit=1
+      ;;
+    O)
+      target_32bit=0
+      ;;
+    N)
+      target_64bit=1
       ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
