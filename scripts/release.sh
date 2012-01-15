@@ -247,17 +247,13 @@ function buildstep () {
   cp esbmc/esbmc $outputbin
 }
 
-# Array of mappings between what target we're building and the set of config
-# flags that have to be set for it.
-linuxplainidx=0; linuxcompatidx=1; linuxstaticidx=2; windowsidx=3;
 # IDX for different config options
 buildopt_linux=0; buildopt_mingw=1; buildopt_static=2; buildopt_compat=3;
-buildopt_isenabled=4;
-buildconfig=(
-{ 1, 0, 0, 0, $target_linuxplain },
-{ 1, 0, 0, 1, $target_linuxcompat },
-{ 1, 0, 1, 0, $target_linuxstatic },
-{ 0, 1, 0, 0, $target_windows } )
+buildopt_fname_suffix=4, buildopt_isenabled=5;
+buildconfig_linuxplain=( 1, 0, 0, 0, "", $target_linuxplain )
+buildconfig_linuxcompat=( 1, 0, 0, 1, "_compat", $target_linuxcompat )
+buildconfig_linuxstatic=( 1, 0, 1, 0, "_static", $target_linuxstatic )
+buildconfig_windows=( 0, 1, 0, 0, "_windows", $target_windows )
 
 function dobuild () {
 
