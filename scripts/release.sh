@@ -91,7 +91,21 @@ fi
 CURHEAD=`basename $CURHEAD`
 
 # Then, checkout whatever we've been told to release
-git stash > /dev/null
+# Allow the user to have a dirty tree, but bitch about it.
+# Are there modified files?
+git status -s | grep -v "^??" > /dev/null 2>&1
+if test $? = "0"; then
+  treeisdirty=1
+  echo "***********************"
+  echo "Your git tree is dirty:"
+  git status -s
+  echo "And it's going to get built into this release. Is that OK?"
+  echo "Hit enter to continue; ctrl+c otherwise"
+  read
+else
+  treeisdirty=0
+fi
+
 git checkout $targetrefname > /dev/null
 
 if test $? != 0; then
@@ -202,7 +216,6 @@ function cleanup () {
 
   # Check back out whatever ref we had before.
   git checkout $CURHEAD
-  git stash pop
 }
 
 function buildtgz {
