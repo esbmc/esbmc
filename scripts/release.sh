@@ -55,17 +55,36 @@ while getopts ":3:6:2:5:r:" opt; do
   esac
 done
 
-function missingarg {
-  if test -z $1; then
-    echo "Missing argument $2" >&2
-    exit 1
+function setdefaultsatdir () {
+  curname=$1
+  defaultname=$2
+  valuename=$3
+  optname=$4
+
+  if test -z $curname; then
+    if test -z $defaultname; then
+      echo "Can't autodetect a value for $valuename, give it with option $optname"
+      exit 1
+    fi
+    echo $defaultname
+    return
   fi
+
+  echo $curname
+  return
 }
 
-missingarg "$satdir32" "-3"
-missingarg "$satdir64" "-3"
-missingarg "$satdir32compat" "-2"
-missingarg "$satdir64compat" "-5"
+satdir32=$(setdefaultsatdir "$satdir32" "$SATDIR32" "32-bit solvers" "-3")
+satdir64=$(setdefaultsatdir "$satdir64" "$SATDIR64" "64-bit solvers" "-3")
+satdir32compat=$(setdefaultsatdir "$satdir32compat" "$SATDIR32" "32-bit compat solvers" "-3")
+satdir64compat=$(setdefaultsatdir "$satdir64compat" "$SATDIR64" "64-bit compat solvers" "-3")
+
+if test "$satdir32" = "$satdir32compat"; then
+  echo "NB: no compat-specific 32 bit solver dir"
+fi
+if test "$satdir64" = "$satdir64compat"; then
+  echo "NB: no compat-specific 64 bit solver dir"
+fi
 
 # Tell the user about what version of Z3 we're about to compile with
 
