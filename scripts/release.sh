@@ -248,12 +248,10 @@ function buildstep () {
 }
 
 # IDX for different config options
-buildopt_linux=0; buildopt_mingw=1; buildopt_static=2; buildopt_compat=3;
-buildopt_fname_suffix=4; buildopt_isenabled=5; buildopt_name=6;
-buildconfig_linuxplain=( 1, 0, 0, 0, "", $target_linuxplain, "linux plain" )
-buildconfig_linuxcompat=( 1, 0, 0, 1, "_compat", $target_linuxcompat, "linux compat" )
-buildconfig_linuxstatic=( 1, 0, 1, 0, "_static", $target_linuxstatic, "linux static" )
-buildconfig_windows=( 0, 1, 0, 0, "_windows", $target_windows, "mingw windows" )
+envstr_linuxplain="LINUX=1"
+envstr_linuxcompat="LINUX=1 LINUXCOMPAT=1"
+envstr_linuxstatic="LINUX=1 STATICLINK=1"
+envstr_windows="WIN_MINGW32=1"
 
 function dobuild () {
 
