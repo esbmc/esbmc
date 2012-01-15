@@ -137,15 +137,22 @@ function dobuild () {
   # And some actual config...
   export LINUX=1
   export TARGET64=1
-
   echo "Building 64 bit ESBMC"
   buildstep ".release/esbmc"
 
-  unset TARGET64
-  export TARGET32=1
+  export STATICLINK=1
+  echo "Building 64 bit static ESBMC"
+  buildstep ".release/esbmc_static"
 
+  unset TARGET64
+  unset STATICLINK
+  export TARGET32=1
   echo "Building 32 bit ESBMC"
   buildstep ".release/esbmc32"
+
+  export STATICLINK=1
+  echo "Building 32 bit ESBMC"
+  buildstep ".release/esbmc32_static"
 }
 
 function cleanup () {
