@@ -39,7 +39,6 @@ YACC   = bison -y
 YFLAGS = -v
 LEX    = flex
 BLOBGENLD= ld
-PLATLIBS= -lgmp -ldl -lgomp
 PARTLINKLD= ld
 PARTLINKOUT= -o
 PARTLINKOPTS= -r $(LDFLAGS)
