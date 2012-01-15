@@ -253,11 +253,11 @@ linuxplainidx=0; linuxcompatidx=1; linuxstaticidx=2; windowsidx=3;
 # IDX for different config options
 buildopt_linux=0; buildopt_mingw=1; buildopt_static=2; buildopt_compat=3;
 buildopt_isenabled=4;
-buildconfig={
+buildconfig=(
 { 1, 0, 0, 0, $target_linuxplain },
 { 1, 0, 0, 1, $target_linuxcompat },
 { 1, 0, 1, 0, $target_linuxstatic },
-{ 0, 1, 0, 0, $target_windows } }
+{ 0, 1, 0, 0, $target_windows } )
 
 function dobuild () {
 
