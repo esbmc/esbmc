@@ -215,6 +215,19 @@ fi
 # And wrap all our modifications into a function, so that upon error we can
 # cleanly remove all changes to the checked out copy.
 
+function buildstep2() {
+
+  make clean > /dev/null 2>&1
+  env $1 make > /dev/null 2>&1
+
+  if test $? != 0; then
+    echo "Build failed."
+    return 1
+  fi
+
+  return 0
+}
+
 function buildstep () {
   envstr=$1
   enabled=$2
@@ -222,13 +235,7 @@ function buildstep () {
 
   if test $enabled = "0"; then return 1; fi
 
-  make clean > /dev/null 2>&1
-  env $envstr make > /dev/null 2>&1
-
-  if test $? != 0; then
-    echo "Build failed."
-    return 1
-  fi
+  buildstep2 $envstr
 
   cp esbmc/esbmc $outputbin
 }
