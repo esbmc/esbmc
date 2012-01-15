@@ -102,6 +102,7 @@ if test $? = "0"; then
   echo "And it's going to get built into this release. Is that OK?"
   echo "Hit enter to continue; ctrl+c otherwise"
   read
+  echo "Kay"
 else
   treeisdirty=0
 fi
