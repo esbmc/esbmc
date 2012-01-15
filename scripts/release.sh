@@ -153,6 +153,18 @@ function dobuild () {
   export STATICLINK=1
   echo "Building 32 bit ESBMC"
   buildstep ".release/esbmc32_static"
+
+  unset TARGET32
+  unset STATICLINK
+  export TARGET64=1
+  export LINUXCOMPAT=1
+  echo "Building 64 bit compat ESBMC"
+  buildstep ".release/esbmc_compat"
+
+  unset TARGET64
+  export TARGET32=1
+  echo "Building 32 bit compat ESBMC"
+  buildstep ".release/esbmc32_compat"
 }
 
 function cleanup () {
