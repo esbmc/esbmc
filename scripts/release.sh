@@ -140,20 +140,24 @@ function dobuild () {
   export TARGET64=1
   echo "Building 64 bit ESBMC"
   buildstep ".release/esbmc"
+  if test $? != 0; then return $?; fi
 
   export STATICLINK=1
   echo "Building 64 bit static ESBMC"
   buildstep ".release/esbmc_static"
+  if test $? != 0; then return $?; fi
 
   unset TARGET64
   unset STATICLINK
   export TARGET32=1
   echo "Building 32 bit ESBMC"
   buildstep ".release/esbmc32"
+  if test $? != 0; then return $?; fi
 
   export STATICLINK=1
   echo "Building 32 bit ESBMC"
   buildstep ".release/esbmc32_static"
+  if test $? != 0; then return $?; fi
 
   unset TARGET32
   unset STATICLINK
@@ -163,11 +167,13 @@ function dobuild () {
   export SATDIR64=$satdir64compat
   echo "Building 64 bit compat ESBMC"
   buildstep ".release/esbmc_compat"
+  if test $? != 0; then return $?; fi
 
   unset TARGET64
   export TARGET32=1
   echo "Building 32 bit compat ESBMC"
   buildstep ".release/esbmc32_compat"
+  if test $? != 0; then return $?; fi
 
   unset LINUXCOMPAT
   unset TARGET32
@@ -178,11 +184,13 @@ function dobuild () {
   export SATDIR64=$satdir64
   echo "Building 64 bit Windows binary"
   buildstep ".release/esbmc_windows"
+  if test $? != 0; then return $?; fi
 
   unset TARGET64
   export TARGET32=1
   echo "Building 32 bit Windows binary"
   buildstep ".release/esbmc32_windows"
+  if test $? != 0; then return $?; fi
 }
 
 function cleanup () {
