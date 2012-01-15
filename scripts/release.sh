@@ -216,22 +216,9 @@ fi
 # cleanly remove all changes to the checked out copy.
 
 function buildstep () {
-  outputbin=$1
-  configidx=$2
-  is32bit=$3
-
-  if test buildconfig[$configidx][$buildopt_isenabled] = "0"; then
-    return 0;
-  fi
-  if test buildconfig[$configidx][$buildopt_linux] = "0"; then LINUX=1; fi
-  if test buildconfig[$configidx][$buildopt_mingw] = "0"; then WIN_MINGW32=1; fi
-  if test buildconfig[$configidx][$buildopt_static] = "0"; then STATICLINK=1; fi
-  if test buildconfig[$configidx][$buildopt_compat] = "0"; then LINUXCOMPAT=1; fi
-  if test $is32bit = "0"; then
-    TARGET64=1;
-  else
-    TARGET32=1;
-  fi
+  envstr=$1
+  enabled=$2
+  suffix=$3
 
   make clean > /dev/null 2>&1
   make > /dev/null 2>&1
