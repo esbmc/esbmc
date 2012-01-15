@@ -56,7 +56,32 @@ target_windows=0
 target_32bit=0
 target_64bit=0
 
-while getopts ":3:6:2:5:r:" opt; do
+function settarget() {
+  target=$1
+  val=$2
+
+  case $target in
+    linux)
+      target_linuxplain=$val
+      ;;
+    linuxcompat)
+      target_linuxcompat=$val
+      ;;
+    linuxstatic)
+      target_linuxstatic=$val
+      ;;
+    windows)
+      target_windows=$val
+      ;;
+    *)
+      echo "Unrecognized target $target" >&2
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+while getopts ":3:6:2:5:r:t:" opt; do
   case $opt in
     3)
       satdir32=$OPTARG
@@ -80,6 +105,12 @@ while getopts ":3:6:2:5:r:" opt; do
       target_windows=1
       target_32bit=1
       target_64bit=1
+      ;;
+    t)
+      settarget $OPTARG 1
+      ;;
+    T)
+      settarget $OPTARG 0
       ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
