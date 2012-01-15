@@ -25,6 +25,8 @@ function checksanity() {
   fi
 }
 
+checksanity
+
 while getopts ":3:6:2:5:" opt; do
   case $opt in
     3)
@@ -49,8 +51,6 @@ while getopts ":3:6:2:5:" opt; do
       ;;
   esac
 done
-
-checksanity
 
 # Tell the user about what version of Z3 we're about to compile with
 
