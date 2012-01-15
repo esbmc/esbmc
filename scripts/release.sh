@@ -73,6 +73,14 @@ while getopts ":3:6:2:5:r:" opt; do
     r)
       targetrefname=$OPTARG
       ;;
+    a)
+      target_linuxplain=1
+      target_linuxcompat=1
+      target_linuxstatic=1
+      target_windows=1
+      target_32bit=1
+      target_64bit=1
+      ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
       usage
