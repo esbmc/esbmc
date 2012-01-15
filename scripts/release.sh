@@ -25,13 +25,19 @@ function checksanity() {
   fi
 }
 
-while getopts ":3:6:" opt; do
+while getopts ":3:6:2:5:" opt; do
   case $opt in
     3)
       satdir32=$OPTARG
       ;;
+    2)
+      satdir32compat=$OPTARG
+      ;;
     6)
       satdir64=$OPTARG
+      ;;
+    5)
+      satdir64compat=$OPTARG
       ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
