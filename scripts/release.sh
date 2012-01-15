@@ -232,10 +232,12 @@ function buildstep () {
   envstr=$1
   enabled=$2
   suffix=$3
+  targetname=$4
 
   if test $enabled = "0"; then return 1; fi
 
   if test $target_64bit != "0"; then
+    echo "Building 64 bit $targetname"
     TARGET64=1
     buildstep2 $envstr
     unset TARGET64
@@ -244,6 +246,7 @@ function buildstep () {
   fi
 
   if test $target_32bit != "0"; then
+    echo "Building 32 bit $targetname"
     TARGET32=1
     buildstep2 $envstr
     unset TARGET32
@@ -280,18 +283,18 @@ function dobuild () {
   # Override configuration in config.inc
   export EXTERN_ESBMC_CONFIG=1
 
-  buildstep $envstr_linuxplain $target_linuxplain ""
+  buildstep $envstr_linuxplain $target_linuxplain "" "plain linux"
   if test $? != 0; then return $?; fi
 
-  buildstep $envstr_linuxstatic $target_linuxstatic "_static"
+  buildstep $envstr_linuxstatic $target_linuxstatic "_static" "static linux"
   if test $? != 0; then return $?; fi
 
-  buildstep $envstr_windows $target_windows "_windows"
+  buildstep $envstr_windows $target_windows "_windows" "windows"
   if test $? != 0; then return $?; fi
 
   export SATDIR32=$satdir32compat
   export SATDIR64=$satdir64compat
-  buildstep $envstr_linuxcompat $target_linuxcompat "_compat"
+  buildstep $envstr_linuxcompat $target_linuxcompat "_compat" "compat linux"
   if test $? != 0; then return $?; fi
 }
 
