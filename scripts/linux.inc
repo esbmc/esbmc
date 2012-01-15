@@ -22,6 +22,7 @@ endif
 ifdef LINUXCOMPAT
 CC=gcc34
 CXX=g++34
+FINLINKBIN=g++
 else
 # If not in compat mode, link against libgomp. Can't do it with g++34 for
 # an unknown reason.
