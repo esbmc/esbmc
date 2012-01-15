@@ -44,4 +44,4 @@ endif
 include $(ESBMCDIR)/common
 
 preproc.o: $(OBJS)
-	$(BLOBGENLD) $^ -o $@ -r
+	$(BLOBGENLD) $(LDFLAGS) $^ -o $@ -r
