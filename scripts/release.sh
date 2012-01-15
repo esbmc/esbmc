@@ -52,6 +52,18 @@ while getopts ":3:6:2:5:" opt; do
   esac
 done
 
+function missingarg {
+  if test -z $1; then
+    echo "Missing argument $2" >&2
+    exit 1
+  fi
+}
+
+missingarg "$satdir32" "-3"
+missingarg "$satdir64" "-3"
+missingarg "$satdir32compat" "-2"
+missingarg "$satdir64compat" "-5"
+
 # Tell the user about what version of Z3 we're about to compile with
 
 function printz3 {
