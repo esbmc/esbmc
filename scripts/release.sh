@@ -137,6 +137,25 @@ while getopts ":3:6:2:5:r:t:onONa" opt; do
   esac
 done
 
+if test $target_linuxplain = "0"; then
+  if test $target_linuxcompat = "0"; then
+    if test $target_linuxstatic = "0"; then
+      if test $target_windows = "0"; then
+        echo "No targets enabled, nothing is going to be built. This probably isn't what you want" >&2
+        exit 1
+      fi
+    fi
+  fi
+fi
+
+if test $target_32bit = "0"; then
+  if test $target_64bit = "0"; then
+    echo "Neither 32 nor 64 bit binaries are enabled, nothing is going to be built. This probably isn't what you want" >&2
+    exit 1
+  fi
+fi
+
+
 function setdefaultsatdir () {
   curname=$1
   defaultname=$2
