@@ -18,7 +18,7 @@ function checksanity() {
   # this version in release notes
   # (Start by removing leading v)
   vernum=`echo $1 | sed s#v\(.*\)#\1#`
-  grep "\*\*\*.*$vernum.*\*\*\*" ./scripts/release-notes.txt
+  grep "\*\*\*.*$vernum.*\*\*\*" ./scripts/release-notes.txt > /dev/null 2>&1
   if test $? != 0; then
     echo "Can't find an entry for $1 in release-notes.txt; you need to write one"
     exit 1
