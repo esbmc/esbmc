@@ -63,7 +63,7 @@ function setdefaultsatdir () {
 
   if test -z $curname; then
     if test -z $defaultname; then
-      echo "Can't autodetect a value for $valuename, give it with option $optname"
+      echo "Can't autodetect a value for $valuename, give it with option $optname" >&2
       exit 1
     fi
     echo $defaultname
