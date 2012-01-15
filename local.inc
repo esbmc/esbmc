@@ -1,5 +1,12 @@
-# If SATDIR isn't set yet, assume the user has solvers in their home dir.
+# If SATDIR{64,32} isn't set yet, assume the user has solvers in their home dir.
+
+ifdef TARGET64
+SATDIR ?= $(SATDIR64)
 SATDIR ?= $(HOME)
+else
+SATDIR ?= $(SATDIR32)
+SATDIR ?= $(HOME)
+endif
 
 # Hack around MSVC linking against Z3.
 ifdef WIN_MSVC
