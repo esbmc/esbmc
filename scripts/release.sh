@@ -173,7 +173,7 @@ function dobuild () {
   if test $? != 0; then return $?; fi
 
   export STATICLINK=1
-  echo "Building 32 bit ESBMC"
+  echo "Building 32 bit static ESBMC"
   buildstep ".release/esbmc32_static"
   if test $? != 0; then return $?; fi
 
