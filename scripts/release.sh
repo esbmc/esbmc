@@ -250,10 +250,12 @@ function buildtarballs() {
 
   buildtgz $version "64" ".release/esbmc"
   buildtgz $version "32" ".release/esbmc32"
-  if test $buildcompat = 1; then
-    buildtgz $version "64-compat" ".release/esbmc_compat"
-    buildtgz $version "32-compat" ".release/esbmc32_compat"
-  fi
+  buildtgz $version "64-static" ".release/esbmc_static"
+  buildtgz $version "32-static" ".release/esbmc32_static"
+  buildtgz $version "64-compat" ".release/esbmc_compat"
+  buildtgz $version "32-compat" ".release/esbmc32_compat"
+  buildtgz $version "64-windows" ".release/esbmc_windows"
+  buildtgz $version "32-windows" ".release/esbmc32_windows"
 }
 
 # If we get sigint/term/hup, cleanup before quitting.
