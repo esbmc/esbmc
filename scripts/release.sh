@@ -223,9 +223,6 @@ function buildstep () {
   make clean > /dev/null 2>&1
   env $envstr make > /dev/null 2>&1
 
-  unset LINUX; unset WIN_MINGW32; unset STATICLINK; unset LINUXCOMPAT;
-  unset TARGET64; unset TARGET32;
-
   if test $? != 0; then
     echo "Build failed."
     return 1
