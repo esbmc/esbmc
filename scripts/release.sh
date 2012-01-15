@@ -215,11 +215,10 @@ function cleanup () {
   echo "Cleaning up"
   make clean > /dev/null 2>&1
 
-  # Clear anything we left behind
-  git reset --hard
-
-  # Check back out whatever ref we had before.
-  git checkout $CURHEAD
+  if test $switchedref = "1"; then
+    # Check back out whatever ref we had before.
+    git checkout $CURHEAD
+  fi
 }
 
 function buildtgz {
