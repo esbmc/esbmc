@@ -43,6 +43,7 @@ while getopts ":3:6:2:5:r:" opt; do
       ;;
     r)
       targetrefname=$OPTARG
+      ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
       exit 1
