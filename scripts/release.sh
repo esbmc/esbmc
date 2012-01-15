@@ -64,41 +64,6 @@ printz3 satdir32 "Linux32"
 printz3 satdir64compat "LinuxCompat64"
 printz3 satdir32compat "LinuxCompat32"
 
-sat32z3vernum=`$3/z3/bin/z3 -version | cut "--delim= " -f 3`
-echo "Compiling with Z3 versions $sat64z3vernum and $sat32z3vernum for 64 and 32 bits"
-
-# Work out whether we're going to build compat versions.
-
-buildcompat=0
-
-which gcc34 > /dev/null 2>&1
-if test $? = 0; then
-  which g++34 > /dev/null 2>&1
-  if test $? = 0; then
-    buildcompat=1
-  fi
-fi
-
-# If we're compiling compat, work out whether we'll be re-using the normal
-# SMT solver directories, or whether there are compat-specific ones on the
-# command line.
-# Protip: gcc34 won't link against libgomp for some reason.
-if test $buildcompat = 1; then
-  satdir64compat=$4
-  satdir32compat=$5
-  if test "$satdir64compat" = ""; then
-    satdir64compat=$satdir64
-  fi
-  if test "$satdir32compat" = ""; then
-    satdir32compat=$satdir32
-  fi
-
-  sat64compatz3vernum=`$satdir64compat/z3/bin/z3 -version | cut "--delim= " -f 3`
-  sat32compatz3vernum=`$satdir32compat/z3/bin/z3 -version | cut "--delim= " -f 3`
-
-  echo "For compat version, using Z3 versions $sat64compatz3vernum and $sat32compatz3vernum for 64 and 32 bits"
-fi
-
 # Find whatever the current head is
 CURHEAD=`git symbolic-ref HEAD`
 
