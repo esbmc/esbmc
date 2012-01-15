@@ -74,10 +74,14 @@ function setdefaultsatdir () {
   return
 }
 
-satdir32=$(setdefaultsatdir "$satdir32" "$SATDIR32" "32-bit solvers" "-3")
-satdir64=$(setdefaultsatdir "$satdir64" "$SATDIR64" "64-bit solvers" "-3")
-satdir32compat=$(setdefaultsatdir "$satdir32compat" "$SATDIR32" "32-bit compat solvers" "-3")
-satdir64compat=$(setdefaultsatdir "$satdir64compat" "$SATDIR64" "64-bit compat solvers" "-3")
+satdir32=`setdefaultsatdir "$satdir32" "$SATDIR32" "32-bit solvers" "-3"`
+if test $? = "1"; then exit 1; fi
+satdir64=`setdefaultsatdir "$satdir64" "$SATDIR64" "64-bit solvers" "-3"`
+if test $? = "1"; then exit 1; fi
+satdir32compat=`setdefaultsatdir "$satdir32compat" "$SATDIR32" "32-bit compat solvers" "-3"`
+if test $? = "1"; then exit 1; fi
+satdir64compat=`setdefaultsatdir "$satdir64compat" "$SATDIR64" "64-bit compat solvers" "-3"`
+if test $? = "1"; then exit 1; fi
 
 if test "$satdir32" = "$satdir32compat"; then
   echo "NB: no compat-specific 32 bit solver dir"
