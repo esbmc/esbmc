@@ -235,9 +235,22 @@ function buildstep () {
 
   if test $enabled = "0"; then return 1; fi
 
-  buildstep2 $envstr
+  if test $target_64bit != "0"; then
+    TARGET64=1
+    buildstep2 $envstr
+    unset TARGET64
+    if test $? != 0; then return $?; fi
+    cp esbmc/esbmc "esbmc$suffix"
+  fi
 
-  cp esbmc/esbmc $outputbin
+  if test $target_32bit != "0"; then
+    TARGET32=1
+    buildstep2 $envstr
+    unset TARGET32
+    if test $? != 0; then return $?; fi
+    cp esbmc/esbmc "esbmc32$suffix"
+  fi
+
 }
 
 # IDX for different config options
