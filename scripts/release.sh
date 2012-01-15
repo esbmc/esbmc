@@ -221,7 +221,7 @@ function buildstep () {
   suffix=$3
 
   make clean > /dev/null 2>&1
-  make > /dev/null 2>&1
+  env $envstr make > /dev/null 2>&1
 
   unset LINUX; unset WIN_MINGW32; unset STATICLINK; unset LINUXCOMPAT;
   unset TARGET64; unset TARGET32;
