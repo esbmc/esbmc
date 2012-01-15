@@ -101,6 +101,18 @@ fi
 # And wrap all our modifications into a function, so that upon error we can
 # cleanly remove all changes to the checked out copy.
 
+function buildstep () {
+  make clean > /dev/null 2>&1
+  make > /dev/null 2>&1
+
+  if test $? != 0; then
+    echo "Build failed."
+    return 1
+  fi
+
+  cp esbmc/esbmc $1
+}
+
 function dobuild () {
 
   # Install our configuration files.
@@ -119,15 +131,7 @@ function dobuild () {
   export SATDIR=$satdir64
 
   echo "Building 64 bit ESBMC"
-  make clean > /dev/null 2>&1
-  make > /dev/null 2>&1
-
-  if test $? != 0; then
-    echo "Build failed."
-    return 1
-  fi
-
-  cp esbmc/esbmc .release/esbmc
+  buildstep ".release/esbmc"
 
   if test $buildcompat = 1; then
     echo "Building compat 64 bit ESBMC"
