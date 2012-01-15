@@ -8,6 +8,20 @@ function usage() {
   echo "  -2 dir       ''       ''        ''     32 bit compatibility solvers" >&2
   echo "  -5 dir       ''       ''        ''     64 bit compatibility solvers" >&2
   echo "  -h ref    Checkout and build the git reference 'ref'" >&2
+  echo "What-to-build options:" >&2
+  echo "  -a        Build all targets" >&2
+  echo "  -l        Enable plain-linux targets" >&2
+  echo "  -s        Enable static linux targets" >&2
+  echo "  -w        Enable windows targets" >&2
+  echo "  -c        Enable compat linuxversions" >&2
+  echo "  -o        Enable 32 bit versions" >&2
+  echo "  -n        Enable 64 bit versions" >&2
+  echo "  -L        Disable plain-linux targets" >&2
+  echo "  -S        Disable static linux targets" >&2
+  echo "  -W        Disable windows targets" >&2
+  echo "  -C        Disable compat linux targets" >&2
+  echo "  -O        Disable 32 bit versions" >&2
+  echo "  -N        Disable 64 bit versions" >&2
 }
 
 function checksanity() {
