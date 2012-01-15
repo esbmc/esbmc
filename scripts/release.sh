@@ -158,6 +158,8 @@ function dobuild () {
   unset STATICLINK
   export TARGET64=1
   export LINUXCOMPAT=1
+  export SATDIR32=$satdir32compat
+  export SATDIR64=$satdir64compat
   echo "Building 64 bit compat ESBMC"
   buildstep ".release/esbmc_compat"
 
@@ -171,6 +173,8 @@ function dobuild () {
   unset LINUX
   export WIN_MINGW32=1
   export TARGET64=1
+  export SATDIR32=$satdir32
+  export SATDIR64=$satdir64
   echo "Building 64 bit Windows binary"
   buildstep ".release/esbmc_windows"
 
