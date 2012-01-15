@@ -27,7 +27,7 @@ function checksanity() {
 
 checksanity
 
-while getopts ":3:6:2:5:" opt; do
+while getopts ":3:6:2:5:r:" opt; do
   case $opt in
     3)
       satdir32=$OPTARG
@@ -41,6 +41,8 @@ while getopts ":3:6:2:5:" opt; do
     5)
       satdir64compat=$OPTARG
       ;;
+    r)
+      targetrefname=$OPTARG
     \?)
       echo "Invalid option -$OPTARG" >&2
       exit 1
@@ -89,10 +91,10 @@ CURHEAD=`basename $CURHEAD`
 
 # Then, checkout whatever we've been told to release
 git stash > /dev/null
-git checkout $1 > /dev/null
+git checkout $targetrefname > /dev/null
 
 if test $? != 0; then
-  echo "Couldn't checkout $1"
+  echo "Couldn't checkout $targetrefname"
   exit 1
 fi
 
@@ -233,7 +235,7 @@ if test $? != 0; then
   echo "Build failed"
 fi
 
-buildtarballs $1
+buildtarballs $targetrefname
 
 cleanup
 
