@@ -1,10 +1,5 @@
 #!/bin/bash
 
-if test "$#" -lt 3; then
-  echo "Usage: release.sh refname solvers64dir solvers32dir [compat64dir compat32dir]"
-  exit 1
-fi
-
 function checksanity() {
   # You need a 64 bit machine to fully build a release
   if test `uname -m` != "x86_64"; then
