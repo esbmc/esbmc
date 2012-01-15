@@ -50,11 +50,11 @@ c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
 
 $(OBJDIR)/clib32.o: c2goto library/*.c
 	./c2goto library/*.c --32 --output clib32.goto --no-lock-check $(C2GOTO_INCS)
-	$(BLOBGENLD) -b binary clib32.goto -o $(OBJDIR)/clib32.o -r
+	$(BLOBGENLD) $(LDFLAGS) -b binary clib32.goto -o $(OBJDIR)/clib32.o -r
 
 $(OBJDIR)/clib64.o: c2goto library/*.c
 	./c2goto library/*.c --32 --output clib64.goto --no-lock-check $(C2GOTO_INCS)
-	$(BLOBGENLD) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
+	$(BLOBGENLD) $(LDFLAGS) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
 
 $(OBJDIR)/clib.o: c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
 	$(PARTLINKLD) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(PARTLINKOUT)$(OBJDIR)/clib.o $(PARTLINKOPTS)

@@ -15,6 +15,12 @@ OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 # Given the presence of OBJDIR, $(OBJS) can't now automatically infer
 # dependancies between .o's and .cpp's etc
 
+# list of includes, potentially modified by includer
+INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
+
+CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
+CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
+
 ifndef WIN_MSVC
 $(OBJDIR)/%.o : %.cpp
 	$(CXX) -c $(CXXFLAGS) -o $@ $<
@@ -28,12 +34,6 @@ $(OBJDIR)/%.o : %.cpp
 $(OBJDIR)/%.o : %.c
 	$(VCBINS)/cl.exe /TC /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" $(VCINCLUDES) /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
 endif
-
-# list of includes, potentially modified by includer
-INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
-
-CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
-CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 
 # A generic target; potentially not defined by the includer
 
