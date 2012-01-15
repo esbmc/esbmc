@@ -131,56 +131,21 @@ function dobuild () {
   export SATDIR32=$satdir32
   export SATDIR64=$satdir64
 
+  # Override configuration in config.inc
+  export EXTERN_ESBMC_CONFIG=1
+
+  # And some actual config...
+  export LINUX=1
+  export TARGET64=1
+
   echo "Building 64 bit ESBMC"
   buildstep ".release/esbmc"
 
-  if test $buildcompat = 1; then
-    echo "Building compat 64 bit ESBMC"
-    export SATDIR=$satdir64compat
-    make clean > /dev/null 2>&1
-    env CC=gcc34 CXX=g++34 make > /dev/null 2>&1
+  unset TARGET64
+  export TARGET32=1
 
-    if test $? != 0; then
-      echo "Build failed."
-      return 1
-    fi
-
-    cp esbmc/esbmc .release/esbmc_compat
-  fi
-
-  # Try for 32 bits
   echo "Building 32 bit ESBMC"
-  export SATDIR=$satdir32
-
-  buildfor32bits=0
-  make clean > /dev/null 2>&1
-
-  env EXTRACFLAGS="-m32 -DNDEBUG" EXTRACXXFLAGS="-m32 -DNDEBUG" LDFLAGS="-m elf_i386" make > /dev/null 2>&1
-
-  if test $? != 0; then
-    echo "Buildling 32 bits failed; do you have the right headers and libraries?"
-    return 1
-  else
-    buildfor32bits=1
-    cp esbmc/esbmc .release/esbmc32
-    if test $buildcompat = 1; then
-      echo "Building 32 bit compat ESBMC"
-
-      export SATDIR=$satdir32compat
-
-      make clean > /dev/null 2>&1
-
-      env CC=gcc34 CXX=g++34 EXTRACFLAGS="-m32 -DNDEBUG" EXTRACXXFLAGS="-m32 -DNDEBUG" LDFLAGS="-m elf_i386" make > /dev/null 2>&1
-
-      if test $? != 0; then
-        echo "Building 32 bit compat ESBMC failed"
-        return 1
-      fi
-
-      cp esbmc/esbmc .release/esbmc32_compat
-    fi
-  fi
-
+  buildstep ".release/esbmc32"
 }
 
 function cleanup () {
