@@ -295,18 +295,18 @@ function dobuild () {
   # Override configuration in config.inc
   export EXTERN_ESBMC_CONFIG=1
 
-  buildstep $envstr_linuxplain $target_linuxplain "" "plain linux"
+  buildstep "$envstr_linuxplain" "$target_linuxplain" "" "plain linux"
   if test $? != 0; then return $?; fi
 
-  buildstep $envstr_linuxstatic $target_linuxstatic "_static" "static linux"
+  buildstep "$envstr_linuxstatic" "$target_linuxstatic" "_static" "static linux"
   if test $? != 0; then return $?; fi
 
-  buildstep $envstr_windows $target_windows "_windows" "windows"
+  buildstep "$envstr_windows" "$target_windows" "_windows" "windows"
   if test $? != 0; then return $?; fi
 
   export SATDIR32=$satdir32compat
   export SATDIR64=$satdir64compat
-  buildstep $envstr_linuxcompat $target_linuxcompat "_compat" "compat linux"
+  buildstep "$envstr_linuxcompat" "$target_linuxcompat" "_compat" "compat linux"
   if test $? != 0; then return $?; fi
 }
 
