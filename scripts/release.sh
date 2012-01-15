@@ -56,10 +56,12 @@ while getopts ":3:6:2:5:r:" opt; do
       ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
+      usage
       exit 1
       ;;
     :)
       echo "Option -$OPTARG requires argument" >&2
+      usage
       exit 1
       ;;
   esac
@@ -74,6 +76,7 @@ function setdefaultsatdir () {
   if test -z $curname; then
     if test -z $defaultname; then
       echo "Can't autodetect a value for $valuename, give it with option $optname" >&2
+      usage
       exit 1
     fi
     echo $defaultname
