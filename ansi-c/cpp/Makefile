@@ -20,9 +20,6 @@ $(OBJDIR)/lex.cpp.o: y.tab.c
 
 cpp.c: y.tab.c # Includes y.tab.h
 
-compat.o: compat.c
-	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ compat.c
-
 $(OBJS): $(HEADERS)
 
 cpp.o: cpy.o
