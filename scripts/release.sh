@@ -54,7 +54,16 @@ checksanity
 
 # Tell the user about what version of Z3 we're about to compile with
 
-sat64z3vernum=`$2/z3/bin/z3 -version | cut "--delim= " -f 3`
+function printz3 {
+  z3ver=`$1/z3/bin/z3 -version | cut "--delim= " -f 3`
+  echo "Z3 for $2: $z3ver"
+}
+
+printz3 satdir64 "Linux64"
+printz3 satdir32 "Linux32"
+printz3 satdir64compat "LinuxCompat64"
+printz3 satdir32compat "LinuxCompat32"
+
 sat32z3vernum=`$3/z3/bin/z3 -version | cut "--delim= " -f 3`
 echo "Compiling with Z3 versions $sat64z3vernum and $sat32z3vernum for 64 and 32 bits"
 
