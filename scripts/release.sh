@@ -227,7 +227,7 @@ function buildtgz {
   binpath=$3
 
   tmpdirname=`mktemp -d`
-  projname="esbmc-$version-linux-$suffix"
+  projname="esbmc-$version-$suffix"
   dirname="$tmpdirname/$projname"
   mkdir $dirname
   mkdir $dirname/bin
@@ -248,14 +248,14 @@ function buildtgz {
 function buildtarballs() {
   version=$1
 
-  buildtgz "$version" "64" ".release/esbmc"
-  buildtgz "$version" "32" ".release/esbmc32"
-  buildtgz "$version" "64-static" ".release/esbmc_static"
-  buildtgz "$version" "32-static" ".release/esbmc32_static"
-  buildtgz "$version" "64-compat" ".release/esbmc_compat"
-  buildtgz "$version" "32-compat" ".release/esbmc32_compat"
-  buildtgz "$version" "64-windows" ".release/esbmc_windows"
-  buildtgz "$version" "32-windows" ".release/esbmc32_windows"
+  buildtgz "$version" "linux-64" ".release/esbmc"
+  buildtgz "$version" "linux-32" ".release/esbmc32"
+  buildtgz "$version" "linux-64-static" ".release/esbmc_static"
+  buildtgz "$version" "linux-32-static" ".release/esbmc32_static"
+  buildtgz "$version" "linux-64-compat" ".release/esbmc_compat"
+  buildtgz "$version" "linux-32-compat" ".release/esbmc32_compat"
+  buildtgz "$version" "windows-64" ".release/esbmc_windows"
+  buildtgz "$version" "windows-32" ".release/esbmc32_windows"
 }
 
 # If we get sigint/term/hup, cleanup before quitting.
