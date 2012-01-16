@@ -1120,7 +1120,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	{
 	  // make new assignment to temp for each global symbol
 	  symbolt &new_symbol=new_tmp_symbol(rhs.type());
-
+	  new_symbol.static_lifetime=true;
 	  equality_exprt eq_expr;
 	  irept irep;
 	  new_symbol.to_irep(irep);
