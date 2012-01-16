@@ -9,6 +9,7 @@ function usage() {
   echo "  -5 dir       ''       ''        ''     64 bit compatibility solvers" >&2
   echo "  -h ref    Checkout and build the git reference 'ref'" >&2
   echo "  -i        Incremental build; don't clean objdirs after building" >&2
+  echo "  -c        Clean build objdir directories" >&2
   echo "What-to-build options:" >&2
   echo "  -a        Build all targets" >&2
   echo "  -t        Enable a particular build target, see below" >&2
@@ -58,6 +59,7 @@ target_32bit=0
 target_64bit=0
 
 incrementalbuild=0
+cleanobjs=0
 
 function settarget() {
   target=$1
@@ -84,7 +86,7 @@ function settarget() {
   return 0
 }
 
-while getopts ":3:6:2:5:r:t:onONai" opt; do
+while getopts ":3:6:2:5:r:t:onONaic" opt; do
   case $opt in
     3)
       satdir32=$OPTARG
@@ -129,6 +131,9 @@ while getopts ":3:6:2:5:r:t:onONai" opt; do
       ;;
     i)
       incrementalbuild=1
+      ;;
+    c)
+      cleanobjs=1
       ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
@@ -401,6 +406,11 @@ function buildtarballs() {
 
 # If we get sigint/term/hup, cleanup before quitting.
 trap "echo 'Exiting'; cleanup; exit 1" SIGHUP SIGINT SIGTERM
+
+if test $cleanobjs = "1"; then
+  cleanup
+  exit 0
+fi
 
 dobuild
 
