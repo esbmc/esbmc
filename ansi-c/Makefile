@@ -43,7 +43,7 @@ C2GOTO_DEPS= $(OBJS) ../util/$(OBJDIR)/util.o ../langapi/$(OBJDIR)/langapi.o \
 	     ../big-int/$(OBJDIR)/bigint.o \
 	     ../goto-programs/$(OBJDIR)/goto-programs.o \
 	     ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \
-	     cpp/preproc.o headers/headers.o
+	     cpp/preproc.o headers/$(OBJDIR)/headers.o
 
 c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
 	$(FINLINKBIN) $(CXXFLAGS) $^ $(FINLINKOUT) $@ $(C2GOTO_DEPS) $(FINLINKTAIL)
@@ -70,7 +70,7 @@ cpp_dir:
 
 .PHONY: cpp_dir
 
-headers/headers.o: headers_dir
+headers/$(OBJDIR)/headers.o: headers_dir
 
 headers_dir:
 	$(MAKE) -C headers
@@ -79,7 +79,7 @@ headers_dir:
 
 ###############################################################################
 
-$(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/preproc.o headers/headers.o
+$(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/preproc.o headers/$(OBJDIR)/headers.o
 	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
 clean:
