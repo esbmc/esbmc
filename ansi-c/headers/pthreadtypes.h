@@ -20,6 +20,7 @@
 #ifndef _BITS_PTHREADTYPES_H
 #define _BITS_PTHREADTYPES_H	1
 
+#include <stdint.h>
 #include <bits/wordsize.h>
 
 #if __WORDSIZE == 64
@@ -44,6 +45,8 @@
 # define __SIZEOF_PTHREAD_BARRIERATTR_T 4
 #endif
 
+/* jmorse - parsing workaround */
+typedef int32_t __clockid_t;
 
 /* Thread identifiers.  The structure of the attribute type is not
    exposed on purpose.  */
