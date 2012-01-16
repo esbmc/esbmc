@@ -279,7 +279,7 @@ function buildstep () {
     buildstep2 $envstr "64_$objdirsuffix"
     if test $? != 0; then return 1; fi
     unset TARGET64
-    cp esbmc/esbmc "esbmc$suffix"
+    cp esbmc/esbmc ".release/esbmc$suffix"
   fi
 
   if test $target_32bit != "0"; then
@@ -288,7 +288,7 @@ function buildstep () {
     buildstep2 $envstr "32_$objdirsuffix"
     if test $? != 0; then return 1; fi
     unset TARGET32
-    cp esbmc/esbmc "esbmc32$suffix"
+    cp esbmc/esbmc ".release/esbmc32$suffix"
   fi
 
 }
