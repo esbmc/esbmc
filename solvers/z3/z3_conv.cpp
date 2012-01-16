@@ -2113,13 +2113,22 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
 
   Z3_ast *args = (Z3_ast*)alloca(sizeof(Z3_ast) * size);
 
+  int numoperands = expr.operands().size();
   // Populate tuple with members of that struct/union
   for (struct_typet::componentst::const_iterator
        it = components.begin();
        it != components.end();
        it++, i++)
   {
-    convert_bv(expr.operands()[i], args[i]);
+    if (i < numoperands) {
+      convert_bv(expr.operands()[i], args[i]);
+    } else {
+      // Turns out that unions don't necessarily initialize all members.
+      // If no initialization give, use free (fresh) variable.
+      Z3_sort s;
+      create_type(it->type(), s);
+      args[i] = Z3_mk_fresh_const(z3_ctx, NULL, s);
+    }
   }
 
   // Update unions "last-set" member to be the last field
