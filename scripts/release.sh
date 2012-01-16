@@ -8,6 +8,7 @@ function usage() {
   echo "  -2 dir       ''       ''        ''     32 bit compatibility solvers" >&2
   echo "  -5 dir       ''       ''        ''     64 bit compatibility solvers" >&2
   echo "  -h ref    Checkout and build the git reference 'ref'" >&2
+  echo "  -i        Incremental build; don't clean objdirs after building" >&2
   echo "What-to-build options:" >&2
   echo "  -a        Build all targets" >&2
   echo "  -t        Enable a particular build target, see below" >&2
@@ -56,6 +57,8 @@ target_windows=0
 target_32bit=0
 target_64bit=0
 
+incrementalbuild=0
+
 function settarget() {
   target=$1
   val=$2
@@ -81,7 +84,7 @@ function settarget() {
   return 0
 }
 
-while getopts ":3:6:2:5:r:t:onONa" opt; do
+while getopts ":3:6:2:5:r:t:onONac" opt; do
   case $opt in
     3)
       satdir32=$OPTARG
@@ -123,6 +126,9 @@ while getopts ":3:6:2:5:r:t:onONa" opt; do
       ;;
     N)
       target_64bit=1
+      ;;
+    i)
+      incrementalbuild=1
       ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
