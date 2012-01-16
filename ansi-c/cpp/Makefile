@@ -5,7 +5,7 @@ SRCS=cpp.c compat.c hooks.c
 OBJS=$(OBJDIR)/y.tab.o $(OBJDIR)/lex.cpp.o
 HEADERS=cpp.h
 
-all: preproc.o
+all: $(OBJDIR)/preproc.o
 
 lex.cpp.c: scanner.l
 	$(LEX) -Pcpp $(LFLAGS) $<
@@ -26,7 +26,6 @@ cpp.o: cpy.o
 
 clean:
 	-rm $(OBJDIR)/*.o
-	-rm preproc.o
 	-rm lex.cpp.c
 	-rm y.tab.c
 	-rm y.tab.h
@@ -41,5 +40,5 @@ endif
 
 include $(ESBMCDIR)/common
 
-preproc.o: $(OBJS)
+$(OBJDIR)/preproc.o: $(OBJS)
 	$(BLOBGENLD) $(LDFLAGS) $^ -o $@ -r

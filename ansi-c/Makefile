@@ -43,7 +43,7 @@ C2GOTO_DEPS= $(OBJS) ../util/$(OBJDIR)/util.o ../langapi/$(OBJDIR)/langapi.o \
 	     ../big-int/$(OBJDIR)/bigint.o \
 	     ../goto-programs/$(OBJDIR)/goto-programs.o \
 	     ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \
-	     cpp/preproc.o headers/$(OBJDIR)/headers.o
+	     cpp/$(OBJDIR)/preproc.o headers/$(OBJDIR)/headers.o
 
 c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
 	$(FINLINKBIN) $(CXXFLAGS) $^ $(FINLINKOUT) $@ $(C2GOTO_DEPS) $(FINLINKTAIL)
@@ -63,7 +63,7 @@ $(OBJDIR)/clib.o: c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
 
 include $(ESBMCDIR)/common
 
-cpp/preproc.o: cpp_dir
+cpp/$(OBJDIR)/preproc.o: cpp_dir
 
 cpp_dir:
 	$(MAKE) -C cpp
@@ -79,7 +79,7 @@ headers_dir:
 
 ###############################################################################
 
-$(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/preproc.o headers/$(OBJDIR)/headers.o
+$(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/$(OBJDIR)/preproc.o headers/$(OBJDIR)/headers.o
 	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
 clean:
