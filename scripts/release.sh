@@ -360,6 +360,13 @@ function buildtgz {
   suffix=$2
   binpath=$3
 
+  if test ! -e $binpath; then
+    echo "Skipping tarball for $2"
+    return
+  else
+    echo "Making tarball for $2"
+  fi
+
   tmpdirname=`mktemp -d`
   projname="esbmc-$version-$suffix"
   dirname="$tmpdirname/$projname"
