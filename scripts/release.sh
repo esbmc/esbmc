@@ -254,8 +254,7 @@ fi
 
 function buildstep2() {
 
-  make clean > /dev/null 2>&1
-  env $1 make > /dev/null 2>&1
+  env $1 OBJDIR=.release_$2 make > /dev/null 2>&1
 
   if test $? != 0; then
     echo "Build failed."
@@ -270,13 +269,14 @@ function buildstep () {
   enabled=$2
   suffix=$3
   targetname=$4
+  objdirsuffix=$5
 
   if test $enabled = "0"; then return 1; fi
 
   if test $target_64bit != "0"; then
     echo "Building 64 bit $targetname"
     export TARGET64=1
-    buildstep2 $envstr
+    buildstep2 $envstr "64_$objdirsuffix"
     if test $? != 0; then return 1; fi
     unset TARGET64
     cp esbmc/esbmc "esbmc$suffix"
@@ -285,7 +285,7 @@ function buildstep () {
   if test $target_32bit != "0"; then
     echo "Building 32 bit $targetname"
     export TARGET32=1
-    buildstep2 $envstr
+    buildstep2 $envstr "32_$objdirsuffix"
     if test $? != 0; then return 1; fi
     unset TARGET32
     cp esbmc/esbmc "esbmc32$suffix"
@@ -320,18 +320,18 @@ function dobuild () {
   # Override configuration in config.inc
   export EXTERN_ESBMC_CONFIG=1
 
-  buildstep "$envstr_linuxplain" "$target_linuxplain" "" "plain linux"
+  buildstep "$envstr_linuxplain" "$target_linuxplain" "" "plain linux" "linux"
   if test $? != 0; then return $?; fi
 
-  buildstep "$envstr_linuxstatic" "$target_linuxstatic" "_static" "static linux"
+  buildstep "$envstr_linuxstatic" "$target_linuxstatic" "_static" "static linux" "static"
   if test $? != 0; then return $?; fi
 
-  buildstep "$envstr_windows" "$target_windows" "_windows" "windows"
+  buildstep "$envstr_windows" "$target_windows" "_windows" "windows" "mingw"
   if test $? != 0; then return $?; fi
 
   export SATDIR32=$satdir32compat
   export SATDIR64=$satdir64compat
-  buildstep "$envstr_linuxcompat" "$target_linuxcompat" "_compat" "compat linux"
+  buildstep "$envstr_linuxcompat" "$target_linuxcompat" "_compat" "compat linux" "compat"
   if test $? != 0; then return $?; fi
 }
 
