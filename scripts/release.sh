@@ -337,7 +337,17 @@ function dobuild () {
 
 function cleanup () {
   echo "Cleaning up"
-  make clean > /dev/null 2>&1
+
+  if test $incrementalbuild = "0"; then
+    env OBJDIR=.release_32_linux make clean > /dev/null 2>&1
+    env OBJDIR=.release_64_linux make clean > /dev/null 2>&1
+    env OBJDIR=.release_32_static make clean > /dev/null 2>&1
+    env OBJDIR=.release_64_static make clean > /dev/null 2>&1
+    env OBJDIR=.release_32_compat make clean > /dev/null 2>&1
+    env OBJDIR=.release_64_compat make clean > /dev/null 2>&1
+    env OBJDIR=.release_32_mingw make clean > /dev/null 2>&1
+    env OBJDIR=.release_64_mingw make clean > /dev/null 2>&1
+  fi
 
   if test $switchedref = "1"; then
     # Check back out whatever ref we had before.
