@@ -259,7 +259,7 @@ fi
 
 function buildstep2() {
 
-  env $1 OBJDIR=.release_$2 make > /dev/null 2>&1
+  env $1 OBJDIR=.release_$2 make
 
   if test $? != 0; then
     echo "Build failed."
@@ -281,7 +281,7 @@ function buildstep () {
   if test $target_64bit != "0"; then
     echo "Building 64 bit $targetname"
     export TARGET64=1
-    buildstep2 $envstr "64_$objdirsuffix"
+    buildstep2 "$envstr" "64_$objdirsuffix"
     if test $? != 0; then return 1; fi
     unset TARGET64
     cp esbmc/esbmc ".release/esbmc$suffix"
@@ -290,7 +290,7 @@ function buildstep () {
   if test $target_32bit != "0"; then
     echo "Building 32 bit $targetname"
     export TARGET32=1
-    buildstep2 $envstr "32_$objdirsuffix"
+    buildstep2 "$envstr" "32_$objdirsuffix"
     if test $? != 0; then return 1; fi
     unset TARGET32
     cp esbmc/esbmc ".release/esbmc32$suffix"
