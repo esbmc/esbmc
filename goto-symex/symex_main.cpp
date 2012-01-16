@@ -580,6 +580,9 @@ void goto_symext::symex_step(
               state.source.pc = goto_target;
             }
 
+            ex_state.reexecute_instruction = false;
+            art.generate_states();
+
             break;
         case END_THREAD:
             ex_state.end_thread(ns, *target);
@@ -591,6 +594,8 @@ void goto_symext::symex_step(
         case ATOMIC_BEGIN:
             state.source.pc++;
             ex_state.increment_active_atomic_number();
+            ex_state.reexecute_instruction = false;
+            art.generate_states();
             break;
         case ATOMIC_END:
             ex_state.decrement_active_atomic_number();
