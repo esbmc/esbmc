@@ -26,6 +26,7 @@ cpp.o: cpy.o
 
 clean:
 	-rm $(OBJDIR)/*.o
+	-rm preproc.o
 	-rm lex.cpp.c
 	-rm y.tab.c
 	-rm y.tab.h

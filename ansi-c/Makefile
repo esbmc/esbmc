@@ -85,7 +85,7 @@ $(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/pre
 clean:
 	$(MAKE) -C cpp clean
 	$(MAKE) -C headers clean
-	-rm -f $(MAINOBJ)
+	-rm -f $(OBJDIR)/ansi-c.o
 	-rm -f $(OBJS) y.tab.h y.tab.cpp lex.yy.cpp y.tab.cpp.output y.output
 	-rm -f c2goto
 	-rm -f *.goto

@@ -57,7 +57,7 @@ $(OBJDIR)/solvers.o: $(OBJS)
 dummy: $(OBJDIRS)
 
 clean:
-	-rm solvers.o
+	-rm $(OBJDIR)/solvers.o
 	-$(MAKE) -C sat clean
 	-$(MAKE) -C flattening clean
 	-$(MAKE) -C qbf clean

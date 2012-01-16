@@ -28,7 +28,7 @@ ifdef MODULE_FLOATBV
 endif
 
 clean:
-	-rm -f $(OBJS) ieee_float_test
+	-rm -f $(OBJS) ieee_float_test $(MAINOBJ)
 	-rm -f $(OBJDIR)/.deps
 #
 #ieee_float_test: ieee_float_test.o ieee_float.o util.o

@@ -13,6 +13,6 @@ SRCS= value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp \
       value_set_fivrns.cpp value_set_domain_fivrns.cpp
 
 clean:
-	-rm -f $(OBJS) $(OBJDIR)/.deps
+	-rm -f $(OBJS) $(OBJDIR)/.deps $(MAINOBJ)
 
 include $(ESBMCDIR)/common
