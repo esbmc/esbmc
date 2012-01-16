@@ -7,6 +7,6 @@ all: $(OBJDIR)/.deps $(MAINOBJ)
 SRCS = mode.cpp language_ui.cpp languages.cpp language_util.cpp
 
 clean:
-	-rm -f $(OBJS) $(OBJDIR)/.deps
+	-rm -f $(OBJS) $(OBJDIR)/.deps $(MAINOBJ)
 
 include $(ESBMCDIR)/common

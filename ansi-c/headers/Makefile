@@ -1,15 +1,17 @@
 ESBMCDIR= $(shell pwd)/../..
-MAINOBJ=headers.o
+include $(ESBMCDIR)/config.inc
+MAINOBJ=$(OBJDIR)/headers.o
 
-OBJS= stddef.o stdarg.o stdbool.o pthread.o pthreadtypes.o
+PLAINOBJS= stddef.o stdarg.o stdbool.o pthread.o pthreadtypes.o
+OBJS= $(PLAINOBJS:%.o=$(OBJDIR)/%.o)
 
-all: headers.o
+all: $(OBJDIR)/headers.o
 
-.h.o:
+$(OBJDIR)/%.o : %.h
 	$(BLOBGENLD) $(LDFLAGS) -b binary $< -o $@ -r
 
 clean:
-	-rm *.o .deps
+	-rm $(OBJS) $(MAINOBJ) .deps
 
 .PHONY: clean
 
