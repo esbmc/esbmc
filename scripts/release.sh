@@ -84,7 +84,7 @@ function settarget() {
   return 0
 }
 
-while getopts ":3:6:2:5:r:t:onONac" opt; do
+while getopts ":3:6:2:5:r:t:onONai" opt; do
   case $opt in
     3)
       satdir32=$OPTARG
