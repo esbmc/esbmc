@@ -160,7 +160,10 @@ foreach my $test (@tests) {
 
     open(LOGFILE, "<$test/$outputfile") or die "Can't open outputfile $test/$outputfile";
     while (<LOGFILE>) {
-      $xmloutput = $xmloutput . "$_";
+      my $lump;
+      $lump =  $_;
+      $lump =~ s/\&/\\\&/gm;
+      $xmloutput = $xmloutput . $lump;
     }
     close(LOGFILE);
 
