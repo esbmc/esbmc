@@ -9,8 +9,8 @@ LINUX=1
 #WIN_MINGW32=1
 
 # 32 or 64 bits?
-TARGET64=1
-#TARGET32=1
+#TARGET64=1
+TARGET32=1
 
 # Static? (Linux only)
 #STATICLINK=1

@@ -5,6 +5,7 @@
 
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
+void __ESBMC_yield();
 
 typedef struct DEVICE {
   int pendingIo;

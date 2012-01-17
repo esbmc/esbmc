@@ -762,7 +762,6 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
     const irep_idt &id = expr.identifier();
     const irep_idt &identifier = get_active_state().get_original_name(id);
     const symbolt &symbol = lookup(ns, identifier);
-
     if (identifier == "c::__ESBMC_alloc"
         || identifier == "c::__ESBMC_alloc_size")
       return 0;
