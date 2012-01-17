@@ -134,6 +134,7 @@ if($count == 1) {
 }
 print "\n";
 my $failures = 0;
+my $xmloutput =  "";
 print "Running tests\n";
 foreach my $test (@tests) {
   print "  Running $test";
@@ -142,14 +143,27 @@ foreach my $test (@tests) {
   my $failed = test($test, "test.desc");
   chdir "..";
 
+  $xmloutput = $xmloutput . "<testcase name=\"$test\" time=\"0.0\"";
+
   if($failed) {
     $failures++;
     print "  [FAILED]\n";
+    $xmloutput = $xmloutput . ">\n";
+    $xmloutput = $xmloutput . "  <failure message=\"test failed\" type=\"nodescript failure\">No idea what output to get</failure>\n</testcase>";
   } else {
     print "  [OK]\n";
+    $xmloutput = $xmloutput . "/>\n";
   }
 }
 print "\n";
+
+use IO::Handle;
+my $io = IO::Handle->new();
+if ($io->fdopen(3, "w")) {
+  print $io "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<testsuite failures=\"$failures\" hostname=\"pony.ecs.soton.ac.uk\" name=\"ESBMC single threaded regression tests\" tests=\"$count\" time=\"0.0\">\n";
+  print $io $xmloutput;
+  print $io "</testsuite>";
+}
 
 if($failures == 0) {
   print "All tests were successful\n";
