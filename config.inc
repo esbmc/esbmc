@@ -8,9 +8,9 @@ LINUX=1
 #WIN_MSVC=1
 #WIN_MINGW32=1
 
-# 32 or 64 bits?
+# 32 or 64 bits? If left unset, default to whatever your host machine is.
 #TARGET64=1
-TARGET32=1
+#TARGET32=1
 
 # Static? (Linux only)
 #STATICLINK=1
@@ -20,6 +20,18 @@ TARGET32=1
 #LINUXCOMPAT=1
 
 endif #EXTERN_ESBMC_CONFIG
+
+# Might need to guess what bitwidth target to build.
+ifndef TARGET64
+ifndef TARGET32
+THEMACHINE:=$(shell uname -m)
+ifeq ($(THEMACHINE),x86_64)
+  TARGET64=1
+else
+  TARGET32=1
+endif
+endif
+endif
 
 # Detect cygwin
 
