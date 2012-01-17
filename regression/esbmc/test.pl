@@ -106,7 +106,7 @@ sub test($$) {
 
   print LOG "\n";
 
-  return ($failed, $elapsed, $output);
+  return ($failed, $elapsed, $output, @results);
 }
 
 sub dirs() {
@@ -146,7 +146,7 @@ foreach my $test (@tests) {
   print "  Running $test";
 
   chdir $test;
-  my ($failed, $elapsed, $outputfile) = test($test, "test.desc");
+  my ($failed, $elapsed, $outputfile, @resultrexps) = test($test, "test.desc");
   $timeaccuml += $elapsed;
   chdir "..";
 
@@ -156,7 +156,7 @@ foreach my $test (@tests) {
     $failures++;
     print "  [FAILED]\n";
     $xmloutput = $xmloutput . ">\n";
-    $xmloutput = $xmloutput . "  <failure message=\"test failed\" type=\"nodescript failure\">\n";
+    $xmloutput = $xmloutput . "  <failure message=\"Test regexes \'@resultrexps\' failed\" type=\"nodescript failure\">\n";
 
     open(LOGFILE, "<$test/$outputfile") or die "Can't open outputfile $test/$outputfile";
     while (<LOGFILE>) {
