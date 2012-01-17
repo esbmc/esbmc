@@ -215,17 +215,6 @@ printz3 $satdir32 "Linux32"
 printz3 $satdir64compat "LinuxCompat64"
 printz3 $satdir32compat "LinuxCompat32"
 
-# Find whatever the current head is
-CURHEAD=`git symbolic-ref HEAD`
-
-if test $? != 0; then
-  # Not checked out a symbolic ref right now
-  CURHEAD=`cat .git/HEAD`
-fi
-
-# Strip "refs/heads/" or suchlike from CURHEAD
-CURHEAD=`basename $CURHEAD`
-
 # Then, checkout whatever we've been told to release
 # Allow the user to have a dirty tree, but bitch about it.
 # Are there modified files?
@@ -244,9 +233,22 @@ else
 fi
 
 if test -z "$targetrefname"; then
+  # No ref to checkout; inspect the current one.
+
   switchedref=0
+  # Find whatever the current head is
+  CURHEAD=`git symbolic-ref HEAD`
+
+  if test $? != 0; then
+    # Not checked out a symbolic ref right now
+    CURHEAD=`cat .git/HEAD`
+  fi
+
+  # Strip "refs/heads/" or suchlike from CURHEAD
+  CURHEAD=`basename $CURHEAD`
 else
   switcheref=1
+  CURHEAD=$targetrefname
   git checkout $targetrefname > /dev/null
   if test $? != 0; then
     echo "Couldn't checkout $targetrefname"
