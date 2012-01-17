@@ -10,7 +10,7 @@ use warnings;
 
 sub run($$$) {
   my ($input, $options, $output) = @_;
-  my $cmd = "esbmc --schedule $options $input >$output 2>&1";
+  my $cmd = "esbmc --schedule $EXTRAESBMCOPTS $options $input >$output 2>&1";
 
   print LOG "Running $cmd\n";
   system $cmd;
