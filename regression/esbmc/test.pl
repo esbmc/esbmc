@@ -140,12 +140,14 @@ if($count == 1) {
 print "\n";
 my $failures = 0;
 my $xmloutput =  "";
+my $timeaccuml = 0.0;
 print "Running tests\n";
 foreach my $test (@tests) {
   print "  Running $test";
 
   chdir $test;
   my ($failed, $elapsed) = test($test, "test.desc");
+  $timeaccuml += $elapsed;
   chdir "..";
 
   $xmloutput = $xmloutput . "<testcase name=\"$test\" time=\"$elapsed\"";
@@ -164,7 +166,7 @@ print "\n";
 
 my $io = IO::Handle->new();
 if ($io->fdopen(3, "w")) {
-  print $io "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<testsuite failures=\"$failures\" hostname=\"pony.ecs.soton.ac.uk\" name=\"ESBMC single threaded regression tests\" tests=\"$count\" time=\"0.0\">\n";
+  print $io "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<testsuite failures=\"$failures\" hostname=\"pony.ecs.soton.ac.uk\" name=\"ESBMC single threaded regression tests\" tests=\"$count\" time=\"$timeaccuml\">\n";
   print $io $xmloutput;
   print $io "</testsuite>";
 }
