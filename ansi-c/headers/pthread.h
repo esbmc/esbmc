@@ -48,10 +48,6 @@ enum
   PTHREAD_MUTEX_ERRORCHECK = PTHREAD_MUTEX_ERRORCHECK_NP,
   PTHREAD_MUTEX_DEFAULT = PTHREAD_MUTEX_NORMAL
 #endif
-#ifdef __USE_GNU
-  /* For compatibility.  */
-  , PTHREAD_MUTEX_FAST_NP = PTHREAD_MUTEX_TIMED_NP
-#endif
 };
 
 
@@ -82,25 +78,9 @@ enum
 #if __WORDSIZE == 64
 # define PTHREAD_MUTEX_INITIALIZER \
   { { 0, 0, 0, 0, 0, 0, { 0, 0 } } }
-# ifdef __USE_GNU
-#  define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP \
-  { { 0, 0, 0, 0, PTHREAD_MUTEX_RECURSIVE_NP, 0, { 0, 0 } } }
-#  define PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP \
-  { { 0, 0, 0, 0, PTHREAD_MUTEX_ERRORCHECK_NP, 0, { 0, 0 } } }
-#  define PTHREAD_ADAPTIVE_MUTEX_INITIALIZER_NP \
-  { { 0, 0, 0, 0, PTHREAD_MUTEX_ADAPTIVE_NP, 0, { 0, 0 } } }
-# endif
 #else
 # define PTHREAD_MUTEX_INITIALIZER \
   { { 0, 0, 0, 0, 0, { 0 } } }
-# ifdef __USE_GNU
-#  define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP \
-  { { 0, 0, 0, PTHREAD_MUTEX_RECURSIVE_NP, 0, { 0 } } }
-#  define PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP \
-  { { 0, 0, 0, PTHREAD_MUTEX_ERRORCHECK_NP, 0, { 0 } } }
-#  define PTHREAD_ADAPTIVE_MUTEX_INITIALIZER_NP \
-  { { 0, 0, 0, PTHREAD_MUTEX_ADAPTIVE_NP, 0, { 0 } } }
-# endif
 #endif
 
 
@@ -117,23 +97,6 @@ enum
 /* Read-write lock initializers.  */
 # define PTHREAD_RWLOCK_INITIALIZER \
   { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
-# ifdef __USE_GNU
-#  if __WORDSIZE == 64
-#   define PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP \
-  { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,					      \
-	PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP } }
-#  else
-#   if __BYTE_ORDER == __LITTLE_ENDIAN
-#    define PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP \
-  { { 0, 0, 0, 0, 0, 0, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP, \
-      0, 0, 0, 0 } }
-#   else
-#    define PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP \
-  { { 0, 0, 0, 0, 0, 0, 0, 0, 0, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP,\
-      0 } }
-#   endif
-#  endif
-# endif
 #endif  /* Unix98 or XOpen2K */
 
 
@@ -232,21 +195,6 @@ extern void pthread_exit (void *__retval) __attribute__ ((__noreturn__));
    This function is a cancellation point and therefore not marked with
    __THROW.  */
 extern int pthread_join (pthread_t __th, void **__thread_return);
-
-#ifdef __USE_GNU
-/* Check whether thread TH has terminated.  If yes return the status of
-   the thread in *THREAD_RETURN, if THREAD_RETURN is not NULL.  */
-extern int pthread_tryjoin_np (pthread_t __th, void **__thread_return);
-
-/* Make calling thread wait for termination of the thread TH, but only
-   until TIMEOUT.  The exit status of the thread is stored in
-   *THREAD_RETURN, if THREAD_RETURN is not NULL.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern int pthread_timedjoin_np (pthread_t __th, void **__thread_return,
-				 __const struct timespec *__abstime);
-#endif
 
 /* Indicate that the thread TH is never to be joined with PTHREAD_JOIN.
    The resources of TH will therefore be freed immediately when it
@@ -356,27 +304,6 @@ extern int pthread_attr_setstack (pthread_attr_t *__attr, void *__stackaddr,
 				  size_t __stacksize);
 #endif
 
-#ifdef __USE_GNU
-/* Thread created with attribute ATTR will be limited to run only on
-   the processors represented in CPUSET.  */
-extern int pthread_attr_setaffinity_np (pthread_attr_t *__attr,
-					size_t __cpusetsize,
-					__const cpu_set_t *__cpuset);
-
-/* Get bit set in CPUSET representing the processors threads created with
-   ATTR can run on.  */
-extern int pthread_attr_getaffinity_np (__const pthread_attr_t *__attr,
-					size_t __cpusetsize,
-					cpu_set_t *__cpuset);
-
-
-/* Initialize thread attribute *ATTR with attributes corresponding to the
-   already running thread TH.  It shall be called on uninitialized ATTR
-   and destroyed with pthread_attr_destroy when no longer needed.  */
-extern int pthread_getattr_np (pthread_t __th, pthread_attr_t *__attr);
-#endif
-
-
 /* Functions for scheduling control.  */
 
 /* Set the scheduling parameters for TARGET_THREAD according to POLICY
@@ -392,17 +319,6 @@ extern int pthread_getschedparam (pthread_t __target_thread,
 /* Set the scheduling priority for TARGET_THREAD.  */
 extern int pthread_setschedprio (pthread_t __target_thread, int __prio);
 
-
-#ifdef __USE_GNU
-/* Get thread name visible in the kernel and its interfaces.  */
-extern int pthread_getname_np (pthread_t __target_thread, char *__buf,
-			       size_t __buflen);
-
-/* Set thread name visible in the kernel and its interfaces.  */
-extern int pthread_setname_np (pthread_t __target_thread, __const char *__name);
-#endif
-
-
 #ifdef __USE_UNIX98
 /* Determine level of concurrency.  */
 extern int pthread_getconcurrency (void);
@@ -410,25 +326,6 @@ extern int pthread_getconcurrency (void);
 /* Set new concurrency level to LEVEL.  */
 extern int pthread_setconcurrency (int __level);
 #endif
-
-#ifdef __USE_GNU
-/* Yield the processor to another thread or process.
-   This function is similar to the POSIX `sched_yield' function but
-   might be differently implemented in the case of a m-on-n thread
-   implementation.  */
-extern int pthread_yield (void);
-
-
-/* Limit specified thread TH to run only on the processors represented
-   in CPUSET.  */
-extern int pthread_setaffinity_np (pthread_t __th, size_t __cpusetsize,
-				   __const cpu_set_t *__cpuset);
-
-/* Get bit set in CPUSET representing the processors TH can run on.  */
-extern int pthread_getaffinity_np (pthread_t __th, size_t __cpusetsize,
-				   cpu_set_t *__cpuset);
-#endif
-
 
 /* Functions for handling initialization.  */
 
@@ -511,9 +408,6 @@ extern int pthread_mutex_setprioceiling (pthread_mutex_t *__restrict __mutex,
 #ifdef __USE_XOPEN2K8
 /* Declare the state protected by MUTEX as consistent.  */
 extern int pthread_mutex_consistent (pthread_mutex_t *__mutex);
-# ifdef __USE_GNU
-extern int pthread_mutex_consistent_np (pthread_mutex_t *__mutex);
-# endif
 #endif
 
 
@@ -569,18 +463,10 @@ extern int pthread_mutexattr_setprioceiling (pthread_mutexattr_t *__attr,
 /* Get the robustness flag of the mutex attribute ATTR.  */
 extern int pthread_mutexattr_getrobust (__const pthread_mutexattr_t *__attr,
 					int *__robustness);
-# ifdef __USE_GNU
-extern int pthread_mutexattr_getrobust_np (__const pthread_mutexattr_t *__attr,
-					   int *__robustness);
-# endif
 
 /* Set the robustness flag of the mutex attribute ATTR.  */
 extern int pthread_mutexattr_setrobust (pthread_mutexattr_t *__attr,
 					int __robustness);
-# ifdef __USE_GNU
-extern int pthread_mutexattr_setrobust_np (pthread_mutexattr_t *__attr,
-					   int __robustness);
-# endif
 #endif
 
 
