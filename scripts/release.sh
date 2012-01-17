@@ -10,6 +10,10 @@ function usage() {
   echo "  -h ref    Checkout and build the git reference 'ref'" >&2
   echo "  -i        Incremental build; don't clean objdirs after building" >&2
   echo "  -c        Clean build objdir directories" >&2
+  echo "  -j        Jenkins build; don't actually checkout the ref from -h" >&2
+  # That's because Jenkins doesn't actually update refs in the repository it
+  # clones, it just fetches commits then checks out explicit hash ids. So
+  # Jenkins idea of master doesn't match what's in the repo.
   echo "What-to-build options:" >&2
   echo "  -a        Build all targets" >&2
   echo "  -t        Enable a particular build target, see below" >&2
@@ -60,6 +64,7 @@ target_64bit=0
 
 incrementalbuild=0
 cleanobjs=0
+jenkinsbuild=0
 
 function settarget() {
   target=$1
@@ -86,7 +91,7 @@ function settarget() {
   return 0
 }
 
-while getopts ":3:6:2:5:r:t:onONaic" opt; do
+while getopts ":3:6:2:5:r:t:onONaicj" opt; do
   case $opt in
     3)
       satdir32=$OPTARG
@@ -134,6 +139,9 @@ while getopts ":3:6:2:5:r:t:onONaic" opt; do
       ;;
     c)
       cleanobjs=1
+      ;;
+    j)
+      jenkinsbuild=1
       ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
@@ -249,10 +257,12 @@ if test -z "$targetrefname"; then
 else
   switcheref=1
   CURHEAD=$targetrefname
-  git checkout $targetrefname > /dev/null
-  if test $? != 0; then
-    echo "Couldn't checkout $targetrefname"
-    exit 1
+  if test $jenkinsbuild = "0"; then
+    git checkout $targetrefname > /dev/null
+    if test $? != 0; then
+      echo "Couldn't checkout $targetrefname"
+      exit 1
+    fi
   fi
 fi
 
