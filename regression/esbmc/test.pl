@@ -162,7 +162,7 @@ foreach my $test (@tests) {
     while (<LOGFILE>) {
       my $lump;
       $lump =  $_;
-      $lump =~ s/\&/\\\&/gm;
+      $lump =~ s/\&/\&amp;/gm;
       $xmloutput = $xmloutput . $lump;
     }
     close(LOGFILE);
