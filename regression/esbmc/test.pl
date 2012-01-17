@@ -3,6 +3,7 @@
 use subs;
 use strict;
 use warnings;
+use IO::Handle;
 
 # test.pl
 #
@@ -157,7 +158,6 @@ foreach my $test (@tests) {
 }
 print "\n";
 
-use IO::Handle;
 my $io = IO::Handle->new();
 if ($io->fdopen(3, "w")) {
   print $io "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<testsuite failures=\"$failures\" hostname=\"pony.ecs.soton.ac.uk\" name=\"ESBMC single threaded regression tests\" tests=\"$count\" time=\"0.0\">\n";
