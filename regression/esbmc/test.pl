@@ -163,6 +163,9 @@ foreach my $test (@tests) {
       my $lump;
       $lump =  $_;
       $lump =~ s/\&/\&amp;/gm;
+      $lump =~ s/"/\&quot;/gm;
+      $lump =~ s/</\&lt;/gm;
+      $lump =~ s/>/\&gt;/gm;
       $xmloutput = $xmloutput . $lump;
     }
     close(LOGFILE);
