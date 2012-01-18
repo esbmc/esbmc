@@ -303,7 +303,7 @@ function buildstep () {
   targetname=$4
   objdirsuffix=$5
 
-  if test $enabled = "0"; then return 1; fi
+  if test $enabled = "0"; then return 0; fi
 
   if test $target_64bit != "0"; then
     echo "Building 64 bit $targetname"
