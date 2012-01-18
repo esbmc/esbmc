@@ -53,14 +53,20 @@ done < test.desc
 # failure.
 success=0;
 failure=0;
+winregex='^VERIFICATION SUCCESSFUL$'
+failregex='^VERIFICATION FAILED$'
 for regexp in "${regexarr[@]}"
 do
   echo "Looking at regex $regexp"
-  if test "$regexp" = "^VERIFICATION SUCCESSFUL$"; then
+  if test "$regexp" = "$winregex"; then
     success=1;
+    rightregex=$winregex
+    wrongregex=$failregex
   fi
-  if test "$regexp" = "^VERIFICATION FAILED$"; then
+  if test "$regexp" = "$failregex"; then
     failure=1;
+    rightregex=$failregex
+    wrongregex=$winregex
   fi
 done
 
