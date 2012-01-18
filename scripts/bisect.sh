@@ -18,15 +18,15 @@ fi
 
 # Otherwise, find the test we'll be testing.
 cd regression
-stat esbmc/$testname
+stat esbmc/$testname >/dev/null 2>&1
 if test $? = 0; then
   cd esbmc/$testname
 else
-  stat esbmc-pt/$testname
+  stat esbmc-pt/$testname > /dev/null 2>&1
   if test $? = 0; then
     cd esbmc-pt/$testname
   else
-    stat esbmc-cpp/$testname
+    stat esbmc-cpp/$testname > /dev/null 2>&1
     if test $? != 0; then
       echo "Can't find $testname" >&2
       exit 125
