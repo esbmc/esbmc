@@ -2,7 +2,8 @@
 
 searchpath=-1
 beatstash=0
-while getopts ":t:ps" opt; do
+dirpath=""
+while getopts "t:p:s" opt; do
   case $opt in
     t)
       testname=$OPTARG
