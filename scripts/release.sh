@@ -271,6 +271,7 @@ fi
 
 function buildstep2() {
 
+  env $1 OBJDIR=.release_$2 make depend
   env $1 OBJDIR=.release_$2 make
 
   if test $? != 0; then
