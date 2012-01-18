@@ -55,9 +55,9 @@ const mode_table_et mode_table[] =
 };
 
 #if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
-extern "C" uint8_t _binary__objs_buildidobj_s_start;
-uint8_t *version_string = &_binary__objs_buildidobj_s_start;
-#else
 extern "C" uint8_t binary__objs_buildidobj_s_start;
 uint8_t *version_string = &binary__objs_buildidobj_s_start;
+#else
+extern "C" uint8_t _binary__objs_buildidobj_s_start;
+uint8_t *version_string = &_binary__objs_buildidobj_s_start;
 #endif
