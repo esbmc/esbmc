@@ -18,7 +18,8 @@ OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
       ../langapi/$(OBJDIR)/langapi.o \
       ../solvers/$(OBJDIR)/solvers.o \
       ../util/$(OBJDIR)/util.o \
-      ../cpp/$(OBJDIR)/cpp.o
+      ../cpp/$(OBJDIR)/cpp.o \
+      $(OBJDIR)/buildidobj.o
 
 all: $(OBJDIR)/.deps esbmc
 
@@ -57,6 +58,18 @@ CXXFLAGS+= USE_SMT
 endif
 
 ###############################################################################
+
+$(OBJDIR)/buildidobj.o:
+	touch $(OBJDIR)/buildidobj.s
+	echo -n "ESBMC built from " >> $(OBJDIR)/buildidobj.s
+	echo -n `git rev-parse HEAD` >> $(OBJDIR)/buildidobj.s
+	echo -n " " >> $(OBJDIR)/buildidobj.s
+	echo -n `date` >> $(OBJDIR)/buildidobj.s
+	echo -n " by $(USER)@$(HOSTNAME)" >> $(OBJDIR)/buildidobj.s
+	git status -s | grep -v "^??" > /dev/null 2>&1
+	if test $$? = "0"; then echo -n " (dirty tree)" >> $(OBJDIR)/buildidobj.s; fi
+	$(LD) $(LDFLAGS) -b binary -r $(OBJDIR)/buildidobj.s -o $(OBJDIR)/buildidobj.o
+	rm $(OBJDIR)/buildidobj.s
 
 include $(ESBMCDIR)/common
 
