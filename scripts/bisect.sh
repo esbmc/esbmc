@@ -48,7 +48,7 @@ else
     if test $? != 0; then
       echo "Can't find $testname" >&2
       restash
-      exit 125
+      exit -1
     fi
     cd esbmc-cpp/$testname
   fi
@@ -91,13 +91,13 @@ done
 if test $success = 1 -a $failure = 1; then
   echo "Test desc file matches both success and failure" >&2
   restash
-  exit 1
+  exit -1
 fi
 
 if test $success = 0 -a $failure = 0; then
   echo "Test desc file matches neither success nor failure in verification" >&2
   restash
-  exit 1
+  exit -1
 fi
 
 # Actually run esbmc
