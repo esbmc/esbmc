@@ -49,6 +49,31 @@ do
   counter=$(($counter+1))
 done < test.desc
 
+# Search the array of regexes we have for what we're looking for, success or
+# failure.
+success=0;
+failure=0;
+for regexp in "${regexarr[@]}"
+do
+  echo "Looking at regex $regexp"
+  if test "$regexp" = "^VERIFICATION SUCCESSFUL$"; then
+    success=1;
+  fi
+  if test "$regexp" = "^VERIFICATION FAILED$"; then
+    failure=1;
+  fi
+done
+
+if test $success = 1 -a $failure = 1; then
+  echo "Test desc file matches both success and failure" >&2
+  exit 1
+fi
+
+if test $success = 0 -a $failure = 0; then
+  echo "Test desc file matches neither success nor failure in verification" >&2
+  exit 1
+fi
+
 # Actually run esbmc
 tmpfile=`mktemp`
 $ESBMCDIR/esbmc/esbmc $args > $tmpfile 2>&1
