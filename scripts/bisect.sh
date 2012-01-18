@@ -58,7 +58,6 @@ winregex='^VERIFICATION SUCCESSFUL$'
 failregex='^VERIFICATION FAILED$'
 for regexp in "${regexarr[@]}"
 do
-  echo "Looking at regex $regexp"
   if test "$regexp" = "$winregex"; then
     success=1;
     rightregex=$winregex
