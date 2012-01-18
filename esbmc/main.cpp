@@ -18,6 +18,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 */
 
+#include <stdint.h>
 #include <langapi/mode.h>
 
 #include "parseoptions.h"
@@ -52,3 +53,11 @@ const mode_table_et mode_table[] =
 #endif
   LANGAPI_HAVE_MODE_END
 };
+
+#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
+extern "C" uint8_t _binary__objs_buildidobj_s_start;
+uint8_t *version_string = &_binary__objs_buildidobj_s_start;
+#else
+extern "C" uint8_t binary__objs_buildidobj_s_start;
+uint8_t *version_string = &binary__objs_buildidobj_s_start;
+#endif
