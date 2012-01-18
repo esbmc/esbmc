@@ -13,11 +13,19 @@ ESBMCDIR=`pwd`
 
 if test $beatstash = 1; then
   git stash pop > /dev/null 2>&1
+  if test $? != 0;
+    echo "Git stash pop failed" >&2
+    exit -1
+  fi
 fi
 
 function restash () {
   if test $beatstash = 1; then
     git stash > /dev/null 2>&1
+    if test $? != 0;
+      echo "Git stash failed" >&2
+      exit -1
+    fi
   fi
 }
 
