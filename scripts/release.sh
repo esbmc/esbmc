@@ -269,7 +269,7 @@ if test -z "$targetrefname"; then
   # Strip "refs/heads/" or suchlike from CURHEAD
   CURHEAD=`basename $CURHEAD`
 else
-  switcheref=1
+  switchedref=1
   CURHEAD=$targetrefname
   if test $jenkinsbuild = "0"; then
     git checkout $targetrefname > /dev/null
