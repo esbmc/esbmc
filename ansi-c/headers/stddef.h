@@ -6,6 +6,7 @@
 typedef long int ptrdiff_t;
 
 typedef short wchar_t;
+#define _WCHAR_T_DEFINED
 
 // Appease mingw
 #ifdef __need_wint_t
