@@ -34,3 +34,17 @@ else
     cd esbmc-cpp/$testname
   fi
 fi
+
+counter=0
+args=""
+declare -a regexarr
+data=`cat test.desc`
+while read line
+do
+  if test $counter -lt 2; then
+    args="$args $line"
+  else
+    regexarr[$(($counter-2))]="$line"
+  fi
+  counter=$(($counter+1))
+done < test.desc
