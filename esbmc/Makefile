@@ -65,7 +65,8 @@ $(OBJDIR)/buildidobj.o:
 	echo -n `git rev-parse HEAD` >> $(OBJDIR)/buildidobj.s
 	echo -n " " >> $(OBJDIR)/buildidobj.s
 	echo -n `date` >> $(OBJDIR)/buildidobj.s
-	echo -n " by $(USER)@$(HOSTNAME)" >> $(OBJDIR)/buildidobj.s
+	echo -n " by $(USER)@" >> $(OBJDIR)/buildidobj.s
+	echo -n `hostname` >> $(OBJDIR)/buildidobj.s
 	-git status -s | grep -v "^??" > /dev/null 2>&1
 	if test $$? = "0"; then echo -n " (dirty tree)" >> $(OBJDIR)/buildidobj.s; fi
 	sh -c 'cd $(OBJDIR); $(LD) $(LDFLAGS) -b binary -r ./buildidobj.s -o buildidobj.o'
