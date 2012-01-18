@@ -31,7 +31,7 @@ function checksanity() {
   cygstr=`uname -a`
   echo $cygstr | grep "CYGWIN"
   if test $? = 0; then
-    grep "WOW64" < echo "$cygstr"
+    echo $cygstr | grep "WOW64"
     if test $? = 0; then
       iswow64cygwin=1
     fi
