@@ -33,10 +33,16 @@ OPTS ?= -O3
 
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
+
+ifndef MSVC_10_HEADERS
+include define_MSVC_10_HEADERS_please
+# It should locate where the C library headers from Visual Studio 10 are.
+endif
+
 ifdef ONCYGWIN
-C2GOTO_INCS=-I$(shell cygpath -w $(MINGWROOTDIR)/include | sed s/\\\\/\\\\\\\\/g) -D_MINGW
+C2GOTO_INCS=-I$(shell cygpath -w $(MSVC_10_HEADERS)/include | sed s/\\\\/\\\\\\\\/g) -D_MINGW
 else
-C2GOTO_INCS=-I$(MINGWROOTDIR)/include -D_MINGW
+C2GOTO_INCS=-I$(MSVC_10_HEADERS)/include -D_MINGW
 endif
 WINDOWS= 1
 PLATLIBS=-lws2_32 -lkernel32
