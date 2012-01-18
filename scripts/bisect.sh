@@ -85,6 +85,10 @@ fi
 tmpfile=`mktemp`
 $ESBMCDIR/esbmc/esbmc $args > $tmpfile 2>&1
 
+# Sadly due to binaries in the tree, git bisect can complain if we don't clean
+# immediately.
+make clean > /dev/null 2>&1
+
 # Look for success
 grep "$rightregex" $tmpfile
 if test $? = 0; then
