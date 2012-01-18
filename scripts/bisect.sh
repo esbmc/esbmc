@@ -83,3 +83,18 @@ fi
 # Actually run esbmc
 tmpfile=`mktemp`
 $ESBMCDIR/esbmc/esbmc $args > $tmpfile 2>&1
+
+# Look for success
+grep "$rightregex" $tmpfile
+if test $? = 0; then
+  exit 0 # success
+fi
+
+# Was opposite true?
+grep "$wrongregex" $tmpfile
+if test $? = 0; then
+  exit 1 # Failure; wrong outcome
+fi
+
+# Otherwise, something crashed or went wrong.
+exit 125
