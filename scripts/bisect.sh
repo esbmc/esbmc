@@ -48,3 +48,7 @@ do
   fi
   counter=$(($counter+1))
 done < test.desc
+
+# Actually run esbmc
+tmpfile=`mktemp`
+$ESBMCDIR/esbmc/esbmc $args > $tmpfile 2>&1
