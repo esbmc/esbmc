@@ -1,11 +1,34 @@
 #!/bin/sh
 
-testname=$1
-
-# Optionally unstash/stash during build.
+searchpath=-1
 beatstash=0
-if test "$2" = "-s"; then
-  beatstash=1
+while getopts ":t:ps" opt; do
+  case $opt in
+    t)
+      testname=$OPTARG
+      searchpath=1
+      ;;
+    p)
+      searchpath=0
+      dirpath=$OPTARG
+      ;;
+    s)
+      beatstash=1
+      ;;
+    \?)
+      echo "Invalid option -$OPTARG" >&2
+      exit 1
+      ;;
+    :)
+      echo "Option -$OPTARG requires argument" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if test $searchpath = -1; then
+  echo "You must specify -t or -p" >&2
+  exit -1
 fi
 
 # Assume we're run from project root
@@ -43,23 +66,27 @@ if test $? != 0; then
 fi
 
 # Otherwise, find the test we'll be testing.
-cd regression
-stat esbmc/$testname >/dev/null 2>&1
-if test $? = 0; then
-  cd esbmc/$testname
-else
-  stat esbmc-pt/$testname > /dev/null 2>&1
+if test $searchpath = 1; then
+  cd regression
+  stat esbmc/$testname >/dev/null 2>&1
   if test $? = 0; then
-    cd esbmc-pt/$testname
+    cd esbmc/$testname
   else
-    stat esbmc-cpp/$testname > /dev/null 2>&1
-    if test $? != 0; then
-      echo "Can't find $testname" >&2
-      restash
-      exit -1
+    stat esbmc-pt/$testname > /dev/null 2>&1
+    if test $? = 0; then
+      cd esbmc-pt/$testname
+    else
+      stat esbmc-cpp/$testname > /dev/null 2>&1
+      if test $? != 0; then
+        echo "Can't find $testname" >&2
+        restash
+        exit -1
+      fi
+      cd esbmc-cpp/$testname
     fi
-    cd esbmc-cpp/$testname
   fi
+else
+  cd $dirpath
 fi
 
 counter=0
