@@ -26,10 +26,24 @@ function usage() {
 }
 
 function checksanity() {
+  # Are we on cygwin?
+  iswow64cygwin=0
+  cygstr=`uname -a`
+  echo $cygstr | grep "CYGWIN"
+  if test $? = 0; then
+    grep "WOW64" < echo "$cygstr"
+    if test $? = 0; then
+      iswow64cygwin=1
+    fi
+  fi
+
   # You need a 64 bit machine to fully build a release
   if test `uname -m` != "x86_64"; then
-    echo "Please run release.sh on a 64 bit machine"
-    exit 1
+    # Forgive 64 bit cygwin, otherwise bail.
+    if test $iswow64cygwin = 0; then
+      echo "Please run release.sh on a 64 bit machine"
+      exit 1
+    fi
   fi
 
   # You also need to be running it in the root ESBMC dir
