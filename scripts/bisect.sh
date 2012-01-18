@@ -2,8 +2,24 @@
 
 testname=$1
 
+# Optionally unstash/stash during build.
+beatstash=0
+if test "$2" = "-s"; then
+  beatstash=1
+fi
+
 # Assume we're run from project root
 ESBMCDIR=`pwd`
+
+if test $beatstash = 1; then
+  git stash pop
+fi
+
+function restash () {
+  if test $beatstash = 1; then
+    git stash
+  fi
+}
 
 # To build: make clean, make.
 make clean > /dev/null 2>/dev/null
@@ -14,6 +30,7 @@ make > /dev/null 2>/dev/null
 # If the build failed, curses.
 if test $? != 0; then
   echo "Failed to build this rev" >&2
+  restash
   exit 125 # untestable
 fi
 
@@ -30,6 +47,7 @@ else
     stat esbmc-cpp/$testname > /dev/null 2>&1
     if test $? != 0; then
       echo "Can't find $testname" >&2
+      restash
       exit 125
     fi
     cd esbmc-cpp/$testname
@@ -72,11 +90,13 @@ done
 
 if test $success = 1 -a $failure = 1; then
   echo "Test desc file matches both success and failure" >&2
+  restash
   exit 1
 fi
 
 if test $success = 0 -a $failure = 0; then
   echo "Test desc file matches neither success nor failure in verification" >&2
+  restash
   exit 1
 fi
 
@@ -87,6 +107,8 @@ $ESBMCDIR/esbmc/esbmc $args > $tmpfile 2>&1
 # Sadly due to binaries in the tree, git bisect can complain if we don't clean
 # immediately.
 make clean > /dev/null 2>&1
+
+restash
 
 # Look for success
 grep "$rightregex" $tmpfile
