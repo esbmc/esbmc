@@ -13,6 +13,7 @@ make > /dev/null 2>/dev/null
 
 # If the build failed, curses.
 if test $? != 0; then
+  echo "Failed to build this rev" >&2
   exit 125 # untestable
 fi
 
@@ -87,14 +88,17 @@ $ESBMCDIR/esbmc/esbmc $args > $tmpfile 2>&1
 # Look for success
 grep "$rightregex" $tmpfile
 if test $? = 0; then
+  echo "Correct output" >&2
   exit 0 # success
 fi
 
 # Was opposite true?
 grep "$wrongregex" $tmpfile
 if test $? = 0; then
+  echo "Wrong output" >&2
   exit 1 # Failure; wrong outcome
 fi
 
 # Otherwise, something crashed or went wrong.
+echo "Noncommital output" >&2
 exit 125
