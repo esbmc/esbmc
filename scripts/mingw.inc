@@ -40,9 +40,9 @@ include define_MSVC_10_HEADERS_please
 endif
 
 ifdef ONCYGWIN
-C2GOTO_INCS=-I$(shell cygpath -w $(MSVC_10_HEADERS)/include | sed s/\\\\/\\\\\\\\/g) -D_MINGW
+C2GOTO_INCS=-I$(shell cygpath -w $(MSVC_10_HEADERS)/include | sed s/\\\\/\\\\\\\\/g) -D_MSVC
 else
-C2GOTO_INCS=-I$(MSVC_10_HEADERS)/include -D_MINGW
+C2GOTO_INCS=-I$(MSVC_10_HEADERS)/include -D_MSVC
 endif
 WINDOWS= 1
 PLATLIBS=-lws2_32 -lkernel32
