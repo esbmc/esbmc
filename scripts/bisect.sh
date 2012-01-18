@@ -63,6 +63,7 @@ make > /dev/null 2>/dev/null
 if test $? != 0; then
   echo "Failed to build this rev" >&2
   restash
+  make clean > /dev/null 2>/dev/null
   exit 125 # untestable
 fi
 
