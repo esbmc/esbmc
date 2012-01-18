@@ -2,17 +2,29 @@
 #define STL_FSTREAM
 
 #include "streambuf"
+#include "string"
+#include "istream"
+#include "ostream"
+#include "definitions.h"
 
 namespace std
 {
-struct fstream{};
 
-struct ofstream{
-	ofstream ( );
+struct fstream: istream{
+	fstream ( );
+	explicit fstream ( const char * filename,
+	                   ios_base::openmode mode = ios_base::in | ios_base::out );
 };
 
-struct ifstream{
+struct ofstream:  ostream, ios{
+	ofstream ( );
+	explicit ofstream ( const char * filename, ios_base::openmode mode = ios_base::out );
+};
+
+struct ifstream: istream{
 	ifstream ( );
+	explicit ifstream ( const char * filename, ios_base::openmode mode = ios_base::in );
+	void close ( );
 };
 
 struct filebuf{};

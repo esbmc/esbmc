@@ -2,14 +2,31 @@
 #define STL_SSTREAM
 
 #include "streambuf"
+#include "definitions.h"
+#include "ostream"
 
 namespace std
 {
-struct istringstream{};
+struct istringstream{
+	explicit istringstream ( const string & str );
+	istream& operator>> (string& val );
+	istream& operator>> (int& val );
+	bool good ( ) const;
+};
 
 struct stringstream{};
 
-struct ostringstream{};
+struct ostringstream: ios{
+	explicit ostringstream ( openmode which = out );
+	explicit ostringstream ( const string & str, openmode which = out );
+	string str ( ) const;
+	void str ( const string & s );
+	ostream& operator<< (string& val );
+	ostream& operator<< (int &val);
+	ostream& operator<< (int val);
+	ostream& operator<< (double val);
+	ostream& operator<< (const char* s );
+};
 
 struct stringbuf{};
 }
