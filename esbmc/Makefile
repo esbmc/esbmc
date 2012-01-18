@@ -68,7 +68,8 @@ $(OBJDIR)/buildidobj.o:
 	echo -n " by $(USER)@$(HOSTNAME)" >> $(OBJDIR)/buildidobj.s
 	git status -s | grep -v "^??" > /dev/null 2>&1
 	if test $$? = "0"; then echo -n " (dirty tree)" >> $(OBJDIR)/buildidobj.s; fi
-	$(LD) $(LDFLAGS) -b binary -r $(OBJDIR)/buildidobj.s -o $(OBJDIR)/buildidobj.o
+	sh -c 'cd $(OBJDIR); $(LD) $(LDFLAGS) -b binary -r ./buildidobj.s -o buildidobj.o'
+	cd ..
 	rm $(OBJDIR)/buildidobj.s
 
 include $(ESBMCDIR)/common
