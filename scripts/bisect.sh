@@ -12,12 +12,12 @@ fi
 ESBMCDIR=`pwd`
 
 if test $beatstash = 1; then
-  git stash pop
+  git stash pop > /dev/null 2>&1
 fi
 
 function restash () {
   if test $beatstash = 1; then
-    git stash
+    git stash > /dev/null 2>&1
   fi
 }
 
