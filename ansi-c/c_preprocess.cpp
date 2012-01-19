@@ -292,6 +292,7 @@ bool c_preprocess(
 
   std::ifstream output_input(out_file_buf);
   outstream << output_input.rdbuf();
+  output_input.close();
   DeleteFile(out_file_buf);
 
   cpp_clear(); // Reset cpp state
