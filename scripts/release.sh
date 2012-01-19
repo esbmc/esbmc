@@ -416,6 +416,7 @@ function buildtgz {
 
   # Create a tarball
   tar -czf .release/$projname.tgz -C $tmpdirname $projname
+  rm -rf $tmpdirname
 }
 
 function buildtarballs() {
