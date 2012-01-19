@@ -3456,8 +3456,22 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
   if (expr.op0().type().id() == "union") {
     union_varst::const_iterator cache_result = union_vars.find(
       expr.op0().get_string("identifier").c_str());
+
     if (cache_result != union_vars.end()) {
-      bv = z3_api.mk_tuple_select(z3_ctx, struct_var, cache_result->second);
+      const struct_union_typet &type = (const struct_union_typet&)expr.op0().type();
+      const struct_union_typet::componentst components = type.components();
+      const typet &source_type = components[cache_result->second].type();
+      if (source_type.compare(expr.type()) == 0) {
+        // Type we're fetching from union matches expected type; just return it.
+        bv = z3_api.mk_tuple_select(z3_ctx, struct_var, cache_result->second);
+        return;
+      }
+
+      // Union field and expected type mismatch. Need to insert a cast.
+      typecast_exprt cast(expr.type());
+      expr.type() = source_type;
+      cast.op0() = expr;
+      convert_z3_expr(cast, bv);
       return;
     }
   }
