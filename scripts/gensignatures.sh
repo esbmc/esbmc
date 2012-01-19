@@ -19,7 +19,8 @@ do
   shasum=`shasum $file | cut "--delim= " -f 1`
   sha2sum=`sha256sum $file | cut "--delim= " -f 1`
 
-  echo "File $file checksums:"
+  basename=`basename $file`
+  echo "File $basename checksums:"
   echo "MD5:    $md5sum"
   echo "SHA:    $shasum"
   echo "SHA256: $sha2sum"
