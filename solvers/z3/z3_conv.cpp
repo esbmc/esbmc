@@ -3468,9 +3468,11 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
       }
 
       // Union field and expected type mismatch. Need to insert a cast.
-      typecast_exprt cast(expr.type());
-      expr.type() = source_type;
-      cast.op0() = expr;
+      // Duplicate expr as we're changing it
+      exprt expr2 = expr;
+      typecast_exprt cast(expr2.type());
+      expr2.type() = source_type;
+      cast.op0() = expr2;
       convert_z3_expr(cast, bv);
       return;
     }
