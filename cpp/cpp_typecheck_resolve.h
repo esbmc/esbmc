@@ -73,7 +73,11 @@ protected:
     resolve_identifierst &identifiers);
 
   void apply_template_args(
-    const locationt &location,
+    resolve_identifierst &identifiers,
+    const irept &template_args,
+    const cpp_typecheck_fargst &fargs);
+
+  void apply_template_args(
     exprt &expr,
     const irept &template_args,
     const cpp_typecheck_fargst& fargs);

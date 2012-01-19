@@ -75,6 +75,44 @@ void cpp_typecheck_resolvet::convert_identifiers(
 
 /*******************************************************************\
 
+Function: cpp_typecheck_resolvet::apply_template_args
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheck_resolvet::apply_template_args(
+  resolve_identifierst &identifiers,
+  const irept &template_args,
+  const cpp_typecheck_fargst &fargs)
+{
+  resolve_identifierst old_identifiers;
+  old_identifiers.swap(identifiers);
+
+  for(resolve_identifierst::const_iterator
+      it=old_identifiers.begin();
+      it!=old_identifiers.end();
+      it++)
+  {
+    exprt e=*it;
+    apply_template_args(e, template_args, fargs);
+
+    if(e.is_not_nil())
+    {
+      if(e.id()=="type")
+        assert(e.type().is_not_nil());
+
+      identifiers.insert(e);
+    }
+  }
+}
+
+/*******************************************************************\
+
 Function: cpp_typecheck_resolvet::convert_template_argument
 
 Inputs:
@@ -300,16 +338,12 @@ void cpp_typecheck_resolvet::convert_identifier(
         else
         {
           e=cpp_symbol_expr(symbol);
-          if(symbol.lvalue)
-            e.set("#lvalue", true);
         }
-
       }
     }
   }
 
   e.location()=location;
-  apply_template_args(location, e, template_args,fargs);
 }
 
 /*******************************************************************\
@@ -881,10 +915,6 @@ exprt cpp_typecheck_resolvet::resolve(
   resolve_scope(cpp_name, base_name, template_args);
 
   #ifdef CPP_SYSTEMC_EXTENSION
-  // SystemC extension
-//  if(base_name == "sc_uint" || base_name == "sc_int" || base_name == "sc_bv" ||
-//     base_name == "sc_lv" || base_name == "sc_logic")
-//  {
   if(base_name == "sc_uint" || base_name == "sc_bv")
     return do_builtin_sc_uint_extension(cpp_name, template_args);
   else if(base_name == "sc_int")
@@ -893,10 +923,6 @@ exprt cpp_typecheck_resolvet::resolve(
     return do_builtin_sc_logic_extension(cpp_name, template_args);
   else if(base_name == "sc_lv")
     return do_builtin_sc_lv_extension(cpp_name, template_args);
-//    else
-//      assert(0);
-//    return;
-//  }
   else if (base_name == "SC_LOGIC_0" || base_name == "SC_LOGIC_1" ||
            base_name == "SC_LOGIC_Z" || base_name == "SC_LOGIC_X")
   {
@@ -963,10 +989,8 @@ exprt cpp_typecheck_resolvet::resolve(
     cpp_typecheck.cpp_scopes.get_ids(base_name, cpp_idt::TEMPLATE, id_set, false);
 
   // Argument-dependent name lookup
-  if (!qualified && !fargs.has_object)
-  {
+  if(!qualified && !fargs.has_object)
     resolve_with_arguments(id_set, base_name, fargs);
-  }
 
   if(id_set.empty())
   {
@@ -994,9 +1018,20 @@ exprt cpp_typecheck_resolvet::resolve(
 
   resolve_identifierst identifiers;
 
-  convert_identifiers(
-                      id_set, location, template_args, fargs, identifiers);
+  if(template_args.is_not_nil())
+  {
+    // methods and functions
+    convert_identifiers(
+      id_set, location, template_args, fargs, identifiers);
 
+    apply_template_args(
+      identifiers, template_args, fargs);
+  }
+  else
+  {
+    convert_identifiers(
+      id_set, location, template_args, fargs, identifiers);
+  }
   // change type into constructors if we want a constructor
   if(want==VAR)
     make_constructors(identifiers);
@@ -1167,10 +1202,9 @@ Purpose:
 \*******************************************************************/
 
 void cpp_typecheck_resolvet::apply_template_args(
-                                                 const locationt &location,
-                                                 exprt &expr,
-                                                 const irept &template_args,
-                                                 const cpp_typecheck_fargst& fargs)
+  exprt &expr,
+  const irept &template_args,
+  const cpp_typecheck_fargst& fargs)
 {
   const irept::subt &arguments=
   template_args.find("arguments").get_sub();
