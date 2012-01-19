@@ -605,85 +605,85 @@ void cpp_typecheck_resolvet::disambiguate(
         it1 != identifiers.end();
         it1++)
     {
-        if(it1->type().id()!="code") continue;
+      if(it1->type().id()!="code") continue;
 
-        const code_typet& f1 =
-          to_code_type(it1->type());
+      const code_typet& f1 =
+        to_code_type(it1->type());
 
-        for(resolve_identifierst::iterator it2=
-            identifiers.begin();
-            it2 != identifiers.end();
-            ) // no it2++
+      for(resolve_identifierst::iterator it2=
+          identifiers.begin();
+          it2!=identifiers.end();
+          ) // no it2++
+      {
+        if(it1 == it2)
         {
-          if(it1 == it2)
-          {
-            it2++;
-            continue;
-          }
-
-          if(it2->type().id()!="code")
-          {
-            it2++;
-            continue;
-          }
-
-          const code_typet& f2 =
-            to_code_type(it2->type());
-
-          // TODO: may fail when using ellipsis
-          assert(f1.arguments().size() == f2.arguments().size());
-
-          bool f1_better = true;
-          bool f2_better = true;
-
-          for(unsigned i=0; i < f1.arguments().size() && (f1_better || f2_better); i++)
-          {
-            typet type1 = f1.arguments()[i].type();
-            typet type2 = f2.arguments()[i].type();
-
-            if(type1 == type2)
-              continue;
-
-            if(is_reference(type1) != is_reference(type2))
-              continue;
-
-            if(type1.id() == "pointer")
-            {
-              typet tmp = type1.subtype();
-              type1 = tmp;
-            }
-
-            if(type2.id() == "pointer")
-            {
-              typet tmp = type2.subtype();
-              type2 = tmp;
-            }
-
-            const typet& followed1 = cpp_typecheck.follow(type1);
-            const typet& followed2 = cpp_typecheck.follow(type2);
-
-            if(followed1.id() != "struct" || followed2.id() != "struct")
-              continue;
-
-            const struct_typet& struct1 = to_struct_type(followed1);
-            const struct_typet& struct2 = to_struct_type(followed2);
-
-            if(f1_better && cpp_typecheck.subtype_typecast(struct1, struct2))
-            {
-              f2_better = false;
-            }
-            else if(f2_better && cpp_typecheck.subtype_typecast(struct2,struct1))
-            {
-              f1_better = false;
-            }
-          }
-
-          resolve_identifierst::iterator prev_it = it2;
           it2++;
-
-          if(f1_better && !f2_better)
-            identifiers.erase(prev_it);
+          continue;
         }
+
+        if(it2->type().id()!="code")
+        {
+          it2++;
+          continue;
+        }
+
+        const code_typet &f2 =
+          to_code_type(it2->type());
+
+        // TODO: may fail when using ellipsis
+        assert(f1.arguments().size() == f2.arguments().size());
+
+        bool f1_better=true;
+        bool f2_better=true;
+
+        for(unsigned i=0; i < f1.arguments().size() && (f1_better || f2_better); i++)
+        {
+          typet type1 = f1.arguments()[i].type();
+          typet type2 = f2.arguments()[i].type();
+
+          if(type1 == type2)
+            continue;
+
+          if(is_reference(type1) != is_reference(type2))
+            continue;
+
+          if(type1.id()=="pointer")
+          {
+            typet tmp = type1.subtype();
+            type1 = tmp;
+          }
+
+          if(type2.id()=="pointer")
+          {
+            typet tmp = type2.subtype();
+            type2 = tmp;
+          }
+
+          const typet &followed1 = cpp_typecheck.follow(type1);
+          const typet &followed2 = cpp_typecheck.follow(type2);
+
+          if(followed1.id() != "struct" || followed2.id() != "struct")
+            continue;
+
+          const struct_typet &struct1 = to_struct_type(followed1);
+          const struct_typet &struct2 = to_struct_type(followed2);
+
+          if(f1_better && cpp_typecheck.subtype_typecast(struct1, struct2))
+          {
+            f2_better = false;
+          }
+          else if(f2_better && cpp_typecheck.subtype_typecast(struct2, struct1))
+          {
+            f1_better = false;
+          }
+        }
+
+        resolve_identifierst::iterator prev_it = it2;
+        it2++;
+
+        if(f1_better && !f2_better)
+          identifiers.erase(prev_it);
+      }
     }
   }
 
@@ -702,7 +702,7 @@ Purpose:
 \*******************************************************************/
 
 void cpp_typecheck_resolvet::make_constructors(
-                                               resolve_identifierst &identifiers)
+  resolve_identifierst &identifiers)
 {
   resolve_identifierst new_identifiers;
 
@@ -926,9 +926,11 @@ exprt cpp_typecheck_resolvet::do_builtin(
 
 Function: cpp_typecheck_resolvet::resolve_scope
 
-Inputs:
+Inputs: a cpp_name
 
-Outputs:
+Outputs: a base_name, and potentially template arguments for
+         the base name; as side-effect, we got to the right
+         scope
 
 Purpose:
 
@@ -944,8 +946,7 @@ void cpp_typecheck_resolvet::resolve_scope(
 
   cpp_scopet& original_scope =
   cpp_typecheck.cpp_scopes.current_scope();
-
-  const locationt &location=cpp_name.location();
+  location=cpp_name.location();
 
   irept::subt::const_iterator pos=cpp_name.get_sub().begin();
 
@@ -969,7 +970,7 @@ void cpp_typecheck_resolvet::resolve_scope(
       // of the original scope
       exprt tmp = static_cast<const exprt&>(*pos);
       cpp_scopet& backup_scope =
-      cpp_typecheck.cpp_scopes.current_scope();
+        cpp_typecheck.cpp_scopes.current_scope();
       cpp_typecheck.cpp_scopes.go_to(original_scope);
 
       cpp_typecheck.typecheck_template_args(tmp);
@@ -1074,8 +1075,7 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_namespace(
   bool qualified=cpp_name.is_qualified();
 
   cpp_scopest::id_sett id_set;
-  cpp_typecheck.cpp_scopes.get_ids(
-                                   base_name, id_set, qualified);
+  cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, qualified);
 
   filter_for_namespaces(id_set);
 
@@ -1233,12 +1233,14 @@ exprt cpp_typecheck_resolvet::resolve(
   // save 'this_expr' before resolving the scopes
   this_expr=cpp_typecheck.cpp_scopes.current_scope().this_expr;
 
+  original_scope=&cpp_typecheck.cpp_scopes.current_scope();
   cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
 
   // this changes the scope
   resolve_scope(cpp_name, base_name, template_args);
 
   #ifdef CPP_SYSTEMC_EXTENSION
+  // SystemC extension
   if(base_name == "sc_uint" || base_name == "sc_bv")
     return do_builtin_sc_uint_extension(cpp_name, template_args);
   else if(base_name == "sc_int")
@@ -1356,6 +1358,7 @@ exprt cpp_typecheck_resolvet::resolve(
     convert_identifiers(
       id_set, location, template_args, fargs, identifiers);
   }
+
   // change type into constructors if we want a constructor
   if(want==VAR)
     make_constructors(identifiers);
@@ -1374,6 +1377,8 @@ exprt cpp_typecheck_resolvet::resolve(
   // no matches? Try again with function template guessing.
   if(new_identifiers.empty() && template_args.is_nil())
   {
+    std::cout << "### guess " << cpp_name.location() << std::endl;
+
     new_identifiers=identifiers;
     guess_function_template_args(new_identifiers, fargs);
   }
@@ -1417,7 +1422,7 @@ exprt cpp_typecheck_resolvet::resolve(
           it++)
       {
         cpp_typecheck.str << "  "
-        		          << cpp_typecheck.to_string(it->type()) << std::endl;
+                          << cpp_typecheck.to_string(it->type()) << std::endl;
       }
     }
 
@@ -1524,7 +1529,6 @@ void cpp_typecheck_resolvet::guess_template_args(
     }
   }
 }
-
 
 /*******************************************************************\
 
@@ -1882,13 +1886,13 @@ void cpp_typecheck_resolvet::apply_template_args(
 
       // check if it is a method
       const code_typet& code_type = to_code_type(new_symbol.type);
-      if(!code_type.arguments().empty() && 
+      if(!code_type.arguments().empty() &&
           code_type.arguments()[0].get("#base_name") == "this")
       {
         // do we have an object?
         if(fargs.has_object)
         {
-          const symbolt& type_symb = 
+          const symbolt& type_symb =
             cpp_typecheck.lookup(fargs.operands.begin()->type().get("identifier"));
           const struct_typet& struct_type = to_struct_type(type_symb.type);
           assert(struct_type.has_component(new_symbol.name));
@@ -1976,6 +1980,7 @@ bool cpp_typecheck_resolvet::disambiguate(
 
         cpp_typecheck_fargst new_fargs(fargs);
         new_fargs.add_object(expr.op0());
+
         return new_fargs.match(type, args_distance, cpp_typecheck);
       }
     }
@@ -1985,9 +1990,9 @@ bool cpp_typecheck_resolvet::disambiguate(
     // if it's not a member then we shall remove the object
     cpp_typecheck_fargst new_fargs(fargs);
     new_fargs.remove_object();
+
     return new_fargs.match(type, args_distance, cpp_typecheck);
   }
-
 
   return fargs.match(type, args_distance, cpp_typecheck);
 }
@@ -2018,7 +2023,10 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
     cpp_idt &id=**it;
 
     if(id.is_class() || id.is_enum() || id.is_namespace())
+    {
+      assert(id.is_scope);
       new_set.insert(&id);
+    }
     else if(id.is_typedef())
     {
       irep_idt identifier=id.identifier;
@@ -2048,7 +2056,9 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
         {
           // this is a scope, too!
           cpp_idt &class_id=
-          cpp_typecheck.cpp_scopes.get_id(identifier);
+            cpp_typecheck.cpp_scopes.get_id(identifier);
+
+          assert(class_id.is_scope);
           new_set.insert(&class_id);
           break;
         }
@@ -2058,19 +2068,19 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
           break;
       }
     }
-    else if(id.id_class == cpp_scopet::TEMPLATE)
+    else if(id.id_class==cpp_scopet::TEMPLATE)
     {
       const symbolt symbol = cpp_typecheck.lookup(id.identifier);
       if(symbol.type.get("type") =="struct")
         new_set.insert(&id);
     }
-    else if(id.id_class == cpp_scopet::TEMPLATE_ARGUMENT)
+    else if(id.id_class==cpp_scopet::TEMPLATE_ARGUMENT)
     {
       // maybe it is a scope
-      exprt e = cpp_typecheck.template_map.lookup(id.identifier);
+      exprt e=cpp_typecheck.template_map.lookup(id.identifier);
 
-      if(e.id() != "type")
-        continue; // it's definitively not a scope
+      if(e.id()!="type")
+        continue; // expressions are definitively not a scope
 
       if(e.type().id() == "symbol")
       {
@@ -2085,7 +2095,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
           {
             // this is a scope, too!
             cpp_idt &class_id=
-            cpp_typecheck.cpp_scopes.get_id(identifier);
+              cpp_typecheck.cpp_scopes.get_id(identifier);
             new_set.insert(&class_id);
             break;
           }
@@ -2154,16 +2164,17 @@ void cpp_typecheck_resolvet::resolve_with_arguments(
 
   for(unsigned i = 0 ; i<fargs.operands.size();i++)
   {
-    const typet& final_type = cpp_typecheck.follow(fargs.operands[i].type());
+    const typet &final_type=
+      cpp_typecheck.follow(fargs.operands[i].type());
 
-    if(final_type.id() != "struct" && final_type.id() != "union")
+    if(final_type.id()!="struct" && final_type.id()!="union")
       continue;
 
     cpp_scopest::id_sett tmp_set;
-    cpp_idt& scope = cpp_typecheck.cpp_scopes.get_scope(final_type.get("name"));
+    cpp_idt& scope=cpp_typecheck.cpp_scopes.get_scope(final_type.get("name"));
     cpp_typecheck.cpp_scopes.go_to(scope);
     cpp_typecheck.cpp_scopes.get_ids(base_name, tmp_set, false);
-    id_set.insert(tmp_set.begin(),tmp_set.end());
+    id_set.insert(tmp_set.begin(), tmp_set.end());
   }
 }
 
