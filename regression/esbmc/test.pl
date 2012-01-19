@@ -12,7 +12,9 @@ use Time::HiRes qw(tv_interval gettimeofday);
 
 sub run($$$) {
   my ($input, $options, $output) = @_;
-  my $cmd = "esbmc $options $input >$output 2>&1";
+  my $extraopts = $ENV{'ESBMC_TEST_EXTRA_ARGS'};
+  $extraopts = "" unless defined($extraopts);
+  my $cmd = "esbmc $extraopts $options $input >$output 2>&1";
 
   print LOG "Running $cmd\n";
   my $tv = [gettimeofday()];
