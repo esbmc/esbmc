@@ -861,16 +861,6 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
   const struct_union_typet &su_type = to_struct_union_type(type);
   const struct_union_typet::componentst &components = su_type.components();
 
-  //std::cout << "type.pretty(): " << type.pretty() << std::endl;
-  //std::cout << "components.size(): " << components.size() << std::endl;
-
-#if 0
-  if (components.size()==0) {
-	  bv = Z3_mk_bool_type(z3_ctx);
-	  return ;
-  }
-#endif
-
   assert(components.size() > 0);
   num_elems = components.size();
   if (uni) num_elems++;
