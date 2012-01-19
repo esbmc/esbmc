@@ -175,7 +175,11 @@ void add_cprover_library(
 
   std::ifstream infile(symname_buffer, std::ios::in | std::ios::binary);
   read_goto_binary(infile, new_ctx, goto_functions, message_handler);
+#ifndef _WIN32
   unlink(symname_buffer);
+#else
+  DeleteFile(symname_buffer);
+#endif
 
   forall_symbols(it, new_ctx.symbols) {
     generate_symbol_deps(it->first, it->second.value, symbol_deps);
