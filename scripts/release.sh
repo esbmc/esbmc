@@ -445,6 +445,8 @@ dobuild
 # We now have a set of binaries (or an error)
 if test $? != 0; then
   echo "Build failed"
+  cleanup
+  exit 1
 fi
 
 # If there's no target ref name, use current branch or hash.
