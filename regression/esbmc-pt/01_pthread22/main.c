@@ -1,7 +1,6 @@
 #include <pthread.h>
 
 int g;
-void __ESBMC_yield();
 
 void *t1(void *arg)
 {
@@ -19,8 +18,6 @@ int main()
 
   pthread_create(&id1, NULL, t1, NULL);
   pthread_create(&id2, NULL, t2, NULL);
-
-// __ESBMC_yield();
 
   assert(g==0 || g==2);
 }

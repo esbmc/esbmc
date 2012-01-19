@@ -109,6 +109,19 @@ void basic_symext::symex_malloc(
   
   guardt guard;
   symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
+
+  // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
+  exprt sym("symbol", array_typet());
+  sym.type().subtype() = bool_typet();
+  sym.set("identifier", "__ESBMC_is_dynamic");
+  exprt pointerobj("pointer_object", signedbv_typet());
+  exprt ptrsrc = lhs;
+  pointerobj.move_to_operands(ptrsrc);
+  exprt index("index", bool_typet());
+  index.move_to_operands(sym, pointerobj);
+  exprt truth("constant", bool_typet());
+  truth.set("value", "true");
+  symex_assign_rec(state, ex_state, index, truth, guard,node_id);
 }
 
 /*******************************************************************\

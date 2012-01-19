@@ -20,7 +20,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_convert_class.h"
 #include "remove_skip.h"
 #include "destructor.h"
-#include "var_name.h"
 
 //#define DEBUG 1
 
@@ -982,20 +981,9 @@ void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rh
 	  dest.add_instruction(ATOMIC_BEGIN);
 	  atomic = -1;
 	}
-	std::stringstream ss;
-	std::string s;
 	goto_programt::targett t=dest.add_instruction(ASSERT);
 	t->guard.swap(atomic_dest);
 	t->location=location;
-	ss << get_variable_name(lhs.identifier().as_string());
-	ss >> s;
-	//std::cout << "s.c_str(): " << s.c_str() << std::endl;
-	//std::cout << "s.empty(): " << s.empty() << std::endl;
-	//std::cout << "lhs.pretty(): " << lhs.identifier().as_string() << std::endl;
-	//std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
-	//if (lhs.identifier().as_string().find("atomicity") == std::string::npos)
-	  //t->location.comment("atomicity violation on assignment to " + s);
-	//else
 	  t->location.comment("atomicity violation on assignment to " + lhs.identifier().as_string());
   }
 
@@ -1132,7 +1120,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	{
 	  // make new assignment to temp for each global symbol
 	  symbolt &new_symbol=new_tmp_symbol(rhs.type());
-
+	  new_symbol.static_lifetime=true;
 	  equality_exprt eq_expr;
 	  irept irep;
 	  new_symbol.to_irep(irep);

@@ -636,31 +636,3 @@ void basic_symex(
   basic_symext basic_symex(ns, new_context, target);
   basic_symex.symex(state, ex_state, code, node_id);
 }
-
-/*******************************************************************\
-
-Function: basic_symex
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symex(
-  const codet &code,
-  const namespacet &ns,
-  symex_targett &target,
-  execution_statet &ex_state,
-        unsigned node_id)
-{
-#if 0
-  contextt new_context;
-  basic_symext basic_symex(ns, new_context, target);
-  goto_symex_statet state;
-  basic_symex.symex(state, ex_state, code, node_id);
-#endif
-__asm__("int $3");
-}

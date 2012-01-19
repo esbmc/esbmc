@@ -14,6 +14,6 @@ SRCS= symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
       crypto_hash.cpp VarMap.cpp
 
 clean:
-	-rm -f $(OBJS) $(OBJDIR)/.deps
+	-rm -f $(OBJS) $(OBJDIR)/.deps $(MAINOBJ)
 
 include $(ESBMCDIR)/common

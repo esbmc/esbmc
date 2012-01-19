@@ -10,17 +10,36 @@ struct hooked_header {
 	char *textend;
 };
 
+/* Drama: when building with mingw, an additional '_' character is placed at the
+ * beginning of all symbols. Wheras the header objects produced by ld in
+ * ansi-c/headers will only ever have one '_' character at the start. So, some
+ * hackery is required */
+
+#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
+#define p(x) x
+#else
+#define p(x) _##x
+#endif
+
 struct hooked_header headers[] = {
-{ "stddef.h",		&_binary_stddef_h_start,	&_binary_stddef_h_end },
+{ "stddef.h",		&p(binary_stddef_h_start),	&p(binary_stddef_h_end) },
 /* stddef.h contains a variety of compiler-specific functions */
-{ "stdarg.h",		&_binary_stdarg_h_start,	&_binary_stdarg_h_end},
+{ "stdarg.h",		&p(binary_stdarg_h_start),	&p(binary_stdarg_h_end)},
 /* contains va_start and similar functionality */
-{ "stdbool.h",		&_binary_stdbool_h_start,	&_binary_stdbool_h_end},
+{ "stdbool.h",		&p(binary_stdbool_h_start),	&p(binary_stdbool_h_end)},
 /* Fairly self explanatory */
 { "bits/wordsize.h",	NULL,				NULL},
 /* Defines __WORDSIZE, which we define ourselves */
+{ "pthread.h",		&p(binary_pthread_h_start),	&p(binary_pthread_h_end)
+},
+/* Pthreads header */
+{ "pthreadtypes.h",	&p(binary_pthreadtypes_h_start),&p(binary_pthreadtypes_h_end)
+},
+/*  Additional pthread data header */
 { NULL, NULL, NULL}
 };
+
+#undef p
 
 int
 handle_hooked_header(usch *name)

@@ -6,13 +6,15 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#ifdef _WIN32
+#include <windows.h>
+#undef small
+#undef ERROR
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 
 #include <fstream>
 
@@ -71,6 +73,7 @@ static const char *cpp_defines_32[] ={
 "__INTMAX_TYPE__=\"long long int\"",
 "__UINTMAX_TYPE__=\"long long unsigned int\"",
 "__WORDSIZE=32",
+"_X86_",
 NULL
 };
 
@@ -99,6 +102,8 @@ static const char *cpp_defines_64[] ={
 "__INTMAX_TYPE__=\"long long int\"",
 "__UINTMAX_TYPE__=\"long long unsigned int\"",
 "__WORDSIZE=64",
+"__x86_64",
+"__x86_64__",
 NULL
 };
 
@@ -139,10 +144,13 @@ NULL
 
 static const char *cpp_normal_defs[] = {
 "__ESBMC__",
-"__null=0",
 "__STRICT_ANSI__=1",
 "_POSIX_SOURCE=1",
+#ifndef __WIN32__ // mingw sched/pthread headers choke and die upon this.
 "_POSIX_C_SOURCE=200112L",
+#endif
+"__GNUC__",
+"__restrict__=/**/",
 NULL
 };
 
@@ -157,6 +165,12 @@ static const char *cpp_linux_defs[] = {
 "unix",
 "__unix",
 "__unix__",
+"__null=0",
+NULL
+};
+
+static const char *cpp_windows_defs[] = {
+"_WIN32",
 NULL
 };
 
@@ -167,6 +181,9 @@ static const char *cpp_ansic_defs[] = {
 "__STDC__",
 NULL
 };
+
+int configure_and_run_cpp(const char *out_file_buf, std::string path,
+		          const char **platformdefs);
 
 void setup_cpp_defs(const char **defs)
 {
@@ -179,6 +196,12 @@ void setup_cpp_defs(const char **defs)
   return;
 }
 
+#ifndef _WIN32
+
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 bool c_preprocess(
   std::istream &instream,
   const std::string &path,
@@ -187,7 +210,7 @@ bool c_preprocess(
 {
   char out_file_buf[32], stderr_file_buf[32];
   pid_t pid;
-  int fd, status, ret;
+  int fd, status;
 
   message_streamt message_stream(message_handler);
 
@@ -237,6 +260,53 @@ bool c_preprocess(
   dup2(fd, STDERR_FILENO);
   close(fd);
 
+  exit(configure_and_run_cpp(out_file_buf, path, cpp_linux_defs));
+}
+
+#else /* __WIN32__ */
+
+#include <io.h>
+
+bool c_preprocess(
+  std::istream &instream,
+  const std::string &path,
+  std::ostream &outstream,
+  message_handlert &message_handler)
+{
+  int err, ret;
+  char out_file_buf[288], tmpdir[256];
+
+  // For Windows, we can't fork and run the preprocessor in a seperate process.
+  // Instead, just run it within the existing ESBMC process.
+
+  message_streamt message_stream(message_handler);
+
+  GetTempPath(sizeof(tmpdir), tmpdir);
+  GetTempFileName(tmpdir, "bmc", 0, out_file_buf);
+
+  ret = configure_and_run_cpp(out_file_buf, path, cpp_windows_defs);
+  if (ret != 0) {
+    message_stream.error("Preprocessor returned an error");
+    return true;
+  }
+
+  std::ifstream output_input(out_file_buf);
+  outstream << output_input.rdbuf();
+  DeleteFile(out_file_buf);
+
+  cpp_clear(); // Reset cpp state
+
+  return false;
+}
+
+#endif
+
+int
+configure_and_run_cpp(const char *out_file_buf, std::string path,
+		      const char **platform_defs)
+{
+  int ret;
+
   if(config.ansi_c.word_size==16)
     setup_cpp_defs(cpp_defines_16);
   else if(config.ansi_c.word_size==32)
@@ -255,7 +325,7 @@ bool c_preprocess(
     setup_cpp_defs(cpp_defines_strabs);
 
   setup_cpp_defs(cpp_normal_defs);
-  setup_cpp_defs(cpp_linux_defs);
+  setup_cpp_defs(platform_defs);
   setup_cpp_defs(cpp_ansic_defs);
 
   for(std::list<std::string>::const_iterator
@@ -281,5 +351,5 @@ bool c_preprocess(
   ret = pushfile((unsigned char *)strdup(path.c_str()));
   fin();
 
-  exit(ret);
+  return ret;
 }

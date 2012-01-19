@@ -3,6 +3,8 @@
 use subs;
 use strict;
 use warnings;
+use IO::Handle;
+use Time::HiRes qw(tv_interval gettimeofday);
 
 # test.pl
 #
@@ -10,10 +12,14 @@ use warnings;
 
 sub run($$$) {
   my ($input, $options, $output) = @_;
-  my $cmd = "esbmc $options $input >$output 2>&1";
+  my $extraopts = $ENV{'ESBMC_TEST_EXTRA_ARGS'};
+  $extraopts = "" unless defined($extraopts);
+  my $cmd = "esbmc $extraopts $options $input >$output 2>&1";
 
   print LOG "Running $cmd\n";
+  my $tv = [gettimeofday()];
   system $cmd;
+  my $elapsed = tv_interval($tv);
   my $exit_value = $? >> 8;
   my $signal_num = $? & 127;
   my $dumped_core = $? & 128;
@@ -40,7 +46,7 @@ sub run($$$) {
   system "echo EXIT=$exit_value >>$output";
   system "echo SIGNAL=$signal_num >>$output";
 
-  return $failed;
+  return ($failed, $elapsed);
 }
 
 sub load($) {
@@ -75,7 +81,8 @@ sub test($$) {
     print LOG "    $result\n";
   }
 
-  my $failed = run($input, $options, $output);
+  my ($failed, $elapsed);
+  ($failed, $elapsed) = run($input, $options, $output);
 
   if(!$failed) {
     print LOG "Execution [OK]\n";
@@ -101,7 +108,7 @@ sub test($$) {
 
   print LOG "\n";
 
-  return $failed;
+  return ($failed, $elapsed, $output, @results);
 }
 
 sub dirs() {
@@ -134,22 +141,51 @@ if($count == 1) {
 }
 print "\n";
 my $failures = 0;
+my $xmloutput =  "";
+my $timeaccuml = 0.0;
 print "Running tests\n";
 foreach my $test (@tests) {
   print "  Running $test";
 
   chdir $test;
-  my $failed = test($test, "test.desc");
+  my ($failed, $elapsed, $outputfile, @resultrexps) = test($test, "test.desc");
+  $timeaccuml += $elapsed;
   chdir "..";
+
+  $xmloutput = $xmloutput . "<testcase name=\"$test\" time=\"$elapsed\"";
 
   if($failed) {
     $failures++;
     print "  [FAILED]\n";
+    $xmloutput = $xmloutput . ">\n";
+    $xmloutput = $xmloutput . "  <failure message=\"Test regexes \'@resultrexps\' failed\" type=\"nodescript failure\">\n";
+
+    open(LOGFILE, "<$test/$outputfile") or die "Can't open outputfile $test/$outputfile";
+    while (<LOGFILE>) {
+      my $lump;
+      $lump =  $_;
+      $lump =~ s/\&/\&amp;/gm;
+      $lump =~ s/"/\&quot;/gm;
+      $lump =~ s/</\&lt;/gm;
+      $lump =~ s/>/\&gt;/gm;
+      $xmloutput = $xmloutput . $lump;
+    }
+    close(LOGFILE);
+
+    $xmloutput = $xmloutput . "</failure>\n</testcase>";
   } else {
     print "  [OK]\n";
+    $xmloutput = $xmloutput . "/>\n";
   }
 }
 print "\n";
+
+my $io = IO::Handle->new();
+if ($io->fdopen(3, "w")) {
+  print $io "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<testsuite failures=\"$failures\" hostname=\"pony.ecs.soton.ac.uk\" name=\"ESBMC single threaded regression tests\" tests=\"$count\" time=\"$timeaccuml\">\n";
+  print $io $xmloutput;
+  print $io "</testsuite>";
+}
 
 if($failures == 0) {
   print "All tests were successful\n";

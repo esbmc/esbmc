@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <assert.h>
 
 #include <algorithm>
+#include <config.h>
+#include <options.h>
 
 #include "simplify_expr_class.h"
 #include "simplify_expr.h"
@@ -960,24 +962,69 @@ bool simplify_exprt::simplify_addition_substraction(
   }
   else if(expr.id()=="-")
   {
-    if(operands.size()==2 &&
-       is_number(expr.type()) &&
-       is_number(operands.front().type()) &&
-       is_number(operands.back().type()))
+    exprt::operandst subtrahends;
+    exprt minuend;
+    // Sum the subtrahend portions, then if the minuend is constant, attempt to
+    // subtract from it.
+
+    exprt::operandst ops = expr.operands();
+    if (ops.size() == 0)
+      return true;
+
+    assert(ops.size() > 1); // This should probably have become a unary-
+
+    // Remove minuend
+    exprt::operandst::iterator it;
+    it = ops.begin();
+    minuend = *it;
+    it++;
+
+    // If this is a binary operation, we might be able to solve right now.
+    if (ops.size() == 2) {
+      if (minuend.id() == "constant" && it->id() == "constant") {
+        minuend.subtract(*it);
+        expr.swap(minuend);
+        return false;
+      } else {
+        return true;
+      }
+    }
+
+    // A large subtract; so collect subtrahend portions
+    for (; it != ops.end(); it++)
+      subtrahends.push_back(*it);
+
+    exprt an_add("+", expr.type());
+    an_add.operands() = subtrahends;
+    simplify_rec(an_add, mode);
+
+    // We should now have a list of operands, one of which might be constant. If
+    // the minuend is constant, and a subtracting operand is constant, perform
+    // that subtraction.
+    if (minuend.id() == "constant") {
+      subtrahends = an_add.operands();
+      for (it = subtrahends.begin(); it != subtrahends.end(); it++) {
+        if (it->id() == "constant") {
+          // Hurrah, we can perform a constant subtraction.
+          minuend.subtract(*it);
+          subtrahends.erase(it);
+          result = false;
+        }
+      }
+    }
+
+    if (subtrahends.size()==0)
     {
-
-      exprt tmp2("unary-", expr.type());
-      tmp2.move_to_operands(operands.back());
-      simplify_node(tmp2, mode);
-
-      exprt tmp("+", expr.type());
-      tmp.move_to_operands(operands.front());
-      tmp.move_to_operands(tmp2);
-
+      exprt tmp(minuend);
       expr.swap(tmp);
-      simplify_node(expr, mode);
-
       return false;
+    } else {
+      // Reconstruct a subtract expr
+      expr.operands().clear();
+      expr.operands().push_back(minuend);
+      for (it = subtrahends.begin(); it != subtrahends.end(); it++)
+        expr.operands().push_back(*it);
+      // result variable will determine whether we've simplified at all.
     }
   }
 
@@ -3343,6 +3390,29 @@ Function:
 
 bool simplify_exprt::simplify_unary_minus(exprt &expr)
 {
+
+  if (config.options.get_bool_option("int-encoding") &&
+      expr.type().id() != "fixedbv" && expr.type().id() != "signedbv")
+    // Never simplify a unary minus if we're using integer encoding. The SMT
+    // solver is going to have its own negative representation, and this
+    // conflicts with the current irep representation of binary-in-a-string.
+    // Specifically, the current 01_cmbc_Malloc1 test encodes:
+    //
+    // o = n - 1;
+    //
+    // as
+    //
+    // o = n + 4294967295
+    //
+    // Which may be fine in bit-vector mode, but that calculation does _not_
+    // wrap around in integer mode. So, block such simplification of unary-'s.
+    //
+    // Update: After further thought that kind of overflowing is fine for
+    // _signed_ types. This is because the binary2integer routine will observe
+    // that the expr is signed, and interpret its value as negative. Which is
+    // ok.
+    return true;
+
   if(expr.operands().size()!=1)
     return true;
 

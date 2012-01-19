@@ -262,11 +262,14 @@ void c_typecheck_baset::typecheck_type(typet &type)
       err_location(size);
       throw "bit field size too large";
     }
+#if 0
+    /* 6.7.2.1 of C89 permits zero sized bit fields */
     else if(i<1)
     {
       err_location(size);
       throw "bit field size too small";
     }
+#endif
 
     width=integer2long(i);
 

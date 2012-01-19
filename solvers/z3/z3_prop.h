@@ -19,7 +19,7 @@ typedef unsigned int uint;
 class z3_propt:virtual public propt
 {
 public:
-  z3_propt(std::ostream &_out);
+  z3_propt(std::ostream &_out, bool uw);
   virtual ~z3_propt();
 
 //  virtual literalt constant(bool value)
@@ -78,12 +78,15 @@ private:
 	Z3_context z3_ctx;
 	typedef std::map<std::string, Z3_ast> map_prop_varst;
 	map_prop_varst map_prop_vars;
-	std::vector<Z3_ast> assumpt;
+	std::list<Z3_ast> assumpt;
+    bool store_assumptions;
     bool smtlib;
 
 protected:
   unsigned _no_variables;
   std::ostream &out;
+  bool uw; // Are we doing underapprox+widenning?
+           // Affects how formula are constructed
 
   Z3_ast z3_literal(literalt l);
 
@@ -98,6 +101,9 @@ protected:
     return true;
   }
 #endif
+
+  void assert_formula(Z3_ast ast, bool needs_literal = true);
+  void assert_literal(literalt l, Z3_ast formula);
 };
 
 #endif

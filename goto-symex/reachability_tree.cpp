@@ -6,9 +6,15 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
+/* Byte order includes, for context switch checkpoint files */
+#ifndef _WIN32
 #include <arpa/inet.h>
-
 #include <netinet/in.h>
+#else
+#include <winsock2.h>
+#undef small // The mingw32 headers are /absolutely rubbish/, or perhaps the
+             // windows headers by themselves.
+#endif
 
 #include "reachability_tree.h"
 #include <i2string.h>
@@ -434,12 +440,14 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
     {
       if(i < ex_state._active_thread)
       {
+    	//std::cout << "ex_state.last_global_read_write.write_set.empty(): " << ex_state.last_global_read_write.write_set.empty() << std::endl;
+    	//std::cout << "ex_state._exprs_read_write.at(i+1).write_set.empty(): " << ex_state._exprs_read_write.at(i+1).write_set.empty() << std::endl;
+    	//std::cout << "ex_state._exprs_read_write.at(ex_state._active_thread).write_set.empty(): " << ex_state._exprs_read_write.at(ex_state._active_thread).write_set.empty() << std::endl;
         if(ex_state.last_global_read_write.write_set.empty() &&
            ex_state._exprs_read_write.at(i+1).write_set.empty() &&
            ex_state._exprs_read_write.at(ex_state._active_thread).write_set.empty())
         {
           //std::cout << "empty: " << expr.pretty() << std::endl;
-          //continue;
           return false;
         }
 
@@ -834,7 +842,7 @@ bool reachability_treet::dfs_position::write_to_file(
   FILE *f;
   unsigned int i;
 
-  f = fopen(filename.c_str(), "w");
+  f = fopen(filename.c_str(), "wb");
   if (f == NULL) {
     std::cerr << "Couldn't open checkpoint output file" << std::endl;
     return true;
@@ -895,7 +903,7 @@ bool reachability_treet::dfs_position::read_from_file(
   unsigned int i, j;
   char c;
 
-  f = fopen(filename.c_str(), "r");
+  f = fopen(filename.c_str(), "rb");
   if (f == NULL) {
     std::cerr << "Couldn't open checkpoint input file" << std::endl;
     return true;

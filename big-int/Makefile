@@ -13,4 +13,4 @@ clean:
 	-rm -f $(OBJDIR)/.deps
 
 test-bigint: $(OBJS)
-	$(CXX) $(CXXFLAGS) -o test-bigint $(OBJS)
+	$(FINLINKBIN) $(FINLINKOUT)test-bigint $(OBJS) $(FINLINKTAIL)

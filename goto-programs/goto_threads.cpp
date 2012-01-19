@@ -96,7 +96,7 @@ void goto_thread_convertt::goto_convert(goto_programt &dest)
     else if(it->is_start_thread())
     {
       std::string event=
-        "start_thread_"+i2string(threads.thread_list.size());
+        "start_thread_"+i2string((unsigned long)threads.thread_list.size());
 
       threads.thread_list.push_back(goto_threadt());
       goto_threadt &thread=threads.thread_list.back();

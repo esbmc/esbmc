@@ -27,7 +27,7 @@ GCCFLAGS += -D CPP_SYSTEMC_EXTENSION
 
 # lex.yy.cpp isn't a source file we actually have for dependancy purposes,
 # so instead put it in the object list.
-OBJS= lex.yy.o
+OBJS= $(OBJDIR)/lex.yy.o
 
 ###############################################################################
 

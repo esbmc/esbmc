@@ -14,7 +14,7 @@
 
 #ifdef _WIN32 
 #define YY_NO_UNISTD_H
-int isatty(int) { return 0; }
+static int isatty(int) { return 0; }
 #endif
 
 #include <expr.h>

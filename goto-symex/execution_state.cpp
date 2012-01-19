@@ -9,6 +9,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "execution_state.h"
 #include <string>
 #include <sstream>
+#include <vector>
 #include <i2string.h>
 #include <string2array.h>
 #include <std_expr.h>
@@ -16,7 +17,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "../ansi-c/c_types.h"
 #include <base_type.h>
 #include <simplify_expr.h>
-#include <bits/stl_vector.h>
 #include "config.h"
 
 #include "basic_symex.h"
@@ -762,7 +762,6 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
     const irep_idt &id = expr.identifier();
     const irep_idt &identifier = get_active_state().get_original_name(id);
     const symbolt &symbol = lookup(ns, identifier);
-
     if (identifier == "c::__ESBMC_alloc"
         || identifier == "c::__ESBMC_alloc_size")
       return 0;

@@ -1,13 +1,17 @@
 #ifndef _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 #define _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 
+
 extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 
+#ifndef NO_OPENSSL
 #include <openssl/sha.h>
+#endif /* NO_OPENSSL */
 }
+
 
 #include <string>
 
@@ -29,12 +33,13 @@ class crypto_hash {
   protected:
   void init(const uint8_t *data, int sz);
 
+#ifndef NO_OPENSSL
   static bool have_pointers;
   static int (*sha_init)(SHA256_CTX *c);
   static int (*sha_update)(SHA256_CTX *c, const void *data, size_t len);
   static int (*sha_final)(unsigned char *md, SHA256_CTX *c);
   static void setup_pointers();
-
+#endif
 };
 
 #endif /* _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_ */

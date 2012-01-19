@@ -5,7 +5,15 @@
 
 typedef long int ptrdiff_t;
 
+#ifndef _WCHAR_T_DEFINED
 typedef short wchar_t;
+#define _WCHAR_T_DEFINED
+#endif
+
+// Appease mingw
+#ifdef __need_wint_t
+typedef short wint_t;
+#endif
 
 typedef unsigned int size_t;
 

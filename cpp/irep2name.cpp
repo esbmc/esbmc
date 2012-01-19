@@ -29,7 +29,7 @@ std::string do_prefix(const std::string &s)
 {
   if(s.find(',')!=std::string::npos ||
      (s!="" && isdigit(s[0])))
-    return i2string(s.size())+"_"+s;
+    return i2string((unsigned long)s.size())+"_"+s;
 
   return s;
 }
