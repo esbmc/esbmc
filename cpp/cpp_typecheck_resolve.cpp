@@ -1104,6 +1104,112 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_namespace(
 
 /*******************************************************************\
 
+Function: cpp_typecheck_resolvet::show_identifiers
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheck_resolvet::show_identifiers(
+  const std::string &base_name,
+  const resolve_identifierst &identifiers,
+  std::ostream &out)
+{
+  for(resolve_identifierst::const_iterator
+      it=identifiers.begin();
+      it!=identifiers.end();
+      it++)
+  {
+    const exprt &id_expr=*it;
+
+    out << "  ";
+
+    if(id_expr.id()=="type")
+    {
+      out << "type " << cpp_typecheck.to_string(id_expr.type());
+    }
+    else
+    {
+      irep_idt id;
+
+      if(id_expr.type().get_bool("is_template"))
+        out << "template ";
+
+      if(id_expr.id()=="member")
+      {
+        out << "member ";
+        id="."+base_name;
+      }
+      else if(id_expr.id()=="pod_constructor")
+      {
+        out << "constructor ";
+        id="";
+      }
+      else if(id_expr.id()=="function_template_instance")
+      {
+        out << "symbol ";
+      }
+      else
+      {
+        out << "symbol ";
+        id=cpp_typecheck.to_string(id_expr);
+      }
+
+      if(id_expr.type().get_bool("is_template"))
+      {
+      }
+      else if(id_expr.type().id()=="code")
+      {
+        const code_typet &code_type=to_code_type(id_expr.type());
+        const typet &return_type=code_type.return_type();
+        const code_typet::argumentst &arguments=code_type.arguments();
+        out << cpp_typecheck.to_string(return_type);
+        out << " " << id << "(";
+
+        for(code_typet::argumentst::const_iterator
+            it=arguments.begin(); it!=arguments.end(); it++)
+        {
+          const typet &argument_type=it->type();
+
+          if(it!=arguments.begin())
+            out << ", ";
+
+          out << cpp_typecheck.to_string(argument_type);
+        }
+
+        if(code_type.has_ellipsis())
+        {
+          if(!arguments.empty()) out << ", ";
+          out << "...";
+        }
+
+        out << ")";
+      }
+      else
+        out << id << ": " << cpp_typecheck.to_string(id_expr.type());
+
+      if(id_expr.id()=="symbol")
+      {
+        const symbolt &symbol=cpp_typecheck.lookup(to_symbol_expr(id_expr));
+        out << " (" << symbol.location << ")";
+      }
+      else if(id_expr.id()=="function_template_instance")
+      {
+        const symbolt &symbol=cpp_typecheck.lookup(id_expr.type().get("#template"));
+        out << " (" << symbol.location << ")";
+      }
+    }
+
+    out << std::endl;
+  }
+}
+
+/*******************************************************************\
+
 Function: cpp_typecheck_resolvet::resolve
 
 Inputs:
@@ -1289,8 +1395,7 @@ exprt cpp_typecheck_resolvet::resolve(
       cpp_typecheck.str
         << "found no match for symbol `" << base_name
         << "', candidates are:" << std::endl;
-      // TODO
-//      show_identifiers(base_name, identifiers, cpp_typecheck.str);
+      show_identifiers(base_name, identifiers, cpp_typecheck.str);
     }
     else
     {
@@ -1298,8 +1403,7 @@ exprt cpp_typecheck_resolvet::resolve(
       cpp_typecheck.str
         << "symbol `" << base_name
         << "' does not uniquely resolve:" << std::endl;
-      // TODO
-//      show_identifiers(base_name, new_identifiers, cpp_typecheck.str);
+      show_identifiers(base_name, new_identifiers, cpp_typecheck.str);
     }
 
     if(fargs.in_use)
@@ -1683,7 +1787,6 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
       // sorts of trouble.
       cpp_convert_plain_type(arg_type);
 
-      // TODO
       guess_template_args(arg_type, fargs.operands[i].type());
     }
   }

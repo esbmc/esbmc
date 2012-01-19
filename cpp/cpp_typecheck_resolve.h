@@ -115,6 +115,11 @@ protected:
     const irep_idt &base_name,
     irept &template_args);
 
+  void show_identifiers(
+    const std::string &base_name,
+    const resolve_identifierst &identifiers,
+    std::ostream &out);
+
   void resolve_with_arguments(
     cpp_scopest::id_sett& id_set,
     const std::string& base_name,
