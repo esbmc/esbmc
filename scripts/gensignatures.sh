@@ -9,7 +9,8 @@ fi
 tgzlist=`ls .release/*.tgz`
 
 date=`date`
-echo "Signatures for ESBMC binaries, version $1 ($date)"
+echo "Signatures for ESBMC binaries (http://esbmc.org)"
+echo "Version $1 ($date)"
 echo ""
 
 # Generate checksums of each tgz
