@@ -150,6 +150,7 @@ restash
 # Look for success
 grep "$rightregex" $tmpfile
 if test $? = 0; then
+  rm $tmpfilet
   echo "Correct output" >&2
   exit 0 # success
 fi
@@ -157,10 +158,12 @@ fi
 # Was opposite true?
 grep "$wrongregex" $tmpfile
 if test $? = 0; then
+  rm $tmpfile
   echo "Wrong output" >&2
   exit 1 # Failure; wrong outcome
 fi
 
 # Otherwise, something crashed or went wrong.
+rm $tmpfile
 echo "Noncommital output" >&2
 exit 125
