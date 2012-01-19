@@ -50,11 +50,8 @@ protected:
     const cpp_typecheck_fargst &fargs,
     resolve_identifierst &identifiers);
 
-  void convert_template_argument(
-    const cpp_idt &id,
-    const locationt &location,
-    const irept &template_args,
-    exprt &e);
+  exprt convert_template_argument(
+    const cpp_idt &id);
 
   void convert_identifier(
     const cpp_idt &id,

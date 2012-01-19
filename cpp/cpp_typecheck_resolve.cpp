@@ -262,40 +262,25 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::convert_template_argument(
-                                                       const cpp_idt &identifier,
-                                                       const locationt &location,
-                                                       const irept &template_args,
-                                                       exprt &e)
+exprt cpp_typecheck_resolvet::convert_template_argument(
+  const cpp_idt &identifier)
 {
-  // template arguments never have template arguments themselves
-  if(template_args.is_not_nil())
-    return;
-
   // look up in template map
-  e=cpp_typecheck.template_map.lookup(identifier.identifier);
+  exprt e=cpp_typecheck.template_map.lookup(identifier.identifier);
 
-  if(e.is_nil())
+  if(e.is_nil() ||
+     (e.id()=="type" && e.type().is_nil()))
   {
-    #if 1
     cpp_typecheck.err_location(location);
-    cpp_typecheck.str<< "internal error: template argument not found: " << identifier << std::endl;
+    cpp_typecheck.str << "internal error: template parameter without instance:"
+                      << std::endl
+                      << identifier << std::endl;
     throw 0;
-    #endif
-
-    // make it a symbol
-    const symbolt &symbol=
-    cpp_typecheck.lookup(identifier.identifier);
-
-    if(symbol.is_type)
-    {
-      e=type_exprt(symbol_typet(symbol.name));
-    }
-    else
-      e=cpp_symbol_expr(symbol);
   }
 
   e.location()=location;
+
+  return e;
 }
 
 /*******************************************************************\
@@ -321,7 +306,7 @@ void cpp_typecheck_resolvet::convert_identifier(
 
   if(identifier.id_class==cpp_scopet::TEMPLATE_ARGUMENT)
   {
-    convert_template_argument(identifier, location, template_args, e);
+    e=convert_template_argument(identifier);
     return;
   }
 
@@ -1379,8 +1364,6 @@ exprt cpp_typecheck_resolvet::resolve(
   // no matches? Try again with function template guessing.
   if(new_identifiers.empty() && template_args.is_nil())
   {
-    std::cout << "### guess " << cpp_name.location() << std::endl;
-
     new_identifiers=identifiers;
     guess_function_template_args(new_identifiers, fargs);
   }
