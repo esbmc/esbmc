@@ -8,6 +8,10 @@ fi
 
 tgzlist=`ls .release/*.tgz`
 
+date=`date`
+echo "Signatures for ESBMC binaries, version $1 ($date)"
+echo ""
+
 # Generate checksums of each tgz
 for file in $tgzlist;
 do
@@ -15,8 +19,9 @@ do
   shasum=`shasum $file | cut "--delim= " -f 1`
   sha2sum=`sha256sum $file | cut "--delim= " -f 1`
 
-  echo "File $file checksums"
+  echo "File $file checksums:"
   echo "MD5:    $md5sum"
   echo "SHA:    $shasum"
   echo "SHA256: $sha2sum"
+  echo ""
 done
