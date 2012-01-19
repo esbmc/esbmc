@@ -305,13 +305,17 @@ function buildstep () {
 
   if test $enabled = "0"; then return 0; fi
 
+  # NB: move esbmc/esbmc out of the way, because the next build _musn't_ have
+  # an already existing esbmc binary in place. Otherwise, it might not rebuild it,
+  # which means we'll get different platform binaries crossing over.
+
   if test $target_64bit != "0"; then
     echo "Building 64 bit $targetname"
     export TARGET64=1
     buildstep2 "$envstr" "64_$objdirsuffix"
     if test $? != 0; then return 1; fi
     unset TARGET64
-    cp esbmc/esbmc ".release/esbmc$suffix"
+    mv esbmc/esbmc ".release/esbmc$suffix"
   fi
 
   if test $target_32bit != "0"; then
@@ -320,7 +324,7 @@ function buildstep () {
     buildstep2 "$envstr" "32_$objdirsuffix"
     if test $? != 0; then return 1; fi
     unset TARGET32
-    cp esbmc/esbmc ".release/esbmc32$suffix"
+    mv esbmc/esbmc ".release/esbmc32$suffix"
   fi
 
 }
@@ -332,6 +336,13 @@ envstr_linuxstatic="LINUX=1 STATICLINK=1"
 envstr_windows="WIN_MINGW32=1"
 
 function dobuild () {
+
+  # If we're an incremental build, eensure that esbmc/esbmc is not hanging around
+  # the workspace. If it were, we could end up building the wrong arch binary into
+  # a tarball
+  if test $incrementalbuild = "1"; then
+    rm esbmc/esbmc >/dev/null 2>&1
+  fi
 
   # Install our configuration files.
   cp ./scripts/release_config.inc ./config.inc
@@ -383,7 +394,9 @@ function cleanup () {
 
   if test $switchedref = "1"; then
     # Check back out whatever ref we had before.
-    git checkout $CURHEAD
+    if test $jenkinsbuild = "0"; then
+      git checkout $CURHEAD
+    fi
   fi
 }
 
