@@ -353,18 +353,18 @@ function dobuild () {
   export EXTERN_ESBMC_CONFIG=1
 
   buildstep "$envstr_linuxplain" "$target_linuxplain" "" "plain linux" "linux"
-  if test $? != 0; then return $?; fi
+  if test $? != 0; then return 1; fi
 
   buildstep "$envstr_linuxstatic" "$target_linuxstatic" "_static" "static linux" "static"
-  if test $? != 0; then return $?; fi
+  if test $? != 0; then return 1; fi
 
   buildstep "$envstr_windows" "$target_windows" "_windows" "windows" "mingw"
-  if test $? != 0; then return $?; fi
+  if test $? != 0; then return 1; fi
 
   export SATDIR32=$satdir32compat
   export SATDIR64=$satdir64compat
   buildstep "$envstr_linuxcompat" "$target_linuxcompat" "_compat" "compat linux" "compat"
-  if test $? != 0; then return $?; fi
+  if test $? != 0; then return 1; fi
 }
 
 function cleanup () {
@@ -444,7 +444,6 @@ dobuild
 
 # We now have a set of binaries (or an error)
 if test $? != 0; then
-  echo "Build failed"
   cleanup
   exit 1
 fi
