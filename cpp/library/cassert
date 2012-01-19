@@ -3,4 +3,8 @@
 
 void assert (int expression);
 
+void assert (int expression) {
+	__ESBMC_assert(expression, "ESBMC_ASSERT");
+}
+
 #endif
