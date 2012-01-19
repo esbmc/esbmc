@@ -337,6 +337,11 @@ envstr_windows="WIN_MINGW32=1"
 
 function dobuild () {
 
+  # If we're an incremental build, eensure that esbmc/esbmc is not hanging around
+  # the workspace. If it were, we could end up building the wrong arch binary into
+  # a tarball
+  if test $incrementalbuild = "1"; then
+
   # Install our configuration files.
   cp ./scripts/release_config.inc ./config.inc
   cp ./scripts/release_local.inc ./local.inc
