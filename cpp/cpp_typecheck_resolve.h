@@ -84,11 +84,27 @@ protected:
     const irept &template_args,
     const cpp_typecheck_fargst& fargs);
 
+  void guess_function_template_args(
+    resolve_identifierst &identifiers,
+    const cpp_typecheck_fargst &fargs);
+
   void remove_templates(
     resolve_identifierst &identifiers);
 
   void remove_duplicates(
     resolve_identifierst &identifiers);
+
+  exprt guess_function_template_args(
+    const exprt &expr,
+    const cpp_typecheck_fargst &fargs);
+
+  void guess_template_args(
+    const typet &template_parameter,
+    const typet &desired_type);
+
+  void guess_template_args(
+    const exprt &template_parameter,
+    const exprt &desired_expr);
 
   bool disambiguate(
     const exprt &expr,

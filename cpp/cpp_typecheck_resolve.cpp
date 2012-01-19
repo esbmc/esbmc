@@ -18,6 +18,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_template_type.h"
 #include "cpp_type2name.h"
 #include "cpp_util.h"
+#include "cpp_convert_type.h"
 
 /*******************************************************************\
 
@@ -108,6 +109,70 @@ void cpp_typecheck_resolvet::apply_template_args(
 
       identifiers.insert(e);
     }
+  }
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheck_resolvet::guess_function_template_args
+
+Inputs:
+
+Outputs:
+
+Purpose: guess arguments of function templates
+
+\*******************************************************************/
+
+void cpp_typecheck_resolvet::guess_function_template_args(
+  resolve_identifierst &identifiers,
+  const cpp_typecheck_fargst &fargs)
+{
+  resolve_identifierst old_identifiers;
+  old_identifiers.swap(identifiers);
+
+  for(resolve_identifierst::const_iterator
+      it=old_identifiers.begin();
+      it!=old_identifiers.end();
+      it++)
+  {
+    exprt e=guess_function_template_args(*it, fargs);
+
+    if(e.is_not_nil())
+    {
+      assert(e.id()!="type");
+      identifiers.insert(e);
+    }
+  }
+
+  disambiguate(identifiers, fargs);
+
+  // there should only be one left, or we have failed to disambiguate
+  if(identifiers.size()==1)
+  {
+    // instantiate that one
+    exprt e=*identifiers.begin();
+    assert(e.id()=="function_template_instance");
+
+    const symbolt &template_symbol=
+      cpp_typecheck.lookup(e.type().get("#template"));
+
+    const cpp_template_args_tct &template_args=
+      to_cpp_template_args_tc(e.type().find("#template_arguments"));
+
+    // Let's build the instance.
+
+    // TODO
+//    const symbolt &new_symbol=
+//      cpp_typecheck.instantiate_template(
+//        location,
+//        template_symbol,
+//        template_args,
+//        template_args);
+//
+//    identifiers.clear();
+//    identifiers.insert(
+//      symbol_exprt(new_symbol.name, new_symbol.type));
   }
 }
 
@@ -1204,7 +1269,7 @@ exprt cpp_typecheck_resolvet::resolve(
   if(new_identifiers.empty() && template_args.is_nil())
   {
     new_identifiers=identifiers;
-//    guess_function_template_args(new_identifiers, fargs);
+    guess_function_template_args(new_identifiers, fargs);
   }
 
   remove_duplicates(new_identifiers);
@@ -1298,6 +1363,358 @@ exprt cpp_typecheck_resolvet::resolve(
   }
 
   return result;
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheck_resolvet::guess_template_args
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheck_resolvet::guess_template_args(
+  const exprt &template_expr,
+  const exprt &desired_expr)
+{
+  if(template_expr.id()=="cpp-name")
+  {
+    const cpp_namet &cpp_name=
+      to_cpp_name(template_expr);
+
+    if(!cpp_name.is_qualified())
+    {
+      cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
+
+      cpp_template_args_non_tct template_args;
+      std::string base_name;
+      resolve_scope(cpp_name, base_name, template_args);
+
+      cpp_scopest::id_sett id_set;
+      // TODO
+//      cpp_typecheck.cpp_scopes.current_scope().lookup(
+//        base_name, cpp_scopet::RECURSIVE, id_set);
+
+      // alright, rummage through these
+      for(cpp_scopest::id_sett::const_iterator it=id_set.begin();
+          it!=id_set.end();
+          it++)
+      {
+        const cpp_idt &id=**it;
+        // template argument?
+        if(id.id_class==cpp_idt::TEMPLATE_ARGUMENT)
+        {
+          // see if unassigned
+          exprt &e=cpp_typecheck.template_map.expr_map[id.identifier];
+          if(e.id()=="unassigned")
+          {
+            typet old_type=e.type();
+            e=desired_expr;
+            if(e.type()!=old_type)
+              e.make_typecast(old_type);
+          }
+        }
+      }
+    }
+  }
+}
+
+
+/*******************************************************************\
+
+Function: cpp_typecheck_resolvet::guess_template_args
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheck_resolvet::guess_template_args(
+  const typet &template_type,
+  const typet &desired_type)
+{
+  // look at
+  // http://publib.boulder.ibm.com/infocenter/comphelp/v8v101/topic/com.ibm.xlcpp8a.doc/language/ref/template_argument_deduction.htm
+
+  // T
+  // const T
+  // volatile T
+  // T&
+  // T*
+  // T[10]
+  // A<T>
+  // C(*)(T)
+  // T(*)()
+  // T(*)(U)
+  // T C::*
+  // C T::*
+  // T U::*
+  // T (C::*)()
+  // C (T::*)()
+  // D (C::*)(T)
+  // C (T::*)(U)
+  // T (C::*)(U)
+  // T (U::*)()
+  // T (U::*)(V)
+  // E[10][i]
+  // B<i>
+  // TT<T>
+  // TT<i>
+  // TT<C>
+
+  #if 0
+  std::cout << "TT: " << template_type.pretty() << std::endl;
+  std::cout << "DT: " << desired_type.pretty() << std::endl;
+  #endif
+
+  if(template_type.id()=="cpp-name")
+  {
+    // we only care about cpp_names that are template parameters!
+    const cpp_namet &cpp_name=to_cpp_name(template_type);
+
+    cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
+
+    if(cpp_name.has_template_args())
+    {
+      // this could be s.th. like my_template<T>, and we need
+      // to match 'T'. Then 'desired_type' has to be a template instance.
+
+      // TODO
+    }
+    else
+    {
+      // template parameters aren't qualified
+      if(!cpp_name.is_qualified())
+      {
+        std::string base_name;
+        cpp_template_args_non_tct template_args;
+        resolve_scope(cpp_name, base_name, template_args);
+
+        cpp_scopest::id_sett id_set;
+        // TODO
+//        cpp_typecheck.cpp_scopes.current_scope().lookup(
+//          base_name, cpp_scopet::RECURSIVE, id_set);
+
+        // alright, rummage through these
+        for(cpp_scopest::id_sett::const_iterator
+            it=id_set.begin();
+            it!=id_set.end();
+            it++)
+        {
+          const cpp_idt &id=**it;
+
+          // template argument?
+          if(id.id_class==cpp_idt::TEMPLATE_ARGUMENT)
+          {
+            // see if unassigned
+            typet &t=cpp_typecheck.template_map.type_map[id.identifier];
+            if(t.id()=="unassigned")
+            {
+              t=desired_type;
+
+              // remove const, volatile (these can be added in the call)
+              t.remove("#constant");
+              t.remove("#volatile");
+              #if 0
+              std::cout << "ASSIGN " << id.identifier << " := "
+                        << cpp_typecheck.to_string(desired_type) << std::endl;
+              #endif
+            }
+          }
+        }
+      }
+    }
+  }
+  else if(template_type.id()=="merged_type")
+  {
+    // look at subtypes
+    for(typet::subtypest::const_iterator
+        it=template_type.subtypes().begin();
+        it!=template_type.subtypes().end();
+        it++)
+    {
+      guess_template_args(*it, desired_type);
+    }
+  }
+  else if(is_reference(template_type) ||
+          is_rvalue_reference(template_type))
+  {
+    guess_template_args(template_type.subtype(), desired_type);
+  }
+  else if(template_type.id()=="pointer")
+  {
+    const typet &desired_type_followed=
+      cpp_typecheck.follow(desired_type);
+
+    if(desired_type_followed.id()=="pointer")
+      guess_template_args(template_type.subtype(), desired_type_followed.subtype());
+  }
+  else if(template_type.id()=="array")
+  {
+    const typet &desired_type_followed=
+      cpp_typecheck.follow(desired_type);
+
+    if(desired_type_followed.id()=="array")
+    {
+      // look at subtype first
+      guess_template_args(
+        template_type.subtype(),
+        desired_type_followed.subtype());
+
+      // size (e.g., buffer size guessing)
+      guess_template_args(
+        to_array_type(template_type).size(),
+        to_array_type(desired_type_followed).size());
+    }
+  }
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheck_resolvet::guess_function_template_args
+
+Inputs:
+
+Outputs:
+
+Purpose: Guess template arguments for function templates
+
+\*******************************************************************/
+
+exprt cpp_typecheck_resolvet::guess_function_template_args(
+  const exprt &expr,
+  const cpp_typecheck_fargst &fargs)
+{
+  typet tmp=expr.type();
+  cpp_typecheck.follow_symbol(tmp);
+
+  if(!tmp.get_bool("is_template"))
+    return nil_exprt(); // not a template
+
+  assert(expr.id()=="symbol");
+
+  // a template is always a declaration
+  const cpp_declarationt &cpp_declaration=
+    to_cpp_declaration(tmp);
+
+  // Template classes require explicit template arguments,
+  // no guessing!
+  if(cpp_declaration.is_template_class())
+    return nil_exprt();
+
+  // we need function arguments for guessing
+  if(fargs.operands.empty())
+    return nil_exprt(); // give up
+
+  // We need to guess in the case of function templates!
+
+  irep_idt template_identifier=
+    to_symbol_expr(expr).get_identifier();
+
+  const symbolt &template_symbol=
+    cpp_typecheck.lookup(template_identifier);
+
+  // alright, set up template arguments as 'unassigned'
+
+  cpp_saved_template_mapt saved_map(cpp_typecheck.template_map);
+
+  cpp_typecheck.template_map.build_unassigned(
+    cpp_declaration.template_type());
+
+  // there should be exactly one declarator
+  assert(cpp_declaration.declarators().size()==1);
+
+  const cpp_declaratort &function_declarator=
+    cpp_declaration.declarators().front();
+
+  // and that needs to have function type
+  if(function_declarator.type().id()!="function_type")
+  {
+    cpp_typecheck.err_location(location);
+    throw "expected function type for function template";
+  }
+
+  cpp_save_scopet cpp_saved_scope(cpp_typecheck.cpp_scopes);
+
+  // we need the template scope
+  cpp_scopet *template_scope=
+    static_cast<cpp_scopet *>(
+      cpp_typecheck.cpp_scopes.id_map[template_identifier]);
+
+  if(template_scope==NULL)
+  {
+    cpp_typecheck.err_location(location);
+    cpp_typecheck.str << "template identifier: " << template_identifier << std::endl;
+    throw "function template instantiation error";
+  }
+
+  // enter the scope of the template
+  cpp_typecheck.cpp_scopes.go_to(*template_scope);
+
+  // walk through the function arguments
+  const irept::subt &arguments=
+    function_declarator.type().find("arguments").get_sub();
+
+  for(unsigned i=0; i<arguments.size(); i++)
+  {
+    if(i<fargs.operands.size() &&
+       arguments[i].id()=="cpp-declaration")
+    {
+      const cpp_declarationt &arg_declaration=
+        to_cpp_declaration(arguments[i]);
+
+      // again, there should be one declarator
+      assert(arg_declaration.declarators().size()==1);
+
+      // turn into type
+      typet arg_type=
+        arg_declaration.declarators().front().
+          merge_type(arg_declaration.type());
+
+      // We only convert the arg_type,
+      // and don't typecheck it -- that could cause all
+      // sorts of trouble.
+      cpp_convert_plain_type(arg_type);
+
+      // TODO
+      guess_template_args(arg_type, fargs.operands[i].type());
+    }
+  }
+
+  // see if that has worked out
+
+  cpp_template_args_tct template_args=
+    cpp_typecheck.template_map.build_template_args(
+      cpp_declaration.template_type());
+
+  if(template_args.has_unassigned())
+    return nil_exprt(); // give up
+
+  // Build the type of the function.
+
+  typet function_type=
+    function_declarator.merge_type(cpp_declaration.type());
+
+  cpp_typecheck.typecheck_type(function_type);
+
+  // Remember that this was a template
+
+  function_type.set("#template", template_symbol.name);
+  function_type.set("#template_arguments", template_args);
+
+  // Seems we got an instance for all parameters. Let's return that.
+
+  exprt function_template_instance(
+    "function_template_instance", function_type);
+
+  return function_template_instance;
 }
 
 /*******************************************************************\
