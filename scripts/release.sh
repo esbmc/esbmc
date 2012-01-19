@@ -305,13 +305,17 @@ function buildstep () {
 
   if test $enabled = "0"; then return 0; fi
 
+  # NB: move esbmc/esbmc out of the way, because the next build _musn't_ have
+  # an already existing esbmc binary in place. Otherwise, it might not rebuild it,
+  # which means we'll get different platform binaries crossing over.
+
   if test $target_64bit != "0"; then
     echo "Building 64 bit $targetname"
     export TARGET64=1
     buildstep2 "$envstr" "64_$objdirsuffix"
     if test $? != 0; then return 1; fi
     unset TARGET64
-    cp esbmc/esbmc ".release/esbmc$suffix"
+    mv esbmc/esbmc ".release/esbmc$suffix"
   fi
 
   if test $target_32bit != "0"; then
@@ -320,7 +324,7 @@ function buildstep () {
     buildstep2 "$envstr" "32_$objdirsuffix"
     if test $? != 0; then return 1; fi
     unset TARGET32
-    cp esbmc/esbmc ".release/esbmc32$suffix"
+    mv esbmc/esbmc ".release/esbmc32$suffix"
   fi
 
 }
