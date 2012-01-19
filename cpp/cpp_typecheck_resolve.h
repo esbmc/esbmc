@@ -64,10 +64,12 @@ protected:
     exprt &e);
 
   void disambiguate(
-    const resolve_identifierst &old_identifiers,
-    resolve_identifierst &new_identifiers,
-    wantt want,
+    resolve_identifierst &identifiers,
     const cpp_typecheck_fargst &fargs);
+
+  void filter(
+    resolve_identifierst &identifiers,
+    const wantt want);
 
   void make_constructors(
     resolve_identifierst &identifiers);
@@ -82,10 +84,15 @@ protected:
     const irept &template_args,
     const cpp_typecheck_fargst& fargs);
 
+  void remove_templates(
+    resolve_identifierst &identifiers);
+
+  void remove_duplicates(
+    resolve_identifierst &identifiers);
+
   bool disambiguate(
     const exprt &expr,
-    wantt want,
-    unsigned &distance,
+    unsigned &args_distance,
     const cpp_typecheck_fargst &fargs);
 
   exprt do_builtin(

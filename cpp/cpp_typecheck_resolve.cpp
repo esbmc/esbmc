@@ -113,6 +113,80 @@ void cpp_typecheck_resolvet::apply_template_args(
 
 /*******************************************************************\
 
+Function: cpp_typecheck_resolvet::remove_templates
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheck_resolvet::remove_templates(
+  resolve_identifierst &identifiers)
+{
+  resolve_identifierst old_identifiers;
+  old_identifiers.swap(identifiers);
+
+  for(resolve_identifierst::const_iterator
+      it=old_identifiers.begin();
+      it!=old_identifiers.end();
+      it++)
+  {
+    if(!cpp_typecheck.follow(it->type()).get_bool("is_template"))
+      identifiers.insert(*it);
+  }
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheck_resolvet::remove_duplicates
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheck_resolvet::remove_duplicates(
+  resolve_identifierst &identifiers)
+{
+  resolve_identifierst old_identifiers;
+  old_identifiers.swap(identifiers);
+
+  std::set<irep_idt> ids;
+  std::set<exprt> other;
+
+  for(resolve_identifierst::const_iterator
+      it=old_identifiers.begin();
+      it!=old_identifiers.end();
+      it++)
+  {
+    irep_idt id;
+
+    if(it->id()=="symbol")
+      id=it->get("identifier");
+    else if(it->id()=="type" && it->type().id()=="symbol")
+      id=it->type().get("identifier");
+
+    if(id=="")
+    {
+      if(other.insert(*it).second)
+        identifiers.insert(*it);
+    }
+    else
+    {
+      if(ids.insert(id).second)
+        identifiers.insert(*it);
+    }
+  }
+}
+
+/*******************************************************************\
+
 Function: cpp_typecheck_resolvet::convert_template_argument
 
 Inputs:
@@ -358,12 +432,63 @@ Purpose:
 
 \*******************************************************************/
 
+void cpp_typecheck_resolvet::filter(
+  resolve_identifierst &identifiers,
+  const wantt want)
+{
+  resolve_identifierst old_identifiers;
+  old_identifiers.swap(identifiers);
+
+  for(resolve_identifierst::const_iterator
+      it=old_identifiers.begin();
+      it!=old_identifiers.end();
+      it++)
+  {
+    bool match=false;
+
+    switch(want)
+    {
+    case TYPE:
+      match=(it->id()=="type");
+      break;
+
+    case VAR:
+      match=(it->id()!="type");
+      break;
+
+    case BOTH:
+      match=true;
+      break;
+
+    default:
+      assert(false);
+      break;
+    }
+
+    if(match)
+      identifiers.insert(*it);
+  }
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheck_resolvet::disambiguate
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
 void cpp_typecheck_resolvet::disambiguate(
-  const resolve_identifierst &old_identifiers,
-  resolve_identifierst &new_identifiers,
-  wantt want,
+  resolve_identifierst &identifiers,
   const cpp_typecheck_fargst &fargs)
 {
+  resolve_identifierst old_identifiers;
+  old_identifiers.swap(identifiers);
+
   // sort according to distance
   std::multimap<unsigned, exprt> distance_map;
 
@@ -372,14 +497,27 @@ void cpp_typecheck_resolvet::disambiguate(
       it!=old_identifiers.end();
       it++)
   {
-    unsigned distance;
+    unsigned args_distance;
 
-    if(disambiguate(*it, want, distance, fargs))
-    distance_map.insert(
-                        std::pair<unsigned, exprt>(distance, *it));
+    if(disambiguate(*it, args_distance, fargs))
+    {
+      unsigned template_distance=0;
+
+      if(it->type().get("#template")!="")
+        template_distance=it->type().
+          find("#template_arguments").find("arguments").get_sub().size();
+
+      // we give strong preference to functions that have
+      // fewer template arguments
+      unsigned total_distance=
+        1000*template_distance+args_distance;
+
+      distance_map.insert(
+        std::pair<unsigned, exprt>(total_distance, *it));
+    }
   }
 
-  new_identifiers.clear();
+  identifiers.clear();
 
   // put in top ones
   if(!distance_map.empty())
@@ -390,22 +528,35 @@ void cpp_typecheck_resolvet::disambiguate(
         it=distance_map.begin();
         it!=distance_map.end() && it->first==distance;
         it++)
-    new_identifiers.insert(it->second);
+    identifiers.insert(it->second);
   }
 
-  if(new_identifiers.size() > 1 && want == VAR && fargs.in_use)
+  if(identifiers.size() > 1 && fargs.in_use)
   {
     // try to further disambiguate functions
-    for(resolve_identifierst::iterator it1 = new_identifiers.begin();
-        it1 != new_identifiers.end(); it1++)
+
+    for(resolve_identifierst::iterator
+        it1 = identifiers.begin();
+        it1 != identifiers.end();
+        it1++)
     {
+        if(it1->type().id()!="code") continue;
+
         const code_typet& f1 =
           to_code_type(it1->type());
 
-        for(resolve_identifierst::iterator it2 = new_identifiers.begin();
-        it2 != new_identifiers.end();)
+        for(resolve_identifierst::iterator it2=
+            identifiers.begin();
+            it2 != identifiers.end();
+            ) // no it2++
         {
           if(it1 == it2)
+          {
+            it2++;
+            continue;
+          }
+
+          if(it2->type().id()!="code")
           {
             it2++;
             continue;
@@ -414,10 +565,12 @@ void cpp_typecheck_resolvet::disambiguate(
           const code_typet& f2 =
             to_code_type(it2->type());
 
+          // TODO: may fail when using ellipsis
           assert(f1.arguments().size() == f2.arguments().size());
 
           bool f1_better = true;
           bool f2_better = true;
+
           for(unsigned i=0; i < f1.arguments().size() && (f1_better || f2_better); i++)
           {
             typet type1 = f1.arguments()[i].type();
@@ -464,7 +617,7 @@ void cpp_typecheck_resolvet::disambiguate(
           it2++;
 
           if(f1_better && !f2_better)
-            new_identifiers.erase(prev_it);
+            identifiers.erase(prev_it);
         }
     }
   }
@@ -1036,119 +1189,76 @@ exprt cpp_typecheck_resolvet::resolve(
   if(want==VAR)
     make_constructors(identifiers);
 
+  filter(identifiers, want);
+
   exprt result;
 
-  // see if we need to disambiguate
-  if(identifiers.empty())
+  // We may need to disambiguate functions,
+  // but don't want templates yet
+  resolve_identifierst new_identifiers=identifiers;
+  remove_templates(new_identifiers);
+
+  disambiguate(new_identifiers, fargs);
+
+  // no matches? Try again with function template guessing.
+  if(new_identifiers.empty() && template_args.is_nil())
   {
-    cpp_typecheck.err_location(location);
-    cpp_typecheck.str
-      << "no matching symbol `"
-      << base_name << "' found";
-    throw 0;
+    new_identifiers=identifiers;
+//    guess_function_template_args(new_identifiers, fargs);
   }
-  else if(identifiers.size()==1)
+
+  remove_duplicates(new_identifiers);
+
+  if(new_identifiers.size()==1)
   {
-    result=*identifiers.begin();
+    result=*new_identifiers.begin();
   }
   else
   {
-    resolve_identifierst new_identifiers;
+    // nothing or too many
+    if(!fail_with_exception) return nil_exprt();
 
-    disambiguate(identifiers, new_identifiers, want, fargs);
-
-    if(new_identifiers.size()==1)
+    if(new_identifiers.empty())
     {
-      result=*new_identifiers.begin();
+      cpp_typecheck.err_location(location);
+      cpp_typecheck.str
+        << "found no match for symbol `" << base_name
+        << "', candidates are:" << std::endl;
+      // TODO
+//      show_identifiers(base_name, identifiers, cpp_typecheck.str);
     }
     else
     {
-      if(new_identifiers.empty())
-      {
-        cpp_typecheck.err_location(location);
-        cpp_typecheck.str
-          << "found no match for symbol `" << base_name
-          << "', candidates are:" << std::endl;
-      }
-      else
-      {
-        cpp_typecheck.err_location(location);
-        cpp_typecheck.str
-          << "symbol `" << base_name
+      cpp_typecheck.err_location(location);
+      cpp_typecheck.str
+        << "symbol `" << base_name
         << "' does not uniquely resolve:" << std::endl;
-        identifiers.swap(new_identifiers);
-      }
+      // TODO
+//      show_identifiers(base_name, new_identifiers, cpp_typecheck.str);
+    }
 
-      for(resolve_identifierst::const_iterator
-          it=identifiers.begin();
-          it!=identifiers.end();
+    if(fargs.in_use)
+    {
+      cpp_typecheck.str << std::endl;
+      cpp_typecheck.str << "argument types:" << std::endl;
+
+      for(exprt::operandst::const_iterator
+          it=fargs.operands.begin();
+          it!=fargs.operands.end();
           it++)
       {
-        const exprt &symbol=*it;
-
-        cpp_typecheck.str << "  ";
-
-        if(symbol.id()=="type")
-        {
-          cpp_typecheck.str
-            << "type "
-            << cpp_typecheck.to_string(symbol.type());
-        }
-        else
-        {
-          irep_idt id;
-
-          if(symbol.id()=="member")
-          {
-            cpp_typecheck.str << "member ";
-            id="."+base_name;
-          }
-          else
-          {
-            cpp_typecheck.str << "symbol ";
-            id=cpp_typecheck.to_string(symbol);
-          }
-
-          if(symbol.type().id()=="code")
-          {
-            const typet &return_type=(const typet &)symbol.type().find("return_type");
-            const irept::subt &arguments=symbol.type().find("arguments").get_sub();
-            cpp_typecheck.str << cpp_typecheck.to_string(return_type);
-            cpp_typecheck.str << " " << id << "(";
-
-            forall_irep(it, arguments)
-            {
-              const typet &argument_type=((exprt &)*it).type();
-
-              if(it!=arguments.begin())
-                cpp_typecheck.str << ", ";
-
-              cpp_typecheck.str << cpp_typecheck.to_string(argument_type);
-            }
-
-            cpp_typecheck.str << ")";
-          }
-          else
-            cpp_typecheck.str << id << ": " << cpp_typecheck.to_string(symbol.type());
-        }
-
-        cpp_typecheck.str << std::endl;
+        cpp_typecheck.str << "  "
+        		          << cpp_typecheck.to_string(it->type()) << std::endl;
       }
-
-      if(fargs.in_use)
-      {
-        cpp_typecheck.str << std::endl;
-        cpp_typecheck.str << "argument types:" << std::endl;
-        for(exprt::operandst::const_iterator
-            it=fargs.operands.begin();
-            it!=fargs.operands.end();
-            it++)
-        {
-        cpp_typecheck.str << "  " << cpp_typecheck.to_string(it->type()) << std::endl;
-        }
-      }
-      throw 0;
     }
+
+    if(!cpp_typecheck.instantiation_stack.empty())
+    {
+      cpp_typecheck.str << std::endl;
+      cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
+    }
+
+    throw 0;
   }
 
   switch(want)
@@ -1183,7 +1293,8 @@ exprt cpp_typecheck_resolvet::resolve(
     }
     break;
 
-  default:;
+  default:
+	  break;
   }
 
   return result;
@@ -1305,31 +1416,11 @@ Purpose:
 \*******************************************************************/
 
 bool cpp_typecheck_resolvet::disambiguate(
-                                          const exprt &expr,
-                                          wantt want,
-                                          unsigned &distance,
-                                          const cpp_typecheck_fargst &fargs)
+  const exprt &expr,
+  unsigned &args_distance,
+  const cpp_typecheck_fargst &fargs)
 {
-  distance=0;
-
-  switch(want)
-  {
-  case TYPE:
-    return expr.id()=="type";
-
-  case VAR:
-    if(expr.id()=="type")
-      return false;
-    break;
-
-  case BOTH:
-    if(expr.id()=="type")
-      return true;
-    break;
-
-  default:
-    assert(false);
-  }
+  args_distance=0;
 
   if(expr.type().id()!="code" || !fargs.in_use)
     return true;
@@ -1357,19 +1448,19 @@ bool cpp_typecheck_resolvet::disambiguate(
 
         cpp_typecheck_fargst new_fargs(fargs);
         new_fargs.add_object(object);
-        return new_fargs.match(type, distance, cpp_typecheck);
+        return new_fargs.match(type, args_distance, cpp_typecheck);
       }
       else
       {
         if(expr.type().get_bool("#is_operator") &&
            fargs.operands.size() == arguments.size())
         {
-          return fargs.match(type, distance, cpp_typecheck);
+          return fargs.match(type, args_distance, cpp_typecheck);
         }
 
         cpp_typecheck_fargst new_fargs(fargs);
         new_fargs.add_object(expr.op0());
-        return new_fargs.match(type, distance, cpp_typecheck);
+        return new_fargs.match(type, args_distance, cpp_typecheck);
       }
     }
   }
@@ -1378,11 +1469,11 @@ bool cpp_typecheck_resolvet::disambiguate(
     // if it's not a member then we shall remove the object
     cpp_typecheck_fargst new_fargs(fargs);
     new_fargs.remove_object();
-    return new_fargs.match(type, distance, cpp_typecheck);
+    return new_fargs.match(type, args_distance, cpp_typecheck);
   }
 
 
-  return fargs.match(type, distance, cpp_typecheck);
+  return fargs.match(type, args_distance, cpp_typecheck);
 }
 
 /*******************************************************************\
