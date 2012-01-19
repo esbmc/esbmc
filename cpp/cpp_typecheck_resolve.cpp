@@ -1499,9 +1499,7 @@ void cpp_typecheck_resolvet::guess_template_args(
       resolve_scope(cpp_name, base_name, template_args);
 
       cpp_scopest::id_sett id_set;
-      // TODO
-//      cpp_typecheck.cpp_scopes.current_scope().lookup(
-//        base_name, cpp_scopet::RECURSIVE, id_set);
+      cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);
 
       // alright, rummage through these
       for(cpp_scopest::id_sett::const_iterator it=id_set.begin();
@@ -1602,9 +1600,7 @@ void cpp_typecheck_resolvet::guess_template_args(
         resolve_scope(cpp_name, base_name, template_args);
 
         cpp_scopest::id_sett id_set;
-        // TODO
-//        cpp_typecheck.cpp_scopes.current_scope().lookup(
-//          base_name, cpp_scopet::RECURSIVE, id_set);
+        cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);
 
         // alright, rummage through these
         for(cpp_scopest::id_sett::const_iterator
