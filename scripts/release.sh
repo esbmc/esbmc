@@ -394,7 +394,9 @@ function cleanup () {
 
   if test $switchedref = "1"; then
     # Check back out whatever ref we had before.
-    git checkout $CURHEAD
+    if test $jenkinsbuild = "0"; then
+      git checkout $CURHEAD
+    fi
   fi
 }
 
