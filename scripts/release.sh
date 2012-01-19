@@ -341,6 +341,8 @@ function dobuild () {
   # the workspace. If it were, we could end up building the wrong arch binary into
   # a tarball
   if test $incrementalbuild = "1"; then
+    rm esbmc/esbmc >/dev/null 2>&1
+  fi
 
   # Install our configuration files.
   cp ./scripts/release_config.inc ./config.inc
