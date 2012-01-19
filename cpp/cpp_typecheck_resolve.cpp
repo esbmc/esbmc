@@ -713,54 +713,56 @@ void cpp_typecheck_resolvet::make_constructors(
       it!=identifiers.end();
       it++)
   {
-    if(it->id()=="type")
+    if(it->id()!="type")
     {
-      const typet& symbol_type =
-        cpp_typecheck.follow(it->type());
+      // already an expression
+      new_identifiers.insert(*it);
+      continue;
+    }
 
-      if(symbol_type.id() != "struct")
-      {
-        // it's ok
-        new_identifiers.insert(*it);
+    const typet& symbol_type =
+      cpp_typecheck.follow(it->type());
+
+    if(symbol_type.id() != "struct")
+    {
+      // it's ok
+      new_identifiers.insert(*it);
+      continue;
+    }
+
+    if(cpp_typecheck.cpp_is_pod(symbol_type))
+    {
+      // in that case, there is no constructor to call
+      new_identifiers.insert(*it);
+      continue;
+    }
+
+    struct_typet struct_type = to_struct_type(symbol_type);
+
+    const struct_typet::componentst &components =
+      struct_type.components();
+
+    // go over components
+    for(struct_typet::componentst::const_iterator
+        itc=components.begin();
+        itc!=components.end();
+        itc++)
+    {
+      const struct_typet::componentt &component = *itc;
+      const typet &type=component.type();
+
+      if(component.get_bool("from_base"))
         continue;
-      }
 
-      if(cpp_typecheck.cpp_is_pod(symbol_type))
+      if(type.find("return_type").id()=="constructor")
       {
-        // in that case, there is no constructor to call
-        new_identifiers.insert(*it);
-        continue;
-      }
-
-      struct_typet struct_type = to_struct_type(symbol_type);
-
-      const struct_typet::componentst &components =
-        struct_type.components();
-
-      // go over components
-      for(struct_typet::componentst::const_iterator
-          itc=components.begin();
-          itc!=components.end();
-          itc++)
-      {
-        const struct_typet::componentt &component = *itc;
-        const typet &type=component.type();
-
-        if(component.get_bool("from_base"))
-          continue;
-
-        if(type.find("return_type").id()=="constructor")
-        {
-          const symbolt &symb =
-            cpp_typecheck.lookup(component.get_name());
-          exprt e = cpp_symbol_expr(symb);
-          e.type() = type;
-          new_identifiers.insert(e);
-        }
+        const symbolt &symb =
+          cpp_typecheck.lookup(component.get_name());
+        exprt e = cpp_symbol_expr(symb);
+        e.type() = type;
+        new_identifiers.insert(e);
       }
     }
-    else
-      new_identifiers.insert(*it);
   }
 
   identifiers = new_identifiers;
