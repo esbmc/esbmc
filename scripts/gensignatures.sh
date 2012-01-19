@@ -6,6 +6,11 @@ if test $? != 0; then
   exit 1
 fi
 
+if test -z "$1"; then
+  echo "ESBMC version number required on command line"
+  exit 1
+fi
+
 tgzlist=`ls .release/*.tgz`
 
 date=`date`
