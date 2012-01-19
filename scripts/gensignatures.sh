@@ -32,3 +32,6 @@ do
   echo "SHA256: $sha2sum"
   echo ""
 done
+
+echo "Now run the following on this scripts \$output" >&2
+echo "gpg -s --clearsign -u \$youremail < \$output > signedfile" >&2
