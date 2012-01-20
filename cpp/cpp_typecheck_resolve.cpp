@@ -976,7 +976,6 @@ void cpp_typecheck_resolvet::resolve_scope(
 
       filter_for_named_scopes(id_set);
 
-
       if(id_set.empty())
       {
         cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);

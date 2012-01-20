@@ -28,22 +28,25 @@ Function: cpp_typecheckt::template_suffix
 \*******************************************************************/
 
 std::string cpp_typecheckt::template_suffix(
-  const irept &template_args)
+  const cpp_template_args_tct &template_args)
 {
   // quick hack
   std::string result="<";
   bool first=true;
 
-  const irept &instance=template_args.find("arguments");
+  const cpp_template_args_tct::argumentst &arguments=
+    template_args.arguments();
 
-  forall_irep(it, instance.get_sub())
+  for(cpp_template_args_tct::argumentst::const_iterator
+      it=arguments.begin();
+      it!=arguments.end();
+      it++)
   {
     if(first) first=false; else result+=",";
 
-    exprt expr=(const exprt &)*it;
+    const exprt expr=*it;
 
-    if(expr.id()=="ambiguous")
-      expr.id("type");
+    assert(expr.id()!="ambiguous");
 
     if(expr.id()=="type")
     {
@@ -55,10 +58,9 @@ std::string cpp_typecheckt::template_suffix(
     }
     else // expression
     {
-      exprt e(expr);
-      simplify_exprt simplify;
-      simplify.simplify(e);
-
+      exprt e=expr;
+      make_constant(e);
+      
       // this must be a constant, which includes true/false
       mp_integer i;
 
@@ -178,7 +180,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   typecheck_template_args(tc_template_args);
 
   // produce new symbol name
-  std::string suffix=template_suffix(tc_template_args);
+  std::string suffix=template_suffix(to_cpp_template_args_tc(tc_template_args));
 
   // we need the template scope to see the parameters
   cpp_scopet *template_scope=

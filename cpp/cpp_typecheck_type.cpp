@@ -107,6 +107,7 @@ void cpp_typecheckt::typecheck_type(typet &type)
       if(type.subtype().id()=="code")
       {
         irept::subt &args=type.subtype().add("arguments").get_sub();
+
         if(args.empty() ||
            args.front().get("#base_name")!="this")
         {

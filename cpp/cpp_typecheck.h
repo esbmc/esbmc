@@ -213,7 +213,8 @@ protected:
 
   template_mapt template_map;
 
-  std::string template_suffix(const irept &template_args);
+  std::string template_suffix(
+    const cpp_template_args_tct &template_args);
 
   void convert_arguments(
     const irep_idt &mode,
