@@ -3,7 +3,10 @@
 /* stddef.h is supposed to contain various compiler specific types and
  * facilities: */
 
+#ifndef _PTRDIFF_T_DEFINED
 typedef long int ptrdiff_t;
+#define _PTRDIFF_T_DEFINED
+#endif
 
 #ifndef _WCHAR_T_DEFINED
 typedef short wchar_t;
