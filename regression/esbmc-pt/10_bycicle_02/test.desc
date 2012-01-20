@@ -1,0 +1,3 @@
+main.c
+--unwind 1 --no-pointer-check --no-unwinding-assertions  --context-switch 3 --no-slice --schedule
+^VERIFICATION FAILED$
