@@ -69,8 +69,7 @@ esbmc: $(OBJS)
 	echo -n `hostname` >> $(OBJDIR)/buildidobj.s
 	# Look for a dirty tree - any files that aren't '??' (i.e., untracked)
 	# or config.inc/local.inc, which might differ for releases.
-	-git status -s | grep -v "^??" | grep -v config.inc | grep -v local.inc | > /dev/null 2>&1
-	if test $$? = "0"; then echo -n " (dirty tree)" >> $(OBJDIR)/buildidobj.s; fi
+	-if test -z "`git status -s | grep -v "^??" | grep -v config.inc | grep -v local.inc `"; then echo -n "" >> $(OBJDIR)/buildidobj.s; else echo -n " (dirty tree)" >> $(OBJDIR)/buildidobj.s; fi
 	sh -c 'cd $(OBJDIR); $(LD) $(LDFLAGS) -b binary -r ./buildidobj.s -o buildidobj.o'
 	cd ..
 	rm $(OBJDIR)/buildidobj.s
