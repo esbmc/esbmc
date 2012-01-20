@@ -866,11 +866,6 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
 	  return;
   }
 
-  if (components.size() == 0){
-	  bv = Z3_mk_bool_type(z3_ctx);
-	  return;
-  }
-
   assert(components.size() > 0);
   num_elems = components.size();
   if (uni) num_elems++;
