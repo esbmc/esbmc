@@ -861,7 +861,7 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
   const struct_union_typet &su_type = to_struct_union_type(type);
   const struct_union_typet::componentst &components = su_type.components();
 
-  assert(components.size() > 0);
+  assert(components.size() >= 0);
   num_elems = components.size();
   if (uni) num_elems++;
 
@@ -872,6 +872,12 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
   name = ((uni) ? "union" : "struct" );
   name += "_type_" + type.get_string("tag");
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
+
+  if (!components.size()) {
+	  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 0, Z3_mk_string_symbol(z3_ctx, "empty"),
+			  Z3_mk_bool_type(z3_ctx), &mk_tuple_decl, proj_decls);
+	  return;
+  }
 
   u_int i = 0;
   for (struct_typet::componentst::const_iterator
@@ -3754,7 +3760,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	    }
       }
     }
-#if 1
+
     if (expr.op1().id()=="constant") {
       unsigned width0, width1;
    	  get_type_width(expr.op0().type(), width0);
@@ -3765,8 +3771,6 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	    }
       }
     }
-#endif
-
   }
 
   DEBUGLOC;

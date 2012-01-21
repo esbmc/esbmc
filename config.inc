@@ -10,7 +10,7 @@ LINUX=1
 
 # 32 or 64 bits? If left unset, default to whatever your host machine is.
 #TARGET64=1
-#TARGET32=1
+TARGET32=1
 
 # Static? (Linux only)
 #STATICLINK=1
