@@ -874,8 +874,7 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
 
   if (!components.size()) {
-	  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 0, Z3_mk_string_symbol(z3_ctx, "empty"),
-			  Z3_mk_bool_type(z3_ctx), &mk_tuple_decl, proj_decls);
+	  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls);
 	  return;
   }
 
