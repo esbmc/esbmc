@@ -46,11 +46,11 @@ ifdef DIRS
 # Rule for making dependancies on first execution
 $(OBJDIR)/.depends:
 	echo "Making dependancies"
-	env DEPENDMAKE=1 $(MAKE) depend
+	$(MAKE) depend
 	touch $(OBJDIR)/.depends
 
 $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS)):
-	env DEPENDMAKE=1 $(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
+	$(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
 
 depend: $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS))
 else

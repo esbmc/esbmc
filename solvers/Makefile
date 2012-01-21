@@ -1,7 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 include $(ESBMCDIR)/local.inc
-all: $(OBJDIR)/.depends dummy $(OBJDIR)/solvers.o
 
 OBJS= sat/$(OBJDIR)/satsolvers.o flattening/$(OBJDIR)/flattening.o \
       prop/$(OBJDIR)/propobj.o
@@ -42,31 +41,25 @@ endif
 
 ###############################################################################
 
-# Don't rebuild if we're `make clean`ing :|
-ifndef DEPENDMAKE
-ifndef CLEANRULE
-FORCEDIRSMAKE:= $(shell for dir in $(DIRS); do \
-                       $(MAKE) -C $$dir;\
-                       done)
-endif
-endif
+all: $(OBJDIR)/.depends
+	# Make dirs then solvers.o _seperately_ so that changes to file mod
+	# times are noticed and solvers.o relinked.
+	$(MAKE) dirs
+	$(MAKE) $(OBJDIR)/solvers.o
+
+dirs:
+	for dir in $(DIRS); do \
+	    $(MAKE) -C $$dir; \
+	done
 
 $(OBJDIR)/solvers.o: $(OBJS)
 	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
-dummy: $(OBJDIRS)
-
 clean:
 	-rm $(OBJDIR)/solvers.o
-	-$(MAKE) -C sat clean
-	-$(MAKE) -C flattening clean
-	-$(MAKE) -C qbf clean
-	-$(MAKE) -C prop clean
-	-$(MAKE) -C boolector clean
-	-$(MAKE) -C z3 clean
-	-$(MAKE) -C cvc clean
-	-$(MAKE) -C smt clean
-	-$(MAKE) -C dplib clean
+	for dir in $(DIRS); do \
+	    make -C $$dir clean; \
+	done
 	-rm $(OBJDIR)/.depends
 
 include $(ESBMCDIR)/common
