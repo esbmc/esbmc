@@ -20,7 +20,10 @@ OBJS= $(OBJDIR)/y.tab.o $(OBJDIR)/lex.yy.o
 
 INCLUDES= -I .. -I ../util
 
-all: $(OBJDIR)/.deps cpp_dir headers_dir $(OBJDIR)/ansi-c.o
+all: $(OBJDIR)/.deps
+	$(MAKE) -C cpp
+	$(MAKE) -C headers
+	$(MAKE) $(OBJDIR)/ansi-c.o
 
 ###############################################################################
 
@@ -62,20 +65,6 @@ $(OBJDIR)/clib.o: $(OBJDIR)/c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
 ###############################################################################
 
 include $(ESBMCDIR)/common
-
-cpp/$(OBJDIR)/preproc.o: cpp_dir
-
-cpp_dir:
-	$(MAKE) -C cpp
-
-.PHONY: cpp_dir
-
-headers/$(OBJDIR)/headers.o: headers_dir
-
-headers_dir:
-	$(MAKE) -C headers
-
-.PHONY: headers_dir
 
 ###############################################################################
 
