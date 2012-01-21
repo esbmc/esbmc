@@ -3754,7 +3754,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	    }
       }
     }
-
+#if 1
     if (expr.op1().id()=="constant") {
       unsigned width0, width1;
    	  get_type_width(expr.op0().type(), width0);
@@ -3765,6 +3765,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	    }
       }
     }
+#endif
 
   }
 

@@ -24,7 +24,7 @@ endif #EXTERN_ESBMC_CONFIG
 # Might need to guess what bitwidth target to build.
 ifndef TARGET64
 ifndef TARGET32
-THEMACHINE:=$(shell uname -m)
+THEMACHINE:=$(uname -m)
 ifeq ($(THEMACHINE),x86_64)
   TARGET64=1
 else
