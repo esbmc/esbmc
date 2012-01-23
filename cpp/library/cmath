@@ -71,4 +71,9 @@ float tan(float n)
 	return nondet_float();
 }
 
+int abs ( int n );
+
+long abs ( long n );
+
+
 #endif

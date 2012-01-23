@@ -4,6 +4,7 @@
 #include "streambuf"
 #include "definitions.h"
 #include "ostream"
+#include "ios"
 
 namespace std
 {
@@ -14,7 +15,12 @@ struct istringstream{
 	bool good ( ) const;
 };
 
-struct stringstream{};
+struct stringstream:ios,ostream{
+	explicit stringstream ( openmode which = ios_base::out|ios_base::in );
+	explicit stringstream ( const string & str, openmode which = ios_base::out|ios_base::in );
+	string str ( ) const;
+	void str ( const string & s );
+};
 
 struct ostringstream: ios{
 	explicit ostringstream ( openmode which = out );
