@@ -10,7 +10,7 @@ LINUX=1
 
 # 32 or 64 bits? If left unset, default to whatever your host machine is.
 #TARGET64=1
-TARGET32=1
+#TARGET32=1
 
 # Static? (Linux only)
 #STATICLINK=1
@@ -24,7 +24,7 @@ endif #EXTERN_ESBMC_CONFIG
 # Might need to guess what bitwidth target to build.
 ifndef TARGET64
 ifndef TARGET32
-THEMACHINE:=$(uname -m)
+THEMACHINE:=$(shell uname -m)
 ifeq ($(THEMACHINE),x86_64)
   TARGET64=1
 else
@@ -65,7 +65,7 @@ PATHSEP=/
 # 32 bit machines, wheras you can vice versa.
 FULLUNAME:=$(shell uname -a)
 WEARE64BIT:=$(shell uname -a | egrep "(CYGWIN.*WOW64|x86_64)")
-ifneq ($(WEARE64BIT),"")
+ifneq ($(WEARE64BIT),)
 CLIB64FLAG=--64
 CLIB32FLAG=--32
 else
