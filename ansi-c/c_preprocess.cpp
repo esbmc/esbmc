@@ -182,8 +182,13 @@ static const char *cpp_ansic_defs[] = {
 NULL
 };
 
+static const char *cpp_cpp_defs[] = {
+"__cplusplus=1",
+NULL
+};
+
 int configure_and_run_cpp(const char *out_file_buf, std::string path,
-		          const char **platformdefs);
+		          const char **platformdefs, bool is_cpp);
 
 void setup_cpp_defs(const char **defs)
 {
@@ -261,7 +266,7 @@ bool c_preprocess(
   dup2(fd, STDERR_FILENO);
   close(fd);
 
-  exit(configure_and_run_cpp(out_file_buf, path, cpp_linux_defs));
+  exit(configure_and_run_cpp(out_file_buf, path, cpp_linux_defs, is_cpp));
 }
 
 #else /* __WIN32__ */
@@ -285,7 +290,7 @@ bool c_preprocess(
   GetTempPath(sizeof(tmpdir), tmpdir);
   GetTempFileName(tmpdir, "bmc", 0, out_file_buf);
 
-  ret = configure_and_run_cpp(out_file_buf, path, cpp_windows_defs);
+  ret = configure_and_run_cpp(out_file_buf, path, cpp_windows_defs, is_cpp);
   if (ret != 0) {
     message_stream.error("Preprocessor returned an error");
     return true;
@@ -305,7 +310,7 @@ bool c_preprocess(
 
 int
 configure_and_run_cpp(const char *out_file_buf, std::string path,
-		      const char **platform_defs)
+		      const char **platform_defs, bool is_cpp)
 {
   int ret;
 
@@ -329,6 +334,9 @@ configure_and_run_cpp(const char *out_file_buf, std::string path,
   setup_cpp_defs(cpp_normal_defs);
   setup_cpp_defs(platform_defs);
   setup_cpp_defs(cpp_ansic_defs);
+
+  if (is_cpp)
+    setup_cpp_defs(cpp_cpp_defs);
 
   for(std::list<std::string>::const_iterator
       it=config.ansi_c.defines.begin();
