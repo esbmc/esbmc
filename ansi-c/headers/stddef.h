@@ -22,7 +22,9 @@ typedef short wint_t;
 
 typedef unsigned int size_t;
 
+#ifndef __cplusplus
 #define NULL ((void *)0)
+#endif
 
 /* ESBMC's ANSI-C parser handles this natively */
 #define offsetof(type, member) __builtin_offsetof(type, member)
