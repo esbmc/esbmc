@@ -1418,8 +1418,8 @@ exprt value_sett::make_member(
      src.id()=="constant")
   {
     unsigned no=struct_type.component_number(component_name);
-    if (no>=src.operands().size()			//component number does not exist,
-    		&& src.operands().size()==1)    //we have only one component
+    if (no>=src.operands().size()		//component number does not exist,
+    	&& src.operands().size()==1)    //we have only one component
       return src.op0();
     else {
       assert(no<src.operands().size());
