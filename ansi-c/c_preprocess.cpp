@@ -206,6 +206,7 @@ bool c_preprocess(
   std::istream &instream,
   const std::string &path,
   std::ostream &outstream,
+  bool is_cpp,
   message_handlert &message_handler)
 {
   char out_file_buf[32], stderr_file_buf[32];
