@@ -20,9 +20,12 @@ typedef short wchar_t;
 typedef short wint_t;
 #endif
 
+#ifndef _SIZE_T_DEFINED
 typedef unsigned int size_t;
+#define _SIZE_T_DEFINED
+#endif
 
-#ifndef __cplusplus
+#ifndef NULL
 #define NULL ((void *)0)
 #endif
 
