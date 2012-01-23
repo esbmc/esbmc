@@ -151,6 +151,7 @@ static const char *cpp_normal_defs[] = {
 #endif
 "__GNUC__",
 "__restrict__=/**/",
+"__restrict=/**/",
 NULL
 };
 
