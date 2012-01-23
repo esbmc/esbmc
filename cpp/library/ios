@@ -9,14 +9,16 @@ namespace std
 struct ios_base {
 	typedef int iostate;
 	typedef int fmtflags;
+	typedef int openmode;
 	static const iostate badbit = 3;
 	static const iostate eofbit = 2;
 	static const iostate failbit = 1;
 	static const iostate goodbit = 0;
-    typedef int seekdir;
-    static const seekdir beg;
-    static const seekdir cur;
-    static const seekdir end;
+        typedef int seekdir;
+	static const openmode app, ate, binary, in, out, trunc;
+        static const seekdir beg;
+        static const seekdir cur;
+        static const seekdir end;
 
 	ios_base ();
 
@@ -26,8 +28,6 @@ private:
 };
 
 struct ios: ios_base{
-	typedef int openmode;
-	static const openmode app, ate, binary, in, out, trunc;
 	//	typedef fpos<mbstate_t> streampos;
 	//	typedef fpos<mbstate_t> streamoff;
 	typedef int streampos;

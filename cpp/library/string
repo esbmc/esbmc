@@ -3,6 +3,8 @@
 
 #include "definitions.h"
 #include "cstring"
+#include "ostream"
+#include "istream"
 
 static const size_t npos = -1;
 
