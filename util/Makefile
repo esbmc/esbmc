@@ -11,7 +11,7 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       replace_expr.cpp threeval.cpp typecheck.cpp \
       type.cpp cnf_simplify.cpp str_getline.cpp strstream2string.cpp \
       bitvector.cpp parser.cpp replace_symbol.cpp actuals.cpp \
-      get_module.cpp string_hash.cpp string_container.cpp identifier.cpp \
+      string_hash.cpp string_container.cpp identifier.cpp \
       options.cpp c_misc.cpp simplify_expr.cpp dstring.cpp \
       find_symbols.cpp ui_message.cpp simplify_utils.cpp \
       string2array.cpp time_stopping.cpp symbol.cpp expr_visitor.cpp \
