@@ -76,4 +76,4 @@ esbmc: $(OBJS)
 	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL)
 
 clean:
-	-rm -f $(OBJDIR)/* esbmc
+	-rm -f $(OBJDIR)/* esbmc $(OBJDIR)/.deps
