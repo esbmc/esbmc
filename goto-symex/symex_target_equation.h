@@ -87,7 +87,7 @@ public:
     // Vector of strings recording the stack state when this step was taken.
     // This can potentially be optimised to the point where there's only one
     // stack trace recorded per function activation record. Valid for assignment
-    // and assert steps only.
+    // and assert steps only. In reverse order (most recent in idx 0).
     std::vector<dstring> stack_trace;
     
     bool is_assert() const     { return type==goto_trace_stept::ASSERT; }
