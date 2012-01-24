@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_SYMEX_TARGET_H
 #define CPROVER_GOTO_SYMEX_SYMEX_TARGET_H
 
+#include <vector>
 #include <expr.h>
 #include <symbol.h>
 #include <guard.h>
@@ -48,6 +49,7 @@ public:
     const exprt &original_lhs,
     exprt &rhs,
     const sourcet &source,
+    std::vector<dstring> stack_trace,
     assignment_typet assignment_type)=0;
 
   // just record a location

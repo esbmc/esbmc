@@ -15,6 +15,7 @@ extern "C" {
 
 #include <list>
 #include <map>
+#include <vector>
 
 #include <namespace.h>
 
@@ -42,6 +43,7 @@ public:
     const exprt &original_lhs,
     exprt &rhs,
     const sourcet &source,
+    std::vector<dstring> stack_trace,
     assignment_typet assignment_type);
     
   // just record a location
