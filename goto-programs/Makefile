@@ -9,7 +9,6 @@ SRCS= goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       goto_function_pointers.cpp goto_functions.cpp goto_inline.cpp \
       remove_skip.cpp goto_convert_functions.cpp string_instrumentation.cpp \
       builtin_functions.cpp show_claims.cpp destructor.cpp set_claims.cpp \
-      invariant_set.cpp \
       add_race_assertions.cpp rw_set.cpp read_goto_binary.cpp \
       static_analysis.cpp string_abstraction.cpp \
       goto_program_serialization.cpp goto_function_serialization.cpp \
