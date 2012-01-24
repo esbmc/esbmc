@@ -41,14 +41,14 @@ endif
 
 ###############################################################################
 
+# Make dirs then solvers.o _seperately_ so that changes to file mod
+# times are noticed and solvers.o relinked.
 all: $(OBJDIR)/.depends
-	# Make dirs then solvers.o _seperately_ so that changes to file mod
-	# times are noticed and solvers.o relinked.
 	$(MAKE) dirs
 	$(MAKE) $(OBJDIR)/solvers.o
 
 dirs:
-	for dir in $(DIRS); do \
+	@for dir in $(DIRS); do \
 	    $(MAKE) -C $$dir; \
 	done
 
@@ -57,7 +57,7 @@ $(OBJDIR)/solvers.o: $(OBJS)
 
 clean:
 	-rm $(OBJDIR)/solvers.o
-	for dir in $(DIRS); do \
+	@for dir in $(DIRS); do \
 	    make -C $$dir clean; \
 	done
 	-rm $(OBJDIR)/.depends
