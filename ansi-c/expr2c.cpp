@@ -1107,8 +1107,7 @@ std::string expr2ct::convert_norep(
   const exprt &src,
   unsigned &precedence)
 {
-  std::cout << "Can't convert irep to C:" << src.pretty(0) << std::endl;
-  abort();
+  return src.pretty(0);
 }
 
 /*******************************************************************\
