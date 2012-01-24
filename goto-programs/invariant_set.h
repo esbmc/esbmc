@@ -9,11 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_CEGAR_INVARIANT_SET_H
 #define CPROVER_CEGAR_INVARIANT_SET_H
 
-/*
-#include <ref_expr_set.h>
-
-*/
-
 #include <std_code.h>
 #include <numbering.h>
 #include <union_find.h>
