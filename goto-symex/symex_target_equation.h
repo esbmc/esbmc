@@ -83,6 +83,12 @@ public:
   public:
     sourcet source;
     goto_trace_stept::typet type;
+
+    // Vector of strings recording the stack state when this step was taken.
+    // This can potentially be optimised to the point where there's only one
+    // stack trace recorded per function activation record. Valid for assignment
+    // and assert steps only.
+    std::vector<dstring> stack_trace;
     
     bool is_assert() const     { return type==goto_trace_stept::ASSERT; }
     bool is_assume() const     { return type==goto_trace_stept::ASSUME; }
