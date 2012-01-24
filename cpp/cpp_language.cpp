@@ -89,7 +89,7 @@ bool cpp_languaget::preprocess(
   message_handlert &message_handler)
 {
   if(path=="")
-    return c_preprocess(instream, "", outstream, message_handler);
+    return c_preprocess(instream, "", outstream, true, message_handler);
 
   // check extension
 
