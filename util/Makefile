@@ -9,7 +9,7 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       location.cpp message.cpp language_file.cpp \
       mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp \
       replace_expr.cpp threeval.cpp typecheck.cpp \
-      type.cpp cnf_simplify.cpp str_getline.cpp strstream2string.cpp \
+      type.cpp str_getline.cpp strstream2string.cpp \
       bitvector.cpp parser.cpp replace_symbol.cpp actuals.cpp \
       string_hash.cpp string_container.cpp identifier.cpp \
       options.cpp c_misc.cpp simplify_expr.cpp dstring.cpp \
