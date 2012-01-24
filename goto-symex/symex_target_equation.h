@@ -71,6 +71,7 @@ public:
     const guardt &guard,
     exprt &cond,
     const std::string &msg,
+    std::vector<dstring> stack_trace,
     const sourcet &source);
 
   void convert(prop_convt &prop_conv);

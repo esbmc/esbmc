@@ -160,6 +160,7 @@ void symex_target_equationt::assertion(
   const guardt &guard,
   exprt &cond,
   const std::string &msg,
+  std::vector<dstring> stack_trace,
   const sourcet &source)
 {
   SSA_steps.push_back(SSA_stept());
