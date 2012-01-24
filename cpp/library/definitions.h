@@ -33,5 +33,6 @@ char* nondet_charPointer();
 char nondet_char();
 
 typedef unsigned int size_t;
+#define _SIZE_T_DEFINED
 
 #endif

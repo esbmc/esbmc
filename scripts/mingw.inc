@@ -46,7 +46,7 @@ C2GOTO_INCS=-I$(MSVC_10_HEADERS)/include -D_MSVC
 endif
 WINDOWS= 1
 PLATLIBS=-lws2_32 -lkernel32
-FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS)
+FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS) -Wl,--stack,8388608
 
 # Always add -static to the command line; this causes things like libstdc++ and
 # the GCC runtime library to be linked in statically rather than dynamically,
