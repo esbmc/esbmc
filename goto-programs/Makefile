@@ -13,8 +13,8 @@ SRCS= goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       add_race_assertions.cpp rw_set.cpp read_goto_binary.cpp \
       invariant_set_domain.cpp static_analysis.cpp string_abstraction.cpp \
       goto_program_serialization.cpp goto_function_serialization.cpp \
-      read_bin_goto_object.cpp goto_program_irep.cpp interpreter.cpp \
-      interpreter_evaluate.cpp flow_insensitive_analysis.cpp \
+      read_bin_goto_object.cpp goto_program_irep.cpp \
+      flow_insensitive_analysis.cpp \
       format_strings.cpp loop_numbers.cpp \
       goto_program_template.cpp write_goto_binary.cpp
 
