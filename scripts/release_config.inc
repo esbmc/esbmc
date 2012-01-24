@@ -60,6 +60,19 @@ FINLINKTAIL= $(CXXFLAGS) $(LIBS) $(PLATLIBS)
 INCCMD=-I
 PATHSEP=/
 
+# If on a 64 bit machine, build C libraries as expected. If on 32 bits, build
+# everything 32 bits. This is because you can't get 64 bit headers (easily) on
+# 32 bit machines, wheras you can vice versa.
+FULLUNAME:=$(shell uname -a)
+WEARE64BIT:=$(shell uname -a | egrep "(CYGWIN.*WOW64|x86_64)")
+ifneq ($(WEARE64BIT),"")
+CLIB64FLAG=--64
+CLIB32FLAG=--32
+else
+CLIB64FLAG=--32
+CLIB32FLAG=--32
+endif
+
 ifdef LINUX
 include $(ESBMCDIR)/scripts/linux.inc
 endif

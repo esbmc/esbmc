@@ -20,7 +20,10 @@ OBJS= $(OBJDIR)/y.tab.o $(OBJDIR)/lex.yy.o
 
 INCLUDES= -I .. -I ../util
 
-all: $(OBJDIR)/.deps cpp_dir headers_dir $(OBJDIR)/ansi-c.o
+all: $(OBJDIR)/.deps
+	$(MAKE) -C cpp
+	$(MAKE) -C headers
+	$(MAKE) $(OBJDIR)/ansi-c.o
 
 ###############################################################################
 
@@ -49,11 +52,11 @@ $(OBJDIR)/c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
 	$(FINLINKBIN) $(CXXFLAGS) $^ $(FINLINKOUT) $@ $(C2GOTO_DEPS) $(FINLINKTAIL)
 
 $(OBJDIR)/clib32.o: $(OBJDIR)/c2goto library/*.c
-	./$(OBJDIR)/c2goto library/*.c --32 --output clib32.goto --no-lock-check $(C2GOTO_INCS)
+	./$(OBJDIR)/c2goto library/*.c $(CLIB32FLAG) --output clib32.goto --no-lock-check $(C2GOTO_INCS)
 	$(BLOBGENLD) $(LDFLAGS) -b binary clib32.goto -o $(OBJDIR)/clib32.o -r
 
 $(OBJDIR)/clib64.o: $(OBJDIR)/c2goto library/*.c
-	./$(OBJDIR)/c2goto library/*.c --32 --output clib64.goto --no-lock-check $(C2GOTO_INCS)
+	./$(OBJDIR)/c2goto library/*.c $(CLIB64FLAG) --output clib64.goto --no-lock-check $(C2GOTO_INCS)
 	$(BLOBGENLD) $(LDFLAGS) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
 
 $(OBJDIR)/clib.o: $(OBJDIR)/c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
@@ -62,20 +65,6 @@ $(OBJDIR)/clib.o: $(OBJDIR)/c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
 ###############################################################################
 
 include $(ESBMCDIR)/common
-
-cpp/$(OBJDIR)/preproc.o: cpp_dir
-
-cpp_dir:
-	$(MAKE) -C cpp
-
-.PHONY: cpp_dir
-
-headers/$(OBJDIR)/headers.o: headers_dir
-
-headers_dir:
-	$(MAKE) -C headers
-
-.PHONY: headers_dir
 
 ###############################################################################
 

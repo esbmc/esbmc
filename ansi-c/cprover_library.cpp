@@ -175,6 +175,7 @@ void add_cprover_library(
 
   std::ifstream infile(symname_buffer, std::ios::in | std::ios::binary);
   read_goto_binary(infile, new_ctx, goto_functions, message_handler);
+  infile.close();
 #ifndef _WIN32
   unlink(symname_buffer);
 #else

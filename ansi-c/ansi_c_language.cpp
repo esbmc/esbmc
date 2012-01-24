@@ -136,7 +136,7 @@ bool ansi_c_languaget::preprocess(
     return false;
   }
 
-  return c_preprocess(instream, path, outstream, message_handler);
+  return c_preprocess(instream, path, outstream, false, message_handler);
 }
 
 /*******************************************************************\

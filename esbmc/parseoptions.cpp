@@ -548,7 +548,7 @@ void cbmc_parseoptionst::preprocessing()
       return;
     }
 
-    if (c_preprocess(infile, filename, std::cout, *get_message_handler()))
+    if (c_preprocess(infile, filename, std::cout, false, *get_message_handler()))
       error("PREPROCESSING ERROR");
   }
 

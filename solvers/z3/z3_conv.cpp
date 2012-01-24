@@ -861,12 +861,6 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
   const struct_union_typet &su_type = to_struct_union_type(type);
   const struct_union_typet::componentst &components = su_type.components();
 
-  if (components.size() == 0){
-	  bv = Z3_mk_bool_type(z3_ctx);
-	  return;
-  }
-
-  assert(components.size() > 0);
   num_elems = components.size();
   if (uni) num_elems++;
 
@@ -877,6 +871,11 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
   name = ((uni) ? "union" : "struct" );
   name += "_type_" + type.get_string("tag");
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
+
+  if (!components.size()) {
+	  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls);
+	  return;
+  }
 
   u_int i = 0;
   for (struct_typet::componentst::const_iterator
@@ -1534,7 +1533,6 @@ z3_convt::convert_rest(const exprt &expr)
       ignoring(expr);
       return l;
     }
-
     convert_bv(expr, constraint);
   } catch (conv_error *e) {
     std::cerr << e->to_string() << std::endl;
@@ -1548,6 +1546,7 @@ z3_convt::convert_rest(const exprt &expr)
   // between the formula and the literal. Otherwise, we risk asserting that a
   // formula within a assertion-statement is true or false.
   assert_formula(formula);
+
   return l;
 }
 
@@ -3461,8 +3460,24 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
   if (expr.op0().type().id() == "union") {
     union_varst::const_iterator cache_result = union_vars.find(
       expr.op0().get_string("identifier").c_str());
+
     if (cache_result != union_vars.end()) {
-      bv = z3_api.mk_tuple_select(z3_ctx, struct_var, cache_result->second);
+      const struct_union_typet &type = (const struct_union_typet&)expr.op0().type();
+      const struct_union_typet::componentst components = type.components();
+      const typet &source_type = components[cache_result->second].type();
+      if (source_type.compare(expr.type()) == 0) {
+        // Type we're fetching from union matches expected type; just return it.
+        bv = z3_api.mk_tuple_select(z3_ctx, struct_var, cache_result->second);
+        return;
+      }
+
+      // Union field and expected type mismatch. Need to insert a cast.
+      // Duplicate expr as we're changing it
+      exprt expr2 = expr;
+      typecast_exprt cast(expr2.type());
+      expr2.type() = source_type;
+      cast.op0() = expr2;
+      convert_z3_expr(cast, bv);
       return;
     }
   }
@@ -3622,25 +3637,26 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   assert(expr.operands().size() == 2);
   // op0 is object to extract from
   // op1 is byte field to extract from.
-
+  DEBUGLOC;
   mp_integer i;
   if (to_integer(expr.op1(), i))
     throw new conv_error("byte_extract expects constant 2nd arg", expr);
 
   unsigned width, w;
-
+  DEBUGLOC;
   get_type_width(expr.op0().type(), width);
-
+  DEBUGLOC;
   // XXXjmorse - looks like this only ever reads a single byte, not the desired
   // number of bytes to fill the type.
   get_type_width(expr.type(), w);
 
+  DEBUGLOC;
   if (width == 0)
     // XXXjmorse - can this happen any more?
     throw new conv_error("failed to get width of byte_extract operand", expr);
 
   uint64_t upper, lower;
-
+  DEBUGLOC;
   if (expr.id() == "byte_extract_little_endian") {
     upper = ((i.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
     lower = i.to_long() * 8; //i*w;
@@ -3737,11 +3753,21 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       get_type_width(expr.type(), width_expr);
 
       if (width_expr > width) {
-	if (expr.type().id() == "unsignedbv") {
-	  bv = Z3_mk_zero_ext(z3_ctx, (width_expr - width), bv);
-	}
+	    if (expr.type().id() == "unsignedbv") {
+	      bv = Z3_mk_zero_ext(z3_ctx, (width_expr - width), bv);
+	    }
       }
+    }
 
+    if (expr.op1().id()=="constant") {
+      unsigned width0, width1;
+   	  get_type_width(expr.op0().type(), width0);
+   	  get_type_width(expr.op1().type(), width1);
+      if (width1 > width0) {
+	    if (expr.op0().type().id() == "unsignedbv") {
+	      bv = Z3_mk_zero_ext(z3_ctx, width1-width0, bv);
+	    }
+      }
     }
   }
 
