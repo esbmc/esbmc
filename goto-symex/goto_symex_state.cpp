@@ -928,6 +928,9 @@ goto_symex_statet::gen_stack_trace(void) const
 
     if (it->function_identifier == "") { // Top level call
       break;
+    } else if (it->function_identifier == "c::main" &&
+               src.pc->location == get_nil_irep()) {
+      trace.push_back("<main invocation>");
     } else {
       std::string loc = it->function_identifier.as_string();
       loc += " at " + src.pc->location.get_file().as_string();
