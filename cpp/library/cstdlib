@@ -29,23 +29,20 @@ int atexit ( void ( * function ) (void) );
 
 #define RAND_MAX        2147483647
 
-//int seed, last_value=-1;
+int rand (void);
 
-int rand(void);
+int random (void);
+
 void srand (unsigned int s);
 
 int rand(void)
 {
-#if 0
-  if (seed==1 && last_value!=-1) {
-    return last_value;
-  }  else {
-    last_value = nondet_uint() % RAND_MAX;
-    return last_value;
-  }
-#endif
+  return nondet_uint() % RAND_MAX;
+}
 
-    return nondet_uint() % RAND_MAX;
+int random(void)
+{
+  return nondet_uint() % RAND_MAX;
 }
 
 #if 0
