@@ -13,7 +13,7 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       bitvector.cpp parser.cpp map_util.cpp replace_symbol.cpp actuals.cpp \
       get_module.cpp string_hash.cpp string_container.cpp identifier.cpp \
       rational.cpp options.cpp c_misc.cpp simplify_expr.cpp dstring.cpp \
-      find_symbols.cpp rational_tools.cpp ui_message.cpp simplify_utils.cpp \
+      find_symbols.cpp ui_message.cpp simplify_utils.cpp \
       string2array.cpp time_stopping.cpp symbol.cpp expr_visitor.cpp \
       type_eq.cpp guard.cpp array_name.cpp gcd.cpp message_stream.cpp \
       decision_procedure.cpp union_find.cpp pretty_names.cpp \
