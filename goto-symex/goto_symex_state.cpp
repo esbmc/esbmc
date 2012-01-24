@@ -913,22 +913,27 @@ goto_symex_statet::gen_stack_trace(void) const
   std::vector<dstring> trace;
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
+  int i = 0;
 
   // Format is a vector of strings, each recording a particular function
   // invocation.
 
   src = source;
-  for (it = call_stack.rbegin(); it != call_stack.rend(); it++) {
+  for (it = call_stack.rbegin(); it != call_stack.rend();
+       it++, src = it->calling_location) {
+
+    // Don't store current function, that can be extracted elsewhere.
+    if (i++ == 0)
+      continue;
+
     if (it->function_identifier == "") { // Top level call
-      trace.push_back("init");
+      break;
     } else {
       std::string loc = it->function_identifier.as_string();
       loc += " at " + src.pc->location.get_file().as_string();
       loc += " line " + src.pc->location.get_line().as_string();
       trace.push_back(loc);
     }
-
-    src = it->calling_location;
   }
 
   return trace;
