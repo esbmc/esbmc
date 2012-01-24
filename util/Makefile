@@ -21,7 +21,7 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       format_constant.cpp find_macros.cpp ref_expr_set.cpp std_expr.cpp \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
       pointer_arithmetic.cpp ieee_float.cpp signal_catcher.cpp \
-      bv_arithmetic.cpp tempdir.cpp
+      bv_arithmetic.cpp
 
 ifdef MODULE_FLOATBV
   CXXFLAGS += -DHAVE_FLOATBV
