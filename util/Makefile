@@ -6,7 +6,7 @@ all: $(OBJDIR)/.deps $(MAINOBJ)
 
 SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr.cpp expr_util.cpp i2string.cpp irep.cpp language.cpp \
-      lispexpr.cpp lispirep.cpp location.cpp message.cpp language_file.cpp \
+      location.cpp message.cpp language_file.cpp \
       mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp \
       replace_expr.cpp threeval.cpp typecheck.cpp graph.cpp \
       type.cpp cnf_simplify.cpp str_getline.cpp strstream2string.cpp \

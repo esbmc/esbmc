@@ -24,7 +24,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "ansi_c_declaration.h"
 #include "expr2c.h"
-#include "lispirep.h"
 #include "c_typecast.h"
 #include "c_types.h"
 
@@ -324,15 +323,8 @@ std::string expr2ct::convert_rec(
     return dest;
   }
 
-  {
-    lispexprt lisp;
-    irep2lisp(src, lisp);
-    std::string dest="irep(\"";
-    MetaString(dest, lisp.expr2string());
-    dest+="\")";
-
-    return dest;
-  }
+  unsigned precedence;
+  return convert_norep((exprt&)src, precedence);
 }
 
 /*******************************************************************\
@@ -1115,13 +1107,8 @@ std::string expr2ct::convert_norep(
   const exprt &src,
   unsigned &precedence)
 {
-  lispexprt lisp;
-  irep2lisp(src, lisp);
-  std::string dest="irep(\"";
-  MetaString(dest, lisp.expr2string());
-  dest+="\")";
-  precedence=15;
-  return dest;
+  std::cout << "Can't convert irep to C:" << src.pretty(0) << std::endl;
+  abort();
 }
 
 /*******************************************************************\
