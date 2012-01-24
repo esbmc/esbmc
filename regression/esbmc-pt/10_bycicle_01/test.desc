@@ -1,3 +1,0 @@
-main.c
---unwind 1 --no-pointer-check --no-lock-check --schedule --round-robin
-^VERIFICATION FAILED$
