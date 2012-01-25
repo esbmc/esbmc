@@ -126,7 +126,15 @@ const char * strrchr ( const char * str, int character );
 const char * strstr ( const char * str1, const char * str2 );
       char * strstr (       char * str1, const char * str2 );
 
-void * memcpy ( void * destination, const void * source, size_t num );
+void *memcpy(void *dst, const void *src, size_t n);
+
+void *memcpy(void *dst, const void *src, size_t n)
+{
+  __ESBMC_HIDE:
+  for(size_t i=0; i<n ; i++) dst[i]=src[i];
+  return dst;
+}
+
 
 void * memmove ( void * destination, const void * source, size_t num );
 
