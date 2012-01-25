@@ -15,10 +15,10 @@ int main()
 
    memcpy( s1, s2, 17 );
 
-//   cout << "After s2 is copied into s1 with memcpy,\n"
-//        << "s1 contains \"" << s1 << '\"' << endl;
+   cout << "After s2 is copied into s1 with memcpy,\n"
+        << "s1 contains \"" << s1 << '\"' << endl;
 
-//   assert(s1==s2);
+   assert(s1!=s2);
 
    return 0;
 
