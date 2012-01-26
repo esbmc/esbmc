@@ -132,9 +132,6 @@ bool reachability_treet::is_global_assign(const exprt &code)
 
   int num_read_globals = get_cur_state().get_expr_read_globals(_ns,code.op1());
 
-  if (get_is_same_mutex())
-    return false;
-
   if (num_read_globals)
 	return true;
   else
@@ -154,9 +151,6 @@ bool reachability_treet::is_global_assign(const exprt &code)
 
 bool reachability_treet::generate_states_before_read(const exprt &code)
 {
-
-  if (get_is_same_mutex())
-    return false;
 
   if (check_CS_bound())
     return false;
@@ -184,9 +178,6 @@ bool reachability_treet::generate_states_before_read(const exprt &code)
 bool reachability_treet::generate_states_before_write(const exprt &code)
 {
 
-  if (get_is_same_mutex())
-    return false;
-
   if (check_CS_bound())
     return false;
 
@@ -197,66 +188,6 @@ bool reachability_treet::generate_states_before_write(const exprt &code)
     return generate_states_base(code);
   else
     return false;
-}
-
-/*******************************************************************
- Function: reachability_treet::get_is_mutex
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool reachability_treet::get_is_same_mutex(void)
-{
-  return _is_same_mutex;
-}
-
-/*******************************************************************
- Function: reachability_treet::check_mutex
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void reachability_treet::check_mutex(const exprt &code, const execution_statet &ex_state)
-{
-
-  static bool is_first_assign=true;
-  static std::string identifier;
-  const exprt &object=code.op0();
-  const exprt &value=code.op1();
-  std::string val;
-
-  if (object.id() == exprt::member)
-  {
-	if (object.op0().type().identifier().as_string().find("pthread_mutex") != std::string::npos)
-	{
-	  if (is_first_assign)
-	  {
-		if (object.op0().operands().size()==0)
-		  return;
-	    identifier = object.op0().op0().identifier().as_string();
-	    is_first_assign=false;
-	  }
-
-	  val = integer2string(binary2integer(value.value().as_string(), true),10);
-
-	  if (identifier.find(object.op0().op0().identifier().as_string()) != std::string::npos)
-	    _is_same_mutex=true;
-	  else if (val.find("0") == std::string::npos)
-	    _is_same_mutex=false;
-
-	  identifier = object.op0().op0().identifier().as_string();
-    }
-  }
 }
 
 /*******************************************************************
@@ -275,14 +206,6 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
 
   if(code.operands().size()!=2)
     throw "assignment expects two operands";
-
-#if 0
-  if (!_deadlock_detection)
-    check_mutex(code, ex_state);
-
-  if (get_is_same_mutex())
-    return false;
-#endif
 
   if(check_CS_bound())
     return false;
@@ -315,9 +238,6 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
 
 bool reachability_treet::generate_states_before_function(const code_function_callt &code)
 {
-
-  if (get_is_same_mutex())
-    return false;
 
   if(check_CS_bound())
     return false;
