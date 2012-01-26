@@ -172,9 +172,6 @@ void z3_propt::limplies(literalt a, literalt b, literalt o)
 
 literalt z3_propt::land(const bvt &bv)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   literalt l=new_variable();
   uint size=bv.size();
@@ -193,9 +190,6 @@ literalt z3_propt::land(const bvt &bv)
 
 literalt z3_propt::lor(const bvt &bv)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   literalt l=new_variable();
   uint size=bv.size();
@@ -215,9 +209,6 @@ literalt z3_propt::lor(const bvt &bv)
 
 literalt z3_propt::lxor(const bvt &bv)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   if(bv.size()==0) return const_literal(false);
   if(bv.size()==1) return bv[0];
@@ -246,9 +237,6 @@ literalt z3_propt::lxor(const bvt &bv)
 
 literalt z3_propt::land(literalt a, literalt b)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 #if 1
   if(a==const_literal(true)) return b;
   if(b==const_literal(true)) return a;
@@ -271,9 +259,6 @@ literalt z3_propt::land(literalt a, literalt b)
 
 literalt z3_propt::lor(literalt a, literalt b)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 #if 1
   if(a==const_literal(false)) return b;
   if(b==const_literal(false)) return a;
@@ -290,10 +275,6 @@ literalt z3_propt::lor(literalt a, literalt b)
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
   assert_formula(formula);
 
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
   return l;
 
 }
@@ -307,9 +288,6 @@ literalt z3_propt::lnot(literalt a)
 
 literalt z3_propt::lxor(literalt a, literalt b)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 #if 1
   if(a==const_literal(false)) return b;
   if(b==const_literal(false)) return a;
@@ -351,9 +329,6 @@ literalt z3_propt::limplies(literalt a, literalt b)
 
 literalt z3_propt::lselect(literalt a, literalt b, literalt c)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 #if 1
   if(a==const_literal(true)) return b;
   if(a==const_literal(false)) return c;
@@ -377,10 +352,6 @@ literalt z3_propt::new_variable()
 
   set_no_variables(_no_variables+1);
 
-#ifdef DEBUG
-  std::cout << "new literal: l" << l.var_no() << "\n";
-#endif
-
   return l;
 }
 
@@ -399,9 +370,6 @@ void z3_propt::eliminate_duplicates(const bvt &bv, bvt &dest)
 
 bool z3_propt::process_clause(const bvt &bv, bvt &dest)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   dest.clear();
 
@@ -444,9 +412,6 @@ bool z3_propt::process_clause(const bvt &bv, bvt &dest)
 
 void z3_propt::lcnf(const bvt &bv)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   bvt new_bv;
 
@@ -475,9 +440,6 @@ void z3_propt::lcnf(const bvt &bv)
 
 Z3_ast z3_propt::z3_literal(literalt l)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   Z3_ast literal_l;
   std::string literal_s;
@@ -489,10 +451,6 @@ Z3_ast z3_propt::z3_literal(literalt l)
 
   literal_s = "l"+i2string(l.var_no());
   literal_l = z3_api.mk_bool_var(z3_ctx, literal_s.c_str());
-
-#ifdef DEBUG
-  std::cout << "literal_s: " << literal_s << "\n";
-#endif
 
   if(l.sign())
   {
@@ -510,9 +468,6 @@ propt::resultt z3_propt::prop_solve()
 
 tvt z3_propt::l_get(literalt a) const
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   tvt result=tvt(tvt::TV_ASSUME);
   std::string literal;
