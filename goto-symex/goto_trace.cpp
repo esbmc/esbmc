@@ -158,16 +158,6 @@ void counterexample_value(
     	 value.type().id()==typet::t_floatbv)
         value_string+= " ("+value.value().as_string()+")";
     }
-#if 0
-    else if (lhs.type().id()==typet::t_pointer)
-    {
-      size_t found;
-      found=value_string.find_first_of("@");
-      if (found!=std::string::npos)
-        value_string.erase(found,value_string.size());
-      value_string="&"+value_string;
-    }
-#endif
   }
 
   #if 1
