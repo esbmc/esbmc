@@ -23,33 +23,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
-Function: goto_symex_statet::goto_symex_statet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-/*
-goto_symex_statet::goto_symex_statet(const goto_symex_statet & state)
-{
-  use_value_set=true;
-  depth= state.depth;
-  level2 = state.level2;
-  guard = state.guard;
-  value_set = state.value_set;
-  call_stack = state.call_stack;
- // top().level1.current_names.clear();
- // top().level1.original_identifiers.clear();
-
-  source = state.source;
-  declaration_history = state.declaration_history;
-}
-*/
-/*******************************************************************\
-
 Function: goto_symex_statet::initialize
 
   Inputs:
@@ -66,12 +39,7 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
 
   source.is_set=true;
   source.thread_nr = thread_id;
-  source.pc=start;//body.instructions.begin();
-/*
-  goto_programt::const_targett end_pc = pc;
-  while((*end_pc).type != END_FUNCTION)
-	  end_pc++;
-*/
+  source.pc=start;
   top().end_of_function=end;
   top().calling_location=symex_targett::sourcet(top().end_of_function, prog);
 }
@@ -94,27 +62,6 @@ std::string goto_symex_statet::level1t::name(
 {
   return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(_thread_id);//+"*"+i2string(execution_node_id);
 }
-
-/*******************************************************************\
-
-Function: goto_symex_statet::name_count
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-//std::string goto_symex_statet::level2t::name(
-//  const irep_idt &identifier,
-//  unsigned count,
-//        unsigned node_id) const
-//{
-//  valuet &entry=current_names[identifier];
-//  return id2string(identifier)+"&"+i2string(entry.node_id)+"#"+i2string(count);
-//}
 
 /*******************************************************************\
 
@@ -152,21 +99,16 @@ std::string goto_symex_statet::level1t::operator()(
   const irep_idt &identifier, unsigned exec_node_id) const
 {
 
- //    	std::cout << "getting current name 3" << std::endl;
-
   current_namest::const_iterator it=
     current_names.find(identifier);
-//	std::cout << "getting current name 3.1" << std::endl;
 
   if(it==current_names.end())
   {
     // can not find
     return id2string(identifier); // means global value ?
   }
-//	std::cout << "getting current name 3.2" << std::endl;
 
   return name(identifier, it->second, exec_node_id);
-//	std::cout << "getting current name 3.3" << std::endl;
 }
 
 /*******************************************************************\
@@ -219,8 +161,6 @@ Function: goto_symex_statet::constant_propagation
 bool goto_symex_statet::constant_propagation(const exprt &expr) const
 {
   static unsigned int with_counter=0;
-  //std::cout << "constant_propagation: " << expr.id() << std::endl;
-  //std::cout << "constant_propagation: " << expr.pretty() << std::endl;
   if(expr.is_constant()) return true;
 
   if(expr.id()==exprt::addrof)
@@ -302,12 +242,6 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
 
   }
   */
-#if 0
-  else
-  {
-	  std::cout << "rest constant_propagation: " << expr.pretty() << std::endl;
-  }
-#endif
 
   return false;
 }
@@ -326,8 +260,6 @@ Function: goto_symex_statet::constant_propagation_reference
 
 bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
 {
-  //std::cout << "constant_propagation_reference: " << expr.id() << std::endl;
-  //std::cout << "constant_propagation_reference: " << expr.pretty() << std::endl;
   if(expr.id()==exprt::symbol)
     return true;
   else if(expr.id()==exprt::index)
@@ -348,10 +280,6 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
 #if 1
   else if(expr.id()=="string-constant")
     return true;
-#endif
-#if 0
-  else
-	std::cout << "constant_propagation_reference: " << expr.pretty() << std::endl;
 #endif
 
   return false;
@@ -736,19 +664,13 @@ Function: goto_symex_statet::get_original_name
 
 void goto_symex_statet::get_original_name(exprt &expr) const
 {
-// std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3 : " << expr.identifier() << std::endl;
   Forall_operands(it, expr)
     get_original_name(*it);
- //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 1" << std::endl;
 
   if(expr.id()==exprt::symbol)
   {
-//	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 2" << std::endl;
-//	  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-1 : " << expr.identifier() << std::endl;
     level2.get_original_name(expr);
-  //  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-2 : " << expr.identifier() << std::endl;
     top().level1.get_original_name(expr);
-    //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-3 : " << expr.identifier() << std::endl;
   }
 }
 
@@ -766,17 +688,14 @@ Function: goto_symex_statet::renaming_levelt::get_original_name
 
 void goto_symex_statet::renaming_levelt::get_original_name(exprt &expr) const
 {
-// std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 2 : " << expr.identifier() << std::endl;
   Forall_operands(it, expr)
     get_original_name(*it);
-//	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::renaming_levelt::get_original_name 1" << std::endl;
 
   if(expr.id()==exprt::symbol)
   {
     original_identifierst::const_iterator it=
       original_identifiers.find(expr.identifier());
     if(it==original_identifiers.end()) return;
-//	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::renaming_levelt::get_original_name 2" << std::endl;
 
     assert(it->second!="");
     expr.identifier(it->second);
@@ -798,7 +717,6 @@ Function: goto_symex_statet::renaming_levelt::get_original_name
 const irep_idt &goto_symex_statet::renaming_levelt::get_original_name(
   const irep_idt &identifier) const
 {
- //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 1 : " << identifier << std::endl;
   original_identifierst::const_iterator it=
     original_identifiers.find(identifier);
   if(it==original_identifiers.end()) return identifier;
@@ -820,11 +738,7 @@ Function: goto_symex_statet::get_original_identifier
 const irep_idt &goto_symex_statet::get_original_name(
   const irep_idt &identifier) const
 {
-  //  top().level1.print(std::cout);
- //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 0 : " << identifier << std::endl;
-  //  level2->print(std::cout);
 
- //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 0 : " << identifier << std::endl;
   return top().level1.get_original_name(
          level2.get_original_name(identifier));
 }
