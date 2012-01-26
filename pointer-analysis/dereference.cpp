@@ -105,10 +105,6 @@ void dereferencet::dereference(
   // type of the object
   const typet &type=deref_expr.type().subtype();
 
-  #if 0
-  std::cout << "DEREF: " << dest.pretty() << std::endl;
-  #endif
-
   // collect objects dest may point to
   value_setst::valuest points_to_set;
 
@@ -216,10 +212,6 @@ void dereferencet::add_checks(
   if(dest.type().id()!="pointer")
     throw "dereference expected pointer type, but got "+
           dest.type().pretty();
-
-  #if 0
-  std::cout << "ADD CHECK: " << dest.pretty() << std::endl;
-  #endif
 
   const typet &type=dest.type().subtype();
 
@@ -495,19 +487,15 @@ void dereferencet::build_reference_to(
     exprt object_pointer("address_of", pointer_typet());
     object_pointer.type().subtype()=object.type();
     object_pointer.copy_to_operands(object);
-    //std::cout << "deref_expr.pretty(): " << deref_expr.pretty() << std::endl;
     pointer_guard=exprt("same-object", typet("bool"));
     pointer_guard.copy_to_operands(deref_expr, object_pointer);
 
     guardt tmp_guard(guard);
     tmp_guard.add(pointer_guard);
 
-    //std::cout << "tmp_guard.as_expr().pretty(): " << tmp_guard.as_expr().pretty() << std::endl;
     valid_check(object, tmp_guard, mode);
 
     exprt offset;
-
-    //std::cout << "o.offset().is_constant(): " << o.offset().is_constant() << std::endl;
 
     if(o.offset().is_constant())
       offset=o.offset();
@@ -522,9 +510,8 @@ void dereferencet::build_reference_to(
       // need to subtract base address
       offset=exprt("-", index_type());
       offset.move_to_operands(pointer_offset, base);
-      //std::cout << "offset.pretty(): " << offset.pretty() << std::endl;
     }
-    //std::cout << "!dereference_type_compare(value, type): " << !dereference_type_compare(value, type) << std::endl;
+
     if(!dereference_type_compare(value, type))
     {
       if(memory_model(value, type, tmp_guard, offset))
@@ -556,15 +543,10 @@ void dereferencet::build_reference_to(
     }
     else
     {
-      //std::cout << "value.id(): " << value.id() << std::endl;
       if(value.id()=="index")
       {
         index_exprt &index_expr=to_index_expr(value);
         index_expr.index()=offset;
-        //std::cout << "value.pretty(): " << value.pretty() << std::endl;
-        //std::cout << "index_expr.pretty(): " << index_expr.pretty() << std::endl;
-        //std::cout << "tmp_guard.pretty(): " << tmp_guard.as_expr().pretty() << std::endl;
-        //std::cout << "tmp_guard.as_expr().id(): " << tmp_guard.as_expr().id() << std::endl;
         bounds_check(index_expr, tmp_guard);
       }
       else if(!offset.is_zero())
@@ -663,9 +645,9 @@ void dereferencet::bounds_check(
 {
   if(options.get_bool_option("no-bounds-check"))
     return;
-  //std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
+
   const typet &array_type=ns.follow(expr.op0().type());
-  //std::cout << "array_type.pretty(): " << array_type.pretty() << std::endl;
+
   if(!array_type.is_array())
     throw "bounds check expected array type";
 
@@ -695,9 +677,6 @@ void dereferencet::bounds_check(
         "`"+name+"' lower bound", tmp_guard);
     }
   }
-
-//  const exprt &size_expr=
-//    to_array_type(array_type).size();
 
   exprt size_expr=
     to_array_type(array_type).size();
@@ -738,7 +717,7 @@ void dereferencet::bounds_check(
 
     guardt tmp_guard(guard);
     tmp_guard.move(inequality);
-    //std::cout << "tmp_guard.as_expr().pretty(): " << tmp_guard.as_expr().pretty() << std::endl;
+
     dereference_callback.dereference_failure(
       "array bounds",
       "`"+name+"' upper bound", tmp_guard);
