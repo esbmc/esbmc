@@ -688,7 +688,7 @@ bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
                              bmc.options.get_bool_option("int-encoding"),
                              bmc.options.get_bool_option("smt"))
 {
-  z3_dec.set_file(bmc.options.get_option("outfile"));
+  z3_dec.set_filename(bmc.options.get_option("outfile"));
   z3_dec.set_unsat_core(atol(bmc.options.get_option("core-size").c_str()));
   conv = &z3_dec;
 }

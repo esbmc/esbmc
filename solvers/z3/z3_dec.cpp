@@ -48,23 +48,6 @@ decision_proceduret::resultt z3_dect::dec_solve()
 
 /*******************************************************************\
 
-Function: z3_dect::set_file
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void z3_dect::set_file(std::string file)
-{
-  set_filename(file);
-}
-
-/*******************************************************************\
-
 Function: z3_dect::set_unsat_core
 
   Inputs:
