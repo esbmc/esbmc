@@ -15,9 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "flow_insensitive_analysis.h"
 
-//#include <fstream>
-//#include <i2string.h>
-
 /*******************************************************************\
 
 Function: flow_insensitive_abstract_domain_baset::get_guard
@@ -257,11 +254,6 @@ bool flow_insensitive_analysis_baset::visit(
 {
   bool new_data=false;
   
-  #if 0
-  std::cout << "Visiting: " << l->function << " " << 
-    l->location_number << std::endl;
-  #endif
-
   goto_programt::const_targetst successors;
   goto_program.get_successors(l, successors);
   
@@ -307,20 +299,6 @@ bool flow_insensitive_analysis_baset::visit(
     }
   }
   
-//  if (l->function.as_string().find("debug")!=std::string::npos)
-//    std::cout << l->function << std::endl; //=="c::messages::debug")
-  
-//  {
-//    static unsigned state_cntr=0;
-//    std::string s("pastate"); s += i2string(state_cntr);
-//    std::ofstream f(s.c_str());
-//    goto_program.output_instruction(ns, "", f, l);
-//    f << std::endl;
-//    get_state().output(ns, f);
-//    f.close();
-//    state_cntr++;
-//  }
-
   return new_data;
 }
 
