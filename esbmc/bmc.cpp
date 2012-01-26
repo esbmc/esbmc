@@ -690,7 +690,6 @@ bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
 {
   z3_dec.set_file(bmc.options.get_option("outfile"));
   z3_dec.set_unsat_core(atol(bmc.options.get_option("core-size").c_str()));
-  z3_dec.set_ecp(bmc.options.get_bool_option("ecp"));
   conv = &z3_dec;
 }
 

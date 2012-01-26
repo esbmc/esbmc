@@ -97,23 +97,6 @@ void z3_dect::set_file(std::string file)
 
 /*******************************************************************\
 
-Function: z3_dect::set_ecp
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void z3_dect::set_ecp(bool ecp)
-{
-  set_z3_ecp(ecp);
-}
-
-/*******************************************************************\
-
 Function: z3_dect::get_unsat_core
 
   Inputs:

@@ -35,7 +35,6 @@ public:
 
   virtual resultt dec_solve();
   void set_file(std::string file);
-  void set_ecp(bool ecp);
   bool get_unsat_core(void);
   bool get_number_of_assumptions(void);
   void set_unsat_core(uint val);
