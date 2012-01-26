@@ -1396,9 +1396,6 @@ void goto_convertt::convert_for(
     if(tmp_x.instructions.empty())
     {
       convert(to_code(code.op2()), tmp_x);
-      //std::cout << tmp_B.pretty() << std::endl;
-      //tmp_x.add_instruction(SKIP);
-      //exit(1);
     }
   }
 
