@@ -158,6 +158,7 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
         new_lhs, guard_expr,
         new_rhs,
         state.source,
+        state.gen_stack_trace(),
         symex_targett::HIDDEN);
 
       guard_expr.make_not();
@@ -380,6 +381,7 @@ void goto_symext::phi_function(
 		  new_lhs, lhs,
 		  rhs,
 		  state.source,
+		  state.gen_stack_trace(),
 		  symex_targett::HIDDEN);
     }
     catch(const std::string e)

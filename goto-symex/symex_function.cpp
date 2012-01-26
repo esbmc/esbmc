@@ -289,6 +289,8 @@ void goto_symext::symex_function_call_code(
   
   unsigned &frame_nr=state.function_frame[identifier];
   frame_nr++;
+
+  frame.calling_location=state.source;
   
   // preserve locality of local variables
   locality(frame_nr, state, goto_function,ex_state.node_id);
@@ -298,7 +300,6 @@ void goto_symext::symex_function_call_code(
 
   frame.end_of_function=--goto_function.body.instructions.end();
   frame.return_value=call.lhs();
-  frame.calling_location=state.source;
   frame.function_identifier=identifier;
 
   state.source.is_set=true;

@@ -218,6 +218,7 @@ void execution_statet::decreament_trds_in_run(const namespacet &ns, symex_target
           new_lhs, lhs_expr,
           rhs_expr,
           get_active_state().source,
+          get_active_state().gen_stack_trace(),
           symex_targett::STATE);
 }
 
@@ -286,6 +287,7 @@ void execution_statet::increament_trds_in_run(const namespacet &ns, symex_target
           new_lhs, lhs_expr,
           rhs_expr,
           get_active_state().source,
+          get_active_state().gen_stack_trace(),
           symex_targett::STATE);
 }
 
@@ -322,6 +324,7 @@ void execution_statet::update_trds_count(const namespacet &ns, symex_targett &ta
           new_lhs, lhs_expr,
           rhs_expr,
           get_active_state().source,
+          get_active_state().gen_stack_trace(),
           symex_targett::STATE);
 }
 
@@ -375,6 +378,7 @@ void execution_statet::execute_guard(const namespacet &ns, symex_targett &target
             new_lhs, guard_expr,
             new_rhs,
             get_active_state().source,
+            get_active_state().gen_stack_trace(),
             symex_targett::HIDDEN);
 
     // copy the new guard exprt to every threads
@@ -490,6 +494,7 @@ void execution_statet::recover_global_state(const namespacet &ns, symex_targett 
                         new_lhs, lhs,
                         rhs,
                         get_active_state().source,
+                        get_active_state().gen_stack_trace(),
                         symex_targett::STATE);
       } catch (const std::string e) {
         continue;

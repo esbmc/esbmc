@@ -61,6 +61,7 @@ void build_goto_trace(
     goto_trace_step.type=SSA_step.type;
     goto_trace_step.step_nr=step_nr;
     goto_trace_step.format_string=SSA_step.format_string;
+    goto_trace_step.stack_trace = SSA_step.stack_trace;
 
     if(SSA_step.lhs.is_not_nil())
       goto_trace_step.value=prop_conv.get(SSA_step.lhs);

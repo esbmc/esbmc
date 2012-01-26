@@ -289,6 +289,13 @@ void show_state_header(
 
   out << " " << location
       << " thread " << state.thread_nr << std::endl;
+
+  // Print stack trace
+
+  std::vector<dstring>::const_iterator it;
+  for (it = state.stack_trace.begin(); it != state.stack_trace.end(); it++)
+    out << it->as_string() << std::endl;
+
   out << "----------------------------------------------------" << std::endl;
 }
 

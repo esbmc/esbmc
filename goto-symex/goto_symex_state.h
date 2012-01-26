@@ -19,6 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-programs/goto_functions.h>
 #include <string>
 #include <stack>
+#include <vector>
 
 #include "symex_target.h"
 #include "crypto_hash.h"
@@ -335,6 +336,7 @@ public:
   inline const framet &previous_frame() { return *(--(--call_stack.end())); }
 
   void print_stack_trace(const namespacet &ns, unsigned int indent) const;
+  std::vector<dstring> gen_stack_trace(void) const;
 };
 
 #endif
