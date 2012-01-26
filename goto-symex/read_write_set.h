@@ -46,8 +46,6 @@ public:
 
     bool has_read_intersect(const std::set<irep_idt> & _set) const
     {
-    	//std::cout << "read_set.empty(): " << read_set.empty() << std::endl;
-    	//std::cout << "_set.empty(): " << _set.empty() << std::endl;
 
         if(read_set.empty() || _set.empty())
           return false;
