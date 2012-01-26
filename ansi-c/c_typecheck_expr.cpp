@@ -25,8 +25,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "c_sizeof.h"
 #include "ansi_c_expr.h"
 
-#include "../goto-programs/goto_check.h"
-
 /*******************************************************************\
 
 Function: c_typecheck_baset::typecheck_expr

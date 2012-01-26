@@ -15,7 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <expr.h>
 #include <std_code.h>
 #include <namespace.h>
-#include <namespace_utils.h>
 
 #include "c_qualifiers.h"
 
