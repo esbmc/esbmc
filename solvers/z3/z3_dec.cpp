@@ -72,12 +72,6 @@ decision_proceduret::resultt z3_dect::dec_solve()
     return read_z3_result();
 
   std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
-  //status("Solving with SMT solver Z3");
-
-#if 0
-  status(integer2string(get_number_variables_z3()) + " variables, " +
-		  integer2string(get_number_vcs_z3()) + " verification conditions");
-#endif
 
   post_process();
 
@@ -215,28 +209,3 @@ decision_proceduret::resultt z3_dect::read_z3_result()
   else
 	return D_SATISFIABLE;
 }
-
-/*******************************************************************\
-
-Function: z3_dect::decision_procedure_text
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-#if 0
-std::string z3_dect::decision_procedure_text() const
-{
-  std::string logic;
-
-  if (get_z3_encoding()==true)
-    logic = "AUFLIRA";
-  else
-	logic = "QF_AUFBV";
-
-  return "SMT "+logic+" using "+"Z3";
-}
-#endif
