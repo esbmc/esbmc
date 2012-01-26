@@ -26,12 +26,12 @@ public:
 
   argumentst &arguments()
   {
-    return (argumentst &)(add("template_args").get_sub());
+    return (argumentst &)(add("arguments").get_sub());
   }
 
   const argumentst &arguments() const
   {
-    return (const argumentst &)(find("template_args").get_sub());
+    return (const argumentst &)(find("arguments").get_sub());
   }
 };
 
