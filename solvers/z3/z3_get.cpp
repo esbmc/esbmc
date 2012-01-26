@@ -23,18 +23,6 @@
 
 #include "z3_conv.h"
 
-/*******************************************************************\
-
-   Function: z3_convt::double2string
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
-\*******************************************************************/
-
 std::string
 z3_convt::double2string(double d) const
 {
@@ -43,18 +31,6 @@ z3_convt::double2string(double d) const
   format_message << std::setprecision(12) << d;
   return format_message.str();
 }
-
-/*******************************************************************\
-
-   Function: z3_convt::double2string
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
-\*******************************************************************/
 
 std::string
 z3_convt::get_fixed_point(const unsigned width, std::string value) const
@@ -82,18 +58,6 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
 
   return value;
 }
-
-/*******************************************************************\
-
-   Function: z3_convt::get
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
-\*******************************************************************/
 
 exprt
 z3_convt::get(const exprt &expr) const
@@ -141,18 +105,6 @@ z3_convt::get(const exprt &expr) const
   return expr;
 }
 
-/*******************************************************************\
-
-   Function: z3_convt::bv_get_rec
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
-\*******************************************************************/
-
 void
 z3_convt::fill_vector(
   const Z3_ast &bv, std::vector<exprt> &unknown, const typet &type) const
@@ -185,18 +137,6 @@ z3_convt::fill_vector(
     }
   }
 }
-
-/*******************************************************************\
-
-   Function: z3_convt::bv_get_rec
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
-\*******************************************************************/
 
 exprt
 z3_convt::bv_get_rec(
