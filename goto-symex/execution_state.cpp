@@ -274,34 +274,6 @@ void execution_statet::end_thread(const namespacet &ns, symex_targett &target)
     get_active_state().thread_ended = true;
 
     decreament_trds_in_run(ns,target);
-#if 0
-    typet uint_t = uint_type();
-
-
-    unsigned int mask_num = ~(_active_thread << 1);
-
-    constant_exprt mask_num_expr = constant_exprt(uint_t);
-    mask_num_expr.set_value(integer2binary(mask_num, config.ansi_c.int_width));
-
-    exprt lhs_expr = symbol_exprt("c::trds_status", uint_t);
-    exprt op1 = lhs_expr;
-    exprt rhs_expr = gen_binary("bitand", uint_t, op1, mask_num_expr);
-
-    get_active_state().rename(rhs_expr, ns,node_id);
-    base_type(rhs_expr, ns);
-    simplify(rhs_expr);
-
-    exprt new_lhs = lhs_expr;
-
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
-
-    target.assignment(
-            get_active_state().guard,
-            new_lhs, lhs_expr,
-            rhs_expr,
-            get_active_state().source,
-            symex_targett::STATE);
-#endif
 }
 
 /*******************************************************************
@@ -357,59 +329,6 @@ void execution_statet::increament_trds_in_run(const namespacet &ns, symex_target
 }
 
 /*******************************************************************
- Function: execution_statet::deadlock_detection
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-#if 0
-void execution_statet::deadlock_detection(const namespacet &ns, symex_targett &target)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  static bool deadlock_detection_flag=0;
-
-  if (deadlock_detection_flag)
-	return ;
-
-  typet int_t = int_type();
-
-  //exprt one_expr = gen_one(int_t);
-  exprt lhs_expr = symbol_exprt("c::deadlock_detection", int_t);
-  exprt op1 = lhs_expr;
-  constant_exprt rhs_expr(int_t);
-
-  if (_no_deadlock_detection)
-    rhs_expr.set_value(integer2binary(1,config.ansi_c.int_width));
-  else
-    rhs_expr.set_value(integer2binary(0,config.ansi_c.int_width));
-
-  get_active_state().rename(rhs_expr, ns, node_id);
-  base_type(rhs_expr, ns);
-  simplify(rhs_expr);
-
-  exprt new_lhs = lhs_expr;
-
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true, this, node_id);
-
-  target.assignment(
-          get_active_state().guard,
-          new_lhs, lhs_expr,
-          rhs_expr,
-          get_active_state().source,
-          symex_targett::STATE);
-
-  deadlock_detection_flag=1;
-
-}
-#endif
-/*******************************************************************
  Function:  execution_statet::update_trds_count
 
  Inputs:
@@ -447,52 +366,6 @@ void execution_statet::update_trds_count(const namespacet &ns, symex_targett &ta
           get_active_state().source,
           symex_targett::STATE);
 }
-
-/*******************************************************************
- Function: execution_statet::update_trds_status
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-#if 0
-void execution_statet::update_trds_status(const namespacet &ns, symex_targett &target)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-	typet uint_t = uint_type();
-
-    unsigned int mask_num = (_threads_state.size()-1) << 1;
-
-    constant_exprt mask_num_expr = constant_exprt(uint_t);
-    mask_num_expr.set_value(integer2binary(mask_num, config.ansi_c.int_width));
-
-    exprt lhs_expr = symbol_exprt("c::trds_status", uint_t);
-    exprt op1 = lhs_expr;
-    exprt rhs_expr = gen_binary("bitor", uint_t, op1, mask_num_expr);
-
-    get_active_state().rename(rhs_expr, ns,node_id);
-    base_type(rhs_expr, ns);
-    simplify(rhs_expr);
-
-    exprt new_lhs = lhs_expr;
-
-    get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
-
-    target.assignment(
-            get_active_state().guard,
-            new_lhs, lhs_expr,
-            rhs_expr,
-            get_active_state().source,
-            symex_targett::STATE);
-
-}
-#endif
 
 /*******************************************************************
  Function: execution_statet::execute_guard
@@ -774,50 +647,6 @@ unsigned int execution_statet::get_expr_write_globals(const namespacet &ns, cons
     else
       return 0;
   }
-#if 0
-  else if (expr.id() == exprt::index)
-  {
-	if (expr.op0().id() == exprt::symbol && expr.op1().id()==exprt::constant)
-	{
-      const irep_idt &id = expr.op0().identifier();
-	  const irep_idt &identifier = get_active_state().get_original_name(id);
-	  const symbolt &symbol = lookup(ns, identifier);
-
-	  if ((symbol.static_lifetime || symbol.type.is_dynamic_set()))
-	  {
-	    std::string value, array_name;
-	    value = integer2string(binary2integer(expr.op1().value().as_string(), true),10);
-	    array_name = expr.op0().identifier().as_string() + "::" + value;
-	    const irep_idt &array_identifier = array_name;
-	    //std::cout << "write_globals identifier: " << array_identifier.c_str() << std::endl;
-	    _exprs_read_write.at(_active_thread).write_set.insert(array_identifier);
-	    return 1;
-	  }
-	  else
-		return 0;
-	}
-  }
-
-  else if (expr.id() == exprt::member)
-  {
-      const irep_idt &id = expr.op0().identifier();
-	  const irep_idt &identifier = get_active_state().get_original_name(id);
-	  const symbolt &symbol = lookup(ns, identifier);
-
-	  if ((symbol.static_lifetime || symbol.type.is_dynamic_set()))
-	  {
-	    std::string value, array_name;
-	    value = expr.component_name().as_string();
-	    array_name = expr.op0().identifier().as_string() + "::" + value;
-	    const irep_idt &array_identifier = array_name;
-	    std::cout << "write_globals identifier: " << array_identifier.c_str() << std::endl;
-	    _exprs_read_write.at(_active_thread).write_set.insert(array_identifier);
-	    return 1;
-	  }
-	  else
-		return 0;
-  }
-#endif
 
     unsigned int globals = 0;
 
@@ -881,50 +710,6 @@ unsigned int execution_statet::get_expr_read_globals(const namespacet &ns, const
     else
       return 0;
   }
-#if 0
-  else if (expr.id() == exprt::index)
-  {
-	if (expr.op0().id() == exprt::symbol && expr.op1().id()==exprt::constant)
-	{
-      const irep_idt &id = expr.op0().identifier();
-	  const irep_idt &identifier = get_active_state().get_original_name(id);
-	  const symbolt &symbol = lookup(ns, identifier);
-
-	  if ((symbol.static_lifetime || symbol.type.is_dynamic_set()))
-	  {
-	    std::string value, array_name;
-        value = integer2string(binary2integer(expr.op1().value().as_string(), true),10);
-        array_name = expr.op0().identifier().as_string() + "::" + value;
-        const irep_idt &array_identifier = array_name;
-        //std::cout << "read_globals identifier: " << array_identifier.c_str() << std::endl;
-        _exprs_read_write.at(_active_thread).read_set.insert(array_identifier);
-        return 1;
-	  }
-	  else
-	    return 0;
-	}
-  }
-
-  else if (expr.id() == exprt::member)
-  {
-      const irep_idt &id = expr.op0().identifier();
-	  const irep_idt &identifier = get_active_state().get_original_name(id);
-	  const symbolt &symbol = lookup(ns, identifier);
-
-	  if ((symbol.static_lifetime || symbol.type.is_dynamic_set()))
-	  {
-	    std::string value, array_name;
-        value = expr.component_name().as_string();
-        array_name = expr.op0().identifier().as_string() + "::" + value;
-        const irep_idt &array_identifier = array_name;
-        std::cout << "read_globals identifier: " << array_identifier.c_str() << std::endl;
-        _exprs_read_write.at(_active_thread).read_set.insert(array_identifier);
-        return 1;
-	  }
-	  else
-	    return 0;
-  }
-#endif
   unsigned int globals = 0;
 
   forall_operands(it, expr) {
