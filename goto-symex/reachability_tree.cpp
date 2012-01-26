@@ -24,8 +24,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include "crypto_hash.h"
 
-//#define DEBUG
-
 /*******************************************************************
  Function: reachability_treet::get_cur_state
 
@@ -39,10 +37,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 execution_statet & reachability_treet::get_cur_state()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
   return **_cur_state_it;
 }
 
@@ -65,10 +59,6 @@ const execution_statet & reachability_treet::get_cur_state() const
 
 bool reachability_treet::has_more_states()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
   return execution_states.size() > 0;
 }
 
@@ -139,9 +129,6 @@ int reachability_treet::get_actual_CS_bound()
 
 bool reachability_treet::is_global_assign(const exprt &code)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   int num_read_globals = get_cur_state().get_expr_read_globals(_ns,code.op1());
 
@@ -167,9 +154,6 @@ bool reachability_treet::is_global_assign(const exprt &code)
 
 bool reachability_treet::generate_states_before_read(const exprt &code)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   if (get_is_same_mutex())
     return false;
@@ -199,9 +183,6 @@ bool reachability_treet::generate_states_before_read(const exprt &code)
 
 bool reachability_treet::generate_states_before_write(const exprt &code)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   if (get_is_same_mutex())
     return false;
@@ -247,9 +228,6 @@ bool reachability_treet::get_is_same_mutex(void)
 
 void reachability_treet::check_mutex(const exprt &code, const execution_statet &ex_state)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   static bool is_first_assign=true;
   static std::string identifier;
@@ -294,9 +272,6 @@ void reachability_treet::check_mutex(const exprt &code, const execution_statet &
 
 bool reachability_treet::generate_states_before_assign(const exprt &code, execution_statet &ex_state)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   if(code.operands().size()!=2)
     throw "assignment expects two operands";
@@ -317,10 +292,6 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
 
   int num_write_globals = get_cur_state().get_expr_write_globals(_ns,code.op0());
   int num_read_globals = get_cur_state().get_expr_read_globals(_ns,code.op1());
-
-  //std::cout << "code.pretty(): " << code.pretty() << std::endl;
-  //std::cout << "num_read_globals: " << num_read_globals << std::endl;
-  //std::cout << "num_write_globals: " << num_write_globals << std::endl;
 
   if(num_read_globals + num_write_globals > 0)
   {
@@ -344,9 +315,6 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
 
 bool reachability_treet::generate_states_before_function(const code_function_callt &code)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   if (get_is_same_mutex())
     return false;
@@ -383,9 +351,6 @@ bool reachability_treet::generate_states_before_function(const code_function_cal
 
 bool reachability_treet::generate_states_after_start_thread()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   get_cur_state().reexecute_instruction = false;
 
@@ -405,9 +370,6 @@ bool reachability_treet::generate_states_after_start_thread()
 
 bool reachability_treet::generate_states()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   if(check_CS_bound())
     return false;
@@ -440,14 +402,10 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
     {
       if(i < ex_state._active_thread)
       {
-    	//std::cout << "ex_state.last_global_read_write.write_set.empty(): " << ex_state.last_global_read_write.write_set.empty() << std::endl;
-    	//std::cout << "ex_state._exprs_read_write.at(i+1).write_set.empty(): " << ex_state._exprs_read_write.at(i+1).write_set.empty() << std::endl;
-    	//std::cout << "ex_state._exprs_read_write.at(ex_state._active_thread).write_set.empty(): " << ex_state._exprs_read_write.at(ex_state._active_thread).write_set.empty() << std::endl;
         if(ex_state.last_global_read_write.write_set.empty() &&
            ex_state._exprs_read_write.at(i+1).write_set.empty() &&
            ex_state._exprs_read_write.at(ex_state._active_thread).write_set.empty())
         {
-          //std::cout << "empty: " << expr.pretty() << std::endl;
           return false;
         }
 
@@ -456,20 +414,15 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
         if(ex_state.last_global_read_write.has_write_intersect(ex_state._exprs_read_write.at(i+1).write_set))
         {
           consider = true;
-          //std::cout << "write-write analysis" << std::endl;
         }
         else if(ex_state.last_global_read_write.has_write_intersect(ex_state._exprs_read_write.at(i+1).read_set))
         {
           consider = true;
-          //std::cout << "write-read analysis" << std::endl;
         }
         else if(ex_state.last_global_read_write.has_read_intersect(ex_state._exprs_read_write.at(i+1).write_set))
         {
           consider = true;
-          //std::cout << "read-write analysis" << std::endl;
         }
-
-        //std::cout << "consider: " << consider << std::endl;
       }
     }
   }
@@ -490,12 +443,6 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
 
 bool reachability_treet::generate_states_base(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << expr.pretty() << std::endl;
-#endif
-
-//  std::cout << "generate_states_base expr.pretty(): " << expr.pretty() << std::endl;
 
   if(_CS_bound  != -1 && get_cur_state().get_context_switch() >= _CS_bound)
     return false;
@@ -662,9 +609,6 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
 bool reachability_treet::is_go_next_state()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   return _go_next ||
          get_cur_state().get_active_state().thread_ended ||
@@ -684,9 +628,6 @@ bool reachability_treet::is_go_next_state()
 
 bool reachability_treet::is_go_next_formula()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   return _go_next_formula;
 }
@@ -704,9 +645,6 @@ bool reachability_treet::is_go_next_formula()
 
 void reachability_treet::multi_formulae_go_next_state()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   std::list<execution_statet*>::iterator it = _cur_state_it;
   it++;
@@ -768,9 +706,6 @@ bool reachability_treet::reset_to_unexplored_state()
 
 void reachability_treet::go_next_state()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   std::list<execution_statet*>::iterator it = _cur_state_it;
   it++;
