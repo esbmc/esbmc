@@ -905,11 +905,9 @@ void goto_convertt::do_function_call_symbol(
     throw "error: function `"+id2string(identifier)+"' type mismatch: expected code";
   }
 
-  bool is_assume=identifier==CPROVER_PREFIX "assume" ||
-                 identifier=="specc::__ESBMC_assume";
+  bool is_assume=identifier==CPROVER_PREFIX "assume";
 
-  bool is_assert=identifier=="c::assert" ||
-                 identifier=="specc::assert";
+  bool is_assert=identifier=="c::assert";
 
   if(is_assume || is_assert)
   {
