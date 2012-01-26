@@ -272,43 +272,6 @@ void goto_symext::merge_gotos(statet &state, execution_statet &ex_state, unsigne
   frame.goto_state_map.erase(state_map_it);
 }
 
-
-#if 0
-void goto_symext::merge_gotos(statet &state)
-{
-
-  statet::framet &frame=state.top();
-
-  // first, see if this is a target at all
-  statet::goto_state_mapt::iterator state_map_it=
-    frame.goto_state_map.find(state.source.pc);
-
-  if(state_map_it==frame.goto_state_map.end())
-    return; // nothing to do
-
-  // we need to merge
-  statet::goto_state_listt &state_list=state_map_it->second;
-
-  for(statet::goto_state_listt::reverse_iterator
-      list_it=state_list.rbegin();
-      list_it!=state_list.rend();
-      list_it++)
-  {
-	  	statet::goto_statet &goto_state=*list_it;
-
-	    // adjust guard
-	    state.guard |= goto_state.guard;
-
-	    // adjust depth
-	    state.depth=std::min(state.depth, goto_state.depth);
-
-	    state.if_guard_stack.pop();
-  }
-
-  // clean up to save some memory
-  frame.goto_state_map.erase(state_map_it);
-}
-#endif
 /*******************************************************************\
 
 Function: goto_symext::merge_value_sets
@@ -375,7 +338,6 @@ void goto_symext::phi_function(
     {
     	// changed!
     	const symbolt &symbol=ns.lookup(original_identifier);
-//    	std::cout << "================================================= meger goto state : " << original_identifier << std::endl;
 
 		typet type(symbol.type);
 
@@ -419,14 +381,11 @@ void goto_symext::phi_function(
 		  rhs,
 		  state.source,
 		  symex_targett::HIDDEN);
-
-	//	std::cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
     }
     catch(const std::string e)
     {
     	continue;
     }
-	//	std::cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
   }
 }
 

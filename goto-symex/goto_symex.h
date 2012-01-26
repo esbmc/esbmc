@@ -92,15 +92,10 @@ protected:
 
   // symex
 
-  //virtual void symex_goto(statet &state);
   virtual void symex_goto(statet &state, execution_statet &ex_state, unsigned node_id);
 
-  //virtual void symex_return(statet &state);
   virtual void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
 
-  //virtual void symex_other(
-  //  const goto_functionst &goto_functions,
-  //  statet &state);
   virtual void symex_other(
     const goto_functionst &goto_functions,
     statet &state,
@@ -133,7 +128,6 @@ protected:
 
   void pop_frame(statet &state);
   void return_assignment(statet &state, execution_statet &ex_state, unsigned node_id);
-  //void return_assignment(statet &state);
 
   virtual void no_body(const irep_idt &identifier __attribute__((unused)))
   {

@@ -291,15 +291,6 @@ void symex_slice_by_tracet::compute_ts_back(
       
       exprt guard = i->guard;
 
-#if 0
-      std::cout << "EVENT:  " << event << std::endl;
-      std::cout << "GUARD:  " << from_expr(ns, "", guard) << std::endl;
-      for (size_t j = 0; j < t.size(); j++) {
-        std::cout << "t[" << j << "] = " << from_expr(ns, "", t[j]) <<
-          std::endl;
-      }
-#endif
-
       bool slice_this = (semantics != ":prefix");
       std::vector<exprt> merge;
       
@@ -448,8 +439,6 @@ void symex_slice_by_tracet::slice_SSA_steps(
     simplify(guard);
     if (!guard.is_true())
       potential_SSA_steps++;
-    //it->output(ns,std::cout);
-    //std::cout << "-----------------" << std::endl;
     if ((guard.id() == exprt::symbol) || (guard.id() == exprt::i_not)) {
       guard.make_not();
       simplify(guard);

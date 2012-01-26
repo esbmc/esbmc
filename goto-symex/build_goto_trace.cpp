@@ -40,18 +40,13 @@ void build_goto_trace(
     tvt result;
     result=prop_conv.prop.l_get(SSA_step.guard_literal);
 
-    //std::cout << "SSA_step.comment: " << SSA_step.comment << "\n";
-
-    //if (result==tvt(true) && SSA_step.comment.compare("arithmetic overflow on *")==0)
-      //result = tvt(false);
-    //std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
     if(result!=tvt(true) && result!=tvt(tvt::TV_ASSUME))
       continue;
-    //std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
+
     if(it->is_assignment() &&
        SSA_step.assignment_type==symex_target_equationt::HIDDEN)
       continue;
-    //std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
+
     step_nr++;
 
     goto_trace.steps.push_back(goto_trace_stept());
@@ -66,7 +61,7 @@ void build_goto_trace(
     goto_trace_step.type=SSA_step.type;
     goto_trace_step.step_nr=step_nr;
     goto_trace_step.format_string=SSA_step.format_string;
-    //std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
+
     if(SSA_step.lhs.is_not_nil())
       goto_trace_step.value=prop_conv.get(SSA_step.lhs);
 
@@ -86,13 +81,10 @@ void build_goto_trace(
       }
     }
 
-    //std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-
     if(SSA_step.is_assert() ||
        SSA_step.is_assume())
     {
       result = prop_conv.prop.l_get(SSA_step.cond_literal);
-      //std::cout << "SSA_step.cond_literal: " << SSA_step.cond_literal.var_no() << "\n";
       if ((result==tvt(tvt::TV_ASSUME) && SSA_step.comment.compare("arithmetic overflow on *")==0) ||
     	 (result==tvt(false) && SSA_step.comment.compare("arithmetic overflow on *")==0))
         goto_trace_step.guard=true;
@@ -107,11 +99,8 @@ void build_goto_trace(
       {
     	if (!SSA_step.is_assert())
     	{
-      	  //goto_trace_step.comment="unwinding assertion loop";
       	  goto_trace_step.type=goto_trace_stept::ASSERT;
-      	  //std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
     	}
-    	//assert(SSA_step.is_assert());
         break;
       }
     }

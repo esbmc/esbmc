@@ -48,14 +48,6 @@ void symex_target_equationt::assignment(
   SSA_step.original_lhs=original_lhs;
   SSA_step.rhs.swap(rhs);
   SSA_step.assignment_type=assignment_type;
-#if 0
-  exprt tmp(guard.as_expr());
-
-  if (guard.is_true())
-    SSA_step.cond=equality_exprt(SSA_step.lhs, SSA_step.rhs);
-  else
-    SSA_step.cond=gen_implies(tmp, equality_exprt(SSA_step.lhs, SSA_step.rhs));
-#endif
   SSA_step.cond=equality_exprt(SSA_step.lhs, SSA_step.rhs);
   SSA_step.type=goto_trace_stept::ASSIGNMENT;
   SSA_step.source=source;

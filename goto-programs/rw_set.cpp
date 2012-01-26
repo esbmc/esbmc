@@ -82,12 +82,9 @@ void rw_sett::read_write_rec(
     const symbolt *symbol;
     if(!ns.lookup(symbol_expr.get_identifier(), symbol))
     {
-      //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-      //std::cout << "expr.type().id(): " << expr.type().id() << std::endl;
 
       if(!symbol->static_lifetime /*&& expr.type().id()=="pointer"*/)
       {
-        //std::cout << "entrou aqui 1" << std::endl;
         return; // ignore for now
       }
 
@@ -98,7 +95,6 @@ void rw_sett::read_write_rec(
          symbol->name=="c::stderr" ||
          symbol->name=="c::sys_nerr")
       {
-    	//std::cout << "entrou aqui 2" << std::endl;
         return; // ignore for now
       }
     }
@@ -123,10 +119,7 @@ void rw_sett::read_write_rec(
     assert(expr.operands().size()==2);
     std::string tmp;
 
-    //std::cout << "index: " << expr.pretty() << std::endl;
-    //std::cout << "antes suffix: " << suffix << std::endl;
     tmp = integer2string(binary2integer(expr.op1().value().as_string(), true),10);
-    //std::cout << "depois tmp: " << tmp << std::endl;
 
     read_write_rec(expr.op0(), r, w, "["+suffix+tmp+"]", guard);
     read(expr.op1(), guard);

@@ -126,9 +126,6 @@ void goto_symext::argument_assignments(
       
       do_simplify(rhs);
       assignment(ex_state, lhs, rhs);
-      
-	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ LHS --------- " << lhs.identifier() << std::endl;
-	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ RHS --------- " << rhs.identifier() << std::endl;
     }
 
     it1++;
@@ -331,16 +328,12 @@ void goto_symext::pop_frame(statet &state)
   state.source.pc=frame.calling_location.pc;
   state.source.prog=frame.calling_location.prog;
 
- // std::cout << "executing end function before remove locals 1" << std::endl;
-
   // clear locals from L2 renaming
   for(statet::framet::local_variablest::const_iterator
       it=frame.local_variables.begin();
       it!=frame.local_variables.end();
       it++)
     state.level2.remove(*it);
-
-//  std::cout << "executing end function afer remove locals 1" << std::endl;
 
   // decrease recursion unwinding counter
   if(frame.function_identifier!="")

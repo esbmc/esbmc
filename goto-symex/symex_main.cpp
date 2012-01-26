@@ -62,17 +62,11 @@ void goto_symext::claim(
   total_claims++;
 
   exprt expr = claim_expr;
-  //std::cout << "before rename expr.pretty(): " << expr.pretty() << "\n";
   state.rename(expr, ns, node_id);
-  //std::cout << "after rename expr.pretty(): " << expr.pretty() << "\n";
-
-  //std::cout << "before simplify expr.pretty(): " << expr.pretty() << "\n";
 
   // first try simplifier on it
   if (!expr.is_false())
     do_simplify(expr);
-
-  //std::cout << "after simplify expr.pretty(): " << expr.pretty() << "\n";
 
   if (expr.is_true() &&
     !options.get_bool_option("all-assertions"))
@@ -166,9 +160,6 @@ symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
   }
   art1->_go_next_formula = false;
   total_formulae++;
-
-//  if (art1->get_actual_CS_bound() > art1->get_CS_bound())
-//    std::cout << "**** WARNING: need to increase the number of context switches" << std::endl;
 
   return &art1->get_cur_state()._target;
 }
@@ -268,10 +259,6 @@ void goto_symext::operator()(const goto_functionst &goto_functions)
 
     art.go_next_state();
   }
-
-//  if (art.get_actual_CS_bound() > art.get_CS_bound())
-//    std::cout << "**** WARNING: need to increase the number of context switches" << std::endl;
-
 }
 
 /*******************************************************************\
@@ -543,10 +530,6 @@ void goto_symext::symex_step(
                     replace_dynamic_allocation(state, deref_code);
                     replace_nondet(deref_code, ex_state);
                     dereference(deref_code, state, false,ex_state.node_id);
-
-                    //if(ex_state._threads_state.size() > 1)
-                      //if (art.generate_states_before_read(deref_code))
-                        //return;
                 }
 
                 symex_other(goto_functions, state, ex_state,  ex_state.node_id);
@@ -589,14 +572,10 @@ void goto_symext::symex_step(
             ex_state.end_thread(ns, *target);
             ex_state.reexecute_instruction = false;
             art.generate_states();
-            //if (art.generate_states_base(exprt()))
-              //return;
             break;
         case ATOMIC_BEGIN:
             state.source.pc++;
             ex_state.increment_active_atomic_number();
-            //ex_state.reexecute_instruction = false;
-            //art.generate_states();
             break;
         case ATOMIC_END:
             ex_state.decrement_active_atomic_number();
