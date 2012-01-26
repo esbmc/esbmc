@@ -13,53 +13,15 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include "z3_prop.h"
 
-//#define DEBUG
-
-/*******************************************************************\
-
-Function: z3_propt::z3_propt
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 z3_propt::z3_propt(bool uw)
 {
   _no_variables=1;
   this->uw = uw;
 }
 
-/*******************************************************************\
-
-Function: z3_propt::~z3_propt
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 z3_propt::~z3_propt()
 {
 }
-
-/*******************************************************************\
-
-Function: z3_propt::land
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void z3_propt::land(literalt a, literalt b, literalt o)
 {
@@ -86,18 +48,6 @@ void z3_propt::land(literalt a, literalt b, literalt o)
    lcnf(lits);
 }
 
-/*******************************************************************\
-
-Function: z3_propt::lor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void z3_propt::lor(literalt a, literalt b, literalt o)
 {
   // a+b=c <==> (a' + c)( b' + c)(a + b + c')
@@ -122,18 +72,6 @@ void z3_propt::lor(literalt a, literalt b, literalt o)
   lits.push_back(neg(o));
   lcnf(lits);
 }
-
-/*******************************************************************\
-
-Function: z3_propt::lxor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void z3_propt::lxor(literalt a, literalt b, literalt o)
 {
@@ -172,18 +110,6 @@ void z3_propt::lxor(literalt a, literalt b, literalt o)
   lcnf(lits);
 }
 
-/*******************************************************************\
-
-Function: z3_propt::lnand
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void z3_propt::lnand(literalt a, literalt b, literalt o)
 {
   // a Nand b = o <==> (a + o)( b + o)(a' + b' + o')
@@ -208,18 +134,6 @@ void z3_propt::lnand(literalt a, literalt b, literalt o)
   lits.push_back(neg(o));
   lcnf(lits);
 }
-
-/*******************************************************************\
-
-Function:
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void z3_propt::lnor(literalt a, literalt b, literalt o)
 {
@@ -246,51 +160,15 @@ void z3_propt::lnor(literalt a, literalt b, literalt o)
   lcnf(lits);
 }
 
-/*******************************************************************\
-
-Function: z3_propt::lequal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void z3_propt::lequal(literalt a, literalt b, literalt o)
 {
   lxor(a, b, lnot(o));
 }
 
-/*******************************************************************\
-
-Function: z3_propt::limplies
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void z3_propt::limplies(literalt a, literalt b, literalt o)
 {
   lor(lnot(a), b, o);
 }
-
-/*******************************************************************\
-
-Function: z3_propt::land
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 literalt z3_propt::land(const bvt &bv)
 {
@@ -313,18 +191,6 @@ literalt z3_propt::land(const bvt &bv)
   return l;
 }
 
-/*******************************************************************\
-
-Function: z3_propt::lor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 literalt z3_propt::lor(const bvt &bv)
 {
 #ifdef DEBUG
@@ -346,18 +212,6 @@ literalt z3_propt::lor(const bvt &bv)
 
   return l;
 }
-
-/*******************************************************************\
-
-Function: z3_propt::lxor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 literalt z3_propt::lxor(const bvt &bv)
 {
@@ -389,17 +243,6 @@ literalt z3_propt::lxor(const bvt &bv)
   return l;
 
 }
-/*******************************************************************\
-
-Function: z3_propt::land
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 literalt z3_propt::land(literalt a, literalt b)
 {
@@ -425,18 +268,6 @@ literalt z3_propt::land(literalt a, literalt b)
   return l;
 
 }
-
-/*******************************************************************\
-
-Function: z3_propt::lor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 literalt z3_propt::lor(literalt a, literalt b)
 {
@@ -467,36 +298,12 @@ literalt z3_propt::lor(literalt a, literalt b)
 
 }
 
-/*******************************************************************\
-
-Function: z3_propt::lnot
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 literalt z3_propt::lnot(literalt a)
 {
   a.invert();
 
   return a;
 }
-
-/*******************************************************************\
-
-Function: z3_propt::lxor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 literalt z3_propt::lxor(literalt a, literalt b)
 {
@@ -522,85 +329,25 @@ literalt z3_propt::lxor(literalt a, literalt b)
 
 }
 
-/*******************************************************************\
-
-Function: z3_propt::lnand
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 literalt z3_propt::lnand(literalt a, literalt b)
 {
   return lnot(land(a, b));
 }
-
-/*******************************************************************\
-
-Function: z3_propt::lnor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 literalt z3_propt::lnor(literalt a, literalt b)
 {
   return lnot(lor(a, b));
 }
 
-/*******************************************************************\
-
-Function: z3_propt::lequal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 literalt z3_propt::lequal(literalt a, literalt b)
 {
   return lnot(lxor(a, b));
 }
 
-/*******************************************************************\
-
-Function: z3_propt::limplies
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 literalt z3_propt::limplies(literalt a, literalt b)
 {
   return lor(lnot(a), b);
 }
-
-/*******************************************************************\
-
-Function: z3_propt::lselect
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 literalt z3_propt::lselect(literalt a, literalt b, literalt c)
 {
@@ -622,18 +369,6 @@ literalt z3_propt::lselect(literalt a, literalt b, literalt c)
   return l;
 }
 
-/*******************************************************************\
-
-Function: z3_propt::new_variable
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 literalt z3_propt::new_variable()
 {
   literalt l;
@@ -649,18 +384,6 @@ literalt z3_propt::new_variable()
   return l;
 }
 
-/*******************************************************************\
-
-Function: z3_propt::eliminate_duplicates
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void z3_propt::eliminate_duplicates(const bvt &bv, bvt &dest)
 {
   std::set<literalt> s;
@@ -673,18 +396,6 @@ void z3_propt::eliminate_duplicates(const bvt &bv, bvt &dest)
       dest.push_back(*it);
   }
 }
-
-/*******************************************************************\
-
-Function: z3_propt::process_clause
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool z3_propt::process_clause(const bvt &bv, bvt &dest)
 {
@@ -731,18 +442,6 @@ bool z3_propt::process_clause(const bvt &bv, bvt &dest)
   return false;
 }
 
-/*******************************************************************\
-
-Function: z3_propt::lcnf
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void z3_propt::lcnf(const bvt &bv)
 {
 #ifdef DEBUG
@@ -774,18 +473,6 @@ void z3_propt::lcnf(const bvt &bv)
   }
 }
 
-/*******************************************************************\
-
-Function: z3_propt::z3_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 Z3_ast z3_propt::z3_literal(literalt l)
 {
 #ifdef DEBUG
@@ -816,34 +503,10 @@ Z3_ast z3_propt::z3_literal(literalt l)
   return literal_l;
 }
 
-/*******************************************************************\
-
-Function: z3_propt::prop_solve
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 propt::resultt z3_propt::prop_solve()
 {
   return P_ERROR;
 }
-
-/*******************************************************************\
-
-Function: z3_propt::l_get
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 tvt z3_propt::l_get(literalt a) const
 {
