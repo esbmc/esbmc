@@ -165,22 +165,6 @@ void z3_dect::set_unsat_core(uint val)
 
 /*******************************************************************\
 
-Function: z3_dect::read_assert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void z3_dect::read_assert(std::istream &in, std::string &line)
-{
-}
-
-/*******************************************************************\
-
 Function: z3_dect::read_z3_result
 
   Inputs:

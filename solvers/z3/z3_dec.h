@@ -42,7 +42,6 @@ public:
 
 protected:
   resultt read_z3_result();
-  void read_assert(std::istream &in, std::string &line);
 
 private:
   bool smtlib;
