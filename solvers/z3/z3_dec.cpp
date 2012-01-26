@@ -97,23 +97,6 @@ void z3_dect::set_file(std::string file)
 
 /*******************************************************************\
 
-Function: z3_dect::get_unsat_core
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool z3_dect::get_unsat_core(void)
-{
-  return get_z3_core_size();
-}
-
-/*******************************************************************\
-
 Function: z3_dect::get_number_of_assumptions
 
   Inputs:
