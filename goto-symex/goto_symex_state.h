@@ -177,10 +177,7 @@ public:
     };
 
     typedef std::map<irep_idt, valuet> current_namest;
-    //typedef std::map<irep_idt, unsigned int> current_names_nodest;
     current_namest current_names;
-    //current_names_nodest current_names_nodes;
-    //std::map<irep_idt, unsigned int> thread_ids;
     typedef std::map<irep_idt, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
 
@@ -192,7 +189,6 @@ public:
       entry.count=count;
       entry.node_id = node_id;
       original_identifiers[name(identifier, entry.count)]=identifier;
-      //current_names_nodes[identifier] = node_id;
     }
 
     std::string name(
@@ -316,7 +312,6 @@ public:
       return_value(static_cast<const exprt &>(get_nil_irep()))
     {
     	level1._thread_id = thread_id;
-    	//std::cout << "new frame created for thread " << thread_id << std::endl;
     }
   };
 
