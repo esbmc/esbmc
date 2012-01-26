@@ -452,32 +452,6 @@ void dereferencet::build_reference_to(
         }
       }
 #endif
-#if 0
-      exprt tmp_object(object);
-
-      // check type
-      if(!dereference_type_compare(tmp_object, type))
-      {
-        exprt type_expr=exprt("pointer_object_has_type", typet("bool"));
-        type_expr.copy_to_operands(deref_expr);
-        type_expr.object_type(type);
-        type_expr.make_not();
-
-        guardt tmp_guard(guard);
-        tmp_guard.add(is_dynamic_object_expr);
-        tmp_guard.move(type_expr);
-
-        std::string msg="wrong object type (got `";
-        msg+=from_type(ns, "", object.type());
-        msg+="', expected `";
-        msg+=from_type(ns, "", type);
-        msg+="')";
-
-        dereference_callback.dereference_failure(
-          "pointer dereference",
-          msg, tmp_guard);
-      }
-#endif
     }
   }
   else
