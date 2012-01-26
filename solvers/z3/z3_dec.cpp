@@ -48,23 +48,6 @@ decision_proceduret::resultt z3_dect::dec_solve()
 
 /*******************************************************************\
 
-Function: z3_dect::set_unsat_core
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void z3_dect::set_unsat_core(uint val)
-{
-  set_z3_core_size(val);
-}
-
-/*******************************************************************\
-
 Function: z3_dect::read_z3_result
 
   Inputs:

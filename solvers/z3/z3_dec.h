@@ -23,7 +23,6 @@ public:
   }
 
   virtual resultt dec_solve();
-  void set_unsat_core(uint val);
 
 protected:
   resultt read_z3_result();
