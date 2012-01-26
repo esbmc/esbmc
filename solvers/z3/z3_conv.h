@@ -29,21 +29,12 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 typedef unsigned int uint;
 
-class z3_prop_wrappert
-{
-public:
-  z3_prop_wrappert(bool uw):z3_prop(uw) { }
-
-protected:
-  z3_propt z3_prop;
-};
-
-class z3_convt:protected z3_prop_wrappert, public prop_convt
+class z3_convt: public prop_convt
 {
 public:
   z3_convt(bool uw, bool int_encoding, bool smt)
-                               :z3_prop_wrappert(uw),
-                                prop_convt(z3_prop)
+                               :prop_convt(z3_prop),
+                                z3_prop(uw)
   {
     if (z3_ctx == NULL) {
       z3_ctx = z3_api.mk_proof_context(uw);
@@ -224,7 +215,10 @@ private:
   void store_sat_assignments(Z3_model m);
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
 	    max_core_size;
+
+  z3_propt z3_prop;
   z3_capi z3_api;
+
   bool int_encoding, ignoring_expr, equivalence_checking;
   //Z3_ast assumptions[Z3_UNSAT_CORE_LIMIT];
   std::list<Z3_ast> assumptions;
