@@ -21,6 +21,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/flattening/pointer_logic.h>
 #include <vector>
 #include <string.h>
+#include <decision_procedure.h>
 
 #include "z3_prop.h"
 #include "z3_capi.h"
@@ -55,6 +56,7 @@ public:
   }
 
   virtual ~z3_convt();
+  decision_proceduret::resultt solve(void);
   Z3_lbool check2_z3_properties(void);
   bool get_z3_encoding(void) const;
   void set_filename(std::string file);

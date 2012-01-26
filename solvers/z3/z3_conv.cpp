@@ -460,6 +460,36 @@ z3_convt::finalize_pointer_chain(void)
   return;
 }
 
+decision_proceduret::resultt
+z3_convt::solve(void)
+{
+  unsigned major, minor, build, revision;
+  Z3_lbool result;
+  Z3_get_version(&major, &minor, &build, &revision);
+
+  // Add assumptions that link up literals to symbols - connections that are
+  // made at high level by prop_conv, rather than by the Z3 backend
+  link_syms_to_literals();
+
+  std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
+
+  post_process(); // Appears to do nothing
+
+  finalize_pointer_chain();
+
+  if (z3_prop.smtlib)
+    return D_SMTLIB;
+
+  result = check2_z3_properties();
+
+  if (result == Z3_L_FALSE)
+    return D_UNSATISFIABLE;
+  else if (result == Z3_L_UNDEF)
+    return D_UNKNOWN;
+  else
+    return D_SATISFIABLE;
+}
+
 Z3_lbool
 z3_convt::check2_z3_properties(void)
 {
