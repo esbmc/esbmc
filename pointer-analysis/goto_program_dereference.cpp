@@ -103,9 +103,7 @@ void goto_program_dereferencet::dereference_failure(
     if(!options.get_bool_option("no-simplify"))
     {
       base_type(guard_expr, ns);
-      //std::cout << "before guard_expr: " << guard_expr.pretty() << std::endl;
       simplify(guard_expr);
-      //std::cout << "after guard_expr: " << guard_expr.pretty() << std::endl;
     }
 
     if(!guard_expr.is_true())
