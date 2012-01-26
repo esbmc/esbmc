@@ -23,8 +23,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include "z3_conv.h"
 
-//#define DEBUG
-
 /*******************************************************************\
 
 Function: z3_convt::double2string
@@ -39,9 +37,6 @@ Function: z3_convt::double2string
 
 std::string z3_convt::double2string(double d) const
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   std::ostringstream format_message;
   format_message << std::setprecision(12) << d;
@@ -62,9 +57,6 @@ Function: z3_convt::double2string
 
 std::string z3_convt::get_fixed_point(const unsigned width, std::string value) const
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   std::string m, f, tmp;
   size_t found, size;
@@ -101,12 +93,6 @@ Function: z3_convt::get
 
 exprt z3_convt::get(const exprt &expr) const
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << "\n";
-#endif
-
-  //std::cout << "expr.pretty(): " << expr.pretty() << "\n";
 
   if ((expr.type().is_array() && expr.type().subtype().is_array()) ||
       (expr.type().is_array() && expr.type().subtype().id() =="pointer") ||
@@ -122,7 +108,7 @@ exprt z3_convt::get(const exprt &expr) const
 	Z3_ast bv;
 
 	identifier = expr.identifier().as_string();
-#if 1
+
 	if (expr.type().id()=="pointer")
 	{
 	  for(z3_cachet::const_iterator it = z3_cache.begin();
@@ -139,7 +125,6 @@ exprt z3_convt::get(const exprt &expr) const
 	  }
 	  return nil_exprt();
 	}
-#endif
 
 	map_varst::const_iterator cache_result=map_vars.find(identifier.c_str());
 	if(cache_result!=map_vars.end())
@@ -173,9 +158,6 @@ void z3_convt::fill_vector(
   std::vector<exprt> &unknown,
   const typet &type) const
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   unsigned i, width;
   static unsigned int idx;
@@ -226,10 +208,6 @@ exprt z3_convt::bv_get_rec(
   const bool cache,
   const typet &type) const
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "type.pretty(): " << type.pretty() << std::endl;
-#endif
 
   unsigned width;
 
@@ -399,7 +377,7 @@ exprt z3_convt::bv_get_rec(
         forall_irep(it, components.get_sub())
         {
           const typet &subtype=it->type();
-          //op.push_back(nil_exprt());
+
           if (subtype.id()!="pointer") //@TODO
           {
             unsigned sub_width;
@@ -431,33 +409,24 @@ exprt z3_convt::bv_get_rec(
       unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
       Z3_ast tmp;
 
-      std::cout << "num_fields: " << num_fields << std::endl;
       assert(num_fields==2);
 
-      std::cout << "type.pretty(): " << type.pretty() << std::endl;
       const typet &subtype=static_cast<const typet &>(type.subtype());
 
-      std::cout << "subtype.pretty(): " << subtype.pretty() << std::endl;
       tmp = Z3_get_app_arg(z3_ctx, app, 0); //object
       object=bv_get_rec(tmp, unknown, true, subtype);
-      std::cout << "object: " << object.pretty() << std::endl;
       tmp = Z3_get_app_arg(z3_ctx, app, 1); //offset
       offset=bv_get_rec(tmp, unknown, true, subtype);
-      std::cout << "offset: " << offset.pretty() << std::endl;
 
       pointer_logict::pointert pointer;
       pointer.object=integer2long(binary2integer(object.value().as_string(), false));
-      std::cout << "pointer.object: " << pointer.object << std::endl;
       pointer.offset=binary2integer(offset.value().as_string(), true);
-      std::cout << "pointer.offset: " << pointer.offset << std::endl;
       if (pointer.offset < 0)
       {
         constant_exprt result(type);
     	result.set_value("NULL");
     	return result;
       }
-
-      std::cout << "pointer_logic.objects.size(): " << pointer_logic.objects.size() << std::endl;
 
       return pointer_logic.pointer_expr(pointer, type);
     }
