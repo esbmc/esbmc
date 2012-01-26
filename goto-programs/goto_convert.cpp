@@ -21,8 +21,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "remove_skip.h"
 #include "destructor.h"
 
-//#define DEBUG 1
-
 /*******************************************************************\
 
 Function: goto_convertt::finish_gotos
@@ -283,9 +281,6 @@ void goto_convertt::convert(
   goto_programt &dest)
 {
   const irep_idt &statement=code.get_statement();
-  //std::cout << "goto_convertt::convert : " << statement << " : " << from_expr(ns,"",code) << std::endl;
-  //std::cout << "goto_convertt::convert code.pretty(): " << code.pretty() << std::endl;
-  //std::cout << "statement: " << statement << std::endl;
 
   dest.instructions.clear();
 
@@ -356,7 +351,6 @@ void goto_convertt::convert(
     convert_cpp_try(code, dest);
   else
   {
-//std::cout << "goto_convertt::convert::copy other code : " << statement  << std::endl;
     copy(code, OTHER, dest);
   }
 
@@ -471,15 +465,7 @@ void goto_convertt::convert_block(
     locals.pop_back();
   }
 
-  //std::cout << "loop: " << loop << std::endl;
-  //std::cout << "is_for_loop: " << is_for_loop << std::endl;
-  //std::cout << "after code.operands().size(): " << code.operands().size() << std::endl;
-  //std::cout << "allocated_objects.size(): " << allocated_objects.size() << std::endl;
-  //std::cout << "locals.size(): " << locals.size() << std::endl;
-
   // see if we need to check for forgotten memory
-
-  //std::cout << "before loop_for_block: " << loop_for_block << std::endl;
 
   if (!loop_for_block)
   {
@@ -508,8 +494,6 @@ void goto_convertt::convert_block(
   }
   else
     loop_for_block=false;
-
-  //std::cout << "after loop_for_block: " << loop_for_block << std::endl;
 }
 
 /*******************************************************************\
@@ -927,10 +911,6 @@ void goto_convertt::convert_assign(
 		if(atomic == -1)
 			dest.add_instruction(ATOMIC_END);
   }
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 }
 
 /*******************************************************************\
@@ -947,9 +927,6 @@ Function: goto_convertt::break_globals2assignments
 
 void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rhs, goto_programt &dest, const locationt &location)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   if(!options.get_bool_option("atomicity-check"))
     return;
@@ -986,10 +963,6 @@ void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rh
 	t->location=location;
 	  t->location.comment("atomicity violation on assignment to " + lhs.identifier().as_string());
   }
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 }
 
 /*******************************************************************\
@@ -1006,9 +979,6 @@ Function: goto_convertt::break_globals2assignments
 
 void goto_convertt::break_globals2assignments(exprt & rhs, goto_programt & dest, const locationt & location)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   if(!options.get_bool_option("atomicity-check"))
     return;
@@ -1038,10 +1008,6 @@ void goto_convertt::break_globals2assignments(exprt & rhs, goto_programt & dest,
 	t->location=location;
     t->location.comment("atomicity violation");
   }
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 }
 
 /*******************************************************************\
@@ -1058,10 +1024,6 @@ Function: goto_convertt::break_globals2assignments_rec
 
 void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest, goto_programt &dest, int atomic, const locationt &location)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
 
   if(!options.get_bool_option("atomicity-check"))
     return;
@@ -1148,10 +1110,6 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	  break_globals2assignments_rec(*it,atomic_dest,dest,atomic,location);
 	}
   }
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 }
 
 /*******************************************************************\
@@ -1275,9 +1233,6 @@ void goto_convertt::convert_assert(
   const codet &code,
   goto_programt &dest)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   if(code.operands().size()!=1)
   {
@@ -2539,9 +2494,6 @@ void goto_convertt::convert_ifthenelse(
 	    convert(to_code(code.op2()), tmp_op2);
 
 #if 1
-	  //std::cout << "is_thread: " << is_thread << std::endl;
-	  //std::cout << "1: " << code.op0().id() << std::endl;
-	  //std::cout << "2: " << code.pretty() << std::endl;
 	  exprt tmp_guard;
 	  if (options.get_bool_option("control-flow-test")
 		  && code.op0().id() != "notequal" && code.op0().id() != "symbol"
@@ -2549,7 +2501,6 @@ void goto_convertt::convert_ifthenelse(
 		  && !is_thread
 		  && !options.get_bool_option("deadlock-check"))
 	  {
-		//std::cout << "2: " << code.op0().id() << std::endl;
 	    symbolt &new_symbol=new_cftest_symbol(code.op0().type());
 		irept irep;
 		new_symbol.to_irep(irep);
@@ -2790,7 +2741,6 @@ Function: goto_convertt::get_string_constant
 const std::string &goto_convertt::get_string_constant(
   const exprt &expr)
 {
-  //std::cout << "expr.id(): " << expr.id() << std::endl;
 
   if(expr.id()=="typecast" &&
      expr.operands().size()==1)
@@ -2803,8 +2753,6 @@ const std::string &goto_convertt::get_string_constant(
      expr.op0().op0().id()!="string-constant")
   {
     err_location(expr);
-//    str << "expected string constant, but got: "
-//        << expr.pretty() << std::endl;
     throw 0;
   }
 
