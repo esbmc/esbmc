@@ -56,7 +56,7 @@ public:
   }
 
   virtual ~z3_convt();
-  decision_proceduret::resultt solve(void);
+  virtual decision_proceduret::resultt dec_solve(void);
   Z3_lbool check2_z3_properties(void);
   bool get_z3_encoding(void) const;
   void set_filename(std::string file);

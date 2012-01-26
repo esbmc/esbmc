@@ -21,7 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/boolector/boolector_dec.h>
 #endif
 #ifdef Z3
-#include <solvers/z3/z3_dec.h>
+#include <solvers/z3/z3_conv.h>
 #endif
 #include <solvers/sat/cnf.h>
 #include <solvers/sat/satcheck.h>
@@ -124,7 +124,7 @@ protected:
     z3_solver(bmc_baset &bmc);
     virtual bool run_solver();
   protected:
-    z3_dect z3_dec;
+    z3_convt z3_conv;
   };
 #endif
 

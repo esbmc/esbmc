@@ -684,20 +684,20 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 
 #ifdef Z3
 bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
-  : solver_base(bmc), z3_dec(bmc.options.get_bool_option("uw-model"),
-                             bmc.options.get_bool_option("int-encoding"),
-                             bmc.options.get_bool_option("smt"))
+  : solver_base(bmc), z3_conv(bmc.options.get_bool_option("uw-model"),
+                               bmc.options.get_bool_option("int-encoding"),
+                               bmc.options.get_bool_option("smt"))
 {
-  z3_dec.set_filename(bmc.options.get_option("outfile"));
-  z3_dec.set_z3_core_size(atol(bmc.options.get_option("core-size").c_str()));
-  conv = &z3_dec;
+  z3_conv.set_filename(bmc.options.get_option("outfile"));
+  z3_conv.set_z3_core_size(atol(bmc.options.get_option("core-size").c_str()));
+  conv = &z3_conv;
 }
 
 bool bmc_baset::z3_solver::run_solver()
 {
   bool result = bmc_baset::solver_base::run_solver();
-  bmc._unsat_core = z3_dec.get_z3_core_size();
-  bmc._number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
+  bmc._unsat_core = z3_conv.get_z3_core_size();
+  bmc._number_of_assumptions = z3_conv.get_z3_number_of_assumptions();
   return result;
 }
 #endif

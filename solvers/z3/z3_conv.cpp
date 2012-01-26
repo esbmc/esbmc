@@ -461,7 +461,7 @@ z3_convt::finalize_pointer_chain(void)
 }
 
 decision_proceduret::resultt
-z3_convt::solve(void)
+z3_convt::dec_solve(void)
 {
   unsigned major, minor, build, revision;
   Z3_lbool result;
