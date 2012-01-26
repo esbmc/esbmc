@@ -32,7 +32,7 @@ typedef unsigned int uint;
 class z3_prop_wrappert
 {
 public:
-  z3_prop_wrappert(std::ostream &_out, bool uw):z3_prop(_out, uw) { }
+  z3_prop_wrappert(bool uw):z3_prop(uw) { }
 
 protected:
   z3_propt z3_prop;
@@ -41,9 +41,8 @@ protected:
 class z3_convt:protected z3_prop_wrappert, public prop_convt
 {
 public:
-  z3_convt(std::ostream &_out, bool uw, bool int_encoding,
-           bool smt)
-                               :z3_prop_wrappert(_out, uw),
+  z3_convt(bool uw, bool int_encoding, bool smt)
+                               :z3_prop_wrappert(uw),
                                 prop_convt(z3_prop)
   {
     if (z3_ctx == NULL) {

@@ -16,38 +16,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 /*******************************************************************\
 
-Function: z3_temp_filet::z3_temp_filet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-z3_temp_filet::z3_temp_filet()
-{
-}
-
-/*******************************************************************\
-
-Function: z3_temp_filet::~z3_temp_filet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-z3_temp_filet::~z3_temp_filet()
-{
-}
-
-/*******************************************************************\
-
 Function: z3_dect::dec_solve
 
   Inputs:

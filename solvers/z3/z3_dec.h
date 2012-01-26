@@ -13,22 +13,11 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include "z3_conv.h"
 
-class z3_temp_filet
-{
-public:
-  z3_temp_filet();
-  ~z3_temp_filet();
-
-protected:
-  std::ofstream temp_out;
-  std::string temp_out_filename, temp_result_filename;
-};
-
-class z3_dect:protected z3_temp_filet, public z3_convt
+class z3_dect: public z3_convt
 {
 public:
   z3_dect(bool uw, bool int_encoding, bool smtlib)
-    :z3_convt(temp_out, uw, int_encoding, smtlib)
+    :z3_convt(uw, int_encoding, smtlib)
   {
     this->smtlib = smtlib;
   }

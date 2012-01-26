@@ -27,7 +27,7 @@ Function: z3_propt::z3_propt
 
 \*******************************************************************/
 
-z3_propt::z3_propt(std::ostream &_out, bool uw):out(_out)
+z3_propt::z3_propt(bool uw)
 {
   _no_variables=1;
   this->uw = uw;

@@ -19,7 +19,7 @@ typedef unsigned int uint;
 class z3_propt:virtual public propt
 {
 public:
-  z3_propt(std::ostream &_out, bool uw);
+  z3_propt(bool uw);
   virtual ~z3_propt();
 
 //  virtual literalt constant(bool value)
