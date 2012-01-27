@@ -121,13 +121,8 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
   if(new_guard.is_true())
   {
     state.guard.make_false();
-#if 1
-	  guardt if_guard;
-	  if(state.cur_if_guard.size() != 0)
-	    if_guard.add(state.cur_if_guard.as_expr());
-	  if_guard.add(state.guard.as_expr());
-	  state.cur_if_guard = if_guard;
-#endif
+    exprt guard_expr = state.guard.as_expr();
+    state.bump_if_guard(guard_expr, target, ex_state, node_id, guard_identifier(state), ns);
   }
   else
   {
@@ -170,25 +165,13 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
       guard_expr.make_not();
       state.guard.add(guard_expr);
 
-#if 1
-	  guardt if_guard;
-	  if(state.cur_if_guard.size() != 0)
-		if_guard.add(state.cur_if_guard.as_expr());
-	  if_guard.add(guard_expr);
-	  state.cur_if_guard = if_guard;
-#endif
-
+      state.bump_if_guard(guard_expr, target, ex_state, node_id, guard_identifier(state), ns);
     }
     else
     {
       state.guard.add(guard_expr);
-#if 1
-	  guardt if_guard;
-	  if(state.cur_if_guard.size() != 0)
-	    if_guard.add(state.cur_if_guard.as_expr());
-	  if_guard.add(guard_expr);
-	  state.cur_if_guard = if_guard;
-#endif
+      state.bump_if_guard(guard_expr, target, ex_state, node_id, guard_identifier(state), ns);
+
       guard_expr.make_not();
       new_state.guard.add(guard_expr);
     }
