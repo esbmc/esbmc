@@ -1,9 +1,66 @@
+/*******************************************************************\
+ *
+ *
+ * Author: Lucas Cordeiro
+ *
+ * 
+\*******************************************************************/
+
+
 #ifndef STL_LIST
 #define STL_LIST
 
 namespace std
 {
+	template<class T> class list
+	{
+	
+	struct node
+	{
+		T data;
+		node* prev;
+		node* next;
+		node(T t, node* p, node* n) : data(t), prev(p), next(n) {}
+	};
+	node* head;
+	node* tail;
+	int _size;
 
+	
+	public:
+		list() : head( NULL ), tail ( NULL ), _size(0) {}
+
+		bool empty ( ) const 
+		{
+			return ( !head || !tail );
+		}
+
+		void push_back(const T& t)
+		{
+			tail = new node(t, tail, NULL);
+			_size++;
+			if( tail->prev )
+				tail->prev->next = tail;
+			if( empty() )
+				head = tail;
+		}
+
+		int size() const
+		{
+			return _size;
+		}
+	
+		~double_linked()
+		{
+			while(head)
+			{
+				node* temp(head);
+				head=head->next;
+				delete temp;
+			}
+		}
+
+	};
 }
 
 #endif
