@@ -25,6 +25,7 @@ struct istream: ios
 	bool good ( ) const;
 	istream& seekg ( streampos pos ); // model
 	istream& seekg ( streamoff off, ios_base::seekdir dir ); // model
+	streampos tellg ( ); //model
 
 private:
 	istream(const istream&); // disabled
