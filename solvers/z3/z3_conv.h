@@ -53,6 +53,8 @@ public:
     max_core_size=Z3_UNSAT_CORE_LIMIT;
 
     init_addr_space_array();
+
+    z3_api.set_z3_ctx(z3_ctx);
   }
 
   virtual ~z3_convt();

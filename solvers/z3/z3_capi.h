@@ -24,6 +24,8 @@ class z3_capi {
     z3_capi(){};  // constructor
     ~z3_capi(){}; // destructor
 
+    void set_z3_ctx(Z3_context _ctx) { z3_ctx = _ctx; }
+
     Z3_context mk_context(char *solver);
     Z3_context mk_proof_context(unsigned int is_uw);
     Z3_ast mk_var(Z3_context ctx, const char * name, Z3_type_ast ty);
