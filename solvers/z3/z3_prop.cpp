@@ -524,14 +524,9 @@ z3_propt::l_get(literalt a) const
       if (found != std::string::npos) {
 	result = tvt(false);
       }
-//      else
-//      return tvt(tvt::TV_ASSUME);
-#if 1
       else {
 	found = literal.find("not");
 	if (found != std::string::npos) {
-	  //result=tvt(true);
-	  //result=tvt(false);
 	  return tvt(tvt::TV_ASSUME);
 	} else   {
 	  found = literal.find("or");
@@ -559,7 +554,6 @@ z3_propt::l_get(literalt a) const
 		} else   {
 		  found = literal.find("bvsle");
 		  if (found != std::string::npos) {
-		    //result=tvt(true);
 		    return tvt(tvt::TV_ASSUME);
 		  }
 		}
@@ -568,7 +562,6 @@ z3_propt::l_get(literalt a) const
 	  }
 	}
       }
-#endif
     }
   }
 
