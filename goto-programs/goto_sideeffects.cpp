@@ -351,14 +351,6 @@ void goto_convertt::remove_sideeffects(
       throw 0;
     }
   }
-#if 0
-  else if(expr.is_address_of())
-  {
-	std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-    assert(expr.operands().size()==1);
-    address_of_replace_objects(expr.op0(), dest);
-  }
-#endif
 }
 
 /*******************************************************************\

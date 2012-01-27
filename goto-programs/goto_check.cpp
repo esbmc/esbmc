@@ -229,7 +229,6 @@ void goto_checkt::pointer_rel_check(
     {
       exprt same_object("same-object", bool_typet());
       same_object.copy_to_operands(expr.op0(), expr.op1());
-      //std::cout << "same_object.pretty(): " << same_object.pretty() << std::endl;
       add_guarded_claim(
         same_object,
         "same object violation",
@@ -354,8 +353,6 @@ void goto_checkt::bounds_check(
       if(inequality.op1().type()!=inequality.op0().type())
         inequality.op1().make_typecast(inequality.op0().type());
 
-      //std::cout << "inequality.pretty(): " << inequality.pretty() << std::endl;
-      //std::cout << "guard.as_expr().pretty(): " << guard.as_expr().pretty() << std::endl;
       add_guarded_claim(
         inequality,
         name+" upper bound",
@@ -484,7 +481,6 @@ void goto_checkt::check_rec(
   guardt &guard,
   bool address)
 {
-  //std::cout << "check_rec::expr.pretty(): " << expr.pretty() << std::endl;
 
   if(address)
   {

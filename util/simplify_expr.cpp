@@ -165,12 +165,6 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
         expr.swap(new_expr);
         return false;
       }
-
-      /*
-      if(expr_type_id=="real") return false;
-      if(expr_type_id=="complex") return false;
-      if(expr_type_id=="floatbv") return false;
-      */
     }
     else if(op_type_id=="rational")
     {
@@ -906,8 +900,6 @@ bool simplify_exprt::simplify_addition_substraction(
     return true;
 
   bool result=true;
-
-  //std::cout << "simplify_addition_substraction expr.pretty(): " << expr.pretty() << std::endl;
 
   exprt::operandst &operands=expr.operands();
 
@@ -1697,11 +1689,6 @@ bool simplify_exprt::simplify_if(exprt &expr)
         cond.swap(tmp);
         truevalue.swap(falsevalue);
       }
-
-      #if 0
-      result = simplify_if_cond(cond) && result;
-      result = simplify_if_branch(truevalue, falsevalue, cond) && result;
-      #endif
 
       if(expr.type()==bool_typet())
       {
@@ -3424,9 +3411,6 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
   if(expr.type()!=operand.type())
     return true;
 
-  //std::cout << "simplify_unary_minus expr.pretty(): " << expr.pretty() << std::endl;
-  //std::cout << "operand.id(): " << operand.id() << std::endl;
-
   if(operand.id()=="unary-")
   {
     if(operand.operands().size()!=1)
@@ -3443,7 +3427,6 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
   else if(operand.id()=="constant")
   {
     const irep_idt &type_id=expr.type().id();
-//    std::cout << "type_id: " << type_id << std::endl;
     if(type_id=="integer" ||
        type_id=="signedbv" ||
        type_id=="unsignedbv")
@@ -3452,9 +3435,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
 
       if(to_integer(expr.op0(), int_value))
         return true;
-//      std::cout << "int_value: " << int_value << std::endl;
-//      std::cout << "-int_value: " << -int_value << std::endl;
-//      std::cout << "int_value*(-1): " << int_value*(-1) << std::endl;
+
       exprt tmp=from_integer(-int_value, expr.type());
 
       if(tmp.is_nil())
@@ -3498,12 +3479,6 @@ Function: simplify_exprt::simplify_node
 bool simplify_exprt::simplify_node(exprt &expr, modet mode)
 {
   if(!expr.has_operands()) return true;
-
-  //#define DEBUGX
-
-  #ifdef DEBUGX
-  exprt old(expr);
-  #endif
 
   bool result=true;
 
@@ -3590,13 +3565,6 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   else if(expr.id()=="ieee_float_equal" ||
           expr.id()=="ieee_float_notequal")
     result=simplify_ieee_float_relation(expr) && result;
-
-  #ifdef DEBUGX
-  if(!result)
-    std::cout << "==== " << old.pretty()
-              << "\n ------> " << expr.pretty()
-              << "\n";
-  #endif
 
   return result;
 }

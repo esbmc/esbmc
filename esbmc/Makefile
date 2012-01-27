@@ -4,10 +4,7 @@ include $(ESBMCDIR)/local.inc
 
 SRCS = main.cpp parseoptions.cpp bmc.cpp  \
       bv_cbmc.cpp document_subgoals.cpp \
-      symex_bmc.cpp show_vcc.cpp \
-      counterex_pretty.cpp \
-      counterex_pretty_greedy.cpp \
-      counterex_pretty_pbs.cpp options.cpp
+      symex_bmc.cpp show_vcc.cpp options.cpp
 
 # additional objects for esbmc binary
 OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
@@ -76,4 +73,4 @@ esbmc: $(OBJS)
 	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL)
 
 clean:
-	-rm -f $(OBJDIR)/* esbmc
+	-rm -f $(OBJDIR)/* esbmc $(OBJDIR)/.deps

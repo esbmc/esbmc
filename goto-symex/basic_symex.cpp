@@ -53,6 +53,7 @@ void basic_symext::assignment(
     new_lhs, original_lhs,
     rhs,
     state.source,
+    state.gen_stack_trace(),
     symex_targett::STATE);
 }
 
@@ -325,6 +326,7 @@ void basic_symext::symex_assign_symbol(
     new_lhs, original_lhs,
     rhs,
     state.source,
+    state.gen_stack_trace(),
     symex_targett::STATE);
 
 }

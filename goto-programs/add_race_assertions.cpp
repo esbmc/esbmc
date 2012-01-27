@@ -155,22 +155,11 @@ void add_race_assertions(
   {
     goto_programt::instructiont &instruction=*i_it;
 
-    //std::cout << "1 - instruction.code.pretty(): " << instruction.code.pretty() << std::endl;
-
     if(instruction.is_assign())
     {
       rw_sett rw_set(ns, value_sets, i_it, instruction.code);
 
-      //std::cout << "2 - instruction.code.pretty(): " << instruction.code.pretty() << std::endl;
-
       if(rw_set.entries.empty()) continue;
-      //if (w_guards.not_valid_assign(instruction)) continue;
-      //if (instruction.code.op0().location().get_function() == "main") continue;
-
-//      std::cout << "instruction.code.pretty(): " << instruction.code.pretty() << std::endl;
-
-//      std::cout << "instruction.code.op0().pretty(): " << instruction.code.op0().pretty() << std::endl;
-//      std::cout << "function: " << instruction.code.op0().location().get_function() << std::endl;
 
       goto_programt::instructiont original_instruction;
       original_instruction.swap(instruction);

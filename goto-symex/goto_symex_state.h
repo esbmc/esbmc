@@ -19,6 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-programs/goto_functions.h>
 #include <string>
 #include <stack>
+#include <vector>
 
 #include "symex_target.h"
 #include "crypto_hash.h"
@@ -61,7 +62,6 @@ public:
 		thread_ended = state.thread_ended;
 		guard = state.guard;
 		source = state.source;
-		if_guard_stack = state.if_guard_stack;
 		function_frame = state.function_frame;
 		unwind_map = state.unwind_map;
 		function_unwind = state.function_unwind;
@@ -84,8 +84,6 @@ public:
 
   guardt guard;
   symex_targett::sourcet source;
-  typedef std::stack<guardt> if_guard_stackt;
-  if_guard_stackt if_guard_stack;
   std::map<irep_idt, unsigned> function_frame;
   std::map<symex_targett::sourcet, unsigned> unwind_map;
   std::map<irep_idt, unsigned> function_unwind;
@@ -177,10 +175,7 @@ public:
     };
 
     typedef std::map<irep_idt, valuet> current_namest;
-    //typedef std::map<irep_idt, unsigned int> current_names_nodest;
     current_namest current_names;
-    //current_names_nodest current_names_nodes;
-    //std::map<irep_idt, unsigned int> thread_ids;
     typedef std::map<irep_idt, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
 
@@ -192,7 +187,6 @@ public:
       entry.count=count;
       entry.node_id = node_id;
       original_identifiers[name(identifier, entry.count)]=identifier;
-      //current_names_nodes[identifier] = node_id;
     }
 
     std::string name(
@@ -316,7 +310,6 @@ public:
       return_value(static_cast<const exprt &>(get_nil_irep()))
     {
     	level1._thread_id = thread_id;
-    	//std::cout << "new frame created for thread " << thread_id << std::endl;
     }
   };
 
@@ -340,6 +333,7 @@ public:
   inline const framet &previous_frame() { return *(--(--call_stack.end())); }
 
   void print_stack_trace(const namespacet &ns, unsigned int indent) const;
+  std::vector<dstring> gen_stack_trace(void) const;
 };
 
 #endif

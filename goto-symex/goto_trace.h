@@ -26,6 +26,9 @@ class goto_trace_stept
 {
 public:
   unsigned step_nr;
+
+  // See SSA_stept.
+  std::vector<dstring> stack_trace;
   
   bool is_assignment() const { return type==ASSIGNMENT; }
   bool is_assume() const     { return type==ASSUME; }

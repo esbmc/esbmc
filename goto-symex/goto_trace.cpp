@@ -161,16 +161,6 @@ void counterexample_value(
     	 value.type().id()==typet::t_floatbv)
         value_string+= " ("+value.value().as_string()+")";
     }
-#if 0
-    else if (lhs.type().id()==typet::t_pointer)
-    {
-      size_t found;
-      found=value_string.find_first_of("@");
-      if (found!=std::string::npos)
-        value_string.erase(found,value_string.size());
-      value_string="&"+value_string;
-    }
-#endif
   }
 
   #if 1
@@ -302,6 +292,13 @@ void show_state_header(
 
   out << " " << location
       << " thread " << state.thread_nr << std::endl;
+
+  // Print stack trace
+
+  std::vector<dstring>::const_iterator it;
+  for (it = state.stack_trace.begin(); it != state.stack_trace.end(); it++)
+    out << it->as_string() << std::endl;
+
   out << "----------------------------------------------------" << std::endl;
 }
 

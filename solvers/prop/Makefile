@@ -4,7 +4,7 @@ include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/propobj.o
 all: $(OBJDIR)/.deps $(MAINOBJ)
 
-SRCS= prop.cpp prop_conv.cpp prop_conv_store.cpp aig_formula.cpp aig.cpp aig_prop.cpp
+SRCS= prop.cpp prop_conv.cpp prop_conv_store.cpp
 
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps

@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <base_type.h>
 #include <i2string.h>
 
-#include "c_link_type_eq.h"
 #include "expr2c.h"
 #include "c_link.h"
 #include "fix_symbol.h"
@@ -141,7 +140,7 @@ void c_linkt::duplicate_type(
   symbolt &in_context,
   symbolt &new_symbol)
 {
-  // check if it is the same -- use base_type_eq, not c_link_type_eq
+  // check if it is the same -- use base_type_eq
   if(!base_type_eq(in_context.type, new_symbol.type, ns))
   {
     if(in_context.type.id()=="incomplete_struct" &&
