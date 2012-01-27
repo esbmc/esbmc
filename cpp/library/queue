@@ -24,7 +24,8 @@ namespace std
 
     void push ( const T& t )
     {
-      assert(0 <= _size && _size < QUEUE_CAPACITY);
+      assert(0 <= _size);
+      __ESBMC_assert(_size < QUEUE_CAPACITY, "queue overflow");
       buf[tail] = t;
       _size++;
      if (tail == QUEUE_CAPACITY)
@@ -44,9 +45,7 @@ namespace std
     T& front ( )
     {
       assert(!empty());
-      T x;
-      x = buf[head];
-      return x;
+      return buf[head];
     }
 
     int size() const
@@ -68,10 +67,8 @@ namespace std
     T& back ()
     {     
       assert(!empty());
-      T x;
-      x = buf[tail-1];
-      return x;
-    }	
+      return buf[tail-1];
+    }    
   };
 }
 
