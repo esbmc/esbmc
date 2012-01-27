@@ -334,6 +334,8 @@ public:
   inline const framet &previous_frame() { return *(--(--call_stack.end())); }
 
   void print_stack_trace(const namespacet &ns, unsigned int indent) const;
+
+  void bump_if_guard(symex_targett *target, execution_statet &ex_state, unsigned node_id, irep_idt guardid, namespacet &ns);
 };
 
 #endif
