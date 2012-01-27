@@ -475,11 +475,6 @@ void goto_symext::symex_return(statet &state, execution_statet &ex_state, unsign
   
   // kill this one
   state.guard.make_false();
-
-  guardt if_guard;
-  if(!state.if_guard_stack.empty())
-		if_guard.add(state.if_guard_stack.top().as_expr());
-  state.if_guard_stack.push(if_guard);
 }
 
 /*******************************************************************\

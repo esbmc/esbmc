@@ -19,6 +19,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "reachability_tree.h"
 #include "execution_state.h"
 #include "goto_symex_state.h"
+#include "basic_symex.h"
+#include "goto_symex.h"
 #include "crypto_hash.h"
 
 /*******************************************************************\
