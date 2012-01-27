@@ -824,29 +824,32 @@ void goto_symex_statet::print_stack_trace(const namespacet &ns, unsigned int ind
 }
 
 void
-goto_symex_statet::bump_if_guard(symex_targett *target, execution_statet &ex_state, unsigned node_id, irep_idt guardid, namespacet &ns)
+goto_symex_statet::bump_if_guard(exprt &new_guard, symex_targett *target, execution_statet &ex_state, unsigned node_id, irep_idt guardid, namespacet &ns)
 {
   irep_idt guardname;
 
   // Assign current guard to "goto_symex::\guard::gotoguard"
   guardname = guardid.as_string() + "gotoguard";
-
   exprt guard_expr = symbol_exprt(guardname, bool_typet());
-  exprt cur_guard = cur_if_guard.as_expr();
   exprt lhs = guard_expr;
 
-  assignment(lhs, cur_guard, ns, false, ex_state, node_id);
+  exprt cur_guard = cur_if_guard.as_expr();
+  guardt combined_guard;
+  combined_guard.add(cur_guard);
+  combined_guard.add(new_guard);
+  exprt combined_guard_expr = combined_guard.as_expr();
+
+  assignment(lhs, combined_guard_expr, ns, false, ex_state, node_id);
 
   guardt guard;
   target->assignment(
     guard,
     lhs, guard_expr,
-    cur_guard,
+    combined_guard_expr,
     source,
     symex_targett::HIDDEN);
 
   // Simplify cur_if_guard to this new symbol.
   rename(lhs, ns, node_id);
-  cur_if_guard = guardt();
-  cur_if_guard.add(lhs);
+  cur_if_guard = combined_guard;
 }
