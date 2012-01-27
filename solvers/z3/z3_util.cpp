@@ -145,9 +145,9 @@ Z3_ast z3_convt::convert_number_int(int64_t value, u_int width, bool type)
 {
 
   if (type)
-    return z3_api.mk_int(z3_ctx, value);
+    return z3_api.mk_int(value);
   else
-    return z3_api.mk_unsigned_int(z3_ctx, value);
+    return z3_api.mk_unsigned_int(value);
 }
 
 Z3_ast z3_convt::convert_number_bv(int64_t value, u_int width, bool type)
@@ -186,7 +186,7 @@ z3_convt::debug_label_formula(std::string name, Z3_ast formula)
   num++;
 
   Z3_sort sort = Z3_get_sort(z3_ctx, formula);
-  Z3_ast sym = z3_api.mk_var(z3_ctx, the_name.c_str(), sort);
+  Z3_ast sym = z3_api.mk_var(the_name.c_str(), sort);
   Z3_ast eq = Z3_mk_eq(z3_ctx, sym, formula);
   assert_formula(eq);
   return;

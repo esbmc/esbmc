@@ -469,7 +469,7 @@ z3_propt::z3_literal(literalt l)
     return Z3_mk_true(z3_ctx);
 
   literal_s = "l" + i2string(l.var_no());
-  literal_l = z3_api.mk_bool_var(z3_ctx, literal_s.c_str());
+  literal_l = z3_api.mk_bool_var(literal_s.c_str());
 
   if (l.sign()) {
     return Z3_mk_not(z3_ctx, literal_l);
