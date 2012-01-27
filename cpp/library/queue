@@ -57,7 +57,7 @@ namespace std
 
      void pop()
      {
-       assert(size()>0);
+       __ESBMC_assert(size()>0, "queue underflow");
        _size--;
        if (head == QUEUE_CAPACITY) 
          head = 1;
@@ -73,6 +73,11 @@ namespace std
       return x;
     }
 	
+    void operator -= (T& lhs, T& rhs)
+    {
+	assert(0);
+    }
+
   };
 }
 
