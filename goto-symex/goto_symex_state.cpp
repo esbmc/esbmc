@@ -824,7 +824,7 @@ void goto_symex_statet::print_stack_trace(const namespacet &ns, unsigned int ind
 }
 
 void
-goto_symex_statet::bump_if_guard(exprt &new_guard, symex_targett *target, execution_statet &ex_state, unsigned node_id, irep_idt guardid, namespacet &ns)
+goto_symex_statet::bump_if_guard(const exprt &new_guard, symex_targett *target, execution_statet &ex_state, unsigned node_id, irep_idt guardid, const namespacet &ns)
 {
   irep_idt guardname;
 
