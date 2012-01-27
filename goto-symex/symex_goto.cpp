@@ -121,8 +121,6 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
   if(new_guard.is_true())
   {
     state.guard.make_false();
-    exprt guard_expr = state.guard.as_expr();
-    state.bump_if_guard(guard_expr, target, ex_state, node_id, guard_identifier(state), ns);
   }
   else
   {
@@ -164,14 +162,10 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
       new_state.guard.add(guard_expr);
       guard_expr.make_not();
       state.guard.add(guard_expr);
-
-      state.bump_if_guard(guard_expr, target, ex_state, node_id, guard_identifier(state), ns);
     }
     else
     {
       state.guard.add(guard_expr);
-      state.bump_if_guard(guard_expr, target, ex_state, node_id, guard_identifier(state), ns);
-
       guard_expr.make_not();
       new_state.guard.add(guard_expr);
     }

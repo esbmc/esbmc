@@ -61,7 +61,6 @@ public:
 		thread_ended = state.thread_ended;
 		guard = state.guard;
 		source = state.source;
-		cur_if_guard = state.cur_if_guard;
 		function_frame = state.function_frame;
 		unwind_map = state.unwind_map;
 		function_unwind = state.function_unwind;
@@ -84,7 +83,6 @@ public:
 
   guardt guard;
   symex_targett::sourcet source;
-  guardt cur_if_guard;
   std::map<irep_idt, unsigned> function_frame;
   std::map<symex_targett::sourcet, unsigned> unwind_map;
   std::map<irep_idt, unsigned> function_unwind;
@@ -334,8 +332,6 @@ public:
   inline const framet &previous_frame() { return *(--(--call_stack.end())); }
 
   void print_stack_trace(const namespacet &ns, unsigned int indent) const;
-
-  void bump_if_guard(const exprt &new_guard, symex_targett *target, execution_statet &ex_state, unsigned node_id, irep_idt guardid, const namespacet &ns);
 };
 
 #endif
