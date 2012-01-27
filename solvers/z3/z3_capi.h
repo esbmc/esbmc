@@ -39,13 +39,7 @@ class z3_capi {
     Z3_ast mk_tuple(Z3_sort tuple_sort, ...);
     Z3_ast mk_tuple(Z3_sort tuple_sort, Z3_ast *args,
                     unsigned int num);
-    Z3_lbool check(Z3_lbool expected_result);
     Z3_lbool check2(Z3_lbool expected_result);
-    void prove(Z3_ast f, Z3_bool is_valid);
-    void assert_inj_axiom(Z3_const_decl_ast f, unsigned i);
-    void display_sort(FILE * out, Z3_sort ty);
-    void assert_comm_axiom(Z3_const_decl_ast f);
-    void display_ast(FILE * out, Z3_ast v);
     Z3_ast mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val);
     Z3_ast mk_tuple_select(Z3_ast t, unsigned i);
 
