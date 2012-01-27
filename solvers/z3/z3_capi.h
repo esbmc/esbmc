@@ -53,8 +53,8 @@ class z3_capi {
     void display_version();
 
   private:
-	Z3_context mk_context_custom(Z3_config cfg, Z3_error_handler err);
-	Z3_context z3_ctx;
+    Z3_context mk_context_custom(Z3_config cfg, Z3_error_handler err);
+    Z3_context z3_ctx;
 };
 
 #endif
