@@ -1,8 +1,8 @@
 /*******************************************************************\
 
-Module:
+   Module:
 
-Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
+   Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
@@ -15,7 +15,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 z3_propt::z3_propt(bool uw)
 {
-  _no_variables=1;
+  _no_variables = 1;
   this->uw = uw;
 }
 
@@ -23,32 +23,34 @@ z3_propt::~z3_propt()
 {
 }
 
-void z3_propt::land(literalt a, literalt b, literalt o)
+void
+z3_propt::land(literalt a, literalt b, literalt o)
 {
   // a*b=c <==> (a + o')( b + o')(a'+b'+o)
-   bvt lits;
+  bvt lits;
 
-   lits.clear();
-   lits.reserve(2);
-   lits.push_back(pos(a));
-   lits.push_back(neg(o));
-   lcnf(lits);
+  lits.clear();
+  lits.reserve(2);
+  lits.push_back(pos(a));
+  lits.push_back(neg(o));
+  lcnf(lits);
 
-   lits.clear();
-   lits.reserve(2);
-   lits.push_back(pos(b));
-   lits.push_back(neg(o));
-   lcnf(lits);
+  lits.clear();
+  lits.reserve(2);
+  lits.push_back(pos(b));
+  lits.push_back(neg(o));
+  lcnf(lits);
 
-   lits.clear();
-   lits.reserve(3);
-   lits.push_back(neg(a));
-   lits.push_back(neg(b));
-   lits.push_back(pos(o));
-   lcnf(lits);
+  lits.clear();
+  lits.reserve(3);
+  lits.push_back(neg(a));
+  lits.push_back(neg(b));
+  lits.push_back(pos(o));
+  lcnf(lits);
 }
 
-void z3_propt::lor(literalt a, literalt b, literalt o)
+void
+z3_propt::lor(literalt a, literalt b, literalt o)
 {
   // a+b=c <==> (a' + c)( b' + c)(a + b + c')
   bvt lits;
@@ -73,7 +75,8 @@ void z3_propt::lor(literalt a, literalt b, literalt o)
   lcnf(lits);
 }
 
-void z3_propt::lxor(literalt a, literalt b, literalt o)
+void
+z3_propt::lxor(literalt a, literalt b, literalt o)
 {
   // a xor b = o <==> (a' + b' + o')
   //                  (a + b + o' )
@@ -110,7 +113,8 @@ void z3_propt::lxor(literalt a, literalt b, literalt o)
   lcnf(lits);
 }
 
-void z3_propt::lnand(literalt a, literalt b, literalt o)
+void
+z3_propt::lnand(literalt a, literalt b, literalt o)
 {
   // a Nand b = o <==> (a + o)( b + o)(a' + b' + o')
   bvt lits;
@@ -135,7 +139,8 @@ void z3_propt::lnand(literalt a, literalt b, literalt o)
   lcnf(lits);
 }
 
-void z3_propt::lnor(literalt a, literalt b, literalt o)
+void
+z3_propt::lnor(literalt a, literalt b, literalt o)
 {
   // a Nor b = o <==> (a' + o')( b' + o')(a + b + o)
   bvt lits;
@@ -160,26 +165,29 @@ void z3_propt::lnor(literalt a, literalt b, literalt o)
   lcnf(lits);
 }
 
-void z3_propt::lequal(literalt a, literalt b, literalt o)
+void
+z3_propt::lequal(literalt a, literalt b, literalt o)
 {
   lxor(a, b, lnot(o));
 }
 
-void z3_propt::limplies(literalt a, literalt b, literalt o)
+void
+z3_propt::limplies(literalt a, literalt b, literalt o)
 {
   lor(lnot(a), b, o);
 }
 
-literalt z3_propt::land(const bvt &bv)
+literalt
+z3_propt::land(const bvt &bv)
 {
 
-  literalt l=new_variable();
-  uint size=bv.size();
+  literalt l = new_variable();
+  uint size = bv.size();
   Z3_ast *args = (Z3_ast*)alloca(size * sizeof(Z3_ast));
   Z3_ast result, formula;
 
-  for(unsigned int i=0; i<bv.size(); i++)
-	args[i] = z3_literal(bv[i]);
+  for (unsigned int i = 0; i < bv.size(); i++)
+    args[i] = z3_literal(bv[i]);
 
   result = Z3_mk_and(z3_ctx, bv.size(), args);
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
@@ -188,16 +196,17 @@ literalt z3_propt::land(const bvt &bv)
   return l;
 }
 
-literalt z3_propt::lor(const bvt &bv)
+literalt
+z3_propt::lor(const bvt &bv)
 {
 
-  literalt l=new_variable();
-  uint size=bv.size();
+  literalt l = new_variable();
+  uint size = bv.size();
   Z3_ast *args = (Z3_ast*)alloca(size * sizeof(Z3_ast));
   Z3_ast result, formula;
 
-  for(unsigned int i=0; i<bv.size(); i++)
-	args[i] = z3_literal(bv[i]);
+  for (unsigned int i = 0; i < bv.size(); i++)
+    args[i] = z3_literal(bv[i]);
 
   result = Z3_mk_or(z3_ctx, bv.size(), args);
 
@@ -207,24 +216,25 @@ literalt z3_propt::lor(const bvt &bv)
   return l;
 }
 
-literalt z3_propt::lxor(const bvt &bv)
+literalt
+z3_propt::lxor(const bvt &bv)
 {
 
-  if(bv.size()==0) return const_literal(false);
-  if(bv.size()==1) return bv[0];
+  if (bv.size() == 0) return const_literal(false);
+  if (bv.size() == 1) return bv[0];
 
-  literalt l=new_variable();
-  uint size=bv.size();
+  literalt l = new_variable();
+  uint size = bv.size();
   Z3_ast *args = (Z3_ast *)alloca(size * sizeof(Z3_ast));
-  Z3_ast result=0, formula;
+  Z3_ast result = 0, formula;
 
-  for(unsigned int i=0; i<bv.size(); i++)
+  for (unsigned int i = 0; i < bv.size(); i++)
   {
-	args[i] = z3_literal(bv[i]);
+    args[i] = z3_literal(bv[i]);
 
-    if (i==1)
+    if (i == 1)
       result = Z3_mk_xor(z3_ctx, args[0], args[1]);
-    else if (i>1)
+    else if (i > 1)
       result = Z3_mk_xor(z3_ctx, result, args[i]);
   }
 
@@ -235,16 +245,17 @@ literalt z3_propt::lxor(const bvt &bv)
 
 }
 
-literalt z3_propt::land(literalt a, literalt b)
+literalt
+z3_propt::land(literalt a, literalt b)
 {
 #if 1
-  if(a==const_literal(true)) return b;
-  if(b==const_literal(true)) return a;
-  if(a==const_literal(false)) return const_literal(false);
-  if(b==const_literal(false)) return const_literal(false);
-  if(a==b) return a;
+  if (a == const_literal(true)) return b;
+  if (b == const_literal(true)) return a;
+  if (a == const_literal(false)) return const_literal(false);
+  if (b == const_literal(false)) return const_literal(false);
+  if (a == b) return a;
 #endif
-  literalt l=new_variable();
+  literalt l = new_variable();
   Z3_ast result, operand[2], formula;
 
   operand[0] = z3_literal(a);
@@ -257,16 +268,17 @@ literalt z3_propt::land(literalt a, literalt b)
 
 }
 
-literalt z3_propt::lor(literalt a, literalt b)
+literalt
+z3_propt::lor(literalt a, literalt b)
 {
 #if 1
-  if(a==const_literal(false)) return b;
-  if(b==const_literal(false)) return a;
-  if(a==const_literal(true)) return const_literal(true);
-  if(b==const_literal(true)) return const_literal(true);
-  if(a==b) return a;
+  if (a == const_literal(false)) return b;
+  if (b == const_literal(false)) return a;
+  if (a == const_literal(true)) return const_literal(true);
+  if (b == const_literal(true)) return const_literal(true);
+  if (a == b) return a;
 #endif
-  literalt l=new_variable();
+  literalt l = new_variable();
   Z3_ast result, operand[2], formula;
 
   operand[0] = z3_literal(a);
@@ -279,22 +291,24 @@ literalt z3_propt::lor(literalt a, literalt b)
 
 }
 
-literalt z3_propt::lnot(literalt a)
+literalt
+z3_propt::lnot(literalt a)
 {
   a.invert();
 
   return a;
 }
 
-literalt z3_propt::lxor(literalt a, literalt b)
+literalt
+z3_propt::lxor(literalt a, literalt b)
 {
 #if 1
-  if(a==const_literal(false)) return b;
-  if(b==const_literal(false)) return a;
-  if(a==const_literal(true)) return lnot(b);
-  if(b==const_literal(true)) return lnot(a);
+  if (a == const_literal(false)) return b;
+  if (b == const_literal(false)) return a;
+  if (a == const_literal(true)) return lnot(b);
+  if (b == const_literal(true)) return lnot(a);
 #endif
-  literalt l=new_variable();
+  literalt l = new_variable();
   Z3_ast result, operand[2], formula;
 
   operand[0] = z3_literal(a);
@@ -307,34 +321,39 @@ literalt z3_propt::lxor(literalt a, literalt b)
 
 }
 
-literalt z3_propt::lnand(literalt a, literalt b)
+literalt
+z3_propt::lnand(literalt a, literalt b)
 {
   return lnot(land(a, b));
 }
 
-literalt z3_propt::lnor(literalt a, literalt b)
+literalt
+z3_propt::lnor(literalt a, literalt b)
 {
   return lnot(lor(a, b));
 }
 
-literalt z3_propt::lequal(literalt a, literalt b)
+literalt
+z3_propt::lequal(literalt a, literalt b)
 {
   return lnot(lxor(a, b));
 }
 
-literalt z3_propt::limplies(literalt a, literalt b)
+literalt
+z3_propt::limplies(literalt a, literalt b)
 {
   return lor(lnot(a), b);
 }
 
-literalt z3_propt::lselect(literalt a, literalt b, literalt c)
+literalt
+z3_propt::lselect(literalt a, literalt b, literalt c)
 {
 #if 1
-  if(a==const_literal(true)) return b;
-  if(a==const_literal(false)) return c;
-  if(b==c) return b;
+  if (a == const_literal(true)) return b;
+  if (a == const_literal(false)) return c;
+  if (b == c) return b;
 #endif
-  literalt l=new_variable();
+  literalt l = new_variable();
   Z3_ast result, formula;
 
   result = Z3_mk_ite(z3_ctx, z3_literal(a), z3_literal(b), z3_literal(c));
@@ -344,240 +363,217 @@ literalt z3_propt::lselect(literalt a, literalt b, literalt c)
   return l;
 }
 
-literalt z3_propt::new_variable()
+literalt
+z3_propt::new_variable()
 {
   literalt l;
 
   l.set(_no_variables, false);
 
-  set_no_variables(_no_variables+1);
+  set_no_variables(_no_variables + 1);
 
   return l;
 }
 
-void z3_propt::eliminate_duplicates(const bvt &bv, bvt &dest)
+void
+z3_propt::eliminate_duplicates(const bvt &bv, bvt &dest)
 {
   std::set<literalt> s;
 
   dest.reserve(bv.size());
 
-  for(bvt::const_iterator it=bv.begin(); it!=bv.end(); it++)
+  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
   {
-    if(s.insert(*it).second)
+    if (s.insert(*it).second)
       dest.push_back(*it);
   }
 }
 
-bool z3_propt::process_clause(const bvt &bv, bvt &dest)
+bool
+z3_propt::process_clause(const bvt &bv, bvt &dest)
 {
 
   dest.clear();
 
   // empty clause! this is UNSAT
-  if(bv.empty()) return false;
+  if (bv.empty()) return false;
 
   std::set<literalt> s;
 
   dest.reserve(bv.size());
 
-  for(bvt::const_iterator it=bv.begin();
-      it!=bv.end();
-      it++)
+  for (bvt::const_iterator it = bv.begin();
+       it != bv.end();
+       it++)
   {
-    literalt l=*it;
+    literalt l = *it;
 
     // we never use index 0
-    assert(l.var_no()!=0);
+    assert(l.var_no() != 0);
 
-    if(l.is_true())
-      return true; // clause satisfied
+    if (l.is_true())
+      return true;  // clause satisfied
 
-    if(l.is_false())
+    if (l.is_false())
       continue;
 
-    assert(l.var_no()<_no_variables);
+    assert(l.var_no() < _no_variables);
 
     // prevent duplicate literals
-    if(s.insert(l).second)
+    if (s.insert(l).second)
       dest.push_back(l);
 
-    if(s.find(lnot(l))!=s.end())
-      return true; // clause satisfied
+    if (s.find(lnot(l)) != s.end())
+      return true;  // clause satisfied
   }
 
   return false;
 }
 
-void z3_propt::lcnf(const bvt &bv)
+void
+z3_propt::lcnf(const bvt &bv)
 {
 
   bvt new_bv;
 
-  if(process_clause(bv, new_bv))
+  if (process_clause(bv, new_bv))
     return;
 
-  if (new_bv.size()==0)
+  if (new_bv.size() == 0)
     return;
 
   Z3_ast lor_var, *args = (Z3_ast*)alloca(new_bv.size() * sizeof(Z3_ast));
-  unsigned int i=0;
+  unsigned int i = 0;
 
-  for(bvt::const_iterator it=new_bv.begin(); it!=new_bv.end(); it++, i++)
-	args[i] = z3_literal(*it);
+  for (bvt::const_iterator it = new_bv.begin(); it != new_bv.end(); it++, i++)
+    args[i] = z3_literal(*it);
 
-  if (i>1)
-  {
+  if (i > 1) {
     lor_var = Z3_mk_or(z3_ctx, i, args);
     assert_formula(lor_var);
-  }
-  else
-  {
+  } else   {
     assert_formula(args[0]);
   }
 }
 
-Z3_ast z3_propt::z3_literal(literalt l)
+Z3_ast
+z3_propt::z3_literal(literalt l)
 {
 
   Z3_ast literal_l;
   std::string literal_s;
 
-  if(l==const_literal(false))
+  if (l == const_literal(false))
     return Z3_mk_false(z3_ctx);
-  else if(l==const_literal(true))
+  else if (l == const_literal(true))
     return Z3_mk_true(z3_ctx);
 
-  literal_s = "l"+i2string(l.var_no());
+  literal_s = "l" + i2string(l.var_no());
   literal_l = z3_api.mk_bool_var(z3_ctx, literal_s.c_str());
 
-  if(l.sign())
-  {
+  if (l.sign()) {
     return Z3_mk_not(z3_ctx, literal_l);
   }
 
   return literal_l;
 }
 
-propt::resultt z3_propt::prop_solve()
+propt::resultt
+z3_propt::prop_solve()
 {
   return P_ERROR;
 }
 
-tvt z3_propt::l_get(literalt a) const
+tvt
+z3_propt::l_get(literalt a) const
 {
 
-  tvt result=tvt(tvt::TV_ASSUME);
+  tvt result = tvt(tvt::TV_ASSUME);
   std::string literal;
   Z3_ast z3_literal;
   size_t found, found2;
 
-  if(a.is_true())
-  {
+  if (a.is_true()) {
     return tvt(true);
-  }
-  else if(a.is_false())
-  {
-	return tvt(false);
+  } else if (a.is_false())    {
+    return tvt(false);
   }
 
-  unsigned v=a.var_no();
-  if(v>=map_prop_vars.size())
-  {
+  unsigned v = a.var_no();
+  if (v >= map_prop_vars.size()) {
     return tvt(tvt::TV_UNKNOWN);
   }
 
-  literal = "l"+i2string(a.var_no());
+  literal = "l" + i2string(a.var_no());
 
-  map_prop_varst::const_iterator cache_result=map_prop_vars.find(literal.c_str());
+  map_prop_varst::const_iterator cache_result = map_prop_vars.find(
+    literal.c_str());
 
-  if(cache_result!=map_prop_vars.end())
-  {
-	z3_literal = cache_result->second;
+  if (cache_result != map_prop_vars.end()) {
+    z3_literal = cache_result->second;
     Z3_app app = Z3_to_app(z3_ctx, z3_literal);
     Z3_func_decl d = Z3_get_app_decl(z3_ctx, app);
     literal = Z3_func_decl_to_string(z3_ctx, d);
 
-    found=literal.find("true");
+    found = literal.find("true");
 
-    if (found!=std::string::npos)
-      result=tvt(true);
-    else
-    {
-      found=literal.find("false");
-      if (found!=std::string::npos)
-      {
-        result=tvt(false);
+    if (found != std::string::npos)
+      result = tvt(true);
+    else {
+      found = literal.find("false");
+      if (found != std::string::npos) {
+	result = tvt(false);
       }
 //      else
-//    	return tvt(tvt::TV_ASSUME);
+//      return tvt(tvt::TV_ASSUME);
 #if 1
-      else
-      {
-        found=literal.find("not");
-        if (found!=std::string::npos)
-        {
-          //result=tvt(true);
-          //result=tvt(false);
-          return tvt(tvt::TV_ASSUME);
-        }
-        else
-        {
-          found=literal.find("or");
-		  found2=literal.find("bool");
-          if (found!=std::string::npos && found2!=std::string::npos)
-          {
-            result=tvt(false);
-          }
-		  else if (found!=std::string::npos)
-		  {
-			result=tvt(true);
+      else {
+	found = literal.find("not");
+	if (found != std::string::npos) {
+	  //result=tvt(true);
+	  //result=tvt(false);
+	  return tvt(tvt::TV_ASSUME);
+	} else   {
+	  found = literal.find("or");
+	  found2 = literal.find("bool");
+	  if (found != std::string::npos && found2 != std::string::npos) {
+	    result = tvt(false);
+	  }       else if (found != std::string::npos) {
+	    result = tvt(true);
+	  } else           {
+	    found = literal.find("<=");
+	    if (found != std::string::npos) {
+	      result = tvt(false);
+	    } else   {
+	      found = literal.find("bvule");
+	      if (found != std::string::npos) {
+		result = tvt(true);
+	      } else   {
+		found = literal.find("=");
+		found2 = literal.find("int");
+		if (found != std::string::npos && found == std::string::npos) {
+		  result = tvt(true);
+		} else if (found != std::string::npos && found2 !=
+		           std::string::npos)       {
+		  result = tvt(false);
+		} else   {
+		  found = literal.find("bvsle");
+		  if (found != std::string::npos) {
+		    //result=tvt(true);
+		    return tvt(tvt::TV_ASSUME);
 		  }
-          else
-          {
-            found=literal.find("<=");
-            if (found!=std::string::npos)
-            {
-              result=tvt(false);
-            }
-            else
-            {
-              found=literal.find("bvule");
-              if (found!=std::string::npos)
-              {
-                result=tvt(true);
-              }
-              else
-              {
-                found=literal.find("=");
-                found2=literal.find("int");
-                if (found!=std::string::npos && found==std::string::npos)
-                {
-                  result=tvt(true);
-                }
-                else if (found!=std::string::npos && found2!=std::string::npos)
-                {
-                  result=tvt(false);
-                }
-                else
-                {
-                  found=literal.find("bvsle");
-                  if (found!=std::string::npos)
-                  {
-                    //result=tvt(true);
-                	return tvt(tvt::TV_ASSUME);
-                  }
-                }
-              }
-            }
-          }
-        }
+		}
+	      }
+	    }
+	  }
+	}
       }
 #endif
     }
   }
 
   if (a.sign())
-	result=!result;
+    result = !result;
 
   return result;
 }
