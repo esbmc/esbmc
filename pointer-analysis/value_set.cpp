@@ -255,11 +255,6 @@ void value_sett::get_value_set(
       it!=object_map.read().end();
       it++)
     dest.push_back(to_expr(it));
-
-  #if 0
-  for(expr_sett::const_iterator it=value_set.begin(); it!=value_set.end(); it++)
-    std::cout << "GET_VALUE_SET: " << from_expr(ns, "", *it) << std::endl;
-  #endif
 }
 
 /*******************************************************************\
@@ -304,12 +299,6 @@ void value_sett::get_value_set_rec(
   const typet &original_type,
   const namespacet &ns) const
 {
-  #if 0
-  std::cout << "GET_VALUE_SET_REC EXPR: " << from_expr(ns, "", expr) << std::endl;
-  std::cout << "GET_VALUE_SET_REC SUFFIX: " << suffix << std::endl;
-  std::cout << std::endl;
-  #endif
-
   const typet &expr_type=ns.follow(expr.type());
 
   if(expr.id()=="unknown" || expr.id()=="invalid")
@@ -700,9 +689,6 @@ void value_sett::get_reference_set_rec(
   object_mapt &dest,
   const namespacet &ns) const
 {
-  #if 0
-  std::cout << "GET_REFERENCE_SET_REC EXPR: " << from_expr(ns, "", expr) << std::endl;
-  #endif
 
   if(expr.id()=="symbol" ||
      expr.id()=="dynamic_object" ||
@@ -723,11 +709,6 @@ void value_sett::get_reference_set_rec(
       throw expr.id_string()+" expected to have one operand";
 
     get_value_set_rec(expr.op0(), dest, "", expr.op0().type(), ns);
-
-    #if 0
-    for(expr_sett::const_iterator it=value_set.begin(); it!=value_set.end(); it++)
-      std::cout << "VALUE_SET: " << from_expr(ns, "", *it) << std::endl;
-    #endif
 
     return;
   }
@@ -857,10 +838,6 @@ void value_sett::assign(
   const namespacet &ns,
   bool add_to_sets)
 {
-  #if 0
-  std::cout << "ASSIGN LHS: " << from_expr(ns, "", lhs) << std::endl;
-  std::cout << "ASSIGN RHS: " << from_expr(ns, "", rhs) << std::endl;
-  #endif
 
   if(rhs.id()=="if")
   {
@@ -901,10 +878,6 @@ void value_sett::assign(
       {
         rhs_member=exprt(rhs.id(), subtype);
       }
-      //else if (rhs.id()=="index") {
-    	  //it should be fixed!
-    	  //std::cout << "ignoring: " << rhs.pretty() << std::endl;
-      //}
       else
       {
     	if (rhs.id() == "index") {
@@ -1090,16 +1063,6 @@ void value_sett::assign_rec(
   const namespacet &ns,
   bool add_to_sets)
 {
-  #if 0
-  std::cout << "ASSIGN_REC LHS: " << from_expr(ns, "", lhs) << std::endl;
-  std::cout << "ASSIGN_REC SUFFIX: " << suffix << std::endl;
-
-  for(object_map_dt::const_iterator it=values_rhs.read().begin(); 
-      it!=values_rhs.read().end(); 
-      it++)
-    std::cout << "ASSIGN_REC RHS: " << 
-      object_numbering[it->first] << std::endl;
-  #endif
 
   if(lhs.id()=="symbol")
   {

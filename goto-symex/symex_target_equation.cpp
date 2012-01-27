@@ -36,6 +36,7 @@ void symex_target_equationt::assignment(
   const exprt &original_lhs,
   exprt &rhs,
   const sourcet &source,
+  std::vector<dstring> stack_trace,
   assignment_typet assignment_type)
 {
   assert(lhs.is_not_nil());
@@ -48,17 +49,10 @@ void symex_target_equationt::assignment(
   SSA_step.original_lhs=original_lhs;
   SSA_step.rhs.swap(rhs);
   SSA_step.assignment_type=assignment_type;
-#if 0
-  exprt tmp(guard.as_expr());
-
-  if (guard.is_true())
-    SSA_step.cond=equality_exprt(SSA_step.lhs, SSA_step.rhs);
-  else
-    SSA_step.cond=gen_implies(tmp, equality_exprt(SSA_step.lhs, SSA_step.rhs));
-#endif
   SSA_step.cond=equality_exprt(SSA_step.lhs, SSA_step.rhs);
   SSA_step.type=goto_trace_stept::ASSIGNMENT;
   SSA_step.source=source;
+  SSA_step.stack_trace = stack_trace;
 }
 
 /*******************************************************************\
@@ -158,6 +152,7 @@ void symex_target_equationt::assertion(
   const guardt &guard,
   exprt &cond,
   const std::string &msg,
+  std::vector<dstring> stack_trace,
   const sourcet &source)
 {
   SSA_steps.push_back(SSA_stept());

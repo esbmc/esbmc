@@ -503,13 +503,10 @@ Function: irept::to_string
 
 \*******************************************************************/
 
-#include "lispirep.h"
 
 std::string irept::to_string() const
 {
-  lispexprt lispexpr;
-  irep2lisp(*this, lispexpr);
-  return lispexpr.expr2string();
+  return pretty(0);
 }
 
 /*******************************************************************\

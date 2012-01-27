@@ -30,8 +30,6 @@ extern "C" {
 #include <goto-programs/show_claims.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/read_goto_binary.h>
-#include <goto-programs/interpreter.h>
-#include <goto-programs/goto_threads.h>
 #include <goto-programs/string_abstraction.h>
 #include <goto-programs/string_instrumentation.h>
 #include <goto-programs/loop_numbers.h>
@@ -483,13 +481,6 @@ bool cbmc_parseoptionst::get_goto_program(
       goto_convert(
         context, bmc.options, goto_functions,
         ui_message_handler);
-    }
-
-    if(cmdline.isset("interpreter"))
-    {
-      status("Starting interpeter");
-      interpreter(context, goto_functions);
-      return true;
     }
 
     if(process_goto_program(bmc, goto_functions))
@@ -1110,7 +1101,6 @@ void cbmc_parseoptionst::help()
 #if 0
     " --arrays-uf-never            never turn arrays into uninterpreted functions\n"
     " --arrays-uf-always           always turn arrays into uninterpreted functions\n"
-    " --interpreter                do concrete execution\n"
 #endif
 #if 0
     " --xml-ui                     use XML-formatted output\n"

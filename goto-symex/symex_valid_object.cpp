@@ -63,7 +63,6 @@ void goto_symext::replace_dynamic_allocation(
 
   if(expr.id()=="valid_object" || expr.id()=="deallocated_object")
   {
-	//std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
     assert(expr.operands().size()==1);
     assert(expr.op0().type().id()==typet::t_pointer);
     

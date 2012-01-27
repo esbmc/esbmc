@@ -48,7 +48,6 @@ public:
     _go_next = false;
     _go_next_formula = false;
     _actual_CS_bound = _CS_bound;
-    _is_same_mutex=false;
     execution_statet *s = new execution_statet(goto_functions, ns, this, initial_level2, options.get_bool_option("schedule"));
     execution_states.push_back(s);
     _cur_state_it = execution_states.begin();
@@ -70,9 +69,6 @@ public:
   bool apply_static_por(const execution_statet &ex_state, const exprt &expr, int i) const;
   bool generate_states_after_start_thread();
   bool generate_states();
-
-  bool get_is_same_mutex(void);
-  void check_mutex(const exprt &code, const execution_statet &ex_state);
 
   bool generate_states_before_read(const exprt &code);
   bool generate_states_before_write(const exprt &code);
@@ -146,7 +142,7 @@ private:
   std::list<execution_statet*>::iterator _cur_state_it;
   int _CS_bound, _actual_CS_bound;
   int _TS_slice;
-  bool _DFS, _multi_formulae, _is_same_mutex, _deadlock_detection, _por;
+  bool _DFS, _multi_formulae, _deadlock_detection, _por;
   bool directed_interleavings;
   const namespacet &_ns;
 

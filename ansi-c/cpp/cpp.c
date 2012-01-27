@@ -865,6 +865,7 @@ subst(struct symtab *sp, struct recur *rp)
 				put[idx++] = ifiles->fname[i];
 			}
 		}
+                put[idx] = '\0';
 		(void)sheap("\"%s\"", put);
 
 		return 1;

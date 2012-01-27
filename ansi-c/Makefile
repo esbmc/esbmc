@@ -5,7 +5,7 @@ include $(ESBMCDIR)/local.inc
 SRCS= c_typecast.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \
       c_types.cpp c_final.cpp trans_unit.cpp ansi_c_typecheck.cpp \
-      c_link.cpp c_preprocess.cpp c_link_type_eq.cpp \
+      c_link.cpp c_preprocess.cpp \
       c_typecheck_base.cpp c_typecheck_initializer.cpp \
       c_typecheck_typecast.cpp c_typecheck_code.cpp \
       c_typecheck_expr.cpp c_typecheck_type.cpp ansi_c_expr.cpp \

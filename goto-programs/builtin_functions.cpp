@@ -449,10 +449,7 @@ void goto_convertt::do_malloc(
   typet alloc_type;
   exprt alloc_size;
 
-  //std::cout << "arguments[0]: " << arguments[0].pretty() << std::endl;
   get_alloc_type(arguments[0], alloc_type, alloc_size);
-  //std::cout << "alloc_type.pretty(): " << alloc_type.pretty() << std::endl;
-  //std::cout << "alloc_size.pretty(): " << alloc_size.pretty() << std::endl;
 
   if(alloc_size.is_nil())
     alloc_size=from_integer(1, uint_type());
@@ -538,14 +535,9 @@ void goto_convertt::do_malloc(
   exprt allocated_object = lhs;
   allocated_object.location() = function.location();
 
-  //std::cout << "allocated_object: " << allocated_object.pretty() << std::endl;
-  //std::cout << "allocated_object.type().id(): " << allocated_object.type().id() << std::endl;
-
   if (options.get_bool_option("memory-leak-check")
 	  && allocated_object.type().id()=="pointer")
     allocated_objects.push(allocated_object);
-
-  //std::cout << "in malloc allocated_objects.size(): " << allocated_objects.size() << std::endl;
 }
 
 /*******************************************************************\
@@ -913,11 +905,9 @@ void goto_convertt::do_function_call_symbol(
     throw "error: function `"+id2string(identifier)+"' type mismatch: expected code";
   }
 
-  bool is_assume=identifier==CPROVER_PREFIX "assume" ||
-                 identifier=="specc::__ESBMC_assume";
+  bool is_assume=identifier==CPROVER_PREFIX "assume";
 
-  bool is_assert=identifier=="c::assert" ||
-                 identifier=="specc::assert";
+  bool is_assert=identifier=="c::assert";
 
   if(is_assume || is_assert)
   {
@@ -1052,9 +1042,6 @@ void goto_convertt::do_function_call_symbol(
 
     std::string description = "assertion ";
 
-    //std::cout << "arguments[0]: " << arguments[0].pretty() << std::endl;
-    //std::cout << "arguments[0].is_address_of(): " << arguments[0].is_address_of() << std::endl;
-    //std::cout << "arguments[0]: " << arguments[0].op0().op0().id() << std::endl;
     //check whether the assert does not contain a member
     if (arguments[0].id() != "address_of" &&
     	arguments[0].op0().op0().id() != "member") {

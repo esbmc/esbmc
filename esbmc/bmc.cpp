@@ -51,7 +51,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include "bmc.h"
 #include "bv_cbmc.h"
-#include "counterex_pretty_greedy.h"
 #include "document_subgoals.h"
 #include "version.h"
 
@@ -671,11 +670,6 @@ bmc_baset::minisat_solver::minisat_solver(bmc_baset &bmc)
 bool bmc_baset::minisat_solver::run_solver()
 {
   bool result = bmc_baset::solver_base::run_solver();
-
-  if (result && bmc.options.get_bool_option("beautify-greedy"))
-      counterexample_beautification_greedyt()(
-        satcheck, bv_cbmc, *bmc.equation, bmc.symex.ns);
-
   return result;
 }
 #endif
