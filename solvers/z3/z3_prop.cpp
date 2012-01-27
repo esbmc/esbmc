@@ -395,8 +395,6 @@ bool z3_propt::process_clause(const bvt &bv, bvt &dest)
     if(l.is_false())
       continue;
 
-    if(l.var_no()>=_no_variables)
-      std::cout << "l.var_no()=" << l.var_no() << " _no_variables=" << _no_variables << std::endl;
     assert(l.var_no()<_no_variables);
 
     // prevent duplicate literals
@@ -454,7 +452,6 @@ Z3_ast z3_propt::z3_literal(literalt l)
 
   if(l.sign())
   {
-	//std::cout << "not " << literal_s << "\n";
     return Z3_mk_not(z3_ctx, literal_l);
   }
 
@@ -474,23 +471,18 @@ tvt z3_propt::l_get(literalt a) const
   Z3_ast z3_literal;
   size_t found, found2;
 
-  //std::cout << "a.var_no(): " << a.var_no() << "\n";
-
   if(a.is_true())
   {
-	//std::cout << "true" << "\n";
     return tvt(true);
   }
   else if(a.is_false())
   {
-	//std::cout << "false" << "\n";
 	return tvt(false);
   }
 
   unsigned v=a.var_no();
   if(v>=map_prop_vars.size())
   {
-	//std::cout << "TV_UNKNOWN " << "\n";
     return tvt(tvt::TV_UNKNOWN);
   }
 
@@ -498,19 +490,14 @@ tvt z3_propt::l_get(literalt a) const
 
   map_prop_varst::const_iterator cache_result=map_prop_vars.find(literal.c_str());
 
-  //std::cout << "literal1: " << literal << "\n";
-
   if(cache_result!=map_prop_vars.end())
   {
-    //std::cout << "Cache hit on " << cache_result->first << "\n";
 	z3_literal = cache_result->second;
     Z3_app app = Z3_to_app(z3_ctx, z3_literal);
     Z3_func_decl d = Z3_get_app_decl(z3_ctx, app);
     literal = Z3_func_decl_to_string(z3_ctx, d);
 
     found=literal.find("true");
-
-    //std::cout << "literal2: " << literal << "\n";
 
     if (found!=std::string::npos)
       result=tvt(true);
@@ -594,13 +581,6 @@ tvt z3_propt::l_get(literalt a) const
 
   return result;
 }
-
-#if 0
-void z3_propt::set_assignment(literalt literal, bool value)
-{
-  std::cout << "value: " << value << std::endl;
-}
-#endif
 
 void
 z3_propt::assert_formula(Z3_ast ast, bool needs_literal)
