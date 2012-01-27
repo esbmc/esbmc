@@ -28,6 +28,7 @@ struct ifstream: istream{
 	ifstream ( );
 	explicit ifstream ( const char * filename, ios_base::openmode mode = ios_base::in );
 	void close ( );
+	bool is_open ( );
 };
 
 struct filebuf{};
