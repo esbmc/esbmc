@@ -63,7 +63,16 @@ namespace std
          head = 1;
        else 
          head++;
-    }	
+    }
+
+    T& back ()
+    {     
+      assert(!empty());
+      T x;
+      x = buf[tail-1];
+      return x;
+    }
+	
   };
 }
 
