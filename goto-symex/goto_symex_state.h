@@ -61,7 +61,7 @@ public:
 		thread_ended = state.thread_ended;
 		guard = state.guard;
 		source = state.source;
-		if_guard_stack = state.if_guard_stack;
+		cur_if_guard = state.cur_if_guard;
 		function_frame = state.function_frame;
 		unwind_map = state.unwind_map;
 		function_unwind = state.function_unwind;
@@ -84,8 +84,7 @@ public:
 
   guardt guard;
   symex_targett::sourcet source;
-  typedef std::stack<guardt> if_guard_stackt;
-  if_guard_stackt if_guard_stack;
+  guardt cur_if_guard;
   std::map<irep_idt, unsigned> function_frame;
   std::map<symex_targett::sourcet, unsigned> unwind_map;
   std::map<irep_idt, unsigned> function_unwind;

@@ -123,10 +123,10 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
     state.guard.make_false();
 #if 1
 	  guardt if_guard;
-	  if(!state.if_guard_stack.empty())
-			if_guard.add(state.if_guard_stack.top().as_expr());
+	  if(state.cur_if_guard.size() != 0)
+	    if_guard.add(state.cur_if_guard.as_expr());
 	  if_guard.add(state.guard.as_expr());
-	  state.if_guard_stack.push(if_guard);
+	  state.cur_if_guard = if_guard;
 #endif
   }
   else
@@ -172,10 +172,10 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
 
 #if 1
 	  guardt if_guard;
-	  if(!state.if_guard_stack.empty())
-		if_guard.add(state.if_guard_stack.top().as_expr());
+	  if(state.cur_if_guard.size() != 0)
+		if_guard.add(state.cur_if_guard.as_expr());
 	  if_guard.add(guard_expr);
-	  state.if_guard_stack.push(if_guard);
+	  state.cur_if_guard = if_guard;
 #endif
 
     }
@@ -184,10 +184,10 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
       state.guard.add(guard_expr);
 #if 1
 	  guardt if_guard;
-	  if(!state.if_guard_stack.empty())
-			if_guard.add(state.if_guard_stack.top().as_expr());
+	  if(state.cur_if_guard.size() != 0)
+	    if_guard.add(state.cur_if_guard.as_expr());
 	  if_guard.add(guard_expr);
-	  state.if_guard_stack.push(if_guard);
+	  state.cur_if_guard = if_guard;
 #endif
       guard_expr.make_not();
       new_state.guard.add(guard_expr);
