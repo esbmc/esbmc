@@ -44,7 +44,7 @@ int main()
    s1 += s2;  // test overloaded concatenation
    cout << s1;
 
-   assert(s1!=s2);
+   assert(s1==s2);
 
    // test conversion constructor
    cout << "\n\ns1 += \" to you\" yields\n";

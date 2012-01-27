@@ -109,7 +109,8 @@ char* strtok(char* str, const char* delim)
 	return nondet_charPointer();
 }
 
-size_t strlen(const char *s)
+//size_t strlen(const char *s)
+int strlen(const char *s)
 {
 	__ESBMC_HIDE:
 	const char *p = s;

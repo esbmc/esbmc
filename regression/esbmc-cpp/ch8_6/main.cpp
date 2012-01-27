@@ -2,26 +2,27 @@
 // Demonstrating standard library class vector.
 #include <iostream>
 
-using std::cout;
-using std::cin;
-using std::endl;
+//using std::cout;
+//using std::cin;
+//using std::endl;
 
 #include <iomanip>
 
-using std::setw;
+//using std::setw;
 
 #include <vector>
 
-using std::vector;
+//using std::vector;
+using namespace std;
 
-void outputVector( const vector< int > & );
-void inputVector( vector< int > & );
+//void outputVector( const vector< int > & );
+//void inputVector( vector< int > & );
 
 int main()
 {
-   vector< int > integers1( 7 );   // 7-element vector< int >
-   vector< int > integers2( 10 );  // 10-element vector< int >
- 
+   vector< int > integers1;   // 7-element vector< int >
+   vector< int > integers2;  // 10-element vector< int >
+ #if 0
    // print integers1 size and contents
    cout << "Size of vector integers1 is " 
         << integers1.size()
@@ -89,11 +90,11 @@ int main()
    cout << "\nAttempt to assign 1000 to integers1.at( 15 )"
         << endl;
    integers1.at( 15 ) = 1000;  // ERROR: out of range
-
+#endif
    return 0;
 
 } // end main
-
+#if 0
 // output vector contents
 void outputVector( const vector< int > &array )
 {
@@ -118,6 +119,8 @@ void inputVector( vector< int > &array )
       cin >> array[ i ];
 
 } // end function inputVector
+
+#endif
 
 /**************************************************************************
  * (C) Copyright 1992-2003 by Deitel & Associates, Inc. and Prentice      *

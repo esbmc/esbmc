@@ -1,9 +1,71 @@
+/*******************************************************************\
+ *
+ *
+ * Author: Lucas Cordeiro
+ *
+ * 
+\*******************************************************************/
+
 #ifndef STL_QUEUE
 #define STL_QUEUE
 
 namespace std
 {
+  #define QUEUE_CAPACITY 20
+  template<class T> class queue
+  {
+    T buf[QUEUE_CAPACITY];
+    int _size=0;
+    int head=0;
+    int tail=0;
+	
+    public:
+    queue():_size(0), head(0), tail(0){}
 
+    void push ( const T& t )
+    {
+      assert(0 <= _size && _size < QUEUE_CAPACITY);
+      buf[tail] = t;
+      _size++;
+     if (tail == QUEUE_CAPACITY)
+       tail = 1;
+     else
+       tail++;
+    }
+
+    bool empty ( ) const
+    {
+      if (head == tail) 
+        return true;
+      else 
+	return false;
+     }
+
+     T& front ( )
+     {
+       assert(!empty());
+       T x;
+       x = buf[head];
+       return x;
+     }
+
+     int size() const
+     {
+       assert(0 <= _size && _size <= QUEUE_CAPACITY);
+       return _size;
+     }
+
+     void pop()
+     {
+       assert(size()>0);
+       _size--;
+       if (head == QUEUE_CAPACITY) 
+         head = 1;
+       else 
+         head++;
+    }	
+  };
 }
 
 #endif
+
