@@ -39,30 +39,30 @@ namespace std
         return true;
       else 
 	return false;
-     }
+    }
 
-     T& front ( )
-     {
-       assert(!empty());
-       T x;
-       x = buf[head];
-       return x;
-     }
+    T& front ( )
+    {
+      assert(!empty());
+      T x;
+      x = buf[head];
+      return x;
+    }
 
-     int size() const
-     {
-       assert(0 <= _size && _size <= QUEUE_CAPACITY);
-       return _size;
-     }
+    int size() const
+    {
+      assert(0 <= _size && _size <= QUEUE_CAPACITY);
+      return _size;
+    }
 
-     void pop()
-     {
-       __ESBMC_assert(size()>0, "queue underflow");
-       _size--;
-       if (head == QUEUE_CAPACITY) 
-         head = 1;
-       else 
-         head++;
+    void pop()
+    {
+      __ESBMC_assert(size()>0, "queue underflow");
+      _size--;
+      if (head == QUEUE_CAPACITY) 
+        head = 1;
+      else 
+        head++;
     }
 
     T& back ()
@@ -71,13 +71,7 @@ namespace std
       T x;
       x = buf[tail-1];
       return x;
-    }
-	
-    void operator -= (T& lhs, T& rhs)
-    {
-	assert(0);
-    }
-
+    }	
   };
 }
 
