@@ -17,12 +17,23 @@ namespace std
 
 	template<class T> class vector
 	{
+		typedef T& reference;
+		typedef const T& const_reference;
+		typedef T& iterator;
+		typedef const T& const_iterator;
+		typedef T size_type;
 	
 		T buf[VECTOR_CAPACITY];
 		int _size;
+		int _capacity;
+
+
 	
 	public:
-		vector():_size(0){}
+		//vector():_size(0){}
+		vector(): _size(0), _capacity(0){}
+		vector(int a, int b): _size(0){}
+		vector(int a): _size(0){}
 
 		void push_back(const T& t)
 		{
@@ -53,7 +64,104 @@ namespace std
 			assert(0 <= _size && _size <= VECTOR_CAPACITY);
 			return VECTOR_CAPACITY;
 		}
+
+		void resize ( T sz, T c = T() );
+
+	    void pop_back()
+	    {
+	      __ESBMC_HIDE:
+	      __ESBMC_assert(_size!=0, "pop_back() on empty vector");
+	      resize(_size-1);
+
+	    }
+
+		T& max_size () const{
+	    	// model
+	    }
+		reference back ( ){
+	    	// model
+	    }
+	    const_reference back ( ) const{
+	    	// model
+	    }
+	    const_reference at ( T n ) const{
+	    	// model
+	    }
+	    reference at ( T n ){
+	    	// model
+	    }
+	    iterator begin (){
+	    	// model
+	    }
+	    const_iterator begin () const{
+	    	// model
+	    }
+	    iterator end (){
+	    	// model
+	    }
+	    const_iterator end () const{
+	    	// model
+	    }
+	    bool empty () const{
+	    	// model
+	    }
+	    void reserve ( T n ){
+	    	// model
+	    }
+	    reference front ( ){
+	    	// model
+	    }
+	    const_reference front ( ) const{
+	    	// model
+	    }
+	    void assign ( size_type n, const T& u ){
+	    	// model
+	    }
+	    T erase ( T position ){
+	    	// model
+	    }
+	    T erase ( T first, T last ){
+	    	// model
+	    }
+	    void clear ( ){
+	    	// model
+	    }
+
 	};
+
+#if 0
+    class reverse_iterator
+    {
+#ifdef __STL_VERSIONS
+  #ifndef VERSION
+    #define VERSION(c,offset)   (c)->_version[(offset)]
+  #endif
+#else
+  #ifndef VERSION
+    #define VERSION(c,offset)   (c)->_version
+  #endif
+#endif
+
+      public:
+      reverse_iterator(vector *_v, unsigned _offset):
+      v(_v),
+      offset(_offset),
+      version(VERSION(v, offset))
+      {
+      }
+
+      reverse_iterator():
+      v(0)
+      {
+      }
+      protected:
+      vector *v;
+      unsigned offset;
+      unsigned version;
+
+    };
+#endif
+
 }
 
 #endif
