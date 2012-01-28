@@ -73,13 +73,13 @@ protected:
 
   void apply_template_args(
     resolve_identifierst &identifiers,
-    const irept &template_args,
+    const cpp_template_args_non_tct &template_args,
     const cpp_typecheck_fargst &fargs);
 
   void apply_template_args(
     exprt &expr,
-    const irept &template_args,
-    const cpp_typecheck_fargst& fargs);
+    const cpp_template_args_non_tct &template_args_non_tc,
+    const cpp_typecheck_fargst &fargs);
 
   void guess_function_template_args(
     resolve_identifierst &identifiers,
@@ -118,8 +118,8 @@ protected:
     std::ostream &out);
 
   void resolve_with_arguments(
-    cpp_scopest::id_sett& id_set,
-    const std::string& base_name,
+    cpp_scopest::id_sett &id_set,
+    const std::string &base_name,
     const cpp_typecheck_fargst &fargs);
 
   void filter_for_named_scopes(cpp_scopest::id_sett &id_set);
@@ -128,19 +128,19 @@ protected:
   #ifdef CPP_SYSTEMC_EXTENSION
   exprt do_builtin_sc_uint_extension(
     const cpp_namet &cpp_name,
-    exprt& template_args);
+    const cpp_template_args_non_tct &template_args);
 
   exprt do_builtin_sc_int_extension(
     const cpp_namet &cpp_name,
-    exprt& template_args);
+    const cpp_template_args_non_tct &template_args);
 
   exprt do_builtin_sc_logic_extension(
     const cpp_namet &cpp_name,
-    const exprt& template_args);
+    const cpp_template_args_non_tct &template_args);
 
   exprt do_builtin_sc_lv_extension(
     const cpp_namet &cpp_name,
-    exprt& template_args);
+    const cpp_template_args_non_tct &template_args);
   #endif
 };
 

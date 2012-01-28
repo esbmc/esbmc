@@ -290,9 +290,9 @@ const symbolt &cpp_typecheckt::instantiate_template(
   {
     typet declaration_type=new_decl.type();
 
-//    // specialization?
-//    if(specialization_given)
-//    {
+    // specialization?
+    if(is_specialization)
+    {
       if(declaration_type.id()=="struct")
       {
         declaration_type=specialization;
@@ -303,7 +303,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
         irept tmp=specialization;
         new_decl.declarators()[0].swap(tmp);
       }
-//    }
+    }
 
     template_map.apply(declaration_type);
     new_decl.type().swap(declaration_type);

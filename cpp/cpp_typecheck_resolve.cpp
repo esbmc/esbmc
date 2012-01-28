@@ -88,7 +88,7 @@ Purpose:
 
 void cpp_typecheck_resolvet::apply_template_args(
   resolve_identifierst &identifiers,
-  const irept &template_args,
+  const cpp_template_args_non_tct &template_args,
   const cpp_typecheck_fargst &fargs)
 {
   resolve_identifierst old_identifiers;
@@ -1213,7 +1213,7 @@ exprt cpp_typecheck_resolvet::resolve(
   bool fail_with_exception)
 {
   std::string base_name;
-  exprt template_args;
+  cpp_template_args_non_tct template_args;
   template_args.make_nil();
 
   // save 'this_expr' before resolving the scopes
@@ -1818,92 +1818,102 @@ Purpose:
 
 void cpp_typecheck_resolvet::apply_template_args(
   exprt &expr,
-  const irept &template_args,
-  const cpp_typecheck_fargst& fargs)
+  const cpp_template_args_non_tct &template_args_non_tc,
+  const cpp_typecheck_fargst &fargs)
 {
-  const irept::subt &arguments=
-  template_args.find("arguments").get_sub();
+  if(expr.id()!="symbol")
+    return; // templates are always symbols
 
-  typet tmp(expr.type());
-  cpp_typecheck.follow_symbol(tmp);
+  const symbolt &template_symbol=
+    cpp_typecheck.lookup(expr.get("identifier"));
 
-  // template class or function?
-  if(tmp.get_bool("is_template"))
+  if(!template_symbol.type.get_bool("is_template"))
+    return;
+
+  #if 0
+  if(template_args_non_tc.is_nil())
   {
-    if(template_args.is_nil())
-    {
-      expr.make_nil();
-      return;
-    }
-
-    assert(tmp.id() == "cpp-declaration");
-
-    if(tmp.find("type").id()=="struct")
-    {
-      if(expr.id()!="symbol")
-      {
-        cpp_typecheck.err_location(location);
-        throw "expected template-class symbol";
-      }
-
-      const symbolt &new_symbol=
-      cpp_typecheck.instantiate_template(
-        location, expr.get("identifier"), template_args);
-
-      exprt expr_type("type");
-      expr_type.type().id("symbol");
-      expr_type.type().set("identifier",new_symbol.name);
-      expr.swap(expr_type);
-    }
-    else
-    {
-      // musst be a function, maybe method
-      if(expr.id()!="symbol")
-      {
-        cpp_typecheck.err_location(location);
-        throw "expected template function symbol type";
-      }
-
-      const symbolt &new_symbol=
-      cpp_typecheck.instantiate_template(
-                                         location, expr.get("identifier"), template_args);
-
-      // check if it is a method
-      const code_typet& code_type = to_code_type(new_symbol.type);
-      if(!code_type.arguments().empty() &&
-          code_type.arguments()[0].get("#base_name") == "this")
-      {
-        // do we have an object?
-        if(fargs.has_object)
-        {
-          const symbolt& type_symb =
-            cpp_typecheck.lookup(fargs.operands.begin()->type().get("identifier"));
-          const struct_typet& struct_type = to_struct_type(type_symb.type);
-          assert(struct_type.has_component(new_symbol.name));
-          exprt member("member",code_type);
-          member.set("component_name",new_symbol.name);
-          member.copy_to_operands(*fargs.operands.begin());
-          member.location() = location;
-          expr.swap(member);
-          return;
-        }
-
-      }
-
-      expr=cpp_symbol_expr(new_symbol);
-      expr.location()=location;
-    }
+    // no arguments, need to guess
+    guess_function_template_args(expr, fargs);
+    return;
   }
-  else if(!arguments.empty())
+  #endif
+
+  // TODO
+  // We typecheck the template arguments in the context
+  // of the original scope!
+//  cpp_template_args_tct template_args_tc;
+//
+//  {
+//    cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
+//
+//    cpp_typecheck.cpp_scopes.go_to(*original_scope);
+//
+//    template_args_tc=
+//      cpp_typecheck.typecheck_template_args(
+//        location,
+//        template_symbol,
+//        template_args_non_tc);
+//    // go back to where we used to be
+//  }
+
+  // We never try 'unassigned' template arguments.
+//  if(template_args_tc.has_unassigned())
+//    assert(false);
+
+  // a template is always a declaration
+  const cpp_declarationt &cpp_declaration=
+    to_cpp_declaration(template_symbol.type);
+    
+  // is it a template class or function?
+  if(cpp_declaration.is_template_class())
   {
-    #if 0
-    cpp_typecheck.err_location(location);
-    cpp_typecheck.err
-    << "expected template type left of <...>, but got "
-    << cpp_typecheck.to_string(expr.type()) << std::endl;
-    throw 0;
-    #endif
-    expr.make_nil();
+    const symbolt &new_symbol=
+      cpp_typecheck.instantiate_template(
+        location, expr.get("identifier"), template_args_non_tc);
+
+    exprt expr_type("type");
+    expr_type.type().id("symbol");
+    expr_type.type().set("identifier", new_symbol.name);
+    expr.swap(expr_type);
+  }
+  else
+  {
+    // must be a function, maybe method
+    const symbolt &new_symbol=
+      cpp_typecheck.instantiate_template(
+        location, expr.get("identifier"), template_args_non_tc);
+
+    // check if it is a method
+    const code_typet &code_type = to_code_type(new_symbol.type);
+
+    if(!code_type.arguments().empty() && 
+        code_type.arguments()[0].get("#base_name")=="this")
+    {
+      // do we have an object?
+      if(fargs.has_object)
+      {
+        const symbolt &type_symb = 
+          cpp_typecheck.lookup(fargs.operands.begin()->type().get("identifier"));
+
+        assert(type_symb.type.id()=="struct");
+
+        const struct_typet &struct_type=
+          to_struct_type(type_symb.type);
+
+        assert(struct_type.has_component(new_symbol.name));
+        member_exprt member(code_type);
+        member.set_component_name(new_symbol.name);
+        member.struct_op()=*fargs.operands.begin();
+        member.location()=location;
+        expr.swap(member);
+        return;
+      }
+
+    }
+
+    expr=cpp_symbol_expr(new_symbol);
+    expr.location()=location;
   }
 }
 
@@ -2177,22 +2187,16 @@ Purpose:
 
 exprt cpp_typecheck_resolvet::do_builtin_sc_uint_extension(
   const cpp_namet &cpp_name,
-  exprt& template_args)
+  const cpp_template_args_non_tct &template_args)
 {
-  if(template_args.is_nil())
+  if(template_args.arguments().size()!=1)
   {
     cpp_typecheck.err_location(cpp_name);
-    cpp_typecheck.str << "template arguments expected";
+    cpp_typecheck.str << "one template argument expected";
     throw 0;
   }
 
-  cpp_typecheck.typecheck_template_args(template_args);
-
-  irept args=template_args.find("arguments");
-  assert(args.is_not_nil() && args.get_sub().size() == 1);
-
-  exprt arg0;
-  arg0.swap(args.get_sub()[0]);
+  exprt arg0=template_args.arguments()[0];
 
   if(!arg0.is_constant() ||
      arg0.type().id()!="signedbv")
@@ -2232,22 +2236,16 @@ Purpose:
 
 exprt cpp_typecheck_resolvet::do_builtin_sc_int_extension(
   const cpp_namet &cpp_name,
-  exprt& template_args)
+  const cpp_template_args_non_tct &template_args)
 {
- if(template_args.is_nil())
+  if(template_args.arguments().size()!=1)
   {
     cpp_typecheck.err_location(cpp_name);
-    cpp_typecheck.str << "template arguments expected";
+    cpp_typecheck.str << "one template argument expected";
     throw 0;
   }
 
-  cpp_typecheck.typecheck_template_args(template_args);
-
-  irept args = template_args.find("arguments");
-  assert(args.is_not_nil() && args.get_sub().size() == 1);
-
-  exprt arg0;
-  arg0.swap(args.get_sub()[0]);
+  exprt arg0=template_args.arguments()[0];
 
   if(!arg0.is_constant() || arg0.type().id() != "signedbv")
   {
@@ -2288,9 +2286,9 @@ Purpose:
 
 exprt cpp_typecheck_resolvet::do_builtin_sc_logic_extension(
   const cpp_namet &cpp_name,
-  const exprt &template_args)
+  const cpp_template_args_non_tct &template_args)
 {
-  if(template_args.is_not_nil())
+  if(template_args.arguments().size()!=0)
   {
     cpp_typecheck.err_location(cpp_name);
     cpp_typecheck.str << "no template argument expected";
@@ -2317,22 +2315,16 @@ Purpose:
 
 exprt cpp_typecheck_resolvet::do_builtin_sc_lv_extension(
   const cpp_namet &cpp_name,
-  exprt &template_args)
+  const cpp_template_args_non_tct &template_args)
 {
-  if(template_args.is_nil())
+  if(template_args.arguments().size()!=1)
   {
     cpp_typecheck.err_location(cpp_name);
-    cpp_typecheck.str << "template arguments expected";
+    cpp_typecheck.str << "one template argument expected";
     throw 0;
   }
 
-  cpp_typecheck.typecheck_template_args(template_args);
-
-  irept args = template_args.find("arguments");
-  assert(args.is_not_nil() && args.get_sub().size() == 1);
-
-  exprt arg0;
-  arg0.swap(args.get_sub()[0]);
+  exprt arg0=template_args.arguments()[0];
 
   if(!arg0.is_constant() || arg0.type().id() != "signedbv")
   {
