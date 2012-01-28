@@ -86,8 +86,6 @@ z3_convt::get(const exprt &expr) const
     std::cerr << std::endl;
     abort();
   }
-
-  return expr;
 }
 
 void
