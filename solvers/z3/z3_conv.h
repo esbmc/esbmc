@@ -207,7 +207,7 @@ private:
   void link_syms_to_literals(void);
   void finalize_pointer_chain(void);
   void init_addr_space_array(void);
-  void store_sat_assignments(Z3_model m);
+  void store_sat_assignments(void);
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
 	    max_core_size;
 
