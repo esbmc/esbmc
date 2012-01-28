@@ -100,8 +100,13 @@ z3_convt::get(const exprt &expr) const
       std::cerr << "Unrecognized symbol in z3_get: " << identifier << std::endl;
       abort();
     }
-  } else if (expr.id() == exprt::constant)
+  } else if (expr.id() == exprt::constant) {
     return expr;
+  } else {
+    std::cerr << "Unrecognized irep fetched from Z3: " << expr.id().as_string();
+    std::cerr << std::endl;
+    abort();
+  }
 
   return expr;
 }
