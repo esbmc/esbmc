@@ -63,12 +63,6 @@ exprt
 z3_convt::get(const exprt &expr) const
 {
 
-  if ((expr.type().is_array() && expr.type().subtype().is_array()) ||
-      (expr.type().is_array() && expr.type().subtype().id() == "pointer") ||
-      (expr.type().is_array() && expr.type().subtype().id() == "union") ||
-      (expr.type().is_array() && expr.type().subtype().id() == "struct"))
-    return expr;
-
   if (expr.id() == exprt::symbol ||
       expr.id() == "nondet_symbol") {
     std::string identifier, tmp;
