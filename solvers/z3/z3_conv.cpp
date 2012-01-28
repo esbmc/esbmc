@@ -496,7 +496,6 @@ z3_convt::check2_z3_properties(void)
 {
   DEBUGLOC
 
-  Z3_model m = 0;
   Z3_lbool result;
   unsigned i;
 
@@ -520,10 +519,10 @@ z3_convt::check2_z3_properties(void)
       unsat_core_size = z3_prop.assumpt.size();
       memset(core, 0, sizeof(Z3_ast) * unsat_core_size);
       result = Z3_check_assumptions(z3_ctx, z3_prop.assumpt.size(),
-                             assumptions_core, &m, &proof, &unsat_core_size,
+                             assumptions_core, &model, &proof, &unsat_core_size,
                              core);
     } else {
-      result = Z3_check_and_get_model(z3_ctx, &m);
+      result = Z3_check_and_get_model(z3_ctx, &model);
     }
   }
   catch (std::string &error_str)
@@ -546,7 +545,7 @@ z3_convt::check2_z3_properties(void)
 
 
   if (result == Z3_L_TRUE) {
-    store_sat_assignments(m);
+    store_sat_assignments(model);
     //printf("Counterexample:\n");
     //z3_api.display_model(z3_ctx, stdout, m);
   } else if (z3_prop.uw && result == Z3_L_FALSE)   {
@@ -556,7 +555,7 @@ z3_convt::check2_z3_properties(void)
       if (id.find("false") != std::string::npos) {
 	result = z3_api.check2(Z3_L_TRUE);
 	if (result == Z3_L_TRUE) {
-	  store_sat_assignments(m);
+	  store_sat_assignments(model);
 	}
 	unsat_core_size = 0;
 	return result;

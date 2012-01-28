@@ -46,6 +46,7 @@ public:
     this->z3_prop.store_assumptions = (smt || uw);
    s_is_uw = uw;
    total_mem_space = 0;
+   model = NULL;
 
     Z3_push(z3_ctx);
     z3_prop.z3_ctx = z3_ctx;
@@ -209,6 +210,8 @@ private:
   void store_sat_assignments(Z3_model m);
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
 	    max_core_size;
+
+  Z3_model model; // Model of satisfying program.
 
   z3_propt z3_prop;
   z3_capi z3_api;
