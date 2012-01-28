@@ -137,8 +137,6 @@ z3_convt::bv_get_rec(
       return false_exprt();
   }
 
-  bvtypet bvtype = get_bvtype(type);
-
   if (type.is_array()) {
     unsigned sub_width;
     const typet &subtype = type.subtype();
@@ -337,19 +335,11 @@ z3_convt::bv_get_rec(
     return value_expr;
   }
 
-  switch (bvtype) {
-  case IS_C_ENUM:
-  {
+  if (type.id() == "c_enum") {
     constant_exprt value_expr(type);
     value_expr.set_value(value);
     return value_expr;
-  }
-  break;
-
-  case IS_UNKNOWN:
-    break;
-
-  default:
+  } else {
     unsigned width;
     boolbv_get_width(type, width);
     constant_exprt value_expr(type);
