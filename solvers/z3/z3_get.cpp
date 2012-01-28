@@ -77,21 +77,6 @@ z3_convt::get(const exprt &expr) const
 
     identifier = expr.identifier().as_string();
 
-    if (expr.type().id() == "pointer") {
-      for (z3_cachet::const_iterator it = z3_cache.begin();
-           it != z3_cache.end(); it++)
-      {
-	if (identifier.compare((*it).second.c_str()) == 0) {
-	  if ((*it).first.id() == exprt::symbol || (*it).first.id() ==
-	      exprt::constant)
-	    return (*it).first;
-	  else
-	    return nil_exprt();
-	}
-      }
-      return nil_exprt();
-    }
-
     map_varst::const_iterator cache_result = map_vars.find(identifier.c_str());
     if (cache_result != map_vars.end()) {
       bv = cache_result->second;
