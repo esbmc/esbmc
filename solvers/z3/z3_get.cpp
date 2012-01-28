@@ -240,9 +240,9 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     const typet &subtype = static_cast<const typet &>(type.subtype());
 
     tmp = Z3_get_app_arg(z3_ctx, app, 0); //object
-    object = bv_get_rec(tmp, subtype);
+    object = bv_get_rec(tmp, unsignedbv_typet(config.ansi_c.int_width));
     tmp = Z3_get_app_arg(z3_ctx, app, 1); //offset
-    offset = bv_get_rec(tmp, subtype);
+    offset = bv_get_rec(tmp, unsignedbv_typet(config.ansi_c.int_width));
 
     pointer_logict::pointert pointer;
     pointer.object =
