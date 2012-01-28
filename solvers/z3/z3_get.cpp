@@ -66,18 +66,21 @@ z3_convt::get(const exprt &expr) const
   if (expr.id() == exprt::symbol ||
       expr.id() == "nondet_symbol") {
     std::string identifier, tmp;
+    Z3_sort sort;
     Z3_ast bv;
+    Z3_func_decl func;
 
     identifier = expr.identifier().as_string();
+    create_type(expr.type(), sort);
+    bv = z3_api.mk_var(identifier.c_str(), sort);
+    func = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, bv));
 
-    map_varst::const_iterator cache_result = map_vars.find(identifier.c_str());
-    if (cache_result != map_vars.end()) {
-      bv = cache_result->second;
-      return bv_get_rec(bv, expr.type());
-    } else {
-      std::cerr << "Unrecognized symbol in z3_get: " << identifier << std::endl;
-      abort();
+    if(Z3_eval_func_decl(z3_ctx, model, func, &bv) == Z3_L_FALSE) {
+      // This symbol doesn't have an assignment in this model
+      return nil_exprt();
     }
+
+    return bv_get_rec(bv, expr.type());
   } else if (expr.id() == exprt::constant) {
     return expr;
   } else {
