@@ -141,9 +141,6 @@ z3_convt::bv_get_rec(
     unsigned sub_width;
     const typet &subtype = type.subtype();
 
-    if (subtype.id() == "struct") //@TODO
-      return nil_exprt();
-
     get_type_width(subtype, sub_width);
     exprt expr;
     static exprt::operandst op;
