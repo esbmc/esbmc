@@ -144,43 +144,43 @@ z3_convt::bv_get_rec(
     if (subtype.id() == "struct") //@TODO
       return nil_exprt();
 
-    if (!boolbv_get_width(subtype, sub_width)) {
-      exprt expr;
-      static exprt::operandst op;
-      constant_exprt zero_expr(subtype);
+    get_type_width(subtype, sub_width);
+    exprt expr;
+    static exprt::operandst op;
+    constant_exprt zero_expr(subtype);
 
-      op.reserve(width / sub_width);
-      unsigned num_fields = Z3_get_app_num_args(z3_ctx, Z3_to_app(z3_ctx, bv));
+    op.reserve(width / sub_width);
+    unsigned num_fields = Z3_get_app_num_args(z3_ctx, Z3_to_app(z3_ctx, bv));
 
-      if (num_fields == 0)
-        return nil_exprt();
+    if (num_fields == 0)
+      return nil_exprt();
 
-      unknown.resize(width / sub_width);
+    unknown.resize(width / sub_width);
 
-      fill_vector(bv, unknown, subtype);
+    fill_vector(bv, unknown, subtype);
 
-      if (unknown.size() == 0)
-        return nil_exprt();
+    if (unknown.size() == 0)
+      return nil_exprt();
 
-      unsigned int size = unknown.size();
-      zero_expr.set_value("0");
+    unsigned int size = unknown.size();
+    zero_expr.set_value("0");
 
-      for (unsigned i = 0; i < size; i++)
-      {
-        expr = unknown[i];
+    for (unsigned i = 0; i < size; i++)
+    {
+      expr = unknown[i];
 
-        if (expr.value().as_string().compare("") == 0)
-          op.push_back(zero_expr);
-        else
-          op.push_back(expr);
-      }
+      if (expr.value().as_string().compare("") == 0)
+        op.push_back(zero_expr);
+      else
+        op.push_back(expr);
+    }
 
-      if (op.empty())
-        return nil_exprt();
+    if (op.empty())
+      return nil_exprt();
 
-      exprt dest = exprt("array", type);
-      dest.operands().swap(op);
-      return dest;
+    exprt dest = exprt("array", type);
+    dest.operands().swap(op);
+    return dest;
   } else if (type.id() == "struct") {
     const irept &components = type.components();
     exprt::operandst op;
@@ -284,7 +284,6 @@ z3_convt::bv_get_rec(
     value.operands().swap(op);
 
     return value;
-  }
 #if 0
     else if (type.id() == "pointer") {
       exprt object, offset;
