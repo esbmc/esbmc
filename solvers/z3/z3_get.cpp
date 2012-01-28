@@ -108,7 +108,11 @@ z3_convt::fill_vector(const Z3_ast bv, std::vector<exprt> &unknown, const typet 
 exprt
 z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
 {
+  Z3_ast tmp;
+  Z3_app app;
   unsigned width;
+
+  app = Z3_to_app(z3_ctx, bv); // Just typecasting.
 
   get_type_width(type, width);
 
@@ -133,7 +137,10 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     if (num_fields == 0)
       return nil_exprt();
 
-    fill_vector(bv, unknown, type.subtype());
+    for (unsigned int i = 0; i < num_fields; i++) {
+      tmp = Z3_get_app_arg(z3_ctx, app, i);
+      unknown.push_back(bv_get_rec(tmp, type.subtype()));
+    }
 
     if (unknown.size() == 0)
       return nil_exprt();
