@@ -104,9 +104,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       return true_exprt();
     else
       return false_exprt();
-  }
-
-  if (type.is_array()) {
+  } else if (type.is_array()) {
     std::vector<exprt> unknown;
     exprt expr;
     static exprt::operandst op;
