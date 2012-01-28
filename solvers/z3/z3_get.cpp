@@ -107,11 +107,8 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
   } else if (type.is_array()) {
     std::vector<exprt> unknown;
     exprt expr;
-    exprt::operandst op;
-    constant_exprt zero_expr(type.subtype());
 
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, Z3_to_app(z3_ctx, bv));
-    op.reserve(num_fields);
     unknown.resize(num_fields);
 
     if (num_fields == 0)
@@ -121,12 +118,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       tmp = Z3_get_app_arg(z3_ctx, app, i);
       unknown.push_back(bv_get_rec(tmp, type.subtype()));
     }
-
-    if (unknown.size() == 0)
-      return nil_exprt();
-
-    unsigned int size = unknown.size();
-    zero_expr.set_value("0");
 
     exprt dest = exprt("array", type);
     dest.operands() = unknown;
