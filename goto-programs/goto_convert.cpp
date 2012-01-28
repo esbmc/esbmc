@@ -303,6 +303,8 @@ void goto_convertt::convert(
 
   dest.instructions.clear();
 
+  link_up_type_names((codet&)code, ns);
+
   if(statement=="block")
     convert_block(code, dest);
   else if(statement=="decl")
@@ -889,9 +891,6 @@ void goto_convertt::convert_assign(
   else
   {
     remove_sideeffects(rhs, dest);
-
-    link_up_type_names(lhs, ns);
-    link_up_type_names(rhs, ns);
 
     if(lhs.id()=="typecast")
     {
