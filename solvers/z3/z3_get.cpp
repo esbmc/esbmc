@@ -284,35 +284,32 @@ z3_convt::bv_get_rec(
     value.operands().swap(op);
 
     return value;
-#if 0
-    else if (type.id() == "pointer") {
-      exprt object, offset;
-      Z3_app app = Z3_to_app(z3_ctx, bv);
-      unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
-      Z3_ast tmp;
+  } else if (type.id() == "pointer") {
+    exprt object, offset;
+    Z3_app app = Z3_to_app(z3_ctx, bv);
+    unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
+    Z3_ast tmp;
 
-      assert(num_fields == 2);
+    assert(num_fields == 2);
 
-      const typet &subtype = static_cast<const typet &>(type.subtype());
+    const typet &subtype = static_cast<const typet &>(type.subtype());
 
-      tmp = Z3_get_app_arg(z3_ctx, app, 0); //object
-      object = bv_get_rec(tmp, unknown, subtype);
-      tmp = Z3_get_app_arg(z3_ctx, app, 1); //offset
-      offset = bv_get_rec(tmp, unknown, subtype);
+    tmp = Z3_get_app_arg(z3_ctx, app, 0); //object
+    object = bv_get_rec(tmp, unknown, subtype);
+    tmp = Z3_get_app_arg(z3_ctx, app, 1); //offset
+    offset = bv_get_rec(tmp, unknown, subtype);
 
-      pointer_logict::pointert pointer;
-      pointer.object =
-        integer2long(binary2integer(object.value().as_string(), false));
-      pointer.offset = binary2integer(offset.value().as_string(), true);
-      if (pointer.offset < 0) {
-	constant_exprt result(type);
-	result.set_value("NULL");
-	return result;
-      }
-
-      return pointer_logic.pointer_expr(pointer, type);
+    pointer_logict::pointert pointer;
+    pointer.object =
+      integer2long(binary2integer(object.value().as_string(), false));
+    pointer.offset = binary2integer(offset.value().as_string(), true);
+    if (pointer.offset < 0) {
+      constant_exprt result(type);
+      result.set_value("NULL");
+      return result;
     }
-#endif
+
+    return pointer_logic.pointer_expr(pointer, type);
   } else if (type.id() == "signedbv" || type.id() == "unsignedbv") {
     unsigned width;
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
