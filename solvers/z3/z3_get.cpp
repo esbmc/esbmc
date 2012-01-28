@@ -314,38 +314,27 @@ z3_convt::bv_get_rec(
       return pointer_logic.pointer_expr(pointer, type);
     }
 #endif
-  }
-
-  std::string value;
-  Z3_ast_kind ast_kind;
-
-  ast_kind = Z3_get_ast_kind(z3_ctx, bv);
-
-  if (ast_kind == Z3_NUMERAL_AST)
-    value = Z3_get_numeral_string(z3_ctx, bv);
-  else
-    return nil_exprt();
-
-  if (type.id() == "fixedbv" && int_encoding) {
-    if (boolbv_get_width(type, width))
-      return nil_exprt();
-
-    constant_exprt value_expr(type);
-    value_expr.set_value(get_fixed_point(width, value));
-    return value_expr;
-  }
-
-  if (type.id() == "c_enum") {
-    constant_exprt value_expr(type);
-    value_expr.set_value(value);
-    return value_expr;
-  } else {
+  } else if (type.id() == "signedbv" || type.id() == "unsignedbv") {
     unsigned width;
+    std::string value = Z3_get_numeral_string(z3_ctx, bv);
     boolbv_get_width(type, width);
     constant_exprt value_expr(type);
     value_expr.set_value(integer2binary(string2integer(value), width));
     return value_expr;
+  } else if (type.id() == "fixedbv" && int_encoding) {
+    std::string value = Z3_get_numeral_string(z3_ctx, bv);
+    get_type_width(type, width);
+    constant_exprt value_expr(type);
+    value_expr.set_value(get_fixed_point(width, value));
+    return value_expr;
+  } else if (type.id() == "c_enum") {
+    std::string value = Z3_get_numeral_string(z3_ctx, bv);
+    constant_exprt value_expr(type);
+    value_expr.set_value(value);
+    return value_expr;
+  } else {
+//    std::cerr << "Unrecognized type \"" << type.id() << "\" generating counterexample" << std::endl;
+//    abort();
+    return nil_exprt();
   }
-
-  return nil_exprt();
 }
