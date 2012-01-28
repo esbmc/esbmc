@@ -152,7 +152,7 @@ private:
   void assert_formula(Z3_ast ast, bool needs_literal = true);
   void assert_literal(literalt l, Z3_ast ast);
 
-  void get_type_width(const typet &t, unsigned &width);
+  void get_type_width(const typet &t, unsigned &width) const;
 
   std::string double2string(double d) const;
 

@@ -3433,7 +3433,7 @@ z3_convt::get_number_variables_z3(void)
 }
 
 void
-z3_convt::get_type_width(const typet &t, unsigned &width)
+z3_convt::get_type_width(const typet &t, unsigned &width) const
 {
 
   if (boolbv_get_width(t, width))
