@@ -66,6 +66,10 @@ protected:
 
   bool have_function_pointers();
   bool have_function_pointers(const goto_programt &dest);
+
+private:
+  bool inlining;
+
 };
 
 #endif

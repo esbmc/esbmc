@@ -227,6 +227,9 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("smtlib-ileave-num", "1");
 
+  if(cmdline.isset("inlining"))
+    options.set_option("inlining", true);
+
   // jmorse
   if(cmdline.isset("timeout")) {
 #ifdef _WIN32
@@ -857,7 +860,8 @@ bool cbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     // do partial inlining
-    goto_partial_inline(goto_functions, ns, ui_message_handler);
+    if(!cmdline.isset("inlining"))
+      goto_partial_inline(goto_functions, ns, ui_message_handler);
 
     if(!cmdline.isset("show-features"))
     {
@@ -1019,6 +1023,7 @@ void cbmc_parseoptionst::help()
     " -I path                      set include path\n"
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
+    " --inlining                   inlining function calls\n"
     " --program-only               only show program expression\n"
     " --all-claims                 keep all claims\n"
     " --show-loops                 show the loops in the program\n"

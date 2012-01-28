@@ -36,6 +36,10 @@ goto_convert_functionst::goto_convert_functionst(
   goto_convertt(_context, _options, _message_handler),
   functions(_functions)
 {
+	if (options.get_bool_option("inlining"))
+	  inlining=true;
+	else
+	  inlining=false;
 }
 
 /*******************************************************************\
@@ -90,10 +94,12 @@ void goto_convert_functionst::goto_convert()
   functions.compute_location_numbers();
 
   // inline those functions marked as "inlined"
-  goto_partial_inline(
-    functions,
-    ns,
-    get_message_handler());
+  if (!inlining) {
+    goto_partial_inline(
+      functions,
+      ns,
+      get_message_handler());
+  }
 }
 
 /*******************************************************************\

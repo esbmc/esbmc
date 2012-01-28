@@ -5,6 +5,7 @@
 #include "parseoptions.h"
 
 const struct opt_templ esbmc_options[] = {
+{ 0,	"inlining",		switc,		""	},
 { 0,	"program-only",		switc,		""	},
 { 0,	"function",		string,		""	},
 { 0,	"preprocess",		switc,		""	},
