@@ -481,6 +481,8 @@ z3_convt::dec_solve(void)
 
   result = check2_z3_properties();
 
+  bv_cache.clear();
+
   if (result == Z3_L_FALSE)
     return D_UNSATISFIABLE;
   else if (result == Z3_L_UNDEF)
