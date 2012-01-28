@@ -169,21 +169,17 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       op.push_back(nil_exprt());
       if (subtype.id() != "pointer") { //@TODO: beautify counter-examples that
                                        // contain pointers
-        unsigned sub_width;
+        tmp = Z3_get_app_arg(z3_ctx, app, i);
+        expr = bv_get_rec(tmp, subtype);
+        if (!expr.is_nil())
+          unknown.push_back(expr);
+        else
+          return nil_exprt();
 
-        if (!boolbv_get_width(subtype, sub_width)) {
-          tmp = Z3_get_app_arg(z3_ctx, app, i);
-          expr = bv_get_rec(tmp, subtype);
-          if (!expr.is_nil())
-            unknown.push_back(expr);
-          else
-            return nil_exprt();
+        op.back() = unknown.back();
 
-          op.back() = unknown.back();
-
-          ++i;
-        }
-      }
+        ++i;
+    }
     }
 
     exprt dest = exprt(type.id(), type);
@@ -231,18 +227,15 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       const typet &subtype = it->type();
 
       if (subtype.id() != "pointer") { //@TODO
-        unsigned sub_width;
-        if (!boolbv_get_width(subtype, sub_width)) {
-          tmp = Z3_get_app_arg(z3_ctx, app, i);
-          expr = bv_get_rec(tmp, subtype);
-          if (comp_nr == i) {
-            if (!expr.is_nil())
-              unknown.push_back(expr);
-            op.push_back(unknown.back());
-            break;
-          }
-          ++i;
+        tmp = Z3_get_app_arg(z3_ctx, app, i);
+        expr = bv_get_rec(tmp, subtype);
+        if (comp_nr == i) {
+          if (!expr.is_nil())
+            unknown.push_back(expr);
+          op.push_back(unknown.back());
+          break;
         }
+        ++i;
       }
     }
 
