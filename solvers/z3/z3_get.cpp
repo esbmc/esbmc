@@ -96,9 +96,10 @@ z3_convt::get(const exprt &expr) const
     if (cache_result != map_vars.end()) {
       bv = cache_result->second;
       return bv_get_rec(bv, unknown, expr.type());
+    } else {
+      std::cerr << "Unrecognized symbol in z3_get: " << identifier << std::endl;
+      abort();
     }
-
-    return bv_get_rec(bv, unknown, expr.type());
   } else if (expr.id() == exprt::constant)
     return expr;
 
