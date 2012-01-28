@@ -107,7 +107,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
   } else if (type.is_array()) {
     std::vector<exprt> unknown;
     exprt expr;
-    static exprt::operandst op;
+    exprt::operandst op;
     constant_exprt zero_expr(type.subtype());
 
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, Z3_to_app(z3_ctx, bv));
