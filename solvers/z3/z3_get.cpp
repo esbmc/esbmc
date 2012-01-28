@@ -146,13 +146,12 @@ z3_convt::bv_get_rec(
     static exprt::operandst op;
     constant_exprt zero_expr(subtype);
 
-    op.reserve(width / sub_width);
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, Z3_to_app(z3_ctx, bv));
+    op.reserve(num_fields);
+    unknown.resize(num_fields);
 
     if (num_fields == 0)
       return nil_exprt();
-
-    unknown.resize(width / sub_width);
 
     fill_vector(bv, unknown, subtype);
 
