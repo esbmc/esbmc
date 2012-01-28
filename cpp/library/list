@@ -89,6 +89,22 @@ namespace std
 			return tail->data;
 		}
 
+		const T back ( ) const
+		{
+			return tail->data;
+		}
+
+		const T front ( ) const
+		{
+			return head->data;
+		}
+
+		T front ( )
+		{
+			return head->data;
+		}
+
+
 		~double_linked()
 		{
 			while(head)

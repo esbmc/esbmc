@@ -32,8 +32,15 @@ namespace std
 	public:
 		//vector():_size(0){}
 		vector(): _size(0), _capacity(0){}
-		vector(int a, int b): _size(0){}
-		vector(int a): _size(0){}
+		vector(T t1, T t2): _size(0)
+		{
+			push_back(t1);
+			push_back(t2);
+		}
+		vector(T t): _size(0)
+		{
+			push_back(t);
+		}
 
 		void push_back(const T& t)
 		{
