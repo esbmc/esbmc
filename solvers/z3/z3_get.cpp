@@ -303,7 +303,7 @@ z3_convt::bv_get_rec(
     pointer.object =
       integer2long(binary2integer(object.value().as_string(), false));
     pointer.offset = binary2integer(offset.value().as_string(), true);
-    if (pointer.offset < 0) {
+    if (pointer.object == 0) {
       constant_exprt result(type);
       result.set_value("NULL");
       return result;
