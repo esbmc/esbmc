@@ -134,24 +134,11 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     if (num_fields == 0)
       return nil_exprt();
 
-
-    forall_irep(it, components.get_sub())
-    {
+    forall_irep(it, components.get_sub()) {
       const typet &subtype = it->type();
+      tmp = Z3_get_app_arg(z3_ctx, app, i);
+      op.push_back(bv_get_rec(tmp, subtype));
       op.push_back(nil_exprt());
-      if (subtype.id() != "pointer") { //@TODO: beautify counter-examples that
-                                       // contain pointers
-        tmp = Z3_get_app_arg(z3_ctx, app, i);
-        expr = bv_get_rec(tmp, subtype);
-        if (!expr.is_nil())
-          unknown.push_back(expr);
-        else
-          return nil_exprt();
-
-        op.back() = unknown.back();
-
-        ++i;
-    }
     }
 
     exprt dest = exprt(type.id(), type);
