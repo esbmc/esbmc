@@ -154,14 +154,10 @@ z3_convt::bv_get_rec(
     size_t found;
 
     Z3_app app = Z3_to_app(z3_ctx, bv);
-    Z3_func_decl d = Z3_get_app_decl(z3_ctx, app);
-    value = Z3_func_decl_to_string(z3_ctx, d);
-    found = value.find("true");
-
-    if (found != std::string::npos)
+    if (Z3_get_bool_value(z3_ctx, Z3_app_to_ast(z3_ctx, app)) == Z3_L_TRUE)
       return true_exprt();
     else
-      return false_exprt();  // default
+      return false_exprt();
   }
 
   bvtypet bvtype = get_bvtype(type);
