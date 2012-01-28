@@ -352,17 +352,6 @@ z3_convt::bv_get_rec(
   case IS_UNKNOWN:
     break;
 
-  case IS_RANGE:
-  {
-    mp_integer int_value = string2integer(value, false);
-    mp_integer from = string2integer(type.from().as_string());
-
-    constant_exprt value_expr(type);
-    value_expr.set_value(integer2string(int_value + from));
-    return value_expr;
-  }
-  break;
-
   default:
     unsigned width;
     boolbv_get_width(type, width);
