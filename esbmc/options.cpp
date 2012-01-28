@@ -114,6 +114,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"decide",		switc,		""	},
 { 0,	"fixed-pointer-model",	switc,		""	},
 { 0,	"floating-pointer-model",switc,		""	},
+{ 0,	"memstats",		switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},

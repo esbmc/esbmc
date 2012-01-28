@@ -12,12 +12,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef _WIN32
 extern "C" {
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
 
-#include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/sendfile.h>
+#include <sys/time.h>
+#include <sys/types.h>
 }
 #endif
 
@@ -990,6 +993,14 @@ int cbmc_parseoptionst::do_bmc(
   status("Starting Bounded Model Checking");
 
   bmc1.run(goto_functions);
+
+#ifndef _WIN32
+  if (bmc1.options.get_bool_option("memstats")) {
+    int fd = open("/proc/self/status", O_RDONLY);
+    sendfile(2, fd, NULL, 100000);
+    close(fd);
+  }
+#endif
 
   return 0;
 }
