@@ -163,7 +163,6 @@ private:
   exprt bv_get_rec(
 	const Z3_ast &bv,
     std::vector<exprt> &unknown,
-    const bool cache,
     const typet &type) const;
 
   void fill_vector(

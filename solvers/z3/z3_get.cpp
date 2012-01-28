@@ -95,10 +95,10 @@ z3_convt::get(const exprt &expr) const
     map_varst::const_iterator cache_result = map_vars.find(identifier.c_str());
     if (cache_result != map_vars.end()) {
       bv = cache_result->second;
-      return bv_get_rec(bv, unknown, true, expr.type());
+      return bv_get_rec(bv, unknown, expr.type());
     }
 
-    return bv_get_rec(bv, unknown, false, expr.type());
+    return bv_get_rec(bv, unknown, expr.type());
   } else if (expr.id() == exprt::constant)
     return expr;
 
@@ -140,8 +140,7 @@ z3_convt::fill_vector(
 
 exprt
 z3_convt::bv_get_rec(
-  const Z3_ast &bv, std::vector<exprt> &unknown, const bool cache,
-  const typet &type) const
+  const Z3_ast &bv, std::vector<exprt> &unknown, const typet &type) const
 {
 
   unsigned width;
@@ -153,14 +152,10 @@ z3_convt::bv_get_rec(
     std::string value;
     size_t found;
 
-    if (cache) {
-      Z3_app app = Z3_to_app(z3_ctx, bv);
-      Z3_func_decl d = Z3_get_app_decl(z3_ctx, app);
-      value = Z3_func_decl_to_string(z3_ctx, d);
-      found = value.find("true");
-    } else   {
-      found = std::string::npos;
-    }
+    Z3_app app = Z3_to_app(z3_ctx, bv);
+    Z3_func_decl d = Z3_get_app_decl(z3_ctx, app);
+    value = Z3_func_decl_to_string(z3_ctx, d);
+    found = value.find("true");
 
     if (found != std::string::npos)
       return true_exprt();
@@ -244,7 +239,7 @@ z3_convt::bv_get_rec(
 
 	  if (!boolbv_get_width(subtype, sub_width)) {
 	    tmp = Z3_get_app_arg(z3_ctx, app, i);
-	    expr = bv_get_rec(tmp, unknown, true, subtype);
+	    expr = bv_get_rec(tmp, unknown, subtype);
 	    if (!expr.is_nil())
 	      unknown.push_back(expr);
 	    else
@@ -305,7 +300,7 @@ z3_convt::bv_get_rec(
 	  unsigned sub_width;
 	  if (!boolbv_get_width(subtype, sub_width)) {
 	    tmp = Z3_get_app_arg(z3_ctx, app, i);
-	    expr = bv_get_rec(tmp, unknown, true, subtype);
+	    expr = bv_get_rec(tmp, unknown, subtype);
 	    if (comp_nr == i) {
 	      if (!expr.is_nil())
 		unknown.push_back(expr);
@@ -333,9 +328,9 @@ z3_convt::bv_get_rec(
       const typet &subtype = static_cast<const typet &>(type.subtype());
 
       tmp = Z3_get_app_arg(z3_ctx, app, 0); //object
-      object = bv_get_rec(tmp, unknown, true, subtype);
+      object = bv_get_rec(tmp, unknown, subtype);
       tmp = Z3_get_app_arg(z3_ctx, app, 1); //offset
-      offset = bv_get_rec(tmp, unknown, true, subtype);
+      offset = bv_get_rec(tmp, unknown, subtype);
 
       pointer_logict::pointert pointer;
       pointer.object =
