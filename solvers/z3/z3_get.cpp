@@ -111,9 +111,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, Z3_to_app(z3_ctx, bv));
     unknown.resize(num_fields);
 
-    if (num_fields == 0)
-      return nil_exprt();
-
     for (unsigned int i = 0; i < num_fields; i++) {
       tmp = Z3_get_app_arg(z3_ctx, app, i);
       unknown.push_back(bv_get_rec(tmp, type.subtype()));
