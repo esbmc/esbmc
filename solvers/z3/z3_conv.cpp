@@ -46,6 +46,10 @@ extern void finalize_symbols(void);
 
 z3_convt::~z3_convt()
 {
+
+  if (model != NULL)
+    Z3_del_model(z3_ctx, model);
+
   if (z3_prop.smtlib) {
     std::ofstream temp_out;
     Z3_string smt_lib_str, logic;
