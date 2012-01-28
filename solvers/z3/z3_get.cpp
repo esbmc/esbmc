@@ -132,9 +132,6 @@ z3_convt::bv_get_rec(
     return nil_exprt();
 
   if (type.is_bool()) {
-    std::string value;
-    size_t found;
-
     Z3_app app = Z3_to_app(z3_ctx, bv);
     if (Z3_get_bool_value(z3_ctx, Z3_app_to_ast(z3_ctx, app)) == Z3_L_TRUE)
       return true_exprt();
