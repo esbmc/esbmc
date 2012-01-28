@@ -161,7 +161,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
 
     forall_irep(it, components.get_sub()) {
       const typet &subtype = it->type();
-      tmp = Z3_get_app_arg(z3_ctx, app, i);
+      tmp = Z3_get_app_arg(z3_ctx, app, i++);
       op.push_back(bv_get_rec(tmp, subtype));
     }
 
