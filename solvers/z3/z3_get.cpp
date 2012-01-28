@@ -108,19 +108,41 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     else
       return false_exprt();
   } else if (type.is_array()) {
-    std::vector<exprt> unknown;
+    std::map<mp_integer, exprt> elems;
     exprt expr;
 
-    unsigned num_fields = Z3_get_app_num_args(z3_ctx, Z3_to_app(z3_ctx, bv));
-    unknown.resize(num_fields);
+    // Array model is a series of store ASTs, with the operands:
+    //   0) Array to store into
+    //   1) Index
+    //   2) Value
+    // As with SMT everything, the array to store into is another store
+    // instruction, so we need to recurse into it. Fetch all these pieces of data
+    // out, store in a list, descend through stores.
+    Z3_app recurse_store = Z3_to_app(z3_ctx, bv);
+    while (Z3_get_app_num_args(z3_ctx, recurse_store) == 3) {
+      Z3_ast idx, value;
+      idx = Z3_get_app_arg(z3_ctx, recurse_store, 1);
+      value = Z3_get_app_arg(z3_ctx, recurse_store, 2);
+      recurse_store = Z3_to_app(z3_ctx, Z3_get_app_arg(z3_ctx, recurse_store, 0));
 
-    for (unsigned int i = 0; i < num_fields; i++) {
-      tmp = Z3_get_app_arg(z3_ctx, app, i);
-      unknown.push_back(bv_get_rec(tmp, type.subtype()));
+      assert(Z3_get_ast_kind(z3_ctx, idx) == Z3_NUMERAL_AST);
+      std::string index = Z3_get_numeral_string(z3_ctx, idx);
+      mp_integer i = string2integer(index);
+      exprt val = bv_get_rec(value, type.subtype());
+
+      elems[i] = val;
     }
 
+    // Array elements ordered by the map upon insertion; now iterate over map and
+    // dump into array operands. We can worry about indexes later.
+
+    std::vector<exprt> elem_list;
+    for (std::map<mp_integer, exprt>::const_iterator it = elems.begin();
+         it != elems.end(); it++)
+      elem_list.push_back(it->second);
+
     exprt dest = exprt("array", type);
-    dest.operands() = unknown;
+    dest.operands() = elem_list;
     return dest;
   } else if (type.id() == "struct") {
     std::vector<exprt> unknown;
