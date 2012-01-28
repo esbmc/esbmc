@@ -138,13 +138,9 @@ z3_convt::bv_get_rec(
   }
 
   if (type.is_array()) {
-    unsigned sub_width;
-    const typet &subtype = type.subtype();
-
-    get_type_width(subtype, sub_width);
     exprt expr;
     static exprt::operandst op;
-    constant_exprt zero_expr(subtype);
+    constant_exprt zero_expr(type.subtype());
 
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, Z3_to_app(z3_ctx, bv));
     op.reserve(num_fields);
@@ -153,7 +149,7 @@ z3_convt::bv_get_rec(
     if (num_fields == 0)
       return nil_exprt();
 
-    fill_vector(bv, unknown, subtype);
+    fill_vector(bv, unknown, type.subtype());
 
     if (unknown.size() == 0)
       return nil_exprt();
