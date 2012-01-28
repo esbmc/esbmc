@@ -30,6 +30,17 @@ namespace std
 	public:
 		list() : head( NULL ), tail ( NULL ), _size(0) {}
 
+		list(T t) : head( NULL ), tail ( NULL ), _size(0) 
+		{
+			push_back(t);
+		}
+
+		list(T t1, T t2) : head( NULL ), tail ( NULL ), _size(0) 
+		{
+			push_back(t1);
+			push_back(t2);
+		}
+
 		bool empty ( ) const 
 		{
 			return ( !head || !tail );
@@ -45,11 +56,39 @@ namespace std
 				head = tail;
 		}
 
+		void push_front ( const T& t )
+		{
+			head = new node(t, NULL, head);
+			_size++;
+			if( head->next )
+				head->next->prev = head;
+			if( empty() )
+				tail = head;
+		}
+
+		void pop_back ( )
+		{
+			__ESBMC_assert ( !empty() , "list is empty");
+			node* temp(tail);
+			T data( tail->data );
+			tail = tail->prev ;
+			if( tail )
+				tail->next = NULL;
+			else
+				head = NULL ;
+			delete temp;
+		}
+
 		int size() const
 		{
 			return _size;
 		}
 	
+		T back ( )
+		{
+			return tail->data;
+		}
+
 		~double_linked()
 		{
 			while(head)
