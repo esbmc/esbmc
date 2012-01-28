@@ -160,10 +160,7 @@ private:
 	const unsigned width,
     std::string value) const;
 
-  exprt bv_get_rec(
-	const Z3_ast bv,
-    std::vector<exprt> &unknown,
-    const typet &type) const;
+  exprt bv_get_rec(const Z3_ast bv, const typet &type) const;
 
   void fill_vector(
     const Z3_ast bv,

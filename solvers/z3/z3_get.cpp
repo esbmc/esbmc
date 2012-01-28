@@ -66,7 +66,6 @@ z3_convt::get(const exprt &expr) const
   if (expr.id() == exprt::symbol ||
       expr.id() == "nondet_symbol") {
     std::string identifier, tmp;
-    std::vector<exprt> unknown;
     Z3_ast bv;
 
     identifier = expr.identifier().as_string();
@@ -74,7 +73,7 @@ z3_convt::get(const exprt &expr) const
     map_varst::const_iterator cache_result = map_vars.find(identifier.c_str());
     if (cache_result != map_vars.end()) {
       bv = cache_result->second;
-      return bv_get_rec(bv, unknown, expr.type());
+      return bv_get_rec(bv, expr.type());
     } else {
       std::cerr << "Unrecognized symbol in z3_get: " << identifier << std::endl;
       abort();
@@ -89,8 +88,7 @@ z3_convt::get(const exprt &expr) const
 }
 
 void
-z3_convt::fill_vector(
-  const Z3_ast bv, std::vector<exprt> &unknown, const typet &type) const
+z3_convt::fill_vector(const Z3_ast bv, std::vector<exprt> &unknown, const typet &type) const
 {
 
   unsigned i, width;
@@ -103,27 +101,12 @@ z3_convt::fill_vector(
   for (i = 0; i < num_fields; i++)
   {
     tmp = Z3_get_app_arg(z3_ctx, app, i);
-
-    if (Z3_get_ast_kind(z3_ctx, tmp) == Z3_NUMERAL_AST) {
-      boolbv_get_width(type, width);
-      value = Z3_get_numeral_string(z3_ctx, tmp);
-      constant_exprt value_expr(type);
-      value_expr.set_value(integer2binary(string2integer(value), width));
-
-      if (i == 1)
-	idx = atoi(value.c_str());
-      else if (i == 2)
-	if (idx < unknown.size())
-	  unknown[idx] = value_expr;
-    } else   {
-      fill_vector(tmp, unknown, type);
-    }
+    unknown.push_back(bv_get_rec(tmp, type));
   }
 }
 
 exprt
-z3_convt::bv_get_rec(
-  const Z3_ast bv, std::vector<exprt> &unknown, const typet &type) const
+z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
 {
   unsigned width;
 
@@ -138,6 +121,7 @@ z3_convt::bv_get_rec(
   }
 
   if (type.is_array()) {
+    std::vector<exprt> unknown;
     exprt expr;
     static exprt::operandst op;
     constant_exprt zero_expr(type.subtype());
@@ -174,6 +158,7 @@ z3_convt::bv_get_rec(
     dest.operands().swap(op);
     return dest;
   } else if (type.id() == "struct") {
+    std::vector<exprt> unknown;
     const irept &components = type.components();
     exprt::operandst op;
     op.reserve(components.get_sub().size());
@@ -201,7 +186,7 @@ z3_convt::bv_get_rec(
 
         if (!boolbv_get_width(subtype, sub_width)) {
           tmp = Z3_get_app_arg(z3_ctx, app, i);
-          expr = bv_get_rec(tmp, unknown, subtype);
+          expr = bv_get_rec(tmp, subtype);
           if (!expr.is_nil())
             unknown.push_back(expr);
           else
@@ -218,6 +203,7 @@ z3_convt::bv_get_rec(
     dest.operands().swap(op);
     return dest;
   } else if (type.id() == "union") {
+    std::vector<exprt> unknown;
     const irept &components = type.components();
 
     unsigned component_nr = 0;
@@ -261,7 +247,7 @@ z3_convt::bv_get_rec(
         unsigned sub_width;
         if (!boolbv_get_width(subtype, sub_width)) {
           tmp = Z3_get_app_arg(z3_ctx, app, i);
-          expr = bv_get_rec(tmp, unknown, subtype);
+          expr = bv_get_rec(tmp, subtype);
           if (comp_nr == i) {
             if (!expr.is_nil())
               unknown.push_back(expr);
@@ -287,9 +273,9 @@ z3_convt::bv_get_rec(
     const typet &subtype = static_cast<const typet &>(type.subtype());
 
     tmp = Z3_get_app_arg(z3_ctx, app, 0); //object
-    object = bv_get_rec(tmp, unknown, subtype);
+    object = bv_get_rec(tmp, subtype);
     tmp = Z3_get_app_arg(z3_ctx, app, 1); //offset
-    offset = bv_get_rec(tmp, unknown, subtype);
+    offset = bv_get_rec(tmp, subtype);
 
     pointer_logict::pointert pointer;
     pointer.object =
