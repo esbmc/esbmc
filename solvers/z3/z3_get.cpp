@@ -124,9 +124,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     const irept &components = type.components();
     exprt::operandst op;
     op.reserve(components.get_sub().size());
-    unsigned int size;
-
-    size = components.get_sub().size();
 
     exprt expr;
     unsigned i = 0;
@@ -176,9 +173,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
 
     exprt::operandst op;
     op.reserve(1);
-    unsigned int size;
-
-    size = components.get_sub().size() + 1;
 
     exprt expr;
     unsigned i = 0;
