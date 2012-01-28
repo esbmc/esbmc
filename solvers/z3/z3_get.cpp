@@ -139,157 +139,154 @@ z3_convt::bv_get_rec(
 
   bvtypet bvtype = get_bvtype(type);
 
-  if (bvtype == IS_UNKNOWN) {
-    if (type.is_array()) {
-      unsigned sub_width;
-      const typet &subtype = type.subtype();
+  if (type.is_array()) {
+    unsigned sub_width;
+    const typet &subtype = type.subtype();
 
-      if (subtype.id() == "struct") //@TODO
-	return nil_exprt();
+    if (subtype.id() == "struct") //@TODO
+      return nil_exprt();
 
-      if (!boolbv_get_width(subtype, sub_width)) {
-	exprt expr;
-	static exprt::operandst op;
-	constant_exprt zero_expr(subtype);
-
-	op.reserve(width / sub_width);
-	unsigned num_fields = Z3_get_app_num_args(z3_ctx, Z3_to_app(z3_ctx, bv));
-
-	if (num_fields == 0)
-	  return nil_exprt();
-
-	unknown.resize(width / sub_width);
-
-	fill_vector(bv, unknown, subtype);
-
-	if (unknown.size() == 0)
-	  return nil_exprt();
-
-	unsigned int size = unknown.size();
-	zero_expr.set_value("0");
-
-	for (unsigned i = 0; i < size; i++)
-	{
-	  expr = unknown[i];
-
-	  if (expr.value().as_string().compare("") == 0)
-	    op.push_back(zero_expr);
-	  else
-	    op.push_back(expr);
-	}
-
-	if (op.empty())
-	  return nil_exprt();
-
-	exprt dest = exprt("array", type);
-	dest.operands().swap(op);
-	return dest;
-      }
-    } else if (type.id() == "struct") {
-      const irept &components = type.components();
-      exprt::operandst op;
-      op.reserve(components.get_sub().size());
-      unsigned int size;
-
-      size = components.get_sub().size();
-
+    if (!boolbv_get_width(subtype, sub_width)) {
       exprt expr;
-      unsigned i = 0;
-      Z3_app app = Z3_to_app(z3_ctx, bv);
-      unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
-      Z3_ast tmp;
+      static exprt::operandst op;
+      constant_exprt zero_expr(subtype);
+
+      op.reserve(width / sub_width);
+      unsigned num_fields = Z3_get_app_num_args(z3_ctx, Z3_to_app(z3_ctx, bv));
 
       if (num_fields == 0)
-	return nil_exprt();
+        return nil_exprt();
 
+      unknown.resize(width / sub_width);
 
-      forall_irep(it, components.get_sub())
+      fill_vector(bv, unknown, subtype);
+
+      if (unknown.size() == 0)
+        return nil_exprt();
+
+      unsigned int size = unknown.size();
+      zero_expr.set_value("0");
+
+      for (unsigned i = 0; i < size; i++)
       {
-	const typet &subtype = it->type();
-	op.push_back(nil_exprt());
-	if (subtype.id() != "pointer") { //@TODO: beautify counter-examples that
-				         // contain pointers
-	  unsigned sub_width;
+        expr = unknown[i];
 
-	  if (!boolbv_get_width(subtype, sub_width)) {
-	    tmp = Z3_get_app_arg(z3_ctx, app, i);
-	    expr = bv_get_rec(tmp, unknown, subtype);
-	    if (!expr.is_nil())
-	      unknown.push_back(expr);
-	    else
-	      return nil_exprt();
-
-	    op.back() = unknown.back();
-
-	    ++i;
-	  }
-	}
+        if (expr.value().as_string().compare("") == 0)
+          op.push_back(zero_expr);
+        else
+          op.push_back(expr);
       }
 
-      exprt dest = exprt(type.id(), type);
+      if (op.empty())
+        return nil_exprt();
+
+      exprt dest = exprt("array", type);
       dest.operands().swap(op);
       return dest;
-    } else if (type.id() == "union")      {
-      const irept &components = type.components();
+  } else if (type.id() == "struct") {
+    const irept &components = type.components();
+    exprt::operandst op;
+    op.reserve(components.get_sub().size());
+    unsigned int size;
 
-      unsigned component_nr = 0;
+    size = components.get_sub().size();
 
-      if (component_nr >= components.get_sub().size())
-	return nil_exprt();
+    exprt expr;
+    unsigned i = 0;
+    Z3_app app = Z3_to_app(z3_ctx, bv);
+    unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
+    Z3_ast tmp;
 
-      exprt value("union", type);
-      value.operands().resize(1);
-
-      value.component_name(components.get_sub()[component_nr].name());
-
-      exprt::operandst op;
-      op.reserve(1);
-      unsigned int size;
-
-      size = components.get_sub().size() + 1;
-
-      exprt expr;
-      unsigned i = 0;
-      Z3_app app = Z3_to_app(z3_ctx, bv);
-      unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
-      Z3_ast tmp;
-
-      tmp = Z3_get_app_arg(z3_ctx, app, num_fields - 1);
-      std::string value1;
-
-      if (Z3_get_ast_kind(z3_ctx, tmp) == Z3_NUMERAL_AST)
-	value1 = Z3_get_numeral_string(z3_ctx, tmp);
-
-      unsigned int comp_nr = atoi(value1.c_str());
+    if (num_fields == 0)
+      return nil_exprt();
 
 
-      if (num_fields == 0)
-	return nil_exprt();
+    forall_irep(it, components.get_sub())
+    {
+      const typet &subtype = it->type();
+      op.push_back(nil_exprt());
+      if (subtype.id() != "pointer") { //@TODO: beautify counter-examples that
+                                       // contain pointers
+        unsigned sub_width;
 
-      forall_irep(it, components.get_sub())
-      {
-	const typet &subtype = it->type();
+        if (!boolbv_get_width(subtype, sub_width)) {
+          tmp = Z3_get_app_arg(z3_ctx, app, i);
+          expr = bv_get_rec(tmp, unknown, subtype);
+          if (!expr.is_nil())
+            unknown.push_back(expr);
+          else
+            return nil_exprt();
 
-	if (subtype.id() != "pointer") { //@TODO
-	  unsigned sub_width;
-	  if (!boolbv_get_width(subtype, sub_width)) {
-	    tmp = Z3_get_app_arg(z3_ctx, app, i);
-	    expr = bv_get_rec(tmp, unknown, subtype);
-	    if (comp_nr == i) {
-	      if (!expr.is_nil())
-		unknown.push_back(expr);
-	      op.push_back(unknown.back());
-	      break;
-	    }
-	    ++i;
-	  }
-	}
+          op.back() = unknown.back();
+
+          ++i;
+        }
       }
-
-      value.operands().swap(op);
-
-      return value;
     }
+
+    exprt dest = exprt(type.id(), type);
+    dest.operands().swap(op);
+    return dest;
+  } else if (type.id() == "union") {
+    const irept &components = type.components();
+
+    unsigned component_nr = 0;
+
+    if (component_nr >= components.get_sub().size())
+      return nil_exprt();
+
+    exprt value("union", type);
+    value.operands().resize(1);
+
+    value.component_name(components.get_sub()[component_nr].name());
+
+    exprt::operandst op;
+    op.reserve(1);
+    unsigned int size;
+
+    size = components.get_sub().size() + 1;
+
+    exprt expr;
+    unsigned i = 0;
+    Z3_app app = Z3_to_app(z3_ctx, bv);
+    unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
+    Z3_ast tmp;
+
+    tmp = Z3_get_app_arg(z3_ctx, app, num_fields - 1);
+    std::string value1;
+
+    if (Z3_get_ast_kind(z3_ctx, tmp) == Z3_NUMERAL_AST)
+      value1 = Z3_get_numeral_string(z3_ctx, tmp);
+
+    unsigned int comp_nr = atoi(value1.c_str());
+
+    if (num_fields == 0)
+      return nil_exprt();
+
+    forall_irep(it, components.get_sub())
+    {
+      const typet &subtype = it->type();
+
+      if (subtype.id() != "pointer") { //@TODO
+        unsigned sub_width;
+        if (!boolbv_get_width(subtype, sub_width)) {
+          tmp = Z3_get_app_arg(z3_ctx, app, i);
+          expr = bv_get_rec(tmp, unknown, subtype);
+          if (comp_nr == i) {
+            if (!expr.is_nil())
+              unknown.push_back(expr);
+            op.push_back(unknown.back());
+            break;
+          }
+          ++i;
+        }
+      }
+    }
+
+    value.operands().swap(op);
+
+    return value;
+  }
 #if 0
     else if (type.id() == "pointer") {
       exprt object, offset;
