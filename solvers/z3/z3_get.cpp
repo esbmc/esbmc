@@ -87,24 +87,6 @@ z3_convt::get(const exprt &expr) const
   }
 }
 
-void
-z3_convt::fill_vector(const Z3_ast bv, std::vector<exprt> &unknown, const typet &type) const
-{
-
-  unsigned i, width;
-  static unsigned int idx;
-  Z3_app app = Z3_to_app(z3_ctx, bv);
-  unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
-  Z3_ast tmp;
-  std::string value;
-
-  for (i = 0; i < num_fields; i++)
-  {
-    tmp = Z3_get_app_arg(z3_ctx, app, i);
-    unknown.push_back(bv_get_rec(tmp, type));
-  }
-}
-
 exprt
 z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
 {
