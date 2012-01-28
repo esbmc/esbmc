@@ -125,11 +125,9 @@ exprt
 z3_convt::bv_get_rec(
   const Z3_ast &bv, std::vector<exprt> &unknown, const typet &type) const
 {
-
   unsigned width;
 
-  if (boolbv_get_width(type, width))
-    return nil_exprt();
+  get_type_width(type, width);
 
   if (type.is_bool()) {
     Z3_app app = Z3_to_app(z3_ctx, bv);
