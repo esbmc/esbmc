@@ -203,10 +203,8 @@ private:
   void bump_addrspace_array(unsigned int idx, Z3_ast val);
   std::string get_cur_addrspace_ident(void);
   void generate_assumptions(const exprt &expr, const Z3_ast &result);
-public: // Hackity hack, for z3_dec
   void link_syms_to_literals(void);
   void finalize_pointer_chain(void);
-private:
   void init_addr_space_array(void);
   void store_sat_assignments(Z3_model m);
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
