@@ -128,21 +128,8 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     unsigned int size = unknown.size();
     zero_expr.set_value("0");
 
-    for (unsigned i = 0; i < size; i++)
-    {
-      expr = unknown[i];
-
-      if (expr.value().as_string().compare("") == 0)
-        op.push_back(zero_expr);
-      else
-        op.push_back(expr);
-    }
-
-    if (op.empty())
-      return nil_exprt();
-
     exprt dest = exprt("array", type);
-    dest.operands().swap(op);
+    dest.operands() = unknown;
     return dest;
   } else if (type.id() == "struct") {
     std::vector<exprt> unknown;
