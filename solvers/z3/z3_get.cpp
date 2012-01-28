@@ -90,7 +90,7 @@ z3_convt::get(const exprt &expr) const
 
 void
 z3_convt::fill_vector(
-  const Z3_ast &bv, std::vector<exprt> &unknown, const typet &type) const
+  const Z3_ast bv, std::vector<exprt> &unknown, const typet &type) const
 {
 
   unsigned i, width;
@@ -123,7 +123,7 @@ z3_convt::fill_vector(
 
 exprt
 z3_convt::bv_get_rec(
-  const Z3_ast &bv, std::vector<exprt> &unknown, const typet &type) const
+  const Z3_ast bv, std::vector<exprt> &unknown, const typet &type) const
 {
   unsigned width;
 
