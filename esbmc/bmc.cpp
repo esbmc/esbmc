@@ -29,15 +29,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/sat/satcheck.h>
 
-#include <solvers/sat/dimacs_cnf.h>
-
-#ifdef USE_CVC
-#include <solvers/cvc/cvc_dec.h>
-#endif
-
 #include <solvers/boolector/boolector_dec.h>
-
-#include <solvers/smt/smt_dec.h>
 
 #include <langapi/mode.h>
 #include <langapi/languages.h>
@@ -542,23 +534,11 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #else
       throw "This version of ESBMC was not compiled with minisat support";
 #endif
-    else if(options.get_bool_option("dimacs"))
-      solver = new dimacs_solver(*this);
     else if(options.get_bool_option("boolector-bv"))
 #ifdef BOOLECTOR
       solver = new boolector_solver(*this);
 #else
       throw "This version of ESBMC was not compiled with boolector support";
-#endif
-    else if(options.get_bool_option("cvc"))
-#ifdef USE_CVC
-      solver = new cvc_solver(*this);
-#else
-      throw "This version of ESBMC was not compiled with CVC support";
-#endif
-#if 0
-    else if(options.get_bool_option("smt"))
-      solver = new smt_solver(*this);
 #endif
     else if(options.get_bool_option("z3"))
 #ifdef Z3
@@ -745,45 +725,6 @@ bool bmc_baset::output_solver::run_solver()
   conv->dec_solve();
   return write_output();
 }
-
-bmc_baset::dimacs_solver::dimacs_solver(bmc_baset &bmc)
-  : output_solver(bmc), conv_wrap(dimacs_cnf)
-{
-  dimacs_cnf.set_message_handler(bmc.message_handler);
-  conv = &conv_wrap;
-}
-
-bool bmc_baset::dimacs_solver::write_output()
-{
-  dimacs_cnf.write_dimacs_cnf(*out_file);
-  return false;
-}
-
-#ifdef USE_CVC
-bmc_baset::cvc_solver::cvc_solver(bmc_baset &bmc)
-  : output_solver(bmc), cvc(*out_file)
-{
-  conv = &cvc;
-}
-
-bool bmc_baset::cvc_solver::write_output()
-{
-  return false;
-}
-#endif
-
-#ifdef USE_SMT
-bmc_baset::smt_solver::smt_solver(bmc_baset &bmc)
-  : output_solver(bmc), smt(*out_file)
-{
-  conv = &smt;
-}
-
-bool bmc_baset::smt_solver::write_output()
-{
-  return false;
-}
-#endif
 
 void bmc_baset::write_checkpoint(void)
 {
