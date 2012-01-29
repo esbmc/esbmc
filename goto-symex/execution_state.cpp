@@ -401,7 +401,7 @@ void execution_statet::execute_guard(const namespacet &ns, symex_targett &target
 
  \*******************************************************************/
 
-void execution_statet::add_thread(goto_symex_statet & state, goto_programt *prog)
+void execution_statet::add_thread(goto_programt *prog)
 {
 
   goto_symex_statet new_state(_state_level2);
