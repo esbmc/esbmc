@@ -11,6 +11,16 @@
 #define __ESBMC_cond_broadcast_seq_field(a) ((a).__data.__broadcast_seq)
 #define __ESBMC_rwlock_field(a) ((a).__data.__lock)
 
+void
+pthread_trampoline(void)
+{
+
+  void *start_arg = __ESBMC_get_thread_start_arg();
+  __ESBMC_thread_start_func_type func = __ESBMC_get_thread_start_func();
+  func(start_arg);
+  return;
+}
+
 int
 pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                void *(*start_routine) (void *), void *arg)
