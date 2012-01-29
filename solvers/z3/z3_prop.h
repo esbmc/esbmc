@@ -64,8 +64,6 @@ public:
 private:
   z3_capi z3_api;
   Z3_context z3_ctx;
-  typedef std::map<std::string, Z3_ast> map_prop_varst;
-  map_prop_varst map_prop_vars;
   std::list<Z3_ast> assumpt;
   bool store_assumptions;
   bool smtlib;

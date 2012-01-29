@@ -342,31 +342,6 @@ z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
 }
 
 void
-z3_convt::store_sat_assignments(void)
-{
-  unsigned num_constants, i;
-
-  num_constants = Z3_get_model_num_constants(z3_ctx, model);
-
-  for (i = 0; i < num_constants; i++)
-  {
-    std::string variable;
-    Z3_symbol name;
-    Z3_ast app, val;
-
-    Z3_func_decl cnst = Z3_get_model_constant(z3_ctx, model, i);
-    name = Z3_get_decl_name(z3_ctx, cnst);
-    variable = Z3_get_symbol_string(z3_ctx, name);
-    app = Z3_mk_app(z3_ctx, cnst, 0, 0);
-    val = app;
-    Z3_eval(z3_ctx, model, app, &val);
-    map_vars.insert(std::pair<std::string, Z3_ast>(variable, val));
-  }
-
-  z3_prop.map_prop_vars = map_vars;
-}
-
-void
 z3_convt::finalize_pointer_chain(void)
 {
   bool fixed_model = false;
@@ -546,17 +521,12 @@ z3_convt::check2_z3_properties(void)
   }
 
 
-  if (result == Z3_L_TRUE) {
-    store_sat_assignments();
-  } else if (z3_prop.uw && result == Z3_L_FALSE)   {
+  if (z3_prop.uw && result == Z3_L_FALSE)   {
     for (i = 0; i < unsat_core_size; ++i)
     {
       std::string id = Z3_ast_to_string(z3_ctx, core[i]);
       if (id.find("false") != std::string::npos) {
 	result = z3_api.check2(Z3_L_TRUE);
-	if (result == Z3_L_TRUE) {
-	  store_sat_assignments();
-	}
 	unsat_core_size = 0;
 	return result;
       }
