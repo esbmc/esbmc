@@ -169,6 +169,11 @@ protected:
     exprt &code,
     const irep_idt &identifier);
 
+  void run_intrinsic(code_function_callt &call, reachability_treet &art,
+                     const std::string symname);
+  void intrinsic_yield(reachability_treet &arg);
+  void intrinsic_switch_to(code_function_callt call, reachability_treet &art);
+
   // dynamic stuff
   virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
   bool is_valid_object(const statet &state, const symbolt &symbol);

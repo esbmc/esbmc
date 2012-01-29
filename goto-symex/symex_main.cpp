@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iostream>
 #include <vector>
 
+#include <prefix.h>
 #include <std_expr.h>
 #include <rename.h>
 #include <expr_util.h>
@@ -482,33 +483,16 @@ void goto_symext::symex_step(
                     dereference(*it, state, false,ex_state.node_id);
                 }
 
-                symex_function_call(goto_functions, ex_state, deref_code);
-
-                if(deref_code.function().identifier() == "c::__ESBMC_yield")
-                {
-                   state.source.pc++;
-                   ex_state.reexecute_instruction = false;
-                   art.generate_states();
-                   return;
-                }
-
-                if (deref_code.function().identifier() == "c::__ESBMC_switch_to")
-                {
+                if (has_prefix(deref_code.function().identifier().as_string(),
+                               "__ESBMC")) {
                   state.source.pc++;
                   ex_state.reexecute_instruction = false;
-
-                  assert(deref_code.arguments().size() == 1);
-
-                  // Switch to other thread.
-                  exprt &num = deref_code.arguments()[0];
-                  if (num.id() != "constant")
-                    throw "Can't switch to non-constant thread id no";
-
-                  unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
-                  ex_state.set_active_state(tid);
+                  run_intrinsic(deref_code, art,
+                                deref_code.function().identifier().as_string());
                   return;
                 }
 
+                symex_function_call(goto_functions, ex_state, deref_code);
 
 //                ex_state.reexecute_instruction = false;
 //                art.generate_states();
@@ -587,4 +571,23 @@ void goto_symext::symex_step(
         default:
             assert(false);
     }
+}
+
+void
+goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
+                           const std::string symname)
+{
+
+  if(symname == "c::__ESBMC_yield") {
+    intrinsic_yield(art);
+  } else if (symname == "c::__ESBMC_switch_to") {
+    intrinsic_switch_to(call, art);
+  } else {
+    std::cerr << "Function call to non-intrinsic prefixed with __ESBMC - fatal";
+    std::cerr << std::endl;
+    std::cerr << "(NB: the C spec reserves the __ prefix for the compiler and environment)" << std::endl;
+    abort();
+  }
+
+  return;
 }

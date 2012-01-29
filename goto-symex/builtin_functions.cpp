@@ -17,6 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_types.h>
 
 #include "basic_symex.h"
+#include "goto_symex.h"
 
 /*******************************************************************\
 
@@ -397,4 +398,32 @@ void basic_symext::symex_macro(
   }
   else
     throw "unknown macro: "+id2string(identifier);
+}
+
+void
+goto_symext::intrinsic_yield(reachability_treet &art)
+{
+
+  art.generate_states();
+  return;
+}
+
+
+void
+goto_symext::intrinsic_switch_to(code_function_callt call,
+                                 reachability_treet &art)
+{
+
+  assert(call.arguments().size() == 1);
+
+  // Switch to other thread.
+  exprt &num = call.arguments()[0];
+  if (num.id() != "constant") {
+    std::cerr << "Can't switch to non-constant thread id no";
+    abort();
+  }
+
+  unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
+  art.get_cur_state().set_active_state(tid);
+  return;
 }
