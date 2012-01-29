@@ -187,7 +187,6 @@ private:
   std::string extract_magnitude(std::string v, unsigned width);
   std::string extract_fraction(std::string v, unsigned width);
   bool is_bv(const typet &type);
-  bool check_all_types(const typet &type);
   bool is_ptr(const typet &type);
   bool is_signed(const typet &type);
   bool is_in_cache(const exprt &expr);

@@ -34,19 +34,6 @@ void z3_convt::show_bv_size(Z3_ast operand)
   std::cout << Z3_get_bv_type_size(z3_ctx, a) << std::endl;
 }
 
-bool z3_convt::check_all_types(const typet &type)
-{
-  if (type.is_bool() || type.id()=="signedbv" || type.id()=="unsignedbv" ||
-	  type.id()=="symbol" || type.id()=="empty" || type.id() == "fixedbv" ||
-	  type.is_array() || type.id()=="struct" || type.id()=="pointer" ||
-	  type.id()=="union" || type.is_code())
-  {
-    return true;
-  }
-
-  return false;
-}
-
 bool z3_convt::is_bv(const typet &type)
 {
   if (type.id()=="signedbv" || type.id()=="unsignedbv" ||
