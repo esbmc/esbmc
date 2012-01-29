@@ -237,7 +237,7 @@ public:
 	void set_active_state(unsigned int i);
     void execute_guard(const namespacet & ns, symex_targett &target);
 
-	void add_thread(goto_symex_statet & state);
+    void add_thread(goto_symex_statet & state, goto_programt *prog);
     void end_thread(const namespacet &ns, symex_targett &target);
     /* Presumably this does the same as read_globals, see below */
     unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);

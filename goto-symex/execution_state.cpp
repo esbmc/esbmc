@@ -401,10 +401,12 @@ void execution_statet::execute_guard(const namespacet &ns, symex_targett &target
 
  \*******************************************************************/
 
-void execution_statet::add_thread(goto_symex_statet & state)
+void execution_statet::add_thread(goto_symex_statet & state, goto_programt *prog)
 {
 
-  goto_symex_statet new_state(state);
+  goto_symex_statet new_state(_state_level2);
+  new_state.initialize(prog->instructions.begin(), prog->instructions.end(),
+                      prog, _threads_state.size());
 
   new_state.source.thread_nr = _threads_state.size();
   _threads_state.push_back(new_state);
