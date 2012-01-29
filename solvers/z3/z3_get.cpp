@@ -277,8 +277,8 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     value_expr.set_value(value);
     return value_expr;
   } else {
-//    std::cerr << "Unrecognized type \"" << type.id() << "\" generating counterexample" << std::endl;
-//    abort();
+    std::cerr << "Unrecognized type \"" << type.id() << "\" generating counterexample" << std::endl;
+    abort();
     return nil_exprt();
   }
 }
