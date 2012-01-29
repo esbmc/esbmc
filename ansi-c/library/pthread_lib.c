@@ -18,6 +18,7 @@ pthread_trampoline(void)
   void *start_arg = __ESBMC_get_thread_start_arg();
   __ESBMC_thread_start_func_type func = __ESBMC_get_thread_start_func();
   func(start_arg);
+  __ESBMC_terminate_thread();
   return;
 }
 
