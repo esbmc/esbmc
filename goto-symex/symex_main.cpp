@@ -525,7 +525,7 @@ void goto_symext::symex_step(
         case SYNC:
             throw "SYNC not yet implemented";
 
-        case START_THREAD:
+#if 0
         	if (!state.guard.is_false())
         	{
           	  assert(!instruction.targets.empty());
@@ -553,6 +553,7 @@ void goto_symext::symex_step(
             art.set_go_next_state();
 
             break;
+#endif
         case END_THREAD:
             ex_state.end_thread(ns, *target);
             ex_state.reexecute_instruction = false;

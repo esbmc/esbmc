@@ -88,22 +88,6 @@ void goto_convertt::finish_gotos()
       }
 #endif
     }
-    else if(i.is_start_thread())
-    {
-      const irep_idt &goto_label=i.code.destination();
-
-      labelst::const_iterator l_it=
-        targets.labels.find(goto_label);
-
-      if(l_it==targets.labels.end())
-      {
-        err_location(i.code);
-        str << "goto label " << goto_label << " not found";
-        throw 0;
-      }
-
-      i.targets.push_back(l_it->second);
-    }
     else if(i.code.statement()=="goto")
     {
       const irep_idt &goto_label=i.code.destination();
@@ -220,17 +204,7 @@ void goto_convertt::convert_label(
 
   goto_programt tmp;
 
-  // magic thread creation label?
-  if(has_prefix(id2string(label), "CPROVER_ASYNC_"))
-  {
-    // this is like a START_THREAD
-    codet tmp_code("start_thread");
-    tmp_code.copy_to_operands(code.op0());
-    tmp_code.location()=code.location();
-    convert(tmp_code, tmp);
-  }
-  else
-    convert(to_code(code.op0()), tmp);
+  convert(to_code(code.op0()), tmp);
 
   // magic ERROR label?
 
@@ -345,8 +319,6 @@ void goto_convertt::convert(
     convert_non_deterministic_goto(code, dest);
   else if(statement=="ifthenelse")
     convert_ifthenelse(code, dest);
-  else if(statement=="start_thread")
-    convert_start_thread(code, dest);
   else if(statement=="end_thread")
     convert_end_thread(code, dest);
   else if(statement=="sync")
@@ -1925,56 +1897,6 @@ void goto_convertt::convert_non_deterministic_goto(
   goto_programt &dest)
 {
   convert_goto(code, dest);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_start_thread
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::convert_start_thread(
-  const codet &code,
-  goto_programt &dest)
-{
-  if(code.operands().size()!=2)
-  {
-    err_location(code);
-    throw "start_thread expects two operand";
-  }
-
-  goto_programt::targett start_thread=
-    dest.add_instruction(START_THREAD);
-
-  start_thread->location=code.location();
-  start_thread->code.copy_to_operands(code.op1());
-
-  // see if op0 is an unconditional goto
-  if(code.op0().statement()=="goto")
-  {
-    start_thread->code.destination(code.op0().destination());
-    // remember it to do target later
-    targets.gotos.insert(start_thread);
-  }
-  else
-  {
-   goto_programt tmp;
-    convert(to_code(code.op0()), tmp);
-    tmp.add_instruction(END_THREAD);
-
-    dest.destructive_append(tmp);
-
-    goto_programt tmp2;
-    start_thread->targets.push_back(tmp2.add_instruction(SKIP));
-    dest.destructive_append(tmp2);
-  }
-  is_thread=true;
 }
 
 /*******************************************************************\

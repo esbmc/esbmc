@@ -171,7 +171,6 @@ protected:
   void convert_non_deterministic_goto(const codet &code, goto_programt &dest);
   void convert_label(const code_labelt &code, goto_programt &dest);
   void convert_function_call(const code_function_callt &code, goto_programt &dest);
-  void convert_start_thread(const codet &code, goto_programt &dest);
   void convert_end_thread(const codet &code, goto_programt &dest);
   void convert_sync(const codet &code, goto_programt &dest);
   void convert_atomic_begin(const codet &code, goto_programt &dest);

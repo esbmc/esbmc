@@ -31,7 +31,6 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case OTHER: out << "OTHER"; break;
   case SYNC: out << "SYNC"; break;
   case SKIP: out << "SKIP"; break;
-  case START_THREAD: out << "START_THREAD"; break;
   case END_THREAD: out << "END_THREAD"; break;
   case LOCATION: out << "LOCATION"; break;
   case END_FUNCTION: out << "END_FUNCTION"; break;

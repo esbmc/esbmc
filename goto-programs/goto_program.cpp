@@ -157,23 +157,6 @@ std::ostream& goto_programt::output_instruction(
     out << "ATOMIC_END" << std::endl;
     break;
     
-  case START_THREAD:
-    out << "START THREAD ";
-
-    if(it->targets.size()==1)
-    {
-      target_numberst::const_iterator t_it2=
-        target_numbers.find(it->targets.front());
-
-      if(t_it2==target_numbers.end())
-        out << "unknown";
-      else
-        out << t_it2->second;
-    }
-    
-    out << std::endl;
-    break;
-    
   case END_THREAD:
     out << "END THREAD" << std::endl;
     break;
