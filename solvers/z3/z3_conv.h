@@ -35,7 +35,7 @@ class z3_convt: public prop_convt
 public:
   z3_convt(bool uw, bool int_encoding, bool smt)
                                :prop_convt(z3_prop),
-                                z3_prop(uw)
+                                z3_prop(uw, *this)
   {
     if (z3_ctx == NULL) {
       z3_ctx = z3_api.mk_proof_context(uw);

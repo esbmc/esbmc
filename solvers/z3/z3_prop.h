@@ -15,11 +15,12 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "z3_capi.h"
 
 typedef unsigned int uint;
+class z3_convt; // forward dec
 
 class z3_propt:virtual public propt
 {
 public:
-  z3_propt(bool uw);
+  z3_propt(bool uw, z3_convt &_owner);
   virtual ~z3_propt();
 
 //  virtual literalt constant(bool value)
@@ -68,6 +69,8 @@ private:
   std::list<Z3_ast> assumpt;
   bool store_assumptions;
   bool smtlib;
+
+  z3_convt &owner; // Reference back to convt owner.
 
 protected:
   unsigned _no_variables;

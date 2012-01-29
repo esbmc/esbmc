@@ -13,7 +13,7 @@
 
 #include "z3_prop.h"
 
-z3_propt::z3_propt(bool uw)
+z3_propt::z3_propt(bool uw, z3_convt &_owner) : owner(_owner)
 {
   _no_variables = 1;
   this->uw = uw;
