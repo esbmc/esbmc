@@ -165,14 +165,6 @@ private:
 
   pointer_logict pointer_logic;
 
-  struct eqstr
-  {
-    bool operator()(const char* s1, const char* s2) const
-    {
-      return strcmp(s1, s2) == 0;
-    }
-  };
-
   typedef hash_map_cont<const exprt, Z3_ast, irep_hash> bv_cachet;
   bv_cachet bv_cache;
 
