@@ -149,6 +149,8 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
          it != mapped_elems.end(); it++)
       elem_list.push_back(it->second);
 
+    // XXXjmorse - this isn't going to be printed right if the array data is
+    // sparse. See trac #73
     exprt dest = exprt("array", type);
     dest.operands() = elem_list;
     return dest;
