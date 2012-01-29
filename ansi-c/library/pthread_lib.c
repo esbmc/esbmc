@@ -11,6 +11,21 @@
 #define __ESBMC_cond_broadcast_seq_field(a) ((a).__data.__broadcast_seq)
 #define __ESBMC_rwlock_field(a) ((a).__data.__lock)
 
+int
+pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+               void *(*start_routine) (void *), void *arg)
+{
+
+  assert(0);
+}
+
+void
+pthread_exit(void *retval)
+{
+
+  assert(0);
+}
+
 int pthread_mutex_init(
   pthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr)
 {
