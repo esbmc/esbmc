@@ -186,7 +186,6 @@ private:
   bool is_bv(const typet &type);
   bool is_ptr(const typet &type);
   bool is_signed(const typet &type);
-  static std::string ascii2int(char ch);
   void print_data_types(Z3_ast operand0, Z3_ast operand1);
   void print_location(const exprt &expr);
   void debug_label_formula(std::string name, Z3_ast formula);
