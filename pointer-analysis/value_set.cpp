@@ -255,11 +255,6 @@ void value_sett::get_value_set(
       it!=object_map.read().end();
       it++)
     dest.push_back(to_expr(it));
-
-  #if 0
-  for(expr_sett::const_iterator it=value_set.begin(); it!=value_set.end(); it++)
-    std::cout << "GET_VALUE_SET: " << from_expr(ns, "", *it) << std::endl;
-  #endif
 }
 
 /*******************************************************************\
@@ -304,11 +299,7 @@ void value_sett::get_value_set_rec(
   const typet &original_type,
   const namespacet &ns) const
 {
-  #if 0
-  std::cout << "GET_VALUE_SET_REC EXPR: " << from_expr(ns, "", expr) << std::endl;
-  std::cout << "GET_VALUE_SET_REC SUFFIX: " << suffix << std::endl;
-  std::cout << std::endl;
-  #endif
+  const typet &expr_type=ns.follow(expr.type());
 
   if(expr.id()=="unknown" || expr.id()=="invalid")
   {
@@ -321,7 +312,7 @@ void value_sett::get_value_set_rec(
 
     const typet &type=ns.follow(expr.op0().type());
 
-    assert(type.id()=="array" ||
+    assert(type.is_array() ||
            type.id()=="incomplete_array");
            
     get_value_set_rec(expr.op0(), dest, "[]"+suffix, original_type, ns);
@@ -340,7 +331,7 @@ void value_sett::get_value_set_rec(
            type.id()=="incomplete_union");
            
     const std::string &component_name=
-      expr.get_string("component_name");
+      expr.component_name().as_string();
     
     get_value_set_rec(expr.op0(), dest,
       "."+component_name+suffix, original_type, ns);
@@ -351,7 +342,7 @@ void value_sett::get_value_set_rec(
   {
     // look it up
     valuest::const_iterator v_it=
-      values.find(expr.get_string("identifier")+suffix);
+      values.find(expr.identifier().as_string()+suffix);
       
     if(v_it!=values.end())
     {
@@ -369,7 +360,7 @@ void value_sett::get_value_set_rec(
 
     return;
   }
-  else if(expr.id()=="address_of")
+  else if(expr.is_address_of())
   {
     if(expr.operands().size()!=1)
       throw expr.id_string()+" expected to have one operand";
@@ -424,8 +415,7 @@ void value_sett::get_value_set_rec(
   else if(expr.is_constant())
   {
     // check if NULL
-    if(expr.get("value")=="NULL" &&
-       expr.type().id()=="pointer")
+    if(expr.value()=="NULL" && expr.type().id()=="pointer")
     {
       insert(dest, exprt("NULL-object", expr.type().subtype()), 0);
       return;
@@ -503,19 +493,20 @@ void value_sett::get_value_set_rec(
   }
   else if(expr.id()=="sideeffect")
   {
-    const irep_idt &statement=expr.get("statement");
+    const irep_idt &statement=expr.statement();
     
     if(statement=="function_call")
     {
+      std::cout << "value_sett: expr.pretty(): " << expr.pretty() << std::endl;
       // these should be gone
-      throw "unexpected function_call sideeffect";
+      throw "value_sett: unexpected function_call sideeffect";
     }
     else if(statement=="malloc")
     {
       assert(suffix=="");
       
       const typet &dynamic_type=
-        static_cast<const typet &>(expr.find("#type"));
+        static_cast<const typet &>(expr.cmt_type());
 
       dynamic_object_exprt dynamic_object(dynamic_type);
       dynamic_object.instance()=from_integer(location_number, typet("natural"));
@@ -544,9 +535,60 @@ void value_sett::get_value_set_rec(
     insert(dest, address_of_exprt(expr), 0);
     return;
   }
-  else if(expr.id()=="with" ||
-          expr.id()=="array_of" ||
-          expr.id()=="array")
+
+  else if(expr.id()=="with")
+  {
+    assert(expr.operands().size()==3);
+
+    // this is the array/struct
+    object_mapt tmp_map0;
+    get_value_set_rec(expr.op0(), tmp_map0, suffix, original_type, ns);
+
+    // this is the update value -- note NO SUFFIX
+    object_mapt tmp_map2;
+    get_value_set_rec(expr.op2(), tmp_map2, "", original_type, ns);
+
+    if(expr_type.id()=="struct")
+    {
+      #if 0
+      const object_map_dt &object_map0=tmp_map0.read();
+      irep_idt component_name=expr.op1().get(ID_component_name);
+
+      bool insert=true;
+
+      for(object_map_dt::const_iterator
+          it=object_map0.begin();
+          it!=object_map0.end();
+          it++)
+      {
+        const exprt &e=to_expr(it);
+
+        if(e.id()==ID_member &&
+           e.get(ID_component_name)==component_name)
+        {
+          if(insert)
+          {
+            dest.write().insert(tmp_map2.read().begin(), tmp_map2.read().end());
+            insert=false;
+          }
+        }
+        else
+          dest.write().insert(*it);
+      }
+      #else
+      // Should be more precise! We only want "suffix"
+      make_union(dest, tmp_map0);
+      make_union(dest, tmp_map2);
+      #endif
+    }
+    else
+    {
+      make_union(dest, tmp_map0);
+      make_union(dest, tmp_map2);
+    }
+  }
+  else if(expr.id()=="array_of" ||
+          expr.is_array())
   {
     // these are supposed to be done by assign()
     throw "unexpected value in get_value_set: "+expr.id_string();
@@ -558,8 +600,7 @@ void value_sett::get_value_set_rec(
   
     const std::string name=
       "value_set::dynamic_object"+
-      dynamic_object.instance().get_string("value")+
-      suffix;
+      dynamic_object.instance().value().as_string()+suffix;
   
     // look it up
     valuest::const_iterator v_it=values.find(name);
@@ -648,16 +689,13 @@ void value_sett::get_reference_set_rec(
   object_mapt &dest,
   const namespacet &ns) const
 {
-  #if 0
-  std::cout << "GET_REFERENCE_SET_REC EXPR: " << from_expr(ns, "", expr) << std::endl;
-  #endif
 
   if(expr.id()=="symbol" ||
      expr.id()=="dynamic_object" ||
      expr.id()=="string-constant")
   {
-    if(expr.type().id()=="array" &&
-       expr.type().subtype().id()=="array")
+    if(expr.type().is_array() &&
+       expr.type().subtype().is_array())
       insert(dest, expr);
     else    
       insert(dest, expr, 0);
@@ -672,11 +710,6 @@ void value_sett::get_reference_set_rec(
 
     get_value_set_rec(expr.op0(), dest, "", expr.op0().type(), ns);
 
-    #if 0
-    for(expr_sett::const_iterator it=value_set.begin(); it!=value_set.end(); it++)
-      std::cout << "VALUE_SET: " << from_expr(ns, "", *it) << std::endl;
-    #endif
-
     return;
   }
   else if(expr.id()=="index")
@@ -688,7 +721,7 @@ void value_sett::get_reference_set_rec(
     const exprt &offset=expr.op1();
     const typet &array_type=ns.follow(array.type());
     
-    assert(array_type.id()=="array" ||
+    assert(array_type.is_array() ||
            array_type.id()=="incomplete_array");
     
     object_mapt array_references;
@@ -735,7 +768,7 @@ void value_sett::get_reference_set_rec(
   }
   else if(expr.id()=="member")
   {
-    const irep_idt &component_name=expr.get("component_name");
+    const irep_idt &component_name=expr.component_name();
 
     if(expr.operands().size()!=1)
       throw "member expected to have one operand";
@@ -805,10 +838,6 @@ void value_sett::assign(
   const namespacet &ns,
   bool add_to_sets)
 {
-  #if 0
-  std::cout << "ASSIGN LHS: " << from_expr(ns, "", lhs) << std::endl;
-  std::cout << "ASSIGN RHS: " << from_expr(ns, "", rhs) << std::endl;
-  #endif
 
   if(rhs.id()=="if")
   {
@@ -833,10 +862,10 @@ void value_sett::assign(
         c_it++)
     {
       const typet &subtype=c_it->type();
-      const irep_idt &name=c_it->get("name");
+      const irep_idt &name=c_it->name();
 
       // ignore methods
-      if(subtype.id()=="code") continue;
+      if(subtype.is_code()) continue;
     
       member_exprt lhs_member(subtype);
       lhs_member.set_component_name(name);
@@ -845,12 +874,19 @@ void value_sett::assign(
       exprt rhs_member;
 
       if(rhs.id()=="unknown" ||
-         rhs.id()=="invalid")
+         rhs.id()=="invalid" )
       {
         rhs_member=exprt(rhs.id(), subtype);
       }
       else
       {
+    	if (rhs.id() == "index") {
+          if (lhs.id() == "symbol") {
+            assign(lhs_member, rhs.op0(), ns, add_to_sets);
+            return;
+    	  }
+    	}
+
         assert(base_type_eq(rhs.type(), type, ns));
 
         rhs_member=make_member(rhs, name, ns);
@@ -859,7 +895,7 @@ void value_sett::assign(
       }
     }
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     exprt lhs_index("index", type.subtype());
     lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
@@ -878,7 +914,7 @@ void value_sett::assign(
         assert(rhs.operands().size()==1);
         assign(lhs_index, rhs.op0(), ns, add_to_sets);
       }
-      else if(rhs.id()=="array" ||
+      else if(rhs.is_array() ||
               rhs.id()=="constant")
       {
         forall_operands(o_it, rhs)
@@ -1027,20 +1063,10 @@ void value_sett::assign_rec(
   const namespacet &ns,
   bool add_to_sets)
 {
-  #if 0
-  std::cout << "ASSIGN_REC LHS: " << from_expr(ns, "", lhs) << std::endl;
-  std::cout << "ASSIGN_REC SUFFIX: " << suffix << std::endl;
-
-  for(object_map_dt::const_iterator it=values_rhs.read().begin(); 
-      it!=values_rhs.read().end(); 
-      it++)
-    std::cout << "ASSIGN_REC RHS: " << 
-      object_numbering[it->first] << std::endl;
-  #endif
 
   if(lhs.id()=="symbol")
   {
-    const irep_idt &identifier=lhs.get("identifier");
+    const irep_idt &identifier=lhs.identifier();
     
     if(add_to_sets)
       make_union(get_entry(identifier, suffix).object_map, values_rhs);
@@ -1054,7 +1080,7 @@ void value_sett::assign_rec(
   
     const std::string name=
       "value_set::dynamic_object"+
-      dynamic_object.instance().get_string("value");
+      dynamic_object.instance().value().as_string();
 
     make_union(get_entry(name, suffix).object_map, values_rhs);
   }
@@ -1088,7 +1114,7 @@ void value_sett::assign_rec(
       
     const typet &type=ns.follow(lhs.op0().type());
       
-    assert(type.id()=="array" || type.id()=="incomplete_array");
+    assert(type.is_array() || type.id()=="incomplete_array");
 
     assign_rec(lhs.op0(), values_rhs, "[]"+suffix, ns, true);
   }
@@ -1097,7 +1123,7 @@ void value_sett::assign_rec(
     if(lhs.operands().size()!=1)
       throw "member expected to have one operand";
   
-    const std::string &component_name=lhs.get_string("component_name");
+    const std::string &component_name=lhs.component_name().as_string();
 
     const typet &type=ns.follow(lhs.op0().type());
 
@@ -1240,7 +1266,7 @@ void value_sett::apply_code(
   const exprt &code,
   const namespacet &ns)
 {
-  const irep_idt &statement=code.get("statement");
+  const irep_idt &statement=code.statement();
 
   if(statement=="block")
   {
@@ -1320,6 +1346,10 @@ void value_sett::apply_code(
       assign(lhs, code.op0(), ns);
     }
   }
+  else if(statement=="cpp-try")
+  {
+    // doesn't do anything
+  }
   else
   {
     std::cerr << code.pretty() << std::endl;
@@ -1351,8 +1381,13 @@ exprt value_sett::make_member(
      src.id()=="constant")
   {
     unsigned no=struct_type.component_number(component_name);
-    assert(no<src.operands().size());
-    return src.operands()[no];
+    if (no>=src.operands().size()		//component number does not exist,
+    	&& src.operands().size()==1)    //we have only one component
+      return src.op0();
+    else {
+      assert(no<src.operands().size());
+      return src.operands()[no];
+    }
   }
   else if(src.id()=="with")
   {
@@ -1361,7 +1396,7 @@ exprt value_sett::make_member(
     // see if op1 is the member we want
     const exprt &member_operand=src.op1();
 
-    if(component_name==member_operand.get("component_name"))
+    if(component_name==member_operand.component_name())
       // yes! just take op2
       return src.op2();
     else

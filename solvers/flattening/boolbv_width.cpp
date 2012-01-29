@@ -60,7 +60,7 @@ Function: boolbv_widtht::get_width
 
 bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 {
-  if(type.id()=="bool")
+  if(type.is_bool())
   {
     width=1;
     return false;
@@ -71,21 +71,21 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
           type.id()=="fixedbv" ||
           type.id()=="bv")
   {
-    width=atoi(type.get("width").c_str());
+    width=atoi(type.width().c_str());
     assert(width!=0);
     return false;
   }
   else if(type.id()=="verilogbv")
   {
-    width=atoi(type.get("width").c_str());
+    width=atoi(type.width().c_str());
     width=width*2; // we encode with two bits
     assert(width!=0);
     return false;
   }
   else if(type.id()=="range")
   {
-    mp_integer from=string2integer(type.get_string("from")),
-                 to=string2integer(type.get_string("to"));
+    mp_integer from=string2integer(type.from().as_string()),
+                 to=string2integer(type.to().as_string());
 
     mp_integer size=to-from+1;
 
@@ -97,7 +97,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 
     return false;
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     const array_typet &array_type=to_array_type(type);
     unsigned sub_width;
@@ -120,14 +120,14 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
   }
   else if(type.id()=="struct")
   {
-    const irept &components=type.find("components");
+    const irept &components=type.components();
 
     width=0;
     
     forall_irep(it, components.get_sub())
     {
       unsigned sub_width;
-      const typet &sub_type=static_cast<const typet &>(it->find("type"));
+      const typet &sub_type=it->type();
 
       if(get_width(sub_type, sub_width))
         return true;
@@ -137,21 +137,21 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 
     return false;
   }
-  else if(type.id()=="code")
+  else if(type.is_code())
   {
     width=0;
     return false;
   }
   else if(type.id()=="union")
   {
-    const irept &components=type.find("components");
+    const irept &components=type.components();
 
     width=0;
 
     // get the biggest element, plus our index
     forall_irep(it, components.get_sub())
     {
-      const typet &subtype=static_cast<const typet &>(it->find("type"));
+      const typet &subtype=it->type();
 
       unsigned sub_width;
       if(get_width(subtype, sub_width))
@@ -170,7 +170,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
 
     // get number of necessary bits
 
-    unsigned size=type.find("elements").get_sub().size();
+    unsigned size=type.elements().get_sub().size();
     width=integer2long(address_bits(size));
     assert(width!=0);
 
@@ -179,7 +179,7 @@ bool boolbv_widtht::get_width(const typet &type, unsigned &width) const
   else if(type.id()=="c_enum" ||
           type.id()=="incomplete_c_enum")
   {
-    width=atoi(type.get("width").c_str());
+    width=atoi(type.width().c_str());
     assert(width!=0);
     return false;
   }

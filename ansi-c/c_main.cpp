@@ -45,10 +45,10 @@ void static_lifetime_init(
 
       if(value.is_not_nil())
       {
-        assert(value.type().id()!="code");
+        assert(!value.type().is_code());
 
         exprt symbol("symbol", it->second.type);
-        symbol.set("identifier", it->second.name);
+        symbol.identifier(it->second.name);
 
         code_assignt code(symbol, it->second.value);
         code.location()=it->second.location;
@@ -61,8 +61,8 @@ void static_lifetime_init(
 
   forall_symbols(it, context.symbols)
   {
-    if(it->second.type.get_bool("initialization") &&
-       it->second.type.id()=="code")
+    if(it->second.type.initialization() &&
+       it->second.type.is_code())
     {
       code_function_callt function_call;
       function_call.function()=symbol_expr(it->second);
@@ -103,7 +103,7 @@ bool c_main(
 
       if(s_it==context.symbols.end()) continue;
 
-      if(s_it->second.type.id()=="code")
+      if(s_it->second.type.is_code())
         matches.push_back(it->second);
     }
 
@@ -184,9 +184,9 @@ bool c_main(
         mp_integer max;
 
         if(argc_symbol.type.id()=="signedbv")
-          max=power(2, atoi(argc_symbol.type.get("width").c_str())-1)-1;
+          max=power(2, atoi(argc_symbol.type.width().c_str())-1)-1;
         else if(argc_symbol.type.id()=="unsignedbv")
-          max=power(2, atoi(argc_symbol.type.get("width").c_str()))-1;
+          max=power(2, atoi(argc_symbol.type.width().c_str()))-1;
         else
           assert(false);
 
@@ -208,9 +208,9 @@ bool c_main(
         mp_integer max;
 
         if(envp_size_symbol.type.id()=="signedbv")
-          max=power(2, atoi(envp_size_symbol.type.get("width").c_str())-1)-1;
+          max=power(2, atoi(envp_size_symbol.type.width().c_str())-1)-1;
         else if(envp_size_symbol.type.id()=="unsignedbv")
-          max=power(2, atoi(envp_size_symbol.type.get("width").c_str()))-1;
+          max=power(2, atoi(envp_size_symbol.type.width().c_str()))-1;
         else
           assert(false);
 
@@ -231,7 +231,7 @@ bool c_main(
         /*
         exprt zero_string("zero_string", array_typet());
         zero_string.type().subtype()=char_type();
-        zero_string.type().set("size", "infinity");
+        zero_string.type().size("infinity");
         exprt index("index", char_type());
         index.copy_to_operands(zero_string, gen_zero(uint_type()));
         exprt address_of("address_of", pointer_typet());
@@ -253,7 +253,7 @@ bool c_main(
       {
         // assign argv[argc] to NULL
         exprt null("constant", argv_symbol.type.subtype());
-        null.set("value", "NULL");
+        null.value("NULL");
 
         exprt index_expr("index", argv_symbol.type.subtype());
         index_expr.copy_to_operands(
@@ -261,7 +261,7 @@ bool c_main(
           symbol_expr(argc_symbol));
 
         // disable bounds check on that one
-        index_expr.set("bounds_check", false);
+        index_expr.bounds_check(false);
 
         init_code.copy_to_operands(code_assignt(index_expr, null));
       }
@@ -273,7 +273,7 @@ bool c_main(
 
         // assume envp[envp_size] is NULL
         exprt null("constant", envp_symbol.type.subtype());
-        null.set("value", "NULL");
+        null.value("NULL");
 
         exprt index_expr("index", envp_symbol.type.subtype());
         index_expr.copy_to_operands(
@@ -281,7 +281,7 @@ bool c_main(
           symbol_expr(envp_size_symbol));
 
         // disable bounds check on that one
-        index_expr.set("bounds_check", false);
+        index_expr.bounds_check(false);
 
         exprt is_null("=", typet("bool"));
         is_null.copy_to_operands(index_expr, null);
@@ -312,7 +312,7 @@ bool c_main(
           index_expr.copy_to_operands(symbol_expr(argv_symbol), gen_zero(index_type()));
 
           // disable bounds check on that one
-          index_expr.set("bounds_check", false);
+          index_expr.bounds_check(false);
 
           op1=exprt("address_of", arg1.type());
           op1.move_to_operands(index_expr);

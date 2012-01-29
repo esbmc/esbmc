@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 #include <iostream>
+#include <vector>
 
 #include <std_expr.h>
 #include <rename.h>
@@ -21,7 +22,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "../ansi-c/c_types.h"
 #include <base_type.h>
 #include <simplify_expr.h>
-#include <bits/stl_vector.h>
 #include "config.h"
 
 /*******************************************************************\
@@ -62,17 +62,11 @@ void goto_symext::claim(
   total_claims++;
 
   exprt expr = claim_expr;
-  //std::cout << "before rename expr.pretty(): " << expr.pretty() << "\n";
   state.rename(expr, ns, node_id);
-  //std::cout << "after rename expr.pretty(): " << expr.pretty() << "\n";
-
-  //std::cout << "before simplify expr.pretty(): " << expr.pretty() << "\n";
 
   // first try simplifier on it
   if (!expr.is_false())
     do_simplify(expr);
-
-  //std::cout << "after simplify expr.pretty(): " << expr.pretty() << "\n";
 
   if (expr.is_true() &&
     !options.get_bool_option("all-assertions"))
@@ -81,7 +75,8 @@ void goto_symext::claim(
   state.guard.guard_expr(expr);
 
   remaining_claims++;
-  target->assertion(state.guard, expr, msg, state.source);
+  target->assertion(state.guard, expr, msg, state.gen_stack_trace(),
+                    state.source);
 }
 
 bool
@@ -103,11 +98,14 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
       // assumes that the DFS exploration path algorithm never changes.
       // Has to occur here; between generating new threads, ESBMC messes with
       // the dfs state.
-      art1->get_cur_state()._DFS_traversed = it->explored;
+      for (int dfspos = 0; dfspos < art1->get_cur_state()._DFS_traversed.size();
+           dfspos++)
+        art1->get_cur_state()._DFS_traversed[dfspos] = true;
       art1->get_cur_state()._DFS_traversed[it->cur_thread] = false;
 
       symex_step(art1->goto_functions, *art1);
     }
+    art1->get_cur_state()._DFS_traversed = it->explored;
 
     if (art1->get_cur_state()._threads_state.size() != it->num_threads) {
       std::cerr << "Unexpected number of threads when reexploring checkpoint"
@@ -160,13 +158,13 @@ Function: goto_symext::get_symbol
 \*******************************************************************/
 
 irep_idt goto_symext::get_symbol(const exprt & expr) {
-  if (expr.id() != "symbol") {
+  if (expr.id() != exprt::symbol) {
     forall_operands(it, expr) {
       return get_symbol(*it);
     }
   }
 
-  return expr.get("identifier");
+  return expr.identifier();
 }
 
 /*******************************************************************\
@@ -197,7 +195,12 @@ void goto_symext::symex_step(
     if (instruction.location_number == insn_num) {
       // If you're developing ESBMC on a machine that isn't x86, I'll send you
       // cookies.
+#ifndef _WIN32
       __asm__("int $3");
+#else
+      std::cerr << "Can't trap on windows, sorry" << std::endl;
+      abort();
+#endif
     }
   }
 
@@ -293,10 +296,10 @@ void goto_symext::symex_step(
         case ASSERT:
             if (!state.guard.is_false()) {
                 if (!options.get_bool_option("no-assertions") ||
-                        !state.source.pc->location.get_bool("user-provided")
+                        !state.source.pc->location.user_provided()
                         || options.get_bool_option("deadlock-check")) {
 
-                    std::string msg = state.source.pc->location.get_string("comment");
+                    std::string msg = state.source.pc->location.comment().as_string();
                     if (msg == "") msg = "assertion";
                     exprt tmp(instruction.guard);
 
@@ -359,7 +362,7 @@ void goto_symext::symex_step(
 
                 dereference(deref_code.function(), state, false, ex_state.node_id);
 
-                if(deref_code.function().get("identifier") == "c::__ESBMC_yield")
+                if(deref_code.function().identifier() == "c::__ESBMC_yield")
                 {
                    state.source.pc++;
                    ex_state.reexecute_instruction = false;
@@ -367,7 +370,7 @@ void goto_symext::symex_step(
                    return;
                 }
 
-                if (deref_code.function().get("identifier") == "c::__ESBMC_switch_to")
+                if (deref_code.function().identifier() == "c::__ESBMC_switch_to")
                 {
                   state.source.pc++;
                   ex_state.reexecute_instruction = false;
@@ -379,7 +382,7 @@ void goto_symext::symex_step(
                   if (num.id() != "constant")
                     throw "Can't switch to non-constant thread id no";
 
-                  unsigned int tid = binary2integer(num.get("value").as_string(), false).to_long();
+                  unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
                   ex_state.set_active_state(tid);
                   return;
                 }
@@ -404,17 +407,13 @@ void goto_symext::symex_step(
             if (!state.guard.is_false()) {
                 codet deref_code(instruction.code);
                 const irep_idt &statement = deref_code.get_statement();
-                if (/*statement == "cpp_delete" ||
-                        statement == "cpp_delete[]" ||*/
+                if (statement == "cpp_delete" ||
+                        statement == "cpp_delete[]" ||
                         statement == "free" ||
                         statement == "printf") {
                     replace_dynamic_allocation(state, deref_code);
                     replace_nondet(deref_code, ex_state);
                     dereference(deref_code, state, false,ex_state.node_id);
-
-                    //if(ex_state._threads_state.size() > 1)
-                      //if (art.generate_states_before_read(deref_code))
-                        //return;
                 }
 
                 symex_other(goto_functions, state, ex_state,  ex_state.node_id);
@@ -448,13 +447,15 @@ void goto_symext::symex_step(
               state.source.pc = goto_target;
             }
 
+            ex_state.reexecute_instruction = false;
+            art.generate_states();
+            art.set_is_at_end_of_run();
+
             break;
         case END_THREAD:
             ex_state.end_thread(ns, *target);
             ex_state.reexecute_instruction = false;
             art.generate_states();
-            //if (art.generate_states_base(exprt()))
-              //return;
             break;
         case ATOMIC_BEGIN:
             state.source.pc++;
@@ -463,6 +464,8 @@ void goto_symext::symex_step(
         case ATOMIC_END:
             ex_state.decrement_active_atomic_number();
             state.source.pc++;
+            ex_state.reexecute_instruction = false;
+            art.generate_states();
             break;
         default:
             assert(false);

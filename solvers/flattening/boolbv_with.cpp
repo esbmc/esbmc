@@ -80,7 +80,7 @@ void boolbvt::convert_with(
 
   next_bv.resize(prev_bv.size());
 
-  if(type.id()=="array")
+  if(type.is_array())
     return convert_with_array(to_array_type(type), op1, op2, prev_bv, next_bv);
   else if(type.id()=="bv" ||
           type.id()=="unsignedbv" ||
@@ -242,8 +242,8 @@ void boolbvt::convert_with_struct(
   bvt op2_bv;
   convert_bv(op2, op2_bv);
 
-  const irep_idt &component_name=op1.get("component_name");
-  const irept &components=type.find("components");
+  const irep_idt &component_name=op1.component_name();
+  const irept &components=type.components();
 
   unsigned offset=0;
 
@@ -251,13 +251,12 @@ void boolbvt::convert_with_struct(
   {
     unsigned sub_width;
 
-    const typet &subtype=static_cast<const typet &>
-      (it->find("type"));
+    const typet &subtype=it->type();
 
     if(boolbv_get_width(subtype, sub_width))
       sub_width=0;
 
-    if(it->get("name")==component_name)
+    if(it->name()==component_name)
     {
       if(subtype!=op2.type())
         throw "with/struct: component `"+id2string(component_name)+
@@ -310,7 +309,7 @@ void boolbvt::convert_with_union(
     
   const struct_typet &s_type=to_struct_type(type);
 
-  const irep_idt &component_name=op1.get("component_name");
+  const irep_idt &component_name=op1.component_name();
 
   if(!s_type.has_component(component_name))
     throw "with/union: component not found";

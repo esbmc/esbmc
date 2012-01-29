@@ -1,0 +1,3 @@
+main.c
+--unwind 1 --no-unwinding-assertions --no-bounds-check --no-pointer-check --no-div-by-zero-check
+^VERIFICATION SUCCESSFUL$

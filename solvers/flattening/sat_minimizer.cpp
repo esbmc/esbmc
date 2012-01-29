@@ -84,7 +84,7 @@ bool bv_minimizing_dect::minimize(const minimization_listt &symbols)
       }
     }
 
-    status(symbol.get_string("identifier")+" = "+i2string(result));
+    status(symbol.identifier().as_string()+" = "+i2string(result));
   }
 
   return true;

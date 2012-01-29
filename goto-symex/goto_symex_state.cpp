@@ -3,11 +3,13 @@
 Module: Symbolic Execution
 
 Author: Daniel Kroening, kroening@kroening.com
+		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
 #include <assert.h>
-#include <alloca.h>
+#include <global.h>
+#include <malloc.h>
 #include <map>
 #include <sstream>
 
@@ -17,35 +19,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "reachability_tree.h"
 #include "execution_state.h"
 #include "goto_symex_state.h"
+#include "basic_symex.h"
+#include "goto_symex.h"
 #include "crypto_hash.h"
 
-/*******************************************************************\
-
-Function: goto_symex_statet::goto_symex_statet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-/*
-goto_symex_statet::goto_symex_statet(const goto_symex_statet & state)
-{
-  use_value_set=true;
-  depth= state.depth;
-  level2 = state.level2;
-  guard = state.guard;
-  value_set = state.value_set;
-  call_stack = state.call_stack;
- // top().level1.current_names.clear();
- // top().level1.original_identifiers.clear();
-
-  source = state.source;
-  declaration_history = state.declaration_history;
-}
-*/
 /*******************************************************************\
 
 Function: goto_symex_statet::initialize
@@ -64,12 +41,7 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
 
   source.is_set=true;
   source.thread_nr = thread_id;
-  source.pc=start;//body.instructions.begin();
-/*
-  goto_programt::const_targett end_pc = pc;
-  while((*end_pc).type != END_FUNCTION)
-	  end_pc++;
-*/
+  source.pc=start;
   top().end_of_function=end;
   top().calling_location=symex_targett::sourcet(top().end_of_function, prog);
 }
@@ -92,27 +64,6 @@ std::string goto_symex_statet::level1t::name(
 {
   return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(_thread_id);//+"*"+i2string(execution_node_id);
 }
-
-/*******************************************************************\
-
-Function: goto_symex_statet::name_count
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-//std::string goto_symex_statet::level2t::name(
-//  const irep_idt &identifier,
-//  unsigned count,
-//        unsigned node_id) const
-//{
-//  valuet &entry=current_names[identifier];
-//  return id2string(identifier)+"&"+i2string(entry.node_id)+"#"+i2string(count);
-//}
 
 /*******************************************************************\
 
@@ -150,21 +101,16 @@ std::string goto_symex_statet::level1t::operator()(
   const irep_idt &identifier, unsigned exec_node_id) const
 {
 
- //    	std::cout << "getting current name 3" << std::endl;
-
   current_namest::const_iterator it=
     current_names.find(identifier);
-//	std::cout << "getting current name 3.1" << std::endl;
 
   if(it==current_names.end())
   {
     // can not find
     return id2string(identifier); // means global value ?
   }
-//	std::cout << "getting current name 3.2" << std::endl;
 
   return name(identifier, it->second, exec_node_id);
-//	std::cout << "getting current name 3.3" << std::endl;
 }
 
 /*******************************************************************\
@@ -217,25 +163,23 @@ Function: goto_symex_statet::constant_propagation
 bool goto_symex_statet::constant_propagation(const exprt &expr) const
 {
   static unsigned int with_counter=0;
-  //std::cout << "constant_propagation: " << expr.id() << std::endl;
-  //std::cout << "constant_propagation: " << expr.pretty() << std::endl;
   if(expr.is_constant()) return true;
 
-  if(expr.id()=="address_of")
+  if(expr.id()==exprt::addrof)
   {
     if(expr.operands().size()!=1)
       throw "address_of expects one operand";
 
     return constant_propagation_reference(expr.op0());
   }
-  else if(expr.id()=="typecast")
+  else if(expr.id()==exprt::typecast)
   {
     if(expr.operands().size()!=1)
       throw "typecast expects one operand";
 
     return constant_propagation(expr.op0());
   }
-  else if(expr.id()=="+")
+  else if(expr.id()==exprt::plus)
   {
     forall_operands(it, expr)
       if(!constant_propagation(*it))
@@ -244,15 +188,15 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
     return true;
   }
 #if 1
-  else if(expr.id()=="array_of")
+  else if(expr.id()==exprt::arrayof)
   {
     if(expr.operands().size()==1)
-      if (expr.op0().id()=="constant" && expr.op0().type().id()!="bool")
+      if (expr.op0().id()==exprt::constant && expr.op0().type().id()!=typet::t_bool)
         return true;
   }
 #endif
 #if 1
-  else if(expr.id()=="with")
+  else if(expr.id()==exprt::with)
   {
 	with_counter++;
 
@@ -290,7 +234,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
   }
 
   /* No difference
-  else if(expr.id()=="=")
+  else if(expr.id()==exprt::equality)
   {
     if(expr.operands().size()!=2)
 	  throw "equality expects two operands";
@@ -300,12 +244,6 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
 
   }
   */
-#if 0
-  else
-  {
-	  std::cout << "rest constant_propagation: " << expr.pretty() << std::endl;
-  }
-#endif
 
   return false;
 }
@@ -324,11 +262,9 @@ Function: goto_symex_statet::constant_propagation_reference
 
 bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
 {
-  //std::cout << "constant_propagation_reference: " << expr.id() << std::endl;
-  //std::cout << "constant_propagation_reference: " << expr.pretty() << std::endl;
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
     return true;
-  else if(expr.id()=="index")
+  else if(expr.id()==exprt::index)
   {
     if(expr.operands().size()!=2)
       throw "index expects two operands";
@@ -336,7 +272,7 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
     return constant_propagation_reference(expr.op0()) &&
            constant_propagation(expr.op1());
   }
-  else if(expr.id()=="member")
+  else if(expr.id()==exprt::member)
   {
     if(expr.operands().size()!=1)
       throw "member expects one operand";
@@ -346,10 +282,6 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
 #if 1
   else if(expr.id()=="string-constant")
     return true;
-#endif
-#if 0
-  else
-	std::cout << "constant_propagation_reference: " << expr.pretty() << std::endl;
 #endif
 
   return false;
@@ -377,6 +309,7 @@ void goto_symex_statet::assignment(
 {
   crypto_hash hash;
   assert(lhs.id()=="symbol");
+  assert(lhs.id()==exprt::symbol);
 
   if (ex_state.owning_rt->state_hashing)
     hash = ex_state.update_hash_for_assignment(rhs);
@@ -384,7 +317,7 @@ void goto_symex_statet::assignment(
   // the type might need renaming
   rename(lhs.type(), ns, exec_node_id);
 
-  const irep_idt &identifier= lhs.get("identifier");
+  const irep_idt &identifier= lhs.identifier();
 
   // identifier should be l0 or l1, make sure it's l1
 
@@ -398,7 +331,7 @@ void goto_symex_statet::assignment(
 
   level2.rename(l1_identifier, entry.count,exec_node_id);
 
-  lhs.set("identifier", level2.name(l1_identifier, entry.count));
+  lhs.identifier(level2.name(l1_identifier, entry.count));
 
   if (ex_state.owning_rt->state_hashing)
     level2.current_hashes[orig_name] = hash;
@@ -422,8 +355,8 @@ void goto_symex_statet::assignment(
     exprt l1_rhs(rhs);
     level2.get_original_name(l1_rhs);
 
-    exprt l1_lhs("symbol", lhs.type());
-    l1_lhs.set("identifier", l1_identifier);
+    exprt l1_lhs(exprt::symbol, lhs.type());
+    l1_lhs.identifier(l1_identifier);
 
     value_set.assign(l1_lhs, l1_rhs, ns);
   }
@@ -436,24 +369,24 @@ static std::string state_to_ignore[8] =
 crypto_hash
 goto_symex_statet::level2t::generate_l2_state_hash() const
 {
-  uint8_t *data;
-  int idx;
+  unsigned int total;
 
-  data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE);
+  uint8_t *data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE * sizeof(uint8_t));
 
-  idx = 0;
+  total = 0;
   for (current_state_hashest::const_iterator it = current_hashes.begin();
-        it != current_hashes.end(); it++, idx++) {
+        it != current_hashes.end(); it++) {
     int j;
 
     for (j = 0 ; j < 8; j++)
       if (it->first.as_string().find(state_to_ignore[j]) != std::string::npos)
         continue;
 
-    memcpy(&data[idx * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
+    memcpy(&data[total * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
+    total++;
   }
 
-  return crypto_hash(data, current_hashes.size() * CRYPTO_HASH_SIZE);
+  return crypto_hash(data, total * CRYPTO_HASH_SIZE);
 }
 
 /*******************************************************************\
@@ -474,12 +407,12 @@ void goto_symex_statet::rename(exprt &expr, const namespacet &ns,unsigned node_i
 
   rename(expr.type(), ns,node_id);
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     top().level1.rename(expr,node_id);
     level2.rename(expr,node_id);
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.id()==exprt::addrof ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {
@@ -514,12 +447,12 @@ void goto_symex_statet::rename_address(
 
   rename(expr.type(), ns,node_id);
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     // only do L1
     top().level1.rename(expr,node_id);
   }
-  else if(expr.id()=="index")
+  else if(expr.id()==exprt::index)
   {
     assert(expr.operands().size()==2);
     rename_address(expr.op0(), ns,node_id);
@@ -551,9 +484,9 @@ void goto_symex_statet::level1t::rename(exprt &expr,unsigned node_id)
 
   rename(expr.type(),node_id);
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
 
     // first see if it's already an l1 name
 
@@ -565,9 +498,9 @@ void goto_symex_statet::level1t::rename(exprt &expr,unsigned node_id)
       current_names.find(identifier);
 
     if(it!=current_names.end())
-      expr.set("identifier", name(identifier, it->second,node_id));
+      expr.identifier(name(identifier, it->second,node_id));
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.id()==exprt::addrof ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {
@@ -599,9 +532,9 @@ void goto_symex_statet::level2t::rename(exprt &expr, unsigned node_id)
 
   rename(expr.type(),node_id);
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
 
     // first see if it's already an l2 name
 
@@ -617,16 +550,16 @@ void goto_symex_statet::level2t::rename(exprt &expr, unsigned node_id)
       if(it->second.constant.is_not_nil())
         expr=it->second.constant;
       else
-        expr.set("identifier", name(identifier, it->second.count));
+        expr.identifier(name(identifier, it->second.count));
     }
     else
     {
       std::string new_identifier=name(identifier, 0);
       original_identifiers[new_identifier]=identifier;
-      expr.set("identifier", new_identifier);
+      expr.identifier(new_identifier);
     }
   }
-  else if(expr.id()=="address_of" ||
+  else if(expr.id()==exprt::addrof ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {
@@ -658,25 +591,27 @@ void goto_symex_statet::rename(
 {
   // rename all the symbols with their last known value
 
-  if(type.id()=="array")
+  if(type.id()==typet::t_array)
   {
     rename(type.subtype(), ns,node_id);
-    rename(static_cast<exprt &>(type.add("size")), ns,node_id);
+    exprt tmp = static_cast<const exprt &>(type.size_irep());
+    rename(tmp, ns,node_id);
+    type.size(tmp);
   }
-  else if(type.id()=="struct" ||
-          type.id()=="union" ||
-          type.id()=="class")
+  else if(type.id()==typet::t_struct ||
+          type.id()==typet::t_union ||
+          type.id()==typet::t_class)
   {
     // TODO
   }
-  else if(type.id()=="pointer")
+  else if(type.id()==typet::t_pointer)
   {
     // rename(type.subtype(), ns);
     // don't do this, or it might get cyclic
   }
-  else if(type.id()=="symbol")
+  else if(type.id()==exprt::symbol)
   {
-	const symbolt &symbol=ns.lookup(type.get("identifier"));
+	const symbolt &symbol=ns.lookup(type.identifier());
 	type=symbol.type;
     rename(type, ns,node_id);
   }
@@ -698,18 +633,20 @@ void goto_symex_statet::renaming_levelt::rename(typet &type, unsigned node_id)
 {
   // rename all the symbols with their last known value
 
-  if(type.id()=="array")
+  if(type.id()==typet::t_array)
   {
     rename(type.subtype(),node_id);
-    rename((exprt &)type.add("size"),node_id);
+    exprt tmp = static_cast<const exprt &>(type.size_irep());
+    rename(tmp, node_id);
+    type.size(tmp);
   }
-  else if(type.id()=="struct" ||
-          type.id()=="union" ||
-          type.id()=="class")
+  else if(type.id()==typet::t_struct ||
+          type.id()==typet::t_union ||
+          type.id()==typet::t_class)
   {
     // TODO
   }
-  else if(type.id()=="pointer")
+  else if(type.id()==typet::t_pointer)
   {
     rename(type.subtype(),node_id);
   }
@@ -729,19 +666,13 @@ Function: goto_symex_statet::get_original_name
 
 void goto_symex_statet::get_original_name(exprt &expr) const
 {
-// std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3 : " << expr.get("identifier") << std::endl;
   Forall_operands(it, expr)
     get_original_name(*it);
- //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 1" << std::endl;
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
-//	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 2" << std::endl;
-//	  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-1 : " << expr.get("identifier") << std::endl;
     level2.get_original_name(expr);
-  //  std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-2 : " << expr.get("identifier") << std::endl;
     top().level1.get_original_name(expr);
-    //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 3-3 : " << expr.get("identifier") << std::endl;
   }
 }
 
@@ -759,20 +690,17 @@ Function: goto_symex_statet::renaming_levelt::get_original_name
 
 void goto_symex_statet::renaming_levelt::get_original_name(exprt &expr) const
 {
-// std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 2 : " << expr.get("identifier") << std::endl;
   Forall_operands(it, expr)
     get_original_name(*it);
-//	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::renaming_levelt::get_original_name 1" << std::endl;
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     original_identifierst::const_iterator it=
-      original_identifiers.find(expr.get("identifier"));
+      original_identifiers.find(expr.identifier());
     if(it==original_identifiers.end()) return;
-//	 std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::renaming_levelt::get_original_name 2" << std::endl;
 
     assert(it->second!="");
-    expr.set("identifier", it->second);
+    expr.identifier(it->second);
   }
 }
 
@@ -791,7 +719,6 @@ Function: goto_symex_statet::renaming_levelt::get_original_name
 const irep_idt &goto_symex_statet::renaming_levelt::get_original_name(
   const irep_idt &identifier) const
 {
- //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 1 : " << identifier << std::endl;
   original_identifierst::const_iterator it=
     original_identifiers.find(identifier);
   if(it==original_identifiers.end()) return identifier;
@@ -813,11 +740,7 @@ Function: goto_symex_statet::get_original_identifier
 const irep_idt &goto_symex_statet::get_original_name(
   const irep_idt &identifier) const
 {
-  //  top().level1.print(std::cout);
- //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 0 : " << identifier << std::endl;
-  //  level2->print(std::cout);
 
- //std::cout << "+++++++++++++++++++++++++++++++++ goto_symex_statet::get_original_name 0 : " << identifier << std::endl;
   return top().level1.get_original_name(
          level2.get_original_name(identifier));
 }
@@ -898,4 +821,39 @@ void goto_symex_statet::print_stack_trace(const namespacet &ns, unsigned int ind
   }
 
   return;
+}
+
+std::vector<dstring>
+goto_symex_statet::gen_stack_trace(void) const
+{
+  std::vector<dstring> trace;
+  call_stackt::const_reverse_iterator it;
+  symex_targett::sourcet src;
+  int i = 0;
+
+  // Format is a vector of strings, each recording a particular function
+  // invocation.
+
+  src = source;
+  for (it = call_stack.rbegin(); it != call_stack.rend();
+       it++, src = it->calling_location) {
+
+    // Don't store current function, that can be extracted elsewhere.
+    if (i++ == 0)
+      continue;
+
+    if (it->function_identifier == "") { // Top level call
+      break;
+    } else if (it->function_identifier == "c::main" &&
+               src.pc->location == get_nil_irep()) {
+      trace.push_back("<main invocation>");
+    } else {
+      std::string loc = it->function_identifier.as_string();
+      loc += " at " + src.pc->location.get_file().as_string();
+      loc += " line " + src.pc->location.get_line().as_string();
+      trace.push_back(loc);
+    }
+  }
+
+  return trace;
 }

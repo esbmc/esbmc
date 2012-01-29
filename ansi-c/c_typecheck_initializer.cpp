@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <arith_tools.h>
 #include <string2array.h>
 #include <config.h>
+#include <i2string.h>
 #include <type_eq.h>
 #include <std_types.h>
 #include <expr_util.h>
@@ -58,7 +59,7 @@ bool c_typecheck_baset::zero_initializer(
           type_id=="incomplete_c_enum")
   {
     value=exprt("constant", type);
-    value.set("value", 0);
+    value.value(i2string(0));
     return false;
   }
   else if(type_id=="array")
@@ -91,7 +92,7 @@ bool c_typecheck_baset::zero_initializer(
   else if(type_id=="struct")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     value=exprt("struct", type);
 
@@ -99,7 +100,7 @@ bool c_typecheck_baset::zero_initializer(
     {
       exprt tmp;
 
-      if(zero_initializer(tmp, (const typet &)it->find("type")))
+      if(zero_initializer(tmp, (const typet &)it->type()))
         return true;
 
       value.move_to_operands(tmp);
@@ -110,18 +111,18 @@ bool c_typecheck_baset::zero_initializer(
   else if(type_id=="union")
   {
     const irept::subt &components=
-      type.find("components").get_sub();
+      type.components().get_sub();
 
     value=exprt("union", type);
 
     if(components.empty())
       return true;
 
-    value.set("component_name", components.front().get("name"));
+    value.component_name(components.front().name());
 
     exprt tmp;
 
-    if(zero_initializer(tmp, (const typet &)components.front().find("type")))
+    if(zero_initializer(tmp, (const typet &)components.front().type()))
       return true;
 
     value.move_to_operands(tmp);
@@ -153,7 +154,7 @@ void c_typecheck_baset::do_initializer(
 {
   if(type.id()=="symbol")
   {     
-    const irep_idt &identifier=type.get("identifier");
+    const irep_idt &identifier=type.identifier();
     symbolst::iterator sit=context.symbols.find(identifier);
 
     if(sit==context.symbols.end())
@@ -170,7 +171,7 @@ void c_typecheck_baset::do_initializer(
     
   if(type.id()=="incomplete_array")
   {
-    assert(value.type().id()=="array");
+    assert(value.type().is_array());
     type=value.type();
   } 
 }
@@ -216,7 +217,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   }
   
   if(full_type.id()=="incomplete_array" ||
-     full_type.id()=="array" ||
+     full_type.is_array() ||
      full_type.id()=="struct" ||
      full_type.id()=="union")
   {
@@ -229,7 +230,7 @@ exprt c_typecheck_baset::do_initializer_rec(
     else if(value.id()=="string-constant")
     {
       // we only do this for arrays, not for structs
-      if(full_type.id()=="array" ||
+      if(full_type.is_array() ||
          full_type.id()=="incomplete_array")
       {
         exprt tmp;
@@ -295,7 +296,7 @@ exprt c_typecheck_baset::do_initializer_rec(
 
   const typet &full_type=follow(type);
 
-  if(full_type.id()=="array")
+  if(full_type.is_array())
     return do_initializer_array(state, to_array_type(full_type), force_constant);
   else if(full_type.id()=="incomplete_array")
     return do_initializer_incomplete_array(state, full_type, force_constant);
@@ -436,7 +437,7 @@ exprt c_typecheck_baset::do_initializer_incomplete_array(
     
   // set size
   result.type().id("array");
-  result.type().add("size")=from_integer(s, int_type());
+  result.type().size(from_integer(s, int_type()));
   
   return result;
 }
@@ -542,7 +543,7 @@ exprt c_typecheck_baset::do_initializer_union(
   const typet &op_type=components.front().type();
   result.copy_to_operands(
     do_initializer_rec(state, op_type, force_constant, true));
-  result.set("component_name", components.front().get("name"));
+  result.component_name(components.front().name());
 
   return result;
 }
@@ -584,7 +585,7 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
           throw 0;
         }
         
-        symbol.value.set("#zero_initializer", true);
+        symbol.value.zero_initializer(true);
       }
     }
     else
@@ -648,7 +649,7 @@ exprt c_typecheck_baset::do_designated_initializer(
     
     assert(initializer.operands().size()==1);
     
-    const irep_idt &component_name=initializer.get("component_name");
+    const irep_idt &component_name=initializer.component_name();
 
     if(!struct_type.has_component(component_name))
     {

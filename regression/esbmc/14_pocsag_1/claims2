@@ -1,0 +1,561 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Claim 1:
+  file common.h line 16 function memcpy
+  dereference failure: invalid pointer
+  FALSE
+
+Claim 2:
+  file common.h line 24 function strncmp
+  dereference failure: offset not zero
+  POINTER_OFFSET(s1) + (int)i == 0 || !(SAME-OBJECT(s1, &msg[0]))
+
+Claim 3:
+  file common.h line 24 function strncmp
+  dereference failure: `string' lower bound
+  !(POINTER_OFFSET(s2) + (int)i < 0) || !(SAME-OBJECT(s2, &"Dear fellow ACP benchmarker"[0]))
+
+Claim 4:
+  file common.h line 24 function strncmp
+  dereference failure: `string' upper bound
+  !(POINTER_OFFSET(s2) + (int)i >= 28) || !(SAME-OBJECT(s2, &"Dear fellow ACP benchmarker"[0]))
+
+Claim 5:
+  file common.h line 25 function strncmp
+  dereference failure: offset not zero
+  POINTER_OFFSET(s1) + (int)i == 0 || !(SAME-OBJECT(s1, &msg[0]))
+
+Claim 6:
+  file common.h line 25 function strncmp
+  dereference failure: `string' lower bound
+  !(POINTER_OFFSET(s2) + (int)i < 0) || !(SAME-OBJECT(s2, &"Dear fellow ACP benchmarker"[0]))
+
+Claim 7:
+  file common.h line 25 function strncmp
+  dereference failure: `string' upper bound
+  !(POINTER_OFFSET(s2) + (int)i >= 28) || !(SAME-OBJECT(s2, &"Dear fellow ACP benchmarker"[0]))
+
+Claim 8:
+  file common.h line 43 function sin
+  division by zero
+  2.0 * (double)inc * (2.0 * (double)inc + 1.0) != 0l
+
+Claim 9:
+  file common.h line 47 function sin
+  division by zero
+  2.0 * (double)inc * (2.0 * (double)inc + 1.0) != 0l
+
+Claim 10:
+  file common.h line 62 function cos
+  division by zero
+  2.0 * (double)inc * (2.0 * (double)inc + 1.0) != 0l
+
+Claim 11:
+  file common.h line 66 function cos
+  division by zero
+  2.0 * (double)inc * (2.0 * (double)inc + 1.0) != 0l
+
+Claim 12:
+  file common.h line 74 function tan
+  division by zero
+  return_value_cos$2 != 0l
+
+Claim 13:
+  file common.h line 90 function sqrt
+  division by zero
+  2.0 * x != 0l
+
+Claim 14:
+  file common.h line 107 function puts
+  dereference failure: `string' lower bound
+  !(POINTER_OFFSET(s) < 0) || !(SAME-OBJECT(s, &"pocsag: failed\n"[0]))
+
+Claim 15:
+  file common.h line 107 function puts
+  dereference failure: `string' upper bound
+  !(POINTER_OFFSET(s) >= 16) || !(SAME-OBJECT(s, &"pocsag: failed\n"[0]))
+
+Claim 16:
+  file common.h line 107 function puts
+  dereference failure: `string' lower bound
+  !(POINTER_OFFSET(s) < 0) || !(SAME-OBJECT(s, &"pocsag: success\n"[0]))
+
+Claim 17:
+  file common.h line 107 function puts
+  dereference failure: `string' upper bound
+  !(POINTER_OFFSET(s) >= 17) || !(SAME-OBJECT(s, &"pocsag: success\n"[0]))
+
+Claim 18:
+  file common.h line 107 function puts
+  dereference failure: `array `buf'' lower bound
+  !(POINTER_OFFSET(s) < 0) || !(SAME-OBJECT(s, &buf[0]))
+
+Claim 19:
+  file common.h line 107 function puts
+  dereference failure: `array `buf'' upper bound
+  !(POINTER_OFFSET(s) >= 12) || !(SAME-OBJECT(s, &buf[0]))
+
+Claim 20:
+  file common.h line 108 function puts
+  dereference failure: `string' lower bound
+  !(POINTER_OFFSET(tmp$1) < 0) || !(SAME-OBJECT(tmp$1, &"pocsag: failed\n"[0]))
+
+Claim 21:
+  file common.h line 108 function puts
+  dereference failure: `string' upper bound
+  !(POINTER_OFFSET(tmp$1) >= 16) || !(SAME-OBJECT(tmp$1, &"pocsag: failed\n"[0]))
+
+Claim 22:
+  file common.h line 108 function puts
+  dereference failure: `string' lower bound
+  !(POINTER_OFFSET(tmp$1) < 0) || !(SAME-OBJECT(tmp$1, &"pocsag: success\n"[0]))
+
+Claim 23:
+  file common.h line 108 function puts
+  dereference failure: `string' upper bound
+  !(POINTER_OFFSET(tmp$1) >= 17) || !(SAME-OBJECT(tmp$1, &"pocsag: success\n"[0]))
+
+Claim 24:
+  file common.h line 108 function puts
+  dereference failure: `array `buf'' lower bound
+  !(POINTER_OFFSET(tmp$1) < 0) || !(SAME-OBJECT(tmp$1, &buf[0]))
+
+Claim 25:
+  file common.h line 108 function puts
+  dereference failure: `array `buf'' upper bound
+  !(POINTER_OFFSET(tmp$1) >= 12) || !(SAME-OBJECT(tmp$1, &buf[0]))
+
+Claim 26:
+  file common.h line 117 function puti
+  array `buf' lower bound
+  tmp$1 >= 0
+
+Claim 27:
+  file common.h line 117 function puti
+  array `buf' upper bound
+  tmp$1 < 12
+
+Claim 28:
+  file common.h line 119 function puti
+  array `buf' lower bound
+  i >= 0
+
+Claim 29:
+  file common.h line 119 function puti
+  array `buf' upper bound
+  i < 12
+
+Claim 30:
+  file common.h line 119 function puti
+  array `buf' lower bound
+  !(_Bool)j => i >= 0
+
+Claim 31:
+  file common.h line 119 function puti
+  array `buf' upper bound
+  !(_Bool)j => i < 12
+
+Claim 32:
+  file common.h line 120 function puti
+  array `buf' lower bound
+  i >= 0
+
+Claim 33:
+  file common.h line 120 function puti
+  array `buf' upper bound
+  i < 12
+
+Claim 34:
+  file common.h line 120 function puti
+  array `buf' lower bound
+  !(_Bool)j => i >= 0
+
+Claim 35:
+  file common.h line 120 function puti
+  array `buf' upper bound
+  !(_Bool)j => i < 12
+
+Claim 36:
+  file common.h line 121 function puti
+  array `buf' lower bound
+  i >= 0
+
+Claim 37:
+  file common.h line 121 function puti
+  array `buf' upper bound
+  i < 12
+
+Claim 38:
+  file common.h line 121 function puti
+  array `buf' lower bound
+  !(_Bool)j => i >= 0
+
+Claim 39:
+  file common.h line 121 function puti
+  array `buf' upper bound
+  !(_Bool)j => i < 12
+
+Claim 40:
+  file common.h line 122 function puti
+  array `buf' lower bound
+  i >= 0
+
+Claim 41:
+  file common.h line 122 function puti
+  array `buf' upper bound
+  i < 12
+
+Claim 42:
+  file common.h line 122 function puti
+  array `buf' lower bound
+  !(_Bool)j => i >= 0
+
+Claim 43:
+  file common.h line 122 function puti
+  array `buf' upper bound
+  !(_Bool)j => i < 12
+
+Claim 44:
+  file common.h line 123 function puti
+  array `buf' lower bound
+  i >= 0
+
+Claim 45:
+  file common.h line 123 function puti
+  array `buf' upper bound
+  i < 12
+
+Claim 46:
+  file common.h line 123 function puti
+  array `buf' lower bound
+  !(_Bool)j => i >= 0
+
+Claim 47:
+  file common.h line 123 function puti
+  array `buf' upper bound
+  !(_Bool)j => i < 12
+
+Claim 48:
+  file common.h line 124 function puti
+  array `buf' lower bound
+  i >= 0
+
+Claim 49:
+  file common.h line 124 function puti
+  array `buf' upper bound
+  i < 12
+
+Claim 50:
+  file common.h line 124 function puti
+  array `buf' lower bound
+  !(_Bool)j => i >= 0
+
+Claim 51:
+  file common.h line 124 function puti
+  array `buf' upper bound
+  !(_Bool)j => i < 12
+
+Claim 52:
+  file common.h line 125 function puti
+  array `buf' lower bound
+  i >= 0
+
+Claim 53:
+  file common.h line 125 function puti
+  array `buf' upper bound
+  i < 12
+
+Claim 54:
+  file common.h line 125 function puti
+  array `buf' lower bound
+  !(_Bool)j => i >= 0
+
+Claim 55:
+  file common.h line 125 function puti
+  array `buf' upper bound
+  !(_Bool)j => i < 12
+
+Claim 56:
+  file common.h line 126 function puti
+  array `buf' lower bound
+  i >= 0
+
+Claim 57:
+  file common.h line 126 function puti
+  array `buf' upper bound
+  i < 12
+
+Claim 58:
+  file common.h line 126 function puti
+  array `buf' lower bound
+  !(_Bool)j => i >= 0
+
+Claim 59:
+  file common.h line 126 function puti
+  array `buf' upper bound
+  !(_Bool)j => i < 12
+
+Claim 60:
+  file common.h line 127 function puti
+  array `buf' lower bound
+  i >= 0
+
+Claim 61:
+  file common.h line 127 function puti
+  array `buf' upper bound
+  i < 12
+
+Claim 62:
+  file common.h line 127 function puti
+  array `buf' lower bound
+  !(_Bool)j => i >= 0
+
+Claim 63:
+  file common.h line 127 function puti
+  array `buf' upper bound
+  !(_Bool)j => i < 12
+
+Claim 64:
+  file common.h line 128 function puti
+  array `buf' lower bound
+  i >= 0
+
+Claim 65:
+  file common.h line 128 function puti
+  array `buf' upper bound
+  i < 12
+
+Claim 66:
+  file common.h line 129 function puti
+  array `buf' lower bound
+  j >= 0
+
+Claim 67:
+  file common.h line 129 function puti
+  array `buf' upper bound
+  j < 12
+
+Claim 68:
+  file main.c line 110 function find_syndromes
+  array `alpha' lower bound
+  i >= 0
+
+Claim 69:
+  file main.c line 110 function find_syndromes
+  array `alpha' upper bound
+  i < 31
+
+Claim 70:
+  file main.c line 111 function find_syndromes
+  array `alpha3' lower bound
+  i >= 0
+
+Claim 71:
+  file main.c line 111 function find_syndromes
+  array `alpha3' upper bound
+  i < 31
+
+Claim 72:
+  file main.c line 123 function normalized_locator
+  array `alpha_inv' lower bound
+  (int)s1 >= 0
+
+Claim 73:
+  file main.c line 123 function normalized_locator
+  array `alpha_inv' upper bound
+  (int)s1 < 32
+
+Claim 74:
+  file main.c line 124 function normalized_locator
+  array `alpha_inv' lower bound
+  (int)s3 >= 0
+
+Claim 75:
+  file main.c line 124 function normalized_locator
+  array `alpha_inv' upper bound
+  (int)s3 < 32
+
+Claim 76:
+  file main.c line 127 function normalized_locator
+  array `alpha' lower bound
+  (int)tau >= 0
+
+Claim 77:
+  file main.c line 127 function normalized_locator
+  array `alpha' upper bound
+  (int)tau < 31
+
+Claim 78:
+  file main.c line 161 function comp32
+  array `err_tab' upper bound
+  (unsigned int)((unsigned char)sample) < 256
+
+Claim 79:
+  file main.c line 176 function sync_find
+  dereference failure: `array `numeric_data'' lower bound
+  !(POINTER_OFFSET(tmp$2) < 0) || !(SAME-OBJECT(tmp$2, &numeric_data[0]))
+
+Claim 80:
+  file main.c line 176 function sync_find
+  dereference failure: `array `numeric_data'' upper bound
+  !(POINTER_OFFSET(tmp$2) >= 41) || !(SAME-OBJECT(tmp$2, &numeric_data[0]))
+
+Claim 81:
+  file main.c line 176 function sync_find
+  dereference failure: `array `alpha_data'' lower bound
+  !(POINTER_OFFSET(tmp$2) < 0) || !(SAME-OBJECT(tmp$2, &alpha_data[0]))
+
+Claim 82:
+  file main.c line 176 function sync_find
+  dereference failure: `array `alpha_data'' upper bound
+  !(POINTER_OFFSET(tmp$2) >= 59) || !(SAME-OBJECT(tmp$2, &alpha_data[0]))
+
+Claim 83:
+  file main.c line 246 function num_proc
+  array `msg' lower bound
+  i >= 0
+
+Claim 84:
+  file main.c line 246 function num_proc
+  array `msg' upper bound
+  i < 256
+
+Claim 85:
+  file main.c line 248 function num_proc
+  array `msg' lower bound
+  i >= 0
+
+Claim 86:
+  file main.c line 248 function num_proc
+  array `msg' upper bound
+  i < 256
+
+Claim 87:
+  file main.c line 251 function num_proc
+  array `msg' lower bound
+  i >= 0
+
+Claim 88:
+  file main.c line 251 function num_proc
+  array `msg' upper bound
+  i < 256
+
+Claim 89:
+  file main.c line 270 function alpha_proc
+  array `msg' lower bound
+  i >= 0
+
+Claim 90:
+  file main.c line 270 function alpha_proc
+  array `msg' upper bound
+  i < 256
+
+Claim 91:
+  file main.c line 273 function alpha_proc
+  array `msg' lower bound
+  i >= 0
+
+Claim 92:
+  file main.c line 273 function alpha_proc
+  array `msg' upper bound
+  i < 256
+
+Claim 93:
+  file main.c line 280 function alpha_proc
+  array `msg' lower bound
+  i >= 0
+
+Claim 94:
+  file main.c line 280 function alpha_proc
+  array `msg' upper bound
+  i < 256
+
+Claim 95:
+  file main.c line 283 function alpha_proc
+  array `msg' lower bound
+  i >= 0
+
+Claim 96:
+  file main.c line 283 function alpha_proc
+  array `msg' upper bound
+  i < 256
+
+Claim 97:
+  file main.c line 306 function msg_proc
+  dereference failure: `array `numeric_data'' lower bound
+  !(POINTER_OFFSET(tmp$1) < 0) || !(SAME-OBJECT(tmp$1, &numeric_data[0]))
+
+Claim 98:
+  file main.c line 306 function msg_proc
+  dereference failure: `array `numeric_data'' upper bound
+  !(POINTER_OFFSET(tmp$1) >= 41) || !(SAME-OBJECT(tmp$1, &numeric_data[0]))
+
+Claim 99:
+  file main.c line 306 function msg_proc
+  dereference failure: `array `alpha_data'' lower bound
+  !(POINTER_OFFSET(tmp$1) < 0) || !(SAME-OBJECT(tmp$1, &alpha_data[0]))
+
+Claim 100:
+  file main.c line 306 function msg_proc
+  dereference failure: `array `alpha_data'' upper bound
+  !(POINTER_OFFSET(tmp$1) >= 59) || !(SAME-OBJECT(tmp$1, &alpha_data[0]))
+
+Claim 101:
+  file main.c line 306 function msg_proc
+  dereference failure: NULL pointer
+  !(SAME-OBJECT(tmp$1, NULL))
+
+Claim 102:
+  file main.c line 67 function err_corr
+  array `alpha_inv' lower bound
+  (int)s1 >= 0
+
+Claim 103:
+  file main.c line 67 function err_corr
+  array `alpha_inv' upper bound
+  (int)s1 < 32
+
+Claim 104:
+  file main.c line 72 function err_corr
+  array `roots' lower bound
+  (int)locator_constant >= 0
+
+Claim 105:
+  file main.c line 72 function err_corr
+  array `roots' upper bound
+  (int)locator_constant < 32
+
+Claim 106:
+  file main.c line 77 function err_corr
+  array `alpha_inv' lower bound
+  (int)s1 >= 0
+
+Claim 107:
+  file main.c line 77 function err_corr
+  array `alpha_inv' upper bound
+  (int)s1 < 32
+
+Claim 108:
+  file main.c line 81 function err_corr
+  array `alpha' lower bound
+  (int)root1 >= 0
+
+Claim 109:
+  file main.c line 81 function err_corr
+  array `alpha' upper bound
+  (int)root1 < 31
+
+Claim 110:
+  file main.c line 82 function err_corr
+  array `alpha_inv' lower bound
+  (int)root2 >= 0
+
+Claim 111:
+  file main.c line 82 function err_corr
+  array `alpha_inv' upper bound
+  (int)root2 < 32
+

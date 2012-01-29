@@ -32,7 +32,7 @@ public:
 
   const irep_idt &get_value() const
   {
-    return get("value");
+    return value();
   }
 };
 

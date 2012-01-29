@@ -97,13 +97,13 @@ bool symex_dereference_statet::has_failed_symbol(
 {
   renaming_nst renaming_ns(goto_symex.ns, state);
 
-  if(expr.id()=="symbol")
+  if(expr.id()==exprt::symbol)
   {
     const symbolt &ptr_symbol=
-      renaming_ns.lookup(expr.get("identifier"));
+      renaming_ns.lookup(expr.identifier());
 
     const irep_idt &failed_symbol=
-      ptr_symbol.type.get("#failed_symbol");
+      ptr_symbol.type.failed_symbol();
 
     if(failed_symbol=="") return false;
 
@@ -132,25 +132,6 @@ void symex_dereference_statet::get_value_set(
   renaming_nst renaming_ns(goto_symex.ns, state);
 
   state.value_set.get_value_set(expr, value_set, renaming_ns);
-
-  #if 0
-  std::cout << "**************************\n";
-  state.value_set.output(std::cout, renaming_ns);
-  std::cout << "**************************\n";
-  #endif
-
-  #if 0
-  std::cout << "E: " << expr.pretty() << std::endl;
-  #endif
-
-  #if 0
-  std::cout << "**************************\n";
-  for(expr_sett::const_iterator it=value_set.begin();
-      it!=value_set.end();
-      it++)
-    std::cout << from_expr(renaming_ns, "", *it) << std::endl;
-  std::cout << "**************************\n";
-  #endif
 }
 
 /*******************************************************************\
@@ -171,7 +152,7 @@ void goto_symext::dereference_rec(
   dereferencet &dereference,
   const bool write)
 {
-  if(expr.id()=="dereference" ||
+  if(expr.id()==exprt::deref ||
      expr.id()=="implicit_dereference")
   {
     if(expr.operands().size()!=1)
@@ -186,11 +167,11 @@ void goto_symext::dereference_rec(
     dereference.dereference(tmp, guard, write?dereferencet::WRITE:dereferencet::READ);
     expr.swap(tmp);
   }
-  else if(expr.id()=="index" &&
+  else if(expr.id()==exprt::index &&
           expr.operands().size()==2 &&
-          expr.op0().type().id()=="pointer")
+          expr.op0().type().id()==typet::t_pointer)
   {
-    exprt tmp("+", expr.op0().type());
+    exprt tmp(exprt::plus, expr.op0().type());
     tmp.operands().swap(expr.operands());
 
     // first make sure there are no dereferences in there

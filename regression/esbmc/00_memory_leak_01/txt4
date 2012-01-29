@@ -1,0 +1,2282 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+size of program expression: 29 assignments
+Generated 1 VCC(s), 1 remaining after simplification
+Encoding remaining VCC(s) using integer/real arithmetic
+
+set_to[5707]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: execution_statet::\guard_exec@0_0_0&0#1
+        * type: bool
+    1: constant
+        * type: bool
+        * value: true
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_identifier[937]
+type.pretty(): bool
+identifier: execution_statet::\guard_exec@0_0_0&0#1
+
+convert_identifier[1027]
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_constant[3311]
+
+convert_bv[1087]
+
+set_to[5876]
+
+set_to[5707]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#1
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: array_of
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: constant
+              * type: bool
+              * value: false
+        * #zero_initializer: 1
+
+convert_rest[2251]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#1
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: array_of
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: constant
+              * type: bool
+              * value: false
+        * #zero_initializer: 1
+
+convert_eq[1482]
+expr.op0().pretty(): symbol
+  * identifier: c::__ESBMC_alloc&0#1
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+expr.op1().pretty(): array_of
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * operands: 
+    0: constant
+        * type: bool
+        * value: false
+  * #zero_initializer: 1
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_identifier[937]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+identifier: c::__ESBMC_alloc&0#1
+
+create_array_type[452]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+
+create_array_type[532]
+
+convert_identifier[1027]
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_array_of[4547]
+before size: 0
+after size: 20
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_constant[3311]
+
+convert_bv[1087]
+
+create_array_type[452]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+
+create_array_type[532]
+
+convert_array_of[4630]
+
+convert_bv[1087]
+
+convert_eq[1542]
+l.var_no(): 2
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+set_to[5876]
+
+set_to[5707]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#2
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#1
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_1_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: true
+
+convert_rest[2251]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#2
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#1
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_1_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: true
+
+convert_eq[1482]
+expr.op0().pretty(): symbol
+  * identifier: c::__ESBMC_alloc&0#2
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+expr.op1().pretty(): with
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#1
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: pointer_object
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: address_of
+              * type: pointer
+                  * subtype: signedbv
+                      * width: 8
+              * operands: 
+                0: index
+                    * type: signedbv
+                        * width: 8
+                    * operands: 
+                      0: symbol
+                          * identifier: symex_dynamic::dynamic_1_array
+                          * type: array
+                              * subtype: signedbv
+                                  * width: 8
+                              * size: constant
+                                  * type: unsignedbv
+                                      * width: 32
+                                  * value: 00000000000000000000000000001010
+                              * #dynamic: 1
+                      1: constant
+                          * type: signedbv
+                              * width: 32
+                          * value: 00000000000000000000000000000000
+    2: constant
+        * type: bool
+        * value: true
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_identifier[937]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+identifier: c::__ESBMC_alloc&0#2
+
+create_array_type[452]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+
+create_array_type[532]
+
+convert_identifier[1027]
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_with[4868]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_pointer_object[5119]
+expr.pretty(): pointer_object
+  * type: unsignedbv
+      * width: 32
+  * operands: 
+    0: address_of
+        * type: pointer
+            * subtype: signedbv
+                * width: 8
+        * operands: 
+          0: index
+              * type: signedbv
+                  * width: 8
+              * operands: 
+                0: symbol
+                    * identifier: symex_dynamic::dynamic_1_array
+                    * type: array
+                        * subtype: signedbv
+                            * width: 8
+                        * size: constant
+                            * type: unsignedbv
+                                * width: 32
+                            * value: 00000000000000000000000000001010
+                        * #dynamic: 1
+                1: constant
+                    * type: signedbv
+                        * width: 32
+                    * value: 00000000000000000000000000000000
+expr.op0().id(): address_of
+object.pretty(): index
+  * type: signedbv
+      * width: 8
+  * operands: 
+    0: symbol
+        * identifier: symex_dynamic::dynamic_1_array
+        * type: array
+            * subtype: signedbv
+                * width: 8
+            * size: constant
+                * type: unsignedbv
+                    * width: 32
+                * value: 00000000000000000000000000001010
+            * #dynamic: 1
+    1: constant
+        * type: signedbv
+            * width: 32
+        * value: 00000000000000000000000000000000
+object.type().id(): signedbv
+object.type().subtype().id(): nil
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_index[4650]
+expr.op0().type().subtype().id(): signedbv
+expr.op0().pretty(): symbol
+  * identifier: symex_dynamic::dynamic_1_array
+  * type: array
+      * subtype: signedbv
+          * width: 8
+      * size: constant
+          * type: unsignedbv
+              * width: 32
+          * value: 00000000000000000000000000001010
+      * #dynamic: 1
+expr.op1().pretty(): constant
+  * type: signedbv
+      * width: 32
+  * value: 00000000000000000000000000000000
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_identifier[937]
+type.pretty(): array
+  * subtype: signedbv
+      * width: 8
+  * size: constant
+      * type: unsignedbv
+          * width: 32
+      * value: 00000000000000000000000000001010
+  * #dynamic: 1
+identifier: symex_dynamic::dynamic_1_array
+
+create_array_type[452]
+type.pretty(): array
+  * subtype: signedbv
+      * width: 8
+  * size: constant
+      * type: unsignedbv
+          * width: 32
+      * value: 00000000000000000000000000001010
+  * #dynamic: 1
+
+create_array_type[532]
+
+convert_identifier[1027]
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_constant[3311]
+
+convert_bv[1087]
+
+convert_index[4682]
+
+convert_bv[1087]
+width: 32
+object_width: 8
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_bv[1087]
+
+convert_eq[1542]
+l.var_no(): 3
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+set_to[5876]
+
+set_to[5707]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#3
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#2
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_1_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: false
+
+convert_rest[2251]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#3
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#2
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_1_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: false
+
+convert_eq[1482]
+expr.op0().pretty(): symbol
+  * identifier: c::__ESBMC_alloc&0#3
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+expr.op1().pretty(): with
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#2
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: pointer_object
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: address_of
+              * type: pointer
+                  * subtype: signedbv
+                      * width: 8
+              * operands: 
+                0: index
+                    * type: signedbv
+                        * width: 8
+                    * operands: 
+                      0: symbol
+                          * identifier: symex_dynamic::dynamic_1_array
+                          * type: array
+                              * subtype: signedbv
+                                  * width: 8
+                              * size: constant
+                                  * type: unsignedbv
+                                      * width: 32
+                                  * value: 00000000000000000000000000001010
+                              * #dynamic: 1
+                      1: constant
+                          * type: signedbv
+                              * width: 32
+                          * value: 00000000000000000000000000000000
+    2: constant
+        * type: bool
+        * value: false
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_identifier[937]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+identifier: c::__ESBMC_alloc&0#3
+
+create_array_type[452]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+
+create_array_type[532]
+
+convert_identifier[1027]
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_with[4868]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_bv[1087]
+
+convert_eq[1542]
+l.var_no(): 4
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+set_to[5876]
+
+set_to[5707]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#4
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#3
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_2_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: true
+
+convert_rest[2251]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#4
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#3
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_2_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: true
+
+convert_eq[1482]
+expr.op0().pretty(): symbol
+  * identifier: c::__ESBMC_alloc&0#4
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+expr.op1().pretty(): with
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#3
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: pointer_object
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: address_of
+              * type: pointer
+                  * subtype: signedbv
+                      * width: 8
+              * operands: 
+                0: index
+                    * type: signedbv
+                        * width: 8
+                    * operands: 
+                      0: symbol
+                          * identifier: symex_dynamic::dynamic_2_array
+                          * type: array
+                              * subtype: signedbv
+                                  * width: 8
+                              * size: constant
+                                  * type: unsignedbv
+                                      * width: 32
+                                  * value: 00000000000000000000000000001010
+                              * #dynamic: 1
+                      1: constant
+                          * type: signedbv
+                              * width: 32
+                          * value: 00000000000000000000000000000000
+    2: constant
+        * type: bool
+        * value: true
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_identifier[937]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+identifier: c::__ESBMC_alloc&0#4
+
+create_array_type[452]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+
+create_array_type[532]
+
+convert_identifier[1027]
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_with[4868]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_pointer_object[5119]
+expr.pretty(): pointer_object
+  * type: unsignedbv
+      * width: 32
+  * operands: 
+    0: address_of
+        * type: pointer
+            * subtype: signedbv
+                * width: 8
+        * operands: 
+          0: index
+              * type: signedbv
+                  * width: 8
+              * operands: 
+                0: symbol
+                    * identifier: symex_dynamic::dynamic_2_array
+                    * type: array
+                        * subtype: signedbv
+                            * width: 8
+                        * size: constant
+                            * type: unsignedbv
+                                * width: 32
+                            * value: 00000000000000000000000000001010
+                        * #dynamic: 1
+                1: constant
+                    * type: signedbv
+                        * width: 32
+                    * value: 00000000000000000000000000000000
+expr.op0().id(): address_of
+object.pretty(): index
+  * type: signedbv
+      * width: 8
+  * operands: 
+    0: symbol
+        * identifier: symex_dynamic::dynamic_2_array
+        * type: array
+            * subtype: signedbv
+                * width: 8
+            * size: constant
+                * type: unsignedbv
+                    * width: 32
+                * value: 00000000000000000000000000001010
+            * #dynamic: 1
+    1: constant
+        * type: signedbv
+            * width: 32
+        * value: 00000000000000000000000000000000
+object.type().id(): signedbv
+object.type().subtype().id(): nil
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_index[4650]
+expr.op0().type().subtype().id(): signedbv
+expr.op0().pretty(): symbol
+  * identifier: symex_dynamic::dynamic_2_array
+  * type: array
+      * subtype: signedbv
+          * width: 8
+      * size: constant
+          * type: unsignedbv
+              * width: 32
+          * value: 00000000000000000000000000001010
+      * #dynamic: 1
+expr.op1().pretty(): constant
+  * type: signedbv
+      * width: 32
+  * value: 00000000000000000000000000000000
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_identifier[937]
+type.pretty(): array
+  * subtype: signedbv
+      * width: 8
+  * size: constant
+      * type: unsignedbv
+          * width: 32
+      * value: 00000000000000000000000000001010
+  * #dynamic: 1
+identifier: symex_dynamic::dynamic_2_array
+
+create_array_type[452]
+type.pretty(): array
+  * subtype: signedbv
+      * width: 8
+  * size: constant
+      * type: unsignedbv
+          * width: 32
+      * value: 00000000000000000000000000001010
+  * #dynamic: 1
+
+create_array_type[532]
+
+convert_identifier[1027]
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_index[4682]
+
+convert_bv[1087]
+width: 32
+object_width: 8
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_bv[1087]
+
+convert_eq[1542]
+l.var_no(): 5
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+set_to[5876]
+
+set_to[5707]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#5
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#4
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_2_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: false
+
+convert_rest[2251]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#5
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#4
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_2_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: false
+
+convert_eq[1482]
+expr.op0().pretty(): symbol
+  * identifier: c::__ESBMC_alloc&0#5
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+expr.op1().pretty(): with
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#4
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: pointer_object
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: address_of
+              * type: pointer
+                  * subtype: signedbv
+                      * width: 8
+              * operands: 
+                0: index
+                    * type: signedbv
+                        * width: 8
+                    * operands: 
+                      0: symbol
+                          * identifier: symex_dynamic::dynamic_2_array
+                          * type: array
+                              * subtype: signedbv
+                                  * width: 8
+                              * size: constant
+                                  * type: unsignedbv
+                                      * width: 32
+                                  * value: 00000000000000000000000000001010
+                              * #dynamic: 1
+                      1: constant
+                          * type: signedbv
+                              * width: 32
+                          * value: 00000000000000000000000000000000
+    2: constant
+        * type: bool
+        * value: false
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_identifier[937]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+identifier: c::__ESBMC_alloc&0#5
+
+create_array_type[452]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+
+create_array_type[532]
+
+convert_identifier[1027]
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_with[4868]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_bv[1087]
+
+convert_eq[1542]
+l.var_no(): 6
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+set_to[5876]
+
+set_to[5707]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#6
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#5
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_2_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: false
+
+convert_rest[2251]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#6
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#5
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_2_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: false
+
+convert_eq[1482]
+expr.op0().pretty(): symbol
+  * identifier: c::__ESBMC_alloc&0#6
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+expr.op1().pretty(): with
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#5
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: pointer_object
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: address_of
+              * type: pointer
+                  * subtype: signedbv
+                      * width: 8
+              * operands: 
+                0: index
+                    * type: signedbv
+                        * width: 8
+                    * operands: 
+                      0: symbol
+                          * identifier: symex_dynamic::dynamic_2_array
+                          * type: array
+                              * subtype: signedbv
+                                  * width: 8
+                              * size: constant
+                                  * type: unsignedbv
+                                      * width: 32
+                                  * value: 00000000000000000000000000001010
+                              * #dynamic: 1
+                      1: constant
+                          * type: signedbv
+                              * width: 32
+                          * value: 00000000000000000000000000000000
+    2: constant
+        * type: bool
+        * value: false
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_identifier[937]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+identifier: c::__ESBMC_alloc&0#6
+
+create_array_type[452]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+
+create_array_type[532]
+
+convert_identifier[1027]
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_with[4868]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_bv[1087]
+
+convert_eq[1542]
+l.var_no(): 7
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+set_to[5876]
+
+set_to[5707]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#7
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#6
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_2_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: true
+
+convert_rest[2251]
+expr.pretty(): =
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#7
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: with
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+        * operands: 
+          0: symbol
+              * identifier: c::__ESBMC_alloc&0#6
+              * type: array
+                  * subtype: bool
+                  * size: infinity
+                      * type: unsignedbv
+                          * width: 32
+                      * #location: 
+                        * file: <built-in>
+                        * line: 12
+                  * #location: 
+                    * file: <built-in>
+                    * line: 12
+          1: pointer_object
+              * type: unsignedbv
+                  * width: 32
+              * operands: 
+                0: address_of
+                    * type: pointer
+                        * subtype: signedbv
+                            * width: 8
+                    * operands: 
+                      0: index
+                          * type: signedbv
+                              * width: 8
+                          * operands: 
+                            0: symbol
+                                * identifier: symex_dynamic::dynamic_2_array
+                                * type: array
+                                    * subtype: signedbv
+                                        * width: 8
+                                    * size: constant
+                                        * type: unsignedbv
+                                            * width: 32
+                                        * value: 00000000000000000000000000001010
+                                    * #dynamic: 1
+                            1: constant
+                                * type: signedbv
+                                    * width: 32
+                                * value: 00000000000000000000000000000000
+          2: constant
+              * type: bool
+              * value: true
+
+convert_eq[1482]
+expr.op0().pretty(): symbol
+  * identifier: c::__ESBMC_alloc&0#7
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+expr.op1().pretty(): with
+  * type: array
+      * subtype: bool
+      * size: infinity
+          * type: unsignedbv
+              * width: 32
+          * #location: 
+            * file: <built-in>
+            * line: 12
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#6
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: pointer_object
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: address_of
+              * type: pointer
+                  * subtype: signedbv
+                      * width: 8
+              * operands: 
+                0: index
+                    * type: signedbv
+                        * width: 8
+                    * operands: 
+                      0: symbol
+                          * identifier: symex_dynamic::dynamic_2_array
+                          * type: array
+                              * subtype: signedbv
+                                  * width: 8
+                              * size: constant
+                                  * type: unsignedbv
+                                      * width: 32
+                                  * value: 00000000000000000000000000001010
+                              * #dynamic: 1
+                      1: constant
+                          * type: signedbv
+                              * width: 32
+                          * value: 00000000000000000000000000000000
+    2: constant
+        * type: bool
+        * value: true
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_identifier[937]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+identifier: c::__ESBMC_alloc&0#7
+
+create_array_type[452]
+type.pretty(): array
+  * subtype: bool
+  * size: infinity
+      * type: unsignedbv
+          * width: 32
+      * #location: 
+        * file: <built-in>
+        * line: 12
+  * #location: 
+    * file: <built-in>
+    * line: 12
+
+create_array_type[532]
+
+convert_identifier[1027]
+
+convert_bv[1087]
+
+convert_bv[1070]
+
+convert_z3_expr[5551]
+
+convert_with[4868]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_bv[1087]
+
+convert_eq[1542]
+l.var_no(): 8
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+set_to[5876]
+
+convert_rest[2251]
+expr.pretty(): index
+  * type: bool
+  * operands: 
+    0: symbol
+        * identifier: c::__ESBMC_alloc&0#7
+        * type: array
+            * subtype: bool
+            * size: infinity
+                * type: unsignedbv
+                    * width: 32
+                * #location: 
+                  * file: <built-in>
+                  * line: 12
+            * #location: 
+              * file: <built-in>
+              * line: 12
+    1: pointer_object
+        * type: unsignedbv
+            * width: 32
+        * operands: 
+          0: address_of
+              * type: pointer
+                  * subtype: signedbv
+                      * width: 8
+              * operands: 
+                0: index
+                    * type: signedbv
+                        * width: 8
+                    * operands: 
+                      0: symbol
+                          * identifier: symex_dynamic::dynamic_1_array
+                          * type: array
+                              * subtype: signedbv
+                                  * width: 8
+                              * size: constant
+                                  * type: unsignedbv
+                                      * width: 32
+                                  * value: 00000000000000000000000000001010
+                              * #dynamic: 1
+                      1: constant
+                          * type: signedbv
+                              * width: 32
+                          * value: 00000000000000000000000000000000
+
+convert_rest_index[2158]
+
+convert_bv[1070]
+
+convert_bv[1070]
+
+convert_rest_index[2176]
+operand0 type:
+array
+operand1:
+Int
+
+convert_rest_index[2178]
+index dynamic_objects.empty(): 1
+index
+  * type: signedbv
+      * width: 8
+  * operands: 
+    0: symbol
+        * identifier: symex_dynamic::dynamic_1_array
+        * type: array
+            * subtype: signedbv
+                * width: 8
+            * size: constant
+                * type: unsignedbv
+                    * width: 32
+                * value: 00000000000000000000000000001010
+            * #dynamic: 1
+    1: constant
+        * type: signedbv
+            * width: 32
+        * value: 00000000000000000000000000000000
+expr.op1().operands()[0].op0().id(): index
+
+convert_rest_index[2197]
+
+convert_rest_index[2208]
+l.var_no(): 9
+Solving with SMT Solver Z3 v2.11
+
+check2_z3_properties[358]
+Counterexample:
+symex_dynamic::dynamic_2_array = (define store array[Int:Int] Int Int array[Int:Int])[(define const[array[Int:Int]] Int array[Int:Int])[1:int], 0:int, 2:int]
+RRAY_OF(false) = (define const[array[Int:bool]] bool array[Int:bool])[(define false bool)]
+symex_dynamic::dynamic_1_array = (define const[array[Int:Int]] Int array[Int:Int])[1:int]
+l1 = (define true bool)
+execution_statet::\guard_exec@0_0_0&0#1 = (define true bool)
+c::__ESBMC_alloc&0#1 = (define const[array[Int:bool]] bool array[Int:bool])[(define false bool)]
+l2 = (define true bool)
+c::__ESBMC_alloc&0#2 = (define store array[Int:bool] Int bool array[Int:bool])[(define const[array[Int:bool]] bool array[Int:bool])[(define false bool)], 1:int, (define true bool)]
+l3 = (define true bool)
+c::__ESBMC_alloc&0#3 = (define const[array[Int:bool]] bool array[Int:bool])[(define false bool)]
+l4 = (define true bool)
+c::__ESBMC_alloc&0#4 = (define store array[Int:bool] Int bool array[Int:bool])[(define const[array[Int:bool]] bool array[Int:bool])[(define false bool)], 2:int, (define true bool)]
+l5 = (define true bool)
+c::__ESBMC_alloc&0#5 = (define const[array[Int:bool]] bool array[Int:bool])[(define false bool)]
+l6 = (define true bool)
+c::__ESBMC_alloc&0#6 = (define const[array[Int:bool]] bool array[Int:bool])[(define false bool)]
+l7 = (define true bool)
+c::__ESBMC_alloc&0#7 = (define store array[Int:bool] Int bool array[Int:bool])[(define const[array[Int:bool]] bool array[Int:bool])[(define false bool)], 2:int, (define true bool)]
+l8 = (define true bool)
+l9 = (define false bool)
+l10 = (define false bool)
+Runtime decision procedure: 0.014s
+Building error trace
+
+Counterexample:
+
+State 1 file <built-in> line 12 thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 4 file main.c line 3 function func thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 5 file main.c line 3 function func thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 6 file main.c line 4 function func thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 7 file main.c line 4 function func thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 8 file main.c line 6 function func thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+State 9 file main.c line 6 function func thread 0
+----------------------------------------------------
+  __ESBMC_alloc=(assignment removed)
+
+Violated property:
+  file main.c line 3 function func
+  dereference failure: forgotten memory
+  DEALLOCATED_OBJECT(return_value_malloc$1) == TRUE
+
+VERIFICATION FAILED

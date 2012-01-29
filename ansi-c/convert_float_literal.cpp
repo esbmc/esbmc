@@ -42,7 +42,7 @@ void convert_float_literal(
   
   dest=exprt("constant");
   
-  dest.set("#cformat", src);
+  dest.cformat(src);
 
   if(is_float)
     dest.type()=float_type();
@@ -53,9 +53,9 @@ void convert_float_literal(
 
   if(config.ansi_c.use_fixed_for_float)
   {
-    unsigned width=atoi(dest.type().get("width").c_str());
+    unsigned width=atoi(dest.type().width().c_str());
     unsigned fraction_bits;
-    const std::string &integer_bits=dest.type().get_string("integer_bits");
+    const std::string &integer_bits=dest.type().integer_bits().as_string();
 
     if(integer_bits=="")
       fraction_bits=width/2;
@@ -70,7 +70,7 @@ void convert_float_literal(
     else
       value*=power(10, exponent);
 
-    dest.set("value", integer2binary(value, width));  
+    dest.value(integer2binary(value, width));
   }
   else
   {
@@ -79,7 +79,6 @@ void convert_float_literal(
     a.spec=to_floatbv_type(dest.type());
     a.from_base10(significand, exponent);
 
-    dest.set("value",
-      integer2binary(a.pack(), a.spec.width()));  
+    dest.value(integer2binary(a.pack(), a.spec.width()));
   }
 }

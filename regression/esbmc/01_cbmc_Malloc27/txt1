@@ -1,0 +1,36 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Starting Bounded Model Checking
+Unwinding loop 0 iteration 1 file main.c line 16 function really
+size of program expression: 32 assignments
+
+Program constraints:
+(1) \guard_exec@0_0_0&0#1 == TRUE
+(2) __ESBMC_alloc&0#1 == ARRAY_OF(FALSE)
+(3) __ESBMC_alloc_size&0#1 == ARRAY_OF(0)
+(4) __ESBMC_rounding_mode&0#1 == 0
+(5) return_value_malloc$1@1!0&0#1 == (void *)(&dynamic_1_array[0])
+(6) __ESBMC_alloc_size&0#2 == (ARRAY_OF(0) WITH [POINTER_OBJECT(&dynamic_1_array[0]):=10])
+(7) __ESBMC_alloc&0#2 == (__ESBMC_alloc&0#1 WITH [POINTER_OBJECT(&dynamic_1_array[0]):=TRUE])
+(8) p@1!0&0#1 == &dynamic_1_array[0]
+(9) p@1!0&0#1 == &dynamic_1_array[0]
+(10) i@1!0&0#1 == 0
+(11) (assert)\guard_exec@0_0_0&0#1 => !(0 >= 10) || !(IS_DYNAMIC_OBJECT(&dynamic_1_array[0]))
+(12) dynamic_1_array&0#1 == (dynamic_1_array&0#0 WITH [0:=122])
+(13) tmp$1@1!0&0#1 == 0
+(14) i@1!0&0#2 == 1
+(15) __ESBMC_alloc&0#3 == (__ESBMC_alloc&0#2 WITH [POINTER_OBJECT(&dynamic_1_array[0]):=FALSE])
+(16) (assert)\guard_exec@0_0_0&0#1 => __ESBMC_alloc&0#3[POINTER_OBJECT(&dynamic_1_array[0])] || !(IS_DYNAMIC_OBJECT(&dynamic_1_array[0]))
+(17) (assert)\guard_exec@0_0_0&0#1 => !(1 >= 10) || !(IS_DYNAMIC_OBJECT(&dynamic_1_array[0]))
+(18) dynamic_1_array&0#2 == (dynamic_1_array&0#1 WITH [1:=122])
+(19) return_value_malloc$2@1!0&0#1 == (void *)(&dynamic_2_array[0])
+(20) __ESBMC_alloc_size&0#3 == (ARRAY_OF(0) WITH [POINTER_OBJECT(&dynamic_1_array[0]):=10] WITH [POINTER_OBJECT(&dynamic_2_array[0]):=10])
+(21) __ESBMC_alloc&0#4 == (__ESBMC_alloc&0#3 WITH [POINTER_OBJECT(&dynamic_2_array[0]):=TRUE])
+(22) p@1!0&0#2 == &dynamic_2_array[0]
+(23) (assert)\guard_exec@0_0_0&0#1 => !(2 >= 10) || !(IS_DYNAMIC_OBJECT(&dynamic_2_array[0]))
+(24) dynamic_2_array&0#1 == (dynamic_2_array&0#0 WITH [2:=122])
+(25) trds_in_run&0#1 == -1 + trds_in_run&0#0

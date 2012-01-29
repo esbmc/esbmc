@@ -1,34 +1,97 @@
-CFLAGS=	$(GCCFLAGS) $(INCLUDES)
-CXXFLAGS= $(GCCFLAGS) $(INCLUDES)
+# This file contains common build rules; to be included at the _end_ of a
+# makefile. Configuration options that are needed during the makefile itself
+# should be put in another config file.
 
-.SUFFIXES:	.C .d .cpp
+# Make ubuntu happy (which uses dash by default)
+SHELL := /bin/bash
 
-.C.o:
+# In case includer hasn't included yet,
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+
+OBJS1 = $(SRCS:%.c=$(OBJDIR)/%.o)
+OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
+
+# Given the presence of OBJDIR, $(OBJS) can't now automatically infer
+# dependancies between .o's and .cpp's etc
+
+# list of includes, potentially modified by includer
+INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
+
+CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
+CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
+
+ifndef WIN_MSVC
+$(OBJDIR)/%.o : %.cpp
 	$(CXX) -c $(CXXFLAGS) -o $@ $<
 
-.cpp.o:
-	$(CXX) -c $(CXXFLAGS) -o $@ $<
-
-.c.o:
+$(OBJDIR)/%.o : %.c
 	$(CC) -c $(CFLAGS) -o $@ $<
+else
+$(OBJDIR)/%.o : %.cpp
+	$(VCBINS)/cl.exe /TP /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" $(VCINCLUDES) /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
 
-# this one is for Visual Studio's compiler:
-#%.obj:%.cpp
-#	cl $(INCLUDES) -nologo -c -GF -EHsc $<
-#
-#%.obj:%.c
-#	cl $(INCLUDES) -nologo -c -GF -EHsc $<
+$(OBJDIR)/%.o : %.c
+	$(VCBINS)/cl.exe /TC /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" $(VCINCLUDES) /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
+endif
 
-#
-# include a dependency file if one exists
-#
+# A generic target; potentially not defined by the includer
 
-# ifeq (.depend,$(wildcard .depend))
-# include .depend
-# endif
+$(MAINOBJ): $(OBJS)
+	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
-D_FILES1 = $(SRC:.c=.d)
-D_FILES = $(D_FILES1:.cpp=.d)
+#clean defined by includer
 
--include $(D_FILES)
+ifdef DIRS
+# Rule for making dependancies on first execution
+$(OBJDIR)/.depends:
+	echo "Making dependancies"
+	$(MAKE) depend
+	touch $(OBJDIR)/.depends
 
+$(patsubst %,%/$(OBJDIR)/.deps,$(DIRS)):
+	$(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
+
+depend: $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS))
+else
+depend: $(SRCS)
+	@echo "Making dependancies in $(shell basename $(shell pwd))"
+	@truncate -s 0 $(OBJDIR)/.deps
+	@touch $(OBJDIR)/.deps
+	@for src in $(SRCS); do \
+		src1=$${src//\.cpp/}; \
+		src2=$${src1//\.c/}; \
+		$(DEPCXX) -DNO_OPENSSL -I $(ESBMCDIR)/util -I$(ESBMCDIR) -I $(Z3GCC)/include -MM -MT $(OBJDIR)/$$src2.o $$src >> $(OBJDIR)/.deps; \
+	done
+
+$(OBJDIR)/.deps:
+	$(MAKE) depend
+
+endif
+
+.PHONY: clean depend
+
+DEPFILEEXISTS := $(shell stat $(OBJDIR)/.deps 2>/dev/null)
+ifneq "$(DEPFILEEXISTS)" ""
+include $(OBJDIR)/.deps
+endif
+
+# Special purpose features,
+ifndef LINUX
+CXXFLAGS+=-DNO_OPENSSL
+endif
+
+# Finally, some special rules for various pieces of hackery for performing debug
+# builds.
+
+debug:
+	env OBJDIR=.debugobjs OPTS=-O0 GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
+
+debugclean:
+	env OBJDIR=.debugobjs $(MAKE) clean
+
+debugfast:
+	env OBJDIR=.debugfastobjs GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
+
+debugfastclean:
+	env OBJDIR=.debugfastobjs $(MAKE) clean

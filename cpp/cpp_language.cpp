@@ -74,7 +74,7 @@ bool cpp_languaget::preprocess(
     return false;
   }
 
-  return c_preprocess(instream, path, outstream, message_handler);
+  return c_preprocess(instream, path, outstream, true, message_handler);
 }
 
 /*******************************************************************\

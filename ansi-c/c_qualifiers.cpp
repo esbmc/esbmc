@@ -50,13 +50,13 @@ Function: c_qualifierst::read
 
 void c_qualifierst::read(const typet &src)
 {
-  if(src.get_bool("#constant"))
+  if(src.cmt_constant())
     is_constant=true;
 
-  if(src.get_bool("#volatile"))
+  if(src.cmt_volatile())
     is_volatile=true;
 
-  if(src.get_bool("#restricted"))
+  if(src.restricted())
     is_restricted=true;
 }
 
@@ -75,17 +75,17 @@ Function: c_qualifierst::write
 void c_qualifierst::write(typet &dest) const
 {
   if(is_constant)
-    dest.set("#constant", true);
+    dest.cmt_constant(true);
   else
     dest.remove("#constant");
 
   if(is_volatile)
-    dest.set("#volatile", true);
+    dest.cmt_volatile(true);
   else
     dest.remove("#volatile");
 
   if(is_restricted)
-    dest.set("#restricted", true);
+    dest.restricted(true);
   else
     dest.remove("#restricted");
 }

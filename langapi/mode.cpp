@@ -58,13 +58,8 @@ int get_mode(const std::string &str)
   unsigned i;
 
   for(i=0; mode_table[i].name!=NULL; i++)
-    #ifdef _WIN32
-    if(strcasecmp(str.c_str(), mode_table[i].name)==0)
-      return i;
-    #else
     if(str==mode_table[i].name)
       return i;
-    #endif
 
   return -1;
 }

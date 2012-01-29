@@ -219,8 +219,8 @@ propt::resultt pbs_dimacs_cnft::prop_solve()
   pbfile.close();
 
   std::string msg=
-    i2string(no_variables())+" variables, "+
-    i2string(clauses.size())+" clauses";
+    i2string((unsigned long)no_variables())+" variables, "+
+    i2string((unsigned long)clauses.size())+" clauses";
   messaget::status(msg);
 
   bool result=pbs_solve();

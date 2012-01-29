@@ -3,6 +3,7 @@
 Module: Program Transformation
 
 Author: Daniel Kroening, kroening@kroening.com
+		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
@@ -19,9 +20,25 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_convert_class.h"
 #include "remove_skip.h"
 #include "destructor.h"
-#include "var_name.h"
 
-//#define DEBUG 1
+static void
+link_up_type_names(irept &irep, const namespacet &ns)
+{
+
+  if (irep.find(exprt::i_type) != get_nil_irep()) {
+    if (irep.find("type").id() == "symbol") {
+      typet newtype = ns.follow((typet&)irep.find("type"));
+      irep.add("type") = newtype;
+    }
+  }
+
+  Forall_irep(it, irep.get_sub())
+    link_up_type_names(*it, ns);
+  Forall_named_irep(it, irep.get_named_sub())
+    link_up_type_names(it->second, ns);
+
+  return;
+}
 
 /*******************************************************************\
 
@@ -43,8 +60,14 @@ void goto_convertt::finish_gotos()
   {
     goto_programt::instructiont &i=**it;
 
-    if(i.code.get("statement")=="non-deterministic-goto")
+    if(i.code.statement()=="non-deterministic-goto")
     {
+      assert(0 && "can't handle non-deterministic gotos");
+      // jmorse - looks like this portion of code is related to the non-existant
+      // nondeterministic goto. Nothing else in {es,c}bmc fiddles with
+      // "destinations", and I'm busy fixing the type situation, so gets
+      // disabled as it serves no purpose and is only getting in the way.
+#if 0
       const irept &destinations=i.code.find("destinations");
 
       i.make_goto();
@@ -63,10 +86,11 @@ void goto_convertt::finish_gotos()
 
         i.targets.push_back(l_it->second);
       }
+#endif
     }
     else if(i.is_start_thread())
     {
-      const irep_idt &goto_label=i.code.get("destination");
+      const irep_idt &goto_label=i.code.destination();
 
       labelst::const_iterator l_it=
         targets.labels.find(goto_label);
@@ -80,9 +104,9 @@ void goto_convertt::finish_gotos()
 
       i.targets.push_back(l_it->second);
     }
-    else if(i.code.get("statement")=="goto")
+    else if(i.code.statement()=="goto")
     {
-      const irep_idt &goto_label=i.code.get("destination");
+      const irep_idt &goto_label=i.code.destination();
 
       labelst::const_iterator l_it=targets.labels.find(goto_label);
 
@@ -219,9 +243,9 @@ void goto_convertt::convert_label(
     goto_programt::targett t=dest.add_instruction(ASSERT);
     t->guard.make_false();
     t->location=code.location();
-    t->location.set("property", "error label");
-    t->location.set("comment", "error label");
-    t->location.set("user-provided", true);
+    t->location.property("error label");
+    t->location.comment("error label");
+    t->location.user_provided(false);
 
     target=t;
     dest.destructive_append(tmp);
@@ -276,9 +300,10 @@ void goto_convertt::convert(
   goto_programt &dest)
 {
   const irep_idt &statement=code.get_statement();
-  //std::cout << "goto_convertt::convert : " << statement << " : " << from_expr(ns,"",code) << std::endl;
 
   dest.instructions.clear();
+
+  link_up_type_names((codet&)code, ns);
 
   if(statement=="block")
     convert_block(code, dest);
@@ -320,12 +345,6 @@ void goto_convertt::convert(
     convert_non_deterministic_goto(code, dest);
   else if(statement=="ifthenelse")
     convert_ifthenelse(code, dest);
-  else if(statement=="specc_notify")
-    convert_specc_notify(code, dest);
-  else if(statement=="specc_wait")
-    convert_specc_wait(code, dest);
-  else if(statement=="specc_par")
-    convert_specc_par(code, dest);
   else if(statement=="start_thread")
     convert_start_thread(code, dest);
   else if(statement=="end_thread")
@@ -343,18 +362,38 @@ void goto_convertt::convert(
   else if(statement=="cpp_delete" ||
           statement=="cpp_delete[]")
     convert_cpp_delete(code, dest);
+  else if(statement=="cpp-try")
+    convert_cpp_try(code, dest);
   else
   {
-//std::cout << "goto_convertt::convert::copy other code : " << statement  << std::endl;
     copy(code, OTHER, dest);
   }
 
-  // ben: if there is no instruction in the program, add skip to it
+  // if there is no instruction in the program, add skip to it
   if(dest.instructions.empty())
   {
     dest.add_instruction(SKIP);
     dest.instructions.back().code.make_nil();
   }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::convert_block
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::convert_cpp_try(
+  const codet &code,
+  goto_programt &dest)
+{
+	convert(to_code(code.op0()), dest);
 }
 
 /*******************************************************************\
@@ -384,11 +423,11 @@ void goto_convertt::convert_block(
     {
       const exprt &op0=code.op0();
       assert(op0.id()=="symbol");
-      const irep_idt &identifier=op0.get("identifier");
+      const irep_idt &identifier=op0.identifier();
       const symbolt &symbol=lookup(identifier);
 
       if(!symbol.static_lifetime &&
-         symbol.type.id()!="code")
+         !symbol.type.is_code())
         locals.push_back(identifier);
     }
 
@@ -441,15 +480,7 @@ void goto_convertt::convert_block(
     locals.pop_back();
   }
 
-  //std::cout << "loop: " << loop << std::endl;
-  //std::cout << "is_for_loop: " << is_for_loop << std::endl;
-  //std::cout << "after code.operands().size(): " << code.operands().size() << std::endl;
-  //std::cout << "allocated_objects.size(): " << allocated_objects.size() << std::endl;
-  //std::cout << "locals.size(): " << locals.size() << std::endl;
-
   // see if we need to check for forgotten memory
-
-  //std::cout << "before loop_for_block: " << loop_for_block << std::endl;
 
   if (!loop_for_block)
   {
@@ -472,14 +503,12 @@ void goto_convertt::convert_block(
 
 	  t_d_a->guard.swap(deallocated_assert);
 	  t_d_a->location = lhs_pointer.location();
-	  t_d_a->location.set("comment","dereference failure: forgotten memory");
+	  t_d_a->location.comment("dereference failure: forgotten memory");
     }
   }
   }
   else
     loop_for_block=false;
-
-  //std::cout << "after loop_for_block: " << loop_for_block << std::endl;
 }
 
 /*******************************************************************\
@@ -498,7 +527,7 @@ void goto_convertt::convert_sideeffect(
   exprt &expr,
   goto_programt &dest)
 {
-  const irep_idt &statement=expr.get("statement");
+  const irep_idt &statement=expr.statement();
 
   if(statement=="postincrement" ||
      statement=="postdecrement" ||
@@ -522,7 +551,7 @@ void goto_convertt::convert_sideeffect(
 
     const typet &op_type=ns.follow(expr.op0().type());
 
-    if(op_type.id()=="bool")
+    if(op_type.is_bool())
     {
       rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
       rhs.op0().make_typecast(int_type());
@@ -626,7 +655,7 @@ void goto_convertt::convert_sideeffect(
     rhs.copy_to_operands(expr.op0(), expr.op1());
     rhs.type()=expr.op0().type();
 
-    if(rhs.op0().type().id()=="bool")
+    if(rhs.op0().type().is_bool())
     {
       rhs.op0().make_typecast(int_type());
       rhs.op1().make_typecast(int_type());
@@ -769,11 +798,11 @@ void goto_convertt::convert_decl(
     throw "decl statement expects symbol as first operand";
   }
 
-  const irep_idt &identifier=op0.get("identifier");
+  const irep_idt &identifier=op0.identifier();
 
   const symbolt &symbol=lookup(identifier);
   if(symbol.static_lifetime ||
-     symbol.type.id()=="code")
+     symbol.type.is_code())
 	  return; // this is a SKIP!
 
   if(code.operands().size()==1)
@@ -837,7 +866,7 @@ void goto_convertt::convert_assign(
   remove_sideeffects(lhs, dest);
 
   if(rhs.id()=="sideeffect" &&
-     rhs.get("statement")=="function_call")
+     rhs.statement()=="function_call")
   {
     if(rhs.operands().size()!=2)
     {
@@ -851,8 +880,8 @@ void goto_convertt::convert_assign(
     do_function_call(lhs, rhs.op0(), rhs.op1().operands(), dest);
   }
   else if(rhs.id()=="sideeffect" &&
-          (rhs.get("statement")=="cpp_new" ||
-           rhs.get("statement")=="cpp_new[]"))
+          (rhs.statement()=="cpp_new" ||
+           rhs.statement()=="cpp_new[]"))
   {
     Forall_operands(it, rhs)
       remove_sideeffects(*it, dest);
@@ -884,7 +913,7 @@ void goto_convertt::convert_assign(
 		unsigned int globals = get_expr_number_globals(lhs);
 		atomic = globals;
 		globals += get_expr_number_globals(rhs);
-		if(globals > 0 && (lhs.get_string("identifier").find("tmp$") == std::string::npos))
+		if(globals > 0 && (lhs.identifier().as_string().find("tmp$") == std::string::npos))
 		  break_globals2assignments(atomic,lhs,rhs, dest,code.location());
 	}
 
@@ -897,10 +926,6 @@ void goto_convertt::convert_assign(
 		if(atomic == -1)
 			dest.add_instruction(ATOMIC_END);
   }
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 }
 
 /*******************************************************************\
@@ -917,9 +942,6 @@ Function: goto_convertt::break_globals2assignments
 
 void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rhs, goto_programt &dest, const locationt &location)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   if(!options.get_bool_option("atomicity-check"))
     return;
@@ -951,26 +973,11 @@ void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rh
 	  dest.add_instruction(ATOMIC_BEGIN);
 	  atomic = -1;
 	}
-	std::stringstream ss;
-	std::string s;
 	goto_programt::targett t=dest.add_instruction(ASSERT);
 	t->guard.swap(atomic_dest);
 	t->location=location;
-	ss << get_variable_name(lhs.get_string("identifier"));
-	ss >> s;
-	//std::cout << "s.c_str(): " << s.c_str() << std::endl;
-	//std::cout << "s.empty(): " << s.empty() << std::endl;
-	//std::cout << "lhs.pretty(): " << lhs.get_string("identifier") << std::endl;
-	//std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
-	//if (lhs.get_string("identifier").find("atomicity") == std::string::npos)
-	  //t->location.set("comment","atomicity violation on assignment to " + s);
-	//else
-	  t->location.set("comment","atomicity violation on assignment to " + lhs.get_string("identifier"));
+	  t->location.comment("atomicity violation on assignment to " + lhs.identifier().as_string());
   }
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 }
 
 /*******************************************************************\
@@ -987,15 +994,12 @@ Function: goto_convertt::break_globals2assignments
 
 void goto_convertt::break_globals2assignments(exprt & rhs, goto_programt & dest, const locationt & location)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   if(!options.get_bool_option("atomicity-check"))
     return;
 
   if (rhs.operands().size()>0)
-    if (rhs.op0().get_string("identifier").find("pthread") != std::string::npos)
+    if (rhs.op0().identifier().as_string().find("pthread") != std::string::npos)
  	  return ;
 
   if (rhs.operands().size()>0)
@@ -1017,12 +1021,8 @@ void goto_convertt::break_globals2assignments(exprt & rhs, goto_programt & dest,
     goto_programt::targett t=dest.add_instruction(ASSERT);
 	t->guard.swap(atomic_dest);
 	t->location=location;
-    t->location.set("comment","atomicity violation");
+    t->location.comment("atomicity violation");
   }
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 }
 
 /*******************************************************************\
@@ -1039,10 +1039,6 @@ Function: goto_convertt::break_globals2assignments_rec
 
 void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest, goto_programt &dest, int atomic, const locationt &location)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
 
   if(!options.get_bool_option("atomicity-check"))
     return;
@@ -1052,15 +1048,15 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	|| rhs.id() == "index"
 	|| rhs.id() == "member")
   {
-    irep_idt identifier=rhs.op0().get("identifier");
+    irep_idt identifier=rhs.op0().identifier();
     if (rhs.id() == "member")
     {
       const exprt &object=rhs.operands()[0];
-      identifier=object.get("identifier");
+      identifier=object.identifier();
     }
     else if (rhs.id() == "index")
     {
-      identifier=rhs.op1().get("identifier");
+      identifier=rhs.op1().identifier();
     }
 
     if (identifier.empty())
@@ -1069,7 +1065,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	const symbolt &symbol=lookup(identifier);
 
     if (!(identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
-          && (symbol.static_lifetime || symbol.type.get("#dynamic") != ""))
+          && (symbol.static_lifetime || symbol.type.is_dynamic_set()))
     {
 	  // make new assignment to temp for each global symbol
 	  symbolt &new_symbol=new_tmp_symbol(rhs.type());
@@ -1085,7 +1081,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	  assignment.copy_to_operands(symbol_expr(new_symbol));
 	  assignment.copy_to_operands(rhs);
 	  assignment.location() = location;
-	  assignment.set("comment", "atomicity violation");
+	  assignment.comment("atomicity violation");
 	  copy(assignment, ASSIGN, dest);
 
 	  if(atomic == 0)
@@ -1095,13 +1091,13 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   }
   else if(rhs.id() == "symbol")
   {
-	const irep_idt &identifier=rhs.get("identifier");
+	const irep_idt &identifier=rhs.identifier();
 	const symbolt &symbol=lookup(identifier);
-	if(symbol.static_lifetime || symbol.type.get("#dynamic") != "")
+	if(symbol.static_lifetime || symbol.type.is_dynamic_set())
 	{
 	  // make new assignment to temp for each global symbol
 	  symbolt &new_symbol=new_tmp_symbol(rhs.type());
-
+	  new_symbol.static_lifetime=true;
 	  equality_exprt eq_expr;
 	  irept irep;
 	  new_symbol.to_irep(irep);
@@ -1115,24 +1111,20 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	  assignment.copy_to_operands(rhs);
 
 	  assignment.location() = rhs.find_location();
-	  assignment.set("comment", "atomicity violation");
+	  assignment.comment("atomicity violation");
 	  copy(assignment, ASSIGN, dest);
 
 	  if(atomic == 0)
 	    rhs=symbol_expr(new_symbol);
     }
   }
-  else if(rhs.id() != "address_of")// && rhs.id() != "dereference")
+  else if(!rhs.is_address_of())// && rhs.id() != "dereference")
   {
     Forall_operands(it, rhs)
 	{
 	  break_globals2assignments_rec(*it,atomic_dest,dest,atomic,location);
 	}
   }
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 }
 
 /*******************************************************************\
@@ -1152,12 +1144,12 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   if(!options.get_bool_option("atomicity-check"))
 	return 0;
 
-  if(expr.id() == "address_of")
+  if(expr.is_address_of())
   	return 0;
 
   else if(expr.id() == "symbol")
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
   	const symbolt &symbol=lookup(identifier);
 
     if (identifier == "c::__ESBMC_alloc"
@@ -1165,7 +1157,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
     {
       return 0;
     }
-    else if (symbol.static_lifetime || symbol.type.get("#dynamic") != "")
+    else if (symbol.static_lifetime || symbol.type.is_dynamic_set())
     {
       return 1;
     }
@@ -1256,9 +1248,6 @@ void goto_convertt::convert_assert(
   const codet &code,
   goto_programt &dest)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
 
   if(code.operands().size()!=1)
   {
@@ -1283,8 +1272,8 @@ void goto_convertt::convert_assert(
   goto_programt::targett t=dest.add_instruction(ASSERT);
   t->guard.swap(cond);
   t->location=code.location();
-  t->location.set("property", "assertion");
-  t->location.set("user-provided", true);
+  t->location.property("assertion");
+  t->location.user_provided(true);
 }
 
 /*******************************************************************\
@@ -1428,9 +1417,6 @@ void goto_convertt::convert_for(
     if(tmp_x.instructions.empty())
     {
       convert(to_code(code.op2()), tmp_x);
-      //std::cout << tmp_B.pretty() << std::endl;
-      //tmp_x.add_instruction(SKIP);
-      //exit(1);
     }
   }
 
@@ -1943,190 +1929,6 @@ void goto_convertt::convert_non_deterministic_goto(
 
 /*******************************************************************\
 
-Function: goto_convertt::convert_specc_notify
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::convert_specc_notify(
-  const codet &code,
-  goto_programt &dest)
-{
-  #if 0
-  goto_programt::targett t=dest.add_instruction(EVENT);
-
-  forall_operands(it, code)
-    convert_specc_event(*it, t->events);
-
-  t->code.swap(code);
-  t->location=code.location();
-  #endif
-
-  copy(code, OTHER, dest);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_specc_event
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::convert_specc_event(
-  const exprt &op,
-  std::set<irep_idt> &events)
-{
-  if(op.id()=="or" || op.id()=="and")
-  {
-    forall_operands(it, op)
-      convert_specc_event(*it, events);
-  }
-  else if(op.id()=="specc_event")
-  {
-    irep_idt event=op.get("identifier");
-
-    if(has_prefix(id2string(event), "specc::"))
-      event=std::string(id2string(event), 7, std::string::npos);
-
-    events.insert(event);
-  }
-  else
-  {
-    err_location(op);
-    throw "convert_convert_event got "+op.id_string();
-  }
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_specc_wait
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::convert_specc_wait(
-  const codet &code,
-  goto_programt &dest)
-{
-  #if 0
-  goto_programt::targett t=dest.add_instruction(WAIT);
-
-  if(code.operands().size()!=1)
-  {
-    err_location(code);
-    throw "specc_wait expects one operand";
-  }
-
-  const exprt &op=code.op0();
-
-  if(op.id()=="or")
-    t->or_semantics=true;
-
-  convert_specc_event(op, t->events);
-
-  t->code.swap(code);
-  t->location=code.location();
-  #endif
-
-  copy(code, OTHER, dest);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_specc_par
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::convert_specc_par(
-  const codet &code,
-  goto_programt &dest)
-{
-  #if 0
-  goto_programt::targett notify=dest.add_instruction(EVENT);
-  goto_programt::targett wait=dest.add_instruction(WAIT);
-
-  wait->or_semantics=false;
-  notify->location=code.location();
-
-  if(code.operands().size()==0)
-  {
-    err_location(code);
-    throw "specc_par expects at least one argument";
-  }
-
-  // create the threads
-  Forall_operands(it, code)
-  {
-    unsigned thread_nr=threads.size();
-
-    notify->events.insert("start_thread"+i2string(thread_nr));
-    wait->events.insert("end_thread"+i2string(thread_nr));
-
-    threads.push_back(goto_threadt());
-
-    goto_threadt &thread=threads.back();
-
-    goto_programt::targett t_wait=
-      thread.goto_program.add_instruction(WAIT);
-
-    t_wait->location=code.location();
-    t_wait->events.insert("start_thread"+i2string(thread_nr));
-
-    // fresh targets
-    targetst old_targets;
-    targets.swap(old_targets);
-
-    goto_programt tmp;
-    goto_convert_rec(*it, tmp);
-    targets.swap(old_targets);
-
-    thread.goto_program.destructive_append(tmp);
-
-    goto_programt::targett t_notify=
-      thread.goto_program.add_instruction(EVENT);
-
-    t_notify->events.insert("end_thread"+i2string(thread_nr));
-
-    // add a loop, for the case that the par statement is also
-    // in a loop
-
-    goto_programt::targett t_goto=
-      thread.goto_program.add_instruction();
-
-    t_goto->make_goto(t_wait);
-
-    thread.goto_program.update();
-  }
-
-  notify->code.swap(code);
-  #endif
-
-  copy(code, OTHER, dest);
-}
-
-/*******************************************************************\
-
 Function: goto_convertt::convert_start_thread
 
   Inputs:
@@ -2154,10 +1956,9 @@ void goto_convertt::convert_start_thread(
   start_thread->code.copy_to_operands(code.op1());
 
   // see if op0 is an unconditional goto
-  if(code.op0().get("statement")=="goto")
+  if(code.op0().statement()=="goto")
   {
-    start_thread->code.set("destination",
-      code.op0().get("destination"));
+    start_thread->code.destination(code.op0().destination());
     // remember it to do target later
     targets.gotos.insert(start_thread);
   }
@@ -2227,7 +2028,7 @@ void goto_convertt::convert_sync(
 
   copy(code, SYNC, dest);
   dest.instructions.back().event=
-    dest.instructions.back().code.get("event");
+    dest.instructions.back().code.event();
 }
 
 /*******************************************************************\
@@ -2327,7 +2128,7 @@ void goto_convertt::convert_bp_enforce(
     {
       if(it->is_assign())
       {
-        assert(it->code.get("statement")=="assign");
+        assert(it->code.statement()=="assign");
 
         // add constrain
         codet constrain("bp_constrain");
@@ -2339,7 +2140,7 @@ void goto_convertt::convert_bp_enforce(
         it->type=OTHER;
       }
       else if(it->is_other() &&
-              it->code.get("statement")=="bp_constrain")
+              it->code.statement()=="bp_constrain")
       {
         // add to constraint
         assert(it->code.operands().size()==2);
@@ -2521,9 +2322,6 @@ void goto_convertt::convert_ifthenelse(
 	    convert(to_code(code.op2()), tmp_op2);
 
 #if 1
-	  //std::cout << "is_thread: " << is_thread << std::endl;
-	  //std::cout << "1: " << code.op0().id() << std::endl;
-	  //std::cout << "2: " << code.pretty() << std::endl;
 	  exprt tmp_guard;
 	  if (options.get_bool_option("control-flow-test")
 		  && code.op0().id() != "notequal" && code.op0().id() != "symbol"
@@ -2531,7 +2329,6 @@ void goto_convertt::convert_ifthenelse(
 		  && !is_thread
 		  && !options.get_bool_option("deadlock-check"))
 	  {
-		//std::cout << "2: " << code.op0().id() << std::endl;
 	    symbolt &new_symbol=new_cftest_symbol(code.op0().type());
 		irept irep;
 		new_symbol.to_irep(irep);
@@ -2689,7 +2486,7 @@ void goto_convertt::generate_conditional_branch(
     return;
   }
 
-  if(guard.id()=="and")
+  if(guard.is_and())
   {
     // turn
     //   if(a && b) goto target_true; else goto target_false;
@@ -2772,23 +2569,22 @@ Function: goto_convertt::get_string_constant
 const std::string &goto_convertt::get_string_constant(
   const exprt &expr)
 {
+
   if(expr.id()=="typecast" &&
      expr.operands().size()==1)
     return get_string_constant(expr.op0());
 
-  if(expr.id()!="address_of" ||
+  if(!expr.is_address_of() ||
      expr.operands().size()!=1 ||
      expr.op0().id()!="index" ||
      expr.op0().operands().size()!=2 ||
      expr.op0().op0().id()!="string-constant")
   {
     err_location(expr);
-//    str << "expected string constant, but got: "
-//        << expr.pretty() << std::endl;
     throw 0;
   }
 
-  return expr.op0().op0().get_string("value");
+  return expr.op0().op0().value().as_string();
 }
 
 /*******************************************************************\

@@ -10,19 +10,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include "z3_conv.h"
 
-//#define DEBUG
-
-/*******************************************************************
- Function: z3_convt::print_data_types
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 void z3_convt::print_data_types(Z3_ast operand0, Z3_ast operand1)
 {
   Z3_type_ast a, b;
@@ -36,17 +23,6 @@ void z3_convt::print_data_types(Z3_ast operand0, Z3_ast operand1)
   std::cout << Z3_get_symbol_string(z3_ctx,Z3_get_type_name(z3_ctx, b)) << std::endl;
 }
 
-/*******************************************************************
- Function: z3_convt::show_bv_size
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 void z3_convt::show_bv_size(Z3_ast operand)
 {
   Z3_type_ast a;
@@ -58,60 +34,6 @@ void z3_convt::show_bv_size(Z3_ast operand)
   std::cout << Z3_get_bv_type_size(z3_ctx, a) << std::endl;
 }
 
-/*******************************************************************
- Function: z3_convt::select_pointer
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-const typet z3_convt::select_pointer(const typet &type)
-{
-  if (is_ptr(type))
-	return select_pointer(type.subtype());
-  else
-	return type;
-}
-
-/*******************************************************************
- Function: z3_convt::check_all_types
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool z3_convt::check_all_types(const typet &type)
-{
-  if (type.id()=="bool" || type.id()=="signedbv" || type.id()=="unsignedbv" ||
-	  type.id()=="symbol" || type.id()=="empty" || type.id() == "fixedbv" ||
-	  type.id()=="array" || type.id()=="struct" || type.id()=="pointer" ||
-	  type.id()=="union" || type.id()=="code")
-  {
-    return true;
-  }
-
-  return false;
-}
-
-/*******************************************************************
- Function: z3_convt::is_bv
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 bool z3_convt::is_bv(const typet &type)
 {
   if (type.id()=="signedbv" || type.id()=="unsignedbv" ||
@@ -121,17 +43,6 @@ bool z3_convt::is_bv(const typet &type)
   return false;
 }
 
-/*******************************************************************
- Function: z3_convt::is_signed
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 bool z3_convt::is_signed(const typet &type)
 {
   if (type.id()=="signedbv" || type.id()=="fixedbv")
@@ -140,58 +51,32 @@ bool z3_convt::is_signed(const typet &type)
   return false;
 }
 
-/*******************************************************************
- Function: z3_convt::convert_number
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-Z3_ast z3_convt::convert_number(int value, u_int width, bool type)
+Z3_ast z3_convt::convert_number(int64_t value, u_int width, bool type)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
-  std::string out;
-  out = "j: "+ 2;
-  static Z3_ast number_var;
-  char val[2];
-
-  sprintf(val,"%i", value);
-
-  if (type==false)
-  {
-    if (int_encoding)
-	  number_var = z3_api.mk_unsigned_int(z3_ctx, atoi(val));
-    else
-	  number_var = Z3_mk_unsigned_int(z3_ctx, atoi(val), Z3_mk_bv_type(z3_ctx, width));
-  }
-  else if (type==true)
-  {
-    if (int_encoding)
-	  number_var = z3_api.mk_int(z3_ctx, atoi(val));
-	else
-	  number_var = Z3_mk_int(z3_ctx, atoi(val), Z3_mk_bv_type(z3_ctx, width));
-  }
-
-  return number_var;
+  if (int_encoding)
+    return convert_number_int(value, width, type);
+  else
+    return convert_number_bv(value, width, type);
 }
 
-/*******************************************************************
- Function: z3_convt::itos
+Z3_ast z3_convt::convert_number_int(int64_t value, u_int width, bool type)
+{
 
- Inputs:
+  if (type)
+    return z3_api.mk_int(value);
+  else
+    return z3_api.mk_unsigned_int(value);
+}
 
- Outputs:
+Z3_ast z3_convt::convert_number_bv(int64_t value, u_int width, bool type)
+{
 
- Purpose:
-
- \*******************************************************************/
+  if (type)
+    return Z3_mk_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
+  else
+    return Z3_mk_unsigned_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
+}
 
 std::string z3_convt::itos(int i)
 {
@@ -199,4 +84,18 @@ std::string z3_convt::itos(int i)
   s << i;
 
   return s.str();
+}
+
+void
+z3_convt::debug_label_formula(std::string name, Z3_ast formula)
+{
+  unsigned &num = debug_label_map[name];
+  std::string the_name = "__ESBMC_" + name + itos(num);
+  num++;
+
+  Z3_sort sort = Z3_get_sort(z3_ctx, formula);
+  Z3_ast sym = z3_api.mk_var(the_name.c_str(), sort);
+  Z3_ast eq = Z3_mk_eq(z3_ctx, sym, formula);
+  assert_formula(eq);
+  return;
 }

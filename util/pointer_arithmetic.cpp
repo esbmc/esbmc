@@ -62,7 +62,7 @@ void pointer_arithmetict::read(const exprt &src)
     o.copy_to_operands(src.op1());
     add_to_offset(o);
   }
-  else if(src.id()=="address_of")
+  else if(src.is_address_of())
   {
     assert(src.operands().size()==1);
     if(src.op0().id()=="index")

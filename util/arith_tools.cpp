@@ -27,7 +27,7 @@ bool to_integer(const exprt &expr, mp_integer &int_value)
 {
   if(!expr.is_constant()) return true;
 
-  const std::string &value=expr.get_string("value");
+  const std::string &value=expr.value().as_string();
   const irep_idt &type_id=expr.type().id();
 
   if(type_id=="pointer")
@@ -85,18 +85,18 @@ exprt from_integer(
 
   if(type_id=="integer")
   {
-    expr.set("value", integer2string(int_value));
+    expr.value(integer2string(int_value));
     return expr;
   }
   else if(type_id=="natural")
   {
     if(int_value<0) { expr.make_nil(); return expr; }
-    expr.set("value", integer2string(int_value));
+    expr.value(integer2string(int_value));
     return expr;
   }
   else if(type_id=="unsignedbv" || type_id=="signedbv")
   {
-    expr.set("value", integer2binary(int_value, bv_width(type)));
+    expr.value(integer2binary(int_value, bv_width(type)));
     return expr;
   }
   else if(type_id=="bool")

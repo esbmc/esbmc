@@ -1,38 +1,33 @@
-include ../../config.inc
-include ../../common
-include ../../local.inc
+ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
+include $(ESBMCDIR)/local.inc
+MAINOBJ= $(OBJDIR)/flattening.o
+all: $(OBJDIR)/.deps $(MAINOBJ)
 
-CXXFLAGS+= -I../../util -I../../
-
-OBJS= equality.o arrays.o functions.o boolbv_width.o \
-	boolbv.o bv_pointers.o bv_utils.o boolbv_abs.o boolbv_with.o \
-	boolbv_typecast.o boolbv_index.o boolbv_member.o boolbv_if.o \
-	boolbv_byte_extract.o boolbv_add_sub.o boolbv_mult.o \
-	boolbv_constant.o boolbv_extractbit.o boolbv_bv_rel.o \
-	boolbv_shift.o boolbv_case.o boolbv_cond.o \
-	boolbv_concatenation.o boolbv_div.o boolbv_mod.o \
-	boolbv_extractbits.o boolbv_replication.o boolbv_reduction.o \
-	boolbv_overflow.o boolbv_get.o boolbv_bitwise.o \
-	boolbv_equality.o boolbv_unary_minus.o boolbv_ieee_float_rel.o \
-	pointer_logic.o boolbv_quantifier.o boolbv_byte_update.o \
-	boolbv_array_of.o boolbv_map.o boolbv_type.o boolbv_union.o
+SRCS= equality.cpp arrays.cpp functions.cpp boolbv_width.cpp \
+	boolbv.cpp bv_pointers.cpp bv_utils.cpp boolbv_abs.cpp \
+        boolbv_with.cpp boolbv_typecast.cpp boolbv_index.cpp \
+	boolbv_member.cpp boolbv_if.cpp boolbv_byte_extract.cpp \
+	boolbv_add_sub.cpp boolbv_mult.cpp \
+	boolbv_constant.cpp boolbv_extractbit.cpp boolbv_bv_rel.cpp \
+	boolbv_shift.cpp boolbv_case.cpp boolbv_cond.cpp \
+	boolbv_concatenation.cpp boolbv_div.cpp boolbv_mod.cpp \
+	boolbv_extractbits.cpp boolbv_replication.cpp boolbv_reduction.cpp \
+	boolbv_overflow.cpp boolbv_get.cpp boolbv_bitwise.cpp \
+	boolbv_equality.cpp boolbv_unary_minus.cpp boolbv_ieee_float_rel.cpp \
+	pointer_logic.cpp boolbv_quantifier.cpp boolbv_byte_update.cpp \
+	boolbv_array_of.cpp boolbv_map.cpp boolbv_type.cpp boolbv_union.cpp
 
 ifdef MINISAT
-OBJS+= sat_minimizer.o
+SRCS+= sat_minimizer.cpp
 endif
 
 ifdef MODULE_FLOATBV
 CXXFLAGS += -DHAVE_FLOATBV
-FLOATBVOBJ = ../../floatbv/floatbv.o
+OBJS = ../../floatbv/floatbv.o
 endif
 
-all: flattening.o
-
-flattening.o: $(OBJS)
-	$(LD) -r -o $@ $^ $(LDFLAGS) $(FLOATBVOBJ)
-
 clean:
-	-rm *.o
-	-rm *.d
+	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
-.PHONY: clean
+include $(ESBMCDIR)/common

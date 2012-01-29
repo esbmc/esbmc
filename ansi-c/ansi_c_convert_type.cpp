@@ -87,7 +87,7 @@ void ansi_c_convert_typet::read_rec(const typet &type)
     double_cnt++;
   else if(type.id()=="float")
     float_cnt++;
-  else if(type.id()=="bool")
+  else if(type.is_bool())
     bool_cnt++;
   else if(type.id()=="static")
     c_storage_spec.is_static=true;
@@ -100,6 +100,10 @@ void ansi_c_convert_typet::read_rec(const typet &type)
   else if(type.id()=="register")
     c_storage_spec.is_register=true;
   else if(type.id()=="auto")
+  {
+    // ignore
+  }
+  else if (type == get_nil_irep())
   {
     // ignore
   }
@@ -298,7 +302,7 @@ void ansi_c_convert_typet::write(typet &type)
       throw 0;
     }
 
-    type.set("width", width);
+    type.width(width);
   }
 
   c_qualifiers.write(type);

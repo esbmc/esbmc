@@ -79,7 +79,7 @@ exprt boolector_convt::bv_get_rec(
   if(boolbv_get_width(type, width))
     return nil_exprt();
 
-  if(type.id()=="bool")
+  if(type.is_bool())
   {
 	std::string value;
 	size_t found;
@@ -104,7 +104,7 @@ exprt boolector_convt::bv_get_rec(
 
   if(bvtype==IS_UNKNOWN)
   {
-    if(type.id()=="array")
+    if(type.is_array())
     {
 #if 0
       unsigned sub_width;
@@ -142,7 +142,7 @@ exprt boolector_convt::bv_get_rec(
     else if(type.id()=="struct")
     {
 #if 0
-      const irept &components=type.find("components");
+      const irept &components=type.components();
       exprt::operandst op;
       op.reserve(components.get_sub().size());
       unsigned int size;
@@ -160,7 +160,7 @@ exprt boolector_convt::bv_get_rec(
 
       forall_irep(it, components.get_sub())
       {
-        const typet &subtype=static_cast<const typet &>(it->find("type"));
+        const typet &subtype=static_cast<const typet &>(it->type());
         op.push_back(nil_exprt());
 
         unsigned sub_width;
@@ -211,7 +211,7 @@ exprt boolector_convt::bv_get_rec(
   case IS_RANGE:
     {
       mp_integer int_value=binary2integer(value, false);
-      mp_integer from=string2integer(type.get_string("from"));
+      mp_integer from=string2integer(type.from().as_string());
 
       constant_exprt value_expr(type);
       value_expr.set_value(integer2string(int_value+from));

@@ -30,7 +30,7 @@ Function: c_typecheck_baset::typecheck_type
 
 void c_typecheck_baset::typecheck_type(typet &type)
 {
-  if(type.id()=="code")
+  if(type.is_code())
   {
     code_typet &code_type=to_code_type(type);
 
@@ -100,7 +100,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
 
     typecheck_type(code_type.return_type());
   }
-  else if(type.id()=="array")
+  else if(type.is_array())
   {
     array_typet &array_type=to_array_type(type);
     exprt &size=array_type.size();
@@ -111,7 +111,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     bool size_is_unsigned=(size.type().id()=="unsignedbv");
 
     typet integer_type(size_is_unsigned?"unsignedbv":"signedbv");
-    integer_type.set("width", config.ansi_c.int_width);
+    integer_type.width(config.ansi_c.int_width);
 
     implicit_typecast(size, integer_type);
 
@@ -165,7 +165,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
       if(type.id()=="incomplete_array")
       {
         type.id("array");
-        type.set("size", gen_zero(int_type()));
+        type.size(gen_zero(int_type()));
       }
     }
 
@@ -177,7 +177,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
         it!=components.end();
         ) // no it++
     {
-      if(it->get("name")=="")
+      if(it->name()=="")
       {
         const typet &final_type=follow(it->type());
 
@@ -212,7 +212,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
         else
         {
           // some other anonymous member
-          it->set("name", "$anon_member"+i2string(anon_member_counter++));
+          it->name("$anon_member"+i2string(anon_member_counter++));
           it++;
         }
       }
@@ -228,7 +228,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     typecheck_type(type.subtype());
 
     // we turn this into unsigedbv/signedbv
-    exprt &size=static_cast<exprt &>(type.add("size"));
+    exprt size = static_cast<const exprt &>(type.size_irep());
 
     typecheck_expr(size);
     make_constant_index(size);
@@ -239,6 +239,9 @@ void c_typecheck_baset::typecheck_type(typet &type)
       err_location(size);
       throw "failed to convert bit field width";
     }
+
+    // Now converted, set size field.
+    type.size(size);
 
     const typet &base_type=follow(type.subtype());
 
@@ -252,28 +255,31 @@ void c_typecheck_baset::typecheck_type(typet &type)
       throw 0;
     }
 
-    unsigned width=atoi(base_type.get("width").c_str());
+    unsigned width=atoi(base_type.width().c_str());
 
     if(i>width)
     {
       err_location(size);
       throw "bit field size too large";
     }
+#if 0
+    /* 6.7.2.1 of C89 permits zero sized bit fields */
     else if(i<1)
     {
       err_location(size);
       throw "bit field size too small";
     }
+#endif
 
     width=integer2long(i);
 
     typet tmp(base_type);
     type.swap(tmp);
-    type.set("width", width);
+    type.width(width);
   }
   else if(type.id()=="type_of")
   {
-    if(type.get_bool("#is_expression"))
+    if(type.is_expression())
     {
       exprt expr = (exprt&) type.subtype();
       typecheck_expr(expr);
@@ -291,7 +297,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     // adjust identifier, if needed
     replace_symbol(type);
 
-    const irep_idt &identifier=type.get("identifier");
+    const irep_idt &identifier=type.identifier();
 
     symbolst::const_iterator s_it=context.symbols.find(identifier);
 
@@ -329,7 +335,7 @@ Function: c_typecheck_baset::adjust_function_argument
 
 void c_typecheck_baset::adjust_function_argument(typet &type) const
 {
-  if(type.id()=="array" ||
+  if(type.is_array() ||
      type.id()=="incomplete_array")
   {
     type.id("pointer");

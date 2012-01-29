@@ -19,8 +19,6 @@ Date: February 2006
 
 #include <pointer-analysis/value_sets.h>
 
-#include "var_name.h"
-
 class rw_sett
 {
 public:
@@ -42,18 +40,13 @@ public:
 
     std::string get_comment() const
     {
-      //std::stringstream ss;
-      std::string result;//, temp;
+      std::string result;
       if(w)
         result="W/W";
       else
         result="R/W";
 
       result+=" data race on " + id2string(object);
-      //temp=id2string(object);
-      //ss << get_variable_name(id2string(object));
-  	  //ss >> temp;
-      //result+=temp;
 
       return result;
     }

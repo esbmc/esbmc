@@ -1,0 +1,37 @@
+#ifndef STL_NEW
+#define STL_NEW
+
+#include "definitions.h"
+#include "exception"
+
+typedef void (*new_handler)();
+
+new_handler func;
+
+namespace std {
+
+	//new_handler set_new_handler (new_handler new_p) throw() {
+	void set_new_handler (new_handler new_p) throw() {
+		func = new_p;
+	}
+
+}
+
+namespace std
+{
+   struct bad_alloc : public exception
+   {
+   public:
+      bad_alloc() throw();
+      bad_alloc(const bad_alloc&) throw()
+      {
+    	  func;
+      }
+      bad_alloc& operator=(const bad_alloc&) throw();
+      const char* what() const throw(): message("std::bad_alloc"){
+    	  return message;
+      }
+   };
+}
+
+#endif

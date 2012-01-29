@@ -29,11 +29,11 @@ Function: prop_convt::literal
 
 bool prop_convt::literal(const exprt &expr, literalt &dest) const
 {
-  assert(expr.type().id()=="bool");
+  assert(expr.type().is_bool());
 
   if(expr.id()=="symbol")
   {
-    const irep_idt &identifier=expr.get("identifier");
+    const irep_idt &identifier=expr.identifier();
 
     symbolst::const_iterator result=symbols.find(identifier);
 
@@ -101,7 +101,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
   }
   else if(expr.id()=="symbol")
   {
-    symbolst::const_iterator result=symbols.find(expr.get("identifier"));
+    symbolst::const_iterator result=symbols.find(expr.identifier());
     if(result==symbols.end()) return true;
 
     value=prop.l_get(result->second);
@@ -112,7 +112,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 
   if(expr.id()=="not")
   {
-    if(expr.type().id()=="bool" &&
+    if(expr.type().is_bool() &&
        expr.operands().size()==1)
     {
       if(get_bool(expr.op0(), value)) return true;
@@ -120,19 +120,19 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
       return false;
     }
   }
-  else if(expr.id()=="and" || expr.id()=="or")
+  else if(expr.is_and() || expr.id()=="or")
   {
-    if(expr.type().id()=="bool" &&
+    if(expr.type().is_bool() &&
        expr.operands().size()>=1)
     {
-      value=tvt(expr.id()=="and");
+      value=tvt(expr.is_and());
 
       forall_operands(it, expr)
       {
         tvt tmp;
         if(get_bool(*it, tmp)) return true;
 
-        if(expr.id()=="and")
+        if(expr.is_and())
         {
           if(tmp.is_false()) { value=tvt(false); return false; }
 
@@ -213,7 +213,7 @@ Function: prop_convt::convert_bool
 
 literalt prop_convt::convert_bool(const exprt &expr)
 {
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
   {
     std::string msg="prop_convt::convert_bool got "
                     "non-boolean expression:\n";
@@ -234,12 +234,12 @@ literalt prop_convt::convert_bool(const exprt &expr)
   }
   else if(expr.id()=="symbol")
   {
-    return get_literal(expr.get("identifier"));
+    return get_literal(expr.identifier());
   }
   else if(expr.id()=="literal")
   {
     literalt l;
-    l.set(atoi(expr.get("literal").c_str()));
+    l.set(atoi(expr.literal().c_str()));
     return l;
   }
   else if(expr.id()=="nondet_symbol")
@@ -284,7 +284,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     return op_bv[0];
   }
-  else if(expr.id()=="or" || expr.id()=="and" || expr.id()=="xor" ||
+  else if(expr.id()=="or" || expr.is_and() || expr.id()=="xor" ||
           expr.id()=="nor" || expr.id()=="nand")
   {
     if(op.size()==0)
@@ -301,7 +301,7 @@ literalt prop_convt::convert_bool(const exprt &expr)
         return prop.lor(bv);
       else if(expr.id()=="nor")
         return prop.lnot(prop.lor(bv));
-      else if(expr.id()=="and")
+      else if(expr.is_and())
         return prop.land(bv);
       else if(expr.id()=="nand")
         return prop.lnot(prop.land(bv));
@@ -323,8 +323,8 @@ literalt prop_convt::convert_bool(const exprt &expr)
 
     bool equal=(expr.id()=="=");
 
-    if(op[0].type().id()=="bool" &&
-       op[1].type().id()=="bool")
+    if(op[0].type().is_bool() &&
+       op[1].type().is_bool())
     {
       literalt tmp1=convert(op[0]),
                tmp2=convert(op[1]);
@@ -379,7 +379,7 @@ bool prop_convt::set_equality_to_true(const exprt &expr)
     if(expr.op0().id()=="symbol")
     {
       const irep_idt &identifier=
-        expr.op0().get("identifier");
+        expr.op0().identifier();
 
       literalt tmp=convert(expr.op1());
 
@@ -410,7 +410,7 @@ Function: prop_convt::set_to
 
 void prop_convt::set_to(const exprt &expr, bool value)
 {
-  if(expr.type().id()!="bool")
+  if(!expr.type().is_bool())
   {
     std::string msg="prop_convt::set_to got "
                     "non-boolean expression:\n";
@@ -421,7 +421,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
   bool boolean=true;
 
   forall_operands(it, expr)
-    if(it->type().id()!="bool")
+    if(!it->type().is_bool())
     {
       boolean=false;
       break;
@@ -443,7 +443,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
       {
         // set_to_true
 
-        if(expr.id()=="and")
+        if(expr.is_and())
         {
           forall_operands(it, expr)
             set_to_true(*it);
@@ -593,7 +593,7 @@ exprt prop_convt::get(const exprt &expr) const
 
   tvt value;
 
-  if(expr.type().id()=="bool" &&
+  if(expr.type().is_bool() &&
      !get_bool(expr, value))
   {
     switch(value.get_value())

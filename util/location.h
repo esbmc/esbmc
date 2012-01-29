@@ -18,37 +18,37 @@ public:
   
   const irep_idt &get_file() const
   {
-    return get("file");
+    return file();
   }
 
   const irep_idt &get_line() const
   {
-    return get("line");
+    return line();
   }
 
   const irep_idt &get_column() const
   {
-    return get("column");
+    return column();
   }
 
   const irep_idt &get_function() const
   {
-    return get("function");
+    return function();
   }
 
   void set_file(const irep_idt &file)
   {
-    set("file", file);
+    this->file(file);
   }
 
   void set_line(const irep_idt &line)
   {
-    set("line", line);
+    this->line(line);
   }
 
   void set_line(unsigned line)
   {
-    set("line", line);
+    this->line(line);
   }
 
   void set_column(const irep_idt &column)
@@ -63,7 +63,7 @@ public:
 
   void set_function(const irep_idt &function)
   {
-    set("function", function);
+    this->function(function);
   }
 
 };

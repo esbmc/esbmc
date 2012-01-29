@@ -1,0 +1,171 @@
+Release Notes of the ESBMC model checker
+
+*** Version 1.18 ***
+Date 19/01/2012
++ Internal efficiency improvements
++ Fixed many pointer model errors encountered during TACAS 2012
++ Binaries for running on MS Windows (MinGW)
+
+*** Version 1.17 ***
+Date 15/10/2011
++ Release for TACAS 2012 Software Verification competition
++ Numerous minor bug fixes related to the Z3 solver backend
+
+*** Version 1.16 ***
+Date: 10/05/2011
++ New Feature
+ - Support for state hashing to reduce the number of redundant interleavings.
++ Enhancements
+ - Minor bug fixes related to the C enumeration, code location ordering and
+   memory leaks.
+
+*** Version 1.15.1 ***
+Date: 18/01/2011
++ Enhancements
+ - Minor bug fixes related to data race detection of arrays and the 
+   counterexample beautification;
+
+*** Version 1.15 ***
+Date: 17/01/2011
++ Enhancements
+ - Implementation of constant propagation for arrays, structs and unions.
+ - Minor bug fixes in the front-end;
+
+*** Version 1.14 ***
+Date: 15/12/2010
++ Enhancements
+ - Minor bug fixes related to the integer and real arithmetic encoding;
+ - Implementation of some optimization to improve the performance
+   during the loop unwinding.
+
+*** Version 1.13 ***
+Date: 23/11/2010
++ Enhancements
+ - Fixed one bug related to the SMT encoding of arrays that contain
+   structs reported by Jeremy;
+ - Integration of a new version of the SMT solver Z3 (i.e., v2.13).
+
+*** Version 1.12 ***
+Date: 08/11/2010
++ New Feature
+ - Output verification conditions into the SMT-lib logics QF_AUFBV
+   and QF_AUFLIRA (use the option --qf_aufbv or qf_auflira followed by
+   --outfile file.smt).
++ Enhancements
+ - Minor bug fixes related to the ANSI-C front-end and dynamic memory allocation.
+
+*** Version 1.11 ***
+Date: 18/10/2010
++ New Features
+ - Preliminary support for detecting memory leaks.
+
+*** Version 1.10 ***
+Date: 13/10/2010
++ New Feature
+ - Support for static partial order reduction (use the 
+   option --no-por to disable it);
++ Enhancements
+ - Fixed one bug related to context-switch before array updates;
+ - Fixed one bug related to pointer typecast reported by Jie Gao.
+
+*** Version 1.9 ***
+Date: 17/09/2010
++ New Feature
+ - Support for checking atomicity violation at visible statements 
+   (use the option --atomicity-check)
+
+*** Version 1.8 ***
+Date: 06/09/2010
++ Enhancements
+ - Included an option --control-flow-test to allow context switch before
+   control flow tests;
+ - Integration of a new version of the SMT solver Z3 (i.e., v2.11).
++ Known Issues
+ - We do not add data race checks for structs and pointers.
+
+*** Version 1.7.1 ***
+Date: 26/07/2010
++ Enhancements
+ - Fixed one bug reported by Jie Gao related to dynamic memory allocation.
++ Known Issues
+ - We do not add data race checks for structs and pointers.
+
+*** Version 1.7 ***
+Date: 22/07/2010
++ Enhancements
+ - Fixed two bugs reported by Jie Gao related to atomicity violation
+   and condition checking of "for" loops;
+ - Fixed a bug related to function pointers;
+ - Integration of a new version of the SMT solver Z3 (i.e., v2.8).
++ Known Issues
+ - We do not add data race checks for structs and pointers.
+
+*** Version 1.6 ***
+Date: 03/06/2010
++ Enhancements
+ - Integration of a new version of the SMT solver Z3 (v2.7);
+ - The UW procedure is able to find deadlocks.
++ Known Issues
+ - We do not add data race checks for pointers (i.e., we miss data race
+   bugs originated from pointers).
+
+*** Version 1.5 ***
+Date: 14/05/2010
++ New Features
+ - Support for data race detection (use the option --data-races-detection).
++ Enhancements
+ - Improved the command-line interface: (i) we provide more details about the
+   UW algorithm in the console and (ii) we also allow the user to disable the 
+   deadlock detection through the command line (thus simplifying the formula
+   to be sent to the SMT solver);
+ - Minor bug fixes related to the pthread_join function and the UW procedure
+   (now we can support thousands of control literals). 
++ Known Issues
+ - We do not add deadlock assertions to be checked using the UW procedure;
+ - We do not add data race assertions for pointers (i.e., we miss data race
+   bugs originating from pointers).
+
+*** Version 1.4.1 ***
+Date: 10/05/2010
++ Enhancements
+ - Minor bug fixes related to the concurrency stuffs.
+ - Integration of a new version of the SMT solver Z3 (v2.6).
++ Known Issues
+ - The UW procedure does not work for multi-threaded C programs that require
+   more than 500 control literals.
+
+*** Version 1.4 ***
+Date: 25/04/2010
++ New Features
+ - Support for context-bounded model checking (use option --context-switch nr);
+ - Support for detecting the potential for deadlock;
+ - Detection of abandoned locks;
+ - Detection of lost signals;
+ - Support for creating dynamically threads, mutexes, and condition variables.
++ Known Issues 
+ - The UW procedure does not work for multi-threaded C programs that require
+   more than 500 control literals.
+
+*** Version 1.3.2 ***
+Date: 08/04/2010
++ Enhancements
+ - Minor bug fixes related to concurrency reported by Byron Cook.
+
+*** Version: 1.3.1 ***
+Date: 29/03/2010
++ Enhancements
+ - Minor bug fixes related to dynamic memory allocation;
+ - Improvement in the command-line interface;
+ - Integration of a new version of the SMT solver Z3 (v2.5).
+
+*** Version: 1.3 ***
+Date: 13/03/2010
++ New features:
+ - Lazy exploration of the threads interleavings;
+ - Generate one single formula using the schedule recording approach to verify multi-threaded programs;
+ - Generate underapproximation and widening models for the multi-threaded programs; 
+ - Support for concurrent C programs with shared memory;
+ - Support for synchronization primitives with mutexes and conditions;
+ - Detection of global deadlock with mutexes and conditions;
+ - Additional support for atomic sections through the functions __ESBMC_atomic_begin() and __ESBMC_atomic_end().
+

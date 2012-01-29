@@ -3,6 +3,7 @@
 Module: GOTO Programs
 
 Author: Daniel Kroening, kroening@kroening.com
+		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
@@ -130,8 +131,8 @@ void goto_checkt::overflow_check(
 
     const typet &old_type=expr.op0().type();
 
-    unsigned new_width=atoi(expr.type().get("width").c_str());
-    unsigned old_width=atoi(old_type.get("width").c_str());
+    unsigned new_width=atoi(expr.type().width().c_str());
+    unsigned old_width=atoi(old_type.width().c_str());
 
     if(old_type.id()=="unsignedbv") new_width--;
     if(new_width>=old_width) return;
@@ -228,7 +229,6 @@ void goto_checkt::pointer_rel_check(
     {
       exprt same_object("same-object", bool_typet());
       same_object.copy_to_operands(expr.op0(), expr.op1());
-      //std::cout << "same_object.pretty(): " << same_object.pretty() << std::endl;
       add_guarded_claim(
         same_object,
         "same object violation",
@@ -278,8 +278,7 @@ void goto_checkt::bounds_check(
   if(expr.id()!="index")
     return;
 
-  if(expr.find("bounds_check").is_not_nil() &&
-     !expr.get_bool("bounds_check"))
+  if(expr.is_bounds_check_set() && !expr.bounds_check())
     return;
 
   if(expr.operands().size()!=2)
@@ -294,7 +293,7 @@ void goto_checkt::bounds_check(
     std::cerr << expr.pretty() << std::endl;
     throw "index got incomplete array";
   }
-  else if(array_type.id()!="array")
+  else if(!array_type.is_array())
     throw "bounds check expected array type, got "+array_type.id_string();
 
   std::string name=array_name(expr.op0());
@@ -340,10 +339,10 @@ void goto_checkt::bounds_check(
   }
 
   {
-    if(array_type.find("size").is_nil())
+    if(array_type.size_irep().is_nil())
       throw "index array operand of wrong type";
 
-    const exprt &size=(const exprt &)array_type.find("size");
+    const exprt &size=(const exprt &)array_type.size_irep();
 
     if(size.id()!="infinity")
     {
@@ -354,8 +353,6 @@ void goto_checkt::bounds_check(
       if(inequality.op1().type()!=inequality.op0().type())
         inequality.op1().make_typecast(inequality.op0().type());
 
-      //std::cout << "inequality.pretty(): " << inequality.pretty() << std::endl;
-      //std::cout << "guard.as_expr().pretty(): " << guard.as_expr().pretty() << std::endl;
       add_guarded_claim(
         inequality,
         name+" upper bound",
@@ -383,9 +380,9 @@ void goto_checkt::array_size_check(
   const exprt &expr,
   const irept &location)
 {
-  if(expr.type().id()=="array")
+  if(expr.type().is_array())
   {
-    const exprt &size=(exprt &)expr.type().find("size");
+    const exprt &size=(exprt &)expr.type().size_irep();
 
     if(size.type().id()=="unsignedbv")
     {
@@ -462,8 +459,8 @@ void goto_checkt::add_guarded_claim(
 
     t->guard.swap(new_expr);
     t->location=location;
-    t->location.set("comment", comment);
-    t->location.set("property", property);
+    t->location.comment(comment);
+    t->location.property(property);
   }
 }
 
@@ -484,6 +481,7 @@ void goto_checkt::check_rec(
   guardt &guard,
   bool address)
 {
+
   if(address)
   {
     if(expr.id()=="dereference")
@@ -505,13 +503,13 @@ void goto_checkt::check_rec(
     return;
   }
 
-  if(expr.id()=="address_of")
+  if(expr.is_address_of())
   {
     assert(expr.operands().size()==1);
     check_rec(expr.op0(), guard, true);
     return;
   }
-  else if(expr.id()=="and" || expr.id()=="or")
+  else if(expr.is_and() || expr.id()=="or")
   {
     if(!expr.is_boolean())
       throw expr.id_string()+" must be Boolean, but got "+
@@ -580,7 +578,6 @@ void goto_checkt::check_rec(
   forall_operands(it, expr)
     check_rec(*it, guard, false);
 
-  //std::cout << "expr.id(): " << expr.id() << std::endl;
   if(expr.id()=="index")
   {
     bounds_check(expr, guard);
@@ -623,10 +620,7 @@ void goto_checkt::check_rec(
     if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
 		&& !options.get_bool_option("z3-ir"))
     {
-      if (use_boolector)
-        options.set_option("bl", true);
-      else
-        options.set_option("int-encoding", false);
+      options.set_option("int-encoding", false);
     }
   }
   else if (expr.id() == "bitand" || expr.id() == "bitor" ||
@@ -636,8 +630,7 @@ void goto_checkt::check_rec(
 	if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
 		&& !options.get_bool_option("z3-ir"))
 	{
-	  if (use_boolector)
-        options.set_option("bl", true);
+          options.set_option("int-encoding", false);
     }
   }
   else if (expr.id() == "mod")
@@ -648,27 +641,22 @@ void goto_checkt::check_rec(
 	if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
 		&& !options.get_bool_option("z3-ir"))
 	{
-	  if (use_boolector)
-	    options.set_option("bl", true);
-	  else
-        options.set_option("int-encoding", false);
+          options.set_option("int-encoding", false);
 	}
   }
   else if (expr.id() == "struct" || expr.id() == "union"
 		    || expr.type().id()=="pointer" || expr.id()=="member" ||
-		    (expr.type().id() == "array" && expr.type().subtype().id() == "array"))
+		    (expr.type().is_array() && expr.type().subtype().is_array()))
   {
 	use_boolector=false; //always deactivate boolector
-	options.set_option("bl", false);
 	options.set_option("z3", true); //activate Z3 for solving the VCs
   }
   else if (expr.type().id()=="fixedbv")
   {
 	use_boolector=false;
-	options.set_option("bl", false);
 	options.set_option("z3", true);
 	if (!options.get_bool_option("z3-bv"))
-      options.set_option("int-encoding", true);
+          options.set_option("int-encoding", true);
 
 	if (!options.get_bool_option("eager"))
 	  options.set_option("no-assume-guarantee", false);
@@ -677,7 +665,6 @@ void goto_checkt::check_rec(
   if (options.get_bool_option("qf_aufbv"))
   {
 	use_boolector=false; //always deactivate boolector
-	options.set_option("bl", false);
     options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
     options.set_option("int-encoding", false);
   }
@@ -685,7 +672,6 @@ void goto_checkt::check_rec(
   if (options.get_bool_option("qf_auflira"))
   {
 	use_boolector=false; //always deactivate boolector
-	options.set_option("bl", false);
     options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
     options.set_option("int-encoding", true);
   }
@@ -738,13 +724,14 @@ void goto_checkt::goto_check(goto_programt &goto_program)
 
     if(i.is_other())
     {
-      const irep_idt &statement=i.code.get("statement");
+      const irep_idt &statement=i.code.statement();
 
       if(statement=="expression")
       {
         check(i.code);
       }
-      else if(statement=="printf")
+      else if(statement=="printf"
+    		  || statement=="cpp-try")
       {
         forall_operands(it, i.code)
           check(*it);

@@ -97,9 +97,9 @@ void goto_trace_stept::output(
     irep_idt identifier;
 
     if(original_lhs.is_not_nil())
-      identifier=original_lhs.get("identifier");
+      identifier=original_lhs.identifier();
     else
-      identifier=lhs.get("identifier");
+      identifier=lhs.identifier();
 
     out << "  " << identifier
         << " = " << from_expr(ns, identifier, value)
@@ -142,7 +142,7 @@ void counterexample_value(
   const exprt &value,
   const pretty_namest &pretty_names)
 {
-  const irep_idt &identifier=lhs.get("identifier");
+  const irep_idt &identifier=lhs.identifier();
   std::string value_string;
 
   if(value.is_nil())
@@ -152,22 +152,12 @@ void counterexample_value(
     value_string=from_expr(ns, identifier, value);
     if(value.is_constant())
     {
-      if(value.type().id()=="signedbv" ||
-    	 value.type().id()=="unsignedbv" ||
-    	 value.type().id()=="fixedbv" ||
-    	 value.type().id()=="floatbv")
-        value_string+= " ("+value.get_string("value")+")";
+      if(value.type().id()==typet::t_signedbv ||
+	 value.type().id()==typet::t_unsignedbv ||
+    	 value.type().id()==typet::t_fixedbv ||
+    	 value.type().id()==typet::t_floatbv)
+        value_string+= " ("+value.value().as_string()+")";
     }
-#if 0
-    else if (lhs.type().id()=="pointer")
-    {
-      size_t found;
-      found=value_string.find_first_of("@");
-      if (found!=std::string::npos)
-        value_string.erase(found,value_string.size());
-      value_string="&"+value_string;
-    }
-#endif
   }
 
   #if 1
@@ -218,18 +208,18 @@ void show_goto_trace_gui(
       out << "FAILED" << std::endl
           << it->comment << std::endl // value
           << std::endl // PC
-          << location.get("file") << std::endl
-          << location.get("line") << std::endl
-          << location.get("column") << std::endl;
+          << location.file() << std::endl
+          << location.line() << std::endl
+          << location.column() << std::endl;
     }
     else if(it->type==goto_trace_stept::ASSIGNMENT)
     {
       irep_idt identifier;
 
       if(it->original_lhs.is_not_nil())
-        identifier=it->original_lhs.get("identifier");
+        identifier=it->original_lhs.identifier();
       else
-        identifier=it->lhs.get("identifier");
+        identifier=it->lhs.identifier();
 
       std::string value_string=from_expr(ns, identifier, it->value);
 
@@ -245,15 +235,15 @@ void show_goto_trace_gui(
           << it->value.type().to_string() << ","
           << value_string << std::endl
           << it->step_nr << std::endl
-          << it->pc->location.get("file") << std::endl
-          << it->pc->location.get("line") << std::endl
-          << it->pc->location.get("column") << std::endl;
+          << it->pc->location.file() << std::endl
+          << it->pc->location.line() << std::endl
+          << it->pc->location.column() << std::endl;
     }
     else if(location!=previous_location)
     {
       // just the location
 
-      if(location.get("file")!="")
+      if(location.file()!="")
       {
         out << "TRACE" << std::endl;
 
@@ -262,9 +252,9 @@ void show_goto_trace_gui(
             << ","             // type
             << "" << std::endl // value
             << it->step_nr << std::endl
-            << location.get("file") << std::endl
-            << location.get("line") << std::endl
-            << location.get("column") << std::endl;
+            << location.file() << std::endl
+            << location.line() << std::endl
+            << location.column() << std::endl;
       }
     }
 
@@ -299,6 +289,13 @@ void show_state_header(
 
   out << " " << location
       << " thread " << state.thread_nr << std::endl;
+
+  // Print stack trace
+
+  std::vector<dstring>::const_iterator it;
+  for (it = state.stack_trace.begin(); it != state.stack_trace.end(); it++)
+    out << it->as_string() << std::endl;
+
   out << "----------------------------------------------------" << std::endl;
 }
 

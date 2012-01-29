@@ -160,10 +160,10 @@ Function: exprt::make_typecast
 
 void exprt::make_typecast(const typet &_type)
 {
-  exprt new_expr("typecast");
+  exprt new_expr(exprt::typecast);
 
   new_expr.move_to_operands(*this);
-  new_expr.set("type", _type);
+  new_expr.set(i_type, _type);
 
   swap(new_expr);
 }
@@ -195,13 +195,13 @@ void exprt::make_not()
 
   exprt new_expr;
 
-  if(id()=="not" && operands().size()==1)
+  if(id()==i_not && operands().size()==1)
   {
     new_expr.swap(operands().front());
   }
   else
   {
-    new_expr=exprt("not", type());
+    new_expr=exprt(i_not, type());
     new_expr.move_to_operands(*this);
   }
 
@@ -222,7 +222,7 @@ Function: exprt::is_constant
 
 bool exprt::is_constant() const
 {
-  return id()=="constant";
+  return id()==constant;
 }
 
 /*******************************************************************\
@@ -240,8 +240,8 @@ Function: exprt::is_true
 bool exprt::is_true() const
 {
   return is_constant() &&
-         type().id()=="bool" &&
-         get("value")!="false";
+         type().is_bool() &&
+         get(a_value)!="false";
 }
 
 /*******************************************************************\
@@ -259,8 +259,8 @@ Function: exprt::is_false
 bool exprt::is_false() const
 {
   return is_constant() &&
-         type().id()=="bool" &&
-         get("value")=="false";
+         type().is_bool() &&
+         get(a_value)=="false";
 }
 
 /*******************************************************************\
@@ -277,8 +277,8 @@ Function: exprt::make_bool
 
 void exprt::make_bool(bool value)
 {
-  *this=exprt("constant", typet("bool"));
-  set("value", value?"true":"false");
+  *this=exprt(constant, typet("bool"));
+  set(a_value, value?i_true:i_false);
 }
 
 /*******************************************************************\
@@ -295,8 +295,8 @@ Function: exprt::make_true
 
 void exprt::make_true()
 {
-  *this=exprt("constant", typet("bool"));
-  set("value", "true");
+  *this=exprt(constant, typet("bool"));
+  set(a_value, i_true);
 }
 
 /*******************************************************************\
@@ -313,8 +313,8 @@ Function: exprt::make_false
 
 void exprt::make_false()
 {
-  *this=exprt("constant", typet("bool"));
-  set("value", "false");
+  *this=exprt(constant, typet("bool"));
+  set(a_value, i_false);
 }
 
 /*******************************************************************\
@@ -355,7 +355,7 @@ void exprt::negate()
   else if(type_id=="integer")
   {
     if(is_constant())
-      set("value", integer2string(-string2integer(get_string("value"))));
+      set(a_value, integer2string(-string2integer(get_string(a_value))));
     else if(id()=="unary-")
     {
       exprt tmp;
@@ -388,7 +388,7 @@ Function: exprt::is_boolean
 
 bool exprt::is_boolean() const
 {
-  return type().id()=="bool";
+  return type().is_bool();
 }
 
 /*******************************************************************\
@@ -407,7 +407,7 @@ bool exprt::is_zero() const
 {
   if(is_constant())
   {
-    const std::string &value=get_string("value");
+    const std::string &value=get_string(a_value);
     const irep_idt &type_id=type().id_string();
 
     if(type_id=="integer" || type_id=="natural")
@@ -453,7 +453,7 @@ bool exprt::is_one() const
 {
   if(is_constant())
   {
-    const std::string &value=get_string("value");
+    const std::string &value=get_string(a_value);
     const irep_idt &type_id=type().id_string();
 
     if(type_id=="integer" || type_id=="natural")
@@ -502,25 +502,25 @@ bool exprt::sum(const exprt &expr)
 
   if(type_id=="integer" || type_id=="natural")
   {
-    set("value", integer2string(
-      string2integer(get_string("value"))+
-      string2integer(expr.get_string("value"))));
+    set(a_value, integer2string(
+      string2integer(get_string(a_value))+
+      string2integer(expr.get_string(a_value))));
     return false;
   }
   else if(type_id=="unsignedbv" || type_id=="signedbv")
   {
-    set("value", integer2binary(
-      binary2integer(get_string("value"), false)+
-      binary2integer(expr.get_string("value"), false),
-      atoi(type().get("width").c_str())));
+    set(a_value, integer2binary(
+      binary2integer(get_string(a_value), false)+
+      binary2integer(expr.get_string(a_value), false),
+      atoi(type().width().c_str())));
     return false;
   }
   else if(type_id=="fixedbv")
   {
-    set("value", integer2binary(
-      binary2integer(get_string("value"), false)+
-      binary2integer(expr.get_string("value"), false),
-      atoi(type().get("width").c_str())));
+    set(a_value, integer2binary(
+      binary2integer(get_string(a_value), false)+
+      binary2integer(expr.get_string(a_value), false),
+      atoi(type().width().c_str())));
     return false;
   }
   else if(type_id=="floatbv")
@@ -555,17 +555,17 @@ bool exprt::mul(const exprt &expr)
 
   if(type_id=="integer" || type_id=="natural")
   {
-    set("value", integer2string(
-      string2integer(get_string("value"))*
-      string2integer(expr.get_string("value"))));
+    set(a_value, integer2string(
+      string2integer(get_string(a_value))*
+      string2integer(expr.get_string(a_value))));
     return false;
   }
   else if(type_id=="unsignedbv" || type_id=="signedbv")
   {
-    set("value", integer2binary(
-      binary2integer(get_string("value"), false)*
-      binary2integer(expr.get_string("value"), false),
-      atoi(type().get("width").c_str())));
+    set(a_value, integer2binary(
+      binary2integer(get_string(a_value), false)*
+      binary2integer(expr.get_string(a_value), false),
+      atoi(type().width().c_str())));
     return false;
   }
   else if(type_id=="fixedbv")
@@ -608,13 +608,19 @@ bool exprt::subtract(const exprt &expr)
 
   if(type_id=="integer" || type_id=="natural")
   {
-    set("value", integer2string(
-      string2integer(get_string("value"))-
-      string2integer(expr.get_string("value"))));
+    set(a_value, integer2string(
+      string2integer(get_string(a_value))-
+      string2integer(expr.get_string(a_value))));
     return false;
   }
   else if(type_id=="unsignedbv" || type_id=="signedbv")
   {
+    set(a_value, integer2binary(
+      binary2integer(get_string(a_value), false)-
+      binary2integer(expr.get_string(a_value), false),
+      atoi(type().width().c_str())));
+    return false;
+  } else if(type_id=="fixedbv") {
     set("value", integer2binary(
       binary2integer(get_string("value"), false)-
       binary2integer(expr.get_string("value"), false),
@@ -651,3 +657,55 @@ const locationt &exprt::find_location() const
 
   return static_cast<const locationt &>(get_nil_irep());
 }
+
+irep_idt exprt::trans = dstring("trans");
+irep_idt exprt::symbol = dstring("symbol");
+irep_idt exprt::plus = dstring("+");
+irep_idt exprt::minus = dstring("-");
+irep_idt exprt::mult = dstring("*");
+irep_idt exprt::div = dstring("/");
+irep_idt exprt::mod = dstring("mod");
+irep_idt exprt::equality = dstring("=");
+irep_idt exprt::notequal = dstring("notequal");
+irep_idt exprt::index = dstring("index");
+irep_idt exprt::arrayof = dstring("array_of");
+irep_idt exprt::objdesc = dstring("object_descriptor");
+irep_idt exprt::dynobj = dstring("dynamic_object");
+irep_idt exprt::typecast = dstring("typecast");
+irep_idt exprt::implies = dstring("=>");
+irep_idt exprt::i_and = dstring("and");
+irep_idt exprt::i_xor = dstring("xor");
+irep_idt exprt::i_or = dstring("or");
+irep_idt exprt::i_not = dstring("not");
+irep_idt exprt::addrof = dstring("address_of");
+irep_idt exprt::deref = dstring("dereference");
+irep_idt exprt::i_if = dstring("if");
+irep_idt exprt::with = dstring("with");
+irep_idt exprt::member = dstring("member");
+irep_idt exprt::isnan = dstring("isnan");
+irep_idt exprt::ieee_floateq = dstring("ieee_float_equal");
+irep_idt exprt::i_type = dstring("type");
+irep_idt exprt::constant = dstring("constant");
+irep_idt exprt::i_true = dstring("true");
+irep_idt exprt::i_false = dstring("false");
+irep_idt exprt::i_lt = dstring("<");
+irep_idt exprt::i_gt = dstring(">");
+irep_idt exprt::i_le = dstring("<=");
+irep_idt exprt::i_ge = dstring(">=");
+irep_idt exprt::i_bitand = dstring("bitand");
+irep_idt exprt::i_bitor = dstring("bitor");
+irep_idt exprt::i_bitxor = dstring("bitxor");
+irep_idt exprt::i_bitnand = dstring("bitnand");
+irep_idt exprt::i_bitnor = dstring("bitnor");
+irep_idt exprt::i_bitnxor = dstring("bitnxor");
+irep_idt exprt::i_bitnot = dstring("bitnot");
+irep_idt exprt::i_ashr = dstring("ashr");
+irep_idt exprt::i_lshr = dstring("lshr");
+irep_idt exprt::i_shl = dstring("shl");
+irep_idt exprt::abs = dstring("abs");
+irep_idt exprt::argument = dstring("argument");
+
+irep_idt exprt::a_value = dstring("value");
+
+irep_idt exprt::o_operands = dstring("operands");
+irep_idt exprt::o_location = dstring("#location");

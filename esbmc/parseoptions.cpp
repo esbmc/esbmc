@@ -9,15 +9,20 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <memory>
 
+#ifndef _WIN32
 extern "C" {
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
 
-#include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/sendfile.h>
+#include <sys/time.h>
+#include <sys/types.h>
 }
+#endif
 
 #include <config.h>
 #include <expr_util.h>
@@ -28,8 +33,6 @@ extern "C" {
 #include <goto-programs/show_claims.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/read_goto_binary.h>
-#include <goto-programs/interpreter.h>
-#include <goto-programs/goto_threads.h>
 #include <goto-programs/string_abstraction.h>
 #include <goto-programs/string_instrumentation.h>
 #include <goto-programs/loop_numbers.h>
@@ -52,6 +55,7 @@ extern "C" {
 
 // jmorse - could be somewhere better
 
+#ifndef _WIN32
 void
 timeout_handler(int dummy __attribute__((unused)))
 {
@@ -64,6 +68,7 @@ timeout_handler(int dummy __attribute__((unused)))
   // and results in the allocator locking against itself. So use _exit instead
   _exit(1);
 }
+#endif
 
 /*******************************************************************\
 
@@ -123,18 +128,15 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("boolector-bv"))
   {
-    options.set_option("bl", true);
     options.set_option("boolector-bv", true);
+    options.set_option("int-encoding", false);
   }
-
-  //options.set_option("bl", true);
 
   if(cmdline.isset("z3-bv"))
   {
     options.set_option("z3", true);
     options.set_option("z3-bv", true);
     options.set_option("int-encoding", false);
-    options.set_option("bl", false);
   }
 
   if (cmdline.isset("lazy"))
@@ -147,12 +149,17 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
   	options.set_option("no-assume-guarantee", false);
 
+  if(cmdline.isset("btor"))
+  {
+    options.set_option("btor", true);
+    options.set_option("boolector-bv", true);
+  }
+
   if(cmdline.isset("z3-ir"))
   {
     options.set_option("z3", true);
     options.set_option("z3-ir", true);
     options.set_option("int-encoding", true);
-    options.set_option("bl", false);
   }
 
   if(cmdline.isset("no-slice"))
@@ -161,8 +168,9 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.set_option("string-abstraction", true);
   options.set_option("fixedbv", true);
 
-  if (!options.get_bool_option("z3") && !options.get_bool_option("bl"))
+  if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3"))
   {
+    // If no solver options given, default to z3 integer encoding
     options.set_option("z3", true);
     options.set_option("int-encoding", true);
   }
@@ -182,12 +190,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", true);
   }
 
-  if(cmdline.isset("btor"))
-  {
-	options.set_option("btor", true);
-    options.set_option("bl", true);
-    options.set_option("boolector-bv", true);
-  }
 
    if(cmdline.isset("context-switch"))
      options.set_option("context-switch", cmdline.getval("context-switch"));
@@ -228,8 +230,15 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("smtlib-ileave-num", "1");
 
+  if(cmdline.isset("inlining"))
+    options.set_option("inlining", true);
+
   // jmorse
   if(cmdline.isset("timeout")) {
+#ifdef _WIN32
+    std::cerr << "Timeout unimplemented on Windows, sorry" << std::endl;
+    abort();
+#else
     int len, mult, timeout;
 
     const char *time = cmdline.getval("timeout");
@@ -260,9 +269,14 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     timeout *= mult;
     signal(SIGALRM, timeout_handler);
     alarm(timeout);
+#endif
   }
 
   if(cmdline.isset("memlimit")) {
+#ifdef _WIN32
+    std::cerr << "Can't memlimit on Windows, sorry" << std::endl;
+    abort();
+#else
     unsigned long len, mult, size;
 
     const char *limit = cmdline.getval("memlimit");
@@ -299,6 +313,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
       perror("Couldn't set memory limit");
       abort();
     }
+#endif
   }
 
   config.options = options;
@@ -332,8 +347,8 @@ int cbmc_parseoptionst::doit()
     cmdline.isset("gen-interface"))
 
   {
-    error("This version of CBMC has no support for "
-          " hardware modules. Please use hw-cbmc.");
+    error("This version has no support for "
+          " hardware modules.");
     return 1;
   }
 
@@ -474,13 +489,6 @@ bool cbmc_parseoptionst::get_goto_program(
         ui_message_handler);
     }
 
-    if(cmdline.isset("interpreter"))
-    {
-      status("Starting interpeter");
-      interpreter(context, goto_functions);
-      return true;
-    }
-
     if(process_goto_program(bmc, goto_functions))
       return true;
   }
@@ -499,12 +507,6 @@ bool cbmc_parseoptionst::get_goto_program(
 
   catch(int)
   {
-    return true;
-  }
-
-  catch(std::bad_alloc)
-  {
-    error("Out of memory");
     return true;
   }
 
@@ -543,7 +545,7 @@ void cbmc_parseoptionst::preprocessing()
       return;
     }
 
-    if (c_preprocess(infile, filename, std::cout, *get_message_handler()))
+    if (c_preprocess(infile, filename, std::cout, false, *get_message_handler()))
       error("PREPROCESSING ERROR");
   }
 
@@ -560,11 +562,6 @@ void cbmc_parseoptionst::preprocessing()
   catch(int)
   {
   }
-
-  catch(std::bad_alloc)
-  {
-    error("Out of memory");
-  }
 }
 
 void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
@@ -577,7 +574,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
       // Munge back into the shape of an actual string
       std::string str = "";
       forall_operands(iter2, it->second.value) {
-        char c = (char)strtol(iter2->get("value").as_string().c_str(), NULL, 2);
+        char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
         if (c != 0)
           str += c;
         else
@@ -619,7 +616,7 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
 {
 
   if (e.id() ==  "symbol") {
-    std::string sym = e.get("identifier").as_string();
+    std::string sym = e.identifier().as_string();
 
 // Originally this piece of code renamed all the symbols in the property
 // expression to ones specified by the user. However, there's no easy way of
@@ -634,7 +631,7 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
       assert(0 && "Missing symbol mapping for property monitor");
 
     sym = strings[sym];
-    e.set("identifier", sym);
+    e.identifier(sym);
 #endif
 
     used_syms.insert(sym);
@@ -683,7 +680,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
   // Is this actually an assignment that we're interested in?
   std::map<std::string, std::pair<std::set<std::string>, exprt> >::const_iterator it;
-  std::string sym_name = sym.get("identifier").as_string();
+  std::string sym_name = sym.identifier().as_string();
   std::set<std::pair<std::string, exprt> > triggered;
   for (it = monitors.begin(); it != monitors.end(); it++) {
     if (it->second.first.find(sym_name) == it->second.first.end())
@@ -715,7 +712,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   }
 
   typet uint32 = typet("unsignedbv");
-  uint32.set("width", 32);
+  uint32.width(32);
   new_insn.type = ASSIGN;
   new_insn.function = insn->function;
   constant_exprt c_expr = constant_exprt(uint32);
@@ -743,7 +740,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
 static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
 {
-  std::string identifier = expr.get_string("identifier");
+  std::string identifier = expr.identifier().as_string();
 
   if (expr.id() != "symbol") {
     unsigned int globals = 0;
@@ -759,7 +756,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
   if (identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
     return 0;
 
-  if (sym.static_lifetime || sym.type.get("#dynamic") != "")
+  if (sym.static_lifetime || sym.type.is_dynamic_set())
     return 1;
 
   return 0;
@@ -787,7 +784,7 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
         case FUNCTION_CALL:
           {
             code_function_callt deref_code = to_code_function_call(pit->code);
-            if (deref_code.function().get("identifier") == "c::__ESBMC_yield")
+            if (deref_code.function().identifier() == "c::__ESBMC_yield")
               print_insn = true;
           }
           break;
@@ -866,7 +863,8 @@ bool cbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     // do partial inlining
-    goto_partial_inline(goto_functions, ns, ui_message_handler);
+    if(!cmdline.isset("inlining"))
+      goto_partial_inline(goto_functions, ns, ui_message_handler);
 
     if(!cmdline.isset("show-features"))
     {
@@ -969,12 +967,6 @@ bool cbmc_parseoptionst::process_goto_program(
     return true;
   }
 
-  catch(std::bad_alloc)
-  {
-    error("Out of memory");
-    return true;
-  }
-
   return false;
 }
 
@@ -1001,6 +993,14 @@ int cbmc_parseoptionst::do_bmc(
   status("Starting Bounded Model Checking");
 
   bmc1.run(goto_functions);
+
+#ifndef _WIN32
+  if (bmc1.options.get_bool_option("memstats")) {
+    int fd = open("/proc/self/status", O_RDONLY);
+    sendfile(2, fd, NULL, 100000);
+    close(fd);
+  }
+#endif
 
   return 0;
 }
@@ -1034,6 +1034,7 @@ void cbmc_parseoptionst::help()
     " -I path                      set include path\n"
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
+    " --inlining                   inlining function calls\n"
     " --program-only               only show program expression\n"
     " --all-claims                 keep all claims\n"
     " --show-loops                 show the loops in the program\n"
@@ -1046,7 +1047,7 @@ void cbmc_parseoptionst::help()
     " --little-endian              allow little-endian word-byte conversions\n"
     " --big-endian                 allow big-endian word-byte conversions\n"
     " --16, --32, --64             set width of machine word\n"
-    " --version                    show current ESBMC version and exit\n"
+    " --version                    show current ESBMC version and exit\n\n"
     " --- BMC options ------------------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"
@@ -1076,11 +1077,14 @@ void cbmc_parseoptionst::help()
     " --deadlock-check             enable global and local deadlock check with mutex\n"
     " --data-races-check           enable data races check\n"
     " --atomicity-check            enable atomicity violation check at visible assignments\n\n"
-    " --- concurrency checking ---------------------------------------------------------------\n\n"
+    " --- scheduling approaches ---------------------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
-    " --context-switch nr          limit the number of context switches for each thread \n"
     " --uw-model                   use under-approximation and widening approach\n"
     " --core-size nr               limit the number of assumptions in the UW approach (experimental)\n"
+    " --round-robin                use the round robin scheduling approach\n"
+    " --time-slice                 set the time slice of the round robin algorithm \n\n"
+    " --- concurrency checking ---------------------------------------------------------------\n\n"
+    " --context-switch nr          limit the number of context switches for each thread \n"
     " --state-hashing              enable state-hashing to prune the state space exploration\n"
     " --control-flow-test          enable context switch before control flow tests\n"
     " --no-lock-check              do not do lock acquisition ordering check\n"
@@ -1112,7 +1116,6 @@ void cbmc_parseoptionst::help()
 #if 0
     " --arrays-uf-never            never turn arrays into uninterpreted functions\n"
     " --arrays-uf-always           always turn arrays into uninterpreted functions\n"
-    " --interpreter                do concrete execution\n"
 #endif
 #if 0
     " --xml-ui                     use XML-formatted output\n"

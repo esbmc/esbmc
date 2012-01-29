@@ -54,18 +54,23 @@ public:
   explicit exprt(const irep_idt &_id):irept(_id) { }
   exprt(const irep_idt &_id, const typet &_type):irept(_id) { type()=_type; }
  
-  typet &type() { return static_cast<typet &>(add("type")); }
-  const typet &type() const { return static_cast<const typet &>(find("type")); }
-
   bool has_operands() const
-  { return !find("operands").is_nil(); }
+  { return !find(o_operands).is_nil(); }
 
   operandst &operands()
-  { return (operandst &)(add("operands").get_sub()); }
+  { return (operandst &)(add(o_operands).get_sub()); }
   
   const operandst &operands() const
-  { return (const operandst &)(find("operands").get_sub()); }
-   
+  { return (const operandst &)(find(o_operands).get_sub()); }
+
+  const irep_idt &value(void) const {
+    return get(a_value);
+  }
+
+  void value(irep_idt val) {
+    set(a_value, val);
+  };
+
   exprt &op0()
   { return operands().front(); }
 
@@ -152,12 +157,12 @@ public:
 
   const locationt &location() const
   {
-    return static_cast<const locationt &>(find("#location"));
+    return static_cast<const locationt &>(cmt_location());
   }
 
   locationt &location()
   {
-    return static_cast<locationt &>(add("#location"));
+    return static_cast<locationt &>(add(o_location));
   }
   
   exprt &add_expr(const std::string &name)
@@ -169,6 +174,62 @@ public:
   {
     return static_cast<const exprt &>(find(name));
   }
+
+  // Actual expression nodes
+  static irep_idt trans;
+  static irep_idt symbol;
+  static irep_idt plus;
+  static irep_idt minus;
+  static irep_idt mult;
+  static irep_idt div;
+  static irep_idt mod;
+  static irep_idt equality;
+  static irep_idt notequal;
+  static irep_idt index;
+  static irep_idt arrayof;
+  static irep_idt objdesc;
+  static irep_idt dynobj;
+  static irep_idt typecast;
+  static irep_idt implies;
+  static irep_idt i_and;
+  static irep_idt i_xor;
+  static irep_idt i_or;
+  static irep_idt i_not;
+  static irep_idt addrof;
+  static irep_idt deref;
+  static irep_idt i_if;
+  static irep_idt with;
+  static irep_idt member;
+  static irep_idt isnan;
+  static irep_idt ieee_floateq;
+  static irep_idt i_type;
+  static irep_idt constant;
+  static irep_idt i_true;
+  static irep_idt i_false;
+  static irep_idt i_lt;
+  static irep_idt i_gt;
+  static irep_idt i_le;
+  static irep_idt i_ge;
+  static irep_idt i_bitand;
+  static irep_idt i_bitor;
+  static irep_idt i_bitxor;
+  static irep_idt i_bitnand;
+  static irep_idt i_bitnor;
+  static irep_idt i_bitnxor;
+  static irep_idt i_bitnot;
+  static irep_idt i_ashr;
+  static irep_idt i_lshr;
+  static irep_idt i_shl;
+  static irep_idt abs;
+  static irep_idt argument;
+
+  // Expression attributes
+  static irep_idt a_value;
+
+  // Other foo
+protected:
+  static irep_idt o_operands;
+  static irep_idt o_location;
 };
 
 typedef std::list<exprt> expr_listt;

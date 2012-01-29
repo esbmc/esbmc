@@ -17,9 +17,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/prop/prop.h>
 #include <solvers/prop/prop_conv.h>
+#ifdef BOOLECTOR
 #include <solvers/boolector/boolector_dec.h>
+#endif
 #ifdef Z3
-#include <solvers/z3/z3_dec.h>
+#include <solvers/z3/z3_conv.h>
 #endif
 #include <solvers/sat/cnf.h>
 #include <solvers/sat/satcheck.h>
@@ -111,12 +113,14 @@ protected:
     bv_cbmct bv_cbmc;
   };
 
+#ifdef BOOLECTOR
   class boolector_solver : public solver_base {
   public:
     boolector_solver(bmc_baset &bmc);
   protected:
     boolector_dect boolector_dec;
   };
+#endif
 
 #ifdef Z3
   class z3_solver : public solver_base {
@@ -124,7 +128,7 @@ protected:
     z3_solver(bmc_baset &bmc);
     virtual bool run_solver();
   protected:
-    z3_dect z3_dec;
+    z3_convt z3_conv;
   };
 #endif
 
@@ -180,6 +184,7 @@ protected:
   virtual void show_program();
   virtual void report_success();
   virtual void report_failure();
+  virtual void write_checkpoint();
 
   virtual void error_trace(
     const prop_convt &prop_conv);

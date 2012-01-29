@@ -27,10 +27,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _WIN32
+#include <unistd.h>
+#else
+#include <windows.h>
+#define YY_NO_UNISTD_H
+// I am going to gnaw my own leg off.
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 
@@ -490,8 +497,28 @@ prtline()
 			s = sheap("%s: %s\n", Mfile, ifiles->fname);
 			write(ofd, s, strlen((char *)s));
 		}
-	} else
-		putstr(sheap("# %d \"%s\"\n", ifiles->lineno, ifiles->fname));
+	} else {
+		usch *tmp, *put;
+		unsigned int i, len, idx;
+		/* jmorse: for greater windows compatibility, escape backslashes
+		 * in the file path. The ESBMC parser/scanner _really_ doesn't
+		 * like them. (Presumably in the past MSVC has escaped them)*/
+		tmp = sheap("# %d \"%s\"\n", ifiles->lineno, ifiles->fname);
+		len = strlen(tmp);
+		put = malloc(len * 2 + 2);
+		for (i = 0, idx = 0; i < len; i++) {
+			if (tmp[i] == '\\') {
+				put[idx++] = '\\';
+				put[idx++] = '\\';
+			} else {
+				put[idx++] = tmp[i];
+			}
+		}
+		put[idx++] = 0;
+		putstr(put);
+//		free(put);
+//		free(tmp);
+	}
 	stringbuf = os;
 }
 

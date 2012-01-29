@@ -1,18 +1,18 @@
-include ../../config.inc
-include ../../local.inc
+ESBMCDIR= $(shell pwd)/../..
+include $(ESBMCDIR)/config.inc
+MAINOBJ=$(OBJDIR)/headers.o
 
-OBJS= stddef.o stdarg.o stdbool.o
+PLAINOBJS= stddef.o stdarg.o stdbool.o pthread.o pthreadtypes.o
+OBJS= $(PLAINOBJS:%.o=$(OBJDIR)/%.o)
 
-all: headers.o
+all: $(OBJDIR)/headers.o
 
-headers.o: $(OBJS)
-	$(LD) $(LDFLAGS) $^ -o $@ -r
-
-.h.o:
-	$(LD) $(LDFLAGS) -b binary $< -o $@ -r
+$(OBJDIR)/%.o : %.h
+	$(BLOBGENLD) $(LDFLAGS) -b binary $< -o $@ -r
 
 clean:
-	-rm *.o
-	-rm *.d
+	-rm $(OBJS) $(MAINOBJ) .deps
 
 .PHONY: clean
+
+include $(ESBMCDIR)/common

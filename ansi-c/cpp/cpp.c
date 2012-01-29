@@ -68,19 +68,23 @@
 
 #include "config.h"
 
-#include <sys/wait.h>
-
+#ifndef _WIN32
 #include <stdbool.h>
+#include <unistd.h>
+#else
+#include <windows.h>
+#include <malloc.h>
+#define false 0
+#define true !0
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 #include <ctype.h>
 
 #include "iface.h"
@@ -107,6 +111,11 @@ int dflag;	/* debug printouts */
 #else
 #define DPRINT(x)
 #define DDPRINT(x)
+#endif
+
+/* Hacks for appeasing Windows */
+#ifdef _WIN32
+const char *optarg = "(no optarg on windows)";
 #endif
 
 int ofd;
@@ -138,6 +147,9 @@ int	flslvl;
 int	elflvl;
 int	elslvl;
 usch *stringbuf = sbf;
+
+static usch	sbf[SBSIZE];
+/* C command */
 
 /*
  * Macro replacement list syntax:
@@ -215,6 +227,7 @@ record_builtin_macros()
 {
 	time_t t;
 	struct symtab *nl;
+	usch *n;
 
 	filloc = lookup((usch *)"__FILE__", ENTER);
 	linloc = lookup((usch *)"__LINE__", ENTER);
@@ -223,7 +236,7 @@ record_builtin_macros()
 	pragloc->value = (usch *)"";
 
 	t = time(NULL);
-	usch *n = (usch *)ctime(&t);
+	n = (usch *)ctime(&t);
 
 	/*
 	 * Manually move in the predefined macros.
@@ -840,7 +853,21 @@ subst(struct symtab *sp, struct recur *rp)
 	 * First check for special macros.
 	 */
 	if (sp == filloc) {
-		(void)sheap("\"%s\"", ifiles->fname);
+		usch *put;
+		unsigned int i, idx, len;
+		len = strlen(ifiles->fname);
+		put = malloc(len * 2 + 2);
+		for (i = 0, idx = 0; i < len; i++) {
+			if (ifiles->fname[i] == '\\') {
+				put[idx++] = '\\';
+				put[idx++] = '\\';
+			} else {
+				put[idx++] = ifiles->fname[i];
+			}
+		}
+                put[idx] = '\0';
+		(void)sheap("\"%s\"", put);
+
 		return 1;
 	} else if (sp == linloc) {
 		(void)sheap("%d", ifiles->lineno);
@@ -1499,3 +1526,25 @@ lookup(usch *key, int enterf)
 	return (struct symtab *)new->lr[bit];
 }
 
+void
+cpp_clear(void)
+{
+
+  /* No attempt at memory managmenet */
+  stringbuf = sbf;
+  trulvl = flslvl = elflvl = elslvl = 0;
+  filloc = linloc = pragloc = NULL;
+  incdir[0] = NULL;
+  incdir[1] = NULL;
+  ofd = 0;
+  memset(outbuf, 0, sizeof(outbuf));
+  obufp = istty = inmac = Cflag = Mflag = dMflag = 0;
+  Mfile = NULL;
+  initar = NULL;
+  memset(sbf, 0, sizeof(sbf));
+  tflag = 0;
+  sympole = NULL;
+  numsyms = 0;
+
+  return;
+}

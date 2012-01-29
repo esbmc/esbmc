@@ -37,10 +37,20 @@ public:
                 _target(ns),
                 _goto_functions(goto_functions)
 	{
+
+          // XXXjmorse - C++s static initialization order trainwreck means
+          // we can't initialize the id -> serializer map statically. Instead,
+          // manually inspect and initialize. This is not thread safe.
+          if (!execution_statet::expr_id_map_initialized) {
+            execution_statet::expr_id_map_initialized = true;
+            execution_statet::expr_id_map = init_expr_id_map();
+          }
+
 		is_schedule = _is_schedule;
 		reexecute_instruction = true;
 		reexecute_atomic = false;
 		_CS_number = 0;
+		_TS_number = 0;
 		node_id = 0;
 		guard_execution = "execution_statet::\\guard_exec";
 		guard_thread = "execution_statet::\\trdsel";
@@ -115,6 +125,7 @@ public:
 
 		_goto_program = ex._goto_program;
 		_CS_number = ex._CS_number;
+		_TS_number = ex._TS_number;
 		return *this;
 	}
 
@@ -140,9 +151,24 @@ public:
       _CS_number++;
     }
 
+    void increment_time_slice()
+    {
+      _TS_number++;
+    }
+
+    void reset_time_slice()
+    {
+      _TS_number=0;
+    }
+
     int get_context_switch()
     {
       return _CS_number;
+    }
+
+    int get_time_slice()
+    {
+      return _TS_number;
     }
 
     void reset_DFS_traversed()
@@ -240,6 +266,8 @@ public:
     bool reexecute_instruction; // temporarily disable context switch for the thread inherited from the last active thread
     bool reexecute_atomic; // temporarily disable context switch for the thread inherited from the last active thread
 
+    int _TS_number;
+
     unsigned nondet_count;
     unsigned dynamic_counter;
 
@@ -257,7 +285,8 @@ private:
 
 public:
     static expr_id_map_t init_expr_id_map();
-    static const expr_id_map_t expr_id_map;
+    static bool expr_id_map_initialized;
+    static expr_id_map_t expr_id_map;
     static unsigned int node_count;
 };
 

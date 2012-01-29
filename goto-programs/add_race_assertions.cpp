@@ -20,7 +20,6 @@ Date: February 2006
 #include "remove_skip.h"
 #include "add_race_assertions.h"
 #include "rw_set.h"
-#include "var_name.h"
 
 class w_guardst
 {
@@ -33,13 +32,6 @@ public:
 
   const symbolt &get_guard_symbol(const irep_idt &object)
   {
-    //std::stringstream ss;
-	//std::string temp;
-
-    //ss << get_variable_name(id2string(object));
-	//ss >> temp;
-
-    //const irep_idt identifier="tmp_"+temp;
 	const irep_idt identifier="tmp_"+id2string(object);
 
     const symbolst::const_iterator it=context.symbols.find(identifier);
@@ -79,8 +71,8 @@ public:
 
   const bool not_valid_assign(goto_programt::instructiont &instruction)
   {
-	std::string identifier=instruction.code.op0().get_string("identifier");
-	std::string type=instruction.code.op0().type().get_string("identifier");
+	std::string identifier=instruction.code.op0().identifier().as_string();
+	std::string type=instruction.code.op0().type().identifier().as_string();
 
 	//these assignments come from the buil-in-libraries
     if (identifier.find("built-in-library")!= std::string::npos
@@ -163,22 +155,11 @@ void add_race_assertions(
   {
     goto_programt::instructiont &instruction=*i_it;
 
-    //std::cout << "1 - instruction.code.pretty(): " << instruction.code.pretty() << std::endl;
-
     if(instruction.is_assign())
     {
       rw_sett rw_set(ns, value_sets, i_it, instruction.code);
 
-      //std::cout << "2 - instruction.code.pretty(): " << instruction.code.pretty() << std::endl;
-
       if(rw_set.entries.empty()) continue;
-      //if (w_guards.not_valid_assign(instruction)) continue;
-      //if (instruction.code.op0().location().get_function() == "main") continue;
-
-//      std::cout << "instruction.code.pretty(): " << instruction.code.pretty() << std::endl;
-
-//      std::cout << "instruction.code.op0().pretty(): " << instruction.code.op0().pretty() << std::endl;
-//      std::cout << "function: " << instruction.code.op0().location().get_function() << std::endl;
 
       goto_programt::instructiont original_instruction;
       original_instruction.swap(instruction);
@@ -243,7 +224,7 @@ void add_race_assertions(
           else
             t->location=original_instruction.code.op1().location();
         }
-        t->location.set("comment", e_it->second.get_comment());
+        t->location.comment(e_it->second.get_comment());
         i_it=++t;
       }
 

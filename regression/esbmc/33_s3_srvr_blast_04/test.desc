@@ -1,0 +1,3 @@
+main.c
+--unwind 1 --no-bounds-check --no-pointer-check --no-div-by-zero-check --error-label ERROR
+^VERIFICATION FAILED$

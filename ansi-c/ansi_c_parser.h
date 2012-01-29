@@ -46,6 +46,7 @@ public:
     // scanner
     string_literal.clear();
     tag_following=false;
+    asm_block_following = false;
     parenthesis_counter=0;
     
     // setup global scope
@@ -58,6 +59,7 @@ public:
   // internal state scanner
   std::string string_literal;
   bool tag_following;
+  bool asm_block_following;
   unsigned parenthesis_counter;
   
   enum { LANGUAGE, EXPRESSION } grammar;

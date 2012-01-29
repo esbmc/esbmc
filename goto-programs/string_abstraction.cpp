@@ -44,16 +44,16 @@ public:
 
     s.components().resize(3);
 
-    s.components()[0].set("name", "is_zero");
-    s.components()[0].set("pretty_name", "is_zero");
+    s.components()[0].name("is_zero");
+    s.components()[0].pretty_name("is_zero");
     s.components()[0].type()=build_type(IS_ZERO);
 
-    s.components()[1].set("name", "length");
-    s.components()[1].set("pretty_name", "length");
+    s.components()[1].name("length");
+    s.components()[1].pretty_name("length");
     s.components()[1].type()=build_type(LENGTH);
 
-    s.components()[2].set("name", "size");
-    s.components()[2].set("pretty_name", "size");
+    s.components()[2].name("size");
+    s.components()[2].pretty_name("size");
     s.components()[2].type()=build_type(SIZE);
 
     string_struct=s;
@@ -150,9 +150,9 @@ protected:
 
     switch(what)
     {
-    case IS_ZERO: result.set("component_name", "is_zero"); break;
-    case SIZE: result.set("component_name", "size"); break;
-    case LENGTH: result.set("component_name", "length"); break;
+    case IS_ZERO: result.component_name("is_zero"); break;
+    case SIZE: result.component_name("size"); break;
+    case LENGTH: result.component_name("length"); break;
     default: assert(false);
     }
 
@@ -336,7 +336,7 @@ void string_abstractiont::abstract(irep_idt name,
       }
 
       // do initializations of those locals
-      if(it->is_other() && it->code.get("statement")=="decl")
+      if(it->is_other() && it->code.statement()=="decl")
       {
         assert(it->code.operands().size()==1);
         if(it->code.op0().id()=="symbol")
@@ -633,7 +633,7 @@ exprt string_abstractiont::build_unknown(whatt what, bool write)
   case LENGTH:
   case SIZE:
     result=exprt("sideeffect", type);
-    result.set("statement", "nondet");
+    result.statement("nondet");
     break;
 
   default: assert(false);
@@ -663,7 +663,7 @@ exprt string_abstractiont::build_unknown(bool write)
     return exprt("NULL-object", type);
 
   exprt result=exprt("constant", type);
-  result.set("value", "NULL");
+  result.value("NULL");
 
   return result;
 }
@@ -736,7 +736,7 @@ exprt string_abstractiont::build_symbol_ptr(const exprt &object)
 
   while(p->id()=="member")
   {
-    suffix="#"+p->get_string("component_name")+suffix;
+    suffix="#"+p->component_name().as_string()+suffix;
     assert(p->operands().size()==1);
     p=&(p->op0());
   }
@@ -818,7 +818,7 @@ exprt string_abstractiont::build(const exprt &pointer, bool write)
 
   pointer_arithmetict ptr(pointer);
 
-  if(ptr.pointer.id()=="address_of")
+  if(ptr.pointer.is_address_of())
   {
     if(write)
       build_unknown(write);
@@ -833,7 +833,7 @@ exprt string_abstractiont::build(const exprt &pointer, bool write)
 
       if(o.id()=="string-constant")
       {
-        exprt symbol=build_symbol_constant(o.get("value"));
+        exprt symbol=build_symbol_constant(o.value());
 
         if(symbol.is_nil())
           return build_unknown(write);
@@ -887,7 +887,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
   // first of all, it must be a buffer
   const typet &obj_t=ns.follow(object.type());
 
-  if(obj_t.id()!="array")  
+  if(!obj_t.is_array())  
     return static_cast<const exprt &>(get_nil_irep());
 
   const array_typet &obj_array_type=to_array_type(obj_t);
@@ -901,7 +901,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
     const typet &t=ns.follow(object.op0().type());
 
     if(object.op0().id()!="symbol" ||
-       t.id()!="array")
+       !t.is_array())
       return static_cast<const exprt &>(get_nil_irep());
 
     const symbol_exprt &expr_symbol=to_symbol_expr(object.op0());
@@ -974,7 +974,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
 
   while(p->id()=="member")
   {
-    suffix="#"+p->get_string("component_name")+suffix;
+    suffix="#"+p->component_name().as_string()+suffix;
     assert(p->operands().size()==1);
     p=&(p->op0());
   }
@@ -1345,7 +1345,7 @@ void string_abstractiont::abstract_function_call(
   const code_function_callt::argumentst &arguments=call.arguments();
   
   symbolst::const_iterator f_it = 
-    context.symbols.find(call.function().get("identifier"));
+    context.symbols.find(call.function().identifier());
   if(f_it==context.symbols.end())
     throw "invalid function call";
 

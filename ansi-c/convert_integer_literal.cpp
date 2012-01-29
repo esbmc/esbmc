@@ -48,17 +48,17 @@ void convert_integer_literal(
   
   if(base==10)
   {
-    dest.set("value", src);
+    dest.value(src);
     value=string2integer(src, 10);
   }
   else if(base==8)
   {
-    dest.set("#hex_or_oct", true);
+    dest.hex_or_oct(true);
     value=string2integer(src, 8);
   }
   else
   {
-    dest.set("#hex_or_oct", true);
+    dest.hex_or_oct(true);
     std::string without_prefix(src, 2, std::string::npos);
     value=string2integer(without_prefix, 16);
   }
@@ -71,14 +71,14 @@ void convert_integer_literal(
     type=typet("signedbv");
 
   if(long_cnt==0)
-    type.set("width", config.ansi_c.int_width);
+    type.width(config.ansi_c.int_width);
   else if(long_cnt==1)
-    type.set("width", config.ansi_c.long_int_width);
+    type.width(config.ansi_c.long_int_width);
   else
-    type.set("width", config.ansi_c.long_long_int_width);
+    type.width(config.ansi_c.long_long_int_width);
     
   dest=from_integer(value, type);
 
-  dest.set("#cformat", src);
+  dest.cformat(src);
   
 }

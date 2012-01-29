@@ -15,9 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "flow_insensitive_analysis.h"
 
-//#include <fstream>
-//#include <i2string.h>
-
 /*******************************************************************\
 
 Function: flow_insensitive_abstract_domain_baset::get_guard
@@ -257,11 +254,6 @@ bool flow_insensitive_analysis_baset::visit(
 {
   bool new_data=false;
   
-  #if 0
-  std::cout << "Visiting: " << l->function << " " << 
-    l->location_number << std::endl;
-  #endif
-
   goto_programt::const_targetst successors;
   goto_program.get_successors(l, successors);
   
@@ -307,20 +299,6 @@ bool flow_insensitive_analysis_baset::visit(
     }
   }
   
-//  if (l->function.as_string().find("debug")!=std::string::npos)
-//    std::cout << l->function << std::endl; //=="c::messages::debug")
-  
-//  {
-//    static unsigned state_cntr=0;
-//    std::string s("pastate"); s += i2string(state_cntr);
-//    std::ofstream f(s.c_str());
-//    goto_program.output_instruction(ns, "", f, l);
-//    f << std::endl;
-//    get_state().output(ns, f);
-//    f.close();
-//    state_cntr++;
-//  }
-
   return new_data;
 }
 
@@ -362,7 +340,10 @@ bool flow_insensitive_analysis_baset::do_function_call(
     r->code.move_to_operands(rhs);    
     
     goto_programt::targett t=temp.add_instruction(END_FUNCTION);    
-    t->code.set("identifier", code.function());
+    //t->code.set("identifier", code.function());
+    // jmorse: this usage violates the "identifier" fields 'type'. There's no
+    // code right now that uses the temporary instruction generated here, so
+    // nothing need be fixed from disabling it. This comment left for posterity.
     t->function=f_it->first;
     t->location_number=1;
     
@@ -440,7 +421,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
   
   if(function.id()=="symbol")
   {
-    const irep_idt &identifier=function.get("identifier");
+    const irep_idt &identifier=function.identifier();
     
     if(recursion_set.find(identifier)!=recursion_set.end())
     {
@@ -508,7 +489,7 @@ bool flow_insensitive_analysis_baset::do_function_call_rec(
         
         // ... but only if they are actually functions.
         goto_functionst::function_mapt::const_iterator it=
-          goto_functions.function_map.find(o.object().get("identifier"));
+          goto_functions.function_map.find(o.object().identifier());
         
         if (it!=goto_functions.function_map.end())
         {

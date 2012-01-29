@@ -1,8 +1,11 @@
 #include <cmdline.h>
 
+#include <fstream>
+
 #include "parseoptions.h"
 
 const struct opt_templ esbmc_options[] = {
+{ 0,	"inlining",		switc,		""	},
 { 0,	"program-only",		switc,		""	},
 { 0,	"function",		string,		""	},
 { 0,	"preprocess",		switc,		""	},
@@ -18,7 +21,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"z3-ir",		switc,		""	},
 { 0,	"boolector-bv",		switc,		""	},
 { 0,	"z3",			switc,		""	},
-{ 0,	"bl",			switc,		""	},
 { 0,	"smt",			switc,		""	},
 { 0,	"outfile",		string,		""	},
 { 0,	"no-pointer-check",	switc,		""	},
@@ -32,7 +34,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"no-assume-guarantee",	switc,		""	},
 { 0,	"partial-loops",	switc,		""	},
 { 0,	"int-encoding",		switc,		""	},
-{ 0,	"ecp",			switc,		""	},
 { 0,	"show-features",	switc,		""	},
 { 0,	"memory-leak-check",	switc,		""	},
 { 0,	"overflow-check",	switc,		""	},
@@ -70,7 +71,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"unsigned-char",	switc,		""	},
 { 0,	"arrays-uf-always",	switc,		""	},
 { 0,	"arrays-uf-never",	switc,		""	},
-{ 0,	"interpreter",		switc,		""	},
 { 0,	"no-lock-check",	switc,		""	},
 { 0,	"deadlock-check",	switc,		""	},
 { 0,	"string-abstraction",	switc,		""	},
@@ -88,6 +88,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"qf_auflira",		switc,		""	},
 { 0,	"btor",			switc,		""	},
 { 0,	"context-switch",	number,		"-1"	},
+{ 0,	"time-slice",   	number,		"1"	},
 { 0,	"no-por",		switc,		""	},
 { 0,	"data-races-check",	switc,		""	},
 { 0,	"DFS",			switc,		""	},
@@ -103,12 +104,19 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"show-ileave-points",	switc,		""	},
 { 0,	"checkpoint-file",	string,		""	},
 { 0,	"from-checkpoint",	switc,		""	},
+{ 0,    "checkpoint-on-cex",    switc,          ""      },
 { 0,	"print-stack-traces",	switc,		""	},
 { 0,	"interactive-ileaves",	switc,		""	},
+{ 0,	"round-robin",	switc,		""	},
 { 0,	"break-at",		string,		""	},
+{ 0,    "no-lit-cache",         switc,          ""      },
 { 0,	"decide",		switc,		""	},
+{ 0,	"fixed-pointer-model",	switc,		""	},
+{ 0,	"floating-pointer-model",switc,		""	},
+{ 0,	"memstats",		switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
+{ 'I',	"",			string,		""	},
 { 0,	"help",			switc,		""	},
 { 0,	"",			switc,		""	}
 };

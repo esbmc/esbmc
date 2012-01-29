@@ -10,6 +10,12 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <io.h>
+#undef small // MinGW headers are terrible (alternately; windows).
+#endif
 }
 
 #include <sstream>
@@ -24,15 +30,26 @@ extern "C" {
 #include "ansi_c_language.h"
 
 #ifndef NO_CPROVER_LIBRARY
-extern uint8_t _binary_clib32_goto_start;
-extern uint8_t _binary_clib64_goto_start;
-extern uint8_t _binary_clib32_goto_end;
-extern uint8_t _binary_clib64_goto_end;
+
+#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
+#define p(x) (x)
+#else
+#define p(x) _##x
+#endif
+
+extern "C" {
+extern uint8_t p(binary_clib32_goto_start);
+extern uint8_t p(binary_clib64_goto_start);
+extern uint8_t p(binary_clib32_goto_end);
+extern uint8_t p(binary_clib64_goto_end);
 
 uint8_t *clib_ptrs[2][2] = {
-{ &_binary_clib32_goto_start, &_binary_clib32_goto_end},
-{ &_binary_clib64_goto_start, &_binary_clib64_goto_end},
+{ &p(binary_clib32_goto_start), &p(binary_clib32_goto_end)},
+{ &p(binary_clib64_goto_start), &p(binary_clib64_goto_end)},
 };
+}
+
+#undef p
 #endif
 
 bool
@@ -54,10 +71,10 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
 
   forall_irep(irep_it, irep.get_sub()) {
     if (irep_it->id() == "symbol") {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->get("identifier"));
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->identifier());
       deps.insert(type);
     } else if (irep_it->id() == "argument") {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->get("#identifier"));
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->cmt_identifier());
       deps.insert(type);
     } else {
       generate_symbol_deps(name, *irep_it, deps);
@@ -66,10 +83,10 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
 
   forall_named_irep(irep_it, irep.get_named_sub()) {
     if (irep_it->second.id() == "symbol") {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.get("identifier"));
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.identifier());
       deps.insert(type);
     } else if (irep_it->second.id() == "argument") {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.get("#identifier"));
+      type = std::pair<irep_idt, irep_idt>(name, irep_it->second.cmt_identifier());
       deps.insert(type);
     } else {
       generate_symbol_deps(name, irep_it->second, deps);
@@ -110,10 +127,10 @@ void add_cprover_library(
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
   ansi_c_languaget ansi_c_language;
-  char symname_buffer[256];
+  char symname_buffer[288];
   FILE *f;
   uint8_t **this_clib_ptrs;
-  unsigned long size;
+  uint64_t size;
   int fd;
 
   if(config.ansi_c.lib==configt::ansi_ct::LIB_NONE)
@@ -134,25 +151,36 @@ void add_cprover_library(
     abort();
   }
 
-  size = (unsigned long)this_clib_ptrs[1] - (unsigned long)this_clib_ptrs[0];
+  size = this_clib_ptrs[1] - this_clib_ptrs[0];
   if (size == 0) {
     std::cerr << "error: Zero-lengthed internal C library" << std::endl;
     abort();
   }
 
+#ifndef _WIN32
   sprintf(symname_buffer, "/tmp/ESBMC_XXXXXX");
   fd = mkstemp(symname_buffer);
   close(fd);
-  f = fopen(symname_buffer, "w");
+#else
+  char tmpdir[256];
+  GetTempPath(sizeof(tmpdir), tmpdir);
+  GetTempFileName(tmpdir, "bmc", 0, symname_buffer);
+#endif
+  f = fopen(symname_buffer, "wb");
   if (fwrite(this_clib_ptrs[0], size, 1, f) != 1) {
     std::cerr << "Couldn't manipulate internal C library" << std::endl;
     abort();
   }
   fclose(f);
 
-  std::ifstream infile(symname_buffer);
+  std::ifstream infile(symname_buffer, std::ios::in | std::ios::binary);
   read_goto_binary(infile, new_ctx, goto_functions, message_handler);
+  infile.close();
+#ifndef _WIN32
   unlink(symname_buffer);
+#else
+  DeleteFile(symname_buffer);
+#endif
 
   forall_symbols(it, new_ctx.symbols) {
     generate_symbol_deps(it->first, it->second.value, symbol_deps);

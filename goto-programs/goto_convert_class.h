@@ -154,6 +154,7 @@ protected:
   void convert_expression(const codet &code, goto_programt &dest);
   void convert_assign(const code_assignt &code, goto_programt &dest);
   void convert_cpp_delete(const codet &code, goto_programt &dest);
+  void convert_cpp_try(const codet &code,goto_programt &dest);
   void convert_for(const codet &code, goto_programt &dest);
   void convert_while(const codet &code, goto_programt &dest);
   void convert_dowhile(const codet &code, goto_programt &dest);
@@ -170,11 +171,6 @@ protected:
   void convert_non_deterministic_goto(const codet &code, goto_programt &dest);
   void convert_label(const code_labelt &code, goto_programt &dest);
   void convert_function_call(const code_function_callt &code, goto_programt &dest);
-  void convert_specc_notify(const codet &code, goto_programt &dest);
-  void convert_specc_wait(const codet &code, goto_programt &dest);
-  void convert_specc_par(const codet &code, goto_programt &dest);
-  void convert_specc_event(const exprt &op,
-                           std::set<irep_idt> &events);
   void convert_start_thread(const codet &code, goto_programt &dest);
   void convert_end_thread(const codet &code, goto_programt &dest);
   void convert_sync(const codet &code, goto_programt &dest);

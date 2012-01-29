@@ -1,9 +1,22 @@
+#ifdef _MINGW
+#define _MT /* Don't define putchar/getc/getchar for us */
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
-
 #include <sys/types.h>
 
 #include "intrinsics.h"
+
+#ifdef _MSVC
+#include <BaseTsd.h>
+#define ssize_t SSIZE_T
+#endif
+
+#ifdef _MINGW
+#undef feof
+#undef ferror
+#endif
 
 int putchar(int c)
 {

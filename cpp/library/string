@@ -1,0 +1,501 @@
+#ifndef STL_STRING
+#define STL_STRING
+
+#include "definitions.h"
+#include "cstring"
+
+static const size_t npos = -1;
+
+namespace std
+{
+	struct string
+	{
+	public:
+
+		string ();
+		string (char*);
+		string (const char * s, size_t n);
+		string (size_t n, char c);
+		char* c_str();
+		const char* c_str ( ) const;
+		char* c_str2 ();
+		bool operator== (string& a, string& b);
+		bool operator== ( const char* lhs, string& rhs );
+		bool operator== ( string& lhs, const char* rhs );
+		bool operator!= (string& a);
+		bool operator!= ( const char* lhs, string& rhs );
+		bool operator!= ( string& lhs, const char* rhs );
+		bool operator> (string& a);
+		bool operator> ( const char* lhs, string& rhs );
+		bool operator> ( string& lhs, const char* rhs );
+		bool operator< (string& a);
+		bool operator< ( const char* lhs, string& rhs );
+		bool operator< ( string& lhs, const char* rhs );
+		bool operator>= (string& a);
+		bool operator>= ( const char* lhs, string& rhs );
+		bool operator>= ( string& lhs, const char* rhs );
+		bool operator<= (string& a);
+		bool operator<= ( const char* lhs, string& rhs );
+		bool operator<= ( string& lhs, const char* rhs );
+		string& operator= ( string& str );
+		string& operator= ( const char* s );
+		string& operator+= (const string& d);
+		string operator += (string& d, string& s);
+		string& operator += (const char* d); //TEST
+		string operator+(const string& str1,const string& str3);
+		string operator+ (const string& d);
+		char& operator[] ( size_t pos );
+		bool empty ( ) const;
+		char& at ( size_t pos ) const;
+		int compare ( const string& str ) const;
+		int compare ( int pos1, size_t n1, string& str ) const;
+		int compare ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 ) const;
+		size_t length() const;
+		string substr ( size_t pos, size_t npos ) const;
+		string substr ( size_t npos ) const;
+		size_t find_first_of ( const string& str, size_t pos = 0 ) const;
+		size_t find_first_of ( const char* s, size_t pos, size_t n ) const;
+		size_t find_first_of ( const char* s, size_t pos = 0 ) const;
+		size_t find_first_of ( char c, size_t pos = 0 ) const;
+		size_t find ( const string& str, size_t pos = 0 ) const;
+		size_t find ( const char* s, size_t pos, size_t n ) const;
+		size_t find ( const char* s, size_t pos = 0 ) const;
+		size_t find ( char c, size_t pos = 0 ) const;
+		string& assign ( const string& str );
+		string& assign ( const string& str, size_t pos, size_t n );
+		string& assign ( const char* s, size_t n );
+		string& assign ( const char* s );
+		string& assign ( size_t n, char c );
+		string& append ( const string& str );
+		string& append ( const string& str, size_t pos, size_t n );
+		string& append ( const char* s, size_t n );
+		string& append ( const char* s );
+		string& append ( size_t n, char c );
+		void swap ( string& str );
+		void resize ( size_t n, char c );
+		void resize ( size_t n );
+		size_t capacity ( ) const;
+		size_t max_size ( ) const;
+		size_t size() const;
+		size_t rfind ( const string& str, size_t pos = npos ) const;
+		size_t rfind ( const char* s, size_t pos, size_t n ) const;
+		size_t rfind ( const char* s, size_t pos = npos ) const;
+		size_t rfind ( char c, size_t pos = npos ) const;
+		size_t find_last_of ( const string& str, size_t pos = npos ) const;
+		size_t find_last_of ( const char* s, size_t pos, size_t n ) const;
+		size_t find_last_of ( const char* s, size_t pos = npos ) const;
+		size_t find_last_of ( char c, size_t pos = npos ) const;
+		size_t find_first_not_of ( const string& str, size_t pos = 0 ) const;
+		size_t find_first_not_of ( const char* s, size_t pos, size_t n ) const;
+		size_t find_first_not_of ( const char* s, size_t pos = 0 ) const;
+		size_t find_first_not_of ( char c, size_t pos = 0 ) const;
+		string& erase ( size_t pos = 0, size_t n = npos );
+		string& replace ( size_t pos1, size_t n1,   const string& str );
+		string& replace ( size_t pos1, size_t n1, const string& str, size_t pos2, size_t n2 );
+		string& replace ( size_t pos1, size_t n1,   const char* s, size_t n2 );
+		string& replace ( size_t pos1, size_t n1,   const char* s );
+		string& replace ( size_t pos1, size_t n1,   size_t n2, char c );
+		string& insert ( size_t pos1, const string& str );
+		string& insert ( size_t pos1, const string& str, size_t pos2, size_t n );
+		string& insert ( size_t pos1, const char* s, size_t n);
+		string& insert ( size_t pos1, const char* s );
+		string& insert ( size_t pos1, size_t n, char c );
+		size_t copy ( char* s, size_t n, size_t pos = 0) const;
+		const char* data() const;
+	};
+}
+
+namespace std
+{
+#if 0
+//Objetos
+	const char* str;
+	char* str2;
+
+//Construtores
+
+	string::string ()
+	{
+	}
+
+	string::string (char* s)
+	{
+		str=s;
+		str2=s;
+	}
+
+	string::string (const char * s, size_t n)
+	{
+		str=s;
+	}
+
+//Funçoẽs de suporte
+
+	const char* string::c_str () const
+	{
+		return str;
+	}
+
+	char* string::c_str2 ()
+	{
+		return str2;
+	}
+
+//Função para saber o tamanho da string
+
+	size_t  string::length() const
+	{
+		return strlen(str);
+	}
+
+//Concatenação operador +
+    string string::operator+(const string& str1,const string& str3)
+    {
+        string tmp;
+        strcat(tmp.c_str2(), str1.c_str());
+        strcat(tmp.c_str2(), str3.c_str());
+        return tmp;
+    }
+
+//Impressão de strings
+#endif
+	inline string::ostream& operator << (ostream& o, string)
+	{
+		return o;
+	}
+
+	inline string::istream& operator >> (istream& is, string)
+	{
+		return is;
+	}
+#if 0
+//Concatenação operador +=
+
+	string string::operator += (string& d, string& s)
+	{
+		return string(strcat(d.c_str2(), s.c_str()));
+	}
+#if 0
+	string& string::operator+= (const string& d)
+	{
+        string tmp;
+        strcat(tmp.c_str2(), d.c_str());
+        return tmp;
+	}
+
+
+
+	string& string::operator += (const char* d)
+	{
+		return string(strcat(str2, d));
+	}
+
+
+//Comparação de strings operador ==
+#endif
+	bool string::operator== (string& a, string& b )
+	{
+		int aux;
+		
+		aux = strcmp(b.c_str(), a.c_str());
+
+		if (aux == 0){
+			return true;
+		}else{
+			return false;
+		}		
+	}
+
+	bool string::operator== ( const char* lhs, string& rhs )
+	{
+		int aux;
+
+		aux = strcmp((char*)lhs, rhs.c_str());
+
+		if (aux == 0){
+			return true;
+		}else{
+			return false;
+		}
+	}
+
+	bool string::operator== ( string& lhs, const char* rhs )
+	{
+		int aux;
+
+		aux = strcmp(lhs.c_str2(), (char*)rhs);
+
+		if (aux == 0){
+			return true;
+		}else{
+			return false;
+		}
+	}
+
+//Comparação de strings operador !=
+
+	bool string::operator !=(string& a)
+	{
+		int aux;
+		
+		aux = strcmp(str, a.c_str());
+
+		if (aux == 0){
+			return false;
+		}else{
+			return true;
+		}		
+	}
+#if 0
+
+	bool operator!= ( const char* lhs, string& rhs )
+	{
+		int aux;
+
+		aux = strcmp((char*)lhs, rhs.c_str());
+
+		if (aux == 0){
+			return false;
+		}else{
+			return true;
+		}
+	}
+
+	bool operator!= ( string& lhs, const char* rhs )
+	{
+		int aux;
+
+		aux = strcmp(lhs.c_str2(), (char*)rhs);
+
+		if (aux == 0){
+			return false;
+		}else{
+			return true;
+		}
+	}
+
+//Comparação de strings operadores de > < >= <=
+
+	bool string::operator >(string& a)
+	{
+	   if ( strlen(str) > strlen(a.c_str()) )
+	      return true;
+
+		return false;
+	}
+
+	bool operator> ( const char* lhs, string& rhs )
+	{
+		   if ( strlen(lhs) > strlen(rhs.c_str()) )
+		      return true;
+
+			return false;
+	}
+
+	bool operator> ( string& lhs, const char* rhs )
+	{
+		   if ( strlen(lhs.c_str()) > strlen(rhs) )
+		      return true;
+
+			return false;
+	}
+
+	bool string::operator <(string& a)
+	{
+	   if ( strlen(str) < strlen(a.c_str()) )
+	      return true;
+
+		return false;
+	}
+
+	bool operator< ( const char* lhs, string& rhs )
+	{
+		   if ( strlen(lhs) < strlen(rhs.c_str()) )
+		      return true;
+
+			return false;
+	}
+
+	bool operator< ( string& lhs, const char* rhs )
+	{
+		   if ( strlen(lhs.c_str()) < strlen(rhs) )
+		      return true;
+
+			return false;
+	}
+
+	bool string::operator >=(string& a)
+	{
+	   if ( (strlen(str)) >= (strlen(a.c_str())) )
+	      return true;
+
+		return false;
+	}
+
+	bool operator>= ( const char* lhs, string& rhs )
+	{
+		if ( (strlen(lhs)) >= (strlen(rhs.c_str())) )
+			return true;
+
+			return false;
+	}
+
+	bool operator>= ( string& lhs, const char* rhs )
+	{
+		   if ( (strlen(lhs.c_str())) >= (strlen(rhs)) )
+		      return true;
+
+			return false;
+	}
+
+	bool string::operator <=(string& a)
+	{
+	   if ( strlen(str) <= strlen(a.c_str()) )
+	      return true;
+
+		return false;
+	}
+
+	bool operator<= ( const char* lhs, string& rhs )
+	{
+		   if ( strlen(lhs) <= strlen(rhs.c_str()) )
+		      return true;
+
+			return false;
+	}
+	bool operator<= ( string& lhs, const char* rhs )
+	{
+		   if ( strlen(lhs.c_str()) <= strlen(rhs) )
+		      return true;
+
+			return false;
+	}
+
+//Verificar se string é vazia
+
+	bool string::empty ( ) const
+	{
+		if ( strlen(str) == 0 ){
+			return true;
+		}else{
+			return false;		
+		}
+	}
+
+//Atribuição de strings operador =
+
+	string& string::operator= ( const char* s )
+	{
+		return string(strcpy(str2, s));
+	}
+
+	string& string::operator= ( string& str )
+	{
+		return string(strcpy(str2, str.c_str()));
+	}
+
+//Capturando elemento da string operadores [] e at
+
+	char& string::operator[] ( size_t pos )
+	{
+		__ESBMC_assert( ( (pos>=0) && (pos<strlen(str)) ), "Error");
+		return (char&)str[pos];
+	}
+
+	char* string::at ( size_t pos ) const
+	{
+#if 0
+		if (s[i] == '\0') {
+			return out_of_range;
+		}
+		else {
+			return (char*) &s[i];
+		}
+		return nondet_charPointer();
+#endif
+	}
+
+//Copiando fragmentos da string
+
+	string string::substr ( size_t pos, size_t npos ) const
+	{
+		char* s;
+		return string(strncpy(s,str+pos,npos));
+	}
+
+	string string::substr ( size_t pos) const
+	{
+		char* s;
+		return string(strncpy(s,str,pos));
+	}
+
+//Comparando fragmentos da string
+
+	int string::compare ( const string& s ) const
+	{
+	   if ( (strlen( s.c_str() )) != (strlen(str)) ){
+			if( strlen(s.c_str()) < strlen(str) ){
+				return -2;
+			}else{
+				return 1;
+			}
+		}
+
+	   if (strcmp(s.c_str(),str)){
+		   return 1;
+	   }else{
+		   return -1;
+	   }
+	}
+
+	int string::compare ( int pos1, size_t n1, string& s ) const
+	{
+	   char* aux;
+
+	   aux = strncpy(s.c_str2(),str+pos1,n1);
+
+	   if ( strlen((const char*)aux) != strlen((const char*)str) ){
+			if(strlen((const char*)aux) < strlen((const char*)str) ){
+				return -2;
+			}else{
+				return 1;
+			}
+
+	   }
+
+	   if (strcmp(aux,str)){
+		   return 1;
+	   }else{
+		   return -1;
+	   }
+	}
+
+	int string::compare ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 ) const
+	{
+		size_t i,j;
+		char* aux;
+		char* aux2;
+
+		aux = strncpy(s.c_str2(),str+pos1,n1);
+
+		aux2 = strncpy(str2,str+pos2,n2);
+
+	   if ( strlen((const char*)aux) != strlen((const char*)aux2) ){
+			if( strlen((const char*)aux) < strlen((const char*)aux2) ){
+				return -2;
+			}else{
+				return 1;
+			}
+		}
+
+	   if (strcmp(aux,aux2)){
+		   return 1;
+	   }else{
+		   return -1;
+	   }
+	}
+#endif
+#endif
+}
+
+#endif

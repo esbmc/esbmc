@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <base_type.h>
 #include <i2string.h>
 
-#include "c_link_type_eq.h"
 #include "expr2c.h"
 #include "c_link.h"
 #include "fix_symbol.h"
@@ -141,7 +140,7 @@ void c_linkt::duplicate_type(
   symbolt &in_context,
   symbolt &new_symbol)
 {
-  // check if it is the same -- use base_type_eq, not c_link_type_eq
+  // check if it is the same -- use base_type_eq
   if(!base_type_eq(in_context.type, new_symbol.type, ns))
   {
     if(in_context.type.id()=="incomplete_struct" &&
@@ -161,12 +160,12 @@ void c_linkt::duplicate_type(
       // ignore
     }
     else if(ns.follow(in_context.type).id()=="incomplete_array" &&
-            ns.follow(new_symbol.type).id()=="array")
+            ns.follow(new_symbol.type).is_array())
     {
       // store new type
       in_context.type=new_symbol.type;
     }
-    else if(ns.follow(in_context.type).id()=="array" &&
+    else if(ns.follow(in_context.type).is_array() &&
             ns.follow(new_symbol.type).id()=="incomplete_array")
     {
       // ignore
@@ -206,8 +205,8 @@ void c_linkt::duplicate_symbol(
 {
   // see if it is a function or a variable
 
-  bool is_code_in_context=in_context.type.id()=="code";
-  bool is_code_new_symbol=new_symbol.type.id()=="code";
+  bool is_code_in_context=in_context.type.is_code();
+  bool is_code_new_symbol=new_symbol.type.is_code();
 
   if(is_code_in_context!=is_code_new_symbol)
   {
@@ -240,7 +239,7 @@ void c_linkt::duplicate_symbol(
         in_context.value.swap(new_symbol.value);
         in_context.type.swap(new_symbol.type); // for argument identifiers
       }
-      else if(in_context.type.get_bool("#inlined"))
+      else if(in_context.type.inlined())
       {
         // ok
       }
@@ -271,12 +270,12 @@ void c_linkt::duplicate_symbol(
     if(!base_type_eq(in_context.type, new_symbol.type, ns))
     {
       if(ns.follow(in_context.type).id()=="incomplete_array" &&
-         ns.follow(new_symbol.type).id()=="array")
+         ns.follow(new_symbol.type).is_array())
       {
         // store new type
         in_context.type=new_symbol.type;
       }
-      else if(ns.follow(in_context.type).id()=="array" &&
+      else if(ns.follow(in_context.type).is_array() &&
               ns.follow(new_symbol.type).id()=="incomplete_array")
       {
         // ignore
@@ -316,10 +315,10 @@ void c_linkt::duplicate_symbol(
     // care about initializers    
 
     if(!new_symbol.value.is_nil() &&
-       !new_symbol.value.get_bool("#zero_initializer"))
+       !new_symbol.value.zero_initializer())
     {
       if(in_context.value.is_nil() ||
-         in_context.value.get_bool("#zero_initializer"))
+         in_context.value.zero_initializer())
       {
         in_context.value.swap(new_symbol.value);
       }
@@ -372,7 +371,7 @@ void c_linkt::typecheck()
       if(counter>0)
       {
         exprt subst("symbol");
-        subst.set("identifier", newname);
+        subst.identifier(newname);
         subst.location() = it->second.location;
         symbol_fixer.insert(it->second.name, 
           static_cast<const typet&>(static_cast<const irept&>(subst)));

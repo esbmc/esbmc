@@ -6,9 +6,15 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
+/* Byte order includes, for context switch checkpoint files */
+#ifndef _WIN32
 #include <arpa/inet.h>
-
 #include <netinet/in.h>
+#else
+#include <winsock2.h>
+#undef small // The mingw32 headers are /absolutely rubbish/, or perhaps the
+             // windows headers by themselves.
+#endif
 
 #include "reachability_tree.h"
 #include "goto_symex.h"
@@ -18,8 +24,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <config.h>
 
 #include "crypto_hash.h"
-
-//#define DEBUG
 
 /*******************************************************************
  Function: reachability_treet::get_cur_state
@@ -34,9 +38,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 execution_statet & reachability_treet::get_cur_state()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   return **cur_state_it;
 }
@@ -60,10 +61,6 @@ const execution_statet & reachability_treet::get_cur_state() const
 
 bool reachability_treet::has_more_states()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
   return execution_states.size() > 0;
 }
 
@@ -117,14 +114,8 @@ int reachability_treet::get_CS_bound()
 
 bool reachability_treet::is_global_assign(const exprt &code)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   int num_read_globals = get_cur_state().get_expr_read_globals(ns,code.op1());
-
-  if (get_is_same_mutex())
-    return false;
 
   if (num_read_globals)
 	return true;
@@ -145,12 +136,6 @@ bool reachability_treet::is_global_assign(const exprt &code)
 
 bool reachability_treet::generate_states_before_read(const exprt &code)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
-  if (get_is_same_mutex())
-    return false;
 
   if (check_CS_bound())
     return false;
@@ -165,69 +150,7 @@ bool reachability_treet::generate_states_before_read(const exprt &code)
 }
 
 /*******************************************************************
- Function: reachability_treet::get_is_mutex
 
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool reachability_treet::get_is_same_mutex(void)
-{
-  return is_same_mutex;
-}
-
-/*******************************************************************
- Function: reachability_treet::check_mutex
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void reachability_treet::check_mutex(const exprt &code, const execution_statet &ex_state)
-{
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
-
-  static bool is_first_assign=true;
-  static std::string identifier;
-  const exprt &object=code.op0();
-  const exprt &value=code.op1();
-  std::string val;
-
-  if (object.id() == "member")
-  {
-	if (object.op0().type().get_string("identifier").find("pthread_mutex") != std::string::npos)
-	{
-	  if (is_first_assign)
-	  {
-		if (object.op0().operands().size()==0)
-		  return;
-	    identifier = object.op0().op0().get_string("identifier");
-	    is_first_assign=false;
-	  }
-
-	  val = integer2string(binary2integer(value.get_string("value"), true),10);
-
-	  if (identifier.find(object.op0().op0().get_string("identifier")) != std::string::npos)
-	    is_same_mutex=true;
-	  else if (val.find("0") == std::string::npos)
-	    is_same_mutex=false;
-
-	  identifier = object.op0().op0().get_string("identifier");
-    }
-  }
-}
-
-/*******************************************************************
  Function: reachability_treet::generate_states_before_assign
 
  Inputs:
@@ -240,20 +163,9 @@ void reachability_treet::check_mutex(const exprt &code, const execution_statet &
 
 bool reachability_treet::generate_states_before_assign(const exprt &code, execution_statet &ex_state)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   if(code.operands().size()!=2)
     throw "assignment expects two operands";
-
-#if 0
-  if (!deadlock_detection)
-    check_mutex(code, ex_state);
-
-  if (get_is_same_mutex())
-    return false;
-#endif
 
   if(check_CS_bound())
     return false;
@@ -263,10 +175,6 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
 
   int num_write_globals = get_cur_state().get_expr_write_globals(ns,code.op0());
   int num_read_globals = get_cur_state().get_expr_read_globals(ns,code.op1());
-
-  //std::cout << "code.pretty(): " << code.pretty() << std::endl;
-  //std::cout << "num_read_globals: " << num_read_globals << std::endl;
-  //std::cout << "num_write_globals: " << num_write_globals << std::endl;
 
   if(num_read_globals + num_write_globals > 0)
   {
@@ -278,6 +186,7 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
 }
 
 /*******************************************************************
+
  Function: reachability_treet::generate_states
 
  Inputs:
@@ -290,9 +199,6 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
 
 bool reachability_treet::generate_states()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   if(check_CS_bound())
     return false;
@@ -329,8 +235,6 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
            ex_state._exprs_read_write.at(i+1).write_set.empty() &&
            ex_state._exprs_read_write.at(ex_state._active_thread).write_set.empty())
         {
-          //std::cout << "empty: " << expr.pretty() << std::endl;
-          //continue;
           return false;
         }
 
@@ -339,20 +243,15 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
         if(ex_state.last_global_read_write.has_write_intersect(ex_state._exprs_read_write.at(i+1).write_set))
         {
           consider = true;
-          //std::cout << "write-write analysis" << std::endl;
         }
         else if(ex_state.last_global_read_write.has_write_intersect(ex_state._exprs_read_write.at(i+1).read_set))
         {
           consider = true;
-          //std::cout << "write-read analysis" << std::endl;
         }
         else if(ex_state.last_global_read_write.has_read_intersect(ex_state._exprs_read_write.at(i+1).write_set))
         {
           consider = true;
-          //std::cout << "read-write analysis" << std::endl;
         }
-
-        //std::cout << "consider: " << consider << std::endl;
       }
     }
   }
@@ -373,12 +272,6 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
 
 bool reachability_treet::generate_states_base(const exprt &expr)
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  std::cout << expr.pretty() << std::endl;
-#endif
-
-//  std::cout << "generate_states_base expr.pretty(): " << expr.pretty() << std::endl;
 
   if(CS_bound  != -1 && get_cur_state().get_context_switch() >= CS_bound)
     return false;
@@ -440,6 +333,26 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   if (config.options.get_bool_option("interactive-ileaves")) {
     user_tid = tid = get_ileave_direction_from_user(expr);
   }
+  //begin - H.Savino
+  else if (config.options.get_bool_option("round-robin")) {
+
+    user_tid = tid = get_ileave_direction_from_scheduling(expr);
+    if(tid != ex_state._active_thread){
+        ex_state._DFS_traversed.at(ex_state._active_thread)=true;
+    }
+    if(tid == ex_state._active_thread){
+        for(tid=0; tid < ex_state._threads_state.size(); tid++)
+        {
+          if(tid==user_tid)
+              continue;
+          if(ex_state._DFS_traversed.at(tid))
+            continue;
+          ex_state._DFS_traversed.at(tid) = true;
+        }
+       tid=user_tid;
+    }
+  }
+  //end - H.Savino
 
   for(; tid < ex_state._threads_state.size(); tid++)
   {
@@ -477,6 +390,15 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     /* Generate a new execution state, duplicate of previous? */
     execution_statet *new_state = new execution_statet(ex_state);
     execution_states.push_back(new_state);
+
+    //begin - H.Savino
+    if (config.options.get_bool_option("round-robin")){
+        if(tid == ex_state._active_thread)
+            new_state->increment_time_slice();
+        else
+            new_state->reset_time_slice();
+    }
+    //end - H.Savino
 
     /* Make it active, make it follow on from previous state... */
     if (new_state->get_active_state_number() != tid) {
@@ -516,9 +438,6 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
 bool reachability_treet::is_at_end_of_run()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   return at_end_of_run ||
          get_cur_state().get_active_state().thread_ended ||
@@ -538,9 +457,6 @@ bool reachability_treet::is_at_end_of_run()
 
 bool reachability_treet::is_has_complete_formula()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   return has_complete_formula;
 }
@@ -558,9 +474,6 @@ bool reachability_treet::is_has_complete_formula()
 
 void reachability_treet::switch_to_next_execution_state()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   std::list<execution_statet*>::iterator it = cur_state_it;
   it++;
@@ -619,9 +532,6 @@ bool reachability_treet::reset_to_unexplored_state()
 
 void reachability_treet::go_next_state()
 {
-#ifdef DEBUG
-  std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-#endif
 
   std::list<execution_statet*>::iterator it = cur_state_it;
   it++;
@@ -693,7 +603,7 @@ bool reachability_treet::dfs_position::write_to_file(
   FILE *f;
   unsigned int i;
 
-  f = fopen(filename.c_str(), "w");
+  f = fopen(filename.c_str(), "wb");
   if (f == NULL) {
     std::cerr << "Couldn't open checkpoint output file" << std::endl;
     return true;
@@ -754,7 +664,7 @@ bool reachability_treet::dfs_position::read_from_file(
   unsigned int i, j;
   char c;
 
-  f = fopen(filename.c_str(), "r");
+  f = fopen(filename.c_str(), "rb");
   if (f == NULL) {
     std::cerr << "Couldn't open checkpoint input file" << std::endl;
     return true;
@@ -878,6 +788,47 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
 
   return tid;
 }
+
+//begin - H.Savino
+int
+reachability_treet::get_ileave_direction_from_scheduling(const exprt &expr) const
+{
+  unsigned int tid;
+
+    // If the guard on this execution trace is false, no context switches are
+    // going to be run over in the future and just general randomness is going to
+    // occur. So there's absolutely no reason exploring further.
+    if ((expr.operands().size() > 0) &&
+      get_cur_state().get_active_state().guard.is_false()) {
+          std::cout << "This trace's guard is false; it will not be evaulated." << std::endl;
+          exit(1);
+    }
+
+    // First of all, are there actually any valid context switch targets?
+    for (tid = 0; tid < get_cur_state()._threads_state.size(); tid++) {
+      if (check_thread_viable(tid, expr, true))
+        break;
+    }
+
+    // If no threads were viable, don't present a choice.
+    if (tid == get_cur_state()._threads_state.size())
+      return get_cur_state()._threads_state.size();
+
+  tid=get_cur_state()._active_thread;
+
+  if(get_cur_state()._TS_number < this->_TS_slice-1){
+      if (check_thread_viable(tid, expr, true))
+          return tid;
+  }
+      while(1){
+        tid=(tid + 1)%get_cur_state()._threads_state.size();
+        if (check_thread_viable(tid, expr, true)){
+            break;
+        }
+      }
+  return tid;
+}
+//end - H.Savino
 
 bool
 reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) const

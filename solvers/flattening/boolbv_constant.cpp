@@ -28,7 +28,7 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
 
   bv.resize(width);
   
-  if(expr.type().id()=="array")
+  if(expr.type().is_array())
   {
     unsigned op_width=width/expr.operands().size();
     unsigned offset=0;
@@ -52,8 +52,8 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
   }
   else if(expr.type().id()=="range")
   {
-    mp_integer from=string2integer(expr.type().get_string("from"));
-    mp_integer value=string2integer(expr.get_string("value"));
+    mp_integer from=string2integer(expr.type().from().as_string());
+    mp_integer value=string2integer(expr.value().as_string());
     mp_integer v=value-from;
     
     std::string binary=integer2binary(v, width);
@@ -69,7 +69,7 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
   else if(expr.type().id()=="c_enum" ||
           expr.type().id()=="incomplete_c_enum")
   {
-    mp_integer value=string2integer(expr.get_string("value"));
+    mp_integer value=string2integer(expr.value().as_string());
     std::string binary=integer2binary(value, width);
     assert(width!=0);
 
@@ -87,7 +87,7 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
           expr.type().id()=="fixedbv" ||
           expr.type().id()=="floatbv")
   {
-    const std::string &binary=expr.get_string("value");
+    const std::string &binary=expr.value().as_string();
 
     if(binary.size()!=width)
       throw "wrong value length in constant: "+expr.to_string();
@@ -102,7 +102,7 @@ void boolbvt::convert_constant(const exprt &expr, bvt &bv)
   }
   else if(expr.type().id()=="verilogbv")
   {
-    const std::string &binary=expr.get_string("value");
+    const std::string &binary=expr.value().as_string();
 
     if(binary.size()*2!=width)
       throw "wrong value length in constant: "+expr.to_string();

@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <assert.h>
 
 #include <algorithm>
+#include <config.h>
+#include <options.h>
 
 #include "simplify_expr_class.h"
 #include "simplify_expr.h"
@@ -93,7 +95,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
   // eliminate typecasts from NULL
   if(expr.type().id()=="pointer" &&
      expr.op0().is_constant() &&
-     expr.op0().get("value")=="NULL")
+     expr.op0().value().as_string()=="NULL")
   {
     exprt tmp=expr.op0();
     tmp.type()=expr.type();
@@ -124,7 +126,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
 
   if(operand.is_constant())
   {
-    const irep_idt &value=operand.get("value");
+    const irep_idt &value=operand.value();
 
     exprt new_expr("constant", expr.type());
 
@@ -137,21 +139,21 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
 
       if(expr_type_id=="bool")
       {
-        new_expr.set("value", (int_value!=0)?"true":"false");
+        new_expr.value((int_value!=0)?"true":"false");
         expr.swap(new_expr);
         return false;
       }
 
       if(expr_type_id=="unsignedbv" || expr_type_id=="signedbv")
       {
-        new_expr.set("value", integer2binary(int_value, expr_width));
+        new_expr.value(integer2binary(int_value, expr_width));
         expr.swap(new_expr);
         return false;
       }
 
       if(expr_type_id=="integer")
       {
-        new_expr.set("value", value);
+        new_expr.value(value);
         expr.swap(new_expr);
         return false;
       }
@@ -159,16 +161,10 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
       if(expr_type_id=="c_enum" ||
          expr_type_id=="incomplete_c_enum")
       {
-        new_expr.set("value", integer2string(int_value));
+        new_expr.value(integer2string(int_value));
         expr.swap(new_expr);
         return false;
       }
-
-      /*
-      if(expr_type_id=="real") return false;
-      if(expr_type_id=="complex") return false;
-      if(expr_type_id=="floatbv") return false;
-      */
     }
     else if(op_type_id=="rational")
     {
@@ -229,7 +225,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
          expr_type_id=="signedbv" ||
          expr_type_id=="bv")
       {
-        new_expr.set("value", integer2binary(int_value, expr_width));
+        new_expr.value(integer2binary(int_value, expr_width));
         expr.swap(new_expr);
         return false;
       }
@@ -237,7 +233,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
       if(expr_type_id=="c_enum" ||
          expr_type_id=="incomplete_c_enum")
       {
-        new_expr.set("value", integer2string(int_value));
+        new_expr.value(integer2string(int_value));
         expr.swap(new_expr);
         return false;
       }
@@ -316,7 +312,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
       {
         mp_integer int_value=binary2integer(
           id2string(value), false);
-        new_expr.set("value", integer2binary(int_value, expr_width));
+        new_expr.value(integer2binary(int_value, expr_width));
         expr.swap(new_expr);
         return false;
       }
@@ -380,7 +376,7 @@ bool simplify_exprt::simplify_dereference(exprt &expr)
 
   if(expr.op0().type().id()!="pointer") return true;
 
-  if(expr.op0().id()=="address_of")
+  if(expr.op0().is_address_of())
   {
     if(expr.op0().operands().size()==1)
     {
@@ -415,7 +411,7 @@ bool simplify_exprt::simplify_address_of(exprt &expr)
   if(expr.op0().id()=="NULL-object")
   {
     exprt constant("constant", expr.type());
-    constant.set("value", "NULL");
+    constant.value("NULL");
     expr.swap(constant);
     return false;
   }
@@ -516,7 +512,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
 
   if(ptr.type().id()!="pointer") return true;
 
-  if(ptr.id()=="address_of")
+  if(ptr.is_address_of())
   {
     if(ptr.operands().size()!=1) return true;
 
@@ -905,8 +901,6 @@ bool simplify_exprt::simplify_addition_substraction(
 
   bool result=true;
 
-  //std::cout << "simplify_addition_substraction expr.pretty(): " << expr.pretty() << std::endl;
-
   exprt::operandst &operands=expr.operands();
 
   if(expr.id()=="+")
@@ -960,24 +954,69 @@ bool simplify_exprt::simplify_addition_substraction(
   }
   else if(expr.id()=="-")
   {
-    if(operands.size()==2 &&
-       is_number(expr.type()) &&
-       is_number(operands.front().type()) &&
-       is_number(operands.back().type()))
+    exprt::operandst subtrahends;
+    exprt minuend;
+    // Sum the subtrahend portions, then if the minuend is constant, attempt to
+    // subtract from it.
+
+    exprt::operandst ops = expr.operands();
+    if (ops.size() == 0)
+      return true;
+
+    assert(ops.size() > 1); // This should probably have become a unary-
+
+    // Remove minuend
+    exprt::operandst::iterator it;
+    it = ops.begin();
+    minuend = *it;
+    it++;
+
+    // If this is a binary operation, we might be able to solve right now.
+    if (ops.size() == 2) {
+      if (minuend.id() == "constant" && it->id() == "constant") {
+        minuend.subtract(*it);
+        expr.swap(minuend);
+        return false;
+      } else {
+        return true;
+      }
+    }
+
+    // A large subtract; so collect subtrahend portions
+    for (; it != ops.end(); it++)
+      subtrahends.push_back(*it);
+
+    exprt an_add("+", expr.type());
+    an_add.operands() = subtrahends;
+    simplify_rec(an_add, mode);
+
+    // We should now have a list of operands, one of which might be constant. If
+    // the minuend is constant, and a subtracting operand is constant, perform
+    // that subtraction.
+    if (minuend.id() == "constant") {
+      subtrahends = an_add.operands();
+      for (it = subtrahends.begin(); it != subtrahends.end(); it++) {
+        if (it->id() == "constant") {
+          // Hurrah, we can perform a constant subtraction.
+          minuend.subtract(*it);
+          subtrahends.erase(it);
+          result = false;
+        }
+      }
+    }
+
+    if (subtrahends.size()==0)
     {
-
-      exprt tmp2("unary-", expr.type());
-      tmp2.move_to_operands(operands.back());
-      simplify_node(tmp2, mode);
-
-      exprt tmp("+", expr.type());
-      tmp.move_to_operands(operands.front());
-      tmp.move_to_operands(tmp2);
-
+      exprt tmp(minuend);
       expr.swap(tmp);
-      simplify_node(expr, mode);
-
       return false;
+    } else {
+      // Reconstruct a subtract expr
+      expr.operands().clear();
+      expr.operands().push_back(minuend);
+      for (it = subtrahends.begin(); it != subtrahends.end(); it++)
+        expr.operands().push_back(*it);
+      // result variable will determine whether we've simplified at all.
     }
   }
 
@@ -1007,8 +1046,8 @@ bool simplify_exprt::simplify_bitwise(exprt &expr)
 
   while(expr.operands().size()>=2)
   {
-    const irep_idt &a_str=expr.op0().get("value");
-    const irep_idt &b_str=expr.op1().get("value");
+    const irep_idt &a_str=expr.op0().value();
+    const irep_idt &b_str=expr.op1().value();
 
     if(!expr.op0().is_constant())
       break;
@@ -1046,7 +1085,7 @@ bool simplify_exprt::simplify_bitwise(exprt &expr)
     else
       break;
 
-    new_op.set("value", new_value);
+    new_op.value(new_value);
 
     // erase first operand
     expr.operands().erase(expr.operands().begin());
@@ -1100,7 +1139,7 @@ bool simplify_exprt::simplify_extractbit(exprt &expr)
   if(i<0 || i>=width)
     return true;
 
-  const irep_idt &value=expr.op0().get("value");
+  const irep_idt &value=expr.op0().value();
 
   if(value.size()!=width)
     return true;
@@ -1138,8 +1177,8 @@ bool simplify_exprt::simplify_concatenation(exprt &expr)
       {
         bool value=op.is_true();
         op=exprt("constant", typet("unsignedbv"));
-        op.type().set("width", 1);
-        op.set("value", value?"1":"0");
+        op.type().width(1);
+        op.value(value?"1":"0");
       }
     }
 
@@ -1158,9 +1197,9 @@ bool simplify_exprt::simplify_concatenation(exprt &expr)
       {
         // merge!
         const std::string new_value=
-          opi.get_string("value")+opn.get_string("value");
-        opi.set("value", new_value);
-        opi.type().set("width", new_value.size());
+          opi.value().as_string()+opn.value().as_string();
+        opi.value(new_value);
+        opi.type().width(new_value.size());
         // erase opn
         expr.operands().erase(expr.operands().begin()+i+1);
         result=true;
@@ -1224,7 +1263,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
      expr.op0().type().id()=="signedbv")
   {
     mp_integer width=
-      string2integer(id2string(expr.op0().type().get("width")));
+      string2integer(id2string(expr.op0().type().width()));
 
     if(expr.id()=="lshr")
     {
@@ -1341,8 +1380,8 @@ bool simplify_exprt::simplify_if_implies(
       const irep_idt &type_id = cond.op1().type().id();
       if(type_id=="integer" || type_id=="natural")
       {
-	if(string2integer(cond.op1().get_string("value")) >=
-	  string2integer(expr.op1().get_string("value")))
+	if(string2integer(cond.op1().value().as_string()) >=
+	  string2integer(expr.op1().value().as_string()))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1351,8 +1390,8 @@ bool simplify_exprt::simplify_if_implies(
       else if(type_id=="unsignedbv")
       {
 	const mp_integer i1, i2;
-	if(binary2integer(cond.op1().get_string("value"), false) >=
-           binary2integer(expr.op1().get_string("value"), false))
+	if(binary2integer(cond.op1().value().as_string(), false) >=
+           binary2integer(expr.op1().value().as_string(), false))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1361,8 +1400,8 @@ bool simplify_exprt::simplify_if_implies(
       else if(type_id=="signedbv")
       {
 	const mp_integer i1, i2;
-	if(binary2integer(cond.op1().get_string("value"), true) >=
-           binary2integer(expr.op1().get_string("value"), true))
+	if(binary2integer(cond.op1().value().as_string(), true) >=
+           binary2integer(expr.op1().value().as_string(), true))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1377,8 +1416,8 @@ bool simplify_exprt::simplify_if_implies(
       const irep_idt &type_id = cond.op1().type().id();
       if(type_id=="integer" || type_id=="natural")
       {
-	if(string2integer(cond.op1().get_string("value")) <=
-	  string2integer(expr.op1().get_string("value")))
+	if(string2integer(cond.op1().value().as_string()) <=
+	  string2integer(expr.op1().value().as_string()))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1387,8 +1426,8 @@ bool simplify_exprt::simplify_if_implies(
       else if(type_id=="unsignedbv")
       {
 	const mp_integer i1, i2;
-	if(binary2integer(cond.op1().get_string("value"), false) <=
-           binary2integer(expr.op1().get_string("value"), false))
+	if(binary2integer(cond.op1().value().as_string(), false) <=
+           binary2integer(expr.op1().value().as_string(), false))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1397,8 +1436,8 @@ bool simplify_exprt::simplify_if_implies(
       else if(type_id=="signedbv")
       {
 	const mp_integer i1, i2;
-	if(binary2integer(cond.op1().get_string("value"), true) <=
-           binary2integer(expr.op1().get_string("value"), true))
+	if(binary2integer(cond.op1().value().as_string(), true) <=
+           binary2integer(expr.op1().value().as_string(), true))
 	 {
 	  new_truth = true;
 	  return false;
@@ -1427,7 +1466,7 @@ bool simplify_exprt::simplify_if_recursive(
   const exprt &cond,
   bool truth)
 {
-  if(expr.type().id()=="bool")
+  if(expr.type().is_bool())
   {
     bool new_truth;
 
@@ -1541,7 +1580,7 @@ bool simplify_exprt::simplify_if_branch(
   bool tresult = true;
   bool fresult = true;
 
-  if(cond.id()=="and")
+  if(cond.is_and())
   {
     tresult = simplify_if_conj(trueexpr, cond) && tresult;
     fresult = simplify_if_recursive(falseexpr, cond, false) && fresult;
@@ -1584,7 +1623,7 @@ bool simplify_exprt::simplify_if_cond(exprt &expr, modet mode)
   {
     tmp = true;
 
-    if(expr.id()=="and")
+    if(expr.is_and())
     {
       if(expr.has_operands())
       {
@@ -1650,11 +1689,6 @@ bool simplify_exprt::simplify_if(exprt &expr)
         cond.swap(tmp);
         truevalue.swap(falsevalue);
       }
-
-      #if 0
-      result = simplify_if_cond(cond) && result;
-      result = simplify_if_branch(truevalue, falsevalue, cond) && result;
-      #endif
 
       if(expr.type()==bool_typet())
       {
@@ -1731,8 +1765,8 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
 
   exprt &op=expr.op0();
 
-  if(expr.type().id()!="bool" ||
-     op.type().id()!="bool") return true;
+  if(!expr.type().is_bool() ||
+     !op.type().is_bool()) return true;
 
   if(op.id()=="not") // (not not a) == a
   {
@@ -1754,7 +1788,7 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
     expr.make_false();
     return false;
   }
-  else if(op.id()=="and" ||
+  else if(op.is_and() ||
           op.id()=="or")
   {
     exprt tmp;
@@ -1767,7 +1801,7 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
       simplify_node(*it, mode);
     }
 
-    expr.id(expr.id()=="and"?"or":"and");
+    expr.id(expr.is_and()?"or":"and");
 
     return false;
   }
@@ -1793,13 +1827,13 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
 
   exprt::operandst &operands=expr.operands();
 
-  if(expr.type().id()!="bool") return true;
+  if(!expr.type().is_bool()) return true;
 
   if(expr.id()=="=>")
   {
     if(operands.size()!=2 ||
-       operands.front().type().id()!="bool" ||
-       operands.back().type().id()!="bool")
+       !operands.front().type().is_bool() ||
+       !operands.back().type().is_bool())
       return true;
 
     // turn a => b into !a || b
@@ -1813,8 +1847,8 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
   else if(expr.id()=="<=>")
   {
     if(operands.size()!=2 ||
-       operands.front().type().id()!="bool" ||
-       operands.back().type().id()!="bool")
+       !operands.front().type().is_bool() ||
+       !operands.back().type().is_bool())
       return true;
 
     if(operands.front().is_false())
@@ -1843,7 +1877,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
     }
   }
   else if(expr.id()=="or" ||
-          expr.id()=="and" ||
+          expr.is_and() ||
           expr.id()=="xor")
   {
     if(operands.size()==0) return true;
@@ -1856,12 +1890,12 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
     for(exprt::operandst::iterator it=operands.begin();
         it!=operands.end();)
     {
-      if(it->type().id()!="bool") return true;
+      if(!it->type().is_bool()) return true;
 
       bool is_true=it->is_true();
       bool is_false=it->is_false();
 
-      if(expr.id()=="and" && is_false)
+      if(expr.is_and() && is_false)
       {
         expr.make_false();
         return false;
@@ -1874,13 +1908,13 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
 
       bool erase;
 
-      if(expr.id()=="and")
+      if(expr.is_and())
         erase=is_true;
       else
         erase=is_false;
 
       if(last_set && *it==*last &&
-         (expr.id()=="or" || expr.id()=="and"))
+         (expr.id()=="or" || expr.is_and()))
         erase=true; // erase duplicate operands
 
       if(erase)
@@ -1897,7 +1931,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
     }
 
     // search for a and !a
-    if(expr.id()=="and" || expr.id()=="or")
+    if(expr.is_and() || expr.id()=="or")
     {
       // first gather all the a's with !a
 
@@ -1906,7 +1940,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
       forall_operands(it, expr)
         if(it->id()=="not" &&
            it->operands().size()==1 &&
-           it->type().id()=="bool")
+           it->type().is_bool())
           expr_set.insert(it->op0());
 
       // now search for a
@@ -1921,7 +1955,7 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
 
     if(operands.size()==0)
     {
-      if(expr.id()=="and")
+      if(expr.is_and())
         expr.make_true();
       else
         expr.make_false();
@@ -1987,13 +2021,13 @@ bool simplify_exprt::simplify_bitnot(exprt &expr)
     {
       if(op.id()=="constant")
       {
-        std::string value=op.get_string("value");
+        std::string value=op.value().as_string();
 
         for(unsigned i=0; i<value.size(); i++)
           value[i]=(value[i]=='0')?'1':'0';
 
         exprt tmp("constant", op.type());
-        tmp.set("value", value);
+        tmp.value(value);
         expr.swap(tmp);
         return false;
       }
@@ -2057,7 +2091,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
 {
   exprt::operandst &operands=expr.operands();
 
-  if(expr.type().id()!="bool") return true;
+  if(!expr.type().is_bool()) return true;
 
   if(operands.size()!=2) return true;
 
@@ -2072,7 +2106,7 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
 
   if(op0_is_const && op1_is_const)
   {
-    if(expr.op0().type().id()=="bool")
+    if(expr.op0().type().is_bool())
     {
       bool v0=expr.op0().is_true();
       bool v1=expr.op1().is_true();
@@ -2506,15 +2540,15 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
     const exprt *other=NULL;
 
     if(expr.op0().is_constant() &&
-       expr.op0().get("value")=="NULL")
+       expr.op0().value().as_string()=="NULL")
       other=&(expr.op1());
     else if(expr.op1().is_constant() &&
-            expr.op1().get("value")=="NULL")
+            expr.op1().value().as_string()=="NULL")
       other=&(expr.op0());
 
     if(other!=NULL)
     {
-      if(other->id()=="address_of" &&
+      if(other->is_address_of() &&
          other->operands().size()==1)
       {
         if(other->op0().id()=="symbol" ||
@@ -2551,7 +2585,7 @@ bool simplify_exprt::simplify_ieee_float_relation(exprt &expr)
 {
   exprt::operandst &operands=expr.operands();
 
-  if(expr.type().id()!="bool") return true;
+  if(!expr.type().is_bool()) return true;
 
   if(operands.size()!=2) return true;
 
@@ -2649,7 +2683,7 @@ bool simplify_exprt::simplify_with(exprt &expr)
       while(expr.operands().size()>1)
       {
         const irep_idt &component_name=
-          expr.op1().get("component_name");
+          expr.op1().component_name();
 
         if(!to_struct_type(expr.op0().type()).
            has_component(component_name))
@@ -2667,9 +2701,9 @@ bool simplify_exprt::simplify_with(exprt &expr)
       }
     }
   }
-  else if(expr.op0().type().id()=="array")
+  else if(expr.op0().type().is_array())
   {
-    if(expr.op0().id()=="array" ||
+    if(expr.op0().is_array() ||
        expr.op0().id()=="constant")
     {
       while(expr.operands().size()>1)
@@ -2788,7 +2822,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
     }
   }
   else if(expr.op0().id()=="constant" ||
-          expr.op0().id()=="array")
+          expr.op0().is_array())
   {
     if(mode==NORMAL)
     {
@@ -2817,7 +2851,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
     {
       mp_integer i;
 
-      const irep_idt &value=expr.op0().get("value");
+      const irep_idt &value=expr.op0().value();
 
       if(to_integer(expr.op1(), i))
       {
@@ -2953,12 +2987,12 @@ tvt simplify_exprt::objects_equal(const exprt &a, const exprt &b)
 {
   if(a==b) return tvt(true);
 
-  if(a.id()=="address_of" && b.id()=="address_of" &&
+  if(a.is_address_of() && b.is_address_of() &&
      a.operands().size()==1 && b.operands().size()==1)
     return objects_equal_address_of(a.op0(), b.op0());
 
   if(a.id()=="constant" && b.id()=="constant" &&
-     a.get("value")=="NULL" && b.get("value")=="NULL")
+     a.value().as_string()=="NULL" && b.value().as_string()=="NULL")
     return tvt(true);
 
   return tvt(tvt::TV_UNKNOWN);
@@ -2982,7 +3016,7 @@ tvt simplify_exprt::objects_equal_address_of(const exprt &a, const exprt &b)
 
   if(a.id()=="symbol" && b.id()=="symbol")
   {
-    if(a.get("identifier")==b.get("identifier"))
+    if(a.identifier()==b.identifier())
       return tvt(true);
   }
   else if(a.id()=="index" && b.id()=="index")
@@ -3094,7 +3128,7 @@ bool simplify_exprt::simplify_member(member_exprt &expr)
 {
   if(expr.operands().size()!=1) return true;
 
-  const irep_idt &component_name=expr.get("component_name");
+  const irep_idt &component_name=expr.component_name();
 
   exprt &op=expr.op0();
 
@@ -3109,7 +3143,7 @@ bool simplify_exprt::simplify_member(member_exprt &expr)
         exprt &op1=operands[operands.size()-2];
         exprt &op2=operands[operands.size()-1];
 
-        if(op1.get("component_name")==component_name)
+        if(op1.component_name()==component_name)
         {
           // found it!
           exprt tmp;
@@ -3308,7 +3342,7 @@ bool simplify_exprt::simplify_extractbits(exprt &expr)
 
     assert(start>=end); //is this always the case??
 
-    const irep_idt &value=expr.op0().get("value");
+    const irep_idt &value=expr.op0().value();
 
     if(value.size()!=width)
       return true;
@@ -3320,7 +3354,7 @@ bool simplify_exprt::simplify_extractbits(exprt &expr)
                     integer2long(start-end+1));
 
     exprt tmp("constant", expr.type());
-    tmp.set("value", extracted_value);
+    tmp.value(extracted_value);
     expr.swap(tmp);
 
     return false;
@@ -3343,6 +3377,29 @@ Function:
 
 bool simplify_exprt::simplify_unary_minus(exprt &expr)
 {
+
+  if (config.options.get_bool_option("int-encoding") &&
+      expr.type().id() != "fixedbv" && expr.type().id() != "signedbv")
+    // Never simplify a unary minus if we're using integer encoding. The SMT
+    // solver is going to have its own negative representation, and this
+    // conflicts with the current irep representation of binary-in-a-string.
+    // Specifically, the current 01_cmbc_Malloc1 test encodes:
+    //
+    // o = n - 1;
+    //
+    // as
+    //
+    // o = n + 4294967295
+    //
+    // Which may be fine in bit-vector mode, but that calculation does _not_
+    // wrap around in integer mode. So, block such simplification of unary-'s.
+    //
+    // Update: After further thought that kind of overflowing is fine for
+    // _signed_ types. This is because the binary2integer routine will observe
+    // that the expr is signed, and interpret its value as negative. Which is
+    // ok.
+    return true;
+
   if(expr.operands().size()!=1)
     return true;
 
@@ -3353,9 +3410,6 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
 
   if(expr.type()!=operand.type())
     return true;
-
-  //std::cout << "simplify_unary_minus expr.pretty(): " << expr.pretty() << std::endl;
-  //std::cout << "operand.id(): " << operand.id() << std::endl;
 
   if(operand.id()=="unary-")
   {
@@ -3373,7 +3427,6 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
   else if(operand.id()=="constant")
   {
     const irep_idt &type_id=expr.type().id();
-//    std::cout << "type_id: " << type_id << std::endl;
     if(type_id=="integer" ||
        type_id=="signedbv" ||
        type_id=="unsignedbv")
@@ -3382,9 +3435,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
 
       if(to_integer(expr.op0(), int_value))
         return true;
-//      std::cout << "int_value: " << int_value << std::endl;
-//      std::cout << "-int_value: " << -int_value << std::endl;
-//      std::cout << "int_value*(-1): " << int_value*(-1) << std::endl;
+
       exprt tmp=from_integer(-int_value, expr.type());
 
       if(tmp.is_nil())
@@ -3428,12 +3479,6 @@ Function: simplify_exprt::simplify_node
 bool simplify_exprt::simplify_node(exprt &expr, modet mode)
 {
   if(!expr.has_operands()) return true;
-
-  //#define DEBUGX
-
-  #ifdef DEBUGX
-  exprt old(expr);
-  #endif
 
   bool result=true;
 
@@ -3493,7 +3538,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_not(expr, mode) && result;
   else if(expr.id()=="=>"  || expr.id()=="<=>" ||
           expr.id()=="or"  || expr.id()=="xor" ||
-          expr.id()=="and")
+          expr.is_and())
     result=simplify_boolean(expr, mode) && result;
   else if(expr.id()=="comma")
   {
@@ -3507,7 +3552,7 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   }
   else if(expr.id()=="dereference")
     result=simplify_dereference(expr) && result;
-  else if(expr.id()=="address_of")
+  else if(expr.is_address_of())
     result=simplify_address_of(expr) && result;
   else if(expr.id()=="pointer_offset")
     result=simplify_pointer_offset(expr) && result;
@@ -3520,13 +3565,6 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   else if(expr.id()=="ieee_float_equal" ||
           expr.id()=="ieee_float_notequal")
     result=simplify_ieee_float_relation(expr) && result;
-
-  #ifdef DEBUGX
-  if(!result)
-    std::cout << "==== " << old.pretty()
-              << "\n ------> " << expr.pretty()
-              << "\n";
-  #endif
 
   return result;
 }
@@ -3567,7 +3605,7 @@ bool simplify_exprt::simplify_rec(exprt &expr, modet mode)
   bool result=true;
   modet sub_mode=mode;
 
-  if(expr.id()=="address_of")
+  if(expr.is_address_of())
     sub_mode=ADDRESS_OF;
 
   if(expr.has_operands())

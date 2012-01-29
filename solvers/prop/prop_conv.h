@@ -16,6 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string>
 #include <list>
 
+#include <config.h>
 #include <hash_cont.h>
 #include <decision_procedure.h>
 #include <threeval.h>
@@ -26,9 +27,14 @@ class prop_convt:virtual public decision_proceduret
 {
 public:
   explicit prop_convt(propt &_prop):
-    use_cache(true),
     equality_propagation(true),
-    prop(_prop) { }
+    prop(_prop)
+  {
+    if (config.options.get_bool_option("no-lit-cache"))
+      use_cache = false;
+    else
+      use_cache = true;
+  }
   virtual ~prop_convt() { }
 
   // overloading

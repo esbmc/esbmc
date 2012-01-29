@@ -105,10 +105,6 @@ void dereferencet::dereference(
   // type of the object
   const typet &type=deref_expr.type().subtype();
 
-  #if 0
-  std::cout << "DEREF: " << dest.pretty() << std::endl;
-  #endif
-
   // collect objects dest may point to
   value_setst::valuest points_to_set;
 
@@ -190,7 +186,7 @@ void dereferencet::dereference(
       new_context.move(symbol);
     }
 
-    value.set("#invalid_object", true);
+    value.invalid_object(true);
   }
 
   dest.swap(value);
@@ -216,10 +212,6 @@ void dereferencet::add_checks(
   if(dest.type().id()!="pointer")
     throw "dereference expected pointer type, but got "+
           dest.type().pretty();
-
-  #if 0
-  std::cout << "ADD CHECK: " << dest.pretty() << std::endl;
-  #endif
 
   const typet &type=dest.type().subtype();
 
@@ -298,8 +290,8 @@ bool dereferencet::dereference_type_compare(
   }
 
   // we are generous about code pointers
-  if(dereference_type.id()=="code" &&
-     object_type.id()=="code")
+  if(dereference_type.is_code() &&
+     object_type.is_code())
     return true;
 
   // really different
@@ -460,32 +452,6 @@ void dereferencet::build_reference_to(
         }
       }
 #endif
-#if 0
-      exprt tmp_object(object);
-
-      // check type
-      if(!dereference_type_compare(tmp_object, type))
-      {
-        exprt type_expr=exprt("pointer_object_has_type", typet("bool"));
-        type_expr.copy_to_operands(deref_expr);
-        type_expr.set("object_type", type);
-        type_expr.make_not();
-
-        guardt tmp_guard(guard);
-        tmp_guard.add(is_dynamic_object_expr);
-        tmp_guard.move(type_expr);
-
-        std::string msg="wrong object type (got `";
-        msg+=from_type(ns, "", object.type());
-        msg+="', expected `";
-        msg+=from_type(ns, "", type);
-        msg+="')";
-
-        dereference_callback.dereference_failure(
-          "pointer dereference",
-          msg, tmp_guard);
-      }
-#endif
     }
   }
   else
@@ -495,19 +461,15 @@ void dereferencet::build_reference_to(
     exprt object_pointer("address_of", pointer_typet());
     object_pointer.type().subtype()=object.type();
     object_pointer.copy_to_operands(object);
-    //std::cout << "deref_expr.pretty(): " << deref_expr.pretty() << std::endl;
     pointer_guard=exprt("same-object", typet("bool"));
     pointer_guard.copy_to_operands(deref_expr, object_pointer);
 
     guardt tmp_guard(guard);
     tmp_guard.add(pointer_guard);
 
-    //std::cout << "tmp_guard.as_expr().pretty(): " << tmp_guard.as_expr().pretty() << std::endl;
     valid_check(object, tmp_guard, mode);
 
     exprt offset;
-
-    //std::cout << "o.offset().is_constant(): " << o.offset().is_constant() << std::endl;
 
     if(o.offset().is_constant())
       offset=o.offset();
@@ -522,9 +484,8 @@ void dereferencet::build_reference_to(
       // need to subtract base address
       offset=exprt("-", index_type());
       offset.move_to_operands(pointer_offset, base);
-      //std::cout << "offset.pretty(): " << offset.pretty() << std::endl;
     }
-    //std::cout << "!dereference_type_compare(value, type): " << !dereference_type_compare(value, type) << std::endl;
+
     if(!dereference_type_compare(value, type))
     {
       if(memory_model(value, type, tmp_guard, offset))
@@ -556,15 +517,10 @@ void dereferencet::build_reference_to(
     }
     else
     {
-      //std::cout << "value.id(): " << value.id() << std::endl;
       if(value.id()=="index")
       {
         index_exprt &index_expr=to_index_expr(value);
         index_expr.index()=offset;
-        //std::cout << "value.pretty(): " << value.pretty() << std::endl;
-        //std::cout << "index_expr.pretty(): " << index_expr.pretty() << std::endl;
-        //std::cout << "tmp_guard.pretty(): " << tmp_guard.as_expr().pretty() << std::endl;
-        //std::cout << "tmp_guard.as_expr().id(): " << tmp_guard.as_expr().id() << std::endl;
         bounds_check(index_expr, tmp_guard);
       }
       else if(!offset.is_zero())
@@ -631,14 +587,14 @@ void dereferencet::valid_check(
     }
   }
   else if(symbol.is_nil() ||
-          symbol.get_bool("#invalid_object"))
+          symbol.invalid_object())
   {
     // always "valid", shut up
     return;
   }
   else if(symbol.id()=="symbol")
   {
-    const irep_idt identifier=symbol.get("identifier");
+    const irep_idt identifier=symbol.identifier();
 
     if(dereference_callback.is_valid_object(identifier))
       return; // always ok
@@ -663,10 +619,10 @@ void dereferencet::bounds_check(
 {
   if(options.get_bool_option("no-bounds-check"))
     return;
-  //std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
+
   const typet &array_type=ns.follow(expr.op0().type());
-  //std::cout << "array_type.pretty(): " << array_type.pretty() << std::endl;
-  if(array_type.id()!="array")
+
+  if(!array_type.is_array())
     throw "bounds check expected array type";
 
   std::string name=array_name(ns, expr.array());
@@ -696,9 +652,6 @@ void dereferencet::bounds_check(
     }
   }
 
-//  const exprt &size_expr=
-//    to_array_type(array_type).size();
-
   exprt size_expr=
     to_array_type(array_type).size();
 
@@ -711,13 +664,13 @@ void dereferencet::bounds_check(
 	const typet array_type2=ns.follow(expr.op0().operands()[0].type());
 	const exprt &size_expr2=to_array_type(array_type2).size();
 
-	val1 = integer2string(binary2integer(size_expr.get_string("value"), true),10);
-	val2 = integer2string(binary2integer(size_expr2.get_string("value"), true),10);
+	val1 = integer2string(binary2integer(size_expr.value().as_string(), true),10);
+	val2 = integer2string(binary2integer(size_expr2.value().as_string(), true),10);
     total = atoi(val1.c_str())*atoi(val2.c_str());
 
     s << total;
     unsigned width;
-    width = atoi(size_expr.type().get_string("width").c_str());
+    width = atoi(size_expr.type().width().as_string().c_str());
     constant_exprt value_expr(size_expr.type());
     value_expr.set_value(integer2binary(string2integer(s.str()),width));
     size_expr.swap(value_expr);
@@ -738,7 +691,7 @@ void dereferencet::bounds_check(
 
     guardt tmp_guard(guard);
     tmp_guard.move(inequality);
-    //std::cout << "tmp_guard.as_expr().pretty(): " << tmp_guard.as_expr().pretty() << std::endl;
+
     dereference_callback.dereference_failure(
       "array bounds",
       "`"+name+"' upper bound", tmp_guard);
@@ -759,7 +712,7 @@ Function: dereferencet::memory_model
 
 static unsigned bv_width(const typet &type)
 {
-  return atoi(type.get("width").c_str());
+  return atoi(type.width().c_str());
 }
 
 static bool is_a_bv_type(const typet &type)
@@ -866,7 +819,7 @@ bool dereferencet::memory_model_bytes(
   const typet from_type=value.type();
 
   // we won't try to convert to/from code
-  if(from_type.id()=="code" || to_type.id()=="code")
+  if(from_type.is_code() || to_type.is_code())
     return false;
 
   // won't do this without a committment to an endianess

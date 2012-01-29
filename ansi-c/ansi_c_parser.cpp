@@ -98,12 +98,68 @@ Function: ansi_c_parsert::convert_declarator
 
 \*******************************************************************/
 
+static void
+insert_base_type(typet &dest, const typet &base_type)
+{
+  typet *p = &dest;
+
+  while(true)
+  {
+    typet &t=*p;
+
+    if(t.is_nil() || t.id() == "")
+    {
+      t=base_type;
+      break;
+    }
+    else if(t.id()=="merged_type")
+    {
+      assert(!t.subtypes().empty());
+      // Is this the final point in this chain of types? It could be either a
+      // further {pointer,array,incomplete_array} or some qualifier. If the
+      // former, descend further; if not, insert type here.
+      p=&(t.subtypes().back());
+      if (p->id() != "pointer" && p->id() != "merged_type" &&
+          !p->is_array() && p->id() !=  "incomplete_array") {
+        t.subtypes().push_back(typet());
+        p=&(t.subtypes().back());
+        p->make_nil();
+      }
+    }
+    else
+      p=&t.subtype();
+  }
+
+  return;
+}
+
 void ansi_c_parsert::convert_declarator(
   irept &declarator,
   const typet &type,
   irept &identifier)
 {
   typet *p=(typet *)&declarator;
+
+  // In aid of making ireps type safe, declarations with identifiers come in the
+  // form of ireps named {declarator,code,array,incomplete_array} with
+  // identifier subtypes.
+
+  if (declarator.is_decl_ident_set() && declarator.id() != "symbol") {
+    identifier = declarator.decl_ident();
+    declarator.remove("decl_ident");
+
+    if (declarator.id() == "merged_type")
+      insert_base_type((typet&)declarator, type);
+    else
+      insert_base_type((typet&)((typet&)declarator).subtype(), type);
+
+    // Plain variables type is the "declarator" subtype. For code/arrays etc,
+    // the fact that it's "code" or an array makes a difference.
+    if (declarator.id() == "declarator")
+      declarator = (exprt&)((typet&)declarator).subtype();
+    // else: leave it as it was.
+    return;
+  }
   
   // walk down subtype until we hit nil or symbol
   while(true)
@@ -161,7 +217,7 @@ void ansi_c_parsert::new_declaration(
   convert_declarator(declarator, static_cast<const typet &>(type), identifier);
   typet final_type=static_cast<typet &>(declarator);
   
-  std::string base_name=identifier.get_string("#base_name");
+  std::string base_name=identifier.cmt_base_name().as_string();
   
   bool is_global=current_scope().prefix=="";
 
@@ -171,7 +227,7 @@ void ansi_c_parsert::new_declaration(
     is_tag?"tag-"+base_name:base_name;
     
   if(is_tag)
-    final_type.set("tag", base_name);
+    final_type.tag(base_name);
 
   std::string name;
 
@@ -200,7 +256,7 @@ void ansi_c_parsert::new_declaration(
   declaration.set_base_name(base_name);
   declaration.set_name(name);
   declaration.location()=identifier.location();
-  declaration.value().make_nil();
+  declaration.decl_value().make_nil();
   declaration.set_is_type(is_tag || id_class==ANSI_C_TYPEDEF);
   declaration.set_is_typedef(id_class==ANSI_C_TYPEDEF);
   declaration.set_is_global(is_global);

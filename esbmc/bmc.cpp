@@ -10,7 +10,14 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <sys/types.h>
 
 #include <signal.h>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+#include <windows.h>
+#include <winbase.h>
+#undef ERROR
+#undef small
+#endif
 
 #include <sstream>
 #include <fstream>
@@ -45,7 +52,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include "bmc.h"
 #include "bv_cbmc.h"
-#include "counterex_pretty_greedy.h"
 #include "document_subgoals.h"
 #include "version.h"
 
@@ -96,6 +102,10 @@ void bmc_baset::do_cbmc(prop_convt &solver)
 
   forall_expr_list(it, bmc_constraints)
     solver.set_to_true(*it);
+
+  // After all conversions, clear cache, which tends to contain a large
+  // amount of stuff.
+  solver.clear_cache();
 }
 
 /*******************************************************************\
@@ -160,7 +170,7 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
   std::string logic;
 
   if (options.get_bool_option("bl-bv") || options.get_bool_option("z3-bv") ||
-      options.get_bool_option("bl") || !options.get_bool_option("int-encoding"))
+      !options.get_bool_option("int-encoding"))
     logic = "bit-vector arithmetic";
   else
     logic = "integer/real arithmetic";
@@ -342,7 +352,9 @@ Function: bmc_baset::run
 
 bool bmc_baset::run(const goto_functionst &goto_functions)
 {
+#ifndef _WIN32
   struct sigaction act;
+#endif
   bool resp;
   reachability_treet *art;
 
@@ -355,11 +367,13 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
   symex.last_location.make_nil();
 
+#ifndef _WIN32
   // Collect SIGUSR1, indicating that we're supposed to checkpoint.
   act.sa_handler = sigusr1_handler;
   sigemptyset(&act.sa_mask);
   act.sa_flags = 0;
   sigaction(SIGUSR1, &act, NULL);
+#endif
 
   // get unwinding info
   setup_unwind();
@@ -408,6 +422,11 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       if(run_thread(art))
       {
         ++interleaving_failed;
+
+        if (symex.options.get_bool_option("checkpoint-on-cex")) {
+          write_checkpoint();
+        }
+
         if(!symex.options.get_bool_option("all-runs"))
         {
           return true;
@@ -415,20 +434,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       }
 
       if (checkpoint_sig) {
-        // We're supposed to perform a checkpoint now.
-        std::string f;
-
-        if (options.get_option("checkpoint-file") == "") {
-          char buffer[32];
-          sprintf(buffer, "%d", getpid());
-          f = "esbmc_checkpoint." + std::string(buffer);
-        } else {
-          f = options.get_option("checkpoint-file");
-        }
-
-        symex.save_checkpoint(f);
-
-        checkpoint_sig = false;
+        write_checkpoint();
       }
     } while(art->setup_next_formula());
   }
@@ -475,15 +481,8 @@ bool bmc_baset::run_thread(reachability_treet *art)
     return true;
   }
 
-  catch(std::bad_alloc)
-  {
-    message_streamt message_stream(*get_message_handler());
-    message_stream.error("Out of memory");
-    return true;
-  }
-
   print(8, "size of program expression: "+
-           i2string(equation->SSA_steps.size())+
+           i2string((unsigned long)equation->SSA_steps.size())+
            " assignments");
 
   try
@@ -549,7 +548,7 @@ bool bmc_baset::run_thread(reachability_treet *art)
 #endif
     else if(options.get_bool_option("dimacs"))
       solver = new dimacs_solver(*this);
-    else if(options.get_bool_option("bl"))
+    else if(options.get_bool_option("boolector-bv"))
 #ifdef BOOLECTOR
       solver = new boolector_solver(*this);
 #else
@@ -572,7 +571,13 @@ bool bmc_baset::run_thread(reachability_treet *art)
       throw "This version of ESBMC was not compiled with Z3 support";
 #endif
     else
+      // If we have Z3, default to Z3. Otherwise, user needs to explicitly
+      // select an SMT solver
+#ifdef Z3
+      solver = new z3_solver(*this);
+#else
       throw "Please specify a SAT/SMT solver to use";
+#endif
 
     ret = solver->run_solver();
     delete solver;
@@ -589,12 +594,6 @@ bool bmc_baset::run_thread(reachability_treet *art)
   {
     error(error_str);
     return true;
-  }
-
-  catch(std::bad_alloc)
-  {
-    error("Out of memory");
-    abort();
   }
 }
 
@@ -673,11 +672,6 @@ bmc_baset::minisat_solver::minisat_solver(bmc_baset &bmc)
 bool bmc_baset::minisat_solver::run_solver()
 {
   bool result = bmc_baset::solver_base::run_solver();
-
-  if (result && bmc.options.get_bool_option("beautify-greedy"))
-      counterexample_beautification_greedyt()(
-        satcheck, bv_cbmc, *bmc.equation, bmc.symex.ns);
-
   return result;
 }
 #endif
@@ -694,21 +688,20 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 
 #ifdef Z3
 bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
-  : solver_base(bmc), z3_dec(bmc.options.get_bool_option("no-assume-guarentee"), bmc.options.get_bool_option("uw-model"))
+  : solver_base(bmc), z3_conv(bmc.options.get_bool_option("uw-model"),
+                               bmc.options.get_bool_option("int-encoding"),
+                               bmc.options.get_bool_option("smt"))
 {
-  z3_dec.set_encoding(bmc.options.get_bool_option("int-encoding"));
-  z3_dec.set_file(bmc.options.get_option("outfile"));
-  z3_dec.set_smt(bmc.options.get_bool_option("smt"));
-  z3_dec.set_unsat_core(atol(bmc.options.get_option("core-size").c_str()));
-  z3_dec.set_ecp(bmc.options.get_bool_option("ecp"));
-  conv = &z3_dec;
+  z3_conv.set_filename(bmc.options.get_option("outfile"));
+  z3_conv.set_z3_core_size(atol(bmc.options.get_option("core-size").c_str()));
+  conv = &z3_conv;
 }
 
 bool bmc_baset::z3_solver::run_solver()
 {
   bool result = bmc_baset::solver_base::run_solver();
-  bmc._unsat_core = z3_dec.get_z3_core_size();
-  bmc._number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
+  bmc._unsat_core = z3_conv.get_z3_core_size();
+  bmc._number_of_assumptions = z3_conv.get_z3_number_of_assumptions();
   return result;
 }
 #endif
@@ -795,3 +788,24 @@ bool bmc_baset::smt_solver::write_output()
   return false;
 }
 #endif
+
+void bmc_baset::write_checkpoint(void)
+{
+  std::string f;
+
+  if (options.get_option("checkpoint-file") == "") {
+    char buffer[32];
+#ifndef _WIN32
+    pid_t pid = getpid();
+#else
+    unsigned long pid = GetCurrentProcessId();
+#endif
+    sprintf(buffer, "%d", pid);
+    f = "esbmc_checkpoint." + std::string(buffer);
+  } else {
+    f = options.get_option("checkpoint-file");
+  }
+
+  symex.save_checkpoint(f);
+  return;
+}

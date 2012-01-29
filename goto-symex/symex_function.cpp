@@ -3,6 +3,7 @@
 Module: Symbolic Execution of ANSI-C
 
 Author: Daniel Kroening, kroening@kroening.com
+		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
@@ -100,16 +101,16 @@ void goto_symext::argument_assignments(
         const typet &f_rhs_type=ns.follow(rhs.type());
       
         // we are willing to do some limited conversion
-        if((f_arg_type.id()=="signedbv" ||
-            f_arg_type.id()=="unsignedbv" ||
-            f_arg_type.id()=="bool" ||
-            f_arg_type.id()=="pointer" ||
-            f_arg_type.id()=="fixedbv") &&
-           (f_rhs_type.id()=="signedbv" ||
-            f_rhs_type.id()=="unsignedbv" ||
-            f_rhs_type.id()=="bool" ||
-            f_rhs_type.id()=="pointer" ||
-            f_rhs_type.id()=="fixedbv"))
+        if((f_arg_type.id()==typet::t_signedbv ||
+            f_arg_type.id()==typet::t_unsignedbv ||
+            f_arg_type.id()==typet::t_bool ||
+            f_arg_type.id()==typet::t_pointer ||
+            f_arg_type.id()==typet::t_fixedbv) &&
+           (f_rhs_type.id()==typet::t_signedbv ||
+            f_rhs_type.id()==typet::t_unsignedbv ||
+            f_rhs_type.id()==typet::t_bool ||
+            f_rhs_type.id()==typet::t_pointer ||
+            f_rhs_type.id()==typet::t_fixedbv))
         {
           rhs.make_typecast(arg_type);
         }
@@ -125,9 +126,6 @@ void goto_symext::argument_assignments(
       
       do_simplify(rhs);
       assignment(ex_state, lhs, rhs);
-      
-	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ LHS --------- " << lhs.get("identifier") << std::endl;
-	  //std::cout << " Argument after rename +++++++++++++++++++++++++++++++++++ RHS --------- " << rhs.get("identifier") << std::endl;
     }
 
     it1++;
@@ -164,7 +162,7 @@ void goto_symext::symex_function_call(
 {
   const exprt &function=code.function();
 
-  if(function.id()=="symbol")
+  if(function.id()==exprt::symbol)
     symex_function_call_symbol(goto_functions, ex_state, code);
   else
     throw "unexpected function for symex_function_call: "+code.id_string();
@@ -190,10 +188,10 @@ void goto_symext::symex_function_call_symbol(
     statet & state = ex_state.get_active_state();
   target->location(state.guard, state.source);
 
-  assert(code.function().id()=="symbol");
+  assert(code.function().id()==exprt::symbol);
 
   const irep_idt &identifier=
-    code.function().get("identifier");
+    code.function().identifier();
     
   if(identifier=="c::CBMC_trace")
   {
@@ -261,7 +259,7 @@ void goto_symext::symex_function_call_code(
     if(call.lhs().is_not_nil())
     {
       exprt rhs=exprt("nondet_symbol", call.lhs().type());
-      rhs.set("identifier", "symex::"+i2string(ex_state.nondet_count++));
+      rhs.identifier("symex::"+i2string(ex_state.nondet_count++));
       rhs.location()=call.location();
       code_assignt code(call.lhs(), rhs);
       basic_symext::symex(state, ex_state, code, ex_state.node_id);
@@ -291,6 +289,8 @@ void goto_symext::symex_function_call_code(
   
   unsigned &frame_nr=state.function_frame[identifier];
   frame_nr++;
+
+  frame.calling_location=state.source;
   
   // preserve locality of local variables
   locality(frame_nr, state, goto_function,ex_state.node_id);
@@ -300,7 +300,6 @@ void goto_symext::symex_function_call_code(
 
   frame.end_of_function=--goto_function.body.instructions.end();
   frame.return_value=call.lhs();
-  frame.calling_location=state.source;
   frame.function_identifier=identifier;
 
   state.source.is_set=true;
@@ -330,16 +329,12 @@ void goto_symext::pop_frame(statet &state)
   state.source.pc=frame.calling_location.pc;
   state.source.prog=frame.calling_location.prog;
 
- // std::cout << "executing end function before remove locals 1" << std::endl;
-
   // clear locals from L2 renaming
   for(statet::framet::local_variablest::const_iterator
       it=frame.local_variables.begin();
       it!=frame.local_variables.end();
       it++)
     state.level2.remove(*it);
-
-//  std::cout << "executing end function afer remove locals 1" << std::endl;
 
   // decrease recursion unwinding counter
   if(frame.function_identifier!="")
@@ -437,6 +432,11 @@ void goto_symext::return_assignment(statet &state, execution_statet &ex_state, u
     if(frame.return_value.is_not_nil())
     {
       code_assignt assignment(frame.return_value, value);
+
+      if (assignment.lhs().type()!=assignment.rhs().type())
+        assignment.rhs().make_typecast(assignment.lhs().type());
+
+      //make sure that we assign two expressions of the same type
       assert(assignment.lhs().type()==assignment.rhs().type());
       basic_symext::symex_assign(state, ex_state, assignment, node_id);
     }
@@ -475,11 +475,6 @@ void goto_symext::symex_return(statet &state, execution_statet &ex_state, unsign
   
   // kill this one
   state.guard.make_false();
-
-  guardt if_guard;
-  if(!state.if_guard_stack.empty())
-		if_guard.add(state.if_guard_stack.top().as_expr());
-  state.if_guard_stack.push(if_guard);
 }
 
 /*******************************************************************\

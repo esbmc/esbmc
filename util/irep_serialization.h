@@ -38,11 +38,15 @@ private:
     }
   };
 
-  struct irep_full_hash
+  struct irep_full_hash hash_map_hasher_superclass(irept)
   {
     size_t operator()(const irept &i) const 
     { 
       return i.full_hash(); 
+    }
+    bool operator()(const irept &i1, const irept &i2) const
+    {
+      return i1.full_hash() < i2.full_hash();
     }
   };
 
@@ -58,12 +62,11 @@ public:
   class ireps_containert
   {
   public:
-    typedef std::vector<std::pair<bool, irept> > ireps_on_readt;
-    ireps_on_readt ireps_on_read;
+    typedef std::map<unsigned, irept> irepts_on_readt;
+    irepts_on_readt ireps_on_read;
 
-    typedef hash_map_cont<
-      irept, unsigned long, irep_full_hash, irep_content_eq> ireps_on_writet;
-    ireps_on_writet ireps_on_write;
+    typedef std::vector<irept> irepts_on_writet;
+    irepts_on_writet ireps_on_write;
     
     typedef std::vector<bool> string_mapt;
     string_mapt string_map;
@@ -86,9 +89,6 @@ public:
     read_buffer.resize(1,0); 
     clear(); 
   };
-  
-  unsigned long insert_on_write(const irept&);
-  unsigned long insert_on_read(unsigned id, const irept&);
   
   void reference_convert(std::istream&, irept &irep);
   void reference_convert(const irept &irep, std::ostream&);

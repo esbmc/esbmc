@@ -30,13 +30,13 @@ bool goto_program_dereferencet::has_failed_symbol(
 {
   if(expr.id()=="symbol")
   {
-    if(expr.get_bool("#invalid_object"))
+    if(expr.invalid_object())
       return false;
 
     const symbolt &ptr_symbol=ns.lookup(expr);
 
     const irep_idt &failed_symbol=
-      ptr_symbol.type.get("#failed_symbol");
+      ptr_symbol.type.failed_symbol();
 
     if(failed_symbol=="") return false;
 
@@ -63,7 +63,7 @@ bool goto_program_dereferencet::is_valid_object(
 {
   const symbolt &symbol=ns.lookup(identifier);
 
-  if(symbol.type.id()=="code")
+  if(symbol.type.is_code())
     return true;
 
   if(symbol.static_lifetime)
@@ -103,9 +103,7 @@ void goto_program_dereferencet::dereference_failure(
     if(!options.get_bool_option("no-simplify"))
     {
       base_type(guard_expr, ns);
-      //std::cout << "before guard_expr: " << guard_expr.pretty() << std::endl;
       simplify(guard_expr);
-      //std::cout << "after guard_expr: " << guard_expr.pretty() << std::endl;
     }
 
     if(!guard_expr.is_true())
@@ -113,8 +111,8 @@ void goto_program_dereferencet::dereference_failure(
       goto_programt::targett t=new_code.add_instruction(ASSERT);
       t->guard.swap(guard_expr);
       t->location=dereference_location;
-      t->location.set("property", property);
-      t->location.set("comment", "dereference failure: "+msg);
+      t->location.property(property);
+      t->location.comment("dereference failure: "+msg);
     }
   }
 }
@@ -139,7 +137,7 @@ void goto_program_dereferencet::dereference_rec(
   if(!dereference.has_dereference(expr))
     return;
 
-  if(expr.id()=="and" || expr.id()=="or")
+  if(expr.is_and() || expr.id()=="or")
   {
     if(!expr.is_boolean())
       throw expr.id_string()+" must be Boolean, but got "+
@@ -211,7 +209,7 @@ void goto_program_dereferencet::dereference_rec(
     return;
   }
 
-  if(expr.id()=="address_of" ||
+  if(expr.is_address_of() ||
      expr.id()=="reference_to")
   {
     // turn &*p to p
@@ -421,7 +419,7 @@ void goto_program_dereferencet::dereference_instruction(
   }
   else if (i.is_return())
   {
-    assert(i.code.get("statement") == "return");
+    assert(i.code.statement() == "return");
     if (i.code.operands().size() == 0)
       return;
 
@@ -432,7 +430,7 @@ void goto_program_dereferencet::dereference_instruction(
   }
   else if(i.is_other())
   {
-    const irep_idt &statement=i.code.get("statement");
+    const irep_idt &statement=i.code.statement();
 
     if(statement=="decl")
     {
