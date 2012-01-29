@@ -824,46 +824,6 @@ z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
   return;
 }
 
-void
-z3_convt::read_cache(const exprt &expr, Z3_ast &bv)
-{
-  std::string symbol;
-
-  symbol = expr.identifier().as_string();
-
-  for (z3_cachet::const_iterator it = z3_cache.begin();
-       it != z3_cache.end(); it++)
-  {
-    if (symbol.compare((*it).second.c_str()) == 0) {
-      convert_bv((*it).first, bv);
-      return;
-    }
-  }
-
-  convert_bv(expr, bv);
-}
-
-void
-z3_convt::write_cache(const exprt &expr)
-{
-  std::string symbol, identifier;
-
-  identifier = expr.get_string("identifier");
-
-  for (std::string::const_iterator it = identifier.begin(); it
-       != identifier.end(); it++)
-  {
-    char ch = *it;
-
-    if (isalnum(ch) || ch == '$' || ch == '?') {
-      symbol += ch;
-    } else if (ch == '#')   {
-      z3_cache.insert(std::pair<const exprt, std::string>(expr, symbol));
-      return;
-    }
-  }
-}
-
 Z3_ast
 z3_convt::convert_cmp(const exprt &expr)
 {
@@ -931,9 +891,6 @@ z3_convt::convert_eq(const exprt &expr)
   const exprt &op0 = expr.op0();
   const exprt &op1 = expr.op1();
 
-  if (op0.type().id() == "array")
-    write_cache(op0);
-
   convert_bv(op0, operand[0]);
   convert_bv(op1, operand[1]);
 
@@ -994,9 +951,6 @@ z3_convt::convert_overflow_sum_sub_mul(const exprt &expr)
   assert(expr.operands().size() == 2);
   Z3_ast bv, result[2], operand[2];
   unsigned width_op0, width_op1;
-
-  if (expr.op0().type().id() == "array")
-    write_cache(expr.op0());
 
   convert_bv(expr.op0(), operand[0]);
 

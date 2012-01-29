@@ -176,9 +176,6 @@ private:
   typedef hash_map_cont<const exprt, Z3_ast, irep_hash> bv_cachet;
   bv_cachet bv_cache;
 
-  typedef hash_map_cont<const exprt, std::string, irep_hash> z3_cachet;
-  z3_cachet z3_cache;
-
   typedef std::map<std::string, Z3_ast> map_varst;
   map_varst map_vars;
 
@@ -189,9 +186,6 @@ private:
   bool is_bv(const typet &type);
   bool is_ptr(const typet &type);
   bool is_signed(const typet &type);
-  bool is_in_cache(const exprt &expr);
-  void write_cache(const exprt &expr);
-  void read_cache(const exprt &expr, Z3_ast &bv);
   static std::string ascii2int(char ch);
   void print_data_types(Z3_ast operand0, Z3_ast operand1);
   void print_location(const exprt &expr);
