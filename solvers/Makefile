@@ -29,11 +29,6 @@ OBJS+= smt/$(OBJDIR)/smt.o
 DIRS+= smt
 endif
 
-ifdef USE_QBF
-OBJS+= qbf/$(OBJDIR)/qbfsolvers.o
-DIRS+= qbf
-endif
-
 ###############################################################################
 
 # Make dirs then solvers.o _seperately_ so that changes to file mod
