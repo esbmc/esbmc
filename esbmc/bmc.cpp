@@ -29,8 +29,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/sat/satcheck.h>
 
-#include <solvers/sat/dimacs_cnf.h>
-
 #include <solvers/boolector/boolector_dec.h>
 
 #include <langapi/mode.h>
@@ -536,8 +534,6 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #else
       throw "This version of ESBMC was not compiled with minisat support";
 #endif
-    else if(options.get_bool_option("dimacs"))
-      solver = new dimacs_solver(*this);
     else if(options.get_bool_option("boolector-bv"))
 #ifdef BOOLECTOR
       solver = new boolector_solver(*this);
@@ -728,19 +724,6 @@ bool bmc_baset::output_solver::run_solver()
   bmc.do_cbmc(*conv);
   conv->dec_solve();
   return write_output();
-}
-
-bmc_baset::dimacs_solver::dimacs_solver(bmc_baset &bmc)
-  : output_solver(bmc), conv_wrap(dimacs_cnf)
-{
-  dimacs_cnf.set_message_handler(bmc.message_handler);
-  conv = &conv_wrap;
-}
-
-bool bmc_baset::dimacs_solver::write_output()
-{
-  dimacs_cnf.write_dimacs_cnf(*out_file);
-  return false;
 }
 
 void bmc_baset::write_checkpoint(void)

@@ -42,7 +42,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"no-assertions",	switc,		""	},
 { 0,	"gui",			switc,		""	},
 { 0,	"nan-check",		switc,		""	},
-{ 0,	"dimacs",		switc,		""	},
 { 0,	"minisat",		switc,		""	},
 { 0,	"16",			switc,		""	},
 { 0,	"32",			switc,		""	},
