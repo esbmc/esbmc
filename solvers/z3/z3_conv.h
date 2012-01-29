@@ -168,9 +168,6 @@ private:
   typedef hash_map_cont<const exprt, Z3_ast, irep_hash> bv_cachet;
   bv_cachet bv_cache;
 
-  typedef std::map<std::string, Z3_ast> map_varst;
-  map_varst map_vars;
-
   std::string itos(int i);
   std::string fixed_point(std::string v, unsigned width);
   std::string extract_magnitude(std::string v, unsigned width);
@@ -191,7 +188,6 @@ private:
   void link_syms_to_literals(void);
   void finalize_pointer_chain(void);
   void init_addr_space_array(void);
-  void store_sat_assignments(void);
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
 	    max_core_size;
 
