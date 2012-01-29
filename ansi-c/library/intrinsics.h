@@ -22,4 +22,6 @@ int __ESBMC_isnormal(double x);
 int __ESBMC_sign(double x);
 extern int __ESBMC_rounding_mode;
 
-
+typedef void *(*__ESBMC_thread_start_func_type)(void *);
+void *__ESBMC_get_thread_start_arg();
+__ESBMC_thread_start_func_type __ESBMC_get_thread_start_func();
