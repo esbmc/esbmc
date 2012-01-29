@@ -410,7 +410,7 @@ goto_symext::intrinsic_yield(reachability_treet &art)
 
 
 void
-goto_symext::intrinsic_switch_to(code_function_callt call,
+goto_symext::intrinsic_switch_to(code_function_callt &call,
                                  reachability_treet &art)
 {
 
