@@ -185,6 +185,16 @@ public:
 		_DFS_traversed.at(i) = false;
     }
 
+    void set_next_thread_start_arg(exprt &e)
+    {
+      next_thread_start_arg = e;
+    }
+
+    void set_next_thread_start_func(exprt &e)
+    {
+      next_thread_start_func = e;
+    }
+
     void recover_global_state(const namespacet &ns, symex_targett &target);
 
     irep_idt get_guard_identifier();

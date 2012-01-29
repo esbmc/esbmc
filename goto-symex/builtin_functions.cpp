@@ -427,3 +427,21 @@ goto_symext::intrinsic_switch_to(code_function_callt &call,
   art.get_cur_state().set_active_state(tid);
   return;
 }
+
+void
+goto_symext::intrinsic_set_start_arg(code_function_callt &call,
+                                     reachability_treet &art)
+{
+
+  art.get_cur_state().set_next_thread_start_arg(call.arguments()[0]);
+  return;
+}
+
+void
+goto_symext::intrinsic_set_start_func(code_function_callt &call,
+                                      reachability_treet &art)
+{
+
+  art.get_cur_state().set_next_thread_start_func(call.arguments()[0]);
+  return;
+}

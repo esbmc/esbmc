@@ -582,6 +582,10 @@ goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
     intrinsic_yield(art);
   } else if (symname == "c::__ESBMC_switch_to") {
     intrinsic_switch_to(call, art);
+  } else if (symname == "c::__ESBMC_set_next_thread_start_arg") {
+    intrinsic_set_start_arg(call, art);
+  } else if (symname == "c::__ESBMC_set_next_thread_start_func") {
+    intrinsic_set_start_func(call, art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC - fatal";
     std::cerr << std::endl;

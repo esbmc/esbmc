@@ -173,6 +173,9 @@ protected:
                      const std::string symname);
   void intrinsic_yield(reachability_treet &arg);
   void intrinsic_switch_to(code_function_callt &call, reachability_treet &art);
+  void intrinsic_set_start_arg(code_function_callt &call, reachability_treet &art);
+  void intrinsic_set_start_func(code_function_callt &call,
+                                reachability_treet &art);
 
   // dynamic stuff
   virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
