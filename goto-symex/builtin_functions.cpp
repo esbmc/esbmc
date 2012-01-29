@@ -471,3 +471,35 @@ goto_symext::intrinsic_get_start_func(code_function_callt &call,
                assign, art.get_cur_state().node_id);
   return;
 }
+
+void
+goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art)
+{
+
+  // As an argument, we expect the address of a symbol.
+  const exprt &args = call.operands()[2];
+  assert(args.id() == "arguments");
+  const exprt &addrof = args.operands()[0];
+  assert(addrof.id() == "address_of");
+  const exprt &symexpr = addrof.operands()[0];
+  assert(symexpr.id() == "symbol");
+  irep_idt symname = symexpr.get("identifier");
+
+  goto_functionst::function_mapt::const_iterator it =
+    art._goto_functions.function_map.find(symname);
+  if (it == art._goto_functions.function_map.end()) {
+    std::cerr << "Spawning thread \"" << symname << "\": symbol not found";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  if (!it->second.body_available) {
+    std::cerr << "Spawning thread \"" << symname << "\": no body" << std::endl;
+    abort();
+  }
+
+  const goto_programt &prog = it->second.body;
+  art.get_cur_state().add_thread(&prog);
+
+  return;
+}

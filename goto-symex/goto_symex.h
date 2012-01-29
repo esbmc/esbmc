@@ -179,7 +179,7 @@ protected:
   void intrinsic_get_start_arg(code_function_callt &call, reachability_treet &art);
   void intrinsic_get_start_func(code_function_callt &call,
                                 reachability_treet &art);
-
+  void intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art);
 
   // dynamic stuff
   virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
