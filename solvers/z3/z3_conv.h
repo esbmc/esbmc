@@ -187,7 +187,6 @@ private:
   std::string extract_magnitude(std::string v, unsigned width);
   std::string extract_fraction(std::string v, unsigned width);
   bool is_ptr(const typet &type);
-  bool is_in_cache(const exprt &expr);
   void write_cache(const exprt &expr);
   void read_cache(const exprt &expr, Z3_ast &bv);
   static std::string ascii2int(char ch);

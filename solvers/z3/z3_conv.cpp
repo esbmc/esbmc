@@ -803,17 +803,6 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
   DEBUGLOC;
 }
 
-bool
-z3_convt::is_in_cache(const exprt &expr)
-{
-  bv_cachet::const_iterator cache_result = bv_cache.find(expr);
-  if (cache_result != bv_cache.end()) {
-    return true;
-  }
-
-  return false;
-}
-
 void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
