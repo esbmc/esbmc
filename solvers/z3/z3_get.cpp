@@ -108,7 +108,9 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     else
       return false_exprt();
   } else if (type.is_array()) {
-    std::map<mp_integer, exprt> elems;
+    typedef std::pair<mp_integer, exprt> array_elem;
+    std::list<array_elem> elems_in_z3_order;
+    std::map<mp_integer, exprt> mapped_elems;
     exprt expr;
 
     // Array model is a series of store ASTs, with the operands:
@@ -130,15 +132,21 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       mp_integer i = string2integer(index);
       exprt val = bv_get_rec(value, type.subtype());
 
-      elems[i] = val;
+      elems_in_z3_order.push_back(array_elem(i, val));
     }
 
-    // Array elements ordered by the map upon insertion; now iterate over map and
-    // dump into array operands. We can worry about indexes later.
+    // We now have all assignments to the array; including to duplicate indexes.
+    // So, put everything into a map in reverse order from how we received it,
+    // ensuring that the assignment to a particular index is the most recent.
+    for (std::list<array_elem>::reverse_iterator it = elems_in_z3_order.rbegin();
+         it != elems_in_z3_order.rend(); it++)
+      mapped_elems[it->first] = it->second;
+
+    // Finally, serialise into operands list
 
     std::vector<exprt> elem_list;
-    for (std::map<mp_integer, exprt>::const_iterator it = elems.begin();
-         it != elems.end(); it++)
+    for (std::map<mp_integer, exprt>::const_iterator it = mapped_elems.begin();
+         it != mapped_elems.end(); it++)
       elem_list.push_back(it->second);
 
     exprt dest = exprt("array", type);
