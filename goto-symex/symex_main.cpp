@@ -554,11 +554,12 @@ void goto_symext::symex_step(
 
             break;
 #endif
-        case END_THREAD:
+#if 0
             ex_state.end_thread(ns, *target);
             ex_state.reexecute_instruction = false;
             art.generate_states();
             break;
+#endif
         case ATOMIC_BEGIN:
             state.source.pc++;
             ex_state.increment_active_atomic_number();

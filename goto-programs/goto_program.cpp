@@ -157,10 +157,6 @@ std::ostream& goto_programt::output_instruction(
     out << "ATOMIC_END" << std::endl;
     break;
     
-  case END_THREAD:
-    out << "END THREAD" << std::endl;
-    break;
-    
   default:
     throw "unknown statement";
   }

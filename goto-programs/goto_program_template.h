@@ -17,7 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <namespace.h>
 
 typedef enum { NO_INSTRUCTION_TYPE, GOTO, ASSUME, ASSERT, OTHER, SYNC, SKIP,
-               END_THREAD, LOCATION, END_FUNCTION,
+               LOCATION, END_FUNCTION,
                ATOMIC_BEGIN, ATOMIC_END, RETURN, ASSIGN,
                FUNCTION_CALL }
   goto_program_instruction_typet;
@@ -176,7 +176,6 @@ public:
     inline bool is_sync         () const { return type==SYNC;          }
     inline bool is_atomic_begin () const { return type==ATOMIC_BEGIN;  }
     inline bool is_atomic_end   () const { return type==ATOMIC_END;    }
-    inline bool is_end_thread   () const { return type==END_THREAD;    }
     inline bool is_end_function () const { return type==END_FUNCTION;  }
 
     instructiont():
@@ -280,10 +279,6 @@ public:
       if(!i.guard.is_true())
         successors.push_back(next);
     }
-    else if(i.is_end_thread())
-    {
-      // no successors
-    }
     else if(i.is_return())
     {
       // the successor is the end_function at the end
@@ -315,10 +310,6 @@ public:
   
       if(!i.guard.is_true())
         successors.push_back(next);
-    }
-    else if(i.is_end_thread())
-    {
-      // no successors
     }
     else if(i.is_return())
     {

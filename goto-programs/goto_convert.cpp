@@ -319,8 +319,6 @@ void goto_convertt::convert(
     convert_non_deterministic_goto(code, dest);
   else if(statement=="ifthenelse")
     convert_ifthenelse(code, dest);
-  else if(statement=="end_thread")
-    convert_end_thread(code, dest);
   else if(statement=="sync")
     convert_sync(code, dest);
   else if(statement=="atomic_begin")
@@ -1897,33 +1895,6 @@ void goto_convertt::convert_non_deterministic_goto(
   goto_programt &dest)
 {
   convert_goto(code, dest);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_end_thread
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::convert_end_thread(
-  const codet &code,
-  goto_programt &dest)
-{
-  if(code.operands().size()!=0)
-  {
-    err_location(code);
-    throw "end_thread expects no operands";
-  }
-
-  copy(code, END_THREAD, dest);
-  dest.instructions.back().code.copy_to_operands(code.op0());
-  is_thread=false;
 }
 
 /*******************************************************************\
