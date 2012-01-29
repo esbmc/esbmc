@@ -169,11 +169,6 @@ protected:
     exprt &code,
     const irep_idt &identifier);
 
-// moved to symex_statet
-//  std::map<irep_idt, unsigned> function_frame;
-//  std::map<irep_idt, unsigned> function_unwind;
-//  std::map<symex_targett::sourcet, unsigned> unwind_map;
-
   // dynamic stuff
   virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
   bool is_valid_object(const statet &state, const symbolt &symbol);
