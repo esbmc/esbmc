@@ -63,7 +63,23 @@ public:
 
 		_goto_program =&(it->second.body);
 
-		add_thread((*_goto_program).instructions.begin(),(*_goto_program).instructions.end(), _goto_program);
+                // Initialize initial thread state
+                goto_symex_statet state(_state_level2);
+                state.initialize((*_goto_program).instructions.begin(),
+                                 (*_goto_program).instructions.end(),
+                                 _goto_program, 0);
+                _threads_state.push_back(state);
+                _atomic_numbers.push_back(0);
+
+                if (_DFS_traversed.size() <= state.source.thread_nr) {
+                  _DFS_traversed.push_back(false);
+                } else {
+                  _DFS_traversed[state.source.thread_nr] = false;
+                }
+
+                _exprs.push_back(exprt());
+                _exprs_read_write.push_back(read_write_set());
+
 		_active_thread = 0;
 		_last_active_thread = 0;
 		generating_new_threads = 0;
@@ -221,7 +237,6 @@ public:
 	void set_active_state(unsigned int i);
     void execute_guard(const namespacet & ns, symex_targett &target);
 
-	void add_thread(goto_programt::const_targett start, goto_programt::const_targett end, const goto_programt *prog);
 	void add_thread(goto_symex_statet & state);
     void end_thread(const namespacet &ns, symex_targett &target);
     /* Presumably this does the same as read_globals, see below */

@@ -401,37 +401,6 @@ void execution_statet::execute_guard(const namespacet &ns, symex_targett &target
 
  \*******************************************************************/
 
-void execution_statet::add_thread(goto_programt::const_targett thread_start, goto_programt::const_targett thread_end, const goto_programt *prog)
-{
-
-  goto_symex_statet state(_state_level2);
-  state.initialize(thread_start, thread_end, prog, _threads_state.size());
-
-  _threads_state.push_back(state);
-  _atomic_numbers.push_back(0);
-
-  if (_DFS_traversed.size() <= state.source.thread_nr) {
-    _DFS_traversed.push_back(false);
-  } else {
-    _DFS_traversed[state.source.thread_nr] = false;
-  }
-
-  _exprs.push_back(exprt());
-
-  _exprs_read_write.push_back(read_write_set());
-}
-
-/*******************************************************************
- Function: execution_statet::add_thread
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 void execution_statet::add_thread(goto_symex_statet & state)
 {
 
