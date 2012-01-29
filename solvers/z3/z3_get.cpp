@@ -269,6 +269,15 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     constant_exprt value_expr(type);
     value_expr.set_value(get_fixed_point(width, value));
     return value_expr;
+  } else if (type.id() == "fixedbv" && !int_encoding) {
+    // bv integer representation of fixedbv can be stuffed right back into a
+    // constant irep, afaik
+    if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
+      return nil_exprt();
+    boolbv_get_width(type, width);
+    std::string value = Z3_get_numeral_string(z3_ctx, bv);
+    constant_exprt value_expr(type);
+    value_expr.set_value(integer2binary(string2integer(value), width));
   } else if (type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return nil_exprt();
