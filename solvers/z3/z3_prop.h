@@ -56,21 +56,9 @@ public:
   { return "Z3"; }
 
   virtual tvt l_get(literalt a) const;
-  //virtual void set_assignment(literalt a, bool value);
   virtual propt::resultt prop_solve();
 
   friend class z3_convt;
-
-  virtual void clear()
-  {
-    assignment.clear();
-  }
-
-  void reset_assignment()
-  {
-    assignment.clear();
-    assignment.resize(no_variables(), tvt(tvt::TV_UNKNOWN));
-  }
 
 private:
 	z3_capi z3_api;
@@ -87,8 +75,6 @@ protected:
            // Affects how formula are constructed
 
   Z3_ast z3_literal(literalt l);
-
-  std::vector<tvt> assignment;
 
   bool process_clause(const bvt &bv, bvt &dest);
   void assert_formula(Z3_ast ast, bool needs_literal = true);
