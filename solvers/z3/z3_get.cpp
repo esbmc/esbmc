@@ -17,9 +17,7 @@
 
 #include <arith_tools.h>
 #include <std_expr.h>
-#include <solvers/flattening/boolbv_type.h>
-#include <solvers/flattening/boolbv_width.h>
-#include <solvers/flattening/boolbv.h>
+#include <std_types.h>
 
 #include "z3_conv.h"
 
@@ -257,7 +255,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return nil_exprt();
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
-    boolbv_get_width(type, width);
+    get_type_width(type, width);
     constant_exprt value_expr(type);
     value_expr.set_value(integer2binary(string2integer(value), width));
     return value_expr;
@@ -274,7 +272,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     // constant irep, afaik
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return nil_exprt();
-    boolbv_get_width(type, width);
+    get_type_width(type, width);
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
     constant_exprt value_expr(type);
     value_expr.set_value(integer2binary(string2integer(value), width));
