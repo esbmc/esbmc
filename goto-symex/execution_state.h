@@ -238,7 +238,7 @@ public:
     void execute_guard(const namespacet & ns, symex_targett &target);
 
     void add_thread(goto_programt *prog);
-    void end_thread(const namespacet &ns, symex_targett &target);
+    void end_thread();
     /* Presumably this does the same as read_globals, see below */
     unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
     /* This takes the given expression, and for all constituent parts looks

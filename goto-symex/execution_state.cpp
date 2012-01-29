@@ -234,12 +234,11 @@ void execution_statet::decreament_trds_in_run(const namespacet &ns, symex_target
 
  \*******************************************************************/
 
-void execution_statet::end_thread(const namespacet &ns, symex_targett &target)
+void execution_statet::end_thread()
 {
 
     get_active_state().thread_ended = true;
-
-    decreament_trds_in_run(ns,target);
+    decreament_trds_in_run(owning_rt->_ns, _target);
 }
 
 /*******************************************************************

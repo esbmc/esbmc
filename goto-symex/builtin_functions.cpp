@@ -503,3 +503,11 @@ goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_tree
 
   return;
 }
+
+void
+goto_symext::intrinsic_terminate_thread(reachability_treet &art)
+{
+
+  art.get_cur_state().end_thread();
+  return;
+}

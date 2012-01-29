@@ -351,7 +351,7 @@ void goto_symext::symex_step(
         case END_FUNCTION:
             if(instruction.function == "c::main")
             {
-                ex_state.end_thread(ns, *target);
+                ex_state.end_thread();
                 ex_state.reexecute_instruction = false;
                 art.generate_states_base(exprt());
                 art.set_go_next_state();
@@ -565,6 +565,8 @@ goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
     intrinsic_get_start_func(call, art);
   } else if (symname == "c::__ESBMC_spawn_thread") {
     intrinsic_spawn_thread(call, art);
+  } else if (symname == "c::__ESBMC_terminate_thread") {
+    intrinsic_terminate_thread(art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
     std::cerr << std::endl << "The name in question: " << symname << std::endl;
