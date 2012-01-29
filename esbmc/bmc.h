@@ -28,7 +28,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/flattening/sat_minimizer.h>
 #include <solvers/sat/cnf_clause_list.h>
 #include <solvers/sat/dimacs_cnf.h>
-#include <solvers/smt/smt_dec.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
 
@@ -142,14 +141,6 @@ protected:
   protected:
     dimacs_cnft dimacs_cnf;
     prop_convt conv_wrap;
-  };
-
-  class smt_solver: public output_solver {
-  public:
-    smt_solver(bmc_baset &bmc);
-    virtual bool write_output();
-  protected:
-    smt_convt smt;
   };
 
   virtual decision_proceduret::resultt

@@ -33,8 +33,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/boolector/boolector_dec.h>
 
-#include <solvers/smt/smt_dec.h>
-
 #include <langapi/mode.h>
 #include <langapi/languages.h>
 #include <langapi/language_util.h>
@@ -546,10 +544,6 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #else
       throw "This version of ESBMC was not compiled with boolector support";
 #endif
-#if 0
-    else if(options.get_bool_option("smt"))
-      solver = new smt_solver(*this);
-#endif
     else if(options.get_bool_option("z3"))
 #ifdef Z3
       solver = new z3_solver(*this);
@@ -748,19 +742,6 @@ bool bmc_baset::dimacs_solver::write_output()
   dimacs_cnf.write_dimacs_cnf(*out_file);
   return false;
 }
-
-#ifdef USE_SMT
-bmc_baset::smt_solver::smt_solver(bmc_baset &bmc)
-  : output_solver(bmc), smt(*out_file)
-{
-  conv = &smt;
-}
-
-bool bmc_baset::smt_solver::write_output()
-{
-  return false;
-}
-#endif
 
 void bmc_baset::write_checkpoint(void)
 {
