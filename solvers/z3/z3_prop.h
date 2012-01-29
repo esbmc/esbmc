@@ -60,7 +60,6 @@ public:
   virtual propt::resultt prop_solve();
 
   friend class z3_convt;
-  friend class z3_dect;
 
   virtual void clear()
   {
