@@ -73,6 +73,9 @@ public:
 		_DFS_traversed.reserve(1);
 		_DFS_traversed[0] = false;
 
+                next_thread_start_arg = exprt();
+                next_thread_start_func = exprt();
+
 		str_state = string_container.take_state_snapshot();
 	};
 
@@ -128,6 +131,9 @@ public:
 		_goto_program = ex._goto_program;
 		_CS_number = ex._CS_number;
 		_TS_number = ex._TS_number;
+
+                next_thread_start_arg = ex.next_thread_start_arg;
+                next_thread_start_func = ex.next_thread_start_func;
 		return *this;
 	}
 
@@ -283,6 +289,9 @@ private:
     const goto_programt *_goto_program;
     int _CS_number;
     string_containert::str_snapshot str_state;
+
+    exprt next_thread_start_arg;
+    exprt next_thread_start_func;
 
     // Static stuff:
 
