@@ -34,7 +34,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"no-assume-guarantee",	switc,		""	},
 { 0,	"partial-loops",	switc,		""	},
 { 0,	"int-encoding",		switc,		""	},
-{ 0,	"ecp",			switc,		""	},
 { 0,	"show-features",	switc,		""	},
 { 0,	"memory-leak-check",	switc,		""	},
 { 0,	"overflow-check",	switc,		""	},

@@ -21,6 +21,25 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "remove_skip.h"
 #include "destructor.h"
 
+static void
+link_up_type_names(irept &irep, const namespacet &ns)
+{
+
+  if (irep.find(exprt::i_type) != get_nil_irep()) {
+    if (irep.find("type").id() == "symbol") {
+      typet newtype = ns.follow((typet&)irep.find("type"));
+      irep.add("type") = newtype;
+    }
+  }
+
+  Forall_irep(it, irep.get_sub())
+    link_up_type_names(*it, ns);
+  Forall_named_irep(it, irep.get_named_sub())
+    link_up_type_names(it->second, ns);
+
+  return;
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::finish_gotos
@@ -283,6 +302,8 @@ void goto_convertt::convert(
   const irep_idt &statement=code.get_statement();
 
   dest.instructions.clear();
+
+  link_up_type_names((codet&)code, ns);
 
   if(statement=="block")
     convert_block(code, dest);
