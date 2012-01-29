@@ -68,7 +68,6 @@ z3_convt::~z3_convt()
     else
       logic = "QF_AUFBV";
 
-    //Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
     smt_lib_str = Z3_benchmark_to_smtlib_string(z3_ctx, "ESBMC", logic,
                                     "unknown", "", z3_prop.assumpt.size(),
                                     assumpt_array, formula);
@@ -549,8 +548,6 @@ z3_convt::check2_z3_properties(void)
 
   if (result == Z3_L_TRUE) {
     store_sat_assignments();
-    //printf("Counterexample:\n");
-    //z3_api.display_model(z3_ctx, stdout, m);
   } else if (z3_prop.uw && result == Z3_L_FALSE)   {
     for (i = 0; i < unsat_core_size; ++i)
     {
