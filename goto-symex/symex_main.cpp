@@ -595,8 +595,8 @@ goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
   } else if (symname == "c::__ESBMC_spawn_thread") {
     intrinsic_spawn_thread(call, art);
   } else {
-    std::cerr << "Function call to non-intrinsic prefixed with __ESBMC - fatal";
-    std::cerr << std::endl;
+    std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
+    std::cerr << "The name in question: " << symname << std::endl;
     std::cerr << "(NB: the C spec reserves the __ prefix for the compiler and environment)" << std::endl;
     abort();
   }
