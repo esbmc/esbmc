@@ -526,35 +526,6 @@ void goto_symext::symex_step(
             throw "SYNC not yet implemented";
 
 #if 0
-        	if (!state.guard.is_false())
-        	{
-          	  assert(!instruction.targets.empty());
-          	  goto_programt::const_targett goto_target=instruction.targets.front();
-
-              state.source.pc++;
-              ex_state.add_thread(state);
-              ex_state.get_active_state().source.pc = goto_target;
-
-              //ex_state.deadlock_detection(ns,*target);
-              ex_state.update_trds_count(ns,*target);
-              ex_state.increament_trds_in_run(ns,*target);
-
-              ex_state.generating_new_threads = ex_state._threads_state.size() - 1;
-            }
-        	else
-        	{
-              assert(!instruction.targets.empty());
-              goto_programt::const_targett goto_target=instruction.targets.front();
-              state.source.pc = goto_target;
-            }
-
-            ex_state.reexecute_instruction = false;
-            art.generate_states();
-            art.set_go_next_state();
-
-            break;
-#endif
-#if 0
             ex_state.end_thread(ns, *target);
             ex_state.reexecute_instruction = false;
             art.generate_states();
