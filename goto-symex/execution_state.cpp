@@ -420,6 +420,10 @@ void execution_statet::add_thread(goto_programt *prog)
   _exprs.push_back(exprt());
 
   _exprs_read_write.push_back(read_write_set());
+
+  update_trds_count(ns, get_cur_state().target);
+  increment_trds_in_run(ns, get_cur_state().target);
+  generating_new_threads = _threads_state.size() - 1;
 }
 
 /*******************************************************************
