@@ -10,8 +10,11 @@
 #include <malloc.h>
 #include <set>
 #include <i2string.h>
+#include <std_expr.h>
+#include <std_types.h>
 
 #include "z3_prop.h"
+#include "z3_conv.h"
 
 z3_propt::z3_propt(bool uw, z3_convt &_owner) : owner(_owner)
 {
@@ -487,11 +490,8 @@ z3_propt::prop_solve()
 tvt
 z3_propt::l_get(literalt a) const
 {
-
   tvt result = tvt(tvt::TV_ASSUME);
   std::string literal;
-  Z3_ast z3_literal;
-  size_t found, found2;
 
   if (a.is_true()) {
     return tvt(true);
@@ -499,71 +499,15 @@ z3_propt::l_get(literalt a) const
     return tvt(false);
   }
 
-  unsigned v = a.var_no();
-  if (v >= map_prop_vars.size()) {
-    return tvt(tvt::TV_UNKNOWN);
-  }
+  symbol_exprt sym("l" + i2string(a.var_no()), bool_typet());
+  exprt res = owner.get(sym);
 
-  literal = "l" + i2string(a.var_no());
-
-  map_prop_varst::const_iterator cache_result = map_prop_vars.find(
-    literal.c_str());
-
-  if (cache_result != map_prop_vars.end()) {
-    z3_literal = cache_result->second;
-    Z3_app app = Z3_to_app(z3_ctx, z3_literal);
-    Z3_func_decl d = Z3_get_app_decl(z3_ctx, app);
-    literal = Z3_func_decl_to_string(z3_ctx, d);
-
-    found = literal.find("true");
-
-    if (found != std::string::npos)
-      result = tvt(true);
-    else {
-      found = literal.find("false");
-      if (found != std::string::npos) {
-	result = tvt(false);
-      }
-      else {
-	found = literal.find("not");
-	if (found != std::string::npos) {
-	  return tvt(tvt::TV_ASSUME);
-	} else   {
-	  found = literal.find("or");
-	  found2 = literal.find("bool");
-	  if (found != std::string::npos && found2 != std::string::npos) {
-	    result = tvt(false);
-	  }       else if (found != std::string::npos) {
-	    result = tvt(true);
-	  } else           {
-	    found = literal.find("<=");
-	    if (found != std::string::npos) {
-	      result = tvt(false);
-	    } else   {
-	      found = literal.find("bvule");
-	      if (found != std::string::npos) {
-		result = tvt(true);
-	      } else   {
-		found = literal.find("=");
-		found2 = literal.find("int");
-		if (found != std::string::npos && found == std::string::npos) {
-		  result = tvt(true);
-		} else if (found != std::string::npos && found2 !=
-		           std::string::npos)       {
-		  result = tvt(false);
-		} else   {
-		  found = literal.find("bvsle");
-		  if (found != std::string::npos) {
-		    return tvt(tvt::TV_ASSUME);
-		  }
-		}
-	      }
-	    }
-	  }
-	}
-      }
-    }
-  }
+  if (res.is_true())
+    result = tvt(true);
+  else if (res.is_false())
+    result = tvt(false);
+  else
+    result = tvt(tvt::TV_UNKNOWN);
 
   if (a.sign())
     result = !result;
