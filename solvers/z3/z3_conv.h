@@ -44,9 +44,9 @@ public:
     this->int_encoding = int_encoding;
     this->z3_prop.smtlib = smt;
     this->z3_prop.store_assumptions = (smt || uw);
-   s_is_uw = uw;
-   total_mem_space = 0;
-   model = NULL;
+    s_is_uw = uw;
+    total_mem_space = 0;
+    model = NULL;
 
     Z3_push(z3_ctx);
     z3_prop.z3_ctx = z3_ctx;
