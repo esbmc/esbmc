@@ -19,11 +19,6 @@ OBJS+= z3/$(OBJDIR)/z3.o
 DIRS+= z3
 endif
 
-ifdef USE_DPLIB
-OBJS+= dplib/$(OBJDIR)/dplib.o
-DIRS+= dplib
-endif
-
 ifdef USE_SMT
 OBJS+= smt/$(OBJDIR)/smt.o
 DIRS+= smt
