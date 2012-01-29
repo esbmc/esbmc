@@ -16,7 +16,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"slice-formula",	switc,		""	},
 { 0,	"debug-level",		number,		""	},
 { 0,	"no-bounds-check",	switc,		""	},
-{ 0,	"cvc",			switc,		""	},
 { 0,	"z3-bv",		switc,		""	},
 { 0,	"z3-ir",		switc,		""	},
 { 0,	"boolector-bv",		switc,		""	},
