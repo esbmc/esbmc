@@ -112,9 +112,6 @@ int pthread_mutex_unlock_check(pthread_mutex_t *mutex)
 int pthread_mutex_destroy(pthread_mutex_t *mutex)
 { }
 
-void pthread_exit(void *value_ptr)
-{ __ESBMC_assume(0); }
-
 int pthread_rwlock_destroy(pthread_rwlock_t *lock)
 { }
 
