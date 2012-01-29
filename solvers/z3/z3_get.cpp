@@ -213,22 +213,18 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     forall_irep(it, components.get_sub())
     {
       const typet &subtype = it->type();
-
-      if (subtype.id() != "pointer") { //@TODO
-        tmp = Z3_get_app_arg(z3_ctx, app, i);
-        expr = bv_get_rec(tmp, subtype);
-        if (comp_nr == i) {
-          if (!expr.is_nil())
-            unknown.push_back(expr);
-          op.push_back(unknown.back());
-          break;
-        }
-        ++i;
+      tmp = Z3_get_app_arg(z3_ctx, app, i);
+      expr = bv_get_rec(tmp, subtype);
+      if (comp_nr == i) {
+        // XXXjmorse, Dunno what to do with this
+        // in fact, shouldn't be reached, not in components list.
+        break;
       }
+      unknown.push_back(expr);
+      ++i;
     }
 
     value.operands().swap(op);
-
     return value;
   } else if (type.id() == "pointer") {
     exprt object, offset;
