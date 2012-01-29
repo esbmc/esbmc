@@ -484,7 +484,7 @@ void goto_symext::symex_step(
                 }
 
                 if (has_prefix(deref_code.function().identifier().as_string(),
-                               "__ESBMC")) {
+                               "c::__ESBMC")) {
                   state.source.pc++;
                   ex_state.reexecute_instruction = false;
                   run_intrinsic(deref_code, art,
