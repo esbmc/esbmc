@@ -478,6 +478,11 @@ void goto_symext::symex_step(
                 }
 
                 dereference(deref_code.function(), state, false, ex_state.node_id);
+                Forall_expr(it, deref_code.arguments()) {
+                    dereference(*it, state, false,ex_state.node_id);
+                }
+
+                symex_function_call(goto_functions, ex_state, deref_code);
 
                 if(deref_code.function().identifier() == "c::__ESBMC_yield")
                 {
@@ -504,11 +509,6 @@ void goto_symext::symex_step(
                   return;
                 }
 
-                Forall_expr(it, deref_code.arguments()) {
-                    dereference(*it, state, false,ex_state.node_id);
-                }
-
-                symex_function_call(goto_functions, ex_state, deref_code);
 
 //                ex_state.reexecute_instruction = false;
 //                art.generate_states();
