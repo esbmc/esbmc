@@ -190,9 +190,19 @@ public:
       next_thread_start_arg = e;
     }
 
+    const exprt &get_next_thread_start_arg()
+    {
+      return next_thread_start_arg;
+    }
+
     void set_next_thread_start_func(exprt &e)
     {
       next_thread_start_func = e;
+    }
+
+    const exprt &get_next_thread_start_func()
+    {
+      return next_thread_start_func;
     }
 
     void recover_global_state(const namespacet &ns, symex_targett &target);
