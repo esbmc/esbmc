@@ -84,7 +84,6 @@ private:
 
 protected:
   unsigned _no_variables;
-  std::ostream &out;
   bool uw; // Are we doing underapprox+widenning?
            // Affects how formula are constructed
 
