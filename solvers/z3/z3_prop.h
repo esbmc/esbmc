@@ -93,15 +93,6 @@ protected:
   std::vector<tvt> assignment;
 
   bool process_clause(const bvt &bv, bvt &dest);
-#if 0
-  static bool is_all(const bvt &bv, literalt l)
-  {
-    for(unsigned i=0; i<bv.size(); i++)
-      if(bv[i]!=l) return false;
-    return true;
-  }
-#endif
-
   void assert_formula(Z3_ast ast, bool needs_literal = true);
   void assert_literal(literalt l, Z3_ast formula);
 };
