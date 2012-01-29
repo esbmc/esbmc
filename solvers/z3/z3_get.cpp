@@ -196,18 +196,16 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     op.reserve(1);
 
     exprt expr;
-    unsigned i = 0;
+    unsigned int i = 0, comp_nr;
     Z3_app app = Z3_to_app(z3_ctx, bv);
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;
 
     tmp = Z3_get_app_arg(z3_ctx, app, num_fields - 1);
-    std::string value1;
 
-    if (Z3_get_ast_kind(z3_ctx, tmp) == Z3_NUMERAL_AST)
-      value1 = Z3_get_numeral_string(z3_ctx, tmp);
-
-    unsigned int comp_nr = atoi(value1.c_str());
+    assert(Z3_get_ast_kind(z3_ctx, tmp) == Z3_NUMERAL_AST);
+    Z3_bool tbool = Z3_get_numeral_int(z3_ctx, tmp, &comp_nr);
+    assert(tbool);
 
     if (num_fields == 0)
       return nil_exprt();
