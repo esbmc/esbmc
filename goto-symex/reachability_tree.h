@@ -146,6 +146,8 @@ private:
   bool directed_interleavings;
   const namespacet &_ns;
 
+  friend class execution_statet;
+
     /* jmorse */
   std::set<crypto_hash>hit_hashes;
 

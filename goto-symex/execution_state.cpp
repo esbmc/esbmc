@@ -7,6 +7,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 \*******************************************************************/
 
 #include "execution_state.h"
+#include "reachability_tree.h"
 #include <string>
 #include <sstream>
 #include <vector>
@@ -421,8 +422,8 @@ void execution_statet::add_thread(goto_programt *prog)
 
   _exprs_read_write.push_back(read_write_set());
 
-  update_trds_count(ns, get_cur_state().target);
-  increment_trds_in_run(ns, get_cur_state().target);
+  update_trds_count(owning_rt->_ns, _target);
+  increament_trds_in_run(owning_rt->_ns, _target);
   generating_new_threads = _threads_state.size() - 1;
 }
 
