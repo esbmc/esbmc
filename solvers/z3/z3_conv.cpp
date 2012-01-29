@@ -480,12 +480,12 @@ z3_convt::dec_solve(void)
 
   finalize_pointer_chain();
 
+  bv_cache.clear();
+
   if (z3_prop.smtlib)
     return D_SMTLIB;
 
   result = check2_z3_properties();
-
-  bv_cache.clear();
 
   if (result == Z3_L_FALSE)
     return D_UNSATISFIABLE;
