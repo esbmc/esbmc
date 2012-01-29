@@ -28,7 +28,6 @@
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
 
-//static Z3_ast core[Z3_UNSAT_CORE_LIMIT];
 static std::vector<Z3_ast> core_vector;
 static u_int unsat_core_size = 0;
 static u_int assumptions_status = 0;
