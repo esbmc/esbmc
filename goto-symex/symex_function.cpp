@@ -413,11 +413,12 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   state.top().function_ptr_combine_target++;
   state.top().orig_func_ptr_call = &call;
 
-  run_next_function_ptr_target(ex_state);
+  run_next_function_ptr_target(goto_functions, ex_state);
 }
 
 bool
-goto_symext::run_next_function_ptr_target(execution_statet &ex_state)
+goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
+                                          execution_statet &ex_state)
 {
   statet &state = ex_state.get_active_state();
 
@@ -450,6 +451,9 @@ goto_symext::run_next_function_ptr_target(execution_statet &ex_state)
   state.source.pc = state.top().function_ptr_call_loc;
 
   // And setup the function call.
+  code_function_callt call = *state.top().orig_func_ptr_call;
+  call.function() = target_symbol;
+  symex_function_call_code(goto_functions, ex_state, call);
 
   return true;
 }

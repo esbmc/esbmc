@@ -361,7 +361,7 @@ void goto_symext::symex_step(
 
                 // Potentially skip to run another function ptr target; if not,
                 // continue
-                if (!run_next_function_ptr_target(ex_state))
+                if (!run_next_function_ptr_target(goto_functions, ex_state))
                   state.source.pc++;
             }
             break;
