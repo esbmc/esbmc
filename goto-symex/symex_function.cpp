@@ -323,7 +323,7 @@ get_function_list(const exprt &expr)
       it->first.add(guardexpr);
 
     exprt notguardexpr = not_exprt(guardexpr);
-    l2 = get_function_list(expr.op1());
+    l2 = get_function_list(expr.op2());
     for (std::list<std::pair<guardt,exprt> >::iterator it = l2.begin();
          it != l2.end(); it++)
       it->first.add(notguardexpr);
