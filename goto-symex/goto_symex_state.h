@@ -310,6 +310,7 @@ public:
     // Should only be nonzero sized when in the middle of running such a func
     // ptr.
     std::list<goto_programt::const_targett> cur_function_ptr_targets;
+    goto_programt::const_targett function_ptr_combine_target;
 
     framet(unsigned int thread_id):
       return_value(static_cast<const exprt &>(get_nil_irep()))

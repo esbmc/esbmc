@@ -404,6 +404,9 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
     new_state.guard.add(it->first.as_expr());
   }
 
+  state.top().function_ptr_combine_target = state.source.pc;
+  state.top().function_ptr_combine_target++;
+
   run_next_function_ptr_target(ex_state);
 }
 
