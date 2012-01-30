@@ -348,6 +348,11 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
                                        execution_statet &ex_state,
                                        const code_function_callt &call)
 {
+  statet &state = ex_state.get_active_state();
+
+  assert(state.top().cur_function_ptr_targets.size() == 0);
+  assert(state.top().cur_function_ptr_isdone.size() == 0);
+  assert(state.top().cur_function_ptr_results.size() == 0);
 
   // Indirect function call. The value is dereferenced, so we'll get either an
   // address_of a symbol, or a set of if ireps. For symbols we'll invoke
