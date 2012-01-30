@@ -396,7 +396,7 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   state.top().function_ptr_call_loc = state.source.pc;
   state.top().function_ptr_combine_target = state.source.pc;
   state.top().function_ptr_combine_target++;
-  state.top().orig_func_ptr_call = &call;
+  state.top().orig_func_ptr_call = new code_function_callt(call);
 
   run_next_function_ptr_target(goto_functions, ex_state);
 }
@@ -439,6 +439,9 @@ goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
   code_function_callt call = *state.top().orig_func_ptr_call;
   call.function() = target_symbol;
   symex_function_call_code(goto_functions, ex_state, call);
+
+  if (state.top().cur_function_ptr_targets.size() == 0)
+    delete state.top().orig_func_ptr_call;
 
   return true;
 }
