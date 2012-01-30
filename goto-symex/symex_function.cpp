@@ -383,6 +383,12 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   }
 
   // Store.
+  for (std::list<std::pair<guardt,exprt> >::const_iterator it = l.begin();
+       it != l.end(); it++) {
+    state.top().cur_function_ptr_targets.push_back(*it);
+    state.top().cur_function_ptr_isdone.push_back(0);
+    // results left uninitialized
+  }
 }
 
 /*******************************************************************\
