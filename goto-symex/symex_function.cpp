@@ -315,6 +315,7 @@ get_function_list(const exprt &expr)
   if (expr.id() == "if") {
     std::list<std::pair<guardt,exprt> > l1, l2;
     exprt guardexpr = expr.op0();
+    exprt notguardexpr = not_exprt(guardexpr);
 
     // Get sub items, them iterate over adding the relevant guard
     l1 = get_function_list(expr.op1());
@@ -322,7 +323,6 @@ get_function_list(const exprt &expr)
          it != l1.end(); it++)
       it->first.add(guardexpr);
 
-    exprt notguardexpr = not_exprt(guardexpr);
     l2 = get_function_list(expr.op2());
     for (std::list<std::pair<guardt,exprt> >::iterator it = l2.begin();
          it != l2.end(); it++)
