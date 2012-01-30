@@ -351,8 +351,6 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   statet &state = ex_state.get_active_state();
 
   assert(state.top().cur_function_ptr_targets.size() == 0);
-  assert(state.top().cur_function_ptr_isdone.size() == 0);
-  assert(state.top().cur_function_ptr_results.size() == 0);
 
   // Indirect function call. The value is dereferenced, so we'll get either an
   // address_of a symbol, or a set of if ireps. For symbols we'll invoke
@@ -383,36 +381,34 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   }
 
   // Store.
-  for (std::list<std::pair<guardt,exprt> >::const_iterator it = l.begin();
+  for (std::list<std::pair<guardt,exprt> >::iterator it = l.begin();
        it != l.end(); it++) {
-    // Add current state guard to which-ptr-target guard
-    it->second.add(state.guard);
 
-    state.top().cur_function_ptr_targets.push_back(*it);
-    state.top().cur_function_ptr_isdone.push_back(0);
-    // results left uninitialized
+    goto_functionst::function_mapt::const_iterator fit =
+      goto_functions.function_map.find(it->second.identifier());
+    if (fit == goto_functions.function_map.end() || !fit->second.body_available) {
+      std::cerr << "Couldn't find symbol " << it->second.identifier();
+      std::cerr << " or body not available, during function ptr dereference";
+      std::cerr << std::endl;
+      abort();
+    }
+
+    // Set up a merge of the current state into the target function.
+    statet::goto_state_listt &goto_state_list =
+      state.top().goto_state_map[fit->second.body.instructions.begin()];
+    state.top().cur_function_ptr_targets.push_back(
+      fit->second.body.instructions.begin());
+
+    goto_state_list.push_back(statet::goto_statet(state));
+    statet::goto_statet &new_state = goto_state_list.back();
+    new_state.guard.add(it->first.as_expr());
   }
-
-  state.top().state_before_func_ptr_call = new goto_statet(state);
 }
 
 bool
 goto_symext::run_next_function_ptr_target(execution_statet &ex_state)
 {
   statet &state = ex_state.get_active_state();
-
-  // Find and setup a function pointer target call.
-  // First, is there one left to run?
-  for (std::vector<bool>::iterator it =
-       state.top().cur_function_ptr_isdone.begin();
-       it != state.top().cur_function_ptr_isdone.end(); it++)
-    if (!*it)
-      break;
-
-  if (it == state.top().cur_function_ptr_isdone.end())
-    return false; // Nothing to run
-
-  // Some code.
 
   return true;
 }
