@@ -418,6 +418,12 @@ goto_symext::run_next_function_ptr_target(execution_statet &ex_state)
   if (state.top().cur_function_ptr_targets.size() == 0)
     return false;
 
+  // Record a merge - when all function ptr target runs are completed, they'll
+  // be merged into the state when the instruction after the func call is run.
+  statet::goto_state_listt &goto_state_list =
+    state.top().goto_state_map[state.top().function_ptr_combine_target];
+  goto_state_list.push_back(statet::goto_statet(state));
+
   goto_programt::const_targett target =
     state.top().cur_function_ptr_targets.front();
   state.top().cur_function_ptr_targets.pop_front();
