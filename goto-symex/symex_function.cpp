@@ -404,6 +404,7 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
     new_state.guard.add(it->first.as_expr());
   }
 
+  state.top().function_ptr_call_loc = state.source.pc;
   state.top().function_ptr_combine_target = state.source.pc;
   state.top().function_ptr_combine_target++;
 
@@ -432,6 +433,16 @@ goto_symext::run_next_function_ptr_target(execution_statet &ex_state)
 
   state.guard.make_false();
   state.source.pc = target;
+
+  // Merge pre-function-ptr-call state in immediately.
+  merge_gotos(state, ex_state, ex_state.node_id);
+
+  // Now switch back to the original call location so that the call appears
+  // to originate from there...
+  state.source.pc = state.top().function_ptr_call_loc;
+
+  // And setup the function call.
+
 
   return true;
 }
