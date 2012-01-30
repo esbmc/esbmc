@@ -67,7 +67,10 @@ namespace std
 			return VECTOR_CAPACITY;
 		}
 
-		void resize ( T sz, T c = T() );
+		void resize ( T sz, T c = T() )
+		{
+			//model
+		}
 
 	    void pop_back()
 	    {
