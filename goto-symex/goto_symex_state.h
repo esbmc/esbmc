@@ -315,6 +315,7 @@ public:
     std::vector<bool> cur_function_ptr_isdone;
     // Record of state at end of function, for future merging
     std::vector<goto_statet> cur_function_ptr_results;
+    goto_statet *state_before_func_ptr_call;
 
     framet(unsigned int thread_id):
       return_value(static_cast<const exprt &>(get_nil_irep()))

@@ -389,6 +389,8 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
     state.top().cur_function_ptr_isdone.push_back(0);
     // results left uninitialized
   }
+
+  state.top().state_before_func_ptr_call = new goto_statet(state);
 }
 
 bool
