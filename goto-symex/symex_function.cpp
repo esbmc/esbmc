@@ -403,6 +403,8 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
     statet::goto_statet &new_state = goto_state_list.back();
     new_state.guard.add(it->first.as_expr());
   }
+
+  run_next_function_ptr_target(ex_state);
 }
 
 bool
