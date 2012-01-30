@@ -353,6 +353,11 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   // address_of a symbol, or a set of if ireps. For symbols we'll invoke
   // symex_function_call_symbol, when dealing with if's we need to fork and
   // merge.
+  if (call.op1().is_nil()) {
+    std::cerr << "Function pointer call with no targets; irep: ";
+    std::cerr << call.pretty(0) << std::endl;
+    abort();
+  }
 
   // Generate a list of functions to call. We'll then proceed to call them,
   // and will later on merge them.
