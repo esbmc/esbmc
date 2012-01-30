@@ -330,11 +330,10 @@ get_function_list(const exprt &expr)
 
     l1.splice(l1.begin(), l2);
     return l1;
-  } else if (expr.id() == "address_of") {
+  } else if (expr.id() == "symbol") {
     guardt guard;
     guard.make_true();
-    assert(expr.op0().id() == "symbol");
-    std::pair<guardt,exprt> p(guard, expr.op0());
+    std::pair<guardt,exprt> p(guard, expr);
     l.push_back(p);
     return l;
   } else {
