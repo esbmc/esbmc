@@ -358,7 +358,11 @@ void goto_symext::symex_step(
             else
             {
                 symex_end_of_function(state);
-                state.source.pc++;
+
+                // Potentially skip to run another function ptr target; if not,
+                // continue
+                if (!run_next_function_ptr_target(ex_state))
+                  state.source.pc++;
             }
             break;
         case LOCATION:
