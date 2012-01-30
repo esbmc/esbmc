@@ -204,6 +204,13 @@ protected:
     const irept &template_args,
     const typet &specialization = typet("nil"));
 
+  const symbolt &instantiate_template(
+    const locationt &location,
+    const symbolt &template_symbol,
+    const cpp_template_args_tct &specialization_template_args,
+    const cpp_template_args_tct &full_template_args,
+    const typet &specialization = typet("nil"));
+
   unsigned template_counter;
   unsigned anon_counter;
 

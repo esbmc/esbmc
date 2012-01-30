@@ -162,17 +162,16 @@ void cpp_typecheck_resolvet::guess_function_template_args(
 
     // Let's build the instance.
 
-    // TODO
-//    const symbolt &new_symbol=
-//      cpp_typecheck.instantiate_template(
-//        location,
-//        template_symbol,
-//        template_args,
-//        template_args);
-//
-//    identifiers.clear();
-//    identifiers.insert(
-//      symbol_exprt(new_symbol.name, new_symbol.type));
+    const symbolt &new_symbol=
+      cpp_typecheck.instantiate_template(
+        location,
+        template_symbol,
+        template_args,
+        template_args);
+
+    identifiers.clear();
+    identifiers.insert(
+      symbol_exprt(new_symbol.name, new_symbol.type));
   }
 }
 
