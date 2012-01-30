@@ -9,6 +9,8 @@
 
 #ifndef STL_VECTOR
 #define STL_VECTOR
+#include <iostream>
+#include <cassert>
 
 namespace std
 {
@@ -22,15 +24,8 @@ namespace std
 		typedef T& iterator;
 		typedef const T& const_iterator;
 		typedef T size_type;
-	
-		T buf[VECTOR_CAPACITY];
-		int _size;
-		int _capacity;
 
-
-	
 	public:
-		//vector():_size(0){}
 		vector(): _size(0), _capacity(0){}
 		vector(T t1, T t2): _size(0)
 		{
@@ -81,6 +76,23 @@ namespace std
 	      resize(_size-1);
 
 	    }
+
+		bool operator==(const vector& v2): _size(0)
+	    {/*
+	      __ESBMC_HIDE:
+	      if(v1._size != v2._size)return false;
+
+	      for(unsigned i = 0; i < v1._size; i++)
+	        if (v1._buf[i] != v2._buf[i]) return false;
+
+	      return true;
+	    */}
+
+	    bool operator !=(const vector& v2): _size(0)
+	    {/*
+	      __ESBMC_HIDE:
+	      return !(v1==v2);
+	    */}
 
 		T& max_size () const{
 	    	// model
@@ -133,6 +145,17 @@ namespace std
 	    void clear ( ){
 	    	// model
 	    }
+			    iterator insert ( iterator position, const T& x ){
+	    	// model
+	    }
+	    void insert ( iterator position, size_type n, const T& x ){
+	    	// model
+	    }
+
+	private:
+		T buf[VECTOR_CAPACITY];
+		int _size;
+		int _capacity;
 
 	};
 
