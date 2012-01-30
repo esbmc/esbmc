@@ -424,6 +424,8 @@ goto_symext::run_next_function_ptr_target(execution_statet &ex_state)
     state.top().goto_state_map[state.top().function_ptr_combine_target];
   goto_state_list.push_back(statet::goto_statet(state));
 
+  // Take one function ptr target out of the list and jump to it. A previously
+  // recorded merge will ensure it gets the right state.
   goto_programt::const_targett target =
     state.top().cur_function_ptr_targets.front();
   state.top().cur_function_ptr_targets.pop_front();
