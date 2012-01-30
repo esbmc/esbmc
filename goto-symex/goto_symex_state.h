@@ -314,6 +314,7 @@ public:
       cur_function_ptr_targets;
     goto_programt::const_targett function_ptr_call_loc;
     goto_programt::const_targett function_ptr_combine_target;
+    const code_function_callt *orig_func_ptr_call;
 
     framet(unsigned int thread_id):
       return_value(static_cast<const exprt &>(get_nil_irep()))

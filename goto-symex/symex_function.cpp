@@ -411,6 +411,7 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   state.top().function_ptr_call_loc = state.source.pc;
   state.top().function_ptr_combine_target = state.source.pc;
   state.top().function_ptr_combine_target++;
+  state.top().orig_func_ptr_call = &call;
 
   run_next_function_ptr_target(ex_state);
 }
