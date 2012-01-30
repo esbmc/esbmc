@@ -145,6 +145,11 @@ protected:
     execution_statet &state,
     const code_function_callt &call);
 
+  virtual void symex_function_call_deref(
+    const goto_functionst &goto_functions,
+    execution_statet &state,
+    const code_function_callt &call);
+
   virtual void symex_function_call_code(
     const goto_functionst &goto_functions,
     execution_statet &state,

@@ -165,7 +165,7 @@ void goto_symext::symex_function_call(
   if(function.id()==exprt::symbol)
     symex_function_call_symbol(goto_functions, ex_state, code);
   else
-    throw "unexpected function for symex_function_call: "+code.id_string();
+    symex_function_call_deref(goto_functions, ex_state, code);
 }
 
 /*******************************************************************\
@@ -305,6 +305,58 @@ void goto_symext::symex_function_call_code(
   state.source.is_set=true;
   state.source.pc=goto_function.body.instructions.begin();
   state.source.prog=&goto_function.body;
+}
+
+static std::list<std::pair<guardt,exprt> >
+get_function_list(const exprt &expr)
+{
+  std::list<std::pair<guardt,exprt> > l;
+
+  if (expr.id() == "if") {
+    std::list<std::pair<guardt,exprt> > l1, l2;
+    exprt guardexpr = expr.op0();
+
+    // Get sub items, them iterate over adding the relevant guard
+    l1 = get_function_list(expr.op1());
+    for (std::list<std::pair<guardt,exprt> >::iterator it = l1.begin();
+         it != l1.end(); it++)
+      it->first.add(guardexpr);
+
+    exprt notguardexpr = not_exprt(guardexpr);
+    l2 = get_function_list(expr.op1());
+    for (std::list<std::pair<guardt,exprt> >::iterator it = l2.begin();
+         it != l2.end(); it++)
+      it->first.add(notguardexpr);
+
+    l1.splice(l1.begin(), l2);
+    return l1;
+  } else if (expr.id() == "address_of") {
+    guardt guard;
+    guard.make_true();
+    assert(expr.op0().id() == "symbol");
+    std::pair<guardt,exprt> p(guard, expr.op0());
+    l.push_back(p);
+    return l;
+  } else {
+    std::cerr << "Unexpected irep id " << expr.id() << " in function ptr dereference" << std::endl;
+    abort();
+  }
+}
+
+void
+goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
+                                       execution_statet &ex_state,
+                                       const code_function_callt &call)
+{
+
+  // Indirect function call. The value is dereferenced, so we'll get either an
+  // address_of a symbol, or a set of if ireps. For symbols we'll invoke
+  // symex_function_call_symbol, when dealing with if's we need to fork and
+  // merge.
+
+  // Generate a list of functions to call. We'll then proceed to call them,
+  // and will later on merge them.
+
 }
 
 /*******************************************************************\
