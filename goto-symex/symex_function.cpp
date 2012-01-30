@@ -396,8 +396,12 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
     // Set up a merge of the current state into the target function.
     statet::goto_state_listt &goto_state_list =
       state.top().goto_state_map[fit->second.body.instructions.begin()];
+
     state.top().cur_function_ptr_targets.push_back(
-      fit->second.body.instructions.begin());
+      std::pair<goto_programt::const_targett,exprt>(
+        fit->second.body.instructions.begin(),
+        it->second)
+      );
 
     goto_state_list.push_back(statet::goto_statet(state));
     statet::goto_statet &new_state = goto_state_list.back();
@@ -427,9 +431,12 @@ goto_symext::run_next_function_ptr_target(execution_statet &ex_state)
 
   // Take one function ptr target out of the list and jump to it. A previously
   // recorded merge will ensure it gets the right state.
-  goto_programt::const_targett target =
+  std::pair<goto_programt::const_targett,exprt> p =
     state.top().cur_function_ptr_targets.front();
   state.top().cur_function_ptr_targets.pop_front();
+
+  goto_programt::const_targett target = p.first;
+  exprt target_symbol = p.second;
 
   state.guard.make_false();
   state.source.pc = target;
@@ -442,7 +449,6 @@ goto_symext::run_next_function_ptr_target(execution_statet &ex_state)
   state.source.pc = state.top().function_ptr_call_loc;
 
   // And setup the function call.
-
 
   return true;
 }

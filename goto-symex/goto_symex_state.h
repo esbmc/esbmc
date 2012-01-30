@@ -309,7 +309,9 @@ public:
     // Records containing data for dereferencing and running a function pointer.
     // Should only be nonzero sized when in the middle of running such a func
     // ptr.
-    std::list<goto_programt::const_targett> cur_function_ptr_targets;
+    // Program target instruction, and the symbol of the func its in.
+    std::list<std::pair<goto_programt::const_targett,exprt> >
+      cur_function_ptr_targets;
     goto_programt::const_targett function_ptr_call_loc;
     goto_programt::const_targett function_ptr_combine_target;
 
