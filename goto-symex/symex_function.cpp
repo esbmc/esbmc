@@ -365,20 +365,6 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   // and will later on merge them.
   std::list<std::pair<guardt,exprt> > l = get_function_list(call.op1());
 
-  // Verify that the type is what we expect. If it isn't, that's a serious
-  // error. It's debateable as to whether this should be reported as an
-  // assertion failure and fed back in a counterexample.
-  for (std::list<std::pair<guardt,exprt> >::const_iterator it = l.begin();
-       it != l.end(); it++) {
-    if (!full_eq(it->second.type(), call.op1().type())) {
-      std::cerr << "Attempting to make function ptr call with ptr type: ";
-      std::cerr << call.op1().type() << std::endl;
-      std::cerr << "But pointer points at type: ";
-      std::cerr << it->second.type().pretty(0) << std::endl;
-      abort();
-    }
-  }
-
   // Store.
   for (std::list<std::pair<guardt,exprt> >::iterator it = l.begin();
        it != l.end(); it++) {
