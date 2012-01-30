@@ -410,6 +410,16 @@ goto_symext::run_next_function_ptr_target(execution_statet &ex_state)
 {
   statet &state = ex_state.get_active_state();
 
+  if (state.top().cur_function_ptr_targets.size() == 0)
+    return false;
+
+  goto_programt::const_targett target =
+    state.top().cur_function_ptr_targets.front();
+  state.top().cur_function_ptr_targets.pop_front();
+
+  state.guard.make_false();
+  state.source.pc = target;
+
   return true;
 }
 
