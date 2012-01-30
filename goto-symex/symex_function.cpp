@@ -438,10 +438,13 @@ goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
   // And setup the function call.
   code_function_callt call = *state.top().orig_func_ptr_call;
   call.function() = target_symbol;
-  symex_function_call_code(goto_functions, ex_state, call);
+  goto_symex_statet::framet &cur_frame = state.top();
 
   if (state.top().cur_function_ptr_targets.size() == 0)
-    delete state.top().orig_func_ptr_call;
+    delete cur_frame.orig_func_ptr_call;
+
+  symex_function_call_code(goto_functions, ex_state, call);
+
 
   return true;
 }
