@@ -391,6 +391,27 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   }
 }
 
+bool
+goto_symext::run_next_function_ptr_target(execution_statet &ex_state)
+{
+  statet &state = ex_state.get_active_state();
+
+  // Find and setup a function pointer target call.
+  // First, is there one left to run?
+  for (std::vector<bool>::iterator it =
+       state.top().cur_function_ptr_isdone.begin();
+       it != state.top().cur_function_ptr_isdone.end(); it++)
+    if (!*it)
+      break;
+
+  if (it == state.top().cur_function_ptr_isdone.end())
+    return false; // Nothing to run
+
+  // Some code.
+
+  return true;
+}
+
 /*******************************************************************\
 
 Function: goto_symext::pop_frame

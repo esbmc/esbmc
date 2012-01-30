@@ -170,6 +170,8 @@ protected:
     exprt &code,
     const irep_idt &identifier);
 
+  bool run_next_function_ptr_target(execution_statet &ex_state);
+
 // moved to symex_statet
 //  std::map<irep_idt, unsigned> function_frame;
 //  std::map<irep_idt, unsigned> function_unwind;
