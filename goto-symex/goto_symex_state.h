@@ -306,6 +306,16 @@ public:
     typedef std::set<irep_idt> local_variablest;
     local_variablest local_variables;
 
+    // Records containing data for dereferencing and running a function pointer.
+    // Should only be nonzero sized when in the middle of running such a func
+    // ptr.
+    // The function symbols and its guard:
+    std::vector<std::pair<guardt,exprt> > cur_function_ptr_targets;
+    // Has a particular guard/symbol pair been run?
+    std::vector<bool> cur_function_ptr_isdone;
+    // Record of state at end of function, for future merging
+    std::vector<goto_statet> cur_function_ptr_results;
+
     framet(unsigned int thread_id):
       return_value(static_cast<const exprt &>(get_nil_irep()))
     {
