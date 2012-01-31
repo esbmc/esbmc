@@ -82,7 +82,7 @@ private:
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
   void create_array_type(const typet &type, Z3_type_ast &bv);
-  void create_type(const typet &type, Z3_type_ast &bv);
+  void create_type(const typet &type, Z3_type_ast &bv) const;
   void create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv);
   void create_struct_type(const typet &type, Z3_type_ast &bv) {
     create_struct_union_type(type, false, bv);

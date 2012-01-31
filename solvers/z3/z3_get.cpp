@@ -194,7 +194,8 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     op.reserve(1);
 
     exprt expr;
-    unsigned int i = 0, comp_nr;
+    unsigned int i = 0;
+    int comp_nr;
     Z3_app app = Z3_to_app(z3_ctx, bv);
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;

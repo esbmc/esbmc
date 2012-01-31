@@ -603,7 +603,7 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 }
 
 void
-z3_convt::create_type(const typet &type, Z3_type_ast &bv)
+z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
 {
   DEBUGLOC;
 
