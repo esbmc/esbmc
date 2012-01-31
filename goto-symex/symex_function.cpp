@@ -390,7 +390,9 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
 
     goto_state_list.push_back(statet::goto_statet(state));
     statet::goto_statet &new_state = goto_state_list.back();
-    new_state.guard.add(it->first.as_expr());
+    exprt guardexpr = it->first.as_expr();
+    state.rename(guardexpr, ns, ex_state.node_id);
+    new_state.guard.add(guardexpr);
   }
 
   state.top().function_ptr_call_loc = state.source.pc;
