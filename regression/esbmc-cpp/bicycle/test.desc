@@ -1,0 +1,3 @@
+main.cpp 
+Bicycle.cpp Display.cpp EmbeddedPC.cpp Thread.cpp --unwind 10 --no-unwinding-assertions -I ~/libraries/
+^VERIFICATION SUCCESSFUL$
