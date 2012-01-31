@@ -235,8 +235,16 @@ void goto_symext::symex_function_call_code(
   goto_functionst::function_mapt::const_iterator it=
     goto_functions.function_map.find(identifier);
 
-  if(it==goto_functions.function_map.end())
+  if(it==goto_functions.function_map.end()) {
+    if (call.function().invalid_object()) {
+      std::cout << "WARNING: function ptr call with no target, ";
+      std::cout << call.location() << std::endl;
+      state.source.pc++;
+      return;
+    }
+
     throw "failed to find `"+id2string(identifier)+"' in function_map";
+  }
 
   const goto_functionst::goto_functiont &goto_function=it->second;
   
