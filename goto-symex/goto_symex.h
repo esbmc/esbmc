@@ -171,7 +171,7 @@ protected:
     const irep_idt &identifier);
 
   bool run_next_function_ptr_target(const goto_functionst &goto_functions,
-                                    execution_statet &ex_state);
+                                    execution_statet &ex_state, bool first);
 
 // moved to symex_statet
 //  std::map<irep_idt, unsigned> function_frame;

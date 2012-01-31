@@ -398,12 +398,13 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   state.top().function_ptr_combine_target++;
   state.top().orig_func_ptr_call = new code_function_callt(call);
 
-  run_next_function_ptr_target(goto_functions, ex_state);
+  run_next_function_ptr_target(goto_functions, ex_state, true);
 }
 
 bool
 goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
-                                          execution_statet &ex_state)
+                                          execution_statet &ex_state,
+                                          bool first)
 {
   statet &state = ex_state.get_active_state();
 
@@ -412,9 +413,13 @@ goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
 
   // Record a merge - when all function ptr target runs are completed, they'll
   // be merged into the state when the instruction after the func call is run.
-  statet::goto_state_listt &goto_state_list =
-    state.top().goto_state_map[state.top().function_ptr_combine_target];
-  goto_state_list.push_back(statet::goto_statet(state));
+  // But, don't do it the first time, or we'll have a merge that's effectively
+  // unconditional.
+  if (!first) {
+    statet::goto_state_listt &goto_state_list =
+      state.top().goto_state_map[state.top().function_ptr_combine_target];
+    goto_state_list.push_back(statet::goto_statet(state));
+  }
 
   // Take one function ptr target out of the list and jump to it. A previously
   // recorded merge will ensure it gets the right state.
