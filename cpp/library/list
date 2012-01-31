@@ -49,6 +49,7 @@ namespace std
 		void push_back(const T& t)
 		{
 			tail = new node(t, tail, NULL);
+			tail->data = t;
 			_size++;
 			if( tail->prev )
 				tail->prev->next = tail;
