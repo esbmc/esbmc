@@ -410,6 +410,9 @@ goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
 {
   statet &state = ex_state.get_active_state();
 
+  if (state.call_stack.empty())
+    return false;
+
   if (state.top().cur_function_ptr_targets.size() == 0)
     return false;
 
