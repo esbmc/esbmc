@@ -29,15 +29,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/sat/satcheck.h>
 
-#include <solvers/sat/dimacs_cnf.h>
-
-#ifdef USE_CVC
-#include <solvers/cvc/cvc_dec.h>
-#endif
-
 #include <solvers/boolector/boolector_dec.h>
-
-#include <solvers/smt/smt_dec.h>
 
 #include <langapi/mode.h>
 #include <langapi/languages.h>
@@ -544,23 +536,11 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 #else
       throw "This version of ESBMC was not compiled with minisat support";
 #endif
-    else if(options.get_bool_option("dimacs"))
-      solver = new dimacs_solver(*this);
     else if(options.get_bool_option("boolector-bv"))
 #ifdef BOOLECTOR
       solver = new boolector_solver(*this);
 #else
       throw "This version of ESBMC was not compiled with boolector support";
-#endif
-    else if(options.get_bool_option("cvc"))
-#ifdef USE_CVC
-      solver = new cvc_solver(*this);
-#else
-      throw "This version of ESBMC was not compiled with CVC support";
-#endif
-#if 0
-    else if(options.get_bool_option("smt"))
-      solver = new smt_solver(*this);
 #endif
     else if(options.get_bool_option("z3"))
 #ifdef Z3
@@ -686,21 +666,20 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 
 #ifdef Z3
 bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
-  : solver_base(bmc), z3_dec(bmc.options.get_bool_option("uw-model"),
-                             bmc.options.get_bool_option("int-encoding"),
-                             bmc.options.get_bool_option("smt"))
+  : solver_base(bmc), z3_conv(bmc.options.get_bool_option("uw-model"),
+                               bmc.options.get_bool_option("int-encoding"),
+                               bmc.options.get_bool_option("smt"))
 {
-  z3_dec.set_file(bmc.options.get_option("outfile"));
-  z3_dec.set_unsat_core(atol(bmc.options.get_option("core-size").c_str()));
-  z3_dec.set_ecp(bmc.options.get_bool_option("ecp"));
-  conv = &z3_dec;
+  z3_conv.set_filename(bmc.options.get_option("outfile"));
+  z3_conv.set_z3_core_size(atol(bmc.options.get_option("core-size").c_str()));
+  conv = &z3_conv;
 }
 
 bool bmc_baset::z3_solver::run_solver()
 {
   bool result = bmc_baset::solver_base::run_solver();
-  bmc._unsat_core = z3_dec.get_z3_core_size();
-  bmc._number_of_assumptions = z3_dec.get_z3_number_of_assumptions();
+  bmc._unsat_core = z3_conv.get_z3_core_size();
+  bmc._number_of_assumptions = z3_conv.get_z3_number_of_assumptions();
   return result;
 }
 #endif
@@ -748,45 +727,6 @@ bool bmc_baset::output_solver::run_solver()
   conv->dec_solve();
   return write_output();
 }
-
-bmc_baset::dimacs_solver::dimacs_solver(bmc_baset &bmc)
-  : output_solver(bmc), conv_wrap(dimacs_cnf)
-{
-  dimacs_cnf.set_message_handler(bmc.message_handler);
-  conv = &conv_wrap;
-}
-
-bool bmc_baset::dimacs_solver::write_output()
-{
-  dimacs_cnf.write_dimacs_cnf(*out_file);
-  return false;
-}
-
-#ifdef USE_CVC
-bmc_baset::cvc_solver::cvc_solver(bmc_baset &bmc)
-  : output_solver(bmc), cvc(*out_file)
-{
-  conv = &cvc;
-}
-
-bool bmc_baset::cvc_solver::write_output()
-{
-  return false;
-}
-#endif
-
-#ifdef USE_SMT
-bmc_baset::smt_solver::smt_solver(bmc_baset &bmc)
-  : output_solver(bmc), smt(*out_file)
-{
-  conv = &smt;
-}
-
-bool bmc_baset::smt_solver::write_output()
-{
-  return false;
-}
-#endif
 
 void bmc_baset::write_checkpoint(void)
 {

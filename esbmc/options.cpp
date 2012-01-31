@@ -5,6 +5,7 @@
 #include "parseoptions.h"
 
 const struct opt_templ esbmc_options[] = {
+{ 0,	"inlining",		switc,		""	},
 { 0,	"program-only",		switc,		""	},
 { 0,	"function",		string,		""	},
 { 0,	"preprocess",		switc,		""	},
@@ -15,7 +16,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"slice-formula",	switc,		""	},
 { 0,	"debug-level",		number,		""	},
 { 0,	"no-bounds-check",	switc,		""	},
-{ 0,	"cvc",			switc,		""	},
 { 0,	"z3-bv",		switc,		""	},
 { 0,	"z3-ir",		switc,		""	},
 { 0,	"boolector-bv",		switc,		""	},
@@ -34,7 +34,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"no-assume-guarantee",	switc,		""	},
 { 0,	"partial-loops",	switc,		""	},
 { 0,	"int-encoding",		switc,		""	},
-{ 0,	"ecp",			switc,		""	},
 { 0,	"show-features",	switc,		""	},
 { 0,	"memory-leak-check",	switc,		""	},
 { 0,	"overflow-check",	switc,		""	},
@@ -44,7 +43,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"no-assertions",	switc,		""	},
 { 0,	"gui",			switc,		""	},
 { 0,	"nan-check",		switc,		""	},
-{ 0,	"dimacs",		switc,		""	},
 { 0,	"minisat",		switc,		""	},
 { 0,	"16",			switc,		""	},
 { 0,	"32",			switc,		""	},
@@ -114,6 +112,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"decide",		switc,		""	},
 { 0,	"fixed-pointer-model",	switc,		""	},
 { 0,	"floating-pointer-model",switc,		""	},
+{ 0,	"memstats",		switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},

@@ -21,6 +21,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/flattening/pointer_logic.h>
 #include <vector>
 #include <string.h>
+#include <decision_procedure.h>
 
 #include "z3_prop.h"
 #include "z3_capi.h"
@@ -29,22 +30,12 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 typedef unsigned int uint;
 
-class z3_prop_wrappert
+class z3_convt: public prop_convt
 {
 public:
-  z3_prop_wrappert(std::ostream &_out, bool uw):z3_prop(_out, uw) { }
-
-protected:
-  z3_propt z3_prop;
-};
-
-class z3_convt:protected z3_prop_wrappert, public prop_convt
-{
-public:
-  z3_convt(std::ostream &_out, bool uw, bool int_encoding,
-           bool smt)
-                               :z3_prop_wrappert(_out, uw),
-                                prop_convt(z3_prop)
+  z3_convt(bool uw, bool int_encoding, bool smt)
+                               :prop_convt(z3_prop),
+                                z3_prop(uw, *this)
   {
     if (z3_ctx == NULL) {
       z3_ctx = z3_api.mk_proof_context(uw);
@@ -53,18 +44,23 @@ public:
     this->int_encoding = int_encoding;
     this->z3_prop.smtlib = smt;
     this->z3_prop.store_assumptions = (smt || uw);
-   s_is_uw = uw;
-   total_mem_space = 0;
+    s_is_uw = uw;
+    total_mem_space = 0;
+    model = NULL;
 
     Z3_push(z3_ctx);
     z3_prop.z3_ctx = z3_ctx;
     ignoring_expr=true;
     max_core_size=Z3_UNSAT_CORE_LIMIT;
 
+    z3_api.set_z3_ctx(z3_ctx);
+    z3_prop.z3_api.set_z3_ctx(z3_ctx);
+
     init_addr_space_array();
   }
 
   virtual ~z3_convt();
+  virtual decision_proceduret::resultt dec_solve(void);
   Z3_lbool check2_z3_properties(void);
   bool get_z3_encoding(void) const;
   void set_filename(std::string file);
@@ -85,17 +81,17 @@ private:
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
-  void create_array_type(const typet &type, Z3_type_ast &bv);
-  void create_type(const typet &type, Z3_type_ast &bv);
-  void create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv);
-  void create_struct_type(const typet &type, Z3_type_ast &bv) {
+  void create_array_type(const typet &type, Z3_type_ast &bv) const;
+  void create_type(const typet &type, Z3_type_ast &bv) const;
+  void create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv) const;
+  void create_struct_type(const typet &type, Z3_type_ast &bv) const {
     create_struct_union_type(type, false, bv);
   }
-  void create_union_type(const typet &type, Z3_type_ast &bv) {
+  void create_union_type(const typet &type, Z3_type_ast &bv) const {
     create_struct_union_type(type, true, bv);
   }
-  void create_enum_type(Z3_type_ast &bv);
-  void create_pointer_type(Z3_type_ast &bv);
+  void create_enum_type(Z3_type_ast &bv) const;
+  void create_pointer_type(Z3_type_ast &bv) const;
   Z3_ast convert_cmp(const exprt &expr);
   Z3_ast convert_eq(const exprt &expr);
   Z3_ast convert_same_object(const exprt &expr);
@@ -157,7 +153,7 @@ private:
   void assert_formula(Z3_ast ast, bool needs_literal = true);
   void assert_literal(literalt l, Z3_ast ast);
 
-  void get_type_width(const typet &t, unsigned &width);
+  void get_type_width(const typet &t, unsigned &width) const;
 
   std::string double2string(double d) const;
 
@@ -165,48 +161,20 @@ private:
 	const unsigned width,
     std::string value) const;
 
-  exprt bv_get_rec(
-	const Z3_ast &bv,
-    std::vector<exprt> &unknown,
-    const bool cache,
-    const typet &type) const;
-
-  void fill_vector(
-    const Z3_ast &bv,
-    std::vector<exprt> &unknown,
-    const typet &type) const;
+  exprt bv_get_rec(const Z3_ast bv, const typet &type) const;
 
   pointer_logict pointer_logic;
 
-  struct eqstr
-  {
-    bool operator()(const char* s1, const char* s2) const
-    {
-      return strcmp(s1, s2) == 0;
-    }
-  };
-
   typedef hash_map_cont<const exprt, Z3_ast, irep_hash> bv_cachet;
   bv_cachet bv_cache;
-
-  typedef hash_map_cont<const exprt, std::string, irep_hash> z3_cachet;
-  z3_cachet z3_cache;
-
-  typedef std::map<std::string, Z3_ast> map_varst;
-  map_varst map_vars;
 
   std::string itos(int i);
   std::string fixed_point(std::string v, unsigned width);
   std::string extract_magnitude(std::string v, unsigned width);
   std::string extract_fraction(std::string v, unsigned width);
   bool is_bv(const typet &type);
-  bool check_all_types(const typet &type);
   bool is_ptr(const typet &type);
   bool is_signed(const typet &type);
-  bool is_in_cache(const exprt &expr);
-  void write_cache(const exprt &expr);
-  void read_cache(const exprt &expr, Z3_ast &bv);
-  static std::string ascii2int(char ch);
   void print_data_types(Z3_ast operand0, Z3_ast operand1);
   void print_location(const exprt &expr);
   void debug_label_formula(std::string name, Z3_ast formula);
@@ -217,15 +185,17 @@ private:
   void bump_addrspace_array(unsigned int idx, Z3_ast val);
   std::string get_cur_addrspace_ident(void);
   void generate_assumptions(const exprt &expr, const Z3_ast &result);
-public: // Hackity hack, for z3_dec
   void link_syms_to_literals(void);
   void finalize_pointer_chain(void);
-private:
   void init_addr_space_array(void);
-  void store_sat_assignments(Z3_model m);
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
 	    max_core_size;
+
+  Z3_model model; // Model of satisfying program.
+
+  z3_propt z3_prop;
   z3_capi z3_api;
+
   bool int_encoding, ignoring_expr, equivalence_checking;
   //Z3_ast assumptions[Z3_UNSAT_CORE_LIMIT];
   std::list<Z3_ast> assumptions;

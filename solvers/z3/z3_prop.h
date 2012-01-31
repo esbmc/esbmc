@@ -15,11 +15,12 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "z3_capi.h"
 
 typedef unsigned int uint;
+class z3_convt; // forward dec
 
 class z3_propt:virtual public propt
 {
 public:
-  z3_propt(std::ostream &_out, bool uw);
+  z3_propt(bool uw, z3_convt &_owner);
   virtual ~z3_propt();
 
 //  virtual literalt constant(bool value)
@@ -56,52 +57,27 @@ public:
   { return "Z3"; }
 
   virtual tvt l_get(literalt a) const;
-  //virtual void set_assignment(literalt a, bool value);
   virtual propt::resultt prop_solve();
 
   friend class z3_convt;
-  friend class z3_dect;
-
-  virtual void clear()
-  {
-    assignment.clear();
-  }
-
-  void reset_assignment()
-  {
-    assignment.clear();
-    assignment.resize(no_variables(), tvt(tvt::TV_UNKNOWN));
-  }
 
 private:
-	z3_capi z3_api;
-	Z3_context z3_ctx;
-	typedef std::map<std::string, Z3_ast> map_prop_varst;
-	map_prop_varst map_prop_vars;
-	std::list<Z3_ast> assumpt;
-    bool store_assumptions;
-    bool smtlib;
+  z3_capi z3_api;
+  Z3_context z3_ctx;
+  std::list<Z3_ast> assumpt;
+  bool store_assumptions;
+  bool smtlib;
+
+  z3_convt &owner; // Reference back to convt owner.
 
 protected:
   unsigned _no_variables;
-  std::ostream &out;
   bool uw; // Are we doing underapprox+widenning?
            // Affects how formula are constructed
 
   Z3_ast z3_literal(literalt l);
 
-  std::vector<tvt> assignment;
-
   bool process_clause(const bvt &bv, bvt &dest);
-#if 0
-  static bool is_all(const bvt &bv, literalt l)
-  {
-    for(unsigned i=0; i<bv.size(); i++)
-      if(bv[i]!=l) return false;
-    return true;
-  }
-#endif
-
   void assert_formula(Z3_ast ast, bool needs_literal = true);
   void assert_literal(literalt l, Z3_ast formula);
 };

@@ -12,12 +12,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef _WIN32
 extern "C" {
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
 
-#include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/sendfile.h>
+#include <sys/time.h>
+#include <sys/types.h>
 }
 #endif
 
@@ -226,6 +229,9 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("smtlib-ileave-num", cmdline.getval("smtlib-ileave-num"));
   else
     options.set_option("smtlib-ileave-num", "1");
+
+  if(cmdline.isset("inlining"))
+    options.set_option("inlining", true);
 
   // jmorse
   if(cmdline.isset("timeout")) {
@@ -857,7 +863,8 @@ bool cbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     // do partial inlining
-    goto_partial_inline(goto_functions, ns, ui_message_handler);
+    if(!cmdline.isset("inlining"))
+      goto_partial_inline(goto_functions, ns, ui_message_handler);
 
     if(!cmdline.isset("show-features"))
     {
@@ -987,6 +994,14 @@ int cbmc_parseoptionst::do_bmc(
 
   bmc1.run(goto_functions);
 
+#ifndef _WIN32
+  if (bmc1.options.get_bool_option("memstats")) {
+    int fd = open("/proc/self/status", O_RDONLY);
+    sendfile(2, fd, NULL, 100000);
+    close(fd);
+  }
+#endif
+
   return 0;
 }
 
@@ -1019,6 +1034,7 @@ void cbmc_parseoptionst::help()
     " -I path                      set include path\n"
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
+    " --inlining                   inlining function calls\n"
     " --program-only               only show program expression\n"
     " --all-claims                 keep all claims\n"
     " --show-loops                 show the loops in the program\n"

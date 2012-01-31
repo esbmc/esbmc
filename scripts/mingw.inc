@@ -55,9 +55,3 @@ FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS) -Wl,--stack,8388608
 # This doesn't result in an actual static binary, because there's no such thing
 # on windows, just no additional dependancies
 FINLINKTAIL+= -static
-
-# Work with latest version of gcc
-GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `$(CC) -dumpversion`)
-ifeq "$(GCCVERSIONGTEQ460)" "1"
-  CXXFLAGS += -fpermissive
-endif
