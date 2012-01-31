@@ -856,10 +856,6 @@ bool cbmc_parseoptionst::process_goto_program(
         context, *get_message_handler(), goto_functions);
     }
 
-    remove_function_pointers(
-      context, bmc.options, goto_functions,
-      ui_message_handler);
-
     namespacet ns(context);
 
     // do partial inlining

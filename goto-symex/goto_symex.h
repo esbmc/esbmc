@@ -56,10 +56,6 @@ public:
   const goto_functionst &goto_functions,
   reachability_treet & art);
 
-  // these bypass the target maps
-  virtual void symex_step_return(statet &state, execution_statet &ex_state, unsigned node_id);
-  virtual void symex_step_goto(statet &state, bool taken, unsigned node_id);
-
 protected:
   friend class symex_dereference_statet;
   reachability_treet *art1;
@@ -145,6 +141,11 @@ protected:
     execution_statet &state,
     const code_function_callt &call);
 
+  virtual void symex_function_call_deref(
+    const goto_functionst &goto_functions,
+    execution_statet &state,
+    const code_function_callt &call);
+
   virtual void symex_function_call_code(
     const goto_functionst &goto_functions,
     execution_statet &state,
@@ -169,6 +170,9 @@ protected:
     exprt &code,
     const irep_idt &identifier);
 
+  bool run_next_function_ptr_target(const goto_functionst &goto_functions,
+                                    execution_statet &ex_state, bool first);
+
   void run_intrinsic(code_function_callt &call, reachability_treet &art,
                      const std::string symname);
   void intrinsic_yield(reachability_treet &arg);
@@ -181,6 +185,11 @@ protected:
                                 reachability_treet &art);
   void intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art);
   void intrinsic_terminate_thread(reachability_treet &art);
+
+// moved to symex_statet
+//  std::map<irep_idt, unsigned> function_frame;
+//  std::map<irep_idt, unsigned> function_unwind;
+//  std::map<symex_targett::sourcet, unsigned> unwind_map;
 
   // dynamic stuff
   virtual void replace_dynamic_allocation(const statet &state, exprt &expr);

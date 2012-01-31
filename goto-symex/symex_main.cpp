@@ -359,7 +359,12 @@ void goto_symext::symex_step(
             else
             {
                 symex_end_of_function(state);
-                state.source.pc++;
+
+                // Potentially skip to run another function ptr target; if not,
+                // continue
+                if (!run_next_function_ptr_target(goto_functions, ex_state,
+                                                  false))
+                  state.source.pc++;
             }
             break;
         case LOCATION:
