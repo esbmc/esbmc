@@ -1,5 +1,14 @@
 #!/bin/sh
 
+function usage {
+  echo "Usage: bisect.sh [opts]" >&2
+  echo "Options:" >&2
+  echo "    -t testname    Name of regression test to run" >&2
+  echo "    -p dirname     Path to regression test to run" >&2
+  echo "    -s             Unstash/Stash when performing a run" >&2
+  echo "You must specify either -t or -p."
+}
+
 searchpath=-1
 beatstash=0
 dirpath=""
