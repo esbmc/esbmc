@@ -24,31 +24,12 @@ Author: Daniel Kroening, kroening@kroening.com
 class basic_symext
 {
 public:
-  basic_symext(
-    const namespacet &_ns,
-    contextt &_new_context,
-    symex_targett &_target):
-    constant_propagation(true),
-    new_context(_new_context),
-    ns(_ns),
-    target(&_target)
+  basic_symext()
   {
-    options.set_option("no-simplify", false);
+//    options.set_option("no-simplify", false);
   }
 
   virtual ~basic_symext() { }
-
-  typedef goto_symex_statet statet;
-
-  bool constant_propagation;
-
-  optionst options;
-  contextt &new_context;
-
-// XXX jmorse - un-protected to appease bmc.cpp. g++34 does not approve of its
-// access of this member.
-  const namespacet &ns;
-  symex_targett *target;
 };
 
 #endif
