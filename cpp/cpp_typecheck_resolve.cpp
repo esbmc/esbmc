@@ -1348,7 +1348,8 @@ exprt cpp_typecheck_resolvet::resolve(
   if(want==VAR)
     make_constructors(identifiers);
 
-  filter(identifiers, want);
+  if(identifiers.size() != 1)
+    filter(identifiers, want);
 
   exprt result;
 
