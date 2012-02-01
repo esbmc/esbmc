@@ -83,17 +83,4 @@ protected:
     exprt &rhs);
 };
 
-void basic_symex(
-  const codet &code,
-  const namespacet &ns,
-  symex_targett &target,
-  execution_statet &ex_state,
-  goto_symex_statet &state);
-
-void basic_symex(
-  const codet &code,
-  const namespacet &ns,
-  symex_targett &target,
-  execution_statet &ex_state);
-
 #endif
