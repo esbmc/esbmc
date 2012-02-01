@@ -40,7 +40,6 @@ public:
 
   typedef goto_symex_statet statet;
 
-  virtual void symex(statet &state, execution_statet &ex_state, const codet &code, unsigned node_id);
   bool constant_propagation;
 
   optionst options;
@@ -54,7 +53,6 @@ public:
 protected:
   virtual void do_simplify(exprt &expr);
 
-  virtual void symex_block(statet &state, execution_statet &ex_state, const codet &code, unsigned node_id);
   virtual void symex_assign(statet &state, execution_statet &ex_state, const codet &code, unsigned node_id);
 
   void symex_assign_rec(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard, unsigned node_id);
