@@ -177,6 +177,7 @@ protected:
   void symex_macro(statet &state, const code_function_callt &code);
   void symex_printf(statet &state, const exprt &lhs, const exprt &code,unsigned node_id);
 
+  void replace_nondet(exprt &expr, execution_statet &ex_state);
 };
 
 #endif

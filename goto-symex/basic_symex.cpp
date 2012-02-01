@@ -496,7 +496,7 @@ void basic_symext::replace_dynamic_allocation(
 
 /*******************************************************************\
 
-Function: basic_symext::replace_nondet
+Function: goto_symext::replace_nondet
 
   Inputs:
 
@@ -506,7 +506,7 @@ Function: basic_symext::replace_nondet
 
 \*******************************************************************/
 
-void basic_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
+void goto_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
 {
   if(expr.id()=="sideeffect" && expr.statement()=="nondet")
   {
