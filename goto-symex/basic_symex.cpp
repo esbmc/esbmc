@@ -109,7 +109,6 @@ void basic_symext::symex(statet &state, execution_statet &ex_state, const codet 
     rhs.location()=code.location();
 
     exprt new_lhs(code.op0());
-    read(new_lhs);
 
     guardt guard; // NOT the state guard!
     symex_assign_rec(state, ex_state, new_lhs, rhs, guard,node_id);
