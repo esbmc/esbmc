@@ -265,38 +265,6 @@ void goto_symext::symex_cpp_delete(
 
 /*******************************************************************\
 
-Function: goto_symext::symex_fkt
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::symex_fkt(
-  statet &state,
-  const code_function_callt &code)
-{
-  #if 0
-  exprt new_fc("function", fc.type());
-
-  new_fc.reserve_operands(fc.operands().size()-1);
-
-  bool first=true;
-
-  Forall_operands(it, fc)
-    if(first) first=false; else new_fc.move_to_operands(*it);
-
-  new_fc.identifier(fc.op0().identifier());
-
-  fc.swap(new_fc);
-  #endif
-}
-
-/*******************************************************************\
-
 Function: goto_symext::symex_macro
 
   Inputs:
