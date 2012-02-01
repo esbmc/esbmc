@@ -17,10 +17,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_types.h>
 
 #include "basic_symex.h"
+#include "goto_symex.h"
 
 /*******************************************************************\
 
-Function: basic_symext::symex_malloc
+Function: goto_symext::symex_malloc
 
   Inputs:
 
@@ -30,7 +31,7 @@ Function: basic_symext::symex_malloc
 
 \*******************************************************************/
 
-void basic_symext::symex_malloc(
+void goto_symext::symex_malloc(
   statet &state,
   const exprt &lhs,
   const side_effect_exprt &code,
@@ -126,7 +127,7 @@ void basic_symext::symex_malloc(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_printf
+Function: goto_symext::symex_printf
 
   Inputs:
 
@@ -136,7 +137,7 @@ Function: basic_symext::symex_printf
 
 \*******************************************************************/
 
-void basic_symext::symex_printf(
+void goto_symext::symex_printf(
   statet &state,
   const exprt &lhs,
   const exprt &rhs,
@@ -172,7 +173,7 @@ void basic_symext::symex_printf(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_cpp_new
+Function: goto_symext::symex_cpp_new
 
   Inputs:
 
@@ -182,7 +183,7 @@ Function: basic_symext::symex_cpp_new
 
 \*******************************************************************/
 
-void basic_symext::symex_cpp_new(
+void goto_symext::symex_cpp_new(
   statet &state,
   const exprt &lhs,
   const side_effect_exprt &code,
@@ -245,7 +246,7 @@ void basic_symext::symex_cpp_new(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_cpp_delete
+Function: goto_symext::symex_cpp_delete
 
   Inputs:
 
@@ -255,7 +256,7 @@ Function: basic_symext::symex_cpp_delete
 
 \*******************************************************************/
 
-void basic_symext::symex_cpp_delete(
+void goto_symext::symex_cpp_delete(
   statet &state,
   const codet &code)
 {
@@ -264,7 +265,7 @@ void basic_symext::symex_cpp_delete(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_trace
+Function: goto_symext::symex_trace
 
   Inputs:
 
@@ -274,7 +275,7 @@ Function: basic_symext::symex_trace
 
 \*******************************************************************/
 
-void basic_symext::symex_trace(
+void goto_symext::symex_trace(
   statet &state,
   const code_function_callt &code,
         unsigned node_id)
@@ -316,7 +317,7 @@ void basic_symext::symex_trace(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_fkt
+Function: goto_symext::symex_fkt
 
   Inputs:
 
@@ -326,7 +327,7 @@ Function: basic_symext::symex_fkt
 
 \*******************************************************************/
 
-void basic_symext::symex_fkt(
+void goto_symext::symex_fkt(
   statet &state,
   const code_function_callt &code)
 {
@@ -348,7 +349,7 @@ void basic_symext::symex_fkt(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_macro
+Function: goto_symext::symex_macro
 
   Inputs:
 
@@ -358,7 +359,7 @@ Function: basic_symext::symex_macro
 
 \*******************************************************************/
 
-void basic_symext::symex_macro(
+void goto_symext::symex_macro(
   statet &state,
   const code_function_callt &code)
 {

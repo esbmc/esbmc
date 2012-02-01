@@ -53,22 +53,6 @@ public:
 protected:
   virtual void do_simplify(exprt &expr);
 
-  void symex_assign_rec(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard, unsigned node_id);
-  void symex_assign_symbol(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
-  void symex_assign_typecast(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
-  void symex_assign_array(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
-  void symex_assign_member(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
-  void symex_assign_if(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
-  void symex_assign_byte_extract(statet &state,  execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
-
-  virtual void symex_malloc (statet &state, const exprt &lhs, const side_effect_exprt &code, execution_statet &ex_state, unsigned node_id);
-  virtual void symex_cpp_delete    (statet &state, const codet &code);
-  virtual void symex_cpp_new (statet &state, const exprt &lhs, const side_effect_exprt &code, execution_statet &ex_state, unsigned node_id);
-  virtual void symex_fkt           (statet &state, const code_function_callt &code);
-  virtual void symex_macro         (statet &state, const code_function_callt &code);
-  virtual void symex_trace         (statet &state, const code_function_callt &code,unsigned node_id);
-  virtual void symex_printf        (statet &state, const exprt &lhs, const exprt &code,unsigned node_id);
-
   virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
   void replace_nondet(exprt &expr, execution_statet &ex_state);
 
