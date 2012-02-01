@@ -193,12 +193,7 @@ void goto_symext::symex_function_call_symbol(
   const irep_idt &identifier=
     code.function().identifier();
     
-  if(has_prefix(id2string(identifier), CPROVER_MACRO_PREFIX))
-  {
-    symex_macro(state, code);
-  }
-  else
-    symex_function_call_code(goto_functions, ex_state, code);
+  symex_function_call_code(goto_functions, ex_state, code);
 }
 
 /*******************************************************************\
