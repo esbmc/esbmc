@@ -16,15 +16,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "basic_symex.h"
 #include "reachability_tree.h"
 
-class goto_symext:
-  public basic_symext
+class goto_symext
 {
 public:
   goto_symext(
       const namespacet &_ns,
       contextt &_new_context,
       symex_targett &_target) :
-    basic_symext(),
     constant_propagation(true),
     ns(_ns),
     new_context(_new_context),
@@ -33,6 +31,7 @@ public:
     remaining_claims(0),
     guard_identifier_s("goto_symex::\\guard")
   {
+    options.set_option("no-simplify", false);
     options.set_option("no-assertions", false);
     art1 = NULL;
   }

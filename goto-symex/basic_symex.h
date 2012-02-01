@@ -21,15 +21,4 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "symex_target.h"
 #include "goto_symex_state.h"
 
-class basic_symext
-{
-public:
-  basic_symext()
-  {
-//    options.set_option("no-simplify", false);
-  }
-
-  virtual ~basic_symext() { }
-};
-
 #endif
