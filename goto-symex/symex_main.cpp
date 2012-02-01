@@ -74,22 +74,6 @@ Function: goto_symext::operator()
 
 \*******************************************************************/
 
-void goto_symext::operator()() {
-
-    throw "symex_main::goto_symex::operator() : who called me?";
-}
-/*******************************************************************\
-
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::multi_formulas_init(const goto_functionst &goto_functions)
 {
 
