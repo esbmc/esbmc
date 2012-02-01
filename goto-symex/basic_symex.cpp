@@ -596,28 +596,3 @@ void basic_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
     Forall_operands(it, expr)
       replace_nondet(*it, ex_state);
 }
-
-/*******************************************************************\
-
-Function: basic_symex
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symex(
-  const codet &code,
-  const namespacet &ns,
-  symex_targett &target,
-  execution_statet &ex_state,
-  goto_symex_statet &state,
-  unsigned node_id)
-{
-  contextt new_context;
-  basic_symext basic_symex(ns, new_context, target);
-  basic_symex.symex(state, ex_state, code, node_id);
-}
