@@ -24,7 +24,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
-Function: basic_symext::assignment
+Function: goto_symext::assignment
 
   Inputs:
 
@@ -34,7 +34,7 @@ Function: basic_symext::assignment
 
 \*******************************************************************/
 
-void basic_symext::assignment(
+void goto_symext::assignment(
   execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs)

@@ -55,11 +55,6 @@ protected:
 
   virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
   void replace_nondet(exprt &expr, execution_statet &ex_state);
-
-  void assignment(
-    execution_statet &ex_state,
-    const exprt &lhs,
-    exprt &rhs);
 };
 
 #endif
