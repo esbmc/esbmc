@@ -41,11 +41,6 @@ namespace std
 			push_back(t);
 		}
 
-		vector(int x) 
-		{
-			_size=x;
-		}
-
 		void push_back(const T& t)
 		{
 			assert(0 <= _size && _size < VECTOR_CAPACITY);
