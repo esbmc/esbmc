@@ -175,34 +175,6 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
 
 /*******************************************************************\
 
-Function: goto_symext::symex_step_goto
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::symex_step_goto(statet &state, bool taken,unsigned node_id)
-{
-  const goto_programt::instructiont &instruction=*state.source.pc;
-
-  exprt guard(instruction.guard);
-  dereference(guard, state, false, node_id);
-  state.rename(guard, ns,node_id);
-
-  if(!taken) guard.make_not();
-
-  state.guard.guard_expr(guard);
-  do_simplify(guard);
-
-  target->assumption(state.guard, guard, state.source);
-}
-
-/*******************************************************************\
-
 Function: goto_symext::merge_gotos
 
   Inputs:

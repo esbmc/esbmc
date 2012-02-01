@@ -52,10 +52,6 @@ public:
   const goto_functionst &goto_functions,
   reachability_treet & art);
 
-  // these bypass the target maps
-  virtual void symex_step_return(statet &state, execution_statet &ex_state, unsigned node_id);
-  virtual void symex_step_goto(statet &state, bool taken, unsigned node_id);
-
 protected:
   friend class symex_dereference_statet;
   reachability_treet *art1;

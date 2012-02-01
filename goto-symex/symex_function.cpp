@@ -474,22 +474,3 @@ void goto_symext::symex_return(statet &state, execution_statet &ex_state, unsign
   // kill this one
   state.guard.make_false();
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_step_return
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::symex_step_return(statet &state, execution_statet &ex_state, unsigned node_id)
-{
-  return_assignment(state, ex_state, node_id);
-  pop_frame(state);
-}
-
