@@ -1,6 +1,8 @@
 #ifndef STL_CSTRING
 #define STL_CSTRING
 
+#include "definitions.h"
+
 char *strcpy(char *dest, const char* src)
 {
 	__ESBMC_HIDE:
