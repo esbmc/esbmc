@@ -16,11 +16,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/c_types.h>
 
-#include "basic_symex.h"
+#include "goto_symex.h"
 
 /*******************************************************************\
 
-Function: basic_symext::symex_malloc
+Function: goto_symext::symex_malloc
 
   Inputs:
 
@@ -30,7 +30,7 @@ Function: basic_symext::symex_malloc
 
 \*******************************************************************/
 
-void basic_symext::symex_malloc(
+void goto_symext::symex_malloc(
   statet &state,
   const exprt &lhs,
   const side_effect_exprt &code,
@@ -126,7 +126,7 @@ void basic_symext::symex_malloc(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_printf
+Function: goto_symext::symex_printf
 
   Inputs:
 
@@ -136,7 +136,7 @@ Function: basic_symext::symex_printf
 
 \*******************************************************************/
 
-void basic_symext::symex_printf(
+void goto_symext::symex_printf(
   statet &state,
   const exprt &lhs,
   const exprt &rhs,
@@ -172,7 +172,7 @@ void basic_symext::symex_printf(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_cpp_new
+Function: goto_symext::symex_cpp_new
 
   Inputs:
 
@@ -182,7 +182,7 @@ Function: basic_symext::symex_cpp_new
 
 \*******************************************************************/
 
-void basic_symext::symex_cpp_new(
+void goto_symext::symex_cpp_new(
   statet &state,
   const exprt &lhs,
   const side_effect_exprt &code,
@@ -245,7 +245,7 @@ void basic_symext::symex_cpp_new(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_cpp_delete
+Function: goto_symext::symex_cpp_delete
 
   Inputs:
 
@@ -255,146 +255,9 @@ Function: basic_symext::symex_cpp_delete
 
 \*******************************************************************/
 
-void basic_symext::symex_cpp_delete(
+void goto_symext::symex_cpp_delete(
   statet &state,
   const codet &code)
 {
   //bool do_array=code.statement()=="delete[]";
-}
-
-/*******************************************************************\
-
-Function: basic_symext::symex_trace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symext::symex_trace(
-  statet &state,
-  const code_function_callt &code,
-        unsigned node_id)
-{
-  if(code.arguments().size()<2)
-    throw "CBMC_trace expects at least two arguments";
-
-  int debug_thresh=atol(options.get_option("debug-level").c_str());
-  
-  mp_integer debug_lvl;
-
-  if(to_integer(code.arguments()[0], debug_lvl))
-    throw "CBMC_trace expects constant as first argument";
-    
-  if(code.arguments()[1].id()!="implicit_address_of" ||
-     code.arguments()[1].operands().size()!=1 ||
-     code.arguments()[1].op0().id()!="string-constant")
-    throw "CBMC_trace expects string constant as second argument";
-  
-  if(mp_integer(debug_thresh)>=debug_lvl)
-  {
-    std::list<exprt> vars;
-    
-    exprt trace_event("trave_event");
-    trace_event.event(code.arguments()[1].op0().value());
-    
-    vars.push_back(trace_event);
-
-    for(unsigned j=2; j<code.arguments().size(); j++)
-    {
-      exprt var(code.arguments()[j]);
-      state.rename(var, ns,node_id);
-      vars.push_back(var);
-    }
-
-    target->output(state.guard, state.source, "", vars);
-  }
-}
-
-/*******************************************************************\
-
-Function: basic_symext::symex_fkt
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symext::symex_fkt(
-  statet &state,
-  const code_function_callt &code)
-{
-  #if 0
-  exprt new_fc("function", fc.type());
-
-  new_fc.reserve_operands(fc.operands().size()-1);
-
-  bool first=true;
-
-  Forall_operands(it, fc)
-    if(first) first=false; else new_fc.move_to_operands(*it);
-
-  new_fc.identifier(fc.op0().identifier());
-
-  fc.swap(new_fc);
-  #endif
-}
-
-/*******************************************************************\
-
-Function: basic_symext::symex_macro
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symext::symex_macro(
-  statet &state,
-  const code_function_callt &code)
-{
-  const irep_idt &identifier=code.op0().identifier();
-
-  if(identifier==CPROVER_MACRO_PREFIX "waitfor")
-  {
-    #if 0
-    exprt new_fc("waitfor", fc.type());
-
-    if(fc.operands().size()!=4)
-      throw "waitfor expected to have four operands";
-
-    exprt &cycle_var=fc.op1();
-    exprt &bound=fc.op2();
-    exprt &predicate=fc.op3();
-
-    if(cycle_var.id()!=exprt::symbol)
-      throw "waitfor expects symbol as first operand but got "+
-            cycle_var.id();
-
-    exprt new_cycle_var(cycle_var);
-    new_cycle_var.id("waitfor_symbol");
-    new_cycle_var.copy_to_operands(bound);
-
-    replace_expr(cycle_var, new_cycle_var, predicate);
-
-    new_fc.operands().resize(4);
-    new_fc.op0().swap(cycle_var);
-    new_fc.op1().swap(new_cycle_var);
-    new_fc.op2().swap(bound);
-    new_fc.op3().swap(predicate);
-
-    fc.swap(new_fc);
-    #endif
-  }
-  else
-    throw "unknown macro: "+id2string(identifier);
 }

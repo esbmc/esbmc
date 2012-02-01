@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <expr.h>
 #include <namespace.h>
 
-void replace_dynamic_allocation(
+void default_replace_dynamic_allocation(
   const namespacet &ns,
   exprt &expr);
 

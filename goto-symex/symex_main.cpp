@@ -26,23 +26,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
-Function: goto_symext::new_name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::new_name(symbolt &symbol) {
-    get_new_name(symbol, ns);
-    new_context.add(symbol);
-}
-
-/*******************************************************************\
-
 Function: goto_symext::claim
 
   Inputs:
@@ -79,22 +62,6 @@ void goto_symext::claim(
                     state.source);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::operator()() {
-
-    throw "symex_main::goto_symex::operator() : who called me?";
-}
 /*******************************************************************\
 
 Function: goto_symext::operator()
@@ -264,28 +231,6 @@ void goto_symext::operator()(const goto_functionst &goto_functions)
 
 /*******************************************************************\
 
-Function: goto_symext::get_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-irep_idt goto_symext::get_symbol(const exprt & expr) {
-  if (expr.id() != exprt::symbol) {
-    forall_operands(it, expr) {
-      return get_symbol(*it);
-    }
-  }
-
-  return expr.identifier();
-}
-
-/*******************************************************************\
-
 Function: goto_symext::symex_step
 
   Inputs:
@@ -451,7 +396,7 @@ void goto_symext::symex_step(
                 dereference(deref_code.op0(), state, true, ex_state.node_id);
                 dereference(deref_code.op1(), state, false, ex_state.node_id);
 
-                basic_symext::symex_assign(state, ex_state, deref_code, ex_state.node_id);
+                symex_assign(state, ex_state, deref_code, ex_state.node_id);
 
                 state.source.pc++;
 
