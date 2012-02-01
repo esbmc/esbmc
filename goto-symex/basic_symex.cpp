@@ -60,7 +60,7 @@ void goto_symext::assignment(
 
 /*******************************************************************\
 
-Function: basic_symext::do_simplify
+Function: goto_symext::do_simplify
 
   Inputs:
 
@@ -70,7 +70,7 @@ Function: basic_symext::do_simplify
 
 \*******************************************************************/
 
-void basic_symext::do_simplify(exprt &expr)
+void goto_symext::do_simplify(exprt &expr)
 {
   if(!options.get_bool_option("no-simplify"))
   {

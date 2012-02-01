@@ -49,9 +49,6 @@ public:
 // access of this member.
   const namespacet &ns;
   symex_targett *target;
-
-protected:
-  virtual void do_simplify(exprt &expr);
 };
 
 #endif

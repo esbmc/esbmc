@@ -56,6 +56,8 @@ protected:
   friend class symex_dereference_statet;
   reachability_treet *art1;
 
+  virtual void do_simplify(exprt &expr);
+
   // statistics
   unsigned total_claims, remaining_claims;
 
