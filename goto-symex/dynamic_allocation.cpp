@@ -18,7 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
-Function: replace_dynamic_allocation
+Function: default_replace_dynamic_allocation
 
   Inputs:
 
@@ -28,12 +28,12 @@ Function: replace_dynamic_allocation
 
 \*******************************************************************/
 
-void replace_dynamic_allocation(
+void default_replace_dynamic_allocation(
   const namespacet &ns,
   exprt &expr)
 {
   Forall_operands(it, expr)
-    replace_dynamic_allocation(ns, *it);
+    default_replace_dynamic_allocation(ns, *it);
 
   if(expr.id()=="valid_object")
   {

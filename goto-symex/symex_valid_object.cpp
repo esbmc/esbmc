@@ -98,17 +98,17 @@ void goto_symext::replace_dynamic_allocation(
     }
 
     // default behavior
-    ::replace_dynamic_allocation(ns, expr);
+    default_replace_dynamic_allocation(ns, expr);
   }
   else if(expr.id()=="dynamic_size")
   {
     // default behavior
-    ::replace_dynamic_allocation(ns, expr);
+    default_replace_dynamic_allocation(ns, expr);
   }
    else if(expr.id()=="invalid-pointer")
   {
     // default behavior
-    ::replace_dynamic_allocation(ns, expr);
+    default_replace_dynamic_allocation(ns, expr);
   }
   else if(expr.id()=="object_value")
   {
