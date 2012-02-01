@@ -26,7 +26,9 @@ namespace std
 		typedef T size_type;
 
 	public:
-		vector(): _size(0), _capacity(0){}
+		vector(): _size(0), _capacity(0)
+		{
+		}
 
 		vector(T t1, T t2): _size(0)
 		{
@@ -73,18 +75,17 @@ namespace std
 			assert(0 <= _size && _size <= VECTOR_CAPACITY);
 			return VECTOR_CAPACITY;
 		}
-#if 0
-		void resize ( T sz, T c = T() )
+
+		void resize ( size_type sz, T c = T() )
 		{
 			//model
 		}
-#endif
-	    void pop_back()
+
+		void pop_back()
 	    {
 	      __ESBMC_HIDE:
 	      __ESBMC_assert(_size!=0, "pop_back() on empty vector");
-	      //resize(_size-1);
-
+	      resize(_size-1);
 	    }
 
 		bool operator==(const vector& v2): _size(0)
