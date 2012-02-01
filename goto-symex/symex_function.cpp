@@ -193,20 +193,7 @@ void goto_symext::symex_function_call_symbol(
   const irep_idt &identifier=
     code.function().identifier();
     
-  if(identifier=="c::CBMC_trace")
-  {
-    symex_trace(state, code,ex_state.node_id);
-  }
-  if(has_prefix(id2string(identifier), CPROVER_FKT_PREFIX))
-  {
-    symex_fkt(state, code);
-  }
-  else if(has_prefix(id2string(identifier), CPROVER_MACRO_PREFIX))
-  {
-    symex_macro(state, code);
-  }
-  else
-    symex_function_call_code(goto_functions, ex_state, code);
+  symex_function_call_code(goto_functions, ex_state, code);
 }
 
 /*******************************************************************\
@@ -262,7 +249,7 @@ void goto_symext::symex_function_call_code(
       rhs.identifier("symex::"+i2string(ex_state.nondet_count++));
       rhs.location()=call.location();
       code_assignt code(call.lhs(), rhs);
-      basic_symext::symex(state, ex_state, code, ex_state.node_id);
+      symex_assign(state, ex_state, code, ex_state.node_id);
     }
 
     state.source.pc++;
@@ -438,7 +425,7 @@ void goto_symext::return_assignment(statet &state, execution_statet &ex_state, u
 
       //make sure that we assign two expressions of the same type
       assert(assignment.lhs().type()==assignment.rhs().type());
-      basic_symext::symex_assign(state, ex_state, assignment, node_id);
+      symex_assign(state, ex_state, assignment, node_id);
     }
   }
   else
@@ -476,22 +463,3 @@ void goto_symext::symex_return(statet &state, execution_statet &ex_state, unsign
   // kill this one
   state.guard.make_false();
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_step_return
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::symex_step_return(statet &state, execution_statet &ex_state, unsigned node_id)
-{
-  return_assignment(state, ex_state, node_id);
-  pop_frame(state);
-}
-

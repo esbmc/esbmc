@@ -13,22 +13,24 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-programs/goto_functions.h>
 
 #include <i2string.h>
-#include "basic_symex.h"
 #include "reachability_tree.h"
 
-class goto_symext:
-  public basic_symext
+class goto_symext
 {
 public:
   goto_symext(
-    const namespacet &_ns,
-    contextt &_new_context,
-    symex_targett &_target):
-    basic_symext(_ns, _new_context, _target),
+      const namespacet &_ns,
+      contextt &_new_context,
+      symex_targett &_target) :
+    constant_propagation(true),
+    ns(_ns),
+    new_context(_new_context),
+    target(&_target),
     total_claims(0),
     remaining_claims(0),
     guard_identifier_s("goto_symex::\\guard")
   {
+    options.set_option("no-simplify", false);
     options.set_option("no-assertions", false);
     art1 = NULL;
   }
@@ -38,13 +40,11 @@ public:
       delete art1;
   }
 
-    irep_idt get_symbol(const exprt & expr);
+  typedef goto_symex_statet statet;
 
   // all at once
-  virtual void operator()(
+  void operator()(
     const goto_functionst &goto_functions);
-
-  virtual void operator()();
 
     bool restore_from_dfs_state(const reachability_treet::dfs_position &dfs);
     symex_target_equationt *multi_formulas_get_next_formula();
@@ -56,15 +56,18 @@ public:
   const goto_functionst &goto_functions,
   reachability_treet & art);
 
-  // these bypass the target maps
-  virtual void symex_step_return(statet &state, execution_statet &ex_state, unsigned node_id);
-  virtual void symex_step_goto(statet &state, bool taken, unsigned node_id);
+  bool constant_propagation;
+
+  const namespacet &ns;
+  optionst options;
+  contextt &new_context;
+  symex_targett *target;
 
 protected:
   friend class symex_dereference_statet;
   reachability_treet *art1;
 
-  void new_name(symbolt &symbol);
+  virtual void do_simplify(exprt &expr);
 
   // statistics
   unsigned total_claims, remaining_claims;
@@ -92,17 +95,17 @@ protected:
 
   // symex
 
-  virtual void symex_goto(statet &state, execution_statet &ex_state, unsigned node_id);
+  void symex_goto(statet &state, execution_statet &ex_state, unsigned node_id);
 
-  virtual void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
+  void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
 
-  virtual void symex_other(
+  void symex_other(
     const goto_functionst &goto_functions,
     statet &state,
     execution_statet &ex_state,
     unsigned node_id);
 
-  virtual void claim(
+  void claim(
     const exprt &expr,
     const std::string &msg,
     statet &state, unsigned node_id);
@@ -122,7 +125,7 @@ protected:
     const symex_targett::sourcet &source,
     unsigned unwind);
 
-  virtual void loop_bound_exceeded(statet &state, const exprt &guard,unsigned node_id);
+  void loop_bound_exceeded(statet &state, const exprt &guard,unsigned node_id);
 
   // function calls
 
@@ -133,19 +136,19 @@ protected:
   {
   }
 
-  virtual void symex_function_call(
+  void symex_function_call(
     const goto_functionst &goto_functions,
     execution_statet &state,
     const code_function_callt &call);
 
-  virtual void symex_end_of_function(statet &state);
+  void symex_end_of_function(statet &state);
 
-  virtual void symex_function_call_symbol(
+  void symex_function_call_symbol(
     const goto_functionst &goto_functions,
     execution_statet &state,
     const code_function_callt &call);
 
-  virtual void symex_function_call_code(
+  void symex_function_call_code(
     const goto_functionst &goto_functions,
     execution_statet &state,
     const code_function_callt &call);
@@ -169,14 +172,29 @@ protected:
     exprt &code,
     const irep_idt &identifier);
 
-// moved to symex_statet
-//  std::map<irep_idt, unsigned> function_frame;
-//  std::map<irep_idt, unsigned> function_unwind;
-//  std::map<symex_targett::sourcet, unsigned> unwind_map;
-
   // dynamic stuff
-  virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
+  void replace_dynamic_allocation(const statet &state, exprt &expr);
   bool is_valid_object(const statet &state, const symbolt &symbol);
+
+  // Assignment methods
+  void assignment(execution_statet &ex_state, const exprt &lhs, exprt &rhs);
+
+  void symex_assign(statet &state, execution_statet &ex_state, const codet &code, unsigned node_id);
+  void symex_assign_rec(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard, unsigned node_id);
+  void symex_assign_symbol(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
+  void symex_assign_typecast(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
+  void symex_assign_array(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
+  void symex_assign_member(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
+  void symex_assign_if(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
+  void symex_assign_byte_extract(statet &state,  execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
+
+  void symex_malloc(statet &state, const exprt &lhs, const side_effect_exprt &code, execution_statet &ex_state, unsigned node_id);
+  void symex_cpp_delete(statet &state, const codet &code);
+  void symex_cpp_new(statet &state, const exprt &lhs, const side_effect_exprt &code, execution_statet &ex_state, unsigned node_id);
+  void symex_macro(statet &state, const code_function_callt &code);
+  void symex_printf(statet &state, const exprt &lhs, const exprt &code,unsigned node_id);
+
+  void replace_nondet(exprt &expr, execution_statet &ex_state);
 };
 
 #endif
