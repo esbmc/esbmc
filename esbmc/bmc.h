@@ -29,6 +29,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/sat/cnf_clause_list.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
+#include <goto-symex/reachability_tree.h>
 
 #include "symex_bmc.h"
 #include "bv_cbmc.h"
@@ -45,6 +46,7 @@ public:
     context(_context),
     symex(_symex),
     equation(&_equation),
+    ns(_context, new_context),
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
@@ -77,6 +79,8 @@ protected:
   const contextt &context;
   symex_bmct &symex;
   symex_target_equationt *equation;
+  contextt new_context;
+  namespacet ns;
 
   // use gui format
   language_uit::uit ui;
@@ -152,7 +156,7 @@ protected:
 
   virtual void error_trace(
     const prop_convt &prop_conv);
-    bool run_thread(const goto_functionst &goto_functions);
+    bool run_thread(reachability_treet *art);
 };
 
 class bmct:public bmc_baset
@@ -162,15 +166,12 @@ public:
     const contextt &_context,
     message_handlert &_message_handler):
     bmc_baset(_context, _symex, _equation, _message_handler),
-    ns(_context, new_context),
     _equation(ns),
     _symex(ns, new_context, _equation)
   {
   }
 
 protected:
-  contextt new_context;
-  namespacet ns;
   symex_target_equationt _equation;
   symex_bmct _symex;
 };

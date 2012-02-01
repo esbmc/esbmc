@@ -62,76 +62,6 @@ void goto_symext::claim(
                     state.source);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::multi_formulas_init(const goto_functionst &goto_functions)
-{
-
-  art1 = new reachability_treet(goto_functions, ns, options);
-}
-
-/*******************************************************************\
-
-Function: goto_symext::multi_formulas_has_more_formula
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool goto_symext::multi_formulas_setup_next()
-{
-  return art1->reset_to_unexplored_state();
-}
-
-
-/*******************************************************************\
-
-Function: goto_symext::multi_formulas_get_next_formula
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
-{
-  static unsigned int total_formulae = 0;
-  static int total_states = 0;
-
-  target = &art1->get_cur_state()._target;
-  art1->get_cur_state().execute_guard(ns, *target);
-  while(!art1->is_go_next_formula())
-  {
-    while (!art1->is_go_next_state())
-      symex_step(art1->_goto_functions, *art1);
-
-    art1->multi_formulae_go_next_state();
-    target = &art1->get_cur_state()._target;
-    total_states++;
-  }
-  art1->_go_next_formula = false;
-  total_formulae++;
-
-  return &art1->get_cur_state()._target;
-}
-
 bool
 goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
 {
@@ -143,9 +73,9 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
   // the history we've been provided with.
   for (it = dfs.states.begin(), i = 0; it != dfs.states.end(); it++, i++) {
 
-    art1->_go_next = false;
+    art1->at_end_of_run = false;
 
-    while (!art1->is_go_next_state()) {
+    while (!art1->is_at_end_of_run()) {
       // Restore the DFS exploration space so that when an interleaving occurs
       // we take the option leading to the thread we desire to run. This
       // assumes that the DFS exploration path algorithm never changes.
@@ -156,7 +86,7 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
         art1->get_cur_state()._DFS_traversed[dfspos] = true;
       art1->get_cur_state()._DFS_traversed[it->cur_thread] = false;
 
-      symex_step(art1->_goto_functions, *art1);
+      symex_step(art1->goto_functions, *art1);
     }
     art1->get_cur_state()._DFS_traversed = it->explored;
 
@@ -166,7 +96,7 @@ goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
       abort();
     }
 
-    art1->multi_formulae_go_next_state();
+    art1->switch_to_next_execution_state();
 
     // check we're on the right thread; except on the last run, where there are
     // no more threads to be run.
@@ -220,7 +150,7 @@ void goto_symext::operator()(const goto_functionst &goto_functions)
   {
     total_states++;
     art.get_cur_state().execute_guard(ns, *target);
-    while (!art.is_go_next_state())
+    while (!art.is_at_end_of_run())
     {
       symex_step(goto_functions, art);
     }
@@ -298,7 +228,7 @@ void goto_symext::symex_step(
                 ex_state.end_thread(ns, *target);
                 ex_state.reexecute_instruction = false;
                 art.generate_states_base(exprt());
-                art.set_go_next_state();
+                art.set_is_at_end_of_run();
             }
             else
             {
@@ -511,7 +441,7 @@ void goto_symext::symex_step(
 
             ex_state.reexecute_instruction = false;
             art.generate_states();
-            art.set_go_next_state();
+            art.set_is_at_end_of_run();
 
             break;
         case END_THREAD:

@@ -40,6 +40,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/slice.h>
 #include <goto-symex/slice_by_trace.h>
 #include <goto-symex/xml_goto_trace.h>
+#include <goto-symex/reachability_tree.h>
 
 #include "bmc.h"
 #include "bv_cbmc.h"
@@ -347,6 +348,11 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   struct sigaction act;
 #endif
   bool resp;
+  reachability_treet *art;
+
+  art = new reachability_treet(goto_functions, ns, options);
+
+  symex.art1 = art;
   symex.set_message_handler(message_handler);
   symex.set_verbosity(get_verbosity());
   symex.options=options;
@@ -369,7 +375,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
     if(symex.options.get_bool_option("uw-model"))
         std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
 
-    resp = run_thread(goto_functions);
+    resp = run_thread(art);
 
 
     //underapproximation-widening model
@@ -379,15 +385,13 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       symex.total_claims=0;
       symex.remaining_claims=0;
       std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
-      resp = run_thread(goto_functions);
+      resp = run_thread(art);
     }
 
     return resp;
   }
   else
   {
-    symex.multi_formulas_init(goto_functions);
-
     if (options.get_bool_option("from-checkpoint")) {
       if (options.get_option("checkpoint-file") == "") {
         std::cerr << "Please provide a checkpoint file" << std::endl;
@@ -407,7 +411,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       if (++interleaving_number>1)
         std::cout << "*** Thread interleavings " << interleaving_number << " ***" << std::endl;
 
-      if(run_thread(goto_functions))
+      if(run_thread(art))
       {
         ++interleaving_failed;
 
@@ -424,7 +428,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       if (checkpoint_sig) {
         write_checkpoint();
       }
-    } while(symex.multi_formulas_setup_next());
+    } while(art->setup_next_formula());
   }
 
   if (symex.options.get_bool_option("all-runs"))
@@ -436,7 +440,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   return false;
 }
 
-bool bmc_baset::run_thread(const goto_functionst &goto_functions)
+bool bmc_baset::run_thread(reachability_treet *art)
 {
   solver_base *solver;
   bool ret;
@@ -445,11 +449,11 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
   {
     if(symex.options.get_bool_option("schedule"))
     {
-      symex(goto_functions);
+      art->generate_schedule_formula(symex);
     }
     else
     {
-      equation = symex.multi_formulas_get_next_formula();
+      equation = art->get_next_formula(symex);
     }
   }
 
