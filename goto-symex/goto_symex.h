@@ -39,7 +39,7 @@ public:
   }
 
   // all at once
-  virtual void operator()(
+  void operator()(
     const goto_functionst &goto_functions);
 
     bool restore_from_dfs_state(const reachability_treet::dfs_position &dfs);
@@ -82,17 +82,17 @@ protected:
 
   // symex
 
-  virtual void symex_goto(statet &state, execution_statet &ex_state, unsigned node_id);
+  void symex_goto(statet &state, execution_statet &ex_state, unsigned node_id);
 
-  virtual void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
+  void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
 
-  virtual void symex_other(
+  void symex_other(
     const goto_functionst &goto_functions,
     statet &state,
     execution_statet &ex_state,
     unsigned node_id);
 
-  virtual void claim(
+  void claim(
     const exprt &expr,
     const std::string &msg,
     statet &state, unsigned node_id);
@@ -108,35 +108,35 @@ protected:
     const statet::goto_statet &goto_state,
     statet &state, execution_statet &ex_state, unsigned node_id);
 
-  virtual bool get_unwind(
+  bool get_unwind(
     const symex_targett::sourcet &source,
     unsigned unwind);
 
-  virtual void loop_bound_exceeded(statet &state, const exprt &guard,unsigned node_id);
+  void loop_bound_exceeded(statet &state, const exprt &guard,unsigned node_id);
 
   // function calls
 
   void pop_frame(statet &state);
   void return_assignment(statet &state, execution_statet &ex_state, unsigned node_id);
 
-  virtual void symex_function_call(
+  void symex_function_call(
     const goto_functionst &goto_functions,
     execution_statet &state,
     const code_function_callt &call);
 
-  virtual void symex_end_of_function(statet &state);
+  void symex_end_of_function(statet &state);
 
-  virtual void symex_function_call_symbol(
+  void symex_function_call_symbol(
     const goto_functionst &goto_functions,
     execution_statet &state,
     const code_function_callt &call);
 
-  virtual void symex_function_call_code(
+  void symex_function_call_code(
     const goto_functionst &goto_functions,
     execution_statet &state,
     const code_function_callt &call);
 
-  virtual bool get_unwind_recursion(
+  bool get_unwind_recursion(
     const irep_idt &identifier,
     unsigned unwind);
 
