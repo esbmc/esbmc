@@ -64,8 +64,6 @@ protected:
   friend class symex_dereference_statet;
   reachability_treet *art1;
 
-  void new_name(symbolt &symbol);
-
   // statistics
   unsigned total_claims, remaining_claims;
 

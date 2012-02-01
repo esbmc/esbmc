@@ -26,23 +26,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
-Function: goto_symext::new_name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::new_name(symbolt &symbol) {
-    get_new_name(symbol, ns);
-    new_context.add(symbol);
-}
-
-/*******************************************************************\
-
 Function: goto_symext::claim
 
   Inputs:
