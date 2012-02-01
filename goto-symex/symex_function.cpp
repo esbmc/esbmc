@@ -262,7 +262,7 @@ void goto_symext::symex_function_call_code(
       rhs.identifier("symex::"+i2string(ex_state.nondet_count++));
       rhs.location()=call.location();
       code_assignt code(call.lhs(), rhs);
-      basic_symext::symex(state, ex_state, code, ex_state.node_id);
+      symex_assign(state, ex_state, code, ex_state.node_id);
     }
 
     state.source.pc++;
