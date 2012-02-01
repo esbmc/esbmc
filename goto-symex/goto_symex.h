@@ -38,8 +38,6 @@ public:
       delete art1;
   }
 
-    irep_idt get_symbol(const exprt & expr);
-
   // all at once
   virtual void operator()(
     const goto_functionst &goto_functions);

@@ -247,28 +247,6 @@ void goto_symext::operator()(const goto_functionst &goto_functions)
 
 /*******************************************************************\
 
-Function: goto_symext::get_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-irep_idt goto_symext::get_symbol(const exprt & expr) {
-  if (expr.id() != exprt::symbol) {
-    forall_operands(it, expr) {
-      return get_symbol(*it);
-    }
-  }
-
-  return expr.identifier();
-}
-
-/*******************************************************************\
-
 Function: goto_symext::symex_step
 
   Inputs:
