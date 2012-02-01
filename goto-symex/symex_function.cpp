@@ -241,6 +241,8 @@ void goto_symext::symex_function_call_code(
 
   if(!goto_function.body_available)
   {
+    no_body(identifier);
+  
     if(call.lhs().is_not_nil())
     {
       exprt rhs=exprt("nondet_symbol", call.lhs().type());

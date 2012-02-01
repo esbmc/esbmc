@@ -119,6 +119,10 @@ protected:
   void pop_frame(statet &state);
   void return_assignment(statet &state, execution_statet &ex_state, unsigned node_id);
 
+  virtual void no_body(const irep_idt &identifier __attribute__((unused)))
+  {
+  }
+
   void symex_function_call(
     const goto_functionst &goto_functions,
     execution_statet &state,
