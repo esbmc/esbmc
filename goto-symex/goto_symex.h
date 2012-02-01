@@ -158,6 +158,9 @@ protected:
   // dynamic stuff
   virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
   bool is_valid_object(const statet &state, const symbolt &symbol);
+
+  // Assignment methods
+  void symex_assign(statet &state, execution_statet &ex_state, const codet &code, unsigned node_id);
 };
 
 #endif

@@ -18,6 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_types.h>
 
 #include "basic_symex.h"
+#include "goto_symex.h"
 #include "dynamic_allocation.h"
 #include "execution_state.h"
 
@@ -80,7 +81,7 @@ void basic_symext::do_simplify(exprt &expr)
 
 /*******************************************************************\
 
-Function: basic_symext::symex_assign
+Function: goto_symext::symex_assign
 
   Inputs:
 
@@ -90,7 +91,7 @@ Function: basic_symext::symex_assign
 
 \*******************************************************************/
 
-void basic_symext::symex_assign(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
+void goto_symext::symex_assign(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
 {
   if(code.operands().size()!=2)
     throw "assignment expects two operands";

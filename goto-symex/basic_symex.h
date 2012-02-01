@@ -53,8 +53,6 @@ public:
 protected:
   virtual void do_simplify(exprt &expr);
 
-  virtual void symex_assign(statet &state, execution_statet &ex_state, const codet &code, unsigned node_id);
-
   void symex_assign_rec(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard, unsigned node_id);
   void symex_assign_symbol(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);
   void symex_assign_typecast(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard,unsigned node_id);

@@ -436,7 +436,7 @@ void goto_symext::return_assignment(statet &state, execution_statet &ex_state, u
 
       //make sure that we assign two expressions of the same type
       assert(assignment.lhs().type()==assignment.rhs().type());
-      basic_symext::symex_assign(state, ex_state, assignment, node_id);
+      symex_assign(state, ex_state, assignment, node_id);
     }
   }
   else
