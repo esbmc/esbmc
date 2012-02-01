@@ -108,7 +108,7 @@ protected:
     const statet::goto_statet &goto_state,
     statet &state, execution_statet &ex_state, unsigned node_id);
 
-  bool get_unwind(
+  virtual bool get_unwind(
     const symex_targett::sourcet &source,
     unsigned unwind);
 
@@ -136,7 +136,7 @@ protected:
     execution_statet &state,
     const code_function_callt &call);
 
-  bool get_unwind_recursion(
+  virtual bool get_unwind_recursion(
     const irep_idt &identifier,
     unsigned unwind);
 
