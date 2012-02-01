@@ -17,13 +17,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/c_types.h>
 
-#include "basic_symex.h"
+#include "goto_symex.h"
 #include "dynamic_allocation.h"
 #include "execution_state.h"
 
 /*******************************************************************\
 
-Function: basic_symext::assignment
+Function: goto_symext::assignment
 
   Inputs:
 
@@ -33,7 +33,7 @@ Function: basic_symext::assignment
 
 \*******************************************************************/
 
-void basic_symext::assignment(
+void goto_symext::assignment(
   execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs)
@@ -59,7 +59,7 @@ void basic_symext::assignment(
 
 /*******************************************************************\
 
-Function: basic_symext::do_simplify
+Function: goto_symext::do_simplify
 
   Inputs:
 
@@ -69,7 +69,7 @@ Function: basic_symext::do_simplify
 
 \*******************************************************************/
 
-void basic_symext::do_simplify(exprt &expr)
+void goto_symext::do_simplify(exprt &expr)
 {
   if(!options.get_bool_option("no-simplify"))
   {
@@ -80,7 +80,7 @@ void basic_symext::do_simplify(exprt &expr)
 
 /*******************************************************************\
 
-Function: basic_symext::symex
+Function: goto_symext::symex_assign
 
   Inputs:
 
@@ -90,86 +90,7 @@ Function: basic_symext::symex
 
 \*******************************************************************/
 
-void basic_symext::symex(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
-{
-  const irep_idt &statement=code.statement();
-
-  if(statement=="block")
-    symex_block(state, ex_state, code, node_id);
-  else if(statement=="assign")
-    symex_assign(state, ex_state, code, node_id);
-  else if(statement=="decl")
-  {
-    // behaves like non-deterministic assignment
-    if(code.operands().size()!=1)
-      throw "decl expected to have one operand";
-
-    exprt rhs("nondet_symbol", code.op0().type());
-    rhs.identifier("symex::nondet"+i2string(ex_state.nondet_count++));
-    rhs.location()=code.location();
-
-    exprt new_lhs(code.op0());
-    read(new_lhs);
-
-    guardt guard; // NOT the state guard!
-    symex_assign_rec(state, ex_state, new_lhs, rhs, guard,node_id);
-  }
-  else if(statement=="expression")
-  {
-    // ignore
-  }
-  else if(statement=="cpp_delete" ||
-          statement=="cpp_delete[]")
-    symex_cpp_delete(state, code);
-  else if(statement=="free")
-  {
-    // like skip
-  }
-  else if(statement=="nondet")
-  {
-    // like skip
-  }
-  else if(statement=="printf")
-    symex_printf(state, static_cast<const exprt &>(get_nil_irep()), code,node_id);
-  else
-  {
-    std::cerr << code.pretty() << std::endl;
-    throw "basic_symext: unexpected statement: "+id2string(statement);
-  }
-}
-
-/*******************************************************************\
-
-Function: basic_symext::symex_block
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symext::symex_block(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
-{
-  forall_operands(it, code) {
-    symex(state, ex_state, to_code(*it),node_id);
-  }
-}
-
-/*******************************************************************\
-
-Function: basic_symext::symex_assign
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symext::symex_assign(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
+void goto_symext::symex_assign(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
 {
   if(code.operands().size()!=2)
     throw "assignment expects two operands";
@@ -221,7 +142,7 @@ void basic_symext::symex_assign(statet &state, execution_statet &ex_state, const
 
 /*******************************************************************\
 
-Function: basic_symext::read
+Function: goto_symext::symex_assign_rec
 
   Inputs:
 
@@ -231,23 +152,7 @@ Function: basic_symext::read
 
 \*******************************************************************/
 
-void basic_symext::read(exprt &expr)
-{
-}
-
-/*******************************************************************\
-
-Function: basic_symext::symex_assign_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symext::symex_assign_rec(
+void goto_symext::symex_assign_rec(
   statet &state,
   execution_statet &ex_state,
   const exprt &lhs,
@@ -280,7 +185,7 @@ void basic_symext::symex_assign_rec(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_assign_symbol
+Function: goto_symext::symex_assign_symbol
 
   Inputs:
 
@@ -290,7 +195,7 @@ Function: basic_symext::symex_assign_symbol
 
 \*******************************************************************/
 
-void basic_symext::symex_assign_symbol(
+void goto_symext::symex_assign_symbol(
   statet &state,
   execution_statet &ex_state,
   const exprt &lhs,
@@ -333,7 +238,7 @@ void basic_symext::symex_assign_symbol(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_assign_typecast
+Function: goto_symext::symex_assign_typecast
 
   Inputs:
 
@@ -343,7 +248,7 @@ Function: basic_symext::symex_assign_typecast
 
 \*******************************************************************/
 
-void basic_symext::symex_assign_typecast(
+void goto_symext::symex_assign_typecast(
   statet &state,
   execution_statet &ex_state,
   const exprt &lhs,
@@ -364,7 +269,7 @@ void basic_symext::symex_assign_typecast(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_assign_array
+Function: goto_symext::symex_assign_array
 
   Inputs:
 
@@ -374,7 +279,7 @@ Function: basic_symext::symex_assign_array
 
 \*******************************************************************/
 
-void basic_symext::symex_assign_array(
+void goto_symext::symex_assign_array(
   statet &state,
   execution_statet &ex_state,
   const exprt &lhs,
@@ -413,7 +318,7 @@ void basic_symext::symex_assign_array(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_assign_member
+Function: goto_symext::symex_assign_member
 
   Inputs:
 
@@ -423,7 +328,7 @@ Function: basic_symext::symex_assign_member
 
 \*******************************************************************/
 
-void basic_symext::symex_assign_member(
+void goto_symext::symex_assign_member(
   statet &state,
   execution_statet &ex_state,
   const exprt &lhs,
@@ -487,7 +392,7 @@ void basic_symext::symex_assign_member(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_assign_if
+Function: goto_symext::symex_assign_if
 
   Inputs:
 
@@ -497,7 +402,7 @@ Function: basic_symext::symex_assign_if
 
 \*******************************************************************/
 
-void basic_symext::symex_assign_if(
+void goto_symext::symex_assign_if(
   statet &state,
   execution_statet &ex_state,
   const exprt &lhs,
@@ -530,7 +435,7 @@ void basic_symext::symex_assign_if(
 
 /*******************************************************************\
 
-Function: basic_symext::symex_assign_byte_extract
+Function: goto_symext::symex_assign_byte_extract
 
   Inputs:
 
@@ -540,7 +445,7 @@ Function: basic_symext::symex_assign_byte_extract
 
 \*******************************************************************/
 
-void basic_symext::symex_assign_byte_extract(
+void goto_symext::symex_assign_byte_extract(
   statet &state,
   execution_statet &ex_state,
   const exprt &lhs,
@@ -571,7 +476,7 @@ void basic_symext::symex_assign_byte_extract(
 
 /*******************************************************************\
 
-Function: basic_symext::replace_dynamic_allocation
+Function: goto_symext::replace_nondet
 
   Inputs:
 
@@ -581,26 +486,7 @@ Function: basic_symext::replace_dynamic_allocation
 
 \*******************************************************************/
 
-void basic_symext::replace_dynamic_allocation(
-  const statet &state,
-  exprt &expr)
-{
-  ::replace_dynamic_allocation(ns, expr);
-}
-
-/*******************************************************************\
-
-Function: basic_symext::replace_nondet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
+void goto_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
 {
   if(expr.id()=="sideeffect" && expr.statement()=="nondet")
   {
@@ -612,29 +498,4 @@ void basic_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
   else
     Forall_operands(it, expr)
       replace_nondet(*it, ex_state);
-}
-
-/*******************************************************************\
-
-Function: basic_symex
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symex(
-  const codet &code,
-  const namespacet &ns,
-  symex_targett &target,
-  execution_statet &ex_state,
-  goto_symex_statet &state,
-  unsigned node_id)
-{
-  contextt new_context;
-  basic_symext basic_symex(ns, new_context, target);
-  basic_symex.symex(state, ex_state, code, node_id);
 }

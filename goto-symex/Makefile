@@ -4,7 +4,7 @@ include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/goto-symex.o
 all: $(OBJDIR)/.deps $(MAINOBJ)
 
-SRCS= symex_target.cpp symex_target_equation.cpp basic_symex.cpp \
+SRCS= symex_target.cpp symex_target_equation.cpp symex_assign.cpp \
       symex_main.cpp goto_trace.cpp build_goto_trace.cpp \
       symex_function.cpp goto_symex_state.cpp symex_dereference.cpp \
       symex_goto.cpp builtin_functions.cpp slice.cpp symex_other.cpp \

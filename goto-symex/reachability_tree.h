@@ -15,7 +15,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <map>
 #include <options.h>
 #include "execution_state.h"
-#include "basic_symex.h"
 
 #include "crypto_hash.h"
 
