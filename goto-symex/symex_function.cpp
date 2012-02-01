@@ -193,10 +193,6 @@ void goto_symext::symex_function_call_symbol(
   const irep_idt &identifier=
     code.function().identifier();
     
-  if(identifier=="c::CBMC_trace")
-  {
-    symex_trace(state, code,ex_state.node_id);
-  }
   if(has_prefix(id2string(identifier), CPROVER_FKT_PREFIX))
   {
     symex_fkt(state, code);

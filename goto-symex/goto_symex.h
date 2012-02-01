@@ -174,7 +174,6 @@ protected:
   void symex_cpp_new(statet &state, const exprt &lhs, const side_effect_exprt &code, execution_statet &ex_state, unsigned node_id);
   void symex_fkt(statet &state, const code_function_callt &code);
   void symex_macro(statet &state, const code_function_callt &code);
-  void symex_trace(statet &state, const code_function_callt &code,unsigned node_id);
   void symex_printf(statet &state, const exprt &lhs, const exprt &code,unsigned node_id);
 
 };

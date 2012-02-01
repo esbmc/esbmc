@@ -265,58 +265,6 @@ void goto_symext::symex_cpp_delete(
 
 /*******************************************************************\
 
-Function: goto_symext::symex_trace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::symex_trace(
-  statet &state,
-  const code_function_callt &code,
-        unsigned node_id)
-{
-  if(code.arguments().size()<2)
-    throw "CBMC_trace expects at least two arguments";
-
-  int debug_thresh=atol(options.get_option("debug-level").c_str());
-  
-  mp_integer debug_lvl;
-
-  if(to_integer(code.arguments()[0], debug_lvl))
-    throw "CBMC_trace expects constant as first argument";
-    
-  if(code.arguments()[1].id()!="implicit_address_of" ||
-     code.arguments()[1].operands().size()!=1 ||
-     code.arguments()[1].op0().id()!="string-constant")
-    throw "CBMC_trace expects string constant as second argument";
-  
-  if(mp_integer(debug_thresh)>=debug_lvl)
-  {
-    std::list<exprt> vars;
-    
-    exprt trace_event("trave_event");
-    trace_event.event(code.arguments()[1].op0().value());
-    
-    vars.push_back(trace_event);
-
-    for(unsigned j=2; j<code.arguments().size(); j++)
-    {
-      exprt var(code.arguments()[j]);
-      state.rename(var, ns,node_id);
-      vars.push_back(var);
-    }
-
-    target->output(state.guard, state.source, "", vars);
-  }
-}
-
-/*******************************************************************\
-
 Function: goto_symext::symex_fkt
 
   Inputs:
