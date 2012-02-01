@@ -17,7 +17,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/c_types.h>
 
-#include "basic_symex.h"
 #include "goto_symex.h"
 #include "dynamic_allocation.h"
 #include "execution_state.h"

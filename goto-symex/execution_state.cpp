@@ -19,8 +19,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <simplify_expr.h>
 #include "config.h"
 
-#include "basic_symex.h"
-
 unsigned int execution_statet::node_count=0;
 
 /*******************************************************************

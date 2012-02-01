@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-programs/goto_functions.h>
 
 #include <i2string.h>
-#include "basic_symex.h"
 #include "reachability_tree.h"
 
 class goto_symext
