@@ -13,6 +13,7 @@ public:
 
   exception( ) throw( );
   exception(const exception& right) throw( );
+  bool uncaught_exception ( ) throw ( );
   exception& operator=(const exception& right) throw( );
   ~exception( ) throw( );
   const char* what() const throw() {
@@ -20,7 +21,7 @@ public:
 	  //Returns a null terminated character sequence containing a generic description of the exception.
 	  //Both the wording of such description and the character width are implementation-defined.
 	  //source: http://www.cplusplus.com/reference/std/exception/exception/
-  }
+  }  
 };
 
 }
