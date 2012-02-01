@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_expr.h>
 
 #include "goto_symex.h"
+#include "dynamic_allocation.h"
 
 /*******************************************************************\
 
@@ -97,17 +98,17 @@ void goto_symext::replace_dynamic_allocation(
     }
 
     // default behavior
-    basic_symext::replace_dynamic_allocation(state, expr);
+    ::replace_dynamic_allocation(ns, expr);
   }
   else if(expr.id()=="dynamic_size")
   {
     // default behavior
-    basic_symext::replace_dynamic_allocation(state, expr);
+    ::replace_dynamic_allocation(ns, expr);
   }
    else if(expr.id()=="invalid-pointer")
   {
     // default behavior
-    basic_symext::replace_dynamic_allocation(state, expr);
+    ::replace_dynamic_allocation(ns, expr);
   }
   else if(expr.id()=="object_value")
   {

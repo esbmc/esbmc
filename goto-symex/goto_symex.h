@@ -156,7 +156,7 @@ protected:
     const irep_idt &identifier);
 
   // dynamic stuff
-  virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
+  void replace_dynamic_allocation(const statet &state, exprt &expr);
   bool is_valid_object(const statet &state, const symbolt &symbol);
 
   // Assignment methods

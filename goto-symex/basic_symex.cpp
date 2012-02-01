@@ -477,25 +477,6 @@ void goto_symext::symex_assign_byte_extract(
 
 /*******************************************************************\
 
-Function: basic_symext::replace_dynamic_allocation
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symext::replace_dynamic_allocation(
-  const statet &state,
-  exprt &expr)
-{
-  ::replace_dynamic_allocation(ns, expr);
-}
-
-/*******************************************************************\
-
 Function: goto_symext::replace_nondet
 
   Inputs:
