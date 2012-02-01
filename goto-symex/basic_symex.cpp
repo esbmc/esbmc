@@ -221,22 +221,6 @@ void basic_symext::symex_assign(statet &state, execution_statet &ex_state, const
 
 /*******************************************************************\
 
-Function: basic_symext::read
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void basic_symext::read(exprt &expr)
-{
-}
-
-/*******************************************************************\
-
 Function: basic_symext::symex_assign_rec
 
   Inputs:
