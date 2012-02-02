@@ -24,8 +24,6 @@ public:
     symex_targett &_target);
 
   friend class bmc_baset;
-  friend class cbmc_satt;
-  friend class explain_bmct;
 
   ~symex_bmct(){ };
 
