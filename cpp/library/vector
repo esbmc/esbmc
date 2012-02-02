@@ -264,11 +264,68 @@ namespace std{
     bool operator >= (const vector<T>&) const;
     bool operator <= (const vector<T>&) const;
 
+		T& max_size () const{
+	    	// model
+	    }
+		reference back ( ){
+	    	// model
+	    }
+	    const_reference back ( ) const{
+	    	// model
+	    }
+	    const_reference at ( T n ) const{
+	    	// model
+	    }
+	    reference at ( T n ){
+	    	// model
+	    }
+	    iterator begin (){
+	    	// model
+	    }
+	    const_iterator begin () const{
+	    	// model
+	    }
+	    iterator end (){
+	    	// model
+	    }
+	    const_iterator end () const{
+	    	// model
+	    }
+	    bool empty () const{
+	    	// model
+	    }
+	    void reserve ( T n ){
+	    	// model
+	    }
+	    reference front ( ){
+	    	// model
+	    }
+	    const_reference front ( ) const{
+	    	// model
+	    }
+	    void assign ( size_type n, const T& u ){
+	    	// model
+	    }
+	    T erase ( T position ){
+	    	// model
+	    }
+	    T erase ( T first, T last ){
+	    	// model
+	    }
+	    void clear ( ){
+	    	// model
+	    }
+			    iterator insert ( iterator position, const T& x ){
+	    	// model
+	    }
+	    void insert ( iterator position, size_type n, const T& x ){
+	    	// model
+	    }
+
 	private:
 		T buf[VECTOR_CAPACITY];
 		int _size;
 		int _capacity;
-
 };
 
   // specialized algorithms:
