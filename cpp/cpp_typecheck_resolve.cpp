@@ -1559,6 +1559,9 @@ void cpp_typecheck_resolvet::guess_template_args(
   // TT<i>
   // TT<C>
 
+  //new stuff
+  // const *T
+
   #if 0
   std::cout << "TT: " << template_type.pretty() << std::endl;
   std::cout << "DT: " << desired_type.pretty() << std::endl;
@@ -1641,8 +1644,9 @@ void cpp_typecheck_resolvet::guess_template_args(
     const typet &desired_type_followed=
       cpp_typecheck.follow(desired_type);
 
-    if(desired_type_followed.id()=="pointer")
+    if(desired_type_followed.id()=="pointer" || desired_type_followed.id()=="array")
       guess_template_args(template_type.subtype(), desired_type_followed.subtype());
+
   }
   else if(template_type.id()=="array")
   {
