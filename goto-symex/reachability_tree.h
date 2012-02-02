@@ -31,7 +31,7 @@ public:
   reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
-    optionst opts,
+    optionst &opts,
     contextt &context,
     symex_targett &target):
     goto_symext(ns, context, target),
