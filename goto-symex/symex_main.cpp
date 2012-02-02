@@ -148,7 +148,7 @@ Function: goto_symext::operator()
 void goto_symext::operator()(const goto_functionst &goto_functions)
 {
 
-  reachability_treet art(goto_functions, ns, options);
+  reachability_treet art(goto_functions, ns, options, new_context, *target);
 
   int total_states = 0;
   while (art.has_more_states())

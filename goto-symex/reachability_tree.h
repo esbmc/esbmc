@@ -14,6 +14,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <set>
 #include <map>
 #include <options.h>
+#include "goto_symex.h"
 #include "execution_state.h"
 #include "symex_target_equation.h"
 
@@ -25,13 +26,16 @@ class goto_symext;
 
 #include <goto-programs/goto_program.h>
 
-class reachability_treet
+class reachability_treet : goto_symext
 {
 public:
   reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
-    optionst opts):
+    optionst opts,
+    contextt &context,
+    symex_targett &target):
+    goto_symext(ns, context, target),
     goto_functions(goto_functions),
     reached_terminal_state(NULL),
     ns(ns),

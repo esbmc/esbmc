@@ -350,7 +350,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   bool resp;
   reachability_treet *art;
 
-  art = new reachability_treet(goto_functions, ns, options);
+  art = new reachability_treet(goto_functions, ns, options, new_context, *equation);
 
   symex.art1 = art;
   symex.set_message_handler(message_handler);
