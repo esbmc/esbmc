@@ -150,7 +150,7 @@ public:
   // context switch that may be taken.
   bool at_end_of_run;
   bool state_hashing;
-private:
+protected:
   std::list<execution_statet*> execution_states;
   /* This is derefed and returned by get_current_state */
   std::list<execution_statet*>::iterator cur_state_it;
