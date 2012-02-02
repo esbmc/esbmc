@@ -42,7 +42,7 @@ public:
 
   typedef goto_symex_statet statet;
 
-    bool restore_from_dfs_state(const reachability_treet::dfs_position &dfs);
+    bool restore_from_dfs_state(void *dfs); // tmp type hack
     void save_checkpoint(const std::string fname) const;
 
   void operator()(const goto_functionst &goto_functions);

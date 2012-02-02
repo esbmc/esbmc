@@ -400,7 +400,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
       reachability_treet::dfs_position pos(
                                          options.get_option("checkpoint-file"));
-      symex.restore_from_dfs_state(pos);
+      symex.restore_from_dfs_state((void*)&pos);
     }
 
     do

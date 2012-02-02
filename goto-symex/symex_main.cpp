@@ -63,11 +63,13 @@ void goto_symext::claim(
 }
 
 bool
-goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
+goto_symext::restore_from_dfs_state(void *_dfs)
 {
   std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
   unsigned int i;
 
+  const reachability_treet::dfs_position *foo = (const reachability_treet::dfs_position*)_dfs;
+  const reachability_treet::dfs_position &dfs = *foo;
   // Symex repeatedly until context switch points. At each point, verify that it
   // happened where we expected it to, and then switch to the correct thread for
   // the history we've been provided with.
