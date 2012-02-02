@@ -39,11 +39,6 @@ public:
     art1 = NULL;
   }
 
-  ~goto_symext() {
-    if (art1 != NULL)
-      delete art1;
-  }
-
   typedef goto_symex_statet statet;
 
     bool restore_from_dfs_state(void *dfs); // tmp type hack
