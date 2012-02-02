@@ -23,7 +23,7 @@ public:
     contextt &_new_context,
     symex_targett &_target);
 
-  friend class bmc_baset;
+  friend class bmct;
 
   ~symex_bmct(){ };
 

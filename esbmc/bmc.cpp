@@ -59,7 +59,7 @@ sigusr1_handler(int sig)
 
 /*******************************************************************\
 
-Function: bmc_baset::do_unwind_module
+Function: bmct::do_unwind_module
 
   Inputs:
 
@@ -69,14 +69,14 @@ Function: bmc_baset::do_unwind_module
 
 \*******************************************************************/
 
-void bmc_baset::do_unwind_module(
+void bmct::do_unwind_module(
   decision_proceduret &decision_procedure)
 {
 }
 
 /*******************************************************************\
 
-Function: bmc_baset::do_cbmc
+Function: bmct::do_cbmc
 
   Inputs:
 
@@ -86,7 +86,7 @@ Function: bmc_baset::do_cbmc
 
 \*******************************************************************/
 
-void bmc_baset::do_cbmc(prop_convt &solver)
+void bmct::do_cbmc(prop_convt &solver)
 {
   solver.set_message_handler(message_handler);
 
@@ -102,7 +102,7 @@ void bmc_baset::do_cbmc(prop_convt &solver)
 
 /*******************************************************************\
 
-Function: bmc_baset::error_trace
+Function: bmct::error_trace
 
   Inputs:
 
@@ -112,7 +112,7 @@ Function: bmc_baset::error_trace
 
 \*******************************************************************/
 
-void bmc_baset::error_trace(const prop_convt &prop_conv)
+void bmct::error_trace(const prop_convt &prop_conv)
 {
   status("Building error trace");
 
@@ -145,7 +145,7 @@ void bmc_baset::error_trace(const prop_convt &prop_conv)
 
 /*******************************************************************\
 
-Function: bmc_baset::run_decision_procedure
+Function: bmct::run_decision_procedure
 
   Inputs:
 
@@ -156,7 +156,7 @@ Function: bmc_baset::run_decision_procedure
 \*******************************************************************/
 
 decision_proceduret::resultt
-bmc_baset::run_decision_procedure(prop_convt &prop_conv)
+bmct::run_decision_procedure(prop_convt &prop_conv)
 {
   static bool first_uw=false;
   std::string logic;
@@ -206,7 +206,7 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
 
 /*******************************************************************\
 
-Function: bmc_baset::report_success
+Function: bmct::report_success
 
   Inputs:
 
@@ -216,7 +216,7 @@ Function: bmc_baset::report_success
 
 \*******************************************************************/
 
-void bmc_baset::report_success()
+void bmct::report_success()
 {
   status("VERIFICATION SUCCESSFUL");
 
@@ -251,7 +251,7 @@ void bmc_baset::report_success()
 
 /*******************************************************************\
 
-Function: bmc_baset::report_failure
+Function: bmct::report_failure
 
   Inputs:
 
@@ -261,7 +261,7 @@ Function: bmc_baset::report_failure
 
 \*******************************************************************/
 
-void bmc_baset::report_failure()
+void bmct::report_failure()
 {
   status("VERIFICATION FAILED");
 
@@ -289,7 +289,7 @@ void bmc_baset::report_failure()
 
 /*******************************************************************\
 
-Function: bmc_baset::show_program
+Function: bmct::show_program
 
   Inputs:
 
@@ -299,7 +299,7 @@ Function: bmc_baset::show_program
 
 \*******************************************************************/
 
-void bmc_baset::show_program()
+void bmct::show_program()
 {
   unsigned count=1;
 
@@ -332,7 +332,7 @@ void bmc_baset::show_program()
 
 /*******************************************************************\
 
-Function: bmc_baset::run
+Function: bmct::run
 
   Inputs:
 
@@ -342,7 +342,7 @@ Function: bmc_baset::run
 
 \*******************************************************************/
 
-bool bmc_baset::run(const goto_functionst &goto_functions)
+bool bmct::run(const goto_functionst &goto_functions)
 {
 #ifndef _WIN32
   struct sigaction act;
@@ -440,7 +440,7 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   return false;
 }
 
-bool bmc_baset::run_thread(reachability_treet *art)
+bool bmct::run_thread(reachability_treet *art)
 {
   solver_base *solver;
   bool ret;
@@ -579,7 +579,7 @@ bool bmc_baset::run_thread(reachability_treet *art)
 
 /*******************************************************************\
 
-Function: bmc_baset::setup_unwind
+Function: bmct::setup_unwind
 
   Inputs:
 
@@ -589,7 +589,7 @@ Function: bmc_baset::setup_unwind
 
 \*******************************************************************/
 
-void bmc_baset::setup_unwind()
+void bmct::setup_unwind()
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -608,7 +608,7 @@ void bmc_baset::setup_unwind()
   symex.max_unwind=atol(options.get_option("unwind").c_str());
 }
 
-bool bmc_baset::solver_base::run_solver()
+bool bmct::solver_base::run_solver()
 {
 
   switch(bmc.run_decision_procedure(*conv))
@@ -635,7 +635,7 @@ bool bmc_baset::solver_base::run_solver()
 }
 
 #ifdef MINISAT
-bmc_baset::minisat_solver::minisat_solver(bmc_baset &bmc)
+bmct::minisat_solver::minisat_solver(bmct &bmc)
   : solver_base(bmc), satcheck(), bv_cbmc(satcheck)
 {
   satcheck.set_message_handler(bmc.message_handler);
@@ -649,15 +649,15 @@ bmc_baset::minisat_solver::minisat_solver(bmc_baset &bmc)
   conv = &bv_cbmc;
 }
 
-bool bmc_baset::minisat_solver::run_solver()
+bool bmct::minisat_solver::run_solver()
 {
-  bool result = bmc_baset::solver_base::run_solver();
+  bool result = bmct::solver_base::run_solver();
   return result;
 }
 #endif
 
 #ifdef BOOLECTOR
-bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
+bmct::boolector_solver::boolector_solver(bmct &bmc)
   : solver_base(bmc), boolector_dec()
 {
   boolector_dec.set_file(bmc.options.get_option("outfile"));
@@ -667,7 +667,7 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 #endif
 
 #ifdef Z3
-bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
+bmct::z3_solver::z3_solver(bmct &bmc)
   : solver_base(bmc), z3_conv(bmc.options.get_bool_option("uw-model"),
                                bmc.options.get_bool_option("int-encoding"),
                                bmc.options.get_bool_option("smt"))
@@ -677,16 +677,16 @@ bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
   conv = &z3_conv;
 }
 
-bool bmc_baset::z3_solver::run_solver()
+bool bmct::z3_solver::run_solver()
 {
-  bool result = bmc_baset::solver_base::run_solver();
+  bool result = bmct::solver_base::run_solver();
   bmc._unsat_core = z3_conv.get_z3_core_size();
   bmc._number_of_assumptions = z3_conv.get_z3_number_of_assumptions();
   return result;
 }
 #endif
 
-bmc_baset::output_solver::output_solver(bmc_baset &bmc)
+bmct::output_solver::output_solver(bmct &bmc)
   : solver_base(bmc)
 {
 
@@ -713,7 +713,7 @@ bmc_baset::output_solver::output_solver(bmc_baset &bmc)
   return;
 }
 
-bmc_baset::output_solver::~output_solver()
+bmct::output_solver::~output_solver()
 {
 
   if (out_file != &std::cout)
@@ -721,7 +721,7 @@ bmc_baset::output_solver::~output_solver()
   return;
 }
 
-bool bmc_baset::output_solver::run_solver()
+bool bmct::output_solver::run_solver()
 {
 
   bmc.do_unwind_module(*conv);
@@ -730,7 +730,7 @@ bool bmc_baset::output_solver::run_solver()
   return write_output();
 }
 
-void bmc_baset::write_checkpoint(void)
+void bmct::write_checkpoint(void)
 {
   std::string f;
 

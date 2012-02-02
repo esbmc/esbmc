@@ -442,7 +442,7 @@ Function: cbmc_parseoptionst::get_goto_program
 \*******************************************************************/
 
 bool cbmc_parseoptionst::get_goto_program(
-  bmc_baset &bmc,
+  bmct &bmc,
   goto_functionst &goto_functions)
 {
   try
@@ -845,7 +845,7 @@ Function: cbmc_parseoptionst::process_goto_program
 \*******************************************************************/
 
 bool cbmc_parseoptionst::process_goto_program(
-  bmc_baset &bmc,
+  bmct &bmc,
   goto_functionst &goto_functions)
 {
   try
@@ -983,7 +983,7 @@ Function: cbmc_parseoptionst::do_bmc
 \*******************************************************************/
 
 int cbmc_parseoptionst::do_bmc(
-  bmc_baset &bmc1,
+  bmct &bmc1,
   const goto_functionst &goto_functions)
 {
   bmc1.set_ui(get_ui());

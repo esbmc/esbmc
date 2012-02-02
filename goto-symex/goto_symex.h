@@ -59,6 +59,7 @@ public:
 
 protected:
   friend class symex_dereference_statet;
+  friend class bmct;
   reachability_treet *art1;
 
   virtual void do_simplify(exprt &expr);

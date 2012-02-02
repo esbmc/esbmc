@@ -17,7 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
-Function: bmc_baset::show_vcc
+Function: bmct::show_vcc
 
   Inputs:
 
@@ -27,7 +27,7 @@ Function: bmc_baset::show_vcc
 
 \*******************************************************************/
 
-void bmc_baset::show_vcc(std::ostream &out)
+void bmct::show_vcc(std::ostream &out)
 {
   switch(ui)
   {
@@ -84,7 +84,7 @@ void bmc_baset::show_vcc(std::ostream &out)
 
 /*******************************************************************\
 
-Function: bmc_baset::show_vcc
+Function: bmct::show_vcc
 
   Inputs:
 
@@ -94,7 +94,7 @@ Function: bmc_baset::show_vcc
 
 \*******************************************************************/
 
-void bmc_baset::show_vcc()
+void bmct::show_vcc()
 {
   const std::string &filename=options.get_option("outfile");
   

@@ -34,19 +34,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "symex_bmc.h"
 #include "bv_cbmc.h"
 
-class bmc_baset:public messaget
+class bmct:public messaget
 {
 public:
-  bmc_baset(
-    const contextt &_context,
-    symex_bmct &_symex,
-    symex_target_equationt &_equation,
-    message_handlert &_message_handler):
+  bmct(const contextt &_context, message_handlert &_message_handler):
     messaget(_message_handler),
     context(_context),
-    symex(_symex),
-    equation(&_equation),
     ns(_context, new_context),
+    equation(NULL),
+    symex(ns, new_context, *(new symex_target_equationt(ns))), // XXXjmorse fix this
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
@@ -64,7 +60,7 @@ public:
   unsigned int uw_loop;
 
   virtual bool run(const goto_functionst &goto_functions);
-  virtual ~bmc_baset() { }
+  virtual ~bmct() { }
 
   // additional stuff
   expr_listt bmc_constraints;
@@ -77,10 +73,10 @@ public:
 
 protected:
   const contextt &context;
-  symex_bmct &symex;
-  symex_target_equationt *equation;
-  contextt new_context;
   namespacet ns;
+  symex_target_equationt *equation;
+  symex_bmct symex;
+  contextt new_context;
 
   // use gui format
   language_uit::uit ui;
@@ -91,16 +87,16 @@ protected:
     virtual ~solver_base() {}
 
   protected:
-    solver_base(bmc_baset &_bmc) : bmc(_bmc)
+    solver_base(bmct &_bmc) : bmc(_bmc)
     { }
 
     prop_convt *conv;
-    bmc_baset &bmc;
+    bmct &bmc;
   };
 
   class minisat_solver : public solver_base {
   public:
-    minisat_solver(bmc_baset &bmc);
+    minisat_solver(bmct &bmc);
     virtual bool run_solver();
 
   protected:
@@ -111,7 +107,7 @@ protected:
 #ifdef BOOLECTOR
   class boolector_solver : public solver_base {
   public:
-    boolector_solver(bmc_baset &bmc);
+    boolector_solver(bmct &bmc);
   protected:
     boolector_dect boolector_dec;
   };
@@ -120,7 +116,7 @@ protected:
 #ifdef Z3
   class z3_solver : public solver_base {
   public:
-    z3_solver(bmc_baset &bmc);
+    z3_solver(bmct &bmc);
     virtual bool run_solver();
   protected:
     z3_convt z3_conv;
@@ -129,7 +125,7 @@ protected:
 
   class output_solver : public solver_base {
   public:
-    output_solver(bmc_baset &bmc);
+    output_solver(bmct &bmc);
     ~output_solver();
     virtual bool run_solver();
   protected:
@@ -157,23 +153,6 @@ protected:
   virtual void error_trace(
     const prop_convt &prop_conv);
     bool run_thread(reachability_treet *art);
-};
-
-class bmct:public bmc_baset
-{
-public:
-  bmct(
-    const contextt &_context,
-    message_handlert &_message_handler):
-    bmc_baset(_context, _symex, _equation, _message_handler),
-    _equation(ns),
-    _symex(ns, new_context, _equation)
-  {
-  }
-
-protected:
-  symex_target_equationt _equation;
-  symex_bmct _symex;
 };
 
 #endif
