@@ -352,7 +352,8 @@ int cbmc_parseoptionst::doit()
     return 1;
   }
 
-  bmct bmc(context, ui_message_handler);
+  goto_functionst goto_functions;
+  bmct bmc(goto_functions, context, ui_message_handler);
 
   //
   // command line options
@@ -367,8 +368,6 @@ int cbmc_parseoptionst::doit()
     preprocessing();
     return 0;
   }
-
-  goto_functionst goto_functions;
 
   if(get_goto_program(bmc, goto_functions))
     return 6;

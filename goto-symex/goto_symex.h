@@ -16,6 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_symex_state.h"
 #include "execution_state.h"
+#include "symex_target.h"
 
 class reachability_treet; // Forward dec
 
@@ -39,6 +40,7 @@ public:
     art1 = NULL;
   }
 
+public:
   typedef goto_symex_statet statet;
 
     bool restore_from_dfs_state(void *dfs); // tmp type hack

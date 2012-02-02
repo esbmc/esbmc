@@ -37,12 +37,13 @@ Author: Daniel Kroening, kroening@kroening.com
 class bmct:public messaget
 {
 public:
-  bmct(const contextt &_context, message_handlert &_message_handler):
+  bmct(const goto_functionst &funcs, const contextt &_context, message_handlert &_message_handler):
     messaget(_message_handler),
+    options(),
     context(_context),
     ns(_context, new_context),
     equation(NULL),
-    symex(ns, new_context, *(new symex_target_equationt(ns))), // XXXjmorse fix this
+    symex(funcs, options, ns, new_context, *(new symex_target_equationt(ns))), // XXXjmorse fix this
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;

@@ -11,14 +11,16 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <hash_cont.h>
 #include <message.h>
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/reachability_tree.h>
 
 class symex_bmct:
-  public goto_symext,
+  public reachability_treet,
   virtual public messaget
 {
 public:
   symex_bmct(
+    const goto_functionst &goto_functions,
+    optionst &opts,
     const namespacet &_ns,
     contextt &_new_context,
     symex_targett &_target);

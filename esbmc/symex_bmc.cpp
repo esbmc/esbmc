@@ -24,10 +24,12 @@ Function: symex_bmct::symex_bmct
 \*******************************************************************/
 
 symex_bmct::symex_bmct(
+  const goto_functionst &goto_functions,
+  optionst &opts,
   const namespacet &_ns,
   contextt &_new_context,
   symex_targett &_target):
-  goto_symext(_ns, _new_context, _target)
+  reachability_treet(goto_functions, _ns, opts, _new_context, _target)
 {
 }
 
