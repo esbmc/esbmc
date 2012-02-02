@@ -10,10 +10,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
 #include <std_types.h>
+#include <i2string.h>
+
 #include <goto-programs/goto_functions.h>
 
-#include <i2string.h>
-#include "reachability_tree.h"
+#include "goto_symex_state.h"
+#include "execution_state.h"
+
+class reachability_treet; // Forward dec
 
 class goto_symext
 {

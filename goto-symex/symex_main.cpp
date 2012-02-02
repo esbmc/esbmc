@@ -16,7 +16,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <expr_util.h>
 
 #include "goto_symex.h"
+#include "goto_symex_state.h"
+#include "execution_state.h"
 #include "symex_target_equation.h"
+#include "reachability_tree.h"
 
 #include <std_expr.h>
 #include "../ansi-c/c_types.h"
