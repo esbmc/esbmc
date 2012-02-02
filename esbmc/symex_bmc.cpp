@@ -139,26 +139,3 @@ bool symex_bmct::get_unwind_recursion(
   return this_loop_max_unwind!=0 &&
          unwind>=this_loop_max_unwind;
 }
-
-/*******************************************************************\
-
-Function: symex_bmct::no_body
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void symex_bmct::no_body(const irep_idt &identifier)
-{
-  if(body_warnings.insert(identifier).second)
-  {
-    std::string msg=
-      "**** WARNING: no body for function "+id2string(identifier);
-
-    print(2, msg);
-  }
-}

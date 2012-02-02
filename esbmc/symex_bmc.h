@@ -46,8 +46,6 @@ protected:
     const irep_idt &identifier,
     unsigned unwind);
 
-  virtual void no_body(const irep_idt &identifier);
-
   unsigned long max_unwind;
   std::map<unsigned, long> unwind_set;
 

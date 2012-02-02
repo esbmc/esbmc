@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <std_types.h>
 #include <i2string.h>
+#include <hash_cont.h>
 
 #include <goto-programs/goto_functions.h>
 
@@ -63,6 +64,7 @@ protected:
   friend class symex_dereference_statet;
   friend class bmct;
   reachability_treet *art1;
+  hash_set_cont<irep_idt, irep_id_hash> body_warnings;
 
   virtual void do_simplify(exprt &expr);
 
@@ -128,10 +130,6 @@ protected:
 
   void pop_frame(statet &state);
   void return_assignment(statet &state, execution_statet &ex_state, unsigned node_id);
-
-  virtual void no_body(const irep_idt &identifier __attribute__((unused)))
-  {
-  }
 
   void symex_function_call(
     const goto_functionst &goto_functions,

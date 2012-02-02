@@ -241,7 +241,10 @@ void goto_symext::symex_function_call_code(
 
   if(!goto_function.body_available)
   {
-    no_body(identifier);
+    if (body_warnings.insert(identifier).second) {
+      std::string msg = "**** WARNING: no body for function " + id2string(identifier);
+      std::cerr << msg << std::endl;
+    }
   
     if(call.lhs().is_not_nil())
     {
