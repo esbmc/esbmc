@@ -26,17 +26,17 @@ public:
   goto_symext(
       const namespacet &_ns,
       contextt &_new_context,
-      symex_targett &_target) :
+      symex_targett &_target,
+      const optionst &opts) :
     constant_propagation(true),
     ns(_ns),
+    options(opts),
     new_context(_new_context),
     target(&_target),
     total_claims(0),
     remaining_claims(0),
     guard_identifier_s("goto_symex::\\guard")
   {
-    options.set_option("no-simplify", false);
-    options.set_option("no-assertions", false);
     art1 = NULL;
   }
 
@@ -55,7 +55,7 @@ public:
   bool constant_propagation;
 
   const namespacet &ns;
-  optionst options;
+  const optionst &options;
   contextt &new_context;
   symex_targett *target;
 

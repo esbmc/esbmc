@@ -31,10 +31,10 @@ public:
   reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
-    optionst &opts,
+    const optionst &opts,
     contextt &context,
     symex_targett &target):
-    goto_symext(ns, context, target),
+    goto_symext(ns, context, target, opts),
     goto_functions(goto_functions),
     reached_terminal_state(NULL),
     ns(ns),
