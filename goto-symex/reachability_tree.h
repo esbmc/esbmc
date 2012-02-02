@@ -20,13 +20,12 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 // Can't include goto_symex.h due to inclusion order. This can be fixed with the
 // refactor; in the meantime, forward dec.
-class goto_symext;
 
 #include "crypto_hash.h"
 
 #include <goto-programs/goto_program.h>
 
-class reachability_treet : goto_symext
+class reachability_treet : public goto_symext
 {
 public:
   reachability_treet(
