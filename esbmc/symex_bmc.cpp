@@ -35,39 +35,6 @@ symex_bmct::symex_bmct(
 
 /*******************************************************************\
 
-Function: symex_bmct::symex_step
-
-  Inputs:
-
- Outputs:
-
- Purpose: show progress
-
-\*******************************************************************/
-
-void symex_bmct::symex_step(
-  const goto_functionst &goto_functions,
-  statet &state)
-{
-  /*
-  const locationt &location=state.source.pc->location;
-
-  if(!location.is_nil() && last_location!=location)
-  {
-    print(9, "File "+location.file().as_string()+
-             " line "+location.line().as_string()+
-             " function "+location.function().as_string());
-
-    last_location=location;
-  }
-
-  goto_symext::symex_step(goto_functions, state);
-  */
-	throw "symex step error, who called me?";
-}
-
-/*******************************************************************\
-
 Function: symex_bmct::get_unwind
 
   Inputs:

@@ -33,9 +33,6 @@ protected:
   //
   // overloaded from goto_symext
   //
-  virtual void symex_step(
-    const goto_functionst &goto_functions,
-    statet &state);
 
   // for loop unwinding
   virtual bool get_unwind(
