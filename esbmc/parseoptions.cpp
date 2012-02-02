@@ -333,6 +333,8 @@ Function: cbmc_parseoptionst::doit
 
 int cbmc_parseoptionst::doit()
 {
+  goto_functionst goto_functions;
+
   if(cmdline.isset("version"))
   {
     std::cout << ESBMC_VERSION << std::endl;
@@ -352,15 +354,11 @@ int cbmc_parseoptionst::doit()
     return 1;
   }
 
-  goto_functionst goto_functions;
-  bmct bmc(goto_functions, context, ui_message_handler);
-
   //
   // command line options
   //
 
-  get_command_line_options(bmc.options);
-  set_verbosity(bmc);
+  get_command_line_options(options);
   set_verbosity(*this);
 
   if(cmdline.isset("preprocess"))
@@ -369,7 +367,7 @@ int cbmc_parseoptionst::doit()
     return 0;
   }
 
-  if(get_goto_program(bmc, goto_functions))
+  if(get_goto_program(goto_functions))
     return 6;
 
   if(cmdline.isset("show-claims"))
@@ -385,6 +383,9 @@ int cbmc_parseoptionst::doit()
   // slice according to property
 
   // do actual BMC
+  bmct bmc(goto_functions, options, context, ui_message_handler);
+  get_command_line_options(bmc.options);
+  set_verbosity(bmc);
   return do_bmc(bmc, goto_functions);
 }
 
@@ -440,9 +441,7 @@ Function: cbmc_parseoptionst::get_goto_program
 
 \*******************************************************************/
 
-bool cbmc_parseoptionst::get_goto_program(
-  bmct &bmc,
-  goto_functionst &goto_functions)
+bool cbmc_parseoptionst::get_goto_program(goto_functionst &goto_functions)
 {
   try
   {
@@ -484,11 +483,11 @@ bool cbmc_parseoptionst::get_goto_program(
       status("Generating GOTO Program");
 
       goto_convert(
-        context, bmc.options, goto_functions,
+        context, options, goto_functions,
         ui_message_handler);
     }
 
-    if(process_goto_program(bmc, goto_functions))
+    if(process_goto_program(goto_functions))
       return true;
   }
 
@@ -843,9 +842,7 @@ Function: cbmc_parseoptionst::process_goto_program
 
 \*******************************************************************/
 
-bool cbmc_parseoptionst::process_goto_program(
-  bmct &bmc,
-  goto_functionst &goto_functions)
+bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
 {
   try
   {
@@ -856,7 +853,7 @@ bool cbmc_parseoptionst::process_goto_program(
     }
 
     remove_function_pointers(
-      context, bmc.options, goto_functions,
+      context, options, goto_functions,
       ui_message_handler);
 
     namespacet ns(context);
@@ -868,7 +865,7 @@ bool cbmc_parseoptionst::process_goto_program(
     if(!cmdline.isset("show-features"))
     {
       // add generic checks
-      goto_check(ns, bmc.options, goto_functions);
+      goto_check(ns, options, goto_functions);
     }
 
     if(cmdline.isset("string-abstraction"))
@@ -893,7 +890,7 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // add pointer checks
     pointer_checks(
-      goto_functions, ns, bmc.options, value_set_analysis);
+      goto_functions, ns, options, value_set_analysis);
 
     // add failed symbols
     add_failed_symbols(context);
@@ -937,7 +934,7 @@ bool cbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("show-features"))
     {
       // add generic checks
-      goto_check(ns, bmc.options, goto_functions);
+      goto_check(ns, options, goto_functions);
       return true;
     }
 

@@ -35,16 +35,14 @@ public:
   }
 
 protected:
+  optionst options;
+
   virtual void get_command_line_options(optionst &options);
   virtual int do_bmc(bmct &bmc, const goto_functionst &goto_functions);
 
-  virtual bool get_goto_program(
-    bmct &bmc,
-    goto_functionst &goto_functions);
+  virtual bool get_goto_program(goto_functionst &goto_functions);
 
-  virtual bool process_goto_program(
-    bmct &bmc,
-    goto_functionst &goto_functions);
+  virtual bool process_goto_program(goto_functionst &goto_functions);
 
   bool read_goto_binary(goto_functionst &goto_functions);
 

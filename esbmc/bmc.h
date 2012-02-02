@@ -37,9 +37,10 @@ Author: Daniel Kroening, kroening@kroening.com
 class bmct:public messaget
 {
 public:
-  bmct(const goto_functionst &funcs, const contextt &_context, message_handlert &_message_handler):
+  bmct(const goto_functionst &funcs, optionst &opts,
+       const contextt &_context, message_handlert &_message_handler):
     messaget(_message_handler),
-    options(),
+    options(opts),
     context(_context),
     ns(_context, new_context),
     equation(NULL),
@@ -54,7 +55,7 @@ public:
 
   uint _unsat_core;
   uint _number_of_assumptions;
-  optionst options;
+  optionst &options;
 
   unsigned int interleaving_number;
   unsigned int interleaving_failed;
