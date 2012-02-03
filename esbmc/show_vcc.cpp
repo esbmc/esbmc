@@ -45,7 +45,7 @@ void bmct::show_vcc(std::ostream &out)
     
   out << std::endl << "VERIFICATION CONDITIONS:" << std::endl << std::endl;
 
-  languagest languages(symex.ns, MODE_C);
+  languagest languages(ns, MODE_C);
 
   for(symex_target_equationt::SSA_stepst::iterator
       it=equation->SSA_steps.begin();

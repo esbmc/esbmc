@@ -123,17 +123,17 @@ void bmct::error_trace(const prop_convt &prop_conv)
   {
   case ui_message_handlert::PLAIN:
     std::cout << std::endl << "Counterexample:" << std::endl;
-    show_goto_trace(std::cout, symex.ns, goto_trace);
+    show_goto_trace(std::cout, ns, goto_trace);
     break;
 
   case ui_message_handlert::OLD_GUI:
-    show_goto_trace_gui(std::cout, symex.ns, goto_trace);
+    show_goto_trace_gui(std::cout, ns, goto_trace);
     break;
 
   case ui_message_handlert::XML_UI:
     {
       xmlt xml;
-      convert(symex.ns, goto_trace, xml);
+      convert(ns, goto_trace, xml);
       std::cout << xml << std::endl;
     }
     break;
@@ -193,7 +193,7 @@ bmct::run_decision_procedure(prop_convt &prop_conv)
     status(str.str());
   }
 
-  if(symex.options.get_bool_option("uw-model") && first_uw)
+  if(options.get_bool_option("uw-model") && first_uw)
   {
     std::cout << "number of assumptions: " << _number_of_assumptions << " literal(s)"<< std::endl;
     std::cout << "size of the unsatisfiable core: " << _unsat_core << " literal(s)"<< std::endl;
@@ -303,7 +303,7 @@ void bmct::show_program()
 {
   unsigned count=1;
 
-  languagest languages(symex.ns, MODE_C);
+  languagest languages(ns, MODE_C);
 
   std::cout << std::endl << "Program constraints:" << std::endl;
 
@@ -349,13 +349,7 @@ bool bmct::run(const goto_functionst &goto_functions)
 #endif
   bool resp;
   reachability_treet *art;
-
-  art = new reachability_treet(goto_functions, ns, options, new_context, *equation);
-
-  symex.art1 = art;
-  symex.set_message_handler(message_handler);
-  symex.set_verbosity(get_verbosity());
-  symex.options=options;
+  art = &symex;
 
 #ifndef _WIN32
   // Collect SIGUSR1, indicating that we're supposed to checkpoint.
@@ -365,9 +359,9 @@ bool bmct::run(const goto_functionst &goto_functions)
   sigaction(SIGUSR1, &act, NULL);
 #endif
 
-  if(symex.options.get_bool_option("schedule"))
+  if(options.get_bool_option("schedule"))
   {
-    if(symex.options.get_bool_option("uw-model"))
+    if(options.get_bool_option("uw-model"))
         std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
 
     resp = run_thread(art);
@@ -410,11 +404,11 @@ bool bmct::run(const goto_functionst &goto_functions)
       {
         ++interleaving_failed;
 
-        if (symex.options.get_bool_option("checkpoint-on-cex")) {
+        if (options.get_bool_option("checkpoint-on-cex")) {
           write_checkpoint();
         }
 
-        if(!symex.options.get_bool_option("all-runs"))
+        if(!options.get_bool_option("all-runs"))
         {
           return true;
         }
@@ -426,7 +420,7 @@ bool bmct::run(const goto_functionst &goto_functions)
     } while(art->setup_next_formula());
   }
 
-  if (symex.options.get_bool_option("all-runs"))
+  if (options.get_bool_option("all-runs"))
   {
     std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
     std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
@@ -442,7 +436,7 @@ bool bmct::run_thread(reachability_treet *art)
 
   try
   {
-    if(symex.options.get_bool_option("schedule"))
+    if(options.get_bool_option("schedule"))
     {
       art->generate_schedule_formula(symex);
     }
@@ -476,7 +470,7 @@ bool bmct::run_thread(reachability_treet *art)
     {
       symex_slice_by_tracet symex_slice_by_trace;
       symex_slice_by_trace.slice_by_trace
-      (options.get_option("slice-by-trace"), *equation, symex.ns);
+      (options.get_option("slice-by-trace"), *equation, ns);
     }
 
     if(!options.get_bool_option("no-slice"))

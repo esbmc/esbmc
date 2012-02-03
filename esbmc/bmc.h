@@ -31,7 +31,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/symex_target_equation.h>
 #include <goto-symex/reachability_tree.h>
 
-#include "symex_bmc.h"
 #include "bv_cbmc.h"
 
 class bmct:public messaget
@@ -44,7 +43,7 @@ public:
     context(_context),
     ns(_context, new_context),
     equation(NULL),
-    symex(funcs, options, ns, new_context, *(new symex_target_equationt(ns))), // XXXjmorse fix this
+    symex(funcs, ns, options, new_context, *(new symex_target_equationt(ns))), // XXXjmorse fix this
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
@@ -73,7 +72,7 @@ protected:
   const contextt &context;
   namespacet ns;
   symex_target_equationt *equation;
-  symex_bmct symex;
+  reachability_treet symex;
   contextt new_context;
 
   // use gui format
