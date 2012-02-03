@@ -40,7 +40,18 @@ endif
 $(MAINOBJ): $(OBJS)
 	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
+# Special purpose features,
+ifndef LINUX
+CXXFLAGS+=-DNO_OPENSSL
+endif
+
+DEPFILEEXISTS := $(shell stat $(OBJDIR)/.deps 2>/dev/null)
+ifneq "$(DEPFILEEXISTS)" ""
+include $(OBJDIR)/.deps
+endif
+
 #clean defined by includer
+.PHONY: clean depend
 
 ifdef DIRS
 # Rule for making dependancies on first execution
@@ -67,18 +78,6 @@ depend: $(SRCS)
 $(OBJDIR)/.deps:
 	$(MAKE) depend
 
-endif
-
-.PHONY: clean depend
-
-DEPFILEEXISTS := $(shell stat $(OBJDIR)/.deps 2>/dev/null)
-ifneq "$(DEPFILEEXISTS)" ""
-include $(OBJDIR)/.deps
-endif
-
-# Special purpose features,
-ifndef LINUX
-CXXFLAGS+=-DNO_OPENSSL
 endif
 
 # Finally, some special rules for various pieces of hackery for performing debug
