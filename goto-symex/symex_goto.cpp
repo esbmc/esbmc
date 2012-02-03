@@ -404,11 +404,26 @@ Function: goto_symext::get_unwind
  Purpose:
 
 \*******************************************************************/
-#if 1
+
 bool goto_symext::get_unwind(
   const symex_targett::sourcet &source,
   unsigned unwind)
 {
-  return false;
+  unsigned id=source.pc->loop_number;
+  unsigned long this_loop_max_unwind=max_unwind;
+
+  if(unwind_set.count(id)!=0)
+    this_loop_max_unwind=unwind_set[id];
+
+  #if 1
+  {
+    std::string msg=
+      "Unwinding loop "+i2string(id)+" iteration "+i2string(unwind)+
+      " "+source.pc->location.as_string();
+    std::cout << msg << std::endl;
+  }
+  #endif
+
+  return this_loop_max_unwind!=0 &&
+         unwind>=this_loop_max_unwind;
 }
-#endif

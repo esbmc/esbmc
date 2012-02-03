@@ -134,9 +134,6 @@ protected:
   virtual decision_proceduret::resultt
     run_decision_procedure(prop_convt &prop_conv);
 
-  // unwinding
-  virtual void setup_unwind();
-
   virtual void do_unwind_module(
     decision_proceduret &decision_procedure);
 

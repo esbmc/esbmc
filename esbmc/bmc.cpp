@@ -357,8 +357,6 @@ bool bmct::run(const goto_functionst &goto_functions)
   symex.set_verbosity(get_verbosity());
   symex.options=options;
 
-  symex.last_location.make_nil();
-
 #ifndef _WIN32
   // Collect SIGUSR1, indicating that we're supposed to checkpoint.
   act.sa_handler = sigusr1_handler;
@@ -366,9 +364,6 @@ bool bmct::run(const goto_functionst &goto_functions)
   act.sa_flags = 0;
   sigaction(SIGUSR1, &act, NULL);
 #endif
-
-  // get unwinding info
-  setup_unwind();
 
   if(symex.options.get_bool_option("schedule"))
   {
@@ -460,7 +455,6 @@ bool bmct::run_thread(reachability_treet *art)
   catch(std::string &error_str)
   {
     message_streamt message_stream(*get_message_handler());
-    message_stream.err_location(symex.last_location);
     message_stream.error(error_str);
     return true;
   }
@@ -468,7 +462,6 @@ bool bmct::run_thread(reachability_treet *art)
   catch(const char *error_str)
   {
     message_streamt message_stream(*get_message_handler());
-    message_stream.err_location(symex.last_location);
     message_stream.error(error_str);
     return true;
   }
@@ -575,37 +568,6 @@ bool bmct::run_thread(reachability_treet *art)
     error(error_str);
     return true;
   }
-}
-
-/*******************************************************************\
-
-Function: bmct::setup_unwind
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::setup_unwind()
-{
-  const std::string &set = options.get_option("unwindset");
-  unsigned int length = set.length();
-
-  for(unsigned int idx = 0; idx < length; idx++)
-  {
-    std::string::size_type next = set.find(",", idx);
-    std::string val = set.substr(idx, next - idx);
-    unsigned long id = atoi(val.substr(0, val.find(":", 0)).c_str());
-    unsigned long uw = atol(val.substr(val.find(":", 0) + 1).c_str());
-    symex.unwind_set[id] = uw;
-    if(next == std::string::npos) break;
-    idx = next;
-  }
-
-  symex.max_unwind=atol(options.get_option("unwind").c_str());
 }
 
 bool bmct::solver_base::run_solver()

@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
+#include <map>
 #include <std_types.h>
 #include <i2string.h>
 #include <hash_cont.h>
@@ -38,6 +39,22 @@ public:
     remaining_claims(0),
     guard_identifier_s("goto_symex::\\guard")
   {
+    const std::string &set = options.get_option("unwindset");
+    unsigned int length = set.length();
+
+    for(unsigned int idx = 0; idx < length; idx++)
+    {
+      std::string::size_type next = set.find(",", idx);
+      std::string val = set.substr(idx, next - idx);
+      unsigned long id = atoi(val.substr(0, val.find(":", 0)).c_str());
+      unsigned long uw = atol(val.substr(val.find(":", 0) + 1).c_str());
+      unwind_set[id] = uw;
+      if(next == std::string::npos) break;
+      idx = next;
+    }
+
+    max_unwind=atol(options.get_option("unwind").c_str());
+
     art1 = NULL;
   }
 
@@ -65,6 +82,8 @@ protected:
   friend class bmct;
   reachability_treet *art1;
   hash_set_cont<irep_idt, irep_id_hash> body_warnings;
+  std::map<unsigned, long> unwind_set;
+  unsigned int max_unwind;
 
   virtual void do_simplify(exprt &expr);
 
@@ -120,7 +139,7 @@ protected:
     const statet::goto_statet &goto_state,
     statet &state, execution_statet &ex_state, unsigned node_id);
 
-  virtual bool get_unwind(
+  bool get_unwind(
     const symex_targett::sourcet &source,
     unsigned unwind);
 
@@ -148,7 +167,7 @@ protected:
     execution_statet &state,
     const code_function_callt &call);
 
-  virtual bool get_unwind_recursion(
+  bool get_unwind_recursion(
     const irep_idt &identifier,
     unsigned unwind);
 

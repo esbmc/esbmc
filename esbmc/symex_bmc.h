@@ -33,23 +33,6 @@ protected:
   //
   // overloaded from goto_symext
   //
-
-  // for loop unwinding
-  virtual bool get_unwind(
-    const symex_targett::sourcet &source,
-    unsigned unwind);
-
-  virtual bool get_unwind_recursion(
-    const irep_idt &identifier,
-    unsigned unwind);
-
-  unsigned long max_unwind;
-  std::map<unsigned, long> unwind_set;
-
-  // To show progress
-  irept last_location;
-
-  hash_set_cont<irep_idt, irep_id_hash> body_warnings;
 };
 
 #endif
