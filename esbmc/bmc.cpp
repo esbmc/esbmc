@@ -436,7 +436,7 @@ bool bmct::run_thread()
   {
     if(options.get_bool_option("schedule"))
     {
-      symex.generate_schedule_formula(symex);
+      symex.generate_schedule_formula();
     }
     else
     {

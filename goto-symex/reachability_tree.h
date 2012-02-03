@@ -94,7 +94,7 @@ public:
 
   symex_target_equationt *get_next_formula(goto_symext &symex);
   bool setup_next_formula(void);
-  void generate_schedule_formula(goto_symext &symex);
+  void generate_schedule_formula();
 
   class dfs_position {
 public:
