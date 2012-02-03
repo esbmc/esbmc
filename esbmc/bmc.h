@@ -146,7 +146,7 @@ protected:
 
   virtual void error_trace(
     const prop_convt &prop_conv);
-    bool run_thread(reachability_treet *art);
+    bool run_thread();
 };
 
 #endif

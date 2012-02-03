@@ -348,8 +348,6 @@ bool bmct::run(const goto_functionst &goto_functions)
   struct sigaction act;
 #endif
   bool resp;
-  reachability_treet *art;
-  art = &symex;
 
 #ifndef _WIN32
   // Collect SIGUSR1, indicating that we're supposed to checkpoint.
@@ -364,7 +362,7 @@ bool bmct::run(const goto_functionst &goto_functions)
     if(options.get_bool_option("uw-model"))
         std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
 
-    resp = run_thread(art);
+    resp = run_thread();
 
 
     //underapproximation-widening model
@@ -374,7 +372,7 @@ bool bmct::run(const goto_functionst &goto_functions)
       symex.total_claims=0;
       symex.remaining_claims=0;
       std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
-      resp = run_thread(art);
+      resp = run_thread();
     }
 
     return resp;
@@ -400,7 +398,7 @@ bool bmct::run(const goto_functionst &goto_functions)
       if (++interleaving_number>1)
         std::cout << "*** Thread interleavings " << interleaving_number << " ***" << std::endl;
 
-      if(run_thread(art))
+      if(run_thread())
       {
         ++interleaving_failed;
 
@@ -417,7 +415,7 @@ bool bmct::run(const goto_functionst &goto_functions)
       if (checkpoint_sig) {
         write_checkpoint();
       }
-    } while(art->setup_next_formula());
+    } while(symex.setup_next_formula());
   }
 
   if (options.get_bool_option("all-runs"))
@@ -429,7 +427,7 @@ bool bmct::run(const goto_functionst &goto_functions)
   return false;
 }
 
-bool bmct::run_thread(reachability_treet *art)
+bool bmct::run_thread()
 {
   solver_base *solver;
   bool ret;
@@ -438,11 +436,11 @@ bool bmct::run_thread(reachability_treet *art)
   {
     if(options.get_bool_option("schedule"))
     {
-      art->generate_schedule_formula(symex);
+      symex.generate_schedule_formula(symex);
     }
     else
     {
-      equation = art->get_next_formula(symex);
+      equation = symex.get_next_formula(symex);
     }
   }
 
