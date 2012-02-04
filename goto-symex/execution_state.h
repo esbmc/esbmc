@@ -83,7 +83,7 @@ class execution_statet : public goto_symext
   };
 
   execution_statet(const execution_statet &ex) :
-    goto_symext(ns, new_context, *target, options),
+    goto_symext(ex.ns, ex.new_context, *ex.target, ex.options),
     owning_rt(ex.owning_rt),
     _state_level2(ex._state_level2),
     _target(ex._target),
