@@ -358,7 +358,7 @@ execution_statet::update_trds_count(const namespacet &ns, symex_targett &target)
  \*******************************************************************/
 
 void
-execution_statet::execute_guard(const namespacet &ns, symex_targett &target)
+execution_statet::execute_guard(const namespacet &ns)
 {
 
   parent_node_id = node_id;
@@ -391,7 +391,7 @@ execution_statet::execute_guard(const namespacet &ns, symex_targett &target)
   exprt new_guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
 
   guardt guard;
-  target.assignment(
+  _target.assignment(
     guard,
     new_lhs, guard_expr,
     new_rhs,

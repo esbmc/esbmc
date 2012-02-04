@@ -211,7 +211,7 @@ class execution_statet : public goto_symext
   void decrement_active_atomic_number();
   void set_state_guard(unsigned int i, const exprt & guard);
   void set_active_state(unsigned int i);
-  void execute_guard(const namespacet & ns, symex_targett &target);
+  void execute_guard(const namespacet & ns);
 
   void add_thread(goto_programt::const_targett start,
                   goto_programt::const_targett end,

@@ -154,7 +154,7 @@ void goto_symext::operator()(const goto_functionst &goto_functions)
   while (art.has_more_states())
   {
     total_states++;
-    art.get_cur_state().execute_guard(ns, *target);
+    art.get_cur_state().execute_guard(ns);
     while (!art.is_at_end_of_run())
     {
       symex_step(goto_functions, art);
