@@ -26,13 +26,17 @@
 
 class reachability_treet;
 
-class execution_statet
+class execution_statet : public goto_symext
 {
 
   public:
   execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
-                   const reachability_treet *art, goto_symex_statet::level2t &l2,
+                   const reachability_treet *art,
+                   goto_symex_statet::level2t &l2,
+                   contextt &context,
+                   const optionst &options,
                    bool _is_schedule) :
+    goto_symext(ns, context, *target, options),
     owning_rt(art),
     _state_level2(l2),
     _target(ns),
@@ -79,6 +83,7 @@ class execution_statet
   };
 
   execution_statet(const execution_statet &ex) :
+    goto_symext(ns, new_context, *target, options),
     owning_rt(ex.owning_rt),
     _state_level2(ex._state_level2),
     _target(ex._target),
