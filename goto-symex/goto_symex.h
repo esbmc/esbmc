@@ -60,6 +60,12 @@ public:
   }
 
 public:
+  class symex_resultt {
+    symex_targett *target;
+    unsigned int total_claims;
+    unsigned int remaining_claims;
+  };
+
   typedef goto_symex_statet statet;
 
     bool restore_from_dfs_state(void *dfs); // tmp type hack
