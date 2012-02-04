@@ -370,8 +370,6 @@ bool bmct::run(const goto_functionst &goto_functions)
     //underapproximation-widening model
     while (_unsat_core)
     {
-      symex.total_claims=0;
-      symex.remaining_claims=0;
       std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
       resp = run_thread();
     }
@@ -393,9 +391,6 @@ bool bmct::run(const goto_functionst &goto_functions)
 
     do
     {
-      symex.total_claims=0;
-      symex.remaining_claims=0;
-
       if (++interleaving_number>1)
         std::cout << "*** Thread interleavings " << interleaving_number << " ***" << std::endl;
 
@@ -443,7 +438,7 @@ bool bmct::run_thread()
     }
     else
     {
-      result = symex.get_next_formula(symex);
+      result = symex.get_next_formula();
     }
   }
 
@@ -493,8 +488,8 @@ bool bmct::run_thread()
 
     {
       std::string msg;
-      msg="Generated "+i2string(symex.total_claims)+
-          " VCC(s), "+i2string(symex.remaining_claims)+
+      msg="Generated "+i2string(result->total_claims)+
+          " VCC(s), "+i2string(result->remaining_claims)+
           " remaining after simplification";
       print(8, msg);
     }
@@ -511,7 +506,7 @@ bool bmct::run_thread()
       return false;
     }
 
-    if(symex.remaining_claims==0)
+    if(result->remaining_claims==0)
     {
       report_success();
       return false;

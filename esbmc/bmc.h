@@ -42,7 +42,7 @@ public:
     options(opts),
     context(_context),
     ns(_context, new_context),
-    symex(funcs, ns, options, new_context, *(new symex_target_equationt(ns))), // XXXjmorse fix this
+    symex(funcs, ns, options, new_context), // XXXjmorse fix this
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;

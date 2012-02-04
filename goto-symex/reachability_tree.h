@@ -25,16 +25,14 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include <goto-programs/goto_program.h>
 
-class reachability_treet : public goto_symext
+class reachability_treet
 {
 public:
   reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
     const optionst &opts,
-    contextt &context,
-    symex_targett &target):
-    goto_symext(ns, context, target, opts),
+    contextt &context) :
     goto_functions(goto_functions),
     reached_terminal_state(NULL),
     ns(ns),
@@ -92,7 +90,7 @@ public:
 
   // Interface for bmc operation goes here
 
-  goto_symext::symex_resultt *get_next_formula(goto_symext &symex);
+  goto_symext::symex_resultt *get_next_formula();
   goto_symext::symex_resultt *generate_schedule_formula();
   bool setup_next_formula(void);
 

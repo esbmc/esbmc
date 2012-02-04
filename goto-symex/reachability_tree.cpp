@@ -863,28 +863,28 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
 }
 
 goto_symext::symex_resultt *
-reachability_treet::get_next_formula(goto_symext &symex)
+reachability_treet::get_next_formula()
 {
 
   static unsigned int total_formulae = 0;
   static int total_states = 0;
 
-  symex.target = &get_cur_state()._target;
+  get_cur_state().target = &get_cur_state()._target;
   get_cur_state().execute_guard(ns);
   while(!is_has_complete_formula())
   {
     while (!is_at_end_of_run())
-      symex.symex_step(goto_functions, *this);
+      get_cur_state().symex_step(goto_functions, *this);
 
     switch_to_next_execution_state();
-    symex.target = &get_cur_state()._target;
+    get_cur_state().target = &get_cur_state()._target;
     total_states++;
   }
 
   has_complete_formula = false;
   total_formulae++;
 
-  return get_symex_result();
+  return get_cur_state().get_symex_result();
 }
 
 bool
@@ -905,13 +905,13 @@ reachability_treet::generate_schedule_formula()
     get_cur_state().execute_guard(ns);
     while (!is_at_end_of_run())
     {
-      symex_step(goto_functions, *this);
+      get_cur_state().symex_step(goto_functions, *this);
     }
 
     go_next_state();
   }
 
-  return get_symex_result();
+  return get_cur_state().get_symex_result();
 }
 
 bool
@@ -927,40 +927,40 @@ reachability_treet::restore_from_dfs_state(void *_dfs)
   // the history we've been provided with.
   for (it = dfs.states.begin(), i = 0; it != dfs.states.end(); it++, i++) {
 
-    art1->at_end_of_run = false;
+    at_end_of_run = false;
 
-    while (!art1->is_at_end_of_run()) {
+    while (!is_at_end_of_run()) {
       // Restore the DFS exploration space so that when an interleaving occurs
       // we take the option leading to the thread we desire to run. This
       // assumes that the DFS exploration path algorithm never changes.
       // Has to occur here; between generating new threads, ESBMC messes with
       // the dfs state.
-      for (int dfspos = 0; dfspos < art1->get_cur_state()._DFS_traversed.size();
+      for (int dfspos = 0; dfspos < get_cur_state()._DFS_traversed.size();
            dfspos++)
-        art1->get_cur_state()._DFS_traversed[dfspos] = true;
-      art1->get_cur_state()._DFS_traversed[it->cur_thread] = false;
+        get_cur_state()._DFS_traversed[dfspos] = true;
+      get_cur_state()._DFS_traversed[it->cur_thread] = false;
 
-      symex_step(art1->goto_functions, *art1);
+      get_cur_state().symex_step(goto_functions, *this);
     }
-    art1->get_cur_state()._DFS_traversed = it->explored;
+    get_cur_state()._DFS_traversed = it->explored;
 
-    if (art1->get_cur_state()._threads_state.size() != it->num_threads) {
+    if (get_cur_state()._threads_state.size() != it->num_threads) {
       std::cerr << "Unexpected number of threads when reexploring checkpoint"
                 << std::endl;
       abort();
     }
 
-    art1->switch_to_next_execution_state();
+    switch_to_next_execution_state();
 
     // check we're on the right thread; except on the last run, where there are
     // no more threads to be run.
     if (i + 1 < dfs.states.size())
-      assert(art1->get_cur_state().get_active_state_number() == it->cur_thread);
+      assert(get_cur_state().get_active_state_number() == it->cur_thread);
 
 #if 0
 // XXX jmorse: can't quite get these sequence numbers to line up when they're
 // replayed.
-    if (art1->get_cur_state().get_active_state().source.pc->location_number !=
+    if (get_cur_state().get_active_state().source.pc->location_number !=
         it->location_number) {
       std::cerr << "Interleave at unexpected location when restoring checkpoint"
                 << std::endl;
@@ -975,7 +975,7 @@ reachability_treet::restore_from_dfs_state(void *_dfs)
 void reachability_treet::save_checkpoint(const std::string fname) const
 {
 
-  reachability_treet::dfs_position pos(*art1);
+  reachability_treet::dfs_position pos(*this);
   if (pos.write_to_file(fname))
     std::cerr << "Couldn't save checkpoint; continuing" << std::endl;
 
