@@ -138,6 +138,9 @@ public:
     uint64_t checksum;
   };
 
+  bool restore_from_dfs_state(void *dfs);
+  void save_checkpoint(const std::string fname) const;
+
   const goto_functionst &goto_functions;
 
   // The current terminating execution state that we've reached
