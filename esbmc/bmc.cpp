@@ -86,11 +86,11 @@ Function: bmct::do_cbmc
 
 \*******************************************************************/
 
-void bmct::do_cbmc(prop_convt &solver)
+void bmct::do_cbmc(prop_convt &solver, symex_target_equationt &equation)
 {
   solver.set_message_handler(message_handler);
 
-  equation->convert(solver);
+  equation.convert(solver);
 
   forall_expr_list(it, bmc_constraints)
     solver.set_to_true(*it);
@@ -112,12 +112,13 @@ Function: bmct::error_trace
 
 \*******************************************************************/
 
-void bmct::error_trace(const prop_convt &prop_conv)
+void bmct::error_trace(const prop_convt &prop_conv,
+                       symex_target_equationt &equation)
 {
   status("Building error trace");
 
   goto_tracet goto_trace;
-  build_goto_trace(*equation, prop_conv, goto_trace);
+  build_goto_trace(equation, prop_conv, goto_trace);
 
   switch(ui)
   {
@@ -156,7 +157,8 @@ Function: bmct::run_decision_procedure
 \*******************************************************************/
 
 decision_proceduret::resultt
-bmct::run_decision_procedure(prop_convt &prop_conv)
+bmct::run_decision_procedure(prop_convt &prop_conv,
+                             symex_target_equationt &equation)
 {
   static bool first_uw=false;
   std::string logic;
@@ -178,7 +180,7 @@ bmct::run_decision_procedure(prop_convt &prop_conv)
   fine_timet sat_start=current_time();
 
   do_unwind_module(prop_conv);
-  do_cbmc(prop_conv);
+  do_cbmc(prop_conv, equation);
 
   decision_proceduret::resultt dec_result=prop_conv.dec_solve();
 
@@ -299,7 +301,7 @@ Function: bmct::show_program
 
 \*******************************************************************/
 
-void bmct::show_program()
+void bmct::show_program(symex_target_equationt &equation)
 {
   unsigned count=1;
 
@@ -308,8 +310,8 @@ void bmct::show_program()
   std::cout << std::endl << "Program constraints:" << std::endl;
 
   for(symex_target_equationt::SSA_stepst::const_iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+      it=equation.SSA_steps.begin();
+      it!=equation.SSA_steps.end(); it++)
   {
     if(it->is_assignment())
     {
@@ -368,7 +370,6 @@ bool bmct::run(const goto_functionst &goto_functions)
     //underapproximation-widening model
     while (_unsat_core)
     {
-      equation->clear();
       symex.total_claims=0;
       symex.remaining_claims=0;
       std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
@@ -430,13 +431,14 @@ bool bmct::run(const goto_functionst &goto_functions)
 bool bmct::run_thread()
 {
   solver_base *solver;
+  symex_target_equationt *equation;
   bool ret;
 
   try
   {
     if(options.get_bool_option("schedule"))
     {
-      symex.generate_schedule_formula();
+      equation = symex.generate_schedule_formula();
     }
     else
     {
@@ -482,7 +484,7 @@ bool bmct::run_thread()
 
     if(options.get_bool_option("program-only"))
     {
-      show_program();
+      show_program(*equation);
       return false;
     }
 
@@ -502,7 +504,7 @@ bool bmct::run_thread()
 
     if(options.get_bool_option("show-vcc"))
     {
-      show_vcc();
+      show_vcc(*equation);
       return false;
     }
 
@@ -544,7 +546,7 @@ bool bmct::run_thread()
       throw "Please specify a SAT/SMT solver to use";
 #endif
 
-    ret = solver->run_solver();
+    ret = solver->run_solver(*equation);
     delete solver;
     return ret;
   }
@@ -562,17 +564,17 @@ bool bmct::run_thread()
   }
 }
 
-bool bmct::solver_base::run_solver()
+bool bmct::solver_base::run_solver(symex_target_equationt &equation)
 {
 
-  switch(bmc.run_decision_procedure(*conv))
+  switch(bmc.run_decision_procedure(*conv, equation))
   {
   case decision_proceduret::D_UNSATISFIABLE:
     bmc.report_success();
     return false;
 
   case decision_proceduret::D_SATISFIABLE:
-    bmc.error_trace(*conv);
+    bmc.error_trace(*conv, equation);
     bmc.report_failure();
     return true;
 
@@ -603,9 +605,9 @@ bmct::minisat_solver::minisat_solver(bmct &bmc)
   conv = &bv_cbmc;
 }
 
-bool bmct::minisat_solver::run_solver()
+bool bmct::minisat_solver::run_solver(symex_target_equationt &equation)
 {
-  bool result = bmct::solver_base::run_solver();
+  bool result = bmct::solver_base::run_solver(equation);
   return result;
 }
 #endif
@@ -631,9 +633,9 @@ bmct::z3_solver::z3_solver(bmct &bmc)
   conv = &z3_conv;
 }
 
-bool bmct::z3_solver::run_solver()
+bool bmct::z3_solver::run_solver(symex_target_equationt &equation)
 {
-  bool result = bmct::solver_base::run_solver();
+  bool result = bmct::solver_base::run_solver(equation);
   bmc._unsat_core = z3_conv.get_z3_core_size();
   bmc._number_of_assumptions = z3_conv.get_z3_number_of_assumptions();
   return result;
@@ -675,11 +677,11 @@ bmct::output_solver::~output_solver()
   return;
 }
 
-bool bmct::output_solver::run_solver()
+bool bmct::output_solver::run_solver(symex_target_equationt &equation)
 {
 
   bmc.do_unwind_module(*conv);
-  bmc.do_cbmc(*conv);
+  bmc.do_cbmc(*conv, equation);
   conv->dec_solve();
   return write_output();
 }

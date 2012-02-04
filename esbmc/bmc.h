@@ -42,7 +42,6 @@ public:
     options(opts),
     context(_context),
     ns(_context, new_context),
-    equation(NULL),
     symex(funcs, ns, options, new_context, *(new symex_target_equationt(ns))), // XXXjmorse fix this
     ui(ui_message_handlert::PLAIN)
   {
@@ -71,7 +70,6 @@ public:
 protected:
   const contextt &context;
   namespacet ns;
-  symex_target_equationt *equation;
   reachability_treet symex;
   contextt new_context;
 
@@ -80,7 +78,7 @@ protected:
 
   class solver_base {
   public:
-    virtual bool run_solver();
+    virtual bool run_solver(symex_target_equationt &equation);
     virtual ~solver_base() {}
 
   protected:
@@ -94,7 +92,7 @@ protected:
   class minisat_solver : public solver_base {
   public:
     minisat_solver(bmct &bmc);
-    virtual bool run_solver();
+    virtual bool run_solver(symex_target_equationt &equation);
 
   protected:
     sat_minimizert satcheck;
@@ -114,7 +112,7 @@ protected:
   class z3_solver : public solver_base {
   public:
     z3_solver(bmct &bmc);
-    virtual bool run_solver();
+    virtual bool run_solver(symex_target_equationt &equation);
   protected:
     z3_convt z3_conv;
   };
@@ -124,28 +122,29 @@ protected:
   public:
     output_solver(bmct &bmc);
     ~output_solver();
-    virtual bool run_solver();
+    virtual bool run_solver(symex_target_equationt &equation);
   protected:
     virtual bool write_output() = 0;
     std::ostream *out_file;
   };
 
   virtual decision_proceduret::resultt
-    run_decision_procedure(prop_convt &prop_conv);
+    run_decision_procedure(prop_convt &prop_conv,
+                           symex_target_equationt &equation);
 
   virtual void do_unwind_module(
     decision_proceduret &decision_procedure);
 
-  virtual void do_cbmc(prop_convt &solver);
-  virtual void show_vcc();
-  virtual void show_vcc(std::ostream &out);
-  virtual void show_program();
+  virtual void do_cbmc(prop_convt &solver, symex_target_equationt &eq);
+  virtual void show_vcc(symex_target_equationt &equation);
+  virtual void show_vcc(std::ostream &out, symex_target_equationt &equation);
+  virtual void show_program(symex_target_equationt &equation);
   virtual void report_success();
   virtual void report_failure();
   virtual void write_checkpoint();
 
   virtual void error_trace(
-    const prop_convt &prop_conv);
+    const prop_convt &prop_conv, symex_target_equationt &equation);
     bool run_thread();
 };
 
