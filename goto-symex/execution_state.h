@@ -21,6 +21,7 @@
 #include "symex_target_equation.h"
 
 #include "goto_symex_state.h"
+#include "goto_symex.h"
 #include "read_write_set.h"
 
 class reachability_treet;

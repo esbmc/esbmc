@@ -13,14 +13,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_types.h>
 #include <i2string.h>
 #include <hash_cont.h>
+#include <options.h>
 
 #include <goto-programs/goto_functions.h>
 
 #include "goto_symex_state.h"
-#include "execution_state.h"
 #include "symex_target.h"
 
 class reachability_treet; // Forward dec
+class execution_statet; // Forward dec
 
 class goto_symext
 {

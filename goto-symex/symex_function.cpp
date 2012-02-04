@@ -20,6 +20,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_types.h>
 
 #include "goto_symex.h"
+#include "execution_state.h"
 
 /*******************************************************************\
 
