@@ -862,7 +862,7 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
   return true;
 }
 
-symex_target_equationt *
+goto_symext::symex_resultt *
 reachability_treet::get_next_formula(goto_symext &symex)
 {
 
@@ -884,7 +884,7 @@ reachability_treet::get_next_formula(goto_symext &symex)
   has_complete_formula = false;
   total_formulae++;
 
-  return &get_cur_state()._target;
+  return get_symex_result();
 }
 
 bool
@@ -894,13 +894,9 @@ reachability_treet::setup_next_formula(void)
   return reset_to_unexplored_state();
 }
 
-symex_target_equationt*
+goto_symext::symex_resultt *
 reachability_treet::generate_schedule_formula()
 {
-  symex_target_equationt *equation;
-
-  // for --schedule, equation gets built on top of starting equation
-  equation = &get_cur_state()._target;
 
   int total_states = 0;
   while (has_more_states())
@@ -915,5 +911,5 @@ reachability_treet::generate_schedule_formula()
     go_next_state();
   }
 
-  return equation;
+  return get_symex_result();
 }

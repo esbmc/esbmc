@@ -164,6 +164,13 @@ void goto_symext::operator()(const goto_functionst &goto_functions)
   }
 }
 
+goto_symext::symex_resultt *
+goto_symext::get_symex_result(void)
+{
+
+  return new goto_symext::symex_resultt(target, total_claims, remaining_claims);
+}
+
 /*******************************************************************\
 
 Function: goto_symext::symex_step

@@ -61,10 +61,16 @@ public:
 
 public:
   class symex_resultt {
+  public:
+    symex_resultt(symex_targett *t, unsigned int claims, unsigned int remain) :
+      target(t), total_claims(claims), remaining_claims(remain) { };
+
     symex_targett *target;
     unsigned int total_claims;
     unsigned int remaining_claims;
   };
+
+  symex_resultt *get_symex_result(void);
 
   typedef goto_symex_statet statet;
 

@@ -430,6 +430,7 @@ bool bmct::run(const goto_functionst &goto_functions)
 
 bool bmct::run_thread()
 {
+  goto_symext::symex_resultt *result;
   solver_base *solver;
   symex_target_equationt *equation;
   bool ret;
@@ -438,11 +439,11 @@ bool bmct::run_thread()
   {
     if(options.get_bool_option("schedule"))
     {
-      equation = symex.generate_schedule_formula();
+      result = symex.generate_schedule_formula();
     }
     else
     {
-      equation = symex.get_next_formula(symex);
+      result = symex.get_next_formula(symex);
     }
   }
 
@@ -459,6 +460,8 @@ bool bmct::run_thread()
     message_stream.error(error_str);
     return true;
   }
+
+  equation = static_cast<symex_target_equationt*>(result->target);
 
   print(8, "size of program expression: "+
            i2string((unsigned long)equation->SSA_steps.size())+
