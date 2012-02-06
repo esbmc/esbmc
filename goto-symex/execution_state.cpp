@@ -74,6 +74,31 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   str_state = string_container.take_state_snapshot();
 }
 
+execution_statet::execution_statet(const execution_statet &ex) :
+  goto_symext(ex.ns, ex.new_context, *ex.target, ex.options),
+  owning_rt(ex.owning_rt),
+  _state_level2(ex._state_level2),
+  _target(ex._target),
+  _goto_functions(ex._goto_functions)
+  {
+    *this = ex;
+
+    // Don't copy string state in this copy constructor - instead
+    // take another snapshot to represent what string state was
+    // like when we began the exploration this execution_statet will
+    // perform.
+    str_state = string_container.take_state_snapshot();
+
+    // Regenerate threads state using new objects _state_level2 ref
+    _threads_state.clear();
+    std::vector<goto_symex_statet>::const_iterator it;
+    for (it = ex._threads_state.begin(); it != ex._threads_state.end(); it++) {
+      goto_symex_statet state(*it, _state_level2);
+      _threads_state.push_back(state);
+    }
+
+  }
+
 
 /*******************************************************************
    Function: execution_statet::get_active_state
