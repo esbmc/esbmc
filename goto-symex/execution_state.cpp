@@ -114,7 +114,6 @@ execution_statet::operator=(const execution_statet &ex)
   nondet_count = ex.nondet_count;
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
-  parent_node_id = ex.parent_node_id;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
@@ -472,7 +471,6 @@ void
 execution_statet::execute_guard(const namespacet &ns)
 {
 
-  parent_node_id = node_id;
   node_id = node_count++;
   exprt guard_expr = symbol_exprt(get_guard_identifier_base(), bool_typet());
   exprt parent_guard;

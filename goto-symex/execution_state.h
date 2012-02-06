@@ -148,7 +148,6 @@ class execution_statet : public goto_symext
   unsigned nondet_count;
   unsigned dynamic_counter;
   unsigned int node_id;
-  unsigned int parent_node_id;
 
   private:
   const goto_functionst &_goto_functions;
