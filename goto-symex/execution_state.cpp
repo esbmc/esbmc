@@ -330,8 +330,7 @@ execution_statet::set_active_state(unsigned int i)
  \*******************************************************************/
 
 void
-execution_statet::decrement_trds_in_run(const namespacet &ns,
-  symex_targett &target)
+execution_statet::decrement_trds_in_run(void)
 {
 
   typet int_t = int_type();
@@ -348,7 +347,7 @@ execution_statet::decrement_trds_in_run(const namespacet &ns,
 
   get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
-  target.assignment(
+  target->assignment(
     get_active_state().guard,
     new_lhs, lhs_expr,
     rhs_expr,
@@ -369,12 +368,11 @@ execution_statet::decrement_trds_in_run(const namespacet &ns,
  \*******************************************************************/
 
 void
-execution_statet::end_thread(const namespacet &ns, symex_targett &target)
+execution_statet::end_thread(void)
 {
 
   get_active_state().thread_ended = true;
-
-  decrement_trds_in_run(ns, target);
+  decrement_trds_in_run();
 }
 
 /*******************************************************************

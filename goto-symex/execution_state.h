@@ -109,7 +109,7 @@ class execution_statet : public goto_symext
                   goto_programt::const_targett end,
                   const goto_programt *prog);
   void add_thread(goto_symex_statet & state);
-  void end_thread(const namespacet &ns, symex_targett &target);
+  void end_thread();
   unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
   unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
 
@@ -123,7 +123,7 @@ class execution_statet : public goto_symext
   void print_stack_traces(const namespacet &ns, unsigned int indent = 0) const;
 
   private:
-  void decrement_trds_in_run(const namespacet &ns, symex_targett &target);
+  void decrement_trds_in_run(void);
 
   // Object state
 

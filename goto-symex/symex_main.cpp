@@ -169,7 +169,7 @@ void goto_symext::symex_step(
         case END_FUNCTION:
             if(instruction.function == "c::main")
             {
-                ex_state.end_thread(ns, *target);
+                ex_state.end_thread();
                 ex_state.reexecute_instruction = false;
                 art.generate_states_base(exprt());
                 art.set_is_at_end_of_run();
@@ -389,7 +389,7 @@ void goto_symext::symex_step(
 
             break;
         case END_THREAD:
-            ex_state.end_thread(ns, *target);
+            ex_state.end_thread();
             ex_state.reexecute_instruction = false;
             art.generate_states();
             break;
