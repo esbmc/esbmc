@@ -24,14 +24,14 @@ unsigned int execution_statet::node_count = 0;
 execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    const namespacet &ns,
                                    const reachability_treet *art,
+                                   symex_targett *_target,
                                    goto_symex_statet::level2t &l2,
                                    contextt &context,
                                    const optionst &options,
                                    bool _is_schedule) :
-  goto_symext(ns, context, *target, options),
+  goto_symext(ns, context, *_target, options),
   owning_rt(art),
   _state_level2(l2),
-  _target(ns),
   _goto_functions(goto_functions)
 {
 
@@ -75,10 +75,9 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 }
 
 execution_statet::execution_statet(const execution_statet &ex) :
-  goto_symext(ex.ns, ex.new_context, *ex.target, ex.options),
+  goto_symext(ex.ns, ex.new_context, *ex.target->clone(), ex.options),
   owning_rt(ex.owning_rt),
   _state_level2(ex._state_level2),
-  _target(ex._target),
   _goto_functions(ex._goto_functions)
 {
   *this = ex;
@@ -129,7 +128,10 @@ execution_statet::operator=(const execution_statet &ex)
   return *this;
 }
 
-execution_statet::~execution_statet() {
+execution_statet::~execution_statet()
+{
+
+  delete target;
 
   // Free all name strings and suchlike we generated on this run
   // and no longer require
@@ -510,7 +512,7 @@ execution_statet::execute_guard(const namespacet &ns)
   exprt new_guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
 
   guardt guard;
-  _target.assignment(
+  target->assignment(
     guard,
     new_lhs, guard_expr,
     new_rhs,

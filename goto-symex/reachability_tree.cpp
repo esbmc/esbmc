@@ -869,7 +869,6 @@ reachability_treet::get_next_formula()
   static unsigned int total_formulae = 0;
   static int total_states = 0;
 
-  get_cur_state().target = &get_cur_state()._target;
   get_cur_state().execute_guard(ns);
   while(!is_has_complete_formula())
   {
@@ -877,7 +876,6 @@ reachability_treet::get_next_formula()
       get_cur_state().symex_step(goto_functions, *this);
 
     switch_to_next_execution_state();
-    get_cur_state().target = &get_cur_state()._target;
     total_states++;
   }
 

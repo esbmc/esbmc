@@ -32,6 +32,7 @@ public:
     const goto_functionst &goto_functions,
     const namespacet &ns,
     const optionst &opts,
+    symex_targett *target,
     contextt &context) :
     goto_functions(goto_functions),
     reached_terminal_state(NULL),
@@ -52,7 +53,7 @@ public:
     at_end_of_run = false;
     has_complete_formula = false;
     is_same_mutex=false;
-    execution_statet *s = new execution_statet(goto_functions, ns, this, initial_level2, context, opts, options.get_bool_option("schedule"));
+    execution_statet *s = new execution_statet(goto_functions, ns, this, target, initial_level2, context, opts, options.get_bool_option("schedule"));
     execution_states.push_back(s);
     cur_state_it = execution_states.begin();
   };

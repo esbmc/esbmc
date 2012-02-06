@@ -32,6 +32,7 @@ class execution_statet : public goto_symext
   public:
   execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
                    const reachability_treet *art,
+                   symex_targett *_target,
                    goto_symex_statet::level2t &l2,
                    contextt &context,
                    const optionst &options,
@@ -151,7 +152,6 @@ class execution_statet : public goto_symext
   unsigned dynamic_counter;
   unsigned int node_id;
   unsigned int parent_node_id;
-  symex_target_equationt _target;
 
   private:
   const goto_functionst &_goto_functions;
