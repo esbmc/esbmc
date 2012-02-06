@@ -105,7 +105,7 @@ void goto_symext::symex_other(
 
     // seen it before?
     // it should get a fresh value
-    statet::level2t::current_namest::iterator it=
+    renaming::level2t::current_namest::iterator it=
       state.level2.current_names.find(l1_identifier);
 
     if(it!=state.level2.current_names.end())

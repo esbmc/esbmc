@@ -222,7 +222,7 @@ void goto_symex_statet::assignment(
   std::string orig_name = get_original_name(l1_identifier).as_string();
 
   // do the l2 renaming
-  level2t::valuet &entry=level2.current_names[l1_identifier];
+  renaming::level2t::valuet &entry=level2.current_names[l1_identifier];
 
   entry.count++;
 
