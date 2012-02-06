@@ -121,9 +121,6 @@ public:
 protected:
   virtual void do_simplify(exprt &expr);
 
-  // statistics
-  unsigned total_claims, remaining_claims;
-
   void dereference(
     exprt &expr,
     statet &state,
@@ -241,6 +238,7 @@ protected:
 
   // Members
 
+  unsigned total_claims, remaining_claims;
   reachability_treet *art1;
   hash_set_cont<irep_idt, irep_id_hash> body_warnings;
   std::map<unsigned, long> unwind_set;
