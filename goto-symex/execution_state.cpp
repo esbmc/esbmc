@@ -60,7 +60,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
     it->second.body.instructions.begin(),
     it->second.body.instructions.end(), &(it->second.body));
   active_thread = 0;
-  lastactive_thread = 0;
+  last_active_thread = 0;
   generating_new_threads = 0;
   node_count = 0;
   nondet_count = 0;
@@ -104,7 +104,7 @@ execution_statet::operator=(const execution_statet &ex)
   generating_new_threads = ex.generating_new_threads;
   exprs_read_write = ex.exprs_read_write;
   last_global_read_write = ex.last_global_read_write;
-  lastactive_thread = ex.lastactive_thread;
+  last_active_thread = ex.last_active_thread;
   state_level2 = ex.state_level2;
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
@@ -248,7 +248,7 @@ execution_statet::get_guard_identifier()
 {
 
   return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
-         i2string(lastactive_thread) + '_' + i2string(node_id) + '&' +
+         i2string(last_active_thread) + '_' + i2string(node_id) + '&' +
          i2string(
            node_id) + "#1";
 }
@@ -269,7 +269,7 @@ execution_statet::get_guard_identifier_base()
 {
 
   return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
-         i2string(lastactive_thread) + '_' + i2string(node_id);
+         i2string(last_active_thread) + '_' + i2string(node_id);
 }
 
 
@@ -306,7 +306,7 @@ void
 execution_statet::set_active_state(unsigned int i)
 {
 
-  lastactive_thread = active_thread;
+  last_active_thread = active_thread;
   active_thread = i;
 }
 

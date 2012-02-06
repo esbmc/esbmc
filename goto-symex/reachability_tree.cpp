@@ -301,7 +301,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   if(ex_state.generating_new_threads == -1)
   {
     ex_state.generating_new_threads = 0;
-    ex_state.set_active_state(ex_state.lastactive_thread);
+    ex_state.set_active_state(ex_state.last_active_thread);
   }
 
   if(ex_state.threads_state.size() < 2)
