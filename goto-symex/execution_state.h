@@ -90,7 +90,7 @@ class execution_statet : public goto_symext
     return _active_thread;
   }
 
-  void recover_global_state(const namespacet &ns, symex_targett &target);
+  // Methods
 
   irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();

@@ -593,64 +593,6 @@ execution_statet::add_thread(goto_symex_statet & state)
 }
 
 /*******************************************************************
-   Function: execution_statet::recover_global_state
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-execution_statet::recover_global_state(const namespacet &ns,
-  symex_targett &target)
-{
-
-  std::set<irep_idt> variables;
-  _state_level2.get_variables(variables);
-
-  _state_level2.print(std::cout, parent_node_id);
-
-  for (std::set<irep_idt>::const_iterator
-       it = variables.begin();
-       it != variables.end();
-       it++)
-  {
-    irep_idt original_identifier = get_active_state().get_original_name(*it);
-    try {
-      // changed!
-      const symbolt &symbol = ns.lookup(original_identifier);
-      typet type(symbol.type);
-      // type may need renaming
-      get_active_state().rename(type, ns, node_id);
-
-      exprt rhs =
-        symbol_exprt(get_active_state().current_name(original_identifier,
-                                                     parent_node_id), type);
-      exprt lhs = symbol_exprt(original_identifier, type);
-
-      exprt new_lhs =
-        symbol_exprt(get_active_state().current_name(original_identifier,
-                                                     node_id), type);
-
-      guardt true_guard;
-
-      target.assignment(true_guard,
-                        new_lhs, lhs,
-                        rhs,
-                        get_active_state().source,
-                        get_active_state().gen_stack_trace(),
-                        symex_targett::STATE);
-    }
-    catch (const std::string e) {
-      continue;
-    }
-  }
-}
-
-/*******************************************************************
    Function: execution_statet::get_expr_write_globals
 
    Inputs:
