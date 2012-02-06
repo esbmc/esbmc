@@ -240,40 +240,26 @@ class execution_statet : public goto_symext
   public:
 
   const reachability_treet *owning_rt;
-
   std::vector<goto_symex_statet> _threads_state;
-
   std::vector<unsigned int> _atomic_numbers;
-
   std::vector<bool> _DFS_traversed;
-
   std::vector<exprt> _exprs;
-
   int generating_new_threads;
   exprt last_global_expr;
-
   std::vector<read_write_set> _exprs_read_write;
-
   read_write_set last_global_read_write;
-
   unsigned int _last_active_thread;
   goto_symex_statet::level2t _state_level2;
   unsigned int _active_thread;
-
   irep_idt guard_execution;
   irep_idt guard_thread;
   irep_idt _parent_guard_identifier;
-
   bool is_schedule;
-
   bool reexecute_instruction;
   bool reexecute_atomic;
-
   int _TS_number;
-
   unsigned nondet_count;
   unsigned dynamic_counter;
-
   unsigned int node_id;
   unsigned int parent_node_id;
   symex_target_equationt _target;
