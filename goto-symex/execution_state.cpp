@@ -105,7 +105,7 @@ execution_statet::operator=(const execution_statet &ex)
   atomic_numbers = ex.atomic_numbers;
   DFS_traversed = ex.DFS_traversed;
   generating_new_threads = ex.generating_new_threads;
-  _exprs_read_write = ex._exprs_read_write;
+  exprs_read_write = ex.exprs_read_write;
   last_global_read_write = ex.last_global_read_write;
   _last_active_thread = ex._last_active_thread;
   _state_level2 = ex._state_level2;
@@ -553,7 +553,7 @@ execution_statet::add_thread(goto_programt::const_targett thread_start,
     DFS_traversed[state.source.thread_nr] = false;
   }
 
-  _exprs_read_write.push_back(read_write_set());
+  exprs_read_write.push_back(read_write_set());
 }
 
 /*******************************************************************
@@ -582,7 +582,7 @@ execution_statet::add_thread(goto_symex_statet & state)
   } else {
     DFS_traversed[new_state.source.thread_nr] = false;
   }
-  _exprs_read_write.push_back(read_write_set());
+  exprs_read_write.push_back(read_write_set());
 }
 
 /*******************************************************************
@@ -619,7 +619,7 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
         || identifier == "c::__ESBMC_alloc_size")
       return 0;
     else if ((symbol.static_lifetime || symbol.type.is_dynamic_set())) {
-      _exprs_read_write.at(_active_thread).write_set.insert(identifier);
+      exprs_read_write.at(_active_thread).write_set.insert(identifier);
       return 1;
     } else
       return 0;
@@ -677,7 +677,7 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
         "c::__ESBMC_alloc_size")
       return 0;
     else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
-      _exprs_read_write.at(_active_thread).read_set.insert(identifier);
+      exprs_read_write.at(_active_thread).read_set.insert(identifier);
       return 1;
     } else
       return 0;

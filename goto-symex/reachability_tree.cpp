@@ -232,23 +232,23 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
       if(i < ex_state._active_thread)
       {
         if(ex_state.last_global_read_write.write_set.empty() &&
-           ex_state._exprs_read_write.at(i+1).write_set.empty() &&
-           ex_state._exprs_read_write.at(ex_state._active_thread).write_set.empty())
+           ex_state.exprs_read_write.at(i+1).write_set.empty() &&
+           ex_state.exprs_read_write.at(ex_state._active_thread).write_set.empty())
         {
           return false;
         }
 
         consider = false;
 
-        if(ex_state.last_global_read_write.has_write_intersect(ex_state._exprs_read_write.at(i+1).write_set))
+        if(ex_state.last_global_read_write.has_write_intersect(ex_state.exprs_read_write.at(i+1).write_set))
         {
           consider = true;
         }
-        else if(ex_state.last_global_read_write.has_write_intersect(ex_state._exprs_read_write.at(i+1).read_set))
+        else if(ex_state.last_global_read_write.has_write_intersect(ex_state.exprs_read_write.at(i+1).read_set))
         {
           consider = true;
         }
-        else if(ex_state.last_global_read_write.has_read_intersect(ex_state._exprs_read_write.at(i+1).write_set))
+        else if(ex_state.last_global_read_write.has_read_intersect(ex_state.exprs_read_write.at(i+1).write_set))
         {
           consider = true;
         }
@@ -321,7 +321,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 #if 1
   if(expr.is_not_nil())
   {
-    ex_state.last_global_read_write = ex_state._exprs_read_write.at(ex_state._active_thread);
+    ex_state.last_global_read_write = ex_state.exprs_read_write.at(ex_state._active_thread);
   }
 #endif
 
