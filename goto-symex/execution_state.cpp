@@ -80,25 +80,54 @@ execution_statet::execution_statet(const execution_statet &ex) :
   _state_level2(ex._state_level2),
   _target(ex._target),
   _goto_functions(ex._goto_functions)
-  {
-    *this = ex;
+{
+  *this = ex;
 
-    // Don't copy string state in this copy constructor - instead
-    // take another snapshot to represent what string state was
-    // like when we began the exploration this execution_statet will
-    // perform.
-    str_state = string_container.take_state_snapshot();
+  // Don't copy string state in this copy constructor - instead
+  // take another snapshot to represent what string state was
+  // like when we began the exploration this execution_statet will
+  // perform.
+  str_state = string_container.take_state_snapshot();
 
-    // Regenerate threads state using new objects _state_level2 ref
-    _threads_state.clear();
-    std::vector<goto_symex_statet>::const_iterator it;
-    for (it = ex._threads_state.begin(); it != ex._threads_state.end(); it++) {
-      goto_symex_statet state(*it, _state_level2);
-      _threads_state.push_back(state);
-    }
-
+  // Regenerate threads state using new objects _state_level2 ref
+  _threads_state.clear();
+  std::vector<goto_symex_statet>::const_iterator it;
+  for (it = ex._threads_state.begin(); it != ex._threads_state.end(); it++) {
+    goto_symex_statet state(*it, _state_level2);
+    _threads_state.push_back(state);
   }
+}
 
+execution_statet&
+execution_statet::operator=(const execution_statet &ex)
+{
+  is_schedule = ex.is_schedule;
+  _threads_state = ex._threads_state;
+  _atomic_numbers = ex._atomic_numbers;
+  _DFS_traversed = ex._DFS_traversed;
+  _exprs = ex._exprs;
+  generating_new_threads = ex.generating_new_threads;
+  last_global_expr = ex.last_global_expr;
+  _exprs_read_write = ex._exprs_read_write;
+  last_global_read_write = ex.last_global_read_write;
+  _last_active_thread = ex._last_active_thread;
+  _state_level2 = ex._state_level2;
+  _active_thread = ex._active_thread;
+  guard_execution = ex.guard_execution;
+  guard_thread = ex.guard_thread;
+  _parent_guard_identifier = ex._parent_guard_identifier;
+  reexecute_instruction = ex.reexecute_instruction;
+  reexecute_atomic = ex.reexecute_atomic;
+  nondet_count = ex.nondet_count;
+  dynamic_counter = ex.dynamic_counter;
+  node_id = ex.node_id;
+  parent_node_id = ex.parent_node_id;
+
+  _goto_program = ex._goto_program;
+  _CS_number = ex._CS_number;
+  _TS_number = ex._TS_number;
+  return *this;
+}
 
 /*******************************************************************
    Function: execution_statet::get_active_state
