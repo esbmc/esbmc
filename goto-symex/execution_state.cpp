@@ -25,7 +25,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    const namespacet &ns,
                                    const reachability_treet *art,
                                    symex_targett *_target,
-                                   goto_symex_statet::level2t &l2,
+                                   renaming::level2t &l2,
                                    contextt &context,
                                    const optionst &options,
                                    bool _is_schedule) :
