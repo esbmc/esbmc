@@ -77,7 +77,6 @@ public:
   bool generate_states_before_assign(const exprt &code, execution_statet &ex_state);
   bool is_global_assign(const exprt &code);
 
-  const symbolt &lookup(const namespacet &ns, const irep_idt &identifier) const;
   void print_ileave_trace(void) const;
   bool is_at_end_of_run();
   bool is_has_complete_formula();
