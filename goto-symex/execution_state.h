@@ -141,7 +141,7 @@ class execution_statet : public goto_symext
   unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt guard_thread;
-  irep_idt _parent_guard_identifier;
+  irep_idt parent_guard_identifier;
   bool is_schedule;
   bool reexecute_instruction;
   bool reexecute_atomic;

@@ -112,7 +112,7 @@ execution_statet::operator=(const execution_statet &ex)
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
   guard_thread = ex.guard_thread;
-  _parent_guard_identifier = ex._parent_guard_identifier;
+  parent_guard_identifier = ex.parent_guard_identifier;
   reexecute_instruction = ex.reexecute_instruction;
   reexecute_atomic = ex.reexecute_atomic;
   nondet_count = ex.nondet_count;
@@ -294,7 +294,7 @@ void
 execution_statet::set_parent_guard(const irep_idt & parent_guard)
 {
 
-  _parent_guard_identifier = parent_guard;
+  parent_guard_identifier = parent_guard;
 }
 
 /*******************************************************************
@@ -493,8 +493,8 @@ execution_statet::execute_guard(const namespacet &ns)
   parent_guard = true_exprt();
   new_rhs = parent_guard;
 
-  if (!_parent_guard_identifier.empty()) {
-    parent_guard = symbol_exprt(_parent_guard_identifier, bool_typet());
+  if (!parent_guard_identifier.empty()) {
+    parent_guard = symbol_exprt(parent_guard_identifier, bool_typet());
     new_rhs = cur_rhs;   //gen_and(parent_guard, cur_rhs);
   }
 
