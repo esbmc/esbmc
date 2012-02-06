@@ -35,52 +35,7 @@ class execution_statet : public goto_symext
                    goto_symex_statet::level2t &l2,
                    contextt &context,
                    const optionst &options,
-                   bool _is_schedule) :
-    goto_symext(ns, context, *target, options),
-    owning_rt(art),
-    _state_level2(l2),
-    _target(ns),
-    _goto_functions(goto_functions)
-  {
-
-    // XXXjmorse - C++s static initialization order trainwreck means
-    // we can't initialize the id -> serializer map statically. Instead,
-    // manually inspect and initialize. This is not thread safe.
-    if (!execution_statet::expr_id_map_initialized) {
-      execution_statet::expr_id_map_initialized = true;
-      execution_statet::expr_id_map = init_expr_id_map();
-    }
-
-    is_schedule = _is_schedule;
-    reexecute_instruction = true;
-    reexecute_atomic = false;
-    _CS_number = 0;
-    _TS_number = 0;
-    node_id = 0;
-    guard_execution = "execution_statet::\\guard_exec";
-    guard_thread = "execution_statet::\\trdsel";
-
-    goto_functionst::function_mapt::const_iterator it =
-      goto_functions.function_map.find("main");
-    if (it == goto_functions.function_map.end())
-      throw "main symbol not found; please set an entry point";
-
-    _goto_program = &(it->second.body);
-
-    add_thread(
-      (*_goto_program).instructions.begin(),
-      (*_goto_program).instructions.end(), _goto_program);
-    _active_thread = 0;
-    _last_active_thread = 0;
-    generating_new_threads = 0;
-    node_count = 0;
-    nondet_count = 0;
-    dynamic_counter = 0;
-    _DFS_traversed.reserve(1);
-    _DFS_traversed[0] = false;
-
-    str_state = string_container.take_state_snapshot();
-  };
+                   bool _is_schedule);
 
   execution_statet(const execution_statet &ex) :
     goto_symext(ex.ns, ex.new_context, *ex.target, ex.options),
