@@ -227,7 +227,7 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
 
   if (por)
   {
-    if(ex_state.last_global_expr.is_not_nil() && !expr.id().empty())
+    if(!expr.id().empty())
     {
       if(i < ex_state._active_thread)
       {
@@ -284,8 +284,6 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
   execution_statet &ex_state = get_cur_state();
 
-  ex_state._exprs.at(ex_state._active_thread) = expr;
-
   // force the new threads continue execute to visible instruction
   if(ex_state.generating_new_threads > 0)
   {
@@ -323,7 +321,6 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 #if 1
   if(expr.is_not_nil())
   {
-    ex_state.last_global_expr = ex_state._exprs.at(ex_state._active_thread);
     ex_state.last_global_read_write = ex_state._exprs_read_write.at(ex_state._active_thread);
   }
 #endif
@@ -338,16 +335,16 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
     user_tid = tid = get_ileave_direction_from_scheduling(expr);
     if(tid != ex_state._active_thread){
-        ex_state._DFS_traversed.at(ex_state._active_thread)=true;
+        ex_state.DFS_traversed.at(ex_state._active_thread)=true;
     }
     if(tid == ex_state._active_thread){
         for(tid=0; tid < ex_state.threads_state.size(); tid++)
         {
           if(tid==user_tid)
               continue;
-          if(ex_state._DFS_traversed.at(tid))
+          if(ex_state.DFS_traversed.at(tid))
             continue;
-          ex_state._DFS_traversed.at(tid) = true;
+          ex_state.DFS_traversed.at(tid) = true;
         }
        tid=user_tid;
     }
@@ -358,10 +355,10 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   {
     /* For all threads: */
 
-    if(ex_state._DFS_traversed.at(tid))
+    if(ex_state.DFS_traversed.at(tid))
       continue;
 
-    ex_state._DFS_traversed.at(tid) = true;
+    ex_state.DFS_traversed.at(tid) = true;
 
     /* Presumably checks whether this thread isn't in user code yet? */
     if(ex_state.threads_state.at(tid).call_stack.empty())
@@ -412,7 +409,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 //    execution_states.rbegin()->copy_level2_from(ex_state);
 //    Copy constructor should duplicate level2 object
     /* Reset interleavings (?) investigated in this new state */
-    new_state->reset_DFS_traversed();
+    new_state->resetDFS_traversed();
 
     return true;
   } else {
@@ -564,7 +561,7 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
     execution_statet *ex = *it;
     state.location_number = ex->get_active_state().source.pc->location_number;
     state.num_threads = ex->threads_state.size();
-    state.explored = ex->_DFS_traversed;
+    state.explored = ex->DFS_traversed;
 
     // The thread taken in this DFS path isn't decided at this execution state,
     // instead it's whatever thread is active in the /next/ state. So, take the
@@ -835,7 +832,7 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
 {
   const execution_statet &ex = get_cur_state();
 
-  if (ex._DFS_traversed.at(tid) == true) {
+  if (ex.DFS_traversed.at(tid) == true) {
     if (!quiet)
       std::cout << "Thread unschedulable as it's already been explored" << std::endl;
     return false;
@@ -928,14 +925,14 @@ reachability_treet::restore_from_dfs_state(void *_dfs)
       // assumes that the DFS exploration path algorithm never changes.
       // Has to occur here; between generating new threads, ESBMC messes with
       // the dfs state.
-      for (int dfspos = 0; dfspos < get_cur_state()._DFS_traversed.size();
+      for (int dfspos = 0; dfspos < get_cur_state().DFS_traversed.size();
            dfspos++)
-        get_cur_state()._DFS_traversed[dfspos] = true;
-      get_cur_state()._DFS_traversed[it->cur_thread] = false;
+        get_cur_state().DFS_traversed[dfspos] = true;
+      get_cur_state().DFS_traversed[it->cur_thread] = false;
 
       get_cur_state().symex_step(goto_functions, *this);
     }
-    get_cur_state()._DFS_traversed = it->explored;
+    get_cur_state().DFS_traversed = it->explored;
 
     if (get_cur_state().threads_state.size() != it->num_threads) {
       std::cerr << "Unexpected number of threads when reexploring checkpoint"

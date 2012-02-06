@@ -68,8 +68,8 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   node_count = 0;
   nondet_count = 0;
   dynamic_counter = 0;
-  _DFS_traversed.reserve(1);
-  _DFS_traversed[0] = false;
+  DFS_traversed.reserve(1);
+  DFS_traversed[0] = false;
 
   str_state = string_container.take_state_snapshot();
 }
@@ -103,10 +103,8 @@ execution_statet::operator=(const execution_statet &ex)
   is_schedule = ex.is_schedule;
   threads_state = ex.threads_state;
   atomic_numbers = ex.atomic_numbers;
-  _DFS_traversed = ex._DFS_traversed;
-  _exprs = ex._exprs;
+  DFS_traversed = ex.DFS_traversed;
   generating_new_threads = ex.generating_new_threads;
-  last_global_expr = ex.last_global_expr;
   _exprs_read_write = ex._exprs_read_write;
   last_global_read_write = ex.last_global_read_write;
   _last_active_thread = ex._last_active_thread;
@@ -549,13 +547,11 @@ execution_statet::add_thread(goto_programt::const_targett thread_start,
   threads_state.push_back(state);
   atomic_numbers.push_back(0);
 
-  if (_DFS_traversed.size() <= state.source.thread_nr) {
-    _DFS_traversed.push_back(false);
+  if (DFS_traversed.size() <= state.source.thread_nr) {
+    DFS_traversed.push_back(false);
   } else {
-    _DFS_traversed[state.source.thread_nr] = false;
+    DFS_traversed[state.source.thread_nr] = false;
   }
-
-  _exprs.push_back(exprt());
 
   _exprs_read_write.push_back(read_write_set());
 }
@@ -581,13 +577,11 @@ execution_statet::add_thread(goto_symex_statet & state)
   threads_state.push_back(new_state);
   atomic_numbers.push_back(0);
 
-  if (_DFS_traversed.size() <= new_state.source.thread_nr) {
-    _DFS_traversed.push_back(false);
+  if (DFS_traversed.size() <= new_state.source.thread_nr) {
+    DFS_traversed.push_back(false);
   } else {
-    _DFS_traversed[new_state.source.thread_nr] = false;
+    DFS_traversed[new_state.source.thread_nr] = false;
   }
-  _exprs.push_back(exprt());
-
   _exprs_read_write.push_back(read_write_set());
 }
 

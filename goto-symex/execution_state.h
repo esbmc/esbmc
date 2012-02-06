@@ -80,10 +80,10 @@ class execution_statet : public goto_symext
   }
 
   void
-  reset_DFS_traversed()
+  resetDFS_traversed()
   {
     for (unsigned int i = 0; i < threads_state.size(); i++)
-      _DFS_traversed.at(i) = false;
+      DFS_traversed.at(i) = false;
   }
 
   unsigned int
@@ -132,10 +132,8 @@ class execution_statet : public goto_symext
   const reachability_treet *owning_rt;
   std::vector<goto_symex_statet> threads_state;
   std::vector<unsigned int> atomic_numbers;
-  std::vector<bool> _DFS_traversed;
-  std::vector<exprt> _exprs;
+  std::vector<bool> DFS_traversed;
   int generating_new_threads;
-  exprt last_global_expr;
   std::vector<read_write_set> _exprs_read_write;
   read_write_set last_global_read_write;
   unsigned int _last_active_thread;
