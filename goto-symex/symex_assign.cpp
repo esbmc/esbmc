@@ -21,6 +21,62 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "dynamic_allocation.h"
 #include "execution_state.h"
 
+goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
+                         symex_targett *_target, const optionst &opts) :
+  total_claims(0),
+  remaining_claims(0),
+  guard_identifier_s("goto_symex::\\guard"),
+  constant_propagation(true),
+  ns(_ns),
+  options(opts),
+  new_context(_new_context),
+  target(_target)
+{
+  const std::string &set = options.get_option("unwindset");
+  unsigned int length = set.length();
+
+  for(unsigned int idx = 0; idx < length; idx++)
+  {
+    std::string::size_type next = set.find(",", idx);
+    std::string val = set.substr(idx, next - idx);
+    unsigned long id = atoi(val.substr(0, val.find(":", 0)).c_str());
+    unsigned long uw = atol(val.substr(val.find(":", 0) + 1).c_str());
+    unwind_set[id] = uw;
+    if(next == std::string::npos) break;
+    idx = next;
+  }
+
+  max_unwind=atol(options.get_option("unwind").c_str());
+
+  art1 = NULL;
+}
+
+goto_symext::goto_symext(const goto_symext &sym) :
+  ns(sym.ns),
+  options(sym.options),
+  new_context(sym.new_context)
+{
+  *this = sym;
+}
+
+goto_symext& goto_symext::operator=(const goto_symext &sym)
+{
+  body_warnings = sym.body_warnings;
+  unwind_set = sym.unwind_set;
+  max_unwind = sym.max_unwind;
+  constant_propagation = sym.constant_propagation;
+  total_claims = sym.total_claims;
+  remaining_claims = sym.remaining_claims;
+
+  // Art ptr is shared
+  art1 = sym.art1;
+
+  // Symex target isn't shared.
+  target = sym.target->clone();
+
+  return *this;
+}
+
 /*******************************************************************\
 
 Function: goto_symext::assignment
