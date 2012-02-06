@@ -41,15 +41,7 @@ class execution_statet : public goto_symext
 
   execution_statet &operator=(const execution_statet &ex);
 
-  virtual
-  ~execution_statet() {
-    // Free all name strings and suchlike we generated on this run
-    // and no longer require
-    // But, not if we're running with --schedule, as we'll need all
-    // that information later.
-    if (!is_schedule)
-      string_container.restore_state_snapshot(str_state);
-  };
+  virtual ~execution_statet();
 
   // Types
 
