@@ -49,7 +49,6 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   TS_number = 0;
   node_id = 0;
   guard_execution = "execution_statet::\\guard_exec";
-  guard_thread = "execution_statet::\\trdsel";
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("main");
@@ -108,7 +107,6 @@ execution_statet::operator=(const execution_statet &ex)
   state_level2 = ex.state_level2;
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
-  guard_thread = ex.guard_thread;
   parent_guard_identifier = ex.parent_guard_identifier;
   reexecute_instruction = ex.reexecute_instruction;
   nondet_count = ex.nondet_count;
