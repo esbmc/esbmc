@@ -1,3 +1,6 @@
+#ifndef _GOTO_SYMEX_RENAMING_H_
+#define _GOTO_SYMEX_RENAMING_H_
+
 #include <stdint.h>
 #include <string.h>
 
@@ -9,121 +12,126 @@
 #include <expr_util.h>
 #include <std_expr.h>
 
-struct renaming_levelt
-{
-public:
-  virtual const irep_idt &get_original_name(const irep_idt &identifier) const;
-  virtual void get_original_name(exprt &expr) const;
-  virtual void rename(exprt &expr, unsigned node_id)=0;
-  virtual void rename(typet &type, unsigned node_id);
-  virtual void remove(const irep_idt &identifier)=0;
+namespace renaming {
 
-  virtual std::string operator()(const irep_idt &identifier, unsigned exec_node_id) const=0;
+  typedef std::map<irep_idt, irep_idt> original_identifierst;
 
-  virtual ~renaming_levelt() { }
-
-  original_identifierst original_identifiers;
-};
-
-// level 1 -- function frames
-// this is to preserve locality in case of recursion
-
-struct level1t:public renaming_levelt
-{
-public:
-  std::string name(const irep_idt &identifier, unsigned frame,
-                   unsigned execution_node_id) const;
-
-  typedef std::map<irep_idt, unsigned> current_namest; // variables and its function frame number
-  current_namest current_names;
-  unsigned int _thread_id;
-
-  virtual void rename(exprt &expr, unsigned node_id);
-  virtual void rename(typet &type, unsigned node_id) { renaming_levelt::rename(type,node_id); }
-  virtual std::string operator()(const irep_idt &identifier, unsigned exec_node_id) const;
-  virtual void remove(const irep_idt &identifier) { current_names.erase(identifier); }
-
-  void rename(const irep_idt &identifier, unsigned frame, unsigned exec_node_id)
+  struct renaming_levelt
   {
-    current_names[identifier]=frame;
-    original_identifiers[name(identifier, frame, exec_node_id)]=identifier;
-  }
+  public:
+    virtual const irep_idt &get_original_name(const irep_idt &identifier) const;
+    virtual void get_original_name(exprt &expr) const;
+    virtual void rename(exprt &expr, unsigned node_id)=0;
+    virtual void rename(typet &type, unsigned node_id);
+    virtual void remove(const irep_idt &identifier)=0;
 
-  level1t() {}
-  virtual ~level1t() { }
+    virtual std::string operator()(const irep_idt &identifier, unsigned exec_node_id) const=0;
 
-  virtual void print(std::ostream &out, unsigned node_id) const;
-};
+    virtual ~renaming_levelt() { }
 
-// level 2 -- SSA
-
-struct level2t:public renaming_levelt
-{
-public:
-  virtual void rename(exprt &expr, unsigned node_id);
-  virtual void rename(typet &type, unsigned node_id) { renaming_levelt::rename(type,node_id); }
-  virtual std::string operator()(const irep_idt &identifier, unsigned node_id) const;
-  virtual std::string stupid_operator(const irep_idt &identifier, unsigned node_id) const;
-  virtual void remove(const irep_idt &identifier)
-  {
-      current_names.erase(identifier);
-  }
-
-  struct valuet
-  {
-    unsigned count;
-    exprt constant;
-    unsigned node_id;
-    valuet():
-      count(0),
-      constant(static_cast<const exprt &>(get_nil_irep())),
-      node_id(0)
-    {
-    }
+    original_identifierst original_identifiers;
   };
 
-  typedef std::map<irep_idt, valuet> current_namest;
-  current_namest current_names;
-  typedef std::map<irep_idt, crypto_hash> current_state_hashest;
-  current_state_hashest current_hashes;
+  // level 1 -- function frames
+  // this is to preserve locality in case of recursion
 
-  crypto_hash generate_l2_state_hash() const;
-
-  void rename(const irep_idt &identifier, unsigned count, unsigned node_id)
+  struct level1t:public renaming_levelt
   {
-    valuet &entry=current_names[identifier];
-    entry.count=count;
-    entry.node_id = node_id;
-    original_identifiers[name(identifier, entry.count)]=identifier;
-  }
+  public:
+    std::string name(const irep_idt &identifier, unsigned frame,
+                     unsigned execution_node_id) const;
 
-  std::string name(
-    const irep_idt &identifier, unsigned count) const
-  {
-      unsigned int n_id = 0;
-    current_namest::const_iterator it =current_names.find(identifier);
-    if(it != current_names.end())
-        n_id = it->second.node_id;
-    return id2string(identifier)+"&"+i2string(n_id)+"#"+i2string(count);
+    typedef std::map<irep_idt, unsigned> current_namest; // variables and its function frame number
+    current_namest current_names;
+    unsigned int _thread_id;
 
-  }
+    virtual void rename(exprt &expr, unsigned node_id);
+    virtual void rename(typet &type, unsigned node_id) { renaming_levelt::rename(type,node_id); }
+    virtual std::string operator()(const irep_idt &identifier, unsigned exec_node_id) const;
+    virtual void remove(const irep_idt &identifier) { current_names.erase(identifier); }
 
-  void get_variables(std::set<irep_idt> &vars) const
-  {
-    for(current_namest::const_iterator it=current_names.begin();
-        it!=current_names.end();
-        it++)
+    void rename(const irep_idt &identifier, unsigned frame, unsigned exec_node_id)
     {
-                vars.insert(it->first);
+      current_names[identifier]=frame;
+      original_identifiers[name(identifier, frame, exec_node_id)]=identifier;
     }
-  }
 
-  unsigned current_number(const irep_idt &identifier) const;
+    level1t() {}
+    virtual ~level1t() { }
 
-  level2t() { };
-  virtual ~level2t() { }
+    virtual void print(std::ostream &out, unsigned node_id) const;
+  };
 
-  virtual void print(std::ostream &out, unsigned node_id) const;
-};
+  // level 2 -- SSA
 
+  struct level2t:public renaming_levelt
+  {
+  public:
+    virtual void rename(exprt &expr, unsigned node_id);
+    virtual void rename(typet &type, unsigned node_id) { renaming_levelt::rename(type,node_id); }
+    virtual std::string operator()(const irep_idt &identifier, unsigned node_id) const;
+    virtual std::string stupid_operator(const irep_idt &identifier, unsigned node_id) const;
+    virtual void remove(const irep_idt &identifier)
+    {
+        current_names.erase(identifier);
+    }
 
+    struct valuet
+    {
+      unsigned count;
+      exprt constant;
+      unsigned node_id;
+      valuet():
+        count(0),
+        constant(static_cast<const exprt &>(get_nil_irep())),
+        node_id(0)
+      {
+      }
+    };
+
+    typedef std::map<irep_idt, valuet> current_namest;
+    current_namest current_names;
+    typedef std::map<irep_idt, crypto_hash> current_state_hashest;
+    current_state_hashest current_hashes;
+
+    crypto_hash generate_l2_state_hash() const;
+
+    void rename(const irep_idt &identifier, unsigned count, unsigned node_id)
+    {
+      valuet &entry=current_names[identifier];
+      entry.count=count;
+      entry.node_id = node_id;
+      original_identifiers[name(identifier, entry.count)]=identifier;
+    }
+
+    std::string name(
+      const irep_idt &identifier, unsigned count) const
+    {
+        unsigned int n_id = 0;
+      current_namest::const_iterator it =current_names.find(identifier);
+      if(it != current_names.end())
+          n_id = it->second.node_id;
+      return id2string(identifier)+"&"+i2string(n_id)+"#"+i2string(count);
+
+    }
+
+    void get_variables(std::set<irep_idt> &vars) const
+    {
+      for(current_namest::const_iterator it=current_names.begin();
+          it!=current_names.end();
+          it++)
+      {
+                  vars.insert(it->first);
+      }
+    }
+
+    unsigned current_number(const irep_idt &identifier) const;
+
+    level2t() { };
+    virtual ~level2t() { }
+
+    virtual void print(std::ostream &out, unsigned node_id) const;
+  };
+}
+
+#endif /* _GOTO_SYMEX_RENAMING_H_ */
