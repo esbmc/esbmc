@@ -83,16 +83,6 @@ public:
 protected:
   friend class symex_dereference_statet;
   friend class bmct;
-  reachability_treet *art1;
-  hash_set_cont<irep_idt, irep_id_hash> body_warnings;
-  std::map<unsigned, long> unwind_set;
-  unsigned int max_unwind;
-  bool constant_propagation;
-  const namespacet &ns;
-  const optionst &options;
-  contextt &new_context;
-  symex_targett *target;
-
   virtual void do_simplify(exprt &expr);
 
   // statistics
@@ -217,6 +207,18 @@ protected:
   void symex_printf(statet &state, const exprt &lhs, const exprt &code,unsigned node_id);
 
   void replace_nondet(exprt &expr, execution_statet &ex_state);
+
+  // Members
+
+  reachability_treet *art1;
+  hash_set_cont<irep_idt, irep_id_hash> body_warnings;
+  std::map<unsigned, long> unwind_set;
+  unsigned int max_unwind;
+  bool constant_propagation;
+  const namespacet &ns;
+  const optionst &options;
+  contextt &new_context;
+  symex_targett *target;
 };
 
 #endif
