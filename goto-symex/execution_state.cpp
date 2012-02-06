@@ -57,11 +57,9 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   if (it == goto_functions.function_map.end())
     throw "main symbol not found; please set an entry point";
 
-  _goto_program = &(it->second.body);
-
   add_thread(
-    (*_goto_program).instructions.begin(),
-    (*_goto_program).instructions.end(), _goto_program);
+    it->second.body.instructions.begin(),
+    it->second.body.instructions.end(), &(it->second.body));
   active_thread = 0;
   lastactive_thread = 0;
   generating_new_threads = 0;
@@ -120,7 +118,6 @@ execution_statet::operator=(const execution_statet &ex)
   node_id = ex.node_id;
   parent_node_id = ex.parent_node_id;
 
-  _goto_program = ex._goto_program;
   _CS_number = ex._CS_number;
   TS_number = ex.TS_number;
   return *this;

@@ -153,7 +153,6 @@ class execution_statet : public goto_symext
 
   private:
   const goto_functionst &_goto_functions;
-  const goto_programt *_goto_program;
   int _CS_number;
   string_containert::str_snapshot str_state;
 
