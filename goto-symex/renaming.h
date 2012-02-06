@@ -7,11 +7,14 @@
 #include <string>
 #include <stack>
 #include <vector>
+#include <set>
 
 #include <guard.h>
 #include <expr_util.h>
 #include <std_expr.h>
 #include <i2string.h>
+
+#include "crypto_hash.h"
 
 namespace renaming {
 
