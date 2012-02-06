@@ -46,9 +46,8 @@ class execution_statet : public goto_symext
                                        const exprt &rhs);
   typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
 
-  // Methods
+  // Macros
 
-  /* number of context switches we've performed to reach this state */
   void
   increment_context_switch()
   {
@@ -86,6 +85,11 @@ class execution_statet : public goto_symext
       _DFS_traversed.at(i) = false;
   }
 
+  unsigned int
+  get_active_state_number() {
+    return _active_thread;
+  }
+
   void recover_global_state(const namespacet &ns, symex_targett &target);
 
   irep_idt get_guard_identifier();
@@ -94,10 +98,6 @@ class execution_statet : public goto_symext
   bool all_threads_ended();
   goto_symex_statet & get_active_state();
   const goto_symex_statet & get_active_state() const;
-  unsigned int
-  get_active_state_number() {
-    return _active_thread;
-  }
   unsigned int get_active_atomic_number();
   void increment_active_atomic_number();
   void decrement_active_atomic_number();
