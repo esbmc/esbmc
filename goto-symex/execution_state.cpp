@@ -651,54 +651,6 @@ execution_statet::recover_global_state(const namespacet &ns,
 }
 
 /*******************************************************************
-   Function: execution_statet::is_in_lookup
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-bool
-execution_statet::is_in_lookup(const namespacet &ns,
-  const irep_idt &identifier) const
-{
-
-  const symbolt *symbol;
-
-  if (ns.lookup(identifier, symbol))
-    return true;
-
-  return false;
-}
-
-/*******************************************************************
-   Function: execution_statet::lookup
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-const symbolt &
-execution_statet::lookup(const namespacet &ns,
-  const irep_idt &identifier) const
-{
-
-  const symbolt *symbol;
-
-  if (ns.lookup(identifier, symbol))
-    throw "failed to find symbol " + id2string(identifier);
-
-  return *symbol;
-}
-
-/*******************************************************************
    Function: execution_statet::get_expr_write_globals
 
    Inputs:
@@ -727,7 +679,7 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
   else if (expr.id() == exprt::symbol) {
     const irep_idt &id = expr.identifier();
     const irep_idt &identifier = get_active_state().get_original_name(id);
-    const symbolt &symbol = lookup(ns, identifier);
+    const symbolt &symbol = ns.lookup(identifier);
     if (identifier == "c::__ESBMC_alloc"
         || identifier == "c::__ESBMC_alloc_size")
       return 0;
@@ -782,15 +734,14 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
         i2string(get_active_state().top().level1._thread_id))
       return 0;
 
-    if (is_in_lookup(ns, identifier))
+    const symbolt *symbol;
+    if (ns.lookup(identifier, symbol))
       return 0;
-
-    const symbolt &symbol = lookup(ns, identifier);
 
     if (identifier == "c::__ESBMC_alloc" || identifier ==
         "c::__ESBMC_alloc_size")
       return 0;
-    else if ((symbol.static_lifetime || symbol.type.is_dynamic_set())) {
+    else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
       _exprs_read_write.at(_active_thread).read_set.insert(identifier);
       return 1;
     } else
