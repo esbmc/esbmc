@@ -73,6 +73,8 @@ public:
     unwind_set = sym.unwind_set;
     max_unwind = sym.max_unwind;
     constant_propagation = sym.constant_propagation;
+    total_claims = sym.total_claims;
+    remaining_claims = sym.remaining_claims;
 
     // Art ptr is shared
     art1 = sym.art1;
