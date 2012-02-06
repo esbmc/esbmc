@@ -376,7 +376,7 @@ execution_statet::end_thread(const namespacet &ns, symex_targett &target)
 }
 
 /*******************************************************************
-   Function: execution_statet::increament_trds_in_run
+   Function: execution_statet::increment_trds_in_run
 
    Inputs:
 
@@ -387,7 +387,7 @@ execution_statet::end_thread(const namespacet &ns, symex_targett &target)
  \*******************************************************************/
 
 void
-execution_statet::increament_trds_in_run(const namespacet &ns,
+execution_statet::increment_trds_in_run(const namespacet &ns,
   symex_targett &target)
 {
 

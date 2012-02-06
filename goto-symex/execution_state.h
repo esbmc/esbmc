@@ -112,7 +112,7 @@ class execution_statet : public goto_symext
   unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
   unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
 
-  void increament_trds_in_run(const namespacet &ns, symex_targett &target);
+  void increment_trds_in_run(const namespacet &ns, symex_targett &target);
   void update_trds_count(const namespacet &ns, symex_targett &target);
 
   crypto_hash generate_hash(void) const;
