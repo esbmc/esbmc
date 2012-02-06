@@ -31,14 +31,14 @@ public:
       contextt &_new_context,
       symex_targett *_target,
       const optionst &opts) :
+    total_claims(0),
+    remaining_claims(0),
+    guard_identifier_s("goto_symex::\\guard"),
     constant_propagation(true),
     ns(_ns),
     options(opts),
     new_context(_new_context),
-    target(_target),
-    total_claims(0),
-    remaining_claims(0),
-    guard_identifier_s("goto_symex::\\guard")
+    target(_target)
   {
     const std::string &set = options.get_option("unwindset");
     unsigned int length = set.length();
