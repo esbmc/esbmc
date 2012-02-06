@@ -82,7 +82,7 @@ public:
 
   // Abstract method, with the purpose of duplicating a symex_targett from the
   // subclass.
-  virtual symex_targett *clone(void) = 0;
+  virtual symex_targett *clone(void) const = 0;
 };
 
 bool operator < (

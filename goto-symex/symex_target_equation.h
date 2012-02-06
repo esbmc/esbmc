@@ -168,7 +168,7 @@ public:
     SSA_steps.clear();
   }
   
-  virtual symex_targett *clone(void)
+  virtual symex_targett *clone(void) const
   {
     // No pointers or anything that requires ownership modification, can just
     // duplicate self.
