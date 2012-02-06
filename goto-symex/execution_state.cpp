@@ -319,7 +319,7 @@ execution_statet::set_active_state(unsigned int i)
 }
 
 /*******************************************************************
-   Function: execution_statet::decreament_trds_in_run
+   Function: execution_statet::decrement_trds_in_run
 
    Inputs:
 
@@ -330,7 +330,7 @@ execution_statet::set_active_state(unsigned int i)
  \*******************************************************************/
 
 void
-execution_statet::decreament_trds_in_run(const namespacet &ns,
+execution_statet::decrement_trds_in_run(const namespacet &ns,
   symex_targett &target)
 {
 
@@ -374,7 +374,7 @@ execution_statet::end_thread(const namespacet &ns, symex_targett &target)
 
   get_active_state().thread_ended = true;
 
-  decreament_trds_in_run(ns, target);
+  decrement_trds_in_run(ns, target);
 }
 
 /*******************************************************************

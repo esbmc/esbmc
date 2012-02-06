@@ -123,7 +123,7 @@ class execution_statet : public goto_symext
   void print_stack_traces(const namespacet &ns, unsigned int indent = 0) const;
 
   private:
-  void decreament_trds_in_run(const namespacet &ns, symex_targett &target);
+  void decrement_trds_in_run(const namespacet &ns, symex_targett &target);
 
   // Object state
 
