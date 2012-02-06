@@ -387,8 +387,7 @@ execution_statet::end_thread(void)
  \*******************************************************************/
 
 void
-execution_statet::increment_trds_in_run(const namespacet &ns,
-  symex_targett &target)
+execution_statet::increment_trds_in_run(void)
 {
 
   static bool thrds_in_run_flag = 1;
@@ -417,7 +416,7 @@ execution_statet::increment_trds_in_run(const namespacet &ns,
 
   get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
-  target.assignment(
+  target->assignment(
     get_active_state().guard,
     new_lhs, lhs_expr,
     rhs_expr,
@@ -438,7 +437,7 @@ execution_statet::increment_trds_in_run(const namespacet &ns,
  \*******************************************************************/
 
 void
-execution_statet::update_trds_count(const namespacet &ns, symex_targett &target)
+execution_statet::update_trds_count(void)
 {
 
   typet int_t = int_type();
@@ -456,7 +455,7 @@ execution_statet::update_trds_count(const namespacet &ns, symex_targett &target)
 
   get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this, node_id);
 
-  target.assignment(
+  target->assignment(
     get_active_state().guard,
     new_lhs, lhs_expr,
     rhs_expr,

@@ -109,12 +109,12 @@ class execution_statet : public goto_symext
                   goto_programt::const_targett end,
                   const goto_programt *prog);
   void add_thread(goto_symex_statet & state);
-  void end_thread();
+  void end_thread(void);
   unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
   unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
 
-  void increment_trds_in_run(const namespacet &ns, symex_targett &target);
-  void update_trds_count(const namespacet &ns, symex_targett &target);
+  void increment_trds_in_run(void);
+  void update_trds_count(void);
 
   crypto_hash generate_hash(void) const;
   crypto_hash update_hash_for_assignment(const exprt &rhs);
