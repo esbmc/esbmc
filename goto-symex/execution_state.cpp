@@ -89,11 +89,11 @@ execution_statet::execution_statet(const execution_statet &ex) :
   str_state = string_container.take_state_snapshot();
 
   // Regenerate threads state using new objects _state_level2 ref
-  _threads_state.clear();
+  threads_state.clear();
   std::vector<goto_symex_statet>::const_iterator it;
-  for (it = ex._threads_state.begin(); it != ex._threads_state.end(); it++) {
+  for (it = ex.threads_state.begin(); it != ex.threads_state.end(); it++) {
     goto_symex_statet state(*it, _state_level2);
-    _threads_state.push_back(state);
+    threads_state.push_back(state);
   }
 }
 
@@ -101,7 +101,7 @@ execution_statet&
 execution_statet::operator=(const execution_statet &ex)
 {
   is_schedule = ex.is_schedule;
-  _threads_state = ex._threads_state;
+  threads_state = ex.threads_state;
   _atomic_numbers = ex._atomic_numbers;
   _DFS_traversed = ex._DFS_traversed;
   _exprs = ex._exprs;
@@ -156,13 +156,13 @@ execution_statet::~execution_statet()
 goto_symex_statet &
 execution_statet::get_active_state() {
 
-  return _threads_state.at(_active_thread);
+  return threads_state.at(_active_thread);
 }
 
 const goto_symex_statet &
 execution_statet::get_active_state() const
 {
-  return _threads_state.at(_active_thread);
+  return threads_state.at(_active_thread);
 }
 
 /*******************************************************************
@@ -180,8 +180,8 @@ bool
 execution_statet::all_threads_ended()
 {
 
-  for (unsigned int i = 0; i < _threads_state.size(); i++)
-    if (!_threads_state.at(i).thread_ended)
+  for (unsigned int i = 0; i < threads_state.size(); i++)
+    if (!threads_state.at(i).thread_ended)
       return false;
   return true;
 }
@@ -445,7 +445,7 @@ execution_statet::update_trds_count(void)
   exprt op1 = lhs_expr;
 
   constant_exprt rhs_expr = constant_exprt(int_t);
-  rhs_expr.set_value(integer2binary(_threads_state.size() - 1,
+  rhs_expr.set_value(integer2binary(threads_state.size() - 1,
                                     config.ansi_c.int_width));
   get_active_state().rename(rhs_expr, ns, node_id);
   base_type(rhs_expr, ns);
@@ -518,11 +518,11 @@ execution_statet::execute_guard(const namespacet &ns)
     symex_targett::HIDDEN);
 
   // copy the new guard exprt to every threads
-  for (unsigned int i = 0; i < _threads_state.size(); i++)
+  for (unsigned int i = 0; i < threads_state.size(); i++)
   {
     // remove the old guard first
-    _threads_state.at(i).guard -= old_guard;
-    _threads_state.at(i).guard.add(new_guard_expr);
+    threads_state.at(i).guard -= old_guard;
+    threads_state.at(i).guard.add(new_guard_expr);
   }
 }
 
@@ -544,9 +544,9 @@ execution_statet::add_thread(goto_programt::const_targett thread_start,
 {
 
   goto_symex_statet state(_state_level2);
-  state.initialize(thread_start, thread_end, prog, _threads_state.size());
+  state.initialize(thread_start, thread_end, prog, threads_state.size());
 
-  _threads_state.push_back(state);
+  threads_state.push_back(state);
   _atomic_numbers.push_back(0);
 
   if (_DFS_traversed.size() <= state.source.thread_nr) {
@@ -577,8 +577,8 @@ execution_statet::add_thread(goto_symex_statet & state)
 
   goto_symex_statet new_state(state);
 
-  new_state.source.thread_nr = _threads_state.size();
-  _threads_state.push_back(new_state);
+  new_state.source.thread_nr = threads_state.size();
+  threads_state.push_back(new_state);
   _atomic_numbers.push_back(0);
 
   if (_DFS_traversed.size() <= new_state.source.thread_nr) {
@@ -704,8 +704,8 @@ execution_statet::generate_hash(void) const
   crypto_hash state = _state_level2.generate_l2_state_hash();
   std::string str = state.to_string();
 
-  for (std::vector<goto_symex_statet>::const_iterator it = _threads_state.begin();
-       it != _threads_state.end(); it++) {
+  for (std::vector<goto_symex_statet>::const_iterator it = threads_state.begin();
+       it != threads_state.end(); it++) {
     goto_programt::const_targett pc = it->source.pc;
     int id = pc->location_number;
     std::stringstream s;
@@ -960,7 +960,7 @@ execution_statet::print_stack_traces(const namespacet &ns,
     spaces += " ";
 
   i = 0;
-  for (it = _threads_state.begin(); it != _threads_state.end(); it++) {
+  for (it = threads_state.begin(); it != threads_state.end(); it++) {
     std::cout << spaces << "Thread " << i++ << ":" << std::endl;
     it->print_stack_trace(ns, indent + 2);
     std::cout << std::endl;

@@ -193,7 +193,7 @@ void goto_symext::symex_step(
 
             if(!tmp.is_nil() && !options.get_bool_option("deadlock-check"))
             {
-              if(ex_state._threads_state.size() > 1)
+              if(ex_state.threads_state.size() > 1)
                 if (art.generate_states_before_read(tmp))
                   return;
             }
@@ -214,7 +214,7 @@ void goto_symext::symex_step(
                 do_simplify(tmp);
                 if (!tmp.is_true())
                 {
-                  if(ex_state._threads_state.size() > 1)
+                  if(ex_state.threads_state.size() > 1)
                     if (art.generate_states_before_read(tmp1))
                       return;
 
@@ -243,7 +243,7 @@ void goto_symext::symex_step(
                     replace_nondet(tmp, ex_state);
                     dereference(tmp, state, false, ex_state.node_id);
 
-                    if(ex_state._threads_state.size() > 1)
+                    if(ex_state.threads_state.size() > 1)
                       if (art.generate_states_before_read(tmp))
                         return;
 
@@ -274,7 +274,7 @@ void goto_symext::symex_step(
 
                 state.source.pc++;
 
-                if(ex_state._threads_state.size() > 1)
+                if(ex_state.threads_state.size() > 1)
                 {
                   if (art.generate_states_before_assign(deref_code, ex_state))
                     return;
@@ -374,7 +374,7 @@ void goto_symext::symex_step(
               ex_state.update_trds_count();
               ex_state.increment_trds_in_run();
 
-              ex_state.generating_new_threads = ex_state._threads_state.size() - 1;
+              ex_state.generating_new_threads = ex_state.threads_state.size() - 1;
             }
         	else
         	{

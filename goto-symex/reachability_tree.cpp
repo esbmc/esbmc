@@ -306,7 +306,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     ex_state.set_active_state(ex_state._last_active_thread);
   }
 
-  if(ex_state._threads_state.size() < 2)
+  if(ex_state.threads_state.size() < 2)
   {
     return false;
   }
@@ -341,7 +341,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
         ex_state._DFS_traversed.at(ex_state._active_thread)=true;
     }
     if(tid == ex_state._active_thread){
-        for(tid=0; tid < ex_state._threads_state.size(); tid++)
+        for(tid=0; tid < ex_state.threads_state.size(); tid++)
         {
           if(tid==user_tid)
               continue;
@@ -354,7 +354,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   }
   //end - H.Savino
 
-  for(; tid < ex_state._threads_state.size(); tid++)
+  for(; tid < ex_state.threads_state.size(); tid++)
   {
     /* For all threads: */
 
@@ -364,11 +364,11 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     ex_state._DFS_traversed.at(tid) = true;
 
     /* Presumably checks whether this thread isn't in user code yet? */
-    if(ex_state._threads_state.at(tid).call_stack.empty())
+    if(ex_state.threads_state.at(tid).call_stack.empty())
       continue;
 
     /* Is it even still running? */
-    if(ex_state._threads_state.at(tid).thread_ended)
+    if(ex_state.threads_state.at(tid).thread_ended)
       continue;
 
     //apply static partial-order reduction
@@ -385,7 +385,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
   at_end_of_run = true;
 
-  if (tid != ex_state._threads_state.size()) {
+  if (tid != ex_state.threads_state.size()) {
 
     /* Generate a new execution state, duplicate of previous? */
     execution_statet *new_state = new execution_statet(ex_state);
@@ -563,7 +563,7 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
     reachability_treet::dfs_position::dfs_state state;
     execution_statet *ex = *it;
     state.location_number = ex->get_active_state().source.pc->location_number;
-    state.num_threads = ex->_threads_state.size();
+    state.num_threads = ex->threads_state.size();
     state.explored = ex->_DFS_traversed;
 
     // The thread taken in this DFS path isn't decided at this execution state,
@@ -745,14 +745,14 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
   }
 
   // First of all, are there actually any valid context switch targets?
-  for (tid = 0; tid < get_cur_state()._threads_state.size(); tid++) {
+  for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
     if (check_thread_viable(tid, expr, true))
       break;
   }
 
   // If no threads were viable, don't present a choice.
-  if (tid == get_cur_state()._threads_state.size())
-    return get_cur_state()._threads_state.size();
+  if (tid == get_cur_state().threads_state.size())
+    return get_cur_state().threads_state.size();
 
   std::cout << "Context switch point encountered; please select a thread to run" << std::endl;
   std::cout << "Current thread states:" << std::endl;
@@ -772,7 +772,7 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
       tid = strtol(start, &end, 10);
       if (start == end) {
         std::cout << "Not a valid input" << std::endl;
-      } else if (tid >= get_cur_state()._threads_state.size()) {
+      } else if (tid >= get_cur_state().threads_state.size()) {
         std::cout << "Number out of range";
       } else {
         if (check_thread_viable(tid, expr, false))
@@ -805,14 +805,14 @@ reachability_treet::get_ileave_direction_from_scheduling(const exprt &expr) cons
     }
 
     // First of all, are there actually any valid context switch targets?
-    for (tid = 0; tid < get_cur_state()._threads_state.size(); tid++) {
+    for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
       if (check_thread_viable(tid, expr, true))
         break;
     }
 
     // If no threads were viable, don't present a choice.
-    if (tid == get_cur_state()._threads_state.size())
-      return get_cur_state()._threads_state.size();
+    if (tid == get_cur_state().threads_state.size())
+      return get_cur_state().threads_state.size();
 
   tid=get_cur_state()._active_thread;
 
@@ -821,7 +821,7 @@ reachability_treet::get_ileave_direction_from_scheduling(const exprt &expr) cons
           return tid;
   }
       while(1){
-        tid=(tid + 1)%get_cur_state()._threads_state.size();
+        tid=(tid + 1)%get_cur_state().threads_state.size();
         if (check_thread_viable(tid, expr, true)){
             break;
         }
@@ -841,13 +841,13 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
     return false;
   }
 
-  if (ex._threads_state.at(tid).call_stack.empty()) {
+  if (ex.threads_state.at(tid).call_stack.empty()) {
     if (!quiet)
       std::cout << "Thread unschedulable due to empty call stack" << std::endl;
     return false;
   }
 
-  if (ex._threads_state.at(tid).thread_ended) {
+  if (ex.threads_state.at(tid).thread_ended) {
     if (!quiet)
       std::cout << "That thread has ended" << std::endl;
     return false;
@@ -937,7 +937,7 @@ reachability_treet::restore_from_dfs_state(void *_dfs)
     }
     get_cur_state()._DFS_traversed = it->explored;
 
-    if (get_cur_state()._threads_state.size() != it->num_threads) {
+    if (get_cur_state().threads_state.size() != it->num_threads) {
       std::cerr << "Unexpected number of threads when reexploring checkpoint"
                 << std::endl;
       abort();
