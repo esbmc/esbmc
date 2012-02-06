@@ -59,6 +59,30 @@ public:
     art1 = NULL;
   }
 
+  goto_symext(const goto_symext &sym) :
+    ns(sym.ns),
+    options(sym.options),
+    new_context(sym.new_context)
+  {
+    *this = sym;
+  }
+
+  goto_symext& operator=(const goto_symext &sym)
+  {
+    body_warnings = sym.body_warnings;
+    unwind_set = sym.unwind_set;
+    max_unwind = sym.max_unwind;
+    constant_propagation = sym.constant_propagation;
+
+    // Art ptr is shared
+    art1 = sym.art1;
+
+    // Symex target isn't shared.
+    target = sym.target->clone();
+
+    return *this;
+  }
+
   // Types
 
 public:

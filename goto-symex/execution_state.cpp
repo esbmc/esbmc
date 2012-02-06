@@ -75,7 +75,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 }
 
 execution_statet::execution_statet(const execution_statet &ex) :
-  goto_symext(ex.ns, ex.new_context, ex.target->clone(), ex.options),
+  goto_symext(ex),
   owning_rt(ex.owning_rt),
   _state_level2(ex._state_level2),
   _goto_functions(ex._goto_functions)
