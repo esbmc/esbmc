@@ -229,11 +229,11 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
   {
     if(!expr.id().empty())
     {
-      if(i < ex_state._active_thread)
+      if(i < ex_state.active_thread)
       {
         if(ex_state.last_global_read_write.write_set.empty() &&
            ex_state.exprs_read_write.at(i+1).write_set.empty() &&
-           ex_state.exprs_read_write.at(ex_state._active_thread).write_set.empty())
+           ex_state.exprs_read_write.at(ex_state.active_thread).write_set.empty())
         {
           return false;
         }
@@ -301,7 +301,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   if(ex_state.generating_new_threads == -1)
   {
     ex_state.generating_new_threads = 0;
-    ex_state.set_active_state(ex_state.last_active_thread);
+    ex_state.set_active_state(ex_state.lastactive_thread);
   }
 
   if(ex_state.threads_state.size() < 2)
@@ -321,7 +321,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 #if 1
   if(expr.is_not_nil())
   {
-    ex_state.last_global_read_write = ex_state.exprs_read_write.at(ex_state._active_thread);
+    ex_state.last_global_read_write = ex_state.exprs_read_write.at(ex_state.active_thread);
   }
 #endif
 
@@ -334,10 +334,10 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   else if (config.options.get_bool_option("round-robin")) {
 
     user_tid = tid = get_ileave_direction_from_scheduling(expr);
-    if(tid != ex_state._active_thread){
-        ex_state.DFS_traversed.at(ex_state._active_thread)=true;
+    if(tid != ex_state.active_thread){
+        ex_state.DFS_traversed.at(ex_state.active_thread)=true;
     }
-    if(tid == ex_state._active_thread){
+    if(tid == ex_state.active_thread){
         for(tid=0; tid < ex_state.threads_state.size(); tid++)
         {
           if(tid==user_tid)
@@ -390,7 +390,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
     //begin - H.Savino
     if (config.options.get_bool_option("round-robin")){
-        if(tid == ex_state._active_thread)
+        if(tid == ex_state.active_thread)
             new_state->increment_time_slice();
         else
             new_state->reset_time_slice();
@@ -811,7 +811,7 @@ reachability_treet::get_ileave_direction_from_scheduling(const exprt &expr) cons
     if (tid == get_cur_state().threads_state.size())
       return get_cur_state().threads_state.size();
 
-  tid=get_cur_state()._active_thread;
+  tid=get_cur_state().active_thread;
 
   if(get_cur_state()._TS_number < this->_TS_slice-1){
       if (check_thread_viable(tid, expr, true))

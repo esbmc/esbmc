@@ -62,8 +62,8 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   add_thread(
     (*_goto_program).instructions.begin(),
     (*_goto_program).instructions.end(), _goto_program);
-  _active_thread = 0;
-  last_active_thread = 0;
+  active_thread = 0;
+  lastactive_thread = 0;
   generating_new_threads = 0;
   node_count = 0;
   nondet_count = 0;
@@ -107,9 +107,9 @@ execution_statet::operator=(const execution_statet &ex)
   generating_new_threads = ex.generating_new_threads;
   exprs_read_write = ex.exprs_read_write;
   last_global_read_write = ex.last_global_read_write;
-  last_active_thread = ex.last_active_thread;
+  lastactive_thread = ex.lastactive_thread;
   state_level2 = ex.state_level2;
-  _active_thread = ex._active_thread;
+  active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
   guard_thread = ex.guard_thread;
   _parent_guard_identifier = ex._parent_guard_identifier;
@@ -154,13 +154,13 @@ execution_statet::~execution_statet()
 goto_symex_statet &
 execution_statet::get_active_state() {
 
-  return threads_state.at(_active_thread);
+  return threads_state.at(active_thread);
 }
 
 const goto_symex_statet &
 execution_statet::get_active_state() const
 {
-  return threads_state.at(_active_thread);
+  return threads_state.at(active_thread);
 }
 
 /*******************************************************************
@@ -199,7 +199,7 @@ unsigned int
 execution_statet::get_active_atomic_number()
 {
 
-  return atomic_numbers.at(_active_thread);
+  return atomic_numbers.at(active_thread);
 }
 
 /*******************************************************************
@@ -217,7 +217,7 @@ void
 execution_statet::increment_active_atomic_number()
 {
 
-  atomic_numbers.at(_active_thread)++;
+  atomic_numbers.at(active_thread)++;
 }
 
 /*******************************************************************
@@ -235,7 +235,7 @@ void
 execution_statet::decrement_active_atomic_number()
 {
 
-  atomic_numbers.at(_active_thread)--;
+  atomic_numbers.at(active_thread)--;
 }
 
 /*******************************************************************
@@ -254,7 +254,7 @@ execution_statet::get_guard_identifier()
 {
 
   return id2string(guard_execution) + '@' + i2string(_CS_number) + '_' +
-         i2string(last_active_thread) + '_' + i2string(node_id) + '&' +
+         i2string(lastactive_thread) + '_' + i2string(node_id) + '&' +
          i2string(
            node_id) + "#1";
 }
@@ -275,7 +275,7 @@ execution_statet::get_guard_identifier_base()
 {
 
   return id2string(guard_execution) + '@' + i2string(_CS_number) + '_' +
-         i2string(last_active_thread) + '_' + i2string(node_id);
+         i2string(lastactive_thread) + '_' + i2string(node_id);
 }
 
 
@@ -312,8 +312,8 @@ void
 execution_statet::set_active_state(unsigned int i)
 {
 
-  last_active_thread = _active_thread;
-  _active_thread = i;
+  lastactive_thread = active_thread;
+  active_thread = i;
 }
 
 /*******************************************************************
@@ -486,7 +486,7 @@ execution_statet::execute_guard(const namespacet &ns)
   typet my_type = uint_type();
   exprt trd_expr = symbol_exprt(get_guard_identifier_base(), my_type);
   constant_exprt num_expr = constant_exprt(my_type);
-  num_expr.set_value(integer2binary(_active_thread, config.ansi_c.int_width));
+  num_expr.set_value(integer2binary(active_thread, config.ansi_c.int_width));
   exprt cur_rhs = equality_exprt(trd_expr, num_expr);
 
   exprt new_rhs;
@@ -619,7 +619,7 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
         || identifier == "c::__ESBMC_alloc_size")
       return 0;
     else if ((symbol.static_lifetime || symbol.type.is_dynamic_set())) {
-      exprs_read_write.at(_active_thread).write_set.insert(identifier);
+      exprs_read_write.at(active_thread).write_set.insert(identifier);
       return 1;
     } else
       return 0;
@@ -677,7 +677,7 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
         "c::__ESBMC_alloc_size")
       return 0;
     else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
-      exprs_read_write.at(_active_thread).read_set.insert(identifier);
+      exprs_read_write.at(active_thread).read_set.insert(identifier);
       return 1;
     } else
       return 0;

@@ -88,7 +88,7 @@ class execution_statet : public goto_symext
 
   unsigned int
   get_active_state_number() {
-    return _active_thread;
+    return active_thread;
   }
 
   // Methods
@@ -136,9 +136,9 @@ class execution_statet : public goto_symext
   int generating_new_threads;
   std::vector<read_write_set> exprs_read_write;
   read_write_set last_global_read_write;
-  unsigned int last_active_thread;
+  unsigned int lastactive_thread;
   goto_symex_statet::level2t state_level2;
-  unsigned int _active_thread;
+  unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt guard_thread;
   irep_idt _parent_guard_identifier;
