@@ -47,7 +47,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   reexecute_instruction = true;
   reexecute_atomic = false;
   _CS_number = 0;
-  _TS_number = 0;
+  TS_number = 0;
   node_id = 0;
   guard_execution = "execution_statet::\\guard_exec";
   guard_thread = "execution_statet::\\trdsel";
@@ -122,7 +122,7 @@ execution_statet::operator=(const execution_statet &ex)
 
   _goto_program = ex._goto_program;
   _CS_number = ex._CS_number;
-  _TS_number = ex._TS_number;
+  TS_number = ex.TS_number;
   return *this;
 }
 

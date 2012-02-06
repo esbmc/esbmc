@@ -813,7 +813,7 @@ reachability_treet::get_ileave_direction_from_scheduling(const exprt &expr) cons
 
   tid=get_cur_state().active_thread;
 
-  if(get_cur_state()._TS_number < this->_TS_slice-1){
+  if(get_cur_state().TS_number < this->_TS_slice-1){
       if (check_thread_viable(tid, expr, true))
           return tid;
   }

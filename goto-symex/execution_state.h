@@ -58,13 +58,13 @@ class execution_statet : public goto_symext
   void
   increment_time_slice()
   {
-    _TS_number++;
+    TS_number++;
   }
 
   void
   reset_time_slice()
   {
-    _TS_number = 0;
+    TS_number = 0;
   }
 
   int
@@ -76,7 +76,7 @@ class execution_statet : public goto_symext
   int
   get_time_slice()
   {
-    return _TS_number;
+    return TS_number;
   }
 
   void
@@ -145,7 +145,7 @@ class execution_statet : public goto_symext
   bool is_schedule;
   bool reexecute_instruction;
   bool reexecute_atomic;
-  int _TS_number;
+  int TS_number;
   unsigned nondet_count;
   unsigned dynamic_counter;
   unsigned int node_id;
