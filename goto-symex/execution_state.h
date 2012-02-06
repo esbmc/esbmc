@@ -218,18 +218,11 @@ class execution_statet : public goto_symext
                   const goto_programt *prog);
   void add_thread(goto_symex_statet & state);
   void end_thread(const namespacet &ns, symex_targett &target);
-  /* Presumably this does the same as read_globals, see below */
   unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
-  /* This takes the given expression, and for all constituent parts looks through
-     the identifiers that it touches and checks to see whether or not they're
-     globals. Counts them; also puts them in the
-   * _exprs_read_write implicitly as reads: my eyes are on fire. */
   unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
 
-  //void deadlock_detection(const namespacet &ns, symex_targett &target);
   void increament_trds_in_run(const namespacet &ns, symex_targett &target);
   void update_trds_count(const namespacet &ns, symex_targett &target);
-  //void update_trds_status(const namespacet &ns, symex_targett &target);
 
   crypto_hash generate_hash(void) const;
   crypto_hash update_hash_for_assignment(const exprt &rhs);
@@ -248,30 +241,19 @@ class execution_statet : public goto_symext
 
   const reachability_treet *owning_rt;
 
-  /* jmorse - Set of current thread states, indexed by threads id number*/
   std::vector<goto_symex_statet> _threads_state;
 
-  /* jmorse - appears to just be a flag indicating whether we're currently in an
-     atomic section */
   std::vector<unsigned int> _atomic_numbers;
 
-  /* jmorse - Depth first search? */
   std::vector<bool> _DFS_traversed;
 
-  /* jmorse - a set of expressions, one for each active thread, showing where each
-     thread is at? generate_states_base. */
   std::vector<exprt> _exprs;
 
   int generating_new_threads;
-  /* jmorse - Presumably the last expr to be executed */
   exprt last_global_expr;
 
-  /* jmorse - a set of operations (irep_idts; identifiers?) that presumably occur
-     at the top of each state. indexed by thread id no. So, it's the set of most
-     recent reads/writes of thread? */
   std::vector<read_write_set> _exprs_read_write;
 
-  /* jmorse - what the name says */
   read_write_set last_global_read_write;
 
   unsigned int _last_active_thread;
@@ -282,13 +264,10 @@ class execution_statet : public goto_symext
   irep_idt guard_thread;
   irep_idt _parent_guard_identifier;
 
-  // Is the "--schedule" option enabled?
   bool is_schedule;
 
-  bool reexecute_instruction;     // temporarily disable context switch for the
-                                  // thread inherited from the last active thread
-  bool reexecute_atomic;     // temporarily disable context switch for the thread
-                             // inherited from the last active thread
+  bool reexecute_instruction;
+  bool reexecute_atomic;
 
   int _TS_number;
 
