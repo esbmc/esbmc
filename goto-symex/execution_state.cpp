@@ -45,7 +45,6 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 
   is_schedule = _is_schedule;
   reexecute_instruction = true;
-  reexecute_atomic = false;
   CS_number = 0;
   TS_number = 0;
   node_id = 0;
@@ -112,7 +111,6 @@ execution_statet::operator=(const execution_statet &ex)
   guard_thread = ex.guard_thread;
   parent_guard_identifier = ex.parent_guard_identifier;
   reexecute_instruction = ex.reexecute_instruction;
-  reexecute_atomic = ex.reexecute_atomic;
   nondet_count = ex.nondet_count;
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;

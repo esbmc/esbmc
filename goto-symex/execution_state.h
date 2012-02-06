@@ -144,7 +144,6 @@ class execution_statet : public goto_symext
   irep_idt parent_guard_identifier;
   bool is_schedule;
   bool reexecute_instruction;
-  bool reexecute_atomic;
   int TS_number;
   unsigned nondet_count;
   unsigned dynamic_counter;
