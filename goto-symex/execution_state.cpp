@@ -46,7 +46,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   is_schedule = _is_schedule;
   reexecute_instruction = true;
   reexecute_atomic = false;
-  _CS_number = 0;
+  CS_number = 0;
   TS_number = 0;
   node_id = 0;
   guard_execution = "execution_statet::\\guard_exec";
@@ -118,7 +118,7 @@ execution_statet::operator=(const execution_statet &ex)
   node_id = ex.node_id;
   parent_node_id = ex.parent_node_id;
 
-  _CS_number = ex._CS_number;
+  CS_number = ex.CS_number;
   TS_number = ex.TS_number;
   return *this;
 }
@@ -250,7 +250,7 @@ irep_idt
 execution_statet::get_guard_identifier()
 {
 
-  return id2string(guard_execution) + '@' + i2string(_CS_number) + '_' +
+  return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
          i2string(lastactive_thread) + '_' + i2string(node_id) + '&' +
          i2string(
            node_id) + "#1";
@@ -271,7 +271,7 @@ irep_idt
 execution_statet::get_guard_identifier_base()
 {
 
-  return id2string(guard_execution) + '@' + i2string(_CS_number) + '_' +
+  return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
          i2string(lastactive_thread) + '_' + i2string(node_id);
 }
 

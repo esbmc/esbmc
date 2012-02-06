@@ -52,7 +52,7 @@ class execution_statet : public goto_symext
   void
   increment_context_switch()
   {
-    _CS_number++;
+    CS_number++;
   }
 
   void
@@ -70,7 +70,7 @@ class execution_statet : public goto_symext
   int
   get_context_switch()
   {
-    return _CS_number;
+    return CS_number;
   }
 
   int
@@ -153,7 +153,7 @@ class execution_statet : public goto_symext
 
   private:
   const goto_functionst &_goto_functions;
-  int _CS_number;
+  int CS_number;
   string_containert::str_snapshot str_state;
 
   // Static stuff:
