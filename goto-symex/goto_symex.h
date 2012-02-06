@@ -80,13 +80,6 @@ public:
   const goto_functionst &goto_functions,
   reachability_treet & art);
 
-  bool constant_propagation;
-
-  const namespacet &ns;
-  const optionst &options;
-  contextt &new_context;
-  symex_targett *target;
-
 protected:
   friend class symex_dereference_statet;
   friend class bmct;
@@ -94,6 +87,11 @@ protected:
   hash_set_cont<irep_idt, irep_id_hash> body_warnings;
   std::map<unsigned, long> unwind_set;
   unsigned int max_unwind;
+  bool constant_propagation;
+  const namespacet &ns;
+  const optionst &options;
+  contextt &new_context;
+  symex_targett *target;
 
   virtual void do_simplify(exprt &expr);
 
