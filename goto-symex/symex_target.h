@@ -79,6 +79,10 @@ public:
     const std::string &msg,
     std::vector<dstring> stack_trace,
     const sourcet &source)=0;
+
+  // Abstract method, with the purpose of duplicating a symex_targett from the
+  // subclass.
+  virtual symex_targett *clone(void) = 0;
 };
 
 bool operator < (

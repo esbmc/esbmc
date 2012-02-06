@@ -168,6 +168,14 @@ public:
     SSA_steps.clear();
   }
   
+  virtual symex_targett *clone(void)
+  {
+    // No pointers or anything that requires ownership modification, can just
+    // duplicate self.
+    return new symex_target_equationt(*this);
+  }
+
+
 protected:
   const namespacet &ns;
 };
