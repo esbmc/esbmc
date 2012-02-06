@@ -36,11 +36,8 @@ class execution_statet : public goto_symext
                    contextt &context,
                    const optionst &options,
                    bool _is_schedule);
-
   execution_statet(const execution_statet &ex);
-
   execution_statet &operator=(const execution_statet &ex);
-
   virtual ~execution_statet();
 
   // Types
