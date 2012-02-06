@@ -33,8 +33,7 @@ class execution_statet; // foward dec
 class goto_symex_statet
 {
 public:
-	struct level2t;
-	goto_symex_statet(struct level2t &l2)
+	goto_symex_statet(renaming::level2t &l2)
 		: level2(l2)
 	{
 	    use_value_set=true;
@@ -45,7 +44,7 @@ public:
 	    thread_ended = false;
 	}
 
-	goto_symex_statet(const goto_symex_statet &state, struct level2t &l2)
+	goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2)
 		: level2(l2)
 	{
 		*this = state;
@@ -91,13 +90,12 @@ public:
 
     // we have a two-level renaming
 
-  typedef std::map<irep_idt, irep_idt> original_identifierst;
   typedef std::set<std::string> declaration_historyt;
 
   // we remember all declarations
   declaration_historyt declaration_history;
 
-  level2t &level2;
+  renaming::level2t &level2;
 
   void initialize(const goto_programt::const_targett & start,const goto_programt::const_targett & end, const goto_programt *prog, unsigned int thread_id);
 
@@ -128,7 +126,7 @@ public:
   }
 
   std::string current_name(
-    const level2t &plevel2,
+    const renaming::level2t &plevel2,
     const irep_idt &identifier,unsigned node_id) const
   {
     irep_idt temp = top().level1(identifier,node_id);
@@ -144,7 +142,7 @@ public:
   {
   public:
     unsigned depth;
-    level2t level2;
+    renaming::level2t level2;
     value_sett value_set;
     guardt guard;
     unsigned int thread_id;
@@ -176,7 +174,7 @@ public:
   public:
     irep_idt function_identifier;
     goto_state_mapt goto_state_map;
-    level1t level1;
+    renaming::level1t level1;
     symex_targett::sourcet calling_location;
 
     goto_programt::const_targett end_of_function;

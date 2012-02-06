@@ -23,6 +23,7 @@
 #include "goto_symex_state.h"
 #include "goto_symex.h"
 #include "read_write_set.h"
+#include "renaming.h"
 
 class reachability_treet;
 
@@ -33,7 +34,7 @@ class execution_statet : public goto_symext
   execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
                    const reachability_treet *art,
                    symex_targett *_target,
-                   goto_symex_statet::level2t &l2,
+                   renaming::level2t &l2,
                    contextt &context,
                    const optionst &options,
                    bool _is_schedule);
@@ -137,7 +138,7 @@ class execution_statet : public goto_symext
   std::vector<read_write_set> exprs_read_write;
   read_write_set last_global_read_write;
   unsigned int last_active_thread;
-  goto_symex_statet::level2t state_level2;
+  renaming::level2t state_level2;
   unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt parent_guard_identifier;

@@ -17,6 +17,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "goto_symex.h"
 #include "execution_state.h"
 #include "symex_target_equation.h"
+#include "renaming.h"
 
 // Can't include goto_symex.h due to inclusion order. This can be fixed with the
 // refactor; in the meantime, forward dec.
@@ -165,7 +166,7 @@ protected:
   std::set<crypto_hash>hit_hashes;
 
   optionst options;
-  goto_symex_statet::level2t initial_level2;
+  renaming::level2t initial_level2;
 };
 
 #endif /* REACHABILITY_TREE_H_ */
