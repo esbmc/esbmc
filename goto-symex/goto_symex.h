@@ -59,7 +59,14 @@ public:
     art1 = NULL;
   }
 
+  // Types
+
 public:
+  friend class symex_dereference_statet;
+  friend class bmct;
+
+  typedef goto_symex_statet statet;
+
   class symex_resultt {
   public:
     symex_resultt(symex_targett *t, unsigned int claims, unsigned int remain) :
@@ -70,9 +77,16 @@ public:
     unsigned int remaining_claims;
   };
 
-  symex_resultt *get_symex_result(void);
+  // Macros
+  //
+  irep_idt guard_identifier(statet &state)
+  {
+	  return irep_idt(id2string(guard_identifier_s) + "!" + i2string(state.top().level1._thread_id));
+  };
 
-  typedef goto_symex_statet statet;
+  // Methods
+
+  symex_resultt *get_symex_result(void);
 
   void operator()(const goto_functionst &goto_functions);
 
@@ -81,8 +95,6 @@ public:
   reachability_treet & art);
 
 protected:
-  friend class symex_dereference_statet;
-  friend class bmct;
   virtual void do_simplify(exprt &expr);
 
   // statistics
@@ -103,11 +115,6 @@ protected:
 
   //irep_idt guard_identifier;
   irep_idt guard_identifier_s;
-
-  irep_idt guard_identifier(statet &state)
-  {
-	  return irep_idt(id2string(guard_identifier_s) + "!" + i2string(state.top().level1._thread_id));
-  };
 
   // symex
 
