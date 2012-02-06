@@ -31,7 +31,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    bool _is_schedule) :
   goto_symext(ns, context, _target, options),
   owning_rt(art),
-  _state_level2(l2),
+  state_level2(l2),
   _goto_functions(goto_functions)
 {
 
@@ -77,7 +77,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  _state_level2(ex._state_level2),
+  state_level2(ex.state_level2),
   _goto_functions(ex._goto_functions)
 {
   *this = ex;
@@ -88,11 +88,11 @@ execution_statet::execution_statet(const execution_statet &ex) :
   // perform.
   str_state = string_container.take_state_snapshot();
 
-  // Regenerate threads state using new objects _state_level2 ref
+  // Regenerate threads state using new objects state_level2 ref
   threads_state.clear();
   std::vector<goto_symex_statet>::const_iterator it;
   for (it = ex.threads_state.begin(); it != ex.threads_state.end(); it++) {
-    goto_symex_statet state(*it, _state_level2);
+    goto_symex_statet state(*it, state_level2);
     threads_state.push_back(state);
   }
 }
@@ -108,7 +108,7 @@ execution_statet::operator=(const execution_statet &ex)
   exprs_read_write = ex.exprs_read_write;
   last_global_read_write = ex.last_global_read_write;
   last_active_thread = ex.last_active_thread;
-  _state_level2 = ex._state_level2;
+  state_level2 = ex.state_level2;
   _active_thread = ex._active_thread;
   guard_execution = ex.guard_execution;
   guard_thread = ex.guard_thread;
@@ -541,7 +541,7 @@ execution_statet::add_thread(goto_programt::const_targett thread_start,
   const goto_programt *prog)
 {
 
-  goto_symex_statet state(_state_level2);
+  goto_symex_statet state(state_level2);
   state.initialize(thread_start, thread_end, prog, threads_state.size());
 
   threads_state.push_back(state);
@@ -695,7 +695,7 @@ crypto_hash
 execution_statet::generate_hash(void) const
 {
 
-  crypto_hash state = _state_level2.generate_l2_state_hash();
+  crypto_hash state = state_level2.generate_l2_state_hash();
   std::string str = state.to_string();
 
   for (std::vector<goto_symex_statet>::const_iterator it = threads_state.begin();
@@ -757,9 +757,9 @@ execution_statet::serialise_expr(const exprt &rhs)
     // value.
     exprt tmp = rhs;
     get_active_state().get_original_name(tmp);
-    if (_state_level2.current_hashes.find(tmp.identifier().as_string()) !=
-        _state_level2.current_hashes.end()) {
-      crypto_hash h = _state_level2.current_hashes.find(
+    if (state_level2.current_hashes.find(tmp.identifier().as_string()) !=
+        state_level2.current_hashes.end()) {
+      crypto_hash h = state_level2.current_hashes.find(
         tmp.identifier().as_string())->second;
       return "hash(" + h.to_string() + ")";
     }
