@@ -131,7 +131,7 @@ class execution_statet : public goto_symext
 
   const reachability_treet *owning_rt;
   std::vector<goto_symex_statet> threads_state;
-  std::vector<unsigned int> _atomic_numbers;
+  std::vector<unsigned int> atomic_numbers;
   std::vector<bool> _DFS_traversed;
   std::vector<exprt> _exprs;
   int generating_new_threads;

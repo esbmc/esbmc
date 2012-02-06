@@ -102,7 +102,7 @@ execution_statet::operator=(const execution_statet &ex)
 {
   is_schedule = ex.is_schedule;
   threads_state = ex.threads_state;
-  _atomic_numbers = ex._atomic_numbers;
+  atomic_numbers = ex.atomic_numbers;
   _DFS_traversed = ex._DFS_traversed;
   _exprs = ex._exprs;
   generating_new_threads = ex.generating_new_threads;
@@ -201,7 +201,7 @@ unsigned int
 execution_statet::get_active_atomic_number()
 {
 
-  return _atomic_numbers.at(_active_thread);
+  return atomic_numbers.at(_active_thread);
 }
 
 /*******************************************************************
@@ -219,7 +219,7 @@ void
 execution_statet::increment_active_atomic_number()
 {
 
-  _atomic_numbers.at(_active_thread)++;
+  atomic_numbers.at(_active_thread)++;
 }
 
 /*******************************************************************
@@ -237,7 +237,7 @@ void
 execution_statet::decrement_active_atomic_number()
 {
 
-  _atomic_numbers.at(_active_thread)--;
+  atomic_numbers.at(_active_thread)--;
 }
 
 /*******************************************************************
@@ -547,7 +547,7 @@ execution_statet::add_thread(goto_programt::const_targett thread_start,
   state.initialize(thread_start, thread_end, prog, threads_state.size());
 
   threads_state.push_back(state);
-  _atomic_numbers.push_back(0);
+  atomic_numbers.push_back(0);
 
   if (_DFS_traversed.size() <= state.source.thread_nr) {
     _DFS_traversed.push_back(false);
@@ -579,7 +579,7 @@ execution_statet::add_thread(goto_symex_statet & state)
 
   new_state.source.thread_nr = threads_state.size();
   threads_state.push_back(new_state);
-  _atomic_numbers.push_back(0);
+  atomic_numbers.push_back(0);
 
   if (_DFS_traversed.size() <= new_state.source.thread_nr) {
     _DFS_traversed.push_back(false);
