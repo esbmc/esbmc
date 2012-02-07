@@ -35,7 +35,7 @@ esbmc: $(OBJS)
 	sh -c 'cd $(OBJDIR); $(LD) $(LDFLAGS) -b binary -r ./buildidobj.s -o buildidobj.o'
 	cd ..
 	rm $(OBJDIR)/buildidobj.s
-	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(OBJDIR)/buildidobj.o $(MEMCPYHACK) $(FINLINKTAIL)
+	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(MEMCPYHACK) $(FINLINKTAIL)
 
 clean:
 	-rm -f $(OBJDIR)/* esbmc $(OBJDIR)/.deps

@@ -9,7 +9,7 @@ endif
 ifdef USE_SOLVER_Z3
 Z3 = $(SATDIR)/z3_win
 CXXFLAGS+= -DZ3
-LIBS+= -L$(Z3)/lib -lz3
+SOLVER_LIBS+= -L$(Z3)/lib -lz3
 INCLUDES+= -I $(Z3)/include
 # Vastly irritating, is that mingw linking against z3.lib causes silent linking
 # errors at runtime. So, link directly against the dll.
