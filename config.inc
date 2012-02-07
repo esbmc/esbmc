@@ -62,7 +62,6 @@ PARTLINKOPTS= -r $(LDFLAGS)
 FINLINKBIN= $(CXX)
 FINLINKOUT= -o
 FINLINKTAIL= $(CXXFLAGS) $(LIBS) $(PLATLIBS)
-INCCMD=-I
 PATHSEP=/
 
 # If on a 64 bit machine, build C libraries as expected. If on 32 bits, build

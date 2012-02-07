@@ -22,7 +22,6 @@ CC=$(VCBINS)\\cl.exe
 FINLINKBIN=$(CYGVCDIR)/bin/amd64/cl.exe
 FINLINKOUT= /Fe
 BLOBGENLD=x86_64-w64-mingw32-ld
-INCCMD=/I
 PATHSEP=\\
 CXXFLAGS+=/I"$(VCDIR)\\include"
 PLATLIBS="C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\wsock32.lib"
