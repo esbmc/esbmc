@@ -5,9 +5,6 @@
 # Make ubuntu happy (which uses dash by default)
 SHELL := /bin/bash
 
-# In case includer hasn't included yet,
-include $(ESBMCDIR)/config.inc
-
 OBJS1 = $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 
