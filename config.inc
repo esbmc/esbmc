@@ -73,6 +73,11 @@ CLIB64FLAG=--32
 CLIB32FLAG=--32
 endif
 
+# Unless someone else has set OBJDIR, default to `pwd`/.objs
+OBJDIR?= .objs
+# Danger: evaluating expression creates directory :o
+CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
+
 ifdef LINUX
 include $(ESBMCDIR)/scripts/linux.inc
 endif
@@ -84,8 +89,3 @@ endif
 ifdef WIN_MSVC
 include $(ESBMCDIR)/scripts/msvc.inc
 endif
-
-# Unless someone else has set OBJDIR, default to `pwd`/.objs
-OBJDIR?= .objs
-# Danger: evaluating expression creates directory :o
-CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
