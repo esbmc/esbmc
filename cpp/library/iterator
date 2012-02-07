@@ -1,0 +1,205 @@
+#ifndef STL_INTERATOR
+#define STL_INTERATOR
+
+#include "iostream"
+#include "pair"
+
+namespace std
+{
+template <class T, class charT=char, class traits=char_traits<charT>,
+          class Distance = ptrdiff_t>
+  class istream_iterator{
+  public:
+	istream_iterator(istream&);
+	const T& operator*() const { return value; }
+	istream_iterator<T,charT,traits,Distance>& operator++() {
+		//model
+	}
+	istream_iterator<T,charT,traits,Distance> operator++(int) {
+		//model
+	}
+  private:
+	T value;
+};
+
+template <class T, class charT=char, class traits=char_traits<charT>,
+          class Distance = ptrdiff_t>
+  class ostream_iterator{
+  public:
+	ostream_iterator(ostream&);
+	ostream_iterator<T,charT,traits>& operator*() { return *this; }
+};
+
+template <class charT, class traits=char_traits<charT> >
+  class ostreambuf_iterator{
+  public:
+	ostreambuf_iterator(ostream& s) throw(){
+		//model
+	}
+};
+
+	template<class Key, class T>
+	struct iterator{
+	public:
+
+		//types:
+	    typedef pair<const Key, T> value_type;
+
+		iterator(const iterator&);
+	    iterator();
+	    iterator& operator=(const iterator&);
+
+	    T* operator -> ();
+	    T& operator * ();
+
+	    value_type * operator -> ();
+	    value_type & operator * ();
+
+	    iterator& operator ++ ();
+	    iterator& operator ++ (int);
+
+	    iterator& operator -- ();
+	    iterator& operator -- (int);
+
+	    bool operator == ( const iterator&)const;
+	    bool operator != ( const iterator&)const;
+
+	    bool operator < ( const iterator&)const;
+	    bool operator > ( const iterator&)const;
+
+	    bool operator <= ( const iterator&)const;
+	    bool operator >= ( const iterator&)const;
+
+	    iterator operator + (int) const;
+	    iterator operator - (int) const;
+
+	    iterator& operator += (int);
+	    iterator& operator -= (int);
+	};
+
+	template<class Key, class T>
+	class const_iterator{
+	public:
+
+		//types:
+	    typedef pair<const Key, T> value_type;
+
+	    const_iterator(const const_iterator&);
+	    const_iterator();
+	    const_iterator& operator=(const const_iterator&);
+
+	    const T* operator -> ();
+	    const T& operator * ();
+
+	    const value_type * operator -> ();
+	    const value_type & operator * ();
+
+	    const_iterator& operator ++ ();
+	    const_iterator& operator ++ (int);
+
+	    const_iterator& operator -- ();
+	    const_iterator& operator -- (int);
+
+	    bool operator == ( const const_iterator&)const;
+	    bool operator != ( const const_iterator&)const;
+
+	    bool operator < ( const const_iterator&)const;
+	    bool operator > ( const const_iterator&)const;
+
+	    bool operator <= ( const const_iterator&)const;
+	    bool operator >= ( const const_iterator&)const;
+
+	    const_iterator operator + (int) const;
+	    const_iterator operator - (int) const;
+
+	    const_iterator& operator += (int);
+	    const_iterator& operator -= (int);
+	};
+
+	template<class Key, class T>
+    class reverse_iterator{
+      public:
+
+		//types:
+	    typedef pair<const Key, T> value_type;
+
+	    reverse_iterator(const reverse_iterator&);
+	    reverse_iterator();
+	    reverse_iterator& operator=(const reverse_iterator&);
+	    explicit reverse_iterator(iterator x);
+
+	    iterator base() const; // explicit
+
+	    T* operator -> ();
+	    T& operator * ();
+
+	    value_type * operator -> ();
+	    value_type & operator * ();
+
+	    reverse_iterator& operator ++ ();
+	    reverse_iterator& operator ++ (int);
+
+	    reverse_iterator& operator -- ();
+	    reverse_iterator& operator -- (int);
+
+	    bool operator == ( const reverse_iterator&)const;
+	    bool operator != ( const reverse_iterator&)const;
+
+	    bool operator < ( const reverse_iterator&)const;
+	    bool operator > ( const reverse_iterator&)const;
+
+	    bool operator <= ( const reverse_iterator&)const;
+	    bool operator >= ( const reverse_iterator&)const;
+
+	    reverse_iterator operator + (int) const;
+	    reverse_iterator operator - (int) const;
+
+	    reverse_iterator& operator += (int);
+	    reverse_iterator& operator -= (int);
+    };
+
+	template<class Key, class T>
+    class  const_reverse_iterator {
+      public:
+
+		//types:
+	    typedef pair<const Key, T> value_type;
+
+	    const_reverse_iterator(const const_reverse_iterator&);
+	    const_reverse_iterator();
+	    const_reverse_iterator& operator=(const const_reverse_iterator&);
+	    explicit const_reverse_iterator(const_iterator);
+
+	    const_iterator base() const; // explicit
+
+	    const T* operator -> ();
+	    const T& operator * ();
+
+	    const value_type * operator -> ();
+	    const value_type & operator * ();
+
+	    const_reverse_iterator& operator ++ ();
+	    const_reverse_iterator& operator ++ (int);
+
+	    const_reverse_iterator& operator -- ();
+	    const_reverse_iterator& operator -- (int);
+
+	    bool operator == ( const const_reverse_iterator&)const;
+	    bool operator != ( const const_reverse_iterator&)const;
+
+	    bool operator < ( const const_reverse_iterator&)const;
+	    bool operator > ( const const_reverse_iterator&)const;
+
+	    bool operator <= ( const const_reverse_iterator&)const;
+	    bool operator >= ( const const_reverse_iterator&)const;
+
+	    const_reverse_iterator operator + (int) const;
+	    const_reverse_iterator operator - (int) const;
+
+	    const_reverse_iterator& operator += (int);
+	    const_reverse_iterator& operator -= (int);
+    };
+
+}
+
+#endif

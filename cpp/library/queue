@@ -1,0 +1,93 @@
+/*******************************************************************\
+ *
+ *
+ * Author: Lucas Cordeiro
+ *
+ * 
+\*******************************************************************/
+
+#ifndef STL_QUEUE
+#define STL_QUEUE
+
+#include "vector"
+
+namespace std
+{
+
+  #define QUEUE_CAPACITY 20
+
+  template < class T, class Container = vector<T>,
+	class Compare = less<typename Container::value_type> >
+  class priority_queue
+	{
+	public:
+	  void push ( const float& x );
+	  bool empty ( ) const;
+	  const T& top ( ) const;
+	  void pop ( );
+	};
+
+  template<class T> class queue
+  {
+    T buf[QUEUE_CAPACITY];
+    int _size=0;
+    int head=0;
+    int tail=0;
+	
+    public:
+
+    queue():_size(0), head(0), tail(0){}
+
+    void push ( const T& t )
+    {
+      assert(0 <= _size);
+      __ESBMC_assert(_size < QUEUE_CAPACITY, "queue overflow");
+      buf[tail] = t;
+      _size++;
+     if (tail == QUEUE_CAPACITY)
+       tail = 1;
+     else
+       tail++;
+    }
+
+    bool empty ( ) const
+    {
+      if (head == tail) 
+        return true;
+      else 
+	return false;
+    }
+
+    T& front ( )
+    {
+      assert(!empty());
+      return buf[head];
+    }
+
+    int size() const
+    {
+      assert(0 <= _size && _size <= QUEUE_CAPACITY);
+      return _size;
+    }
+
+    void pop()
+    {
+      __ESBMC_assert(size()>0, "queue underflow");
+      _size--;
+      if (head == QUEUE_CAPACITY) 
+        head = 1;
+      else 
+        head++;
+    }
+
+    T& back ()
+    {     
+      assert(!empty());
+      return buf[tail-1];
+    }    
+  };
+
+}
+
+#endif
+

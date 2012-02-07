@@ -1,0 +1,10 @@
+#ifndef STL_CASSERT
+#define STL_CASSERT
+
+void assert (int expression);
+
+void assert (int expression) {
+	__ESBMC_assert(expression, "assertion");
+}
+
+#endif

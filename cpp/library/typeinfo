@@ -11,11 +11,13 @@ struct typeinfo {
   bool before (const typeinfo& rhs) const;
   const char* name() const;
 private:
-  const typeinfo& type_id;
-  typeinfo (const typeinfo& rhs){
-	type_id = rhs;
-  }
+  typeinfo (const typeinfo& rhs);
   typeinfo& operator= (const typeinfo& rhs);
+  const typeinfo& type_id;
+  //typeinfo (const typeinfo& rhs){
+	//type_id = rhs;
+  //}
+  //typeinfo& operator= (const typeinfo& rhs);
 };
 
 #endif

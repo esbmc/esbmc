@@ -1,0 +1,162 @@
+#ifndef __STL_MAP
+#define __STL_MAP
+
+#include <pair>
+#include "iterator"
+#include "iostream"
+
+namespace std {
+
+  template<class T>
+  class less {};
+
+  template < class Key, class T, class Compare = less<Key>,
+             class Allocator = allocator<pair<const Key,T> > > class multimap
+  {
+  public:
+		struct iterator{
+		public:
+
+			//types:
+		    typedef pair<const Key, T> value_type;
+
+			iterator(const iterator&);
+		    iterator();
+		    iterator& operator=(const iterator&);
+
+		    value_type * operator -> ();
+		    value_type & operator * ();
+
+		    iterator& operator ++ ();
+		    iterator& operator ++ (int);
+
+		    iterator& operator -- ();
+		    iterator& operator -- (int);
+
+		    bool operator == ( const iterator&)const;
+		    bool operator != ( const iterator&)const;
+
+		    bool operator < ( const iterator&)const;
+		    bool operator > ( const iterator&)const;
+
+		    bool operator <= ( const iterator&)const;
+		    bool operator >= ( const iterator&)const;
+
+		    iterator operator + (int) const;
+		    iterator operator - (int) const;
+
+		    iterator& operator += (int);
+		    iterator& operator -= (int);
+		};
+
+		class const_iterator{
+		public:
+
+			//types:
+		    typedef pair<const Key, T> value_type;
+
+		    const_iterator(const const_iterator&);
+		    const_iterator();
+		    const_iterator(iterator&);
+		    const_iterator& operator=(const const_iterator&);
+
+		    const value_type * operator -> ();
+		    const value_type & operator * ();
+
+		    const_iterator& operator ++ ();
+		    const_iterator& operator ++ (int);
+
+		    const_iterator& operator -- ();
+		    const_iterator& operator -- (int);
+
+		    bool operator == ( const const_iterator&)const;
+		    bool operator != ( const const_iterator&)const;
+
+		    bool operator < ( const const_iterator&)const;
+		    bool operator > ( const const_iterator&)const;
+
+		    bool operator <= ( const const_iterator&)const;
+		    bool operator >= ( const const_iterator&)const;
+
+		    const_iterator operator + (int) const;
+		    const_iterator operator - (int) const;
+
+		    const_iterator& operator += (int);
+		    const_iterator& operator -= (int);
+		};
+
+	  typedef pair<const Key, T> value_type;
+	  int count ( const Key& x ) const;
+	  iterator insert ( const value_type& x );
+      iterator begin ();
+      const_iterator begin () const;
+      iterator end ();
+      const_iterator end () const;
+  };
+
+  template <class Key, class T, class Compare=less<Key> >
+  class map {
+    public:
+
+    typedef Key key_type;
+    typedef T mapped_type;
+    typedef pair<const Key, T> value_type;
+    typedef Compare key_compare;
+    typedef int size_type;
+
+    // iterators:
+    iterator begin();
+    const_iterator begin() const;
+    iterator end();
+    const_iterator end() const;
+    reverse_iterator rbegin();
+    const_reverse_iterator rbegin() const;
+    reverse_iterator rend();
+    const_reverse_iterator rend() const;
+
+    // capacity:
+    bool empty() const;
+    size_type size() const;
+    size_type max_size() const;
+
+    //element access:
+    T& operator[](const key_type& x);
+
+    // modifiers:
+    pair<iterator, bool> insert(const value_type& x);
+    //pair<iterator, bool> insert(const std::pair<Key,T>& x);
+    iterator insert(iterator position, const value_type& x);
+
+    void erase(iterator position);
+    size_type erase(const key_type& x);
+    void erase(iterator first, iterator last);
+    void swap(map<Key,T,Compare>);
+    void clear();
+
+    // map operations:
+    iterator find(const key_type& x);
+    const_iterator find(const key_type& x) const;
+    size_type count(const key_type& x) const;
+    iterator lower_bound(const key_type& x);
+    const_iterator lower_bound(const key_type& x) const;
+    iterator upper_bound(const key_type& x);
+    const_iterator upper_bound(const key_type& x) const;
+    pair<iterator,iterator> equal_range(const key_type& x);
+    pair<const_iterator,const_iterator> equal_range(const key_type& x) const;
+
+    // comparators:
+
+    bool operator == (const map<Key,T,Compare>&) const;
+    bool operator != (const map<Key,T,Compare>&) const;
+    bool operator >= (const map<Key,T,Compare>&) const;
+    bool operator <= (const map<Key,T,Compare>&) const;
+  };
+
+  // specialized algorithms:
+  template <class Key, class T, class Compare>
+  void swap(map<Key,T,compare>&, vector<Key,T,compare>&);
+
+}
+
+#endif
+
