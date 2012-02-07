@@ -36,6 +36,9 @@ ifdef LINUXCOMPAT
 CC=gcc34
 CXX=g++34
 FINLINKBIN=g++
+MEMCPYHACK+= -Wl,--defsym=memcpy=memmove
+STATICLIBCPPPATH:=$(shell g++34 -print-file-name=libstdc++.a)
+LIBS+= $(STATICLIBCPPPATH)
 else
 # If not in compat mode, link against libgomp. Can't do it with g++34 for
 # an unknown reason.
