@@ -103,8 +103,6 @@ endif
 
 endif
 
-Z3GCC = $(SATDIR)/z3_win
-
 ifdef LINUX
 include $(ESBMCDIR)/scripts/linux.inc
 endif
