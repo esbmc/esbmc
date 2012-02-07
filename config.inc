@@ -100,14 +100,6 @@ endif
 
 Z3GCC = $(SATDIR)/z3_win
 
-# Only use these solvers on linux
-ifndef WIN_MSVC
-ifndef WIN_MINGW32
-BOOLECTOR = $(SATDIR)/boolector
-MINISAT = $(SATDIR)/MiniSat-p_v1.14
-endif
-endif
-
 ifdef LINUX
 include $(ESBMCDIR)/scripts/linux.inc
 endif
