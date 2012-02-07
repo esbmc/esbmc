@@ -170,6 +170,11 @@ namespace std{
 		push_back(t);
 	}
 
+	explicit vector(T t[], T*): _size(0),  _capacity(0)
+	{
+	        //model
+	}
+
     vector(const vector<T>& x);
 
     vector<T>& operator=(const vector<T>& x);

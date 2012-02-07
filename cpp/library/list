@@ -6,8 +6,139 @@
 namespace std {
 
   template <class T>
-  class list {
+  struct list {
     public:
+
+	    class iterator{
+	      public:
+	      iterator(const iterator&);
+	      iterator();
+	      iterator& operator=(const iterator&);
+
+	      T* operator -> ();
+
+	      T& operator * ();
+
+	      iterator& operator ++ ();
+	      iterator& operator ++ (int);
+
+	      iterator& operator -- ();
+	      iterator& operator -- (int);
+
+	      bool operator == ( const iterator&)const;
+	      bool operator != ( const iterator&)const;
+
+	      bool operator < ( const iterator&)const;
+	      bool operator > ( const iterator&)const;
+
+	      bool operator <= ( const iterator&)const;
+	      bool operator >= ( const iterator&)const;
+
+	      iterator operator + (int) const;
+	      iterator operator - (int) const;
+
+	      iterator& operator += (int);
+	      iterator& operator -= (int);
+	    };
+
+	    class const_iterator
+	    {
+	      public:
+	      const_iterator(const const_iterator&);
+	      const_iterator();
+	      const_iterator& operator=(const const_iterator&);
+
+	      const T* operator -> ();
+
+	      const T& operator * ();
+
+	      const_iterator& operator ++ ();
+	      const_iterator& operator ++ (int);
+
+	      const_iterator& operator -- ();
+	      const_iterator& operator -- (int);
+
+	      bool operator == ( const const_iterator&)const;
+	      bool operator != ( const const_iterator&)const;
+
+	      bool operator < ( const const_iterator&)const;
+	      bool operator > ( const const_iterator&)const;
+
+	      bool operator <= ( const const_iterator&)const;
+	      bool operator >= ( const const_iterator&)const;
+
+	      const_iterator operator + (int) const;
+	      const_iterator operator - (int) const;
+
+	      const_iterator& operator += (int);
+	      const_iterator& operator -= (int);
+	    };
+
+	    class reverse_iterator{
+	      public:
+	      reverse_iterator(const reverse_iterator&);
+	      reverse_iterator();
+	      reverse_iterator& operator=(const reverse_iterator&);
+
+	      T* operator -> ();
+
+	      T& operator * ();
+
+	      reverse_iterator& operator ++ ();
+	      reverse_iterator& operator ++ (int);
+
+	      reverse_iterator& operator -- ();
+	      reverse_iterator& operator -- (int);
+
+	      bool operator == ( const reverse_iterator&)const;
+	      bool operator != ( const reverse_iterator&)const;
+
+	      bool operator < ( const reverse_iterator&)const;
+	      bool operator > ( const reverse_iterator&)const;
+
+	      bool operator <= ( const reverse_iterator&)const;
+	      bool operator >= ( const reverse_iterator&)const;
+
+	      reverse_iterator operator + (int) const;
+	      reverse_iterator operator - (int) const;
+
+	      reverse_iterator& operator += (int);
+	      reverse_iterator& operator -= (int);
+	    };
+
+	    class  const_reverse_iterator {
+	      public:
+	      const_reverse_iterator(const const_reverse_iterator&);
+	      const_reverse_iterator();
+	      const_reverse_iterator& operator=(const const_reverse_iterator&);
+
+	      const T* operator -> ();
+
+	      const T& operator * ();
+
+	      const_reverse_iterator& operator ++ ();
+	      const_reverse_iterator& operator ++ (int);
+
+	      const_reverse_iterator& operator -- ();
+	      const_reverse_iterator& operator -- (int);
+
+	      bool operator == ( const const_reverse_iterator&)const;
+	      bool operator != ( const const_reverse_iterator&)const;
+
+	      bool operator < ( const const_reverse_iterator&)const;
+	      bool operator > ( const const_reverse_iterator&)const;
+
+	      bool operator <= ( const const_reverse_iterator&)const;
+	      bool operator >= ( const const_reverse_iterator&)const;
+
+	      const_reverse_iterator operator + (int) const;
+	      const_reverse_iterator operator - (int) const;
+
+	      const_reverse_iterator& operator += (int);
+	      const_reverse_iterator& operator -= (int);
+	    };
+
+
     // types:
     typedef T& reference;
     typedef const T& const_reference;
