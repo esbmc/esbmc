@@ -7,7 +7,6 @@ SHELL := /bin/bash
 
 # In case includer hasn't included yet,
 include $(ESBMCDIR)/config.inc
-include $(ESBMCDIR)/local.inc
 
 OBJS1 = $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)

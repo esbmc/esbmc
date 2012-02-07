@@ -1,6 +1,5 @@
 ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
-include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/z3.o
 all: $(OBJDIR)/.deps $(MAINOBJ)
 

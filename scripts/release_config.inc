@@ -65,12 +65,61 @@ PATHSEP=/
 # 32 bit machines, wheras you can vice versa.
 FULLUNAME:=$(shell uname -a)
 WEARE64BIT:=$(shell uname -a | egrep "(CYGWIN.*WOW64|x86_64)")
-ifneq ($(WEARE64BIT),"")
+ifneq ($(WEARE64BIT),)
 CLIB64FLAG=--64
 CLIB32FLAG=--32
 else
 CLIB64FLAG=--32
 CLIB32FLAG=--32
+endif
+
+# Unless someone else has set OBJDIR, default to `pwd`/.objs
+OBJDIR?= .objs
+# Danger: evaluating expression creates directory :o
+CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
+
+# If SATDIR{64,32} isn't set yet, assume the user has solvers in their home dir.
+
+ifdef TARGET64
+
+ifdef SATDIR64
+SATDIR=$(SATDIR64)
+else
+SATDIR=$(HOME)
+endif
+
+else
+
+ifdef SATDIR32
+SATDIR=$(SATDIR32)
+else
+SATDIR=$(HOME)
+endif
+
+endif
+
+# Hack around MSVC linking against Z3.
+ifdef WIN_MSVC
+Z31 = $(SATDIR)/z3_win
+Z3 = $(shell cygpath -w $(Z31) | sed s/\\\\/\\\\\\\\/g )
+endif
+
+ifdef WIN_MINGW32
+Z3 = $(SATDIR)/z3_win
+endif
+
+ifdef LINUX
+Z3 = $(SATDIR)/z3
+endif
+
+Z3GCC = $(SATDIR)/z3_win
+
+# Only use these solvers on linux
+ifndef WIN_MSVC
+ifndef WIN_MINGW32
+#BOOLECTOR = $(SATDIR)/boolector
+#MINISAT = $(SATDIR)/MiniSat-p_v1.14
+endif
 endif
 
 ifdef LINUX
@@ -84,8 +133,3 @@ endif
 ifdef WIN_MSVC
 include $(ESBMCDIR)/scripts/msvc.inc
 endif
-
-# Unless someone else has set OBJDIR, default to `pwd`/.objs
-OBJDIR?= .objs
-# Danger: evaluating expression creates directory :o
-CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)

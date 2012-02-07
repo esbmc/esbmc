@@ -1,6 +1,5 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
-include $(ESBMCDIR)/local.inc
 
 SRCS = main.cpp parseoptions.cpp bmc.cpp  \
       bv_cbmc.cpp document_subgoals.cpp \
@@ -57,8 +56,8 @@ esbmc: $(OBJS)
 	echo -n " by $(USER)@" >> $(OBJDIR)/buildidobj.s
 	echo -n `hostname` >> $(OBJDIR)/buildidobj.s
 	# Look for a dirty tree - any files that aren't '??' (i.e., untracked)
-	# or config.inc/local.inc, which might differ for releases.
-	-if test -z "`git status -s | grep -v "^??" | grep -v config.inc | grep -v local.inc `"; then echo -n "" >> $(OBJDIR)/buildidobj.s; else echo -n " (dirty tree)" >> $(OBJDIR)/buildidobj.s; fi
+	# or config.inc, which might differ for releases.
+	-if test -z "`git status -s | grep -v "^??" | grep -v config.inc`"; then echo -n "" >> $(OBJDIR)/buildidobj.s; else echo -n " (dirty tree)" >> $(OBJDIR)/buildidobj.s; fi
 	sh -c 'cd $(OBJDIR); $(LD) $(LDFLAGS) -b binary -r ./buildidobj.s -o buildidobj.o'
 	cd ..
 	rm $(OBJDIR)/buildidobj.s
