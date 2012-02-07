@@ -78,7 +78,8 @@ OBJDIR?= .objs
 # Danger: evaluating expression creates directory :o
 CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
 
-# If SATDIR{64,32} isn't set yet, assume the user has solvers in their home dir.
+# Extract a sat solver location from {SATDIR64,SATDIR32,HOME}, depending on
+# which mode we're in {64,32} and what the user has defined.
 
 ifdef TARGET64
 
