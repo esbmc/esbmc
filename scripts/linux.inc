@@ -36,7 +36,7 @@ ifdef LINUXCOMPAT
 CC=gcc34
 CXX=g++34
 FINLINKBIN=g++
-MEMCPYHACK+= -Wl,--defsym=memcpy=memmove
+FINLINKTAIL+= -Wl,--defsym=memcpy=memmove
 STATICLIBCPPPATH:=$(shell g++34 -print-file-name=libstdc++.a)
 LIBS+= $(STATICLIBCPPPATH)
 else
