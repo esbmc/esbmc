@@ -3,6 +3,9 @@ GCCFLAGS += -Wall -Wextra -Wno-deprecated
 OPTS ?= -O3
 PLATLIBS= -lgmp -ldl
 
+# Solvers
+Z3 = $(SATDIR)/z3
+
 ifdef TARGET32
 CXXFLAGS += -m32
 GCCFLAGS += -m32

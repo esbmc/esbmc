@@ -1,3 +1,6 @@
+Z31 = $(SATDIR)/z3_win
+Z3 = $(shell cygpath -w $(Z31) | sed s/\\\\/\\\\\\\\/g )
+
 WINSDKDIR=$(shell reg query HKLM\\SOFTWARE\\Microsoft\\Microsoft\ SDKs\\Windows /v CurrentInstallFolder | grep REG_SZ | sed "s\# *CurrentInstallFolder *REG_SZ *\(.*\)\#\1\#" | sed s/\\\\/\\\\\\\\/g)
 
 VCDIR=$(shell reg query HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\VisualStudio\\10.0 /v ShellFolder | grep REG_SZ | sed "s\# *ShellFolder *REG_SZ *\(.*\)\#\1\#" | sed s/\\\\/\\\\\\\\/g)VC

@@ -6,6 +6,8 @@ MINGWID=i686-pc-mingw32
 Z3LIBDIR=lib
 endif
 
+Z3 = $(SATDIR)/z3_win
+
 MINGWROOTDIR= /usr/$(MINGWID)/sys-root/mingw
 MINGWBINDIR=$(MINGWROOTDIR)/bin
 
