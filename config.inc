@@ -19,6 +19,11 @@ LINUX=1
 
 #LINUXCOMPAT=1
 
+# What sat solvers to use? Comment out to disable
+USE_SOLVER_Z3=1
+USE_SOLVER_BOOLECTOR=1
+USE_SOLVER_MINISAT1=1
+
 endif #EXTERN_ESBMC_CONFIG
 
 # Might need to guess what bitwidth target to build.

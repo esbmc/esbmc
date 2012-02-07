@@ -4,9 +4,17 @@ OPTS ?= -O3
 PLATLIBS= -lgmp -ldl
 
 # Solvers
+ifdef USE_SOLVER_Z3
 Z3 = $(SATDIR)/z3
+endif
+
+ifdef USE_SOLVER_BOOLECTOR
 BOOLECTOR = $(SATDIR)/boolector
+endif
+
+ifdef USE_SOLVER_MINISAT1
 MINISAT = $(SATDIR)/MiniSat-p_v1.14
+endif
 
 ifdef TARGET32
 CXXFLAGS += -m32
