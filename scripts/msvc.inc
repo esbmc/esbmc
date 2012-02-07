@@ -1,6 +1,10 @@
 ifdef USE_SOLVER_Z3
 Z31 = $(SATDIR)/z3_win
 Z3 = $(shell cygpath -w $(Z31) | sed s/\\\\/\\\\\\\\/g )
+CXXFLAGS+= -DZ3
+LIBS+= -L$(Z3)/lib -lz3
+INCLUDES+= /I $(Z3)\\include
+LIBS+= $(Z3)\\x64\\z3.lib "$(WINSDKDIR)\\lib\\x64\\Kernel32.lib"
 endif
 
 WINSDKDIR=$(shell reg query HKLM\\SOFTWARE\\Microsoft\\Microsoft\ SDKs\\Windows /v CurrentInstallFolder | grep REG_SZ | sed "s\# *CurrentInstallFolder *REG_SZ *\(.*\)\#\1\#" | sed s/\\\\/\\\\\\\\/g)

@@ -6,14 +6,20 @@ PLATLIBS= -lgmp -ldl
 # Solvers
 ifdef USE_SOLVER_Z3
 Z3 = $(SATDIR)/z3
+CXXFLAGS+= -DZ3
+LIBS+= -L$(Z3)/lib -lz3
+INCLUDES+= -I $(Z3)/include
 endif
 
 ifdef USE_SOLVER_BOOLECTOR
 BOOLECTOR = $(SATDIR)/boolector
+CXXFLAGS+= -DBOOLECTOR
+LIBS+= -L$(BOOLECTOR)/lib -lboolector
 endif
 
 ifdef USE_SOLVER_MINISAT1
 MINISAT = $(SATDIR)/MiniSat-p_v1.14
+CXXFLAGS+= -DMINISAT
 endif
 
 ifdef TARGET32
