@@ -15,7 +15,7 @@ LINUX=1
 # Static? (Linux only)
 #STATICLINK=1
 
-# Enable linux compatibility (gcc34), not yet implemented
+# Enable linux compatibility (gcc34)
 
 #LINUXCOMPAT=1
 
