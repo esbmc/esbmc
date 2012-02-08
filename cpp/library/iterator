@@ -23,22 +23,12 @@ template <class T, class charT=char, class traits=char_traits<charT>,
 };
 
 template <class T, class charT=char, class traits=char_traits<charT>,
-          class Distance = ptrdiff_t> class ostream_iterator
-{   
-    public:       
-        ostream_iterator(ostream&);
-        T& operator*() { return value; }
-    private:
-        T value;
+          class Distance = ptrdiff_t>
+  class ostream_iterator{
+  public:
+	ostream_iterator(ostream&);
+	ostream_iterator<T,charT,traits>& operator*() { return *this; }
 };
-
-//template <class T, class charT=char, class traits=char_traits<charT>,
-//          class Distance = ptrdiff_t>
-//  class ostream_iterator{
-//  public:
-//	ostream_iterator(ostream&);
-//	ostream_iterator<T,charT,traits>& operator*() { return *this; }
-//};
 
 template <class charT, class traits=char_traits<charT> >
   class ostreambuf_iterator{
