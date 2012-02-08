@@ -1,9 +1,0 @@
-#ifndef STL_INTERATOR
-#define STL_INTERATOR
-
-namespace std
-{
-
-}
-
-#endif
