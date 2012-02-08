@@ -220,7 +220,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
   else if(expr.id()=="struct")
   {
     forall_operands(it, expr)
-      if(!constant_propagation(expr.op0()))
+      if(!constant_propagation(*it))
         return false;
 
     return true;

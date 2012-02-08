@@ -15,9 +15,14 @@ LINUX=1
 # Static? (Linux only)
 #STATICLINK=1
 
-# Enable linux compatibility (gcc34), not yet implemented
+# Enable linux compatibility (gcc34)
 
 #LINUXCOMPAT=1
+
+# What sat solvers to use? Comment out to disable
+USE_SOLVER_Z3=1
+USE_SOLVER_BOOLECTOR=1
+USE_SOLVER_MINISAT1=1
 
 endif #EXTERN_ESBMC_CONFIG
 
@@ -57,7 +62,6 @@ PARTLINKOPTS= -r $(LDFLAGS)
 FINLINKBIN= $(CXX)
 FINLINKOUT= -o
 FINLINKTAIL= $(CXXFLAGS) $(LIBS) $(PLATLIBS)
-INCCMD=-I
 PATHSEP=/
 
 # If on a 64 bit machine, build C libraries as expected. If on 32 bits, build
@@ -73,6 +77,32 @@ CLIB64FLAG=--32
 CLIB32FLAG=--32
 endif
 
+# Unless someone else has set OBJDIR, default to `pwd`/.objs
+OBJDIR?= .objs
+# Danger: evaluating expression creates directory :o
+CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
+
+# Extract a sat solver location from {SATDIR64,SATDIR32,HOME}, depending on
+# which mode we're in {64,32} and what the user has defined.
+
+ifdef TARGET64
+
+ifdef SATDIR64
+SATDIR=$(SATDIR64)
+else
+SATDIR=$(HOME)
+endif
+
+else
+
+ifdef SATDIR32
+SATDIR=$(SATDIR32)
+else
+SATDIR=$(HOME)
+endif
+
+endif
+
 ifdef LINUX
 include $(ESBMCDIR)/scripts/linux.inc
 endif
@@ -84,8 +114,3 @@ endif
 ifdef WIN_MSVC
 include $(ESBMCDIR)/scripts/msvc.inc
 endif
-
-# Unless someone else has set OBJDIR, default to `pwd`/.objs
-OBJDIR?= .objs
-# Danger: evaluating expression creates directory :o
-CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)

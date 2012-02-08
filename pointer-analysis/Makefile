@@ -1,6 +1,5 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
-include $(ESBMCDIR)/local.inc
 MAINOBJ= $(OBJDIR)/pointer-analysis.o
 all: $(OBJDIR)/.deps $(MAINOBJ)
 

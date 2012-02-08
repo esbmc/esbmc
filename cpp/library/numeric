@@ -1,0 +1,10 @@
+#ifndef __STL_NUMERIC
+#define __STL_NUMERIC
+
+namespace std {
+
+
+}
+
+#endif
+

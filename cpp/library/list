@@ -1,122 +1,213 @@
-/*******************************************************************\
- *
- *
- * Author: Lucas Cordeiro
- *
- * 
-\*******************************************************************/
+#ifndef __STL_LIST
+#define __STL_LIST
+
+#include "iterator"
+
+namespace std {
+
+  template <class T>
+  struct list {
+    public:
+
+	    class iterator{
+	      public:
+	      iterator(const iterator&);
+	      iterator();
+	      iterator& operator=(const iterator&);
+
+	      T* operator -> ();
+
+	      T& operator * ();
+
+	      iterator& operator ++ ();
+	      iterator& operator ++ (int);
+
+	      iterator& operator -- ();
+	      iterator& operator -- (int);
+
+	      bool operator == ( const iterator&)const;
+	      bool operator != ( const iterator&)const;
+
+	      bool operator < ( const iterator&)const;
+	      bool operator > ( const iterator&)const;
+
+	      bool operator <= ( const iterator&)const;
+	      bool operator >= ( const iterator&)const;
+
+	      iterator operator + (int) const;
+	      iterator operator - (int) const;
+
+	      iterator& operator += (int);
+	      iterator& operator -= (int);
+	    };
+
+	    class const_iterator
+	    {
+	      public:
+	      const_iterator(const const_iterator&);
+	      const_iterator();
+	      const_iterator& operator=(const const_iterator&);
+
+	      const T* operator -> ();
+
+	      const T& operator * ();
+
+	      const_iterator& operator ++ ();
+	      const_iterator& operator ++ (int);
+
+	      const_iterator& operator -- ();
+	      const_iterator& operator -- (int);
+
+	      bool operator == ( const const_iterator&)const;
+	      bool operator != ( const const_iterator&)const;
+
+	      bool operator < ( const const_iterator&)const;
+	      bool operator > ( const const_iterator&)const;
+
+	      bool operator <= ( const const_iterator&)const;
+	      bool operator >= ( const const_iterator&)const;
+
+	      const_iterator operator + (int) const;
+	      const_iterator operator - (int) const;
+
+	      const_iterator& operator += (int);
+	      const_iterator& operator -= (int);
+	    };
+
+	    class reverse_iterator{
+	      public:
+	      reverse_iterator(const reverse_iterator&);
+	      reverse_iterator();
+	      reverse_iterator& operator=(const reverse_iterator&);
+
+	      T* operator -> ();
+
+	      T& operator * ();
+
+	      reverse_iterator& operator ++ ();
+	      reverse_iterator& operator ++ (int);
+
+	      reverse_iterator& operator -- ();
+	      reverse_iterator& operator -- (int);
+
+	      bool operator == ( const reverse_iterator&)const;
+	      bool operator != ( const reverse_iterator&)const;
+
+	      bool operator < ( const reverse_iterator&)const;
+	      bool operator > ( const reverse_iterator&)const;
+
+	      bool operator <= ( const reverse_iterator&)const;
+	      bool operator >= ( const reverse_iterator&)const;
+
+	      reverse_iterator operator + (int) const;
+	      reverse_iterator operator - (int) const;
+
+	      reverse_iterator& operator += (int);
+	      reverse_iterator& operator -= (int);
+	    };
+
+	    class  const_reverse_iterator {
+	      public:
+	      const_reverse_iterator(const const_reverse_iterator&);
+	      const_reverse_iterator();
+	      const_reverse_iterator& operator=(const const_reverse_iterator&);
+
+	      const T* operator -> ();
+
+	      const T& operator * ();
+
+	      const_reverse_iterator& operator ++ ();
+	      const_reverse_iterator& operator ++ (int);
+
+	      const_reverse_iterator& operator -- ();
+	      const_reverse_iterator& operator -- (int);
+
+	      bool operator == ( const const_reverse_iterator&)const;
+	      bool operator != ( const const_reverse_iterator&)const;
+
+	      bool operator < ( const const_reverse_iterator&)const;
+	      bool operator > ( const const_reverse_iterator&)const;
+
+	      bool operator <= ( const const_reverse_iterator&)const;
+	      bool operator >= ( const const_reverse_iterator&)const;
+
+	      const_reverse_iterator operator + (int) const;
+	      const_reverse_iterator operator - (int) const;
+
+	      const_reverse_iterator& operator += (int);
+	      const_reverse_iterator& operator -= (int);
+	    };
 
 
-#ifndef STL_LIST
-#define STL_LIST
+    // types:
+    typedef T& reference;
+    typedef const T& const_reference;
+    typedef int size_type;
+    typedef int difference_type;
+    typedef T value_type;
+    typedef T* pointer;
+    typedef const T* const_pointer;
+    
+    // construct/copy/destroy:
+    explicit list();
+    explicit list(size_type n, const T&);
+    explicit list(size_type n);
 
-namespace std
-{
-	template<class T> class list
-	{
-	
-	struct node
-	{
-		T data;
-		node* prev;
-		node* next;
-		node(T t, node* p, node* n) : data(t), prev(p), next(n) {}
-	};
-	node* head;
-	node* tail;
-	int _size;
+    list(const list<T>& x);
+    ~list();
 
-	
-	public:
-		list() : head( NULL ), tail ( NULL ), _size(0) {}
+    list<T>& operator=(const list<T>& x);
+    void assign(size_type n, const T& t);
 
-		list(T t) : head( NULL ), tail ( NULL ), _size(0) 
-		{
-			push_back(t);
-		}
+    // iterators:
+    iterator begin();
+    const_iterator begin() const;
+    iterator end();
+    const_iterator end() const;
+    reverse_iterator rbegin();
+    const_reverse_iterator rbegin() const;
+    reverse_iterator rend();
+    const_reverse_iterator rend() const;
 
-		list(T t1, T t2) : head( NULL ), tail ( NULL ), _size(0) 
-		{
-			push_back(t1);
-			push_back(t2);
-		}
+    // capacity:
+    bool empty() const;
+    size_type size() const;
+    size_type max_size() const;
+    void resize(size_type sz);
+    void resize(size_type sz, T t);
 
-		bool empty ( ) const 
-		{
-			return ( !head || !tail );
-		}
+    // element access:
+    reference front();
+    const_reference front() const;
+    reference back();
+    const_reference back() const;
 
-		void push_back(const T& t)
-		{
-			tail = new node(t, tail, NULL);
-			tail->data = t;
-			_size++;
-			if( tail->prev )
-				tail->prev->next = tail;
-			if( empty() )
-				head = tail;
-		}
+    // modifiers:
+    void push_front(const T& x);
+    void pop_front();
+    void push_back(const T& x);
+    void pop_back();
 
-		void push_front ( const T& t )
-		{
-			head = new node(t, NULL, head);
-			_size++;
-			if( head->next )
-				head->next->prev = head;
-			if( empty() )
-				tail = head;
-		}
+    iterator insert(iterator position, const T& x);
+    void insert(iterator position, size_type n, const T& x);
 
-		void pop_back ( )
-		{
-			__ESBMC_assert ( !empty() , "list is empty");
-			node* temp(tail);
-			T data( tail->data );
-			tail = tail->prev ;
-			if( tail )
-				tail->next = NULL;
-			else
-				head = NULL ;
-			delete temp;
-		}
+    iterator erase(iterator position);
+    iterator erase(iterator position, iterator last);
+    void swap(list<T>&);
+    void clear();
 
-		int size() const
-		{
-			return _size;
-		}
-	
-		T back ( )
-		{
-			return tail->data;
-		}
+    // list operations:
+    void splice(iterator position, list<T>& x);
+    void splice(iterator position, list<T>& x, iterator i);
+    void splice(iterator position, list<T>& x, iterator first, iterator last);
+    void remove(const T& value);
 
-		const T back ( ) const
-		{
-			return tail->data;
-		}
+    void unique();
+    void merge(list<T>& x);
+    void sort();
+    void reverse();
+  };
 
-		const T front ( ) const
-		{
-			return head->data;
-		}
-
-		T front ( )
-		{
-			return head->data;
-		}
-
-
-		~double_linked()
-		{
-			while(head)
-			{
-				node* temp(head);
-				head=head->next;
-				delete temp;
-			}
-		}
-
-	};
 }
 
 #endif

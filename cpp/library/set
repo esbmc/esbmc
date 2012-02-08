@@ -1,9 +1,80 @@
-#ifndef STL_SET
-#define STL_SET
+#ifndef __STL_SET
+#define __STL_SET
 
-namespace std
-{
+#include "iterator"
 
+namespace std {
+  template<class T>
+  class less {};
+
+  template < class Key, class Compare = less<Key>,
+             class Allocator = allocator<Key> >
+  class multiset{
+
+  };
+
+  template <class Key, class Compare = less<Key>,
+          class Allocator = allocator<Key> >
+  class set {
+    public:
+    // types:
+    typedef Key key_type;
+    typedef Key value_type;
+    typedef Compare key_compare;
+    typedef Compare value_compare;
+    typedef int size_type;
+    typedef int difference_type;
+
+    // construct/copy/destroy:
+    explicit set(const Compare& comp);
+    explicit set();
+
+    set(const set<Key,Compare>& x);
+    set();
+
+    set<Key,Compare,Allocator>& operator=(const set<Key,Compare>& x);
+
+    // iterators:
+    iterator begin();
+    const_iterator begin() const;
+    iterator end();
+    const_iterator end() const;
+    reverse_iterator rbegin();
+    const_reverse_iterator rbegin() const;
+    reverse_iterator rend();
+    const_reverse_iterator rend() const;
+
+    // capacity:
+    bool empty() const;
+    size_type size() const;
+    size_type max_size() const;
+
+    // modifiers:
+    pair<iterator,bool> insert(const value_type& x);
+    iterator insert(iterator position, const value_type& x);
+
+    void erase(iterator position);
+    size_type erase(const key_type& x);
+    void erase(iterator first, iterator last);
+    void swap(set<Key,Compare>&);
+    void clear();
+
+    // observers:
+    key_compare key_comp() const;
+    value_compare value_comp() const;
+
+    // set operations:
+    iterator find(const key_type& x) const;
+    size_type count(const key_type& x) const;
+    iterator lower_bound(const key_type& x) const;
+    iterator upper_bound(const key_type& x) const;
+    pair<iterator,iterator> equal_range(const key_type& x) const;
+
+    bool operator == (const set<Key,Compare>&) const;
+    bool operator != (const set<Key,Compare>&) const;
+    bool operator >= (const set<Key,Compare>&) const;
+    bool operator <= (const set<Key,Compare>&) const;
+  };
 }
 
 #endif

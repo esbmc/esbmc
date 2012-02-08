@@ -3,7 +3,30 @@
 
 namespace std
 {
-
+template <class X> class auto_ptr{
+	public:
+	explicit auto_ptr (X* p=0) throw()
+	{
+		//model
+	}
+	auto_ptr (auto_ptr& a) throw()
+	{
+		//model
+	}
+	template<class Y>
+		auto_ptr (auto_ptr<Y>& a) throw()
+		{
+			//model
+		}
+	X* operator->() const throw()
+	{
+		//model
+	}
+	X& operator*() const throw()
+	{
+		//model
+	}
+};
 }
 
 #endif

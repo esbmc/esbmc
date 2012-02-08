@@ -1,7 +1,6 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
-include $(ESBMCDIR)/local.inc
-all: $(OBJDIR)/.deps test-bigint
+all: $(OBJDIR)/.deps allobjs
 
 RM = rm -f
 SRCS= bigint-test.cpp bigint-func.cpp bigint.cpp
@@ -12,5 +11,4 @@ clean:
 	-$(RM) $(OBJS)
 	-rm -f $(OBJDIR)/.deps
 
-test-bigint: $(OBJS)
-	$(FINLINKBIN) $(FINLINKOUT)test-bigint $(OBJS) $(FINLINKTAIL)
+allobjs: $(OBJS)

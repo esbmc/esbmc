@@ -3,7 +3,375 @@
 
 namespace std
 {
+template<class InIt, class Fn1>
+    Fn1 for_each(InIt first, InIt last, Fn1 func);
 
+template<class InIt, class Ty>
+    InIt find(InIt first, InIt last, const Ty& val);
+
+template<class InIt, class Pr>
+    InIt find_if(InIt first, InIt last, Pr pred);
+
+template<class FwdIt1, class FwdIt2>
+    FwdIt1 find_end(FwdIt1 first1, FwdIt1 last1,
+        FwdIt2 first2, FwdIt2 last2);
+
+template<class FwdIt1, class FwdIt2, class Pr>
+    FwdIt1 find_end(FwdIt1 first1, FwdIt1 last1,
+        FwdIt2 first2, FwdIt2 last2, Pr pred);
+
+template<class FwdIt1, class FwdIt2>
+    FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1,
+        FwdIt2 first2, FwdIt2 last2);
+
+template<class FwdIt1, class FwdIt2, class Pr>
+    FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1,
+        FwdIt2 first2, FwdIt2 last2, Pr pred);
+
+template<class FwdIt>
+    FwdIt adjacent_find(FwdIt first, FwdIt last);
+
+template<class FwdIt, class Pr>
+    FwdIt adjacent_find(FwdIt first, FwdIt last, Pr pred);
+
+#if 0
+template<class InIt, class Ty, class Dist>
+    typename iterator_traits<InIt>::difference_type
+        count(InIt first, InIt last,
+            const Ty& val);
+#endif
+
+#if 0
+template<class InIt, class Pr, class Dist>
+    typename iterator_traits<InIt>::difference_type
+        count_if(InIt first, InIt last,
+            Pr pred);
+#endif
+
+#if 0
+template<class InIt1, class InIt2>
+    pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1,
+        InIt2 first2);
+#endif
+
+#if 0
+template<class InIt1, class InIt2, class Pr>
+    pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1,
+        InIt2 first2, Pr pred);
+#endif
+
+template<class InIt1, class InIt2>
+    bool equal(InIt1 first1, InIt1 last1, InIt2 first2);
+
+template<class InIt1, class InIt2, class Pr>
+    bool equal(InIt1 first1, InIt1 last1, InIt2 first2, Pr pred);
+
+template<class FwdIt1, class FwdIt2>
+    FwdIt1 search(FwdIt1 first1, FwdIt1 last1,
+        FwdIt2 first2, FwdIt2 last2);
+
+template<class FwdIt1, class FwdIt2, class Pr>
+    FwdIt1 search(FwdIt1 first1, FwdIt1 last1,
+        FwdIt2 first2, FwdIt2 last2, Pr pred);
+
+template<class FwdIt, class Diff, class Ty>
+    FwdIt search_n(FwdIt first, FwdIt last,
+        Diff count, const Ty& val);
+
+template<class FwdIt, class Diff, class Ty, class Pr>
+    FwdIt search_n(FwdIt first, FwdIt last,
+        Diff count, const Ty& val, Pr pred);
+
+template<class InIt, class OutIt>
+    OutIt copy(InIt first, InIt last, OutIt dest);
+
+template<class BidIt1, class BidIt2>
+    BidIt2 copy_backward(BidIt1 first, BidIt1 last,
+        BidIt2 dest);
+
+template<class Ty>
+    void swap(Ty& left, Ty& right);
+
+template<class FwdIt1, class FwdIt2>
+    FwdIt2 swap_ranges(FwdIt1 first1, FwdIt1 last1,
+        FwdIt2 last2);
+
+template<class FwdIt1, class FwdIt2>
+    void iter_swap(FwdIt1 left, FwdIt2 right);
+
+template<class InIt, class OutIt, class Fn1>
+    OutIt transform(InIt first, InIt last, OutIt dest,
+        Fn1 func);
+
+template<class InIt1, class InIt2, class OutIt, class Fn2>
+    OutIt transform(InIt1 first1, InIt1 last1,
+        InIt2 first2, OutIt dest, Fn2 func);
+
+template<class FwdIt, class Ty>
+    void replace(FwdIt first, FwdIt last,
+        const Ty& oldval, const Ty& newval);
+
+template<class FwdIt, class Pr, class Ty>
+    void replace_if(FwdIt first, FwdIt last,
+        Pr pred, const Ty& val);
+
+template<class InIt, class OutIt, class Ty>
+    OutIt replace_copy(InIt first, InIt last, OutIt dest,
+        const Ty& oldval, const Ty& newval);
+
+template<class InIt, class OutIt, class Pr, class Ty>
+    OutIt replace_copy_if(InIt first, InIt last, OutIt dest,
+        Pr pred, const Ty& val);
+
+template<class FwdIt, class Ty>
+    void fill(FwdIt first, FwdIt last, const Ty& val);
+
+template<class OutIt, class Diff, class Ty>
+    void fill_n(OutIt first, Diff count, const Ty& val);
+
+template<class FwdIt, class Fn0>
+    void generate(FwdIt first, FwdIt last, Fn0 func);
+
+template<class OutIt, class Diff, class Fn0>
+    void generate_n(OutIt first, Diff count, Fn0 func);
+
+template<class FwdIt, class Ty>
+    FwdIt remove(FwdIt first, FwdIt last, const Ty& val);
+
+template<class FwdIt, class Pr>
+    FwdIt remove_if(FwdIt first, FwdIt last, Pr pred);
+
+template<class InIt, class OutIt, class Ty>
+    OutIt remove_copy(InIt first, InIt last, OutIt dest,
+        const Ty& val);
+
+template<class InIt, class OutIt, class Pr>
+    OutIt remove_copy_if(InIt first, InIt last, OutIt dest,
+        Pr pred);
+
+template<class FwdIt>
+    FwdIt unique(FwdIt first, FwdIt last);
+
+template<class FwdIt, class Pr>
+    FwdIt unique(FwdIt first, FwdIt last, Pr pred);
+
+template<class InIt, class OutIt>
+    OutIt unique_copy(InIt first, InIt last, OutIt dest);
+
+template<class InIt, class OutIt, class Pr>
+    OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred);
+
+template<class BidIt>
+    void reverse(BidIt first, BidIt last);
+
+template<class BidIt, class OutIt>
+    OutIt reverse_copy(BidIt first, BidIt last, OutIt dest);
+
+template<class FwdIt>
+    void rotate(FwdIt first, FwdIt mid, FwdIt last);
+
+template<class FwdIt, class OutIt>
+    OutIt rotate_copy(FwdIt first, FwdIt mid, FwdIt last, OutIt dest);
+
+template<class RanIt>
+    void random_shuffle(RanIt first, RanIt last);
+
+template<class RanIt, class Fn1>
+    void random_shuffle(RanIt first, RanIt last, Fn1& func);
+
+template<class BidIt, class Pr>
+    BidIt partition(BidIt first, BidIt last, Pr pred);
+
+template<class BidIt, class Pr>
+    BidIt stable_partition(BidIt first, BidIt last, Pr pred);
+
+template<class RanIt>
+    void sort(RanIt first, RanIt last);
+
+template<class RanIt, class Pr>
+    void sort(RanIt first, RanIt last, Pr pred);
+
+template<class BidIt>
+    void stable_sort(BidIt first, BidIt last);
+
+template<class BidIt, class Pr>
+    void stable_sort(BidIt first, BidIt last, Pr pred);
+
+template<class RanIt>
+    void partial_sort(RanIt first, RanIt mid, RanIt last);
+
+template<class RanIt, class Pr>
+    void partial_sort(RanIt first, RanIt mid,
+        RanIt last, Pr pred);
+
+template<class InIt, class RanIt>
+    RanIt partial_sort_copy(InIt first1, InIt last1,
+        RanIt first2, RanIt last2);
+
+template<class InIt, class RanIt, class Pr>
+    RanIt partial_sort_copy(InIt first1, InIt last1,
+        RanIt first2, RanIt last2, Pr pred);
+
+template<class RanIt>
+    void nth_element(RanIt first, RanIt nth, RanIt last);
+
+template<class RanIt, class Pr>
+    void nth_element(RanIt first, RanIt nth, RanIt last, Pr pred);
+
+template<class FwdIt, class Ty>
+    FwdIt lower_bound(FwdIt first, FwdIt last, const Ty& val);
+
+template<class FwdIt, class Ty, class Pr>
+    FwdIt lower_bound(FwdIt first, FwdIt last,
+        const Ty& val, Pr pred);
+
+template<class FwdIt, class Ty>
+    FwdIt upper_bound(FwdIt first, FwdIt last, const Ty& val);
+
+template<class FwdIt, class Ty, class Pr>
+    FwdIt upper_bound(FwdIt first, FwdIt last,
+        const Ty& val, Pr pred);
+
+#if 0
+template<class FwdIt, class Ty>
+    pair<FwdIt, FwdIt> equal_range(FwdIt first,
+        FwdIt last, const Ty& val);
+#endif
+
+#if 0
+template<class FwdIt, class Ty, class Pr>
+    pair<FwdIt, FwdIt> equal_range(FwdIt first,
+        FwdIt last, const Ty& val, Pr pred);
+#endif
+
+template<class FwdIt, class Ty>
+    bool binary_search(FwdIt first, FwdIt last, const Ty& val);
+
+template<class FwdIt, class Ty, class Pr>
+    bool binary_search(FwdIt first, FwdIt last, const Ty& val, Pr pred);
+
+template<class InIt1, class InIt2, class OutIt>
+    OutIt merge(InIt1 first1, InIt1 last1,
+        InIt2 first2, InIt2 last2, OutIt dest);
+
+template<class InIt1, class InIt2, class OutIt, class Pr>
+    OutIt merge(InIt1 first1, InIt1 last1,
+        InIt2 first2, InIt2 last2, OutIt dest, Pr pred);
+
+template<class BidIt>
+    void inplace_merge(BidIt first, BidIt mid, BidIt last);
+
+template<class BidIt, class Pr>
+    void inplace_merge(BidIt first, BidIt mid,
+        BidIt last, Pr pred);
+
+template<class InIt1, class InIt2>
+    bool includes(InIt1 first1, InIt1 last1,
+        InIt2 first2, InIt2 last2);
+
+template<class InIt1, class InIt2, class Pr>
+    bool includes(InIt1 first1, InIt1 last1,
+        InIt2 first2, InIt2 last2, Pr pred);
+
+template<class InIt1, class InIt2, class OutIt>
+    OutIt set_union(InIt1 first1, InIt1 last1,
+        InIt2 first2, InIt2 last2, OutIt dest);
+
+template<class InIt1, class InIt2, class OutIt, class Pr>
+    OutIt set_union(InIt1 first1, InIt1 last1,
+        InIt2 first2, InIt2 last2, OutIt dest, Pr pred);
+
+template<class InIt1, class InIt2, class OutIt>
+    OutIt set_intersection(InIt1 first1, InIt1 last1,
+        InIt2 first2, InIt2 last2, OutIt dest);
+
+template<class InIt1, class InIt2, class OutIt, class Pr>
+    OutIt set_intersection(InIt1 first1, InIt1 last1,
+        InIt2 first2, InIt2 last2, OutIt dest, Pr pred);
+
+template<class InIt1, class InIt2, class OutIt>
+    OutIt set_difference(InIt1 first1, InIt1 last1,
+        InIt2 first2, InIt2 last2, OutIt dest);
+
+template<class InIt1, class InIt2, class OutIt, class Pr>
+    OutIt set_difference(InIt1 first1, InIt1 last1,
+        InIt2 first2, InIt2 last2, OutIt dest, Pr pred);
+
+template<class InIt1, class InIt2, class OutIt>
+    OutIt set_symmetric_difference(InIt1 first1,
+        InIt1 last1, InIt2 first2, InIt2 last2, OutIt dest);
+
+template<class InIt1, class InIt2, class OutIt, class Pr>
+    OutIt set_symmetric_difference(InIt1 first1,
+        InIt1 last1, InIt2 first2, InIt2 last2, OutIt dest, Pr pred);
+
+template<class RanIt>
+    void push_heap(RanIt first, RanIt last);
+
+template<class RanIt, class Pr>
+    void push_heap(RanIt first, RanIt last, Pr pred);
+
+template<class RanIt>
+    void pop_heap(RanIt first, RanIt last);
+
+template<class RanIt, class Pr>
+    void pop_heap(RanIt first, RanIt last, Pr pred);
+
+template<class RanIt>
+    void make_heap(RanIt first, RanIt last);
+
+template<class RanIt, class Pr>
+    void make_heap(RanIt first, RanIt last, Pr pred);
+
+template<class RanIt>
+    void sort_heap(RanIt first, RanIt last);
+
+template<class RanIt, class Pr>
+    void sort_heap(RanIt first, RanIt last, Pr pred);
+
+template<class Ty>
+    const Ty& max(const Ty& left, const Ty& right);
+
+template<class Ty, class Pr>
+    const Ty& max(const Ty& left, const Ty& right, Pr pred);
+
+template<class Ty>
+    const Ty& min(const Ty& left, const Ty& right);
+
+template<class Ty, class Pr>
+    const Ty& min(const Ty& left, const Ty& right, Pr pred);
+
+template<class FwdIt>
+    FwdIt max_element(FwdIt first, FwdIt last);
+
+template<class FwdIt, class Pr>
+    FwdIt max_element(FwdIt first, FwdIt last, Pr pred);
+
+template<class FwdIt>
+    FwdIt min_element(FwdIt first, FwdIt last);
+
+template<class FwdIt, class Pr>
+    FwdIt min_element(FwdIt first, FwdIt last, Pr pred);
+
+template<class InIt1, class InIt2>
+    bool lexicographical_compare(InIt1 first1,
+        InIt1 last1, InIt2 first2, InIt2 last2);
+
+template<class InIt1, class InIt2, class Pr>
+    bool lexicographical_compare(InIt1 first1,
+        InIt1 last1, InIt2 first2, InIt2 last2, Pr pred);
+
+template<class BidIt>
+    bool next_permutation(BidIt first, BidIt last);
+
+template<class BidIt, class Pr>
+    bool next_permutation(BidIt first, BidIt last, Pr pred);
+
+template<class BidIt>
+    bool prev_permutation(BidIt first, BidIt last);
+
+template<class BidIt, class Pr>
+    bool prev_permutation(BidIt first, BidIt last, Pr pred);
 }
 
 #endif

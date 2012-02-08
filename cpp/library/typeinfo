@@ -13,7 +13,7 @@ struct typeinfo {
 private:
   typeinfo (const typeinfo& rhs);
   typeinfo& operator= (const typeinfo& rhs);
-  //const typeinfo& type_id;
+  const typeinfo& type_id;
   //typeinfo (const typeinfo& rhs){
 	//type_id = rhs;
   //}

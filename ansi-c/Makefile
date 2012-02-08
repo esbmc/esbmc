@@ -1,6 +1,5 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
-include $(ESBMCDIR)/local.inc
 
 SRCS= c_typecast.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \

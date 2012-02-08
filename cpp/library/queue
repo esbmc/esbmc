@@ -9,9 +9,24 @@
 #ifndef STL_QUEUE
 #define STL_QUEUE
 
+#include "vector"
+
 namespace std
 {
+
   #define QUEUE_CAPACITY 20
+
+  template < class T, class Container = vector<T>,
+	class Compare = less<typename Container::value_type> >
+  class priority_queue
+	{
+	public:
+	  void push ( const float& x );
+	  bool empty ( ) const;
+	  const T& top ( ) const;
+	  void pop ( );
+	};
+
   template<class T> class queue
   {
     T buf[QUEUE_CAPACITY];
@@ -70,7 +85,7 @@ namespace std
       return buf[tail-1];
     }    
   };
+
 }
 
 #endif
-
