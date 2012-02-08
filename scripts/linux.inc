@@ -37,7 +37,7 @@ CC=gcc34
 CXX=g++34
 FINLINKBIN=g++
 FINLINKTAIL+= -Wl,--defsym=memcpy=memmove
-STATICLIBCPPPATH:=$(shell g++34 -print-file-name=libstdc++.a)
+STATICLIBCPPPATH:=$(shell g++ -print-file-name=libstdc++.a)
 LIBS+= $(STATICLIBCPPPATH)
 
 # Link statically against Z3.
