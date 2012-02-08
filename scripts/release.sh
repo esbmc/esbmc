@@ -344,13 +344,12 @@ function dobuild () {
     rm esbmc/esbmc >/dev/null 2>&1
   fi
 
-  # Install our configuration files.
-  cp ./scripts/release_config.inc ./config.inc
-  cp ./scripts/release_local.inc ./local.inc
-
   # And build build build
   rm -rf .release
   mkdir .release
+
+  # Z3 only
+  export USE_SOLVER_Z3=1
 
   # For release builds, no debug information
   export EXTRACFLAGS="-DNDEBUG"

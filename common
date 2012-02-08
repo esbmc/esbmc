@@ -5,10 +5,6 @@
 # Make ubuntu happy (which uses dash by default)
 SHELL := /bin/bash
 
-# In case includer hasn't included yet,
-include $(ESBMCDIR)/config.inc
-include $(ESBMCDIR)/local.inc
-
 OBJS1 = $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 
@@ -72,7 +68,7 @@ depend: $(SRCS)
 	@for src in $(SRCS); do \
 		src1=$${src//\.cpp/}; \
 		src2=$${src1//\.c/}; \
-		$(DEPCXX) $(CXXFLAGS) -I $(ESBMCDIR)/util -I$(ESBMCDIR) -I $(Z3GCC)/include -MM -MT $(OBJDIR)/$$src2.o $$src >> $(OBJDIR)/.deps; \
+		$(DEPCXX) $(CXXFLAGS) -I $(ESBMCDIR)/util -I$(ESBMCDIR) -MM -MT $(OBJDIR)/$$src2.o $$src >> $(OBJDIR)/.deps; \
 	done
 
 $(OBJDIR)/.deps:
