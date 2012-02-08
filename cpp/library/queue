@@ -35,6 +35,7 @@ namespace std
     int tail=0;
 	
     public:
+
     queue():_size(0), head(0), tail(0){}
 
     void push ( const T& t )
