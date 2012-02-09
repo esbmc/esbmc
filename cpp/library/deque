@@ -148,7 +148,9 @@ namespace std {
     explicit deque();
     explicit deque(size_type n);
     explicit deque(size_type n, const T& value);
+    explicit deque(T t[], T*);
     deque(const deque<T>& x);
+
     ~deque();
 
     deque<T>& operator=(const deque<T>& x);
