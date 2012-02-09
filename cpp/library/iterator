@@ -24,10 +24,14 @@ template <class T, class charT=char, class traits=char_traits<charT>,
 
 template <class T, class charT=char, class traits=char_traits<charT>,
           class Distance = ptrdiff_t>
-  class ostream_iterator{
-  public:
-	ostream_iterator(ostream&);
-	ostream_iterator<T,charT,traits>& operator*() { return *this; }
+  class ostream_iterator
+{
+    public:
+        ostream_iterator(ostream&);
+        ostream_iterator(ostream& s, const char* delimiter);
+        T& operator*() { return value; }
+    private:
+        T value;
 };
 
 template <class charT, class traits=char_traits<charT> >
@@ -199,7 +203,6 @@ template <class charT, class traits=char_traits<charT> >
 	    const_reverse_iterator& operator += (int);
 	    const_reverse_iterator& operator -= (int);
     };
-
 }
 
 #endif
