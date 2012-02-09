@@ -10,29 +10,116 @@ namespace std {
   template < class Key, class Compare = less<Key>,
              class Allocator = allocator<Key> >
   class multiset{
+  public:
+	  // types:
+	      typedef Key key_type;
+	      typedef Key value_type;
+	      typedef Compare key_compare;
+	      typedef Compare value_compare;
 
-  };
+	      typedef int size_type;
+	      typedef int difference_type;
 
-  template <class Key, class Compare = less<Key>,
-          class Allocator = allocator<Key> >
-  class set {
-    public:
-    // types:
-    typedef Key key_type;
-    typedef Key value_type;
-    typedef Compare key_compare;
-    typedef Compare value_compare;
-    typedef int size_type;
-    typedef int difference_type;
+    class iterator{
+      public:
+
+      iterator(const iterator&);
+      iterator();
+      iterator& operator=(const iterator&);
+
+      value_type * operator -> ();
+
+      value_type & operator * ();
+
+      iterator& operator ++ ();
+      iterator& operator ++ (int);
+
+      iterator& operator -- ();
+      iterator& operator -- (int);
+
+      bool operator == (const iterator& it) const;
+      bool operator != (const iterator& it) const;
+    };
+
+
+    class const_iterator{
+      public:
+      const_iterator(const const_iterator&);
+      const_iterator();
+      const_iterator& operator=(const const_iterator&);
+
+      const value_type * operator -> ();
+
+      const value_type & operator * ();
+
+      const_iterator& operator ++ ();
+      const_iterator& operator ++ (int);
+
+      const_iterator& operator -- ();
+      const_iterator& operator -- (int);
+
+      bool operator == ( const const_iterator&)const;
+      bool operator != ( const const_iterator&)const;
+    };
+
+    class reverse_iterator{
+      public:
+      reverse_iterator(reverse_iterator);
+      reverse_iterator();
+      explicit reverse_iterator(iterator);
+
+      iterator base() const; // explicit
+
+      reverse_iterator& operator=(const reverse_iterator&);
+
+      value_type * operator -> ();
+
+      value_type & operator * ();
+
+      reverse_iterator& operator ++ ();
+      reverse_iterator& operator ++ (int);
+
+      reverse_iterator& operator -- ();
+      reverse_iterator& operator -- (int);
+
+      bool operator == ( const reverse_iterator&)const;
+      bool operator != ( const reverse_iterator&)const;
+    };
+
+    class  const_reverse_iterator {
+      public:
+      const_reverse_iterator(const_reverse_iterator);
+      const_reverse_iterator();
+      explicit const_reverse_iterator(const_iterator);
+
+      const_iterator base() const; // explicit
+
+      const_reverse_iterator& operator=(const const_reverse_iterator);
+
+      const value_type * operator -> ();
+
+      const value_type & operator * ();
+
+      const_reverse_iterator& operator ++ ();
+      const_reverse_iterator& operator ++ (int);
+
+      const_reverse_iterator& operator -- ();
+      const_reverse_iterator& operator -- (int);
+
+      bool operator == ( const const_reverse_iterator&)const;
+      bool operator != ( const const_reverse_iterator&)const;
+    };
 
     // construct/copy/destroy:
-    explicit set(const Compare& comp);
+    //explicit set(const Compare& comp);
     explicit set();
+    explicit set ( const Compare& comp = Compare(),
+                   const Key& = Key() );
+    template <class T, class U>
+		set ( T[], U*);
+    set ( const set<Key,Compare>& x );
 
-    set(const set<Key,Compare>& x);
-    set();
-
-    set<Key,Compare,Allocator>& operator=(const set<Key,Compare>& x);
+    set<Key,Compare>& operator=(const set<Key,Compare>& x);
 
     // iterators:
     iterator begin();
@@ -78,3 +165,4 @@ namespace std {
 }
 
 #endif
+
