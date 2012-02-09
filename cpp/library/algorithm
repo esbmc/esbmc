@@ -1,6 +1,8 @@
 #ifndef STL_ALGORITHM
 #define STL_ALGORITHM
 
+#include "iterator"
+
 namespace std
 {
 template<class InIt, class Fn1>
@@ -34,31 +36,26 @@ template<class FwdIt>
 template<class FwdIt, class Pr>
     FwdIt adjacent_find(FwdIt first, FwdIt last, Pr pred);
 
-#if 0
 template<class InIt, class Ty, class Dist>
     typename iterator_traits<InIt>::difference_type
         count(InIt first, InIt last,
             const Ty& val);
-#endif
 
-#if 0
+template <class InputIterator, class T>
+	T count ( InputIterator first, InputIterator last, const T& value );
+
 template<class InIt, class Pr, class Dist>
     typename iterator_traits<InIt>::difference_type
         count_if(InIt first, InIt last,
             Pr pred);
-#endif
 
-#if 0
 template<class InIt1, class InIt2>
     pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1,
         InIt2 first2);
-#endif
 
-#if 0
 template<class InIt1, class InIt2, class Pr>
     pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1,
         InIt2 first2, Pr pred);
-#endif
 
 template<class InIt1, class InIt2>
     bool equal(InIt1 first1, InIt1 last1, InIt2 first2);
