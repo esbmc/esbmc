@@ -11,87 +11,136 @@ namespace std {
   class less {};
 
   template < class Key, class T, class Compare = less<Key>,
-             class Allocator = allocator<pair<const Key,T> > > class multimap
-  {
+             class Allocator = allocator<pair<const Key,T> > >
+  class multimap{
   public:
-		struct iterator{
-		public:
+	  typedef Key key_type;
+	     typedef T mapped_type;
+	     typedef pair<const Key, T> value_type;
+	     typedef Compare key_compare;
+	     typedef int size_type;
 
-			//types:
-		    typedef pair<const Key, T> value_type;
+	     class iterator{
+	       public:
 
-			iterator(const iterator&);
-		    iterator();
-		    iterator& operator=(const iterator&);
+	       iterator(const iterator&);
+	       iterator();
+	       iterator& operator=(const iterator&);
 
-		    value_type * operator -> ();
-		    value_type & operator * ();
+	       value_type * operator -> ();
 
-		    iterator& operator ++ ();
-		    iterator& operator ++ (int);
+	       value_type & operator * ();
 
-		    iterator& operator -- ();
-		    iterator& operator -- (int);
+	       iterator& operator ++ ();
+	       iterator& operator ++ (int);
 
-		    bool operator == ( const iterator&)const;
-		    bool operator != ( const iterator&)const;
+	       iterator& operator -- ();
+	       iterator& operator -- (int);
 
-		    bool operator < ( const iterator&)const;
-		    bool operator > ( const iterator&)const;
+	       bool operator == (const iterator& it) const;
+	       bool operator != (const iterator& it) const;
+	     };
 
-		    bool operator <= ( const iterator&)const;
-		    bool operator >= ( const iterator&)const;
 
-		    iterator operator + (int) const;
-		    iterator operator - (int) const;
+	     class const_iterator{
+	       public:
+	       const_iterator(const const_iterator&);
+	       const_iterator(iterator&);
+	       const_iterator();
+	       const_iterator& operator=(const const_iterator&);
 
-		    iterator& operator += (int);
-		    iterator& operator -= (int);
-		};
+	       const value_type * operator -> ();
 
-		class const_iterator{
-		public:
+	       const value_type & operator * ();
 
-			//types:
-		    typedef pair<const Key, T> value_type;
+	       const_iterator& operator ++ ();
+	       const_iterator& operator ++ (int);
 
-		    const_iterator(const const_iterator&);
-		    const_iterator();
-		    const_iterator(iterator&);
-		    const_iterator& operator=(const const_iterator&);
+	       const_iterator& operator -- ();
+	       const_iterator& operator -- (int);
 
-		    const value_type * operator -> ();
-		    const value_type & operator * ();
+	       bool operator == ( const const_iterator&)const;
+	       bool operator != ( const const_iterator&)const;
+	     };
 
-		    const_iterator& operator ++ ();
-		    const_iterator& operator ++ (int);
+	     class reverse_iterator{
+	       public:
+	       reverse_iterator(reverse_iterator);
+	       reverse_iterator();
+	       explicit reverse_iterator(iterator);
 
-		    const_iterator& operator -- ();
-		    const_iterator& operator -- (int);
+	       iterator base() const; // explicit
 
-		    bool operator == ( const const_iterator&)const;
-		    bool operator != ( const const_iterator&)const;
+	       reverse_iterator& operator=(const reverse_iterator&);
 
-		    bool operator < ( const const_iterator&)const;
-		    bool operator > ( const const_iterator&)const;
+	       value_type * operator -> ();
 
-		    bool operator <= ( const const_iterator&)const;
-		    bool operator >= ( const const_iterator&)const;
+	       value_type & operator * ();
 
-		    const_iterator operator + (int) const;
-		    const_iterator operator - (int) const;
+	       reverse_iterator& operator ++ ();
+	       reverse_iterator& operator ++ (int);
 
-		    const_iterator& operator += (int);
-		    const_iterator& operator -= (int);
-		};
+	       reverse_iterator& operator -- ();
+	       reverse_iterator& operator -- (int);
 
-	  typedef pair<const Key, T> value_type;
-	  int count ( const Key& x ) const;
+	       bool operator == ( const reverse_iterator&)const;
+	       bool operator != ( const reverse_iterator&)const;
+	     };
+
+	     class  const_reverse_iterator {
+	       public:
+	       const_reverse_iterator(const_reverse_iterator);
+	       const_reverse_iterator();
+	       explicit const_reverse_iterator(const_iterator);
+
+	       const_iterator base() const; // explicit
+
+	       const_reverse_iterator& operator=(const const_reverse_iterator);
+
+	       const value_type * operator -> ();
+
+	       const value_type & operator * ();
+
+	       const_reverse_iterator& operator ++ ();
+	       const_reverse_iterator& operator ++ (int);
+
+	       const_reverse_iterator& operator -- ();
+	       const_reverse_iterator& operator -- (int);
+
+	       bool operator == ( const const_reverse_iterator&)const;
+	       bool operator != ( const const_reverse_iterator&)const;
+	     };
+
+	  explicit multimap ( const Compare& comp = Compare(),
+	                 const Allocator& = Allocator() );
+	  multimap ( const multimap<Key,T,Compare,Allocator>& x );
+	  size_type count ( const key_type& x ) const;
 	  iterator insert ( const value_type& x );
+	  iterator insert ( iterator position, const value_type& x );
+	  template <class InputIterator>
+	     void insert ( InputIterator first, InputIterator last );
       iterator begin ();
       const_iterator begin () const;
       iterator end ();
       const_iterator end () const;
+      template <class Key, class T, class Compare, class Allocator>
+        bool operator== ( const multimap<Key,T,Compare,Allocator>& x,
+                          const multimap<Key,T,Compare,Allocator>& y );
+      template <class Key, class T, class Compare, class Allocator>
+        bool operator<  ( const multimap<Key,T,Compare,Allocator>& x,
+                          const multimap<Key,T,Compare,Allocator>& y );
+      template <class Key, class T, class Compare, class Allocator>
+        bool operator!= ( const multimap<Key,T,Compare,Allocator>& x,
+                          const multimap<Key,T,Compare,Allocator>& y );
+      template <class Key, class T, class Compare, class Allocator>
+        bool operator>  ( const multimap<Key,T,Compare,Allocator>& x,
+                          const multimap<Key,T,Compare,Allocator>& y );
+      template <class Key, class T, class Compare, class Allocator>
+        bool operator>= ( const multimap<Key,T,Compare,Allocator>& x,
+                          const multimap<Key,T,Compare,Allocator>& y );
+      template <class Key, class T, class Compare, class Allocator>
+        bool operator<= ( const multimap<Key,T,Compare,Allocator>& x,
+                          const multimap<Key,T,Compare,Allocator>& y );
   };
 
   template <class Key, class T, class Compare=less<Key> >
@@ -103,6 +152,96 @@ namespace std {
     typedef pair<const Key, T> value_type;
     typedef Compare key_compare;
     typedef int size_type;
+
+    class iterator{
+      public:
+
+      iterator(const iterator&);
+      iterator();
+      iterator& operator=(const iterator&);
+
+      value_type * operator -> ();
+
+      value_type & operator * ();
+
+      iterator& operator ++ ();
+      iterator& operator ++ (int);
+
+      iterator& operator -- ();
+      iterator& operator -- (int);
+
+      bool operator == (const iterator& it) const;
+      bool operator != (const iterator& it) const;
+    };
+
+
+    class const_iterator{
+      public:
+      const_iterator(const const_iterator&);
+      const_iterator();
+      const_iterator& operator=(const const_iterator&);
+
+      const value_type * operator -> ();
+
+      const value_type & operator * ();
+
+      const_iterator& operator ++ ();
+      const_iterator& operator ++ (int);
+
+      const_iterator& operator -- ();
+      const_iterator& operator -- (int);
+
+      bool operator == ( const const_iterator&)const;
+      bool operator != ( const const_iterator&)const;
+    };
+
+    class reverse_iterator{
+      public:
+      reverse_iterator(reverse_iterator);
+      reverse_iterator();
+      explicit reverse_iterator(iterator);
+
+      iterator base() const; // explicit
+
+      reverse_iterator& operator=(const reverse_iterator&);
+
+      value_type * operator -> ();
+
+      value_type & operator * ();
+
+      reverse_iterator& operator ++ ();
+      reverse_iterator& operator ++ (int);
+
+      reverse_iterator& operator -- ();
+      reverse_iterator& operator -- (int);
+
+      bool operator == ( const reverse_iterator&)const;
+      bool operator != ( const reverse_iterator&)const;
+    };
+
+    class  const_reverse_iterator {
+      public:
+      const_reverse_iterator(const_reverse_iterator);
+      const_reverse_iterator();
+      explicit const_reverse_iterator(const_iterator);
+
+      const_iterator base() const; // explicit
+
+      const_reverse_iterator& operator=(const const_reverse_iterator);
+
+      const value_type * operator -> ();
+
+      const value_type & operator * ();
+
+      const_reverse_iterator& operator ++ ();
+      const_reverse_iterator& operator ++ (int);
+
+      const_reverse_iterator& operator -- ();
+      const_reverse_iterator& operator -- (int);
+
+      bool operator == ( const const_reverse_iterator&)const;
+      bool operator != ( const const_reverse_iterator&)const;
+    };
 
     // iterators:
     iterator begin();
@@ -155,6 +294,8 @@ namespace std {
   // specialized algorithms:
   template <class Key, class T, class Compare>
   void swap(map<Key,T,compare>&, vector<Key,T,compare>&);
+
 }
 
 #endif
+
