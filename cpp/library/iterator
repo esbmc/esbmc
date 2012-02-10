@@ -6,6 +6,37 @@
 
 namespace std
 {
+#if 0
+template <class Container>
+  class back_insert_iterator
+{
+public:
+  typedef Container container_type;
+  explicit back_insert_iterator (Container& x): container(x) {}
+  back_insert_iterator<Container>& operator= (typename Container::const_reference value)
+    { container->push_back(value); return *this; }
+  back_insert_iterator<Container>& operator* ()
+    { return *this; }
+  back_insert_iterator<Container>& operator++ ()
+    { return *this; }
+  back_insert_iterator<Container> operator++ (int)
+    { return *this; }
+private:
+  Container* container;
+};
+#endif
+
+template <class Container>
+  class back_insert_iterator
+{
+public:
+  typedef Container container_type;
+  explicit back_insert_iterator (Container& x);
+};
+
+template <class Container>
+  back_insert_iterator<Container> back_inserter (Container& x);
+
 template <class T, class charT=char, class traits=char_traits<charT>,
           class Distance = ptrdiff_t>
   class istream_iterator{
