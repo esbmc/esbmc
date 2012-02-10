@@ -3,6 +3,19 @@
 
 namespace std {
 
+template <class InputIterator, class T>
+   T accumulate ( InputIterator first, InputIterator last, T init );
+template <class InputIterator, class T, class BinaryOperation>
+   T accumulate ( InputIterator first, InputIterator last, T init,
+                  BinaryOperation binary_op );
+
+template <class InputIterator, class T>
+   T accumulate ( InputIterator first, InputIterator last, T init )
+{
+  while ( first!=last )
+    init = init + *first++;  // or: init=binary_op(init,*first++) for the binary_op version
+  return init;
+}
 
 }
 
