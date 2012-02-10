@@ -10,42 +10,44 @@ static const size_t npos = -1;
 
 namespace std
 {
-#if 1
-template<typename T>
-struct const_iterator{
-public:
-    const_iterator(const const_iterator&);
-    const_iterator();
-    const_iterator& operator=(const const_iterator&);
 
-    const T* operator -> ();
-    const T& operator * ();
-
-    const_iterator& operator ++ ();
-    const_iterator& operator ++ (int);
-
-    const_iterator& operator -- ();
-    const_iterator& operator -- (int);
-
-    bool operator == ( const const_iterator&)const;
-    bool operator != ( const const_iterator&)const;
-
-    bool operator < ( const const_iterator&)const;
-    bool operator > ( const const_iterator&)const;
-
-    bool operator <= ( const const_iterator&)const;
-    bool operator >= ( const const_iterator&)const;
-
-    const_iterator operator + (int) const;
-    const_iterator operator - (int) const;
-
-    const_iterator& operator += (int);
-    const_iterator& operator -= (int);
-};
-#endif
 	struct string
 	{
 	public:
+
+		struct const_iterator{
+		public:
+		    const_iterator(const const_iterator&);
+		    const_iterator();
+		    const_iterator& operator=(const const_iterator&);
+
+			template<typename T>
+		    const T* operator -> ();
+
+			template<class T>
+		    const T& operator * ();
+
+		    const_iterator& operator ++ ();
+		    const_iterator& operator ++ (int);
+
+		    const_iterator& operator -- ();
+		    const_iterator& operator -- (int);
+
+		    bool operator == ( const const_iterator&)const;
+		    bool operator != ( const const_iterator&)const;
+
+		    bool operator < ( const const_iterator&)const;
+		    bool operator > ( const const_iterator&)const;
+
+		    bool operator <= ( const const_iterator&)const;
+		    bool operator >= ( const const_iterator&)const;
+
+		    const_iterator operator + (int) const;
+		    const_iterator operator - (int) const;
+
+		    const_iterator& operator += (int);
+		    const_iterator& operator -= (int);
+		};
 
 		string ();
 		string (char*);
@@ -54,6 +56,8 @@ public:
 		char* c_str();
 		const char* c_str ( ) const;
 		char* c_str2 ();
+	    const_iterator begin() const;
+	    const_iterator end() const;
 		bool operator== (string& b);
 		bool operator== ( const char* lhs);
 		bool operator== (string& a, string& b);
