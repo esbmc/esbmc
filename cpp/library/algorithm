@@ -378,8 +378,8 @@ template<class FwdIt, class Pr>
     FwdIt min_element(FwdIt first, FwdIt last, Pr pred);
 
 template<class InIt1, class InIt2>
-    bool lexicographical_compare(InIt1 first1,
-        InIt1 last1, InIt2 first2, InIt2 last2);
+    bool lexicographical_compare(InIt1 first1[],
+        InIt1 *last1, InIt2 first2[], InIt2 *last2);
 
 template<class InIt1, class InIt2, class Pr>
     bool lexicographical_compare(InIt1 first1,
@@ -396,6 +396,7 @@ template<class BidIt>
 
 template<class BidIt, class Pr>
     bool prev_permutation(BidIt first, BidIt last, Pr pred);
+
 }
 
 #endif

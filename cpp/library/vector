@@ -38,6 +38,7 @@ namespace std{
 
 	      iterator operator + (int) const;
 	      iterator operator - (int) const;
+	      iterator operator - (const iterator&) const;
 
 	      iterator& operator += (int);
 	      iterator& operator -= (int);

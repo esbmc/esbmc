@@ -5,6 +5,8 @@
 #include "definitions.h"
 #include "iomanip"
 
+#include "vector"
+
 namespace std
 {
 struct ostream
@@ -43,6 +45,12 @@ namespace esbmc
 }
 
 namespace std{
+
+template < typename T >  // or template< typename T >
+inline ostream& operator <<( ostream& o, T i )
+{
+	return o;
+}
 
 inline ostream& operator << (ostream& o, const char*  cstr)
 {
