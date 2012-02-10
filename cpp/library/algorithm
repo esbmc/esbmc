@@ -285,6 +285,10 @@ template<class InIt1, class InIt2, class OutIt>
     OutIt set_union(InIt1 first1, InIt1 last1,
         InIt2 first2, InIt2 last2, OutIt dest);
 
+template<class InIt1, class InIt2, class OutIt>
+    OutIt* set_union(InIt1 first1[], InIt1 *last1,
+        InIt2 first2[], InIt2 *last2, OutIt dest[]);
+
 template<class InIt1, class InIt2, class OutIt, class Pr>
     OutIt set_union(InIt1 first1, InIt1 last1,
         InIt2 first2, InIt2 last2, OutIt dest, Pr pred);
@@ -292,6 +296,10 @@ template<class InIt1, class InIt2, class OutIt, class Pr>
 template<class InIt1, class InIt2, class OutIt>
     OutIt set_intersection(InIt1 first1, InIt1 last1,
         InIt2 first2, InIt2 last2, OutIt dest);
+
+template<class InIt1, class InIt2, class OutIt>
+    OutIt* set_intersection(InIt1 first1[], InIt1 *last1,
+        InIt2 first2[], InIt2 *last2, OutIt dest[]);
 
 template<class InIt1, class InIt2, class OutIt, class Pr>
     OutIt set_intersection(InIt1 first1, InIt1 last1,
@@ -302,7 +310,7 @@ template<class InIt1, class InIt2, class OutIt>
         InIt2 first2, InIt2 last2, OutIt dest);
 
 template<class InIt1, class InIt2, class OutIt>
-    OutIt set_difference(InIt1 first1[], InIt1 *last1,
+    OutIt* set_difference(InIt1 first1[], InIt1 *last1,
         InIt2 first2[], InIt2 *last2, OutIt dest[]);
 
 template<class InIt1, class InIt2, class OutIt, class Pr>
@@ -312,6 +320,10 @@ template<class InIt1, class InIt2, class OutIt, class Pr>
 template<class InIt1, class InIt2, class OutIt>
     OutIt set_symmetric_difference(InIt1 first1,
         InIt1 last1, InIt2 first2, InIt2 last2, OutIt dest);
+
+template<class InIt1, class InIt2, class OutIt>
+    OutIt* set_symmetric_difference(InIt1 first1[],
+        InIt1 *last1, InIt2 first2[], InIt2 *last2, OutIt dest[]);
 
 template<class InIt1, class InIt2, class OutIt, class Pr>
     OutIt set_symmetric_difference(InIt1 first1,

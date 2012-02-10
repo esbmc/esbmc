@@ -210,8 +210,16 @@ namespace std {
     void resize(size_type sz, T t);
 
     // element access:
-    reference front();
-    const_reference front() const;
+    reference front()
+	{
+		__ESBMC_assert ( !empty() , "list is empty");
+		return head->data;
+	}
+    const_reference front() const
+	{
+		return head->data;
+	}
+
     reference back()
 	{
 		return tail->data;
@@ -234,7 +242,7 @@ namespace std {
     void pop_front();
     void push_back(const T& t)
 	{
-		tail = new node(t, tail, NULL);
+		tail = new node(t, tail, NULL);		
 		_size++;
 		if( tail->prev )
 			tail->prev->next = tail;
