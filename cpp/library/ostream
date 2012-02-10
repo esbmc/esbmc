@@ -43,6 +43,7 @@ namespace esbmc
 }
 
 namespace std{
+
 inline ostream& operator << (ostream& o, const char*  cstr)
 {
 	esbmc::esbmc_print_cstr(o.id, cstr);

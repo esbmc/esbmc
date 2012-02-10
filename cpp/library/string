@@ -21,10 +21,10 @@ namespace std
 		    const_iterator();
 		    const_iterator& operator=(const const_iterator&);
 
-			template<typename T>
+		    template<typename T>
 		    const T* operator -> ();
 
-			template<class T>
+		    template<class T>
 		    const T& operator * ();
 
 		    const_iterator& operator ++ ();
@@ -207,6 +207,11 @@ namespace std
 //Impressão de strings
 #endif
 	inline string::ostream& operator << (ostream& o, string)
+	{
+		return o;
+	}
+
+	inline string::ostream& operator << (ostream& o, struct const_iterator&)
 	{
 		return o;
 	}
