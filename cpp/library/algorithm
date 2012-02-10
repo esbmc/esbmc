@@ -1,6 +1,8 @@
 #ifndef STL_ALGORITHM
 #define STL_ALGORITHM
 
+#include "iterator"
+
 namespace std
 {
 template<class InIt, class Fn1>
@@ -34,31 +36,26 @@ template<class FwdIt>
 template<class FwdIt, class Pr>
     FwdIt adjacent_find(FwdIt first, FwdIt last, Pr pred);
 
-#if 0
 template<class InIt, class Ty, class Dist>
     typename iterator_traits<InIt>::difference_type
         count(InIt first, InIt last,
             const Ty& val);
-#endif
 
-#if 0
+template <class InputIterator, class T>
+	T count ( InputIterator first, InputIterator last, const T& value );
+
 template<class InIt, class Pr, class Dist>
     typename iterator_traits<InIt>::difference_type
         count_if(InIt first, InIt last,
             Pr pred);
-#endif
 
-#if 0
 template<class InIt1, class InIt2>
     pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1,
         InIt2 first2);
-#endif
 
-#if 0
 template<class InIt1, class InIt2, class Pr>
     pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1,
         InIt2 first2, Pr pred);
-#endif
 
 template<class InIt1, class InIt2>
     bool equal(InIt1 first1, InIt1 last1, InIt2 first2);
@@ -85,6 +82,9 @@ template<class FwdIt, class Diff, class Ty, class Pr>
 template<class InIt, class OutIt>
     OutIt copy(InIt first, InIt last, OutIt dest);
 
+template<class InIt, class OutIt>
+    OutIt copy(InIt first[], InIt *last, OutIt dest);
+
 template<class BidIt1, class BidIt2>
     BidIt2 copy_backward(BidIt1 first, BidIt1 last,
         BidIt2 dest);
@@ -95,6 +95,10 @@ template<class Ty>
 template<class FwdIt1, class FwdIt2>
     FwdIt2 swap_ranges(FwdIt1 first1, FwdIt1 last1,
         FwdIt2 last2);
+
+template<class FwdIt1, class FwdIt2>
+    FwdIt2 swap_ranges(FwdIt1 first1[], FwdIt1 *last1,
+        FwdIt2 *last2);
 
 template<class FwdIt1, class FwdIt2>
     void iter_swap(FwdIt1 left, FwdIt2 right);
@@ -269,6 +273,10 @@ template<class InIt1, class InIt2>
     bool includes(InIt1 first1, InIt1 last1,
         InIt2 first2, InIt2 last2);
 
+template<class InIt1, class InIt2>
+    bool includes(InIt1 first1[], InIt1 *last1,
+        InIt2 first2[], InIt2 *last2);
+
 template<class InIt1, class InIt2, class Pr>
     bool includes(InIt1 first1, InIt1 last1,
         InIt2 first2, InIt2 last2, Pr pred);
@@ -292,6 +300,10 @@ template<class InIt1, class InIt2, class OutIt, class Pr>
 template<class InIt1, class InIt2, class OutIt>
     OutIt set_difference(InIt1 first1, InIt1 last1,
         InIt2 first2, InIt2 last2, OutIt dest);
+
+template<class InIt1, class InIt2, class OutIt>
+    OutIt set_difference(InIt1 first1[], InIt1 *last1,
+        InIt2 first2[], InIt2 *last2, OutIt dest[]);
 
 template<class InIt1, class InIt2, class OutIt, class Pr>
     OutIt set_difference(InIt1 first1, InIt1 last1,
@@ -335,8 +347,8 @@ template<class Ty>
 template<class Ty, class Pr>
     const Ty& max(const Ty& left, const Ty& right, Pr pred);
 
-template<class Ty>
-    const Ty& min(const Ty& left, const Ty& right);
+//template<class Ty>
+    //const Ty& min(const Ty& left, const Ty& right);
 
 template<class Ty, class Pr>
     const Ty& min(const Ty& left, const Ty& right, Pr pred);

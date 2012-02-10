@@ -7,8 +7,8 @@
 
 namespace std{
 
-  template<typename T>
-  struct vector{
+  template<class T>
+  class vector{
     public:
 
 	    class iterator{
@@ -198,6 +198,7 @@ namespace std{
 		return _size;
 	}
     size_type max_size() const;
+
     void resize(size_type sz);
     void resize(size_type sz, T t);
     size_type capacity() const
@@ -206,6 +207,7 @@ namespace std{
 		return VECTOR_CAPACITY;
 	}
     bool empty() const;
+
     void reserve(size_type n);
 
     // element access:
@@ -238,11 +240,19 @@ namespace std{
       __ESBMC_assert(_size!=0, "pop_back() on empty vector");
       resize(_size-1);
     }
+
     iterator insert(iterator position, const T& x);
     void insert(iterator position, size_type n, const T& x);
+    void insert(iterator position, iterator n, iterator x){
+   	    	// model
+   	}
+    void insert(iterator position, T n[], T* x){
+  	    	// model
+  	}
 
     iterator erase(iterator position);
     iterator erase(iterator first, iterator last);
+
     void swap(vector<T>&);
     void clear();
 

@@ -7,6 +7,18 @@ namespace std {
 
   template <class T>
   struct list {
+
+		struct node
+		{
+			T data;
+			node* prev;
+			node* next;
+			node(T t, node* p, node* n) : data(t), prev(p), next(n) {}
+		};
+		node* head;
+		node* tail;
+		int _size;
+
     public:
 
 	    class iterator{
@@ -149,12 +161,27 @@ namespace std {
     typedef const T* const_pointer;
     
     // construct/copy/destroy:
-    explicit list();
-    explicit list(size_type n, const T&);
-    explicit list(size_type n);
+    explicit list() : head( NULL ), tail ( NULL ), _size(0) {}
+    explicit list(T t1, T t2) : head( NULL ), tail ( NULL ), _size(0)
+	{
+		push_back(t1);
+		push_back(t2);
+	}
+    explicit list(size_type t) : head( NULL ), tail ( NULL ), _size(0)
+	{
+		push_back(t);
+	}
 
     list(const list<T>& x);
-    ~list();
+    ~list()
+	{
+		while(head)
+		{
+			node* temp(head);
+			head=head->next;
+			delete temp;
+		}
+	}
 
     list<T>& operator=(const list<T>& x);
     void assign(size_type n, const T& t);
@@ -170,8 +197,14 @@ namespace std {
     const_reverse_iterator rend() const;
 
     // capacity:
-    bool empty() const;
-    size_type size() const;
+    bool empty() const
+	{
+		return ( !head || !tail );
+	}
+    size_type size() const
+	{
+		return _size;
+	}
     size_type max_size() const;
     void resize(size_type sz);
     void resize(size_type sz, T t);
@@ -179,14 +212,47 @@ namespace std {
     // element access:
     reference front();
     const_reference front() const;
-    reference back();
-    const_reference back() const;
+    reference back()
+	{
+		return tail->data;
+	}
+    const_reference back() const
+	{
+		return tail->data;
+	}
 
     // modifiers:
-    void push_front(const T& x);
+    void push_front ( const T& t )
+	{
+		head = new node(t, NULL, head);
+		_size++;
+		if( head->next )
+			head->next->prev = head;
+		if( empty() )
+			tail = head;
+	}
     void pop_front();
-    void push_back(const T& x);
-    void pop_back();
+    void push_back(const T& t)
+	{
+		tail = new node(t, tail, NULL);
+		_size++;
+		if( tail->prev )
+			tail->prev->next = tail;
+		if( empty() )
+			head = tail;
+	}
+    void pop_back ( )
+	{
+		__ESBMC_assert ( !empty() , "list is empty");
+		node* temp(tail);
+		T data( tail->data );
+		tail = tail->prev ;
+		if( tail )
+			tail->next = NULL;
+		else
+			head = NULL ;
+		delete temp;
+	}
 
     iterator insert(iterator position, const T& x);
     void insert(iterator position, size_type n, const T& x);

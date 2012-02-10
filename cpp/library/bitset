@@ -3,11 +3,10 @@
 
 #include"iostream"
 
-namespace std
-
 #define BITSET_CAPACITY 20
 
-{
+namespace std{
+
 template <size_t N> class bitset {
 	int _size=0;
 	public:
@@ -29,5 +28,4 @@ template <size_t N> class bitset {
 };
 
 }
-
 #endif
