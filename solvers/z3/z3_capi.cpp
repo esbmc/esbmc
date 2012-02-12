@@ -134,7 +134,7 @@ z3_capi::mk_context(char *solver)
    \brief Create a variable using the given name and type.
  */
 Z3_ast
-z3_capi::mk_var(const char * name, Z3_sort ty)
+z3_capi::mk_var(const char * name, Z3_sort ty) const
 {
   Z3_symbol s  = Z3_mk_string_symbol(z3_ctx, name);
   return Z3_mk_const(z3_ctx, s, ty);

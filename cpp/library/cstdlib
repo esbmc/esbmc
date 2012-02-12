@@ -19,31 +19,30 @@ unsigned long int strtoul ( const char * str, char ** endptr, int base );
 
 char * getenv ( const char * name );
 
-void exit ( int status ); //Felipe
+void exit ( int status );
 
-void abort ( void ); //Felipe
+void abort ( void ){
+	  __ESBMC_assert(0, "Sudden stop of the program");
+}
 
 int atexit ( void ( * function ) (void) );
 
 #define RAND_MAX        2147483647
 
-//int seed, last_value=-1;
+int rand (void);
 
-int rand(void);
+int random (void);
+
 void srand (unsigned int s);
 
 int rand(void)
 {
-#if 0
-  if (seed==1 && last_value!=-1) {
-    return last_value;
-  }  else {
-    last_value = nondet_uint() % RAND_MAX;
-    return last_value;
-  }
-#endif
+  return nondet_uint() % RAND_MAX;
+}
 
-    return nondet_uint() % RAND_MAX;
+int random(void)
+{
+  return nondet_uint() % RAND_MAX;
 }
 
 #if 0

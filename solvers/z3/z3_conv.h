@@ -81,17 +81,17 @@ private:
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
-  void create_array_type(const typet &type, Z3_type_ast &bv);
-  void create_type(const typet &type, Z3_type_ast &bv);
-  void create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv);
-  void create_struct_type(const typet &type, Z3_type_ast &bv) {
+  void create_array_type(const typet &type, Z3_type_ast &bv) const;
+  void create_type(const typet &type, Z3_type_ast &bv) const;
+  void create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv) const;
+  void create_struct_type(const typet &type, Z3_type_ast &bv) const {
     create_struct_union_type(type, false, bv);
   }
-  void create_union_type(const typet &type, Z3_type_ast &bv) {
+  void create_union_type(const typet &type, Z3_type_ast &bv) const {
     create_struct_union_type(type, true, bv);
   }
-  void create_enum_type(Z3_type_ast &bv);
-  void create_pointer_type(Z3_type_ast &bv);
+  void create_enum_type(Z3_type_ast &bv) const;
+  void create_pointer_type(Z3_type_ast &bv) const;
   Z3_ast convert_cmp(const exprt &expr);
   Z3_ast convert_eq(const exprt &expr);
   Z3_ast convert_same_object(const exprt &expr);

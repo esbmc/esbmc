@@ -583,7 +583,7 @@ z3_convt::select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv)
 }
 
 void
-z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
+z3_convt::create_array_type(const typet &type, Z3_type_ast &bv) const
 {
   DEBUGLOC;
 
@@ -603,7 +603,7 @@ z3_convt::create_array_type(const typet &type, Z3_type_ast &bv)
 }
 
 void
-z3_convt::create_type(const typet &type, Z3_type_ast &bv)
+z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
 {
   DEBUGLOC;
 
@@ -649,7 +649,7 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv)
 }
 
 void
-z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
+z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv) const
 {
   DEBUGLOC;
 
@@ -713,7 +713,7 @@ z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv)
 }
 
 void
-z3_convt::create_pointer_type(Z3_type_ast &bv)
+z3_convt::create_pointer_type(Z3_type_ast &bv) const
 {
   DEBUGLOC;
 
