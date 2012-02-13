@@ -1,5 +1,5 @@
+#include <cassert>
 #include <bitset>
-
 #include <iostream>
 
 int main ()
@@ -15,7 +15,7 @@ int main ()
     std::bitset<100> bsf = bs;
     bsf.flip();
 
-    __llbmc_assert(bs.count() == bsf.count());
+    assert(bs.count() == bsf.count());
 
     for (int i = 0; i < 100; ++i) {
         if (!(i % 2)) {
