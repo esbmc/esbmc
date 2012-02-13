@@ -42,6 +42,7 @@ namespace esbmc
 }
 
 namespace std{
+
 inline istream& operator >> (istream& is, char& c)
 {
 	esbmc::esbmc_read_char(is.id,c);
