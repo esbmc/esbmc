@@ -1163,7 +1163,7 @@ void cpp_typecheckt::typecheck_expr_member(
 
   add_implicit_dereference(expr);
 
-  if(expr.type().id() == "code")
+  if(expr.type().id()=="code")
   {
     // Check if the function body has to be typechecked
     contextt::symbolst::iterator it=
@@ -1517,7 +1517,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   // now do the function -- this has been postponed
   typecheck_function_expr(expr.function(), cpp_typecheck_fargst(expr));
 
-  if(expr.function().id() == "type")
+  if(expr.function().id()=="type")
   {
     // otherwise we would have found a constructor
     assert(cpp_is_pod(expr.function().type()));
@@ -1568,6 +1568,8 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
     add_implicit_dereference(expr);
     return;
   }
+
+  // look at type of function
 
   follow_symbol(expr.function().type());
 
@@ -1623,7 +1625,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
        !is_qualified)
     {
       exprt vtptr_member;
-      if(op0.id() == "member" || op0.id() == "ptrmember")
+      if(op0.id()=="member" || op0.id()=="ptrmember")
       {
         vtptr_member.id(op0.id());
         vtptr_member.move_to_operands(op0.op0());
@@ -1647,7 +1649,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
       assert(vt_compo.is_not_nil());
 
-      vtptr_member.set("component_name",vtable_name);
+      vtptr_member.set("component_name", vtable_name);
 
       // look for the right entry
       irep_idt vtentry_component_name = vt_compo.type().subtype().get("identifier").as_string()
@@ -1687,6 +1689,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   {
     irept name("name");
     name.set("identifier", "operator()");
+    name.set("#location", expr.location());
 
     cpp_namet cppname;
     cppname.get_sub().push_back(name);
@@ -1704,9 +1707,9 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   else
   {
     err_location(expr.function());
-    str << "function call expects function/function "
-    << "pointer as argument, but got `"
-    << to_string(expr.op0().type()) << "'";
+    str << "function call expects function or function "
+        << "pointer as argument, but got `"
+        << to_string(expr.op0().type()) << "'";
     throw 0;
   }
 
@@ -2216,7 +2219,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
 
     // for structs we use the 'implicit assignment operator',
     // and therefore, it is allowed to assign to a rvalue struct.
-    if(follow(type0).id() == "struct")
+    if(follow(type0).id()=="struct")
       expr.op0().set("#lvalue",true);
     c_typecheck_baset::typecheck_side_effect_assignment(expr);
     return;
@@ -2299,10 +2302,9 @@ void cpp_typecheckt::typecheck_side_effect_increment(
           id2string(expr.get_statement())+
           " expected to have one operand";
 
-  typet tmp_type=expr.op0().type();
+  add_implicit_dereference(expr.op0());
 
-  if(is_reference(tmp_type))
-    tmp_type=tmp_type.subtype();
+  typet tmp_type=follow(expr.op0().type());
 
   if(is_number(tmp_type) ||
      tmp_type.id()=="pointer")
@@ -2418,7 +2420,7 @@ void cpp_typecheckt::convert_pmop(exprt& expr)
   assert(expr.id()=="pointer-to-member");
   assert(expr.operands().size() == 2);
 
-  if(expr.op1().type().id() != "pointer"
+  if(expr.op1().type().id()!="pointer"
      || expr.op1().type().find("to-member").is_nil())
   {
     err_location(expr.location());
@@ -2426,7 +2428,7 @@ void cpp_typecheckt::convert_pmop(exprt& expr)
     throw 0;
   }
 
-  typet t0 = expr.op0().type().id() == "pointer" ?
+  typet t0 = expr.op0().type().id()=="pointer" ?
   expr.op0().type().subtype():  expr.op0().type();
 
   typet t1((const typet&)expr.op1().type().find("to-member"));
@@ -2451,7 +2453,7 @@ void cpp_typecheckt::convert_pmop(exprt& expr)
     throw 0;
   }
 
-  if(expr.op1().type().subtype().id() != "code")
+  if(expr.op1().type().subtype().id()!="code")
   {
     err_location(expr);
     str << "pointers to data member are not supported";
@@ -2460,9 +2462,9 @@ void cpp_typecheckt::convert_pmop(exprt& expr)
 
   typecheck_expr_main(expr.op1());
 
-  if(expr.op0().type().id() != "pointer")
+  if(expr.op0().type().id()!="pointer")
   {
-    if(expr.op0().id() == "dereference")
+    if(expr.op0().id()=="dereference")
     {
       exprt tmp = expr.op0().op0();
       expr.op0().swap(tmp);
@@ -2497,7 +2499,7 @@ Purpose:
 
 void cpp_typecheckt::typecheck_expr_function_identifier(exprt &expr)
 {
-  if(expr.id() == "symbol")
+  if(expr.id()=="symbol")
   {
     // Check if the function body has to be typechecked
     contextt::symbolst::iterator it=
@@ -2616,6 +2618,30 @@ void cpp_typecheckt::typecheck_expr_index(exprt &expr)
 
   c_typecheck_baset::typecheck_expr_index(expr);
 }
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_expr_sc_index
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+#ifdef CPP_SYSTEMC_EXTENSION
+void cpp_typecheckt::typecheck_expr_sc_index(exprt &expr)
+{
+  exprt &index_expr=expr.op1();
+
+  make_index_type(index_expr);
+
+  expr.id("extractbit");
+  expr.type()=typet("bool");
+}
+#endif
 
 /*******************************************************************\
 
@@ -2815,29 +2841,5 @@ void cpp_typecheckt::typecheck_expr_sc_member(
     std::cout << "MEMBER: " << expr.pretty() << std::endl;
     assert(0);
   }
-}
-#endif
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_expr_sc_index
-
-Inputs:
-
-Outputs:
-
-Purpose:
-
-\*******************************************************************/
-
-#ifdef CPP_SYSTEMC_EXTENSION
-void cpp_typecheckt::typecheck_expr_sc_index(exprt &expr)
-{
-  exprt &index_expr=expr.op1();
-
-  make_index_type(index_expr);
-
-  expr.id("extractbit");
-  expr.type()=typet("bool");
 }
 #endif
