@@ -15,14 +15,14 @@
 //using std::vector;
 using namespace std;
 
-//void outputVector( const vector< int > & );
-//void inputVector( vector< int > & );
+void outputVector( const vector< int > & );
+void inputVector( vector< int > & );
 
 int main()
 {
    vector< int > integers1;   // 7-element vector< int >
    vector< int > integers2;  // 10-element vector< int >
- #if 0
+
    // print integers1 size and contents
    cout << "Size of vector integers1 is " 
         << integers1.size()
@@ -59,6 +59,7 @@ int main()
    cout << "\nSize of vector integers3 is "
         << integers3.size()
         << "\nvector after initialization:\n";
+
    outputVector( integers3 );
 
 
@@ -90,11 +91,11 @@ int main()
    cout << "\nAttempt to assign 1000 to integers1.at( 15 )"
         << endl;
    integers1.at( 15 ) = 1000;  // ERROR: out of range
-#endif
+
    return 0;
 
 } // end main
-#if 0
+
 // output vector contents
 void outputVector( const vector< int > &array )
 {
@@ -120,7 +121,7 @@ void inputVector( vector< int > &array )
 
 } // end function inputVector
 
-#endif
+
 
 /**************************************************************************
  * (C) Copyright 1992-2003 by Deitel & Associates, Inc. and Prentice      *
