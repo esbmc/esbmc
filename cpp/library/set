@@ -123,7 +123,10 @@ namespace std {
 	      const_iterator operator = ( iterator& ) const;
   };
 
-  template <class Key, class Compare = less<Key> >
+//  template <class Key, class Compare = less<Key> >
+
+template < class Key, class Compare = less<Key>,
+           class Allocator = allocator<Key> >
   class set {
     public:
     // types:
@@ -226,15 +229,12 @@ namespace std {
     };
 
     // construct/copy/destroy:
-    //explicit set(const Compare& comp);
-    explicit set();
-    explicit set ( const Compare& comp = Compare(),
-                   const Key& = Key() );
-    template <class T, class U>
-		set ( T[], U*);
-    set ( const set<Key,Compare>& x );
+	explicit set ( const Compare& comp = Compare(),
+               const Allocator& = Allocator() );
+        explicit set ( Key[], Key* );
+	set ( const set<Key,Compare,Allocator>& x );	
 
-    //set<Key,Compare>& operator=(const set<Key,Compare>& x);
+    set<Key,Compare,Allocator>& operator= ( const set<Key,Compare,Allocator>& x );
 
     // iterators:
     iterator begin();
@@ -253,7 +253,7 @@ namespace std {
 
     // modifiers:
     pair<iterator,bool> insert(const value_type& x);
-    iterator insert(iterator position, const value_type& x);
+    //iterator insert(iterator position, const value_type& x);
 
     void erase(iterator position);
     size_type erase(const key_type& x);
@@ -276,6 +276,7 @@ namespace std {
     //bool operator != (const set<Key,Compare>&) const;
     //bool operator >= (const set<Key,Compare>&) const;
     //bool operator <= (const set<Key,Compare>&) const;
+
   };
 }
 

@@ -38,6 +38,7 @@ namespace std{
 
 	      iterator operator + (int) const;
 	      iterator operator - (int) const;
+	      iterator operator - (const iterator&) const;
 
 	      iterator& operator += (int);
 	      iterator& operator -= (int);
@@ -229,6 +230,7 @@ namespace std{
     const_reference back() const;
 
     // modifiers:
+
     void push_back(const T& x){
 		assert(0 <= _size && _size < VECTOR_CAPACITY);
 		buf[_size++] = x;

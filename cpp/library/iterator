@@ -107,6 +107,7 @@ template <class charT, class traits=char_traits<charT> >
 
 	    iterator operator + (int) const;
 	    iterator operator - (int) const;
+            iterator operator - (iterator) const;
 
 	    iterator& operator += (int);
 	    iterator& operator -= (int);

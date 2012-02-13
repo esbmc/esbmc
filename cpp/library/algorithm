@@ -236,17 +236,13 @@ template<class FwdIt, class Ty, class Pr>
     FwdIt upper_bound(FwdIt first, FwdIt last,
         const Ty& val, Pr pred);
 
-#if 0
 template<class FwdIt, class Ty>
     pair<FwdIt, FwdIt> equal_range(FwdIt first,
         FwdIt last, const Ty& val);
-#endif
 
-#if 0
 template<class FwdIt, class Ty, class Pr>
     pair<FwdIt, FwdIt> equal_range(FwdIt first,
         FwdIt last, const Ty& val, Pr pred);
-#endif
 
 template<class FwdIt, class Ty>
     bool binary_search(FwdIt first, FwdIt last, const Ty& val);
@@ -285,6 +281,10 @@ template<class InIt1, class InIt2, class OutIt>
     OutIt set_union(InIt1 first1, InIt1 last1,
         InIt2 first2, InIt2 last2, OutIt dest);
 
+template<class InIt1, class InIt2, class OutIt>
+    OutIt* set_union(InIt1 first1[], InIt1 *last1,
+        InIt2 first2[], InIt2 *last2, OutIt dest[]);
+
 template<class InIt1, class InIt2, class OutIt, class Pr>
     OutIt set_union(InIt1 first1, InIt1 last1,
         InIt2 first2, InIt2 last2, OutIt dest, Pr pred);
@@ -292,6 +292,10 @@ template<class InIt1, class InIt2, class OutIt, class Pr>
 template<class InIt1, class InIt2, class OutIt>
     OutIt set_intersection(InIt1 first1, InIt1 last1,
         InIt2 first2, InIt2 last2, OutIt dest);
+
+template<class InIt1, class InIt2, class OutIt>
+    OutIt* set_intersection(InIt1 first1[], InIt1 *last1,
+        InIt2 first2[], InIt2 *last2, OutIt dest[]);
 
 template<class InIt1, class InIt2, class OutIt, class Pr>
     OutIt set_intersection(InIt1 first1, InIt1 last1,
@@ -302,7 +306,7 @@ template<class InIt1, class InIt2, class OutIt>
         InIt2 first2, InIt2 last2, OutIt dest);
 
 template<class InIt1, class InIt2, class OutIt>
-    OutIt set_difference(InIt1 first1[], InIt1 *last1,
+    OutIt* set_difference(InIt1 first1[], InIt1 *last1,
         InIt2 first2[], InIt2 *last2, OutIt dest[]);
 
 template<class InIt1, class InIt2, class OutIt, class Pr>
@@ -312,6 +316,10 @@ template<class InIt1, class InIt2, class OutIt, class Pr>
 template<class InIt1, class InIt2, class OutIt>
     OutIt set_symmetric_difference(InIt1 first1,
         InIt1 last1, InIt2 first2, InIt2 last2, OutIt dest);
+
+template<class InIt1, class InIt2, class OutIt>
+    OutIt* set_symmetric_difference(InIt1 first1[],
+        InIt1 *last1, InIt2 first2[], InIt2 *last2, OutIt dest[]);
 
 template<class InIt1, class InIt2, class OutIt, class Pr>
     OutIt set_symmetric_difference(InIt1 first1,
@@ -366,8 +374,8 @@ template<class FwdIt, class Pr>
     FwdIt min_element(FwdIt first, FwdIt last, Pr pred);
 
 template<class InIt1, class InIt2>
-    bool lexicographical_compare(InIt1 first1,
-        InIt1 last1, InIt2 first2, InIt2 last2);
+    bool lexicographical_compare(InIt1 first1[],
+        InIt1 *last1, InIt2 first2[], InIt2 *last2);
 
 template<class InIt1, class InIt2, class Pr>
     bool lexicographical_compare(InIt1 first1,
@@ -384,6 +392,7 @@ template<class BidIt>
 
 template<class BidIt, class Pr>
     bool prev_permutation(BidIt first, BidIt last, Pr pred);
+
 }
 
 #endif
