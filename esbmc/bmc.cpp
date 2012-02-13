@@ -404,8 +404,11 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       symex.total_claims=0;
       symex.remaining_claims=0;
 
-      if (++interleaving_number>1)
-        std::cout << "*** Thread interleavings " << interleaving_number << " ***" << std::endl;
+      if (++interleaving_number>1) {
+    	  print(8, "*** Thread interleavings "+
+    	           i2string((unsigned long)interleaving_number)+
+    	           " ***");
+      }
 
       if(run_thread(goto_functions))
       {
