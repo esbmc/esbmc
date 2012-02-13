@@ -314,8 +314,8 @@ void cpp_typecheckt::static_initialization()
         exprt symbexpr("symbol", symbol.type);
         symbexpr.set("identifier", symbol.name);
 
-        exprt code("code", typet("code"));
-        code.set("statement", "assign");
+        codet code;
+        code.set_statement("assign");
         code.copy_to_operands(symbexpr, symbol.value);
         code.location()=symbol.location;
 
@@ -348,8 +348,8 @@ void cpp_typecheckt::static_initialization()
   // Create the initialization procedure
   symbolt init_symbol;
 
-  init_symbol.name="cpp::#ini#"+module;
-  init_symbol.base_name="#ini#"+module;
+  init_symbol.name="c::#ini#"+id2string(module);
+  init_symbol.base_name="#ini#"+id2string(module);
   init_symbol.value.swap(block_sini);
   init_symbol.mode=current_mode;
   init_symbol.module=module;
@@ -389,8 +389,8 @@ void cpp_typecheckt::do_not_typechecked()
     {
       symbolt &symbol=s_it->second;
 
-      if(symbol.value.id()=="cpp_not_typechecked"
-        && symbol.value.get_bool("is_used"))
+      if(symbol.value.id()=="cpp_not_typechecked" &&
+         symbol.value.get_bool("is_used"))
       {
         assert(symbol.type.id()=="code");
 
@@ -402,14 +402,14 @@ void cpp_typecheckt::do_not_typechecked()
             lookup(symbol.type.get("#member_name")),declarator);
           symbol.value.swap(declarator.value());
           convert_function(symbol);
-          cont = true;
+          cont=true;
         }
         else if(symbol.value.operands().size() == 1)
         {
           exprt tmp = symbol.value.operands()[0];
           symbol.value.swap(tmp);
           convert_function(symbol);
-          cont = true;
+          cont=true;
         }
         else
           assert(0); // Don't know what to do!
@@ -454,8 +454,8 @@ void cpp_typecheckt::clean_up()
       context.symbols.erase(cur_it);
       continue;
     }
-    else if(symbol.type.id() == "struct" ||
-            symbol.type.id() == "union")
+    else if(symbol.type.id()=="struct" ||
+            symbol.type.id()=="union")
     {
       struct_typet &struct_type=
         to_struct_type(symbol.type);
@@ -481,7 +481,7 @@ void cpp_typecheckt::clean_up()
         {
           // skip it
         }
-        else if(compo_it->type().id() == "code")
+        else if(compo_it->type().id()=="code")
         {
           function_members.push_back(*compo_it);
         }
