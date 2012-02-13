@@ -426,8 +426,6 @@ protected:
   void typecheck_expr_main(exprt &expr);
   void typecheck_expr_member(exprt &expr);
   void typecheck_expr_ptrmember(exprt &expr);
-  void typecheck_side_effect_assignment(exprt &expr);
-  void typecheck_side_effect_increment(side_effect_exprt &expr);
   void typecheck_function_expr(exprt &expr,
                       const cpp_typecheck_fargst &fargs);
   void typecheck_expr_cpp_name(exprt &expr,
@@ -438,14 +436,6 @@ protected:
                       const cpp_typecheck_fargst &fargs);
   void typecheck_cast_expr(exprt &expr);
   void typecheck_expr_trinary(exprt &expr);
-
-  void typecheck_function_call_arguments(
-                  side_effect_expr_function_callt &expr);
-
-
-  bool operator_is_overloaded(exprt &expr);
-  bool overloadable(const exprt &expr);
-
   void typecheck_expr_binary_arithmetic(exprt &expr);
   void typecheck_expr_explicit_typecast(exprt &expr);
   void typecheck_expr_explicit_constructor_call(exprt &expr);
@@ -458,10 +448,18 @@ protected:
   void typecheck_expr_sizeof(exprt &expr);
   void typecheck_expr_delete(exprt &expr);
   void typecheck_expr_side_effect(side_effect_exprt &expr);
+  void typecheck_side_effect_assignment(exprt &expr);
+  void typecheck_side_effect_increment(side_effect_exprt &expr);
   void typecheck_expr_typecast(exprt &expr);
   void typecheck_expr_index(exprt& expr);
   void typecheck_expr_rel(exprt& expr);
   void typecheck_expr_comma(exprt &expr);
+
+  void typecheck_function_call_arguments(
+    side_effect_expr_function_callt &expr);
+
+  bool operator_is_overloaded(exprt &expr);
+  bool overloadable(const exprt &expr);
 
   void add_implicit_dereference(exprt &expr);
 
