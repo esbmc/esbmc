@@ -46,7 +46,7 @@ namespace esbmc
 
 namespace std{
 
-template < typename T >  // or template< typename T >
+template < typename T >
 inline ostream& operator <<( ostream& o, T i )
 {
 	return o;
