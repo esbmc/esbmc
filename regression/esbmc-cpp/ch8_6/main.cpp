@@ -2,17 +2,17 @@
 // Demonstrating standard library class vector.
 #include <iostream>
 
-//using std::cout;
-//using std::cin;
-//using std::endl;
+using std::cout;
+using std::cin;
+using std::endl;
 
 #include <iomanip>
 
-//using std::setw;
+using std::setw;
 
 #include <vector>
 
-//using std::vector;
+using std::vector;
 using namespace std;
 
 void outputVector( const vector< int > & );
