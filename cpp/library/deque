@@ -1,5 +1,18 @@
+/*******************************************************************\
+
+Module: 
+
+Author: 
+
+Date: Feb 2012
+
+\*******************************************************************/
+
+
 #ifndef __STL_DEQUE
 #define __STL_DEQUE
+
+#include <vector>
 
 #include "iterator"
 
@@ -146,7 +159,7 @@ namespace std {
     typedef T value_type;
 
     // construct/copy/destroy:
-    explicit deque();
+    explicit deque(): vecOne(), vecTwo() { }
     explicit deque(size_type n);
     explicit deque(size_type n, const T& value);
     explicit deque(T t[], T*);
@@ -168,32 +181,79 @@ namespace std {
     const_reverse_iterator rend() const;
 
     // capacity:
-    size_type size() const;
+    size_type size() const
+    {
+	return vecOne.size() + vecTwo.size();
+    }
     size_type max_size() const;
     void resize(size_type sz);
     void resize(size_type sz, T c);
 
-    bool empty() const;
+    bool empty() const
+    {
+	return vecOne.empty() && vecTwo.empty(); 
+    }
 
     // element access:
-    reference operator[](size_type n);
-    const_reference operator[](size_type n) const;
+    reference operator[](size_type i)
+    {
+        int n = vecOne.size();
+        if (i < n)
+            return vecOne [ (n-1) - i ];
+        else
+            return vecTwo [ i - n ];
+    }
+    const_reference operator[](size_type i) const
+    {
+        int n = vecOne.size();
+        if (i < n)
+            return vecOne [ (n-1) - i ];
+        else
+            return vecTwo [ i - n ];
+    }
+
     reference at(size_type n);
     const_reference at(size_type n) const;
-    reference front();
-    const_reference front() const;
-    reference back();
-    const_reference back() const;
+    reference front()
+    {
+        if (vecOne.empty())
+            return vecTwo.front();
+        else
+            return vecOne.back();
+    }
+    const_reference front() const
+    {
+        if (vecOne.empty())
+            return vecTwo.front();
+        else
+            return vecOne.back();
+    }
+
+    reference back()
+    {
+        if (vecOne.empty())
+            return vecTwo.back();
+        else
+            return vecOne.front();
+    }
+
+    const_reference back() const
+    {
+        if (vecOne.empty())
+            return vecTwo.back();
+        else
+            return vecOne.front();
+    }
 
     // modifiers:
-    void push_front(const T& x);
-    void push_back(const T& x);
+    void push_front(const T& x) { vecOne.push_back(x); }
+    void push_back(const T& x)  { vecTwo.push_back(x); }
     iterator insert(iterator position, const T& x);
     void insert(iterator position, size_type n, const T& x);
 
     void pop_front();
     void pop_back();
-    iterator erase(iterator position);
+    iterator erase(iterator position); 
     iterator erase(iterator first, iterator last);
 
     void swap(deque<T>&);
@@ -204,6 +264,11 @@ namespace std {
     bool operator != (const deque<T>&) const;
     bool operator >= (const deque<T>&) const;
     bool operator <= (const deque<T>&) const;
+
+    protected:
+    	vector<T> vecOne;
+    	vector<T> vecTwo;
+
   };
 }
 #endif

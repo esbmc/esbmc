@@ -1,3 +1,13 @@
+/*******************************************************************\
+
+Module: 
+
+Author: 
+
+Date: Feb 2012
+
+\*******************************************************************/
+
 #ifndef __STL_VECTOR
 #define __STL_VECTOR
 
@@ -151,32 +161,37 @@ namespace std{
     typedef const T* const_pointer;
 
     // construct:
-	explicit vector(): _size(0), _capacity(0)
-	{
-	}
+    explicit vector(): _size(0), _capacity(0)
+    {
 
-	explicit vector(T t1, T t2): _size(0)
-	{
-		push_back(t1);
-		push_back(t2);
-	}
+    }
 
-	explicit vector(iterator t1, iterator t2): _size(0)
-	{
-		//model
-	}
+    explicit vector(T t1, T t2): _size(0)
+    {
+        push_back(t1);
+	push_back(t2);
+    }
 
-	explicit vector(T t): _size(0)
-	{
-		push_back(t);
-	}
+    explicit vector(iterator t1, iterator t2): _size(0)
+    {
+	//model
+    }
 
-	explicit vector(T t[], T*): _size(0),  _capacity(0)
-	{
-	        //model
-	}
+    explicit vector(T t): _size(0)
+    {
+	push_back(t);
+    }
 
-    vector(const vector<T>& x);
+    explicit vector(T t[], T*): _size(0),  _capacity(0)
+    {
+        //model
+    }
+
+    vector(const vector<T>& x): _size(0),  _capacity(0)
+    {
+        //model
+    }
+
 
     vector<T>& operator=(const vector<T>& x);
     void assign ( T first, T last );
@@ -194,34 +209,43 @@ namespace std{
 
     // capacity:
     size_type size() const
-	{
-		assert(0 <= _size && _size <= VECTOR_CAPACITY);
-		return _size;
-	}
+    {
+	assert(0 <= _size );
+	assert(_size <= VECTOR_CAPACITY);
+	return _size;
+    }
+
     size_type max_size() const;
 
     void resize(size_type sz);
     void resize(size_type sz, T t);
     size_type capacity() const
-	{
-		assert(0 <= _size && _size <= VECTOR_CAPACITY);
-		return VECTOR_CAPACITY;
-	}
-    bool empty() const;
+    {
+	assert(0 <= _size && _size <= VECTOR_CAPACITY);
+	return VECTOR_CAPACITY;
+    }
+
+    bool empty() const
+    {
+	return (_size == 0) ? true : false;
+    }
 
     void reserve(size_type n);
 
     // element access:
     reference operator[](size_type i)
-	{
-		assert(0 <= i && i < _size && _size <= VECTOR_CAPACITY);
-		return buf[i];
-	}
+    {
+	assert(0 <= i);
+	assert(i < _size);
+	assert(_size <= VECTOR_CAPACITY);
+	return buf[i];
+    }
+
     const_reference operator[](size_type i) const
-	{
-		assert(0 <= i && i < _size && _size <= VECTOR_CAPACITY);
-		return buf[i];
-	}
+    {
+	assert(0 <= i && i < _size && _size <= VECTOR_CAPACITY);
+	return buf[i];
+    }
     const_reference at(size_type n) const;
     reference at(size_type n);
     reference front();
@@ -230,14 +254,15 @@ namespace std{
     const_reference back() const;
 
     // modifiers:
-    void push_back(const T& x){
-		assert(0 <= _size && _size < VECTOR_CAPACITY);
-		buf[_size++] = x;
-	}
+    void push_back(const T& x)
+    {
+	assert(0 <= _size);
+	assert(_size < VECTOR_CAPACITY);
+	buf[_size++] = x;
+    }
 
     void pop_back()
     {
-      __ESBMC_HIDE:
       __ESBMC_assert(_size!=0, "pop_back() on empty vector");
       resize(_size-1);
     }

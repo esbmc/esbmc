@@ -12,7 +12,6 @@ int main()
             d.push_front(i);
         }
     }
-
     for (int i = 0; i < 10; ++i) {
         if (i % 2) {
             assert(d.back() == 10 - i);

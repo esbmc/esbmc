@@ -217,6 +217,7 @@ namespace std {
 	}
     const_reference front() const
 	{
+		__ESBMC_assert ( !empty() , "list is empty");
 		return head->data;
 	}
 
