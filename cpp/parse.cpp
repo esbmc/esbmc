@@ -277,6 +277,7 @@ bool Parser::rProgram(cpp_itemt &item)
     else
     {
       Token tk;
+
       if(!SyntaxError())
         return false;                // too many errors
 
@@ -432,7 +433,6 @@ bool Parser::isTypeSpecifier()
 #endif
        || t==TYPEOF
      )
-
     return true;
 
   return false;
@@ -469,6 +469,7 @@ bool Parser::rLinkageSpec(cpp_linkage_spect &linkage_spec)
 
     if(!rDefinition(item))
       return false;
+
     linkage_spec.items().push_back(item);
   }
 
@@ -580,7 +581,6 @@ bool Parser::rLinkageBody(cpp_linkage_spect::itemst &items)
     }
 
     items.push_back(item);
-
   }
 
   lex->GetToken(cp);
@@ -1070,7 +1070,8 @@ bool Parser::rIntegralDeclaration(
   typet &cv_q)
 {
   #ifdef DEBUG
-  std::cout << "Parser::rIntegralDeclaration 1  token: " << (char) lex->LookAhead(0)<<  "\n";
+  std::cout << "Parser::rIntegralDeclaration 1  token: "
+            << (char) lex->LookAhead(0) << "\n";
   #endif
 
   if(!optCvQualify(cv_q))
@@ -1124,7 +1125,8 @@ bool Parser::rIntegralDeclaration(
 
   default:
     #ifdef DEBUG
-    std::cout << "Parser::rIntegralDeclaration 6 " << lex->LookAhead(0) << "\n";
+    std::cout << "Parser::rIntegralDeclaration 6 "
+              << lex->LookAhead(0) << "\n";
     #endif
 
     if(!rDeclarators(declaration.declarators(), true))
@@ -1137,7 +1139,8 @@ bool Parser::rIntegralDeclaration(
     if(lex->LookAhead(0)==';')
     {
       #ifdef DEBUG
-      std::cout << "Parser::rIntegralDeclaration 8 " << declaration << "\n";
+      std::cout << "Parser::rIntegralDeclaration 8 "
+                << declaration << "\n";
       #endif
 
       lex->GetToken(tk);
@@ -1252,7 +1255,7 @@ bool Parser::rOtherDeclaration(
     if(!rConstructorDecl(conv_operator_declarator, type_name))
       return false;
 
-    type_name = typet("cpp-cast-operator");
+    type_name=typet("cpp-cast-operator");
 
     declaration.declarators().push_back(conv_operator_declarator);
   }
@@ -1364,9 +1367,6 @@ bool Parser::isConstructorDecl()
     int t=lex->LookAhead(1);
     if(t=='*' || t=='&' || t=='(')
       return false;        // declarator
-//    TODO: is this right?
-//    else if(t==CONST || t==VOLATILE)
-//      return true;        // constructor or declarator
     else if(isPtrToMember(1))
       return false;        // declarator (::*)
 
@@ -1619,7 +1619,6 @@ bool Parser::optIntegralTypeOrClassSpec(typet &p)
       typet kw;
       lex->GetToken(tk);
       kw=typet(tk.text);
-
       set_location(kw, tk);
 
       merge_types(kw, p);
@@ -2194,6 +2193,15 @@ bool Parser::optPtrOperator(typet &ptrs)
       set_location(op, tk);
       t_list.push_front(op);
     }
+    else if(t==LogAndOp) // &&, these are C++0x rvalue refs
+    {
+      Token tk;
+      lex->GetToken(tk);
+      typet op("pointer");
+      op.set("#reference",true);
+      set_location(op, tk);
+      t_list.push_front(op);
+    }
   }
 
   for(std::list<typet>::reverse_iterator
@@ -2687,7 +2695,6 @@ bool Parser::rTemplateArgs(irept &template_args)
         exp.id("ambiguous");
       lex->Restore(pos);
       rTypeName(a);
-
     }
     else
     {
@@ -2718,7 +2725,8 @@ bool Parser::rTemplateArgs(irept &template_args)
     case ',':
       break;
 
-    case ShiftOp:
+    case ShiftOp: // turn >> into > >
+      // the newer C++ standards frown on this!
 
       // turn >> into > > // TODO
       //lex->GetOnlyClosingBracket(tk2);
@@ -4101,7 +4109,8 @@ bool Parser::rUnaryExpr(exprt &exp)
 
      case IncOp:
       exp=exprt("sideeffect");
-      exp.set("statement", tk.text=="++"?"preincrement":"predecrement");
+      exp.set("statement",
+        tk.text=="++"?"preincrement":"predecrement");
       break;
 
      default:
@@ -4363,7 +4372,11 @@ bool Parser::rAllocateExpr(exprt &exp)
     {allocate.initializer}
   | {'(' function.arguments ')'} '(' type.name ')' {allocate.initializer}
 */
-bool Parser::rAllocateType(exprt &arguments, typet &atype, exprt &initializer)
+
+bool Parser::rAllocateType(
+  exprt &arguments,
+  typet &atype,
+  exprt &initializer)
 {
   if(lex->LookAhead(0)!='(')
   {
@@ -4614,7 +4627,8 @@ bool Parser::rPostfixExpr(exprt &exp)
       {
         exprt tmp("sideeffect");
         tmp.move_to_operands(exp);
-        tmp.set("statement", op.text=="++"?"postincrement":"postdecrement");
+        tmp.set("statement",
+          op.text=="++"?"postincrement":"postdecrement");
         set_location(tmp, op);
 
         exp.swap(tmp);
@@ -5134,7 +5148,7 @@ bool Parser::rStatement(codet &statement)
 
     if(k==BREAK)
       statement=codet("break");
-    else
+    else // CONTINUE
       statement=codet("continue");
 
     set_location(statement, tk1);
@@ -5204,9 +5218,9 @@ bool Parser::rStatement(codet &statement)
     {
       lex->GetToken(tk1);
 
-      statement = codet("code");
+      statement=codet("code");
       set_location(statement, tk1);
-      statement.set("statement","label");
+      statement.set("statement", "label");
 
       exprt exp;
       if(!rExpression(exp))
@@ -5230,10 +5244,10 @@ bool Parser::rStatement(codet &statement)
     {
       lex->GetToken(tk1);
 
-      statement =codet("code");
+      statement=codet("code");
       set_location(statement, tk1);
-      statement.set("statement","label");
-      statement.set("default",true);
+      statement.set("statement", "label");
+      statement.set("default", true);
 
       if(lex->GetToken(tk2)!=':')
         return false;
@@ -5532,6 +5546,7 @@ bool Parser::rTryStatement(codet &statement)
 
   statement.move_to_operands(body);
 
+  // iterate while there are catch clauses
   do
   {
     if(lex->GetToken(tk)!=CATCH)
@@ -5983,7 +5998,7 @@ bool Parser::parse()
 
 /*******************************************************************\
 
-Funcion: cpp_parse
+Function: cpp_parse
 
   Inputs:
 
