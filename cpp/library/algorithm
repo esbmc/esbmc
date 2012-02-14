@@ -236,17 +236,13 @@ template<class FwdIt, class Ty, class Pr>
     FwdIt upper_bound(FwdIt first, FwdIt last,
         const Ty& val, Pr pred);
 
-#if 0
 template<class FwdIt, class Ty>
     pair<FwdIt, FwdIt> equal_range(FwdIt first,
         FwdIt last, const Ty& val);
-#endif
 
-#if 0
 template<class FwdIt, class Ty, class Pr>
     pair<FwdIt, FwdIt> equal_range(FwdIt first,
         FwdIt last, const Ty& val, Pr pred);
-#endif
 
 template<class FwdIt, class Ty>
     bool binary_search(FwdIt first, FwdIt last, const Ty& val);

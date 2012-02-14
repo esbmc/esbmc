@@ -162,7 +162,15 @@ namespace std {
     explicit deque(): vecOne(), vecTwo() { }
     explicit deque(size_type n);
     explicit deque(size_type n, const T& value);
-    explicit deque(T t[], T*);
+    explicit deque(T t[], T* addr): vecOne(), vecTwo() 
+    {         
+        int i=0;
+	while((t+i)<addr)
+          vecOne.push_back(t[i++]);
+	i--;
+	while((t+i)>=t)
+          vecTwo.push_back(t[i--]);
+    }
     deque(const deque<T>& x);
     ~deque();
 
