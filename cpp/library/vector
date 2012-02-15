@@ -199,8 +199,11 @@ namespace std{
     }
 
     vector<T>& operator=(const vector<T>& x);
-    void assign ( T first, T last );
-    void assign(size_type n, const T& u);
+    //void assign ( T first, T last );
+    //void assign(size_type n, const T& u);
+    void assign(int t1, int t2);
+    void assign(iterator t1, iterator t2);
+    void assign(int t1[], int *t2);
 
     // iterators:
     iterator begin();
