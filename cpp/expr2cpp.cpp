@@ -454,7 +454,7 @@ std::string expr2cppt::convert(
            src.get("statement")=="cpp_new[]"))
     return convert_cpp_new(src, precedence=15);
   else if(src.is_constant() && src.type().id() == "verilogbv")
-    return "'" + id2string(src.get("value")) + "'";
+    return "'" + id2string(src.value()) + "'";
   else if(src.id()=="unassigned")
     return "?";
   else if(src.id()=="pod_constructor")

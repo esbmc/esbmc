@@ -1240,13 +1240,13 @@ exprt cpp_typecheck_resolvet::resolve(
     exprt constant("constant", typet("verilogbv"));
     constant.type().set("width", "1");
     if(base_name == "SC_LOGIC_0")
-       constant.set("value", "0");
+       constant.value("0");
     else if(base_name == "SC_LOGIC_1")
-      constant.set("value", "1");
+      constant.value("1");
     else if(base_name == "SC_LOGIC_Z")
-      constant.set("value", "z");
+      constant.value("z");
     else if(base_name == "SC_LOGIC_X")
-      constant.set("value", "x");
+      constant.value("x");
     else
       assert(0);
 

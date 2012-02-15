@@ -212,7 +212,7 @@ bool Parser::rStringL(Token &tk)
       value+=tk2.data.get_string("value");
     }
 
-    tk.data.set("value", value);
+    tk.data.value(value);
   }
 
   return true;

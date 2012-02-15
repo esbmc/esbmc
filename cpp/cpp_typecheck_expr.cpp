@@ -2091,7 +2091,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
        //  a =  (mask & a) |  ((typecast)b) << right
 
       exprt expr_mask("constant", extractbits.op0().type());
-      expr_mask.set("value", mask);
+      expr_mask.value(mask);
 
       exprt and_expr("bitand", expr_mask.type());
       and_expr.copy_to_operands(expr_mask, extractbits.op0());
@@ -2161,7 +2161,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
        //  a =  (mask & a) |  ((typecast)b) << right
 
       exprt expr_mask("constant", extractbit.op0().type());
-      expr_mask.set("value", mask);
+      expr_mask.value(mask);
 
       exprt and_expr("bitand", extractbit.op0().type());
       and_expr.copy_to_operands(expr_mask, extractbit.op0());

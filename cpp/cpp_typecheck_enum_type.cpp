@@ -52,7 +52,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
     }
     
     exprt final_value("constant", enum_type);
-    final_value.set("value", integer2string(i));
+    final_value.value(integer2string(i));
     
     symbolt symbol;
 

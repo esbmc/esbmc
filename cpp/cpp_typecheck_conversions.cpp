@@ -566,7 +566,7 @@ bool cpp_typecheckt::standard_conversion_pointer(
   if(expr.is_zero())
   {
     new_expr = expr;
-    new_expr.set("value", "NULL");
+    new_expr.value("NULL");
     new_expr.type() = type;
     return true;
   }
@@ -696,7 +696,7 @@ bool cpp_typecheckt::standard_conversion_pointer_to_member(
     return false;
 
   if(expr.id()=="constant" &&
-     expr.get("value")=="NULL")
+     expr.value()=="NULL")
   {
     new_expr = expr;
     new_expr.make_typecast(type);
@@ -788,7 +788,7 @@ bool cpp_typecheckt::standard_conversion_verilogbv(
 
   if(expr.id()=="string-constant")
   {
-    std::string value=id2string(expr.get("value"));
+    std::string value=id2string(expr.value());
 
     if(value.size() != (unsigned) atoi(type.get("width").c_str()))
     return false;
@@ -806,7 +806,7 @@ bool cpp_typecheckt::standard_conversion_verilogbv(
     }
 
     new_expr = exprt("constant", type);
-    new_expr.set("value", value);
+    new_expr.value(value);
     return true;
   }
 
@@ -2148,7 +2148,7 @@ bool cpp_typecheckt::reinterpret_typecast(
     {
       // NULL
       new_expr = e;
-      new_expr.set("value", "NULL");
+      new_expr.value("NULL");
       new_expr.type() = type;
     }
     else
