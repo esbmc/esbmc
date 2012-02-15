@@ -188,11 +188,11 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
       }
     }
 
-    if(expr.op1().get("statement")=="throw" &&
-       expr.op2().get("statement")!="throw")
+    if(expr.op1().get("statement")=="cpp-throw" &&
+       expr.op2().get("statement")!="cpp-throw")
       expr.type()=expr.op2().type();
-    else if (expr.op2().get("statement")=="throw" &&
-            expr.op1().get("statement")!="throw")
+    else if (expr.op2().get("statement")=="cpp-throw" &&
+            expr.op1().get("statement")!="cpp-throw")
       expr.type()=expr.op1().type();
     else if(expr.op1().type().id()=="empty" &&
             expr.op2().type().id() == "empty")

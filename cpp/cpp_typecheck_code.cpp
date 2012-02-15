@@ -32,7 +32,7 @@ void cpp_typecheckt::typecheck_code(codet &code)
 {
   const irep_idt &statement=code.get("statement");
 
-  if(statement=="throw")
+  if(statement=="cpp-throw")
   {
     code.type()=typet("code");
     typecheck_throw(code);

@@ -4083,37 +4083,37 @@ bool Parser::rUnaryExpr(exprt &exp)
 
     switch(t)
     {
-     case '*':
+    case '*':
       exp=exprt("dereference");
       break;
 
-     case '&':
+    case '&':
       exp=exprt("address_of");
       break;
 
-     case '+':
+    case '+':
       exp=exprt("unary+");
       break;
 
-     case '-':
+    case '-':
       exp=exprt("unary-");
       break;
 
-     case '!':
+    case '!':
       exp=exprt("not");
       break;
 
-     case '~':
+    case '~':
       exp=exprt("bitnot");
       break;
 
-     case IncOp:
+    case IncOp:
       exp=exprt("sideeffect");
       exp.set("statement",
         tk.text=="++"?"preincrement":"predecrement");
       break;
 
-     default:
+    default:
       assert(0);
     }
 
@@ -4149,17 +4149,23 @@ bool Parser::rThrowExpr(exprt &exp)
 
   int t=lex->LookAhead(0);
 
-  exprt e;
+  exp=exprt("cpp-throw");
+  set_location(exp, tk);
 
   if(t==':' || t==';')
-    e.make_nil();
+  {
+    // done
+  }
   else
+  {
+    exprt e;
+  
     if(!rExpression(e))
       return false;
 
-  exp=exprt("cpp-throw");
-  exp.move_to_operands(e);
-  set_location(exp, tk);
+    exp.move_to_operands(e);
+  }
+
   return true;
 }
 
@@ -5226,7 +5232,7 @@ bool Parser::rStatement(codet &statement)
       if(!rExpression(exp))
         return false;
 
-      exprt &case_ops=static_cast<exprt &>(statement.add("case"));
+      exprt &case_ops=statement.add_expr("case");
       case_ops.copy_to_operands(exp);
 
       if(lex->GetToken(tk2)!=':')
@@ -5530,7 +5536,7 @@ bool Parser::rForStatement(codet &statement)
 */
 bool Parser::rTryStatement(codet &statement)
 {
-  Token tk, op, cp;
+  Token tk;
 
   if(lex->GetToken(tk)!=TRY)
     return false;
@@ -5539,7 +5545,6 @@ bool Parser::rTryStatement(codet &statement)
   set_location(statement, tk);
 
   codet body;
-  cpp_declarationt handler;
 
   if(!rCompoundStatement(body))
     return false;
@@ -5549,20 +5554,24 @@ bool Parser::rTryStatement(codet &statement)
   // iterate while there are catch clauses
   do
   {
+    Token op, cp;
+    
     if(lex->GetToken(tk)!=CATCH)
       return false;
 
     if(lex->GetToken(op)!='(')
       return false;
 
+    cpp_declarationt declaration;
+
     if(lex->LookAhead(0)==Ellipsis)
     {
       lex->GetToken(cp);
-      //handler=new Leaf(cp);
+      // TODO
     }
     else
     {
-      if(!rArgDeclaration(handler))
+      if(!rArgDeclaration(declaration))
         return false;
     }
 
@@ -5571,11 +5580,6 @@ bool Parser::rTryStatement(codet &statement)
 
     if(!rCompoundStatement(body))
       return false;
-
-    // TODO
-    //st=irept::Snoc(st, irept::List(new LeafReserved(tk),
-    //                 new Leaf(op), handler, new Leaf(cp),
-    //                 body));
   }
   while(lex->LookAhead(0)==CATCH);
 
