@@ -166,20 +166,20 @@ namespace std{
 
     }
 
-    explicit vector(T t1, T t2): _size(0)
-    {
-        push_back(t1);
-	push_back(t2);
-    }
+//    explicit vector(T t1, T t2): _size(0)
+//    {
+//       push_back(t1);
+//			 push_back(t2);
+//    }
 
     explicit vector(iterator t1, iterator t2): _size(0)
     {
-	//model
+				//model
     }
 
     explicit vector(T t): _size(0)
     {
-	push_back(t);
+			push_back(t);
     }
 
     explicit vector(T t[], T*): _size(0),  _capacity(0)
@@ -187,11 +187,16 @@ namespace std{
         //model
     }
 
+   explicit vector ( size_type n, const T& value= T())
+   {
+      _size=n;
+			//model
+   }
+
     vector(const vector<T>& x): _size(0),  _capacity(0)
     {
         //model
     }
-
 
     vector<T>& operator=(const vector<T>& x);
     void assign ( T first, T last );
@@ -210,9 +215,9 @@ namespace std{
     // capacity:
     size_type size() const
     {
-	assert(0 <= _size );
-	assert(_size <= VECTOR_CAPACITY);
-	return _size;
+			assert(0 <= _size );
+			assert(_size <= VECTOR_CAPACITY);
+			return _size;
     }
 
     size_type max_size() const;
@@ -221,13 +226,13 @@ namespace std{
     void resize(size_type sz, T t);
     size_type capacity() const
     {
-	assert(0 <= _size && _size <= VECTOR_CAPACITY);
-	return VECTOR_CAPACITY;
+			assert(0 <= _size && _size <= VECTOR_CAPACITY);
+			return VECTOR_CAPACITY;
     }
 
     bool empty() const
     {
-	return (_size == 0) ? true : false;
+			return (_size == 0) ? true : false;
     }
 
     void reserve(size_type n);
@@ -235,17 +240,20 @@ namespace std{
     // element access:
     reference operator[](size_type i)
     {
-	assert(0 <= i);
-	assert(i < _size);
-	assert(_size <= VECTOR_CAPACITY);
-	return buf[i];
+			assert(0 <= i);
+			assert(i < _size);
+			assert(_size <= VECTOR_CAPACITY);
+			return buf[i];
     }
 
     const_reference operator[](size_type i) const
     {
-	assert(0 <= i && i < _size && _size <= VECTOR_CAPACITY);
-	return buf[i];
+			assert(0 <= i);
+			assert(i < _size);
+			assert(_size <= VECTOR_CAPACITY);
+			return buf[i];
     }
+
     const_reference at(size_type n) const;
     reference at(size_type n);
     reference front();
@@ -256,9 +264,9 @@ namespace std{
     // modifiers:
     void push_back(const T& x)
     {
-	assert(0 <= _size);
-	assert(_size < VECTOR_CAPACITY);
-	buf[_size++] = x;
+			assert(0 <= _size);
+			assert(_size < VECTOR_CAPACITY);
+			buf[_size++] = x;
     }
 
     void pop_back()
