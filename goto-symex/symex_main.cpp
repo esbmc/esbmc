@@ -529,6 +529,17 @@ void goto_symext::symex_step(
             ex_state.reexecute_instruction = false;
             art.generate_states();
             break;
+
+        case CATCH:
+          symex_catch(state);
+          state.source.pc++;
+          break;
+
+        case THROW:
+          symex_throw(state);
+          state.source.pc++;
+          break;
+
         default:
             assert(false);
     }

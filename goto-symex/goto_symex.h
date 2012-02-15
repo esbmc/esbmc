@@ -195,6 +195,11 @@ protected:
   void symex_printf(statet &state, const exprt &lhs, const exprt &code,unsigned node_id);
 
   void replace_nondet(exprt &expr, execution_statet &ex_state);
+
+  // exceptions
+
+  void symex_throw(statet &state);
+  void symex_catch(statet &state);
 };
 
 #endif

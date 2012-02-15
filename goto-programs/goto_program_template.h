@@ -19,7 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 typedef enum { NO_INSTRUCTION_TYPE, GOTO, ASSUME, ASSERT, OTHER, SYNC, SKIP,
                START_THREAD, END_THREAD, LOCATION, END_FUNCTION,
                ATOMIC_BEGIN, ATOMIC_END, RETURN, ASSIGN,
-               FUNCTION_CALL }
+               FUNCTION_CALL, THROW, CATCH }
   goto_program_instruction_typet;
   
 std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
@@ -139,6 +139,15 @@ public:
       code.make_nil();
     }
     
+    void make_catch()
+    {
+      type=CATCH;
+      targets.clear();
+      guard.make_true();
+      event="";
+      code.make_nil();
+    }
+
     // valid local variables at this point
     // this is obsolete and will be removed in future versions
     local_variablest local_variables;
