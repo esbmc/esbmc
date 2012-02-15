@@ -1,3 +1,3 @@
 main.cpp 
---unwind 2 --no-unwinding-assertions -I ~/libraries/
+--unwind 3 --no-unwinding-assertions -I ~/libraries/ --no-pointer-check
 ^VERIFICATION SUCCESSFUL$
