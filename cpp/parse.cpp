@@ -5541,7 +5541,7 @@ bool Parser::rTryStatement(codet &statement)
   if(lex->GetToken(tk)!=TRY)
     return false;
 
-  statement=codet("cpp-try");
+  statement=codet("cpp-catch");
   set_location(statement, tk);
 
   codet body;

@@ -410,7 +410,7 @@ protected:
 
   // code conversion
   virtual void typecheck_code(codet &code);
-  virtual void typecheck_throw(codet &code);
+  virtual void typecheck_catch(codet &code);
   virtual void typecheck_member_initializer(codet &code);
   virtual void typecheck_decl(codet &code);
   virtual void typecheck_block(codet &code);

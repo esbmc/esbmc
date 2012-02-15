@@ -362,8 +362,8 @@ void goto_convertt::convert(
   else if(statement=="cpp_delete" ||
           statement=="cpp_delete[]")
     convert_cpp_delete(code, dest);
-  else if(statement=="cpp-try")
-    convert_cpp_try(code, dest);
+  else if(statement=="cpp-catch")
+    convert_catch(code, dest);
   else
   {
     copy(code, OTHER, dest);
@@ -389,11 +389,57 @@ Function: goto_convertt::convert_block
 
 \*******************************************************************/
 
-void goto_convertt::convert_cpp_try(
+void goto_convertt::convert_catch(
   const codet &code,
   goto_programt &dest)
 {
-	convert(to_code(code.op0()), dest);
+//  assert(code.operands().size()>=2);
+
+  // add the CATCH-push instruction to 'dest'
+  goto_programt::targett catch_push_instruction=dest.add_instruction();
+  catch_push_instruction->make_catch();
+  catch_push_instruction->code.set_statement("cpp-catch");
+  catch_push_instruction->location=code.location();
+
+  // the CATCH-push instruction is annotated with a list of IDs,
+  // one per target
+  irept::subt &exception_list=
+    catch_push_instruction->code.add("exception_list").get_sub();
+
+  // add a SKIP target for the end of everything
+  goto_programt end;
+  goto_programt::targett end_target=end.add_instruction();
+  end_target->make_skip();
+
+  // the first operand is the 'try' block
+  convert(to_code(code.op0()), dest);
+
+  // add the CATCH-pop to the end of the 'try' block
+  goto_programt::targett catch_pop_instruction=dest.add_instruction();
+  catch_pop_instruction->make_catch();
+  catch_pop_instruction->code.set_statement("cpp-catch");
+
+  // add a goto to the end of the 'try' block
+  dest.add_instruction()->make_goto(end_target);
+
+  for(unsigned i=1; i<code.operands().size(); i++)
+  {
+    const codet &block=to_code(code.operands()[i]);
+
+    // grab the ID and add to CATCH instruction
+    exception_list.push_back(irept(block.get("exception_id")));
+
+    goto_programt tmp;
+    convert(block, tmp);
+    catch_push_instruction->targets.push_back(tmp.instructions.begin());
+    dest.destructive_append(tmp);
+
+    // add a goto to the end of the 'catch' block
+    dest.add_instruction()->make_goto(end_target);
+  }
+
+  // add end-target
+  dest.destructive_append(end);
 }
 
 /*******************************************************************\

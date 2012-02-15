@@ -14,6 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_convert_type.h"
 #include "cpp_declarator_converter.h"
 #include "cpp_template_type.h"
+#include "cpp_exception_id.h"
 #include "cpp_util.h"
 
 /*******************************************************************\
@@ -32,10 +33,10 @@ void cpp_typecheckt::typecheck_code(codet &code)
 {
   const irep_idt &statement=code.get("statement");
 
-  if(statement=="cpp-throw")
+  if(statement=="cpp-catch")
   {
     code.type()=typet("code");
-    typecheck_throw(code);
+    typecheck_catch(code);
   }
   else if(statement=="member_initializer")
   {
@@ -58,8 +59,37 @@ Function: cpp_typecheckt::typecheck_throw
 
 \*******************************************************************/
 
-void cpp_typecheckt::typecheck_throw(codet &code)
+void cpp_typecheckt::typecheck_catch(codet &code)
 {
+  codet::operandst &operands=code.operands();
+
+  for(codet::operandst::iterator
+      it=operands.begin();
+      it!=operands.end();
+      it++)
+  {
+    code_blockt &block=to_code_block(to_code(*it));
+
+    typecheck_code(block);
+
+    // is it a catch block?
+    if(it!=operands.begin())
+    {
+      const code_blockt &code_block=to_code_block(block);
+      assert(code_block.operands().size()>=1);
+      const codet &first_instruction=to_code(code_block.op0());
+      assert(first_instruction.get_statement()=="decl");
+
+      // get the declaration
+      const code_declt &code_decl=to_code_decl(first_instruction);
+
+      // get the type
+      const typet &type=code_decl.op0().type();
+
+      // annotate exception ID
+      it->set("exception_id", cpp_exception_id(type, *this));
+    }
+  }
 }
 
 /*******************************************************************\
