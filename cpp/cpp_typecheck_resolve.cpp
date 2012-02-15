@@ -1957,7 +1957,7 @@ bool cpp_typecheck_resolvet::disambiguate(
 
       assert(argument.get("#base_name")=="this");
 
-      if(expr.find("type").get("return_type") == "constructor")
+      if(expr.type().get("return_type") == "constructor")
       {
         // it's a constructor
         const typet &object_type = argument.type().subtype();

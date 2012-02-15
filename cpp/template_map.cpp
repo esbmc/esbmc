@@ -38,7 +38,7 @@ void template_mapt::apply(typet &type) const
 
     Forall_irep(it, components)
     {
-      typet &subtype=static_cast<typet &>(it->add("type"));
+      typet &subtype=static_cast<typet &>(it->type());
       apply(subtype);
     }
   }
@@ -62,7 +62,7 @@ void template_mapt::apply(typet &type) const
     Forall_irep(it, arguments)
     {
       if(it->id()=="argument")
-        apply(static_cast<typet &>(it->add("type")));
+        apply(static_cast<typet &>(it->type()));
     }
   }
   else if(type.id()=="merged_type")

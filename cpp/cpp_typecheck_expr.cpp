@@ -44,9 +44,9 @@ bool cpp_typecheckt::find_parent(
 {
   forall_irep(bit, symb.type.find("bases").get_sub())
   {
-    if(lookup(bit->find("type").get("identifier")).base_name == base_name)
+    if(lookup(bit->type().get("identifier")).base_name == base_name)
     {
-      identifier = bit->find("type").get("identifier");
+      identifier = bit->type().get("identifier");
       return true;
     }
   }
@@ -1286,7 +1286,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
   }
 
   typet &type=static_cast<typet &>(
-    template_arguments.get_sub().front().add("type"));
+    template_arguments.get_sub().front().type());
 
   typecheck_type(type);
 

@@ -137,7 +137,7 @@ void cpp_typecheckt::typecheck_template_class(
     // there already
 
     bool previous_has_body=
-      previous_symbol->second.type.find("type").find("body").is_not_nil();
+      previous_symbol->second.type.type().find("body").is_not_nil();
 
     if(has_body && previous_has_body)
     {

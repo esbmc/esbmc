@@ -174,7 +174,7 @@ void cpp_typecheckt::add_base_components(
       sub_access="protected";
 
     const symbolt &symb=
-      lookup(it->find("type").get("identifier"));
+      lookup(it->type().get("identifier"));
 
     bool is_virtual=it->get_bool("virtual");
 

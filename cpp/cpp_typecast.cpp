@@ -105,7 +105,7 @@ void cpp_typecastt::get_bases(
   {
     assert(it->id()=="type");
     assert(it->get("type") == "symbol");
-    const irep_idt &base=it->find("type").get("identifier");
+    const irep_idt &base=it->type().get("identifier");
     base_count[base]++;
     get_bases(base, base_count);
   }

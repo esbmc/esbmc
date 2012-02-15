@@ -100,7 +100,7 @@ static void copy_member(
   exprt &code=block.operands().back();
 
   code.set("statement", "expression");
-  code.add("type")=typet("code");
+  code.type()=typet("code");
   code.operands().push_back(exprt("sideeffect"));
   code.op0().set("statement", "assign");
   code.op0().operands().push_back(exprt("cpp-name"));
@@ -160,7 +160,7 @@ static void copy_array(
   code.location() = location;
 
   code.set("statement", "expression");
-  code.add("type")=typet("code");
+  code.type()=typet("code");
   code.operands().push_back(exprt("sideeffect"));
   code.op0().set("statement", "assign");
   code.op0().operands().push_back(exprt("index"));
@@ -289,7 +289,7 @@ void cpp_typecheckt::default_cpctor(
     // Argument declaration
   cpp_declarationt argdecl;
   argdecl.set("type", "merged_type");
-  irept& subt = argdecl.add("type").add("subtypes");
+  irept& subt = argdecl.type().add("subtypes");
   subt.get_sub().push_back(cppcomp);
   irept constnd("const");
   subt.get_sub().push_back(constnd);
@@ -297,7 +297,7 @@ void cpp_typecheckt::default_cpctor(
   argdecl.location() = location;
 
   // Add argument to function type
-  decl0.add("type").add("arguments").get_sub().push_back(argdecl);
+  decl0.type().add("arguments").get_sub().push_back(argdecl);
   decl0.location() = location;
 
   irept& initializers = decl0.add("member_initializers");
@@ -314,7 +314,7 @@ void cpp_typecheckt::default_cpctor(
     assert(parent_it->get("type") == "symbol");
 
     const symbolt &parsymb=
-      lookup(parent_it->find("type").get("identifier"));
+      lookup(parent_it->type().get("identifier"));
 
     if(cpp_is_pod(parsymb.type))
       copy_parent(location, parsymb.base_name, arg_name, block);
@@ -528,7 +528,7 @@ void cpp_typecheckt::default_assignop_value(
     assert(parent_it->get("type") == "symbol");
 
     const symbolt& symb=
-      lookup(parent_it->find("type").get("identifier"));
+      lookup(parent_it->type().get("identifier"));
 
     copy_parent(location, symb.base_name, arg_name, block);
   }
@@ -550,7 +550,7 @@ void cpp_typecheckt::default_assignop_value(
     if(mem_it->get("type")== "array")
     {
       const exprt &size_expr=
-        to_array_type((typet&)mem_it->find("type")).size();
+        to_array_type((typet&)mem_it->type()).size();
 
       if(size_expr.id()=="infinity")
       {
@@ -634,7 +634,7 @@ void cpp_typecheckt::check_member_initializers(
         assert(parent_it->get("type") == "symbol");
 
         if(member_type.get("identifier")
-           == parent_it->find("type").get("identifier"))
+           == parent_it->type().get("identifier"))
         {
           ok = true;
           break;
@@ -673,7 +673,7 @@ void cpp_typecheckt::check_member_initializers(
       // Maybe it is a parent constructor?
       if(c_it->get_bool("is_type"))
       {
-        typet type = static_cast<const typet&>(c_it->find("type"));
+        typet type = static_cast<const typet&>(c_it->type());
         if(type.id() != "symbol")
           continue;
 
@@ -685,7 +685,7 @@ void cpp_typecheckt::check_member_initializers(
         forall_irep(parent_it, bases.get_sub())
         {
           assert(parent_it->get("type") == "symbol" );
-          if(symb.name == parent_it->find("type").get("identifier"))
+          if(symb.name == parent_it->type().get("identifier"))
           {
             ok = true;
             break;
@@ -699,7 +699,7 @@ void cpp_typecheckt::check_member_initializers(
         && !c_it->get_bool("is_type")
         && !c_it->get_bool("is_static")
         && c_it->get("type") == "code"
-        && c_it->find("type").get("return_type") == "constructor")
+        && c_it->type().get("return_type") == "constructor")
       {
         typet member_type = (typet&) initializer.find("member");
         typecheck_type(member_type);
@@ -710,7 +710,7 @@ void cpp_typecheckt::check_member_initializers(
           assert(parent_it->get("type") == "symbol" );
 
           if(member_type.get("identifier")
-             == parent_it->find("type").get("identifier"))
+             == parent_it->type().get("identifier"))
           {
             ok = true;
             break;
@@ -810,7 +810,7 @@ void cpp_typecheckt::full_member_initialization(
     assert(parent_it->get("type") == "symbol");
 
     const symbolt &ctorsymb=
-      lookup(parent_it->find("type").get("identifier"));
+      lookup(parent_it->type().get("identifier"));
 
     if(cpp_is_pod(ctorsymb.type))
       continue;
@@ -865,7 +865,7 @@ void cpp_typecheckt::full_member_initialization(
       if(member_type.id()!="symbol")
         break;
 
-      if(parent_it->find("type").get("identifier")==
+      if(parent_it->type().get("identifier")==
          member_type.get("identifier"))
       {
         final_initializers.move_to_sub(initializer);
@@ -983,8 +983,8 @@ void cpp_typecheckt::full_member_initialization(
     // If the data member is a reference, it must be explicitly
     // initialized
     if(!found &&
-       mem_it->find("type").id()=="pointer" &&
-       mem_it->find("type").get_bool("#reference"))
+       mem_it->type().id()=="pointer" &&
+       mem_it->type().get_bool("#reference"))
     {
       err_location(*mem_it);
       str << "reference must be explicitly initialized";
@@ -993,7 +993,7 @@ void cpp_typecheckt::full_member_initialization(
 
     // If the data member is not POD and is not explicitly initialized,
     // then its default constructor is called.
-    if(!found && !cpp_is_pod((const typet&) (mem_it->find("type"))))
+    if(!found && !cpp_is_pod((const typet&) (mem_it->type())))
     {
       irept name("name");
       name.set("identifier", mem_name);
@@ -1192,12 +1192,12 @@ void cpp_typecheckt::default_dtor(
   decl.type().subtype().make_nil();
 
   decl.value().id("code");
-  decl.value().add("type").id("code");
+  decl.value().type().id("code");
   decl.value().set("statement", "block");
   decl.add("cv").make_nil();
   decl.add("throw_decl").make_nil();
 
-  dtor.add("type").id("destructor");
+  dtor.type().id("destructor");
   dtor.add("storage_spec").id("cpp-storage-spec");
   dtor.add("operands").move_to_sub(decl);
 }
@@ -1313,8 +1313,8 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
       bit++)
   {
     assert(bit->id()=="base");
-    assert(bit->find("type").id()=="symbol");
-    const symbolt& psymb = lookup(bit->find("type").get("identifier"));
+    assert(bit->type().id()=="symbol");
+    const symbolt& psymb = lookup(bit->type().get("identifier"));
 
     exprt object("dereference");
     object.operands().push_back(exprt("cpp-this"));

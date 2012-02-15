@@ -369,7 +369,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     std::string virtual_name=
     component.get_string("base_name")+
     id2string(
-              function_identifier(static_cast<const typet &>(component.find("type"))));
+              function_identifier(static_cast<const typet &>(component.type())));
 
     if(method_qualifier.id()=="const")
       virtual_name += "$const";
@@ -679,7 +679,7 @@ void cpp_typecheckt::put_compound_into_scope(const irept &compound)
   const irep_idt &base_name=compound.get("base_name");
   const irep_idt &name=compound.get("name");
 
-  if(compound.find("type").id() =="code")
+  if(compound.type().id() =="code")
   {
 
     // put symbol into scope
@@ -690,7 +690,7 @@ void cpp_typecheckt::put_compound_into_scope(const irept &compound)
     id.class_identifier=cpp_scopes.current_scope().identifier;
     id.is_member = true;
     id.is_constructor =
-    compound.find("type").get("return_type") == "constructor";
+    compound.type().get("return_type") == "constructor";
     id.is_method = true;
     id.is_static_member=compound.get_bool("is_static");
 
@@ -1176,7 +1176,7 @@ void cpp_typecheckt::typecheck_member_function(
 {
   symbolt symbol;
 
-  typet &type=(typet &)component.add("type");
+  typet &type=(typet &)component.type();
 
   if(component.get_bool("is_static"))
   {
@@ -1197,7 +1197,7 @@ void cpp_typecheckt::typecheck_member_function(
     move_member_initializers(initializers, type, value);
 
   irep_idt f_id=
-  function_identifier(static_cast<const typet &>(component.find("type")));
+  function_identifier(static_cast<const typet &>(component.type()));
 
   const irep_idt identifier=
   component.get_string("name")+id2string(f_id);
@@ -1348,7 +1348,7 @@ void cpp_typecheckt::convert_compound_ano_union(
   // do scoping
   forall_irep(it, union_symbol.type.add("components").get_sub())
   {
-    if(it->find("type").id()=="code")
+    if(it->type().id()=="code")
     {
       err_location(union_symbol.type.location());
       str << "anonymous union " << union_symbol.base_name
@@ -1574,7 +1574,7 @@ void cpp_typecheckt::get_bases(
     assert(it->get("type") == "symbol");
 
     const struct_typet &base=
-    to_struct_type(lookup(it->find("type").get("identifier")).type);
+    to_struct_type(lookup(it->type().get("identifier")).type);
     set_bases.insert(base.get("name"));
     get_bases(base,set_bases);
   }
@@ -1608,7 +1608,7 @@ void cpp_typecheckt::get_virtual_bases(
     assert(it->get("type") == "symbol");
 
     const struct_typet &base=
-    to_struct_type(lookup(it->find("type").get("identifier")).type);
+    to_struct_type(lookup(it->type().get("identifier")).type);
 
     if(it->get_bool("virtual"))
       vbases.push_back(base.get("name"));

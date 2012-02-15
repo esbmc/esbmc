@@ -1105,7 +1105,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
           continue;
 
         const typet& comp_type =
-          static_cast<const typet&>(component.find("type"));
+          static_cast<const typet&>(component.type());
 
         if(comp_type.id() !="code")
           continue;
@@ -1247,7 +1247,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
         it != from_struct.components().end(); it++)
     {
       const irept& component = *it;
-      const typet comp_type = static_cast<const typet&>(component.find("type"));
+      const typet comp_type = static_cast<const typet&>(component.type());
 
       if(component.get_bool("from_base"))
         continue;
@@ -1256,13 +1256,13 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
         continue;
 
       assert(component.get("type") == "code" &&
-             component.find("type").find("arguments").get_sub().size() == 1);
+             component.type().find("arguments").get_sub().size() == 1);
 
       typet this_type =
         static_cast<const typet&>(comp_type.find("arguments")
                                            .get_sub()
                                            .front()
-                                           .find("type"));
+                                           .type());
       this_type.set("#reference", true);
 
       exprt this_expr(expr);
@@ -1526,7 +1526,7 @@ bool cpp_typecheckt::reference_binding(
         continue;
 
       const code_typet& component_type =
-        to_code_type(static_cast<const typet&>(component.find("type")));
+        to_code_type(static_cast<const typet&>(component.type()));
 
       // otherwise it cannot bind directly (not an lvalue)
       if(!is_reference(component_type.return_type()))

@@ -91,7 +91,7 @@ void cpp_typecheckt::convert_anonymous_union(
   const irept::subt &components=union_symbol.type.add("components").get_sub();
   forall_irep(it, components)
   {
-    if(it->find("type").id()=="code")
+    if(it->type().id()=="code")
     {
      err_location(union_symbol.type.location());
      str << "anonymous union `" << union_symbol.base_name
@@ -136,7 +136,7 @@ Function: cpp_typecheckt::convert
 void cpp_typecheckt::convert(cpp_declarationt &declaration)
 {
   // see if the declaration is empty
-  if(declaration.find("type").is_nil() &&
+  if(declaration.type().is_nil() &&
      !declaration.has_operands())
     return;
 

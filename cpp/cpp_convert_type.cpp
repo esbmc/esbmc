@@ -314,7 +314,7 @@ void cpp_convert_typet::read_function_type(const typet &type)
 
   // if we just have one argument of type void, remove it
   if(arguments.get_sub().size()==1 &&
-     arguments.get_sub().front().find("type").id()=="empty")
+     arguments.get_sub().front().type().id()=="empty")
     arguments.get_sub().clear();
 }
 
