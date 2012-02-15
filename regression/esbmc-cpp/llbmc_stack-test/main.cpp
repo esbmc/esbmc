@@ -1,5 +1,5 @@
 #include <stack>
-
+#include <cassert>
 int main()
 {
     std::stack<int> s;
