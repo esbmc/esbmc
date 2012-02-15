@@ -22,6 +22,8 @@ MINISAT = $(SATDIR)/MiniSat-p_v1.14
 CXXFLAGS+= -DMINISAT
 endif
 
+# Other goo
+
 ifdef TARGET32
 CXXFLAGS += -m32
 GCCFLAGS += -m32
