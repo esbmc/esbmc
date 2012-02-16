@@ -790,7 +790,7 @@ bool cpp_typecheckt::standard_conversion_verilogbv(
   {
     std::string value=id2string(expr.value());
 
-    if(value.size() != (unsigned) atoi(type.get("width").c_str()))
+    if(value.size() != (unsigned) atoi(type.width().c_str()))
     return false;
 
     for(unsigned i = 0; i < value.size(); i++)
@@ -816,11 +816,11 @@ bool cpp_typecheckt::standard_conversion_verilogbv(
     return false;
 
   if(expr.type().id()=="bool" &&
-     type.get("width")=="1")
+     type.width()=="1")
   {
     // ok
   }
-  else if(expr.type().get("width")==type.get("width"))
+  else if(expr.type().width()==type.width())
   {
     // ok
   }
@@ -2310,7 +2310,7 @@ bool cpp_typecheckt::static_typecast(
   #ifdef CPP_SYSTEMC_EXTENSION
   if(type.id() == "unsignedbv" &&
      e.type().id() == "verilogbv" &&
-     type.get("width") == e.type().get("width"))
+     type.width() == e.type().width())
   {
      new_expr = e;
      new_expr.make_typecast(type);
@@ -2318,7 +2318,7 @@ bool cpp_typecheckt::static_typecast(
   }
   else if(type.id() == "bool" &&
      e.type().id() == "verilogbv" &&
-     e.type().get("width") == "1")
+     e.type().width() == "1")
   {
     new_expr = e;
     new_expr.make_typecast(type);

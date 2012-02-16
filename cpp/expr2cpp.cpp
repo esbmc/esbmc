@@ -333,7 +333,7 @@ std::string expr2cppt::convert_rec(
     return dest;
   }
   else if(src.id() == "verilogbv")
-    return "sc_lv["+id2string(src.get("width"))+"]";
+    return "sc_lv["+id2string(src.width())+"]";
   else if(src.id()=="unassigned")
     return "?";
   else

@@ -2074,7 +2074,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
 
       const exprt& extractbits = expr.op0();
 
-      int width = atoi(extractbits.op0().type().get("width").c_str());
+      int width = atoi(extractbits.op0().type().width().c_str());
       int left  = atoi(extractbits.op1().get("#cformat").c_str());
       int right = atoi(extractbits.op2().get("#cformat").c_str());
 
@@ -2146,7 +2146,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
 
       const exprt& extractbit = expr.op0();
 
-      int width = atoi(extractbit.op0().type().get("width").c_str());
+      int width = atoi(extractbit.op0().type().width().c_str());
       int index  = atoi(extractbit.op1().get("#cformat").c_str());
 
       std::string mask;
@@ -2680,10 +2680,10 @@ void cpp_typecheckt::typecheck_expr_comma(exprt &expr)
     // do concatenation
 
     int width0 = expr.op0().type().id() == "bool" ? 1 :
-              atoi(expr.op0().type().get("width").c_str());
+              atoi(expr.op0().type().width().c_str());
 
     int width1 = expr.op1().type().id() == "bool" ? 1 :
-              atoi(expr.op1().type().get("width").c_str());
+              atoi(expr.op1().type().width().c_str());
 
     irep_idt type_id=
       (expr.op0().type().id() == "verilogbv" ||
