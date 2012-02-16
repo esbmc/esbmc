@@ -680,7 +680,7 @@ void cpp_typecheckt::typecheck_expr_address_of(exprt &expr)
   {
     // we take the address of the method.
     assert(expr.op0().id()=="member");
-    exprt symb = cpp_symbol_expr(lookup(expr.op0().get("component_name")));
+    exprt symb = cpp_symbol_expr(lookup(expr.op0().component_name()));
     exprt address("address_of",typet("pointer"));
     address.copy_to_operands(symb);
     address.type().subtype()=symb.type();
@@ -1128,13 +1128,13 @@ void cpp_typecheckt::typecheck_expr_member(
       return;
     }
 
-    const irep_idt component_name=symbol_expr.get("component_name");
+    const irep_idt component_name=symbol_expr.component_name();
 
     expr.remove("component_cpp_name");
-    expr.set("component_name", component_name);
+    expr.component_name(component_name);
   }
 
-  const irep_idt &component_name=expr.get("component_name");
+  const irep_idt &component_name=expr.component_name();
 
   assert(component_name!="");
 
@@ -1651,7 +1651,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
       assert(vt_compo.is_not_nil());
 
-      vtptr_member.set("component_name", vtable_name);
+      vtptr_member.component_name(vtable_name);
 
       // look for the right entry
       irep_idt vtentry_component_name = vt_compo.type().subtype().identifier().as_string()
@@ -1659,7 +1659,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
       exprt vtentry_member("ptrmember");
       vtentry_member.copy_to_operands(vtptr_member);
-      vtentry_member.set("component_name", vtentry_component_name );
+      vtentry_member.component_name(vtentry_component_name );
       typecheck_expr(vtentry_member);
 
       assert(vtentry_member.type().id()=="pointer");
@@ -1942,7 +1942,7 @@ void cpp_typecheckt::typecheck_method_application(
   exprt member_expr;
   member_expr.swap(expr.function());
 
-  const symbolt &symbol=lookup(member_expr.get("component_name"));
+  const symbolt &symbol=lookup(member_expr.component_name());
 
   // build new function expression
   exprt new_function(cpp_symbol_expr(symbol));

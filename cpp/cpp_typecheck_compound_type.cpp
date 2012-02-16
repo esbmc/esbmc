@@ -1407,7 +1407,7 @@ bool cpp_typecheckt::get_component(
     const struct_typet::componentt &component = *it;
 
     exprt tmp("member", component.type());
-    tmp.set("component_name", component.get_name());
+    tmp.component_name(component.get_name());
     tmp.location() = location;
     tmp.copy_to_operands(object);
 

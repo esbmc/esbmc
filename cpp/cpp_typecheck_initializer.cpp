@@ -122,7 +122,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
       else if(resolved_expr.id() == "member")
       {
         symbol.value =
-          address_of_exprt(symbol_expr(lookup(resolved_expr.get("component_name"))));
+          address_of_exprt(symbol_expr(lookup(resolved_expr.component_name())));
         symbol.value.type().add("to-member") = resolved_expr.op0().type();
       }
       else
@@ -211,7 +211,7 @@ void cpp_typecheckt::zero_initializer(
 
       exprt member("member");
       member.copy_to_operands(object);
-      member.set("component_name", component.name());
+      member.component_name(component.name());
 
       // recursive call
       zero_initializer(member, component.type(), location, ops);

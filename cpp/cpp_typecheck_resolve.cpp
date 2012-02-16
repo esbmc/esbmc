@@ -328,7 +328,7 @@ void cpp_typecheck_resolvet::convert_identifier(
     else if(identifier.id_class==cpp_scopet::SYMBOL)
     {
       e=exprt("member");
-      e.set("component_name", identifier.identifier);
+      e.component_name(identifier.identifier);
       e.location() = location;
 
       exprt object;

@@ -1260,7 +1260,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
       already_typechecked(address);
 
       exprt ptrmember("ptrmember");
-      ptrmember.set("component_name", cit->name());
+      ptrmember.component_name(cit->name());
       ptrmember.operands().push_back(exprt("cpp-this"));
 
       code_assignt assign(ptrmember, address);
