@@ -63,7 +63,7 @@ void cpp_typecheckt::find_constructor(
         {
           // found!
           const irep_idt &identifier=
-            component.get("name");
+            component.name();
 
           if(identifier=="")
             throw "constructor without identifier";

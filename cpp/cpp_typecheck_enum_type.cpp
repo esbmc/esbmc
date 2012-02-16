@@ -40,7 +40,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
   
   Forall_irep(it, components)
   {
-    const irep_idt &name=it->get("name");
+    const irep_idt &name=it->name();
     
     if(it->find("value").is_not_nil())
     {

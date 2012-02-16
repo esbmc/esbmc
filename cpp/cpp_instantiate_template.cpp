@@ -403,7 +403,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
       false,
       false);
 
-    return lookup(to_struct_type(symb.type).components().back().get("name"));
+    return lookup(to_struct_type(symb.type).components().back().name());
   }
 
   // not a template class, not a template method,
@@ -695,7 +695,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
       false,
       false);
 
-    return lookup(to_struct_type(symb.type).components().back().get("name"));
+    return lookup(to_struct_type(symb.type).components().back().name());
   }
   convert(new_decl);
 

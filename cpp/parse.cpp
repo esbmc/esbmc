@@ -2994,7 +2994,7 @@ bool Parser::rEnumSpec(typet &spec)
 
   if(t==Identifier)
   {
-    spec.set("name", tk.text);
+    spec.name(tk.text);
 
     if(lex->LookAhead(0)=='{')
       t=lex->GetToken(tk);
@@ -3002,7 +3002,7 @@ bool Parser::rEnumSpec(typet &spec)
       return true;
   }
   else
-    spec.set("name", "");
+    spec.name("");
 
   if(t!='{')
     return false;
@@ -3043,7 +3043,7 @@ bool Parser::rEnumBody(irept &body)
     body.get_sub().push_back(irept());
     irept &n=body.get_sub().back();
     set_location(n, tk);
-    n.set("name", tk.text);
+    n.name(tk.text);
 
     if(lex->LookAhead(0, tk2)=='=') // set the constant
     {

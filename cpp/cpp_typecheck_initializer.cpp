@@ -211,7 +211,7 @@ void cpp_typecheckt::zero_initializer(
 
       exprt member("member");
       member.copy_to_operands(object);
-      member.set("component_name", component.get("name"));
+      member.set("component_name", component.name());
 
       // recursive call
       zero_initializer(member, component.type(), location, ops);

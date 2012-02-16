@@ -1153,7 +1153,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
 
               tmp_expr.location() = expr.location();
 
-              exprt func_symb = cpp_symbol_expr(lookup(component.get("name")));
+              exprt func_symb = cpp_symbol_expr(lookup(component.name()));
               func_symb.type() = comp_type;
               {
                 exprt tmp("already_typechecked");
@@ -1208,7 +1208,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
                 new_object.set("#lvalue", true);
                 new_object.type().set("#constant", false);
 
-                exprt func_symb = cpp_symbol_expr(lookup(component.get("name")));
+                exprt func_symb = cpp_symbol_expr(lookup(component.name()));
                 func_symb.type() = comp_type;
                 {
                   exprt tmp("already_typechecked");

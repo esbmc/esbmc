@@ -210,7 +210,7 @@ codet cpp_typecheckt::cpp_constructor(
         continue;
 
       exprt member("member", bool_typet());
-      member.set("component_name", component.get("name"));
+      member.set("component_name", component.name());
       member.copy_to_operands(object_tc);
       member.location() = location;
       member.set("#lvalue",object_tc.get_bool("#lvalue"));
@@ -232,7 +232,7 @@ codet cpp_typecheckt::cpp_constructor(
 
     // enter struct scope
     cpp_save_scopet save_scope(cpp_scopes);
-    cpp_scopes.set_scope(struct_type.get("name"));
+    cpp_scopes.set_scope(struct_type.name());
 
     // find name of constructor
     const struct_typet::componentst &components=

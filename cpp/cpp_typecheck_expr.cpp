@@ -884,7 +884,7 @@ void cpp_typecheckt::typecheck_expr_explicit_constructor_call(exprt &expr)
     assert(expr.type().id() == "struct");
 
     typet symb("symbol");
-    symb.identifier(expr.type().get("name"));
+    symb.identifier(expr.type().name());
     symb.location()=expr.location();
 
     exprt e=expr;

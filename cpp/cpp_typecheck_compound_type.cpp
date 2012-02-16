@@ -322,7 +322,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
   cpp_scopes.current_scope().prefix+
   base_name;
 
-  component.set("name", identifier);
+  component.name(identifier);
   component.type()=final_type;
   component.set("access", access);
   component.set("base_name", base_name);
@@ -677,7 +677,7 @@ Purpose:
 void cpp_typecheckt::put_compound_into_scope(const irept &compound)
 {
   const irep_idt &base_name=compound.get("base_name");
-  const irep_idt &name=compound.get("name");
+  const irep_idt &name=compound.name();
 
   if(compound.type().id() =="code")
   {
@@ -1202,7 +1202,7 @@ void cpp_typecheckt::typecheck_member_function(
   const irep_idt identifier=
   component.get_string("name")+id2string(f_id);
 
-  component.set("name", identifier);
+  component.name(identifier);
 
   component.set("prefix",
                 cpp_scopes.current_scope().prefix+
@@ -1310,7 +1310,7 @@ void cpp_typecheckt::convert_compound_ano_union(
 {
 
   symbolt& union_symbol =
-  context.symbols[follow(declaration.type()).get("name")];
+  context.symbols[follow(declaration.type()).name()];
 
   if(declaration.storage_spec().is_static()
      || declaration.storage_spec().is_mutable())
@@ -1330,7 +1330,7 @@ void cpp_typecheckt::convert_compound_ano_union(
   symbol_type.identifier(union_symbol.name);
 
   struct_typet::componentt component;
-  component.set("name", identifier);
+  component.name(identifier);
   component.type() = symbol_type;
   component.set("access", access);
   component.set("base_name", base_name);
@@ -1366,7 +1366,7 @@ void cpp_typecheckt::convert_compound_ano_union(
 
     cpp_idt &id=cpp_scopes.current_scope().insert(base_name);
     id.id_class = cpp_idt::SYMBOL;
-    id.identifier=it->get("name");
+    id.identifier=it->name();
     id.class_identifier=union_symbol.name;
     id.is_member=true;
   }
@@ -1428,7 +1428,7 @@ bool cpp_typecheckt::get_component(
           err_location(location);
           str << "error: member `" << component_name
               << "' is not accessible (" << component.get("access").c_str() <<")";
-          str << "\nstruct name: " << final_type.get("name");
+          str << "\nstruct name: " << final_type.name();
           throw 0;
         }
       }
@@ -1504,7 +1504,7 @@ bool cpp_typecheckt::check_component_access(const irept& component,
   assert(access == "private" ||
          access == "protected");
 
-  const irep_idt &struct_identifier = struct_type.get("name");
+  const irep_idt &struct_identifier = struct_type.name();
 
   cpp_scopet *pscope = &(cpp_scopes.current_scope());
   while(!(pscope->is_root_scope()))
@@ -1575,7 +1575,7 @@ void cpp_typecheckt::get_bases(
 
     const struct_typet &base=
     to_struct_type(lookup(it->type().identifier()).type);
-    set_bases.insert(base.get("name"));
+    set_bases.insert(base.name());
     get_bases(base,set_bases);
   }
 }
@@ -1597,7 +1597,7 @@ void cpp_typecheckt::get_virtual_bases(
                                        const struct_typet& type,
                                        std::list<irep_idt> &vbases) const
 {
-  if(std::find(vbases.begin(), vbases.end(), type.get("name")) != vbases.end())
+  if(std::find(vbases.begin(), vbases.end(), type.name()) != vbases.end())
     return;
 
   const irept::subt &bases=type.find("bases").get_sub();
@@ -1611,7 +1611,7 @@ void cpp_typecheckt::get_virtual_bases(
     to_struct_type(lookup(it->type().identifier()).type);
 
     if(it->get_bool("virtual"))
-      vbases.push_back(base.get("name"));
+      vbases.push_back(base.name());
 
     get_virtual_bases(base,vbases);
   }
@@ -1634,14 +1634,14 @@ bool cpp_typecheckt::subtype_typecast(
                                       const struct_typet &from,
                                       const struct_typet &to) const
 {
-  if(from.get("name")==to.get("name"))
+  if(from.name()==to.name())
     return true;
 
   std::set<irep_idt> bases;
 
   get_bases(from, bases);
 
-  return bases.find(to.get("name")) != bases.end();
+  return bases.find(to.name()) != bases.end();
 }
 
 

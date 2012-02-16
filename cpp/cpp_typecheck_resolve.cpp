@@ -2169,7 +2169,7 @@ void cpp_typecheck_resolvet::resolve_with_arguments(
       continue;
 
     cpp_scopest::id_sett tmp_set;
-    cpp_idt& scope=cpp_typecheck.cpp_scopes.get_scope(final_type.get("name"));
+    cpp_idt& scope=cpp_typecheck.cpp_scopes.get_scope(final_type.name());
     cpp_typecheck.cpp_scopes.go_to(scope);
     cpp_typecheck.cpp_scopes.get_ids(base_name, tmp_set, false);
     id_set.insert(tmp_set.begin(), tmp_set.end());

@@ -366,7 +366,7 @@ void cpp_typecheckt::default_cpctor(
       already_typechecked(address);
 
       exprt ptrmember("ptrmember");
-      ptrmember.set("component_name",mem_it->get("name"));
+      ptrmember.set("component_name",mem_it->name());
       ptrmember.operands().push_back(exprt("cpp-this"));
 
       code_assignt assign(ptrmember, address);
@@ -930,7 +930,7 @@ void cpp_typecheckt::full_member_initialization(
 
       const symbolt& virtual_table_symbol_var  =
         lookup(virtual_table_symbol_type.name.as_string() + "@" + 
-            struct_type.get("name").as_string());
+            struct_type.name().as_string());
 
       exprt var =symbol_expr(virtual_table_symbol_var);
       address_of_exprt address(var);
@@ -939,7 +939,7 @@ void cpp_typecheckt::full_member_initialization(
       already_typechecked(address);
 
       exprt ptrmember("ptrmember");
-      ptrmember.set("component_name",mem_it->get("name"));
+      ptrmember.set("component_name",mem_it->name());
       ptrmember.operands().push_back(exprt("cpp-this"));
 
       code_assignt assign(ptrmember, address);
@@ -1260,7 +1260,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
       already_typechecked(address);
 
       exprt ptrmember("ptrmember");
-      ptrmember.set("component_name", cit->get("name"));
+      ptrmember.set("component_name", cit->name());
       ptrmember.operands().push_back(exprt("cpp-this"));
 
       code_assignt assign(ptrmember, address);

@@ -145,7 +145,7 @@ void cpp_typecheckt::add_base_components(
   std::set<irep_idt> &vbases,
   bool is_virtual)
 {
-  const irep_idt &from_name = from.get("name");
+  const irep_idt &from_name = from.name();
 
   if(is_virtual && vbases.find(from_name)!=vbases.end())
     return;

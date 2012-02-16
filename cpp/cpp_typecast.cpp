@@ -148,7 +148,7 @@ bool cpp_typecastt::subtype_typecast(
   irep_idt from_name;
 
   if(from.id()== "struct")
-    from_name = from.get("name");
+    from_name = from.name();
   else if(from.id()== "symbol")
     from_name = from.identifier();
   else
@@ -160,7 +160,7 @@ bool cpp_typecastt::subtype_typecast(
   irep_idt to_name;
 
   if(to.id()== "struct")
-    to_name = to.get("name");
+    to_name = to.name();
   else if(to.id()== "symbol")
     to_name = to.identifier();
   else
@@ -517,12 +517,12 @@ void cpp_typecastt::implicit_typecast_followed(
 
       c_qualifierst src_qualifiers(src_type);
       typet src_sym_type("symbol");
-      src_sym_type.identifier(src_type.get("name"));
+      src_sym_type.identifier(src_type.name());
       src_qualifiers.write(src_sym_type);
 
       c_qualifierst dest_qualifiers(dest_type);
       typet dest_sym_type("symbol");
-      dest_sym_type.identifier(dest_type.get("name"));
+      dest_sym_type.identifier(dest_type.name());
       dest_qualifiers.write(dest_sym_type);
 
       if(src_type == dest_type)
@@ -611,7 +611,7 @@ void cpp_typecastt::implicit_typecast_followed(
 
       c_qualifierst dest_qualifiers(dest_type);
       typet dest_sym_type("symbol");
-      dest_sym_type.identifier(dest_type.get("name"));
+      dest_sym_type.identifier(dest_type.name());
       dest_qualifiers.write(dest_sym_type);
 
       // create temporary object
