@@ -252,7 +252,7 @@ bool cpp_typecheckt::standard_conversion_integral_promotion(
   qual_from.read(expr.type());
 
   typet int_type("signedbv");
-  int_type.set("width", config.ansi_c.int_width);
+  int_type.width(config.ansi_c.int_width);
   qual_from.write(int_type);
 
   if(expr.type().id()=="signedbv")

@@ -808,7 +808,7 @@ exprt cpp_typecheck_resolvet::do_builtin(
     }
 
     dest=type_exprt(typet(base_name));
-    dest.type().set("width", integer2string(i));
+    dest.type().width(integer2string(i));
   }
   else if(base_name=="fixedbv")
   {
@@ -872,7 +872,7 @@ exprt cpp_typecheck_resolvet::do_builtin(
     }
 
     dest=type_exprt(typet(base_name));
-    dest.type().set("width", integer2string(width));
+    dest.type().width(integer2string(width));
     dest.type().set("integer_bits", integer2string(integer_bits));
   }
   else if(base_name=="integer")
@@ -1238,7 +1238,7 @@ exprt cpp_typecheck_resolvet::resolve(
            base_name == "SC_LOGIC_Z" || base_name == "SC_LOGIC_X")
   {
     exprt constant("constant", typet("verilogbv"));
-    constant.type().set("width", "1");
+    constant.type().width("1");
     if(base_name == "SC_LOGIC_0")
        constant.value("0");
     else if(base_name == "SC_LOGIC_1")
@@ -2300,7 +2300,7 @@ exprt cpp_typecheck_resolvet::do_builtin_sc_logic_extension(
   }
 
   typet verilogbv("verilogbv");
-  verilogbv.set("width", "1");
+  verilogbv.width("1");
 
   return type_exprt(verilogbv);
 }

@@ -743,7 +743,7 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
     typecheck_expr(size);
     bool size_is_unsigned=(size.type().id()=="unsignedbv");
     typet integer_type(size_is_unsigned?"unsignedbv":"signedbv");
-    integer_type.set("width", config.ansi_c.int_width);
+    integer_type.width(config.ansi_c.int_width);
     implicit_typecast(size, integer_type);
 
     expr.statement("cpp_new[]");
@@ -2690,17 +2690,17 @@ void cpp_typecheckt::typecheck_expr_comma(exprt &expr)
        expr.op1().type().id() == "verilogbv")? "verilogbv": "unsignedbv";
 
     typet new_type0(type_id);
-    new_type0.set("width", width0);
+    new_type0.width(width0);
     implicit_typecast(expr.op0(), new_type0);
 
     typet new_type1(type_id);
-    new_type1.set("width", width1);
+    new_type1.width(width1);
     implicit_typecast(expr.op1(), new_type1);
 
     expr.id("concatenation");
 
     typet new_type(type_id);
-    new_type.set("width", width0 + width1);
+    new_type.width(width0 + width1);
     expr.type()=new_type;
 
     return;
@@ -2830,7 +2830,7 @@ void cpp_typecheckt::typecheck_expr_sc_member(
     }
 
     exprt extractbits("extractbits", expr.op0().type());
-    extractbits.type().set("width", integer2string(o0-o1+1));
+    extractbits.type().width(integer2string(o0-o1+1));
     extractbits.copy_to_operands(expr.op0(), arg0, arg1);
 
     expr=exprt("sc_extension");
