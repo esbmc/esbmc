@@ -53,7 +53,7 @@ static void copy_parent(
   op0.type().id("pointer");
   op0.type().add("subtype").id("cpp-name");
   op0.type().add("subtype").get_sub().push_back(irept("name"));
-  op0.type().add("subtype").get_sub().back().set("identifier", parent_base_name);
+  op0.type().add("subtype").get_sub().back().identifier(parent_base_name);
   op0.type().add("subtype").get_sub().back().set("#location", location);
   op0.location() = location;
 
@@ -65,12 +65,12 @@ static void copy_parent(
   op1.type().add("subtype").set("#constant",true);
   op1.type().add("subtype").id("cpp-name");
   op1.type().add("subtype").get_sub().push_back(irept("name"));
-  op1.type().add("subtype").get_sub().back().set("identifier", parent_base_name);
+  op1.type().add("subtype").get_sub().back().identifier(parent_base_name);
   op1.type().add("subtype").get_sub().back().set("#location", location);
 
   op1.operands().push_back(exprt("cpp-name"));
   op1.op0().get_sub().push_back(irept("name"));
-  op1.op0().get_sub().back().set("identifier", arg_name);
+  op1.op0().get_sub().back().identifier(arg_name);
   op1.op0().get_sub().back().set("#location", location);
   op1.location() = location;
 }
@@ -110,7 +110,7 @@ static void copy_member(
   op0.location() = location;
 
   op0.get_sub().push_back(irept("name"));
-  op0.get_sub().back().set("identifier", member_base_name);
+  op0.get_sub().back().identifier(member_base_name);
   op0.get_sub().back().set("#location", location);
 
   code.op0().operands().push_back(exprt("member"));
@@ -119,12 +119,12 @@ static void copy_member(
 
   op1.add("component_cpp_name").id("cpp-name");
   op1.add("component_cpp_name").get_sub().push_back(irept("name"));
-  op1.add("component_cpp_name").get_sub().back().set("identifier", member_base_name);
+  op1.add("component_cpp_name").get_sub().back().identifier(member_base_name);
   op1.add("component_cpp_name").get_sub().back().set("#location", location);
 
   op1.operands().push_back(exprt("cpp-name"));
   op1.op0().get_sub().push_back(irept("name"));
-  op1.op0().get_sub().back().set("identifier", arg_name);
+  op1.op0().get_sub().back().identifier(arg_name);
   op1.op0().get_sub().back().set("#location", location);
   op1.location() = location;
 }
@@ -169,7 +169,7 @@ static void copy_array(
   op0.location() = location;
 
   op0.op0().get_sub().push_back(irept("name"));
-  op0.op0().get_sub().back().set("identifier", member_base_name);
+  op0.op0().get_sub().back().identifier(member_base_name);
   op0.op0().get_sub().back().set("#location", location);
   op0.copy_to_operands(constant);
 
@@ -179,12 +179,12 @@ static void copy_array(
   op1.operands().push_back(exprt("member"));
   op1.op0().add("component_cpp_name").id("cpp-name");
   op1.op0().add("component_cpp_name").get_sub().push_back(irept("name"));
-  op1.op0().add("component_cpp_name").get_sub().back().set("identifier", member_base_name);
+  op1.op0().add("component_cpp_name").get_sub().back().identifier(member_base_name);
   op1.op0().add("component_cpp_name").get_sub().back().set("#location", location);
 
   op1.op0().operands().push_back(exprt("cpp-name"));
   op1.op0().op0().get_sub().push_back(irept("name"));
-  op1.op0().op0().get_sub().back().set("identifier", arg_name);
+  op1.op0().op0().get_sub().back().identifier(arg_name);
   op1.op0().op0().get_sub().back().set("#location", location);
   op1.copy_to_operands(constant);
 
@@ -211,7 +211,7 @@ void cpp_typecheckt::default_ctor(
 {
   exprt name;
   name.id("name");
-  name.set("identifier", base_name);
+  name.identifier(base_name);
   name.location() = location;
 
   cpp_declaratort decl;
@@ -263,7 +263,7 @@ void cpp_typecheckt::default_cpctor(
 
   // Compound name
   irept compname("name");
-  compname.set("identifier", symbol.base_name);
+  compname.identifier(symbol.base_name);
   compname.set("#location", location);
 
   cpp_namet cppcomp;
@@ -272,7 +272,7 @@ void cpp_typecheckt::default_cpctor(
   // Argument name
   exprt argname("name");
   argname.location()=location;
-  argname.set("identifier", arg_name);
+  argname.identifier(arg_name);
 
   cpp_namet cpparg;
   cpparg.move_to_sub(argname);
@@ -314,7 +314,7 @@ void cpp_typecheckt::default_cpctor(
     assert(parent_it->get("type") == "symbol");
 
     const symbolt &parsymb=
-      lookup(parent_it->type().get("identifier"));
+      lookup(parent_it->type().identifier());
 
     if(cpp_is_pod(parsymb.type))
       copy_parent(location, parsymb.base_name, arg_name, block);
@@ -324,7 +324,7 @@ void cpp_typecheckt::default_cpctor(
 
       // Call the parent default copy constructor
       exprt name("name");
-      name.set("identifier", ctor_name);
+      name.identifier(ctor_name);
       name.location() = location;
 
       cpp_namet cppname;
@@ -354,7 +354,7 @@ void cpp_typecheckt::default_cpctor(
       cppname.move_to_sub(name);
 
       const symbolt &virtual_table_symbol_type =
-        namespacet(context).lookup(mem_it->type().subtype().get("identifier"));
+        namespacet(context).lookup(mem_it->type().subtype().identifier());
 
       const symbolt &virtual_table_symbol_var  =
         namespacet(context).lookup(virtual_table_symbol_type.name.as_string() + "@" + symbol.name.as_string());
@@ -383,7 +383,7 @@ void cpp_typecheckt::default_cpctor(
     irep_idt mem_name = mem_it->get("base_name");
 
     exprt name("name");
-    name.set("identifier", mem_name);
+    name.identifier(mem_name);
     name.location() = location;
 
     cpp_namet cppname;
@@ -468,7 +468,7 @@ void cpp_typecheckt::default_assignop(
   args_decl.type().id("merged_type");
   args_decl_type_sub.get_sub().push_back(irept("cpp-name"));
   args_decl_type_sub.get_sub().back().get_sub().push_back(irept("name"));
-  args_decl_type_sub.get_sub().back().get_sub().back().set("identifier", symbol.base_name);
+  args_decl_type_sub.get_sub().back().get_sub().back().identifier(symbol.base_name);
   args_decl_type_sub.get_sub().back().get_sub().back().set("#location", location);
 
   args_decl_type_sub.get_sub().push_back(irept("const"));
@@ -528,7 +528,7 @@ void cpp_typecheckt::default_assignop_value(
     assert(parent_it->get("type") == "symbol");
 
     const symbolt& symb=
-      lookup(parent_it->type().get("identifier"));
+      lookup(parent_it->type().identifier());
 
     copy_parent(location, symb.base_name, arg_name, block);
   }
@@ -633,8 +633,8 @@ void cpp_typecheckt::check_member_initializers(
       {
         assert(parent_it->get("type") == "symbol");
 
-        if(member_type.get("identifier")
-           == parent_it->type().get("identifier"))
+        if(member_type.identifier()
+           == parent_it->type().identifier())
         {
           ok = true;
           break;
@@ -677,7 +677,7 @@ void cpp_typecheckt::check_member_initializers(
         if(type.id() != "symbol")
           continue;
 
-        const symbolt& symb = lookup(type.get("identifier"));
+        const symbolt& symb = lookup(type.identifier());
         if(symb.type.id() != "struct")
           break;
 
@@ -685,7 +685,7 @@ void cpp_typecheckt::check_member_initializers(
         forall_irep(parent_it, bases.get_sub())
         {
           assert(parent_it->get("type") == "symbol" );
-          if(symb.name == parent_it->type().get("identifier"))
+          if(symb.name == parent_it->type().identifier())
           {
             ok = true;
             break;
@@ -709,8 +709,8 @@ void cpp_typecheckt::check_member_initializers(
         {
           assert(parent_it->get("type") == "symbol" );
 
-          if(member_type.get("identifier")
-             == parent_it->type().get("identifier"))
+          if(member_type.identifier()
+             == parent_it->type().identifier())
           {
             ok = true;
             break;
@@ -772,7 +772,7 @@ void cpp_typecheckt::full_member_initialization(
     {
       cpp_namet most_derived;
       most_derived.get_sub().push_back(irept("name"));
-      most_derived.get_sub().back().set("identifier", "@most_derived");
+      most_derived.get_sub().back().identifier("@most_derived");
 
       exprt tmp;
       tmp.swap(most_derived);
@@ -788,7 +788,7 @@ void cpp_typecheckt::full_member_initialization(
       {
         // default initializer
         irept name("name");
-        name.set("identifier", symb.base_name);
+        name.identifier(symb.base_name);
 
         cpp_namet cppname;
         cppname.move_to_sub(name);
@@ -810,7 +810,7 @@ void cpp_typecheckt::full_member_initialization(
     assert(parent_it->get("type") == "symbol");
 
     const symbolt &ctorsymb=
-      lookup(parent_it->type().get("identifier"));
+      lookup(parent_it->type().identifier());
 
     if(cpp_is_pod(ctorsymb.type))
       continue;
@@ -865,8 +865,8 @@ void cpp_typecheckt::full_member_initialization(
       if(member_type.id()!="symbol")
         break;
 
-      if(parent_it->type().get("identifier")==
-         member_type.get("identifier"))
+      if(parent_it->type().identifier()==
+         member_type.identifier())
       {
         final_initializers.move_to_sub(initializer);
         found = true;
@@ -878,7 +878,7 @@ void cpp_typecheckt::full_member_initialization(
     if(!found)
     {
       irept name("name");
-      name.set("identifier", ctor_name);
+      name.identifier(ctor_name);
 
       cpp_namet cppname;
       cppname.move_to_sub(name);
@@ -895,7 +895,7 @@ void cpp_typecheckt::full_member_initialization(
       {
         cpp_namet most_derived;
         most_derived.get_sub().push_back(irept("name"));
-        most_derived.get_sub().back().set("identifier", "@most_derived");
+        most_derived.get_sub().back().identifier("@most_derived");
 
         exprt tmp;
         tmp.swap(most_derived);
@@ -926,7 +926,7 @@ void cpp_typecheckt::full_member_initialization(
       cppname.move_to_sub(name);
 
       const symbolt& virtual_table_symbol_type = 
-        lookup(mem_it->type().subtype().get("identifier"));
+        lookup(mem_it->type().subtype().identifier());
 
       const symbolt& virtual_table_symbol_var  =
         lookup(virtual_table_symbol_type.name.as_string() + "@" + 
@@ -996,7 +996,7 @@ void cpp_typecheckt::full_member_initialization(
     if(!found && !cpp_is_pod((const typet&) (mem_it->type())))
     {
       irept name("name");
-      name.set("identifier", mem_name);
+      name.identifier(mem_name);
 
       cpp_namet cppname;
       cppname.move_to_sub(name);
@@ -1063,7 +1063,7 @@ bool cpp_typecheckt::find_cpctor(const symbolt &symbol) const
     if(!is_reference(arg1_type))
       continue;
 
-    if(arg1_type.subtype().get("identifier")!=symbol.name)
+    if(arg1_type.subtype().identifier()!=symbol.name)
       continue;
 
     bool defargs = true;
@@ -1126,7 +1126,7 @@ bool cpp_typecheckt::find_assignop(const symbolt& symbol) const
     if(!is_reference(arg1_type))
       continue;
 
-    if(arg1_type.subtype().get("identifier")!=symbol.name)
+    if(arg1_type.subtype().identifier()!=symbol.name)
       continue;
 
     return true;
@@ -1182,7 +1182,7 @@ void cpp_typecheckt::default_dtor(
 
   irept name;
   name.id("name");
-  name.set("identifier", "~"+id2string(symb.base_name));
+  name.identifier("~"+id2string(symb.base_name));
   name.set("#location", symb.location);
 
   cpp_declaratort decl;
@@ -1247,7 +1247,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
 
       const symbolt &virtual_table_symbol_type =
         namespacet(context).lookup(
-          cit->type().subtype().get("identifier"));
+          cit->type().subtype().identifier());
 
       const symbolt &virtual_table_symbol_var  =
         namespacet(context).lookup(
@@ -1286,7 +1286,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
       continue;
 
     irept name("name");
-    name.set("identifier", cit->get("base_name"));
+    name.identifier(cit->get("base_name"));
     name.set("#location", location);
 
     cpp_namet cppname;
@@ -1314,7 +1314,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
   {
     assert(bit->id()=="base");
     assert(bit->type().id()=="symbol");
-    const symbolt& psymb = lookup(bit->type().get("identifier"));
+    const symbolt& psymb = lookup(bit->type().identifier());
 
     exprt object("dereference");
     object.operands().push_back(exprt("cpp-this"));

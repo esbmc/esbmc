@@ -60,7 +60,7 @@ void cpp_typecheckt::convert_anonymous_union(
   std::string identifier="#anon_union"+i2string(anon_counter++);
 
   irept name("name");
-  name.set("identifier", identifier);
+  name.identifier(identifier);
   name.set("#location", declaration.location());
 
   cpp_namet cpp_name;

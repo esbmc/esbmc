@@ -355,7 +355,7 @@ void cpp_typecheckt::typecheck_template_member_function(
   cpp_scopet::id_sett id_set;
 
   cpp_scopes.current_scope().lookup(
-    cpp_name.get_sub().front().get("identifier"),
+    cpp_name.get_sub().front().identifier(),
     id_set);
 
   if(id_set.empty())
@@ -363,7 +363,7 @@ void cpp_typecheckt::typecheck_template_member_function(
     str << cpp_scopes.current_scope();
     err_location(cpp_name);
     str << "template function/member identifier `"
-        << cpp_name.get_sub().front().get("identifier")
+        << cpp_name.get_sub().front().identifier()
         << "' not found";
     throw 0;
   }
@@ -371,7 +371,7 @@ void cpp_typecheckt::typecheck_template_member_function(
   {
     err_location(cpp_name);
     str << "template function/member identifier `"
-        << cpp_name.get_sub().front().get("identifier")
+        << cpp_name.get_sub().front().identifier()
         << "' is ambiguous";
     throw 0;
   }
@@ -380,7 +380,7 @@ void cpp_typecheckt::typecheck_template_member_function(
     std::cerr << *(*id_set.begin()) << std::endl;
     err_location(cpp_name);
     str << "template function/member identifier `"
-        << cpp_name.get_sub().front().get("identifier")
+        << cpp_name.get_sub().front().identifier()
         << "' is not a template";
     throw 0;
   }
@@ -592,7 +592,7 @@ const symbolt& cpp_typecheckt::convert_template_specialization(
     }
 
     std::string base_name =
-      cpp_name.get_sub()[0].get("identifier").c_str();
+      cpp_name.get_sub()[0].identifier().c_str();
 
     cpp_scopest::id_sett id_set;
     cpp_scopes.get_ids(base_name, cpp_idt::TEMPLATE, id_set ,true);
@@ -649,7 +649,7 @@ const symbolt& cpp_typecheckt::convert_template_specialization(
     }
 
     std::string base_name =
-      cpp_name.get_sub()[0].get("identifier").c_str();
+      cpp_name.get_sub()[0].identifier().c_str();
 
     cpp_scopest::id_sett id_set;
     cpp_scopes.get_ids(base_name, id_set, true);
@@ -738,7 +738,7 @@ cpp_scopet &cpp_typecheckt::typecheck_template_parameters(
     if(declarator.name().is_nil())
     {
       irept name("name");
-      name.set("identifier", "anon#"+i2string(++anon_count));
+      name.identifier("anon#"+i2string(++anon_count));
       declarator.name()=cpp_namet();
       declarator.name().get_sub().push_back(name);
     }
@@ -758,7 +758,7 @@ cpp_scopet &cpp_typecheckt::typecheck_template_parameters(
     if(cpp_declarator_converter.is_typedef)
     {
       parameter=exprt("type", typet("symbol"));
-      parameter.type().set("identifier", symbol.name);
+      parameter.type().identifier(symbol.name);
       parameter.type().location()=declaration.find_location();
     }
     else
@@ -912,9 +912,9 @@ void cpp_typecheckt::build_template_map(
 
       typet tmp(i.type());
 
-      template_map.type_map[t.type().get("identifier")] = tmp;
+      template_map.type_map[t.type().identifier()] = tmp;
       //template_map.type_map.insert(std::pair<irep_idt, typet>
-      //  (t.type().get("identifier"), tmp));
+      //  (t.type().identifier(), tmp));
     }
     else
     {
@@ -929,7 +929,7 @@ void cpp_typecheckt::build_template_map(
       implicit_typecast(tmp, t.type());
 
       template_map.expr_map.insert(std::pair<irep_idt, exprt>
-        (t.get("identifier"), tmp));
+        (t.identifier(), tmp));
     }
 
     t_it++;

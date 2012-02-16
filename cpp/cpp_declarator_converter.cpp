@@ -65,7 +65,7 @@ symbolt &cpp_declarator_convertert::convert(
     std::string tmp;
     cpp_typecheck.typecheck_type(type);
     irept name("name");
-    name.set("identifier", "("+cpp_type2name(type)+")");
+    name.identifier("("+cpp_type2name(type)+")");
     declarator.name().get_sub().back().swap(name);
   }
 
@@ -164,7 +164,7 @@ symbolt &cpp_declarator_convertert::convert(
         throw 0;
       }
 
-      irep_idt identifier=symbol_expr.type().get("identifier");
+      irep_idt identifier=symbol_expr.type().identifier();
       const symbolt &symb=cpp_typecheck.lookup(identifier);
       const typet &type = symb.type;
       assert(type.id()=="struct");

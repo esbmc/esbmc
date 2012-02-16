@@ -219,7 +219,7 @@ std::string expr2cppt::convert_rec(
   }
   else if(src.id()=="symbol")
   {
-    const irep_idt &identifier=src.get("identifier");
+    const irep_idt &identifier=src.identifier();
 
     const symbolt &symbol=ns.lookup(identifier);
 

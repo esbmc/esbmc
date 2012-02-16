@@ -255,7 +255,7 @@ codet cpp_typecheckt::cpp_constructor(
 
     irept cpp_name("cpp-name");
     cpp_name.get_sub().push_back(irept("name"));
-    cpp_name.get_sub().back().set("identifier", constructor_name);
+    cpp_name.get_sub().back().identifier(constructor_name);
     cpp_name.get_sub().back().set("#location", location);
 
     side_effect_expr_function_callt function_call;

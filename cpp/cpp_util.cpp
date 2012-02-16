@@ -26,7 +26,7 @@ Function: cpp_symbol_expr
 exprt cpp_symbol_expr(const symbolt &symbol)
 {
   exprt tmp("symbol", symbol.type);
-  tmp.set("identifier", symbol.name);
+  tmp.identifier(symbol.name);
 
   if(symbol.lvalue)
     tmp.set("#lvalue", true);

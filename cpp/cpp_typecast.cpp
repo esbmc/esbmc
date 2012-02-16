@@ -105,7 +105,7 @@ void cpp_typecastt::get_bases(
   {
     assert(it->id()=="type");
     assert(it->get("type") == "symbol");
-    const irep_idt &base=it->type().get("identifier");
+    const irep_idt &base=it->type().identifier();
     base_count[base]++;
     get_bases(base, base_count);
   }
@@ -150,7 +150,7 @@ bool cpp_typecastt::subtype_typecast(
   if(from.id()== "struct")
     from_name = from.get("name");
   else if(from.id()== "symbol")
-    from_name = from.get("identifier");
+    from_name = from.identifier();
   else
   {
     err = "types are incompatible";
@@ -162,7 +162,7 @@ bool cpp_typecastt::subtype_typecast(
   if(to.id()== "struct")
     to_name = to.get("name");
   else if(to.id()== "symbol")
-    to_name = to.get("identifier");
+    to_name = to.identifier();
   else
   {
     err = "types are incompatible";
@@ -517,12 +517,12 @@ void cpp_typecastt::implicit_typecast_followed(
 
       c_qualifierst src_qualifiers(src_type);
       typet src_sym_type("symbol");
-      src_sym_type.set("identifier", src_type.get("name"));
+      src_sym_type.identifier(src_type.get("name"));
       src_qualifiers.write(src_sym_type);
 
       c_qualifierst dest_qualifiers(dest_type);
       typet dest_sym_type("symbol");
-      dest_sym_type.set("identifier", dest_type.get("name"));
+      dest_sym_type.identifier(dest_type.get("name"));
       dest_qualifiers.write(dest_sym_type);
 
       if(src_type == dest_type)
@@ -611,7 +611,7 @@ void cpp_typecastt::implicit_typecast_followed(
 
       c_qualifierst dest_qualifiers(dest_type);
       typet dest_sym_type("symbol");
-      dest_sym_type.set("identifier", dest_type.get("name"));
+      dest_sym_type.identifier(dest_type.get("name"));
       dest_qualifiers.write(dest_sym_type);
 
       // create temporary object

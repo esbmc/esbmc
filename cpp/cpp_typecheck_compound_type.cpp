@@ -175,7 +175,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
 
   // create type symbol
   typet symbol_type("symbol");
-  symbol_type.set("identifier", symbol_name);
+  symbol_type.identifier(symbol_name);
   qualifiers.write(symbol_type);
   type.swap(symbol_type);
 }
@@ -214,7 +214,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     declarator.type().subtype()=type;
 
     irept name("name");
-    name.set("identifier", "("+cpp_type2name(type)+")");
+    name.identifier("("+cpp_type2name(type)+")");
     declarator.name().get_sub().back().swap(name);
   }
 
@@ -390,7 +390,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         assert(code_type.arguments().size()>0);
         const typet& pointer_type = code_type.arguments()[0].type();
         assert(pointer_type.id() == "pointer");
-        virtual_bases.insert(pointer_type.subtype().get("identifier"));
+        virtual_bases.insert(pointer_type.subtype().identifier());
       }
     }
 
@@ -622,7 +622,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
       else
       {
         exprt symexpr("symbol");
-        symexpr.set("identifier", new_symbol->name);
+        symexpr.identifier(new_symbol->name);
 
         exprt::operandst ops;
         ops.push_back(value);
@@ -1273,7 +1273,7 @@ void cpp_typecheckt::adjust_method_type(
   argument.type()=typet("pointer");
 
   argument.type().subtype()=typet("symbol");
-  argument.type().subtype().set("identifier", compound_symbol);
+  argument.type().subtype().identifier(compound_symbol);
 
   argument.set("#identifier", "this");
   argument.set("#base_name", "this");
@@ -1327,7 +1327,7 @@ void cpp_typecheckt::convert_compound_ano_union(
   base_name.c_str();
 
   typet symbol_type("symbol");
-  symbol_type.set("identifier", union_symbol.name);
+  symbol_type.identifier(union_symbol.name);
 
   struct_typet::componentt component;
   component.set("name", identifier);
@@ -1531,7 +1531,7 @@ bool cpp_typecheckt::check_component_access(const irept& component,
     const irept& friend_symb = *f_it;
 
     const cpp_scopet& friend_scope =
-      cpp_scopes.get_scope(friend_symb.get("identifier"));
+      cpp_scopes.get_scope(friend_symb.identifier());
 
     cpp_scopet* pscope = &(cpp_scopes.current_scope());
 
@@ -1574,7 +1574,7 @@ void cpp_typecheckt::get_bases(
     assert(it->get("type") == "symbol");
 
     const struct_typet &base=
-    to_struct_type(lookup(it->type().get("identifier")).type);
+    to_struct_type(lookup(it->type().identifier()).type);
     set_bases.insert(base.get("name"));
     get_bases(base,set_bases);
   }
@@ -1608,7 +1608,7 @@ void cpp_typecheckt::get_virtual_bases(
     assert(it->get("type") == "symbol");
 
     const struct_typet &base=
-    to_struct_type(lookup(it->type().get("identifier")).type);
+    to_struct_type(lookup(it->type().identifier()).type);
 
     if(it->get_bool("virtual"))
       vbases.push_back(base.get("name"));

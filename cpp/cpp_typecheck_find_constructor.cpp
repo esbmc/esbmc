@@ -69,7 +69,7 @@ void cpp_typecheckt::find_constructor(
             throw "constructor without identifier";
 
           constructor_expr=exprt("symbol", type);
-          constructor_expr.set("identifier", identifier);
+          constructor_expr.identifier(identifier);
           constructor_expr.location()=location;
           return;
         }

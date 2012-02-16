@@ -232,9 +232,9 @@ void cpp_typecheck_resolvet::remove_duplicates(
     irep_idt id;
 
     if(it->id()=="symbol")
-      id=it->get("identifier");
+      id=it->identifier();
     else if(it->id()=="type" && it->type().id()=="symbol")
-      id=it->type().get("identifier");
+      id=it->type().identifier();
 
     if(id=="")
     {
@@ -428,7 +428,7 @@ void cpp_typecheck_resolvet::convert_identifier(
       else
       {
         e.type()=typet("symbol");
-        e.type().set("identifier", symbol.name);
+        e.type().identifier(symbol.name);
       }
     }
     else
@@ -1829,7 +1829,7 @@ void cpp_typecheck_resolvet::apply_template_args(
     return; // templates are always symbols
 
   const symbolt &template_symbol=
-    cpp_typecheck.lookup(expr.get("identifier"));
+    cpp_typecheck.lookup(expr.identifier());
 
   if(!template_symbol.type.get_bool("is_template"))
     return;
@@ -1874,11 +1874,11 @@ void cpp_typecheck_resolvet::apply_template_args(
   {
     const symbolt &new_symbol=
       cpp_typecheck.instantiate_template(
-        location, expr.get("identifier"), template_args_non_tc);
+        location, expr.identifier(), template_args_non_tc);
 
     exprt expr_type("type");
     expr_type.type().id("symbol");
-    expr_type.type().set("identifier", new_symbol.name);
+    expr_type.type().identifier(new_symbol.name);
     expr.swap(expr_type);
   }
   else
@@ -1886,7 +1886,7 @@ void cpp_typecheck_resolvet::apply_template_args(
     // must be a function, maybe method
     const symbolt &new_symbol=
       cpp_typecheck.instantiate_template(
-        location, expr.get("identifier"), template_args_non_tc);
+        location, expr.identifier(), template_args_non_tc);
 
     // check if it is a method
     const code_typet &code_type = to_code_type(new_symbol.type);
@@ -1898,7 +1898,7 @@ void cpp_typecheck_resolvet::apply_template_args(
       if(fargs.has_object)
       {
         const symbolt &type_symb = 
-          cpp_typecheck.lookup(fargs.operands.begin()->type().get("identifier"));
+          cpp_typecheck.lookup(fargs.operands.begin()->type().identifier());
 
         assert(type_symb.type.id()=="struct");
 
@@ -2039,7 +2039,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
         const typet &type=pcomp.type();
         assert(type.id()!="struct");
         if(type.id()=="symbol")
-          identifier = type.get("identifier");
+          identifier = type.identifier();
         else
           continue;
       }
@@ -2061,7 +2061,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
           break;
         }
         else if(symbol.type.id()=="symbol")
-          identifier=symbol.type.get("identifier");
+          identifier=symbol.type.identifier();
         else
           break;
       }
@@ -2082,7 +2082,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
 
       if(e.type().id() == "symbol")
       {
-        irep_idt identifier=e.type().get("identifier");
+        irep_idt identifier=e.type().identifier();
 
         while(true)
         {
@@ -2098,7 +2098,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
             break;
           }
           else if(symbol.type.id()=="symbol")
-            identifier=symbol.type.get("identifier");
+            identifier=symbol.type.identifier();
           else
             break;
         }

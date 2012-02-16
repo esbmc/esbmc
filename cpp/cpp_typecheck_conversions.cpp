@@ -1277,7 +1277,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
         // To take care of the possible virtual case,
         // we build the function as a member expression.
         irept func_name("name");
-        func_name.set("identifier", component.get("base_name"));
+        func_name.identifier(component.get("base_name"));
         cpp_namet cpp_func_name;
         cpp_func_name.get_sub().push_back(func_name);
 
@@ -1551,7 +1551,7 @@ bool cpp_typecheckt::reference_binding(
         // To take care of the possible virtual case,
         // we build the function as a member expression.
         irept func_name("name");
-        func_name.set("identifier", component.get("base_name"));
+        func_name.identifier(component.get("base_name"));
         cpp_namet cpp_func_name;
         cpp_func_name.get_sub().push_back(func_name);
 

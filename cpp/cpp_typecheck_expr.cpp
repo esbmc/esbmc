@@ -44,9 +44,9 @@ bool cpp_typecheckt::find_parent(
 {
   forall_irep(bit, symb.type.find("bases").get_sub())
   {
-    if(lookup(bit->type().get("identifier")).base_name == base_name)
+    if(lookup(bit->type().identifier()).base_name == base_name)
     {
-      identifier = bit->type().get("identifier");
+      identifier = bit->type().identifier();
       return true;
     }
   }
@@ -398,7 +398,7 @@ void cpp_typecheckt::typecheck_function_expr(
       // first do function/operator
       cpp_namet cpp_name;
       cpp_name.get_sub().push_back(irept("name"));
-      cpp_name.get_sub().back().set("identifier", op_name);
+      cpp_name.get_sub().back().identifier(op_name);
       cpp_name.get_sub().back().add("#location")=expr.location();
 
       functioncall.function()=
@@ -526,7 +526,7 @@ bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
 
     cpp_namet cpp_name;
     cpp_name.get_sub().push_back(irept("name"));
-    cpp_name.get_sub().back().set("identifier", op_name);
+    cpp_name.get_sub().back().identifier(op_name);
     cpp_name.get_sub().back().add("#location")=expr.location();
 
     // See if the struct decalares the cast operator as a member
@@ -605,7 +605,7 @@ bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
       // first do function/operator
       cpp_namet cpp_name;
       cpp_name.get_sub().push_back(irept("name"));
-      cpp_name.get_sub().back().set("identifier", op_name);
+      cpp_name.get_sub().back().identifier(op_name);
       cpp_name.get_sub().back().add("#location")=expr.location();
 
       // turn this into a function call
@@ -882,7 +882,7 @@ void cpp_typecheckt::typecheck_expr_explicit_constructor_call(exprt &expr)
     assert(expr.type().id() == "struct");
 
     typet symb("symbol");
-    symb.set("identifier", expr.type().get("name"));
+    symb.identifier(expr.type().get("name"));
     symb.location()=expr.location();
 
     exprt e=expr;
@@ -1096,7 +1096,7 @@ void cpp_typecheckt::typecheck_expr_member(
       {
         err_location(expr);
         str << "error: member `"
-            << lookup(symbol_expr.get("identifier")).base_name
+            << lookup(symbol_expr.identifier()).base_name
             << "' is a constructor";
         throw 0;
       }
@@ -1110,7 +1110,7 @@ void cpp_typecheckt::typecheck_expr_member(
         {
           err_location(expr);
           str << "error: `"
-              << symbol_expr.get("identifier")
+              << symbol_expr.identifier()
               << "' is not static member "
               << "of class `" << struct_symbol.base_name << "'";
           throw 0;
@@ -1257,7 +1257,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
   add_implicit_dereference(cast_op);
 
   const irep_idt &id=
-  f_op.get_sub().front().get("identifier");
+  f_op.get_sub().front().identifier();
 
   if(f_op.get_sub().size()!=2 ||
      f_op.get_sub()[1].id()!="template_args")
@@ -1372,7 +1372,7 @@ void cpp_typecheckt::typecheck_expr_cpp_name(
       std::string tmp="("+cpp_type2name(type)+")";
 
       typet name("name");
-      name.set("identifier", tmp);
+      name.identifier(tmp);
       name.location()=location;
 
       type=name;
@@ -1382,7 +1382,7 @@ void cpp_typecheckt::typecheck_expr_cpp_name(
   if(expr.get_sub().size()>=1 &&
      expr.get_sub().front().id()=="name")
   {
-    const irep_idt &id=expr.get_sub().front().get("identifier");
+    const irep_idt &id=expr.get_sub().front().identifier();
 
     if(id=="const_cast" ||
        id=="dynamic_cast" ||
@@ -1639,7 +1639,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
       // get the virtual table
       typet this_type =  to_code_type(expr.function().type()).arguments().front().type();
-      irep_idt vtable_name = this_type.subtype().get("identifier").as_string() +"::@vtable_pointer";
+      irep_idt vtable_name = this_type.subtype().identifier().as_string() +"::@vtable_pointer";
 
       const struct_typet &vt_struct=
         to_struct_type(follow(this_type.subtype()));
@@ -1652,7 +1652,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
       vtptr_member.set("component_name", vtable_name);
 
       // look for the right entry
-      irep_idt vtentry_component_name = vt_compo.type().subtype().get("identifier").as_string()
+      irep_idt vtentry_component_name = vt_compo.type().subtype().identifier().as_string()
         + "::" + expr.function().type().get("#virtual_name").as_string();
 
       exprt vtentry_member("ptrmember");
@@ -1688,7 +1688,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   else if(expr.function().type().id()=="struct")
   {
     irept name("name");
-    name.set("identifier", "operator()");
+    name.identifier("operator()");
     name.set("#location", expr.location());
 
     cpp_namet cppname;
@@ -1744,7 +1744,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
     get_component(expr.location(),
                   new_object,
-                  expr.function().get("identifier"),
+                  expr.function().identifier(),
                   member);
 
     // special case for the initialization of parents
@@ -2261,7 +2261,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
 
   cpp_namet cpp_name;
   cpp_name.get_sub().push_back(irept("name"));
-  cpp_name.get_sub().front().set("identifier", strop);
+  cpp_name.get_sub().front().identifier(strop);
   cpp_name.get_sub().front().set("#location", expr.location());
 
   // expr.op0() is already typechecked
@@ -2344,7 +2344,7 @@ void cpp_typecheckt::typecheck_side_effect_increment(
 
   cpp_namet cpp_name;
   cpp_name.get_sub().push_back(irept("name"));
-  cpp_name.get_sub().front().set("identifier", str_op);
+  cpp_name.get_sub().front().identifier(str_op);
   cpp_name.get_sub().front().set("#location", expr.location());
 
   exprt already_typechecked("already_typechecked");
@@ -2503,7 +2503,7 @@ void cpp_typecheckt::typecheck_expr_function_identifier(exprt &expr)
   {
     // Check if the function body has to be typechecked
     contextt::symbolst::iterator it=
-      context.symbols.find(expr.get("identifier"));
+      context.symbols.find(expr.identifier());
 
     assert(it != context.symbols.end());
 
@@ -2774,7 +2774,7 @@ void cpp_typecheckt::typecheck_expr_sc_member(
     throw 0;
   }
 
-  irep_idt name=cpp_name.get_sub()[0].get("identifier");
+  irep_idt name=cpp_name.get_sub()[0].identifier();
 
   if(name=="range")
   {

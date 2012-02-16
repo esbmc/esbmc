@@ -45,7 +45,7 @@ void template_mapt::apply(typet &type) const
   else if(type.id()=="symbol")
   {
     type_mapt::const_iterator m_it=
-      type_map.find(type.get("identifier"));
+      type_map.find(type.identifier());
 
     if(m_it!=type_map.end())
     {
@@ -91,7 +91,7 @@ void template_mapt::apply(exprt &expr) const
   if(expr.id()=="symbol")
   {
     expr_mapt::const_iterator m_it=
-      expr_map.find(expr.get("identifier"));
+      expr_map.find(expr.identifier());
 
     if(m_it!=expr_map.end())
     {
@@ -287,7 +287,7 @@ void template_mapt::set(
 
     typet tmp=value.type();
 
-    irep_idt identifier=parameter.type().get("identifier");
+    irep_idt identifier=parameter.type().identifier();
     type_map[identifier]=tmp;
   }
   else
@@ -297,7 +297,7 @@ void template_mapt::set(
     if(value.id()=="type")
       assert(false); // typechecked before!
 
-    irep_idt identifier=parameter.get("identifier");
+    irep_idt identifier=parameter.identifier();
     expr_map[identifier]=value;
   }
 }
@@ -330,16 +330,16 @@ void template_mapt::build_unassigned(
     if(t.id()=="type")
     {
       typet tmp("unassigned");
-      tmp.set("identifier", t.type().get("identifier"));
+      tmp.identifier(t.type().identifier());
       tmp.location()=t.location();
-      type_map[t.type().get("identifier")]=tmp;
+      type_map[t.type().identifier()]=tmp;
     }
     else
     {
       exprt tmp("unassigned", t.type());
-      tmp.set("identifier", t.get("identifier"));
+      tmp.identifier(t.identifier());
       tmp.location()=t.location();
-      expr_map[t.get("identifier")]=tmp;
+      expr_map[t.identifier()]=tmp;
     }
   }
 }
@@ -372,12 +372,12 @@ cpp_template_args_tct template_mapt::build_template_args(
     if(t.id()=="type")
     {
       template_args.arguments()[i]=
-        exprt("type", lookup_type(t.type().get("identifier")));
+        exprt("type", lookup_type(t.type().identifier()));
     }
     else
     {
       template_args.arguments()[i]=
-        lookup_expr(t.get("identifier"));
+        lookup_expr(t.identifier());
     }
   }
 

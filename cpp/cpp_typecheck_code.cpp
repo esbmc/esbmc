@@ -163,7 +163,7 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
       if(access == "private" || access == "noaccess")
       {
         err_location(code.location());
-        str << "error: constructor of `" << symbol_expr.type().get("identifier").as_string()
+        str << "error: constructor of `" << symbol_expr.type().identifier().as_string()
             << "' is not accessible";
         throw 0;
       }

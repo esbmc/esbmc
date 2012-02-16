@@ -791,7 +791,7 @@ bool Parser::rTempArgDeclaration(cpp_declarationt &declaration)
 
       exprt name("name");
       set_location(name, tk2);
-      name.set("identifier", tk2.text);
+      name.identifier(tk2.text);
       set_location(name,tk1);
       cpp_name.get_sub().push_back(name);
       declarator.name().swap(cpp_name);
@@ -2352,7 +2352,7 @@ bool Parser::rName(irept &name)
     case Identifier:
       lex->GetToken(tk);
       components.push_back(irept("name"));
-      components.back().set("identifier", tk.text);
+      components.back().identifier(tk.text);
       set_location(components.back(), tk);
 
       {
@@ -2586,7 +2586,7 @@ bool Parser::rPtrToMember(irept &ptr_to_mem)
     case Identifier:
       lex->GetToken(tk);
       components.push_back(irept("name"));
-      components.back().set("identifier", tk.text);
+      components.back().identifier(tk.text);
       set_location(components.back(), tk);
 
       {
@@ -4878,7 +4878,7 @@ bool Parser::rVarNameCore(exprt &name)
 
       lex->GetToken(tk);
       components.push_back(irept("name"));
-      components.back().set("identifier", tk.text);
+      components.back().identifier(tk.text);
       set_location(components.back(), tk);
 
       // may be followed by template arguments

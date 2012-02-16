@@ -347,7 +347,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
     }
 
     const symbolt &new_symb=
-      lookup(new_decl.type().get("identifier"));
+      lookup(new_decl.type().identifier());
 
     return new_symb;
   }
@@ -414,7 +414,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   convert(new_decl);
 
   const symbolt &symb=
-    lookup(new_decl.declarators()[0].get("identifier"));
+    lookup(new_decl.declarators()[0].identifier());
 
   return symb;
 }
@@ -608,7 +608,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   if(new_decl.type().id()=="struct")
   {
     convert(new_decl);
-    const symbolt& new_symb = lookup(new_decl.type().get("identifier"));
+    const symbolt& new_symb = lookup(new_decl.type().identifier());
 
     // also instantiate all the template methods
     const exprt &template_methods=
@@ -700,7 +700,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   convert(new_decl);
 
   const symbolt &symb=
-    lookup(new_decl.declarators()[0].get("identifier"));
+    lookup(new_decl.declarators()[0].identifier());
 
   return symb;
 }

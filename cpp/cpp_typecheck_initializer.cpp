@@ -291,7 +291,7 @@ void cpp_typecheckt::zero_initializer(
     if(comp_size>0)
     {
       irept name("name");
-      name.set("identifier", comp.get("base_name"));
+      name.identifier(comp.get("base_name"));
       cpp_namet cpp_name;
       cpp_name.move_to_sub(name);
 

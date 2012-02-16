@@ -34,7 +34,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
     const pointer_typet& pointer_type =
       static_cast<const pointer_typet&>(code_type.arguments()[0].type());
 
-    irep_idt class_id = pointer_type.subtype().get("identifier");
+    irep_idt class_id = pointer_type.subtype().identifier();
 
     std::map<irep_idt,exprt>& value_map =
       vt_value_maps[class_id];

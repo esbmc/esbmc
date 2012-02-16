@@ -312,7 +312,7 @@ void cpp_typecheckt::static_initialization()
       else
       {
         exprt symbexpr("symbol", symbol.type);
-        symbexpr.set("identifier", symbol.name);
+        symbexpr.identifier(symbol.name);
 
         codet code;
         code.set_statement("assign");
