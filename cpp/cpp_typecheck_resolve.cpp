@@ -374,7 +374,7 @@ void cpp_typecheck_resolvet::convert_identifier(
           object=exprt("dereference", this_expr.type().subtype());
           object.copy_to_operands(this_expr);
           object.type().set("#constant",
-                            this_expr.type().subtype().get_bool("#constant"));
+                            this_expr.type().subtype().cmt_constant());
           object.set("#lvalue",true);
           object.location()=location;
         }
@@ -442,13 +442,13 @@ void cpp_typecheck_resolvet::convert_identifier(
       {
 
         typet followed = symbol.type;
-        bool constant = followed.get_bool("#constant");
+        bool constant = followed.cmt_constant();
 
         while(followed.id() == "symbol")
         {
           typet tmp = cpp_typecheck.lookup(followed).type;
           followed = tmp;
-          constant |= followed.get_bool("#constant");
+          constant |= followed.cmt_constant();
         }
 
         if(constant &&
@@ -2035,7 +2035,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
         static_cast<const struct_typet&>(cpp_typecheck.lookup(id.class_identifier).type);
         const exprt pcomp=struct_type.get_component(identifier);
         assert(pcomp.is_not_nil());
-        assert(pcomp.get_bool("is_type"));
+        assert(pcomp.is_type());
         const typet &type=pcomp.type();
         assert(type.id()!="struct");
         if(type.id()=="symbol")

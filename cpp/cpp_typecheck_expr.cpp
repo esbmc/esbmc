@@ -122,7 +122,7 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
   if(expr.op1().type().id() == "empty" ||
      expr.op1().type().id() == "empty")
   {
-    if(expr.op1().get_bool("#lvalue"))
+    if(expr.op1().cmt_lvalue())
     {
       exprt e1(expr.op1());
       if(!standard_conversion_lvalue_to_rvalue(e1, expr.op1()))
@@ -155,7 +155,7 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
       }
     }
 
-    if(expr.op2().get_bool("#lvalue"))
+    if(expr.op2().cmt_lvalue())
     {
       exprt e2(expr.op2());
       if(!standard_conversion_lvalue_to_rvalue(e2, expr.op2()))
@@ -273,8 +273,8 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
     }
   }
 
-  if(expr.op1().get_bool("#lvalue") &&
-     expr.op2().get_bool("#lvalue"))
+  if(expr.op1().cmt_lvalue() &&
+     expr.op2().cmt_lvalue())
     expr.set("#lvalue", true);
   return;
 }
@@ -510,7 +510,7 @@ bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
   if(!overloadable(expr))
     return false;
   else if(expr.id()=="dereference" &&
-          expr.get_bool("#implicit"))
+          expr.implicit())
     return false;
 
   if(expr.id()=="explicit-typecast")
@@ -669,7 +669,7 @@ void cpp_typecheckt::typecheck_expr_address_of(exprt &expr)
 
   exprt &op=expr.op0();
 
-  if(!op.get_bool("#lvalue") && expr.type().id()=="code")
+  if(!op.cmt_lvalue() && expr.type().id()=="code")
   {
     err_location(expr.location());
     str << "expr not an lvalue";
@@ -689,7 +689,7 @@ void cpp_typecheckt::typecheck_expr_address_of(exprt &expr)
   }
 
   if(expr.op0().id()=="address_of" &&
-     expr.op0().get_bool("#implicit"))
+     expr.op0().implicit())
   {
     // must be the address of a function
     code_typet& code_type = to_code_type(op.type().subtype());
@@ -1078,7 +1078,7 @@ void cpp_typecheckt::typecheck_expr_member(
 
     if(symbol_expr.id()== "dereference")
     {
-      assert(symbol_expr.get_bool("#implicit"));
+      assert(symbol_expr.implicit());
       exprt tmp=symbol_expr.op0();
       symbol_expr.swap(tmp);
     }
@@ -2021,7 +2021,7 @@ void cpp_typecheckt::function_call_add_this(
    struct_expr.op0().type().id()=="pointer")
   {
     this_argument_expr=struct_expr.op0();
-    if(this_argument_expr.type().get_bool("#reference"))
+    if(this_argument_expr.type().reference())
       this_argument_expr.type().remove("#reference");
   }
   else
@@ -2060,7 +2060,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
     #ifdef CPP_SYSTEMC_EXTENSION
     if(expr.op0().id()=="extractbits")
     {
-       if(!expr.op0().op0().get_bool("#lvalue"))
+       if(!expr.op0().op0().cmt_lvalue())
        {
          err_location(expr.op0().op0());
          str << "assignment error: `" << to_string(expr.op0().op0())
@@ -2132,7 +2132,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
     }
     else if(expr.op0().id()=="extractbit")
     {
-      if(!expr.op0().op0().get_bool("#lvalue"))
+      if(!expr.op0().op0().cmt_lvalue())
       {
         err_location(expr.op0().op0());
         str << "assignment error: `" << to_string(expr.op0().op0())
@@ -2473,7 +2473,7 @@ void cpp_typecheckt::convert_pmop(exprt& expr)
     }
     else
     {
-      assert(expr.op0().get_bool("#lvalue"));
+      assert(expr.op0().cmt_lvalue());
       exprt address_of("address_of",typet("pointer"));
       address_of.copy_to_operands(expr.op0());
       address_of.type().subtype() = address_of.op0().type();

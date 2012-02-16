@@ -225,7 +225,7 @@ void cpp_typecastt::make_ptr_typecast(
       typet pvoid("pointer");
       pvoid.subtype().id("signedbv");
       pvoid.subtype().set("width","8");
-      if(expr.type().subtype().get_bool("#constant"))
+      if(expr.type().subtype().cmt_constant())
         pvoid.subtype().set("#constant",true);
       expr.make_typecast(pvoid);
 
@@ -253,7 +253,7 @@ void cpp_typecastt::make_ptr_typecast(
         typet pvoid("pointer");
         pvoid.subtype().id("signedbv");
         pvoid.subtype().set("width","8");
-        if(expr.type().subtype().get_bool("#constant"))
+        if(expr.type().subtype().cmt_constant())
           pvoid.subtype().set("#constant",true);
         expr.make_typecast(pvoid);
 
@@ -329,7 +329,7 @@ void cpp_typecastt::implicit_typecast_followed(
     }
     else // expr is not a reference
     {
-      if(expr.get_bool("#lvalue"))
+      if(expr.cmt_lvalue())
       {
         std::string err;
         if(subtype_typecast(src_type, dest_type.subtype(),err))
@@ -355,7 +355,7 @@ void cpp_typecastt::implicit_typecast_followed(
       else
       {
         // need temporary object
-        if(dest_type.subtype().get_bool("#constant"))
+        if(dest_type.subtype().cmt_constant())
         {
           if(integral_conversion(src_type, dest_type.subtype()))
           {
@@ -541,7 +541,7 @@ void cpp_typecastt::implicit_typecast_followed(
         make_ptr_typecast(pointer_to_expr, pointer_to_expr.type(), pointer_dest);
         exprt dereference("dereference", dest_sym_type);
         dereference.move_to_operands(pointer_to_expr);
-        dereference.set("#lvalue",expr.get_bool("#lvalue"));
+        dereference.set("#lvalue",expr.cmt_lvalue());
         expr.swap(dereference);
       }
       return;

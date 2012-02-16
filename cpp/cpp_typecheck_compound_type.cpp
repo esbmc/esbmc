@@ -685,7 +685,7 @@ void cpp_typecheckt::put_compound_into_scope(const irept &compound)
     // put symbol into scope
 
     cpp_idt &id=cpp_scopes.current_scope().insert(base_name);
-    id.id_class=compound.get_bool("is_type")?cpp_idt::TYPEDEF:cpp_idt::SYMBOL;
+    id.id_class=compound.is_type()?cpp_idt::TYPEDEF:cpp_idt::SYMBOL;
     id.identifier=name;
     id.class_identifier=cpp_scopes.current_scope().identifier;
     id.is_member = true;
@@ -720,7 +720,7 @@ void cpp_typecheckt::put_compound_into_scope(const irept &compound)
 
     // put in scope
     cpp_idt &id=cpp_scopes.current_scope().insert(base_name);
-    id.id_class=compound.get_bool("is_type")?cpp_idt::TYPEDEF:cpp_idt::SYMBOL;
+    id.id_class=compound.is_type()?cpp_idt::TYPEDEF:cpp_idt::SYMBOL;
     id.identifier=name;
     id.class_identifier=cpp_scopes.current_scope().identifier;
     id.is_member=true;
@@ -1433,12 +1433,12 @@ bool cpp_typecheckt::get_component(
         }
       }
 
-      if(object.get_bool("#lvalue"))
+      if(object.cmt_lvalue())
       {
         member.set("#lvalue",true);
       }
 
-      if(object.type().get_bool("#constant")
+      if(object.type().cmt_constant()
          && !component.get_bool("is_mutable"))
       {
         member.type().set("#constant",true);
@@ -1462,10 +1462,10 @@ bool cpp_typecheckt::get_component(
           throw 0;
         }
 
-        if(object.get_bool("#lvalue"))
+        if(object.cmt_lvalue())
           member.set("#lvalue",true);
 
-        if(object.get_bool("#constant")
+        if(object.cmt_constant()
            && !component.get_bool("is_mutable"))
           member.type().set("#constant",true);
 

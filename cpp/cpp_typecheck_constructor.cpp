@@ -375,7 +375,7 @@ void cpp_typecheckt::default_cpctor(
     }
 
     if( mem_it->get_bool("from_base")
-      || mem_it->get_bool("is_type")
+      || mem_it->is_type()
       || mem_it->get_bool("is_static")
       || mem_it->type().id() == "code")
         continue;
@@ -539,7 +539,7 @@ void cpp_typecheckt::default_assignop_value(
   forall_irep(mem_it, components.get_sub())
   {
     if(mem_it->get_bool("from_base") ||
-       mem_it->get_bool("is_type") ||
+       mem_it->is_type() ||
        mem_it->get_bool("is_static") ||
        mem_it->get_bool("is_vtptr") ||
        mem_it->get("type")=="code")
@@ -671,7 +671,7 @@ void cpp_typecheckt::check_member_initializers(
       }
 
       // Maybe it is a parent constructor?
-      if(c_it->get_bool("is_type"))
+      if(c_it->is_type())
       {
         typet type = static_cast<const typet&>(c_it->type());
         if(type.id() != "symbol")
@@ -696,7 +696,7 @@ void cpp_typecheckt::check_member_initializers(
 
       // Parent constructor
       if( c_it->get_bool("from_base")
-        && !c_it->get_bool("is_type")
+        && !c_it->is_type()
         && !c_it->get_bool("is_static")
         && c_it->get("type") == "code"
         && c_it->type().get("return_type") == "constructor")
@@ -846,7 +846,7 @@ void cpp_typecheckt::full_member_initialization(
         {
           if (c_it->base_name() == base_name
               && c_it->get("type") != "code"
-              && !c_it->get_bool("is_type"))
+              && !c_it->is_type())
           {
             is_data = true;
             break;
@@ -949,7 +949,7 @@ void cpp_typecheckt::full_member_initialization(
 
     if( mem_it->get_bool("from_base")
       || mem_it->type().id() == "code"
-      || mem_it->get_bool("is_type")
+      || mem_it->is_type()
       || mem_it->get_bool("is_static"))
         continue;
 
@@ -984,7 +984,7 @@ void cpp_typecheckt::full_member_initialization(
     // initialized
     if(!found &&
        mem_it->type().id()=="pointer" &&
-       mem_it->type().get_bool("#reference"))
+       mem_it->type().reference())
     {
       err_location(*mem_it);
       str << "reference must be explicitly initialized";
@@ -1278,7 +1278,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
     const typet &type=cit->type();
 
     if( cit->get_bool("from_base") ||
-       cit->get_bool("is_type") ||
+       cit->is_type() ||
        cit->get_bool("is_static") ||
        type.id()=="code" ||
        is_reference(type) ||

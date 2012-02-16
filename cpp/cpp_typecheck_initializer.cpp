@@ -203,7 +203,7 @@ void cpp_typecheckt::zero_initializer(
       if(component.type().id()=="code")
         continue;
 
-      if(component.get_bool("is_type"))
+      if(component.is_type())
         continue;
 
       if(component.get_bool("is_static"))

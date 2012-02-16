@@ -491,7 +491,7 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
       // it is a variable
       symbol.is_statevar=true;
       symbol.lvalue = !is_reference(symbol.type) &&
-                      !(symbol.type.get_bool("#constant") &&
+                      !(symbol.type.cmt_constant() &&
                         is_number(symbol.type) &&
                         symbol.value.id() == "constant");
 

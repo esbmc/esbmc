@@ -477,7 +477,7 @@ void cpp_typecheckt::clean_up()
           compo_it++)
       {
         if(compo_it->get_bool("is_static") ||
-           compo_it->get_bool("is_type"))
+           compo_it->is_type())
         {
           // skip it
         }

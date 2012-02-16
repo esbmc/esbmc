@@ -195,7 +195,7 @@ void cpp_convert_typet::read_template(const typet &type)
     exprt &decl=static_cast<exprt &>(*it);
 
     // may be type or expression
-    bool is_type=decl.get_bool("is_type");
+    bool is_type=decl.is_type();
 
     if(is_type)
     {

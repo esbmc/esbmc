@@ -114,14 +114,14 @@ std::string cpp_type2name(const typet &type)
 {
   std::string result;
 
-  if(type.get_bool("#constant") ||
+  if(type.cmt_constant() ||
      type.get("#qualifier")=="const")
     result+="const_";
 
-  if(type.get_bool("#restricted"))
+  if(type.restricted())
     result+="restricted_";
 
-  if(type.get_bool("#volatile"))
+  if(type.cmt_volatile())
     result+="volatile_";
 
   if(type.id()=="empty" || type.id()=="void")

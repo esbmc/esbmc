@@ -50,7 +50,7 @@ bool cpp_typecheckt::standard_conversion_lvalue_to_rvalue(
   const exprt &expr,
   exprt &new_expr) const
 {
-  assert(expr.get_bool("#lvalue"));
+  assert(expr.cmt_lvalue());
 
   if(expr.type().id()== "code" ||
      expr.type().id()== "incomplete_array" ||
@@ -124,7 +124,7 @@ bool cpp_typecheckt::standard_conversion_function_to_pointer(
 {
   const code_typet &func_type=to_code_type(expr.type());
 
-  if(!expr.get_bool("#lvalue"))
+  if(!expr.cmt_lvalue())
     return false;
 
   pointer_typet pointer;
@@ -160,7 +160,7 @@ bool cpp_typecheckt::standard_conversion_qualification(
      is_reference(expr.type()))
     return false;
 
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
     return false;
 
   if(expr.type()!=type)
@@ -245,7 +245,7 @@ bool cpp_typecheckt::standard_conversion_integral_promotion(
   const exprt &expr,
   exprt &new_expr) const
 {
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
     return false;
 
   c_qualifierst qual_from;
@@ -307,7 +307,7 @@ bool cpp_typecheckt::standard_conversion_floating_point_promotion(
   const exprt &expr,
   exprt &new_expr) const
 {
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
     return false;
 
   // we only do that with 'float',
@@ -382,7 +382,7 @@ bool cpp_typecheckt::standard_conversion_integral_conversion(
      follow(expr.type()).id() != "c_enum")
     return false;
 
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
     return false;
 
   c_qualifierst qual_from;
@@ -427,7 +427,7 @@ bool cpp_typecheckt::standard_conversion_floating_integral_conversion(
   const typet &type,
   exprt &new_expr) const
 {
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
      return false;
 
   if(expr.type().id() == "floatbv" ||
@@ -496,7 +496,7 @@ bool cpp_typecheckt::standard_conversion_floating_point_conversion(
      type.id()!="fixedbv")
       return false;
 
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
     return false;
 
   c_qualifierst qual_from;
@@ -560,7 +560,7 @@ bool cpp_typecheckt::standard_conversion_pointer(
      type.find("to-member").is_not_nil())
     return false;
 
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
     return false;
 
   if(expr.is_zero())
@@ -680,8 +680,8 @@ bool cpp_typecheckt::standard_conversion_pointer_to_member(
       assert(this2.cmt_base_name() == "this");
       code2.arguments().erase(code2.arguments().begin());
 
-      if(this2.type().subtype().get_bool("#constant") &&
-          !this1.type().subtype().get_bool("#constant"))
+      if(this2.type().subtype().cmt_constant() &&
+          !this1.type().subtype().cmt_constant())
         return false;
 
       // give a second chance ignoring `this'
@@ -692,7 +692,7 @@ bool cpp_typecheckt::standard_conversion_pointer_to_member(
       return false;
   }
 
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
     return false;
 
   if(expr.id()=="constant" &&
@@ -743,7 +743,7 @@ Function: standard_conversion_boolean
 bool cpp_typecheckt::standard_conversion_boolean(
   const exprt &expr, exprt &new_expr) const
 {
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
     return false;
 
   if(expr.type().id() != "signedbv" &&
@@ -783,7 +783,7 @@ bool cpp_typecheckt::standard_conversion_verilogbv(
   const typet &type,
   exprt &new_expr) const
 {
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
     return false;
 
   if(expr.id()=="string-constant")
@@ -891,7 +891,7 @@ bool cpp_typecheckt::standard_conversion_sequence(
     if(!standard_conversion_function_to_pointer(curr_expr, new_expr))
       return false;
   }
-  else if(curr_expr.get_bool("#lvalue"))
+  else if(curr_expr.cmt_lvalue())
   {
     if(!standard_conversion_lvalue_to_rvalue(curr_expr, new_expr))
       return false;
@@ -1046,7 +1046,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
         const struct_typet &to_struct=to_struct_type(to);
 
         if(subtype_typecast(from_struct,to_struct) &&
-            expr.get_bool("#lvalue") )
+            expr.cmt_lvalue() )
         {
           exprt address("address_of", pointer_typet());
           address.copy_to_operands(expr);
@@ -1148,7 +1148,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
                 return false;
               found = true;
 
-              if(expr.get_bool("#lvalue"))
+              if(expr.cmt_lvalue())
                 tmp_expr.set("#lvalue",true);
 
               tmp_expr.location() = expr.location();
@@ -1171,7 +1171,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
               new_expr.swap(ctor_expr);
               assert(new_expr.statement()=="temporary_object");
 
-              if(to.get_bool("#constant"))
+              if(to.cmt_constant())
                 new_expr.type().set("#constant", true);
 
               rank += tmp_rank;
@@ -1226,7 +1226,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
 
                 assert(new_expr.statement()=="temporary_object");
 
-                if(to.get_bool("#constant"))
+                if(to.cmt_constant())
                   new_expr.type().set("#constant", true);
               }
             }
@@ -1453,7 +1453,7 @@ bool cpp_typecheckt::reference_binding(
   unsigned backup_rank = rank;
 
   if(type.get_bool("#this") &&
-     !expr.get_bool("#lvalue"))
+     !expr.cmt_lvalue())
   {
     // `this' has to be an lvalue
     if(expr.statement()=="temporary_object")
@@ -1472,7 +1472,7 @@ bool cpp_typecheckt::reference_binding(
       return false;
   }
 
-  if(expr.get_bool("#lvalue"))
+  if(expr.cmt_lvalue())
   {
     // TODO: Check this
     if(reference_compatible(expr, type, rank))
@@ -1570,7 +1570,7 @@ bool cpp_typecheckt::reference_binding(
         exprt returned_value = func_expr;
         add_implicit_dereference(returned_value);
 
-        if(returned_value.get_bool("#lvalue")
+        if(returned_value.cmt_lvalue()
            && reference_compatible(returned_value,type, rank))
         {
           // returned values are lvalues in case of references only
@@ -1597,13 +1597,13 @@ bool cpp_typecheckt::reference_binding(
   if(type.get_bool("#this"))
     return false;
 
-  if(!type.subtype().get_bool("#constant") ||
-     type.subtype().get_bool("#volatile"))
+  if(!type.subtype().cmt_constant() ||
+     type.subtype().cmt_volatile())
     return false;
 
   // TODO: hanlde the case for implicit parameters
-  if(!type.subtype().get_bool("#constant") &&
-     !expr.get_bool("#lvalue"))
+  if(!type.subtype().cmt_constant() &&
+     !expr.cmt_lvalue())
     return false;
 
   exprt arg_expr = expr;
@@ -1961,7 +1961,7 @@ bool cpp_typecheckt::const_typecast(
     if(!standard_conversion_function_to_pointer(curr_expr, new_expr))
         return false;
   }
-  else if(curr_expr.get_bool("#lvalue"))
+  else if(curr_expr.cmt_lvalue())
   {
     if(!standard_conversion_lvalue_to_rvalue(curr_expr, new_expr))
       return false;
@@ -1971,7 +1971,7 @@ bool cpp_typecheckt::const_typecast(
 
   if(is_reference(type))
   {
-    if(!expr.get_bool("#lvalue"))
+    if(!expr.cmt_lvalue())
       return false;
 
     if(new_expr.type()!=type.subtype())
@@ -2018,7 +2018,7 @@ bool cpp_typecheckt::dynamic_typecast(
 
   if(type.id() == "pointer")
   {
-    if(e.id() == "dereference" && e.get_bool("#implicit"))
+    if(e.id() == "dereference" && e.implicit())
       e = expr.op0();
 
     if(e.type().id() == "pointer" &&
@@ -2041,13 +2041,13 @@ bool cpp_typecheckt::dynamic_typecast(
 
     if(type.subtype().id()=="empty")
     {
-      if(!e.get_bool("#lvalue"))
+      if(!e.cmt_lvalue())
         return false;
       assert(0); // currently not supported
     }
     else if(follow(type.subtype()).id()=="struct")
     {
-      if(e.get_bool("#lvalue"))
+      if(e.cmt_lvalue())
       {
         exprt tmp(e);
 
@@ -2084,7 +2084,7 @@ bool cpp_typecheckt::reinterpret_typecast(
 
   if(check_constantness && type.id() == "pointer")
   {
-    if(e.id() == "dereference" && e.get_bool("#implicit"))
+    if(e.id() == "dereference" && e.implicit())
       e = expr.op0();
 
     if(e.type().id() == "pointer" &&
@@ -2115,7 +2115,7 @@ bool cpp_typecheckt::reinterpret_typecast(
         return false;
     }
 
-    if(e.get_bool("#lvalue"))
+    if(e.cmt_lvalue())
     {
       if(standard_conversion_lvalue_to_rvalue(e,tmp))
         e.swap(tmp);
@@ -2176,7 +2176,7 @@ bool cpp_typecheckt::reinterpret_typecast(
     return true;
   }
 
-  if(is_reference(type) && e.get_bool("#lvalue"))
+  if(is_reference(type) && e.cmt_lvalue())
   {
     exprt tmp("address_of", pointer_typet());
     tmp.type().subtype() = e.type();
@@ -2211,7 +2211,7 @@ bool cpp_typecheckt::static_typecast(
 
   if(check_constantness && type.id() == "pointer")
   {
-    if(e.id() == "dereference" && e.get_bool("#implicit"))
+    if(e.id() == "dereference" && e.implicit())
       e = expr.op0();
 
     if(e.type().id() == "pointer" &&
@@ -2221,7 +2221,7 @@ bool cpp_typecheckt::static_typecast(
 
   add_implicit_dereference(e);
 
-  if(type.get_bool("#reference"))
+  if(type.reference())
   {
     unsigned rank=0;
     if(reference_binding(e,type,new_expr,rank))
@@ -2232,7 +2232,7 @@ bool cpp_typecheckt::static_typecast(
 
     if(subto.id() == "struct" && from.id() == "struct")
     {
-      if(!expr.get_bool("#lvalue"))
+      if(!expr.cmt_lvalue())
         return false;
 
       c_qualifierst qual_from;
@@ -2281,7 +2281,7 @@ bool cpp_typecheckt::static_typecast(
   {
      new_expr = e;
      new_expr.make_typecast(type);
-     if(new_expr.get_bool("#lvalue"))
+     if(new_expr.cmt_lvalue())
        new_expr.remove("#lvalue");
      return true;
   }
@@ -2300,7 +2300,7 @@ bool cpp_typecheckt::static_typecast(
     {
       // try to avoid temporary
       new_expr.set("#temporary_avoided",true);
-      if(new_expr.get_bool("#lvalue"))
+      if(new_expr.cmt_lvalue())
         new_expr.remove("#lvalue");
     }
 
@@ -2344,7 +2344,7 @@ bool cpp_typecheckt::static_typecast(
       if(to.id() == "struct" && from.id() == "struct")
       {
 
-        if(e.get_bool("#lvalue"))
+        if(e.cmt_lvalue())
         {
           exprt tmp(e);
           if(!standard_conversion_lvalue_to_rvalue(tmp,e))

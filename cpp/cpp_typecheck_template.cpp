@@ -743,7 +743,7 @@ cpp_scopet &cpp_typecheckt::typecheck_template_parameters(
       declarator.name().get_sub().push_back(name);
     }
 
-    cpp_declarator_converter.is_typedef=declaration.get_bool("is_type");
+    cpp_declarator_converter.is_typedef=declaration.is_type();
     cpp_declarator_converter.is_template_argument=true;
 
     // There might be a default type or value.

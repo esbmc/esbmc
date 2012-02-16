@@ -30,7 +30,7 @@ void cpp_exception_list_rec(
 {
   if(src.id()=="pointer")
   {
-    if(src.get_bool("#reference"))
+    if(src.reference())
     {
       // do not change
       cpp_exception_list_rec(src.subtype(), ns, suffix, dest);

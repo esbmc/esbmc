@@ -213,7 +213,7 @@ codet cpp_typecheckt::cpp_constructor(
       member.component_name(component.name());
       member.copy_to_operands(object_tc);
       member.location() = location;
-      member.set("#lvalue",object_tc.get_bool("#lvalue"));
+      member.set("#lvalue",object_tc.cmt_lvalue());
 
       exprt val;
       val.make_false();

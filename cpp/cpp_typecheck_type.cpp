@@ -72,7 +72,7 @@ void cpp_typecheckt::typecheck_type(typet &type)
     type=symbol_expr.type();
     assert(type.is_not_nil());
 
-    if(type.get_bool("#constant"))
+    if(type.cmt_constant())
       qualifiers.is_constant = true;
 
      qualifiers.write(type);
@@ -143,10 +143,10 @@ void cpp_typecheckt::typecheck_type(typet &type)
 
     typecheck_type(type.subtype());
 
-    if(type.subtype().get_bool("#constant"))
+    if(type.subtype().cmt_constant())
       type.set("#constant", true);
 
-    if(type.subtype().get_bool("#volatile"))
+    if(type.subtype().cmt_volatile())
       type.set("#volatile", true);
   }
   else if(type.id()=="code")

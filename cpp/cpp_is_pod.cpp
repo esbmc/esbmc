@@ -66,7 +66,7 @@ bool cpp_typecheckt::cpp_is_pod(const typet &type) const
         it!=components.end();
         it++)
     {
-      if(it->get_bool("is_type"))
+      if(it->is_type())
         continue;
 
       if(it->get_base_name()=="operator=")
