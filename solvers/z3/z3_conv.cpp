@@ -889,6 +889,24 @@ z3_convt::convert_same_object(const exprt &expr)
 }
 
 Z3_ast
+z3_convt::convert_invalid_object(const exprt &expr)
+{
+  Z3_sort s;
+  Z3_ast newptr, invalid_ptr_num, bv;
+
+  create_type(expr.type(), s);
+
+  // Create a pointer with an object num corresponding to the invalid object,
+  // and with a free offset.
+  newptr = Z3_mk_fresh_const(z3_ctx, NULL, s);
+  invalid_ptr_num = convert_number(pointer_logic.get_invalid_object(),
+                           config.ansi_c.int_width, true);
+
+  bv = z3_api.mk_tuple_update(newptr, 0, invalid_ptr_num);
+  return bv;
+}
+
+Z3_ast
 z3_convt::convert_is_dynamic_object(const exprt &expr)
 {
   DEBUGLOC;
@@ -3129,6 +3147,8 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_pointer_object(expr, bv);
   else if (exprid == "same-object")
     bv = convert_same_object(expr);
+  else if (exprid == "invalid-object")
+    bv = convert_invalid_object(expr);
   else if (exprid == "string-constant") {
     exprt tmp;
     string2array(expr, tmp);
