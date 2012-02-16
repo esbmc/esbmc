@@ -531,7 +531,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
         // do the body of the function
         typecast_exprt late_cast(to_code_type(component.type()).arguments()[0].type());
-        late_cast.op0() = symbol_expr(namespacet(context).lookup(args[0].get("#identifier")));
+        late_cast.op0() = symbol_expr(namespacet(context).lookup(args[0].cmt_identifier()));
         
 
         if(code_type.return_type().id() != "empty" &&
@@ -544,7 +544,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
           expr_call.arguments().push_back(late_cast);
           for(unsigned i =1; i < args.size(); i++)
           {
-            expr_call.arguments().push_back(symbol_expr(namespacet(context).lookup(args[i].get("#identifier"))));
+            expr_call.arguments().push_back(symbol_expr(namespacet(context).lookup(args[i].cmt_identifier())));
           }
 
           code_returnt code_return;
@@ -561,7 +561,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
           for(unsigned i =1; i < args.size(); i++)
           {
             code_func.arguments().push_back(
-                symbol_expr(namespacet(context).lookup(args[i].get("#identifier"))));
+                symbol_expr(namespacet(context).lookup(args[i].cmt_identifier())));
           }
 
           func_symb.value = code_func;
@@ -1275,8 +1275,8 @@ void cpp_typecheckt::adjust_method_type(
   argument.type().subtype()=typet("symbol");
   argument.type().subtype().identifier(compound_symbol);
 
-  argument.set("#identifier", "this");
-  argument.set("#base_name", "this");
+  argument.cmt_identifier("this");
+  argument.cmt_base_name("this");
 
   if(method_type.id()=="" || method_type.is_nil())
   {

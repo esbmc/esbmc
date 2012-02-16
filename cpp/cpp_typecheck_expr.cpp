@@ -695,7 +695,7 @@ void cpp_typecheckt::typecheck_expr_address_of(exprt &expr)
     code_typet& code_type = to_code_type(op.type().subtype());
 
     code_typet::argumentst& args = code_type.arguments();
-    if(args.size() > 0 && args[0].get("#base_name") == "this")
+    if(args.size() > 0 && args[0].cmt_base_name() == "this")
     {
       // it's a pointer to member function
       typet symbol("symbol");
@@ -1784,7 +1784,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
     expr.function().type().find("arguments").get_sub();
 
     if(arguments.size()>=1 &&
-       arguments.front().get("#base_name")=="this" &&
+       arguments.front().cmt_base_name()=="this" &&
      expr.arguments().size()>=1)
     {
       const exprt &argument=
@@ -2075,8 +2075,8 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
       const exprt& extractbits = expr.op0();
 
       int width = atoi(extractbits.op0().type().width().c_str());
-      int left  = atoi(extractbits.op1().get("#cformat").c_str());
-      int right = atoi(extractbits.op2().get("#cformat").c_str());
+      int left  = atoi(extractbits.op1().cformat().c_str());
+      int right = atoi(extractbits.op2().cformat().c_str());
 
       std::string mask;
 
@@ -2147,7 +2147,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
       const exprt& extractbit = expr.op0();
 
       int width = atoi(extractbit.op0().type().width().c_str());
-      int index  = atoi(extractbit.op1().get("#cformat").c_str());
+      int index  = atoi(extractbit.op1().cformat().c_str());
 
       std::string mask;
 

@@ -99,7 +99,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
         new_object.set("#lvalue", true);
         new_object.type() = ait->type();
 
-        if(ait->get("#base_name")=="this")
+        if(ait->cmt_base_name()=="this")
         {
           fargs.has_object = true;
           new_object.type() = ait->type().subtype();

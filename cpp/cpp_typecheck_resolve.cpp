@@ -1892,7 +1892,7 @@ void cpp_typecheck_resolvet::apply_template_args(
     const code_typet &code_type = to_code_type(new_symbol.type);
 
     if(!code_type.arguments().empty() && 
-        code_type.arguments()[0].get("#base_name")=="this")
+        code_type.arguments()[0].cmt_base_name()=="this")
     {
       // do we have an object?
       if(fargs.has_object)
@@ -1955,7 +1955,7 @@ bool cpp_typecheck_resolvet::disambiguate(
       const code_typet::argumentst &arguments=type.arguments();
       const code_typet::argumentt &argument = arguments.front();
 
-      assert(argument.get("#base_name")=="this");
+      assert(argument.cmt_base_name()=="this");
 
       if(expr.type().get("return_type") == "constructor")
       {
@@ -2210,7 +2210,7 @@ exprt cpp_typecheck_resolvet::do_builtin_sc_uint_extension(
     throw 0;
   }
 
-  int width = atoi(arg0.get("#cformat").c_str());
+  int width = atoi(arg0.cformat().c_str());
 
   if(width <= 0)
   {
@@ -2258,7 +2258,7 @@ exprt cpp_typecheck_resolvet::do_builtin_sc_int_extension(
     throw 0;
   }
 
-  int width = atoi(arg0.get("#cformat").c_str());
+  int width = atoi(arg0.cformat().c_str());
 
   if(width <= 0)
   {
@@ -2337,7 +2337,7 @@ exprt cpp_typecheck_resolvet::do_builtin_sc_lv_extension(
     throw 0;
   }
 
-  int width = atoi(arg0.get("#cformat").c_str());
+  int width = atoi(arg0.cformat().c_str());
 
   if(width <= 0)
   {

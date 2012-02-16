@@ -149,7 +149,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
     assert(arguments.size()>=1);
     code_typet::argumentt &this_argument_expr=arguments.front();
     function_scope.this_expr=exprt("symbol", this_argument_expr.type());
-    function_scope.this_expr.identifier(this_argument_expr.get("#identifier"));
+    function_scope.this_expr.identifier(this_argument_expr.cmt_identifier());
   }
   else
     function_scope.this_expr.make_nil();

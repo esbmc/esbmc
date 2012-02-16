@@ -109,11 +109,11 @@ void cpp_typecheckt::typecheck_type(typet &type)
         irept::subt &args=type.subtype().add("arguments").get_sub();
 
         if(args.empty() ||
-           args.front().get("#base_name")!="this")
+           args.front().cmt_base_name()!="this")
         {
           // Add 'this' to the arguments
           exprt a0("argument");
-          a0.set("#base_name", "this");
+          a0.cmt_base_name("this");
           a0.type().id("pointer");
           a0.type().subtype() = class_object;
           args.insert(args.begin(),a0);

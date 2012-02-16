@@ -140,7 +140,7 @@ bool cpp_typecheck_fargst::match(
 
     // "this" is a special case -- we turn the pointer type
     // into a reference type to do the type matching
-    if(i==0 && argument.get("#base_name")=="this")
+    if(i==0 && argument.cmt_base_name()=="this")
     {
       argument.type().set("#reference", true);
       argument.type().set("#this", true);

@@ -671,13 +671,13 @@ bool cpp_typecheckt::standard_conversion_pointer_to_member(
       code_typet code1 = to_code_type(expr.type().subtype());
       assert(code1.arguments().size()>0);
       code_typet::argumentt this1 = code1.arguments()[0];
-      assert(this1.get("#base_name") == "this");
+      assert(this1.cmt_base_name() == "this");
       code1.arguments().erase(code1.arguments().begin());
 
       code_typet code2 = to_code_type(type.subtype());
       assert(code2.arguments().size()>0);
       code_typet::argumentt this2 = code2.arguments()[0];
-      assert(this2.get("#base_name") == "this");
+      assert(this2.cmt_base_name() == "this");
       code2.arguments().erase(code2.arguments().begin());
 
       if(this2.type().subtype().get_bool("#constant") &&
