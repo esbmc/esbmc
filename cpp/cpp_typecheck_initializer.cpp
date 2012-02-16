@@ -196,7 +196,7 @@ void cpp_typecheckt::zero_initializer(
   {
     std::list<codet> lst;
 
-    forall_irep(cit, final_type.find("components").get_sub())
+    forall_irep(cit, final_type.components().get_sub())
     {
       const exprt &component=static_cast<const exprt &>(*cit);
 
@@ -266,7 +266,7 @@ void cpp_typecheckt::zero_initializer(
     exprt comp;
     comp.make_nil();
 
-    forall_irep(it, final_type.find("components").get_sub())
+    forall_irep(it, final_type.components().get_sub())
     {
       const exprt &component=static_cast<const exprt &>(*it);
 

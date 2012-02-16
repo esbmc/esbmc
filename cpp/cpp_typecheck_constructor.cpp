@@ -534,7 +534,7 @@ void cpp_typecheckt::default_assignop_value(
   }
 
   // Then, we copy the members
-  const irept &components=symbol.type.find("components");
+  const irept &components=symbol.type.components();
 
   forall_irep(mem_it, components.get_sub())
   {
@@ -1149,7 +1149,7 @@ Function: cpp_typecheckt::find_dtor
 bool cpp_typecheckt::find_dtor(const symbolt& symbol) const
 {
   const irept &components=
-    symbol.type.find("components");
+    symbol.type.components();
 
   forall_irep(cit, components.get_sub())
   {
