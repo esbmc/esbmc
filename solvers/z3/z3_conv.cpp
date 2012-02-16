@@ -907,27 +907,6 @@ z3_convt::convert_invalid_object(const exprt &expr)
 }
 
 Z3_ast
-z3_convt::convert_is_dynamic_object(const exprt &expr)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 1);
-
-  exprt sym("symbol", array_typet());
-  sym.type().subtype() = bool_typet();
-  sym.set("identifier", "__ESBMC_is_dynamic");
-  exprt pointerobj("pointer_object", signedbv_typet());
-  exprt ptrsrc = expr.op0();
-  pointerobj.move_to_operands(ptrsrc);
-  exprt index("index", bool_typet());
-  index.move_to_operands(sym, pointerobj);
-
-  Z3_ast bv;
-  convert_bv(index, bv);
-  return bv;
-}
-
-Z3_ast
 z3_convt::convert_overflow_sum_sub_mul(const exprt &expr)
 {
   DEBUGLOC;
@@ -3157,8 +3136,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_zero_string_length(expr.op0(), bv);
   else if (exprid == "replication")
     assert(expr.operands().size() == 2);
-  else if (exprid == "is_dynamic_object")
-    bv = convert_is_dynamic_object(expr);
   else if (exprid == "byte_update_little_endian" ||
            exprid == "byte_update_big_endian")
     convert_byte_update(expr, bv);
