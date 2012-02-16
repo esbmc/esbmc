@@ -377,7 +377,7 @@ std::string expr2cppt::convert_cpp_new(
 {
   std::string dest;
 
-  if(src.get("statement")=="cpp_new[]")
+  if(src.statement()=="cpp_new[]")
   {
     dest="new";
 
@@ -450,8 +450,8 @@ std::string expr2cppt::convert(
   else if(src.id()=="extractbits")
     return convert_extractbits(src, precedence=15);
   else if(src.id()=="sideeffect" &&
-          (src.get("statement")=="cpp_new" ||
-           src.get("statement")=="cpp_new[]"))
+          (src.statement()=="cpp_new" ||
+           src.statement()=="cpp_new[]"))
     return convert_cpp_new(src, precedence=15);
   else if(src.is_constant() && src.type().id() == "verilogbv")
     return "'" + id2string(src.value()) + "'";
@@ -479,7 +479,7 @@ std::string expr2cppt::convert_code(
   const codet &src,
   unsigned indent)
 {
-  const irep_idt &statement=src.get("statement");
+  const irep_idt &statement=src.statement();
 
   if(statement=="cpp_delete" ||
      statement=="cpp_delete[]")

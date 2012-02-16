@@ -276,13 +276,13 @@ codet cpp_typecheckt::cpp_constructor(
       function_call.op1().copy_to_operands(*it);
 
     typecheck_side_effect_function_call(function_call);
-    assert(function_call.get("statement") == "temporary_object");
+    assert(function_call.statement() == "temporary_object");
 
     exprt &initializer =
       static_cast<exprt &>(function_call.add("initializer"));
 
     assert(initializer.id()=="code"
-           && initializer.get("statement")=="expression");
+           && initializer.statement()=="expression");
 
     side_effect_expr_function_callt& func_ini =
       to_side_effect_expr_function_call(initializer.op0());
@@ -332,7 +332,7 @@ void cpp_typecheckt::new_temporary(
 {
   // create temporary object
   exprt tmp_object_expr=exprt("sideeffect", type);
-  tmp_object_expr.set("statement", "temporary_object");
+  tmp_object_expr.statement("temporary_object");
   tmp_object_expr.location()= location;
 
   exprt new_object("new_object");
@@ -347,7 +347,7 @@ void cpp_typecheckt::new_temporary(
 
   if(new_code.is_not_nil())
   {
-    if(new_code.get("statement")=="assign")
+    if(new_code.statement()=="assign")
       tmp_object_expr.move_to_operands(new_code.op1());
     else
       tmp_object_expr.add("initializer")=new_code;

@@ -126,7 +126,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
     const symbolt &msymb=lookup(symbol.type.get("#member_name"));
 
     assert(symbol.value.id()=="code");
-    assert(symbol.value.get("statement") == "block");
+    assert(symbol.value.statement() == "block");
 
     symbol.value.copy_to_operands(dtor(msymb));
   }

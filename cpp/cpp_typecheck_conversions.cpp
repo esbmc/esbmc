@@ -1069,7 +1069,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
 
           // create temporary object
           exprt tmp_object_expr=exprt("sideeffect", type);
-          tmp_object_expr.set("statement", "temporary_object");
+          tmp_object_expr.statement("temporary_object");
           tmp_object_expr.location()=expr.location();
           tmp_object_expr.copy_to_operands(deref);
           tmp_object_expr.set("#lvalue", true);
@@ -1169,7 +1169,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
               typecheck_side_effect_function_call(ctor_expr);
 
               new_expr.swap(ctor_expr);
-              assert(new_expr.get("statement")=="temporary_object");
+              assert(new_expr.statement()=="temporary_object");
 
               if(to.get_bool("#constant"))
                 new_expr.type().set("#constant", true);
@@ -1224,7 +1224,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
 
                 new_expr.swap(ctor_expr);
 
-                assert(new_expr.get("statement")=="temporary_object");
+                assert(new_expr.statement()=="temporary_object");
 
                 if(to.get_bool("#constant"))
                   new_expr.type().set("#constant", true);
@@ -1456,9 +1456,9 @@ bool cpp_typecheckt::reference_binding(
      !expr.get_bool("#lvalue"))
   {
     // `this' has to be an lvalue
-    if(expr.get("statement")=="temporary_object")
+    if(expr.statement()=="temporary_object")
       expr.set("#lvalue", true);
-    else if(expr.get("statement")=="function_call")
+    else if(expr.statement()=="function_call")
       expr.set("#lvalue", true);
     else if(expr.get_bool("#temporary_avoided"))
     {
@@ -1632,7 +1632,7 @@ bool cpp_typecheckt::reference_binding(
     {
       // create temporary object
       exprt tmp=exprt("sideeffect", type.subtype());
-      tmp.set("statement", "temporary_object");
+      tmp.statement("temporary_object");
       tmp.location()=expr.location();
       //tmp.set("#lvalue", true);
       tmp.move_to_operands(new_expr);

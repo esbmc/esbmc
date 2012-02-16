@@ -228,7 +228,7 @@ void cpp_typecheckt::zero_initializer(
       typecheck_expr(obj);
 
       codet assign;
-      assign.set("statement", "assign");
+      assign.statement("assign");
       assign.copy_to_operands(obj, value);
       assign.location()=location;
       ops.push_back(assign);
@@ -311,7 +311,7 @@ void cpp_typecheckt::zero_initializer(
     already_typechecked(zero);
 
     codet assign;
-    assign.set("statement", "assign");
+    assign.statement("assign");
     assign.copy_to_operands(object, zero);
     assign.location()=location;
 
@@ -327,7 +327,7 @@ void cpp_typecheckt::zero_initializer(
     assert(gen_zero(final_type).is_not_nil());
 
     codet assign;
-    assign.set("statement", "assign");
+    assign.statement("assign");
     assign.copy_to_operands(object, gen_zero(final_type));
     assign.location()=location;
 

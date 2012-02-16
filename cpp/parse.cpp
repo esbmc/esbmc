@@ -1762,7 +1762,7 @@ bool Parser::rConstructorDecl(
       return false;
 
     exprt pure_virtual("code");
-    pure_virtual.set("statement", "cpp-pure-virtual");
+    pure_virtual.statement("cpp-pure-virtual");
 
     constructor.add("value").swap(pure_virtual);
   }
@@ -3466,27 +3466,27 @@ bool Parser::rExpression(exprt &exp)
     exp=exprt("sideeffect");
 
     if(t=='=')
-      exp.set("statement", "assign");
+      exp.statement("assign");
     else if(tk.text=="+=")
-      exp.set("statement", "assign+");
+      exp.statement("assign+");
     else if(tk.text=="-=")
-      exp.set("statement", "assign-");
+      exp.statement("assign-");
     else if(tk.text=="*=")
-      exp.set("statement", "assign*");
+      exp.statement("assign*");
     else if(tk.text=="/=")
-      exp.set("statement", "assign_div");
+      exp.statement("assign_div");
     else if(tk.text=="%=")
-      exp.set("statement", "assign_mod");
+      exp.statement("assign_mod");
     else if(tk.text=="<<=")
-      exp.set("statement", "assign_shl");
+      exp.statement("assign_shl");
     else if(tk.text==">>=")
-      exp.set("statement", "assign_shr");
+      exp.statement("assign_shr");
     else if(tk.text=="&=")
-      exp.set("statement", "assign_bitand");
+      exp.statement("assign_bitand");
     else if(tk.text=="^=")
-      exp.set("statement", "assign_bitxor");
+      exp.statement("assign_bitxor");
     else if(tk.text=="|=")
-      exp.set("statement", "assign_bitor");
+      exp.statement("assign_bitor");
 
     exp.move_to_operands(left, right);
     set_location(exp, tk);
@@ -4109,8 +4109,7 @@ bool Parser::rUnaryExpr(exprt &exp)
 
     case IncOp:
       exp=exprt("sideeffect");
-      exp.set("statement",
-        tk.text=="++"?"preincrement":"predecrement");
+      exp.statement(tk.text=="++"?"preincrement":"predecrement");
       break;
 
     default:
@@ -4326,12 +4325,12 @@ bool Parser::rAllocateExpr(exprt &exp)
         return false;
 
       exp=exprt("sideeffect");
-      exp.set("statement", "cpp_delete[]");
+      exp.statement("cpp_delete[]");
     }
     else
     {
       exp=exprt("sideeffect");
-      exp.set("statement", "cpp_delete");
+      exp.statement("cpp_delete");
     }
 
     set_location(exp, tk);
@@ -4350,7 +4349,7 @@ bool Parser::rAllocateExpr(exprt &exp)
     #endif
 
     exp=exprt("sideeffect");
-    exp.set("statement", "cpp_new");
+    exp.statement("cpp_new");
     set_location(exp, tk);
 
     exprt arguments, initializer;
@@ -4633,8 +4632,7 @@ bool Parser::rPostfixExpr(exprt &exp)
       {
         exprt tmp("sideeffect");
         tmp.move_to_operands(exp);
-        tmp.set("statement",
-          op.text=="++"?"postincrement":"postdecrement");
+        tmp.statement(op.text=="++"?"postincrement":"postdecrement");
         set_location(tmp, op);
 
         exp.swap(tmp);
@@ -4739,7 +4737,7 @@ bool Parser::rPrimaryExpr(exprt &exp)
         return false;
 
       exp=exprt("sideeffect");
-      exp.set("statement", "statement_expression");
+      exp.statement("statement_expression");
       set_location(exp, tk);
       exp.move_to_operands(code);
 
@@ -5226,7 +5224,7 @@ bool Parser::rStatement(codet &statement)
 
       statement=codet("code");
       set_location(statement, tk1);
-      statement.set("statement", "label");
+      statement.statement("label");
 
       exprt exp;
       if(!rExpression(exp))
@@ -5252,7 +5250,7 @@ bool Parser::rStatement(codet &statement)
 
       statement=codet("code");
       set_location(statement, tk1);
-      statement.set("statement", "label");
+      statement.statement("label");
       statement.set("default", true);
 
       if(lex->GetToken(tk2)!=':')
@@ -5505,7 +5503,7 @@ bool Parser::rForStatement(codet &statement)
 
 	// TODO: Remove?
     exp3=exprt("code");
-    exp3.set("statement", "expression");
+    exp3.statement("expression");
     exp3.location()=tmp.location();
     exp3.move_to_operands(tmp);
   }

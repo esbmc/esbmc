@@ -188,11 +188,11 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
       }
     }
 
-    if(expr.op1().get("statement")=="cpp-throw" &&
-       expr.op2().get("statement")!="cpp-throw")
+    if(expr.op1().statement()=="cpp-throw" &&
+       expr.op2().statement()!="cpp-throw")
       expr.type()=expr.op2().type();
-    else if (expr.op2().get("statement")=="cpp-throw" &&
-            expr.op1().get("statement")!="cpp-throw")
+    else if (expr.op2().statement()=="cpp-throw" &&
+            expr.op1().statement()!="cpp-throw")
       expr.type()=expr.op1().type();
     else if(expr.op1().type().id()=="empty" &&
             expr.op2().type().id() == "empty")
@@ -746,7 +746,7 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
     integer_type.set("width", config.ansi_c.int_width);
     implicit_typecast(size, integer_type);
 
-    expr.set("statement", "cpp_new[]");
+    expr.statement("cpp_new[]");
 
     // this must not have an initializer
     if(expr.operands().size()!=0)
@@ -767,7 +767,7 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
     // first typecheck type
     typecheck_type(expr.type());
 
-    expr.set("statement", "cpp_new");
+    expr.statement("cpp_new");
 
     typet ptr_type("pointer");
     ptr_type.subtype().swap(expr.type());
@@ -940,10 +940,10 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
   if(expr.operands().size()!=1)
     throw "delete expects one operand";
 
-  if(expr.get("statement")=="cpp_delete")
+  if(expr.statement()=="cpp_delete")
   {
   }
-  else if(expr.get("statement")=="cpp_delete[]")
+  else if(expr.statement()=="cpp_delete[]")
   {
   }
   else
@@ -1528,7 +1528,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
     {
       // create temporary object
       exprt tmp_object_expr("sideeffect", expr.op0().type());
-      tmp_object_expr.set("statement", "temporary_object");
+      tmp_object_expr.statement("temporary_object");
       tmp_object_expr.set("#lvalue",true);
       tmp_object_expr.set("mode", current_mode);
       tmp_object_expr.location()=expr.location();
@@ -1734,7 +1734,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
     // create temporary object
     exprt tmp_object_expr("sideeffect", this_type.subtype());
-    tmp_object_expr.set("statement", "temporary_object");
+    tmp_object_expr.statement("temporary_object");
     tmp_object_expr.set("#lvalue", true);
     tmp_object_expr.set("mode", current_mode);
     tmp_object_expr.location()=expr.location();
@@ -1894,7 +1894,7 @@ Purpose:
 void cpp_typecheckt::typecheck_expr_side_effect(
  side_effect_exprt &expr)
 {
-  const irep_idt &statement=expr.get("statement");
+  const irep_idt &statement=expr.statement();
 
   if(statement=="cpp_new" ||
      statement=="cpp_new[]")
@@ -2110,7 +2110,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
       // TODO: cbmc: simplify(or_expr, *this);
       simplify(or_expr);
 
-      codet assign(expr.get("statement"));
+      codet assign(expr.statement());
       assign.type() = extractbits.op0().type();
       assign.copy_to_operands(extractbits.op0(), or_expr);
       assign.location() = expr.location();
@@ -2180,7 +2180,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
       // TODO: cbmc: simplify(or_expr, *this);
       simplify(or_expr);
 
-      codet assign(expr.get("statement"));
+      codet assign(expr.statement());
       assign.type() = extractbit.op0().type();
       assign.copy_to_operands(extractbit.op0(), or_expr);
       assign.location() = expr.location();
@@ -2209,7 +2209,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
          expr.id()=="assign/")
       {
         err_location(expr);
-        str << "assignment operator '" << id2string(expr.get("statement"))
+        str << "assignment operator '" << id2string(expr.statement())
             << "' not defined for types `" << type2cpp(expr.op0().type(),*this)
             << "' and `" << type2cpp(expr.op1().type(),*this) <<"'";
       }
@@ -2232,7 +2232,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
 
   std::string strop="operator";
 
-  const irep_idt statement=expr.get("statement");
+  const irep_idt statement=expr.statement();
 
   if(statement=="assign")
     strop += "=";
@@ -2321,16 +2321,16 @@ void cpp_typecheckt::typecheck_side_effect_increment(
   std::string str_op = "operator";
   bool post = false;
 
-  if(expr.get("statement")=="preincrement")
+  if(expr.statement()=="preincrement")
     str_op += "++";
-  else if(expr.get("statement")=="predecrement")
+  else if(expr.statement()=="predecrement")
     str_op += "--";
-  else if(expr.get("statement")=="postincrement")
+  else if(expr.statement()=="postincrement")
   {
     str_op += "++";
     post = true;
   }
-  else if(expr.get("statement")=="postdecrement")
+  else if(expr.statement()=="postdecrement")
   {
     str_op += "--";
     post = true;

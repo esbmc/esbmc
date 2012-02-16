@@ -99,10 +99,10 @@ static void copy_member(
   block.operands().push_back(exprt("code"));
   exprt &code=block.operands().back();
 
-  code.set("statement", "expression");
+  code.statement("expression");
   code.type()=typet("code");
   code.operands().push_back(exprt("sideeffect"));
-  code.op0().set("statement", "assign");
+  code.op0().statement("assign");
   code.op0().operands().push_back(exprt("cpp-name"));
   code.location() = location;
 
@@ -159,10 +159,10 @@ static void copy_array(
   exprt& code = block.operands().back();
   code.location() = location;
 
-  code.set("statement", "expression");
+  code.statement("expression");
   code.type()=typet("code");
   code.operands().push_back(exprt("sideeffect"));
-  code.op0().set("statement", "assign");
+  code.op0().statement("assign");
   code.op0().operands().push_back(exprt("index"));
   exprt& op0 = code.op0().op0();
   op0.operands().push_back(exprt("cpp-name"));
@@ -223,7 +223,7 @@ void cpp_typecheckt::default_ctor(
 
   decl.value().id("code");
   decl.value().type()=typet("code");
-  decl.value().set("statement", "block");
+  decl.value().statement("block");
   decl.add("cv").make_nil();
   decl.add("throw_decl").make_nil();
 
@@ -512,7 +512,7 @@ void cpp_typecheckt::default_assignop_value(
 
   declarator.value().location() = location;
   declarator.value().id("code");
-  declarator.value().set("statement", "block");
+  declarator.value().statement("block");
   declarator.value().type()=code_typet();
 
   exprt &block=declarator.value();
@@ -578,7 +578,7 @@ void cpp_typecheckt::default_assignop_value(
   exprt &ret_code = declarator.value().operands().back();
   ret_code.operands().push_back(exprt("dereference"));
   ret_code.op0().operands().push_back(exprt("cpp-this"));
-  ret_code.set("statement", "return");
+  ret_code.statement("return");
   ret_code.type()=code_typet();
 }
 
@@ -1193,7 +1193,7 @@ void cpp_typecheckt::default_dtor(
 
   decl.value().id("code");
   decl.value().type().id("code");
-  decl.value().set("statement", "block");
+  decl.value().statement("block");
   decl.add("cv").make_nil();
   decl.add("throw_decl").make_nil();
 

@@ -384,7 +384,7 @@ void cpp_typecastt::implicit_typecast_followed(
           exprt tmp_object_expr=exprt("sideeffect", expr.type());
 
           tmp_object_expr.type().set("#constant", false);
-          tmp_object_expr.set("statement", "temporary_object");
+          tmp_object_expr.statement("temporary_object");
           tmp_object_expr.set("#lvalue", true);
           tmp_object_expr.location()=expr.location();
 
@@ -616,7 +616,7 @@ void cpp_typecastt::implicit_typecast_followed(
 
       // create temporary object
       exprt tmp_object_expr=exprt("sideeffect", dest_sym_type);
-      tmp_object_expr.set("statement", "temporary_object");
+      tmp_object_expr.statement("temporary_object");
       tmp_object_expr.location()=expr.location();
       tmp_object_expr.set("#lvalue", true);
 

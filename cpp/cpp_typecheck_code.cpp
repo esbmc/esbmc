@@ -31,7 +31,7 @@ Function: cpp_typecheckt::typecheck_code
 
 void cpp_typecheckt::typecheck_code(codet &code)
 {
-  const irep_idt &statement=code.get("statement");
+  const irep_idt &statement=code.statement();
 
   if(statement=="cpp-catch")
   {
@@ -151,7 +151,7 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
     typecheck_expr(function_call);
     disable_access_control = old_access_control;
 
-    assert(function_call.get("statement") == "temporary_object");
+    assert(function_call.statement() == "temporary_object");
 
     if(function_call.get_bool("#not_accessible"))
     {
@@ -415,7 +415,7 @@ void cpp_typecheckt::typecheck_assign(codet &code)
     throw "assignment statement expected to have two operands";
 
   // turn into a sideeffect
-  side_effect_exprt expr(code.get("statement"));
+  side_effect_exprt expr(code.statement());
   expr.operands() = code.operands();
   typecheck_expr(expr);
 
