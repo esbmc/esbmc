@@ -182,9 +182,11 @@ namespace std{
 			push_back(t);
     }
 
-    explicit vector(T t[], T*): _size(0),  _capacity(0)
+    explicit vector(T t[], T* addr): _size(0),  _capacity(0)
     {
-        //model
+        int i=0;
+				while((t+i)<addr)
+          push_back(t[i++]);
     }
 
    explicit vector ( size_type n, const T& value= T())

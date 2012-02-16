@@ -165,10 +165,10 @@ namespace std {
     explicit deque(T t[], T* addr): vecOne(), vecTwo() 
     {         
         int i=0;
-	while((t+i)<addr)
+				while((t+i)<addr)
           vecOne.push_back(t[i++]);
-	i--;
-	while((t+i)>=t)
+				i--;
+				while((t+i)>=t)
           vecTwo.push_back(t[i--]);
     }
     deque(const deque<T>& x);
