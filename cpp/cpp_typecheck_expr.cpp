@@ -550,7 +550,7 @@ bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
           it++)
       {
         if(!it->get_bool("from_base") &&
-           it->get("base_name") == op_name)
+           it->base_name() == op_name)
         {
           found_in_struct = true;
           break;

@@ -325,7 +325,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
   component.name(identifier);
   component.type()=final_type;
   component.set("access", access);
-  component.set("base_name", base_name);
+  component.base_name(base_name);
   component.set("pretty_name", base_name);
   component.location() = cpp_name.location();
 
@@ -459,7 +459,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         struct_typet::componentt compo;
         compo.type() = pointer_typet(symbol_typet(vt_name));
         compo.set_name(symbol.name.as_string() +"::@vtable_pointer");
-        compo.set("base_name", "@vtable_pointer");
+        compo.base_name("@vtable_pointer");
         compo.set("pretty_name", symbol.base_name.as_string() +"@vtable_pointer");
         compo.set("is_vtptr",true);
         compo.set("access","public");
@@ -490,8 +490,8 @@ void cpp_typecheckt::typecheck_compound_declarator(
         // a new function that does 'late casting' of the 'this' parameter
         symbolt func_symb;
         func_symb.name=component.get_name().as_string() + "::" +virtual_base.as_string();
-        func_symb.base_name=component.get("base_name");
-        func_symb.pretty_name = component.get("base_name");
+        func_symb.base_name=component.base_name();
+        func_symb.pretty_name = component.base_name();
         func_symb.mode=current_mode;
         func_symb.module=module;
         func_symb.location=component.location();
@@ -594,7 +594,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     static_symbol.mode=symbol.mode;
     static_symbol.name=identifier;
     static_symbol.type=component.type();
-    static_symbol.base_name=component.get("base_name");
+    static_symbol.base_name=component.base_name();
     static_symbol.lvalue=true;
     static_symbol.static_lifetime=true;
     static_symbol.location = cpp_name.location();
@@ -676,7 +676,7 @@ Purpose:
 
 void cpp_typecheckt::put_compound_into_scope(const irept &compound)
 {
-  const irep_idt &base_name=compound.get("base_name");
+  const irep_idt &base_name=compound.base_name();
   const irep_idt &name=compound.name();
 
   if(compound.type().id() =="code")
@@ -1213,7 +1213,7 @@ void cpp_typecheckt::typecheck_member_function(
     type.set("#inlined", true);
 
   symbol.name=identifier;
-  symbol.base_name=component.get("base_name");
+  symbol.base_name=component.base_name();
   symbol.value.swap(value);
   symbol.mode=current_mode;
   symbol.module=module;
@@ -1333,7 +1333,7 @@ void cpp_typecheckt::convert_compound_ano_union(
   component.name(identifier);
   component.type() = symbol_type;
   component.set("access", access);
-  component.set("base_name", base_name);
+  component.base_name(base_name);
   component.set("pretty_name", base_name);
 
   components.push_back(component);
@@ -1356,7 +1356,7 @@ void cpp_typecheckt::convert_compound_ano_union(
       throw 0;
     }
 
-    const irep_idt& base_name = it->get("base_name");
+    const irep_idt& base_name = it->base_name();
 
     if(cpp_scopes.current_scope().contains(base_name))
     {

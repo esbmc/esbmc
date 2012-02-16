@@ -99,7 +99,7 @@ void cpp_typecheckt::convert_anonymous_union(
      throw 0;
     }
 
-    const irep_idt &base_name=it->get("base_name");
+    const irep_idt &base_name=it->base_name();
 
     if(cpp_scopes.current_scope().contains(base_name))
     {

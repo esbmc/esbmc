@@ -347,7 +347,7 @@ void cpp_typecheckt::default_cpctor(
     if(mem_it->get_bool("is_vtptr"))
     {
       exprt name("name");
-      name.set("identifier",mem_it->get("base_name"));
+      name.set("identifier",mem_it->base_name());
       name.location()=location;
 
       cpp_namet cppname;
@@ -380,7 +380,7 @@ void cpp_typecheckt::default_cpctor(
       || mem_it->type().id() == "code")
         continue;
 
-    irep_idt mem_name = mem_it->get("base_name");
+    irep_idt mem_name = mem_it->base_name();
 
     exprt name("name");
     name.identifier(mem_name);
@@ -545,7 +545,7 @@ void cpp_typecheckt::default_assignop_value(
        mem_it->get("type")=="code")
       continue;
 
-    irep_idt mem_name=mem_it->get("base_name");
+    irep_idt mem_name=mem_it->base_name();
 
     if(mem_it->get("type")== "array")
     {
@@ -659,7 +659,7 @@ void cpp_typecheckt::check_member_initializers(
         c_it!=components.end();
         c_it++)
     {
-      if(c_it->get("base_name") != base_name ) continue;
+      if(c_it->base_name() != base_name ) continue;
 
       // Data member
       if(!c_it->get_bool("from_base") &&
@@ -844,7 +844,7 @@ void cpp_typecheckt::full_member_initialization(
         for(struct_typet::componentst::const_iterator c_it =
             components.begin(); c_it != components.end(); c_it++)
         {
-          if (c_it->get("base_name") == base_name
+          if (c_it->base_name() == base_name
               && c_it->get("type") != "code"
               && !c_it->get_bool("is_type"))
           {
@@ -919,7 +919,7 @@ void cpp_typecheckt::full_member_initialization(
     if(mem_it->get_bool("is_vtptr"))
     {
       exprt name("name");
-      name.set("identifier",mem_it->get("base_name"));
+      name.set("identifier",mem_it->base_name());
       name.location() = mem_it->location();
 
       cpp_namet cppname;
@@ -953,7 +953,7 @@ void cpp_typecheckt::full_member_initialization(
       || mem_it->get_bool("is_static"))
         continue;
 
-    irep_idt mem_name = mem_it->get("base_name");
+    irep_idt mem_name = mem_it->base_name();
 
     // Check if the initialization list of the constructor
     // explicitly initializes the data member
@@ -1103,7 +1103,7 @@ bool cpp_typecheckt::find_assignop(const symbolt& symbol) const
   {
     const struct_typet::componentt& component = components[i];
 
-    if(component.get("base_name")!="operator=")
+    if(component.base_name()!="operator=")
       continue;
 
     if(component.get_bool("is_static"))
@@ -1153,7 +1153,7 @@ bool cpp_typecheckt::find_dtor(const symbolt& symbol) const
 
   forall_irep(cit, components.get_sub())
   {
-    if(cit->get("base_name")=="~"+id2string(symbol.base_name))
+    if(cit->base_name()=="~"+id2string(symbol.base_name))
       return true;
   }
 
@@ -1240,7 +1240,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
     if(cit->get_bool("is_vtptr"))
     {
       exprt name("name");
-      name.set("identifier",cit->get("base_name"));
+      name.set("identifier",cit->base_name());
 
       cpp_namet cppname;
       cppname.move_to_sub(name);
@@ -1286,7 +1286,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
       continue;
 
     irept name("name");
-    name.identifier(cit->get("base_name"));
+    name.identifier(cit->base_name());
     name.set("#location", location);
 
     cpp_namet cppname;

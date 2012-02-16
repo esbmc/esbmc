@@ -206,7 +206,7 @@ codet cpp_typecheckt::cpp_constructor(
     for(unsigned i=0; i < struct_type.components().size(); i++)
     {
       const irept &component = struct_type.components()[i];
-      if(component.get("base_name") != "@most_derived")
+      if(component.base_name() != "@most_derived")
         continue;
 
       exprt member("member", bool_typet());
@@ -251,7 +251,7 @@ codet cpp_typecheckt::cpp_constructor(
          type.id()=="code" &&
          type.find("return_type").id()=="constructor")
       {
-        constructor_name=it->get("base_name");
+        constructor_name=it->base_name();
         break;
       }
     }

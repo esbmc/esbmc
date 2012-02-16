@@ -82,7 +82,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
     {
       const struct_typet::componentt& compo = vt_type.components()[i];
       std::map<irep_idt,exprt>::const_iterator cit2 =
-        value_map.find( compo.get("base_name"));
+        value_map.find( compo.base_name());
       assert(cit2 != value_map.end());
       const exprt& value = cit2->second;
       assert(value.type() == compo.type());

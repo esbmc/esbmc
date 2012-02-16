@@ -108,7 +108,7 @@ codet cpp_typecheckt::cpp_destructor(
          type.id()=="code" &&
          type.find("return_type").id()=="destructor")
       {
-        dtor_name=it->get("base_name");
+        dtor_name=it->base_name();
         break;
       }
     }
