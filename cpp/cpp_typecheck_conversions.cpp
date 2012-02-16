@@ -1172,7 +1172,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
               assert(new_expr.statement()=="temporary_object");
 
               if(to.cmt_constant())
-                new_expr.type().set("#constant", true);
+                new_expr.type().cmt_constant(true);
 
               rank += tmp_rank;
             }
@@ -1206,7 +1206,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
 
                 exprt new_object("new_object", type);
                 new_object.set("#lvalue", true);
-                new_object.type().set("#constant", false);
+                new_object.type().cmt_constant(false);
 
                 exprt func_symb = cpp_symbol_expr(lookup(component.name()));
                 func_symb.type() = comp_type;
@@ -1227,7 +1227,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
                 assert(new_expr.statement()=="temporary_object");
 
                 if(to.cmt_constant())
-                  new_expr.type().set("#constant", true);
+                  new_expr.type().cmt_constant(true);
               }
             }
           }

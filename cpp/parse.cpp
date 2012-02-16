@@ -5214,7 +5214,7 @@ bool Parser::rStatement(codet &statement)
     if(lex->GetToken(tk3)!=';')
       return false;
 
-    statement.set("destination", tk2.text);
+    statement.destination(tk2.text);
 
     return true;
 

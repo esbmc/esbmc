@@ -91,7 +91,7 @@ codet cpp_typecheckt::cpp_constructor(
       exprt op_tc = operands.front();
       typecheck_expr(op_tc);
        // Override constantness
-      object_tc.type().set("#constant", false);
+      object_tc.type().cmt_constant(false);
       object_tc.set("#lvalue", true);
       side_effect_exprt assign("assign");
       assign.location()=location;
@@ -162,7 +162,7 @@ codet cpp_typecheckt::cpp_constructor(
     else if(operands_tc.size()==1)
     {
       // Override constantness
-      object_tc.type().set("#constant", false);
+      object_tc.type().cmt_constant(false);
       object_tc.set("#lvalue", true);
       side_effect_exprt assign("assign");
       assign.location()=location;

@@ -144,7 +144,7 @@ void cpp_typecheckt::typecheck_type(typet &type)
     typecheck_type(type.subtype());
 
     if(type.subtype().cmt_constant())
-      type.set("#constant", true);
+      type.cmt_constant(true);
 
     if(type.subtype().cmt_volatile())
       type.set("#volatile", true);

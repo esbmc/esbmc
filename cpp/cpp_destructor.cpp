@@ -132,7 +132,7 @@ codet cpp_typecheckt::cpp_destructor(
 
     exprt member_expr("member");
     member_expr.copy_to_operands(object);
-    member_expr.op0().type().set("#constant", false);
+    member_expr.op0().type().cmt_constant(false);
     member_expr.add("component_cpp_name").swap(cpp_name);
     member_expr.location()=location;
 

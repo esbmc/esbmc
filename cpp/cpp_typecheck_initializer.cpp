@@ -316,7 +316,7 @@ void cpp_typecheckt::zero_initializer(
     assign.location()=location;
 
     typecheck_expr(assign.op0());
-    assign.op0().type().set("#constant", false);
+    assign.op0().type().cmt_constant(false);
     already_typechecked(assign.op0());
 
     typecheck_code(assign);
@@ -332,7 +332,7 @@ void cpp_typecheckt::zero_initializer(
     assign.location()=location;
 
     typecheck_expr(assign.op0());
-    assign.op0().type().set("#constant", false);
+    assign.op0().type().cmt_constant(false);
     already_typechecked(assign.op0());
 
     typecheck_code(assign);

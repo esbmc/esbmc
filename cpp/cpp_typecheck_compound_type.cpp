@@ -326,7 +326,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
   component.type()=final_type;
   component.set("access", access);
   component.base_name(base_name);
-  component.set("pretty_name", base_name);
+  component.pretty_name(base_name);
   component.location() = cpp_name.location();
 
   if(cpp_name.is_operator())
@@ -460,7 +460,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         compo.type() = pointer_typet(symbol_typet(vt_name));
         compo.set_name(symbol.name.as_string() +"::@vtable_pointer");
         compo.base_name("@vtable_pointer");
-        compo.set("pretty_name", symbol.base_name.as_string() +"@vtable_pointer");
+        compo.pretty_name(symbol.base_name.as_string() +"@vtable_pointer");
         compo.set("is_vtptr",true);
         compo.set("access","public");
         components.push_back(compo);
@@ -1282,7 +1282,7 @@ void cpp_typecheckt::adjust_method_type(
   {
   }
   else if(method_type.id()=="const")
-    argument.type().subtype().set("#constant", true);
+    argument.type().subtype().cmt_constant(true);
   else
   {
     err_location(method_type);
@@ -1334,7 +1334,7 @@ void cpp_typecheckt::convert_compound_ano_union(
   component.type() = symbol_type;
   component.set("access", access);
   component.base_name(base_name);
-  component.set("pretty_name", base_name);
+  component.pretty_name(base_name);
 
   components.push_back(component);
 

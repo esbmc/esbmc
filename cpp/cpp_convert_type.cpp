@@ -591,7 +591,7 @@ void cpp_convert_typet::write(typet &type)
 
   // is it constant?
   if(const_cnt)
-    type.set("#constant", true);
+    type.cmt_constant(true);
 
   // is it volatile?
   if(volatile_cnt)
