@@ -249,7 +249,7 @@ codet cpp_typecheckt::cpp_constructor(
 
       if(!it->get_bool("from_base") &&
          type.id()=="code" &&
-         type.find("return_type").id()=="constructor")
+         type.return_type().id()=="constructor")
       {
         constructor_name=it->base_name();
         break;

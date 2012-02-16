@@ -46,10 +46,10 @@ void cpp_typecheckt::find_constructor(
     const struct_typet::componentt &component=*it;
     const typet &type=component.type();
 
-    if(type.find("return_type").id()=="constructor")
+    if(type.return_type().id()=="constructor")
     {
       const irept::subt &arguments=
-        type.find("arguments").get_sub();
+        type.arguments().get_sub();
 
       namespacet ns(context);
 

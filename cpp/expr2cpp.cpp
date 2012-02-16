@@ -280,7 +280,7 @@ std::string expr2cppt::convert_rec(
   {
     std::string dest="template<";
 
-    const irept::subt &arguments=src.find("arguments").get_sub();
+    const irept::subt &arguments=src.arguments().get_sub();
 
     forall_irep(it, arguments)
     {

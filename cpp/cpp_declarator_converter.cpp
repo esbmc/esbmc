@@ -581,7 +581,7 @@ irep_idt cpp_declarator_convertert::get_pretty_name()
   if(is_code)
   {
     const irept::subt &arguments=
-      final_type.find("arguments").get_sub();
+      final_type.arguments().get_sub();
 
     std::string result=scope->prefix+base_name+"(";
 
@@ -646,7 +646,7 @@ void cpp_declarator_convertert::main_function_rules(
 
     const typet &return_type=
       static_cast<const typet &>(
-        symbol.type.find("return_type"));
+        symbol.type.return_type());
 
     if(return_type!=int_type())
     {

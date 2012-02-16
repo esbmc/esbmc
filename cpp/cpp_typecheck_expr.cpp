@@ -1781,7 +1781,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
     // for the sake of operator overloading
 
     const irept::subt &arguments=
-    expr.function().type().find("arguments").get_sub();
+    expr.function().type().arguments().get_sub();
 
     if(arguments.size()>=1 &&
        arguments.front().cmt_base_name()=="this" &&

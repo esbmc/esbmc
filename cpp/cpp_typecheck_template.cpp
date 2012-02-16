@@ -75,7 +75,7 @@ void cpp_typecheckt::typecheck_template_class(
   typet &type=declaration.type();
   template_typet &template_type=declaration.template_type();
 
-  bool has_body=type.find("body").is_not_nil();
+  bool has_body=type.body().is_not_nil();
 
   const cpp_namet &cpp_name=
     static_cast<const cpp_namet &>(type.find("tag"));
@@ -137,7 +137,7 @@ void cpp_typecheckt::typecheck_template_class(
     // there already
 
     bool previous_has_body=
-      previous_symbol->second.type.type().find("body").is_not_nil();
+      previous_symbol->second.type.type().body().is_not_nil();
 
     if(has_body && previous_has_body)
     {
@@ -851,8 +851,8 @@ void cpp_typecheckt::build_template_map(
   const typet &type,
   const irept &template_args)
 {
-  const irept &type_arguments=type.find("arguments");
-  irept instance=template_args.find("arguments");
+  const irept &type_arguments=type.arguments();
+  irept instance=template_args.arguments();
 
   irept::subt::const_iterator t_it=
     type_arguments.get_sub().begin();

@@ -617,14 +617,14 @@ void cpp_typecheckt::check_member_initializers(
     assert(initializer.get("member") == "cpp-name");
 
     const cpp_namet &member_name=
-      to_cpp_name(initializer.find("member"));
+      to_cpp_name(initializer.member_irep());
 
     bool has_template_args = member_name.has_template_args();
 
     if(has_template_args)
     {
       // it has to be a parent constructor
-      typet member_type = (typet&) initializer.find("member");
+      typet member_type = (typet&) initializer.member_irep();
       typecheck_type(member_type);
 
       // check for a direct parent
@@ -701,7 +701,7 @@ void cpp_typecheckt::check_member_initializers(
         && c_it->get("type") == "code"
         && c_it->type().get("return_type") == "constructor")
       {
-        typet member_type = (typet&) initializer.find("member");
+        typet member_type = (typet&) initializer.member_irep();
         typecheck_type(member_type);
 
         // check for a direct parent
@@ -830,7 +830,7 @@ void cpp_typecheckt::full_member_initialization(
       assert(initializer.get("member") == "cpp-name");
 
       const cpp_namet &member_name=
-        to_cpp_name(initializer.find("member"));
+        to_cpp_name(initializer.member_irep());
 
       bool has_template_args = member_name.has_template_args();
 
@@ -858,7 +858,7 @@ void cpp_typecheckt::full_member_initialization(
       }
 
       typet member_type=
-        static_cast<const typet&>(initializer.find("member"));
+        static_cast<const typet&>(initializer.member_irep());
 
       typecheck_type(member_type);
 

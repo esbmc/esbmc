@@ -106,7 +106,7 @@ codet cpp_typecheckt::cpp_destructor(
 
       if(!it->get_bool("from_base") &&
          type.id()=="code" &&
-         type.find("return_type").id()=="destructor")
+         type.return_type().id()=="destructor")
       {
         dtor_name=it->base_name();
         break;

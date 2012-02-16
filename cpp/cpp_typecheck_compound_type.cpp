@@ -81,7 +81,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
   // replace by type symbol
 
   cpp_namet &cpp_name=static_cast<cpp_namet &>(type.add("tag"));
-  bool has_body=type.find("body").is_not_nil();
+  bool has_body=type.body().is_not_nil();
 
   std::string identifier, base_name;
   cpp_name.convert(identifier, base_name);
@@ -289,7 +289,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
   }
 
   if(is_constructor &&
-     final_type.find("return_type").id()!="constructor")
+     final_type.return_type().id()!="constructor")
   {
     err_location(cpp_name.location());
     str << "constructors do not return a value";
@@ -298,7 +298,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
   if(!is_constructor &&
      is_method &&
-   final_type.find("return_type").id()=="constructor")
+   final_type.return_type().id()=="constructor")
   {
     err_location(cpp_name.location());
     str << "method must return a value or void";
@@ -306,7 +306,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
   }
 
   if(is_destructor &&
-     final_type.find("return_type").id()!="destructor")
+     final_type.return_type().id()!="destructor")
   {
     err_location(cpp_name.location());
     str << "destructors do not return a value";
@@ -785,7 +785,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         {
           typet& ftype = declaration.type();
 
-          if(ftype.find("body").is_not_nil())
+          if(ftype.body().is_not_nil())
           {
             err_location(declaration.location());
             str << "class declaration not expected";
@@ -1123,7 +1123,7 @@ void cpp_typecheckt::move_member_initializers(
                                               exprt &value)
 {
   bool is_constructor=
-  type.find("return_type").id()=="constructor";
+  type.return_type().id()=="constructor";
 
   // see if we have initializers
   if(!initializers.get_sub().empty())

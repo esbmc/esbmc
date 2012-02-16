@@ -565,12 +565,12 @@ void cpp_typecastt::implicit_typecast_followed(
 
         if(it->get_bool("from_base") ||
           type.id()!="code" ||
-        type.find("return_type").id() !="constructor")
+        type.return_type().id() !="constructor")
         continue;
 
         // TODO: ellipsis
 
-        const irept &arguments = type.find("arguments");
+        const irept &arguments = type.arguments();
 
         if(arguments.get_sub().size() != 2)
           continue;

@@ -1110,12 +1110,12 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
         if(comp_type.id() !="code")
           continue;
 
-        if(comp_type.find("return_type").id() !="constructor")
+        if(comp_type.return_type().id() !="constructor")
           continue;
 
         // TODO: ellipsis
 
-        const irept &arguments = comp_type.find("arguments");
+        const irept &arguments = comp_type.arguments();
 
         if(arguments.get_sub().size() != 2)
           continue;
@@ -1256,10 +1256,10 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
         continue;
 
       assert(component.get("type") == "code" &&
-             component.type().find("arguments").get_sub().size() == 1);
+             component.type().arguments().get_sub().size() == 1);
 
       typet this_type =
-        static_cast<const typet&>(comp_type.find("arguments")
+        static_cast<const typet&>(comp_type.arguments()
                                            .get_sub()
                                            .front()
                                            .type());

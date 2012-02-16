@@ -554,7 +554,7 @@ void cpp_typecheck_resolvet::disambiguate(
 
       if(it->type().get("#template")!="")
         template_distance=it->type().
-          find("#template_arguments").find("arguments").get_sub().size();
+          find("#template_arguments").arguments().get_sub().size();
 
       // we give strong preference to functions that have
       // fewer template arguments
@@ -738,7 +738,7 @@ void cpp_typecheck_resolvet::make_constructors(
       if(component.get_bool("from_base"))
         continue;
 
-      if(type.find("return_type").id()=="constructor")
+      if(type.return_type().id()=="constructor")
       {
         const symbolt &symb =
           cpp_typecheck.lookup(component.get_name());
@@ -1752,7 +1752,7 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
 
   // walk through the function arguments
   const irept::subt &arguments=
-    function_declarator.type().find("arguments").get_sub();
+    function_declarator.type().arguments().get_sub();
 
   for(unsigned i=0; i<arguments.size(); i++)
   {
