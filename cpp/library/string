@@ -26,6 +26,7 @@ namespace std
 
 		    template<class T>
 		    const T& operator * ();
+		    const_iterator& operator * ();
 
 		    const_iterator& operator ++ ();
 		    const_iterator& operator ++ (int);
