@@ -759,7 +759,7 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
     // it actually returns a pointer
     typet ptr_type("pointer");
     ptr_type.subtype()=expr.type().subtype();
-    expr.set("size", expr.type().find("size"));
+    expr.set("size", expr.type().size_irep());
     expr.type().swap(ptr_type);
   }
   else

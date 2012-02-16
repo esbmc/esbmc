@@ -382,7 +382,7 @@ std::string expr2cppt::convert_cpp_new(
     dest="new";
 
     std::string tmp_size=
-      convert(static_cast<const exprt &>(src.find("size")));
+      convert(static_cast<const exprt &>(src.size_irep()));
 
     dest+=" ";
     dest+=convert(src.type().subtype());
