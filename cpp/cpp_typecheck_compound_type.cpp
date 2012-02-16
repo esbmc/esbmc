@@ -146,7 +146,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     symbol.is_type=true;
     symbol.is_macro=false;
     symbol.pretty_name=cpp_scopes.current_scope().prefix+id2string(symbol.base_name);
-    symbol.type.set("tag", symbol.pretty_name);
+    symbol.type.tag(symbol.pretty_name);
 
     // move early, must be visible before doing body
     symbolt *new_symbol;
