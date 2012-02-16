@@ -85,8 +85,20 @@ void default_replace_dynamic_allocation(
     exprt is_dyn("index", bool_typet());
     is_dyn.copy_to_operands(sym, pointerobj);
 
-    exprt is_valid_ptr("and", bool_typet());
-    is_valid_ptr.move_to_operands(notindex, is_dyn);
+    // Catch free pointers: don't allow anything to be pointer object 1, the
+    // invalid pointer.
+    exprt invalid_object("invalid-object");
+    invalid_object.type() = theptr.type();
+    exprt isinvalid("=", bool_typet());
+    isinvalid.copy_to_operands(theptr, invalid_object);
+    exprt notinvalid("not", bool_typet());
+    notinvalid.copy_to_operands(isinvalid);
+
+    exprt is_not_bad_ptr("and", bool_typet());
+    is_not_bad_ptr.move_to_operands(notindex, is_dyn);
+
+    exprt is_valid_ptr("or", bool_typet());
+    is_valid_ptr.move_to_operands(is_not_bad_ptr, isinvalid);
 
     expr.swap(is_valid_ptr);
   }
