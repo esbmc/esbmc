@@ -385,6 +385,8 @@ void cpp_typecheckt::typecheck_function_expr(
   else if(expr.id()=="ptrmember")
   {
     typecheck_expr_operands(expr);
+    add_implicit_dereference(expr.op0());
+
     // is operator-> overloaded?
     if(expr.op0().type().id() != "pointer")
     {

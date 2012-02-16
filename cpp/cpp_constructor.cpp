@@ -149,7 +149,10 @@ codet cpp_typecheckt::cpp_constructor(
       it=operands_tc.begin();
       it!=operands_tc.end();
       it++)
-    typecheck_expr(*it);
+    {
+      typecheck_expr(*it);
+      add_implicit_dereference(*it);
+    }
 
     if(operands_tc.size()==0)
     {
@@ -190,7 +193,10 @@ codet cpp_typecheckt::cpp_constructor(
       it=operands_tc.begin();
       it!=operands_tc.end();
       it++)
-    typecheck_expr(*it);
+    {
+      typecheck_expr(*it);
+      add_implicit_dereference(*it);
+    }
 
     const struct_typet &struct_type=
       to_struct_type(tmp_type);
