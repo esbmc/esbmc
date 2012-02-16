@@ -77,8 +77,14 @@ void default_replace_dynamic_allocation(
     // So, add the precondition that invalid_ptr only ever applies to dynamic
     // objects.
 
-    exprt is_dyn("is_dynamic_object", bool_typet());
-    is_dyn.move_to_operands(theptr);
+    exprt sym("symbol", array_typet());
+    sym.type().subtype() = bool_typet();
+    sym.set("identifier", "c::__ESBMC_is_dynamic");
+    exprt pointerobj("pointer_object", signedbv_typet());
+    pointerobj.copy_to_operands(theptr);
+    exprt is_dyn("index", bool_typet());
+    is_dyn.copy_to_operands(sym, pointerobj);
+
     exprt is_valid_ptr("and", bool_typet());
     is_valid_ptr.move_to_operands(notindex, is_dyn);
 
