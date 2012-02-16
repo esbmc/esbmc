@@ -494,10 +494,6 @@ void goto_convertt::do_malloc(
   exprt neg_deallocated_expr=gen_not(deallocated_expr);
 #endif
 
-  exprt is_dynamic_expr("is_dynamic_object", typet("bool"));
-  is_dynamic_expr.location()=location;
-  is_dynamic_expr.copy_to_operands(lhs_pointer);
-
   exprt pointer_offset_expr("pointer_offset", int_type());
   pointer_offset_expr.location()=location;
   pointer_offset_expr.copy_to_operands(lhs_pointer);
@@ -507,8 +503,7 @@ void goto_convertt::do_malloc(
 
   // first assume that it's available and that it's a dynamic object
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
-
-  t_a->guard=(neg_valid_expr, is_dynamic_expr, offset_is_zero_expr);
+  t_a->guard=(neg_valid_expr, offset_is_zero_expr);
 
   // set size
   //nec: ex37.c
