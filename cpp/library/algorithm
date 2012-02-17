@@ -364,11 +364,11 @@ template<class RanIt, class Pr>
 
 const int& max(const int& left, const int& right)
 {
-  return (left<right)?left:right; 
+  return (left>right) ? left : right; 
 }
 
-//template<class Ty, class Pr>
-//    const Ty& max(const Ty& left, const Ty& right, Pr pred);
+template<class Ty, class Pr>
+    const Ty& max(const Ty& left, const Ty& right, Pr pred);
 
 //template<class Ty>
 //    const Ty& min(const Ty& left, const Ty& right);
@@ -378,7 +378,7 @@ template<class Ty, class Pr>
 
 const int& min(const int& left, const int& right)
 {
-  return !(right<left)?left:right;
+  return (left<right) ? left : right;
 }
 
 template<class FwdIt>
