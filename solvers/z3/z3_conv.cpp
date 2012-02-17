@@ -2431,6 +2431,18 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
     std::string identifier = "address_of_str_const(" +
                              expr.op0().get_string("value") + ")";
     convert_identifier_pointer(expr.op0(), identifier, bv);
+  } else if (expr.op0().id() == "if") {
+    // We can't nondeterministically take the address of something; So instead
+    // rewrite this to be if (cond) ? &a : &b;.
+    exprt ifexpr = expr.op0();
+    exprt addrof1("address_of", expr.type());
+    addrof1.copy_to_operands(ifexpr.op1());
+    exprt addrof2("address_of", expr.type());
+    addrof2.copy_to_operands(ifexpr.op2());
+    ifexpr.type() = expr.type();
+    ifexpr.op1() = addrof1;
+    ifexpr.op2() = addrof2;
+    convert_bv(ifexpr, bv);
   } else {
     throw new conv_error("Unrecognized address_of operand", expr);
   }
