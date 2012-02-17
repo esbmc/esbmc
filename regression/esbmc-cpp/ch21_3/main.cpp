@@ -28,6 +28,7 @@ int main()
         << "\nLast element of integers: " << integers.back();
 
    integers[ 0 ] = 7;      // set first element to 7
+
    integers.at( 2 ) = 10;  // set element at position 2 to 10
 
    // insert 22 as 2nd element

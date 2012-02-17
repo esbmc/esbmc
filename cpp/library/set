@@ -1,5 +1,19 @@
+/*******************************************************************\
+
+Module: 
+
+Author: 
+
+Date: Feb 2012
+
+\*******************************************************************/
+
 #ifndef __STL_SET
 #define __STL_SET
+
+#include <pair>
+#include "iterator"
+#include "iostream"
 
 namespace std {
 
@@ -120,7 +134,7 @@ namespace std {
 	      iterator find ( const key_type& x ) const;
 	      iterator end ();
 	      const_iterator end () const;
-	      const_iterator operator = ( iterator& ) const;
+	      const_iterator operator= ( iterator& ) const;
   };
 
 //  template <class Key, class Compare = less<Key> >
