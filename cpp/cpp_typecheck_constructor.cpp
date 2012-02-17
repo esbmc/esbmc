@@ -51,10 +51,10 @@ static void copy_parent(
 
   op0.operands().push_back(exprt("cpp-this"));
   op0.type().id("pointer");
-  op0.type().add("subtype").id("cpp-name");
-  op0.type().add("subtype").get_sub().push_back(irept("name"));
-  op0.type().add("subtype").get_sub().back().identifier(parent_base_name);
-  op0.type().add("subtype").get_sub().back().set("#location", location);
+  op0.type().subtype().id("cpp-name");
+  op0.type().subtype().get_sub().push_back(irept("name"));
+  op0.type().subtype().get_sub().back().identifier(parent_base_name);
+  op0.type().subtype().get_sub().back().set("#location", location);
   op0.location() = location;
 
   code.operands().push_back(exprt("explicit-typecast"));
@@ -62,11 +62,11 @@ static void copy_parent(
 
   op1.type().id("pointer");
   op1.type().set("#reference", true);
-  op1.type().add("subtype").set("#constant",true);
-  op1.type().add("subtype").id("cpp-name");
-  op1.type().add("subtype").get_sub().push_back(irept("name"));
-  op1.type().add("subtype").get_sub().back().identifier(parent_base_name);
-  op1.type().add("subtype").get_sub().back().set("#location", location);
+  op1.type().subtype().set("#constant",true);
+  op1.type().subtype().id("cpp-name");
+  op1.type().subtype().get_sub().push_back(irept("name"));
+  op1.type().subtype().get_sub().back().identifier(parent_base_name);
+  op1.type().subtype().get_sub().back().set("#location", location);
 
   op1.operands().push_back(exprt("cpp-name"));
   op1.op0().get_sub().push_back(irept("name"));
@@ -486,7 +486,7 @@ void cpp_typecheckt::default_assignop(
   args_decl_declor.type().id("pointer");
   args_decl_declor.type().set("#reference", true);
   args_decl_declor.type().add("#qualifier").make_nil();
-  args_decl_declor.type().add("subtype").make_nil();
+  args_decl_declor.type().subtype().make_nil();
   args_decl_declor.value().make_nil();
 }
 
