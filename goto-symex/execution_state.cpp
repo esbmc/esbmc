@@ -25,13 +25,12 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    const namespacet &ns,
                                    const reachability_treet *art,
                                    symex_targett *_target,
-                                   renaming::level2t &l2,
                                    contextt &context,
                                    const optionst &options,
                                    bool _is_schedule) :
   goto_symext(ns, context, _target, options),
   owning_rt(art),
-  state_level2(l2),
+  state_level2(),
   _goto_functions(goto_functions)
 {
 

@@ -54,7 +54,7 @@ public:
     at_end_of_run = false;
     has_complete_formula = false;
     is_same_mutex=false;
-    execution_statet *s = new execution_statet(goto_functions, ns, this, target, initial_level2, context, opts, options.get_bool_option("schedule"));
+    execution_statet *s = new execution_statet(goto_functions, ns, this, target, context, opts, options.get_bool_option("schedule"));
     execution_states.push_back(s);
     cur_state_it = execution_states.begin();
   };
@@ -166,7 +166,6 @@ protected:
   std::set<crypto_hash>hit_hashes;
 
   optionst options;
-  renaming::level2t initial_level2;
 };
 
 #endif /* REACHABILITY_TREE_H_ */
