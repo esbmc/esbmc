@@ -520,6 +520,8 @@ z3_convt::check2_z3_properties(void)
     abort();
   }
 
+  if (config.options.get_bool_option("dump-z3-assigns") && model != NULL)
+    std::cout << Z3_model_to_string(z3_ctx, model);
 
   if (z3_prop.uw && result == Z3_L_FALSE)   {
     for (i = 0; i < unsat_core_size; ++i)
