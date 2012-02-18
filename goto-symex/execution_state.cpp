@@ -956,3 +956,10 @@ execution_statet::print_stack_traces(const namespacet &ns,
 }
 
 bool execution_statet::expr_id_map_initialized = false;
+
+execution_statet::ex_state_level2 *
+execution_statet::ex_state_level2::clone(void)
+{
+
+  return new ex_state_level2(*this);
+}

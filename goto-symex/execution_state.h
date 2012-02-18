@@ -47,6 +47,14 @@ class execution_statet : public goto_symext
                                        const exprt &rhs);
   typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
 
+  class ex_state_level2 : public renaming::level2t
+  {
+  public:
+    ex_state_level2() : renaming::level2t() {};
+    virtual ~ex_state_level2() {};
+    virtual ex_state_level2 *clone(void);
+  };
+
   // Macros
 
   void
