@@ -47,12 +47,12 @@ class execution_statet : public goto_symext
                                        const exprt &rhs);
   typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
 
-  class ex_state_level2 : public renaming::level2t
+  class ex_state_level2t : public renaming::level2t
   {
   public:
-    ex_state_level2() : renaming::level2t() {};
-    virtual ~ex_state_level2() {};
-    virtual ex_state_level2 *clone(void);
+    ex_state_level2t() : renaming::level2t() {};
+    virtual ~ex_state_level2t() {};
+    virtual ex_state_level2t *clone(void);
   };
 
   // Macros
@@ -145,7 +145,7 @@ class execution_statet : public goto_symext
   std::vector<read_write_set> exprs_read_write;
   read_write_set last_global_read_write;
   unsigned int last_active_thread;
-  ex_state_level2 state_level2;
+  ex_state_level2t state_level2;
   unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt parent_guard_identifier;
