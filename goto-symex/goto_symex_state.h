@@ -1,9 +1,9 @@
 /*******************************************************************\
 
-Module: Symbolic Execution
+   Module: Symbolic Execution
 
-Author: Daniel Kroening, kroening@kroening.com
-		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
+   Author: Daniel Kroening, kroening@kroening.com Lucas Cordeiro,
+     lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
@@ -33,46 +33,45 @@ class execution_statet; // foward dec
 class goto_symex_statet
 {
 public:
-	goto_symex_statet(renaming::level2t &l2)
-		: level2(l2)
-	{
-	    use_value_set=true;
-	    depth=0;
-	    sleeping = false;
-	    waiting = false;
-	    join_count = 0;
-	    thread_ended = false;
-	}
+  goto_symex_statet(renaming::level2t &l2)
+    : level2(l2)
+  {
+    use_value_set = true;
+    depth = 0;
+    sleeping = false;
+    waiting = false;
+    join_count = 0;
+    thread_ended = false;
+  }
 
-	goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2)
-		: level2(l2)
-	{
-		*this = state;
-		level2 = l2;
-	}
+  goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2)
+    : level2(l2)
+  {
+    *this = state;
+    level2 = l2;
+  }
 
-	goto_symex_statet& operator=(const goto_symex_statet &state)
-	{
-		level2 = state.level2;
-		depth = state.depth;
-		sleeping = state.sleeping;
-		waiting = state.waiting;
-		waiting = state.waiting;
-		join_count = state.join_count;
-		thread_ended = state.thread_ended;
-		guard = state.guard;
-		source = state.source;
-		function_frame = state.function_frame;
-		unwind_map = state.unwind_map;
-		function_unwind = state.function_unwind;
-		declaration_history = state.declaration_history;
-		use_value_set = state.use_value_set;
-		value_set = state.value_set;
-		call_stack = state.call_stack;
-		return *this;
-	}
-
-
+  goto_symex_statet &
+  operator=(const goto_symex_statet &state)
+  {
+    level2 = state.level2;
+    depth = state.depth;
+    sleeping = state.sleeping;
+    waiting = state.waiting;
+    waiting = state.waiting;
+    join_count = state.join_count;
+    thread_ended = state.thread_ended;
+    guard = state.guard;
+    source = state.source;
+    function_frame = state.function_frame;
+    unwind_map = state.unwind_map;
+    function_unwind = state.function_unwind;
+    declaration_history = state.declaration_history;
+    use_value_set = state.use_value_set;
+    value_set = state.value_set;
+    call_stack = state.call_stack;
+    return *this;
+  }
 
   // distance from entry
   unsigned depth;
@@ -88,7 +87,7 @@ public:
   std::map<symex_targett::sourcet, unsigned> unwind_map;
   std::map<irep_idt, unsigned> function_unwind;
 
-    // we have a two-level renaming
+  // we have a two-level renaming
 
   typedef std::set<std::string> declaration_historyt;
 
@@ -97,19 +96,18 @@ public:
 
   renaming::level2t &level2;
 
-  void initialize(const goto_programt::const_targett & start,const goto_programt::const_targett & end, const goto_programt *prog, unsigned int thread_id);
+  void initialize(const goto_programt::const_targett & start,
+                  const goto_programt::const_targett & end,
+                  const goto_programt *prog,
+                  unsigned int thread_id);
 
   void rename(exprt &expr, const namespacet &ns, unsigned node_id);
   void rename_address(exprt &expr, const namespacet &ns, unsigned node_id);
   void rename(typet &type, const namespacet &ns, unsigned node_id);
 
   void assignment(
-    exprt &lhs,
-    const exprt &rhs,
-    const namespacet &ns,
-    bool record_value,
-    execution_statet &ex_state,
-    unsigned exec_node_id);
+    exprt &lhs, const exprt &rhs, const namespacet &ns, bool record_value,
+    execution_statet &ex_state, unsigned exec_node_id);
 
   // what to propagate
   bool constant_propagation(const exprt &expr) const;
@@ -120,17 +118,19 @@ public:
   void get_original_name(exprt &expr) const;
 
   // does both levels of renaming
-  std::string current_name(const irep_idt &identifier, unsigned node_id) const
+  std::string
+  current_name(const irep_idt &identifier, unsigned node_id) const
   {
     return current_name(level2, identifier, node_id);
   }
 
-  std::string current_name(
-    const renaming::level2t &plevel2,
-    const irep_idt &identifier,unsigned node_id) const
+  std::string
+  current_name(
+    const renaming::level2t &plevel2, const irep_idt &identifier,
+    unsigned node_id) const
   {
-    irep_idt temp = top().level1(identifier,node_id);
-    return plevel2.stupid_operator(temp,node_id);
+    irep_idt temp = top().level1(identifier, node_id);
+    return plevel2.stupid_operator(temp, node_id);
   }
 
   bool use_value_set;
@@ -147,7 +147,8 @@ public:
     guardt guard;
     unsigned int thread_id;
 
-    explicit goto_statet(const goto_symex_statet &s):
+    explicit
+    goto_statet(const goto_symex_statet &s) :
       depth(s.depth),
       level2(s.level2),
       value_set(s.value_set),
@@ -157,16 +158,18 @@ public:
     }
   };
 
-  std::string current_name(
-    const goto_statet &goto_state,
-    const irep_idt &identifier, unsigned node_id) const
+  std::string
+  current_name(
+    const goto_statet &goto_state, const irep_idt &identifier,
+    unsigned node_id) const
   {
     return current_name(goto_state.level2, identifier, node_id);
   }
 
   // gotos
   typedef std::list<goto_statet> goto_state_listt;
-  typedef std::map<goto_programt::const_targett, goto_state_listt> goto_state_mapt;
+  typedef std::map<goto_programt::const_targett,
+                   goto_state_listt> goto_state_mapt;
 
   // function calls
   class framet
@@ -183,7 +186,7 @@ public:
     typedef std::set<irep_idt> local_variablest;
     local_variablest local_variables;
 
-    framet(unsigned int thread_id):
+    framet(unsigned int thread_id) :
       return_value(static_cast<const exprt &>(get_nil_irep()))
     {
       level1.level1_data._thread_id = thread_id;
@@ -193,21 +196,33 @@ public:
   typedef std::vector<framet> call_stackt;
   call_stackt call_stack;
 
-  inline framet &top()
+  inline framet &
+  top()
   {
     assert(!call_stack.empty());
     return call_stack.back();
   }
 
-  inline const framet &top() const
+  inline const framet &
+  top() const
   {
     assert(!call_stack.empty());
     return call_stack.back();
   }
 
-  inline framet &new_frame(unsigned int thread_id) { call_stack.push_back(framet(thread_id)); return call_stack.back(); }
-  inline void pop_frame() { call_stack.pop_back(); }
-  inline const framet &previous_frame() { return *(--(--call_stack.end())); }
+  inline framet &
+  new_frame(unsigned int thread_id) {
+    call_stack.push_back(framet(thread_id));
+    return call_stack.back();
+  }
+  inline void
+  pop_frame() {
+    call_stack.pop_back();
+  }
+  inline const framet &
+  previous_frame() {
+    return *(--(--call_stack.end()));
+  }
 
   void print_stack_trace(const namespacet &ns, unsigned int indent) const;
   std::vector<dstring> gen_stack_trace(void) const;
