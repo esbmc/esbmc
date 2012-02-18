@@ -48,13 +48,11 @@ public:
     : level2(l2)
   {
     *this = state;
-    level2 = l2;
   }
 
   goto_symex_statet &
   operator=(const goto_symex_statet &state)
   {
-    level2 = state.level2;
     depth = state.depth;
     sleeping = state.sleeping;
     waiting = state.waiting;
