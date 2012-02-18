@@ -95,6 +95,9 @@ execution_statet::execution_statet(const execution_statet &ex) :
 execution_statet&
 execution_statet::operator=(const execution_statet &ex)
 {
+  // Don't copy level2, copy cons it in execution_statet(ref)
+  //state_level2 = ex.state_level2;
+
   is_schedule = ex.is_schedule;
   threads_state = ex.threads_state;
   atomic_numbers = ex.atomic_numbers;
@@ -103,7 +106,6 @@ execution_statet::operator=(const execution_statet &ex)
   exprs_read_write = ex.exprs_read_write;
   last_global_read_write = ex.last_global_read_write;
   last_active_thread = ex.last_active_thread;
-  state_level2 = ex.state_level2;
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
   parent_guard_identifier = ex.parent_guard_identifier;
