@@ -145,7 +145,7 @@ class execution_statet : public goto_symext
   std::vector<read_write_set> exprs_read_write;
   read_write_set last_global_read_write;
   unsigned int last_active_thread;
-  renaming::level2t state_level2;
+  ex_state_level2 state_level2;
   unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt parent_guard_identifier;
