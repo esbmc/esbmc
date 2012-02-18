@@ -50,9 +50,12 @@ class execution_statet : public goto_symext
   class ex_state_level2t : public renaming::level2t
   {
   public:
-    ex_state_level2t() : renaming::level2t() {};
-    virtual ~ex_state_level2t() {};
+    ex_state_level2t(execution_statet &ref);
+    virtual ~ex_state_level2t();
     virtual ex_state_level2t *clone(void);
+
+  private:
+    execution_statet &owner;
   };
 
   // Macros

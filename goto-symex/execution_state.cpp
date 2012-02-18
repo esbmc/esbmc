@@ -30,7 +30,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    bool _is_schedule) :
   goto_symext(ns, context, _target, options),
   owning_rt(art),
-  state_level2(),
+  state_level2(*this),
   _goto_functions(goto_functions)
 {
 
@@ -956,6 +956,17 @@ execution_statet::print_stack_traces(const namespacet &ns,
 }
 
 bool execution_statet::expr_id_map_initialized = false;
+
+execution_statet::ex_state_level2t::ex_state_level2t(
+    execution_statet &ref)
+  : renaming::level2t(),
+    owner(ref)
+{
+}
+
+execution_statet::ex_state_level2t::~ex_state_level2t(void)
+{
+}
 
 execution_statet::ex_state_level2t *
 execution_statet::ex_state_level2t::clone(void)
