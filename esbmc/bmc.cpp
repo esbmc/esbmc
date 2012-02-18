@@ -391,8 +391,11 @@ bool bmct::run(const goto_functionst &goto_functions)
 
     do
     {
-      if (++interleaving_number>1)
-        std::cout << "*** Thread interleavings " << interleaving_number << " ***" << std::endl;
+      if (++interleaving_number>1) {
+    	  print(8, "*** Thread interleavings "+
+    	           i2string((unsigned long)interleaving_number)+
+    	           " ***");
+      }
 
       if(run_thread())
       {

@@ -385,8 +385,13 @@ void dereferencet::build_reference_to(
     {
       // constraint that it actually is a dynamic object
 
-      exprt is_dynamic_object_expr("is_dynamic_object", typet("bool"));
-      is_dynamic_object_expr.copy_to_operands(deref_expr);
+      exprt sym("symbol", array_typet());
+      sym.type().subtype() = bool_typet();
+      sym.set("identifier", "c::__ESBMC_is_dynamic");
+      exprt pointerobj("pointer_object", signedbv_typet());
+      pointerobj.copy_to_operands(deref_expr);
+      exprt is_dynamic_object_expr("index", bool_typet());
+      is_dynamic_object_expr.copy_to_operands(sym, pointerobj);
 
       if(!dynamic_object.valid().is_true())
       {

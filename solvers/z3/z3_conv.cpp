@@ -520,6 +520,8 @@ z3_convt::check2_z3_properties(void)
     abort();
   }
 
+  if (config.options.get_bool_option("dump-z3-assigns") && model != NULL)
+    std::cout << Z3_model_to_string(z3_ctx, model);
 
   if (z3_prop.uw && result == Z3_L_FALSE)   {
     for (i = 0; i < unsat_core_size; ++i)
@@ -889,23 +891,20 @@ z3_convt::convert_same_object(const exprt &expr)
 }
 
 Z3_ast
-z3_convt::convert_is_dynamic_object(const exprt &expr)
+z3_convt::convert_invalid_object(const exprt &expr)
 {
-  DEBUGLOC;
+  Z3_sort s;
+  Z3_ast newptr, invalid_ptr_num, bv;
 
-  assert(expr.operands().size() == 1);
+  create_type(expr.type(), s);
 
-  exprt sym("symbol", array_typet());
-  sym.type().subtype() = bool_typet();
-  sym.set("identifier", "__ESBMC_is_dynamic");
-  exprt pointerobj("pointer_object", signedbv_typet());
-  exprt ptrsrc = expr.op0();
-  pointerobj.move_to_operands(ptrsrc);
-  exprt index("index", bool_typet());
-  index.move_to_operands(sym, pointerobj);
+  // Create a pointer with an object num corresponding to the invalid object,
+  // and with a free offset.
+  newptr = Z3_mk_fresh_const(z3_ctx, NULL, s);
+  invalid_ptr_num = convert_number(pointer_logic.get_invalid_object(),
+                           config.ansi_c.int_width, true);
 
-  Z3_ast bv;
-  convert_bv(index, bv);
+  bv = z3_api.mk_tuple_update(newptr, 0, invalid_ptr_num);
   return bv;
 }
 
@@ -2434,6 +2433,18 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
     std::string identifier = "address_of_str_const(" +
                              expr.op0().get_string("value") + ")";
     convert_identifier_pointer(expr.op0(), identifier, bv);
+  } else if (expr.op0().id() == "if") {
+    // We can't nondeterministically take the address of something; So instead
+    // rewrite this to be if (cond) ? &a : &b;.
+    exprt ifexpr = expr.op0();
+    exprt addrof1("address_of", expr.type());
+    addrof1.copy_to_operands(ifexpr.op1());
+    exprt addrof2("address_of", expr.type());
+    addrof2.copy_to_operands(ifexpr.op2());
+    ifexpr.type() = expr.type();
+    ifexpr.op1() = addrof1;
+    ifexpr.op2() = addrof2;
+    convert_bv(ifexpr, bv);
   } else {
     throw new conv_error("Unrecognized address_of operand", expr);
   }
@@ -3129,6 +3140,8 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_pointer_object(expr, bv);
   else if (exprid == "same-object")
     bv = convert_same_object(expr);
+  else if (exprid == "invalid-object")
+    bv = convert_invalid_object(expr);
   else if (exprid == "string-constant") {
     exprt tmp;
     string2array(expr, tmp);
@@ -3137,8 +3150,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_zero_string_length(expr.op0(), bv);
   else if (exprid == "replication")
     assert(expr.operands().size() == 2);
-  else if (exprid == "is_dynamic_object")
-    bv = convert_is_dynamic_object(expr);
   else if (exprid == "byte_update_little_endian" ||
            exprid == "byte_update_big_endian")
     convert_byte_update(expr, bv);
