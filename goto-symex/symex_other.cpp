@@ -95,7 +95,7 @@ void goto_symext::symex_other(
     while(state.declaration_history.find(l1_identifier)!=
           state.declaration_history.end())
     {
-      unsigned index=state.top().level1.level1_data.current_names[original_id];
+      unsigned index=state.top().level1.current_names[original_id];
       state.top().level1.rename(original_id, index+1,node_id);
       l1_identifier=state.top().level1.get_ident_name(original_id,node_id);
     }
@@ -105,10 +105,10 @@ void goto_symext::symex_other(
 
     // seen it before?
     // it should get a fresh value
-    renaming::level2_datat::current_namest::iterator it=
-      state.level2.level2_data.current_names.find(l1_identifier);
+    renaming::level2t::current_namest::iterator it=
+      state.level2.current_names.find(l1_identifier);
 
-    if(it!=state.level2.level2_data.current_names.end())
+    if(it!=state.level2.current_names.end())
     {
       state.level2.rename(l1_identifier, it->second.count+1,node_id);
       it->second.constant.make_nil();

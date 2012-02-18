@@ -656,7 +656,7 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
     const irep_idt &identifier = get_active_state().get_original_name(id);
 
     if (identifier == "goto_symex::\\guard!" +
-        i2string(get_active_state().top().level1.level1_data._thread_id))
+        i2string(get_active_state().top().level1._thread_id))
       return 0;
 
     const symbolt *symbol;
@@ -747,9 +747,9 @@ execution_statet::serialise_expr(const exprt &rhs)
     // value.
     exprt tmp = rhs;
     get_active_state().get_original_name(tmp);
-    if (state_level2.level2_data.current_hashes.find(tmp.identifier().as_string()) !=
-        state_level2.level2_data.current_hashes.end()) {
-      crypto_hash h = state_level2.level2_data.current_hashes.find(
+    if (state_level2.current_hashes.find(tmp.identifier().as_string()) !=
+        state_level2.current_hashes.end()) {
+      crypto_hash h = state_level2.current_hashes.find(
         tmp.identifier().as_string())->second;
       return "hash(" + h.to_string() + ")";
     }

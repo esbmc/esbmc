@@ -19,12 +19,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_symex_state.h"
 #include "symex_target.h"
-#include "renaming.h"
 
 class reachability_treet; // Forward dec
 class execution_statet; // Forward dec
 
-class goto_symext : renaming::level1t, renaming::level2t
+class goto_symext
 {
 public:
   goto_symext(const namespacet &_ns, contextt &_new_context,
@@ -54,7 +53,7 @@ public:
   //
   irep_idt guard_identifier(statet &state)
   {
-	  return irep_idt(id2string(guard_identifier_s) + "!" + i2string(state.top().level1.level1_data._thread_id));
+	  return irep_idt(id2string(guard_identifier_s) + "!" + i2string(state.top().level1._thread_id));
   };
 
   // Methods

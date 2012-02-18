@@ -23,8 +23,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
                          symex_targett *_target, const optionst &opts) :
-  renaming::level1t(),
-  renaming::level2t(),
   total_claims(0),
   remaining_claims(0),
   guard_identifier_s("goto_symex::\\guard"),
@@ -54,8 +52,6 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
 }
 
 goto_symext::goto_symext(const goto_symext &sym) :
-  renaming::level1t(sym),
-  renaming::level2t(sym),
   ns(sym.ns),
   options(sym.options),
   new_context(sym.new_context)

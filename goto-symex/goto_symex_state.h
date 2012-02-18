@@ -189,7 +189,7 @@ public:
     framet(unsigned int thread_id) :
       return_value(static_cast<const exprt &>(get_nil_irep()))
     {
-      level1.level1_data._thread_id = thread_id;
+    	level1._thread_id = thread_id;
     }
   };
 
