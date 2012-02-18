@@ -140,7 +140,8 @@ public:
   {
   public:
     unsigned depth;
-    renaming::level2t level2;
+    renaming::level2t *level2_ptr;
+    renaming::level2t &level2;
     value_sett value_set;
     guardt guard;
     unsigned int thread_id;
@@ -148,11 +149,28 @@ public:
     explicit
     goto_statet(const goto_symex_statet &s) :
       depth(s.depth),
-      level2(s.level2),
+      level2_ptr(s.level2.clone()),
+      level2(*level2_ptr),
       value_set(s.value_set),
       guard(s.guard),
       thread_id(s.source.thread_nr)
     {
+    }
+
+    goto_statet(const goto_statet &s) :
+      depth(s.depth),
+      level2_ptr(s.level2_ptr->clone()),
+      level2(*level2_ptr),
+      value_set(s.value_set),
+      guard(s.guard),
+      thread_id(s.thread_id) {}
+
+  private: goto_statet &operator=(const goto_statet &ref) { return *this; }
+
+  public:
+    ~goto_statet() {
+      delete level2_ptr;
+      return;
     }
   };
 

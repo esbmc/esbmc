@@ -234,3 +234,9 @@ void renaming::level2t::print(std::ostream &out, unsigned node_id) const
         << name(it->first, it->second.count) << std::endl;
 
 }
+
+renaming::level2t *renaming::level2t::clone(void) const
+{
+
+  return new level2t(*this);
+}

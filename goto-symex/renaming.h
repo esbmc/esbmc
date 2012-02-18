@@ -132,7 +132,8 @@ namespace renaming {
     unsigned current_number(const irep_idt &identifier) const;
 
     level2t() { };
-    virtual ~level2t() { }
+    virtual ~level2t() { };
+    virtual level2t *clone(void) const;
 
     virtual void print(std::ostream &out, unsigned node_id) const;
   };
