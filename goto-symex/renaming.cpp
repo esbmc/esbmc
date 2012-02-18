@@ -94,8 +94,8 @@ void renaming::level1t::rename(exprt &expr,unsigned node_id)
 
     // first see if it's already an l1 name
 
-    if(original_identifiers.find(identifier)!=
-       original_identifiers.end())
+    if(renaming_data.original_identifiers.find(identifier)!=
+       renaming_data.original_identifiers.end())
       return;
 
     const current_namest::const_iterator it=
@@ -131,8 +131,8 @@ void renaming::level2t::rename(exprt &expr, unsigned node_id)
 
     // first see if it's already an l2 name
 
-    if(original_identifiers.find(identifier)!=
-       original_identifiers.end())
+    if(renaming_data.original_identifiers.find(identifier)!=
+       renaming_data.original_identifiers.end())
       return;
 
     const current_namest::const_iterator it=
@@ -148,7 +148,7 @@ void renaming::level2t::rename(exprt &expr, unsigned node_id)
     else
     {
       std::string new_identifier=name(identifier, 0);
-      original_identifiers[new_identifier]=identifier;
+      renaming_data.original_identifiers[new_identifier]=identifier;
       expr.identifier(new_identifier);
     }
   }
@@ -197,8 +197,8 @@ void renaming::renaming_levelt::get_original_name(exprt &expr) const
   if(expr.id()==exprt::symbol)
   {
     original_identifierst::const_iterator it=
-      original_identifiers.find(expr.identifier());
-    if(it==original_identifiers.end()) return;
+      renaming_data.original_identifiers.find(expr.identifier());
+    if(it==renaming_data.original_identifiers.end()) return;
 
     assert(it->second!="");
     expr.identifier(it->second);
@@ -209,8 +209,8 @@ const irep_idt &renaming::renaming_levelt::get_original_name(
   const irep_idt &identifier) const
 {
   original_identifierst::const_iterator it=
-    original_identifiers.find(identifier);
-  if(it==original_identifiers.end()) return identifier;
+    renaming_data.original_identifiers.find(identifier);
+  if(it==renaming_data.original_identifiers.end()) return identifier;
   return it->second;
 }
 

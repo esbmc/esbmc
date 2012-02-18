@@ -38,7 +38,7 @@ namespace renaming {
 
     virtual ~renaming_levelt() { }
 
-    original_identifierst original_identifiers;
+    renaming_level_datat renaming_data;
   };
 
   // level 1 -- function frames
@@ -69,7 +69,7 @@ namespace renaming {
     void rename(const irep_idt &identifier, unsigned frame, unsigned exec_node_id)
     {
       current_names[identifier]=frame;
-      original_identifiers[name(identifier, frame, exec_node_id)]=identifier;
+      renaming_data.original_identifiers[name(identifier, frame, exec_node_id)]=identifier;
     }
 
     level1t() {}
@@ -138,7 +138,7 @@ namespace renaming {
       valuet &entry=current_names[identifier];
       entry.count=count;
       entry.node_id = node_id;
-      original_identifiers[name(identifier, entry.count)]=identifier;
+      renaming_data.original_identifiers[name(identifier, entry.count)]=identifier;
     }
 
     std::string name(
