@@ -20,6 +20,11 @@ namespace renaming {
 
   typedef std::map<irep_idt, irep_idt> original_identifierst;
 
+  struct renaming_level_datat
+  {
+    original_identifierst original_identifiers;
+  };
+
   struct renaming_levelt
   {
   public:
@@ -38,6 +43,13 @@ namespace renaming {
 
   // level 1 -- function frames
   // this is to preserve locality in case of recursion
+
+  struct level1_datat:public renaming_level_datat
+  {
+    typedef std::map<irep_idt, unsigned> current_namest; // variables and its function frame number
+    current_namest current_names;
+    unsigned int _thread_id;
+  };
 
   struct level1t:public renaming_levelt
   {
@@ -66,7 +78,28 @@ namespace renaming {
     virtual void print(std::ostream &out, unsigned node_id) const;
   };
 
-  // level 2 -- SSA
+ // level 2 -- SSA
+
+  struct level2_datat:public renaming_level_datat
+  {
+    struct valuet
+    {
+      unsigned count;
+      exprt constant;
+      unsigned node_id;
+      valuet():
+        count(0),
+        constant(static_cast<const exprt &>(get_nil_irep())),
+        node_id(0)
+      {
+      }
+    };
+
+    typedef std::map<irep_idt, valuet> current_namest;
+    current_namest current_names;
+    typedef std::map<irep_idt, crypto_hash> current_state_hashest;
+    current_state_hashest current_hashes;
+  };
 
   struct level2t:public renaming_levelt
   {
