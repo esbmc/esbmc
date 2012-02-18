@@ -222,7 +222,7 @@ void goto_symex_statet::assignment(
   std::string orig_name = get_original_name(l1_identifier).as_string();
 
   // do the l2 renaming
-  renaming::level2t::valuet &entry=level2.current_names[l1_identifier];
+  renaming::level2_datat::valuet &entry=level2.level2_data.current_names[l1_identifier];
 
   entry.count++;
 
@@ -231,7 +231,7 @@ void goto_symex_statet::assignment(
   lhs.identifier(level2.name(l1_identifier, entry.count));
 
   if (ex_state.owning_rt->state_hashing)
-    level2.current_hashes[orig_name] = hash;
+    level2.level2_data.current_hashes[orig_name] = hash;
 
   if(record_value)
   {

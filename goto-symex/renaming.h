@@ -108,32 +108,14 @@ namespace renaming {
     virtual std::string stupid_operator(const irep_idt &identifier, unsigned node_id) const;
     virtual void remove(const irep_idt &identifier)
     {
-        current_names.erase(identifier);
+        level2_data.current_names.erase(identifier);
     }
-
-    struct valuet
-    {
-      unsigned count;
-      exprt constant;
-      unsigned node_id;
-      valuet():
-        count(0),
-        constant(static_cast<const exprt &>(get_nil_irep())),
-        node_id(0)
-      {
-      }
-    };
-
-    typedef std::map<irep_idt, valuet> current_namest;
-    current_namest current_names;
-    typedef std::map<irep_idt, crypto_hash> current_state_hashest;
-    current_state_hashest current_hashes;
 
     crypto_hash generate_l2_state_hash() const;
 
     void rename(const irep_idt &identifier, unsigned count, unsigned node_id)
     {
-      valuet &entry=current_names[identifier];
+      level2_datat::valuet &entry=level2_data.current_names[identifier];
       entry.count=count;
       entry.node_id = node_id;
       renaming_data.original_identifiers[name(identifier, entry.count)]=identifier;
@@ -143,8 +125,9 @@ namespace renaming {
       const irep_idt &identifier, unsigned count) const
     {
         unsigned int n_id = 0;
-      current_namest::const_iterator it =current_names.find(identifier);
-      if(it != current_names.end())
+        level2_datat::current_namest::const_iterator it=
+          level2_data.current_names.find(identifier);
+      if(it != level2_data.current_names.end())
           n_id = it->second.node_id;
       return id2string(identifier)+"&"+i2string(n_id)+"#"+i2string(count);
 
@@ -152,8 +135,9 @@ namespace renaming {
 
     void get_variables(std::set<irep_idt> &vars) const
     {
-      for(current_namest::const_iterator it=current_names.begin();
-          it!=current_names.end();
+      for(level2_datat::current_namest::const_iterator it=
+            level2_data.current_names.begin();
+          it!=level2_data.current_names.end();
           it++)
       {
                   vars.insert(it->first);
@@ -166,6 +150,8 @@ namespace renaming {
     virtual ~level2t() { }
 
     virtual void print(std::ostream &out, unsigned node_id) const;
+
+    level2_datat level2_data;
   };
 }
 

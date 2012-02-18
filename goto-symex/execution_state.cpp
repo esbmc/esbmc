@@ -747,9 +747,9 @@ execution_statet::serialise_expr(const exprt &rhs)
     // value.
     exprt tmp = rhs;
     get_active_state().get_original_name(tmp);
-    if (state_level2.current_hashes.find(tmp.identifier().as_string()) !=
-        state_level2.current_hashes.end()) {
-      crypto_hash h = state_level2.current_hashes.find(
+    if (state_level2.level2_data.current_hashes.find(tmp.identifier().as_string()) !=
+        state_level2.level2_data.current_hashes.end()) {
+      crypto_hash h = state_level2.level2_data.current_hashes.find(
         tmp.identifier().as_string())->second;
       return "hash(" + h.to_string() + ")";
     }

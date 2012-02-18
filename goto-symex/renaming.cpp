@@ -10,8 +10,9 @@ std::string renaming::level1t::name(
 unsigned renaming::level2t::current_number(
   const irep_idt &identifier) const
 {
-  current_namest::const_iterator it=current_names.find(identifier);
-  if(it==current_names.end()) return 0;
+  level2_datat::current_namest::const_iterator it=
+    level2_data.current_names.find(identifier);
+  if(it==level2_data.current_names.end()) return 0;
   return it->second.count;
 }
 
@@ -34,10 +35,10 @@ std::string renaming::level1t::operator()(
 std::string renaming::level2t::operator()(
   const irep_idt &identifier, unsigned exec_node_id) const
 {
-  current_namest::const_iterator it=
-    current_names.find(identifier);
+  level2_datat::current_namest::const_iterator it=
+    level2_data.current_names.find(identifier);
 
-  if(it==current_names.end())
+  if(it==level2_data.current_names.end())
     return name(identifier, 0);
 
   return name(identifier, it->second.count);
@@ -46,10 +47,10 @@ std::string renaming::level2t::operator()(
 std::string renaming::level2t::stupid_operator(
   const irep_idt &identifier, unsigned exec_node_id) const
 {
-  current_namest::const_iterator it=
-    current_names.find(identifier);
+  level2_datat::current_namest::const_iterator it=
+    level2_data.current_names.find(identifier);
 
-  if(it==current_names.end())
+  if(it==level2_data.current_names.end())
     return name(identifier, 0);
 
   return name(identifier, it->second.count);
@@ -64,11 +65,11 @@ renaming::level2t::generate_l2_state_hash() const
 {
   unsigned int total;
 
-  uint8_t *data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE * sizeof(uint8_t));
+  uint8_t *data = (uint8_t*)alloca(level2_data.current_hashes.size() * CRYPTO_HASH_SIZE * sizeof(uint8_t));
 
   total = 0;
-  for (current_state_hashest::const_iterator it = current_hashes.begin();
-        it != current_hashes.end(); it++) {
+  for (level2_datat::current_state_hashest::const_iterator it = level2_data.current_hashes.begin();
+        it != level2_data.current_hashes.end(); it++) {
     int j;
 
     for (j = 0 ; j < 8; j++)
@@ -135,10 +136,10 @@ void renaming::level2t::rename(exprt &expr, unsigned node_id)
        renaming_data.original_identifiers.end())
       return;
 
-    const current_namest::const_iterator it=
-      current_names.find(identifier);
+    const level2_datat::current_namest::const_iterator it=
+      level2_data.current_names.find(identifier);
 
-    if(it!=current_names.end())
+    if(it!=level2_data.current_names.end())
     {
       if(it->second.constant.is_not_nil())
         expr=it->second.constant;
@@ -226,9 +227,9 @@ void renaming::level1t::print(std::ostream &out,unsigned node_id) const
 
 void renaming::level2t::print(std::ostream &out, unsigned node_id) const
 {
-  for(current_namest::const_iterator
-      it=current_names.begin();
-      it!=current_names.end();
+  for(level2_datat::current_namest::const_iterator
+      it=level2_data.current_names.begin();
+      it!=level2_data.current_names.end();
       it++)
     out << it->first << " --> "
         << name(it->first, it->second.count) << std::endl;
