@@ -19,11 +19,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_symex_state.h"
 #include "symex_target.h"
+#include "renaming.h"
 
 class reachability_treet; // Forward dec
 class execution_statet; // Forward dec
 
-class goto_symext
+class goto_symext : renaming::level1t, renaming::level2t
 {
 public:
   goto_symext(const namespacet &_ns, contextt &_new_context,
