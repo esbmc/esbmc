@@ -296,7 +296,7 @@ void goto_symext::symex_function_call_code(
   
   // copy L1 renaming from previous frame
   frame.level1=state.previous_frame().level1;
-  frame.level1._thread_id = state.source.thread_nr;
+  frame.level1.level1_data._thread_id = state.source.thread_nr;
   
   unsigned &frame_nr=state.function_frame[identifier];
   frame_nr++;

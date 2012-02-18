@@ -656,7 +656,7 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
     const irep_idt &identifier = get_active_state().get_original_name(id);
 
     if (identifier == "goto_symex::\\guard!" +
-        i2string(get_active_state().top().level1._thread_id))
+        i2string(get_active_state().top().level1.level1_data._thread_id))
       return 0;
 
     const symbolt *symbol;

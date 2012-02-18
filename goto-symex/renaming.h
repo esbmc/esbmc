@@ -57,18 +57,14 @@ namespace renaming {
     std::string name(const irep_idt &identifier, unsigned frame,
                      unsigned execution_node_id) const;
 
-    typedef std::map<irep_idt, unsigned> current_namest; // variables and its function frame number
-    current_namest current_names;
-    unsigned int _thread_id;
-
     virtual void rename(exprt &expr, unsigned node_id);
     virtual void rename(typet &type, unsigned node_id) { renaming_levelt::rename(type,node_id); }
     virtual std::string operator()(const irep_idt &identifier, unsigned exec_node_id) const;
-    virtual void remove(const irep_idt &identifier) { current_names.erase(identifier); }
+    virtual void remove(const irep_idt &identifier) { level1_data.current_names.erase(identifier); }
 
     void rename(const irep_idt &identifier, unsigned frame, unsigned exec_node_id)
     {
-      current_names[identifier]=frame;
+      level1_data.current_names[identifier]=frame;
       renaming_data.original_identifiers[name(identifier, frame, exec_node_id)]=identifier;
     }
 
@@ -76,6 +72,8 @@ namespace renaming {
     virtual ~level1t() { }
 
     virtual void print(std::ostream &out, unsigned node_id) const;
+
+    level1_datat level1_data;
   };
 
  // level 2 -- SSA

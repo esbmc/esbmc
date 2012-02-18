@@ -4,7 +4,7 @@ std::string renaming::level1t::name(
   const irep_idt &identifier,
   unsigned frame, unsigned execution_node_id) const
 {
-  return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(_thread_id);//+"*"+i2string(execution_node_id);
+  return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(level1_data._thread_id);//+"*"+i2string(execution_node_id);
 }
 
 unsigned renaming::level2t::current_number(
@@ -19,10 +19,10 @@ std::string renaming::level1t::operator()(
   const irep_idt &identifier, unsigned exec_node_id) const
 {
 
-  current_namest::const_iterator it=
-    current_names.find(identifier);
+  level1_datat::current_namest::const_iterator it=
+    level1_data.current_names.find(identifier);
 
-  if(it==current_names.end())
+  if(it==level1_data.current_names.end())
   {
     // can not find
     return id2string(identifier); // means global value ?
@@ -98,10 +98,10 @@ void renaming::level1t::rename(exprt &expr,unsigned node_id)
        renaming_data.original_identifiers.end())
       return;
 
-    const current_namest::const_iterator it=
-      current_names.find(identifier);
+    const level1_datat::current_namest::const_iterator it=
+      level1_data.current_names.find(identifier);
 
-    if(it!=current_names.end())
+    if(it!=level1_data.current_names.end())
       expr.identifier(name(identifier, it->second,node_id));
   }
   else if(expr.id()==exprt::addrof ||
@@ -216,9 +216,9 @@ const irep_idt &renaming::renaming_levelt::get_original_name(
 
 void renaming::level1t::print(std::ostream &out,unsigned node_id) const
 {
-  for(current_namest::const_iterator
-      it=current_names.begin();
-      it!=current_names.end();
+  for(level1_datat::current_namest::const_iterator
+      it=level1_data.current_names.begin();
+      it!=level1_data.current_names.end();
       it++)
     out << it->first << " --> "
         << name(it->first, it->second,node_id) << std::endl;

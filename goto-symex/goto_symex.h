@@ -53,7 +53,7 @@ public:
   //
   irep_idt guard_identifier(statet &state)
   {
-	  return irep_idt(id2string(guard_identifier_s) + "!" + i2string(state.top().level1._thread_id));
+	  return irep_idt(id2string(guard_identifier_s) + "!" + i2string(state.top().level1.level1_data._thread_id));
   };
 
   // Methods

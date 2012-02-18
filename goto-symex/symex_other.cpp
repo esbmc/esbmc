@@ -95,7 +95,7 @@ void goto_symext::symex_other(
     while(state.declaration_history.find(l1_identifier)!=
           state.declaration_history.end())
     {
-      unsigned index=state.top().level1.current_names[original_id];
+      unsigned index=state.top().level1.level1_data.current_names[original_id];
       state.top().level1.rename(original_id, index+1,node_id);
       l1_identifier=state.top().level1(original_id,node_id);
     }
