@@ -37,8 +37,7 @@ class execution_statet : public goto_symext
                    symex_targett *_target,
                    contextt &context,
                    const optionst &options,
-                   ex_state_level2t &l2ref,
-                   bool _is_schedule);
+                   ex_state_level2t &l2ref);
 
   // Deny implicit copy constructor synthesis
   private: execution_statet(const execution_statet &ex);
@@ -160,14 +159,13 @@ class execution_statet : public goto_symext
   unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt parent_guard_identifier;
-  bool is_schedule;
   bool reexecute_instruction;
   int TS_number;
   unsigned nondet_count;
   unsigned dynamic_counter;
   unsigned int node_id;
 
-  private:
+  protected:
   const goto_functionst &_goto_functions;
   int CS_number;
   string_containert::str_snapshot str_state;
@@ -190,10 +188,9 @@ class dfs_execution_statet : public execution_statet
                    const reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
-                   const optionst &options,
-                   bool _is_schedule)
+                   const optionst &options)
       : execution_statet(goto_functions, ns, art, _target, context,
-                       options, level2, _is_schedule),
+                       options, level2),
         level2(*this)
   {
   };
@@ -202,7 +199,7 @@ class dfs_execution_statet : public execution_statet
 
   dfs_execution_statet *clone(void) const;
 
-  virtual ~dfs_execution_statet(void) {};
+  virtual ~dfs_execution_statet(void);
 
   execution_statet::ex_state_level2t level2;
 };

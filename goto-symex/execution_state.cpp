@@ -27,8 +27,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    symex_targett *_target,
                                    contextt &context,
                                    const optionst &options,
-                                   ex_state_level2t &l2ref,
-                                   bool _is_schedule) :
+                                   ex_state_level2t &l2ref) :
   goto_symext(ns, context, _target, options),
   owning_rt(art),
   state_level2(l2ref),
@@ -43,7 +42,6 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
     execution_statet::expr_id_map = init_expr_id_map();
   }
 
-  is_schedule = _is_schedule;
   reexecute_instruction = true;
   CS_number = 0;
   TS_number = 0;
@@ -99,7 +97,6 @@ execution_statet::operator=(const execution_statet &ex)
   // Don't copy level2, copy cons it in execution_statet(ref)
   //state_level2 = ex.state_level2;
 
-  is_schedule = ex.is_schedule;
   threads_state = ex.threads_state;
   atomic_numbers = ex.atomic_numbers;
   DFS_traversed = ex.DFS_traversed;
@@ -142,15 +139,6 @@ execution_statet::operator=(const execution_statet &ex)
 
 execution_statet::~execution_statet()
 {
-
-  delete target;
-
-  // Free all name strings and suchlike we generated on this run
-  // and no longer require
-  // But, not if we're running with --schedule, as we'll need all
-  // that information later.
-  if (!is_schedule)
-    string_container.restore_state_snapshot(str_state);
 };
 
 
@@ -994,6 +982,16 @@ execution_statet::ex_state_level2t::clone(void)
 {
 
   return new ex_state_level2t(*this);
+}
+
+dfs_execution_statet::~dfs_execution_statet(void)
+{
+
+  delete target;
+
+  // Free all name strings and suchlike we generated on this run
+  // and no longer require
+  string_container.restore_state_snapshot(str_state);
 }
 
 dfs_execution_statet* dfs_execution_statet::clone(void) const

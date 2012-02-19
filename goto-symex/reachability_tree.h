@@ -54,7 +54,8 @@ public:
     at_end_of_run = false;
     has_complete_formula = false;
     is_same_mutex=false;
-    execution_statet *s = new dfs_execution_statet(goto_functions, ns, this, target, context, opts, options.get_bool_option("schedule"));
+    bool is_schedule = options.get_bool_option("schedule");
+    execution_statet *s = new dfs_execution_statet(goto_functions, ns, this, target, context, opts);
     execution_states.push_back(s);
     cur_state_it = execution_states.begin();
   };
