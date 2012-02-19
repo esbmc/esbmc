@@ -57,15 +57,13 @@ public:
 
     execution_statet *s;
     if (options.get_bool_option("schedule")) {
-      schedule_execution_statet *ss;
-      ss = new schedule_execution_statet(goto_functions, ns, this, target,
-                                        context, opts);
-      schedule_level2 = ss->get_level2();
-      s = reinterpret_cast<execution_statet*>(ss);
+      s = reinterpret_cast<execution_statet*>(
+                           new schedule_execution_statet(goto_functions, ns,
+                                                 this, target, context, opts));
     } else {
       s = reinterpret_cast<execution_statet*>(
                            new dfs_execution_statet(goto_functions, ns, this,
-                                                   target, context, opts));
+                                                 target, context, opts));
     }
 
     execution_states.push_back(s);
@@ -169,8 +167,6 @@ protected:
   std::list<execution_statet*> execution_states;
   /* This is derefed and returned by get_current_state */
   std::list<execution_statet*>::iterator cur_state_it;
-  // Level2 record for --schedule.
-  execution_statet::ex_state_level2t *schedule_level2;
   int CS_bound;
   int _TS_slice;
   bool is_same_mutex, deadlock_detection, por;

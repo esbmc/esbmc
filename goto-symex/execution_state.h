@@ -36,14 +36,9 @@ class execution_statet : public goto_symext
                    const reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
-                   const optionst &options,
-                   ex_state_level2t &l2ref);
+                   const optionst &options);
 
-  // Deny implicit copy constructor synthesis
-  private: execution_statet(const execution_statet &ex);
-
-  public:
-  execution_statet(const execution_statet &ex, ex_state_level2t &ref);
+  execution_statet(const execution_statet &ex);
   execution_statet &operator=(const execution_statet &ex);
   virtual ~execution_statet();
 
@@ -155,7 +150,7 @@ class execution_statet : public goto_symext
   std::vector<read_write_set> exprs_read_write;
   read_write_set last_global_read_write;
   unsigned int last_active_thread;
-  ex_state_level2t &state_level2;
+  ex_state_level2t state_level2;
   unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt parent_guard_identifier;
@@ -189,17 +184,13 @@ class dfs_execution_statet : public execution_statet
                    symex_targett *_target,
                    contextt &context,
                    const optionst &options)
-      : execution_statet(goto_functions, ns, art, _target, context,
-                       options, level2),
-        level2(*this)
+      : execution_statet(goto_functions, ns, art, _target, context, options)
   {
   };
 
   dfs_execution_statet(const dfs_execution_statet &ref);
   dfs_execution_statet *clone(void) const;
   virtual ~dfs_execution_statet(void);
-
-  execution_statet::ex_state_level2t level2;
 };
 
 class schedule_execution_statet : public execution_statet
@@ -212,15 +203,13 @@ class schedule_execution_statet : public execution_statet
                    symex_targett *_target,
                    contextt &context,
                    const optionst &options)
-      : execution_statet(goto_functions, ns, art, _target, context,
-                       options, *(new ex_state_level2t(*this)))
+      : execution_statet(goto_functions, ns, art, _target, context, options)
   {
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref);
   schedule_execution_statet *clone(void) const;
   virtual ~schedule_execution_statet(void);
-  ex_state_level2t *get_level2(void);
 };
 
 #endif /* EXECUTION_STATE_H_ */

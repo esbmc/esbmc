@@ -26,11 +26,10 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    const reachability_treet *art,
                                    symex_targett *_target,
                                    contextt &context,
-                                   const optionst &options,
-                                   ex_state_level2t &l2ref) :
+                                   const optionst &options) :
   goto_symext(ns, context, _target, options),
   owning_rt(art),
-  state_level2(l2ref),
+  state_level2(*this),
   _goto_functions(goto_functions)
 {
 
@@ -68,10 +67,10 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   str_state = string_container.take_state_snapshot();
 }
 
-execution_statet::execution_statet(const execution_statet &ex, ex_state_level2t &ref) :
+execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(ref),
+  state_level2(ex.state_level2),
   _goto_functions(ex._goto_functions)
 {
   // Don't copy string state in this copy constructor - instead
@@ -1001,8 +1000,7 @@ dfs_execution_statet* dfs_execution_statet::clone(void) const
 }
 
 dfs_execution_statet::dfs_execution_statet(const dfs_execution_statet &ref)
-  :  execution_statet(ref, level2),
-     level2(ref.level2)
+  :  execution_statet(ref)
 {
 }
 
@@ -1018,13 +1016,6 @@ schedule_execution_statet* schedule_execution_statet::clone(void) const
 }
 
 schedule_execution_statet::schedule_execution_statet(const schedule_execution_statet &ref)
-  :  execution_statet(ref, state_level2) // Keep l2 ref the same
+  :  execution_statet(ref)
 {
-}
-
-execution_statet::ex_state_level2t *
-schedule_execution_statet::get_level2(void)
-{
-
-  return &state_level2;
 }
