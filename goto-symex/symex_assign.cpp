@@ -71,7 +71,9 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   // Art ptr is shared
   art1 = sym.art1;
 
-  // Symex target isn't shared.
+  // Symex target is another matter; a higher up class needs to decide
+  // whether we're duplicating it or using the same one.
+  target = NULL;
   target = sym.target->clone();
 
   return *this;

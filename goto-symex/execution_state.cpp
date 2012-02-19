@@ -995,8 +995,13 @@ dfs_execution_statet::~dfs_execution_statet(void)
 
 dfs_execution_statet* dfs_execution_statet::clone(void) const
 {
+  dfs_execution_statet *d;
 
-  return new dfs_execution_statet(*this);
+  d = new dfs_execution_statet(*this);
+
+  // Duplicate target equation.
+  d->target = target->clone();
+  return d;
 }
 
 dfs_execution_statet::dfs_execution_statet(const dfs_execution_statet &ref)
@@ -1011,8 +1016,13 @@ schedule_execution_statet::~schedule_execution_statet(void)
 
 schedule_execution_statet* schedule_execution_statet::clone(void) const
 {
+  schedule_execution_statet *s;
 
-  return new schedule_execution_statet(*this);
+  s = new schedule_execution_statet(*this);
+
+  // Don't duplicate target equation.
+  s->target = target->clone();
+  return s;
 }
 
 schedule_execution_statet::schedule_execution_statet(const schedule_execution_statet &ref)
