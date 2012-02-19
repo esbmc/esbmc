@@ -62,10 +62,12 @@ public:
                                                  this, target, context, opts,
                                                  &schedule_total_claims,
                                                  &schedule_remaining_claims));
+      schedule_target = target;
     } else {
       s = reinterpret_cast<execution_statet*>(
                            new dfs_execution_statet(goto_functions, ns, this,
                                                  target, context, opts));
+      schedule_target = NULL;
     }
 
     execution_states.push_back(s);
@@ -169,6 +171,7 @@ protected:
   std::list<execution_statet*> execution_states;
   /* This is derefed and returned by get_current_state */
   std::list<execution_statet*>::iterator cur_state_it;
+  symex_targett *schedule_target;
   int CS_bound;
   int _TS_slice;
   unsigned int schedule_total_claims, schedule_remaining_claims;
