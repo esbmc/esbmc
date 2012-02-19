@@ -77,25 +77,6 @@ Function: goto_symext::operator()
 
 \*******************************************************************/
 
-void goto_symext::operator()(const goto_functionst &goto_functions)
-{
-
-  reachability_treet art(goto_functions, ns, options, target, new_context);
-
-  int total_states = 0;
-  while (art.has_more_states())
-  {
-    total_states++;
-    art.get_cur_state().execute_guard(ns);
-    while (!art.is_at_end_of_run())
-    {
-      symex_step(goto_functions, art);
-    }
-
-    art.go_next_state();
-  }
-}
-
 goto_symext::symex_resultt *
 goto_symext::get_symex_result(void)
 {
