@@ -1029,3 +1029,22 @@ schedule_execution_statet::schedule_execution_statet(const schedule_execution_st
   :  execution_statet(ref)
 {
 }
+
+void
+schedule_execution_statet::claim(const exprt &expr, const std::string &msg,
+                                 statet &state, unsigned int node_id)
+{
+  unsigned int tmp_total, tmp_remaining;
+
+  tmp_total = total_claims;
+  tmp_remaining = remaining_claims;
+
+  goto_symext::claim(expr, msg, state, node_id);
+
+  tmp_total = total_claims - tmp_total;
+  tmp_remaining = remaining_claims - tmp_remaining;
+
+  *ptotal_claims += tmp_total;
+  *premaining_claims += tmp_remaining;
+  return;
+}

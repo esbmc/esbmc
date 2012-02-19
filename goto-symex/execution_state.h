@@ -202,14 +202,25 @@ class schedule_execution_statet : public execution_statet
                    const reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
-                   const optionst &options)
+                   const optionst &options,
+                   unsigned int *ptotal_claims,
+                   unsigned int *premaining_claims)
       : execution_statet(goto_functions, ns, art, _target, context, options)
   {
+    this->ptotal_claims = ptotal_claims;
+    this->premaining_claims = premaining_claims;
+    *ptotal_claims = 0;
+    *premaining_claims = 0;
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref);
   schedule_execution_statet *clone(void) const;
   virtual ~schedule_execution_statet(void);
+  virtual void claim(const exprt &expr, const std::string &msg, statet &state,
+                     unsigned node_id);
+
+  unsigned int *ptotal_claims;
+  unsigned int *premaining_claims;
 };
 
 #endif /* EXECUTION_STATE_H_ */

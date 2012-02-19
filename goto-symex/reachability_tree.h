@@ -59,7 +59,9 @@ public:
     if (options.get_bool_option("schedule")) {
       s = reinterpret_cast<execution_statet*>(
                            new schedule_execution_statet(goto_functions, ns,
-                                                 this, target, context, opts));
+                                                 this, target, context, opts,
+                                                 &schedule_total_claims,
+                                                 &schedule_remaining_claims));
     } else {
       s = reinterpret_cast<execution_statet*>(
                            new dfs_execution_statet(goto_functions, ns, this,
@@ -169,6 +171,7 @@ protected:
   std::list<execution_statet*>::iterator cur_state_it;
   int CS_bound;
   int _TS_slice;
+  unsigned int schedule_total_claims, schedule_remaining_claims;
   bool is_same_mutex, deadlock_detection, por;
   bool directed_interleavings;
   const namespacet &ns;

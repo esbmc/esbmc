@@ -97,7 +97,7 @@ protected:
     execution_statet &ex_state,
     unsigned node_id);
 
-  void claim(
+  virtual void claim(
     const exprt &expr,
     const std::string &msg,
     statet &state, unsigned node_id);
