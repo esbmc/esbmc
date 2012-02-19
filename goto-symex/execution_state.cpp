@@ -1021,7 +1021,7 @@ schedule_execution_statet* schedule_execution_statet::clone(void) const
   s = new schedule_execution_statet(*this);
 
   // Don't duplicate target equation.
-  s->target = target->clone();
+  s->target = target;
   return s;
 }
 
