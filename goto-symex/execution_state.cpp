@@ -75,13 +75,13 @@ execution_statet::execution_statet(const execution_statet &ex) :
   state_level2(ex.state_level2),
   _goto_functions(ex._goto_functions)
 {
-  *this = ex;
-
   // Don't copy string state in this copy constructor - instead
   // take another snapshot to represent what string state was
   // like when we began the exploration this execution_statet will
   // perform.
   str_state = string_container.take_state_snapshot();
+
+  *this = ex;
 
   // Regenerate threads state using new objects state_level2 ref
   threads_state.clear();
