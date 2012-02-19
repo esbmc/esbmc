@@ -385,7 +385,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   if (tid != ex_state.threads_state.size()) {
 
     /* Generate a new execution state, duplicate of previous? */
-    execution_statet *new_state = new execution_statet(ex_state);
+    execution_statet *new_state = ex_state.clone();
     execution_states.push_back(new_state);
 
     //begin - H.Savino

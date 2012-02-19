@@ -27,10 +27,11 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    symex_targett *_target,
                                    contextt &context,
                                    const optionst &options,
+                                   ex_state_level2t &l2ref,
                                    bool _is_schedule) :
   goto_symext(ns, context, _target, options),
   owning_rt(art),
-  state_level2(*this),
+  state_level2(l2ref),
   _goto_functions(goto_functions)
 {
 
@@ -69,10 +70,10 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   str_state = string_container.take_state_snapshot();
 }
 
-execution_statet::execution_statet(const execution_statet &ex) :
+execution_statet::execution_statet(const execution_statet &ex, ex_state_level2t &ref) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(ex.state_level2),
+  state_level2(ref),
   _goto_functions(ex._goto_functions)
 {
   // Don't copy string state in this copy constructor - instead
@@ -993,4 +994,16 @@ execution_statet::ex_state_level2t::clone(void)
 {
 
   return new ex_state_level2t(*this);
+}
+
+dfs_execution_statet* dfs_execution_statet::clone(void) const
+{
+
+  return new dfs_execution_statet(*this);
+}
+
+dfs_execution_statet::dfs_execution_statet(const dfs_execution_statet &ref)
+  :  execution_statet(ref, level2),
+     level2(ref.level2)
+{
 }

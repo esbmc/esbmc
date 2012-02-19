@@ -29,6 +29,7 @@ class reachability_treet;
 
 class execution_statet : public goto_symext
 {
+  public: class ex_state_level2t; // Forward dec
 
   public:
   execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
@@ -36,8 +37,14 @@ class execution_statet : public goto_symext
                    symex_targett *_target,
                    contextt &context,
                    const optionst &options,
+                   ex_state_level2t &l2ref,
                    bool _is_schedule);
-  execution_statet(const execution_statet &ex);
+
+  // Deny implicit copy constructor synthesis
+  private: execution_statet(const execution_statet &ex);
+
+  public:
+  execution_statet(const execution_statet &ex, ex_state_level2t &ref);
   execution_statet &operator=(const execution_statet &ex);
   virtual ~execution_statet();
 
@@ -103,6 +110,8 @@ class execution_statet : public goto_symext
 
   // Methods
 
+  virtual execution_statet *clone(void) const = 0;
+
   irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();
   void set_parent_guard(const irep_idt & parent_guard);
@@ -147,7 +156,7 @@ class execution_statet : public goto_symext
   std::vector<read_write_set> exprs_read_write;
   read_write_set last_global_read_write;
   unsigned int last_active_thread;
-  ex_state_level2t state_level2;
+  ex_state_level2t &state_level2;
   unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt parent_guard_identifier;
@@ -170,6 +179,32 @@ class execution_statet : public goto_symext
   static bool expr_id_map_initialized;
   static expr_id_map_t expr_id_map;
   static unsigned int node_count;
+};
+
+class dfs_execution_statet : public execution_statet
+{
+  public:
+  dfs_execution_statet(
+                   const goto_functionst &goto_functions,
+                   const namespacet &ns,
+                   const reachability_treet *art,
+                   symex_targett *_target,
+                   contextt &context,
+                   const optionst &options,
+                   bool _is_schedule)
+      : execution_statet(goto_functions, ns, art, _target, context,
+                       options, level2, _is_schedule),
+        level2(*this)
+  {
+  };
+
+  dfs_execution_statet(const dfs_execution_statet &ref);
+
+  dfs_execution_statet *clone(void) const;
+
+  virtual ~dfs_execution_statet(void) {};
+
+  execution_statet::ex_state_level2t level2;
 };
 
 #endif /* EXECUTION_STATE_H_ */
