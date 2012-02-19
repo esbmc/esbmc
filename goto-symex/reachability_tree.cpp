@@ -901,7 +901,8 @@ reachability_treet::generate_schedule_formula()
     go_next_state();
   }
 
-  return get_cur_state().get_symex_result();
+  return new goto_symext::symex_resultt(schedule_target, schedule_total_claims,
+                                        schedule_remaining_claims);
 }
 
 bool
