@@ -196,9 +196,7 @@ class dfs_execution_statet : public execution_statet
   };
 
   dfs_execution_statet(const dfs_execution_statet &ref);
-
   dfs_execution_statet *clone(void) const;
-
   virtual ~dfs_execution_statet(void);
 
   execution_statet::ex_state_level2t level2;
