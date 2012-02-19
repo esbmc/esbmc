@@ -55,6 +55,16 @@ std::string renaming::level2t::stupid_operator(
   return name(identifier, it->second.count);
 }
 
+std::string
+renaming::level2t::name(const irep_idt &identifier, unsigned count) const
+{
+  unsigned int n_id = 0;
+  current_namest::const_iterator it =current_names.find(identifier);
+  if(it != current_names.end())
+    n_id = it->second.node_id;
+  return id2string(identifier)+"&"+i2string(n_id)+"#"+i2string(count);
+}
+
 static std::string state_to_ignore[8] =
 {"\\guard", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
 "count_lock", "count_wait", "unlocked"};

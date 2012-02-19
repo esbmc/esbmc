@@ -42,7 +42,7 @@ namespace renaming {
   struct level1t:public renaming_levelt
   {
   public:
-    std::string name(const irep_idt &identifier, unsigned frame,
+    virtual std::string name(const irep_idt &identifier, unsigned frame,
                      unsigned execution_node_id) const;
 
     typedef std::map<irep_idt, unsigned> current_namest; // variables and its function frame number
@@ -75,6 +75,8 @@ namespace renaming {
     virtual void rename(typet &type, unsigned node_id) { renaming_levelt::rename(type,node_id); }
     virtual std::string get_ident_name(const irep_idt &identifier, unsigned node_id) const;
     virtual std::string stupid_operator(const irep_idt &identifier, unsigned node_id) const;
+    virtual std::string name( const irep_idt &identifier, unsigned count) const;
+
     virtual void remove(const irep_idt &identifier)
     {
         current_names.erase(identifier);
@@ -106,17 +108,6 @@ namespace renaming {
       entry.count=count;
       entry.node_id = node_id;
       original_identifiers[name(identifier, entry.count)]=identifier;
-    }
-
-    std::string name(
-      const irep_idt &identifier, unsigned count) const
-    {
-        unsigned int n_id = 0;
-      current_namest::const_iterator it =current_names.find(identifier);
-      if(it != current_names.end())
-          n_id = it->second.node_id;
-      return id2string(identifier)+"&"+i2string(n_id)+"#"+i2string(count);
-
     }
 
     void get_variables(std::set<irep_idt> &vars) const
