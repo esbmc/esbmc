@@ -116,6 +116,26 @@ execution_statet::operator=(const execution_statet &ex)
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
+
+  // Vastly irritatingly, we have to iterate through existing level2t objects
+  // updating their ex_state references. There isn't an elegant way of updating
+  // them, it seems, while keeping the symex stuff ignorant of ex_state.
+  // Oooooo, so this is where auto types would be useful...
+  for (std::vector<goto_symex_statet>::iterator it = threads_state.begin();
+       it != threads_state.end(); it++) {
+    for (goto_symex_statet::call_stackt::iterator it2 = it->call_stack.begin();
+         it2 != it->call_stack.end(); it2++) {
+      for (goto_symex_statet::goto_state_mapt::iterator it3 = it2->goto_state_map.begin();
+           it3 != it2->goto_state_map.end(); it3++) {
+        for (goto_symex_statet::goto_state_listt::iterator it4 = it3->second.begin();
+             it4 != it3->second.begin(); it4++) {
+          ex_state_level2t &l2 = dynamic_cast<ex_state_level2t&>(it4->level2);
+          l2.owner = this;
+        }
+      }
+    }
+  }
+
   return *this;
 }
 
@@ -960,7 +980,7 @@ bool execution_statet::expr_id_map_initialized = false;
 execution_statet::ex_state_level2t::ex_state_level2t(
     execution_statet &ref)
   : renaming::level2t(),
-    owner(ref)
+    owner(&ref)
 {
 }
 

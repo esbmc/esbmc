@@ -54,8 +54,7 @@ class execution_statet : public goto_symext
     virtual ~ex_state_level2t();
     virtual ex_state_level2t *clone(void);
 
-  private:
-    execution_statet &owner;
+    execution_statet *owner;
   };
 
   // Macros
