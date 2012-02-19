@@ -1005,3 +1005,19 @@ dfs_execution_statet::dfs_execution_statet(const dfs_execution_statet &ref)
      level2(ref.level2)
 {
 }
+
+schedule_execution_statet::~schedule_execution_statet(void)
+{
+  // Don't delete equation or snapshot state. Schedule requires all this data.
+}
+
+schedule_execution_statet* schedule_execution_statet::clone(void) const
+{
+
+  return new schedule_execution_statet(*this);
+}
+
+schedule_execution_statet::schedule_execution_statet(const schedule_execution_statet &ref)
+  :  execution_statet(ref, state_level2) // Keep l2 ref the same
+{
+}

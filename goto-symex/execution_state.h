@@ -202,4 +202,25 @@ class dfs_execution_statet : public execution_statet
   execution_statet::ex_state_level2t level2;
 };
 
+class schedule_execution_statet : public execution_statet
+{
+  public:
+  schedule_execution_statet(
+                   const goto_functionst &goto_functions,
+                   const namespacet &ns,
+                   const reachability_treet *art,
+                   symex_targett *_target,
+                   contextt &context,
+                   ex_state_level2t &level2,
+                   const optionst &options)
+      : execution_statet(goto_functions, ns, art, _target, context,
+                       options, level2)
+  {
+  };
+
+  schedule_execution_statet(const schedule_execution_statet &ref);
+  schedule_execution_statet *clone(void) const;
+  virtual ~schedule_execution_statet(void);
+};
+
 #endif /* EXECUTION_STATE_H_ */
