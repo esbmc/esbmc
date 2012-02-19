@@ -211,16 +211,16 @@ class schedule_execution_statet : public execution_statet
                    const reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
-                   ex_state_level2t &level2,
                    const optionst &options)
       : execution_statet(goto_functions, ns, art, _target, context,
-                       options, level2)
+                       options, *(new ex_state_level2t(*this)))
   {
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref);
   schedule_execution_statet *clone(void) const;
   virtual ~schedule_execution_statet(void);
+  ex_state_level2t *get_level2(void);
 };
 
 #endif /* EXECUTION_STATE_H_ */

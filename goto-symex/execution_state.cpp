@@ -1021,3 +1021,10 @@ schedule_execution_statet::schedule_execution_statet(const schedule_execution_st
   :  execution_statet(ref, state_level2) // Keep l2 ref the same
 {
 }
+
+execution_statet::ex_state_level2t *
+schedule_execution_statet::get_level2(void)
+{
+
+  return &state_level2;
+}
