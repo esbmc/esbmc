@@ -1026,7 +1026,9 @@ schedule_execution_statet* schedule_execution_statet::clone(void) const
 }
 
 schedule_execution_statet::schedule_execution_statet(const schedule_execution_statet &ref)
-  :  execution_statet(ref)
+  :  execution_statet(ref),
+     ptotal_claims(ref.ptotal_claims),
+     premaining_claims(ref.premaining_claims)
 {
 }
 
