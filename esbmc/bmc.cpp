@@ -459,7 +459,7 @@ bool bmct::run_thread()
     return true;
   }
 
-  equation = static_cast<symex_target_equationt*>(result->target);
+  equation = dynamic_cast<symex_target_equationt*>(result->target);
 
   print(8, "size of program expression: "+
            i2string((unsigned long)equation->SSA_steps.size())+
