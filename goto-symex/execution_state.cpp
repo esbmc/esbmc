@@ -134,6 +134,8 @@ execution_statet::operator=(const execution_statet &ex)
     }
   }
 
+  state_level2->owner = this;
+
   return *this;
 }
 
