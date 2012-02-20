@@ -72,7 +72,9 @@ namespace renaming {
   {
   public:
     virtual void rename(exprt &expr, unsigned node_id);
-    virtual void rename(typet &type, unsigned node_id) { renaming_levelt::rename(type,node_id); }
+    virtual void rename(const irep_idt &identifier, unsigned count, unsigned node_id);
+
+   virtual void rename(typet &type, unsigned node_id) { renaming_levelt::rename(type,node_id); }
     virtual std::string get_ident_name(const irep_idt &identifier, unsigned node_id) const;
     virtual std::string stupid_operator(const irep_idt &identifier, unsigned node_id) const;
     virtual std::string name( const irep_idt &identifier, unsigned count) const;
@@ -101,14 +103,6 @@ namespace renaming {
     current_state_hashest current_hashes;
 
     crypto_hash generate_l2_state_hash() const;
-
-    void rename(const irep_idt &identifier, unsigned count, unsigned node_id)
-    {
-      valuet &entry=current_names[identifier];
-      entry.count=count;
-      entry.node_id = node_id;
-      original_identifiers[name(identifier, entry.count)]=identifier;
-    }
 
     void get_variables(std::set<irep_idt> &vars) const
     {

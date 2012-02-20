@@ -176,6 +176,14 @@ void renaming::level2t::rename(exprt &expr, unsigned node_id)
   }
 }
 
+void renaming::level2t::rename(const irep_idt &identifier, unsigned count, unsigned node_id)
+{
+  valuet &entry=current_names[identifier];
+  entry.count=count;
+  entry.node_id = node_id;
+  original_identifiers[name(identifier, entry.count)]=identifier;
+}
+
 void renaming::renaming_levelt::rename(typet &type, unsigned node_id)
 {
   // rename all the symbols with their last known value
