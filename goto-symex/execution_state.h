@@ -55,6 +55,7 @@ class execution_statet : public goto_symext
     ex_state_level2t(execution_statet &ref);
     virtual ~ex_state_level2t();
     virtual ex_state_level2t *clone(void);
+    virtual void rename(const irep_idt &identifier, unsigned count, unsigned int node_id);
 
     execution_statet *owner;
   };
