@@ -977,7 +977,7 @@ execution_statet::ex_state_level2t::rename(const irep_idt &identifier, unsigned 
   // Replace node_id with the owning ex_states node id. should always be
   // the same.
   assert(owner->node_id == node_id);
-  renaming::level2t::rename(identifier, count, owner->node_id);
+  renaming::level2t::coveredinbees(identifier, count, owner->node_id);
 }
 
 dfs_execution_statet::~dfs_execution_statet(void)

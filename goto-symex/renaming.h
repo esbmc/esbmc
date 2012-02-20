@@ -70,6 +70,8 @@ namespace renaming {
 
   struct level2t:public renaming_levelt
   {
+  protected:
+    virtual void coveredinbees(const irep_idt &identifier, unsigned count, unsigned node_id);
   public:
     virtual void rename(exprt &expr, unsigned node_id);
     virtual void rename(const irep_idt &identifier, unsigned count, unsigned node_id);
