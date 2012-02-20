@@ -36,6 +36,7 @@ class execution_statet : public goto_symext
                    const reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
+                   ex_state_level2t *l2init,
                    const optionst &options);
 
   execution_statet(const execution_statet &ex);
@@ -150,7 +151,7 @@ class execution_statet : public goto_symext
   std::vector<read_write_set> exprs_read_write;
   read_write_set last_global_read_write;
   unsigned int last_active_thread;
-  ex_state_level2t state_level2;
+  ex_state_level2t *state_level2;
   unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt parent_guard_identifier;
@@ -184,7 +185,8 @@ class dfs_execution_statet : public execution_statet
                    symex_targett *_target,
                    contextt &context,
                    const optionst &options)
-      : execution_statet(goto_functions, ns, art, _target, context, options)
+      : execution_statet(goto_functions, ns, art, _target, context,
+                         new ex_state_level2t(*this), options)
   {
   };
 
@@ -205,7 +207,8 @@ class schedule_execution_statet : public execution_statet
                    const optionst &options,
                    unsigned int *ptotal_claims,
                    unsigned int *premaining_claims)
-      : execution_statet(goto_functions, ns, art, _target, context, options)
+      : execution_statet(goto_functions, ns, art, _target, context,
+                         new ex_state_level2t(*this), options)
   {
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;

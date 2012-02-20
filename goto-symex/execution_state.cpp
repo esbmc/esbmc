@@ -26,10 +26,11 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    const reachability_treet *art,
                                    symex_targett *_target,
                                    contextt &context,
+                                   ex_state_level2t *l2init,
                                    const optionst &options) :
   goto_symext(ns, context, _target, options),
   owning_rt(art),
-  state_level2(*this),
+  state_level2(l2init),
   _goto_functions(goto_functions)
 {
 
@@ -70,7 +71,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(ex.state_level2),
+  state_level2(ex.state_level2->clone()),
   _goto_functions(ex._goto_functions)
 {
   // Don't copy string state in this copy constructor - instead
@@ -85,7 +86,7 @@ execution_statet::execution_statet(const execution_statet &ex) :
   threads_state.clear();
   std::vector<goto_symex_statet>::const_iterator it;
   for (it = ex.threads_state.begin(); it != ex.threads_state.end(); it++) {
-    goto_symex_statet state(*it, state_level2);
+    goto_symex_statet state(*it, *state_level2);
     threads_state.push_back(state);
   }
 }
@@ -138,6 +139,7 @@ execution_statet::operator=(const execution_statet &ex)
 
 execution_statet::~execution_statet()
 {
+  delete state_level2;
 };
 
 
@@ -541,7 +543,7 @@ execution_statet::add_thread(goto_programt::const_targett thread_start,
   const goto_programt *prog)
 {
 
-  goto_symex_statet state(state_level2);
+  goto_symex_statet state(*state_level2);
   state.initialize(thread_start, thread_end, prog, threads_state.size());
 
   threads_state.push_back(state);
@@ -695,7 +697,7 @@ crypto_hash
 execution_statet::generate_hash(void) const
 {
 
-  crypto_hash state = state_level2.generate_l2_state_hash();
+  crypto_hash state = state_level2->generate_l2_state_hash();
   std::string str = state.to_string();
 
   for (std::vector<goto_symex_statet>::const_iterator it = threads_state.begin();
@@ -757,9 +759,9 @@ execution_statet::serialise_expr(const exprt &rhs)
     // value.
     exprt tmp = rhs;
     get_active_state().get_original_name(tmp);
-    if (state_level2.current_hashes.find(tmp.identifier().as_string()) !=
-        state_level2.current_hashes.end()) {
-      crypto_hash h = state_level2.current_hashes.find(
+    if (state_level2->current_hashes.find(tmp.identifier().as_string()) !=
+        state_level2->current_hashes.end()) {
+      crypto_hash h = state_level2->current_hashes.find(
         tmp.identifier().as_string())->second;
       return "hash(" + h.to_string() + ")";
     }
