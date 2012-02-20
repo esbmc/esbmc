@@ -25,8 +25,8 @@ namespace renaming {
   public:
     virtual const irep_idt &get_original_name(const irep_idt &identifier) const;
     virtual void get_original_name(exprt &expr) const;
-    virtual void rename(exprt &expr, unsigned node_id)=0;
-    virtual void rename(typet &type, unsigned node_id);
+    virtual void rename(exprt &expr)=0;
+    virtual void rename(typet &type);
     virtual void remove(const irep_idt &identifier)=0;
 
     virtual std::string get_ident_name(const irep_idt &identifier, unsigned exec_node_id) const=0;
@@ -42,22 +42,21 @@ namespace renaming {
   struct level1t:public renaming_levelt
   {
   public:
-    virtual std::string name(const irep_idt &identifier, unsigned frame,
-                     unsigned execution_node_id) const;
+    virtual std::string name(const irep_idt &identifier, unsigned frame) const;
 
     typedef std::map<irep_idt, unsigned> current_namest; // variables and its function frame number
     current_namest current_names;
     unsigned int _thread_id;
 
-    virtual void rename(exprt &expr, unsigned node_id);
-    virtual void rename(typet &type, unsigned node_id) { renaming_levelt::rename(type,node_id); }
+    virtual void rename(exprt &expr);
+    virtual void rename(typet &type) { renaming_levelt::rename(type); }
     virtual std::string get_ident_name(const irep_idt &identifier, unsigned exec_node_id) const;
     virtual void remove(const irep_idt &identifier) { current_names.erase(identifier); }
 
-    void rename(const irep_idt &identifier, unsigned frame, unsigned exec_node_id)
+    void rename(const irep_idt &identifier, unsigned frame)
     {
       current_names[identifier]=frame;
-      original_identifiers[name(identifier, frame, exec_node_id)]=identifier;
+      original_identifiers[name(identifier, frame)]=identifier;
     }
 
     level1t() {}
@@ -73,10 +72,10 @@ namespace renaming {
   protected:
     virtual void coveredinbees(const irep_idt &identifier, unsigned count, unsigned node_id);
   public:
-    virtual void rename(exprt &expr, unsigned node_id);
+    virtual void rename(exprt &expr);
     virtual void rename(const irep_idt &identifier, unsigned count, unsigned node_id);
 
-   virtual void rename(typet &type, unsigned node_id) { renaming_levelt::rename(type,node_id); }
+   virtual void rename(typet &type) { renaming_levelt::rename(type); }
     virtual std::string get_ident_name(const irep_idt &identifier, unsigned node_id) const;
     virtual std::string stupid_operator(const irep_idt &identifier, unsigned node_id) const;
     virtual std::string name( const irep_idt &identifier, unsigned count) const;

@@ -1,8 +1,7 @@
 #include "renaming.h"
 
-std::string renaming::level1t::name(
-  const irep_idt &identifier,
-  unsigned frame, unsigned execution_node_id) const
+std::string renaming::level1t::name(const irep_idt &identifier,
+                                    unsigned frame) const
 {
   return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(_thread_id);//+"*"+i2string(execution_node_id);
 }
@@ -28,7 +27,7 @@ std::string renaming::level1t::get_ident_name(
     return id2string(identifier); // means global value ?
   }
 
-  return name(identifier, it->second, exec_node_id);
+  return name(identifier, it->second);
 }
 
 std::string renaming::level2t::get_ident_name(
@@ -92,11 +91,11 @@ renaming::level2t::generate_l2_state_hash() const
   return crypto_hash(data, total * CRYPTO_HASH_SIZE);
 }
 
-void renaming::level1t::rename(exprt &expr,unsigned node_id)
+void renaming::level1t::rename(exprt &expr)
 {
   // rename all the symbols with their last known value
 
-  rename(expr.type(),node_id);
+  rename(expr.type());
 
   if(expr.id()==exprt::symbol)
   {
@@ -112,28 +111,28 @@ void renaming::level1t::rename(exprt &expr,unsigned node_id)
       current_names.find(identifier);
 
     if(it!=current_names.end())
-      expr.identifier(name(identifier, it->second,node_id));
+      expr.identifier(name(identifier, it->second));
   }
   else if(expr.id()==exprt::addrof ||
           expr.id()=="implicit_address_of" ||
           expr.id()=="reference_to")
   {
     assert(expr.operands().size()==1);
-    rename(expr.op0(),node_id);
+    rename(expr.op0());
   }
   else
   {
     // do this recursively
     Forall_operands(it, expr)
-      rename(*it,node_id);
+      rename(*it);
   }
 }
 
-void renaming::level2t::rename(exprt &expr, unsigned node_id)
+void renaming::level2t::rename(exprt &expr)
 {
   // rename all the symbols with their last known value
 
-  rename(expr.type(),node_id);
+  rename(expr.type());
 
   if(expr.id()==exprt::symbol)
   {
@@ -172,7 +171,7 @@ void renaming::level2t::rename(exprt &expr, unsigned node_id)
   {
     // do this recursively
     Forall_operands(it, expr)
-      rename(*it,node_id);
+      rename(*it);
   }
 }
 
@@ -192,15 +191,15 @@ void renaming::level2t::coveredinbees(const irep_idt &identifier, unsigned count
   original_identifiers[name(identifier, entry.count)]=identifier;
 }
 
-void renaming::renaming_levelt::rename(typet &type, unsigned node_id)
+void renaming::renaming_levelt::rename(typet &type)
 {
   // rename all the symbols with their last known value
 
   if(type.id()==typet::t_array)
   {
-    rename(type.subtype(),node_id);
+    rename(type.subtype());
     exprt tmp = static_cast<const exprt &>(type.size_irep());
-    rename(tmp, node_id);
+    rename(tmp);
     type.size(tmp);
   }
   else if(type.id()==typet::t_struct ||
@@ -211,7 +210,7 @@ void renaming::renaming_levelt::rename(typet &type, unsigned node_id)
   }
   else if(type.id()==typet::t_pointer)
   {
-    rename(type.subtype(),node_id);
+    rename(type.subtype());
   }
 }
 
@@ -247,7 +246,7 @@ void renaming::level1t::print(std::ostream &out,unsigned node_id) const
       it!=current_names.end();
       it++)
     out << it->first << " --> "
-        << name(it->first, it->second,node_id) << std::endl;
+        << name(it->first, it->second) << std::endl;
 }
 
 void renaming::level2t::print(std::ostream &out, unsigned node_id) const

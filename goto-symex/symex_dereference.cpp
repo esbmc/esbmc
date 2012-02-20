@@ -216,7 +216,7 @@ void goto_symext::dereference(
 
   // needs to be renamed to level 1
   assert(!state.call_stack.empty());
-  state.top().level1.rename(expr,node_id);
+  state.top().level1.rename(expr);
 
   guardt guard;
   dereference_rec(expr, guard, dereference, write);

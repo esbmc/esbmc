@@ -406,7 +406,7 @@ void goto_symext::locality(
       it!=local_identifiers.end();
       it++)
   {
-    frame.level1.rename(*it, frame_nr, exec_node_id);
+    frame.level1.rename(*it, frame_nr);
     irep_idt l1_name=frame.level1.get_ident_name(*it,exec_node_id);
     frame.local_variables.insert(l1_name);
   }

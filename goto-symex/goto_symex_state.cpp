@@ -279,8 +279,8 @@ void goto_symex_statet::rename(exprt &expr, const namespacet &ns,unsigned node_i
 
   if(expr.id()==exprt::symbol)
   {
-    top().level1.rename(expr,node_id);
-    level2.rename(expr,node_id);
+    top().level1.rename(expr);
+    level2.rename(expr);
   }
   else if(expr.id()==exprt::addrof ||
           expr.id()=="implicit_address_of" ||
@@ -320,7 +320,7 @@ void goto_symex_statet::rename_address(
   if(expr.id()==exprt::symbol)
   {
     // only do L1
-    top().level1.rename(expr,node_id);
+    top().level1.rename(expr);
   }
   else if(expr.id()==exprt::index)
   {
