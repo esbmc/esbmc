@@ -965,7 +965,7 @@ execution_statet::ex_state_level2t::~ex_state_level2t(void)
 }
 
 execution_statet::ex_state_level2t *
-execution_statet::ex_state_level2t::clone(void)
+execution_statet::ex_state_level2t::clone(void) const
 {
 
   return new ex_state_level2t(*this);

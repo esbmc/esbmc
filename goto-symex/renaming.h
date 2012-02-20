@@ -119,7 +119,7 @@ namespace renaming {
 
     level2t() { };
     virtual ~level2t() { };
-    virtual level2t *clone(void) const;
+    virtual level2t *clone(void) const = 0;
 
     virtual void print(std::ostream &out, unsigned node_id) const;
   };
