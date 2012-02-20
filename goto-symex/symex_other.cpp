@@ -110,7 +110,7 @@ void goto_symext::symex_other(
 
     if(it!=state.level2.current_names.end())
     {
-      state.level2.rename(l1_identifier, it->second.count+1,node_id);
+      state.level2.rename(l1_identifier, it->second.count+1);
       it->second.constant.make_nil();
     }
   }

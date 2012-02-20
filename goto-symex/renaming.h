@@ -73,7 +73,7 @@ namespace renaming {
     virtual void coveredinbees(const irep_idt &identifier, unsigned count, unsigned node_id);
   public:
     virtual void rename(exprt &expr);
-    virtual void rename(const irep_idt &identifier, unsigned count, unsigned node_id);
+    virtual void rename(const irep_idt &identifier, unsigned count)=0;
 
    virtual void rename(typet &type) { renaming_levelt::rename(type); }
     virtual std::string get_ident_name(const irep_idt &identifier, unsigned node_id) const;

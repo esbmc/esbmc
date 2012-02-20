@@ -972,7 +972,7 @@ execution_statet::ex_state_level2t::clone(void) const
 }
 
 void
-execution_statet::ex_state_level2t::rename(const irep_idt &identifier, unsigned count, unsigned node_id)
+execution_statet::ex_state_level2t::rename(const irep_idt &identifier, unsigned count)
 {
   renaming::level2t::coveredinbees(identifier, count, owner->node_id);
 }

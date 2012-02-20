@@ -226,7 +226,7 @@ void goto_symex_statet::assignment(
 
   entry.count++;
 
-  level2.rename(l1_identifier, entry.count,exec_node_id);
+  level2.rename(l1_identifier, entry.count);
 
   lhs.identifier(level2.name(l1_identifier, entry.count));
 
