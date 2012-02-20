@@ -714,22 +714,6 @@ execution_statet::generate_hash(void) const
   return h;
 }
 
-std::string
-unmunge_SSA_name(std::string str)
-{
-  size_t and_pos, hash_pos;
-  std::string result;
-
-  /* All SSA assignment names are of the form symname&x_x_x#n, where n is the
-     assignment count for that symbol, and x are a variety of uninteresting but
-     interleaving-specific numbers. So, we want to discard them. */
-  and_pos = str.find("&");
-  hash_pos = str.rfind("#");
-  result = str.substr(0, and_pos);
-  result = result + str[hash_pos + 1];
-  return result;
-}
-
 static std::string state_to_ignore[8] =
 {
   "\\guard", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
