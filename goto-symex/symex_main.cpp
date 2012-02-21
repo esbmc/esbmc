@@ -120,7 +120,7 @@ void goto_symext::symex_step(
     }
   }
 
-  merge_gotos(state, ex_state, ex_state.node_id);
+  merge_gotos(state, ex_state);
 
   // depth exceeded?
   {
