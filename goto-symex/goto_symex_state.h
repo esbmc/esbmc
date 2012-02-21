@@ -107,7 +107,7 @@ public:
 
   void assignment(
     exprt &lhs, const exprt &rhs, const namespacet &ns, bool record_value,
-    execution_statet &ex_state, unsigned exec_node_id);
+    execution_statet &ex_state);
 
   // what to propagate
   bool constant_propagation(const exprt &expr) const;
