@@ -117,15 +117,14 @@ public:
 
   // does both levels of renaming
   std::string
-  current_name(const irep_idt &identifier, unsigned node_id) const
+  current_name(const irep_idt &identifier) const
   {
-    return current_name(level2, identifier, node_id);
+    return current_name(level2, identifier);
   }
 
   std::string
   current_name(
-    const renaming::level2t &plevel2, const irep_idt &identifier,
-    unsigned node_id) const
+    const renaming::level2t &plevel2, const irep_idt &identifier) const
   {
     irep_idt temp = top().level1.get_ident_name(identifier);
     return plevel2.get_ident_name(temp);
@@ -176,10 +175,9 @@ public:
 
   std::string
   current_name(
-    const goto_statet &goto_state, const irep_idt &identifier,
-    unsigned node_id) const
+    const goto_statet &goto_state, const irep_idt &identifier) const
   {
-    return current_name(goto_state.level2, identifier, node_id);
+    return current_name(goto_state.level2, identifier);
   }
 
   // gotos

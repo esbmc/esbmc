@@ -48,7 +48,7 @@ void goto_symext::claim(
   total_claims++;
 
   exprt expr = claim_expr;
-  state.rename(expr, ns, node_id);
+  state.rename(expr, ns);
 
   // first try simplifier on it
   if (!expr.is_false())
@@ -190,7 +190,7 @@ void goto_symext::symex_step(
                 dereference(tmp, state, false, ex_state.node_id);
 
                 exprt tmp1 = tmp;
-                state.rename(tmp, ns,ex_state.node_id);
+                state.rename(tmp, ns);
 
                 do_simplify(tmp);
                 if (!tmp.is_true())
