@@ -14,8 +14,7 @@ unsigned renaming::level2t::current_number(
   return it->second.count;
 }
 
-std::string renaming::level1t::get_ident_name(
-  const irep_idt &identifier, unsigned exec_node_id) const
+std::string renaming::level1t::get_ident_name(const irep_idt &identifier) const
 {
 
   current_namest::const_iterator it=
@@ -30,8 +29,7 @@ std::string renaming::level1t::get_ident_name(
   return name(identifier, it->second);
 }
 
-std::string renaming::level2t::get_ident_name(
-  const irep_idt &identifier, unsigned exec_node_id) const
+std::string renaming::level2t::get_ident_name(const irep_idt &identifier) const
 {
   current_namest::const_iterator it=
     current_names.find(identifier);

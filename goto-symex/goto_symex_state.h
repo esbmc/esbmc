@@ -127,7 +127,7 @@ public:
     const renaming::level2t &plevel2, const irep_idt &identifier,
     unsigned node_id) const
   {
-    irep_idt temp = top().level1.get_ident_name(identifier, node_id);
+    irep_idt temp = top().level1.get_ident_name(identifier);
     return plevel2.stupid_operator(temp, node_id);
   }
 

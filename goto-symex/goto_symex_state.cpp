@@ -218,7 +218,7 @@ void goto_symex_statet::assignment(
 
   // identifier should be l0 or l1, make sure it's l1
 
-  const std::string l1_identifier=top().level1.get_ident_name(identifier,exec_node_id);
+  const std::string l1_identifier=top().level1.get_ident_name(identifier);
   std::string orig_name = get_original_name(l1_identifier).as_string();
 
   // do the l2 renaming

@@ -29,7 +29,7 @@ namespace renaming {
     virtual void rename(typet &type);
     virtual void remove(const irep_idt &identifier)=0;
 
-    virtual std::string get_ident_name(const irep_idt &identifier, unsigned exec_node_id) const=0;
+    virtual std::string get_ident_name(const irep_idt &identifier) const=0;
 
     virtual ~renaming_levelt() { }
 
@@ -50,7 +50,7 @@ namespace renaming {
 
     virtual void rename(exprt &expr);
     virtual void rename(typet &type) { renaming_levelt::rename(type); }
-    virtual std::string get_ident_name(const irep_idt &identifier, unsigned exec_node_id) const;
+    virtual std::string get_ident_name(const irep_idt &identifier) const;
     virtual void remove(const irep_idt &identifier) { current_names.erase(identifier); }
 
     void rename(const irep_idt &identifier, unsigned frame)
@@ -76,7 +76,7 @@ namespace renaming {
     virtual void rename(const irep_idt &identifier, unsigned count)=0;
 
    virtual void rename(typet &type) { renaming_levelt::rename(type); }
-    virtual std::string get_ident_name(const irep_idt &identifier, unsigned node_id) const;
+    virtual std::string get_ident_name(const irep_idt &identifier) const;
     virtual std::string stupid_operator(const irep_idt &identifier, unsigned node_id) const;
     virtual std::string name( const irep_idt &identifier, unsigned count) const;
 

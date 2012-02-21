@@ -86,7 +86,7 @@ void goto_symext::symex_other(
     // just do the L2 renaming to preseve locality
     const irep_idt &identifier=deref_code.op0().identifier();
 
-    std::string l1_identifier=state.top().level1.get_ident_name(identifier,node_id);
+    std::string l1_identifier=state.top().level1.get_ident_name(identifier);
 
     const irep_idt &original_id=
       state.top().level1.get_original_name(l1_identifier);
@@ -97,7 +97,7 @@ void goto_symext::symex_other(
     {
       unsigned index=state.top().level1.current_names[original_id];
       state.top().level1.rename(original_id, index+1);
-      l1_identifier=state.top().level1.get_ident_name(original_id,node_id);
+      l1_identifier=state.top().level1.get_ident_name(original_id);
     }
 
     state.declaration_history.insert(l1_identifier);
