@@ -229,7 +229,7 @@ const irep_idt &renaming::renaming_levelt::get_original_name(
   return it->second;
 }
 
-void renaming::level1t::print(std::ostream &out,unsigned node_id) const
+void renaming::level1t::print(std::ostream &out) const
 {
   for(current_namest::const_iterator
       it=current_names.begin();
@@ -239,7 +239,7 @@ void renaming::level1t::print(std::ostream &out,unsigned node_id) const
         << name(it->first, it->second) << std::endl;
 }
 
-void renaming::level2t::print(std::ostream &out, unsigned node_id) const
+void renaming::level2t::print(std::ostream &out) const
 {
   for(current_namest::const_iterator
       it=current_names.begin();

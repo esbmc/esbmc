@@ -62,7 +62,7 @@ namespace renaming {
     level1t() {}
     virtual ~level1t() { }
 
-    virtual void print(std::ostream &out, unsigned node_id) const;
+    virtual void print(std::ostream &out) const;
   };
 
   // level 2 -- SSA
@@ -121,7 +121,7 @@ namespace renaming {
     virtual ~level2t() { };
     virtual level2t *clone(void) const = 0;
 
-    virtual void print(std::ostream &out, unsigned node_id) const;
+    virtual void print(std::ostream &out) const;
   };
 }
 
