@@ -33,6 +33,8 @@ class execution_statet; // foward dec
 class goto_symex_statet
 {
 public:
+  class goto_statet; // forward dec
+
   goto_symex_statet(renaming::level2t &l2)
     : level2(l2)
   {
@@ -130,6 +132,13 @@ public:
     return plevel2.get_ident_name(temp);
   }
 
+  std::string
+  current_name(
+    const goto_statet &goto_state, const irep_idt &identifier) const
+  {
+    return current_name(goto_state.level2, identifier);
+  }
+
   bool use_value_set;
 
   // uses level 1 names
@@ -172,13 +181,6 @@ public:
       return;
     }
   };
-
-  std::string
-  current_name(
-    const goto_statet &goto_state, const irep_idt &identifier) const
-  {
-    return current_name(goto_state.level2, identifier);
-  }
 
   // gotos
   typedef std::list<goto_statet> goto_state_listt;
