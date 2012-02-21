@@ -377,8 +377,7 @@ void goto_symext::loop_bound_exceeded(
     {
       // generate unwinding assertion
       claim(negated_cond,
-            "unwinding assertion loop "+id2string(loop_id),
-            state, node_id);
+            "unwinding assertion loop "+id2string(loop_id), state);
     }
     else
     {

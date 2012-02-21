@@ -254,7 +254,7 @@ void goto_symext::symex_function_call_code(
   if(get_unwind_recursion(identifier, unwinding_counter))
   {
     if(!options.get_bool_option("no-unwinding-assertions"))
-      claim(false_exprt(), "recursion unwinding assertion", state,ex_state.node_id);
+      claim(false_exprt(), "recursion unwinding assertion", state);
 
     state.source.pc++;
     return;

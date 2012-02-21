@@ -42,8 +42,7 @@ Function: goto_symext::claim
 void goto_symext::claim(
   const exprt &claim_expr,
   const std::string &msg,
-  statet &state,
-  unsigned node_id) {
+  statet &state) {
 
   total_claims++;
 
@@ -228,7 +227,7 @@ void goto_symext::symex_step(
                       if (art.generate_states_before_read(tmp))
                         return;
 
-                    claim(tmp, msg, state, ex_state.node_id);
+                    claim(tmp, msg, state);
                 }
             }
             state.source.pc++;

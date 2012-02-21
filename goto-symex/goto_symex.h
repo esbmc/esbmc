@@ -99,7 +99,7 @@ protected:
   virtual void claim(
     const exprt &expr,
     const std::string &msg,
-    statet &state, unsigned node_id);
+    statet &state);
 
   // gotos
   void merge_gotos(statet &state, execution_statet &ex_state, unsigned node_id);

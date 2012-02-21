@@ -1035,7 +1035,7 @@ schedule_execution_statet::claim(const exprt &expr, const std::string &msg,
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
 
-  goto_symext::claim(expr, msg, state, node_id);
+  goto_symext::claim(expr, msg, state);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;
