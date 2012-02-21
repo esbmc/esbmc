@@ -72,7 +72,7 @@ protected:
   void dereference(
     exprt &expr,
     statet &state,
-    const bool write, unsigned node_id);
+    const bool write);
 
   void dereference_rec(
     exprt &expr,

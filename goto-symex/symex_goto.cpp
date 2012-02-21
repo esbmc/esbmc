@@ -33,7 +33,7 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
   exprt old_guard=instruction.guard;
 
   replace_dynamic_allocation(state, old_guard);
-  dereference(old_guard, state, false, node_id);
+  dereference(old_guard, state, false);
 
   exprt new_guard=old_guard;
   state.rename(new_guard, ns);

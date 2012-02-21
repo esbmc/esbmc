@@ -170,7 +170,7 @@ void goto_symext::symex_step(
             exprt tmp(instruction.guard);
             replace_dynamic_allocation(state, tmp);
             replace_nondet(tmp, ex_state);
-            dereference(tmp, state, false, ex_state.node_id);
+            dereference(tmp, state, false);
 
             if(!tmp.is_nil() && !options.get_bool_option("deadlock-check"))
             {
@@ -187,7 +187,7 @@ void goto_symext::symex_step(
                 exprt tmp(instruction.guard);
                 replace_dynamic_allocation(state, tmp);
                 replace_nondet(tmp, ex_state);
-                dereference(tmp, state, false, ex_state.node_id);
+                dereference(tmp, state, false);
 
                 exprt tmp1 = tmp;
                 state.rename(tmp, ns);
@@ -222,7 +222,7 @@ void goto_symext::symex_step(
 
                     replace_dynamic_allocation(state, tmp);
                     replace_nondet(tmp, ex_state);
-                    dereference(tmp, state, false, ex_state.node_id);
+                    dereference(tmp, state, false);
 
                     if(ex_state.threads_state.size() > 1)
                       if (art.generate_states_before_read(tmp))
@@ -248,8 +248,8 @@ void goto_symext::symex_step(
                 replace_nondet(deref_code, ex_state);
                 assert(deref_code.operands().size()==2);
 
-                dereference(deref_code.op0(), state, true, ex_state.node_id);
-                dereference(deref_code.op1(), state, false, ex_state.node_id);
+                dereference(deref_code.op0(), state, true);
+                dereference(deref_code.op1(), state, false);
 
                 symex_assign(state, ex_state, deref_code, ex_state.node_id);
 
@@ -274,10 +274,10 @@ void goto_symext::symex_step(
                 replace_nondet(deref_code, ex_state);
 
                 if (deref_code.lhs().is_not_nil()) {
-                    dereference(deref_code.lhs(), state, true,ex_state.node_id);
+                    dereference(deref_code.lhs(), state, true);
                 }
 
-                dereference(deref_code.function(), state, false, ex_state.node_id);
+                dereference(deref_code.function(), state, false);
 
                 if(deref_code.function().identifier() == "c::__ESBMC_yield")
                 {
@@ -305,7 +305,7 @@ void goto_symext::symex_step(
                 }
 
                 Forall_expr(it, deref_code.arguments()) {
-                    dereference(*it, state, false,ex_state.node_id);
+                    dereference(*it, state, false);
                 }
 
                 symex_function_call(goto_functions, ex_state, deref_code);
@@ -330,7 +330,7 @@ void goto_symext::symex_step(
                         statement == "printf") {
                     replace_dynamic_allocation(state, deref_code);
                     replace_nondet(deref_code, ex_state);
-                    dereference(deref_code, state, false,ex_state.node_id);
+                    dereference(deref_code, state, false);
                 }
 
                 symex_other(goto_functions, state, ex_state,  ex_state.node_id);

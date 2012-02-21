@@ -438,7 +438,7 @@ void goto_symext::return_assignment(statet &state, execution_statet &ex_state, u
   {
     exprt value(code.op0());
     
-    dereference(value, state, false,node_id);
+    dereference(value, state, false);
     
     if(frame.return_value.is_not_nil())
     {
