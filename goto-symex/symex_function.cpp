@@ -273,7 +273,7 @@ void goto_symext::symex_function_call_code(
       rhs.identifier("symex::"+i2string(ex_state.nondet_count++));
       rhs.location()=call.location();
       code_assignt code(call.lhs(), rhs);
-      symex_assign(state, ex_state, code, ex_state.node_id);
+      symex_assign(state, ex_state, code);
     }
 
     state.source.pc++;
@@ -449,7 +449,7 @@ void goto_symext::return_assignment(statet &state, execution_statet &ex_state, u
 
       //make sure that we assign two expressions of the same type
       assert(assignment.lhs().type()==assignment.rhs().type());
-      symex_assign(state, ex_state, assignment, node_id);
+      symex_assign(state, ex_state, assignment);
     }
   }
   else

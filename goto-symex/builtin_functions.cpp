@@ -35,8 +35,7 @@ void goto_symext::symex_malloc(
   statet &state,
   const exprt &lhs,
   const side_effect_exprt &code,
-  execution_statet &ex_state,
-        unsigned node_id)
+  execution_statet &ex_state)
 {
   if(code.operands().size()!=1)
     throw "malloc expected to have one operand";
@@ -109,7 +108,7 @@ void goto_symext::symex_malloc(
   state.rename(rhs, ns);
   
   guardt guard;
-  symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs, rhs, guard);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   exprt sym("symbol", array_typet());
@@ -122,7 +121,7 @@ void goto_symext::symex_malloc(
   index.move_to_operands(sym, pointerobj);
   exprt truth("constant", bool_typet());
   truth.set("value", "true");
-  symex_assign_rec(state, ex_state, index, truth, guard,node_id);
+  symex_assign_rec(state, ex_state, index, truth, guard);
 }
 
 /*******************************************************************\
@@ -186,8 +185,7 @@ void goto_symext::symex_cpp_new(
   statet &state,
   const exprt &lhs,
   const side_effect_exprt &code,
-  execution_statet &ex_state,
-        unsigned node_id)
+  execution_statet &ex_state)
 {
   bool do_array;
 
@@ -240,7 +238,7 @@ void goto_symext::symex_cpp_new(
   state.rename(rhs, ns);
 
   guardt guard;
-  symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs, rhs, guard);
 }
 
 /*******************************************************************\

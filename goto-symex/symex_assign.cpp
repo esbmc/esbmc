@@ -148,7 +148,7 @@ Function: goto_symext::symex_assign
 
 \*******************************************************************/
 
-void goto_symext::symex_assign(statet &state, execution_statet &ex_state, const codet &code,unsigned node_id)
+void goto_symext::symex_assign(statet &state, execution_statet &ex_state, const codet &code)
 {
   if(code.operands().size()!=2)
     throw "assignment expects two operands";
@@ -181,9 +181,9 @@ void goto_symext::symex_assign(statet &state, execution_statet &ex_state, const 
     }
     else if(statement=="cpp_new" ||
             statement=="cpp_new[]")
-      symex_cpp_new(state, lhs, side_effect_expr, ex_state, node_id);
+      symex_cpp_new(state, lhs, side_effect_expr, ex_state);
     else if(statement=="malloc")
-      symex_malloc(state, lhs, side_effect_expr, ex_state, node_id);
+      symex_malloc(state, lhs, side_effect_expr, ex_state);
     else if(statement=="printf")
       symex_printf(state, lhs, side_effect_expr);
     else
@@ -194,7 +194,7 @@ void goto_symext::symex_assign(statet &state, execution_statet &ex_state, const 
   else
   {
     guardt guard; // NOT the state guard!
-    symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
+    symex_assign_rec(state, ex_state, lhs, rhs, guard);
   }
 }
 
@@ -215,19 +215,18 @@ void goto_symext::symex_assign_rec(
   execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
-  guardt &guard,
-        unsigned node_id)
+  guardt &guard)
 {
   if(lhs.id()==exprt::symbol)
-    symex_assign_symbol(state, ex_state, lhs, rhs, guard,node_id);
+    symex_assign_symbol(state, ex_state, lhs, rhs, guard);
   else if(lhs.id()==exprt::index || lhs.id()=="memory-leak")
-    symex_assign_array(state, ex_state, lhs, rhs, guard,node_id);
+    symex_assign_array(state, ex_state, lhs, rhs, guard);
   else if(lhs.id()==exprt::member)
-    symex_assign_member(state, ex_state, lhs, rhs, guard,node_id);
+    symex_assign_member(state, ex_state, lhs, rhs, guard);
   else if(lhs.id()==exprt::i_if)
-    symex_assign_if(state, ex_state, lhs, rhs, guard,node_id);
+    symex_assign_if(state, ex_state, lhs, rhs, guard);
   else if(lhs.id()==exprt::typecast)
-    symex_assign_typecast(state, ex_state, lhs, rhs, guard,node_id);
+    symex_assign_typecast(state, ex_state, lhs, rhs, guard);
   else if(lhs.id()=="string-constant" ||
           lhs.id()=="NULL-object" ||
           lhs.id()=="zero_string")
@@ -236,7 +235,7 @@ void goto_symext::symex_assign_rec(
   }
   else if(lhs.id()=="byte_extract_little_endian" ||
           lhs.id()=="byte_extract_big_endian")
-    symex_assign_byte_extract(state, ex_state, lhs, rhs, guard,node_id);
+    symex_assign_byte_extract(state, ex_state, lhs, rhs, guard);
   else
     throw "assignment to "+lhs.id_string()+" not handled";
 }
@@ -258,8 +257,7 @@ void goto_symext::symex_assign_symbol(
   execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
-  guardt &guard,
-  unsigned node_id)
+  guardt &guard)
 {
   // put assignment guard in rhs
   if(!guard.empty())
@@ -311,8 +309,7 @@ void goto_symext::symex_assign_typecast(
   execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
-  guardt &guard,
-        unsigned node_id)
+  guardt &guard)
 {
   // these may come from dereferencing on the lhs
 
@@ -322,7 +319,7 @@ void goto_symext::symex_assign_typecast(
 
   rhs_typecasted.make_typecast(lhs.op0().type());
 
-  symex_assign_rec(state, ex_state, lhs.op0(), rhs_typecasted, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs.op0(), rhs_typecasted, guard);
 }
 
 /*******************************************************************\
@@ -342,8 +339,7 @@ void goto_symext::symex_assign_array(
   execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
-  guardt &guard,
-        unsigned node_id)
+  guardt &guard)
 {
   // lhs must be index operand
   // that takes two operands: the first must be an array
@@ -371,7 +367,7 @@ void goto_symext::symex_assign_array(
   new_rhs.copy_to_operands(lhs_index);
   new_rhs.move_to_operands(rhs);
 
-  symex_assign_rec(state, ex_state, lhs_array, new_rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs_array, new_rhs, guard);
 }
 
 /*******************************************************************\
@@ -391,8 +387,7 @@ void goto_symext::symex_assign_member(
   execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
-  guardt &guard,
-        unsigned node_id)
+  guardt &guard)
 {
   // symbolic execution of a struct member assignment
 
@@ -445,7 +440,7 @@ void goto_symext::symex_assign_member(
 
   new_rhs.op1().component_name(component_name);
 
-  symex_assign_rec(state, ex_state, lhs_struct, new_rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs_struct, new_rhs, guard);
 }
 
 /*******************************************************************\
@@ -465,8 +460,7 @@ void goto_symext::symex_assign_if(
   execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
-  guardt &guard,
-        unsigned node_id)
+  guardt &guard)
 {
   // we have (c?a:b)=e;
 
@@ -481,13 +475,13 @@ void goto_symext::symex_assign_if(
   exprt condition(lhs.op0());
 
   guard.add(condition);
-  symex_assign_rec(state, ex_state, lhs.op1(), rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs.op1(), rhs, guard);
   guard.resize(old_guard_size);
 
   condition.make_not();
 
   guard.add(condition);
-  symex_assign_rec(state, ex_state, lhs.op2(), rhs_copy, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs.op2(), rhs_copy, guard);
   guard.resize(old_guard_size);
 }
 
@@ -508,8 +502,7 @@ void goto_symext::symex_assign_byte_extract(
   execution_statet &ex_state,
   const exprt &lhs,
   exprt &rhs,
-  guardt &guard,
-        unsigned node_id)
+  guardt &guard)
 {
   // we have byte_extract_X(l, b)=r
   // turn into l=byte_update_X(l, b, r)
@@ -529,7 +522,7 @@ void goto_symext::symex_assign_byte_extract(
   new_rhs.copy_to_operands(lhs.op0(), lhs.op1(), rhs);
   new_rhs.type()=lhs.op0().type();
 
-  symex_assign_rec(state, ex_state, lhs.op0(), new_rhs, guard,node_id);
+  symex_assign_rec(state, ex_state, lhs.op0(), new_rhs, guard);
 }
 
 /*******************************************************************\

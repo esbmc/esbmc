@@ -251,7 +251,7 @@ void goto_symext::symex_step(
                 dereference(deref_code.op0(), state, true);
                 dereference(deref_code.op1(), state, false);
 
-                symex_assign(state, ex_state, deref_code, ex_state.node_id);
+                symex_assign(state, ex_state, deref_code);
 
                 state.source.pc++;
 
