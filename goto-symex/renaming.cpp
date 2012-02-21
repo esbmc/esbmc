@@ -3,7 +3,7 @@
 std::string renaming::level1t::name(const irep_idt &identifier,
                                     unsigned frame) const
 {
-  return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(_thread_id);//+"*"+i2string(execution_node_id);
+  return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(_thread_id);
 }
 
 unsigned renaming::level2t::current_number(
