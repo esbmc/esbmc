@@ -87,7 +87,7 @@ protected:
 
   // symex
 
-  void symex_goto(statet &state, execution_statet &ex_state, unsigned node_id);
+  void symex_goto(statet &state, execution_statet &ex_state);
 
   void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
 
@@ -116,7 +116,7 @@ protected:
     const symex_targett::sourcet &source,
     unsigned unwind);
 
-  void loop_bound_exceeded(statet &state, const exprt &guard,unsigned node_id);
+  void loop_bound_exceeded(statet &state, const exprt &guard);
 
   // function calls
 

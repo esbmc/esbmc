@@ -178,7 +178,7 @@ void goto_symext::symex_step(
                   return;
             }
 
-            symex_goto(art.get_cur_state().get_active_state(), ex_state, ex_state.node_id);
+            symex_goto(art.get_cur_state().get_active_state(), ex_state);
         }
             break;
         case ASSUME:

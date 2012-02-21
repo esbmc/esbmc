@@ -26,7 +26,7 @@ Function: goto_symext::symex_goto
 
 \*******************************************************************/
 
-void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned node_id)
+void goto_symext::symex_goto(statet &state, execution_statet &ex_state)
 {
   const goto_programt::instructiont &instruction=*state.source.pc;
 
@@ -76,7 +76,7 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
 
     if(get_unwind(state.source, unwind))
     {
-      loop_bound_exceeded(state, new_guard, node_id);
+      loop_bound_exceeded(state, new_guard);
 
       // reset unwinding
       state.unwind_map[state.source] = 0;
@@ -352,9 +352,7 @@ Function: goto_symext::loop_bound_exceeded
 
 \*******************************************************************/
 
-void goto_symext::loop_bound_exceeded(
-  statet &state,
-  const exprt &guard, unsigned node_id)
+void goto_symext::loop_bound_exceeded(statet &state, const exprt &guard)
 {
   const irep_idt &loop_id=state.source.pc->location.loopid();
 
