@@ -140,8 +140,7 @@ Function: goto_symext::symex_printf
 void goto_symext::symex_printf(
   statet &state,
   const exprt &lhs,
-  const exprt &rhs,
-        unsigned node_id)
+  const exprt &rhs)
 {
   if(rhs.operands().empty())
     throw "printf expected to have at least one operand";

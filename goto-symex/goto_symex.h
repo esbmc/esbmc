@@ -94,8 +94,7 @@ protected:
   void symex_other(
     const goto_functionst &goto_functions,
     statet &state,
-    execution_statet &ex_state,
-    unsigned node_id);
+    execution_statet &ex_state);
 
   virtual void claim(
     const exprt &expr,
@@ -180,7 +179,7 @@ protected:
   void symex_cpp_delete(statet &state, const codet &code);
   void symex_cpp_new(statet &state, const exprt &lhs, const side_effect_exprt &code, execution_statet &ex_state, unsigned node_id);
   void symex_macro(statet &state, const code_function_callt &code);
-  void symex_printf(statet &state, const exprt &lhs, const exprt &code,unsigned node_id);
+  void symex_printf(statet &state, const exprt &lhs, const exprt &code);
 
   void replace_nondet(exprt &expr, execution_statet &ex_state);
 

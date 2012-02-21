@@ -28,8 +28,7 @@ Function: goto_symext::symex_other
 void goto_symext::symex_other(
   const goto_functionst &goto_functions,
   statet &state,
-  execution_statet &ex_state,
-        unsigned node_id)
+  execution_statet &ex_state)
 {
   const goto_programt::instructiont &instruction=*state.source.pc;
 
@@ -64,7 +63,7 @@ void goto_symext::symex_other(
     replace_nondet(deref_code, ex_state);
     dereference(deref_code, state, false);
 
-    symex_printf(state, static_cast<const exprt &>(get_nil_irep()), deref_code,node_id);
+    symex_printf(state, static_cast<const exprt &>(get_nil_irep()), deref_code);
   }
   else if(statement=="decl")
   {

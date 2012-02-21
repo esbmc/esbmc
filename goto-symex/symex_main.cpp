@@ -333,7 +333,7 @@ void goto_symext::symex_step(
                     dereference(deref_code, state, false);
                 }
 
-                symex_other(goto_functions, state, ex_state,  ex_state.node_id);
+                symex_other(goto_functions, state, ex_state);
             }
             state.source.pc++;
             break;
