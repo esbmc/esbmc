@@ -349,8 +349,6 @@ void goto_symext::symex_step(
               //ex_state.deadlock_detection(ns,*target);
               ex_state.update_trds_count();
               ex_state.increment_trds_in_run();
-
-              ex_state.generating_new_threads = ex_state.threads_state.size() - 1;
             }
         	else
         	{

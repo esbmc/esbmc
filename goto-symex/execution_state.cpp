@@ -58,7 +58,6 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
     it->second.body.instructions.end(), &(it->second.body));
   active_thread = 0;
   last_active_thread = 0;
-  generating_new_threads = 0;
   node_count = 0;
   nondet_count = 0;
   dynamic_counter = 0;
@@ -100,7 +99,6 @@ execution_statet::operator=(const execution_statet &ex)
   threads_state = ex.threads_state;
   atomic_numbers = ex.atomic_numbers;
   DFS_traversed = ex.DFS_traversed;
-  generating_new_threads = ex.generating_new_threads;
   exprs_read_write = ex.exprs_read_write;
   last_global_read_write = ex.last_global_read_write;
   last_active_thread = ex.last_active_thread;

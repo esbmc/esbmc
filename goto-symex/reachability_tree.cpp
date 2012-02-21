@@ -284,24 +284,10 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
   execution_statet &ex_state = get_cur_state();
 
-  // force the new threads continue execute to visible instruction
-  if(ex_state.generating_new_threads > 0)
-  {
-    /* jmorse - just sets some internal fields, last active, etc */
-    ex_state.set_active_state(ex_state.generating_new_threads);
-    ex_state.generating_new_threads = -1;
-    ex_state.reexecute_instruction = false;
-    return true;
-  }
   if(ex_state.reexecute_instruction)
   {
     ex_state.reexecute_instruction = false;
     return false;
-  }
-  if(ex_state.generating_new_threads == -1)
-  {
-    ex_state.generating_new_threads = 0;
-    ex_state.set_active_state(ex_state.last_active_thread);
   }
 
   if(ex_state.threads_state.size() < 2)

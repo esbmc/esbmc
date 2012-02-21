@@ -148,7 +148,6 @@ class execution_statet : public goto_symext
   std::vector<goto_symex_statet> threads_state;
   std::vector<unsigned int> atomic_numbers;
   std::vector<bool> DFS_traversed;
-  int generating_new_threads;
   std::vector<read_write_set> exprs_read_write;
   read_write_set last_global_read_write;
   unsigned int last_active_thread;
