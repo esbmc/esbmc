@@ -367,17 +367,9 @@ void goto_symext::symex_step(
             ex_state.reexecute_instruction = false;
             art.generate_states();
             break;
-        case ATOMIC_BEGIN:
-            state.source.pc++;
-            ex_state.increment_active_atomic_number();
-            break;
-        case ATOMIC_END:
-            ex_state.decrement_active_atomic_number();
-            state.source.pc++;
-            ex_state.reexecute_instruction = false;
-            art.generate_states();
-            break;
         default:
-            assert(false);
+            std::cerr << "GOTO instruction type " << instruction.type;
+            std::cerr << " not handled in goto_symext::symex_step" << std::endl;
+            abort();
     }
 }

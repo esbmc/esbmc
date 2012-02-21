@@ -7,6 +7,7 @@
 \*******************************************************************/
 
 #include "execution_state.h"
+#include "reachability_tree.h"
 #include <string>
 #include <sstream>
 #include <vector>
@@ -147,7 +148,23 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
                              reachability_treet &art)
 {
 
-  goto_symext::symex_step(goto_functions, art);
+  statet &state = get_active_state();
+  const goto_programt::instructiont &instruction = *state.source.pc;
+
+  switch (instruction.type) {
+    case ATOMIC_BEGIN:
+      state.source.pc++;
+      increment_active_atomic_number();
+      break;
+    case ATOMIC_END:
+      decrement_active_atomic_number();
+      state.source.pc++;
+      reexecute_instruction = false;
+      art.generate_states();
+      break;
+    default:
+      goto_symext::symex_step(goto_functions, art);
+  }
   return;
 }
 
