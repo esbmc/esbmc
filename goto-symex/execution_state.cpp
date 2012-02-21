@@ -208,6 +208,15 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
   return;
 }
 
+void
+execution_statet::symex_assign(statet &state, execution_statet &ex_state,
+                               const codet &code)
+{
+
+  goto_symext::symex_assign(state, ex_state, code);
+  return;
+}
+
 /*******************************************************************
    Function: execution_statet::get_active_state
 
