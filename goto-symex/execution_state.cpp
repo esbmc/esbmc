@@ -161,7 +161,6 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
         add_thread(state);
         get_active_state().source.pc = goto_target;
 
-        //ex_state.deadlock_detection(ns,*target);
         update_trds_count();
         increment_trds_in_run();
       }
