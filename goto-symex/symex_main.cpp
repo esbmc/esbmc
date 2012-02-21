@@ -147,19 +147,9 @@ void goto_symext::symex_step(
             state.source.pc++;
             break;
         case END_FUNCTION:
-            if(instruction.function == "c::main")
-            {
-                ex_state.end_thread();
-                ex_state.reexecute_instruction = false;
-                art.generate_states_base(exprt());
-                art.set_is_at_end_of_run();
-            }
-            else
-            {
-                symex_end_of_function(state);
-                state.source.pc++;
-            }
-            break;
+          symex_end_of_function(state);
+          state.source.pc++;
+          break;
         case LOCATION:
             target->location(state.guard, state.source);
             state.source.pc++;

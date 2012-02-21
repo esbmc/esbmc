@@ -152,6 +152,18 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
   const goto_programt::instructiont &instruction = *state.source.pc;
 
   switch (instruction.type) {
+    case END_FUNCTION:
+      if (instruction.function == "c::main") {
+        end_thread();
+        reexecute_instruction = false;
+        art.generate_states_base(exprt());
+        art.set_is_at_end_of_run();
+      } else {
+        // Fall through to base class
+        goto_symext::symex_step(goto_functions, art);
+      }
+      break;
+
     case START_THREAD:
       if (!state.guard.is_false())
       {
