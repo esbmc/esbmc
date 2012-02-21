@@ -36,7 +36,7 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
   dereference(old_guard, state, false, node_id);
 
   exprt new_guard=old_guard;
-  state.rename(new_guard, ns,node_id);
+  state.rename(new_guard, ns);
   do_simplify(new_guard);
 
   target->location(state.guard, state.source);
@@ -155,7 +155,7 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
         symex_targett::HIDDEN);
 
       guard_expr.make_not();
-      state.rename(guard_expr, ns,node_id);
+      state.rename(guard_expr, ns);
     }
 
     if(forward)
@@ -292,7 +292,7 @@ void goto_symext::phi_function(
 		typet type(symbol.type);
 
 		// type may need renaming
-		state.rename(type, ns,node_id);
+		state.rename(type, ns);
 
 		exprt rhs;
 

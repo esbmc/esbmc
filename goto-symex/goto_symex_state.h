@@ -99,9 +99,9 @@ public:
                   const goto_programt *prog,
                   unsigned int thread_id);
 
-  void rename(exprt &expr, const namespacet &ns, unsigned node_id);
-  void rename_address(exprt &expr, const namespacet &ns, unsigned node_id);
-  void rename(typet &type, const namespacet &ns, unsigned node_id);
+  void rename(exprt &expr, const namespacet &ns);
+  void rename_address(exprt &expr, const namespacet &ns);
+  void rename(typet &type, const namespacet &ns);
 
   void assignment(
     exprt &lhs, const exprt &rhs, const namespacet &ns, bool record_value,

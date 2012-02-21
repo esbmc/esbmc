@@ -212,7 +212,7 @@ void goto_symex_statet::assignment(
     hash = ex_state.update_hash_for_assignment(rhs);
 
   // the type might need renaming
-  rename(lhs.type(), ns, exec_node_id);
+  rename(lhs.type(), ns);
 
   const irep_idt &identifier= lhs.identifier();
 
@@ -271,11 +271,11 @@ Function: goto_symex_statet::rename
 
 \*******************************************************************/
 
-void goto_symex_statet::rename(exprt &expr, const namespacet &ns,unsigned node_id)
+void goto_symex_statet::rename(exprt &expr, const namespacet &ns)
 {
   // rename all the symbols with their last known value
 
-  rename(expr.type(), ns,node_id);
+  rename(expr.type(), ns);
 
   if(expr.id()==exprt::symbol)
   {
@@ -287,13 +287,13 @@ void goto_symex_statet::rename(exprt &expr, const namespacet &ns,unsigned node_i
           expr.id()=="reference_to")
   {
     assert(expr.operands().size()==1);
-    rename_address(expr.op0(), ns,node_id);
+    rename_address(expr.op0(), ns);
   }
   else
   {
     // do this recursively
     Forall_operands(it, expr)
-      rename(*it, ns,node_id);
+      rename(*it, ns);
   }
 }
 
@@ -309,13 +309,11 @@ Function: goto_symex_statet::rename_address
 
 \*******************************************************************/
 
-void goto_symex_statet::rename_address(
-  exprt &expr,
-  const namespacet &ns, unsigned node_id)
+void goto_symex_statet::rename_address(exprt &expr, const namespacet &ns)
 {
   // rename all the symbols with their last known value
 
-  rename(expr.type(), ns,node_id);
+  rename(expr.type(), ns);
 
   if(expr.id()==exprt::symbol)
   {
@@ -325,14 +323,14 @@ void goto_symex_statet::rename_address(
   else if(expr.id()==exprt::index)
   {
     assert(expr.operands().size()==2);
-    rename_address(expr.op0(), ns,node_id);
-    rename(expr.op1(), ns,node_id);
+    rename_address(expr.op0(), ns);
+    rename(expr.op1(), ns);
   }
   else
   {
     // do this recursively
     Forall_operands(it, expr)
-      rename_address(*it, ns,node_id);
+      rename_address(*it, ns);
   }
 }
 
@@ -348,17 +346,15 @@ Function: goto_symex_statet::rename
 
 \*******************************************************************/
 
-void goto_symex_statet::rename(
-  typet &type,
-  const namespacet &ns, unsigned node_id)
+void goto_symex_statet::rename(typet &type, const namespacet &ns)
 {
   // rename all the symbols with their last known value
 
   if(type.id()==typet::t_array)
   {
-    rename(type.subtype(), ns,node_id);
+    rename(type.subtype(), ns);
     exprt tmp = static_cast<const exprt &>(type.size_irep());
-    rename(tmp, ns,node_id);
+    rename(tmp, ns);
     type.size(tmp);
   }
   else if(type.id()==typet::t_struct ||
@@ -376,7 +372,7 @@ void goto_symex_statet::rename(
   {
 	const symbolt &symbol=ns.lookup(type.identifier());
 	type=symbol.type;
-    rename(type, ns,node_id);
+    rename(type, ns);
   }
 }
 /*******************************************************************\

@@ -53,7 +53,7 @@ void goto_symext::symex_malloc(
     size_is_one=true;
   else
   {
-    state.rename(size, ns, node_id);
+    state.rename(size, ns);
     mp_integer i;
     size_is_one=(!to_integer(size, i) && i==1);
   }
@@ -106,7 +106,7 @@ void goto_symext::symex_malloc(
   if(rhs.type()!=lhs.type())
     rhs.make_typecast(lhs.type());
 
-  state.rename(rhs, ns,node_id);
+  state.rename(rhs, ns);
   
   guardt guard;
   symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
@@ -147,7 +147,7 @@ void goto_symext::symex_printf(
     throw "printf expected to have at least one operand";
 
   exprt tmp_rhs=rhs;
-  state.rename(tmp_rhs, ns, node_id);
+  state.rename(tmp_rhs, ns);
 
   const exprt::operandst &operands=tmp_rhs.operands();
   std::list<exprt> args;
@@ -238,7 +238,7 @@ void goto_symext::symex_cpp_new(
   else
     rhs.copy_to_operands(symbol_expr(symbol));
   
-  state.rename(rhs, ns,node_id);
+  state.rename(rhs, ns);
 
   guardt guard;
   symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);

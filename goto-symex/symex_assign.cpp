@@ -273,7 +273,7 @@ void goto_symext::symex_assign_symbol(
   }
   exprt original_lhs=lhs;
   state.get_original_name(original_lhs);
-  state.rename(rhs, ns, node_id);
+  state.rename(rhs, ns);
   do_simplify(rhs);
 
   exprt new_lhs=lhs;

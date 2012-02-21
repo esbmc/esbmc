@@ -284,7 +284,7 @@ void goto_symext::symex_function_call_code(
   exprt::operandst arguments=call.arguments();
   for(unsigned i=0; i<arguments.size(); i++)
   {
-    state.rename(arguments[i], ns,ex_state.node_id);
+    state.rename(arguments[i], ns);
   }
 
   // increase unwinding counter

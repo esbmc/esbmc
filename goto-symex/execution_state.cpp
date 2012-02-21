@@ -342,7 +342,7 @@ execution_statet::decrement_trds_in_run(void)
   exprt op1 = lhs_expr;
   exprt rhs_expr = gen_binary(exprt::minus, int_t, op1, one_expr);
 
-  get_active_state().rename(rhs_expr, ns, node_id);
+  get_active_state().rename(rhs_expr, ns);
   base_type(rhs_expr, ns);
   simplify(rhs_expr);
 
@@ -411,7 +411,7 @@ execution_statet::increment_trds_in_run(void)
   exprt op1 = lhs_expr;
   exprt rhs_expr = gen_binary(exprt::plus, int_t, op1, one_expr);
 
-  get_active_state().rename(rhs_expr, ns, node_id);
+  get_active_state().rename(rhs_expr, ns);
   base_type(rhs_expr, ns);
   simplify(rhs_expr);
 
@@ -450,7 +450,7 @@ execution_statet::update_trds_count(void)
   constant_exprt rhs_expr = constant_exprt(int_t);
   rhs_expr.set_value(integer2binary(threads_state.size() - 1,
                                     config.ansi_c.int_width));
-  get_active_state().rename(rhs_expr, ns, node_id);
+  get_active_state().rename(rhs_expr, ns);
   base_type(rhs_expr, ns);
   simplify(rhs_expr);
 
