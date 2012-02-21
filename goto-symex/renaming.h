@@ -77,7 +77,6 @@ namespace renaming {
 
    virtual void rename(typet &type) { renaming_levelt::rename(type); }
     virtual std::string get_ident_name(const irep_idt &identifier) const;
-    virtual std::string stupid_operator(const irep_idt &identifier, unsigned node_id) const;
     virtual std::string name( const irep_idt &identifier, unsigned count) const;
 
     virtual void remove(const irep_idt &identifier)

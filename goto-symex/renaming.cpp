@@ -40,18 +40,6 @@ std::string renaming::level2t::get_ident_name(const irep_idt &identifier) const
   return name(identifier, it->second.count);
 }
 
-std::string renaming::level2t::stupid_operator(
-  const irep_idt &identifier, unsigned exec_node_id) const
-{
-  current_namest::const_iterator it=
-    current_names.find(identifier);
-
-  if(it==current_names.end())
-    return name(identifier, 0);
-
-  return name(identifier, it->second.count);
-}
-
 std::string
 renaming::level2t::name(const irep_idt &identifier, unsigned count) const
 {

@@ -128,7 +128,7 @@ public:
     unsigned node_id) const
   {
     irep_idt temp = top().level1.get_ident_name(identifier);
-    return plevel2.stupid_operator(temp, node_id);
+    return plevel2.get_ident_name(temp);
   }
 
   bool use_value_set;
