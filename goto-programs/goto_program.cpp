@@ -145,10 +145,6 @@ std::ostream& goto_programt::output_instruction(
     out << "LOCATION" << std::endl;
     break;
     
-  case SYNC:
-    out << "SYNC " << it->event << std::endl;
-    break;
-    
   case ATOMIC_BEGIN:
     out << "ATOMIC_BEGIN" << std::endl;
     break;

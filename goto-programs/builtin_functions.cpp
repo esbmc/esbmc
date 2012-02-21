@@ -383,41 +383,6 @@ void goto_convertt::do_atomic_end(
 
 /*******************************************************************\
 
-Function: goto_convertt::do_event
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::do_event(
-  const exprt &lhs,
-  const exprt &function,
-  const exprt::operandst &arguments,
-  goto_programt &dest)
-{
-  if(arguments.size()!=1)
-  {
-    err_location(function);
-    throw "event expected to have one argument";
-  }
-
-  goto_programt::targett t=dest.add_instruction(SYNC);
-  t->event=get_string_constant(arguments[0]);
-  t->location=function.location();
-
-  if(lhs.is_not_nil())
-  {
-    err_location(function);
-    throw "event expected not to have LHS";
-  }
-}
-
-/*******************************************************************\
-
 Function: goto_convertt::do_malloc
 
   Inputs:
@@ -957,10 +922,6 @@ void goto_convertt::do_function_call_symbol(
       err_location(function);
       throw id2string(identifier)+" expected not to have LHS";
     }
-  }
-  else if(identifier==CPROVER_PREFIX "event")
-  {
-    do_event(lhs, function, arguments, dest);
   }
   else if(identifier==CPROVER_PREFIX "printf")
   {

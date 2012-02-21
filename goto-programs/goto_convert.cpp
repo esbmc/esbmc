@@ -349,8 +349,6 @@ void goto_convertt::convert(
     convert_start_thread(code, dest);
   else if(statement=="end_thread")
     convert_end_thread(code, dest);
-  else if(statement=="sync")
-    convert_sync(code, dest);
   else if(statement=="atomic_begin")
     convert_atomic_begin(code, dest);
   else if(statement=="atomic_end")
@@ -2002,33 +2000,6 @@ void goto_convertt::convert_end_thread(
   copy(code, END_THREAD, dest);
   dest.instructions.back().code.copy_to_operands(code.op0());
   is_thread=false;
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_sync
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::convert_sync(
-  const codet &code,
-  goto_programt &dest)
-{
-  if(code.operands().size()!=0)
-  {
-    err_location(code);
-    throw "sync expects no operands";
-  }
-
-  copy(code, SYNC, dest);
-  dest.instructions.back().event=
-    dest.instructions.back().code.event();
 }
 
 /*******************************************************************\

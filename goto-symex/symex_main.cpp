@@ -333,8 +333,6 @@ void goto_symext::symex_step(
             state.source.pc++;
             break;
 
-        case SYNC:
-            throw "SYNC not yet implemented";
         default:
             std::cerr << "GOTO instruction type " << instruction.type;
             std::cerr << " not handled in goto_symext::symex_step" << std::endl;
