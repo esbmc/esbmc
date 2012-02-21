@@ -304,7 +304,7 @@ void goto_symext::symex_function_call_code(
   frame.calling_location=state.source;
   
   // preserve locality of local variables
-  locality(frame_nr, state, goto_function,ex_state.node_id);
+  locality(frame_nr, state, goto_function);
 
   // assign arguments
   argument_assignments(goto_function.type, ex_state, arguments);
@@ -386,8 +386,7 @@ Function: goto_symext::locality
 void goto_symext::locality(
   unsigned frame_nr,
   statet &state,
-  const goto_functionst::goto_functiont &goto_function,
-        unsigned exec_node_id)
+  const goto_functionst::goto_functiont &goto_function)
 {
   goto_programt::local_variablest local_identifiers;
 

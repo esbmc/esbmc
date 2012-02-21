@@ -152,8 +152,7 @@ protected:
   void locality(
     unsigned frame_counter,
     statet &state,
-    const goto_functionst::goto_functiont &goto_function,
-    unsigned exec_node_id);
+    const goto_functionst::goto_functiont &goto_function);
 
   void add_end_of_function(
     exprt &code,
