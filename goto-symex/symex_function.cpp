@@ -424,7 +424,7 @@ Function: goto_symext::return_assignment
 
 \*******************************************************************/
 
-void goto_symext::return_assignment(statet &state, execution_statet &ex_state, unsigned node_id)
+void goto_symext::return_assignment(statet &state, execution_statet &ex_state)
 {
   statet::framet &frame=state.top();
 
@@ -471,9 +471,9 @@ Function: goto_symext::symex_return
 
 \*******************************************************************/
 
-void goto_symext::symex_return(statet &state, execution_statet &ex_state, unsigned node_id)
+void goto_symext::symex_return(statet &state, execution_statet &ex_state)
 {
-  return_assignment(state, ex_state, node_id);
+  return_assignment(state, ex_state);
 
   // we treat this like an unconditional
   // goto to the end of the function

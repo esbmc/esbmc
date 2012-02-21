@@ -89,7 +89,7 @@ protected:
 
   void symex_goto(statet &state, execution_statet &ex_state);
 
-  void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
+  void symex_return(statet &state, execution_statet &ex_state);
 
   void symex_other(
     const goto_functionst &goto_functions,
@@ -121,7 +121,7 @@ protected:
   // function calls
 
   void pop_frame(statet &state);
-  void return_assignment(statet &state, execution_statet &ex_state, unsigned node_id);
+  void return_assignment(statet &state, execution_statet &ex_state);
 
   void symex_function_call(
     const goto_functionst &goto_functions,

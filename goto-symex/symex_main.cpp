@@ -235,7 +235,7 @@ void goto_symext::symex_step(
 
         case RETURN:
         	 if(!state.guard.is_false())
-                         symex_return(state, ex_state, ex_state.node_id);
+                         symex_return(state, ex_state);
 
             state.source.pc++;
             break;
