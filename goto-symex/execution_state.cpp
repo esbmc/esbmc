@@ -152,6 +152,35 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
   const goto_programt::instructiont &instruction = *state.source.pc;
 
   switch (instruction.type) {
+    case START_THREAD:
+      if (!state.guard.is_false())
+      {
+        assert(!instruction.targets.empty());
+        goto_programt::const_targett goto_target=instruction.targets.front();
+        state.source.pc++;
+        add_thread(state);
+        get_active_state().source.pc = goto_target;
+
+        //ex_state.deadlock_detection(ns,*target);
+        update_trds_count();
+        increment_trds_in_run();
+      }
+      else
+      {
+        assert(!instruction.targets.empty());
+        goto_programt::const_targett goto_target=instruction.targets.front();
+        state.source.pc = goto_target;
+      }
+
+      reexecute_instruction = false;
+      art.generate_states();
+      art.set_is_at_end_of_run();
+      break;
+    case END_THREAD:
+      end_thread();
+      reexecute_instruction = false;
+      art.generate_states();
+      break;
     case ATOMIC_BEGIN:
       state.source.pc++;
       increment_active_atomic_number();

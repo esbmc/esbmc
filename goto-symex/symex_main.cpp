@@ -335,38 +335,6 @@ void goto_symext::symex_step(
 
         case SYNC:
             throw "SYNC not yet implemented";
-
-        case START_THREAD:
-        	if (!state.guard.is_false())
-        	{
-          	  assert(!instruction.targets.empty());
-          	  goto_programt::const_targett goto_target=instruction.targets.front();
-
-              state.source.pc++;
-              ex_state.add_thread(state);
-              ex_state.get_active_state().source.pc = goto_target;
-
-              //ex_state.deadlock_detection(ns,*target);
-              ex_state.update_trds_count();
-              ex_state.increment_trds_in_run();
-            }
-        	else
-        	{
-              assert(!instruction.targets.empty());
-              goto_programt::const_targett goto_target=instruction.targets.front();
-              state.source.pc = goto_target;
-            }
-
-            ex_state.reexecute_instruction = false;
-            art.generate_states();
-            art.set_is_at_end_of_run();
-
-            break;
-        case END_THREAD:
-            ex_state.end_thread();
-            ex_state.reexecute_instruction = false;
-            art.generate_states();
-            break;
         default:
             std::cerr << "GOTO instruction type " << instruction.type;
             std::cerr << " not handled in goto_symext::symex_step" << std::endl;
