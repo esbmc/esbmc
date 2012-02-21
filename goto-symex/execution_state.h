@@ -107,6 +107,8 @@ class execution_statet : public goto_symext
   // Methods
 
   virtual execution_statet *clone(void) const = 0;
+  virtual void symex_step(const goto_functionst &goto_functions,
+                          reachability_treet &art);
 
   irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();

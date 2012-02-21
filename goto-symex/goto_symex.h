@@ -62,7 +62,7 @@ public:
 
   void operator()(const goto_functionst &goto_functions);
 
-  void symex_step(
+  virtual void symex_step(
   const goto_functionst &goto_functions,
   reachability_treet & art);
 

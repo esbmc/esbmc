@@ -142,6 +142,14 @@ execution_statet::~execution_statet()
   delete state_level2;
 };
 
+void
+execution_statet::symex_step(const goto_functionst &goto_functions,
+                             reachability_treet &art)
+{
+
+  goto_symext::symex_step(goto_functions, art);
+  return;
+}
 
 /*******************************************************************
    Function: execution_statet::get_active_state
