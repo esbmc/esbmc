@@ -1028,7 +1028,7 @@ schedule_execution_statet::schedule_execution_statet(const schedule_execution_st
 
 void
 schedule_execution_statet::claim(const exprt &expr, const std::string &msg,
-                                 statet &state, unsigned int node_id)
+                                 statet &state)
 {
   unsigned int tmp_total, tmp_remaining;
 

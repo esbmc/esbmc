@@ -220,8 +220,7 @@ class schedule_execution_statet : public execution_statet
   schedule_execution_statet(const schedule_execution_statet &ref);
   schedule_execution_statet *clone(void) const;
   virtual ~schedule_execution_statet(void);
-  virtual void claim(const exprt &expr, const std::string &msg, statet &state,
-                     unsigned node_id);
+  virtual void claim(const exprt &expr, const std::string &msg, statet &state);
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;
