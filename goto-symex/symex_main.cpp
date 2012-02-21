@@ -308,10 +308,6 @@ void goto_symext::symex_step(
                 }
 
                 symex_function_call(goto_functions, ex_state, deref_code);
-
-//                ex_state.reexecute_instruction = false;
-//                art.generate_states();
-
             }
             else
             {
