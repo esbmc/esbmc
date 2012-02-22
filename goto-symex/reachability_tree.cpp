@@ -377,8 +377,6 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     new_state->set_parent_guard(ex_state.get_guard_identifier());
     new_state->reexecute_instruction = true;
 
-//    execution_states.rbegin()->copy_level2_from(ex_state);
-//    Copy constructor should duplicate level2 object
     /* Reset interleavings (?) investigated in this new state */
     new_state->resetDFS_traversed();
 
