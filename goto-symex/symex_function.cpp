@@ -423,13 +423,10 @@ Function: goto_symext::return_assignment
 
 \*******************************************************************/
 
-void goto_symext::return_assignment(statet &state, execution_statet &ex_state)
+void goto_symext::return_assignment(statet &state, execution_statet &ex_state,
+                                    const code_returnt &code)
 {
   statet::framet &frame=state.top();
-
-  const goto_programt::instructiont &instruction=*state.source.pc;
-  assert(instruction.is_return());
-  const code_returnt &code=to_code_return(instruction.code);
 
   target->location(state.guard, state.source);
 
@@ -472,7 +469,6 @@ Function: goto_symext::symex_return
 
 void goto_symext::symex_return(statet &state, execution_statet &ex_state)
 {
-  return_assignment(state, ex_state);
 
   // we treat this like an unconditional
   // goto to the end of the function

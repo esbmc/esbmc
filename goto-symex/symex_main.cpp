@@ -224,8 +224,12 @@ void goto_symext::symex_step(
             break;
 
         case RETURN:
-        	 if(!state.guard.is_false())
+        	 if(!state.guard.is_false()) {
+                         const code_returnt &code =
+                           to_code_return(instruction.code);
+                         return_assignment(state, ex_state, code);
                          symex_return(state, ex_state);
+                 }
 
             state.source.pc++;
             break;
