@@ -96,7 +96,7 @@ bool reachability_treet::check_CS_bound()
 
  \*******************************************************************/
 
-int reachability_treet::get_CS_bound()
+int reachability_treet::get_CS_bound() const
 {
   return CS_bound;
 }
@@ -255,30 +255,10 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
 bool reachability_treet::generate_states_base(const exprt &expr)
 {
 
-  if(check_CS_bound())
-    return false;
-
-  if (get_cur_state().get_active_atomic_number() > 0)
-    return false;
-
-  if (directed_interleavings)
-    // Don't generate interleavings automatically - instead, the user will
-    // inserts intrinsics identifying where they want interleavings to occur,
-    // and to what thread.
-    return false;
-
   execution_statet &ex_state = get_cur_state();
 
-  if(ex_state.reexecute_instruction)
-  {
-    ex_state.reexecute_instruction = false;
+  if (ex_state.check_if_ileaves_blocked())
     return false;
-  }
-
-  if(ex_state.threads_state.size() < 2)
-  {
-    return false;
-  }
 
   crypto_hash hash;
   if (state_hashing) {

@@ -412,6 +412,35 @@ execution_statet::dfs_explore_thread(unsigned int tid)
     return true;
 }
 
+bool
+execution_statet::check_if_ileaves_blocked(void)
+{
+
+  if(owning_rt->get_CS_bound() != -1 && CS_number >= owning_rt->get_CS_bound())
+    return true;
+
+  if (get_active_atomic_number() > 0)
+    return true;
+
+  if (owning_rt->directed_interleavings)
+    // Don't generate interleavings automatically - instead, the user will
+    // inserts intrinsics identifying where they want interleavings to occur,
+    // and to what thread.
+    return true;
+
+  if(reexecute_instruction)
+  {
+    reexecute_instruction = false;
+    return true;
+  }
+
+  if(threads_state.size() < 2)
+    return true;
+
+  return false;
+}
+
+
 /*******************************************************************
    Function: execution_statet::decrement_trds_in_run
 

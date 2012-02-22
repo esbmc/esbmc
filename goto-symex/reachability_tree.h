@@ -81,7 +81,7 @@ public:
   bool reset_to_unexplored_state();
   bool has_more_states();
   bool check_CS_bound();
-  int get_CS_bound();
+  int get_CS_bound() const;
   int get_actual_CS_bound();
   int get_ileave_direction_from_user(const exprt &expr) const;
   int get_ileave_direction_from_scheduling(const exprt &expr) const;
@@ -167,6 +167,7 @@ public:
   // context switch that may be taken.
   bool at_end_of_run;
   bool state_hashing;
+  bool directed_interleavings;
 protected:
   std::list<execution_statet*> execution_states;
   /* This is derefed and returned by get_current_state */
@@ -176,7 +177,6 @@ protected:
   int _TS_slice;
   unsigned int schedule_total_claims, schedule_remaining_claims;
   bool is_same_mutex, deadlock_detection, por;
-  bool directed_interleavings;
   const namespacet &ns;
 
     /* jmorse */
