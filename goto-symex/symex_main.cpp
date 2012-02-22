@@ -227,7 +227,9 @@ void goto_symext::symex_step(
         	 if(!state.guard.is_false()) {
                          const code_returnt &code =
                            to_code_return(instruction.code);
-                         return_assignment(state, ex_state, code);
+                         code_assignt assign;
+                         if (make_return_assignment(state, ex_state, assign, code))
+                           goto_symext::symex_assign(state, ex_state, assign);
                          symex_return(state, ex_state);
                  }
 

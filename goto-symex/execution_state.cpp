@@ -210,7 +210,10 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
       state.source.pc++;
       if(!state.guard.is_false()) {
         const code_returnt &code = to_code_return(instruction.code);
-        return_assignment(state, *this, code);
+        code_assignt assign;
+        if (make_return_assignment(state, *this, assign, code))
+          goto_symext::symex_assign(state, *this, assign);
+
         symex_return(state, *this);
       }
       break;

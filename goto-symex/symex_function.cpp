@@ -423,8 +423,11 @@ Function: goto_symext::return_assignment
 
 \*******************************************************************/
 
-void goto_symext::return_assignment(statet &state, execution_statet &ex_state,
-                                    const code_returnt &code)
+bool
+goto_symext::make_return_assignment(statet &state,
+                               execution_statet &ex_state,
+                               code_assignt &assign,
+                               const code_returnt &code)
 {
   statet::framet &frame=state.top();
 
@@ -438,19 +441,14 @@ void goto_symext::return_assignment(statet &state, execution_statet &ex_state,
     
     if(frame.return_value.is_not_nil())
     {
-      code_assignt assignment(frame.return_value, value);
+      assign = code_assignt(frame.return_value, value);
 
-      if (assignment.lhs().type()!=assignment.rhs().type())
-        assignment.rhs().make_typecast(assignment.lhs().type());
+      if (assign.lhs().type()!=assign.rhs().type())
+        assign.rhs().make_typecast(assign.lhs().type());
 
       //make sure that we assign two expressions of the same type
-      assert(assignment.lhs().type()==assignment.rhs().type());
-
-      // So, this assignment could cause a context switch. Instead of allowing
-      // complexity to occur here, instead call a fixed symex_assign, and let
-      // a higher up level of code decied whether "return" is going to cause
-      // a context switch at some other point.
-      goto_symext::symex_assign(state, ex_state, assignment);
+      assert(assign.lhs().type()==assign.rhs().type());
+      return true;
     }
   }
   else
@@ -458,6 +456,8 @@ void goto_symext::return_assignment(statet &state, execution_statet &ex_state,
     if(frame.return_value.is_not_nil())
       throw "return with unexpected value";
   }
+
+  return false;
 }
 
 /*******************************************************************\
