@@ -33,7 +33,7 @@ class execution_statet : public goto_symext
 
   public:
   execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
-                   const reachability_treet *art,
+                   reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
                    ex_state_level2t *l2init,
@@ -150,7 +150,7 @@ class execution_statet : public goto_symext
 
   public:
 
-  const reachability_treet *owning_rt;
+  reachability_treet *owning_rt;
   std::vector<goto_symex_statet> threads_state;
   std::vector<unsigned int> atomic_numbers;
   std::vector<bool> DFS_traversed;
@@ -187,7 +187,7 @@ class dfs_execution_statet : public execution_statet
   dfs_execution_statet(
                    const goto_functionst &goto_functions,
                    const namespacet &ns,
-                   const reachability_treet *art,
+                   reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
                    const optionst &options)
@@ -207,7 +207,7 @@ class schedule_execution_statet : public execution_statet
   schedule_execution_statet(
                    const goto_functionst &goto_functions,
                    const namespacet &ns,
-                   const reachability_treet *art,
+                   reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
                    const optionst &options,

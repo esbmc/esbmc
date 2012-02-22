@@ -24,7 +24,7 @@ unsigned int execution_statet::node_count = 0;
 
 execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    const namespacet &ns,
-                                   const reachability_treet *art,
+                                   reachability_treet *art,
                                    symex_targett *_target,
                                    contextt &context,
                                    ex_state_level2t *l2init,
