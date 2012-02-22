@@ -137,9 +137,6 @@ bool reachability_treet::is_global_assign(const exprt &code)
 bool reachability_treet::generate_states_before_read(const exprt &code)
 {
 
-  if (check_CS_bound())
-    return false;
-
   if (get_cur_state().get_active_atomic_number() > 0)
    	return false;
 
@@ -166,9 +163,6 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
 
   if(code.operands().size()!=2)
     throw "assignment expects two operands";
-
-  if(check_CS_bound())
-    return false;
 
   if(get_cur_state().get_active_atomic_number() > 0)
     return false;
@@ -199,9 +193,6 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
 
 bool reachability_treet::generate_states()
 {
-
-  if(check_CS_bound())
-    return false;
 
   if(get_cur_state().get_active_atomic_number() > 0)
   	return false;
@@ -273,7 +264,7 @@ bool reachability_treet::apply_static_por(const execution_statet &ex_state, cons
 bool reachability_treet::generate_states_base(const exprt &expr)
 {
 
-  if(CS_bound  != -1 && get_cur_state().get_context_switch() >= CS_bound)
+  if(check_CS_bound())
     return false;
 
   if (directed_interleavings)
