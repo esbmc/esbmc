@@ -445,7 +445,12 @@ void goto_symext::return_assignment(statet &state, execution_statet &ex_state,
 
       //make sure that we assign two expressions of the same type
       assert(assignment.lhs().type()==assignment.rhs().type());
-      symex_assign(state, ex_state, assignment);
+
+      // So, this assignment could cause a context switch. Instead of allowing
+      // complexity to occur here, instead call a fixed symex_assign, and let
+      // a higher up level of code decied whether "return" is going to cause
+      // a context switch at some other point.
+      goto_symext::symex_assign(state, ex_state, assignment);
     }
   }
   else
