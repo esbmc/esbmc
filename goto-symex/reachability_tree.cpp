@@ -288,13 +288,10 @@ bool reachability_treet::generate_states_base(const exprt &expr)
       return false;
   }
 
-  //new
-#if 1
   if(expr.is_not_nil())
   {
     ex_state.last_global_read_write = ex_state.exprs_read_write.at(ex_state.active_thread);
   }
-#endif
 
   unsigned int tid = 0, user_tid = 0;
 
