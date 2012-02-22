@@ -206,6 +206,14 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
       reexecute_instruction = false;
       art.generate_states();
       break;
+    case RETURN:
+      state.source.pc++;
+      if(!state.guard.is_false()) {
+        const code_returnt &code = to_code_return(instruction.code);
+        return_assignment(state, *this, code);
+        symex_return(state, *this);
+      }
+      break;
     default:
       goto_symext::symex_step(goto_functions, art);
   }
