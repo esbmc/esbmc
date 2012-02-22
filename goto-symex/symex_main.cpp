@@ -240,15 +240,9 @@ void goto_symext::symex_step(
                 dereference(deref_code.op0(), state, true);
                 dereference(deref_code.op1(), state, false);
 
-                symex_assign(state, ex_state, deref_code);
-
                 state.source.pc++;
 
-                if(ex_state.threads_state.size() > 1)
-                {
-                  if (art.generate_states_before_assign(deref_code, ex_state))
-                    return;
-                }
+                symex_assign(state, ex_state, deref_code);
             }
             else
               state.source.pc++;

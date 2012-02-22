@@ -60,6 +60,12 @@ class execution_statet : public goto_symext
     execution_statet *owner;
   };
 
+  // Exception class, representing when we abort executing an instruction
+  // because it triggers a context switch.
+  class context_switch_occured
+  {
+  };
+
   // Macros
 
   void

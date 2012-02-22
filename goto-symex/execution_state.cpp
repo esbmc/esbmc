@@ -153,6 +153,8 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
 
   merge_gotos(state, *this);
 
+  try {
+
   switch (instruction.type) {
     case END_FUNCTION:
       if (instruction.function == "c::main") {
@@ -207,6 +209,12 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
     default:
       goto_symext::symex_step(goto_functions, art);
   }
+
+  } catch (context_switch_occured *c) {
+    // Dummy - all this exception does is abort interpretation, no corrective
+    // measure is needed.
+  }
+
   return;
 }
 
@@ -215,7 +223,14 @@ execution_statet::symex_assign(statet &state, execution_statet &ex_state,
                                const codet &code)
 {
 
-  goto_symext::symex_assign(state, ex_state, code);
+  goto_symext::symex_assign(state, *this, code);
+
+  if (threads_state.size() > 1)
+  {
+    if (owning_rt->generate_states_before_assign(code, *this))
+      throw new context_switch_occured();
+  }
+
   return;
 }
 
