@@ -151,6 +151,8 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
   statet &state = get_active_state();
   const goto_programt::instructiont &instruction = *state.source.pc;
 
+  merge_gotos(state, *this);
+
   switch (instruction.type) {
     case END_FUNCTION:
       if (instruction.function == "c::main") {
