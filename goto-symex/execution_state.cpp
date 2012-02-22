@@ -395,6 +395,23 @@ execution_statet::set_active_state(unsigned int i)
   active_thread = i;
 }
 
+bool
+execution_statet::dfs_explore_thread(unsigned int tid)
+{
+
+    if(DFS_traversed.at(tid))
+      return false;
+
+    if(threads_state.at(tid).call_stack.empty())
+      return false;
+
+    if(threads_state.at(tid).thread_ended)
+      return false;
+
+    DFS_traversed.at(tid) = true;
+    return true;
+}
+
 /*******************************************************************
    Function: execution_statet::decrement_trds_in_run
 

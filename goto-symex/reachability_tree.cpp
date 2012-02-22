@@ -326,17 +326,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   {
     /* For all threads: */
 
-    if(ex_state.DFS_traversed.at(tid))
-      continue;
-
-    ex_state.DFS_traversed.at(tid) = true;
-
-    /* Presumably checks whether this thread isn't in user code yet? */
-    if(ex_state.threads_state.at(tid).call_stack.empty())
-      continue;
-
-    /* Is it even still running? */
-    if(ex_state.threads_state.at(tid).thread_ended)
+    if (!ex_state.dfs_explore_thread(tid))
       continue;
 
     //apply static partial-order reduction

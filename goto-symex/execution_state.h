@@ -122,6 +122,7 @@ class execution_statet : public goto_symext
   void decrement_active_atomic_number();
   void set_active_state(unsigned int i);
   void execute_guard(const namespacet & ns);
+  bool dfs_explore_thread(unsigned int tid);
 
   void add_thread(goto_programt::const_targett start,
                   goto_programt::const_targett end,
