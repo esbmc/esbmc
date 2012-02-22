@@ -226,6 +226,54 @@ bool reachability_treet::generate_states_base(const exprt &expr)
 
   unsigned int tid = 0, user_tid = 0;
 
+  tid = decide_ileave_direction(ex_state, expr);
+
+  at_end_of_run = true;
+
+  if (tid != ex_state.threads_state.size()) {
+
+    /* Generate a new execution state, duplicate of previous? */
+    execution_statet *new_state = ex_state.clone();
+    execution_states.push_back(new_state);
+
+    //begin - H.Savino
+    if (config.options.get_bool_option("round-robin")){
+        if(tid == ex_state.active_thread)
+            new_state->increment_time_slice();
+        else
+            new_state->reset_time_slice();
+    }
+    //end - H.Savino
+
+    /* Make it active, make it follow on from previous state... */
+    if (new_state->get_active_state_number() != tid) {
+      new_state->increment_context_switch();
+      new_state->set_active_state(tid);
+    }
+
+    new_state->set_parent_guard(ex_state.get_guard_identifier());
+    new_state->reexecute_instruction = true;
+
+    /* Reset interleavings (?) investigated in this new state */
+    new_state->resetDFS_traversed();
+
+    return true;
+  } else {
+    /* Once we've generated all interleavings from this state, increment hit
+     * count so that we don't come back here again */
+    if (state_hashing)
+      hit_hashes.insert(hash);
+
+    return false;
+  }
+}
+
+unsigned int
+reachability_treet::decide_ileave_direction(execution_statet &ex_state,
+                                            const exprt &expr)
+{
+  unsigned int tid = 0, user_tid = 0;
+
   if (config.options.get_bool_option("interactive-ileaves")) {
     user_tid = tid = get_ileave_direction_from_user(expr);
   }
@@ -269,44 +317,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     std::cerr << std::endl;
   }
 
-  at_end_of_run = true;
-
-  if (tid != ex_state.threads_state.size()) {
-
-    /* Generate a new execution state, duplicate of previous? */
-    execution_statet *new_state = ex_state.clone();
-    execution_states.push_back(new_state);
-
-    //begin - H.Savino
-    if (config.options.get_bool_option("round-robin")){
-        if(tid == ex_state.active_thread)
-            new_state->increment_time_slice();
-        else
-            new_state->reset_time_slice();
-    }
-    //end - H.Savino
-
-    /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_state_number() != tid) {
-      new_state->increment_context_switch();
-      new_state->set_active_state(tid);
-    }
-
-    new_state->set_parent_guard(ex_state.get_guard_identifier());
-    new_state->reexecute_instruction = true;
-
-    /* Reset interleavings (?) investigated in this new state */
-    new_state->resetDFS_traversed();
-
-    return true;
-  } else {
-    /* Once we've generated all interleavings from this state, increment hit
-     * count so that we don't come back here again */
-    if (state_hashing)
-      hit_hashes.insert(hash);
-
-    return false;
-  }
+  return tid;
 }
 
 /*******************************************************************
