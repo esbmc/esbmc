@@ -193,55 +193,6 @@ bool reachability_treet::generate_states()
 }
 
 /*******************************************************************
- Function: reachability_treet::apply_static_por
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool reachability_treet::apply_static_por(const execution_statet &ex_state, const exprt &expr, int i) const
-{
-  bool consider = true;
-
-  if (por)
-  {
-    if(!expr.id().empty())
-    {
-      if(i < ex_state.active_thread)
-      {
-        if(ex_state.last_global_read_write.write_set.empty() &&
-           ex_state.exprs_read_write.at(i+1).write_set.empty() &&
-           ex_state.exprs_read_write.at(ex_state.active_thread).write_set.empty())
-        {
-          return false;
-        }
-
-        consider = false;
-
-        if(ex_state.last_global_read_write.has_write_intersect(ex_state.exprs_read_write.at(i+1).write_set))
-        {
-          consider = true;
-        }
-        else if(ex_state.last_global_read_write.has_write_intersect(ex_state.exprs_read_write.at(i+1).read_set))
-        {
-          consider = true;
-        }
-        else if(ex_state.last_global_read_write.has_read_intersect(ex_state.exprs_read_write.at(i+1).write_set))
-        {
-          consider = true;
-        }
-      }
-    }
-  }
-
-  return consider;
-}
-
-/*******************************************************************
  Function: reachability_treet::generate_states_base
 
  Inputs:
@@ -307,7 +258,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
       continue;
 
     //apply static partial-order reduction
-    if(!apply_static_por(ex_state, expr, tid))
+    if(por && !ex_state.apply_static_por(expr, tid))
       continue;
 
     break;
@@ -786,7 +737,7 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
     return false;
   }
 
-  if (!apply_static_por(ex, expr, tid)) {
+  if (por && !ex.apply_static_por(expr, tid)) {
     if (!quiet)
       std::cout << "Thread unschedulable due to POR" << std::endl;
     return false;

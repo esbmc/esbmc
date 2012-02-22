@@ -87,7 +87,6 @@ public:
   int get_ileave_direction_from_scheduling(const exprt &expr) const;
   bool check_thread_viable(int tid, const exprt &expr, bool quiet) const;
   bool generate_states_base(const exprt & expr);
-  bool apply_static_por(const execution_statet &ex_state, const exprt &expr, int i) const;
   bool generate_states();
 
   bool generate_states_before_read(const exprt &code);

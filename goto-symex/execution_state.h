@@ -124,6 +124,7 @@ class execution_statet : public goto_symext
   void execute_guard(const namespacet & ns);
   bool dfs_explore_thread(unsigned int tid);
   bool check_if_ileaves_blocked(void);
+  bool apply_static_por(const exprt &expr, int i) const;
 
   void add_thread(goto_programt::const_targett start,
                   goto_programt::const_targett end,

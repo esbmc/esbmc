@@ -440,6 +440,41 @@ execution_statet::check_if_ileaves_blocked(void)
   return false;
 }
 
+bool
+execution_statet::apply_static_por(const exprt &expr, int i) const
+{
+  bool consider = true;
+
+  if(!expr.id().empty())
+  {
+    if(i < active_thread)
+    {
+      if(last_global_read_write.write_set.empty() &&
+         exprs_read_write.at(i+1).write_set.empty() &&
+         exprs_read_write.at(active_thread).write_set.empty())
+      {
+        return false;
+      }
+
+      consider = false;
+
+      if(last_global_read_write.has_write_intersect(exprs_read_write.at(i+1).write_set))
+      {
+        consider = true;
+      }
+      else if(last_global_read_write.has_write_intersect(exprs_read_write.at(i+1).read_set))
+      {
+        consider = true;
+      }
+      else if(last_global_read_write.has_read_intersect(exprs_read_write.at(i+1).write_set))
+      {
+        consider = true;
+      }
+    }
+  }
+
+  return consider;
+}
 
 /*******************************************************************
    Function: execution_statet::decrement_trds_in_run
