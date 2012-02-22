@@ -272,8 +272,8 @@ void goto_symext::symex_function_call_code(
       exprt rhs=exprt("nondet_symbol", call.lhs().type());
       rhs.identifier("symex::"+i2string(ex_state.nondet_count++));
       rhs.location()=call.location();
-      code_assignt code(call.lhs(), rhs);
-      symex_assign(state, ex_state, code);
+      guardt guard;
+      symex_assign_rec(state, ex_state, call.lhs(), rhs, guard);
     }
 
     state.source.pc++;
