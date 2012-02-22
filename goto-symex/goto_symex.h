@@ -165,7 +165,7 @@ protected:
   // Assignment methods
   void assignment(execution_statet &ex_state, const exprt &lhs, exprt &rhs);
 
-  void symex_assign(statet &state, execution_statet &ex_state, const codet &code);
+  virtual void symex_assign(statet &state, execution_statet &ex_state, const codet &code);
   void symex_assign_rec(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard);
   void symex_assign_symbol(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard);
   void symex_assign_typecast(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard);
