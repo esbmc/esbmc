@@ -900,6 +900,7 @@ execution_statet::generate_hash(void) const
 {
 
   state_hashing_level2t *l2 =dynamic_cast<state_hashing_level2t*>(state_level2);
+  assert(l2 != NULL);
   crypto_hash state = l2->generate_l2_state_hash();
   std::string str = state.to_string();
 
