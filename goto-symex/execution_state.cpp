@@ -231,10 +231,7 @@ execution_statet::symex_assign(statet &state, execution_statet &ex_state,
   goto_symext::symex_assign(state, *this, code);
 
   if (threads_state.size() > 1)
-  {
-    if (owning_rt->generate_states_after_assign(code, *this))
-      throw new context_switch_occured();
-  }
+    owning_rt->generate_states_after_assign(code, *this);
 
   return;
 }
