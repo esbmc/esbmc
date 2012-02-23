@@ -175,6 +175,7 @@ void goto_symext::symex_step(
         }
             break;
         case ASSUME:
+            state.source.pc++;
             if (!state.guard.is_false()) {
                 exprt tmp(instruction.guard);
                 replace_dynamic_allocation(state, tmp);
@@ -190,21 +191,16 @@ void goto_symext::symex_step(
                     exprt tmp2 = tmp;
                     state.guard.guard_expr(tmp2);
 
-                    state.source.pc++;
-
                     assume(tmp2, state);
 
                     // we also add it to the state guard
                     state.guard.add(tmp);
-               } else {
-                state.source.pc++;
-               }
-            } else {
-              state.source.pc++;
+                }
             }
             break;
 
         case ASSERT:
+            state.source.pc++;
             if (!state.guard.is_false()) {
                 if (!options.get_bool_option("no-assertions") ||
                         !state.source.pc->location.user_provided()
@@ -218,14 +214,8 @@ void goto_symext::symex_step(
                     replace_nondet(tmp, ex_state);
                     dereference(tmp, state, false);
 
-                    state.source.pc++;
-
                     claim(tmp, msg, state);
-               } else {
-                 state.source.pc++;
-               }
-            } else {
-              state.source.pc++;
+                }
             }
             break;
 
@@ -243,6 +233,7 @@ void goto_symext::symex_step(
             break;
 
         case ASSIGN:
+            state.source.pc++;
             if (!state.guard.is_false()) {
                 codet deref_code=instruction.code;
                 replace_dynamic_allocation(state, deref_code);
@@ -252,12 +243,8 @@ void goto_symext::symex_step(
                 dereference(deref_code.op0(), state, true);
                 dereference(deref_code.op1(), state, false);
 
-                state.source.pc++;
-
                 symex_assign(state, ex_state, deref_code);
             }
-            else
-              state.source.pc++;
             break;
         case FUNCTION_CALL:
             if (!state.guard.is_false())
