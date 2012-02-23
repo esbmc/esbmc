@@ -288,7 +288,7 @@ void goto_symext::symex_step(
                     dereference(*it, state, false);
                 }
 
-                symex_function_call(goto_functions, ex_state, deref_code);
+                symex_function_call(goto_functions, state, deref_code);
             }
             else
             {

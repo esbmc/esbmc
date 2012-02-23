@@ -126,19 +126,19 @@ protected:
 
   void symex_function_call(
     const goto_functionst &goto_functions,
-    execution_statet &state,
+    statet &state,
     const code_function_callt &call);
 
   void symex_end_of_function(statet &state);
 
   void symex_function_call_symbol(
     const goto_functionst &goto_functions,
-    execution_statet &state,
+    statet &state,
     const code_function_callt &call);
 
   void symex_function_call_code(
     const goto_functionst &goto_functions,
-    execution_statet &state,
+    statet &state,
     const code_function_callt &call);
 
   bool get_unwind_recursion(

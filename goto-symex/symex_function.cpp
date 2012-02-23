@@ -177,13 +177,13 @@ Function: goto_symext::symex_function_call
 
 void goto_symext::symex_function_call(
   const goto_functionst &goto_functions,
-  execution_statet &ex_state,
+  statet &state,
   const code_function_callt &code)
 {
   const exprt &function=code.function();
 
   if(function.id()==exprt::symbol)
-    symex_function_call_symbol(goto_functions, ex_state, code);
+    symex_function_call_symbol(goto_functions, state, code);
   else
     throw "unexpected function for symex_function_call: "+code.id_string();
 }
@@ -202,10 +202,9 @@ Function: goto_symext::symex_function_call_symbol
 
 void goto_symext::symex_function_call_symbol(
   const goto_functionst &goto_functions,
-  execution_statet &ex_state,
+  statet  &state,
   const code_function_callt &code)
 {
-    statet & state = ex_state.get_active_state();
   target->location(state.guard, state.source);
 
   assert(code.function().id()==exprt::symbol);
@@ -213,7 +212,7 @@ void goto_symext::symex_function_call_symbol(
   const irep_idt &identifier=
     code.function().identifier();
     
-  symex_function_call_code(goto_functions, ex_state, code);
+  symex_function_call_code(goto_functions, state, code);
 }
 
 /*******************************************************************\
@@ -230,10 +229,9 @@ Function: goto_symext::symex_function_call_code
 
 void goto_symext::symex_function_call_code(
   const goto_functionst &goto_functions,
-  execution_statet &ex_state,
+  statet &state,
   const code_function_callt &call)
 {
-    statet & state = ex_state.get_active_state();
   const irep_idt &identifier=
     to_symbol_expr(call.function()).get_identifier();
   
@@ -268,8 +266,9 @@ void goto_symext::symex_function_call_code(
   
     if(call.lhs().is_not_nil())
     {
+      unsigned int &nondet_count = get_nondet_counter();
       exprt rhs=exprt("nondet_symbol", call.lhs().type());
-      rhs.identifier("symex::"+i2string(ex_state.nondet_count++));
+      rhs.identifier("symex::"+i2string(nondet_count++));
       rhs.location()=call.location();
       guardt guard;
       symex_assign_rec(state, call.lhs(), rhs, guard);
