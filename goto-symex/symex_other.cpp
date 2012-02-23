@@ -27,8 +27,7 @@ Function: goto_symext::symex_other
 
 void goto_symext::symex_other(
   const goto_functionst &goto_functions,
-  statet &state,
-  execution_statet &ex_state)
+  statet &state)
 {
   const goto_programt::instructiont &instruction=*state.source.pc;
 

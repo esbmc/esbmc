@@ -309,7 +309,7 @@ void goto_symext::symex_step(
                     dereference(deref_code, state, false);
                 }
 
-                symex_other(goto_functions, state, ex_state);
+                symex_other(goto_functions, state);
             }
             state.source.pc++;
             break;
