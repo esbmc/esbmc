@@ -237,3 +237,20 @@ void renaming::level2t::print(std::ostream &out) const
         << name(it->first, it->second.count) << std::endl;
 
 }
+
+irep_idt
+renaming::level2t::make_assignment(irep_idt l1_ident, const exprt &const_value)
+{
+  irep_idt new_name;
+
+  valuet &entry = current_names[l1_ident];
+
+  // This'll update entry beneath our feet; could reengineer it in the future.
+  rename(l1_ident, entry.count + 1);
+
+  new_name = name(l1_ident, entry.count);
+
+  entry.constant = const_value;
+
+  return new_name;
+}

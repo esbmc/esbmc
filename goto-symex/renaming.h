@@ -72,6 +72,9 @@ namespace renaming {
   protected:
     virtual void coveredinbees(const irep_idt &identifier, unsigned count, unsigned node_id);
   public:
+    virtual irep_idt make_assignment(irep_idt ll1_identifier,
+                                     const exprt &constant_value);
+
     virtual void rename(exprt &expr);
     virtual void rename(const irep_idt &identifier, unsigned count)=0;
 
