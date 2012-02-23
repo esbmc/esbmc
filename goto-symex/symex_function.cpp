@@ -75,10 +75,9 @@ Function: goto_symext::argument_assignments
 
 void goto_symext::argument_assignments(
   const code_typet &function_type,
-  execution_statet &ex_state,
+  statet &state,
   const exprt::operandst &arguments)
 {
-    statet & state = ex_state.get_active_state();
   // iterates over the operands
   exprt::operandst::const_iterator it1=arguments.begin();
 
@@ -307,7 +306,7 @@ void goto_symext::symex_function_call_code(
   locality(frame_nr, state, goto_function);
 
   // assign arguments
-  argument_assignments(goto_function.type, ex_state, arguments);
+  argument_assignments(goto_function.type, state, arguments);
 
   frame.end_of_function=--goto_function.body.instructions.end();
   frame.return_value=call.lhs();

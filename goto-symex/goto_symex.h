@@ -147,7 +147,7 @@ protected:
 
   void argument_assignments(
     const code_typet &function_type,
-    execution_statet &state,
+    statet &state,
     const exprt::operandst &arguments);
 
   void locality(
