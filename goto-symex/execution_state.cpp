@@ -151,6 +151,30 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
 
   merge_gotos(state);
 
+  if (config.options.get_option("break-at") != "") {
+    int insn_num = strtol(config.options.get_option("break-at").c_str(), NULL, 10);
+    if (instruction.location_number == insn_num) {
+      // If you're developing ESBMC on a machine that isn't x86, I'll send you
+      // cookies.
+#ifndef _WIN32
+      __asm__("int $3");
+#else
+      std::cerr << "Can't trap on windows, sorry" << std::endl;
+      abort();
+#endif
+    }
+  }
+
+  if (options.get_bool_option("symex-trace")) {
+    const goto_programt p_dummy;
+    goto_functions_templatet<goto_programt>::function_mapt::const_iterator it =
+      goto_functions.function_map.find(instruction.function);
+
+    const goto_programt &p_real = it->second.body;
+    const goto_programt &p = (it == goto_functions.function_map.end()) ? p_dummy : p_real;
+    p.output_instruction(ns, "", std::cout, state.source.pc, false, false);
+  }
+
   switch (instruction.type) {
     case END_FUNCTION:
       if (instruction.function == "c::main") {
