@@ -209,6 +209,8 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
           goto_symext::symex_assign(state, *this, assign);
 
         symex_return(state, *this);
+
+        owning_rt->generate_states_after_assign(assign, *this);
       }
       break;
     default:
