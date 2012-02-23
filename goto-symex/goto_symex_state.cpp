@@ -233,7 +233,7 @@ void goto_symex_statet::assignment(
   else
     const_value.make_nil();
 
-  irep_idt new_name = level2.make_assignment(l1_identifier, const_value);
+  irep_idt new_name = level2.make_assignment(l1_identifier, const_value, rhs);
   lhs.identifier(new_name);
 
   if(use_value_set)
