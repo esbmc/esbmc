@@ -74,7 +74,6 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   // Symex target is another matter; a higher up class needs to decide
   // whether we're duplicating it or using the same one.
   target = NULL;
-  target = sym.target->clone();
 
   return *this;
 }
