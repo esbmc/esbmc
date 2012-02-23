@@ -1,0 +1,9 @@
+#ifndef STL_STREAMBUF
+#define STL_STREAMBUF
+
+namespace std
+{
+struct streambuf{};
+}
+
+#endif

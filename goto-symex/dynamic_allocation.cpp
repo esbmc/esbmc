@@ -18,7 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
-Function: replace_dynamic_allocation
+Function: default_replace_dynamic_allocation
 
   Inputs:
 
@@ -28,12 +28,12 @@ Function: replace_dynamic_allocation
 
 \*******************************************************************/
 
-void replace_dynamic_allocation(
+void default_replace_dynamic_allocation(
   const namespacet &ns,
   exprt &expr)
 {
   Forall_operands(it, expr)
-    replace_dynamic_allocation(ns, *it);
+    default_replace_dynamic_allocation(ns, *it);
 
   if(expr.id()=="valid_object")
   {
@@ -77,10 +77,28 @@ void replace_dynamic_allocation(
     // So, add the precondition that invalid_ptr only ever applies to dynamic
     // objects.
 
-    exprt is_dyn("is_dynamic_object", bool_typet());
-    is_dyn.move_to_operands(theptr);
-    exprt is_valid_ptr("and", bool_typet());
-    is_valid_ptr.move_to_operands(notindex, is_dyn);
+    exprt sym("symbol", array_typet());
+    sym.type().subtype() = bool_typet();
+    sym.set("identifier", "c::__ESBMC_is_dynamic");
+    exprt pointerobj("pointer_object", signedbv_typet());
+    pointerobj.copy_to_operands(theptr);
+    exprt is_dyn("index", bool_typet());
+    is_dyn.copy_to_operands(sym, pointerobj);
+
+    // Catch free pointers: don't allow anything to be pointer object 1, the
+    // invalid pointer.
+    exprt invalid_object("invalid-object");
+    invalid_object.type() = theptr.type();
+    exprt isinvalid("=", bool_typet());
+    isinvalid.copy_to_operands(theptr, invalid_object);
+    exprt notinvalid("not", bool_typet());
+    notinvalid.copy_to_operands(isinvalid);
+
+    exprt is_not_bad_ptr("and", bool_typet());
+    is_not_bad_ptr.move_to_operands(notindex, is_dyn);
+
+    exprt is_valid_ptr("or", bool_typet());
+    is_valid_ptr.move_to_operands(is_not_bad_ptr, isinvalid);
 
     expr.swap(is_valid_ptr);
   }

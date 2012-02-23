@@ -9,66 +9,70 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
+#include <map>
 #include <std_types.h>
+#include <i2string.h>
+#include <hash_cont.h>
+#include <options.h>
+
 #include <goto-programs/goto_functions.h>
 
-#include <i2string.h>
-#include "basic_symex.h"
-#include "reachability_tree.h"
+#include "goto_symex_state.h"
+#include "symex_target.h"
 
-class goto_symext:
-  public basic_symext
+class reachability_treet; // Forward dec
+class execution_statet; // Forward dec
+
+class goto_symext
 {
 public:
-  goto_symext(
-    const namespacet &_ns,
-    contextt &_new_context,
-    symex_targett &_target):
-    basic_symext(_ns, _new_context, _target),
-    total_claims(0),
-    remaining_claims(0),
-    guard_identifier_s("goto_symex::\\guard")
+  goto_symext(const namespacet &_ns, contextt &_new_context,
+              symex_targett *_target, const optionst &opts);
+  goto_symext(const goto_symext &sym);
+  goto_symext& operator=(const goto_symext &sym);
+
+  // Types
+
+public:
+  friend class symex_dereference_statet;
+  friend class bmct;
+
+  typedef goto_symex_statet statet;
+
+  class symex_resultt {
+  public:
+    symex_resultt(symex_targett *t, unsigned int claims, unsigned int remain) :
+      target(t), total_claims(claims), remaining_claims(remain) { };
+
+    symex_targett *target;
+    unsigned int total_claims;
+    unsigned int remaining_claims;
+  };
+
+  // Macros
+  //
+  irep_idt guard_identifier(statet &state)
   {
-    options.set_option("no-assertions", false);
-    art1 = NULL;
-  }
+	  return irep_idt(id2string(guard_identifier_s) + "!" + i2string(state.top().level1._thread_id));
+  };
 
-  ~goto_symext() {
-    if (art1 != NULL)
-      delete art1;
-  }
+  // Methods
 
-    irep_idt get_symbol(const exprt & expr);
+  symex_resultt *get_symex_result(void);
 
-  // all at once
-  virtual void operator()(
-    const goto_functionst &goto_functions);
+  void operator()(const goto_functionst &goto_functions);
 
-  virtual void operator()();
-
-    bool restore_from_dfs_state(const reachability_treet::dfs_position &dfs);
-    symex_target_equationt *multi_formulas_get_next_formula();
-    bool multi_formulas_setup_next();
-    void multi_formulas_init(const goto_functionst &goto_functions);
-    void save_checkpoint(const std::string fname) const;
-
-  void symex_step(
+  virtual void symex_step(
   const goto_functionst &goto_functions,
   reachability_treet & art);
 
 protected:
-  friend class symex_dereference_statet;
-  reachability_treet *art1;
-
-  void new_name(symbolt &symbol);
-
-  // statistics
-  unsigned total_claims, remaining_claims;
+  virtual void do_simplify(exprt &expr);
 
   void dereference(
     exprt &expr,
     statet &state,
-    const bool write, unsigned node_id);
+    const bool write);
 
   void dereference_rec(
     exprt &expr,
@@ -81,97 +85,84 @@ protected:
   //irep_idt guard_identifier;
   irep_idt guard_identifier_s;
 
-  irep_idt guard_identifier(statet &state)
-  {
-	  return irep_idt(id2string(guard_identifier_s) + "!" + i2string(state.top().level1._thread_id));
-  };
-
   // symex
 
-  virtual void symex_goto(statet &state, execution_statet &ex_state, unsigned node_id);
+  virtual void symex_goto(statet &state, const exprt &old_guard);
 
-  virtual void symex_return(statet &state, execution_statet &ex_state, unsigned node_id);
+  void symex_return(statet &state);
 
-  virtual void symex_other(
-    const goto_functionst &goto_functions,
-    statet &state,
-    execution_statet &ex_state,
-    unsigned node_id);
+  void symex_other(const goto_functionst &goto_functions, statet &state);
 
   virtual void claim(
     const exprt &expr,
     const std::string &msg,
-    statet &state, unsigned node_id);
+    statet &state);
+
+  virtual void assume(const exprt &assumption, statet &state);
 
   // gotos
-  void merge_gotos(statet &state, execution_statet &ex_state, unsigned node_id);
+  void merge_gotos(statet &state);
 
   void merge_value_sets(
     const statet::goto_statet &goto_state,
     statet &dest);
 
-  void phi_function(
-    const statet::goto_statet &goto_state,
-    statet &state, execution_statet &ex_state, unsigned node_id);
+  void phi_function(const statet::goto_statet &goto_state, statet &state);
 
-  virtual bool get_unwind(
+  bool get_unwind(
     const symex_targett::sourcet &source,
     unsigned unwind);
 
-  virtual void loop_bound_exceeded(statet &state, const exprt &guard,unsigned node_id);
+  void loop_bound_exceeded(statet &state, const exprt &guard);
 
   // function calls
 
   void pop_frame(statet &state);
-  void return_assignment(statet &state, execution_statet &ex_state, unsigned node_id);
+  bool make_return_assignment(statet &state, code_assignt &assign,
+                              const code_returnt &code);
 
-  virtual void no_body(const irep_idt &identifier __attribute__((unused)))
-  {
-  }
-
-  virtual void symex_function_call(
+  void symex_function_call(
     const goto_functionst &goto_functions,
-    execution_statet &state,
+    statet &state,
     const code_function_callt &call);
 
-  virtual void symex_end_of_function(statet &state);
+  void symex_end_of_function(statet &state);
 
-  virtual void symex_function_call_symbol(
+  void symex_function_call_symbol(
     const goto_functionst &goto_functions,
-    execution_statet &state,
+    statet &state,
     const code_function_callt &call);
 
   virtual void symex_function_call_deref(
     const goto_functionst &goto_functions,
-    execution_statet &state,
+    statet &state,
     const code_function_callt &call);
 
   virtual void symex_function_call_code(
     const goto_functionst &goto_functions,
-    execution_statet &state,
+    statet &state,
     const code_function_callt &call);
 
-  virtual bool get_unwind_recursion(
+  bool get_unwind_recursion(
     const irep_idt &identifier,
     unsigned unwind);
 
   void argument_assignments(
     const code_typet &function_type,
-    execution_statet &state,
+    statet &state,
     const exprt::operandst &arguments);
 
   void locality(
     unsigned frame_counter,
     statet &state,
-    const goto_functionst::goto_functiont &goto_function,
-    unsigned exec_node_id);
+    const goto_functionst::goto_functiont &goto_function);
 
   void add_end_of_function(
     exprt &code,
     const irep_idt &identifier);
 
   bool run_next_function_ptr_target(const goto_functionst &goto_functions,
-                                    execution_statet &ex_state, bool first);
+                                    statet &state, bool first);
 
   void run_intrinsic(code_function_callt &call, reachability_treet &art,
                      const std::string symname);
@@ -186,14 +177,42 @@ protected:
   void intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art);
   void intrinsic_terminate_thread(reachability_treet &art);
 
-// moved to symex_statet
-//  std::map<irep_idt, unsigned> function_frame;
-//  std::map<irep_idt, unsigned> function_unwind;
-//  std::map<symex_targett::sourcet, unsigned> unwind_map;
-
   // dynamic stuff
-  virtual void replace_dynamic_allocation(const statet &state, exprt &expr);
+  void replace_dynamic_allocation(const statet &state, exprt &expr);
   bool is_valid_object(const statet &state, const symbolt &symbol);
+
+  virtual void symex_assign(statet &state, const codet &code);
+  void symex_assign_rec(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_symbol(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_typecast(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_array(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_member(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_if(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_byte_extract(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+
+  void symex_malloc(statet &state, const exprt &lhs, const side_effect_exprt &code);
+  void symex_cpp_delete(statet &state, const codet &code);
+  void symex_cpp_new(statet &state, const exprt &lhs, const side_effect_exprt &code);
+  void symex_macro(statet &state, const code_function_callt &code);
+  void symex_printf(statet &state, const exprt &lhs, const exprt &code);
+
+  void replace_nondet(exprt &expr);
+
+  virtual unsigned int &get_dynamic_counter(void) = 0;
+  virtual unsigned int &get_nondet_counter(void) = 0;
+
+  // Members
+
+  unsigned total_claims, remaining_claims;
+  reachability_treet *art1;
+  hash_set_cont<irep_idt, irep_id_hash> body_warnings;
+  std::map<unsigned, long> unwind_set;
+  unsigned int max_unwind;
+  bool constant_propagation;
+  const namespacet &ns;
+  const optionst &options;
+  contextt &new_context;
+  symex_targett *target;
 };
 
 #endif

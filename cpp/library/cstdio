@@ -3,5 +3,7 @@
 
 #include "definitions.h"
 
+int printf ( const char * format, ... );
+
 #endif
 

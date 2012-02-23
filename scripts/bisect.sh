@@ -1,7 +1,18 @@
 #!/bin/sh
 
+function usage {
+  echo "Usage: bisect.sh [opts]" >&2
+  echo "Options:" >&2
+  echo "    -t testname    Name of regression test to run" >&2
+  echo "    -p dirname     Path to regression test to run" >&2
+  echo "    -s             Unstash/Stash when performing a run" >&2
+  echo "    -n             No decisive output means bad revision" >&2
+  echo "You must specify either -t or -p."
+}
+
 searchpath=-1
 beatstash=0
+nooutputisfail=0
 dirpath=""
 while getopts "t:p:s" opt; do
   case $opt in
@@ -15,6 +26,9 @@ while getopts "t:p:s" opt; do
       ;;
     s)
       beatstash=1
+      ;;
+    n)
+      nooutputisfail=1
       ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
@@ -165,5 +179,10 @@ fi
 
 # Otherwise, something crashed or went wrong.
 rm $tmpfile
-echo "Noncommital output" >&2
-exit 125
+if test $nooutputisfail = 0; then
+  echo "Noncommital output" >&2
+  exit 125
+else
+  echo "Crash or abnormal exit" >&2
+  exit 1
+fi

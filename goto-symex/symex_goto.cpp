@@ -26,17 +26,12 @@ Function: goto_symext::symex_goto
 
 \*******************************************************************/
 
-void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned node_id)
+void goto_symext::symex_goto(statet &state, const exprt &old_guard)
 {
   const goto_programt::instructiont &instruction=*state.source.pc;
 
-  exprt old_guard=instruction.guard;
-
-  replace_dynamic_allocation(state, old_guard);
-  dereference(old_guard, state, false, node_id);
-
   exprt new_guard=old_guard;
-  state.rename(new_guard, ns,node_id);
+  state.rename(new_guard, ns);
   do_simplify(new_guard);
 
   target->location(state.guard, state.source);
@@ -76,7 +71,7 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
 
     if(get_unwind(state.source, unwind))
     {
-      loop_bound_exceeded(state, new_guard, node_id);
+      loop_bound_exceeded(state, new_guard);
 
       // reset unwinding
       state.unwind_map[state.source] = 0;
@@ -142,7 +137,7 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
 
       exprt new_lhs=guard_expr;
 
-      state.assignment(new_lhs, new_rhs, ns, false, ex_state, node_id);
+      state.assignment(new_lhs, new_rhs, ns, false);
 
       guardt guard;
 
@@ -155,7 +150,7 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state, unsigned
         symex_targett::HIDDEN);
 
       guard_expr.make_not();
-      state.rename(guard_expr, ns,node_id);
+      state.rename(guard_expr, ns);
     }
 
     if(forward)
@@ -185,7 +180,7 @@ Function: goto_symext::merge_gotos
 
 \*******************************************************************/
 
-void goto_symext::merge_gotos(statet &state, execution_statet &ex_state, unsigned node_id)
+void goto_symext::merge_gotos(statet &state)
 {
   statet::framet &frame=state.top();
 
@@ -207,7 +202,7 @@ void goto_symext::merge_gotos(statet &state, execution_statet &ex_state, unsigne
     statet::goto_statet &goto_state=*list_it;
 
     // do SSA phi functions
-    phi_function(goto_state, state, ex_state, node_id);
+    phi_function(goto_state, state);
 
     merge_value_sets(goto_state, state);
 
@@ -261,9 +256,7 @@ Function: goto_symext::phi_function
 
 void goto_symext::phi_function(
   const statet::goto_statet &goto_state,
-  statet &state,
-  execution_statet &ex_state,
-   unsigned node_id)
+  statet &state)
 {
   // go over all variables to see what changed
   std::set<irep_idt> variables;
@@ -292,17 +285,17 @@ void goto_symext::phi_function(
 		typet type(symbol.type);
 
 		// type may need renaming
-		state.rename(type, ns,node_id);
+		state.rename(type, ns);
 
 		exprt rhs;
 
 		if(state.guard.is_false())
 		{
-		  rhs=symbol_exprt(state.current_name(goto_state, symbol.name,node_id), type);
+		  rhs=symbol_exprt(state.current_name(goto_state, symbol.name), type);
 		}
 		else if(goto_state.guard.is_false())
 		{
-		  rhs=symbol_exprt(state.current_name(symbol.name,node_id), type);
+		  rhs=symbol_exprt(state.current_name(symbol.name), type);
 		}
 		else
 		{
@@ -314,14 +307,14 @@ void goto_symext::phi_function(
 		  rhs=if_exprt();
 		  rhs.type()=type;
 		  rhs.op0()=tmp_guard.as_expr();
-		  rhs.op1()=symbol_exprt(state.current_name(goto_state, symbol.name,node_id), type);
-		  rhs.op2()=symbol_exprt(state.current_name(symbol.name,node_id), type);
+		  rhs.op1()=symbol_exprt(state.current_name(goto_state, symbol.name), type);
+		  rhs.op2()=symbol_exprt(state.current_name(symbol.name), type);
 		}
 
 		exprt lhs(symbol_expr(symbol));
 		exprt new_lhs(lhs);
 
-		state.assignment(new_lhs, rhs, ns, false, ex_state, node_id);
+		state.assignment(new_lhs, rhs, ns, false);
 
 		guardt true_guard;
 
@@ -352,9 +345,7 @@ Function: goto_symext::loop_bound_exceeded
 
 \*******************************************************************/
 
-void goto_symext::loop_bound_exceeded(
-  statet &state,
-  const exprt &guard, unsigned node_id)
+void goto_symext::loop_bound_exceeded(statet &state, const exprt &guard)
 {
   const irep_idt &loop_id=state.source.pc->location.loopid();
 
@@ -377,8 +368,7 @@ void goto_symext::loop_bound_exceeded(
     {
       // generate unwinding assertion
       claim(negated_cond,
-            "unwinding assertion loop "+id2string(loop_id),
-            state, node_id);
+            "unwinding assertion loop "+id2string(loop_id), state);
     }
     else
     {
@@ -404,11 +394,26 @@ Function: goto_symext::get_unwind
  Purpose:
 
 \*******************************************************************/
-#if 1
+
 bool goto_symext::get_unwind(
   const symex_targett::sourcet &source,
   unsigned unwind)
 {
-  return false;
+  unsigned id=source.pc->loop_number;
+  unsigned long this_loop_max_unwind=max_unwind;
+
+  if(unwind_set.count(id)!=0)
+    this_loop_max_unwind=unwind_set[id];
+
+  #if 1
+  {
+    std::string msg=
+      "Unwinding loop "+i2string(id)+" iteration "+i2string(unwind)+
+      " "+source.pc->location.as_string();
+    std::cout << msg << std::endl;
+  }
+  #endif
+
+  return this_loop_max_unwind!=0 &&
+         unwind>=this_loop_max_unwind;
 }
-#endif

@@ -1,6 +1,8 @@
 #ifndef STL_CSTRING
 #define STL_CSTRING
 
+#include "definitions.h"
+
 char *strcpy(char *dest, const char* src)
 {
 	__ESBMC_HIDE:
@@ -109,7 +111,8 @@ char* strtok(char* str, const char* delim)
 	return nondet_charPointer();
 }
 
-size_t strlen(const char *s)
+//size_t strlen(const char *s)
+int strlen(const char *s)
 {
 	__ESBMC_HIDE:
 	const char *p = s;
@@ -126,9 +129,32 @@ const char * strrchr ( const char * str, int character );
 const char * strstr ( const char * str1, const char * str2 );
       char * strstr (       char * str1, const char * str2 );
 
-void * memcpy ( void * destination, const void * source, size_t num );
+void *memcpy(void *dst, const void *src, size_t n);
 
-void * memmove ( void * destination, const void * source, size_t num );
+void *memcpy(void *dst, const void *src, size_t n)
+{
+  __ESBMC_HIDE:
+  for(size_t i=0; i<n ; i++) dst[i]=src[i];
+  return dst;
+}
+
+
+void *memmove(void *dest, const void *src, size_t n);
+
+
+void *memmove(void *dest, const void *src, size_t n)
+{
+  __ESBMC_HIDE:
+  if (dest-src >= n)
+  {
+    for(size_t i=0; i<n ; i++) dest[i]=src[i];
+  }
+  else
+  {
+    for(size_t i=n; i>0 ; i--) dest[i-1]=src[i-1];
+  }
+  return dest;
+}
 
 int memcmp ( const void * ptr1, const void * ptr2, size_t num );
 

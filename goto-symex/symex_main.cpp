@@ -17,30 +17,16 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <expr_util.h>
 
 #include "goto_symex.h"
+#include "goto_symex_state.h"
+#include "execution_state.h"
 #include "symex_target_equation.h"
+#include "reachability_tree.h"
 
 #include <std_expr.h>
 #include "../ansi-c/c_types.h"
 #include <base_type.h>
 #include <simplify_expr.h>
 #include "config.h"
-
-/*******************************************************************\
-
-Function: goto_symext::new_name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::new_name(symbolt &symbol) {
-    get_new_name(symbol, ns);
-    new_context.add(symbol);
-}
 
 /*******************************************************************\
 
@@ -57,13 +43,12 @@ Function: goto_symext::claim
 void goto_symext::claim(
   const exprt &claim_expr,
   const std::string &msg,
-  statet &state,
-  unsigned node_id) {
+  statet &state) {
 
   total_claims++;
 
   exprt expr = claim_expr;
-  state.rename(expr, ns, node_id);
+  state.rename(expr, ns);
 
   // first try simplifier on it
   if (!expr.is_false())
@@ -80,155 +65,13 @@ void goto_symext::claim(
                     state.source);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::operator()() {
-
-    throw "symex_main::goto_symex::operator() : who called me?";
-}
-/*******************************************************************\
-
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::multi_formulas_init(const goto_functionst &goto_functions)
+void
+goto_symext::assume(const exprt &assumption, statet &state)
 {
 
-  art1 = new reachability_treet(goto_functions, ns, options);
-}
-
-/*******************************************************************\
-
-Function: goto_symext::multi_formulas_has_more_formula
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool goto_symext::multi_formulas_setup_next()
-{
-  return art1->reset_to_unexplored_state();
-}
-
-
-/*******************************************************************\
-
-Function: goto_symext::multi_formulas_get_next_formula
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
-{
-  static unsigned int total_formulae = 0;
-  static int total_states = 0;
-
-  target = &art1->get_cur_state()._target;
-  art1->get_cur_state().execute_guard(ns, *target);
-  while(!art1->is_go_next_formula())
-  {
-    while (!art1->is_go_next_state())
-      symex_step(art1->_goto_functions, *art1);
-
-    art1->multi_formulae_go_next_state();
-    target = &art1->get_cur_state()._target;
-    total_states++;
-  }
-  art1->_go_next_formula = false;
-  total_formulae++;
-
-  return &art1->get_cur_state()._target;
-}
-
-bool
-goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
-{
-  std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
-  unsigned int i;
-
-  // Symex repeatedly until context switch points. At each point, verify that it
-  // happened where we expected it to, and then switch to the correct thread for
-  // the history we've been provided with.
-  for (it = dfs.states.begin(), i = 0; it != dfs.states.end(); it++, i++) {
-
-    art1->_go_next = false;
-
-    while (!art1->is_go_next_state()) {
-      // Restore the DFS exploration space so that when an interleaving occurs
-      // we take the option leading to the thread we desire to run. This
-      // assumes that the DFS exploration path algorithm never changes.
-      // Has to occur here; between generating new threads, ESBMC messes with
-      // the dfs state.
-      for (int dfspos = 0; dfspos < art1->get_cur_state()._DFS_traversed.size();
-           dfspos++)
-        art1->get_cur_state()._DFS_traversed[dfspos] = true;
-      art1->get_cur_state()._DFS_traversed[it->cur_thread] = false;
-
-      symex_step(art1->_goto_functions, *art1);
-    }
-    art1->get_cur_state()._DFS_traversed = it->explored;
-
-    if (art1->get_cur_state()._threads_state.size() != it->num_threads) {
-      std::cerr << "Unexpected number of threads when reexploring checkpoint"
-                << std::endl;
-      abort();
-    }
-
-    art1->multi_formulae_go_next_state();
-
-    // check we're on the right thread; except on the last run, where there are
-    // no more threads to be run.
-    if (i + 1 < dfs.states.size())
-      assert(art1->get_cur_state().get_active_state_number() == it->cur_thread);
-
-#if 0
-// XXX jmorse: can't quite get these sequence numbers to line up when they're
-// replayed.
-    if (art1->get_cur_state().get_active_state().source.pc->location_number !=
-        it->location_number) {
-      std::cerr << "Interleave at unexpected location when restoring checkpoint"
-                << std::endl;
-      abort();
-    }
-#endif
-  }
-
-  return false;
-}
-
-void goto_symext::save_checkpoint(const std::string fname) const
-{
-
-  reachability_treet::dfs_position pos(*art1);
-  if (pos.write_to_file(fname))
-    std::cerr << "Couldn't save checkpoint; continuing" << std::endl;
-
+  // Irritatingly, assumption destroys its expr argument
+  exprt assumpt_dup = assumption;
+  target->assumption(state.guard, assumpt_dup, state.source);
   return;
 }
 
@@ -244,45 +87,11 @@ Function: goto_symext::operator()
 
 \*******************************************************************/
 
-void goto_symext::operator()(const goto_functionst &goto_functions)
+goto_symext::symex_resultt *
+goto_symext::get_symex_result(void)
 {
 
-  reachability_treet art(goto_functions, ns, options);
-
-  int total_states = 0;
-  while (art.has_more_states())
-  {
-    total_states++;
-    art.get_cur_state().execute_guard(ns, *target);
-    while (!art.is_go_next_state())
-    {
-      symex_step(goto_functions, art);
-    }
-
-    art.go_next_state();
-  }
-}
-
-/*******************************************************************\
-
-Function: goto_symext::get_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-irep_idt goto_symext::get_symbol(const exprt & expr) {
-  if (expr.id() != exprt::symbol) {
-    forall_operands(it, expr) {
-      return get_symbol(*it);
-    }
-  }
-
-  return expr.identifier();
+  return new goto_symext::symex_resultt(target, total_claims, remaining_claims);
 }
 
 /*******************************************************************\
@@ -322,7 +131,7 @@ void goto_symext::symex_step(
     }
   }
 
-  merge_gotos(state, ex_state, ex_state.node_id);
+  merge_gotos(state);
 
   // depth exceeded?
   {
@@ -349,23 +158,13 @@ void goto_symext::symex_step(
             state.source.pc++;
             break;
         case END_FUNCTION:
-            if(instruction.function == "c::main")
-            {
-                ex_state.end_thread();
-                ex_state.reexecute_instruction = false;
-                art.generate_states_base(exprt());
-                art.set_go_next_state();
-            }
-            else
-            {
                 symex_end_of_function(state);
 
                 // Potentially skip to run another function ptr target; if not,
                 // continue
-                if (!run_next_function_ptr_target(goto_functions, ex_state,
+                if (!run_next_function_ptr_target(goto_functions, state,
                                                   false))
                   state.source.pc++;
-            }
             break;
         case LOCATION:
             target->location(state.guard, state.source);
@@ -375,48 +174,39 @@ void goto_symext::symex_step(
         {
             exprt tmp(instruction.guard);
             replace_dynamic_allocation(state, tmp);
-            replace_nondet(tmp, ex_state);
-            dereference(tmp, state, false, ex_state.node_id);
+            replace_nondet(tmp);
+            dereference(tmp, state, false);
 
-            if(!tmp.is_nil() && !options.get_bool_option("deadlock-check"))
-            {
-              if(ex_state._threads_state.size() > 1)
-                if (art.generate_states_before_read(tmp))
-                  return;
-            }
-
-            symex_goto(art.get_cur_state().get_active_state(), ex_state, ex_state.node_id);
+           symex_goto(art.get_cur_state().get_active_state(), tmp);
         }
             break;
         case ASSUME:
+            state.source.pc++;
             if (!state.guard.is_false()) {
                 exprt tmp(instruction.guard);
                 replace_dynamic_allocation(state, tmp);
-                replace_nondet(tmp, ex_state);
-                dereference(tmp, state, false, ex_state.node_id);
+                replace_nondet(tmp);
+                dereference(tmp, state, false);
 
                 exprt tmp1 = tmp;
-                state.rename(tmp, ns,ex_state.node_id);
+                state.rename(tmp, ns);
 
                 do_simplify(tmp);
                 if (!tmp.is_true())
                 {
-                  if(ex_state._threads_state.size() > 1)
-                    if (art.generate_states_before_read(tmp1))
-                      return;
-
                     exprt tmp2 = tmp;
                     state.guard.guard_expr(tmp2);
-                    target->assumption(state.guard, tmp2, state.source);
+
+                    assume(tmp2, state);
 
                     // we also add it to the state guard
                     state.guard.add(tmp);
                 }
             }
-            state.source.pc++;
             break;
 
         case ASSERT:
+            state.source.pc++;
             if (!state.guard.is_false()) {
                 if (!options.get_bool_option("no-assertions") ||
                         !state.source.pc->location.user_provided()
@@ -427,48 +217,40 @@ void goto_symext::symex_step(
                     exprt tmp(instruction.guard);
 
                     replace_dynamic_allocation(state, tmp);
-                    replace_nondet(tmp, ex_state);
-                    dereference(tmp, state, false, ex_state.node_id);
+                    replace_nondet(tmp);
+                    dereference(tmp, state, false);
 
-                    if(ex_state._threads_state.size() > 1)
-                      if (art.generate_states_before_read(tmp))
-                        return;
-
-                    claim(tmp, msg, state, ex_state.node_id);
+                    claim(tmp, msg, state);
                 }
             }
-            state.source.pc++;
             break;
 
         case RETURN:
-        	 if(!state.guard.is_false())
-                         symex_return(state, ex_state, ex_state.node_id);
+        	 if(!state.guard.is_false()) {
+                         const code_returnt &code =
+                           to_code_return(instruction.code);
+                         code_assignt assign;
+                         if (make_return_assignment(state, assign, code))
+                           goto_symext::symex_assign(state, assign);
+                         symex_return(state);
+                 }
 
             state.source.pc++;
             break;
 
         case ASSIGN:
+            state.source.pc++;
             if (!state.guard.is_false()) {
                 codet deref_code=instruction.code;
                 replace_dynamic_allocation(state, deref_code);
-                replace_nondet(deref_code, ex_state);
+                replace_nondet(deref_code);
                 assert(deref_code.operands().size()==2);
 
-                dereference(deref_code.op0(), state, true, ex_state.node_id);
-                dereference(deref_code.op1(), state, false, ex_state.node_id);
+                dereference(deref_code.op0(), state, true);
+                dereference(deref_code.op1(), state, false);
 
-                basic_symext::symex_assign(state, ex_state, deref_code, ex_state.node_id);
-
-                state.source.pc++;
-
-                if(ex_state._threads_state.size() > 1)
-                {
-                  if (art.generate_states_before_assign(deref_code, ex_state))
-                    return;
-                }
+                symex_assign(state, deref_code);
             }
-            else
-              state.source.pc++;
             break;
         case FUNCTION_CALL:
             if (!state.guard.is_false())
@@ -477,31 +259,26 @@ void goto_symext::symex_step(
                         to_code_function_call(instruction.code);
 
                 replace_dynamic_allocation(state, deref_code);
-                replace_nondet(deref_code, ex_state);
+                replace_nondet(deref_code);
 
                 if (deref_code.lhs().is_not_nil()) {
-                    dereference(deref_code.lhs(), state, true,ex_state.node_id);
+                    dereference(deref_code.lhs(), state, true);
                 }
 
-                dereference(deref_code.function(), state, false, ex_state.node_id);
+                dereference(deref_code.function(), state, false);
                 Forall_expr(it, deref_code.arguments()) {
-                    dereference(*it, state, false,ex_state.node_id);
+                    dereference(*it, state, false);
                 }
 
                 if (has_prefix(deref_code.function().identifier().as_string(),
                                "c::__ESBMC")) {
                   state.source.pc++;
-                  ex_state.reexecute_instruction = false;
                   run_intrinsic(deref_code, art,
                                 deref_code.function().identifier().as_string());
                   return;
                 }
 
-                symex_function_call(goto_functions, ex_state, deref_code);
-
-//                ex_state.reexecute_instruction = false;
-//                art.generate_states();
-
+                symex_function_call(goto_functions, state, deref_code);
             }
             else
             {
@@ -518,36 +295,19 @@ void goto_symext::symex_step(
                         statement == "free" ||
                         statement == "printf") {
                     replace_dynamic_allocation(state, deref_code);
-                    replace_nondet(deref_code, ex_state);
-                    dereference(deref_code, state, false,ex_state.node_id);
+                    replace_nondet(deref_code);
+                    dereference(deref_code, state, false);
                 }
 
-                symex_other(goto_functions, state, ex_state,  ex_state.node_id);
+                symex_other(goto_functions, state);
             }
             state.source.pc++;
             break;
 
-        case SYNC:
-            throw "SYNC not yet implemented";
-
-#if 0
-            ex_state.end_thread(ns, *target);
-            ex_state.reexecute_instruction = false;
-            art.generate_states();
-            break;
-#endif
-        case ATOMIC_BEGIN:
-            state.source.pc++;
-            ex_state.increment_active_atomic_number();
-            break;
-        case ATOMIC_END:
-            ex_state.decrement_active_atomic_number();
-            state.source.pc++;
-            ex_state.reexecute_instruction = false;
-            art.generate_states();
-            break;
         default:
-            assert(false);
+            std::cerr << "GOTO instruction type " << instruction.type;
+            std::cerr << " not handled in goto_symext::symex_step" << std::endl;
+            abort();
     }
 }
 

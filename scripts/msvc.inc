@@ -1,3 +1,12 @@
+ifdef USE_SOLVER_Z3
+Z31 = $(SATDIR)/z3_win
+Z3 = $(shell cygpath -w $(Z31) | sed s/\\\\/\\\\\\\\/g )
+CXXFLAGS+= -DZ3
+SOLVER_LIBS+= -L$(Z3)/lib -lz3
+INCLUDES+= /I $(Z3)\\include
+LIBS+= $(Z3)\\x64\\z3.lib "$(WINSDKDIR)\\lib\\x64\\Kernel32.lib"
+endif
+
 WINSDKDIR=$(shell reg query HKLM\\SOFTWARE\\Microsoft\\Microsoft\ SDKs\\Windows /v CurrentInstallFolder | grep REG_SZ | sed "s\# *CurrentInstallFolder *REG_SZ *\(.*\)\#\1\#" | sed s/\\\\/\\\\\\\\/g)
 
 VCDIR=$(shell reg query HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\VisualStudio\\10.0 /v ShellFolder | grep REG_SZ | sed "s\# *ShellFolder *REG_SZ *\(.*\)\#\1\#" | sed s/\\\\/\\\\\\\\/g)VC
@@ -13,7 +22,6 @@ CC=$(VCBINS)\\cl.exe
 FINLINKBIN=$(CYGVCDIR)/bin/amd64/cl.exe
 FINLINKOUT= /Fe
 BLOBGENLD=x86_64-w64-mingw32-ld
-INCCMD=/I
 PATHSEP=\\
 CXXFLAGS+=/I"$(VCDIR)\\include"
 PLATLIBS="C:\\Program Files (x86)\\Microsoft SDKs\\Windows\\v7.0A\\lib\\x64\\wsock32.lib"

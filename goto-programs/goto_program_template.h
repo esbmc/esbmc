@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <namespace.h>
 
-typedef enum { NO_INSTRUCTION_TYPE, GOTO, ASSUME, ASSERT, OTHER, SYNC, SKIP,
+typedef enum { NO_INSTRUCTION_TYPE, GOTO, ASSUME, ASSERT, OTHER, SKIP,
                LOCATION, END_FUNCTION,
                ATOMIC_BEGIN, ATOMIC_END, RETURN, ASSIGN,
                FUNCTION_CALL }
@@ -173,7 +173,6 @@ public:
     inline bool is_other        () const { return type==OTHER;         }
     inline bool is_assume       () const { return type==ASSUME;        }
     inline bool is_assert       () const { return type==ASSERT;        }
-    inline bool is_sync         () const { return type==SYNC;          }
     inline bool is_atomic_begin () const { return type==ATOMIC_BEGIN;  }
     inline bool is_atomic_end   () const { return type==ATOMIC_END;    }
     inline bool is_end_function () const { return type==END_FUNCTION;  }

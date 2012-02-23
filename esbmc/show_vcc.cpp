@@ -17,7 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
-Function: bmc_baset::show_vcc
+Function: bmct::show_vcc
 
   Inputs:
 
@@ -27,7 +27,7 @@ Function: bmc_baset::show_vcc
 
 \*******************************************************************/
 
-void bmc_baset::show_vcc(std::ostream &out)
+void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
 {
   switch(ui)
   {
@@ -45,11 +45,11 @@ void bmc_baset::show_vcc(std::ostream &out)
     
   out << std::endl << "VERIFICATION CONDITIONS:" << std::endl << std::endl;
 
-  languagest languages(symex.ns, MODE_C);
+  languagest languages(ns, MODE_C);
 
   for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+      it=equation.SSA_steps.begin();
+      it!=equation.SSA_steps.end(); it++)
   {
     if(!it->is_assert()) continue;
 
@@ -60,7 +60,7 @@ void bmc_baset::show_vcc(std::ostream &out)
       out << it->comment << std::endl;
       
     symex_target_equationt::SSA_stepst::const_iterator
-      p_it=equation->SSA_steps.begin();
+      p_it=equation.SSA_steps.begin();
       
     for(unsigned count=1; p_it!=it; p_it++)
       if(p_it->is_assume() || p_it->is_assignment())
@@ -84,7 +84,7 @@ void bmc_baset::show_vcc(std::ostream &out)
 
 /*******************************************************************\
 
-Function: bmc_baset::show_vcc
+Function: bmct::show_vcc
 
   Inputs:
 
@@ -94,19 +94,19 @@ Function: bmc_baset::show_vcc
 
 \*******************************************************************/
 
-void bmc_baset::show_vcc()
+void bmct::show_vcc(symex_target_equationt &equation)
 {
   const std::string &filename=options.get_option("outfile");
   
   if(filename.empty() || filename=="-")
-    show_vcc(std::cout);
+    show_vcc(std::cout, equation);
   else
   {
     std::ofstream out(filename.c_str());
     if(!out)
       std::cerr << "failed to open " << filename << std::endl;
     else
-      show_vcc(out);
+      show_vcc(out, equation);
   }
 }
 

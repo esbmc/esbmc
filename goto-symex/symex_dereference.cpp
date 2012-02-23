@@ -202,8 +202,7 @@ Function: goto_symext::dereference
 void goto_symext::dereference(
   exprt &expr,
   statet &state,
-  const bool write,
-  unsigned node_id)
+  const bool write)
 {
   symex_dereference_statet symex_dereference_state(*this, state);
   renaming_nst renaming_ns(ns, state);
@@ -216,7 +215,7 @@ void goto_symext::dereference(
 
   // needs to be renamed to level 1
   assert(!state.call_stack.empty());
-  state.top().level1.rename(expr,node_id);
+  state.top().level1.rename(expr);
 
   guardt guard;
   dereference_rec(expr, guard, dereference, write);

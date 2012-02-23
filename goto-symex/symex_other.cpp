@@ -27,9 +27,7 @@ Function: goto_symext::symex_other
 
 void goto_symext::symex_other(
   const goto_functionst &goto_functions,
-  statet &state,
-  execution_statet &ex_state,
-        unsigned node_id)
+  statet &state)
 {
   const goto_programt::instructiont &instruction=*state.source.pc;
 
@@ -47,8 +45,8 @@ void goto_symext::symex_other(
     codet deref_code(code);
 
     replace_dynamic_allocation(state, deref_code);
-    replace_nondet(deref_code, ex_state);
-    dereference(deref_code, state, false,node_id);
+    replace_nondet(deref_code);
+    dereference(deref_code, state, false);
 
     symex_cpp_delete(state, deref_code);
   }
@@ -61,18 +59,18 @@ void goto_symext::symex_other(
     codet deref_code(code);
 
     replace_dynamic_allocation(state, deref_code);
-    replace_nondet(deref_code, ex_state);
-    dereference(deref_code, state, false,node_id);
+    replace_nondet(deref_code);
+    dereference(deref_code, state, false);
 
-    symex_printf(state, static_cast<const exprt &>(get_nil_irep()), deref_code,node_id);
+    symex_printf(state, static_cast<const exprt &>(get_nil_irep()), deref_code);
   }
   else if(statement=="decl")
   {
     codet deref_code(code);
 
     replace_dynamic_allocation(state, deref_code);
-    replace_nondet(deref_code, ex_state);
-    dereference(deref_code, state, false,node_id);
+    replace_nondet(deref_code);
+    dereference(deref_code, state, false);
 
     if(deref_code.operands().size()==2)
       throw "two-operand decl not supported here";
@@ -86,7 +84,7 @@ void goto_symext::symex_other(
     // just do the L2 renaming to preseve locality
     const irep_idt &identifier=deref_code.op0().identifier();
 
-    std::string l1_identifier=state.top().level1(identifier,node_id);
+    std::string l1_identifier=state.top().level1.get_ident_name(identifier);
 
     const irep_idt &original_id=
       state.top().level1.get_original_name(l1_identifier);
@@ -96,8 +94,8 @@ void goto_symext::symex_other(
           state.declaration_history.end())
     {
       unsigned index=state.top().level1.current_names[original_id];
-      state.top().level1.rename(original_id, index+1,node_id);
-      l1_identifier=state.top().level1(original_id,node_id);
+      state.top().level1.rename(original_id, index+1);
+      l1_identifier=state.top().level1.get_ident_name(original_id);
     }
 
     state.declaration_history.insert(l1_identifier);
@@ -105,12 +103,12 @@ void goto_symext::symex_other(
 
     // seen it before?
     // it should get a fresh value
-    statet::level2t::current_namest::iterator it=
+    renaming::level2t::current_namest::iterator it=
       state.level2.current_names.find(l1_identifier);
 
     if(it!=state.level2.current_names.end())
     {
-      state.level2.rename(l1_identifier, it->second.count+1,node_id);
+      state.level2.rename(l1_identifier, it->second.count+1);
       it->second.constant.make_nil();
     }
   }
@@ -124,11 +122,6 @@ void goto_symext::symex_other(
   }
   else if (statement=="assign"){
 	  assert(0);
-  }
-  else if(statement=="cpp-try")
-  {
-	  //try to symbolically execute the try block
-	  symex(state, ex_state, to_code(code.op0()), node_id);
   }
   else
     throw "goto_symext: unexpected statement: "+id2string(statement);

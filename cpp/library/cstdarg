@@ -1,0 +1,13 @@
+#ifndef STL_CSTDARG
+#define STL_CSTDARG
+
+
+typedef char *va_list;
+
+#define va_end(ap) (ap = (va_list)0)
+#define va_arg(ap,t) (*(t *)((ap += ((sizeof(t) + sizeof(int) - 1) & ~(sizeof(int) - 1))) -  ((sizeof(t) + sizeof(int) - 1) & ~(sizeof(int) - 1))))
+
+void va_start ( va_list ap, ... );
+
+
+#endif

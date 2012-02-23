@@ -28,7 +28,7 @@ class z3_capi {
 
     Z3_context mk_context(char *solver);
     Z3_context mk_proof_context(unsigned int is_uw);
-    Z3_ast mk_var(const char * name, Z3_type_ast ty);
+    Z3_ast mk_var(const char * name, Z3_type_ast ty) const;
     Z3_ast mk_bool_var(const char * name);
     Z3_ast mk_int_var(const char * name);
     Z3_ast mk_int(int v);

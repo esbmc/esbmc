@@ -89,23 +89,6 @@ public:
     l^=(a?1:0);
   }
   
-  int dimacs() const
-  {
-    int result=var_no();
-
-    if(sign())
-      result=-result;
-
-    return result;
-  }
-  
-  void from_dimacs(int d)
-  {
-    bool sign=d<0;
-    if(sign) d=-d;
-    set(d, sign);
-  }
-  
   void clear()
   {
     l=0;

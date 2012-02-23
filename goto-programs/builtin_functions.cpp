@@ -219,41 +219,6 @@ void goto_convertt::do_atomic_end(
 
 /*******************************************************************\
 
-Function: goto_convertt::do_event
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::do_event(
-  const exprt &lhs,
-  const exprt &function,
-  const exprt::operandst &arguments,
-  goto_programt &dest)
-{
-  if(arguments.size()!=1)
-  {
-    err_location(function);
-    throw "event expected to have one argument";
-  }
-
-  goto_programt::targett t=dest.add_instruction(SYNC);
-  t->event=get_string_constant(arguments[0]);
-  t->location=function.location();
-
-  if(lhs.is_not_nil())
-  {
-    err_location(function);
-    throw "event expected not to have LHS";
-  }
-}
-
-/*******************************************************************\
-
 Function: goto_convertt::do_malloc
 
   Inputs:
@@ -330,10 +295,6 @@ void goto_convertt::do_malloc(
   exprt neg_deallocated_expr=gen_not(deallocated_expr);
 #endif
 
-  exprt is_dynamic_expr("is_dynamic_object", typet("bool"));
-  is_dynamic_expr.location()=location;
-  is_dynamic_expr.copy_to_operands(lhs_pointer);
-
   exprt pointer_offset_expr("pointer_offset", int_type());
   pointer_offset_expr.location()=location;
   pointer_offset_expr.copy_to_operands(lhs_pointer);
@@ -343,8 +304,7 @@ void goto_convertt::do_malloc(
 
   // first assume that it's available and that it's a dynamic object
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
-
-  t_a->guard=(neg_valid_expr, is_dynamic_expr, offset_is_zero_expr);
+  t_a->guard=(neg_valid_expr, offset_is_zero_expr);
 
   // set size
   //nec: ex37.c
@@ -471,8 +431,8 @@ void goto_convertt::cpp_new_initializer(
     initializer.make_nil();
   else
   {
-    initializer.make_nil();
-    rhs.initializer(initializer);
+    initializer = (exprt&)rhs.initializer();
+    rhs.remove("initializer");
   }
 
   if(initializer.is_not_nil())
@@ -798,10 +758,6 @@ void goto_convertt::do_function_call_symbol(
       err_location(function);
       throw id2string(identifier)+" expected not to have LHS";
     }
-  }
-  else if(identifier==CPROVER_PREFIX "event")
-  {
-    do_event(lhs, function, arguments, dest);
   }
   else if(identifier==CPROVER_PREFIX "printf")
   {

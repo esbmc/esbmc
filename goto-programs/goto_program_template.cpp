@@ -29,7 +29,6 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case ASSUME: out << "ASSUME"; break;
   case ASSERT: out << "ASSERT"; break;
   case OTHER: out << "OTHER"; break;
-  case SYNC: out << "SYNC"; break;
   case SKIP: out << "SKIP"; break;
   case LOCATION: out << "LOCATION"; break;
   case END_FUNCTION: out << "END_FUNCTION"; break;

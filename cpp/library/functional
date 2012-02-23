@@ -1,0 +1,9 @@
+#ifndef STL_FUNCTIONAL
+#define STL_FUNCTIONAL
+
+namespace std
+{
+
+}
+
+#endif
