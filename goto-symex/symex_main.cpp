@@ -161,7 +161,7 @@ void goto_symext::symex_step(
             replace_nondet(tmp, ex_state);
             dereference(tmp, state, false);
 
-           symex_goto(art.get_cur_state().get_active_state(), ex_state);
+           symex_goto(art.get_cur_state().get_active_state(), ex_state, tmp);
 
            if(!tmp.is_nil() && !options.get_bool_option("deadlock-check"))
             {

@@ -26,14 +26,10 @@ Function: goto_symext::symex_goto
 
 \*******************************************************************/
 
-void goto_symext::symex_goto(statet &state, execution_statet &ex_state)
+void goto_symext::symex_goto(statet &state, execution_statet &ex_state,
+                             const exprt &old_guard)
 {
   const goto_programt::instructiont &instruction=*state.source.pc;
-
-  exprt old_guard=instruction.guard;
-
-  replace_dynamic_allocation(state, old_guard);
-  dereference(old_guard, state, false);
 
   exprt new_guard=old_guard;
   state.rename(new_guard, ns);
