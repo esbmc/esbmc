@@ -89,8 +89,8 @@ public:
   bool generate_states_base(const exprt & expr);
   bool generate_states();
 
-  bool generate_states_before_read(const exprt &code);
-  bool generate_states_before_assign(const exprt &code, execution_statet &ex_state);
+  bool generate_states_after_read(const exprt &code);
+  bool generate_states_after_assign(const exprt &code, execution_statet &ex_state);
   bool is_global_assign(const exprt &code);
 
   unsigned int decide_ileave_direction(execution_statet &ex_state,

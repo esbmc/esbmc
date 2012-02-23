@@ -232,7 +232,7 @@ execution_statet::symex_assign(statet &state, execution_statet &ex_state,
 
   if (threads_state.size() > 1)
   {
-    if (owning_rt->generate_states_before_assign(code, *this))
+    if (owning_rt->generate_states_after_assign(code, *this))
       throw new context_switch_occured();
   }
 

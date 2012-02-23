@@ -166,7 +166,7 @@ void goto_symext::symex_step(
            if(!tmp.is_nil() && !options.get_bool_option("deadlock-check"))
             {
               if(ex_state.threads_state.size() > 1)
-                if (art.generate_states_before_read(tmp))
+                if (art.generate_states_after_read(tmp))
                   return;
             }
         }
@@ -194,7 +194,7 @@ void goto_symext::symex_step(
                     state.source.pc++;
 
                     if(ex_state.threads_state.size() > 1)
-                      if (art.generate_states_before_read(tmp1))
+                      if (art.generate_states_after_read(tmp1))
                         return;
                } else {
                 state.source.pc++;
@@ -223,7 +223,7 @@ void goto_symext::symex_step(
                     state.source.pc++;
 
                     if(ex_state.threads_state.size() > 1)
-                      if (art.generate_states_before_read(tmp))
+                      if (art.generate_states_after_read(tmp))
                         return;
                } else {
                  state.source.pc++;
