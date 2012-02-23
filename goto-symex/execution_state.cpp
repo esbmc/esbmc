@@ -244,11 +244,10 @@ execution_statet::claim(const exprt &expr, const std::string &msg,
 }
 
 void
-execution_statet::symex_goto(statet &state, execution_statet &ex_state,
-                             const exprt &old_guard)
+execution_statet::symex_goto(statet &state, const exprt &old_guard)
 {
 
-  goto_symext::symex_goto(state, *this, old_guard);
+  goto_symext::symex_goto(state, old_guard);
 
   if (!old_guard.is_nil() && !options.get_bool_option("deadlock-check"))
     if (threads_state.size() > 1)

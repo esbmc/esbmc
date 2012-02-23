@@ -171,7 +171,7 @@ void goto_symext::symex_step(
             replace_nondet(tmp);
             dereference(tmp, state, false);
 
-           symex_goto(art.get_cur_state().get_active_state(), ex_state, tmp);
+           symex_goto(art.get_cur_state().get_active_state(), tmp);
         }
             break;
         case ASSUME:

@@ -26,8 +26,7 @@ Function: goto_symext::symex_goto
 
 \*******************************************************************/
 
-void goto_symext::symex_goto(statet &state, execution_statet &ex_state,
-                             const exprt &old_guard)
+void goto_symext::symex_goto(statet &state, const exprt &old_guard)
 {
   const goto_programt::instructiont &instruction=*state.source.pc;
 
