@@ -270,20 +270,20 @@ execution_statet::assume(const exprt &assumption, statet &state)
   return;
 }
 
-void
-execution_statet::replace_nondet(exprt &expr)
-{
-
-  goto_symext::replace_nondet(expr, nondet_count);
-  return;
-}
-
 unsigned int &
 execution_statet::get_dynamic_counter(void)
 {
 
   return dynamic_counter;
 }
+
+unsigned int &
+execution_statet::get_nondet_counter(void)
+{
+
+  return nondet_count;
+}
+
 
 /*******************************************************************
    Function: execution_statet::get_active_state

@@ -184,10 +184,10 @@ protected:
   void symex_macro(statet &state, const code_function_callt &code);
   void symex_printf(statet &state, const exprt &lhs, const exprt &code);
 
-  virtual void replace_nondet(exprt &expr) = 0;
-  void replace_nondet(exprt &expr, unsigned int &nondet_count);
+  void replace_nondet(exprt &expr);
 
   virtual unsigned int &get_dynamic_counter(void) = 0;
+  virtual unsigned int &get_nondet_counter(void) = 0;
 
   // Members
 

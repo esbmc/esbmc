@@ -128,9 +128,9 @@ class execution_statet : public goto_symext
   virtual void symex_goto(statet &state, execution_statet &ex_state,
                           const exprt &old_guard);
   virtual void assume(const exprt &assumption, statet &state);
-  virtual void replace_nondet(exprt &expr);
 
   virtual unsigned int &get_dynamic_counter(void);
+  virtual unsigned int &get_nondet_counter(void);
 
   irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();

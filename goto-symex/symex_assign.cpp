@@ -524,10 +524,11 @@ void goto_symext::symex_assign_byte_extract(
   symex_assign_rec(state, ex_state, lhs.op0(), new_rhs, guard);
 }
 
-void goto_symext::replace_nondet(exprt &expr, unsigned int &nondet_count)
+void goto_symext::replace_nondet(exprt &expr)
 {
   if(expr.id()=="sideeffect" && expr.statement()=="nondet")
   {
+    unsigned int &nondet_count = get_dynamic_counter();
     exprt new_expr("nondet_symbol", expr.type());
     new_expr.identifier("symex::nondet"+i2string(nondet_count++));
     new_expr.location()=expr.location();
@@ -535,5 +536,5 @@ void goto_symext::replace_nondet(exprt &expr, unsigned int &nondet_count)
   }
   else
     Forall_operands(it, expr)
-      replace_nondet(*it, nondet_count);
+      replace_nondet(*it);
 }
