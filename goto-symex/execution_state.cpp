@@ -265,6 +265,18 @@ execution_statet::symex_goto(statet &state, execution_statet &ex_state,
   return;
 }
 
+void
+execution_statet::assume(const exprt &assumption, statet &state)
+{
+
+  goto_symext::assume(assumption, state);
+
+  if (threads_state.size() > 1)
+    owning_rt->generate_states_after_read(assumption);
+
+  return;
+}
+
 /*******************************************************************
    Function: execution_statet::get_active_state
 

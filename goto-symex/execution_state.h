@@ -119,6 +119,7 @@ class execution_statet : public goto_symext
   virtual void claim(const exprt &expr, const std::string &msg, statet &state);
   virtual void symex_goto(statet &state, execution_statet &ex_state,
                           const exprt &old_guard);
+  virtual void assume(const exprt &assumption, statet &state);
 
   irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();

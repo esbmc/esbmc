@@ -196,10 +196,6 @@ void goto_symext::symex_step(
 
                     // we also add it to the state guard
                     state.guard.add(tmp);
-
-                    if(ex_state.threads_state.size() > 1)
-                      if (art.generate_states_after_read(tmp1))
-                        return;
                } else {
                 state.source.pc++;
                }
