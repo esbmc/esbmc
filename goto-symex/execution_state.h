@@ -60,6 +60,17 @@ class execution_statet : public goto_symext
     execution_statet *owner;
   };
 
+  class state_hashing_level2t : public ex_state_level2t
+  {
+  public:
+    virtual state_hashing_level2t *clone(void) const;
+    virtual irep_idt make_assignment(irep_idt l1_ident,
+                                     const exprt &const_value,
+                                     const exprt &assigned_value);
+    typedef std::map<irep_idt, crypto_hash> current_state_hashest;
+    current_state_hashest current_hashes;
+  };
+
   // Exception class, representing when we abort executing an instruction
   // because it triggers a context switch.
   class context_switch_occured

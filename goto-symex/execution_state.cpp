@@ -1251,3 +1251,30 @@ schedule_execution_statet::claim(const exprt &expr, const std::string &msg,
   *premaining_claims += tmp_remaining;
   return;
 }
+
+execution_statet::state_hashing_level2t *
+execution_statet::state_hashing_level2t::clone(void) const
+{
+
+  return new state_hashing_level2t(*this);
+}
+
+irep_idt
+execution_statet::state_hashing_level2t::make_assignment(irep_idt l1_ident,
+                                       const exprt &const_value,
+                                       const exprt &assigned_value)
+{
+  crypto_hash hash;
+  irep_idt new_name;
+
+  new_name = renaming::level2t::make_assignment(l1_ident, const_value,
+                                                assigned_value);
+
+  // XXX - consider whether to use l1 names instead. Recursion, reentrancy.
+  hash = owner->update_hash_for_assignment(assigned_value);
+  std::string orig_name =
+    owner->get_active_state().get_original_name(l1_ident).as_string();
+  current_hashes[orig_name] = hash;
+
+  return new_name;
+}
