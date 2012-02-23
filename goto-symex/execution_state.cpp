@@ -238,6 +238,19 @@ execution_statet::symex_assign(statet &state, execution_statet &ex_state,
   return;
 }
 
+void
+execution_statet::claim(const exprt &expr, const std::string &msg,
+                        statet &state)
+{
+
+  goto_symext::claim(expr, msg, state);
+
+  if (threads_state.size() > 1)
+    owning_rt->generate_states_after_read(expr);
+
+  return;
+}
+
 /*******************************************************************
    Function: execution_statet::get_active_state
 
@@ -1203,7 +1216,7 @@ schedule_execution_statet::claim(const exprt &expr, const std::string &msg,
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
 
-  goto_symext::claim(expr, msg, state);
+  execution_statet::claim(expr, msg, state);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;

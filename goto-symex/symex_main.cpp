@@ -218,13 +218,9 @@ void goto_symext::symex_step(
                     replace_nondet(tmp, ex_state);
                     dereference(tmp, state, false);
 
-                    claim(tmp, msg, state);
-
                     state.source.pc++;
 
-                    if(ex_state.threads_state.size() > 1)
-                      if (art.generate_states_after_read(tmp))
-                        return;
+                    claim(tmp, msg, state);
                } else {
                  state.source.pc++;
                }
