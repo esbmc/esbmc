@@ -121,8 +121,8 @@ protected:
   // function calls
 
   void pop_frame(statet &state);
-  bool make_return_assignment(statet &state, execution_statet &ex_state,
-                              code_assignt &assign, const code_returnt &code);
+  bool make_return_assignment(statet &state, code_assignt &assign,
+                              const code_returnt &code);
 
   void symex_function_call(
     const goto_functionst &goto_functions,

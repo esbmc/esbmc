@@ -424,7 +424,6 @@ Function: goto_symext::return_assignment
 
 bool
 goto_symext::make_return_assignment(statet &state,
-                               execution_statet &ex_state,
                                code_assignt &assign,
                                const code_returnt &code)
 {
