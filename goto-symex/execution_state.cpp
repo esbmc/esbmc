@@ -206,7 +206,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
         if (make_return_assignment(state, assign, code))
           goto_symext::symex_assign(state, assign);
 
-        symex_return(state, *this);
+        symex_return(state);
 
         owning_rt->generate_states_after_assign(assign, *this);
       }

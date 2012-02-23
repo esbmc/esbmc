@@ -89,7 +89,7 @@ protected:
 
   virtual void symex_goto(statet &state, const exprt &old_guard);
 
-  void symex_return(statet &state, execution_statet &ex_state);
+  void symex_return(statet &state);
 
   void symex_other(
     const goto_functionst &goto_functions,

@@ -226,7 +226,7 @@ void goto_symext::symex_step(
                          code_assignt assign;
                          if (make_return_assignment(state, assign, code))
                            goto_symext::symex_assign(state, assign);
-                         symex_return(state, ex_state);
+                         symex_return(state);
                  }
 
             state.source.pc++;

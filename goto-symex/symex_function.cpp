@@ -470,7 +470,7 @@ Function: goto_symext::symex_return
 
 \*******************************************************************/
 
-void goto_symext::symex_return(statet &state, execution_statet &ex_state)
+void goto_symext::symex_return(statet &state)
 {
 
   // we treat this like an unconditional
