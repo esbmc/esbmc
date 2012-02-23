@@ -64,6 +64,16 @@ void goto_symext::claim(
                     state.source);
 }
 
+void
+goto_symext::assume(const exprt &assumption, statet &state)
+{
+
+  // Irritatingly, assumption destroys its expr argument
+  exprt assumpt_dup = assumption;
+  target->assumption(state.guard, assumpt_dup, state.source);
+  return;
+}
+
 /*******************************************************************\
 
 Function: goto_symext::operator()
@@ -179,12 +189,13 @@ void goto_symext::symex_step(
                 {
                     exprt tmp2 = tmp;
                     state.guard.guard_expr(tmp2);
-                    target->assumption(state.guard, tmp2, state.source);
+
+                    state.source.pc++;
+
+                    assume(tmp2, state);
 
                     // we also add it to the state guard
                     state.guard.add(tmp);
-
-                    state.source.pc++;
 
                     if(ex_state.threads_state.size() > 1)
                       if (art.generate_states_after_read(tmp1))

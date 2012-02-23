@@ -102,6 +102,8 @@ protected:
     const std::string &msg,
     statet &state);
 
+  virtual void assume(const exprt &assumption, statet &state);
+
   // gotos
   void merge_gotos(statet &state, execution_statet &ex_state);
 
