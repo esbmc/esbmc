@@ -155,8 +155,8 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
     case END_FUNCTION:
       if (instruction.function == "c::main") {
         end_thread();
-        art.generate_states_base(exprt());
-        art.set_is_at_end_of_run();
+        end_thread();
+        art.generate_states();
       } else {
         // Fall through to base class
         goto_symext::symex_step(goto_functions, art);
