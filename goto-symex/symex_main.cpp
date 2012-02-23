@@ -175,7 +175,6 @@ void goto_symext::symex_step(
         }
             break;
         case ASSUME:
-            state.source.pc++;
             if (!state.guard.is_false()) {
                 exprt tmp(instruction.guard);
                 replace_dynamic_allocation(state, tmp);
@@ -197,10 +196,10 @@ void goto_symext::symex_step(
                     state.guard.add(tmp);
                 }
             }
+            state.source.pc++;
             break;
 
         case ASSERT:
-            state.source.pc++;
             if (!state.guard.is_false()) {
                 if (!options.get_bool_option("no-assertions") ||
                         !state.source.pc->location.user_provided()
@@ -217,6 +216,7 @@ void goto_symext::symex_step(
                     claim(tmp, msg, state);
                 }
             }
+            state.source.pc++;
             break;
 
         case RETURN:
@@ -233,7 +233,6 @@ void goto_symext::symex_step(
             break;
 
         case ASSIGN:
-            state.source.pc++;
             if (!state.guard.is_false()) {
                 codet deref_code=instruction.code;
                 replace_dynamic_allocation(state, deref_code);
@@ -245,6 +244,7 @@ void goto_symext::symex_step(
 
                 symex_assign(state, deref_code);
             }
+            state.source.pc++;
             break;
         case FUNCTION_CALL:
             if (!state.guard.is_false())
@@ -263,14 +263,13 @@ void goto_symext::symex_step(
 
                 if(deref_code.function().identifier() == "c::__ESBMC_yield")
                 {
-                   state.source.pc++;
                    art.generate_states();
+                   state.source.pc++;
                    return;
                 }
 
                 if (deref_code.function().identifier() == "c::__ESBMC_switch_to")
                 {
-                  state.source.pc++;
 
                   assert(deref_code.arguments().size() == 1);
 
@@ -278,6 +277,8 @@ void goto_symext::symex_step(
                   exprt &num = deref_code.arguments()[0];
                   if (num.id() != "constant")
                     throw "Can't switch to non-constant thread id no";
+
+                  state.source.pc++;
 
                   unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
                   ex_state.set_active_state(tid);
