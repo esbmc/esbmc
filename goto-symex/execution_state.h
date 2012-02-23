@@ -167,7 +167,6 @@ class execution_statet : public goto_symext
   unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt parent_guard_identifier;
-  bool reexecute_instruction;
   int TS_number;
   unsigned nondet_count;
   unsigned dynamic_counter;

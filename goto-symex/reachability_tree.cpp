@@ -166,7 +166,6 @@ bool reachability_treet::generate_states_before_assign(const exprt &code, execut
 
   if(num_read_globals + num_write_globals > 0)
   {
-	ex_state.reexecute_instruction = false;
     return generate_states_base(code);
   }
 
@@ -252,7 +251,6 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     }
 
     new_state->set_parent_guard(ex_state.get_guard_identifier());
-    new_state->reexecute_instruction = true;
 
     /* Reset interleavings (?) investigated in this new state */
     new_state->resetDFS_traversed();

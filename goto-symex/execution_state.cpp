@@ -43,7 +43,6 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
     execution_statet::expr_id_map = init_expr_id_map();
   }
 
-  reexecute_instruction = true;
   CS_number = 0;
   TS_number = 0;
   node_id = 0;
@@ -106,7 +105,6 @@ execution_statet::operator=(const execution_statet &ex)
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
   parent_guard_identifier = ex.parent_guard_identifier;
-  reexecute_instruction = ex.reexecute_instruction;
   nondet_count = ex.nondet_count;
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
@@ -159,7 +157,6 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
     case END_FUNCTION:
       if (instruction.function == "c::main") {
         end_thread();
-        reexecute_instruction = false;
         art.generate_states_base(exprt());
         art.set_is_at_end_of_run();
       } else {
@@ -187,13 +184,11 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
         state.source.pc = goto_target;
       }
 
-      reexecute_instruction = false;
       art.generate_states();
       art.set_is_at_end_of_run();
       break;
     case END_THREAD:
       end_thread();
-      reexecute_instruction = false;
       art.generate_states();
       break;
     case ATOMIC_BEGIN:
@@ -203,7 +198,6 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
     case ATOMIC_END:
       decrement_active_atomic_number();
       state.source.pc++;
-      reexecute_instruction = false;
       art.generate_states();
       break;
     case RETURN:
@@ -453,12 +447,6 @@ execution_statet::check_if_ileaves_blocked(void)
     // inserts intrinsics identifying where they want interleavings to occur,
     // and to what thread.
     return true;
-
-  if(reexecute_instruction)
-  {
-    reexecute_instruction = false;
-    return true;
-  }
 
   if(threads_state.size() < 2)
     return true;
