@@ -130,6 +130,8 @@ class execution_statet : public goto_symext
   virtual void assume(const exprt &assumption, statet &state);
   virtual void replace_nondet(exprt &expr);
 
+  virtual unsigned int &get_dynamic_counter(void);
+
   irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();
   void set_parent_guard(const irep_idt & parent_guard);

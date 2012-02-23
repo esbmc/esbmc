@@ -278,6 +278,13 @@ execution_statet::replace_nondet(exprt &expr)
   return;
 }
 
+unsigned int &
+execution_statet::get_dynamic_counter(void)
+{
+
+  return dynamic_counter;
+}
+
 /*******************************************************************
    Function: execution_statet::get_active_state
 

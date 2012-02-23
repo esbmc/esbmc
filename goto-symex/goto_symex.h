@@ -187,6 +187,8 @@ protected:
   virtual void replace_nondet(exprt &expr) = 0;
   void replace_nondet(exprt &expr, unsigned int &nondet_count);
 
+  virtual unsigned int &get_dynamic_counter(void) = 0;
+
   // Members
 
   unsigned total_claims, remaining_claims;

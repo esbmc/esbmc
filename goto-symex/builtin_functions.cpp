@@ -60,13 +60,14 @@ void goto_symext::symex_malloc(
   if(type.is_nil())
     type=char_type();
 
-  ex_state.dynamic_counter++;
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
 
   // value
   symbolt symbol;
 
   symbol.base_name="dynamic_"+
-    i2string(ex_state.dynamic_counter)+
+    i2string(dynamic_counter)+
     (size_is_one?"_value":"_array");
 
   symbol.name="symex_dynamic::"+id2string(symbol.base_name);
@@ -194,9 +195,10 @@ void goto_symext::symex_cpp_new(
 
   do_array=(code.statement()=="cpp_new[]");
       
-  ex_state.dynamic_counter++;
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
 
-  const std::string count_string(i2string(ex_state.dynamic_counter));
+  const std::string count_string(i2string(dynamic_counter));
 
   // value
   symbolt symbol;
