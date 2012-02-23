@@ -138,7 +138,7 @@ void goto_symext::symex_goto(statet &state, execution_statet &ex_state,
 
       exprt new_lhs=guard_expr;
 
-      state.assignment(new_lhs, new_rhs, ns, false, ex_state);
+      state.assignment(new_lhs, new_rhs, ns, false);
 
       guardt guard;
 
@@ -316,7 +316,7 @@ void goto_symext::phi_function(
 		exprt lhs(symbol_expr(symbol));
 		exprt new_lhs(lhs);
 
-		state.assignment(new_lhs, rhs, ns, false, ex_state);
+		state.assignment(new_lhs, rhs, ns, false);
 
 		guardt true_guard;
 

@@ -106,8 +106,7 @@ public:
   void rename(typet &type, const namespacet &ns);
 
   void assignment(
-    exprt &lhs, const exprt &rhs, const namespacet &ns, bool record_value,
-    execution_statet &ex_state);
+    exprt &lhs, const exprt &rhs, const namespacet &ns, bool record_value);
 
   // what to propagate
   bool constant_propagation(const exprt &expr) const;

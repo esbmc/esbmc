@@ -200,8 +200,7 @@ void goto_symex_statet::assignment(
   exprt &lhs,
   const exprt &rhs,
   const namespacet &ns,
-  bool record_value,
-  execution_statet &ex_state)
+  bool record_value)
 {
   crypto_hash hash;
   assert(lhs.id()=="symbol");

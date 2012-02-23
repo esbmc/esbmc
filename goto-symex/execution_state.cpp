@@ -548,7 +548,7 @@ execution_statet::decrement_trds_in_run(void)
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true);
 
   target->assignment(
     get_active_state().guard,
@@ -601,7 +601,7 @@ execution_statet::increment_trds_in_run(void)
     constant_exprt rhs_expr(int_t);
     rhs_expr.set_value(integer2binary(1, config.ansi_c.int_width));
 
-    get_active_state().assignment(lhs_expr, rhs_expr, ns, true, *this);
+    get_active_state().assignment(lhs_expr, rhs_expr, ns, true);
 
     thrds_in_run_flag = 0;
   }
@@ -617,7 +617,7 @@ execution_statet::increment_trds_in_run(void)
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true);
 
   target->assignment(
     get_active_state().guard,
@@ -656,7 +656,7 @@ execution_statet::update_trds_count(void)
 
   exprt new_lhs = lhs_expr;
 
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true, *this);
+  get_active_state().assignment(new_lhs, rhs_expr, ns, true);
 
   target->assignment(
     get_active_state().guard,
@@ -702,7 +702,7 @@ execution_statet::execute_guard(const namespacet &ns)
     new_rhs = cur_rhs;   //gen_and(parent_guard, cur_rhs);
   }
 
-  get_active_state().assignment(new_lhs, new_rhs, ns, false, *this);
+  get_active_state().assignment(new_lhs, new_rhs, ns, false);
 
   assert(new_lhs.identifier() == get_guard_identifier());
 
