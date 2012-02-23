@@ -161,14 +161,14 @@ void goto_symext::symex_step(
             replace_nondet(tmp, ex_state);
             dereference(tmp, state, false);
 
-            if(!tmp.is_nil() && !options.get_bool_option("deadlock-check"))
+           symex_goto(art.get_cur_state().get_active_state(), ex_state);
+
+           if(!tmp.is_nil() && !options.get_bool_option("deadlock-check"))
             {
               if(ex_state.threads_state.size() > 1)
                 if (art.generate_states_before_read(tmp))
                   return;
             }
-
-            symex_goto(art.get_cur_state().get_active_state(), ex_state);
         }
             break;
         case ASSUME:
@@ -184,19 +184,24 @@ void goto_symext::symex_step(
                 do_simplify(tmp);
                 if (!tmp.is_true())
                 {
-                  if(ex_state.threads_state.size() > 1)
-                    if (art.generate_states_before_read(tmp1))
-                      return;
-
                     exprt tmp2 = tmp;
                     state.guard.guard_expr(tmp2);
                     target->assumption(state.guard, tmp2, state.source);
 
                     // we also add it to the state guard
                     state.guard.add(tmp);
-                }
+
+                    state.source.pc++;
+
+                    if(ex_state.threads_state.size() > 1)
+                      if (art.generate_states_before_read(tmp1))
+                        return;
+               } else {
+                state.source.pc++;
+               }
+            } else {
+              state.source.pc++;
             }
-            state.source.pc++;
             break;
 
         case ASSERT:
@@ -213,14 +218,19 @@ void goto_symext::symex_step(
                     replace_nondet(tmp, ex_state);
                     dereference(tmp, state, false);
 
+                    claim(tmp, msg, state);
+
+                    state.source.pc++;
+
                     if(ex_state.threads_state.size() > 1)
                       if (art.generate_states_before_read(tmp))
                         return;
-
-                    claim(tmp, msg, state);
-                }
+               } else {
+                 state.source.pc++;
+               }
+            } else {
+              state.source.pc++;
             }
-            state.source.pc++;
             break;
 
         case RETURN:
