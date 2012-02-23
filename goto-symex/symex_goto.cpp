@@ -180,7 +180,7 @@ Function: goto_symext::merge_gotos
 
 \*******************************************************************/
 
-void goto_symext::merge_gotos(statet &state, execution_statet &ex_state)
+void goto_symext::merge_gotos(statet &state)
 {
   statet::framet &frame=state.top();
 
@@ -202,7 +202,7 @@ void goto_symext::merge_gotos(statet &state, execution_statet &ex_state)
     statet::goto_statet &goto_state=*list_it;
 
     // do SSA phi functions
-    phi_function(goto_state, state, ex_state);
+    phi_function(goto_state, state);
 
     merge_value_sets(goto_state, state);
 
@@ -256,8 +256,7 @@ Function: goto_symext::phi_function
 
 void goto_symext::phi_function(
   const statet::goto_statet &goto_state,
-  statet &state,
-  execution_statet &ex_state)
+  statet &state)
 {
   // go over all variables to see what changed
   std::set<irep_idt> variables;

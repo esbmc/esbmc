@@ -149,7 +149,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
   statet &state = get_active_state();
   const goto_programt::instructiont &instruction = *state.source.pc;
 
-  merge_gotos(state, *this);
+  merge_gotos(state);
 
   switch (instruction.type) {
     case END_FUNCTION:

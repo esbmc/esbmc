@@ -130,7 +130,7 @@ void goto_symext::symex_step(
     }
   }
 
-  merge_gotos(state, ex_state);
+  merge_gotos(state);
 
   // depth exceeded?
   {

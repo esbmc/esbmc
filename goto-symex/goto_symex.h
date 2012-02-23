@@ -104,15 +104,13 @@ protected:
   virtual void assume(const exprt &assumption, statet &state);
 
   // gotos
-  void merge_gotos(statet &state, execution_statet &ex_state);
+  void merge_gotos(statet &state);
 
   void merge_value_sets(
     const statet::goto_statet &goto_state,
     statet &dest);
 
-  void phi_function(
-    const statet::goto_statet &goto_state,
-    statet &state, execution_statet &ex_state);
+  void phi_function(const statet::goto_statet &goto_state, statet &state);
 
   bool get_unwind(
     const symex_targett::sourcet &source,
