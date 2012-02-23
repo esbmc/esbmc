@@ -63,6 +63,8 @@ class execution_statet : public goto_symext
   class state_hashing_level2t : public ex_state_level2t
   {
   public:
+    state_hashing_level2t(execution_statet &ref);
+    virtual ~state_hashing_level2t(void);
     virtual state_hashing_level2t *clone(void) const;
     virtual irep_idt make_assignment(irep_idt l1_ident,
                                      const exprt &const_value,

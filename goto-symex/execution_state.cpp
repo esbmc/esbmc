@@ -1247,6 +1247,16 @@ schedule_execution_statet::claim(const exprt &expr, const std::string &msg,
   return;
 }
 
+execution_statet::state_hashing_level2t::state_hashing_level2t(
+                                         execution_statet &ref)
+    : ex_state_level2t(ref)
+{
+}
+
+execution_statet::state_hashing_level2t::~state_hashing_level2t(void)
+{
+}
+
 execution_statet::state_hashing_level2t *
 execution_statet::state_hashing_level2t::clone(void) const
 {
