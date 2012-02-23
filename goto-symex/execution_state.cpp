@@ -183,7 +183,6 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
       }
 
       art.generate_states();
-      art.set_is_at_end_of_run();
       break;
     case END_THREAD:
       end_thread();
