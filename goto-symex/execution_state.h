@@ -209,7 +209,10 @@ class dfs_execution_statet : public execution_statet
                    contextt &context,
                    const optionst &options)
       : execution_statet(goto_functions, ns, art, _target, context,
-                         new ex_state_level2t(*this), options)
+                         options.get_bool_option("state-hashing")
+                             ? new state_hashing_level2t(*this)
+                             : new ex_state_level2t(*this),
+                             options)
   {
   };
 
