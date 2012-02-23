@@ -177,7 +177,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     dest.operands().swap(op);
     return dest;
   } else if (type.id() == "union") {
-    std::vector<exprt> unknown;
     const irept &components = type.components();
 
     unsigned component_nr = 0;
@@ -214,12 +213,12 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       const typet &subtype = it->type();
       tmp = Z3_get_app_arg(z3_ctx, app, i);
       expr = bv_get_rec(tmp, subtype);
+      op.push_back(expr);
       if (comp_nr == i) {
         // XXXjmorse, Dunno what to do with this
         // in fact, shouldn't be reached, not in components list.
         break;
       }
-      unknown.push_back(expr);
       ++i;
     }
 
