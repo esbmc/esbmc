@@ -106,8 +106,6 @@ namespace renaming {
     typedef std::map<irep_idt, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
 
-    crypto_hash generate_l2_state_hash() const;
-
     void get_variables(std::set<irep_idt> &vars) const
     {
       for(current_namest::const_iterator it=current_names.begin();

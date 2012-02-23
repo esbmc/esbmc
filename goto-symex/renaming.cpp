@@ -50,33 +50,6 @@ renaming::level2t::name(const irep_idt &identifier, unsigned count) const
   return id2string(identifier)+"&"+i2string(n_id)+"#"+i2string(count);
 }
 
-static std::string state_to_ignore[8] =
-{"\\guard", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
-"count_lock", "count_wait", "unlocked"};
-
-crypto_hash
-renaming::level2t::generate_l2_state_hash() const
-{
-  unsigned int total;
-
-  uint8_t *data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE * sizeof(uint8_t));
-
-  total = 0;
-  for (current_state_hashest::const_iterator it = current_hashes.begin();
-        it != current_hashes.end(); it++) {
-    int j;
-
-    for (j = 0 ; j < 8; j++)
-      if (it->first.as_string().find(state_to_ignore[j]) != std::string::npos)
-        continue;
-
-    memcpy(&data[total * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
-    total++;
-  }
-
-  return crypto_hash(data, total * CRYPTO_HASH_SIZE);
-}
-
 void renaming::level1t::rename(exprt &expr)
 {
   // rename all the symbols with their last known value

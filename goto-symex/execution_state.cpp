@@ -1272,3 +1272,26 @@ execution_statet::state_hashing_level2t::make_assignment(irep_idt l1_ident,
 
   return new_name;
 }
+
+crypto_hash
+execution_statet::state_hashing_level2t::generate_l2_state_hash() const
+{
+  unsigned int total;
+
+  uint8_t *data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE * sizeof(uint8_t));
+
+  total = 0;
+  for (current_state_hashest::const_iterator it = current_hashes.begin();
+        it != current_hashes.end(); it++) {
+    int j;
+
+    for (j = 0 ; j < 8; j++)
+      if (it->first.as_string().find(state_to_ignore[j]) != std::string::npos)
+        continue;
+
+    memcpy(&data[total * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
+    total++;
+  }
+
+  return crypto_hash(data, total * CRYPTO_HASH_SIZE);
+}
