@@ -78,7 +78,7 @@ void goto_symext::argument_assignments(
   execution_statet &ex_state,
   const exprt::operandst &arguments)
 {
-//    statet & state = ex_state.get_active_state();
+    statet & state = ex_state.get_active_state();
   // iterates over the operands
   exprt::operandst::const_iterator it1=arguments.begin();
 
@@ -145,8 +145,8 @@ void goto_symext::argument_assignments(
         }
       }
       
-      do_simplify(rhs);
-      assignment(ex_state, lhs, rhs);
+      guardt guard;
+      symex_assign_symbol(state, lhs, rhs, guard);
     }
 
     it1++;

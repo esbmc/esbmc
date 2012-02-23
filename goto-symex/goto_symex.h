@@ -163,9 +163,6 @@ protected:
   void replace_dynamic_allocation(const statet &state, exprt &expr);
   bool is_valid_object(const statet &state, const symbolt &symbol);
 
-  // Assignment methods
-  void assignment(execution_statet &ex_state, const exprt &lhs, exprt &rhs);
-
   virtual void symex_assign(statet &state, const codet &code);
   void symex_assign_rec(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
   void symex_assign_symbol(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);

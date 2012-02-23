@@ -80,42 +80,6 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
 
 /*******************************************************************\
 
-Function: goto_symext::assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::assignment(
-  execution_statet &ex_state,
-  const exprt &lhs,
-  exprt &rhs)
-{
-  statet & state = ex_state.get_active_state();
-  exprt original_lhs=lhs;
-  state.get_original_name(original_lhs);
-
-  exprt new_lhs=lhs;
-  //replace_dynamic_allocation(state, rhs);
-  //replace_nondet(rhs);
-
-  state.assignment(new_lhs, rhs, ns, constant_propagation);
-
-  target->assignment(
-    state.guard,
-    new_lhs, original_lhs,
-    rhs,
-    state.source,
-    state.gen_stack_trace(),
-    symex_targett::STATE);
-}
-
-/*******************************************************************\
-
 Function: goto_symext::do_simplify
 
   Inputs:
