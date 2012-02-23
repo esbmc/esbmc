@@ -87,7 +87,8 @@ protected:
 
   // symex
 
-  void symex_goto(statet &state, execution_statet &ex_state);
+  virtual void symex_goto(statet &state, execution_statet &ex_state,
+                          const exprt &old_guard);
 
   void symex_return(statet &state, execution_statet &ex_state);
 

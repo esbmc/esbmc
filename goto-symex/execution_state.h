@@ -117,6 +117,8 @@ class execution_statet : public goto_symext
                           reachability_treet &art);
   virtual void symex_assign(statet &state, execution_statet &ex_state, const codet &code);
   virtual void claim(const exprt &expr, const std::string &msg, statet &state);
+  virtual void symex_goto(statet &state, execution_statet &ex_state,
+                          const exprt &old_guard);
 
   irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();

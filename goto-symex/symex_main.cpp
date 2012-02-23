@@ -162,13 +162,6 @@ void goto_symext::symex_step(
             dereference(tmp, state, false);
 
            symex_goto(art.get_cur_state().get_active_state(), ex_state, tmp);
-
-           if(!tmp.is_nil() && !options.get_bool_option("deadlock-check"))
-            {
-              if(ex_state.threads_state.size() > 1)
-                if (art.generate_states_after_read(tmp))
-                  return;
-            }
         }
             break;
         case ASSUME:

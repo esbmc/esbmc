@@ -251,6 +251,20 @@ execution_statet::claim(const exprt &expr, const std::string &msg,
   return;
 }
 
+void
+execution_statet::symex_goto(statet &state, execution_statet &ex_state,
+                             const exprt &old_guard)
+{
+
+  goto_symext::symex_goto(state, *this, old_guard);
+
+  if (!old_guard.is_nil() && !options.get_bool_option("deadlock-check"))
+    if (threads_state.size() > 1)
+      owning_rt->generate_states_after_read(old_guard);
+
+  return;
+}
+
 /*******************************************************************
    Function: execution_statet::get_active_state
 
