@@ -207,8 +207,10 @@ void goto_symex_statet::assignment(
   assert(lhs.id()=="symbol");
   assert(lhs.id()==exprt::symbol);
 
+#if 0
   if (ex_state.owning_rt->state_hashing)
     hash = ex_state.update_hash_for_assignment(rhs);
+#endif
 
   // the type might need renaming
   rename(lhs.type(), ns);
@@ -229,8 +231,10 @@ void goto_symex_statet::assignment(
 
   lhs.identifier(level2.name(l1_identifier, entry.count));
 
+#if 0
   if (ex_state.owning_rt->state_hashing)
     level2.current_hashes[orig_name] = hash;
+#endif
 
   if(record_value)
   {
