@@ -151,8 +151,6 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
 
   merge_gotos(state, *this);
 
-  try {
-
   switch (instruction.type) {
     case END_FUNCTION:
       if (instruction.function == "c::main") {
@@ -215,11 +213,6 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
       break;
     default:
       goto_symext::symex_step(goto_functions, art);
-  }
-
-  } catch (context_switch_occured *c) {
-    // Dummy - all this exception does is abort interpretation, no corrective
-    // measure is needed.
   }
 
   return;
