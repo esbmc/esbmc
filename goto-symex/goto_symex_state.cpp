@@ -207,11 +207,6 @@ void goto_symex_statet::assignment(
   assert(lhs.id()=="symbol");
   assert(lhs.id()==exprt::symbol);
 
-#if 0
-  if (ex_state.owning_rt->state_hashing)
-    hash = ex_state.update_hash_for_assignment(rhs);
-#endif
-
   // the type might need renaming
   rename(lhs.type(), ns);
 
@@ -220,12 +215,6 @@ void goto_symex_statet::assignment(
   // identifier should be l0 or l1, make sure it's l1
 
   const std::string l1_identifier=top().level1.get_ident_name(identifier);
-  std::string orig_name = get_original_name(l1_identifier).as_string();
-
-#if 0
-  if (ex_state.owning_rt->state_hashing)
-    level2.current_hashes[orig_name] = hash;
-#endif
 
   exprt const_value;
   if(record_value && constant_propagation(rhs))
