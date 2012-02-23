@@ -169,18 +169,18 @@ protected:
   // Assignment methods
   void assignment(execution_statet &ex_state, const exprt &lhs, exprt &rhs);
 
-  virtual void symex_assign(statet &state, execution_statet &ex_state, const codet &code);
-  void symex_assign_rec(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard);
-  void symex_assign_symbol(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard);
-  void symex_assign_typecast(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard);
-  void symex_assign_array(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard);
-  void symex_assign_member(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard);
-  void symex_assign_if(statet &state, execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard);
-  void symex_assign_byte_extract(statet &state,  execution_statet &ex_state, const exprt &lhs, exprt &rhs, guardt &guard);
+  virtual void symex_assign(statet &state, const codet &code);
+  void symex_assign_rec(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_symbol(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_typecast(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_array(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_member(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_if(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_byte_extract(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
 
-  void symex_malloc(statet &state, const exprt &lhs, const side_effect_exprt &code, execution_statet &ex_state);
+  void symex_malloc(statet &state, const exprt &lhs, const side_effect_exprt &code);
   void symex_cpp_delete(statet &state, const codet &code);
-  void symex_cpp_new(statet &state, const exprt &lhs, const side_effect_exprt &code, execution_statet &ex_state);
+  void symex_cpp_new(statet &state, const exprt &lhs, const side_effect_exprt &code);
   void symex_macro(statet &state, const code_function_callt &code);
   void symex_printf(statet &state, const exprt &lhs, const exprt &code);
 

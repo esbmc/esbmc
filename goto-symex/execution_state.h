@@ -123,7 +123,7 @@ class execution_statet : public goto_symext
   virtual execution_statet *clone(void) const = 0;
   virtual void symex_step(const goto_functionst &goto_functions,
                           reachability_treet &art);
-  virtual void symex_assign(statet &state, execution_statet &ex_state, const codet &code);
+  virtual void symex_assign(statet &state, const codet &code);
   virtual void claim(const exprt &expr, const std::string &msg, statet &state);
   virtual void symex_goto(statet &state, execution_statet &ex_state,
                           const exprt &old_guard);

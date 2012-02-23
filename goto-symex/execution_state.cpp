@@ -204,7 +204,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
         const code_returnt &code = to_code_return(instruction.code);
         code_assignt assign;
         if (make_return_assignment(state, *this, assign, code))
-          goto_symext::symex_assign(state, *this, assign);
+          goto_symext::symex_assign(state, assign);
 
         symex_return(state, *this);
 
@@ -219,11 +219,10 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
 }
 
 void
-execution_statet::symex_assign(statet &state, execution_statet &ex_state,
-                               const codet &code)
+execution_statet::symex_assign(statet &state, const codet &code)
 {
 
-  goto_symext::symex_assign(state, *this, code);
+  goto_symext::symex_assign(state, code);
 
   if (threads_state.size() > 1)
     owning_rt->generate_states_after_assign(code, *this);

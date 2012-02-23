@@ -225,7 +225,7 @@ void goto_symext::symex_step(
                            to_code_return(instruction.code);
                          code_assignt assign;
                          if (make_return_assignment(state, ex_state, assign, code))
-                           goto_symext::symex_assign(state, ex_state, assign);
+                           goto_symext::symex_assign(state, assign);
                          symex_return(state, ex_state);
                  }
 
@@ -243,7 +243,7 @@ void goto_symext::symex_step(
                 dereference(deref_code.op0(), state, true);
                 dereference(deref_code.op1(), state, false);
 
-                symex_assign(state, ex_state, deref_code);
+                symex_assign(state, deref_code);
             }
             break;
         case FUNCTION_CALL:
