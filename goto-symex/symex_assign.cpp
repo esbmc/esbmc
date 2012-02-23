@@ -158,8 +158,8 @@ void goto_symext::symex_assign(statet &state, execution_statet &ex_state, const 
   //replace_dynamic_allocation(state, lhs);
   //replace_dynamic_allocation(state, rhs);
 
-  replace_nondet(lhs, ex_state);
-  replace_nondet(rhs, ex_state);
+  replace_nondet(lhs);
+  replace_nondet(rhs);
 
   if(rhs.id()=="sideeffect")
   {
@@ -522,32 +522,6 @@ void goto_symext::symex_assign_byte_extract(
   new_rhs.type()=lhs.op0().type();
 
   symex_assign_rec(state, ex_state, lhs.op0(), new_rhs, guard);
-}
-
-/*******************************************************************\
-
-Function: goto_symext::replace_nondet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
-{
-  if(expr.id()=="sideeffect" && expr.statement()=="nondet")
-  {
-    exprt new_expr("nondet_symbol", expr.type());
-    new_expr.identifier("symex::nondet"+i2string(ex_state.nondet_count++));
-    new_expr.location()=expr.location();
-    expr.swap(new_expr);
-  }
-  else
-    Forall_operands(it, expr)
-      replace_nondet(*it, ex_state);
 }
 
 void goto_symext::replace_nondet(exprt &expr, unsigned int &nondet_count)

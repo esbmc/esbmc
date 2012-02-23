@@ -184,7 +184,7 @@ protected:
   void symex_macro(statet &state, const code_function_callt &code);
   void symex_printf(statet &state, const exprt &lhs, const exprt &code);
 
-  void replace_nondet(exprt &expr, execution_statet &ex_state);
+  virtual void replace_nondet(exprt &expr) = 0;
   void replace_nondet(exprt &expr, unsigned int &nondet_count);
 
   // Members

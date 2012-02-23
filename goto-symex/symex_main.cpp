@@ -168,7 +168,7 @@ void goto_symext::symex_step(
         {
             exprt tmp(instruction.guard);
             replace_dynamic_allocation(state, tmp);
-            replace_nondet(tmp, ex_state);
+            replace_nondet(tmp);
             dereference(tmp, state, false);
 
            symex_goto(art.get_cur_state().get_active_state(), ex_state, tmp);
@@ -179,7 +179,7 @@ void goto_symext::symex_step(
             if (!state.guard.is_false()) {
                 exprt tmp(instruction.guard);
                 replace_dynamic_allocation(state, tmp);
-                replace_nondet(tmp, ex_state);
+                replace_nondet(tmp);
                 dereference(tmp, state, false);
 
                 exprt tmp1 = tmp;
@@ -211,7 +211,7 @@ void goto_symext::symex_step(
                     exprt tmp(instruction.guard);
 
                     replace_dynamic_allocation(state, tmp);
-                    replace_nondet(tmp, ex_state);
+                    replace_nondet(tmp);
                     dereference(tmp, state, false);
 
                     claim(tmp, msg, state);
@@ -237,7 +237,7 @@ void goto_symext::symex_step(
             if (!state.guard.is_false()) {
                 codet deref_code=instruction.code;
                 replace_dynamic_allocation(state, deref_code);
-                replace_nondet(deref_code, ex_state);
+                replace_nondet(deref_code);
                 assert(deref_code.operands().size()==2);
 
                 dereference(deref_code.op0(), state, true);
@@ -253,7 +253,7 @@ void goto_symext::symex_step(
                         to_code_function_call(instruction.code);
 
                 replace_dynamic_allocation(state, deref_code);
-                replace_nondet(deref_code, ex_state);
+                replace_nondet(deref_code);
 
                 if (deref_code.lhs().is_not_nil()) {
                     dereference(deref_code.lhs(), state, true);
@@ -305,7 +305,7 @@ void goto_symext::symex_step(
                         statement == "free" ||
                         statement == "printf") {
                     replace_dynamic_allocation(state, deref_code);
-                    replace_nondet(deref_code, ex_state);
+                    replace_nondet(deref_code);
                     dereference(deref_code, state, false);
                 }
 
