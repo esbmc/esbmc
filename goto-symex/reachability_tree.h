@@ -91,6 +91,8 @@ public:
 
   bool generate_states_after_read(const exprt &code);
   bool generate_states_after_assign(const exprt &code, execution_statet &ex_state);
+  void create_next_state(void);
+  bool step_next_state(void);
   bool is_global_assign(const exprt &code);
 
   unsigned int decide_ileave_direction(execution_statet &ex_state,
@@ -178,6 +180,7 @@ protected:
   int CS_bound;
   int _TS_slice;
   unsigned int schedule_total_claims, schedule_remaining_claims;
+  unsigned int next_thread_id;
   bool is_same_mutex, deadlock_detection, por;
   const namespacet &ns;
 

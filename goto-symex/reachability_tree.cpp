@@ -228,16 +228,35 @@ bool reachability_treet::generate_states_base(const exprt &expr)
   tid = decide_ileave_direction(ex_state, expr);
 
   at_end_of_run = true;
+  next_thread_id = tid;
 
-  if (tid != ex_state.threads_state.size()) {
+  if (tid == ex_state.threads_state.size()) {
+    /* Once we've generated all interleavings from this state, increment hit
+     * count so that we don't come back here again */
+    if (state_hashing)
+      hit_hashes.insert(hash);
 
-    /* Generate a new execution state, duplicate of previous? */
+    return false;
+  } else {
+    return true;
+  }
+}
+
+void
+reachability_treet::create_next_state(void)
+{
+  execution_statet &ex_state = get_cur_state();
+
+  if (!at_end_of_run)
+    return;
+
+  if (next_thread_id != ex_state.threads_state.size()) {
     execution_statet *new_state = ex_state.clone();
     execution_states.push_back(new_state);
 
     //begin - H.Savino
     if (config.options.get_bool_option("round-robin")){
-        if(tid == ex_state.active_thread)
+        if(next_thread_id == ex_state.active_thread)
             new_state->increment_time_slice();
         else
             new_state->reset_time_slice();
@@ -245,25 +264,30 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     //end - H.Savino
 
     /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_state_number() != tid) {
+    if (new_state->get_active_state_number() != next_thread_id) {
       new_state->increment_context_switch();
-      new_state->set_active_state(tid);
+      new_state->set_active_state(next_thread_id);
     }
 
     new_state->set_parent_guard(ex_state.get_guard_identifier());
 
     /* Reset interleavings (?) investigated in this new state */
     new_state->resetDFS_traversed();
-
-    return true;
-  } else {
-    /* Once we've generated all interleavings from this state, increment hit
-     * count so that we don't come back here again */
-    if (state_hashing)
-      hit_hashes.insert(hash);
-
-    return false;
   }
+
+  return;
+}
+
+bool
+reachability_treet::step_next_state(void)
+{
+  bool res;
+
+  res = generate_states_base(exprt());
+  if (res)
+    create_next_state();
+
+  return res;
 }
 
 unsigned int
@@ -374,7 +398,7 @@ void reachability_treet::switch_to_next_execution_state()
   if(it != execution_states.end()) {
     cur_state_it++;
   } else {
-    if (generate_states_base(exprt()))
+    if (step_next_state())
       cur_state_it++;
     else
       has_complete_formula = true;
@@ -399,7 +423,7 @@ bool reachability_treet::reset_to_unexplored_state()
   delete *it;
   execution_states.erase(it);
 
-  while(execution_states.size() > 0 && !generate_states_base(exprt())) {
+  while(execution_states.size() > 0 && !step_next_state()) {
     it = cur_state_it--;
     delete *it;
     execution_states.erase(it);
@@ -432,7 +456,7 @@ void reachability_treet::go_next_state()
     cur_state_it++;
   else
   {
-    while(execution_states.size() > 0 && !generate_states_base(exprt()))
+    while(execution_states.size() > 0 && !step_next_state())
     {
       it = cur_state_it;
       cur_state_it--;
@@ -765,6 +789,8 @@ reachability_treet::get_next_formula()
     while (!is_at_end_of_run())
       get_cur_state().symex_step(goto_functions, *this);
 
+    create_next_state();
+
     switch_to_next_execution_state();
   }
 
@@ -793,6 +819,8 @@ reachability_treet::generate_schedule_formula()
     {
       get_cur_state().symex_step(goto_functions, *this);
     }
+
+    create_next_state();
 
     go_next_state();
   }
@@ -829,6 +857,9 @@ reachability_treet::restore_from_dfs_state(void *_dfs)
 
       get_cur_state().symex_step(goto_functions, *this);
     }
+
+    create_next_state();
+
     get_cur_state().DFS_traversed = it->explored;
 
     if (get_cur_state().threads_state.size() != it->num_threads) {
