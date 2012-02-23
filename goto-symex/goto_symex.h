@@ -185,6 +185,7 @@ protected:
   void symex_printf(statet &state, const exprt &lhs, const exprt &code);
 
   void replace_nondet(exprt &expr, execution_statet &ex_state);
+  void replace_nondet(exprt &expr, unsigned int &nondet_count);
 
   // Members
 

@@ -270,6 +270,14 @@ execution_statet::assume(const exprt &assumption, statet &state)
   return;
 }
 
+void
+execution_statet::replace_nondet(exprt &expr)
+{
+
+  goto_symext::replace_nondet(expr, nondet_count);
+  return;
+}
+
 /*******************************************************************
    Function: execution_statet::get_active_state
 
