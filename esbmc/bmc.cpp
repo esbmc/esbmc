@@ -328,6 +328,14 @@ void bmct::show_program(symex_target_equationt &equation)
       std::cout << "(" << count << ") " << "(assert)" << string_value << std::endl;
       count++;
     }
+    else if(it->is_assume())
+    {
+      std::string string_value;
+      languages.from_expr(it->cond, string_value);
+      std::cout << "(" << count << ") " << "(assume)" << string_value << std::endl;
+      count++;
+    }
+#
 #endif
   }
 }
@@ -483,11 +491,12 @@ bool bmct::run_thread()
       simple_slice(*equation);
     }
 
-    if(options.get_bool_option("program-only"))
-    {
+    if (options.get_bool_option("program-only") ||
+        options.get_bool_option("program-too"))
       show_program(*equation);
+
+    if (options.get_bool_option("program-only"))
       return false;
-    }
 
     {
       std::string msg;
