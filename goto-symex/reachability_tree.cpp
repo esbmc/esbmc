@@ -759,7 +759,6 @@ goto_symext::symex_resultt *
 reachability_treet::get_next_formula()
 {
 
-  get_cur_state().execute_guard(ns);
   while(!is_has_complete_formula())
   {
     while (!is_at_end_of_run())
@@ -788,7 +787,6 @@ reachability_treet::generate_schedule_formula()
   while (has_more_states())
   {
     total_states++;
-    get_cur_state().execute_guard(ns);
     while (!is_at_end_of_run())
     {
       get_cur_state().symex_step(goto_functions, *this);
