@@ -152,7 +152,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
   merge_gotos(state);
 
   if (config.options.get_option("break-at") != "") {
-    int insn_num = strtol(config.options.get_option("break-at").c_str(), NULL, 10);
+    unsigned int insn_num = strtol(config.options.get_option("break-at").c_str(), NULL, 10);
     if (instruction.location_number == insn_num) {
       // If you're developing ESBMC on a machine that isn't x86, I'll send you
       // cookies.
@@ -500,7 +500,7 @@ execution_statet::check_if_ileaves_blocked(void)
 }
 
 bool
-execution_statet::apply_static_por(const exprt &expr, int i) const
+execution_statet::apply_static_por(const exprt &expr, unsigned int i) const
 {
   bool consider = true;
 
@@ -1152,7 +1152,7 @@ execution_statet::print_stack_traces(const namespacet &ns,
 {
   std::vector<goto_symex_statet>::const_iterator it;
   std::string spaces = std::string("");
-  int i;
+  unsigned int i;
 
   for (i = 0; i < indent; i++)
     spaces += " ";
