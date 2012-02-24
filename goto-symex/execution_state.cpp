@@ -662,6 +662,7 @@ execution_statet::execute_guard(const namespacet &ns)
   exprt parent_guard, new_rhs;
 
   parent_guard = threads_state[last_active_thread].guard.as_expr();
+  do_simplify(parent_guard);
 
   // Truth of this guard implies the parent is true.
   exprt assumpt("=>", bool_typet());
