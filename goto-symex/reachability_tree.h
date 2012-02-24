@@ -80,7 +80,6 @@ public:
   const execution_statet & get_cur_state() const;
   bool reset_to_unexplored_state();
   bool has_more_states();
-  bool check_CS_bound();
   int get_CS_bound() const;
   int get_ileave_direction_from_user(const exprt &expr) const;
   int get_ileave_direction_from_scheduling(const exprt &expr) const;

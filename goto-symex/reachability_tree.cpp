@@ -65,27 +65,6 @@ bool reachability_treet::has_more_states()
 }
 
 /*******************************************************************
- Function: reachability_treet::check_CS_bound
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool reachability_treet::check_CS_bound()
-{
-  if(CS_bound  != -1 && get_cur_state().get_context_switch() >= CS_bound)
-  {
-    return true;
-  }
-  else
-    return false;
-}
-
-/*******************************************************************
  Function: reachability_treet::get_CS_bound
 
  Inputs:
