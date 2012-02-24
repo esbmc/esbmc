@@ -414,6 +414,8 @@ void
 execution_statet::switch_to_thread(unsigned int i)
 {
 
+  assert(i != active_thread);
+
   last_active_thread = active_thread;
   active_thread = i;
   execute_guard(ns);
