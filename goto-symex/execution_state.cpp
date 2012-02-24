@@ -681,6 +681,12 @@ execution_statet::execute_guard(const namespacet &ns)
   guardt old_guard;
   old_guard.add(threads_state[last_active_thread].guard.as_expr());
 
+  // If we simplified the global guard expr to false, write that to thread
+  // guards, not the symbolic guard name. This is the only way to bail out of
+  // evaulating a particular interleaving early right now.
+  if (parent_guard.is_false())
+    guard_expr = parent_guard;
+
   // copy the new guard exprt to every threads
   for (unsigned int i = 0; i < threads_state.size(); i++)
   {
