@@ -104,7 +104,6 @@ execution_statet::operator=(const execution_statet &ex)
   last_active_thread = ex.last_active_thread;
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
-  parent_guard_identifier = ex.parent_guard_identifier;
   nondet_count = ex.nondet_count;
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
@@ -419,25 +418,6 @@ execution_statet::get_guard_identifier_base()
 
   return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
          i2string(last_active_thread) + '_' + i2string(node_id);
-}
-
-
-/*******************************************************************
-   Function: execution_statet::set_parent_guard
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-execution_statet::set_parent_guard(const irep_idt & parent_guard)
-{
-
-  parent_guard_identifier = parent_guard;
 }
 
 /*******************************************************************

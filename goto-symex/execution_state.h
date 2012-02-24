@@ -133,7 +133,6 @@ class execution_statet : public goto_symext
 
   irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();
-  void set_parent_guard(const irep_idt & parent_guard);
   bool all_threads_ended();
   goto_symex_statet & get_active_state();
   const goto_symex_statet & get_active_state() const;
@@ -180,7 +179,6 @@ class execution_statet : public goto_symext
   ex_state_level2t *state_level2;
   unsigned int active_thread;
   irep_idt guard_execution;
-  irep_idt parent_guard_identifier;
   int TS_number;
   unsigned nondet_count;
   unsigned dynamic_counter;
