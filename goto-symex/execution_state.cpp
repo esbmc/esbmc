@@ -1135,6 +1135,12 @@ execution_statet::ex_state_level2t::rename(const irep_idt &identifier, unsigned 
   renaming::level2t::coveredinbees(identifier, count, owner->node_id);
 }
 
+void
+execution_statet::ex_state_level2t::rename(exprt &identifier)
+{
+  renaming::level2t::rename(identifier);
+}
+
 dfs_execution_statet::~dfs_execution_statet(void)
 {
 
