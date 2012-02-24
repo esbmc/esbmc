@@ -329,27 +329,6 @@ execution_statet::get_active_state() const
 }
 
 /*******************************************************************
-   Function: execution_statet::all_threads_ended
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-bool
-execution_statet::all_threads_ended()
-{
-
-  for (unsigned int i = 0; i < threads_state.size(); i++)
-    if (!threads_state.at(i).thread_ended)
-      return false;
-  return true;
-}
-
-/*******************************************************************
    Function: execution_statet::get_active_atomic_number
 
    Inputs:

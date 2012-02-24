@@ -134,7 +134,6 @@ class execution_statet : public goto_symext
   irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();
   void set_parent_guard(const irep_idt & parent_guard);
-  bool all_threads_ended();
   goto_symex_statet & get_active_state();
   const goto_symex_statet & get_active_state() const;
   unsigned int get_active_atomic_number();
