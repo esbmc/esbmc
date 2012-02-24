@@ -179,7 +179,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
     case END_FUNCTION:
       if (instruction.function == "c::main") {
         end_thread();
-        art.generate_states();
+        art.force_cswitch_point();
       } else {
         // Fall through to base class
         goto_symext::symex_step(goto_functions, art);
@@ -205,11 +205,11 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
         state.source.pc = goto_target;
       }
 
-      art.generate_states();
+      art.force_cswitch_point();
       break;
     case END_THREAD:
       end_thread();
-      art.generate_states();
+      art.force_cswitch_point();
       break;
     case ATOMIC_BEGIN:
       state.source.pc++;
@@ -218,7 +218,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
     case ATOMIC_END:
       decrement_active_atomic_number();
       state.source.pc++;
-      art.generate_states();
+      art.force_cswitch_point();
       break;
     case RETURN:
       state.source.pc++;

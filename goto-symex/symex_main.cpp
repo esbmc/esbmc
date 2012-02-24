@@ -239,7 +239,7 @@ void goto_symext::symex_step(
 
                 if(deref_code.function().identifier() == "c::__ESBMC_yield")
                 {
-                   art.generate_states();
+                   art.force_cswitch_point();
                    state.source.pc++;
                    return;
                 }

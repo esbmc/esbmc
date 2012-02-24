@@ -138,7 +138,7 @@ bool reachability_treet::analyse_for_cswitch_after_read(const exprt &code)
 {
 
   if (get_cur_state().get_expr_read_globals(ns,code) > 0)
-    return generate_states_base(code);
+    return analyse_for_cswitch_base(code);
   else
     return false;
 }
@@ -166,7 +166,7 @@ bool reachability_treet::analyse_for_cswitch_after_assign(const exprt &code)
 
   if(num_read_globals + num_write_globals > 0)
   {
-    return generate_states_base(code);
+    return analyse_for_cswitch_base(code);
   }
 
   return false;
@@ -174,7 +174,7 @@ bool reachability_treet::analyse_for_cswitch_after_assign(const exprt &code)
 
 /*******************************************************************
 
- Function: reachability_treet::generate_states
+ Function: reachability_treet::analyse_for_cswitch_base
 
  Inputs:
 
@@ -184,15 +184,15 @@ bool reachability_treet::analyse_for_cswitch_after_assign(const exprt &code)
 
  \*******************************************************************/
 
-bool reachability_treet::generate_states()
+bool reachability_treet::force_cswitch_point()
 {
 
   // do analysis here
-  return generate_states_base(exprt());
+  return analyse_for_cswitch_base(exprt());
 }
 
 /*******************************************************************
- Function: reachability_treet::generate_states_base
+ Function: reachability_treet::analyse_for_cswitch_base
 
  Inputs:
 
@@ -202,7 +202,7 @@ bool reachability_treet::generate_states()
 
  \*******************************************************************/
 
-bool reachability_treet::generate_states_base(const exprt &expr)
+bool reachability_treet::analyse_for_cswitch_base(const exprt &expr)
 {
 
   execution_statet &ex_state = get_cur_state();
@@ -283,7 +283,7 @@ reachability_treet::step_next_state(void)
 {
   bool res;
 
-  res = generate_states_base(exprt());
+  res = force_cswitch_point();
   if (res)
     create_next_state();
 

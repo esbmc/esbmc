@@ -86,8 +86,8 @@ public:
   int get_ileave_direction_from_user(const exprt &expr) const;
   int get_ileave_direction_from_scheduling(const exprt &expr) const;
   bool check_thread_viable(int tid, const exprt &expr, bool quiet) const;
-  bool generate_states_base(const exprt & expr);
-  bool generate_states();
+  bool analyse_for_cswitch_base(const exprt & expr);
+  bool force_cswitch_point();
 
   bool analyse_for_cswitch_after_read(const exprt &code);
   bool analyse_for_cswitch_after_assign(const exprt &code);
