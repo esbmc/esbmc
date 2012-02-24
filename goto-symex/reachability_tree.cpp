@@ -247,7 +247,7 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     /* Make it active, make it follow on from previous state... */
     if (new_state->get_active_state_number() != tid) {
       new_state->increment_context_switch();
-      new_state->set_active_state(tid);
+      new_state->switch_to_thread(tid);
     }
 
     new_state->set_parent_guard(ex_state.get_guard_identifier());

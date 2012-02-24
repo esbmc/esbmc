@@ -452,7 +452,7 @@ execution_statet::set_parent_guard(const irep_idt & parent_guard)
  \*******************************************************************/
 
 void
-execution_statet::set_active_state(unsigned int i)
+execution_statet::switch_to_thread(unsigned int i)
 {
 
   last_active_thread = active_thread;
