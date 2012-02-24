@@ -82,7 +82,6 @@ public:
   bool has_more_states();
   bool check_CS_bound();
   int get_CS_bound() const;
-  int get_actual_CS_bound();
   int get_ileave_direction_from_user(const exprt &expr) const;
   int get_ileave_direction_from_scheduling(const exprt &expr) const;
   bool check_thread_viable(int tid, const exprt &expr, bool quiet) const;
