@@ -657,31 +657,20 @@ execution_statet::execute_guard(const namespacet &ns)
 
   node_id = node_count++;
   exprt guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
-  exprt parent_guard;
-  exprt new_lhs = guard_expr;
+  exprt parent_guard, new_rhs;
 
-  typet my_type = uint_type();
-  exprt trd_expr = symbol_exprt(get_guard_identifier(), my_type);
-  constant_exprt num_expr = constant_exprt(my_type);
-  num_expr.set_value(integer2binary(active_thread, config.ansi_c.int_width));
-  exprt cur_rhs = equality_exprt(trd_expr, num_expr);
+  parent_guard = threads_state[last_active_thread].guard.as_expr();
 
-  exprt new_rhs;
-  parent_guard = true_exprt();
-  new_rhs = parent_guard;
+  // Truth of this guard implies the parent is true.
+  exprt assumpt("=>", bool_typet());
+  assumpt.copy_to_operands(guard_expr, parent_guard);
+
+  guardt guard;
+  target->assumption(guard, assumpt, get_active_state().source);
 
   guardt old_guard;
   old_guard.add(parent_guard);
   exprt new_guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
-
-  guardt guard;
-  target->assignment(
-    guard,
-    new_lhs, guard_expr,
-    new_rhs,
-    get_active_state().source,
-    get_active_state().gen_stack_trace(),
-    symex_targett::HIDDEN);
 
   // copy the new guard exprt to every threads
   for (unsigned int i = 0; i < threads_state.size(); i++)
