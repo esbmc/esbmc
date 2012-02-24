@@ -829,7 +829,7 @@ reachability_treet::restore_from_dfs_state(void *_dfs)
       // assumes that the DFS exploration path algorithm never changes.
       // Has to occur here; between generating new threads, ESBMC messes with
       // the dfs state.
-      for (int dfspos = 0; dfspos < get_cur_state().DFS_traversed.size();
+      for (unsigned int dfspos = 0; dfspos < get_cur_state().DFS_traversed.size();
            dfspos++)
         get_cur_state().DFS_traversed[dfspos] = true;
       get_cur_state().DFS_traversed[it->cur_thread] = false;
