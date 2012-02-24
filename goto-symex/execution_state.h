@@ -131,7 +131,6 @@ class execution_statet : public goto_symext
   virtual unsigned int &get_dynamic_counter(void);
   virtual unsigned int &get_nondet_counter(void);
 
-  irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();
   bool all_threads_ended();
   goto_symex_statet & get_active_state();

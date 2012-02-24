@@ -381,27 +381,6 @@ execution_statet::decrement_active_atomic_number()
 }
 
 /*******************************************************************
-   Function: execution_statet::get_guard_identifier
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-irep_idt
-execution_statet::get_guard_identifier()
-{
-
-  return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
-         i2string(last_active_thread) + '_' + i2string(node_id) + '&' +
-         i2string(
-           node_id) + "#1";
-}
-
-/*******************************************************************
    Function: execution_statet::get_guard_identifier_base
 
    Inputs:
@@ -691,13 +670,9 @@ execution_statet::execute_guard(const namespacet &ns)
   parent_guard = true_exprt();
   new_rhs = parent_guard;
 
-  get_active_state().assignment(new_lhs, new_rhs, ns, false);
-
-  assert(new_lhs.identifier() == get_guard_identifier());
-
   guardt old_guard;
   old_guard.add(parent_guard);
-  exprt new_guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
+  exprt new_guard_expr = symbol_exprt(get_guard_identifier_base(), bool_typet());
 
   guardt guard;
   target->assignment(
