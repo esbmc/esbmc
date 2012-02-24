@@ -53,7 +53,6 @@ public:
 
     at_end_of_run = false;
     has_complete_formula = false;
-    is_same_mutex=false;
 
     execution_statet *s;
     if (options.get_bool_option("schedule")) {
@@ -175,7 +174,7 @@ protected:
   int TS_slice;
   unsigned int schedule_total_claims, schedule_remaining_claims;
   unsigned int next_thread_id;
-  bool is_same_mutex, deadlock_detection, por;
+  bool deadlock_detection, por;
   const namespacet &ns;
 
     /* jmorse */
