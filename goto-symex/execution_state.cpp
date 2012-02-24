@@ -673,14 +673,13 @@ execution_statet::execute_guard(const namespacet &ns)
 
   guardt old_guard;
   old_guard.add(parent_guard);
-  exprt new_guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
 
   // copy the new guard exprt to every threads
   for (unsigned int i = 0; i < threads_state.size(); i++)
   {
     // remove the old guard first
     threads_state.at(i).guard -= old_guard;
-    threads_state.at(i).guard.add(new_guard_expr);
+    threads_state.at(i).guard.add(guard_expr);
   }
 }
 
