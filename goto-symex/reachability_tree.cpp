@@ -202,7 +202,7 @@ bool reachability_treet::analyse_for_cswitch_base(const exprt &expr)
     ex_state.last_global_read_write = ex_state.exprs_read_write.at(ex_state.active_thread);
   }
 
-  unsigned int tid = 0, user_tid = 0;
+  unsigned int tid = 0;
 
   tid = decide_ileave_direction(ex_state, expr);
 
