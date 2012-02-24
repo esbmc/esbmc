@@ -280,7 +280,9 @@ void goto_symext::symex_step(
                     throw "Can't switch to non-constant thread id no";
 
                   unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
-                  ex_state.switch_to_thread(tid);
+                  if (tid != ex_state.get_active_state_number())
+                    ex_state.switch_to_thread(tid);
+
                   return;
                 }
 
