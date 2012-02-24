@@ -659,13 +659,20 @@ execution_statet::execute_guard(const namespacet &ns)
 
   node_id = node_count++;
   exprt guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
-  exprt parent_guard, new_rhs;
+  exprt parent_guard, new_rhs, const_prop_val;
 
   parent_guard = threads_state[last_active_thread].guard.as_expr();
-  do_simplify(parent_guard);
+
+  // Rename value, allows its use in other renamed exprs
+  irep_idt new_name = state_level2->make_assignment(guard_expr.identifier(),
+                                    (exprt&)get_nil_irep(),
+                                    (exprt&)get_nil_irep());
+  guard_expr.identifier(new_name);
 
   // Truth of this guard implies the parent is true.
   exprt assumpt("=>", bool_typet());
+  state_level2->rename(parent_guard);
+  do_simplify(parent_guard);
   assumpt.copy_to_operands(guard_expr, parent_guard);
 
   guardt guard;
