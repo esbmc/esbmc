@@ -710,11 +710,6 @@ execution_statet::execute_guard(const namespacet &ns)
   parent_guard = true_exprt();
   new_rhs = parent_guard;
 
-  if (!parent_guard_identifier.empty()) {
-    parent_guard = symbol_exprt(parent_guard_identifier, bool_typet());
-    new_rhs = cur_rhs;   //gen_and(parent_guard, cur_rhs);
-  }
-
   get_active_state().assignment(new_lhs, new_rhs, ns, false);
 
   assert(new_lhs.identifier() == get_guard_identifier());
