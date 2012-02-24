@@ -502,11 +502,12 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       simple_slice(*equation);
     }
 
-    if(options.get_bool_option("program-only"))
-    {
+    if (options.get_bool_option("program-only") ||
+        options.get_bool_option("program-too"))
       show_program();
+
+    if (options.get_bool_option("program-only"))
       return false;
-    }
 
     {
       std::string msg;
