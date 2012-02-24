@@ -325,6 +325,14 @@ void bmc_baset::show_program()
       std::cout << "(" << count << ") " << "(assert)" << string_value << std::endl;
       count++;
     }
+    else if(it->is_assume())
+    {
+      std::string string_value;
+      languages.from_expr(it->cond, string_value);
+      std::cout << "(" << count << ") " << "(assume)" << string_value << std::endl;
+      count++;
+    }
+#
 #endif
   }
 }
