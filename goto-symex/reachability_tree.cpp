@@ -124,7 +124,7 @@ bool reachability_treet::is_global_assign(const exprt &code)
 }
 
 /*******************************************************************
- Function: reachability_treet::generate_states_after_read
+ Function: reachability_treet::analyse_for_cswitch_after_read
 
  Inputs:
 
@@ -134,7 +134,7 @@ bool reachability_treet::is_global_assign(const exprt &code)
 
  \*******************************************************************/
 
-bool reachability_treet::generate_states_after_read(const exprt &code)
+bool reachability_treet::analyse_for_cswitch_after_read(const exprt &code)
 {
 
   if (get_cur_state().get_expr_read_globals(ns,code) > 0)
@@ -145,7 +145,7 @@ bool reachability_treet::generate_states_after_read(const exprt &code)
 
 /*******************************************************************
 
- Function: reachability_treet::generate_states_after_assign
+ Function: reachability_treet::analyse_for_cswitch_after_assign
 
  Inputs:
 
@@ -155,7 +155,7 @@ bool reachability_treet::generate_states_after_read(const exprt &code)
 
  \*******************************************************************/
 
-bool reachability_treet::generate_states_after_assign(const exprt &code, execution_statet &ex_state)
+bool reachability_treet::analyse_for_cswitch_after_assign(const exprt &code)
 {
 
   if(code.operands().size()!=2)

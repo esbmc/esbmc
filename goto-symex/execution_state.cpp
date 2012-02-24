@@ -230,7 +230,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
 
         symex_return(state);
 
-        owning_rt->generate_states_after_assign(assign, *this);
+        owning_rt->analyse_for_cswitch_after_assign(assign);
       }
       break;
     default:
@@ -247,7 +247,7 @@ execution_statet::symex_assign(statet &state, const codet &code)
   goto_symext::symex_assign(state, code);
 
   if (threads_state.size() > 1)
-    owning_rt->generate_states_after_assign(code, *this);
+    owning_rt->analyse_for_cswitch_after_assign(code);
 
   return;
 }
@@ -260,7 +260,7 @@ execution_statet::claim(const exprt &expr, const std::string &msg,
   goto_symext::claim(expr, msg, state);
 
   if (threads_state.size() > 1)
-    owning_rt->generate_states_after_read(expr);
+    owning_rt->analyse_for_cswitch_after_read(expr);
 
   return;
 }
@@ -273,7 +273,7 @@ execution_statet::symex_goto(statet &state, const exprt &old_guard)
 
   if (!old_guard.is_nil() && !options.get_bool_option("deadlock-check"))
     if (threads_state.size() > 1)
-      owning_rt->generate_states_after_read(old_guard);
+      owning_rt->analyse_for_cswitch_after_read(old_guard);
 
   return;
 }
@@ -285,7 +285,7 @@ execution_statet::assume(const exprt &assumption, statet &state)
   goto_symext::assume(assumption, state);
 
   if (threads_state.size() > 1)
-    owning_rt->generate_states_after_read(assumption);
+    owning_rt->analyse_for_cswitch_after_read(assumption);
 
   return;
 }

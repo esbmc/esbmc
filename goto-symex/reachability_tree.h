@@ -89,8 +89,8 @@ public:
   bool generate_states_base(const exprt & expr);
   bool generate_states();
 
-  bool generate_states_after_read(const exprt &code);
-  bool generate_states_after_assign(const exprt &code, execution_statet &ex_state);
+  bool analyse_for_cswitch_after_read(const exprt &code);
+  bool analyse_for_cswitch_after_assign(const exprt &code);
   void create_next_state(void);
   bool step_next_state(void);
   bool is_global_assign(const exprt &code);
