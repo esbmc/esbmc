@@ -42,7 +42,7 @@ public:
   {
     CS_bound = atoi(options.get_option("context-switch").c_str());
     deadlock_detection = options.get_bool_option("deadlock-check");
-    _TS_slice = atoi(options.get_option("time-slice").c_str());
+    TS_slice = atoi(options.get_option("time-slice").c_str());
     state_hashing = options.get_bool_option("state-hashing");
     directed_interleavings = options.get_bool_option("direct-interleavings");
 
@@ -172,7 +172,7 @@ protected:
   std::list<execution_statet*>::iterator cur_state_it;
   symex_targett *schedule_target;
   int CS_bound;
-  int _TS_slice;
+  int TS_slice;
   unsigned int schedule_total_claims, schedule_remaining_claims;
   unsigned int next_thread_id;
   bool is_same_mutex, deadlock_detection, por;
