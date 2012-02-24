@@ -103,10 +103,6 @@ public:
   bool is_has_complete_formula();
   void go_next_state();
   void switch_to_next_execution_state();
-  void set_is_at_end_of_run()
-  {
-    at_end_of_run = true;
-  }
 
   // Interface for bmc operation goes here
 
