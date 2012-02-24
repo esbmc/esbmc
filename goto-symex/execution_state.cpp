@@ -679,7 +679,7 @@ execution_statet::execute_guard(const namespacet &ns)
   target->assumption(guard, assumpt, get_active_state().source);
 
   guardt old_guard;
-  old_guard.add(parent_guard);
+  old_guard.add(threads_state[last_active_thread].guard.as_expr());
 
   // copy the new guard exprt to every threads
   for (unsigned int i = 0; i < threads_state.size(); i++)
