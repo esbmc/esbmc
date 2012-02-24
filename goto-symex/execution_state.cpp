@@ -381,7 +381,7 @@ execution_statet::decrement_active_atomic_number()
 }
 
 /*******************************************************************
-   Function: execution_statet::get_guard_identifier_base
+   Function: execution_statet::get_guard_identifier
 
    Inputs:
 
@@ -392,7 +392,7 @@ execution_statet::decrement_active_atomic_number()
  \*******************************************************************/
 
 irep_idt
-execution_statet::get_guard_identifier_base()
+execution_statet::get_guard_identifier()
 {
 
   return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
@@ -656,12 +656,12 @@ execution_statet::execute_guard(const namespacet &ns)
 {
 
   node_id = node_count++;
-  exprt guard_expr = symbol_exprt(get_guard_identifier_base(), bool_typet());
+  exprt guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
   exprt parent_guard;
   exprt new_lhs = guard_expr;
 
   typet my_type = uint_type();
-  exprt trd_expr = symbol_exprt(get_guard_identifier_base(), my_type);
+  exprt trd_expr = symbol_exprt(get_guard_identifier(), my_type);
   constant_exprt num_expr = constant_exprt(my_type);
   num_expr.set_value(integer2binary(active_thread, config.ansi_c.int_width));
   exprt cur_rhs = equality_exprt(trd_expr, num_expr);
@@ -672,7 +672,7 @@ execution_statet::execute_guard(const namespacet &ns)
 
   guardt old_guard;
   old_guard.add(parent_guard);
-  exprt new_guard_expr = symbol_exprt(get_guard_identifier_base(), bool_typet());
+  exprt new_guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
 
   guardt guard;
   target->assignment(
