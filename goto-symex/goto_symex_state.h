@@ -74,7 +74,50 @@ public:
   }
 
   // Types
-  //
+
+  class goto_statet
+  {
+  public:
+    unsigned depth;
+    renaming::level2t *level2_ptr;
+    renaming::level2t &level2;
+    value_sett value_set;
+    guardt guard;
+    unsigned int thread_id;
+
+    explicit
+    goto_statet(const goto_symex_statet &s) :
+      depth(s.depth),
+      level2_ptr(s.level2.clone()),
+      level2(*level2_ptr),
+      value_set(s.value_set),
+      guard(s.guard),
+      thread_id(s.source.thread_nr)
+    {
+    }
+
+    goto_statet(const goto_statet &s) :
+      depth(s.depth),
+      level2_ptr(s.level2_ptr->clone()),
+      level2(*level2_ptr),
+      value_set(s.value_set),
+      guard(s.guard),
+      thread_id(s.thread_id) {}
+
+  // Deny the use of goto_statet copy constructors
+  private:
+  goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
+  {
+    assert(0);
+  }
+
+  public:
+    ~goto_statet() {
+      delete level2_ptr;
+      return;
+    }
+  };
+
   // function calls
   class framet
   {
@@ -152,49 +195,6 @@ public:
 
   // uses level 1 names
   value_sett value_set;
-
-  class goto_statet
-  {
-  public:
-    unsigned depth;
-    renaming::level2t *level2_ptr;
-    renaming::level2t &level2;
-    value_sett value_set;
-    guardt guard;
-    unsigned int thread_id;
-
-    explicit
-    goto_statet(const goto_symex_statet &s) :
-      depth(s.depth),
-      level2_ptr(s.level2.clone()),
-      level2(*level2_ptr),
-      value_set(s.value_set),
-      guard(s.guard),
-      thread_id(s.source.thread_nr)
-    {
-    }
-
-    goto_statet(const goto_statet &s) :
-      depth(s.depth),
-      level2_ptr(s.level2_ptr->clone()),
-      level2(*level2_ptr),
-      value_set(s.value_set),
-      guard(s.guard),
-      thread_id(s.thread_id) {}
-
-  // Deny the use of goto_statet copy constructors
-  private:
-  goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
-  {
-    assert(0);
-  }
-
-  public:
-    ~goto_statet() {
-      delete level2_ptr;
-      return;
-    }
-  };
 
   // gotos
   typedef std::list<goto_statet> goto_state_listt;
