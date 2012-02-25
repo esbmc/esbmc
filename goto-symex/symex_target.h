@@ -28,7 +28,7 @@ public:
     const goto_programt *prog;
     bool is_set;
 
-    sourcet():thread_nr(0), is_set(false)
+    sourcet():thread_nr(0), prog(NULL), is_set(false)
     {
     }
 
