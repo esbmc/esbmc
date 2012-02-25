@@ -435,6 +435,11 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       if (checkpoint_sig) {
         write_checkpoint();
       }
+
+      // Only run for one run
+      if (symex.options.get_bool_option("interactive-ileaves"))
+        return false;
+
     } while(symex.multi_formulas_setup_next());
   }
 
