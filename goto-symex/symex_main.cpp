@@ -241,7 +241,6 @@ void goto_symext::symex_step(
                     dereference(deref_code.lhs(), state, true);
                 }
 
-                dereference(deref_code.function(), state, false);
                 Forall_expr(it, deref_code.arguments()) {
                     dereference(*it, state, false);
                 }

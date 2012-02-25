@@ -376,7 +376,9 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
 
   // Generate a list of functions to call. We'll then proceed to call them,
   // and will later on merge them.
-  std::list<std::pair<guardt,exprt> > l = get_function_list(call.op1());
+  exprt funcptr = call.op1();
+  dereference(funcptr, state, false);
+  std::list<std::pair<guardt,exprt> > l = get_function_list(funcptr);
 
   // Store.
   for (std::list<std::pair<guardt,exprt> >::iterator it = l.begin();
