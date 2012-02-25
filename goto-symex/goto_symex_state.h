@@ -146,25 +146,7 @@ public:
   typedef std::vector<framet> call_stackt;
   typedef std::set<std::string> declaration_historyt;
 
-  void initialize(const goto_programt::const_targett & start,
-                  const goto_programt::const_targett & end,
-                  const goto_programt *prog,
-                  unsigned int thread_id);
-
-  void rename(exprt &expr, const namespacet &ns);
-  void rename_address(exprt &expr, const namespacet &ns);
-  void rename(typet &type, const namespacet &ns);
-
-  void assignment(
-    exprt &lhs, const exprt &rhs, const namespacet &ns, bool record_value);
-
-  // what to propagate
-  bool constant_propagation(const exprt &expr) const;
-  bool constant_propagation_reference(const exprt &expr) const;
-
-  // undoes both levels of renaming
-  const irep_idt &get_original_name(const irep_idt &identifier) const;
-  void get_original_name(exprt &expr) const;
+  // Macros
 
   // does both levels of renaming
   std::string
@@ -215,6 +197,28 @@ public:
   previous_frame() {
     return *(--(--call_stack.end()));
   }
+
+  // Methods
+
+  void initialize(const goto_programt::const_targett & start,
+                  const goto_programt::const_targett & end,
+                  const goto_programt *prog,
+                  unsigned int thread_id);
+
+  void rename(exprt &expr, const namespacet &ns);
+  void rename_address(exprt &expr, const namespacet &ns);
+  void rename(typet &type, const namespacet &ns);
+
+  void assignment(
+    exprt &lhs, const exprt &rhs, const namespacet &ns, bool record_value);
+
+  // what to propagate
+  bool constant_propagation(const exprt &expr) const;
+  bool constant_propagation_reference(const exprt &expr) const;
+
+  // undoes both levels of renaming
+  const irep_idt &get_original_name(const irep_idt &identifier) const;
+  void get_original_name(exprt &expr) const;
 
   void print_stack_trace(const namespacet &ns, unsigned int indent) const;
   std::vector<dstring> gen_stack_trace(void) const;
