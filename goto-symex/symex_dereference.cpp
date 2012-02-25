@@ -74,10 +74,12 @@ Function: symex_dereference_statet::dereference_failure
 \*******************************************************************/
 
 void symex_dereference_statet::dereference_failure(
-  const std::string &property,
-  const std::string &msg,
-  const guardt &guard)
+  const std::string &property __attribute__((unused)),
+  const std::string &msg __attribute__((unused)),
+  const guardt &guard __attribute__((unused)))
 {
+  // XXXjmorse - this is clearly wrong, but we can't do anything about it until
+  // we fix the memory model.
 }
 
 /*******************************************************************\
