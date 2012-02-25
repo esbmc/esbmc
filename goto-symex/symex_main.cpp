@@ -286,7 +286,7 @@ void goto_symext::symex_step(
                     dereference(deref_code, state, false);
                 }
 
-                symex_other(goto_functions, state);
+                symex_other(state);
             }
             state.source.pc++;
             break;

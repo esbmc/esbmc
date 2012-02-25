@@ -403,7 +403,7 @@ void goto_symex_statet::print_stack_trace(const namespacet &ns, unsigned int ind
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
   std::string spaces = std::string("");
-  int i;
+  unsigned int i;
 
   for (i = 0; i < indent; i++)
     spaces += " ";

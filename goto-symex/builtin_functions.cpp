@@ -138,7 +138,7 @@ Function: goto_symext::symex_printf
 
 void goto_symext::symex_printf(
   statet &state,
-  const exprt &lhs,
+  const exprt &lhs __attribute__((unused)),
   const exprt &rhs)
 {
   if(rhs.operands().empty())
@@ -253,9 +253,10 @@ Function: goto_symext::symex_cpp_delete
 
 \*******************************************************************/
 
+// XXX - implement as a call to free?
 void goto_symext::symex_cpp_delete(
-  statet &state,
-  const codet &code)
+  statet &state __attribute__((unused)),
+  const codet &code __attribute__((unused)))
 {
   //bool do_array=code.statement()=="delete[]";
 }
