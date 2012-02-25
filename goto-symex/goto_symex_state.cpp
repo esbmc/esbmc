@@ -41,6 +41,7 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
   source.is_set=true;
   source.thread_nr = thread_id;
   source.pc=start;
+  source.prog = prog;
   top().end_of_function=end;
   top().calling_location=symex_targett::sourcet(top().end_of_function, prog);
 }
