@@ -73,6 +73,30 @@ public:
     return *this;
   }
 
+  // Types
+  //
+  // function calls
+  class framet
+  {
+  public:
+    irep_idt function_identifier;
+    goto_state_mapt goto_state_map;
+    renaming::level1t level1;
+    symex_targett::sourcet calling_location;
+
+    goto_programt::const_targett end_of_function;
+    exprt return_value;
+
+    typedef std::set<irep_idt> local_variablest;
+    local_variablest local_variables;
+
+    framet(unsigned int thread_id) :
+      return_value(static_cast<const exprt &>(get_nil_irep()))
+    {
+      level1._thread_id = thread_id;
+    }
+  };
+
   // we have a two-level renaming
 
   typedef std::set<std::string> declaration_historyt;
@@ -176,28 +200,6 @@ public:
   typedef std::list<goto_statet> goto_state_listt;
   typedef std::map<goto_programt::const_targett,
                    goto_state_listt> goto_state_mapt;
-
-  // function calls
-  class framet
-  {
-  public:
-    irep_idt function_identifier;
-    goto_state_mapt goto_state_map;
-    renaming::level1t level1;
-    symex_targett::sourcet calling_location;
-
-    goto_programt::const_targett end_of_function;
-    exprt return_value;
-
-    typedef std::set<irep_idt> local_variablest;
-    local_variablest local_variables;
-
-    framet(unsigned int thread_id) :
-      return_value(static_cast<const exprt &>(get_nil_irep()))
-    {
-    	level1._thread_id = thread_id;
-    }
-  };
 
   typedef std::vector<framet> call_stackt;
   call_stackt call_stack;
