@@ -759,7 +759,7 @@ execution_statet::add_thread(goto_programt::const_targett thread_start,
   const goto_programt *prog)
 {
 
-  goto_symex_statet state(*state_level2);
+  goto_symex_statet state(*state_level2, global_value_set);
   state.initialize(thread_start, thread_end, prog, threads_state.size());
 
   threads_state.push_back(state);

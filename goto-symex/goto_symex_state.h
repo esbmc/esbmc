@@ -36,8 +36,8 @@ public:
   class goto_statet; // forward dec
   class framet; // forward dec
 
-  goto_symex_statet(renaming::level2t &l2)
-    : level2(l2)
+  goto_symex_statet(renaming::level2t &l2, value_sett &vs)
+    : level2(l2), value_set(vs)
   {
     use_value_set = true;
     depth = 0;
@@ -48,7 +48,7 @@ public:
   }
 
   goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2)
-    : level2(l2)
+    : level2(l2), value_set(state.value_set)
   {
     *this = state;
   }
@@ -69,7 +69,6 @@ public:
     function_unwind = state.function_unwind;
     declaration_history = state.declaration_history;
     use_value_set = state.use_value_set;
-    value_set = state.value_set;
     call_stack = state.call_stack;
     return *this;
   }
@@ -243,12 +242,9 @@ public:
   // we remember all declarations
   declaration_historyt declaration_history;
 
-  renaming::level2t &level2;
-
   bool use_value_set;
-
-  // uses level 1 names
-  value_sett value_set;
+  renaming::level2t &level2;
+  value_sett &value_set;
 
   call_stackt call_stack;
 };
