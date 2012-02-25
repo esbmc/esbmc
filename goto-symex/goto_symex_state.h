@@ -75,6 +75,12 @@ public:
 
   // Types
 
+  typedef std::list<goto_statet> goto_state_listt;
+  typedef std::map<goto_programt::const_targett,
+                   goto_state_listt> goto_state_mapt;
+  typedef std::vector<framet> call_stackt;
+  typedef std::set<std::string> declaration_historyt;
+
   class goto_statet
   {
   public:
@@ -139,12 +145,6 @@ public:
       level1._thread_id = thread_id;
     }
   };
-
-  typedef std::list<goto_statet> goto_state_listt;
-  typedef std::map<goto_programt::const_targett,
-                   goto_state_listt> goto_state_mapt;
-  typedef std::vector<framet> call_stackt;
-  typedef std::set<std::string> declaration_historyt;
 
   // Macros
 
