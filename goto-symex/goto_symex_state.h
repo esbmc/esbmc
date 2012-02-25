@@ -140,8 +140,10 @@ public:
     }
   };
 
-  // we have a two-level renaming
-
+  typedef std::list<goto_statet> goto_state_listt;
+  typedef std::map<goto_programt::const_targett,
+                   goto_state_listt> goto_state_mapt;
+  typedef std::vector<framet> call_stackt;
   typedef std::set<std::string> declaration_historyt;
 
   void initialize(const goto_programt::const_targett & start,
@@ -185,13 +187,6 @@ public:
   {
     return current_name(goto_state.level2, identifier);
   }
-
-  // gotos
-  typedef std::list<goto_statet> goto_state_listt;
-  typedef std::map<goto_programt::const_targett,
-                   goto_state_listt> goto_state_mapt;
-
-  typedef std::vector<framet> call_stackt;
 
   inline framet &
   top()
