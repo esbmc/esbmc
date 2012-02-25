@@ -363,6 +363,11 @@ goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_tree
   const goto_programt &prog = it->second.body;
   art.get_cur_state().add_thread(&prog);
 
+  // Force a context switch point. If the caller is in an atomic block, it'll be
+  // blocked, but a context switch will be forced when we exit the atomic block.
+  // Otherwise, this will cause the required context switch.
+  art.force_cswitch_point();
+
   return;
 }
 
@@ -371,5 +376,7 @@ goto_symext::intrinsic_terminate_thread(reachability_treet &art)
 {
 
   art.get_cur_state().end_thread();
+  // No need to force a context switch; an ended thread will cause the run to
+  // end and the switcher to be invoked.
   return;
 }
