@@ -73,20 +73,6 @@ public:
     return *this;
   }
 
-  // distance from entry
-  unsigned depth;
-
-  bool sleeping;
-  bool waiting;
-  unsigned int join_count;
-  bool thread_ended;
-
-  guardt guard;
-  symex_targett::sourcet source;
-  std::map<irep_idt, unsigned> function_frame;
-  std::map<symex_targett::sourcet, unsigned> unwind_map;
-  std::map<irep_idt, unsigned> function_unwind;
-
   // we have a two-level renaming
 
   typedef std::set<std::string> declaration_historyt;
@@ -246,6 +232,22 @@ public:
 
   void print_stack_trace(const namespacet &ns, unsigned int indent) const;
   std::vector<dstring> gen_stack_trace(void) const;
+
+  // Members
+
+  // distance from entry
+  unsigned depth;
+
+  bool sleeping;
+  bool waiting;
+  unsigned int join_count;
+  bool thread_ended;
+
+  guardt guard;
+  symex_targett::sourcet source;
+  std::map<irep_idt, unsigned> function_frame;
+  std::map<symex_targett::sourcet, unsigned> unwind_map;
+  std::map<irep_idt, unsigned> function_unwind;
 };
 
 #endif
