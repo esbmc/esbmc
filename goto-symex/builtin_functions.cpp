@@ -307,18 +307,19 @@ goto_symext::intrinsic_set_start_func(code_function_callt &call,
 {
 
   art.get_cur_state().set_next_thread_start_func(call.arguments()[0]);
-  return;
 }
 
 void
 goto_symext::intrinsic_get_start_arg(code_function_callt &call,
                                      reachability_treet &art)
 {
+  statet &state = art.get_cur_state().get_active_state();
 
   exprt arg = art.get_cur_state().get_next_thread_start_arg();
   code_assignt assign(call.lhs(), arg);
   assert(call.lhs().type() == arg.type());
-  symex_assign(art.get_cur_state().get_active_state(), assign);
+  state.value_set.assign(call.lhs(), arg, ns);
+  symex_assign(state, assign);
   return;
 }
 
@@ -326,11 +327,13 @@ void
 goto_symext::intrinsic_get_start_func(code_function_callt &call,
                                       reachability_treet &art)
 {
+  statet &state = art.get_cur_state().get_active_state();
 
   exprt func = art.get_cur_state().get_next_thread_start_func();
   code_assignt assign(call.lhs(), func);
   assert(call.lhs().type() == func.type());
-  symex_assign(art.get_cur_state().get_active_state(), assign);
+  state.value_set.assign(call.lhs(), func, ns);
+  symex_assign(state, assign);
   return;
 }
 
