@@ -34,6 +34,7 @@ class goto_symex_statet
 {
 public:
   class goto_statet; // forward dec
+  class framet; // forward dec
 
   goto_symex_statet(renaming::level2t &l2)
     : level2(l2)
