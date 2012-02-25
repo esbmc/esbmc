@@ -144,11 +144,6 @@ public:
 
   typedef std::set<std::string> declaration_historyt;
 
-  // we remember all declarations
-  declaration_historyt declaration_history;
-
-  renaming::level2t &level2;
-
   void initialize(const goto_programt::const_targett & start,
                   const goto_programt::const_targett & end,
                   const goto_programt *prog,
@@ -191,18 +186,12 @@ public:
     return current_name(goto_state.level2, identifier);
   }
 
-  bool use_value_set;
-
-  // uses level 1 names
-  value_sett value_set;
-
   // gotos
   typedef std::list<goto_statet> goto_state_listt;
   typedef std::map<goto_programt::const_targett,
                    goto_state_listt> goto_state_mapt;
 
   typedef std::vector<framet> call_stackt;
-  call_stackt call_stack;
 
   inline framet &
   top()
@@ -250,6 +239,18 @@ public:
   std::map<irep_idt, unsigned> function_frame;
   std::map<symex_targett::sourcet, unsigned> unwind_map;
   std::map<irep_idt, unsigned> function_unwind;
+
+  // we remember all declarations
+  declaration_historyt declaration_history;
+
+  renaming::level2t &level2;
+
+  bool use_value_set;
+
+  // uses level 1 names
+  value_sett value_set;
+
+  call_stackt call_stack;
 };
 
 #endif
