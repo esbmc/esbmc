@@ -53,7 +53,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
 
     read_trace(filename);
     
-    compute_ts_back(equation, ns);
+    compute_ts_back(equation);
     
     exprt t_copy (t[0]);
     trace_conditions.push_back(t_copy);
@@ -265,9 +265,7 @@ Function: compute_ts_back
 
 \*******************************************************************/
 
-void symex_slice_by_tracet::compute_ts_back(
-  symex_target_equationt &equation,
-  const namespacet &ns)
+void symex_slice_by_tracet::compute_ts_back(symex_target_equationt &equation)
 {
   size_t merge_count = 0;
 

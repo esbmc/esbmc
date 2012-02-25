@@ -56,7 +56,7 @@ public:
   
   void compute_ts_fd(symex_target_equationt &equation, const namespacet &ns);
 
-  void compute_ts_back(symex_target_equationt &equation, const namespacet &ns);
+  void compute_ts_back(symex_target_equationt &equation);
 
   void slice_SSA_steps(
     symex_target_equationt &equation,
