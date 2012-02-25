@@ -56,7 +56,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   const goto_programt *goto_program = &(it->second.body);
 
   // Initialize initial thread state
-  goto_symex_statet state(*state_level2);
+  goto_symex_statet state(*state_level2, global_value_set);
   state.initialize((*goto_program).instructions.begin(),
              (*goto_program).instructions.end(),
              goto_program, 0);
@@ -749,7 +749,7 @@ execution_statet::execute_guard(const namespacet &ns)
 void execution_statet::add_thread(const goto_programt *prog)
 {
 
-  goto_symex_statet new_state(*state_level2);
+  goto_symex_statet new_state(*state_level2, global_value_set);
   new_state.initialize(prog->instructions.begin(), prog->instructions.end(),
                       prog, threads_state.size());
 

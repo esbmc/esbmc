@@ -194,6 +194,7 @@ class execution_statet : public goto_symext
   read_write_set last_global_read_write;
   unsigned int last_active_thread;
   ex_state_level2t *state_level2;
+  value_sett global_value_set; // Shared global value set
   unsigned int active_thread;
   irep_idt guard_execution;
   irep_idt parent_guard_identifier;
