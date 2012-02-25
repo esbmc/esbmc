@@ -41,7 +41,8 @@ protected:
   goto_symext::statet &state;
 
   // overloads from dereference_callbackt
-  virtual bool is_valid_object(const irep_idt &identifier)
+  // XXXjmorse - no it doesn't. This should be virtual pure!
+  virtual bool is_valid_object(const irep_idt &identifier __attribute__((unused)))
   {
     return true;
   }
@@ -73,10 +74,12 @@ Function: symex_dereference_statet::dereference_failure
 \*******************************************************************/
 
 void symex_dereference_statet::dereference_failure(
-  const std::string &property,
-  const std::string &msg,
-  const guardt &guard)
+  const std::string &property __attribute__((unused)),
+  const std::string &msg __attribute__((unused)),
+  const guardt &guard __attribute__((unused)))
 {
+  // XXXjmorse - this is clearly wrong, but we can't do anything about it until
+  // we fix the memory model.
 }
 
 /*******************************************************************\

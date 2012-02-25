@@ -139,7 +139,7 @@ Function: goto_symext::symex_printf
 
 void goto_symext::symex_printf(
   statet &state,
-  const exprt &lhs,
+  const exprt &lhs __attribute__((unused)),
   const exprt &rhs)
 {
   if(rhs.operands().empty())
@@ -254,9 +254,10 @@ Function: goto_symext::symex_cpp_delete
 
 \*******************************************************************/
 
+// XXX - implement as a call to free?
 void goto_symext::symex_cpp_delete(
-  statet &state,
-  const codet &code)
+  statet &state __attribute__((unused)),
+  const codet &code __attribute__((unused)))
 {
   //bool do_array=code.statement()=="delete[]";
 }
@@ -265,7 +266,7 @@ void
 goto_symext::intrinsic_yield(reachability_treet &art)
 {
 
-  art.generate_states();
+  art.force_cswitch_point();
   return;
 }
 
@@ -285,7 +286,9 @@ goto_symext::intrinsic_switch_to(code_function_callt &call,
   }
 
   unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
-  art.get_cur_state().set_active_state(tid);
+  if (tid != art.get_cur_state().get_active_state_number())
+    art.get_cur_state().set_active_state(tid);
+
   return;
 }
 

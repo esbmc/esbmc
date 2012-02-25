@@ -170,18 +170,40 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
 
   merge_gotos(state);
 
+  if (config.options.get_option("break-at") != "") {
+    unsigned int insn_num = strtol(config.options.get_option("break-at").c_str(), NULL, 10);
+    if (instruction.location_number == insn_num) {
+      // If you're developing ESBMC on a machine that isn't x86, I'll send you
+      // cookies.
+#ifndef _WIN32
+      __asm__("int $3");
+#else
+      std::cerr << "Can't trap on windows, sorry" << std::endl;
+      abort();
+#endif
+    }
+  }
+
+  if (options.get_bool_option("symex-trace")) {
+    const goto_programt p_dummy;
+    goto_functions_templatet<goto_programt>::function_mapt::const_iterator it =
+      goto_functions.function_map.find(instruction.function);
+
+    const goto_programt &p_real = it->second.body;
+    const goto_programt &p = (it == goto_functions.function_map.end()) ? p_dummy : p_real;
+    p.output_instruction(ns, "", std::cout, state.source.pc, false, false);
+  }
+
   switch (instruction.type) {
     case END_FUNCTION:
       if (instruction.function == "c::main") {
         end_thread();
-        art.generate_states_base(exprt());
-        art.set_is_at_end_of_run();
+        art.force_cswitch_point();
       } else {
         // Fall through to base class
         goto_symext::symex_step(goto_functions, art);
       }
       break;
-
     case ATOMIC_BEGIN:
       state.source.pc++;
       increment_active_atomic_number();
@@ -189,7 +211,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
     case ATOMIC_END:
       decrement_active_atomic_number();
       state.source.pc++;
-      art.generate_states();
+      art.force_cswitch_point();
       break;
     case RETURN:
       state.source.pc++;
@@ -201,7 +223,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
 
         symex_return(state);
 
-        owning_rt->generate_states_after_assign(assign, *this);
+        owning_rt->analyse_for_cswitch_after_assign(assign);
       }
       break;
     default:
@@ -218,7 +240,7 @@ execution_statet::symex_assign(statet &state, const codet &code)
   goto_symext::symex_assign(state, code);
 
   if (threads_state.size() > 1)
-    owning_rt->generate_states_after_assign(code, *this);
+    owning_rt->analyse_for_cswitch_after_assign(code);
 
   return;
 }
@@ -231,7 +253,7 @@ execution_statet::claim(const exprt &expr, const std::string &msg,
   goto_symext::claim(expr, msg, state);
 
   if (threads_state.size() > 1)
-    owning_rt->generate_states_after_read(expr);
+    owning_rt->analyse_for_cswitch_after_read(expr);
 
   return;
 }
@@ -244,7 +266,7 @@ execution_statet::symex_goto(statet &state, const exprt &old_guard)
 
   if (!old_guard.is_nil() && !options.get_bool_option("deadlock-check"))
     if (threads_state.size() > 1)
-      owning_rt->generate_states_after_read(old_guard);
+      owning_rt->analyse_for_cswitch_after_read(old_guard);
 
   return;
 }
@@ -256,7 +278,7 @@ execution_statet::assume(const exprt &assumption, statet &state)
   goto_symext::assume(assumption, state);
 
   if (threads_state.size() > 1)
-    owning_rt->generate_states_after_read(assumption);
+    owning_rt->analyse_for_cswitch_after_read(assumption);
 
   return;
 }
@@ -297,27 +319,6 @@ const goto_symex_statet &
 execution_statet::get_active_state() const
 {
   return threads_state.at(active_thread);
-}
-
-/*******************************************************************
-   Function: execution_statet::all_threads_ended
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-bool
-execution_statet::all_threads_ended()
-{
-
-  for (unsigned int i = 0; i < threads_state.size(); i++)
-    if (!threads_state.at(i).thread_ended)
-      return false;
-  return true;
 }
 
 /*******************************************************************
@@ -492,7 +493,7 @@ execution_statet::check_if_ileaves_blocked(void)
 }
 
 bool
-execution_statet::apply_static_por(const exprt &expr, int i) const
+execution_statet::apply_static_por(const exprt &expr, unsigned int i) const
 {
   bool consider = true;
 
@@ -1117,7 +1118,7 @@ execution_statet::print_stack_traces(const namespacet &ns,
 {
   std::vector<goto_symex_statet>::const_iterator it;
   std::string spaces = std::string("");
-  int i;
+  unsigned int i;
 
   for (i = 0; i < indent; i++)
     spaces += " ";

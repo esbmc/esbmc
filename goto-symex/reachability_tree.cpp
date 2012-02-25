@@ -65,27 +65,6 @@ bool reachability_treet::has_more_states()
 }
 
 /*******************************************************************
- Function: reachability_treet::check_CS_bound
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool reachability_treet::check_CS_bound()
-{
-  if(CS_bound  != -1 && get_cur_state().get_context_switch() >= CS_bound)
-  {
-    return true;
-  }
-  else
-    return false;
-}
-
-/*******************************************************************
  Function: reachability_treet::get_CS_bound
 
  Inputs:
@@ -124,7 +103,7 @@ bool reachability_treet::is_global_assign(const exprt &code)
 }
 
 /*******************************************************************
- Function: reachability_treet::generate_states_after_read
+ Function: reachability_treet::analyse_for_cswitch_after_read
 
  Inputs:
 
@@ -134,18 +113,18 @@ bool reachability_treet::is_global_assign(const exprt &code)
 
  \*******************************************************************/
 
-bool reachability_treet::generate_states_after_read(const exprt &code)
+bool reachability_treet::analyse_for_cswitch_after_read(const exprt &code)
 {
 
   if (get_cur_state().get_expr_read_globals(ns,code) > 0)
-    return generate_states_base(code);
+    return analyse_for_cswitch_base(code);
   else
     return false;
 }
 
 /*******************************************************************
 
- Function: reachability_treet::generate_states_after_assign
+ Function: reachability_treet::analyse_for_cswitch_after_assign
 
  Inputs:
 
@@ -155,7 +134,7 @@ bool reachability_treet::generate_states_after_read(const exprt &code)
 
  \*******************************************************************/
 
-bool reachability_treet::generate_states_after_assign(const exprt &code, execution_statet &ex_state)
+bool reachability_treet::analyse_for_cswitch_after_assign(const exprt &code)
 {
 
   if(code.operands().size()!=2)
@@ -166,7 +145,7 @@ bool reachability_treet::generate_states_after_assign(const exprt &code, executi
 
   if(num_read_globals + num_write_globals > 0)
   {
-    return generate_states_base(code);
+    return analyse_for_cswitch_base(code);
   }
 
   return false;
@@ -174,7 +153,7 @@ bool reachability_treet::generate_states_after_assign(const exprt &code, executi
 
 /*******************************************************************
 
- Function: reachability_treet::generate_states
+ Function: reachability_treet::analyse_for_cswitch_base
 
  Inputs:
 
@@ -184,15 +163,15 @@ bool reachability_treet::generate_states_after_assign(const exprt &code, executi
 
  \*******************************************************************/
 
-bool reachability_treet::generate_states()
+bool reachability_treet::force_cswitch_point()
 {
 
   // do analysis here
-  return generate_states_base(exprt());
+  return analyse_for_cswitch_base(exprt());
 }
 
 /*******************************************************************
- Function: reachability_treet::generate_states_base
+ Function: reachability_treet::analyse_for_cswitch_base
 
  Inputs:
 
@@ -202,7 +181,7 @@ bool reachability_treet::generate_states()
 
  \*******************************************************************/
 
-bool reachability_treet::generate_states_base(const exprt &expr)
+bool reachability_treet::analyse_for_cswitch_base(const exprt &expr)
 {
 
   execution_statet &ex_state = get_cur_state();
@@ -223,21 +202,40 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     ex_state.last_global_read_write = ex_state.exprs_read_write.at(ex_state.active_thread);
   }
 
-  unsigned int tid = 0, user_tid = 0;
+  unsigned int tid = 0;
 
   tid = decide_ileave_direction(ex_state, expr);
 
   at_end_of_run = true;
+  next_thread_id = tid;
 
-  if (tid != ex_state.threads_state.size()) {
+  if (tid == ex_state.threads_state.size()) {
+    /* Once we've generated all interleavings from this state, increment hit
+     * count so that we don't come back here again */
+    if (state_hashing)
+      hit_hashes.insert(hash);
 
-    /* Generate a new execution state, duplicate of previous? */
+    return false;
+  } else {
+    return true;
+  }
+}
+
+void
+reachability_treet::create_next_state(void)
+{
+  execution_statet &ex_state = get_cur_state();
+
+  if (!at_end_of_run)
+    return;
+
+  if (next_thread_id != ex_state.threads_state.size()) {
     execution_statet *new_state = ex_state.clone();
     execution_states.push_back(new_state);
 
     //begin - H.Savino
     if (config.options.get_bool_option("round-robin")){
-        if(tid == ex_state.active_thread)
+        if(next_thread_id == ex_state.active_thread)
             new_state->increment_time_slice();
         else
             new_state->reset_time_slice();
@@ -245,25 +243,30 @@ bool reachability_treet::generate_states_base(const exprt &expr)
     //end - H.Savino
 
     /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_state_number() != tid) {
+    if (new_state->get_active_state_number() != next_thread_id) {
       new_state->increment_context_switch();
-      new_state->set_active_state(tid);
+      new_state->set_active_state(next_thread_id);
     }
 
     new_state->set_parent_guard(ex_state.get_guard_identifier());
 
     /* Reset interleavings (?) investigated in this new state */
     new_state->resetDFS_traversed();
-
-    return true;
-  } else {
-    /* Once we've generated all interleavings from this state, increment hit
-     * count so that we don't come back here again */
-    if (state_hashing)
-      hit_hashes.insert(hash);
-
-    return false;
   }
+
+  return;
+}
+
+bool
+reachability_treet::step_next_state(void)
+{
+  bool res;
+
+  res = force_cswitch_point();
+  if (res)
+    create_next_state();
+
+  return res;
 }
 
 unsigned int
@@ -374,7 +377,7 @@ void reachability_treet::switch_to_next_execution_state()
   if(it != execution_states.end()) {
     cur_state_it++;
   } else {
-    if (generate_states_base(exprt()))
+    if (step_next_state())
       cur_state_it++;
     else
       has_complete_formula = true;
@@ -399,7 +402,7 @@ bool reachability_treet::reset_to_unexplored_state()
   delete *it;
   execution_states.erase(it);
 
-  while(execution_states.size() > 0 && !generate_states_base(exprt())) {
+  while(execution_states.size() > 0 && !step_next_state()) {
     it = cur_state_it--;
     delete *it;
     execution_states.erase(it);
@@ -432,7 +435,7 @@ void reachability_treet::go_next_state()
     cur_state_it++;
   else
   {
-    while(execution_states.size() > 0 && !generate_states_base(exprt()))
+    while(execution_states.size() > 0 && !step_next_state())
     {
       it = cur_state_it;
       cur_state_it--;
@@ -483,7 +486,7 @@ reachability_treet::dfs_position::dfs_position(const std::string filename)
   read_from_file(filename);
 }
 
-const uint32_t reachability_treet::dfs_position::file_magic = 'ECHK';
+const uint32_t reachability_treet::dfs_position::file_magic = 0x4543484B; //'ECHK'
 
 bool reachability_treet::dfs_position::write_to_file(
                                        const std::string filename) const
@@ -709,7 +712,7 @@ reachability_treet::get_ileave_direction_from_scheduling(const exprt &expr) cons
 
   tid=get_cur_state().active_thread;
 
-  if(get_cur_state().TS_number < this->_TS_slice-1){
+  if(get_cur_state().TS_number < this->TS_slice-1){
       if (check_thread_viable(tid, expr, true))
           return tid;
   }
@@ -765,6 +768,8 @@ reachability_treet::get_next_formula()
     while (!is_at_end_of_run())
       get_cur_state().symex_step(goto_functions, *this);
 
+    create_next_state();
+
     switch_to_next_execution_state();
   }
 
@@ -794,6 +799,8 @@ reachability_treet::generate_schedule_formula()
       get_cur_state().symex_step(goto_functions, *this);
     }
 
+    create_next_state();
+
     go_next_state();
   }
 
@@ -822,13 +829,16 @@ reachability_treet::restore_from_dfs_state(void *_dfs)
       // assumes that the DFS exploration path algorithm never changes.
       // Has to occur here; between generating new threads, ESBMC messes with
       // the dfs state.
-      for (int dfspos = 0; dfspos < get_cur_state().DFS_traversed.size();
+      for (unsigned int dfspos = 0; dfspos < get_cur_state().DFS_traversed.size();
            dfspos++)
         get_cur_state().DFS_traversed[dfspos] = true;
       get_cur_state().DFS_traversed[it->cur_thread] = false;
 
       get_cur_state().symex_step(goto_functions, *this);
     }
+
+    create_next_state();
+
     get_cur_state().DFS_traversed = it->explored;
 
     if (get_cur_state().threads_state.size() != it->num_threads) {

@@ -42,7 +42,7 @@ public:
   {
     CS_bound = atoi(options.get_option("context-switch").c_str());
     deadlock_detection = options.get_bool_option("deadlock-check");
-    _TS_slice = atoi(options.get_option("time-slice").c_str());
+    TS_slice = atoi(options.get_option("time-slice").c_str());
     state_hashing = options.get_bool_option("state-hashing");
     directed_interleavings = options.get_bool_option("direct-interleavings");
 
@@ -53,7 +53,6 @@ public:
 
     at_end_of_run = false;
     has_complete_formula = false;
-    is_same_mutex=false;
 
     execution_statet *s;
     if (options.get_bool_option("schedule")) {
@@ -80,17 +79,17 @@ public:
   const execution_statet & get_cur_state() const;
   bool reset_to_unexplored_state();
   bool has_more_states();
-  bool check_CS_bound();
   int get_CS_bound() const;
-  int get_actual_CS_bound();
   int get_ileave_direction_from_user(const exprt &expr) const;
   int get_ileave_direction_from_scheduling(const exprt &expr) const;
   bool check_thread_viable(int tid, const exprt &expr, bool quiet) const;
-  bool generate_states_base(const exprt & expr);
-  bool generate_states();
+  bool analyse_for_cswitch_base(const exprt & expr);
+  bool force_cswitch_point();
 
-  bool generate_states_after_read(const exprt &code);
-  bool generate_states_after_assign(const exprt &code, execution_statet &ex_state);
+  bool analyse_for_cswitch_after_read(const exprt &code);
+  bool analyse_for_cswitch_after_assign(const exprt &code);
+  void create_next_state(void);
+  bool step_next_state(void);
   bool is_global_assign(const exprt &code);
 
   unsigned int decide_ileave_direction(execution_statet &ex_state,
@@ -101,10 +100,6 @@ public:
   bool is_has_complete_formula();
   void go_next_state();
   void switch_to_next_execution_state();
-  void set_is_at_end_of_run()
-  {
-    at_end_of_run = true;
-  }
 
   // Interface for bmc operation goes here
 
@@ -176,9 +171,10 @@ protected:
   std::list<execution_statet*>::iterator cur_state_it;
   symex_targett *schedule_target;
   int CS_bound;
-  int _TS_slice;
+  int TS_slice;
   unsigned int schedule_total_claims, schedule_remaining_claims;
-  bool is_same_mutex, deadlock_detection, por;
+  unsigned int next_thread_id;
+  bool deadlock_detection, por;
   const namespacet &ns;
 
   friend class execution_statet;

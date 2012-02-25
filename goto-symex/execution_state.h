@@ -154,7 +154,6 @@ class execution_statet : public goto_symext
   irep_idt get_guard_identifier();
   irep_idt get_guard_identifier_base();
   void set_parent_guard(const irep_idt & parent_guard);
-  bool all_threads_ended();
   goto_symex_statet & get_active_state();
   const goto_symex_statet & get_active_state() const;
   unsigned int get_active_atomic_number();
@@ -164,7 +163,7 @@ class execution_statet : public goto_symext
   void execute_guard(const namespacet & ns);
   bool dfs_explore_thread(unsigned int tid);
   bool check_if_ileaves_blocked(void);
-  bool apply_static_por(const exprt &expr, int i) const;
+  bool apply_static_por(const exprt &expr, unsigned int i) const;
 
   void add_thread(const goto_programt *prog);
   void end_thread(void);

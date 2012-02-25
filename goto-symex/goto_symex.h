@@ -91,7 +91,7 @@ protected:
 
   void symex_return(statet &state);
 
-  void symex_other(const goto_functionst &goto_functions, statet &state);
+  void symex_other(statet &state);
 
   virtual void claim(
     const exprt &expr,

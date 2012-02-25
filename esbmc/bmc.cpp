@@ -471,7 +471,7 @@ bool bmct::run_thread()
     {
       symex_slice_by_tracet symex_slice_by_trace;
       symex_slice_by_trace.slice_by_trace
-      (options.get_option("slice-by-trace"), *equation, ns);
+      (options.get_option("slice-by-trace"), *equation);
     }
 
     if(!options.get_bool_option("no-slice"))

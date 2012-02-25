@@ -209,9 +209,6 @@ void goto_symext::symex_function_call_symbol(
 
   assert(code.function().id()==exprt::symbol);
 
-  const irep_idt &identifier=
-    code.function().identifier();
-    
   symex_function_call_code(goto_functions, state, code);
 }
 
