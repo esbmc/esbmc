@@ -18,6 +18,7 @@ public:
 
     };
 
+    read_write_set(const read_write_set& orig);
     virtual ~read_write_set();
     std::set<irep_idt> read_set;
     std::set<irep_idt> write_set;
