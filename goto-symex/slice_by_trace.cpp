@@ -381,24 +381,6 @@ void symex_slice_by_tracet::compute_ts_back(symex_target_equationt &equation)
 
 /*******************************************************************\
 
-Function: compute_ts_fd
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void symex_slice_by_tracet::compute_ts_fd(
-  symex_target_equationt &equation,
-  const namespacet &ns)
-{
-}
-
-/*******************************************************************\
-
 Function:  slice_SSA_steps
 
   Inputs:
