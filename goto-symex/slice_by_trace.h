@@ -15,8 +15,7 @@ class symex_slice_by_tracet
 {
 public:
   void slice_by_trace(std::string trace_files,
-		      symex_target_equationt &equation,
-		      const namespacet &ns);
+		      symex_target_equationt &equation);
 
  protected:
 
@@ -58,8 +57,7 @@ public:
 
   void slice_SSA_steps(
     symex_target_equationt &equation,
-    std::set<exprt> implications,
-    const namespacet &ns);
+    std::set<exprt> implications);
 
   bool matches(event_sett s, irep_idt event);
 

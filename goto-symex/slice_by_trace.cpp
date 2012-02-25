@@ -35,8 +35,7 @@ Function: slice_by_trace
 \*******************************************************************/
 
 void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
-					   symex_target_equationt &equation,
-					   const namespacet &ns)
+					   symex_target_equationt &equation)
 {
   std::cout << "Slicing by trace..." << std::endl;
 
@@ -98,7 +97,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
     }
   }
  
-  slice_SSA_steps(equation, implications, ns); // Slice based on implications
+  slice_SSA_steps(equation, implications); // Slice based on implications
 
   guardt t_guard;
   t_guard.make_true();
@@ -393,8 +392,7 @@ Function:  slice_SSA_steps
 
 void symex_slice_by_tracet::slice_SSA_steps(
   symex_target_equationt &equation, 
-  std::set<exprt> implications,
-  const namespacet &ns)
+  std::set<exprt> implications)
 {
   //Some statistics for our benefit.
   size_t conds_seen = 0;
