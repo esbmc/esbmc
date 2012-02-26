@@ -37,7 +37,7 @@ public:
   class framet; // forward dec
 
   goto_symex_statet(renaming::level2t &l2, value_sett &vs)
-    : level2(l2), value_set(vs)
+    : guard(), level2(l2), value_set(vs)
   {
     use_value_set = true;
     depth = 0;
@@ -45,6 +45,7 @@ public:
     waiting = false;
     join_count = 0;
     thread_ended = false;
+    guard.make_true();
   }
 
   goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2)
