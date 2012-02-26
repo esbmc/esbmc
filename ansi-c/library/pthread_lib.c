@@ -2,6 +2,15 @@
 
 #include "intrinsics.h"
 
+struct __pthread_start_data {
+    __ESBMC_thread_start_func_type func;
+      void *start_arg;
+};
+
+struct __pthread_start_data __ESBMC_get_thread_start_data(unsigned int tid);
+void __ESBMC_set_next_thread_start_data(unsigned int tid,
+                                            struct __pthread_start_data data);
+
 #define __ESBMC_mutex_lock_field(a) ((a).__data.__lock)
 #define __ESBMC_mutex_count_field(a) ((a).__data.__count)
 #define __ESBMC_mutex_owner_field(a) ((a).__data.__owner)
