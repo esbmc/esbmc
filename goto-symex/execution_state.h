@@ -165,7 +165,7 @@ class execution_statet : public goto_symext
   bool check_if_ileaves_blocked(void);
   bool apply_static_por(const exprt &expr, unsigned int i) const;
 
-  void add_thread(const goto_programt *prog);
+  unsigned int add_thread(const goto_programt *prog);
   void end_thread(void);
   unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
   unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);

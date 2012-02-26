@@ -26,11 +26,12 @@ int
 pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                void *(*start_routine) (void *), void *arg)
 {
+  unsigned int thread_id;
 
   __ESBMC_atomic_begin();
+  thread_id = __ESBMC_spawn_thread(pthread_trampoline);
   __ESBMC_set_next_thread_start_arg(arg);
   __ESBMC_set_next_thread_start_func(start_routine);
-  __ESBMC_spawn_thread(pthread_trampoline);
   __ESBMC_atomic_end();
 }
 

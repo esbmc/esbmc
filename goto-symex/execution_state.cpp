@@ -746,7 +746,8 @@ execution_statet::execute_guard(const namespacet &ns)
 
  \*******************************************************************/
 
-void execution_statet::add_thread(const goto_programt *prog)
+unsigned int
+execution_statet::add_thread(const goto_programt *prog)
 {
 
   goto_symex_statet new_state(*state_level2, global_value_set);
@@ -767,6 +768,7 @@ void execution_statet::add_thread(const goto_programt *prog)
 
   update_trds_count();
   increment_trds_in_run();
+  return threads_state.size() - 1; // thread ID, zero based
 }
 
 /*******************************************************************

@@ -340,6 +340,7 @@ goto_symext::intrinsic_get_start_func(code_function_callt &call,
 void
 goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art)
 {
+  statet &state = art.get_cur_state().get_active_state();
 
   // As an argument, we expect the address of a symbol.
   const exprt &args = call.operands()[2];
@@ -364,7 +365,13 @@ goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_tree
   }
 
   const goto_programt &prog = it->second.body;
-  art.get_cur_state().add_thread(&prog);
+  unsigned int thread_id = art.get_cur_state().add_thread(&prog);
+
+  constant_exprt thread_id_expr(unsignedbv_typet(config.ansi_c.int_width));
+  thread_id_expr.set_value(integer2binary(thread_id, config.ansi_c.int_width));
+  code_assignt assign(call.lhs(), thread_id_expr);
+  state.value_set.assign(call.lhs(), thread_id_expr, ns);
+  symex_assign(state, assign);
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.
