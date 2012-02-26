@@ -257,7 +257,9 @@ void goto_symext::symex_step(
                   state.source.pc++;
 
                   unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
-                  ex_state.set_active_state(tid);
+                  if (tid != ex_state.get_active_state_number())
+                    ex_state.switch_to_thread(tid);
+
                   return;
                 }
 

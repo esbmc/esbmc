@@ -104,7 +104,6 @@ execution_statet::operator=(const execution_statet &ex)
   last_active_thread = ex.last_active_thread;
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
-  parent_guard_identifier = ex.parent_guard_identifier;
   nondet_count = ex.nondet_count;
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
@@ -398,47 +397,7 @@ execution_statet::get_guard_identifier()
 {
 
   return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
-         i2string(last_active_thread) + '_' + i2string(node_id) + '&' +
-         i2string(
-           node_id) + "#1";
-}
-
-/*******************************************************************
-   Function: execution_statet::get_guard_identifier_base
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-irep_idt
-execution_statet::get_guard_identifier_base()
-{
-
-  return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
          i2string(last_active_thread) + '_' + i2string(node_id);
-}
-
-
-/*******************************************************************
-   Function: execution_statet::set_parent_guard
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-execution_statet::set_parent_guard(const irep_idt & parent_guard)
-{
-
-  parent_guard_identifier = parent_guard;
 }
 
 /*******************************************************************
@@ -453,11 +412,14 @@ execution_statet::set_parent_guard(const irep_idt & parent_guard)
  \*******************************************************************/
 
 void
-execution_statet::set_active_state(unsigned int i)
+execution_statet::switch_to_thread(unsigned int i)
 {
+
+  assert(i != active_thread);
 
   last_active_thread = active_thread;
   active_thread = i;
+  execute_guard(ns);
 }
 
 bool
@@ -697,48 +659,41 @@ execution_statet::execute_guard(const namespacet &ns)
 {
 
   node_id = node_count++;
-  exprt guard_expr = symbol_exprt(get_guard_identifier_base(), bool_typet());
-  exprt parent_guard;
-  exprt new_lhs = guard_expr;
+  exprt guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
+  exprt parent_guard, new_rhs, const_prop_val;
 
-  typet my_type = uint_type();
-  exprt trd_expr = symbol_exprt(get_guard_identifier_base(), my_type);
-  constant_exprt num_expr = constant_exprt(my_type);
-  num_expr.set_value(integer2binary(active_thread, config.ansi_c.int_width));
-  exprt cur_rhs = equality_exprt(trd_expr, num_expr);
+  parent_guard = threads_state[last_active_thread].guard.as_expr();
 
-  exprt new_rhs;
-  parent_guard = true_exprt();
-  new_rhs = parent_guard;
+  // Rename value, allows its use in other renamed exprs
+  irep_idt new_name = state_level2->make_assignment(guard_expr.identifier(),
+                                    (exprt&)get_nil_irep(),
+                                    (exprt&)get_nil_irep());
+  guard_expr.identifier(new_name);
 
-  if (!parent_guard_identifier.empty()) {
-    parent_guard = symbol_exprt(parent_guard_identifier, bool_typet());
-    new_rhs = cur_rhs;   //gen_and(parent_guard, cur_rhs);
-  }
-
-  get_active_state().assignment(new_lhs, new_rhs, ns, false);
-
-  assert(new_lhs.identifier() == get_guard_identifier());
-
-  guardt old_guard;
-  old_guard.add(parent_guard);
-  exprt new_guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
+  // Truth of this guard implies the parent is true.
+  exprt assumpt("=>", bool_typet());
+  state_level2->rename(parent_guard);
+  do_simplify(parent_guard);
+  assumpt.copy_to_operands(guard_expr, parent_guard);
 
   guardt guard;
-  target->assignment(
-    guard,
-    new_lhs, guard_expr,
-    new_rhs,
-    get_active_state().source,
-    get_active_state().gen_stack_trace(),
-    symex_targett::HIDDEN);
+  target->assumption(guard, assumpt, get_active_state().source);
+
+  guardt old_guard;
+  old_guard.add(threads_state[last_active_thread].guard.as_expr());
+
+  // If we simplified the global guard expr to false, write that to thread
+  // guards, not the symbolic guard name. This is the only way to bail out of
+  // evaulating a particular interleaving early right now.
+  if (parent_guard.is_false())
+    guard_expr = parent_guard;
 
   // copy the new guard exprt to every threads
   for (unsigned int i = 0; i < threads_state.size(); i++)
   {
     // remove the old guard first
     threads_state.at(i).guard -= old_guard;
-    threads_state.at(i).guard.add(new_guard_expr);
+    threads_state.at(i).guard.add(guard_expr);
   }
 }
 
@@ -1191,6 +1146,12 @@ void
 execution_statet::ex_state_level2t::rename(const irep_idt &identifier, unsigned count)
 {
   renaming::level2t::coveredinbees(identifier, count, owner->node_id);
+}
+
+void
+execution_statet::ex_state_level2t::rename(exprt &identifier)
+{
+  renaming::level2t::rename(identifier);
 }
 
 dfs_execution_statet::~dfs_execution_statet(void)
