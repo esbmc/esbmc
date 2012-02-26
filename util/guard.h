@@ -76,6 +76,8 @@ public:
   }
 
   friend std::ostream &operator << (std::ostream &out, const guardt &g);
+
+  void dump() const;
   
   unsigned size() const
   {

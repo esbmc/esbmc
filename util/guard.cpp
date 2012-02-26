@@ -222,3 +222,10 @@ bool guardt::is_false() const
       
   return false;
 }
+
+void
+guardt::dump(void) const
+{
+  std::cout << *this;
+  return;
+}
