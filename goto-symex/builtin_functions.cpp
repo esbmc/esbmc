@@ -293,46 +293,58 @@ goto_symext::intrinsic_switch_to(code_function_callt &call,
 }
 
 void
-goto_symext::intrinsic_set_start_arg(code_function_callt &call,
-                                     reachability_treet &art)
-{
-
-  art.get_cur_state().set_next_thread_start_arg(call.arguments()[0]);
-  return;
-}
-
-void
-goto_symext::intrinsic_set_start_func(code_function_callt &call,
-                                      reachability_treet &art)
-{
-
-  art.get_cur_state().set_next_thread_start_func(call.arguments()[0]);
-}
-
-void
-goto_symext::intrinsic_get_start_arg(code_function_callt &call,
+goto_symext::intrinsic_get_thread_id(code_function_callt &call,
                                      reachability_treet &art)
 {
   statet &state = art.get_cur_state().get_active_state();
+  unsigned int thread_id;
 
-  exprt arg = art.get_cur_state().get_next_thread_start_arg();
-  code_assignt assign(call.lhs(), arg);
-  assert(call.lhs().type() == arg.type());
-  state.value_set.assign(call.lhs(), arg, ns);
+  thread_id = art.get_cur_state().get_active_state_number();
+  constant_exprt tid(unsignedbv_typet(config.ansi_c.int_width));
+  tid.set_value(integer2binary(thread_id, config.ansi_c.int_width));
+
+  code_assignt assign(call.lhs(), tid);
+  assert(call.lhs().type() == tid.type());
+  state.value_set.assign(call.lhs(), tid, ns);
   symex_assign(state, assign);
   return;
 }
 
 void
-goto_symext::intrinsic_get_start_func(code_function_callt &call,
+goto_symext::intrinsic_set_start_data(code_function_callt &call,
+                                      reachability_treet &art)
+{
+  const exprt &threadid = call.arguments()[0];
+
+  if (threadid.id() != "constant") {
+    std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  art.get_cur_state().set_thread_start_data(tid, call.arguments()[1]);
+}
+
+void
+goto_symext::intrinsic_get_start_data(code_function_callt &call,
                                       reachability_treet &art)
 {
   statet &state = art.get_cur_state().get_active_state();
+  const exprt &threadid = call.arguments()[0];
 
-  exprt func = art.get_cur_state().get_next_thread_start_func();
-  code_assignt assign(call.lhs(), func);
-  assert(call.lhs().type() == func.type());
-  state.value_set.assign(call.lhs(), func, ns);
+  if (threadid.id() != "constant") {
+    std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  const exprt &startdata = art.get_cur_state().get_thread_start_data(tid);
+
+  code_assignt assign(call.lhs(), startdata);
+  assert(call.lhs().type() == startdata.type());
+  state.value_set.assign(call.lhs(), startdata, ns);
   symex_assign(state, assign);
   return;
 }

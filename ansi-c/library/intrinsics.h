@@ -23,9 +23,15 @@ int __ESBMC_sign(double x);
 extern int __ESBMC_rounding_mode;
 
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
-void *__ESBMC_get_thread_start_arg();
-__ESBMC_thread_start_func_type __ESBMC_get_thread_start_func();
-void __ESBMC_set_next_thread_start_arg(void *);
-void __ESBMC_set_next_thread_start_func(__ESBMC_thread_start_func_type);
+
+struct __pthread_start_data {
+  __ESBMC_thread_start_func_type func;
+  void *start_arg;
+};
+
+struct __pthread_start_data __ESBMC_get_thread_start_data(unsigned int tid);
+void __ESBMC_set_next_thread_start_data(unsigned int tid,
+                                        struct __pthread_start_data data);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
+unsigned int __ESBMC_get_thread_id(void);
 void __ESBMC_terminate_thread(void);

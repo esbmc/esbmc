@@ -14,10 +14,12 @@
 void
 pthread_trampoline(void)
 {
+  struct __pthread_start_data startdata;
+  unsigned int threadid;
 
-  void *start_arg = __ESBMC_get_thread_start_arg();
-  __ESBMC_thread_start_func_type func = __ESBMC_get_thread_start_func();
-  func(start_arg);
+  threadid = __ESBMC_get_thread_id();
+  startdata = __ESBMC_get_thread_start_data(threadid);
+  startdata.func(startdata.start_arg);
   __ESBMC_terminate_thread();
   return;
 }
@@ -27,11 +29,11 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                void *(*start_routine) (void *), void *arg)
 {
   unsigned int thread_id;
+  struct __pthread_start_data startdata = { start_routine, arg };
 
   __ESBMC_atomic_begin();
   thread_id = __ESBMC_spawn_thread(pthread_trampoline);
-  __ESBMC_set_next_thread_start_arg(arg);
-  __ESBMC_set_next_thread_start_func(start_routine);
+  __ESBMC_set_next_thread_start_data(thread_id, startdata);
   __ESBMC_atomic_end();
 }
 

@@ -71,6 +71,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   }
 
   exprs_read_write.push_back(read_write_set());
+  thread_start_data.push_back(exprt());
 
   active_thread = 0;
   last_active_thread = 0;
@@ -116,6 +117,7 @@ execution_statet::operator=(const execution_statet &ex)
   atomic_numbers = ex.atomic_numbers;
   DFS_traversed = ex.DFS_traversed;
   exprs_read_write = ex.exprs_read_write;
+  thread_start_data = ex.thread_start_data;
   last_global_read_write = ex.last_global_read_write;
   last_active_thread = ex.last_active_thread;
   active_thread = ex.active_thread;
@@ -124,9 +126,6 @@ execution_statet::operator=(const execution_statet &ex)
   nondet_count = ex.nondet_count;
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
-
-  next_thread_start_arg = ex.next_thread_start_arg;
-  next_thread_start_func = ex.next_thread_start_func;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
@@ -749,6 +748,7 @@ execution_statet::execute_guard(const namespacet &ns)
 unsigned int
 execution_statet::add_thread(const goto_programt *prog)
 {
+  statet &state = get_active_state();
 
   goto_symex_statet new_state(*state_level2, global_value_set);
   new_state.initialize(prog->instructions.begin(), prog->instructions.end(),
@@ -765,6 +765,7 @@ execution_statet::add_thread(const goto_programt *prog)
   }
 
   exprs_read_write.push_back(read_write_set());
+  thread_start_data.push_back(exprt());
 
   update_trds_count();
   increment_trds_in_run();

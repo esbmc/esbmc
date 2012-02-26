@@ -168,11 +168,11 @@ protected:
                      const std::string symname);
   void intrinsic_yield(reachability_treet &arg);
   void intrinsic_switch_to(code_function_callt &call, reachability_treet &art);
-  void intrinsic_set_start_arg(code_function_callt &call, reachability_treet &art);
-  void intrinsic_set_start_func(code_function_callt &call,
+  void intrinsic_get_thread_id(code_function_callt &call,
                                 reachability_treet &art);
-  void intrinsic_get_start_arg(code_function_callt &call, reachability_treet &art);
-  void intrinsic_get_start_func(code_function_callt &call,
+  void intrinsic_set_start_data(code_function_callt &call,
+                                reachability_treet &art);
+  void intrinsic_get_start_data(code_function_callt &call,
                                 reachability_treet &art);
   void intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art);
   void intrinsic_terminate_thread(reachability_treet &art);

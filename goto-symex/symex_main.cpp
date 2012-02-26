@@ -295,14 +295,12 @@ goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
     intrinsic_yield(art);
   } else if (symname == "c::__ESBMC_switch_to") {
     intrinsic_switch_to(call, art);
-  } else if (symname == "c::__ESBMC_set_next_thread_start_arg") {
-    intrinsic_set_start_arg(call, art);
-  } else if (symname == "c::__ESBMC_set_next_thread_start_func") {
-    intrinsic_set_start_func(call, art);
-  } else if (symname == "c::__ESBMC_get_thread_start_arg") {
-    intrinsic_get_start_arg(call, art);
-  } else if (symname == "c::__ESBMC_get_thread_start_func") {
-    intrinsic_get_start_func(call, art);
+  } else if (symname == "c::__ESBMC_get_thread_id") {
+    intrinsic_get_thread_id(call, art);
+  } else if (symname == "c::__ESBMC_set_next_thread_start_data") {
+    intrinsic_set_start_data(call, art);
+  } else if (symname == "c::__ESBMC_get_thread_start_data") {
+    intrinsic_get_start_data(call, art);
   } else if (symname == "c::__ESBMC_spawn_thread") {
     intrinsic_spawn_thread(call, art);
   } else if (symname == "c::__ESBMC_terminate_thread") {

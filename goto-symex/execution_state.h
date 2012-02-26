@@ -118,24 +118,26 @@ class execution_statet : public goto_symext
     return active_thread;
   }
 
-  void set_next_thread_start_arg(exprt &e)
+  void set_thread_start_data(unsigned int tid, const exprt &argdata)
   {
-    next_thread_start_arg = e;
+    if (tid >= thread_start_data.size()) {
+      std::cerr << "Setting thread data for nonexistant thread " << tid;
+      std::cerr << std::endl;
+      abort();
+    }
+
+    thread_start_data[tid] = argdata;
   }
 
-  const exprt &get_next_thread_start_arg()
+  const exprt &get_thread_start_data(unsigned int tid) const
   {
-    return next_thread_start_arg;
-  }
+    if (tid >= thread_start_data.size()) {
+      std::cerr << "Getting thread data for nonexistant thread " << tid;
+      std::cerr << std::endl;
+      abort();
+    }
 
-  void set_next_thread_start_func(exprt &e)
-  {
-    next_thread_start_func = e;
-  }
-
-  const exprt &get_next_thread_start_func()
-  {
-    return next_thread_start_func;
+    return thread_start_data[tid];
   }
 
   // Methods
@@ -191,6 +193,7 @@ class execution_statet : public goto_symext
   std::vector<unsigned int> atomic_numbers;
   std::vector<bool> DFS_traversed;
   std::vector<read_write_set> exprs_read_write;
+  std::vector<exprt> thread_start_data;
   read_write_set last_global_read_write;
   unsigned int last_active_thread;
   ex_state_level2t *state_level2;
@@ -207,9 +210,6 @@ class execution_statet : public goto_symext
   const goto_functionst &_goto_functions;
   int CS_number;
   string_containert::str_snapshot str_state;
-
-  exprt next_thread_start_arg;
-  exprt next_thread_start_func;
 
   // Static stuff:
 
