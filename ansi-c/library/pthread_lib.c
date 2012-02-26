@@ -50,7 +50,7 @@ void
 pthread_exit(void *retval)
 {
 
-  assert(0);
+  __ESBMC_terminate_thread();
 }
 
 int pthread_mutex_init(
