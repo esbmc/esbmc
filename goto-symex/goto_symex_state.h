@@ -228,7 +228,7 @@ public:
   bool constant_propagation_reference(const exprt &expr) const;
 
   // undoes both levels of renaming
-  const irep_idt &get_original_name(const irep_idt &identifier) const;
+  const irep_idt get_original_name(const irep_idt &identifier) const;
   void get_original_name(exprt &expr) const;
 
   void print_stack_trace(const namespacet &ns, unsigned int indent) const;

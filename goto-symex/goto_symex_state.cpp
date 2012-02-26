@@ -391,7 +391,7 @@ Function: goto_symex_statet::get_original_identifier
 
 \*******************************************************************/
 
-const irep_idt &goto_symex_statet::get_original_name(
+const irep_idt goto_symex_statet::get_original_name(
   const irep_idt &identifier) const
 {
 

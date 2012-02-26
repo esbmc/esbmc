@@ -62,8 +62,7 @@ void renaming::level1t::rename(exprt &expr)
 
     // first see if it's already an l1 name
 
-    if(original_identifiers.find(identifier)!=
-       original_identifiers.end())
+    if(get_original_name(identifier) != identifier)
       return;
 
     const current_namest::const_iterator it=
@@ -99,8 +98,7 @@ void renaming::level2t::rename(exprt &expr)
 
     // first see if it's already an l2 name
 
-    if(original_identifiers.find(identifier)!=
-       original_identifiers.end())
+    if(get_original_name(identifier) != identifier)
       return;
 
     const current_namest::const_iterator it=
@@ -116,7 +114,6 @@ void renaming::level2t::rename(exprt &expr)
     else
     {
       std::string new_identifier=name(identifier, 0);
-      original_identifiers[new_identifier]=identifier;
       expr.identifier(new_identifier);
     }
   }
@@ -139,7 +136,6 @@ void renaming::level2t::coveredinbees(const irep_idt &identifier, unsigned count
   valuet &entry=current_names[identifier];
   entry.count=count;
   entry.node_id = node_id;
-  original_identifiers[name(identifier, entry.count)]=identifier;
 }
 
 void renaming::renaming_levelt::rename(typet &type)
@@ -172,22 +168,26 @@ void renaming::renaming_levelt::get_original_name(exprt &expr) const
 
   if(expr.id()==exprt::symbol)
   {
-    original_identifierst::const_iterator it=
-      original_identifiers.find(expr.identifier());
-    if(it==original_identifiers.end()) return;
-
-    assert(it->second!="");
-    expr.identifier(it->second);
+    irep_idt ident = get_original_name(expr.identifier());
+    expr.identifier(ident);
   }
 }
 
-const irep_idt &renaming::renaming_levelt::get_original_name(
+const irep_idt renaming::renaming_levelt::get_original_name(
   const irep_idt &identifier) const
 {
-  original_identifierst::const_iterator it=
-    original_identifiers.find(identifier);
-  if(it==original_identifiers.end()) return identifier;
-  return it->second;
+  std::string namestr = identifier.as_string();
+
+  // If this is renamed at all, it'll have the suffix:
+  //   @x!y&z#n
+  // So to undo this, find and remove everything after @, if it exists.
+  size_t pos = namestr.find("@");
+  if (pos == std::string::npos)
+    return identifier; // It's not named at all.
+
+  // Remove suffix
+  namestr = namestr.substr(0, pos);
+  return irep_idt(namestr);
 }
 
 void renaming::level1t::print(std::ostream &out) const
