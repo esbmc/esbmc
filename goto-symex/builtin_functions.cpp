@@ -314,7 +314,10 @@ void
 goto_symext::intrinsic_set_start_data(code_function_callt &call,
                                       reachability_treet &art)
 {
-  const exprt &threadid = call.arguments()[0];
+  statet &state = art.get_cur_state().get_active_state();
+  exprt threadid = call.arguments()[0];
+
+  state.level2.rename(threadid);
 
   if (threadid.id() != "constant") {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
@@ -331,7 +334,9 @@ goto_symext::intrinsic_get_start_data(code_function_callt &call,
                                       reachability_treet &art)
 {
   statet &state = art.get_cur_state().get_active_state();
-  const exprt &threadid = call.arguments()[0];
+  exprt &threadid = call.arguments()[0];
+
+  state.level2.rename(threadid);
 
   if (threadid.id() != "constant") {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
