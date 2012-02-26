@@ -67,6 +67,7 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
+  guard_identifier_s = sym.guard_identifier_s;
 
   // Art ptr is shared
   art1 = sym.art1;

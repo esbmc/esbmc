@@ -287,7 +287,7 @@ goto_symext::intrinsic_switch_to(code_function_callt &call,
 
   unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
   if (tid != art.get_cur_state().get_active_state_number())
-    art.get_cur_state().set_active_state(tid);
+    art.get_cur_state().switch_to_thread(tid);
 
   return;
 }

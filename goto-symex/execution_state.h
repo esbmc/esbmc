@@ -56,6 +56,7 @@ class execution_statet : public goto_symext
     virtual ~ex_state_level2t();
     virtual ex_state_level2t *clone(void) const;
     virtual void rename(const irep_idt &identifier, unsigned count);
+    virtual void rename(exprt &identifier);
 
     execution_statet *owner;
   };
@@ -154,14 +155,12 @@ class execution_statet : public goto_symext
   virtual unsigned int &get_nondet_counter(void);
 
   irep_idt get_guard_identifier();
-  irep_idt get_guard_identifier_base();
-  void set_parent_guard(const irep_idt & parent_guard);
   goto_symex_statet & get_active_state();
   const goto_symex_statet & get_active_state() const;
   unsigned int get_active_atomic_number();
   void increment_active_atomic_number();
   void decrement_active_atomic_number();
-  void set_active_state(unsigned int i);
+  void switch_to_thread(unsigned int i);
   void execute_guard(const namespacet & ns);
   bool dfs_explore_thread(unsigned int tid);
   bool check_if_ileaves_blocked(void);
@@ -200,7 +199,6 @@ class execution_statet : public goto_symext
   value_sett global_value_set; // Shared global value set
   unsigned int active_thread;
   irep_idt guard_execution;
-  irep_idt parent_guard_identifier;
   int TS_number;
   unsigned nondet_count;
   unsigned dynamic_counter;

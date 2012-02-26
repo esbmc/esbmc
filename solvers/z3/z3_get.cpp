@@ -61,6 +61,8 @@ exprt
 z3_convt::get(const exprt &expr) const
 {
 
+  try {
+
   if (expr.id() == exprt::symbol ||
       expr.id() == "nondet_symbol") {
     std::string identifier, tmp;
@@ -85,6 +87,12 @@ z3_convt::get(const exprt &expr) const
     std::cerr << "Unrecognized irep fetched from Z3: " << expr.id().as_string();
     std::cerr << std::endl;
     abort();
+  }
+
+  } catch (conv_error *e) {
+    std::cerr << "Conversion error fetching counterexample:" << std::endl;
+    std::cerr << e->to_string() << std::endl;
+    return nil_exprt();
   }
 }
 

@@ -80,11 +80,6 @@ protected:
     class dereferencet &dereference,
     const bool write);
 
-  // guards
-
-  //irep_idt guard_identifier;
-  irep_idt guard_identifier_s;
-
   // symex
 
   virtual void symex_goto(statet &state, const exprt &old_guard);
@@ -203,6 +198,7 @@ protected:
 
   // Members
 
+  irep_idt guard_identifier_s;
   unsigned total_claims, remaining_claims;
   reachability_treet *art1;
   hash_set_cont<irep_idt, irep_id_hash> body_warnings;

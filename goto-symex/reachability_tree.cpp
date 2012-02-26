@@ -245,10 +245,8 @@ reachability_treet::create_next_state(void)
     /* Make it active, make it follow on from previous state... */
     if (new_state->get_active_state_number() != next_thread_id) {
       new_state->increment_context_switch();
-      new_state->set_active_state(next_thread_id);
+      new_state->switch_to_thread(next_thread_id);
     }
-
-    new_state->set_parent_guard(ex_state.get_guard_identifier());
 
     /* Reset interleavings (?) investigated in this new state */
     new_state->resetDFS_traversed();
@@ -762,7 +760,6 @@ goto_symext::symex_resultt *
 reachability_treet::get_next_formula()
 {
 
-  get_cur_state().execute_guard(ns);
   while(!is_has_complete_formula())
   {
     while (!is_at_end_of_run())
@@ -793,7 +790,6 @@ reachability_treet::generate_schedule_formula()
   while (has_more_states())
   {
     total_states++;
-    get_cur_state().execute_guard(ns);
     while (!is_at_end_of_run())
     {
       get_cur_state().symex_step(goto_functions, *this);
