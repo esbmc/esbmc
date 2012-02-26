@@ -16,6 +16,10 @@ Author: Daniel Kroening, kroening@kroening.com
 class guardt
 {
 public:
+  // Default constructors
+  guardt() : guard_list() { }
+  guardt(const guardt &ref) { *this = ref; }
+
   typedef expr_listt guard_listt;
 
   void add(const exprt &expr);
