@@ -62,7 +62,7 @@ void renaming::level1t::rename(exprt &expr)
 
     // first see if it's already an l1 name
 
-    if(get_original_name(identifier) != identifier)
+    if(identifier.as_string().find("@") != std::string::npos)
       return;
 
     const current_namest::const_iterator it=
@@ -98,7 +98,7 @@ void renaming::level2t::rename(exprt &expr)
 
     // first see if it's already an l2 name
 
-    if(get_original_name(identifier) != identifier)
+    if(identifier.as_string().find("#") != std::string::npos)
       return;
 
     const current_namest::const_iterator it=
