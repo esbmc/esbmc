@@ -8,6 +8,7 @@ Author: Felipe Rodrigues
 
 class QGraphicsItem
 {
+public:
 	QGraphicsItem ( QGraphicsItem * parent = 0 );
 	~QGraphicsItem ();
 };
