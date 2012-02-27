@@ -157,7 +157,8 @@ protected:
 
   std::string template_class_identifier(
     const irep_idt &base_name,
-    const template_typet &template_type);
+    const template_typet &template_type,
+    const cpp_template_args_non_tct &partial_specialization_args);
 
   std::string function_template_identifier(
     const irep_idt &base_name,

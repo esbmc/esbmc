@@ -68,7 +68,7 @@ Function: cpp_typecheckt::typecheck_template_class
 void cpp_typecheckt::typecheck_template_class(
   cpp_declarationt &declaration)
 {
-  // Do template arguments. This also sets up the template scope.
+  // Do template parameters. This also sets up the template scope.
   cpp_scopet &template_scope=
     typecheck_template_parameters(declaration.template_type());
 
@@ -99,7 +99,8 @@ void cpp_typecheckt::typecheck_template_class(
     declaration.partial_specialization_args();
 
   const irep_idt symbol_name=
-    template_class_identifier(base_name, template_type);
+    template_class_identifier(
+      base_name, template_type, partial_specialization_args);
 
   #if 0
   // Check if the name is already used by a different template
@@ -439,7 +440,8 @@ Function: cpp_typecheckt::template_class_identifier
 
 std::string cpp_typecheckt::template_class_identifier(
   const irep_idt &base_name,
-  const template_typet &template_type)
+  const template_typet &template_type,
+  const cpp_template_args_non_tct &partial_specialization_args)
 {
   std::string identifier=
     cpp_identifier_prefix(current_mode)+"::"+
@@ -466,10 +468,30 @@ std::string cpp_typecheckt::template_class_identifier(
   }
 
   identifier += ">";
+  
+  if(!partial_specialization_args.arguments().empty())
+  {
+    identifier+="_specialized_to_<";
+  
+    counter=0;
+    for(cpp_template_args_non_tct::argumentst::const_iterator
+        it=partial_specialization_args.arguments().begin();
+        it!=partial_specialization_args.arguments().end();
+        it++, counter++)
+    {  
+      if(counter!=0) identifier+=",";
+
+      if(it->id()=="type" || it->id()=="ambiguous")
+        identifier+=cpp_type2name(it->type());
+      else
+        identifier+=cpp_expr2name(*it);
+    }
+    
+    identifier+=">";
+  }
+  
   return identifier;
 }
-
-
 
 /*******************************************************************\
 
@@ -491,7 +513,8 @@ std::string cpp_typecheckt::function_template_identifier(
   // we first build something without function arguments
   cpp_template_args_non_tct partial_specialization_args;
   std::string identifier=
-    template_class_identifier(base_name, template_type);
+    template_class_identifier(base_name, template_type,
+                              partial_specialization_args);
 
   // we must also add the signature of the function to the identifier
   identifier+=cpp_type2name(function_type);
@@ -679,7 +702,6 @@ const symbolt& cpp_typecheckt::convert_template_specialization(
       specialization);
   }
 }
-
 
 /*******************************************************************\
 
