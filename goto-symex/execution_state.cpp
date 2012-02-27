@@ -90,11 +90,6 @@ execution_statet::execution_statet(const execution_statet &ex) :
   state_level2(ex.state_level2->clone()),
   _goto_functions(ex._goto_functions)
 {
-  // Don't copy string state in this copy constructor - instead
-  // take another snapshot to represent what string state was
-  // like when we began the exploration this execution_statet will
-  // perform.
-  str_state = string_container.take_state_snapshot();
 
   *this = ex;
 
@@ -105,6 +100,12 @@ execution_statet::execution_statet(const execution_statet &ex) :
     goto_symex_statet state(*it, *state_level2);
     threads_state.push_back(state);
   }
+
+  // Take another snapshot to represent what string state was
+  // like when we began the exploration this execution_statet will
+  // perform.
+  str_state = string_container.take_state_snapshot();
+
 }
 
 execution_statet&
