@@ -13,6 +13,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <arith_tools.h>
 #include <prefix.h>
 
+#include <ansi-c/ansi_c_expr.h>
+
 #include "cpp_typecheck.h"
 #include "cpp_typecheck_resolve.h"
 #include "cpp_template_type.h"
@@ -69,6 +71,9 @@ void cpp_typecheck_resolvet::convert_identifiers(
 
     if(e.is_not_nil())
     {
+      if(e.id()=="type")
+        assert(e.type().is_not_nil());
+
       identifiers.insert(e);
     }
   }
@@ -406,9 +411,7 @@ void cpp_typecheck_resolvet::convert_identifier(
         if(identifier.is_method && !fargs.in_use)
           e = cpp_symbol_expr(cpp_typecheck.lookup(identifier.identifier));
         else
-        {
           e.make_nil();
-        }
       }
     }
   }
@@ -424,44 +427,38 @@ void cpp_typecheck_resolvet::convert_identifier(
       if(symbol.is_macro)
       {
         e.type()=symbol.type;
+        assert(symbol.type.is_not_nil());
       }
       else
-      {
-        e.type()=typet("symbol");
-        e.type().identifier(symbol.name);
-      }
+        e.type()=symbol_typet(symbol.name);
+    }
+    else if(symbol.is_macro)
+    {
+      e=symbol.value;
+      assert(e.is_not_nil());
     }
     else
     {
-      if(symbol.is_macro)
+      typet followed_type=symbol.type;
+      bool constant=followed_type.cmt_constant();
+
+      while(followed_type.id()=="symbol")
+      {
+        typet tmp=cpp_typecheck.lookup(followed_type).type;
+        followed_type=tmp;
+        constant |= followed_type.cmt_constant();
+      }
+
+      if(constant &&
+         symbol.value.is_not_nil() &&
+         is_number(followed_type) &&
+         symbol.value.id() == "constant")
       {
         e=symbol.value;
-        assert(e.is_not_nil());
       }
       else
       {
-
-        typet followed = symbol.type;
-        bool constant = followed.cmt_constant();
-
-        while(followed.id() == "symbol")
-        {
-          typet tmp = cpp_typecheck.lookup(followed).type;
-          followed = tmp;
-          constant |= followed.cmt_constant();
-        }
-
-        if(constant &&
-           symbol.value.is_not_nil() &&
-         is_number(followed) &&
-         symbol.value.id() == "constant")
-        {
-          e=symbol.value;
-        }
-        else
-        {
-          e=cpp_symbol_expr(symbol);
-        }
+        e=cpp_symbol_expr(symbol);
       }
     }
   }
@@ -580,7 +577,7 @@ void cpp_typecheck_resolvet::disambiguate(
     identifiers.insert(it->second);
   }
 
-  if(identifiers.size() > 1 && fargs.in_use)
+  if(identifiers.size()>1 && fargs.in_use)
   {
     // try to further disambiguate functions
 
@@ -591,7 +588,7 @@ void cpp_typecheck_resolvet::disambiguate(
     {
       if(it1->type().id()!="code") continue;
 
-      const code_typet& f1 =
+      const code_typet &f1=
         to_code_type(it1->type());
 
       for(resolve_identifierst::iterator it2=
@@ -704,7 +701,7 @@ void cpp_typecheck_resolvet::make_constructors(
       continue;
     }
 
-    const typet& symbol_type =
+    const typet &symbol_type=
       cpp_typecheck.follow(it->type());
 
     if(symbol_type.id() != "struct")
@@ -749,7 +746,7 @@ void cpp_typecheck_resolvet::make_constructors(
     }
   }
 
-  identifiers = new_identifiers;
+  identifiers=new_identifiers;
 }
 
 /*******************************************************************\
@@ -930,8 +927,7 @@ void cpp_typecheck_resolvet::resolve_scope(
   assert(cpp_name.id()=="cpp-name");
   assert(!cpp_name.get_sub().empty());
 
-  cpp_scopet& original_scope =
-  cpp_typecheck.cpp_scopes.current_scope();
+  cpp_scopet &original_scope=cpp_typecheck.cpp_scopes.current_scope();
   location=cpp_name.location();
 
   irept::subt::const_iterator pos=cpp_name.get_sub().begin();
@@ -1016,7 +1012,12 @@ void cpp_typecheck_resolvet::resolve_scope(
       irept::subt::const_iterator next=pos+1;
       assert(next != cpp_name.get_sub().end());
 
-      if(next->id() == "cpp-name")
+      if(next->id() == "cpp-name" ||
+         next->id() == "pointer" ||
+         next->id() == "int" ||
+         next->id() == "char" ||
+         next->id() == "bool" ||
+         next->id() == "merged_type")
       {
         // it's a cast operator
         irept next_ir = *next;
@@ -1291,6 +1292,26 @@ exprt cpp_typecheck_resolvet::resolve(
       result.location()=location;
       return result;
     }
+    else if(base_name=="__nullptr") // this is c++0x
+    {
+      constant_exprt result;
+      result.set_value("NULL");
+      result.type()=pointer_typet();
+      result.type().subtype()=empty_typet();
+      result.location()=location;
+      return result;
+    }
+    else if(base_name=="__func__" ||
+            base_name=="__FUNCTION__" ||
+            base_name=="__PRETTY_FUNCTION__")
+    {
+      // __func__ is an ANSI-C standard compliant hack to get the function name
+      // __FUNCTION__ and __PRETTY_FUNCTION__ are GCC-specific
+      string_constantt s;
+      s.set_value(location.get_function());
+      s.location()=location;
+      return s;
+    }
   }
 
   cpp_scopest::id_sett id_set;
@@ -1344,7 +1365,7 @@ exprt cpp_typecheck_resolvet::resolve(
       id_set, location, template_args, fargs, identifiers);
   }
 
-  // change type into constructors if we want a constructor
+  // change types into constructors if we want a constructor
   if(want==VAR)
     make_constructors(identifiers);
 
@@ -1646,7 +1667,6 @@ void cpp_typecheck_resolvet::guess_template_args(
 
     if(desired_type_followed.id()=="pointer" || desired_type_followed.id()=="array")
       guess_template_args(template_type.subtype(), desired_type_followed.subtype());
-
   }
   else if(template_type.id()=="array")
   {
@@ -2069,12 +2089,13 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
     else if(id.id_class==cpp_scopet::TEMPLATE)
     {
       const symbolt symbol = cpp_typecheck.lookup(id.identifier);
-      if(symbol.type.get("type") =="struct")
+      if(symbol.type.get("type")=="struct")
         new_set.insert(&id);
     }
     else if(id.id_class==cpp_scopet::TEMPLATE_ARGUMENT)
     {
-      // maybe it is a scope
+      // a template argument may be a scope: it could
+      // be instantiated with a class/struct
       exprt e=cpp_typecheck.template_map.lookup(id.identifier);
 
       if(e.id()!="type")
@@ -2160,7 +2181,7 @@ void cpp_typecheck_resolvet::resolve_with_arguments(
 {
   cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
 
-  for(unsigned i = 0 ; i<fargs.operands.size();i++)
+  for(unsigned i=0; i<fargs.operands.size();i++)
   {
     const typet &final_type=
       cpp_typecheck.follow(fargs.operands[i].type());

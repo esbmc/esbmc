@@ -6,11 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <location.h>
 #include <expr_util.h>
-#include <arith_tools.h>
 #include <i2string.h>
-#include <replace_symbol.h>
 #include <simplify_expr_class.h>
 #include <simplify_expr.h>
 
