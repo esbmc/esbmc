@@ -21,7 +21,9 @@ namespace renaming {
   struct renaming_levelt
   {
   public:
-    virtual const irep_idt get_original_name(const irep_idt &identifier) const;
+    virtual const irep_idt get_original_name(const irep_idt &identifier,
+                                             std::string idxname) const;
+    virtual const irep_idt get_original_name(const irep_idt &identifier)const=0;
     virtual void get_original_name(exprt &expr) const;
     virtual void rename(exprt &expr)=0;
     virtual void rename(typet &type);
@@ -54,6 +56,16 @@ namespace renaming {
       current_names[identifier]=frame;
     }
 
+    virtual const irep_idt get_original_name(const irep_idt &identifier) const
+    {
+      return renaming_levelt::get_original_name(identifier, "@");
+    }
+
+    virtual void get_original_name(exprt &expr) const
+    {
+      renaming_levelt::get_original_name(expr);
+    }
+
     level1t() {}
     virtual ~level1t() { }
 
@@ -81,6 +93,16 @@ namespace renaming {
     virtual void remove(const irep_idt &identifier)
     {
         current_names.erase(identifier);
+    }
+
+    virtual const irep_idt get_original_name(const irep_idt &identifier) const
+    {
+      return renaming_levelt::get_original_name(identifier, std::string("&"));
+    }
+
+    virtual void get_original_name(exprt &expr) const
+    {
+      renaming_levelt::get_original_name(expr);
     }
 
     struct valuet

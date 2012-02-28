@@ -174,14 +174,14 @@ void renaming::renaming_levelt::get_original_name(exprt &expr) const
 }
 
 const irep_idt renaming::renaming_levelt::get_original_name(
-  const irep_idt &identifier) const
+  const irep_idt &identifier, std::string idxchar) const
 {
   std::string namestr = identifier.as_string();
 
   // If this is renamed at all, it'll have the suffix:
   //   @x!y&z#n
   // So to undo this, find and remove everything after @, if it exists.
-  size_t pos = namestr.find("@");
+  size_t pos = namestr.find(idxchar);
   if (pos == std::string::npos)
     return identifier; // It's not named at all.
 
