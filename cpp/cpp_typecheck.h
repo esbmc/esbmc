@@ -148,6 +148,9 @@ protected:
   void convert_template_function_or_member_specialization(
     cpp_declarationt &declaration);
 
+  void convert_template_class_specialization(
+    cpp_declarationt &declaration);
+
   const symbolt& convert_template_specialization(
     cpp_declarationt &declaration);
 

@@ -650,6 +650,145 @@ const symbolt& cpp_typecheckt::convert_template_specialization(
       specialization);
   }
 }
+/*******************************************************************\
+
+Function: cpp_typecheckt::convert_template_class_specialization
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::convert_template_class_specialization(
+  cpp_declarationt &declaration)
+{
+  cpp_save_scopet saved_scope(cpp_scopes);
+
+  typet &type=declaration.type();
+
+  assert(type.id()=="struct");
+
+  cpp_namet &cpp_name=
+    static_cast<cpp_namet &>(type.add("tag"));
+
+  if(cpp_name.is_qualified())
+  {
+    err_location(cpp_name.location());
+    str << "qualifiers not excpected here";
+    throw 0;
+  }
+  
+  if(cpp_name.get_sub().size()!=2 ||
+     cpp_name.get_sub()[0].id()!="name" ||
+     cpp_name.get_sub()[1].id()!="template_args")
+  {
+    // currently we are more restrictive
+    // than the standard
+    err_location(cpp_name.location());
+    str << "bad template-class-sepcialization name";                                                
+    throw 0;
+  }
+
+  irep_idt base_name=
+    cpp_name.get_sub()[0].get("identifier");
+
+  // copy the template arguments    
+  const cpp_template_args_non_tct template_args_non_tc=
+    to_cpp_template_args_non_tc(cpp_name.get_sub()[1]);
+
+  // Remove the template arguments from the name.
+  cpp_name.get_sub().pop_back();
+
+  // get the template symbol
+
+  cpp_scopest::id_sett id_set;
+  cpp_scopes.get_ids(base_name, cpp_idt::TEMPLATE, id_set ,true);
+
+  // remove any specializations
+  for(cpp_scopest::id_sett::iterator
+      it=id_set.begin();
+      it!=id_set.end();
+      ) // no it++
+  {
+    cpp_scopest::id_sett::iterator next=it;
+    next++;
+    
+    if(lookup((*it)->identifier).type.
+         find("specialization_of").is_not_nil())
+      id_set.erase(it);
+    
+    it=next;
+  }
+
+  // only one should be left
+  if(id_set.empty())
+  {
+    err_location(type.location());
+    str << "template class `" << base_name << "' not found";
+    throw 0;
+  }
+  else if(id_set.size()>1)
+  {
+    err_location(type);
+    str << "template class `" << base_name << "' is ambiguous";
+    throw 0;
+  }
+  
+  contextt::symbolst::iterator s_it=
+    context.symbols.find((*id_set.begin())->identifier);
+    
+  assert(s_it!=context.symbols.end());
+  
+  symbolt &template_symbol=s_it->second;
+    
+  if(!template_symbol.type.get_bool("is_template"))
+  {
+    err_location(type);
+    str << "expected a template";
+  }
+
+  #if 0
+  // is this partial specialization?  
+  if(declaration.template_type().parameters().empty())
+  {
+    // typecheck arguments -- these are for the 'primary' template!
+    cpp_template_args_tct template_args_tc=
+      typecheck_template_args(
+        declaration.location(),
+        to_cpp_declaration(template_symbol.type).template_type(),
+        template_args_non_tc);
+    
+    // Full specialization, i.e., template<>.
+    // We instantiate.
+    instantiate_template(
+      cpp_name.location(),
+      template_symbol,
+      template_args_tc,
+      type);
+  }
+  else
+  #endif
+  
+  {
+    // partial -- we typecheck
+    declaration.partial_specialization_args()=template_args_non_tc;
+    declaration.set_specialization_of(template_symbol.name);
+
+    // We can't typecheck arguments yet, they are used
+    // for guessing later. But we can check the number.
+    if(template_args_non_tc.arguments().size()!=
+       to_cpp_declaration(template_symbol.type).template_type().parameters().size())
+    {
+      err_location(cpp_name.location());
+      throw "template specialization with wrong number of arguments";
+    }    
+    
+    typecheck_template_class(declaration);
+  }
+}
 
 /*******************************************************************\
 
@@ -1094,7 +1233,6 @@ void cpp_typecheckt::build_template_map(
 
   if(instance.get_sub().size()!=type_arguments.get_sub().size())
   {
-
     //ps_irep("type",type);
     //ps_irep("template_args",template_args);
     err_location(template_args);
@@ -1198,6 +1336,16 @@ void cpp_typecheckt::convert_template_declaration(
     {
       err_location(declaration);
       throw "expected template class";
+    }
+
+    // Is it class template specialization?
+    // We can tell if there are template arguments in the class name,
+    // like template<...> class tag<stuff> ...
+    if((static_cast<const cpp_namet &>(
+       type.find("tag"))).has_template_args())
+    {
+      convert_template_class_specialization(declaration);
+      return;
     }
 
     typecheck_template_class(declaration);
