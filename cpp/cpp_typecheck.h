@@ -145,6 +145,8 @@ protected:
 
   void convert_non_template_declaration(cpp_declarationt &declaration);
 
+  void convert_template_function_or_member_specialization(
+    cpp_declarationt &declaration);
 
   const symbolt& convert_template_specialization(
     cpp_declarationt &declaration);
@@ -167,6 +169,11 @@ protected:
 
   void typecheck_template_args(irept &template_args);
 
+  cpp_template_args_tct typecheck_template_args(
+    const locationt &location,
+    const symbolt &template_symbol,
+    const cpp_template_args_non_tct &template_args);
+    
   class instantiationt
   {
   public:
