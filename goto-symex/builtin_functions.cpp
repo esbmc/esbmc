@@ -311,8 +311,8 @@ goto_symext::intrinsic_get_thread_id(code_function_callt &call,
 }
 
 void
-goto_symext::intrinsic_set_start_data(code_function_callt &call,
-                                      reachability_treet &art)
+goto_symext::intrinsic_set_thread_data(code_function_callt &call,
+                                       reachability_treet &art)
 {
   statet &state = art.get_cur_state().get_active_state();
   exprt threadid = call.arguments()[0];
@@ -332,8 +332,8 @@ goto_symext::intrinsic_set_start_data(code_function_callt &call,
 }
 
 void
-goto_symext::intrinsic_get_start_data(code_function_callt &call,
-                                      reachability_treet &art)
+goto_symext::intrinsic_get_thread_data(code_function_callt &call,
+                                       reachability_treet &art)
 {
   statet &state = art.get_cur_state().get_active_state();
   exprt &threadid = call.arguments()[0];

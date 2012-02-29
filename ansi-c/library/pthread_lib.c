@@ -7,9 +7,9 @@ struct __pthread_start_data {
       void *start_arg;
 };
 
-struct __pthread_start_data __ESBMC_get_thread_start_data(unsigned int tid);
-void __ESBMC_set_next_thread_start_data(unsigned int tid,
-                                            struct __pthread_start_data data);
+struct __pthread_start_data __ESBMC_get_thread_internal_data(unsigned int tid);
+void __ESBMC_set_thread_internal_data(unsigned int tid,
+                                      struct __pthread_start_data data);
 
 #define __ESBMC_mutex_lock_field(a) ((a).__data.__lock)
 #define __ESBMC_mutex_count_field(a) ((a).__data.__count)
@@ -28,7 +28,7 @@ __ESBMC_hide:
   unsigned int threadid;
 
   threadid = __ESBMC_get_thread_id();
-  startdata = __ESBMC_get_thread_start_data(threadid);
+  startdata = __ESBMC_get_thread_internal_data(threadid);
   startdata.func(startdata.start_arg);
   __ESBMC_terminate_thread();
   return;
@@ -44,7 +44,7 @@ __ESBMC_hide:
 
   __ESBMC_atomic_begin();
   thread_id = __ESBMC_spawn_thread(pthread_trampoline);
-  __ESBMC_set_next_thread_start_data(thread_id, startdata);
+  __ESBMC_set_thread_internal_data(thread_id, startdata);
   __ESBMC_atomic_end();
 
   // pthread_t is actually an unsigned long int; identify a thread using just
