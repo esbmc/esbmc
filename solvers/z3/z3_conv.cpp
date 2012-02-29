@@ -1655,18 +1655,10 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
   const struct_typet &struct_type = to_struct_type(expr.type());
   const struct_typet::componentst &components = struct_type.components();
   u_int i = 0;
-  std::string identifier;
 
   assert(components.size() >= expr.operands().size());
   assert(!components.empty());
 
-  if (expr.id() == "struct" || expr.type().id() == "struct")
-    identifier = "conv_struct_" + expr.type().get_string("tag");
-  else
-    identifier = expr.type().get_string("tag");
-
-  // Generate a tuple of the correct form for this type
-  convert_identifier(identifier, expr.type(), bv);
   Z3_sort sort;
   create_type(expr.type(), sort);
 
@@ -1698,12 +1690,9 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
   if (expr.id() == "union")
     args[size-1] = convert_number(i, config.ansi_c.int_width, false);
 
-  // Create tuple itself and bind to sym name
-  Z3_ast init_val = z3_api.mk_tuple(sort, args, size);
-  Z3_ast eq = Z3_mk_eq(z3_ctx, bv, init_val);
-  // XXXjmorse - is this necessary?
-  // We're generating a struct, not _actually_ binding it to a name.
-  assert_formula(eq);
+  // Create tuple itself, return to caller. This is a lump of data, we don't
+  // need to bind it to a name or symbol.
+  bv = z3_api.mk_tuple(sort, args, size);
 
   DEBUGLOC;
 }
