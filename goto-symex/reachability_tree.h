@@ -34,44 +34,7 @@ public:
     const namespacet &ns,
     const optionst &opts,
     symex_targett *target,
-    contextt &context) :
-    goto_functions(goto_functions),
-    reached_terminal_state(NULL),
-    ns(ns),
-    options(opts)
-  {
-    CS_bound = atoi(options.get_option("context-switch").c_str());
-    deadlock_detection = options.get_bool_option("deadlock-check");
-    TS_slice = atoi(options.get_option("time-slice").c_str());
-    state_hashing = options.get_bool_option("state-hashing");
-    directed_interleavings = options.get_bool_option("direct-interleavings");
-
-    if (options.get_bool_option("no-por") || options.get_bool_option("control-flow-test"))
-      por = false;
-    else
-      por = true;
-
-    at_end_of_run = false;
-    has_complete_formula = false;
-
-    execution_statet *s;
-    if (options.get_bool_option("schedule")) {
-      s = reinterpret_cast<execution_statet*>(
-                           new schedule_execution_statet(goto_functions, ns,
-                                                 this, target, context, opts,
-                                                 &schedule_total_claims,
-                                                 &schedule_remaining_claims));
-      schedule_target = target;
-    } else {
-      s = reinterpret_cast<execution_statet*>(
-                           new dfs_execution_statet(goto_functions, ns, this,
-                                                 target, context, opts));
-      schedule_target = NULL;
-    }
-
-    execution_states.push_back(s);
-    cur_state_it = execution_states.begin();
-  };
+    contextt &context);
 
   virtual ~reachability_treet() { };
 
