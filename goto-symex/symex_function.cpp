@@ -378,6 +378,16 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   // and will later on merge them.
   exprt funcptr = call.op1();
   dereference(funcptr, state, false);
+
+  if (funcptr.invalid_object()) {
+    // Emit warning; perform no function call behaviour. Increment PC
+    std::cout << call.op1().location().as_string() << std::endl;
+    std::cout << "No target candidate for function call " <<
+      from_expr(ns, "", call.op1()) << std::endl;
+    state.source.pc++;
+    return;
+  }
+
   std::list<std::pair<guardt,exprt> > l = get_function_list(funcptr);
 
   // Store.
