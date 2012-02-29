@@ -73,6 +73,7 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
     if (irep_it->id() == "symbol") {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->identifier());
       deps.insert(type);
+      generate_symbol_deps(name, *irep_it, deps);
     } else if (irep_it->id() == "argument") {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->cmt_identifier());
       deps.insert(type);
