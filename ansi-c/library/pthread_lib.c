@@ -185,25 +185,6 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 }
 
 #if 0
-int pthread_join(pthread_t __th, void **__thread_return)
-{
-#if 0
-	extern unsigned int trds_in_join=0;
-    __ESBMC_atomic_begin();
-    trds_in_join++;
-    __ESBMC_atomic_end();
-    __ESBMC_yield();
-    __ESBMC_atomic_begin();
-//    __ESBMC_assume((trds_status & (__th << 1)) == 0);
-    trds_in_join--;
-    __ESBMC_atomic_end();
-    return 0;
-#endif
-  /* TODO */
-  return 0; // we never fail
-}
-#endif
-#if 0
 /* FUNCTION: pthread_cond_broadcast */
 
 #ifndef __ESBMC_PTHREAD_H_INCLUDED
