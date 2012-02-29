@@ -88,18 +88,15 @@ int
 pthread_join(pthread_t thread, void **retval)
 {
 __ESBMC_hide:
-  struct __pthread_start_data enddata;
-  int isitrunning = __ESBMC_get_thread_state(thread);
 
   // Assume that it's no longer running. This is dodgy because we're fetching
   // explicit state from inside the model checker, but fine because we're not
   // trying to inject any nondeterminism anywhere.
-  __ESBMC_assume(isitrunning & __ESBMC_thread_flag_ended);
+  __ESBMC_assume(pthread_thread_ended[thread]);
 
   // Fetch exit code
-  enddata = __ESBMC_get_thread_internal_data(thread);
   if (retval != NULL)
-    *retval = enddata.exit_value;
+    *retval = pthread_end_values[thread];
 
   return 0;
 }
