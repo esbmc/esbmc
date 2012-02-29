@@ -46,6 +46,7 @@ __ESBMC_hide:
   struct __pthread_start_data enddata = { NULL, NULL, exit_val };
   // Set exit value for later join retrieval
   __ESBMC_set_thread_internal_data(threadid, enddata);
+  pthread_thread_ended[threadid] = true;
   __ESBMC_terminate_thread();
   return;
 }
@@ -60,6 +61,7 @@ __ESBMC_hide:
 
   __ESBMC_atomic_begin();
   thread_id = __ESBMC_spawn_thread(pthread_trampoline);
+  pthread_thread_running[thread_id] = true;
   __ESBMC_set_thread_internal_data(thread_id, startdata);
   __ESBMC_atomic_end();
 
@@ -77,6 +79,7 @@ __ESBMC_hide:
   struct __pthread_start_data enddata = { NULL, NULL, retval };
   // Set exit value for later join retrieval
   __ESBMC_set_thread_internal_data(threadid, enddata);
+  pthread_thread_ended[threadid] = true;
   __ESBMC_terminate_thread();
 }
 
