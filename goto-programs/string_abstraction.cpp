@@ -1347,7 +1347,8 @@ void string_abstractiont::abstract_function_call(
   symbolst::const_iterator f_it = 
     context.symbols.find(call.function().identifier());
   if(f_it==context.symbols.end())
-    throw "invalid function call";
+    // XXXjmorse - handle function pointer strabs at symex time?
+    return;
 
   // Don't attempt to strabs an absent function.
   if (f_it->second.value.is_nil())
