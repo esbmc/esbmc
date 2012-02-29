@@ -3,8 +3,8 @@
 #include "intrinsics.h"
 
 struct __pthread_start_data {
-    __ESBMC_thread_start_func_type func;
-      void *start_arg;
+  __ESBMC_thread_start_func_type func;
+  void *start_arg;
 };
 
 struct __pthread_start_data __ESBMC_get_thread_internal_data(unsigned int tid);
