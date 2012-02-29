@@ -79,6 +79,24 @@ pthread_self(void)
   return __ESBMC_get_thread_id();
 }
 
+int
+pthread_join(pthread_t thread, void **retval)
+{
+__ESBMC_hide:
+  struct __pthread_start_data enddata;
+  _Bool isitrunning = __ESBMC_get_thread_state(thread);
+
+  // Assume that it's no longer running. This is dodgy because we're fetching
+  // explicit state from inside the model checker, but fine because we're not
+  // trying to inject any nondeterminism anywhere.
+  __ESBMC_assume(!(isitrunning & __ESBMC_thread_flag_running));
+
+  // Fetch exit code
+  enddata = __ESBMC_get_thread_internal_data(thread);
+
+  return enddata.exit_value;
+}
+
 int pthread_mutex_init(
   pthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr)
 {
