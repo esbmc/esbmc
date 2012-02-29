@@ -93,8 +93,10 @@ __ESBMC_hide:
 
   // Fetch exit code
   enddata = __ESBMC_get_thread_internal_data(thread);
+  if (retval != NULL)
+    *retval = enddata.exit_value;
 
-  return enddata.exit_value;
+  return 0;
 }
 
 int pthread_mutex_init(
