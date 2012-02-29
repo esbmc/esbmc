@@ -417,6 +417,7 @@ goto_symext::intrinsic_get_thread_state(code_function_callt &call, reachability_
 {
   statet &state = art.get_cur_state().get_active_state();
   exprt threadid = call.arguments()[0];
+  state.level2.rename(threadid);
 
   if (threadid.id() != "constant") {
     std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
