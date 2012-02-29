@@ -29,6 +29,7 @@ clean:
 		fi; \
 	done;
 	find . -name *.*~ | xargs rm -f
+	find . -name *.pro | xargs rm -f
 	find . -name *.out | xargs rm -f
 	find . -name *.smt | xargs rm -f
 	find . -name txt | xargs rm -f
