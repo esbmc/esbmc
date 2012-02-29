@@ -89,7 +89,7 @@ __ESBMC_hide:
   // Assume that it's no longer running. This is dodgy because we're fetching
   // explicit state from inside the model checker, but fine because we're not
   // trying to inject any nondeterminism anywhere.
-  __ESBMC_assume(!(isitrunning & __ESBMC_thread_flag_running));
+  __ESBMC_assume(isitrunning & __ESBMC_thread_flag_ended);
 
   // Fetch exit code
   enddata = __ESBMC_get_thread_internal_data(thread);

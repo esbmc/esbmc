@@ -28,5 +28,5 @@ unsigned int __ESBMC_spawn_thread(void (*)(void));
 unsigned int __ESBMC_get_thread_id(void);
 void __ESBMC_terminate_thread(void);
 
-#define __ESBMC_thread_flag_running               1
+#define __ESBMC_thread_flag_ended               1
 unsigned long int __ESBMC_get_thread_state(unsigned long int tid);
