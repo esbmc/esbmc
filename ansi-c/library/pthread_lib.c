@@ -23,6 +23,7 @@ void __ESBMC_set_next_thread_start_data(unsigned int tid,
 void
 pthread_trampoline(void)
 {
+__ESBMC_hide:
   struct __pthread_start_data startdata;
   unsigned int threadid;
 
@@ -37,6 +38,7 @@ int
 pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                void *(*start_routine) (void *), void *arg)
 {
+__ESBMC_hide:
   unsigned int thread_id;
   struct __pthread_start_data startdata = { start_routine, arg };
 
@@ -49,7 +51,7 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 void
 pthread_exit(void *retval)
 {
-
+__ESBMC_hide:
   __ESBMC_terminate_thread();
 }
 
