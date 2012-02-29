@@ -21,6 +21,14 @@ void __ESBMC_set_thread_internal_data(unsigned int tid,
 #define __ESBMC_cond_broadcast_seq_field(a) ((a).__data.__broadcast_seq)
 #define __ESBMC_rwlock_field(a) ((a).__data.__lock)
 
+/* Global tracking data. Should all initialize to 0 / false */
+static _Bool pthread_thread_running[__ESBMC_constant_infinity_uint];
+static _Bool pthread_thread_ended[__ESBMC_constant_infinity_uint];
+static __ESBMC_thread_start_func_type pthread_start_funcs
+                                             [__ESBMC_constant_infinity_uint];
+static void *pthread_start_args[__ESBMC_constant_infinity_uint];
+static void *pthread_end_values[__ESBMC_constant_infinity_uint];
+
 void
 pthread_trampoline(void)
 {
