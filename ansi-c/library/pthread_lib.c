@@ -5,6 +5,7 @@
 struct __pthread_start_data {
   __ESBMC_thread_start_func_type func;
   void *start_arg;
+  void *exit_value;
 };
 
 struct __pthread_start_data __ESBMC_get_thread_internal_data(unsigned int tid);
@@ -26,10 +27,17 @@ pthread_trampoline(void)
 __ESBMC_hide:
   struct __pthread_start_data startdata;
   unsigned int threadid;
+  void *exit_val;
 
   threadid = __ESBMC_get_thread_id();
   startdata = __ESBMC_get_thread_internal_data(threadid);
-  startdata.func(startdata.start_arg);
+
+  exit_val = startdata.func(startdata.start_arg);
+
+  // Ensure enddata is a constant struct, not one covered with with's.
+  struct __pthread_start_data enddata = { NULL, NULL, exit_val };
+  // Set exit value for later join retrieval
+  __ESBMC_set_thread_internal_data(threadid, enddata);
   __ESBMC_terminate_thread();
   return;
 }
