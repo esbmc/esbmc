@@ -2,7 +2,7 @@
 
 Module: 
 
-Author: 
+Author: Felipe Rodrigues
 
 Date: Feb 2012
 
@@ -23,6 +23,9 @@ namespace std
 
 	struct string
 	{
+		//Objetos
+			const char* str;
+			char* str2;
 	public:
 
 		struct const_iterator{
@@ -165,11 +168,6 @@ namespace std
 
 namespace std
 {
-#if 0
-//Objetos
-	const char* str;
-	char* str2;
-
 //Construtores
 
 	string::string ()
@@ -199,24 +197,8 @@ namespace std
 		return str2;
 	}
 
-//Função para saber o tamanho da string
-
-	size_t  string::length() const
-	{
-		return strlen(str);
-	}
-
-//Concatenação operador +
-    string string::operator+(const string& str1,const string& str3)
-    {
-        string tmp;
-        strcat(tmp.c_str2(), str1.c_str());
-        strcat(tmp.c_str2(), str3.c_str());
-        return tmp;
-    }
-
 //Impressão de strings
-#endif
+
 	inline string::ostream& operator << (ostream& o, string)
 	{
 		return o;
@@ -227,338 +209,19 @@ namespace std
 		return o;
 	}
 
+//Inserção de strings
+
 	inline string::istream& operator >> (istream& is, string)
 	{
 		return is;
 	}
-#if 0
-//Concatenação operador +=
 
-	string string::operator += (string& d, string& s)
+//Função para saber o tamanho da string
+
+	size_t  string::length() const
 	{
-		return string(strcat(d.c_str2(), s.c_str()));
+		return strlen(str);
 	}
-#if 0
-	string& string::operator+= (const string& d)
-	{
-        string tmp;
-        strcat(tmp.c_str2(), d.c_str());
-        return tmp;
-	}
-
-
-
-	string& string::operator += (const char* d)
-	{
-		return string(strcat(str2, d));
-	}
-
-
-//Comparação de strings operador ==
-#endif
-	bool string::operator== (string& a, string& b )
-	{
-		int aux;
-		
-		aux = strcmp(b.c_str(), a.c_str());
-
-		if (aux == 0){
-			return true;
-		}else{
-			return false;
-		}		
-	}
-
-	bool string::operator== ( const char* lhs, string& rhs )
-	{
-		int aux;
-
-		aux = strcmp((char*)lhs, rhs.c_str());
-
-		if (aux == 0){
-			return true;
-		}else{
-			return false;
-		}
-	}
-
-	bool string::operator== ( string& lhs, const char* rhs )
-	{
-		int aux;
-
-		aux = strcmp(lhs.c_str2(), (char*)rhs);
-
-		if (aux == 0){
-			return true;
-		}else{
-			return false;
-		}
-	}
-
-//Comparação de strings operador !=
-
-	bool string::operator !=(string& a)
-	{
-		int aux;
-		
-		aux = strcmp(str, a.c_str());
-
-		if (aux == 0){
-			return false;
-		}else{
-			return true;
-		}		
-	}
-#if 0
-
-	bool operator!= ( const char* lhs, string& rhs )
-	{
-		int aux;
-
-		aux = strcmp((char*)lhs, rhs.c_str());
-
-		if (aux == 0){
-			return false;
-		}else{
-			return true;
-		}
-	}
-
-	bool operator!= ( string& lhs, const char* rhs )
-	{
-		int aux;
-
-		aux = strcmp(lhs.c_str2(), (char*)rhs);
-
-		if (aux == 0){
-			return false;
-		}else{
-			return true;
-		}
-	}
-
-//Comparação de strings operadores de > < >= <=
-
-	bool string::operator >(string& a)
-	{
-	   if ( strlen(str) > strlen(a.c_str()) )
-	      return true;
-
-		return false;
-	}
-
-	bool operator> ( const char* lhs, string& rhs )
-	{
-		   if ( strlen(lhs) > strlen(rhs.c_str()) )
-		      return true;
-
-			return false;
-	}
-
-	bool operator> ( string& lhs, const char* rhs )
-	{
-		   if ( strlen(lhs.c_str()) > strlen(rhs) )
-		      return true;
-
-			return false;
-	}
-
-	bool string::operator <(string& a)
-	{
-	   if ( strlen(str) < strlen(a.c_str()) )
-	      return true;
-
-		return false;
-	}
-
-	bool operator< ( const char* lhs, string& rhs )
-	{
-		   if ( strlen(lhs) < strlen(rhs.c_str()) )
-		      return true;
-
-			return false;
-	}
-
-	bool operator< ( string& lhs, const char* rhs )
-	{
-		   if ( strlen(lhs.c_str()) < strlen(rhs) )
-		      return true;
-
-			return false;
-	}
-
-	bool string::operator >=(string& a)
-	{
-	   if ( (strlen(str)) >= (strlen(a.c_str())) )
-	      return true;
-
-		return false;
-	}
-
-	bool operator>= ( const char* lhs, string& rhs )
-	{
-		if ( (strlen(lhs)) >= (strlen(rhs.c_str())) )
-			return true;
-
-			return false;
-	}
-
-	bool operator>= ( string& lhs, const char* rhs )
-	{
-		   if ( (strlen(lhs.c_str())) >= (strlen(rhs)) )
-		      return true;
-
-			return false;
-	}
-
-	bool string::operator <=(string& a)
-	{
-	   if ( strlen(str) <= strlen(a.c_str()) )
-	      return true;
-
-		return false;
-	}
-
-	bool operator<= ( const char* lhs, string& rhs )
-	{
-		   if ( strlen(lhs) <= strlen(rhs.c_str()) )
-		      return true;
-
-			return false;
-	}
-	bool operator<= ( string& lhs, const char* rhs )
-	{
-		   if ( strlen(lhs.c_str()) <= strlen(rhs) )
-		      return true;
-
-			return false;
-	}
-
-//Verificar se string é vazia
-
-	bool string::empty ( ) const
-	{
-		if ( strlen(str) == 0 ){
-			return true;
-		}else{
-			return false;		
-		}
-	}
-
-//Atribuição de strings operador =
-
-	string& string::operator= ( const char* s )
-	{
-		return string(strcpy(str2, s));
-	}
-
-	string& string::operator= ( string& str )
-	{
-		return string(strcpy(str2, str.c_str()));
-	}
-
-//Capturando elemento da string operadores [] e at
-
-	char& string::operator[] ( size_t pos )
-	{
-		__ESBMC_assert( ( (pos>=0) && (pos<strlen(str)) ), "Error");
-		return (char&)str[pos];
-	}
-
-	char* string::at ( size_t pos ) const
-	{
-#if 0
-		if (s[i] == '\0') {
-			return out_of_range;
-		}
-		else {
-			return (char*) &s[i];
-		}
-		return nondet_charPointer();
-#endif
-	}
-
-//Copiando fragmentos da string
-
-	string string::substr ( size_t pos, size_t npos ) const
-	{
-		char* s;
-		return string(strncpy(s,str+pos,npos));
-	}
-
-	string string::substr ( size_t pos) const
-	{
-		char* s;
-		return string(strncpy(s,str,pos));
-	}
-
-//Comparando fragmentos da string
-
-	int string::compare ( const string& s ) const
-	{
-	   if ( (strlen( s.c_str() )) != (strlen(str)) ){
-			if( strlen(s.c_str()) < strlen(str) ){
-				return -2;
-			}else{
-				return 1;
-			}
-		}
-
-	   if (strcmp(s.c_str(),str)){
-		   return 1;
-	   }else{
-		   return -1;
-	   }
-	}
-
-	int string::compare ( int pos1, size_t n1, string& s ) const
-	{
-	   char* aux;
-
-	   aux = strncpy(s.c_str2(),str+pos1,n1);
-
-	   if ( strlen((const char*)aux) != strlen((const char*)str) ){
-			if(strlen((const char*)aux) < strlen((const char*)str) ){
-				return -2;
-			}else{
-				return 1;
-			}
-
-	   }
-
-	   if (strcmp(aux,str)){
-		   return 1;
-	   }else{
-		   return -1;
-	   }
-	}
-
-	int string::compare ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 ) const
-	{
-		size_t i,j;
-		char* aux;
-		char* aux2;
-
-		aux = strncpy(s.c_str2(),str+pos1,n1);
-
-		aux2 = strncpy(str2,str+pos2,n2);
-
-	   if ( strlen((const char*)aux) != strlen((const char*)aux2) ){
-			if( strlen((const char*)aux) < strlen((const char*)aux2) ){
-				return -2;
-			}else{
-				return 1;
-			}
-		}
-
-	   if (strcmp(aux,aux2)){
-		   return 1;
-	   }else{
-		   return -1;
-	   }
-	}
-#endif
-#endif
 }
 
 #endif
