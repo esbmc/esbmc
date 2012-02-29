@@ -64,6 +64,11 @@ void
 pthread_exit(void *retval)
 {
 __ESBMC_hide:
+  unsigned int threadid = __ESBMC_get_thread_id();
+  // Ensure enddata is a constant struct, not one covered with with's.
+  struct __pthread_start_data enddata = { NULL, NULL, retval };
+  // Set exit value for later join retrieval
+  __ESBMC_set_thread_internal_data(threadid, enddata);
   __ESBMC_terminate_thread();
 }
 
