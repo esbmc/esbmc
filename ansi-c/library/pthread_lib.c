@@ -46,6 +46,10 @@ __ESBMC_hide:
   thread_id = __ESBMC_spawn_thread(pthread_trampoline);
   __ESBMC_set_next_thread_start_data(thread_id, startdata);
   __ESBMC_atomic_end();
+
+  // pthread_t is actually an unsigned long int; identify a thread using just
+  // its thread number.
+  *thread = thread_id;
 }
 
 void
