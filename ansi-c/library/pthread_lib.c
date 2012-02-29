@@ -84,7 +84,7 @@ pthread_join(pthread_t thread, void **retval)
 {
 __ESBMC_hide:
   struct __pthread_start_data enddata;
-  _Bool isitrunning = __ESBMC_get_thread_state(thread);
+  int isitrunning = __ESBMC_get_thread_state(thread);
 
   // Assume that it's no longer running. This is dodgy because we're fetching
   // explicit state from inside the model checker, but fine because we're not
