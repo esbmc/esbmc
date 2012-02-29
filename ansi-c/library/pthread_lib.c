@@ -59,6 +59,13 @@ __ESBMC_hide:
   __ESBMC_terminate_thread();
 }
 
+pthread_t
+pthread_self(void)
+{
+
+  return __ESBMC_get_thread_id();
+}
+
 int pthread_mutex_init(
   pthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr)
 {
