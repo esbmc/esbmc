@@ -171,6 +171,7 @@ protected:
                                 reachability_treet &art);
   void intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art);
   void intrinsic_terminate_thread(reachability_treet &art);
+  void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
 
   // dynamic stuff
   void replace_dynamic_allocation(const statet &state, exprt &expr);
