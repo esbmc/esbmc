@@ -318,8 +318,8 @@ goto_symext::intrinsic_set_thread_data(code_function_callt &call,
   exprt threadid = call.arguments()[0];
   exprt startdata = call.arguments()[1];
 
-  state.level2.rename(threadid);
-  state.level2.rename(startdata);
+  state.rename(threadid, ns);
+  state.rename(startdata, ns);
 
   if (threadid.id() != "constant") {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
