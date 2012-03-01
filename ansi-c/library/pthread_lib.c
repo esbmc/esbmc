@@ -40,10 +40,12 @@ __ESBMC_hide:
 
   exit_val = startdata.func(startdata.start_arg);
 
+  __ESBMC_atomic_begin();
   threadid = __ESBMC_get_thread_id();
   pthread_end_values[threadid] = exit_val;
   pthread_thread_ended[threadid] = true;
   __ESBMC_terminate_thread();
+  __ESBMC_atomic_end(); // Never reached; doesn't matter.
   return;
 }
 
@@ -70,10 +72,12 @@ void
 pthread_exit(void *retval)
 {
 __ESBMC_hide:
+  __ESBMC_atomic_begin();
   unsigned int threadid = __ESBMC_get_thread_id();
   pthread_end_values[threadid] = retval;
   pthread_thread_ended[threadid] = true;
   __ESBMC_terminate_thread();
+  __ESBMC_atomic_end();
 }
 
 pthread_t
@@ -87,6 +91,7 @@ int
 pthread_join(pthread_t thread, void **retval)
 {
 __ESBMC_hide:
+  __ESBMC_atomic_begin();
 
   // Assume that it's no longer running. This is dodgy because we're fetching
   // explicit state from inside the model checker, but fine because we're not
@@ -94,8 +99,11 @@ __ESBMC_hide:
   __ESBMC_assume(pthread_thread_ended[thread]);
 
   // Fetch exit code
+
   if (retval != NULL)
     *retval = pthread_end_values[thread];
+
+  __ESBMC_atomic_end();
 
   return 0;
 }
