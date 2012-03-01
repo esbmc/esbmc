@@ -118,6 +118,29 @@ z3_convt::init_addr_space_array(void)
     native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
   }
 
+  // Place locations of numerical addresses for null and invalid_obj.
+
+  Z3_ast tmp = z3_api.mk_var("__ESBMC_ptr_obj_start_0", native_int_sort);
+  Z3_ast num = convert_number(0, config.ansi_c.int_width, true);
+  Z3_ast eq = Z3_mk_eq(z3_ctx, tmp, num);
+  assert_formula(eq);
+
+  tmp = z3_api.mk_var("__ESBMC_ptr_obj_end_0", native_int_sort);
+  num = convert_number(0, config.ansi_c.int_width, true);
+  eq = Z3_mk_eq(z3_ctx, tmp, num);
+  assert_formula(eq);
+
+  tmp = z3_api.mk_var("__ESBMC_ptr_obj_start_1", native_int_sort);
+  num = convert_number(1, config.ansi_c.int_width, true);
+  eq = Z3_mk_eq(z3_ctx, tmp, num);
+  assert_formula(eq);
+
+  tmp = z3_api.mk_var("__ESBMC_ptr_obj_end_1", native_int_sort);
+  num = convert_number(0xFFFFFFFFFFFFFFFFULL,
+                              config.ansi_c.int_width, true);
+  eq = Z3_mk_eq(z3_ctx, tmp, num);
+  assert_formula(eq);
+
   proj_types[0] = proj_types[1] = native_int_sort;
 
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "struct_type_addr_space_tuple");
@@ -132,13 +155,13 @@ z3_convt::init_addr_space_array(void)
   addr_space_arr_sort = Z3_mk_array_type(z3_ctx, native_int_sort,
                                          addr_space_tuple_sort);
 
-  Z3_ast num = convert_number(0, config.ansi_c.int_width, true);
+  num = convert_number(0, config.ansi_c.int_width, true);
   Z3_ast initial_val = z3_api.mk_tuple(addr_space_tuple_sort, num, num, NULL);
 
   Z3_ast initial_const = Z3_mk_const_array(z3_ctx, native_int_sort, initial_val);
   Z3_ast first_name = z3_api.mk_var("__ESBMC_addrspace_arr_0",
                                     addr_space_arr_sort);
-  Z3_ast eq = Z3_mk_eq(z3_ctx, first_name, initial_const);
+  eq = Z3_mk_eq(z3_ctx, first_name, initial_const);
   assert_formula(eq);
 
   // Actually store into array
