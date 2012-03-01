@@ -1,5 +1,5 @@
-#include <pthread.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #include "intrinsics.h"
 
@@ -25,21 +25,20 @@ void __ESBMC_set_thread_internal_data(unsigned int tid,
 /* Global tracking data. Should all initialize to 0 / false */
 static _Bool pthread_thread_running[__ESBMC_constant_infinity_uint];
 static _Bool pthread_thread_ended[__ESBMC_constant_infinity_uint];
-static __ESBMC_thread_start_func_type pthread_start_funcs
-                                             [__ESBMC_constant_infinity_uint];
-static void *pthread_start_args[__ESBMC_constant_infinity_uint];
 static void *pthread_end_values[__ESBMC_constant_infinity_uint];
 
 void
 pthread_trampoline(void)
 {
 __ESBMC_hide:
+  struct __pthread_start_data startdata;
   unsigned int threadid;
   void *exit_val;
 
   threadid = __ESBMC_get_thread_id();
+  startdata = __ESBMC_get_thread_internal_data(threadid);
 
-  exit_val = pthread_start_funcs[threadid](pthread_start_args[threadid]);
+  exit_val = startdata.func(startdata.start_arg);
 
   threadid = __ESBMC_get_thread_id();
   pthread_end_values[threadid] = exit_val;
@@ -58,9 +57,8 @@ __ESBMC_hide:
 
   __ESBMC_atomic_begin();
   thread_id = __ESBMC_spawn_thread(pthread_trampoline);
-  pthread_start_funcs[thread_id] = start_routine;
-  pthread_start_args[thread_id] = arg;
   pthread_thread_running[thread_id] = true;
+  __ESBMC_set_thread_internal_data(thread_id, startdata);
   __ESBMC_atomic_end();
 
   // pthread_t is actually an unsigned long int; identify a thread using just
