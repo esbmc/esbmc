@@ -41,6 +41,7 @@ __ESBMC_hide:
 
   exit_val = pthread_start_funcs[threadid](pthread_start_args[threadid]);
 
+  threadid = __ESBMC_get_thread_id();
   pthread_end_values[threadid] = exit_val;
   pthread_thread_ended[threadid] = true;
   __ESBMC_terminate_thread();
