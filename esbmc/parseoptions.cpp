@@ -920,13 +920,6 @@ bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
       return true;
     }
 
-    // show it?
-    if(cmdline.isset("show-goto-functions"))
-    {
-      goto_functions.output(ns, std::cout);
-      return true;
-    }
-
     if(cmdline.isset("show-features"))
     {
       // add generic checks
@@ -953,6 +946,13 @@ bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
 
       goto_functions.function_map["pthread_cond_wait"] = checkit->second;
       goto_functions.function_map.erase("pthread_cond_wait_check");
+    }
+
+    // show it?
+    if(cmdline.isset("show-goto-functions"))
+    {
+      goto_functions.output(ns, std::cout);
+      return true;
     }
   }
 
