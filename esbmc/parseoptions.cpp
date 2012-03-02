@@ -937,15 +937,24 @@ bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
     // checking or not.
     if (options.get_bool_option("deadlock-check")) {
       goto_functionst::function_mapt::iterator checkit;
-      checkit = goto_functions.function_map.find("pthread_mutex_lock_check");
 
-      goto_functions.function_map["pthread_mutex_lock"] = checkit->second;
-      goto_functions.function_map.erase("pthread_mutex_lock_check");
+      checkit = goto_functions.function_map.find("c::pthread_mutex_lock_check");
+      if (checkit != goto_functions.function_map.end()) {
+        goto_functionst::goto_functiont &f =
+          goto_functions.function_map["c::pthread_mutex_lock"];
+        f.body.swap(checkit->second.body);
+        goto_functions.function_map.erase("c::pthread_mutex_lock_check");
+      }
 
-      checkit = goto_functions.function_map.find("pthread_cond_wait_check");
+      checkit = goto_functions.function_map.find("c::pthread_cond_wait_check");
+      if (checkit != goto_functions.function_map.end()) {
+        goto_functionst::goto_functiont &f2 =
+          goto_functions.function_map["c::pthread_cond_wait"];
+        f2.body.swap(checkit->second.body);
+        goto_functions.function_map.erase("c::pthread_cond_wait_check");
+      }
 
-      goto_functions.function_map["pthread_cond_wait"] = checkit->second;
-      goto_functions.function_map.erase("pthread_cond_wait_check");
+      goto_functions.update();
     }
 
     // show it?
