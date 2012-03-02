@@ -30,6 +30,8 @@ static void *pthread_end_values[__ESBMC_constant_infinity_uint];
  * there's no special initialization for pthreads */
 static unsigned int num_total_threads = 1;
 static unsigned int num_threads_running = 1;
+static unsigned int count_wait = 0;
+static unsigned int count_lock = 0;
 
 void
 pthread_trampoline(void)
@@ -146,7 +148,6 @@ int pthread_mutex_lock_check(pthread_mutex_t *mutex)
   __ESBMC_HIDE:
   _Bool unlocked = 1;
   _Bool deadlock_mutex=0;
-  extern int trds_in_run, trds_count, count_lock;
 
   __ESBMC_yield();
   __ESBMC_atomic_begin();
@@ -163,7 +164,7 @@ int pthread_mutex_lock_check(pthread_mutex_t *mutex)
 
   if (!unlocked)
   {
-	deadlock_mutex = (count_lock == trds_in_run);
+	deadlock_mutex = (count_lock == num_threads_running);
 	__ESBMC_assert(!deadlock_mutex,"deadlock detected with mutex lock");
     __ESBMC_assume(deadlock_mutex);
   }
@@ -286,9 +287,8 @@ static void do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 			_Bool assrt)
 {
   __ESBMC_HIDE:
-  extern int trds_in_run, trds_count;
-  extern int count_wait=0;
-  extern static _Bool deadlock_wait=0;
+  _Bool deadlock_wait=0;
+
   __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*cond)=1;
   if (assrt)
@@ -299,7 +299,7 @@ static void do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 
   //__ESBMC_atomic_begin();
   if (assrt) {
-    deadlock_wait = (count_wait == trds_in_run);
+    deadlock_wait = (count_wait == num_threads_running);
     __ESBMC_assert(!deadlock_wait,"deadlock detected with pthread_cond_wait");
   }
   __ESBMC_assume(/*deadlock_wait ||*/ __ESBMC_cond_lock_field(*cond)==0);
