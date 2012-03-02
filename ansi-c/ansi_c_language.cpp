@@ -97,6 +97,12 @@ static void internal_additions(std::string &code)
     "long double __ESBMC_fabsl(long double x);\n"
     "float __ESBMC_fabsf(float x);\n"
 
+    // Forward decs for pthread main thread begin/end hooks. Because they're
+    // pulled in from the C library, they need to be declared prior to pulling
+    // them in, for type checking.
+    "void pthread_start_main_hook(void);\n"
+    "void pthread_end_main_hook(void);\n"
+
     // GCC junk stuff
     GCC_BUILTIN_HEADERS
 

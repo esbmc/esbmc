@@ -34,6 +34,16 @@ static unsigned int count_wait = 0;
 static unsigned int count_lock = 0;
 
 void
+pthread_start_main_hook(void)
+{
+}
+
+void
+pthread_end_main_hook(void)
+{
+}
+
+void
 pthread_trampoline(void)
 {
 __ESBMC_hide:
