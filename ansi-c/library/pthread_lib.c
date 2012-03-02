@@ -51,6 +51,7 @@ __ESBMC_ATOMIC:
   threadid = __ESBMC_get_thread_id();
   pthread_end_values[threadid] = exit_val;
   pthread_thread_ended[threadid] = true;
+  num_threads_running--;
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end(); // Never reached; doesn't matter.
   return;
@@ -66,6 +67,8 @@ __ESBMC_hide:
 
   __ESBMC_atomic_begin();
   thread_id = __ESBMC_spawn_thread(pthread_trampoline);
+  num_total_threads++;
+  num_threads_running++;
   pthread_thread_running[thread_id] = true;
   __ESBMC_set_thread_internal_data(thread_id, startdata);
 
@@ -84,6 +87,7 @@ __ESBMC_hide:
   unsigned int threadid = __ESBMC_get_thread_id();
   pthread_end_values[threadid] = retval;
   pthread_thread_ended[threadid] = true;
+  num_threads_running--;
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
 }
