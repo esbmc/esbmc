@@ -131,17 +131,6 @@ static const char *cpp_defines_strabs[] ={
 NULL
 };
 
-static const char *cpp_defines_deadlock_check[] ={
-"pthread_mutex_lock=pthread_mutex_lock_check",
-NULL
-};
-
-static const char *cpp_defines_lock_check[] ={
-"pthread_mutex_unlock=pthread_mutex_unlock_check",
-"pthread_cond_wait=pthread_cond_wait_check",
-NULL
-};
-
 static const char *cpp_normal_defs[] = {
 "__ESBMC__",
 "__STRICT_ANSI__=1",
@@ -323,11 +312,6 @@ configure_and_run_cpp(const char *out_file_buf, std::string path,
     setup_cpp_defs(cpp_defines_64);
   else
     std::cerr << "Bad word size " << config.ansi_c.word_size << std::endl;
-
-  if (config.ansi_c.deadlock_check)
-    setup_cpp_defs(cpp_defines_deadlock_check);
-  else if (!config.ansi_c.deadlock_check && config.ansi_c.lock_check)
-    setup_cpp_defs(cpp_defines_lock_check);
 
   if (config.ansi_c.string_abstraction)
     setup_cpp_defs(cpp_defines_strabs);
