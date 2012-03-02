@@ -171,19 +171,11 @@ class execution_statet : public goto_symext
   unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
   unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
 
-  void increment_trds_in_run(void);
-  void update_trds_count(void);
-
   crypto_hash generate_hash(void) const;
   crypto_hash update_hash_for_assignment(const exprt &rhs);
   std::string serialise_expr(const exprt &rhs);
 
   void print_stack_traces(const namespacet &ns, unsigned int indent = 0) const;
-
-  private:
-  void decrement_trds_in_run(void);
-
-  // Object state
 
   public:
 

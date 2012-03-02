@@ -497,44 +497,6 @@ execution_statet::apply_static_por(const exprt &expr, unsigned int i) const
 }
 
 /*******************************************************************
-   Function: execution_statet::decrement_trds_in_run
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-execution_statet::decrement_trds_in_run(void)
-{
-
-  typet int_t = int_type();
-  exprt one_expr = gen_one(int_t);
-  exprt lhs_expr = symbol_exprt("c::trds_in_run", int_t);
-  exprt op1 = lhs_expr;
-  exprt rhs_expr = gen_binary(exprt::minus, int_t, op1, one_expr);
-
-  get_active_state().rename(rhs_expr, ns);
-  base_type(rhs_expr, ns);
-  simplify(rhs_expr);
-
-  exprt new_lhs = lhs_expr;
-
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true);
-
-  target->assignment(
-    get_active_state().guard,
-    new_lhs, lhs_expr,
-    rhs_expr,
-    get_active_state().source,
-    get_active_state().gen_stack_trace(),
-    symex_targett::STATE);
-}
-
-/*******************************************************************
    Function: execution_statet::end_thread
 
    Inputs:
@@ -555,96 +517,6 @@ execution_statet::end_thread(void)
   // live thread (because it's trying to be atomic). So, disable atomic blocks
   // when the thread ends.
   atomic_numbers[active_thread] = 0;
-  decrement_trds_in_run();
-}
-
-/*******************************************************************
-   Function: execution_statet::increment_trds_in_run
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-execution_statet::increment_trds_in_run(void)
-{
-
-  static bool thrds_in_run_flag = 1;
-  typet int_t = int_type();
-
-  if (thrds_in_run_flag) {
-    exprt lhs_expr = symbol_exprt("c::trds_in_run", int_t);
-    constant_exprt rhs_expr(int_t);
-    rhs_expr.set_value(integer2binary(1, config.ansi_c.int_width));
-
-    get_active_state().assignment(lhs_expr, rhs_expr, ns, true);
-
-    thrds_in_run_flag = 0;
-  }
-
-  exprt one_expr = gen_one(int_t);
-  exprt lhs_expr = symbol_exprt("c::trds_in_run", int_t);
-  exprt op1 = lhs_expr;
-  exprt rhs_expr = gen_binary(exprt::plus, int_t, op1, one_expr);
-
-  get_active_state().rename(rhs_expr, ns);
-  base_type(rhs_expr, ns);
-  simplify(rhs_expr);
-
-  exprt new_lhs = lhs_expr;
-
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true);
-
-  target->assignment(
-    get_active_state().guard,
-    new_lhs, lhs_expr,
-    rhs_expr,
-    get_active_state().source,
-    get_active_state().gen_stack_trace(),
-    symex_targett::STATE);
-}
-
-/*******************************************************************
-   Function:  execution_statet::update_trds_count
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-execution_statet::update_trds_count(void)
-{
-
-  typet int_t = int_type();
-  exprt lhs_expr = symbol_exprt("c::trds_count", int_t);
-  exprt op1 = lhs_expr;
-
-  constant_exprt rhs_expr = constant_exprt(int_t);
-  rhs_expr.set_value(integer2binary(threads_state.size() - 1,
-                                    config.ansi_c.int_width));
-  get_active_state().rename(rhs_expr, ns);
-  base_type(rhs_expr, ns);
-  simplify(rhs_expr);
-
-  exprt new_lhs = lhs_expr;
-
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true);
-
-  target->assignment(
-    get_active_state().guard,
-    new_lhs, lhs_expr,
-    rhs_expr,
-    get_active_state().source,
-    get_active_state().gen_stack_trace(),
-    symex_targett::STATE);
 }
 
 /*******************************************************************
@@ -734,8 +606,6 @@ execution_statet::add_thread(const goto_programt *prog)
   exprs_read_write.push_back(read_write_set());
   thread_start_data.push_back(exprt());
 
-  update_trds_count();
-  increment_trds_in_run();
   return threads_state.size() - 1; // thread ID, zero based
 }
 
