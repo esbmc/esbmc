@@ -6,7 +6,6 @@
 struct __pthread_start_data {
   __ESBMC_thread_start_func_type func;
   void *start_arg;
-  void *exit_value;
 };
 
 struct __pthread_start_data __ESBMC_get_thread_internal_data(unsigned int tid);
