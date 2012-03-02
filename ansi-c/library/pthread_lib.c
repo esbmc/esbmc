@@ -38,6 +38,9 @@ __ESBMC_hide:
   threadid = __ESBMC_get_thread_id();
   startdata = __ESBMC_get_thread_internal_data(threadid);
 
+  // Don't cause a context switch when dereferencing this pointer, which hits
+  // global pointers (i.e., the function pointer). This is an optimisation.
+__ESBMC_ATOMIC:
   exit_val = startdata.func(startdata.start_arg);
 
   __ESBMC_atomic_begin();

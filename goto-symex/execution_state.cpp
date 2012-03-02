@@ -442,6 +442,12 @@ execution_statet::check_if_ileaves_blocked(void)
   if (get_active_atomic_number() > 0)
     return true;
 
+  const goto_programt::instructiont &insn = *get_active_state().source.pc;
+  std::list<irep_idt>::const_iterator it = insn.labels.begin();
+  for (; it != insn.labels.end(); it++)
+    if (*it == "__ESBMC_ATOMIC")
+      return true;
+
   if (owning_rt->directed_interleavings)
     // Don't generate interleavings automatically - instead, the user will
     // inserts intrinsics identifying where they want interleavings to occur,
