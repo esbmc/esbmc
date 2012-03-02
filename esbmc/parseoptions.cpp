@@ -943,22 +943,16 @@ bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
     // Rename pthread functions depending on whether we're doing deadlock
     // checking or not.
     if (options.get_bool_option("deadlock-check")) {
-      goto_functionst::function_mapt::iterator checkit, notcheck;
-      notcheck = goto_functions.function_map.find("pthread_mutex_lock");
+      goto_functionst::function_mapt::iterator checkit;
       checkit = goto_functions.function_map.find("pthread_mutex_lock_check");
 
-      goto_functionst::function_mapt::value_type
-        vt("pthread_mutex_lock", checkit->second);
-      goto_functions.function_map.erase(notcheck);
-      goto_functions.function_map.insert(vt);
+      goto_functions.function_map["pthread_mutex_lock"] = checkit->second;
+      goto_functions.function_map.erase("pthread_mutex_lock_check");
 
-      notcheck = goto_functions.function_map.find("pthread_cond_wait");
       checkit = goto_functions.function_map.find("pthread_cond_wait_check");
 
-      goto_functionst::function_mapt::value_type
-        vt2("pthread_cond_wait", checkit->second);
-      goto_functions.function_map.erase(notcheck);
-      goto_functions.function_map.insert(vt);
+      goto_functions.function_map["pthread_cond_wait"] = checkit->second;
+      goto_functions.function_map.erase("pthread_cond_wait_check");
     }
   }
 
