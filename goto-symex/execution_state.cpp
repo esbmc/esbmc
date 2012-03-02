@@ -195,7 +195,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
 
   switch (instruction.type) {
     case END_FUNCTION:
-      if (instruction.function == "c::main") {
+      if (instruction.function == "main") {
         end_thread();
         art.force_cswitch_point();
       } else {
