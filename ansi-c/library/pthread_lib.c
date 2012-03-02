@@ -376,7 +376,7 @@ __ESBMC_HIDE:
   // You're permitted to signal a condvar while you hold its mutex, so we have
   // to allow a context switch before reaquiring the mutex to handle that
   // situation
-  pthread_mutex_lock_check(mutex);
+  pthread_mutex_lock(mutex);
 
   return;
 }
