@@ -31,6 +31,8 @@ static unsigned int num_threads_running = 0;
 static unsigned int count_wait = 0;
 static unsigned int count_lock = 0;
 
+/************************** Thread creation and exit **************************/
+
 void
 pthread_start_main_hook(void)
 {
@@ -139,6 +141,8 @@ __ESBMC_hide:
   return 0;
 }
 
+/************************* Mutex manipulation routines ************************/
+
 int
 pthread_mutex_init(
   pthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr)
@@ -233,6 +237,8 @@ pthread_rwlock_destroy(pthread_rwlock_t *lock)
 {
 }
 
+/************************ rwlock mainpulation routines ************************/
+
 int
 pthread_rwlock_init(pthread_rwlock_t *lock, const pthread_rwlockattr_t *attr)
 {
@@ -279,6 +285,8 @@ pthread_rwlock_wrlock(pthread_rwlock_t *lock)
   __ESBMC_atomic_end();
   return 0; // we never fail
 }
+
+/************************ condvar mainpulation routines ***********************/
 
 #if 0
 /* FUNCTION: pthread_cond_broadcast */
