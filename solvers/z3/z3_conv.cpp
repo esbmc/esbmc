@@ -396,6 +396,12 @@ z3_convt::finalize_pointer_chain(void)
     std::map<unsigned,unsigned>::const_iterator it;
     for (it = addr_space_data.begin(); it != addr_space_data.end(); it++) {
 
+      // The invalid object overlaps everything; it exists to catch anything
+      // that slip through the cracks. Don't make the assumption that objects
+      // don't overlap it.
+      if (it->first == 1)
+        continue;
+
       Z3_ast start = z3_api.mk_var(
                            ("__ESBMC_ptr_obj_start_" + itos(it->first)).c_str(),
                            native_int_sort);
@@ -425,6 +431,10 @@ z3_convt::finalize_pointer_chain(void)
 
     unsigned num_objs = addr_space_data.size();
     for (unsigned i = 0; i < num_objs; i++) {
+      // Obj 1 is designed to overlap
+      if (i == 1)
+        continue;
+
        Z3_ast i_start = z3_api.mk_var(
                            ("__ESBMC_ptr_obj_start_" + itos(i)).c_str(),
                            native_int_sort);
@@ -433,6 +443,10 @@ z3_convt::finalize_pointer_chain(void)
                            native_int_sort);
 
       for (unsigned j = 0; j < i; j++) {
+        // Obj 1 is designed to overlap
+        if (j == 1)
+          continue;
+
         Z3_ast j_start = z3_api.mk_var(
                            ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
                            native_int_sort);
