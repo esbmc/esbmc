@@ -347,23 +347,36 @@ __ESBMC_HIDE:
   _Bool deadlock_wait = 0;
 
   __ESBMC_atomic_begin();
-  __ESBMC_cond_lock_field(*cond) = 1;
-  if (assrt)
-    __ESBMC_assert(__ESBMC_mutex_lock_field(
-                     *mutex), "pthread_cond_wait must hold lock upon unlock");
-  __ESBMC_mutex_lock_field(*mutex) = 0;
-  ++count_wait;
-  //__ESBMC_atomic_end();
 
-  //__ESBMC_atomic_begin();
+  if (assrt)
+    __ESBMC_assert(__ESBMC_mutex_lock_field( *mutex),
+                   "caller must hold pthread mutex lock in pthread_cond_wait");
+
+  // Unlock mutex; register us as waiting on condvar; context switch
+  __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_cond_lock_field(*cond) = 1;
+  ++count_wait;
+
+  __ESBMC_atomic_end();
+  // Other thread activity to happen in this gap
+  __ESBMC_atomic_begin();
+
   if (assrt) {
     deadlock_wait = (count_wait == num_threads_running);
     __ESBMC_assert(!deadlock_wait, "deadlock detected with pthread_cond_wait");
   }
-  __ESBMC_assume(/*deadlock_wait ||*/ __ESBMC_cond_lock_field(*cond) == 0);
+
+  // Assume that we've been signaled. If we weren't, guard becomes false, and
+  // deadlock assertions possibly trigger.
+  __ESBMC_assume(__ESBMC_cond_lock_field(*cond) == 0);
   --count_wait;
-  __ESBMC_atomic_end();
+
+  // Assume that our sync mutex is unlocked. Prevents us grabbing an already
+  // locked mutex.
+  __ESBMC_assume(__ESBMC_mutex_lock_field(*mutex) == 0);
   __ESBMC_mutex_lock_field(*mutex) = 1;
+
+  __ESBMC_atomic_end();
 
   return;
 }
