@@ -26,21 +26,25 @@ static _Bool pthread_thread_running[__ESBMC_constant_infinity_uint];
 static _Bool pthread_thread_ended[__ESBMC_constant_infinity_uint];
 static void *pthread_end_values[__ESBMC_constant_infinity_uint];
 
-/* Number of threads in total, and number still running. Starts at 1 because
- * there's no special initialization for pthreads */
-static unsigned int num_total_threads = 1;
-static unsigned int num_threads_running = 1;
+static unsigned int num_total_threads = 0;
+static unsigned int num_threads_running = 0;
 static unsigned int count_wait = 0;
 static unsigned int count_lock = 0;
 
 void
 pthread_start_main_hook(void)
 {
+__ESBMC_ATOMIC:
+  num_total_threads++;
+__ESBMC_ATOMIC:
+  num_threads_running++;
 }
 
 void
 pthread_end_main_hook(void)
 {
+__ESBMC_ATOMIC:
+  num_threads_running--;
 }
 
 void
