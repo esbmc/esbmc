@@ -371,12 +371,12 @@ __ESBMC_HIDE:
   __ESBMC_assume(__ESBMC_cond_lock_field(*cond) == 0);
   --count_wait;
 
-  // Assume that our sync mutex is unlocked. Prevents us grabbing an already
-  // locked mutex.
-  __ESBMC_assume(__ESBMC_mutex_lock_field(*mutex) == 0);
-  __ESBMC_mutex_lock_field(*mutex) = 1;
-
   __ESBMC_atomic_end();
+
+  // You're permitted to signal a condvar while you hold its mutex, so we have
+  // to allow a context switch before reaquiring the mutex to handle that
+  // situation
+  pthread_mutex_lock_check(mutex);
 
   return;
 }
