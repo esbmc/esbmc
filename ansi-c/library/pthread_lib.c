@@ -26,6 +26,11 @@ static _Bool pthread_thread_running[__ESBMC_constant_infinity_uint];
 static _Bool pthread_thread_ended[__ESBMC_constant_infinity_uint];
 static void *pthread_end_values[__ESBMC_constant_infinity_uint];
 
+/* Number of threads in total, and number still running. Starts at 1 because
+ * there's no special initialization for pthreads */
+static unsigned int num_total_threads = 1;
+static unsigned int num_threads_running = 1;
+
 void
 pthread_trampoline(void)
 {
