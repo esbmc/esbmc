@@ -133,8 +133,6 @@ int pthread_mutex_init(
 int pthread_mutex_lock(pthread_mutex_t *mutex)
 {
   __ESBMC_HIDE:
-  extern int trds_in_run, trds_count, count_lock;
-
   __ESBMC_yield();
   __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
   __ESBMC_atomic_begin();
