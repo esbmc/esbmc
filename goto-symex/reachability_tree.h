@@ -41,7 +41,6 @@ public:
     options(opts)
   {
     CS_bound = atoi(options.get_option("context-switch").c_str());
-    deadlock_detection = options.get_bool_option("deadlock-check");
     TS_slice = atoi(options.get_option("time-slice").c_str());
     state_hashing = options.get_bool_option("state-hashing");
     directed_interleavings = options.get_bool_option("direct-interleavings");
@@ -174,7 +173,7 @@ protected:
   int TS_slice;
   unsigned int schedule_total_claims, schedule_remaining_claims;
   unsigned int next_thread_id;
-  bool deadlock_detection, por;
+  bool por;
   const namespacet &ns;
 
   friend class execution_statet;
