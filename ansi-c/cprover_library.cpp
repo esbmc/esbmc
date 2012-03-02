@@ -188,6 +188,18 @@ void add_cprover_library(
     generate_symbol_deps(it->first, it->second.type, symbol_deps);
   }
 
+  // Add two hacks; we migth use either pthread_mutex_lock or the checked
+  // variety; so if one version is used, pull in the other too.
+  std::pair<irep_idt,irep_idt>
+    lockcheck(dstring("pthread_mutex_lock"),
+              dstring("pthread_mutex_lock_check"));
+  symbol_deps.insert(lockcheck);
+
+  std::pair<irep_idt,irep_idt>
+    condcheck(dstring("pthread_cond_wait"),
+              dstring("pthread_cond_wait_check"));
+  symbol_deps.insert(lockcheck);
+
   /* The code just pulled into store_ctx might use other symbols in the C
    * library. So, repeatedly search for new C library symbols that we use but
    * haven't pulled in, then pull them in. We finish when we've made a pass
