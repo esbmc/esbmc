@@ -289,13 +289,6 @@ pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 /************************ condvar mainpulation routines ***********************/
 
 #if 0
-/* FUNCTION: pthread_cond_broadcast */
-
-#ifndef __ESBMC_PTHREAD_H_INCLUDED
-#include <pthread.h>
-#define __ESBMC_PTHREAD_H_INCLUDED
-#endif
-
 int
 pthread_cond_broadcast(pthread_cond_t *cond)
 {
