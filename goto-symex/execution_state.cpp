@@ -263,7 +263,7 @@ execution_statet::symex_goto(statet &state, const exprt &old_guard)
 
   goto_symext::symex_goto(state, old_guard);
 
-  if (!old_guard.is_nil() && !options.get_bool_option("deadlock-check"))
+  if (!old_guard.is_nil())
     if (threads_state.size() > 1)
       owning_rt->analyse_for_cswitch_after_read(old_guard);
 
