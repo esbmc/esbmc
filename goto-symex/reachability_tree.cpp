@@ -630,13 +630,8 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
   std::string input;
   unsigned int tid;
 
-  // If the guard on this execution trace is false, no context switches are
-  // going to be run over in the future and just general randomness is going to
-  // occur. So there's absolutely no reason exploring further.
-  if (get_cur_state().get_active_state().guard.is_false()) {
+  if (get_cur_state().get_active_state().guard.is_false())
     std::cout << "This trace's guard is false; it will not be evaulated." << std::endl;
-    exit(1);
-  }
 
   // First of all, are there actually any valid context switch targets?
   for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
