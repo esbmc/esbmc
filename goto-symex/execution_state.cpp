@@ -512,7 +512,6 @@ execution_statet::end_thread(void)
 {
 
   get_active_state().thread_ended = true;
-  get_active_state().guard.make_false();
   // If ending in an atomic block, the switcher fails to switch to another
   // live thread (because it's trying to be atomic). So, disable atomic blocks
   // when the thread ends.
