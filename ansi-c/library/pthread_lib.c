@@ -135,8 +135,12 @@ __ESBMC_hide:
   // happen.
   // One exception - where the thread we're joining _has_ already ended. We
   // can still continue onwards and cause progress to occur if that's the case.
-  __ESBMC_assert(num_threads_running != 1 + count_wait + count_lock &&
-                 !pthread_thread_ended[thread],
+  //
+  // And another exception; _something_ has to be blocked. We can have one
+  // thread runing (this one) and still violate the assertion otherwise.
+  __ESBMC_assert((num_threads_running != 1 + count_wait + count_lock &&
+                 !pthread_thread_ended[thread]) ||
+                 count_wait + count_lock == 0,
                  "Deadlock: pthread_join with all other threads blocked");
 
   // Assume that it's no longer running. This is dodgy because we're fetching
