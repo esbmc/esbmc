@@ -172,7 +172,6 @@ __ESBMC_HIDE:
   _Bool unlocked = 1;
   _Bool deadlock_mutex = 0;
 
-  __ESBMC_yield();
   __ESBMC_atomic_begin();
   unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
 
@@ -180,16 +179,13 @@ __ESBMC_HIDE:
     __ESBMC_mutex_lock_field(*mutex) = 1;
   else
     count_lock++;
-  __ESBMC_atomic_end();
-
-  if (__ESBMC_mutex_lock_field(*mutex) == 0)
-    count_lock--;
 
   if (!unlocked) {
     deadlock_mutex = (count_lock == num_threads_running);
     __ESBMC_assert(!deadlock_mutex, "deadlock detected with mutex lock");
     __ESBMC_assume(deadlock_mutex);
   }
+  __ESBMC_atomic_end();
 
   return 0;
 }
