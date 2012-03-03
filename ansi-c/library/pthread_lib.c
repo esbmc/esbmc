@@ -137,7 +137,7 @@ __ESBMC_hide:
   // can still continue onwards and cause progress to occur if that's the case.
   __ESBMC_assert(num_threads_running != 1 + count_wait + count_lock &&
                  !pthread_thread_ended[thread],
-                 "Deadlock: pthread_join with all other threads blocked");
+                 "deadlock detected: pthread_join with all other threads blocked");
 
   // Assume that it's no longer running. This is dodgy because we're fetching
   // explicit state from inside the model checker, but fine because we're not
