@@ -53,7 +53,6 @@ public:
   bool analyse_for_cswitch_after_assign(const exprt &code);
   void create_next_state(void);
   bool step_next_state(void);
-  bool is_global_assign(const exprt &code);
 
   unsigned int decide_ileave_direction(execution_statet &ex_state,
                                        const exprt &expr);

@@ -125,28 +125,6 @@ int reachability_treet::get_CS_bound() const
 }
 
 /*******************************************************************
- Function: reachability_treet::is_global_assign
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool reachability_treet::is_global_assign(const exprt &code)
-{
-
-  int num_read_globals = get_cur_state().get_expr_read_globals(ns,code.op1());
-
-  if (num_read_globals)
-	return true;
-  else
-	return false;
-}
-
-/*******************************************************************
  Function: reachability_treet::analyse_for_cswitch_after_read
 
  Inputs:
