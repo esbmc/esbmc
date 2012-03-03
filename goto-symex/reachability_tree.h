@@ -18,12 +18,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "execution_state.h"
 #include "symex_target_equation.h"
 #include "renaming.h"
-
-// Can't include goto_symex.h due to inclusion order. This can be fixed with the
-// refactor; in the meantime, forward dec.
-
 #include "crypto_hash.h"
-
 #include <goto-programs/goto_program.h>
 
 class reachability_treet
