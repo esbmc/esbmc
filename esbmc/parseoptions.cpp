@@ -24,6 +24,7 @@ extern "C" {
 }
 #endif
 
+#include <irep.h>
 #include <config.h>
 #include <expr_util.h>
 
@@ -842,6 +843,32 @@ Function: cbmc_parseoptionst::process_goto_program
 
 \*******************************************************************/
 
+static void
+relink_calls_from_to(irept &irep, irep_idt from_name, irep_idt to_name)
+{
+
+   if (irep.id() == "symbol") {
+    if (irep.identifier() == from_name)
+      irep.identifier(to_name);
+
+    return;
+  } else {
+    Forall_irep(it, irep.get_sub()) {
+      relink_calls_from_to(*it, from_name, to_name);
+    }
+
+    Forall_named_irep(it, irep.get_named_sub()) {
+      relink_calls_from_to(it->second, from_name, to_name);
+    }
+
+    Forall_named_irep(it, irep.get_comments()) {
+      relink_calls_from_to(it->second, from_name, to_name);
+    }
+  }
+
+  return;
+}
+
 bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
 {
   try
@@ -937,24 +964,30 @@ bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
     // checking or not.
     if (options.get_bool_option("deadlock-check")) {
       goto_functionst::function_mapt::iterator checkit;
+      irep_idt mutex_lock("c::pthread_mutex_lock");
+      irep_idt lock_check("c::pthread_mutex_lock_check");
 
-      checkit = goto_functions.function_map.find("c::pthread_mutex_lock_check");
-      if (checkit != goto_functions.function_map.end()) {
-        goto_functionst::goto_functiont &f =
-          goto_functions.function_map["c::pthread_mutex_lock"];
-        f.body.swap(checkit->second.body);
-        goto_functions.function_map.erase("c::pthread_mutex_lock_check");
+      checkit = goto_functions.function_map.begin();
+      for (; checkit != goto_functions.function_map.end(); checkit++) {
+        goto_programt::instructionst::iterator it =
+          checkit->second.body.instructions.begin();
+        for (; it != checkit->second.body.instructions.end(); it++) {
+          relink_calls_from_to(it->code, mutex_lock, lock_check);
+          relink_calls_from_to(it->guard, mutex_lock, lock_check);
+        }
       }
 
-      checkit = goto_functions.function_map.find("c::pthread_cond_wait_check");
-      if (checkit != goto_functions.function_map.end()) {
-        goto_functionst::goto_functiont &f2 =
-          goto_functions.function_map["c::pthread_cond_wait"];
-        f2.body.swap(checkit->second.body);
-        goto_functions.function_map.erase("c::pthread_cond_wait_check");
+      irep_idt cond_wait("c::pthread_cond_wait");
+      irep_idt cond_check("c::pthread_cond_wait_check");
+      checkit = goto_functions.function_map.begin();
+      for (; checkit != goto_functions.function_map.end(); checkit++) {
+        goto_programt::instructionst::iterator it =
+          checkit->second.body.instructions.begin();
+        for (; it != checkit->second.body.instructions.end(); it++) {
+          relink_calls_from_to(it->code, cond_wait, cond_check);
+          relink_calls_from_to(it->guard, cond_wait, cond_check);
+        }
       }
-
-      goto_functions.update();
     }
 
     // show it?
