@@ -208,31 +208,15 @@ pthread_mutex_trylock(pthread_mutex_t *mutex)
   return 0; // we never fail
 }
 
-static void
-do_pthread_mutex_unlock(pthread_mutex_t *mutex, _Bool assrt)
+void
+pthread_mutex_unlock(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:
   __ESBMC_atomic_begin();
-  if (assrt)
-    __ESBMC_assert(__ESBMC_mutex_lock_field(
-                     *mutex), "must hold lock upon unlock");
+  __ESBMC_assert(__ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
   __ESBMC_mutex_lock_field(*mutex) = 0;
   __ESBMC_atomic_end();
   return;
-}
-
-int
-pthread_mutex_unlock(pthread_mutex_t *mutex)
-{
-  do_pthread_mutex_unlock(mutex, 0);
-  return 0;
-}
-
-int
-pthread_mutex_unlock_check(pthread_mutex_t *mutex)
-{
-  do_pthread_mutex_unlock(mutex, 1);
-  return 0;
 }
 
 int
