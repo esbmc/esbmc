@@ -32,7 +32,6 @@ reachability_treet::reachability_treet(
     symex_targett *target,
     contextt &context) :
     goto_functions(goto_functions),
-    reached_terminal_state(NULL),
     ns(ns),
     options(opts)
 {
