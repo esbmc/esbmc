@@ -196,9 +196,10 @@ __ESBMC_HIDE:
   if (!unlocked) {
     deadlock_mutex = (count_lock == num_threads_running);
     __ESBMC_assert(!deadlock_mutex, "deadlock detected with mutex lock");
-    __ESBMC_assume(deadlock_mutex);
   }
   __ESBMC_atomic_end();
+
+  __ESBMC_assume(deadlock_mutex);
 
   return 0;
 }
