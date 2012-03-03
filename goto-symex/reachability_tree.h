@@ -136,8 +136,10 @@ protected:
   int TS_slice;
   unsigned int schedule_total_claims, schedule_remaining_claims;
   unsigned int next_thread_id;
-  bool deadlock_detection, por;
+  bool por;
   const namespacet &ns;
+
+  friend class execution_statet;
 
     /* jmorse */
   std::set<crypto_hash>hit_hashes;

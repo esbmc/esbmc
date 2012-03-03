@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iostream>
 #include <vector>
 
+#include <prefix.h>
 #include <std_expr.h>
 #include <rename.h>
 #include <expr_util.h>
@@ -133,9 +134,14 @@ void goto_symext::symex_step(
             state.source.pc++;
             break;
         case END_FUNCTION:
-          symex_end_of_function(state);
-          state.source.pc++;
-          break;
+                symex_end_of_function(state);
+
+                // Potentially skip to run another function ptr target; if not,
+                // continue
+                if (!run_next_function_ptr_target(goto_functions, state,
+                                                  false))
+                  state.source.pc++;
+            break;
         case LOCATION:
             target->location(state.guard, state.source);
             state.source.pc++;
@@ -235,36 +241,16 @@ void goto_symext::symex_step(
                     dereference(deref_code.lhs(), state, true);
                 }
 
-                dereference(deref_code.function(), state, false);
-
-                if(deref_code.function().identifier() == "c::__ESBMC_yield")
-                {
-                   art.force_cswitch_point();
-                   state.source.pc++;
-                   return;
-                }
-
-                if (deref_code.function().identifier() == "c::__ESBMC_switch_to")
-                {
-
-                  assert(deref_code.arguments().size() == 1);
-
-                  // Switch to other thread.
-                  exprt &num = deref_code.arguments()[0];
-                  if (num.id() != "constant")
-                    throw "Can't switch to non-constant thread id no";
-
-                  state.source.pc++;
-
-                  unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
-                  if (tid != ex_state.get_active_state_number())
-                    ex_state.switch_to_thread(tid);
-
-                  return;
-                }
-
                 Forall_expr(it, deref_code.arguments()) {
                     dereference(*it, state, false);
+                }
+
+                if (has_prefix(deref_code.function().identifier().as_string(),
+                               "c::__ESBMC")) {
+                  state.source.pc++;
+                  run_intrinsic(deref_code, art,
+                                deref_code.function().identifier().as_string());
+                  return;
                 }
 
                 symex_function_call(goto_functions, state, deref_code);
@@ -298,4 +284,35 @@ void goto_symext::symex_step(
             std::cerr << " not handled in goto_symext::symex_step" << std::endl;
             abort();
     }
+}
+
+void
+goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
+                           const std::string symname)
+{
+
+  if(symname == "c::__ESBMC_yield") {
+    intrinsic_yield(art);
+  } else if (symname == "c::__ESBMC_switch_to") {
+    intrinsic_switch_to(call, art);
+  } else if (symname == "c::__ESBMC_get_thread_id") {
+    intrinsic_get_thread_id(call, art);
+  } else if (symname == "c::__ESBMC_set_thread_internal_data") {
+    intrinsic_set_thread_data(call, art);
+  } else if (symname == "c::__ESBMC_get_thread_internal_data") {
+    intrinsic_get_thread_data(call, art);
+  } else if (symname == "c::__ESBMC_spawn_thread") {
+    intrinsic_spawn_thread(call, art);
+  } else if (symname == "c::__ESBMC_terminate_thread") {
+    intrinsic_terminate_thread(art);
+  } else if (symname == "c::__ESBMC_get_thread_state") {
+    intrinsic_get_thread_state(call, art);
+  } else {
+    std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
+    std::cerr << std::endl << "The name in question: " << symname << std::endl;
+    std::cerr << "(NB: the C spec reserves the __ prefix for the compiler and environment)" << std::endl;
+    abort();
+  }
+
+  return;
 }

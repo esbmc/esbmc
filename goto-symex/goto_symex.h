@@ -128,7 +128,12 @@ protected:
     statet &state,
     const code_function_callt &call);
 
-  void symex_function_call_code(
+  virtual void symex_function_call_deref(
+    const goto_functionst &goto_functions,
+    statet &state,
+    const code_function_callt &call);
+
+  virtual void symex_function_call_code(
     const goto_functionst &goto_functions,
     statet &state,
     const code_function_callt &call);
@@ -150,6 +155,23 @@ protected:
   void add_end_of_function(
     exprt &code,
     const irep_idt &identifier);
+
+  bool run_next_function_ptr_target(const goto_functionst &goto_functions,
+                                    statet &state, bool first);
+
+  void run_intrinsic(code_function_callt &call, reachability_treet &art,
+                     const std::string symname);
+  void intrinsic_yield(reachability_treet &arg);
+  void intrinsic_switch_to(code_function_callt &call, reachability_treet &art);
+  void intrinsic_get_thread_id(code_function_callt &call,
+                                reachability_treet &art);
+  void intrinsic_set_thread_data(code_function_callt &call,
+                                reachability_treet &art);
+  void intrinsic_get_thread_data(code_function_callt &call,
+                                reachability_treet &art);
+  void intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art);
+  void intrinsic_terminate_thread(reachability_treet &art);
+  void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
 
   // dynamic stuff
   void replace_dynamic_allocation(const statet &state, exprt &expr);

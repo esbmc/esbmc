@@ -71,6 +71,7 @@ int main()
   pthread_t thr_cons[AMOUNT_CONS];
   int i, j;
 
+  __ESBMC_atomic_begin();
   for (i=0; i<(AMOUNT_PROD+AMOUNT_CONS); i++)
     join[i] = FALSE;
     
@@ -87,23 +88,8 @@ int main()
     pthread_create(&thr_cons[j], NULL, consumer, &thread_id[i]);
     i++;
   }
-  
-  if ((AMOUNT_PROD+AMOUNT_CONS) == 2)
-    __ESBMC_assume((join[0] && join[1]));
-  else if ((AMOUNT_PROD+AMOUNT_CONS) == 3)
-    __ESBMC_assume((join[0] && join[1] && join[2]));
-  else if ((AMOUNT_PROD+AMOUNT_CONS) == 4)
-    __ESBMC_assume((join[0] && join[1] && join[2] && join[3]));
-  else if ((AMOUNT_PROD+AMOUNT_CONS) == 5)
-    __ESBMC_assume((join[0] && join[1] && join[2] && join[3] && join[4]));
-  else if ((AMOUNT_PROD+AMOUNT_CONS) == 6)
-    __ESBMC_assume((join[0] && join[1] && join[2] && join[3] && join[4] && join[5]));
-  else if ((AMOUNT_PROD+AMOUNT_CONS) == 7)
-    __ESBMC_assume((join[0] && join[1] && join[2] && join[3] && join[4] && join[5] && join[6]));
-  else if ((AMOUNT_PROD+AMOUNT_CONS) == 8)
-    __ESBMC_assume((join[0] && join[1] && join[2] && join[3] && join[4] && join[5] && join[6] && join[7]));
-  else if ((AMOUNT_PROD+AMOUNT_CONS) == 9)
-    __ESBMC_assume((join[0] && join[1] && join[2] && join[3] && join[4] && join[5] && join[6] && join[7] && join[8]));
+
+  __ESBMC_atomic_end();
 
   pthread_mutex_destroy (&lock);
 

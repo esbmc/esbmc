@@ -108,7 +108,7 @@ void remove_skip(goto_programt &goto_program)
   // adjust gotos
 
   Forall_goto_program_instructions(i_it, goto_program)
-    if(i_it->is_goto() || i_it->is_start_thread())
+    if(i_it->is_goto())
     {
       for(goto_programt::instructiont::targetst::iterator
           t_it=i_it->targets.begin();

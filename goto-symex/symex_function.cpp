@@ -185,7 +185,7 @@ void goto_symext::symex_function_call(
   if(function.id()==exprt::symbol)
     symex_function_call_symbol(goto_functions, state, code);
   else
-    throw "unexpected function for symex_function_call: "+code.id_string();
+    symex_function_call_deref(goto_functions, state, code);
 }
 
 /*******************************************************************\
@@ -237,8 +237,16 @@ void goto_symext::symex_function_call_code(
   goto_functionst::function_mapt::const_iterator it=
     goto_functions.function_map.find(identifier);
 
-  if(it==goto_functions.function_map.end())
+  if(it==goto_functions.function_map.end()) {
+    if (call.function().invalid_object()) {
+      std::cout << "WARNING: function ptr call with no target, ";
+      std::cout << call.location() << std::endl;
+      state.source.pc++;
+      return;
+    }
+
     throw "failed to find `"+id2string(identifier)+"' in function_map";
+  }
 
   const goto_functionst::goto_functiont &goto_function=it->second;
   
@@ -311,6 +319,167 @@ void goto_symext::symex_function_call_code(
   state.source.is_set=true;
   state.source.pc=goto_function.body.instructions.begin();
   state.source.prog=&goto_function.body;
+}
+
+static std::list<std::pair<guardt,exprt> >
+get_function_list(const exprt &expr)
+{
+  std::list<std::pair<guardt,exprt> > l;
+
+  if (expr.id() == "if") {
+    std::list<std::pair<guardt,exprt> > l1, l2;
+    exprt guardexpr = expr.op0();
+    exprt notguardexpr = not_exprt(guardexpr);
+
+    // Get sub items, them iterate over adding the relevant guard
+    l1 = get_function_list(expr.op1());
+    for (std::list<std::pair<guardt,exprt> >::iterator it = l1.begin();
+         it != l1.end(); it++)
+      it->first.add(guardexpr);
+
+    l2 = get_function_list(expr.op2());
+    for (std::list<std::pair<guardt,exprt> >::iterator it = l2.begin();
+         it != l2.end(); it++)
+      it->first.add(notguardexpr);
+
+    l1.splice(l1.begin(), l2);
+    return l1;
+  } else if (expr.id() == "symbol") {
+    guardt guard;
+    guard.make_true();
+    std::pair<guardt,exprt> p(guard, expr);
+    l.push_back(p);
+    return l;
+  } else {
+    std::cerr << "Unexpected irep id " << expr.id() << " in function ptr dereference" << std::endl;
+    abort();
+  }
+}
+
+void
+goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
+                                       statet &state,
+                                       const code_function_callt &call)
+{
+
+  assert(state.top().cur_function_ptr_targets.size() == 0);
+
+  // Indirect function call. The value is dereferenced, so we'll get either an
+  // address_of a symbol, or a set of if ireps. For symbols we'll invoke
+  // symex_function_call_symbol, when dealing with if's we need to fork and
+  // merge.
+  if (call.op1().is_nil()) {
+    std::cerr << "Function pointer call with no targets; irep: ";
+    std::cerr << call.pretty(0) << std::endl;
+    abort();
+  }
+
+  // Generate a list of functions to call. We'll then proceed to call them,
+  // and will later on merge them.
+  exprt funcptr = call.op1();
+  dereference(funcptr, state, false);
+
+  if (funcptr.invalid_object()) {
+    // Emit warning; perform no function call behaviour. Increment PC
+    std::cout << call.op1().location().as_string() << std::endl;
+    std::cout << "No target candidate for function call " <<
+      from_expr(ns, "", call.op1()) << std::endl;
+    state.source.pc++;
+    return;
+  }
+
+  std::list<std::pair<guardt,exprt> > l = get_function_list(funcptr);
+
+  // Store.
+  for (std::list<std::pair<guardt,exprt> >::iterator it = l.begin();
+       it != l.end(); it++) {
+
+    goto_functionst::function_mapt::const_iterator fit =
+      goto_functions.function_map.find(it->second.identifier());
+    if (fit == goto_functions.function_map.end() || !fit->second.body_available) {
+      std::cerr << "Couldn't find symbol " << it->second.identifier();
+      std::cerr << " or body not available, during function ptr dereference";
+      std::cerr << std::endl;
+      abort();
+    }
+
+    // Set up a merge of the current state into the target function.
+    statet::goto_state_listt &goto_state_list =
+      state.top().goto_state_map[fit->second.body.instructions.begin()];
+
+    state.top().cur_function_ptr_targets.push_back(
+      std::pair<goto_programt::const_targett,exprt>(
+        fit->second.body.instructions.begin(),
+        it->second)
+      );
+
+    goto_state_list.push_back(statet::goto_statet(state));
+    statet::goto_statet &new_state = goto_state_list.back();
+    exprt guardexpr = it->first.as_expr();
+    state.rename(guardexpr, ns);
+    new_state.guard.add(guardexpr);
+  }
+
+  state.top().function_ptr_call_loc = state.source.pc;
+  state.top().function_ptr_combine_target = state.source.pc;
+  state.top().function_ptr_combine_target++;
+  state.top().orig_func_ptr_call = new code_function_callt(call);
+
+  run_next_function_ptr_target(goto_functions, state, true);
+}
+
+bool
+goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
+                                          statet &state, bool first)
+{
+
+  if (state.call_stack.empty())
+    return false;
+
+  if (state.top().cur_function_ptr_targets.size() == 0)
+    return false;
+
+  // Record a merge - when all function ptr target runs are completed, they'll
+  // be merged into the state when the instruction after the func call is run.
+  // But, don't do it the first time, or we'll have a merge that's effectively
+  // unconditional.
+  if (!first) {
+    statet::goto_state_listt &goto_state_list =
+      state.top().goto_state_map[state.top().function_ptr_combine_target];
+    goto_state_list.push_back(statet::goto_statet(state));
+  }
+
+  // Take one function ptr target out of the list and jump to it. A previously
+  // recorded merge will ensure it gets the right state.
+  std::pair<goto_programt::const_targett,exprt> p =
+    state.top().cur_function_ptr_targets.front();
+  state.top().cur_function_ptr_targets.pop_front();
+
+  goto_programt::const_targett target = p.first;
+  exprt target_symbol = p.second;
+
+  state.guard.make_false();
+  state.source.pc = target;
+
+  // Merge pre-function-ptr-call state in immediately.
+  merge_gotos(state);
+
+  // Now switch back to the original call location so that the call appears
+  // to originate from there...
+  state.source.pc = state.top().function_ptr_call_loc;
+
+  // And setup the function call.
+  code_function_callt call = *state.top().orig_func_ptr_call;
+  call.function() = target_symbol;
+  goto_symex_statet::framet &cur_frame = state.top();
+
+  if (state.top().cur_function_ptr_targets.size() == 0)
+    delete cur_frame.orig_func_ptr_call;
+
+  symex_function_call_code(goto_functions, state, call);
+
+
+  return true;
 }
 
 /*******************************************************************\

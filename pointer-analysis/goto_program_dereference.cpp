@@ -414,8 +414,18 @@ void goto_program_dereferencet::dereference_instruction(
     if(function_call.lhs().is_not_nil())
       dereference_expr(function_call.lhs(), checks_only, dereferencet::WRITE);
 
-    dereference_expr(function_call.function(), checks_only, dereferencet::READ);
     dereference_expr(function_call.op2(), checks_only, dereferencet::READ);
+
+    if (function_call.function().id() == "dereference") {
+      // Rather than derefing function ptr, which we're moving to not collect
+      // via pointer analysis, instead just assert that it's a valid pointer.
+      exprt invalid_ptr("invalid-pointer", typet("bool"));
+      invalid_ptr.copy_to_operands(function_call.function().op0());
+      guardt guard;
+      guard.move(invalid_ptr);
+      dereference_failure("function pointer dereference",
+                          "invalid pointer", guard);
+    }
   }
   else if (i.is_return())
   {

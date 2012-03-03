@@ -171,8 +171,6 @@ protected:
   void convert_non_deterministic_goto(const codet &code, goto_programt &dest);
   void convert_label(const code_labelt &code, goto_programt &dest);
   void convert_function_call(const code_function_callt &code, goto_programt &dest);
-  void convert_start_thread(const codet &code, goto_programt &dest);
-  void convert_end_thread(const codet &code, goto_programt &dest);
   void convert_atomic_begin(const codet &code, goto_programt &dest);
   void convert_atomic_end(const codet &code, goto_programt &dest);
   void convert_bp_enforce(const codet &code, goto_programt &dest);
@@ -330,8 +328,6 @@ protected:
   void do_exit          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_array_set     (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_pthread_create(const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_pthread_exit  (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
 
   private:
     bool is_thread;
