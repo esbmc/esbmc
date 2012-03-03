@@ -126,17 +126,15 @@ pthread_join(pthread_t thread, void **retval)
 __ESBMC_hide:
   __ESBMC_atomic_begin();
 
-  // The thread we're trying to join with may be deadlocked, in which case
-  // assuming it's exited is counterproductive and won't lead to the deadlock
-  // assertion triggering. Instead, assert now that there's at least one other
-  // thread running that isn't encountering a deadlock and isn't us. If all
-  // other threads have incremented count_{wait/lock} except us, it means that
-  // for this interleaving everything else is waiting for something else to
-  // happen.
+  // The thread we're trying to join with may be deadlocked. Assert that there's
+  // at least one other thread running that isn't encountering a deadlock and
+  // isn't us. If all other threads have incremented count_{wait/lock} except
+  // us, it means that for this interleaving everything else is waiting for
+  // something else to happen.
   // One exception - where the thread we're joining _has_ already ended. We
   // can still continue onwards and cause progress to occur if that's the case.
-  __ESBMC_assert(num_threads_running != 1 + count_wait + count_lock &&
-                 !pthread_thread_ended[thread],
+  __ESBMC_assert(num_threads_running != 1 + count_wait + count_lock ||
+                 pthread_thread_ended[thread],
                  "deadlock detected: pthread_join with all other threads blocked");
 
   // Assume that it's no longer running. This is dodgy because we're fetching
