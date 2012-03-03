@@ -116,6 +116,11 @@ public:
     return insert(dest, object_numbering.number(expr), object);
   }
 
+  bool erase(idt name)
+  {
+    return (values.erase(name) == 1);
+  }
+
   struct entryt
   {
     object_mapt object_map;

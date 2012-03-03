@@ -320,8 +320,11 @@ void goto_symext::pop_frame(statet &state)
   for(statet::framet::local_variablest::const_iterator
       it=frame.local_variables.begin();
       it!=frame.local_variables.end();
-      it++)
+      it++) {
     state.level2.remove(*it);
+    irep_idt orig_name = state.level2.get_original_name(*it);
+    state.value_set.erase(orig_name);
+  }
 
   // decrease recursion unwinding counter
   if(frame.function_identifier!="")
