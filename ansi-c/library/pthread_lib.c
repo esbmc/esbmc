@@ -181,7 +181,7 @@ pthread_mutex_lock_check(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:
   _Bool unlocked = 1;
-  _Bool deadlock_mutex = 0;
+  _Bool deadlock_mutex = true;
 
   __ESBMC_atomic_begin();
   unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
