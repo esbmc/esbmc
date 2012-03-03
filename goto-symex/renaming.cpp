@@ -211,6 +211,12 @@ void renaming::level2t::print(std::ostream &out) const
 
 }
 
+void renaming::level2t::dump() const
+{
+
+  print(std::cout);
+}
+
 irep_idt
 renaming::level2t::make_assignment(irep_idt l1_ident, const exprt &const_value,
                            const exprt &assigned_value __attribute__((unused)))
