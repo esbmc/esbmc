@@ -443,13 +443,8 @@ goto_symex_statet::gen_stack_trace(void) const
   // Format is a vector of strings, each recording a particular function
   // invocation.
 
-  src = source;
-  for (it = call_stack.rbegin(); it != call_stack.rend();
-       it++, src = it->calling_location) {
-
-    // Don't store current function, that can be extracted elsewhere.
-    if (i++ == 0)
-      continue;
+  for (it = call_stack.rbegin(); it != call_stack.rend(); it++) {
+    src = it->calling_location;
 
     if (it->function_identifier == "") { // Top level call
       break;
