@@ -7,6 +7,7 @@ function usage {
   echo "    -p dirname     Path to regression test to run" >&2
   echo "    -s             Unstash/Stash when performing a run" >&2
   echo "    -n             No decisive output means bad revision" >&2
+  echo "    -T num_secs    Test taking more than num_secs means failure" >&2
   echo "You must specify either -t or -p."
 }
 
@@ -14,7 +15,8 @@ searchpath=-1
 beatstash=0
 nooutputisfail=0
 dirpath=""
-while getopts "t:p:s" opt; do
+numsecs=0
+while getopts "t:p:sT:" opt; do
   case $opt in
     t)
       testname=$OPTARG
@@ -29,6 +31,9 @@ while getopts "t:p:s" opt; do
       ;;
     n)
       nooutputisfail=1
+      ;;
+    T)
+      numsecs=$OPTARG
       ;;
     \?)
       echo "Invalid option -$OPTARG" >&2
@@ -151,9 +156,32 @@ if test $success = 0 -a $failure = 0; then
   exit -1
 fi
 
+# Potentially run with a timeout
+alarm() { perl -e 'sleep shift; exec @ARGV' "$@" &  }
+
+alarmed_exit() {
+  echo "Timed out" >&2
+  kill -9 $esbmcpid
+  exit 1
+}
+
+trap alarmed_exit SIGINT
+
+if test $numsecs != 0; then
+  alarm $numsecs kill -s SIGINT $$
+  alarmprocpid=$!
+fi
+
 # Actually run esbmc
 tmpfile=`mktemp`
-$ESBMCDIR/esbmc/esbmc $args > $tmpfile 2>&1
+$ESBMCDIR/esbmc/esbmc $args > $tmpfile 2>&1 &
+esbmcpid=$!
+
+wait $esbmcpid
+
+if test $numsecs != 0; then
+  kill -9 $alarmprocpid
+fi
 
 # Sadly due to binaries in the tree, git bisect can complain if we don't clean
 # immediately.

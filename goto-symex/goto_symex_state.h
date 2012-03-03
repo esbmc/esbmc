@@ -37,7 +37,7 @@ public:
   class framet; // forward dec
 
   goto_symex_statet(renaming::level2t &l2, value_sett &vs)
-    : level2(l2), value_set(vs)
+    : guard(), level2(l2), value_set(vs)
   {
     use_value_set = true;
     depth = 0;
@@ -45,6 +45,7 @@ public:
     waiting = false;
     join_count = 0;
     thread_ended = false;
+    guard.make_true();
   }
 
   goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2)
@@ -139,6 +140,16 @@ public:
     typedef std::set<irep_idt> local_variablest;
     local_variablest local_variables;
 
+    // Records containing data for dereferencing and running a function pointer.
+    // Should only be nonzero sized when in the middle of running such a func
+    // ptr.
+    // Program target instruction, and the symbol of the func its in.
+    std::list<std::pair<goto_programt::const_targett,exprt> >
+      cur_function_ptr_targets;
+    goto_programt::const_targett function_ptr_call_loc;
+    goto_programt::const_targett function_ptr_combine_target;
+    const code_function_callt *orig_func_ptr_call;
+
     framet(unsigned int thread_id) :
       return_value(static_cast<const exprt &>(get_nil_irep()))
     {
@@ -217,7 +228,7 @@ public:
   bool constant_propagation_reference(const exprt &expr) const;
 
   // undoes both levels of renaming
-  const irep_idt &get_original_name(const irep_idt &identifier) const;
+  const irep_idt get_original_name(const irep_idt &identifier) const;
   void get_original_name(exprt &expr) const;
 
   void print_stack_trace(const namespacet &ns, unsigned int indent) const;

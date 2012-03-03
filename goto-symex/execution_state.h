@@ -119,6 +119,28 @@ class execution_statet : public goto_symext
     return active_thread;
   }
 
+  void set_thread_start_data(unsigned int tid, const exprt &argdata)
+  {
+    if (tid >= thread_start_data.size()) {
+      std::cerr << "Setting thread data for nonexistant thread " << tid;
+      std::cerr << std::endl;
+      abort();
+    }
+
+    thread_start_data[tid] = argdata;
+  }
+
+  const exprt &get_thread_start_data(unsigned int tid) const
+  {
+    if (tid >= thread_start_data.size()) {
+      std::cerr << "Getting thread data for nonexistant thread " << tid;
+      std::cerr << std::endl;
+      abort();
+    }
+
+    return thread_start_data[tid];
+  }
+
   // Methods
 
   virtual execution_statet *clone(void) const = 0;
@@ -144,27 +166,16 @@ class execution_statet : public goto_symext
   bool check_if_ileaves_blocked(void);
   bool apply_static_por(const exprt &expr, unsigned int i) const;
 
-  void add_thread(goto_programt::const_targett start,
-                  goto_programt::const_targett end,
-                  const goto_programt *prog);
-  void add_thread(goto_symex_statet & state);
+  unsigned int add_thread(const goto_programt *prog);
   void end_thread(void);
   unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
   unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
-
-  void increment_trds_in_run(void);
-  void update_trds_count(void);
 
   crypto_hash generate_hash(void) const;
   crypto_hash update_hash_for_assignment(const exprt &rhs);
   std::string serialise_expr(const exprt &rhs);
 
   void print_stack_traces(const namespacet &ns, unsigned int indent = 0) const;
-
-  private:
-  void decrement_trds_in_run(void);
-
-  // Object state
 
   public:
 
@@ -173,6 +184,7 @@ class execution_statet : public goto_symext
   std::vector<unsigned int> atomic_numbers;
   std::vector<bool> DFS_traversed;
   std::vector<read_write_set> exprs_read_write;
+  std::vector<exprt> thread_start_data;
   read_write_set last_global_read_write;
   unsigned int last_active_thread;
   ex_state_level2t *state_level2;

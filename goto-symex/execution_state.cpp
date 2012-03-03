@@ -53,9 +53,26 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   if (it == goto_functions.function_map.end())
     throw "main symbol not found; please set an entry point";
 
-  add_thread(
-    it->second.body.instructions.begin(),
-    it->second.body.instructions.end(), &(it->second.body));
+  const goto_programt *goto_program = &(it->second.body);
+
+  // Initialize initial thread state
+  goto_symex_statet state(*state_level2, global_value_set);
+  state.initialize((*goto_program).instructions.begin(),
+             (*goto_program).instructions.end(),
+             goto_program, 0);
+
+  threads_state.push_back(state);
+  atomic_numbers.push_back(0);
+
+  if (DFS_traversed.size() <= state.source.thread_nr) {
+    DFS_traversed.push_back(false);
+  } else {
+    DFS_traversed[state.source.thread_nr] = false;
+  }
+
+  exprs_read_write.push_back(read_write_set());
+  thread_start_data.push_back(exprt());
+
   active_thread = 0;
   last_active_thread = 0;
   node_count = 0;
@@ -73,11 +90,6 @@ execution_statet::execution_statet(const execution_statet &ex) :
   state_level2(ex.state_level2->clone()),
   _goto_functions(ex._goto_functions)
 {
-  // Don't copy string state in this copy constructor - instead
-  // take another snapshot to represent what string state was
-  // like when we began the exploration this execution_statet will
-  // perform.
-  str_state = string_container.take_state_snapshot();
 
   *this = ex;
 
@@ -88,6 +100,12 @@ execution_statet::execution_statet(const execution_statet &ex) :
     goto_symex_statet state(*it, *state_level2);
     threads_state.push_back(state);
   }
+
+  // Take another snapshot to represent what string state was
+  // like when we began the exploration this execution_statet will
+  // perform.
+  str_state = string_container.take_state_snapshot();
+
 }
 
 execution_statet&
@@ -100,6 +118,7 @@ execution_statet::operator=(const execution_statet &ex)
   atomic_numbers = ex.atomic_numbers;
   DFS_traversed = ex.DFS_traversed;
   exprs_read_write = ex.exprs_read_write;
+  thread_start_data = ex.thread_start_data;
   last_global_read_write = ex.last_global_read_write;
   last_active_thread = ex.last_active_thread;
   active_thread = ex.active_thread;
@@ -176,39 +195,13 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
 
   switch (instruction.type) {
     case END_FUNCTION:
-      if (instruction.function == "c::main") {
+      if (instruction.function == "main") {
         end_thread();
         art.force_cswitch_point();
       } else {
         // Fall through to base class
         goto_symext::symex_step(goto_functions, art);
       }
-      break;
-
-    case START_THREAD:
-      if (!state.guard.is_false())
-      {
-        assert(!instruction.targets.empty());
-        goto_programt::const_targett goto_target=instruction.targets.front();
-        state.source.pc++;
-        add_thread(state);
-        get_active_state().source.pc = goto_target;
-
-        update_trds_count();
-        increment_trds_in_run();
-      }
-      else
-      {
-        assert(!instruction.targets.empty());
-        goto_programt::const_targett goto_target=instruction.targets.front();
-        state.source.pc = goto_target;
-      }
-
-      art.force_cswitch_point();
-      break;
-    case END_THREAD:
-      end_thread();
-      art.force_cswitch_point();
       break;
     case ATOMIC_BEGIN:
       state.source.pc++;
@@ -270,7 +263,7 @@ execution_statet::symex_goto(statet &state, const exprt &old_guard)
 
   goto_symext::symex_goto(state, old_guard);
 
-  if (!old_guard.is_nil() && !options.get_bool_option("deadlock-check"))
+  if (!old_guard.is_nil())
     if (threads_state.size() > 1)
       owning_rt->analyse_for_cswitch_after_read(old_guard);
 
@@ -449,6 +442,12 @@ execution_statet::check_if_ileaves_blocked(void)
   if (get_active_atomic_number() > 0)
     return true;
 
+  const goto_programt::instructiont &insn = *get_active_state().source.pc;
+  std::list<irep_idt>::const_iterator it = insn.labels.begin();
+  for (; it != insn.labels.end(); it++)
+    if (*it == "__ESBMC_ATOMIC")
+      return true;
+
   if (owning_rt->directed_interleavings)
     // Don't generate interleavings automatically - instead, the user will
     // inserts intrinsics identifying where they want interleavings to occur,
@@ -498,44 +497,6 @@ execution_statet::apply_static_por(const exprt &expr, unsigned int i) const
 }
 
 /*******************************************************************
-   Function: execution_statet::decrement_trds_in_run
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-execution_statet::decrement_trds_in_run(void)
-{
-
-  typet int_t = int_type();
-  exprt one_expr = gen_one(int_t);
-  exprt lhs_expr = symbol_exprt("c::trds_in_run", int_t);
-  exprt op1 = lhs_expr;
-  exprt rhs_expr = gen_binary(exprt::minus, int_t, op1, one_expr);
-
-  get_active_state().rename(rhs_expr, ns);
-  base_type(rhs_expr, ns);
-  simplify(rhs_expr);
-
-  exprt new_lhs = lhs_expr;
-
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true);
-
-  target->assignment(
-    get_active_state().guard,
-    new_lhs, lhs_expr,
-    rhs_expr,
-    get_active_state().source,
-    get_active_state().gen_stack_trace(),
-    symex_targett::STATE);
-}
-
-/*******************************************************************
    Function: execution_statet::end_thread
 
    Inputs:
@@ -551,96 +512,10 @@ execution_statet::end_thread(void)
 {
 
   get_active_state().thread_ended = true;
-  decrement_trds_in_run();
-}
-
-/*******************************************************************
-   Function: execution_statet::increment_trds_in_run
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-execution_statet::increment_trds_in_run(void)
-{
-
-  static bool thrds_in_run_flag = 1;
-  typet int_t = int_type();
-
-  if (thrds_in_run_flag) {
-    exprt lhs_expr = symbol_exprt("c::trds_in_run", int_t);
-    constant_exprt rhs_expr(int_t);
-    rhs_expr.set_value(integer2binary(1, config.ansi_c.int_width));
-
-    get_active_state().assignment(lhs_expr, rhs_expr, ns, true);
-
-    thrds_in_run_flag = 0;
-  }
-
-  exprt one_expr = gen_one(int_t);
-  exprt lhs_expr = symbol_exprt("c::trds_in_run", int_t);
-  exprt op1 = lhs_expr;
-  exprt rhs_expr = gen_binary(exprt::plus, int_t, op1, one_expr);
-
-  get_active_state().rename(rhs_expr, ns);
-  base_type(rhs_expr, ns);
-  simplify(rhs_expr);
-
-  exprt new_lhs = lhs_expr;
-
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true);
-
-  target->assignment(
-    get_active_state().guard,
-    new_lhs, lhs_expr,
-    rhs_expr,
-    get_active_state().source,
-    get_active_state().gen_stack_trace(),
-    symex_targett::STATE);
-}
-
-/*******************************************************************
-   Function:  execution_statet::update_trds_count
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-execution_statet::update_trds_count(void)
-{
-
-  typet int_t = int_type();
-  exprt lhs_expr = symbol_exprt("c::trds_count", int_t);
-  exprt op1 = lhs_expr;
-
-  constant_exprt rhs_expr = constant_exprt(int_t);
-  rhs_expr.set_value(integer2binary(threads_state.size() - 1,
-                                    config.ansi_c.int_width));
-  get_active_state().rename(rhs_expr, ns);
-  base_type(rhs_expr, ns);
-  simplify(rhs_expr);
-
-  exprt new_lhs = lhs_expr;
-
-  get_active_state().assignment(new_lhs, rhs_expr, ns, true);
-
-  target->assignment(
-    get_active_state().guard,
-    new_lhs, lhs_expr,
-    rhs_expr,
-    get_active_state().source,
-    get_active_state().gen_stack_trace(),
-    symex_targett::STATE);
+  // If ending in an atomic block, the switcher fails to switch to another
+  // live thread (because it's trying to be atomic). So, disable atomic blocks
+  // when the thread ends.
+  atomic_numbers[active_thread] = 0;
 }
 
 /*******************************************************************
@@ -708,43 +583,14 @@ execution_statet::execute_guard(const namespacet &ns)
 
  \*******************************************************************/
 
-void
-execution_statet::add_thread(goto_programt::const_targett thread_start,
-  goto_programt::const_targett thread_end,
-  const goto_programt *prog)
+unsigned int
+execution_statet::add_thread(const goto_programt *prog)
 {
+  statet &state = get_active_state();
 
-  goto_symex_statet state(*state_level2, global_value_set);
-  state.initialize(thread_start, thread_end, prog, threads_state.size());
-
-  threads_state.push_back(state);
-  atomic_numbers.push_back(0);
-
-  if (DFS_traversed.size() <= state.source.thread_nr) {
-    DFS_traversed.push_back(false);
-  } else {
-    DFS_traversed[state.source.thread_nr] = false;
-  }
-
-  exprs_read_write.push_back(read_write_set());
-}
-
-/*******************************************************************
-   Function: execution_statet::add_thread
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
-void
-execution_statet::add_thread(goto_symex_statet & state)
-{
-
-  goto_symex_statet new_state(state);
+  goto_symex_statet new_state(*state_level2, global_value_set);
+  new_state.initialize(prog->instructions.begin(), prog->instructions.end(),
+                      prog, threads_state.size());
 
   new_state.source.thread_nr = threads_state.size();
   threads_state.push_back(new_state);
@@ -755,7 +601,11 @@ execution_statet::add_thread(goto_symex_statet & state)
   } else {
     DFS_traversed[new_state.source.thread_nr] = false;
   }
+
   exprs_read_write.push_back(read_write_set());
+  thread_start_data.push_back(exprt());
+
+  return threads_state.size() - 1; // thread ID, zero based
 }
 
 /*******************************************************************

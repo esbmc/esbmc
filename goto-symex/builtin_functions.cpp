@@ -18,6 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_symex.h"
 #include "execution_state.h"
+#include "reachability_tree.h"
 
 /*******************************************************************\
 
@@ -259,4 +260,183 @@ void goto_symext::symex_cpp_delete(
   const codet &code __attribute__((unused)))
 {
   //bool do_array=code.statement()=="delete[]";
+}
+
+void
+goto_symext::intrinsic_yield(reachability_treet &art)
+{
+
+  art.force_cswitch_point();
+  return;
+}
+
+
+void
+goto_symext::intrinsic_switch_to(code_function_callt &call,
+                                 reachability_treet &art)
+{
+
+  assert(call.arguments().size() == 1);
+
+  // Switch to other thread.
+  exprt &num = call.arguments()[0];
+  if (num.id() != "constant") {
+    std::cerr << "Can't switch to non-constant thread id no";
+    abort();
+  }
+
+  unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
+  if (tid != art.get_cur_state().get_active_state_number())
+    art.get_cur_state().switch_to_thread(tid);
+
+  return;
+}
+
+void
+goto_symext::intrinsic_get_thread_id(code_function_callt &call,
+                                     reachability_treet &art)
+{
+  statet &state = art.get_cur_state().get_active_state();
+  unsigned int thread_id;
+
+  thread_id = art.get_cur_state().get_active_state_number();
+  constant_exprt tid(unsignedbv_typet(config.ansi_c.int_width));
+  tid.set_value(integer2binary(thread_id, config.ansi_c.int_width));
+
+  code_assignt assign(call.lhs(), tid);
+  assert(call.lhs().type() == tid.type());
+  state.value_set.assign(call.lhs(), tid, ns);
+  symex_assign(state, assign);
+  return;
+}
+
+void
+goto_symext::intrinsic_set_thread_data(code_function_callt &call,
+                                       reachability_treet &art)
+{
+  statet &state = art.get_cur_state().get_active_state();
+  exprt threadid = call.arguments()[0];
+  exprt startdata = call.arguments()[1];
+
+  state.rename(threadid, ns);
+  state.rename(startdata, ns);
+
+  if (threadid.id() != "constant") {
+    std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  art.get_cur_state().set_thread_start_data(tid, startdata);
+}
+
+void
+goto_symext::intrinsic_get_thread_data(code_function_callt &call,
+                                       reachability_treet &art)
+{
+  statet &state = art.get_cur_state().get_active_state();
+  exprt &threadid = call.arguments()[0];
+
+  state.level2.rename(threadid);
+
+  if (threadid.id() != "constant") {
+    std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  const exprt &startdata = art.get_cur_state().get_thread_start_data(tid);
+
+  code_assignt assign(call.lhs(), startdata);
+  assert(call.lhs().type() == startdata.type());
+  state.value_set.assign(call.lhs(), startdata, ns);
+  symex_assign(state, assign);
+  return;
+}
+
+void
+goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art)
+{
+
+  // As an argument, we expect the address of a symbol.
+  const exprt &args = call.operands()[2];
+  assert(args.id() == "arguments");
+  const exprt &addrof = args.operands()[0];
+  assert(addrof.id() == "address_of");
+  const exprt &symexpr = addrof.operands()[0];
+  assert(symexpr.id() == "symbol");
+  irep_idt symname = symexpr.get("identifier");
+
+  goto_functionst::function_mapt::const_iterator it =
+    art.goto_functions.function_map.find(symname);
+  if (it == art.goto_functions.function_map.end()) {
+    std::cerr << "Spawning thread \"" << symname << "\": symbol not found";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  if (!it->second.body_available) {
+    std::cerr << "Spawning thread \"" << symname << "\": no body" << std::endl;
+    abort();
+  }
+
+  const goto_programt &prog = it->second.body;
+  // Invalidates current state reference!
+  unsigned int thread_id = art.get_cur_state().add_thread(&prog);
+
+  statet &state = art.get_cur_state().get_active_state();
+
+  constant_exprt thread_id_expr(unsignedbv_typet(config.ansi_c.int_width));
+  thread_id_expr.set_value(integer2binary(thread_id, config.ansi_c.int_width));
+  code_assignt assign(call.lhs(), thread_id_expr);
+  state.value_set.assign(call.lhs(), thread_id_expr, ns);
+  symex_assign(state, assign);
+
+  // Force a context switch point. If the caller is in an atomic block, it'll be
+  // blocked, but a context switch will be forced when we exit the atomic block.
+  // Otherwise, this will cause the required context switch.
+  art.force_cswitch_point();
+
+  return;
+}
+
+void
+goto_symext::intrinsic_terminate_thread(reachability_treet &art)
+{
+
+  art.get_cur_state().end_thread();
+  // No need to force a context switch; an ended thread will cause the run to
+  // end and the switcher to be invoked.
+  return;
+}
+
+void
+goto_symext::intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art)
+{
+  statet &state = art.get_cur_state().get_active_state();
+  exprt threadid = call.arguments()[0];
+  state.level2.rename(threadid);
+
+  if (threadid.id() != "constant") {
+    std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  // Possibly we should handle this error; but meh.
+  assert(art.get_cur_state().threads_state.size() >= tid);
+
+  // Thread state is simply whether the thread is ended or not.
+  unsigned int flags = (art.get_cur_state().threads_state[tid].thread_ended)
+                       ? 1 : 0;
+
+  // Reuse threadid
+  constant_exprt flag_expr(unsignedbv_typet(config.ansi_c.int_width));
+  flag_expr.set_value(integer2binary(flags, config.ansi_c.int_width));
+  code_assignt assign(call.lhs(), flag_expr);
+  symex_assign(state, assign);
+  return;
 }

@@ -381,8 +381,6 @@ protected:
   unsigned int schedule_remaining_claims;
   /** Next thread ID to switch to, decided by analyse_* routines */
   unsigned int next_thread_id;
-  /** Whether --deadlock-detection is enabled */
-  bool deadlock_detection;
   /** Whether partial-order-reduction is enabled */
   bool por;
   /** Namespace we're operating in */

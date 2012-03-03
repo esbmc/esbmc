@@ -41,6 +41,7 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
   source.is_set=true;
   source.thread_nr = thread_id;
   source.pc=start;
+  source.prog = prog;
   top().end_of_function=end;
   top().calling_location=symex_targett::sourcet(top().end_of_function, prog);
 }
@@ -390,7 +391,7 @@ Function: goto_symex_statet::get_original_identifier
 
 \*******************************************************************/
 
-const irep_idt &goto_symex_statet::get_original_name(
+const irep_idt goto_symex_statet::get_original_name(
   const irep_idt &identifier) const
 {
 
@@ -442,13 +443,8 @@ goto_symex_statet::gen_stack_trace(void) const
   // Format is a vector of strings, each recording a particular function
   // invocation.
 
-  src = source;
-  for (it = call_stack.rbegin(); it != call_stack.rend();
-       it++, src = it->calling_location) {
-
-    // Don't store current function, that can be extracted elsewhere.
-    if (i++ == 0)
-      continue;
+  for (it = call_stack.rbegin(); it != call_stack.rend(); it++) {
+    src = it->calling_location;
 
     if (it->function_identifier == "") { // Top level call
       break;

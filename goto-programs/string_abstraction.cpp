@@ -266,8 +266,8 @@ void string_abstractiont::abstract(irep_idt name,
       code_typet::argumentt new_arg;
 
       new_arg.type() = pointer_typet(string_struct);
-      new_arg.set_identifier(it->get_identifier().as_string() + "#str");
-      new_arg.set_base_name(it->get_base_name().as_string() + "#str");
+      new_arg.set_identifier(it->get_identifier().as_string() + "\\str");
+      new_arg.set_base_name(it->get_base_name().as_string() + "\\str");
       new_args.push_back(new_arg);
 
       // We also need to put this new argument into the symbol table.
@@ -291,8 +291,8 @@ void string_abstractiont::abstract(irep_idt name,
     code_typet::argumentt new_arg;
 
     new_arg.type() = pointer_typet(pointer_typet(string_struct));
-    new_arg.set_identifier(name.as_string() + "::__strabs::returned_str#str");
-    new_arg.set_base_name("returned_str#str");
+    new_arg.set_identifier(name.as_string() + "::__strabs::returned_str\\str");
+    new_arg.set_base_name("returned_str\\str");
     new_args.push_back(new_arg);
 
     symbolt new_sym;
@@ -477,10 +477,10 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
 
   typet rtype = pointer_typet(pointer_typet(string_struct));
   typet rtype2 = pointer_typet(rtype);
-  exprt ret_sym = symbol_exprt(name.as_string() + "::__strabs::returned_str#str", rtype2);
+  exprt ret_sym = symbol_exprt(name.as_string() + "::__strabs::returned_str\\str", rtype2);
 
   // For the purposes of comparing the pointer against NULL, we need to typecast
-  // it: other goto convert functions rewrite the returned_str#str pointer to
+  // it: other goto convert functions rewrite the returned_str\\str pointer to
   // be a particular pointer (value set foo). Upon which it becomes another type
   typecast_exprt cast(rtype);
   cast.op0() = ret_sym;
@@ -731,12 +731,12 @@ Function: string_abstractiont::build_symbol_ptr
 
 exprt string_abstractiont::build_symbol_ptr(const exprt &object)
 {
-  std::string suffix="#str";
+  std::string suffix="\\str";
   const exprt *p=&object;
 
   while(p->id()=="member")
   {
-    suffix="#"+p->component_name().as_string()+suffix;
+    suffix="\\"+p->component_name().as_string()+suffix;
     assert(p->operands().size()==1);
     p=&(p->op0());
   }
@@ -907,7 +907,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
     const symbol_exprt &expr_symbol=to_symbol_expr(object.op0());
 
     const symbolt &symbol=ns.lookup(expr_symbol.get_identifier());
-    std::string suffix="#str_array";
+    std::string suffix="\\str_array";
     irep_idt identifier=id2string(symbol.name)+suffix;
 
     if(context.symbols.find(identifier)==
@@ -969,12 +969,12 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
 
   // possibly walk over some members
 
-  std::string suffix="#str";
+  std::string suffix="\\str";
   const exprt *p=&object;
 
   while(p->id()=="member")
   {
-    suffix="#"+p->component_name().as_string()+suffix;
+    suffix="\\"+p->component_name().as_string()+suffix;
     assert(p->operands().size()==1);
     p=&(p->op0());
   }
@@ -1347,7 +1347,8 @@ void string_abstractiont::abstract_function_call(
   symbolst::const_iterator f_it = 
     context.symbols.find(call.function().identifier());
   if(f_it==context.symbols.end())
-    throw "invalid function call";
+    // XXXjmorse - handle function pointer strabs at symex time?
+    return;
 
   // Don't attempt to strabs an absent function.
   if (f_it->second.value.is_nil())
