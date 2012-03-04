@@ -337,6 +337,10 @@ void goto_convert(
 static void
 fetch_type_dependancies(const typet &type, std::set<irep_idt> &deps)
 {
+
+  if (type.id() == "pointer")
+    return;
+
   if (type.id() == "symbol") {
     if (type.identifier().as_string().find("$type") != std::string::npos) {
       deps.insert(type.identifier());
