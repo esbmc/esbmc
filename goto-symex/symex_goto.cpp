@@ -107,7 +107,7 @@ goto_symext::symex_goto(statet &state, const exprt &old_guard)
          new_guard.op0().id() == exprt::symbol))
       guard_expr = new_guard;
     else {
-      guard_expr = symbol_exprt(guard_identifier(state), bool_typet());
+      guard_expr = symbol_exprt(guard_identifier(), bool_typet());
       exprt new_rhs = new_guard,
             rhs = old_guard;
       new_rhs.make_not();
@@ -212,7 +212,7 @@ goto_symext::phi_function(
         state.level2.current_number(*it))
       continue;  // not changed
 
-    if (*it == guard_identifier(state))
+    if (*it == guard_identifier())
       continue;  // just a guard
 
     irep_idt original_identifier = state.get_original_name(*it);

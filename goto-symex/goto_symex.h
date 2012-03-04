@@ -82,12 +82,11 @@ public:
    *  These guards are symbolic names for the truth of a guard on a GOTO jump.
    *  Assertions and other activity during the course of symbolic execution
    *  encode these execution guard in them.
-   *  @param state Symex state the guard is for
    *  @return Name of the guard
    */
-  irep_idt guard_identifier(statet &state)
+  irep_idt guard_identifier(void)
   {
-	  return irep_idt(id2string(guard_identifier_s) + "!" + i2string(state.top().level1._thread_id));
+    return irep_idt(id2string(guard_identifier_s) + "!" + i2string(cur_state->top().level1._thread_id));
   };
 
   // Methods
