@@ -27,9 +27,6 @@ goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs)
 {
   use_value_set = true;
   depth = 0;
-  sleeping = false;
-  waiting = false;
-  join_count = 0;
   thread_ended = false;
   guard.make_true();
 }
@@ -46,10 +43,6 @@ goto_symex_statet &
 goto_symex_statet::operator=(const goto_symex_statet &state)
 {
   depth = state.depth;
-  sleeping = state.sleeping;
-  waiting = state.waiting;
-  waiting = state.waiting;
-  join_count = state.join_count;
   thread_ended = state.thread_ended;
   guard = state.guard;
   source = state.source;
