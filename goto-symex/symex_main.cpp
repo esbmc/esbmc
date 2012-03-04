@@ -102,7 +102,7 @@ goto_symext::symex_step(
 
     // Potentially skip to run another function ptr target; if not,
     // continue
-    if (!run_next_function_ptr_target(goto_functions, state, false))
+    if (!run_next_function_ptr_target(state, false))
       state.source.pc++;
     break;
 

@@ -313,12 +313,10 @@ protected:
    *  one run, then at the end of each of these function calls we switch to
    *  the next in the list. Finally, when the insn after the func ptr call is
    *  run, all func ptr call states are merged in.
-   *  @param goto_functions Functions to operate over.
    *  @param state Thread state to operate on.
    *  @param call Function call to interpret.
    */
   virtual void symex_function_call_deref(
-    const goto_functionst &goto_functions,
     statet &state,
     const code_function_callt &call);
 
@@ -376,13 +374,11 @@ protected:
   /**
    *  Setup next function in a chain of func ptr calls.
    *  @see symex_function_call_deref
-   *  @param goto_functions Functions we're operating over
    *  @param state State we're operating upon
    *  @param first Whether this is the first func ptr invocation.
    *  @return True if a function pointer invocation was set up.
    */
-  bool run_next_function_ptr_target(const goto_functionst &goto_functions,
-                                    statet &state, bool first);
+  bool run_next_function_ptr_target(statet &state, bool first);
 
   /**
    *  Run an intrinsic, something prefixed with __ESBMC.

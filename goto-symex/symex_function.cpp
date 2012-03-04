@@ -139,7 +139,7 @@ goto_symext::symex_function_call(
   if (function.id() == exprt::symbol)
     symex_function_call_symbol(goto_functions, state, code);
   else
-    symex_function_call_deref(goto_functions, state, code);
+    symex_function_call_deref(state, code);
 }
 
 void
@@ -286,9 +286,8 @@ get_function_list(const exprt &expr)
 }
 
 void
-goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
-  statet &state,
-  const code_function_callt &call)
+goto_symext::symex_function_call_deref(statet &state,
+                                       const code_function_callt &call)
 {
 
   assert(state.top().cur_function_ptr_targets.size() == 0);
@@ -324,8 +323,8 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
        it != l.end(); it++) {
 
     goto_functionst::function_mapt::const_iterator fit =
-      goto_functions.function_map.find(it->second.identifier());
-    if (fit == goto_functions.function_map.end() ||
+      _goto_functions.function_map.find(it->second.identifier());
+    if (fit == _goto_functions.function_map.end() ||
         !fit->second.body_available) {
       std::cerr << "Couldn't find symbol " << it->second.identifier();
       std::cerr << " or body not available, during function ptr dereference";
@@ -355,13 +354,11 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   state.top().function_ptr_combine_target++;
   state.top().orig_func_ptr_call = new code_function_callt(call);
 
-  run_next_function_ptr_target(goto_functions, state, true);
+  run_next_function_ptr_target(state, true);
 }
 
 bool
-goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
-  statet &state,
-  bool first)
+goto_symext::run_next_function_ptr_target(statet &state, bool first)
 {
 
   if (state.call_stack.empty())
@@ -407,7 +404,7 @@ goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
   if (state.top().cur_function_ptr_targets.size() == 0)
     delete cur_frame.orig_func_ptr_call;
 
-  symex_function_call_code(goto_functions, state, call);
+  symex_function_call_code(_goto_functions, state, call);
 
 
   return true;
