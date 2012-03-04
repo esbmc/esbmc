@@ -36,43 +36,11 @@ public:
   class goto_statet; // forward dec
   class framet; // forward dec
 
-  goto_symex_statet(renaming::level2t &l2, value_sett &vs)
-    : guard(), level2(l2), value_set(vs)
-  {
-    use_value_set = true;
-    depth = 0;
-    sleeping = false;
-    waiting = false;
-    join_count = 0;
-    thread_ended = false;
-    guard.make_true();
-  }
-
-  goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2)
-    : level2(l2), value_set(state.value_set)
-  {
-    *this = state;
-  }
+  goto_symex_statet(renaming::level2t &l2, value_sett &vs);
+  goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2);
 
   goto_symex_statet &
-  operator=(const goto_symex_statet &state)
-  {
-    depth = state.depth;
-    sleeping = state.sleeping;
-    waiting = state.waiting;
-    waiting = state.waiting;
-    join_count = state.join_count;
-    thread_ended = state.thread_ended;
-    guard = state.guard;
-    source = state.source;
-    function_frame = state.function_frame;
-    unwind_map = state.unwind_map;
-    function_unwind = state.function_unwind;
-    declaration_history = state.declaration_history;
-    use_value_set = state.use_value_set;
-    call_stack = state.call_stack;
-    return *this;
-  }
+  operator=(const goto_symex_statet &state);
 
   // Types
 
