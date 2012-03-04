@@ -11,6 +11,7 @@ Date: June 2003
 #include <assert.h>
 
 #include <base_type.h>
+#include <prefix.h>
 #include <std_code.h>
 
 #include "goto_convert_functions.h"
@@ -334,6 +335,18 @@ void goto_convert(
     throw 0;
 }
 
+static bool
+is_type_symbol(irep_idt name)
+{
+
+  if (name.as_string().find("$type") != std::string::npos)
+    return true;
+  else if (has_prefix(name.as_string(), "c::tag-"))
+    return true;
+  else
+    return false;
+}
+
 static void
 fetch_type_dependancies(const irept &type, std::set<irep_idt> &deps)
 {
@@ -342,7 +355,7 @@ fetch_type_dependancies(const irept &type, std::set<irep_idt> &deps)
     return;
 
   if (type.id() == "symbol") {
-    if (type.identifier().as_string().find("$type") != std::string::npos) {
+    if (is_type_symbol(type.identifier())) {
       deps.insert(type.identifier());
       return;
     }
@@ -368,7 +381,7 @@ goto_convert_functionst::rename_types(irept &type)
     return;
 
   if (type.id() == "symbol") {
-    if (type.identifier().as_string().find("$type") != std::string::npos) {
+    if (is_type_symbol(type.identifier())) {
       symbolst::const_iterator it = context.symbols.find(type.identifier());
       assert(it != context.symbols.end());
       type = it->second.type;
@@ -425,7 +438,7 @@ goto_convert_functionst::thrash_type_symbols(void)
   std::map<irep_idt, std::set<irep_idt> > typenames;
 
   forall_symbols(it, context.symbols) {
-    if (it->second.name.as_string().find("$type") != std::string::npos) {
+    if (is_type_symbol(it->second.name)) {
       std::set<irep_idt> depset;
       fetch_type_dependancies(it->second.type, depset);
       typenames[it->second.name] = depset;
@@ -442,7 +455,7 @@ goto_convert_functionst::thrash_type_symbols(void)
 
   // And now all the types have a fixed form, assault all existing code.
   Forall_symbols(it, context.symbols) {
-    if (it->second.name.as_string().find("$type") == std::string::npos) {
+    if (!is_type_symbol(it->second.name)) {
       rename_types(it->second.type);
       rename_types(it->second.value);
     }
