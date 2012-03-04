@@ -26,6 +26,7 @@ class goto_convert_functionst:public goto_convertt
 public:
   void goto_convert();
   void convert_function(const irep_idt &identifier);
+  void thrash_type_symbols(void);
 
   goto_convert_functionst(
     contextt &_context,

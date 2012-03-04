@@ -311,6 +311,7 @@ void goto_convert(
 
   try
   {
+    goto_convert_functions.thrash_type_symbols();
     goto_convert_functions.goto_convert();
   }
 
@@ -331,4 +332,52 @@ void goto_convert(
 
   if(goto_convert_functions.get_error_found())
     throw 0;
+}
+
+static void
+fetch_type_dependancies(const typet &type, std::set<irep_idt> &deps)
+{
+  if (type.id() == "symbol") {
+    if (type.identifier().as_string().find("$type") != std::string::npos) {
+      deps.insert(type.identifier());
+      return;
+    }
+  }
+
+  forall_irep(it, type.get_sub())
+    fetch_type_dependancies((const typet&)*it, deps);
+
+  forall_named_irep(it, type.get_named_sub())
+    fetch_type_dependancies((const typet&)it->second, deps);
+
+  forall_named_irep(it, type.get_comments())
+    fetch_type_dependancies((const typet&)it->second, deps);
+
+  return;
+}
+
+void
+goto_convert_functionst::thrash_type_symbols(void)
+{
+
+  // This function has one purpose: remove as many type symbols as possible.
+  // This is easy enough by just following each type symbol that occurs and
+  // replacing it with the value of the type name. However, if we have a pointer
+  // in a struct to itself, this breaks down. Therefore, don't rename types of
+  // pointers; they have a type already; they're pointers.
+
+  // Start off by collecting all type symbols. Identified by having "$type"
+  // in their names :|. And, compute their dependancies.
+
+  std::map<irep_idt, std::set<irep_idt> > typenames;
+
+  forall_symbols(it, context.symbols) {
+    if (it->second.name.as_string().find("$type") != std::string::npos) {
+      std::set<irep_idt> depset;
+      fetch_type_dependancies(it->second.type, depset);
+      typenames[it->second.name] = depset;
+    }
+  }
+
+  return;
 }
