@@ -296,18 +296,6 @@ execution_statet::get_nondet_counter(void)
   return nondet_count;
 }
 
-
-/*******************************************************************
-   Function: execution_statet::get_active_state
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
 goto_symex_statet &
 execution_statet::get_active_state() {
 
@@ -320,34 +308,12 @@ execution_statet::get_active_state() const
   return threads_state.at(active_thread);
 }
 
-/*******************************************************************
-   Function: execution_statet::get_active_atomic_number
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
 unsigned int
 execution_statet::get_active_atomic_number()
 {
 
   return atomic_numbers.at(active_thread);
 }
-
-/*******************************************************************
-   Function: execution_statet::increment_active_atomic_number
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
 
 void
 execution_statet::increment_active_atomic_number()
@@ -356,34 +322,12 @@ execution_statet::increment_active_atomic_number()
   atomic_numbers.at(active_thread)++;
 }
 
-/*******************************************************************
-   Function: execution_statet::decrement_active_atomic_number
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
 void
 execution_statet::decrement_active_atomic_number()
 {
 
   atomic_numbers.at(active_thread)--;
 }
-
-/*******************************************************************
-   Function: execution_statet::get_guard_identifier
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
 
 irep_idt
 execution_statet::get_guard_identifier()
@@ -392,17 +336,6 @@ execution_statet::get_guard_identifier()
   return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
          i2string(last_active_thread) + '_' + i2string(node_id);
 }
-
-/*******************************************************************
-   Function: execution_statet::set_active_stat
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
 
 void
 execution_statet::switch_to_thread(unsigned int i)
@@ -496,17 +429,6 @@ execution_statet::apply_static_por(const exprt &expr, unsigned int i) const
   return consider;
 }
 
-/*******************************************************************
-   Function: execution_statet::end_thread
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
 void
 execution_statet::end_thread(void)
 {
@@ -517,17 +439,6 @@ execution_statet::end_thread(void)
   // when the thread ends.
   atomic_numbers[active_thread] = 0;
 }
-
-/*******************************************************************
-   Function: execution_statet::execute_guard
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
 
 void
 execution_statet::execute_guard(const namespacet &ns)
@@ -572,17 +483,6 @@ execution_statet::execute_guard(const namespacet &ns)
   }
 }
 
-/*******************************************************************
-   Function: execution_statet::add_thread
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
-
 unsigned int
 execution_statet::add_thread(const goto_programt *prog)
 {
@@ -607,17 +507,6 @@ execution_statet::add_thread(const goto_programt *prog)
 
   return threads_state.size() - 1; // thread ID, zero based
 }
-
-/*******************************************************************
-   Function: execution_statet::get_expr_write_globals
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
 
 unsigned int
 execution_statet::get_expr_write_globals(const namespacet &ns,
@@ -656,17 +545,6 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
 
   return globals;
 }
-
-/*******************************************************************
-   Function: execution_statet::get_expr_read_globals
-
-   Inputs:
-
-   Outputs:
-
-   Purpose:
-
- \*******************************************************************/
 
 unsigned int
 execution_statet::get_expr_read_globals(const namespacet &ns,
