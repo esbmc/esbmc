@@ -96,7 +96,7 @@ goto_symext::symex_step(reachability_treet & art) {
     break;
 
   case END_FUNCTION:
-    symex_end_of_function(state);
+    symex_end_of_function();
 
     // Potentially skip to run another function ptr target; if not,
     // continue

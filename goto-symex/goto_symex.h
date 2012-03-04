@@ -231,10 +231,9 @@ protected:
    *  If unwinding assertions are on, assert that the unwinding bound is not
    *  exceeded. If partial loops are off, assume that the unwinding bound was
    *  not exceeded. Otherwise, just continue execution.
-   *  @param state Current thread state.
    *  @param guard Current state guard.
    */
-  void loop_bound_exceeded(statet &state, const exprt &guard);
+  void loop_bound_exceeded(const exprt &guard);
 
   // function calls
 
@@ -242,9 +241,8 @@ protected:
    *  Pop a stack frame.
    *  This frees/removes the top stack frame, and removes any relevant local
    *  variables from the l2 renaming, and value set tracking.
-   *  @param state Current thread state.
    */
-  void pop_frame(statet &state);
+  void pop_frame(void);
 
   /**
    *  Create assignment for return statement.
@@ -261,21 +259,17 @@ protected:
    *  Perform function call.
    *  Handles all kinds of function call instructions, symbols or function
    *  pointers.
-   *  @param state Thread state to operate on.
    *  @param call Function call we're working on.
    */
-  void symex_function_call(
-    statet &state,
-    const code_function_callt &call);
+  void symex_function_call(const code_function_callt &call);
 
   /**
    *  End a functions interpretation.
    *  This routine pops a stack frame, and returns control to the caller;
    *  except in the case of function pointer interpretation, where we instead
    *  switch to interpreting the next pointed to function.
-   *  @param state Thread state we're working on.
    */
-  void symex_end_of_function(statet &state);
+  void symex_end_of_function(void);
 
   /**
    *  Handle a call to a named function.

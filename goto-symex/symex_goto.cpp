@@ -57,7 +57,7 @@ goto_symext::symex_goto(const exprt &old_guard)
     cur_state->unwind_map[cur_state->source] = unwind;
 
     if (get_unwind(cur_state->source, unwind)) {
-      loop_bound_exceeded(*cur_state, new_guard);
+      loop_bound_exceeded(new_guard);
 
       // reset unwinding
       cur_state->unwind_map[cur_state->source] = 0;
@@ -267,9 +267,9 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 }
 
 void
-goto_symext::loop_bound_exceeded(statet &state, const exprt &guard)
+goto_symext::loop_bound_exceeded(const exprt &guard)
 {
-  const irep_idt &loop_id = state.source.pc->location.loopid();
+  const irep_idt &loop_id = cur_state->source.pc->location.loopid();
 
   exprt negated_cond;
 
@@ -291,12 +291,12 @@ goto_symext::loop_bound_exceeded(statet &state, const exprt &guard)
     } else   {
       // generate unwinding assumption, unless we permit partial loops
       exprt guarded_expr = negated_cond;
-      state.guard.guard_expr(guarded_expr);
-      target->assumption(state.guard, guarded_expr, state.source);
+      cur_state->guard.guard_expr(guarded_expr);
+      target->assumption(cur_state->guard, guarded_expr, cur_state->source);
     }
 
     // add to state guard to prevent further assignments
-    state.guard.add(negated_cond);
+    cur_state->guard.add(negated_cond);
   }
 }
 

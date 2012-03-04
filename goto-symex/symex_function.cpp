@@ -130,8 +130,7 @@ goto_symext::argument_assignments(
 }
 
 void
-goto_symext::symex_function_call(statet &state,
-                                 const code_function_callt &code)
+goto_symext::symex_function_call(const code_function_callt &code)
 {
   const exprt &function = code.function();
 
@@ -408,34 +407,34 @@ goto_symext::run_next_function_ptr_target(statet &state, bool first)
 }
 
 void
-goto_symext::pop_frame(statet &state)
+goto_symext::pop_frame(void)
 {
-  assert(!state.call_stack.empty());
+  assert(!cur_state->call_stack.empty());
 
-  statet::framet &frame = state.top();
+  statet::framet &frame = cur_state->top();
 
   // restore state
-  state.source.pc = frame.calling_location.pc;
-  state.source.prog = frame.calling_location.prog;
+  cur_state->source.pc = frame.calling_location.pc;
+  cur_state->source.prog = frame.calling_location.prog;
 
   // clear locals from L2 renaming
   for (statet::framet::local_variablest::const_iterator
        it = frame.local_variables.begin();
        it != frame.local_variables.end();
        it++)
-    state.level2.remove(*it);
+    cur_state->level2.remove(*it);
 
   // decrease recursion unwinding counter
   if (frame.function_identifier != "")
-    state.function_unwind[frame.function_identifier]--;
+    cur_state->function_unwind[frame.function_identifier]--;
 
-  state.pop_frame();
+  cur_state->pop_frame();
 }
 
 void
-goto_symext::symex_end_of_function(statet &state)
+goto_symext::symex_end_of_function()
 {
-  pop_frame(state);
+  pop_frame();
 }
 
 void
