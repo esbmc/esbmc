@@ -18,18 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex_state.h"
 #include "symex_target_equation.h"
 
-/*******************************************************************\
-
-Function: symex_target_equationt::assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose: write to a variable
-
-\*******************************************************************/
-
 void symex_target_equationt::assignment(
   const guardt &guard,
   const exprt &lhs,
@@ -55,18 +43,6 @@ void symex_target_equationt::assignment(
   SSA_step.stack_trace = stack_trace;
 }
 
-/*******************************************************************\
-
-Function: symex_target_equationt::location
-
-  Inputs:
-
- Outputs:
-
- Purpose: just record a location
-
-\*******************************************************************/
-
 void symex_target_equationt::location(
   const guardt &guard,
   const sourcet &source)
@@ -79,18 +55,6 @@ void symex_target_equationt::location(
   SSA_step.type=goto_trace_stept::LOCATION;
   SSA_step.source=source;
 }
-
-/*******************************************************************\
-
-Function: symex_target_equationt::trace_event
-
-  Inputs:
-
- Outputs:
-
- Purpose: just record output
-
-\*******************************************************************/
 
 void symex_target_equationt::output(
   const guardt &guard,
@@ -109,18 +73,6 @@ void symex_target_equationt::output(
   SSA_step.format_string=fmt;
 }
 
-/*******************************************************************\
-
-Function: symex_target_equationt::assumption
-
-  Inputs: cond is destroyed
-
- Outputs:
-
- Purpose: record an assumption
-
-\*******************************************************************/
-
 void symex_target_equationt::assumption(
   const guardt &guard,
   exprt &cond,
@@ -135,18 +87,6 @@ void symex_target_equationt::assumption(
   SSA_step.type=goto_trace_stept::ASSUME;
   SSA_step.source=source;
 }
-
-/*******************************************************************\
-
-Function: symex_target_equationt::assertion
-
-  Inputs: cond is destroyed
-
- Outputs:
-
- Purpose: record an assertion
-
-\*******************************************************************/
 
 void symex_target_equationt::assertion(
   const guardt &guard,
@@ -167,18 +107,6 @@ void symex_target_equationt::assertion(
   SSA_step.stack_trace = stack_trace;
 }
 
-/*******************************************************************\
-
-Function: symex_target_equationt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_target_equationt::convert(
   prop_convt &prop_conv)
 {
@@ -188,18 +116,6 @@ void symex_target_equationt::convert(
   convert_assertions(prop_conv);
   convert_output(prop_conv);
 }
-
-/*******************************************************************\
-
-Function: symex_target_equationt::convert_assignments
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_target_equationt::convert_assignments(
   decision_proceduret &decision_procedure) const
@@ -215,18 +131,6 @@ void symex_target_equationt::convert_assignments(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: symex_target_equationt::convert_guards
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_target_equationt::convert_guards(
   prop_convt &prop_conv)
@@ -244,18 +148,6 @@ void symex_target_equationt::convert_guards(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: symex_target_equationt::convert_assumptions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_target_equationt::convert_assumptions(
   prop_convt &prop_conv)
