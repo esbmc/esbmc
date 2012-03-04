@@ -170,7 +170,7 @@ goto_symext::symex_step(reachability_treet & art) {
         to_code_return(instruction.code);
       code_assignt assign;
       if (make_return_assignment(state, assign, code))
-	goto_symext::symex_assign(state, assign);
+	goto_symext::symex_assign(assign);
       symex_return();
     }
 
@@ -187,7 +187,7 @@ goto_symext::symex_step(reachability_treet & art) {
       dereference(deref_code.op0(), true);
       dereference(deref_code.op1(), false);
 
-      symex_assign(state, deref_code);
+      symex_assign(deref_code);
     }
     state.source.pc++;
     break;

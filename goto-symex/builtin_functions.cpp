@@ -97,7 +97,7 @@ void goto_symext::symex_malloc(
   state.rename(rhs, ns);
   
   guardt guard;
-  symex_assign_rec(state, lhs, rhs, guard);
+  symex_assign_rec(lhs, rhs, guard);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   exprt sym("symbol", array_typet());
@@ -110,7 +110,7 @@ void goto_symext::symex_malloc(
   index.move_to_operands(sym, pointerobj);
   exprt truth("constant", bool_typet());
   truth.set("value", "true");
-  symex_assign_rec(state, index, truth, guard);
+  symex_assign_rec(index, truth, guard);
 }
 
 void goto_symext::symex_printf(
@@ -201,7 +201,7 @@ void goto_symext::symex_cpp_new(
   cur_state->rename(rhs, ns);
 
   guardt guard;
-  symex_assign_rec(*cur_state, lhs, rhs, guard);
+  symex_assign_rec(lhs, rhs, guard);
 }
 
 // XXX - implement as a call to free?
@@ -254,7 +254,7 @@ goto_symext::intrinsic_get_thread_id(code_function_callt &call,
   code_assignt assign(call.lhs(), tid);
   assert(call.lhs().type() == tid.type());
   state.value_set.assign(call.lhs(), tid, ns);
-  symex_assign(state, assign);
+  symex_assign(assign);
   return;
 }
 
@@ -300,7 +300,7 @@ goto_symext::intrinsic_get_thread_data(code_function_callt &call,
   code_assignt assign(call.lhs(), startdata);
   assert(call.lhs().type() == startdata.type());
   state.value_set.assign(call.lhs(), startdata, ns);
-  symex_assign(state, assign);
+  symex_assign(assign);
   return;
 }
 
@@ -340,7 +340,7 @@ goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_tree
   thread_id_expr.set_value(integer2binary(thread_id, config.ansi_c.int_width));
   code_assignt assign(call.lhs(), thread_id_expr);
   state.value_set.assign(call.lhs(), thread_id_expr, ns);
-  symex_assign(state, assign);
+  symex_assign(assign);
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.
@@ -385,6 +385,6 @@ goto_symext::intrinsic_get_thread_state(code_function_callt &call, reachability_
   constant_exprt flag_expr(unsignedbv_typet(config.ansi_c.int_width));
   flag_expr.set_value(integer2binary(flags, config.ansi_c.int_width));
   code_assignt assign(call.lhs(), flag_expr);
-  symex_assign(state, assign);
+  symex_assign(assign);
   return;
 }

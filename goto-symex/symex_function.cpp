@@ -114,7 +114,7 @@ goto_symext::argument_assignments(
       }
 
       guardt guard;
-      symex_assign_symbol(*cur_state, lhs, rhs, guard);
+      symex_assign_symbol(lhs, rhs, guard);
     }
 
     it1++;
@@ -198,7 +198,7 @@ goto_symext::symex_function_call_code(const code_function_callt &call)
       rhs.identifier("symex::" + i2string(nondet_count++));
       rhs.location() = call.location();
       guardt guard;
-      symex_assign_rec(*cur_state, call.lhs(), rhs, guard);
+      symex_assign_rec(call.lhs(), rhs, guard);
     }
 
     cur_state->source.pc++;

@@ -221,7 +221,7 @@ execution_statet::symex_step(reachability_treet &art)
         const code_returnt &code = to_code_return(instruction.code);
         code_assignt assign;
         if (make_return_assignment(state, assign, code))
-          goto_symext::symex_assign(state, assign);
+          goto_symext::symex_assign(assign);
 
         symex_return();
 
@@ -236,10 +236,10 @@ execution_statet::symex_step(reachability_treet &art)
 }
 
 void
-execution_statet::symex_assign(statet &state, const codet &code)
+execution_statet::symex_assign(const codet &code)
 {
 
-  goto_symext::symex_assign(state, code);
+  goto_symext::symex_assign(code);
 
   if (threads_state.size() > 1)
     owning_rt->analyse_for_cswitch_after_assign(code);

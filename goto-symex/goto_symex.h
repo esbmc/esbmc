@@ -396,57 +396,52 @@ protected:
    *  is to rewrite assignments to arrays, structs, and byte_selects into the
    *  equivalent uses of WITH, or byte_update, and so forth. The end result is
    *  a single new value to be bound to a new symbol.
-   *  @param state Current thread state.
    *  @param code Code to assign; with lhs and rhs.
    */
-  virtual void symex_assign(statet &state, const codet &code);
+  virtual void symex_assign(const codet &code);
 
   /** Recursively perform symex assign. @see symex_assign */
-  void symex_assign_rec(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_rec(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a symbol.
    *  Renames further, performs goto_symex_statet::assignment and symex target
    *  assignments.
-   *  @param state Current state to operate on.
    *  @param lhs Symbol to assign to
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_symbol(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_symbol(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a typecast irep.
    *  This just ends up moving the typecast from the lhs to the rhs.
-   *  @param state Current state to operate on.
    *  @param lhs Typecast to assign to
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_typecast(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_typecast(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to an array.
    *  lhs transformed to the container of the array, or the symbol for its
    *  destination. rhs converted to a WITH statement, updating the contents of
    *  the original array with the value of the original rhs.
-   *  @param state Current state to operate on.
    *  @param lhs Array to assign to
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_array(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_array(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a struct.
    *  Exactly like with arrays, but with structs and members.
    *  @see symex_assign_array
-   *  @param state Current state to operate on.
    *  @param lhs Struct to assign to
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_member(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_member(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to an "if".
@@ -454,24 +449,22 @@ protected:
    *  other to the other. The appropriate guard is executed in either case.
    *  Possibly defunct; I'm not aware of C supporting nondeterministic
    *  left hand side expressions.
-   *  @param state Current state to operate on.
    *  @param lhs "If" to assign to
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_if(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_if(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a byte extract.
    *  Results in a byte update of the relevant part of the lhs with the
    *  right hand side at the appropriate position. Currently a problem , as
    *  assignments of something that's bigger than a byte fails.
-   *  @param state Current state to operate on.
    *  @param lhs Byte extract to assign to
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_byte_extract(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_byte_extract(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /** Symbolic implementation of malloc. */
   void symex_malloc(statet &state, const exprt &lhs, const side_effect_exprt &code);

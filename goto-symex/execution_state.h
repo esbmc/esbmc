@@ -239,10 +239,9 @@ class execution_statet : public goto_symext
    *  Entirely handed off to goto_symext::symex_assign. However this method
    *  also passes the assignment to a reachability_treet analysis function to
    *  see whether the assignment should be generating a context switch.
-   *  @param state State of current thread.
    *  @param code Code representing assignment we're making.
    */
-  virtual void symex_assign(statet &state, const codet &code);
+  virtual void symex_assign(const codet &code);
 
   /**
    *  Symbolically assert something.
