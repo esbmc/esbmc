@@ -22,8 +22,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "crypto_hash.h"
 
-goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs)    
-    : guard(), level2(l2), value_set(vs)
+goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
+                                     const namespacet &_ns)
+    : guard(), level2(l2), value_set(vs), ns(_ns)
 {
   use_value_set = true;
   depth = 0;
@@ -34,7 +35,7 @@ goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs)
 goto_symex_statet::goto_symex_statet(const goto_symex_statet &state,
                                      renaming::level2t &l2,
                                      value_sett &vs)
-  : level2(l2), value_set(vs)
+  : level2(l2), value_set(vs), ns(state.ns)
 {
   *this = state;
 }

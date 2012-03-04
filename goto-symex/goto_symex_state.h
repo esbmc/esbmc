@@ -56,7 +56,8 @@ public:
    *  @param l2 Global L2 state reference.
    *  @param vs Global value set reference.
    */
-  goto_symex_statet(renaming::level2t &l2, value_sett &vs);
+  goto_symex_statet(renaming::level2t &l2, value_sett &vs,
+                    const namespacet &_ns);
 
   /**
    *  Copy constructor.
@@ -422,6 +423,9 @@ public:
 
   /** Stack of framet's recording current function call stack */
   call_stackt call_stack;
+
+  /** Namespace to work with. */
+  const namespacet &ns;
 };
 
 #endif
