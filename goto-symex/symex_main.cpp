@@ -69,30 +69,28 @@ goto_symext::get_symex_result(void)
 }
 
 void
-goto_symext::symex_step(reachability_treet & art) {
+goto_symext::symex_step(reachability_treet & art)
+{
 
-  execution_statet &ex_state = art.get_cur_state();
-  statet &state = ex_state.get_active_state();
+  assert(!cur_state->call_stack.empty());
 
-  assert(!state.call_stack.empty());
-
-  const goto_programt::instructiont &instruction = *state.source.pc;
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
   merge_gotos();
 
   // depth exceeded?
   {
     unsigned max_depth = atoi(options.get_option("depth").c_str());
-    if (max_depth != 0 && state.depth > max_depth)
-      state.guard.add(false_exprt());
-    state.depth++;
+    if (max_depth != 0 && cur_state->depth > max_depth)
+      cur_state->guard.add(false_exprt());
+    cur_state->depth++;
   }
 
   // actually do instruction
   switch (instruction.type) {
   case SKIP:
     // really ignore
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   case END_FUNCTION:
@@ -101,12 +99,12 @@ goto_symext::symex_step(reachability_treet & art) {
     // Potentially skip to run another function ptr target; if not,
     // continue
     if (!run_next_function_ptr_target(false))
-      state.source.pc++;
+      cur_state->source.pc++;
     break;
 
   case LOCATION:
-    target->location(state.guard, state.source);
-    state.source.pc++;
+    target->location(cur_state->guard, cur_state->source);
+    cur_state->source.pc++;
     break;
 
   case GOTO:
@@ -121,36 +119,36 @@ goto_symext::symex_step(reachability_treet & art) {
   break;
 
   case ASSUME:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       exprt tmp(instruction.guard);
       replace_dynamic_allocation(tmp);
       replace_nondet(tmp);
       dereference(tmp, false);
 
       exprt tmp1 = tmp;
-      state.rename(tmp);
+      cur_state->rename(tmp);
 
       do_simplify(tmp);
       if (!tmp.is_true()) {
 	exprt tmp2 = tmp;
-	state.guard.guard_expr(tmp2);
+	cur_state->guard.guard_expr(tmp2);
 
 	assume(tmp2);
 
 	// we also add it to the state guard
-	state.guard.add(tmp);
+	cur_state->guard.add(tmp);
       }
     }
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   case ASSERT:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       if (!options.get_bool_option("no-assertions") ||
-          !state.source.pc->location.user_provided()
+          !cur_state->source.pc->location.user_provided()
           || options.get_bool_option("deadlock-check")) {
 
-	std::string msg = state.source.pc->location.comment().as_string();
+	std::string msg = cur_state->source.pc->location.comment().as_string();
 	if (msg == "") msg = "assertion";
 	exprt tmp(instruction.guard);
 
@@ -161,11 +159,11 @@ goto_symext::symex_step(reachability_treet & art) {
 	claim(tmp, msg);
       }
     }
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   case RETURN:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       const code_returnt &code =
         to_code_return(instruction.code);
       code_assignt assign;
@@ -174,11 +172,11 @@ goto_symext::symex_step(reachability_treet & art) {
       symex_return();
     }
 
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   case ASSIGN:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       codet deref_code = instruction.code;
       replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
@@ -189,11 +187,11 @@ goto_symext::symex_step(reachability_treet & art) {
 
       symex_assign(deref_code);
     }
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   case FUNCTION_CALL:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       code_function_callt deref_code =
         to_code_function_call(instruction.code);
 
@@ -210,7 +208,7 @@ goto_symext::symex_step(reachability_treet & art) {
 
       if (has_prefix(deref_code.function().identifier().as_string(),
                      "c::__ESBMC")) {
-	state.source.pc++;
+	cur_state->source.pc++;
 	run_intrinsic(deref_code, art,
 	              deref_code.function().identifier().as_string());
 	return;
@@ -218,15 +216,15 @@ goto_symext::symex_step(reachability_treet & art) {
 
       symex_function_call(deref_code);
     } else   {
-      state.source.pc++;
+      cur_state->source.pc++;
     }
     break;
 
   case OTHER:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       symex_other();
     }
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   default:
