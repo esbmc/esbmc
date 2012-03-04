@@ -440,5 +440,13 @@ goto_convert_functionst::thrash_type_symbols(void)
   for (it = typenames.begin(); it != typenames.end(); it++)
     wallop_type(it->first, typenames);
 
+  // And now all the types have a fixed form, assault all existing code.
+  Forall_symbols(it, context.symbols) {
+    if (it->second.name.as_string().find("$type") == std::string::npos) {
+      rename_types(it->second.type);
+      rename_types(it->second.value);
+    }
+  }
+
   return;
 }
