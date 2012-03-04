@@ -338,9 +338,8 @@ class execution_statet : public goto_symext
    *  for this value into the guards of all currently executing threads. This
    *  means that any assertion after a context switch is guarded by the
    *  conditions on all the previous switches that have happened.
-   *  @param ns The namespace we're operating in (defunct?).
    */
-  void execute_guard(const namespacet & ns);
+  void execute_guard(void);
 
   /**
    *  Attempt to explore a thread.

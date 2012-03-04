@@ -348,7 +348,7 @@ execution_statet::switch_to_thread(unsigned int i)
   last_active_thread = active_thread;
   active_thread = i;
   cur_state = &threads_state[active_thread];
-  execute_guard(ns);
+  execute_guard();
 }
 
 bool
@@ -444,7 +444,7 @@ execution_statet::end_thread(void)
 }
 
 void
-execution_statet::execute_guard(const namespacet &ns)
+execution_statet::execute_guard(void)
 {
 
   node_id = node_count++;
