@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "dynamic_allocation.h"
 
-/*******************************************************************\
-
-Function: get_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static irep_idt get_object(const exprt &expr)
 {
   if(expr.id()==exprt::symbol)
@@ -42,18 +30,6 @@ static irep_idt get_object(const exprt &expr)
 
   return "";
 }
-
-/*******************************************************************\
-
-Function: goto_symext::do_valid_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::replace_dynamic_allocation(
   const statet &state,
@@ -116,18 +92,6 @@ void goto_symext::replace_dynamic_allocation(
     expr.id(exprt::deref);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_symext::is_valid_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool goto_symext::is_valid_object(
   const statet &state,

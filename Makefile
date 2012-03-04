@@ -36,6 +36,9 @@ clean:
 
 esbmc: $(OBJDIR)/.depends infrastructure languages
 
+doxygen:
+	doxygen .doxygen
+
 ###############################################################################
 
 include $(ESBMCDIR)/common

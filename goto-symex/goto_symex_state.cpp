@@ -22,17 +22,38 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "crypto_hash.h"
 
-/*******************************************************************\
+goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs)    
+    : guard(), level2(l2), value_set(vs)
+{
+  use_value_set = true;
+  depth = 0;
+  thread_ended = false;
+  guard.make_true();
+}
 
-Function: goto_symex_statet::initialize
+goto_symex_statet::goto_symex_statet(const goto_symex_statet &state,
+                                     renaming::level2t &l2,
+                                     value_sett &vs)
+  : level2(l2), value_set(vs)
+{
+  *this = state;
+}
 
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+goto_symex_statet &
+goto_symex_statet::operator=(const goto_symex_statet &state)
+{
+  depth = state.depth;
+  thread_ended = state.thread_ended;
+  guard = state.guard;
+  source = state.source;
+  function_frame = state.function_frame;
+  unwind_map = state.unwind_map;
+  function_unwind = state.function_unwind;
+  declaration_history = state.declaration_history;
+  use_value_set = state.use_value_set;
+  call_stack = state.call_stack;
+  return *this;
+}
 
 void goto_symex_statet::initialize(const goto_programt::const_targett & start, const goto_programt::const_targett & end, const goto_programt *prog, unsigned int thread_id)
 {
@@ -45,18 +66,6 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
   top().end_of_function=end;
   top().calling_location=symex_targett::sourcet(top().end_of_function, prog);
 }
-
-/*******************************************************************\
-
-Function: goto_symex_statet::constant_propagation
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool goto_symex_statet::constant_propagation(const exprt &expr) const
 {
@@ -146,18 +155,6 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
   return false;
 }
 
-/*******************************************************************\
-
-Function: goto_symex_statet::constant_propagation_reference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
 {
   if(expr.id()==exprt::symbol)
@@ -184,18 +181,6 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_symex_statet::assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose: write to a variable
-
-\*******************************************************************/
 
 void goto_symex_statet::assignment(
   exprt &lhs,
@@ -239,18 +224,6 @@ void goto_symex_statet::assignment(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_symex_statet::rename
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symex_statet::rename(exprt &expr, const namespacet &ns)
 {
   // rename all the symbols with their last known value
@@ -277,18 +250,6 @@ void goto_symex_statet::rename(exprt &expr, const namespacet &ns)
   }
 }
 
-/*******************************************************************\
-
-Function: goto_symex_statet::rename_address
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symex_statet::rename_address(exprt &expr, const namespacet &ns)
 {
   // rename all the symbols with their last known value
@@ -313,18 +274,6 @@ void goto_symex_statet::rename_address(exprt &expr, const namespacet &ns)
       rename_address(*it, ns);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_symex_statet::rename
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symex_statet::rename(typet &type, const namespacet &ns)
 {
@@ -355,17 +304,6 @@ void goto_symex_statet::rename(typet &type, const namespacet &ns)
     rename(type, ns);
   }
 }
-/*******************************************************************\
-
-Function: goto_symex_statet::get_original_name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symex_statet::get_original_name(exprt &expr) const
 {
@@ -378,18 +316,6 @@ void goto_symex_statet::get_original_name(exprt &expr) const
     top().level1.get_original_name(expr);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_symex_statet::get_original_identifier
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 const irep_idt goto_symex_statet::get_original_name(
   const irep_idt &identifier) const

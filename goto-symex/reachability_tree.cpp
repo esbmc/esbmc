@@ -32,7 +32,6 @@ reachability_treet::reachability_treet(
     symex_targett *target,
     contextt &context) :
     goto_functions(goto_functions),
-    reached_terminal_state(NULL),
     ns(ns),
     options(opts)
 {
@@ -68,17 +67,6 @@ reachability_treet::reachability_treet(
   cur_state_it = execution_states.begin();
 }
 
-/*******************************************************************
- Function: reachability_treet::get_cur_state
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 execution_statet & reachability_treet::get_cur_state()
 {
 
@@ -91,48 +79,15 @@ const execution_statet & reachability_treet::get_cur_state() const
   return **cur_state_it;
 }
 
-/*******************************************************************
- Function: reachability_treet::has_more_states
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 bool reachability_treet::has_more_states()
 {
   return execution_states.size() > 0;
 }
 
-/*******************************************************************
- Function: reachability_treet::get_CS_bound
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 int reachability_treet::get_CS_bound() const
 {
   return CS_bound;
 }
-
-/*******************************************************************
- Function: reachability_treet::analyse_for_cswitch_after_read
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
 
 bool reachability_treet::analyse_for_cswitch_after_read(const exprt &code)
 {
@@ -142,18 +97,6 @@ bool reachability_treet::analyse_for_cswitch_after_read(const exprt &code)
   else
     return false;
 }
-
-/*******************************************************************
-
- Function: reachability_treet::analyse_for_cswitch_after_assign
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
 
 bool reachability_treet::analyse_for_cswitch_after_assign(const exprt &code)
 {
@@ -172,35 +115,12 @@ bool reachability_treet::analyse_for_cswitch_after_assign(const exprt &code)
   return false;
 }
 
-/*******************************************************************
-
- Function: reachability_treet::analyse_for_cswitch_base
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 bool reachability_treet::force_cswitch_point()
 {
 
   // do analysis here
   return analyse_for_cswitch_base(exprt());
 }
-
-/*******************************************************************
- Function: reachability_treet::analyse_for_cswitch_base
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
 
 bool reachability_treet::analyse_for_cswitch_base(const exprt &expr)
 {
@@ -340,17 +260,6 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state,
   return tid;
 }
 
-/*******************************************************************
- Function: reachability_treet::is_at_end_of_run
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 bool reachability_treet::is_at_end_of_run()
 {
 
@@ -359,33 +268,11 @@ bool reachability_treet::is_at_end_of_run()
          get_cur_state().get_active_state().call_stack.empty();
 }
 
-/*******************************************************************
- Function: reachability_treet::is_has_complete_formula
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
 bool reachability_treet::is_has_complete_formula()
 {
 
   return has_complete_formula;
 }
-
-/*******************************************************************
- Function: reachability_treet::switch_to_next_execution_state
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
 
 void reachability_treet::switch_to_next_execution_state()
 {
@@ -433,17 +320,6 @@ bool reachability_treet::reset_to_unexplored_state()
   at_end_of_run = false;
   return execution_states.size() != 0;
 }
-
-/*******************************************************************
- Function: reachability_treet::go_next_state
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
 
 void reachability_treet::go_next_state()
 {
