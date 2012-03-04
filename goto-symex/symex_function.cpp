@@ -22,18 +22,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "execution_state.h"
 
-/*******************************************************************\
-
-Function: goto_symext::get_unwind_recursion
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool goto_symext::get_unwind_recursion(
   const irep_idt &identifier,
   unsigned unwind)
@@ -60,18 +48,6 @@ bool goto_symext::get_unwind_recursion(
   return this_loop_max_unwind!=0 &&
          unwind>=this_loop_max_unwind;
 }
-
-/*******************************************************************\
-
-Function: goto_symext::argument_assignments
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::argument_assignments(
   const code_typet &function_type,
@@ -163,18 +139,6 @@ void goto_symext::argument_assignments(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_function_call(
   const goto_functionst &goto_functions,
   statet &state,
@@ -188,18 +152,6 @@ void goto_symext::symex_function_call(
     symex_function_call_deref(goto_functions, state, code);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_function_call_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_function_call_symbol(
   const goto_functionst &goto_functions,
   statet  &state,
@@ -211,18 +163,6 @@ void goto_symext::symex_function_call_symbol(
 
   symex_function_call_code(goto_functions, state, code);
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_function_call_code
-
-  Inputs:
-
- Outputs:
-
- Purpose: do function call by inlining
-
-\*******************************************************************/
 
 void goto_symext::symex_function_call_code(
   const goto_functionst &goto_functions,
@@ -482,18 +422,6 @@ goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
   return true;
 }
 
-/*******************************************************************\
-
-Function: goto_symext::pop_frame
-
-  Inputs:
-
- Outputs:
-
- Purpose: pop one call frame
-
-\*******************************************************************/
-
 void goto_symext::pop_frame(statet &state)
 {
   assert(!state.call_stack.empty());
@@ -518,34 +446,10 @@ void goto_symext::pop_frame(statet &state)
   state.pop_frame();
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_end_of_function
-
-  Inputs:
-
- Outputs:
-
- Purpose: do function call by inlining
-
-\*******************************************************************/
-
 void goto_symext::symex_end_of_function(statet &state)
 {
   pop_frame(state);
 }
-
-/*******************************************************************\
-
-Function: goto_symext::locality
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::locality(
   unsigned frame_nr,
@@ -574,18 +478,6 @@ void goto_symext::locality(
     frame.local_variables.insert(l1_name);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_symext::return_assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool
 goto_symext::make_return_assignment(statet &state,
@@ -622,18 +514,6 @@ goto_symext::make_return_assignment(statet &state,
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_return
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_return(statet &state)
 {
