@@ -192,7 +192,7 @@ protected:
    *  the truth of their guards.
    *  @param state Current thread state.
    */
-  void merge_gotos(statet &state);
+  void merge_gotos(void);
 
   /**
    *  Merge pointer tracking value sets in a phi function.

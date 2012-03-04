@@ -144,13 +144,13 @@ goto_symext::symex_goto(const exprt &old_guard)
 }
 
 void
-goto_symext::merge_gotos(statet &state)
+goto_symext::merge_gotos(void)
 {
-  statet::framet &frame = state.top();
+  statet::framet &frame = cur_state->top();
 
   // first, see if this is a target at all
   statet::goto_state_mapt::iterator state_map_it =
-    frame.goto_state_map.find(state.source.pc);
+    frame.goto_state_map.find(cur_state->source.pc);
 
   if (state_map_it == frame.goto_state_map.end())
     return;  // nothing to do
@@ -166,15 +166,15 @@ goto_symext::merge_gotos(statet &state)
     statet::goto_statet &goto_state = *list_it;
 
     // do SSA phi functions
-    phi_function(goto_state, state);
+    phi_function(goto_state, *cur_state);
 
-    merge_value_sets(goto_state, state);
+    merge_value_sets(goto_state, *cur_state);
 
     // adjust guard
-    state.guard |= goto_state.guard;
+    cur_state->guard |= goto_state.guard;
 
     // adjust depth
-    state.depth = std::min(state.depth, goto_state.depth);
+    cur_state->depth = std::min(cur_state->depth, goto_state.depth);
   }
 
   // clean up to save some memory

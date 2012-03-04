@@ -170,7 +170,7 @@ execution_statet::symex_step(reachability_treet &art)
   statet &state = get_active_state();
   const goto_programt::instructiont &instruction = *state.source.pc;
 
-  merge_gotos(state);
+  merge_gotos();
 
   if (config.options.get_option("break-at") != "") {
     unsigned int insn_num = strtol(config.options.get_option("break-at").c_str(), NULL, 10);

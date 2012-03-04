@@ -387,7 +387,7 @@ goto_symext::run_next_function_ptr_target(statet &state, bool first)
   state.source.pc = target;
 
   // Merge pre-function-ptr-call state in immediately.
-  merge_gotos(state);
+  merge_gotos();
 
   // Now switch back to the original call location so that the call appears
   // to originate from there...
