@@ -50,7 +50,6 @@ goto_symex_statet::operator=(const goto_symex_statet &state)
   function_frame = state.function_frame;
   unwind_map = state.unwind_map;
   function_unwind = state.function_unwind;
-  declaration_history = state.declaration_history;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
   return *this;

@@ -81,7 +81,6 @@ public:
   typedef std::map<goto_programt::const_targett,
                    goto_state_listt> goto_state_mapt;
   typedef std::vector<framet> call_stackt;
-  typedef std::set<std::string> declaration_historyt;
 
   /**
    *  Class recording the result of a portion of symex.
@@ -186,6 +185,13 @@ public:
     /** Original function pointer call code. Contains arguments to setup
      *  resulting function invocations with. */
     const code_function_callt *orig_func_ptr_call;
+
+    typedef std::set<std::string> declaration_historyt;
+    /** List of variables names that have been declared. Used to detect when we
+     *  are in some kind of block that is entered then exited repeatedly -
+     *  whenever that happens, a new l1 name is required. This caches the
+     *  already seen names in a function for making that decision. */
+    declaration_historyt declaration_history;
 
     framet(unsigned int thread_id) :
       return_value(static_cast<const exprt &>(get_nil_irep()))
@@ -404,10 +410,6 @@ public:
   std::map<symex_targett::sourcet, unsigned> unwind_map;
   /** Record of how many times we've unwound function recursion. */
   std::map<irep_idt, unsigned> function_unwind;
-
-  /** Record of declarations. Used to detect when a new decl shadows another
-   *  one higher in the function scope? */
-  declaration_historyt declaration_history;
 
   /** Flag saying whether to maintain pointer value set tracking. */
   bool use_value_set;

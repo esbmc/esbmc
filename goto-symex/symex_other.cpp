@@ -76,15 +76,15 @@ void goto_symext::symex_other(void)
       cur_state->top().level1.get_original_name(l1_identifier);
 
     // increase the frame if we have seen this declaration before
-    while(cur_state->declaration_history.find(l1_identifier)!=
-          cur_state->declaration_history.end())
+    while(cur_state->top().declaration_history.find(l1_identifier)!=
+          cur_state->top().declaration_history.end())
     {
       unsigned index=cur_state->top().level1.current_names[original_id];
       cur_state->top().level1.rename(original_id, index+1);
       l1_identifier=cur_state->top().level1.get_ident_name(original_id);
     }
 
-    cur_state->declaration_history.insert(l1_identifier);
+    cur_state->top().declaration_history.insert(l1_identifier);
     cur_state->top().local_variables.insert(l1_identifier);
 
     // seen it before?

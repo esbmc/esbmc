@@ -415,11 +415,14 @@ goto_symext::pop_frame(void)
   cur_state->source.prog = frame.calling_location.prog;
 
   // clear locals from L2 renaming
-  for (statet::framet::local_variablest::const_iterator
-       it = frame.local_variables.begin();
-       it != frame.local_variables.end();
-       it++)
+  for(statet::framet::local_variablest::const_iterator
+      it=frame.local_variables.begin();
+      it!=frame.local_variables.end();
+      it++) {
     cur_state->level2.remove(*it);
+    irep_idt orig_name = cur_state->level2.get_original_name(*it);
+    cur_state->value_set.erase(orig_name);
+  }
 
   // decrease recursion unwinding counter
   if (frame.function_identifier != "")
