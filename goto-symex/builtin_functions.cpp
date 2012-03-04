@@ -20,18 +20,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 
-/*******************************************************************\
-
-Function: goto_symext::symex_malloc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_malloc(
   statet &state,
   const exprt &lhs,
@@ -125,18 +113,6 @@ void goto_symext::symex_malloc(
   symex_assign_rec(state, index, truth, guard);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_printf
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_printf(
   const exprt &lhs __attribute__((unused)),
   const exprt &rhs)
@@ -168,18 +144,6 @@ void goto_symext::symex_printf(
     target->output(cur_state->guard, cur_state->source, fmt, args);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_cpp_new
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_cpp_new(
   const exprt &lhs,
@@ -239,18 +203,6 @@ void goto_symext::symex_cpp_new(
   guardt guard;
   symex_assign_rec(*cur_state, lhs, rhs, guard);
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_cpp_delete
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 // XXX - implement as a call to free?
 void goto_symext::symex_cpp_delete(const codet &code __attribute__((unused)))
