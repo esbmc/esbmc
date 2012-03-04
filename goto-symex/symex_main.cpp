@@ -28,18 +28,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <simplify_expr.h>
 #include "config.h"
 
-/*******************************************************************\
-
-Function: goto_symext::claim
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::claim(
   const exprt &claim_expr,
   const std::string &msg,
@@ -75,36 +63,12 @@ goto_symext::assume(const exprt &assumption, statet &state)
   return;
 }
 
-/*******************************************************************\
-
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 goto_symext::symex_resultt *
 goto_symext::get_symex_result(void)
 {
 
   return new goto_symext::symex_resultt(target, total_claims, remaining_claims);
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_step
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_step(
         const goto_functionst &goto_functions,
