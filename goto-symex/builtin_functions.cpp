@@ -182,7 +182,6 @@ Function: goto_symext::symex_cpp_new
 \*******************************************************************/
 
 void goto_symext::symex_cpp_new(
-  statet &state,
   const exprt &lhs,
   const side_effect_exprt &code)
 {
@@ -235,10 +234,10 @@ void goto_symext::symex_cpp_new(
   else
     rhs.copy_to_operands(symbol_expr(symbol));
   
-  state.rename(rhs, ns);
+  cur_state->rename(rhs, ns);
 
   guardt guard;
-  symex_assign_rec(state, lhs, rhs, guard);
+  symex_assign_rec(*cur_state, lhs, rhs, guard);
 }
 
 /*******************************************************************\

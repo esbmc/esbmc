@@ -149,7 +149,7 @@ void goto_symext::symex_assign(statet &state, const codet &code)
     }
     else if(statement=="cpp_new" ||
             statement=="cpp_new[]")
-      symex_cpp_new(state, lhs, side_effect_expr);
+      symex_cpp_new(lhs, side_effect_expr);
     else if(statement=="malloc")
       symex_malloc(state, lhs, side_effect_expr);
     else if(statement=="printf")
