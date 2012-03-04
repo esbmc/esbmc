@@ -225,17 +225,6 @@ goto_symext::symex_step(reachability_treet & art) {
 
   case OTHER:
     if (!state.guard.is_false()) {
-      codet deref_code(instruction.code);
-      const irep_idt &statement = deref_code.get_statement();
-      if (statement == "cpp_delete" ||
-          statement == "cpp_delete[]" ||
-          statement == "free" ||
-          statement == "printf") {
-	replace_dynamic_allocation(deref_code);
-	replace_nondet(deref_code);
-	dereference(deref_code, false);
-      }
-
       symex_other();
     }
     state.source.pc++;
