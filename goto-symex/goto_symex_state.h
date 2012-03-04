@@ -29,14 +29,44 @@
 
 class execution_statet; // foward dec
 
-// central data structure: state
+/**
+ *  Class for storing a particular threads state.
+ *  This means storing information about its program counter, its call stack,
+ *  the locality of all the variables in that stack, its execution guard, the
+ *  number of jumps and states that are hanging around... the everything,
+ *  really. Notably, we're storing all that stuff here, we're not mainpulating
+ *  it. Instead, that all occurs in the goto_symext class.
+ *
+ *  Perhaps in the future code will start moving over from one to the other;
+ *  however that'd end up with an even larger class containing everything.
+ *  Ideally everything would become more segregated.
+ */
+
 class goto_symex_statet
 {
 public:
   class goto_statet; // forward dec
   class framet; // forward dec
 
+  /**
+   *  Default constructor.
+   *  Sets up blank contents for the call stack, a dummy guard, no data of
+   *  interest. Takes references to pieces of global state, the l2 renaming
+   *  and value set / pointer tracking situations.
+   *  @param l2 Global L2 state reference.
+   *  @param vs Global value set reference.
+   */
   goto_symex_statet(renaming::level2t &l2, value_sett &vs);
+
+  /**
+   *  Copy constructor.
+   *  Performs your normal copy constructor activity; however requires a new
+   *  l2 state, because in the majority of circumstances where copy
+   *  constructors are needed, it's because a higher up object is getting cloned
+   *  and we need to change global state references.
+   *  @param state State to copy from
+   *  @param l2 New L2 state to refer to.
+   */
   goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2);
 
   goto_symex_statet &
