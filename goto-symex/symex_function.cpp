@@ -162,9 +162,9 @@ goto_symext::symex_function_call_code(statet &state,
   // find code in function map
 
   goto_functionst::function_mapt::const_iterator it =
-    _goto_functions.function_map.find(identifier);
+    goto_functions.function_map.find(identifier);
 
-  if (it == _goto_functions.function_map.end()) {
+  if (it == goto_functions.function_map.end()) {
     if (call.function().invalid_object()) {
       std::cout << "WARNING: function ptr call with no target, ";
       std::cout << call.location() << std::endl;
@@ -320,8 +320,8 @@ goto_symext::symex_function_call_deref(statet &state,
        it != l.end(); it++) {
 
     goto_functionst::function_mapt::const_iterator fit =
-      _goto_functions.function_map.find(it->second.identifier());
-    if (fit == _goto_functions.function_map.end() ||
+      goto_functions.function_map.find(it->second.identifier());
+    if (fit == goto_functions.function_map.end() ||
         !fit->second.body_available) {
       std::cerr << "Couldn't find symbol " << it->second.identifier();
       std::cerr << " or body not available, during function ptr dereference";

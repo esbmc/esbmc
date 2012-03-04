@@ -184,10 +184,10 @@ execution_statet::symex_step(reachability_treet &art)
   if (options.get_bool_option("symex-trace")) {
     const goto_programt p_dummy;
     goto_functions_templatet<goto_programt>::function_mapt::const_iterator it =
-      _goto_functions.function_map.find(instruction.function);
+      goto_functions.function_map.find(instruction.function);
 
     const goto_programt &p_real = it->second.body;
-    const goto_programt &p = (it == _goto_functions.function_map.end()) ? p_dummy : p_real;
+    const goto_programt &p = (it == goto_functions.function_map.end()) ? p_dummy : p_real;
     p.output_instruction(ns, "", std::cout, state.source.pc, false, false);
   }
 

@@ -568,7 +568,7 @@ protected:
   /** Context we're working with */
   contextt &new_context;
   /** GOTO functions that we're operating over. */
-  const goto_functionst &_goto_functions;
+  const goto_functionst &goto_functions;
   /** Target listening to the execution trace */
   symex_targett *target;
 };
