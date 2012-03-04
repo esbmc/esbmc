@@ -39,7 +39,7 @@ void goto_symext::symex_malloc(
     size_is_one=true;
   else
   {
-    cur_state->rename(size, ns);
+    cur_state->rename(size);
     mp_integer i;
     size_is_one=(!to_integer(size, i) && i==1);
   }
@@ -93,7 +93,7 @@ void goto_symext::symex_malloc(
   if(rhs.type()!=lhs.type())
     rhs.make_typecast(lhs.type());
 
-  cur_state->rename(rhs, ns);
+  cur_state->rename(rhs);
   
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
@@ -120,7 +120,7 @@ void goto_symext::symex_printf(
     throw "printf expected to have at least one operand";
 
   exprt tmp_rhs=rhs;
-  cur_state->rename(tmp_rhs, ns);
+  cur_state->rename(tmp_rhs);
 
   const exprt::operandst &operands=tmp_rhs.operands();
   std::list<exprt> args;
@@ -197,7 +197,7 @@ void goto_symext::symex_cpp_new(
   else
     rhs.copy_to_operands(symbol_expr(symbol));
   
-  cur_state->rename(rhs, ns);
+  cur_state->rename(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
@@ -265,8 +265,8 @@ goto_symext::intrinsic_set_thread_data(code_function_callt &call,
   exprt threadid = call.arguments()[0];
   exprt startdata = call.arguments()[1];
 
-  state.rename(threadid, ns);
-  state.rename(startdata, ns);
+  state.rename(threadid);
+  state.rename(startdata);
 
   if (threadid.id() != "constant") {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";

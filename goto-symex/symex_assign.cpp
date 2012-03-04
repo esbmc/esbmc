@@ -187,12 +187,12 @@ void goto_symext::symex_assign_symbol(
   }
   exprt original_lhs=lhs;
   cur_state->get_original_name(original_lhs);
-  cur_state->rename(rhs, ns);
+  cur_state->rename(rhs);
   do_simplify(rhs);
 
   exprt new_lhs=lhs;
 
-  cur_state->assignment(new_lhs, rhs, ns, constant_propagation);
+  cur_state->assignment(new_lhs, rhs, constant_propagation);
 
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);

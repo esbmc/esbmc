@@ -849,7 +849,7 @@ execution_statet::print_stack_traces(const namespacet &ns,
   i = 0;
   for (it = threads_state.begin(); it != threads_state.end(); it++) {
     std::cout << spaces << "Thread " << i++ << ":" << std::endl;
-    it->print_stack_trace(ns, indent + 2);
+    it->print_stack_trace(indent + 2);
     std::cout << std::endl;
   }
 

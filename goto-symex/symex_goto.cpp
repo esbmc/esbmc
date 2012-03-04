@@ -20,7 +20,7 @@ goto_symext::symex_goto(const exprt &old_guard)
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
   exprt new_guard = old_guard;
-  cur_state->rename(new_guard, ns);
+  cur_state->rename(new_guard);
   do_simplify(new_guard);
 
   target->location(cur_state->guard, cur_state->source);
@@ -115,7 +115,7 @@ goto_symext::symex_goto(const exprt &old_guard)
 
       exprt new_lhs = guard_expr;
 
-      cur_state->assignment(new_lhs, new_rhs, ns, false);
+      cur_state->assignment(new_lhs, new_rhs, false);
 
       guardt guard;
 
@@ -128,7 +128,7 @@ goto_symext::symex_goto(const exprt &old_guard)
         symex_targett::HIDDEN);
 
       guard_expr.make_not();
-      cur_state->rename(guard_expr, ns);
+      cur_state->rename(guard_expr);
     }
 
     if (forward) {
@@ -222,7 +222,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       typet type(symbol.type);
 
       // type may need renaming
-      cur_state->rename(type, ns);
+      cur_state->rename(type);
 
       exprt rhs;
 
@@ -247,7 +247,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       exprt lhs(symbol_expr(symbol));
       exprt new_lhs(lhs);
 
-      cur_state->assignment(new_lhs, rhs, ns, false);
+      cur_state->assignment(new_lhs, rhs, false);
 
       guardt true_guard;
 

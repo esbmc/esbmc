@@ -209,7 +209,7 @@ goto_symext::symex_function_call_code(const code_function_callt &call)
   exprt::operandst arguments = call.arguments();
   for (unsigned i = 0; i < arguments.size(); i++)
   {
-    cur_state->rename(arguments[i], ns);
+    cur_state->rename(arguments[i]);
   }
 
   // increase unwinding counter
@@ -338,7 +338,7 @@ goto_symext::symex_function_call_deref(const code_function_callt &call)
     goto_state_list.push_back(statet::goto_statet(*cur_state));
     statet::goto_statet &new_state = goto_state_list.back();
     exprt guardexpr = it->first.as_expr();
-    cur_state->rename(guardexpr, ns);
+    cur_state->rename(guardexpr);
     new_state.guard.add(guardexpr);
   }
 
