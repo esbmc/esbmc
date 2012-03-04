@@ -509,6 +509,9 @@ execution_statet::add_thread(const goto_programt *prog)
   exprs_read_write.push_back(read_write_set());
   thread_start_data.push_back(exprt());
 
+  // We invalidated all threads_state refs, so reset cur_state ptr.
+  cur_state = &threads_state[active_thread];
+
   return threads_state.size() - 1; // thread ID, zero based
 }
 
