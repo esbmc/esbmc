@@ -166,7 +166,7 @@ goto_symext::merge_gotos(void)
     statet::goto_statet &goto_state = *list_it;
 
     // do SSA phi functions
-    phi_function(goto_state, *cur_state);
+    phi_function(goto_state);
 
     merge_value_sets(goto_state);
 
@@ -193,14 +193,13 @@ goto_symext::merge_value_sets(const statet::goto_statet &src)
 }
 
 void
-goto_symext::phi_function(
-  const statet::goto_statet &goto_state, statet &state)
+goto_symext::phi_function(const statet::goto_statet &goto_state)
 {
   // go over all variables to see what changed
   std::set<irep_idt> variables;
 
   goto_state.level2.get_variables(variables);
-  state.level2.get_variables(variables);
+  cur_state->level2.get_variables(variables);
 
   for (std::set<irep_idt>::const_iterator
        it = variables.begin();
@@ -208,13 +207,13 @@ goto_symext::phi_function(
        it++)
   {
     if (goto_state.level2.current_number(*it) ==
-        state.level2.current_number(*it))
+        cur_state->level2.current_number(*it))
       continue;  // not changed
 
     if (*it == guard_identifier())
       continue;  // just a guard
 
-    irep_idt original_identifier = state.get_original_name(*it);
+    irep_idt original_identifier = cur_state->get_original_name(*it);
     try
     {
       // changed!
@@ -223,32 +222,32 @@ goto_symext::phi_function(
       typet type(symbol.type);
 
       // type may need renaming
-      state.rename(type, ns);
+      cur_state->rename(type, ns);
 
       exprt rhs;
 
-      if (state.guard.is_false()) {
-	rhs = symbol_exprt(state.current_name(goto_state, symbol.name), type);
+      if (cur_state->guard.is_false()) {
+	rhs = symbol_exprt(cur_state->current_name(goto_state, symbol.name), type);
       } else if (goto_state.guard.is_false())    {
-	rhs = symbol_exprt(state.current_name(symbol.name), type);
+	rhs = symbol_exprt(cur_state->current_name(symbol.name), type);
       } else   {
 	guardt tmp_guard(goto_state.guard);
 
 	// this gets the diff between the guards
-	tmp_guard -= state.guard;
+	tmp_guard -= cur_state->guard;
 
 	rhs = if_exprt();
 	rhs.type() = type;
 	rhs.op0() = tmp_guard.as_expr();
-	rhs.op1() = symbol_exprt(state.current_name(goto_state, symbol.name),
+	rhs.op1() = symbol_exprt(cur_state->current_name(goto_state, symbol.name),
                                  type);
-	rhs.op2() = symbol_exprt(state.current_name(symbol.name), type);
+	rhs.op2() = symbol_exprt(cur_state->current_name(symbol.name), type);
       }
 
       exprt lhs(symbol_expr(symbol));
       exprt new_lhs(lhs);
 
-      state.assignment(new_lhs, rhs, ns, false);
+      cur_state->assignment(new_lhs, rhs, ns, false);
 
       guardt true_guard;
 
@@ -256,8 +255,8 @@ goto_symext::phi_function(
         true_guard,
         new_lhs, lhs,
         rhs,
-        state.source,
-        state.gen_stack_trace(),
+        cur_state->source,
+        cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);
     }
     catch (const std::string e)

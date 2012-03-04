@@ -211,7 +211,7 @@ protected:
    *  @param goto_state The previous jumps state to be merged into the current
    *  @param state The current thread state to be merged into
    */
-  void phi_function(const statet::goto_statet &goto_state, statet &state);
+  void phi_function(const statet::goto_statet &goto_state);
 
   /**
    *  Test whether unwinding bound has been exceeded.
