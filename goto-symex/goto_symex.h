@@ -571,6 +571,8 @@ protected:
   const goto_functionst &goto_functions;
   /** Target listening to the execution trace */
   symex_targett *target;
+  /** Target thread we're currently operating upon */
+  goto_symex_statet *cur_state;
 };
 
 #endif

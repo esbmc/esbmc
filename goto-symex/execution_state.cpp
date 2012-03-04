@@ -61,6 +61,8 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
              goto_program, 0);
 
   threads_state.push_back(state);
+  cur_state = &threads_state.front();
+
   atomic_numbers.push_back(0);
 
   if (DFS_traversed.size() <= state.source.thread_nr) {
@@ -98,6 +100,9 @@ execution_statet::execution_statet(const execution_statet &ex) :
     goto_symex_statet state(*it, *state_level2, global_value_set);
     threads_state.push_back(state);
   }
+
+  // Reassign which state is currently being worked on.
+  cur_state = &threads_state[active_thread];
 
   // Take another snapshot to represent what string state was
   // like when we began the exploration this execution_statet will
@@ -343,6 +348,7 @@ execution_statet::switch_to_thread(unsigned int i)
 
   last_active_thread = active_thread;
   active_thread = i;
+  cur_state = &threads_state[active_thread];
   execute_guard(ns);
 }
 
