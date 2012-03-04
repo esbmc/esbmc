@@ -13,18 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_symex.h"
 
-/*******************************************************************\
-
-Function: goto_symext::symex_other
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_other(void)
 {
   const goto_programt::instructiont &instruction=*cur_state->source.pc;
