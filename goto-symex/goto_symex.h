@@ -45,6 +45,7 @@ public:
    *  @param opts Options we'll be running with.
    */
   goto_symext(const namespacet &_ns, contextt &_new_context,
+              const goto_functionst &goto_functions,
               symex_targett *_target, const optionst &opts);
   goto_symext(const goto_symext &sym);
   goto_symext& operator=(const goto_symext &sym);
@@ -579,6 +580,8 @@ protected:
   const optionst &options;
   /** Context we're working with */
   contextt &new_context;
+  /** GOTO functions that we're operating over. */
+  const goto_functionst &_goto_functions;
   /** Target listening to the execution trace */
   symex_targett *target;
 };

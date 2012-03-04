@@ -29,10 +29,9 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    contextt &context,
                                    ex_state_level2t *l2init,
                                    const optionst &options) :
-  goto_symext(ns, context, _target, options),
+  goto_symext(ns, context, goto_functions, _target, options),
   owning_rt(art),
-  state_level2(l2init),
-  _goto_functions(goto_functions)
+  state_level2(l2init)
 {
 
   // XXXjmorse - C++s static initialization order trainwreck means
@@ -87,8 +86,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(ex.state_level2->clone()),
-  _goto_functions(ex._goto_functions)
+  state_level2(ex.state_level2->clone())
 {
 
   *this = ex;

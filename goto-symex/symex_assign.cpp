@@ -22,6 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 
 goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
+                         const goto_functionst &goto_functions,
                          symex_targett *_target, const optionst &opts) :
   guard_identifier_s("goto_symex::\\guard"),
   total_claims(0),
@@ -30,6 +31,7 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   ns(_ns),
   options(opts),
   new_context(_new_context),
+  _goto_functions(goto_functions),
   target(_target)
 {
   const std::string &set = options.get_option("unwindset");
@@ -54,7 +56,8 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
 goto_symext::goto_symext(const goto_symext &sym) :
   ns(sym.ns),
   options(sym.options),
-  new_context(sym.new_context)
+  new_context(sym.new_context),
+  _goto_functions(sym._goto_functions)
 {
   *this = sym;
 }

@@ -489,8 +489,6 @@ class execution_statet : public goto_symext
   unsigned int node_id;
 
   protected:
-  /** GOTO functions that we're operating over. */
-  const goto_functionst &_goto_functions;
   /** Number of context switches performed by this ex_state */
   int CS_number;
   /** Snapshot of global string pool. @see dfs_execution_statet */
