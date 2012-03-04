@@ -462,12 +462,12 @@ goto_symext::locality(unsigned frame_nr,
 }
 
 bool
-goto_symext::make_return_assignment(statet &state, code_assignt &assign,
-  const code_returnt &code)
+goto_symext::make_return_assignment(code_assignt &assign,
+                                    const code_returnt &code)
 {
-  statet::framet &frame = state.top();
+  statet::framet &frame = cur_state->top();
 
-  target->location(state.guard, state.source);
+  target->location(cur_state->guard, cur_state->source);
 
   if (code.operands().size() == 1) {
     exprt value(code.op0());

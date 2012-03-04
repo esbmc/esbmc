@@ -220,7 +220,7 @@ execution_statet::symex_step(reachability_treet &art)
       if(!state.guard.is_false()) {
         const code_returnt &code = to_code_return(instruction.code);
         code_assignt assign;
-        if (make_return_assignment(state, assign, code))
+        if (make_return_assignment(assign, code))
           goto_symext::symex_assign(assign);
 
         symex_return();

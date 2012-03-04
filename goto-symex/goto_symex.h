@@ -247,13 +247,11 @@ protected:
   /**
    *  Create assignment for return statement.
    *  Generate an assignment to the return variable from this return statement.
-   *  @param state Current thread state.
    *  @param assign Assignment expression. Output.
    *  @param code The return statement we're interpreting.
    *  @return True if a return assignment was generated.
    */
-  bool make_return_assignment(statet &state, code_assignt &assign,
-                              const code_returnt &code);
+  bool make_return_assignment(code_assignt &assign, const code_returnt &code);
 
   /** 
    *  Perform function call.
