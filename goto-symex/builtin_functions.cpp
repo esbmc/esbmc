@@ -20,20 +20,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 
-/*******************************************************************\
-
-Function: goto_symext::symex_malloc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_malloc(
-  statet &state,
   const exprt &lhs,
   const side_effect_exprt &code)
 {
@@ -52,7 +39,7 @@ void goto_symext::symex_malloc(
     size_is_one=true;
   else
   {
-    state.rename(size, ns);
+    cur_state->rename(size);
     mp_integer i;
     size_is_one=(!to_integer(size, i) && i==1);
   }
@@ -106,10 +93,10 @@ void goto_symext::symex_malloc(
   if(rhs.type()!=lhs.type())
     rhs.make_typecast(lhs.type());
 
-  state.rename(rhs, ns);
+  cur_state->rename(rhs);
   
   guardt guard;
-  symex_assign_rec(state, lhs, rhs, guard);
+  symex_assign_rec(lhs, rhs, guard);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   exprt sym("symbol", array_typet());
@@ -122,23 +109,10 @@ void goto_symext::symex_malloc(
   index.move_to_operands(sym, pointerobj);
   exprt truth("constant", bool_typet());
   truth.set("value", "true");
-  symex_assign_rec(state, index, truth, guard);
+  symex_assign_rec(index, truth, guard);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_printf
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_printf(
-  statet &state,
   const exprt &lhs __attribute__((unused)),
   const exprt &rhs)
 {
@@ -146,7 +120,7 @@ void goto_symext::symex_printf(
     throw "printf expected to have at least one operand";
 
   exprt tmp_rhs=rhs;
-  state.rename(tmp_rhs, ns);
+  cur_state->rename(tmp_rhs);
 
   const exprt::operandst &operands=tmp_rhs.operands();
   std::list<exprt> args;
@@ -166,24 +140,11 @@ void goto_symext::symex_printf(
     const exprt &fmt_str=format.op0().op0();
     const std::string &fmt=fmt_str.value().as_string();
 
-    target->output(state.guard, state.source, fmt, args);
+    target->output(cur_state->guard, cur_state->source, fmt, args);
   }
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_cpp_new
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_cpp_new(
-  statet &state,
   const exprt &lhs,
   const side_effect_exprt &code)
 {
@@ -236,28 +197,14 @@ void goto_symext::symex_cpp_new(
   else
     rhs.copy_to_operands(symbol_expr(symbol));
   
-  state.rename(rhs, ns);
+  cur_state->rename(rhs);
 
   guardt guard;
-  symex_assign_rec(state, lhs, rhs, guard);
+  symex_assign_rec(lhs, rhs, guard);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_cpp_delete
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 // XXX - implement as a call to free?
-void goto_symext::symex_cpp_delete(
-  statet &state __attribute__((unused)),
-  const codet &code __attribute__((unused)))
+void goto_symext::symex_cpp_delete(const codet &code __attribute__((unused)))
 {
   //bool do_array=code.statement()=="delete[]";
 }
@@ -306,7 +253,7 @@ goto_symext::intrinsic_get_thread_id(code_function_callt &call,
   code_assignt assign(call.lhs(), tid);
   assert(call.lhs().type() == tid.type());
   state.value_set.assign(call.lhs(), tid, ns);
-  symex_assign(state, assign);
+  symex_assign(assign);
   return;
 }
 
@@ -318,8 +265,8 @@ goto_symext::intrinsic_set_thread_data(code_function_callt &call,
   exprt threadid = call.arguments()[0];
   exprt startdata = call.arguments()[1];
 
-  state.rename(threadid, ns);
-  state.rename(startdata, ns);
+  state.rename(threadid);
+  state.rename(startdata);
 
   if (threadid.id() != "constant") {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
@@ -352,7 +299,7 @@ goto_symext::intrinsic_get_thread_data(code_function_callt &call,
   code_assignt assign(call.lhs(), startdata);
   assert(call.lhs().type() == startdata.type());
   state.value_set.assign(call.lhs(), startdata, ns);
-  symex_assign(state, assign);
+  symex_assign(assign);
   return;
 }
 
@@ -392,7 +339,7 @@ goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_tree
   thread_id_expr.set_value(integer2binary(thread_id, config.ansi_c.int_width));
   code_assignt assign(call.lhs(), thread_id_expr);
   state.value_set.assign(call.lhs(), thread_id_expr, ns);
-  symex_assign(state, assign);
+  symex_assign(assign);
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.
@@ -437,6 +384,6 @@ goto_symext::intrinsic_get_thread_state(code_function_callt &call, reachability_
   constant_exprt flag_expr(unsignedbv_typet(config.ansi_c.int_width));
   flag_expr.set_value(integer2binary(flags, config.ansi_c.int_width));
   code_assignt assign(call.lhs(), flag_expr);
-  symex_assign(state, assign);
+  symex_assign(assign);
   return;
 }

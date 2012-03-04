@@ -29,10 +29,9 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    contextt &context,
                                    ex_state_level2t *l2init,
                                    const optionst &options) :
-  goto_symext(ns, context, _target, options),
+  goto_symext(ns, context, goto_functions, _target, options),
   owning_rt(art),
-  state_level2(l2init),
-  _goto_functions(goto_functions)
+  state_level2(l2init)
 {
 
   // XXXjmorse - C++s static initialization order trainwreck means
@@ -56,12 +55,14 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   const goto_programt *goto_program = &(it->second.body);
 
   // Initialize initial thread state
-  goto_symex_statet state(*state_level2, global_value_set);
+  goto_symex_statet state(*state_level2, global_value_set, ns);
   state.initialize((*goto_program).instructions.begin(),
              (*goto_program).instructions.end(),
              goto_program, 0);
 
   threads_state.push_back(state);
+  cur_state = &threads_state.front();
+
   atomic_numbers.push_back(0);
 
   if (DFS_traversed.size() <= state.source.thread_nr) {
@@ -87,8 +88,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(ex.state_level2->clone()),
-  _goto_functions(ex._goto_functions)
+  state_level2(ex.state_level2->clone())
 {
 
   *this = ex;
@@ -100,6 +100,9 @@ execution_statet::execution_statet(const execution_statet &ex) :
     goto_symex_statet state(*it, *state_level2, global_value_set);
     threads_state.push_back(state);
   }
+
+  // Reassign which state is currently being worked on.
+  cur_state = &threads_state[active_thread];
 
   // Take another snapshot to represent what string state was
   // like when we began the exploration this execution_statet will
@@ -161,14 +164,13 @@ execution_statet::~execution_statet()
 };
 
 void
-execution_statet::symex_step(const goto_functionst &goto_functions,
-                             reachability_treet &art)
+execution_statet::symex_step(reachability_treet &art)
 {
 
   statet &state = get_active_state();
   const goto_programt::instructiont &instruction = *state.source.pc;
 
-  merge_gotos(state);
+  merge_gotos();
 
   if (config.options.get_option("break-at") != "") {
     unsigned int insn_num = strtol(config.options.get_option("break-at").c_str(), NULL, 10);
@@ -201,7 +203,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
         art.force_cswitch_point();
       } else {
         // Fall through to base class
-        goto_symext::symex_step(goto_functions, art);
+        goto_symext::symex_step(art);
       }
       break;
     case ATOMIC_BEGIN:
@@ -218,26 +220,26 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
       if(!state.guard.is_false()) {
         const code_returnt &code = to_code_return(instruction.code);
         code_assignt assign;
-        if (make_return_assignment(state, assign, code))
-          goto_symext::symex_assign(state, assign);
+        if (make_return_assignment(assign, code))
+          goto_symext::symex_assign(assign);
 
-        symex_return(state);
+        symex_return();
 
         owning_rt->analyse_for_cswitch_after_assign(assign);
       }
       break;
     default:
-      goto_symext::symex_step(goto_functions, art);
+      goto_symext::symex_step(art);
   }
 
   return;
 }
 
 void
-execution_statet::symex_assign(statet &state, const codet &code)
+execution_statet::symex_assign(const codet &code)
 {
 
-  goto_symext::symex_assign(state, code);
+  goto_symext::symex_assign(code);
 
   if (threads_state.size() > 1)
     owning_rt->analyse_for_cswitch_after_assign(code);
@@ -246,11 +248,10 @@ execution_statet::symex_assign(statet &state, const codet &code)
 }
 
 void
-execution_statet::claim(const exprt &expr, const std::string &msg,
-                        statet &state)
+execution_statet::claim(const exprt &expr, const std::string &msg)
 {
 
-  goto_symext::claim(expr, msg, state);
+  goto_symext::claim(expr, msg);
 
   if (threads_state.size() > 1)
     owning_rt->analyse_for_cswitch_after_read(expr);
@@ -259,10 +260,10 @@ execution_statet::claim(const exprt &expr, const std::string &msg,
 }
 
 void
-execution_statet::symex_goto(statet &state, const exprt &old_guard)
+execution_statet::symex_goto(const exprt &old_guard)
 {
 
-  goto_symext::symex_goto(state, old_guard);
+  goto_symext::symex_goto(old_guard);
 
   if (!old_guard.is_nil())
     if (threads_state.size() > 1)
@@ -272,10 +273,10 @@ execution_statet::symex_goto(statet &state, const exprt &old_guard)
 }
 
 void
-execution_statet::assume(const exprt &assumption, statet &state)
+execution_statet::assume(const exprt &assumption)
 {
 
-  goto_symext::assume(assumption, state);
+  goto_symext::assume(assumption);
 
   if (threads_state.size() > 1)
     owning_rt->analyse_for_cswitch_after_read(assumption);
@@ -346,7 +347,8 @@ execution_statet::switch_to_thread(unsigned int i)
 
   last_active_thread = active_thread;
   active_thread = i;
-  execute_guard(ns);
+  cur_state = &threads_state[active_thread];
+  execute_guard();
 }
 
 bool
@@ -442,7 +444,7 @@ execution_statet::end_thread(void)
 }
 
 void
-execution_statet::execute_guard(const namespacet &ns)
+execution_statet::execute_guard(void)
 {
 
   node_id = node_count++;
@@ -489,7 +491,7 @@ execution_statet::add_thread(const goto_programt *prog)
 {
   statet &state = get_active_state();
 
-  goto_symex_statet new_state(*state_level2, global_value_set);
+  goto_symex_statet new_state(*state_level2, global_value_set, ns);
   new_state.initialize(prog->instructions.begin(), prog->instructions.end(),
                       prog, threads_state.size());
 
@@ -505,6 +507,9 @@ execution_statet::add_thread(const goto_programt *prog)
 
   exprs_read_write.push_back(read_write_set());
   thread_start_data.push_back(exprt());
+
+  // We invalidated all threads_state refs, so reset cur_state ptr.
+  cur_state = &threads_state[active_thread];
 
   return threads_state.size() - 1; // thread ID, zero based
 }
@@ -844,7 +849,7 @@ execution_statet::print_stack_traces(const namespacet &ns,
   i = 0;
   for (it = threads_state.begin(); it != threads_state.end(); it++) {
     std::cout << spaces << "Thread " << i++ << ":" << std::endl;
-    it->print_stack_trace(ns, indent + 2);
+    it->print_stack_trace(indent + 2);
     std::cout << std::endl;
   }
 
@@ -933,15 +938,14 @@ schedule_execution_statet::schedule_execution_statet(const schedule_execution_st
 }
 
 void
-schedule_execution_statet::claim(const exprt &expr, const std::string &msg,
-                                 statet &state)
+schedule_execution_statet::claim(const exprt &expr, const std::string &msg)
 {
   unsigned int tmp_total, tmp_remaining;
 
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
 
-  execution_statet::claim(expr, msg, state);
+  execution_statet::claim(expr, msg);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;

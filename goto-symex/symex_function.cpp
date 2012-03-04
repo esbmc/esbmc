@@ -50,7 +50,7 @@ goto_symext::get_unwind_recursion(
 
 void
 goto_symext::argument_assignments(
-  const code_typet &function_type, statet &state,
+  const code_typet &function_type,
   const exprt::operandst &arguments)
 {
   // iterates over the operands
@@ -114,7 +114,7 @@ goto_symext::argument_assignments(
       }
 
       guardt guard;
-      symex_assign_symbol(state, lhs, rhs, guard);
+      symex_assign_symbol(lhs, rhs, guard);
     }
 
     it1++;
@@ -130,34 +130,28 @@ goto_symext::argument_assignments(
 }
 
 void
-goto_symext::symex_function_call(
-  const goto_functionst &goto_functions, statet &state,
-  const code_function_callt &code)
+goto_symext::symex_function_call(const code_function_callt &code)
 {
   const exprt &function = code.function();
 
   if (function.id() == exprt::symbol)
-    symex_function_call_symbol(goto_functions, state, code);
+    symex_function_call_symbol(code);
   else
-    symex_function_call_deref(goto_functions, state, code);
+    symex_function_call_deref(code);
 }
 
 void
-goto_symext::symex_function_call_symbol(
-  const goto_functionst &goto_functions, statet  &state,
-  const code_function_callt &code)
+goto_symext::symex_function_call_symbol(const code_function_callt &code)
 {
-  target->location(state.guard, state.source);
+  target->location(cur_state->guard, cur_state->source);
 
   assert(code.function().id() == exprt::symbol);
 
-  symex_function_call_code(goto_functions, state, code);
+  symex_function_call_code(code);
 }
 
 void
-goto_symext::symex_function_call_code(
-  const goto_functionst &goto_functions, statet &state,
-  const code_function_callt &call)
+goto_symext::symex_function_call_code(const code_function_callt &call)
 {
   const irep_idt &identifier =
     to_symbol_expr(call.function()).get_identifier();
@@ -171,7 +165,7 @@ goto_symext::symex_function_call_code(
     if (call.function().invalid_object()) {
       std::cout << "WARNING: function ptr call with no target, ";
       std::cout << call.location() << std::endl;
-      state.source.pc++;
+      cur_state->source.pc++;
       return;
     }
 
@@ -180,14 +174,14 @@ goto_symext::symex_function_call_code(
 
   const goto_functionst::goto_functiont &goto_function = it->second;
 
-  unsigned &unwinding_counter = state.function_unwind[identifier];
+  unsigned &unwinding_counter = cur_state->function_unwind[identifier];
 
   // see if it's too much
   if (get_unwind_recursion(identifier, unwinding_counter)) {
     if (!options.get_bool_option("no-unwinding-assertions"))
-      claim(false_exprt(), "recursion unwinding assertion", state);
+      claim(false_exprt(), "recursion unwinding assertion");
 
-    state.source.pc++;
+    cur_state->source.pc++;
     return;
   }
 
@@ -204,10 +198,10 @@ goto_symext::symex_function_call_code(
       rhs.identifier("symex::" + i2string(nondet_count++));
       rhs.location() = call.location();
       guardt guard;
-      symex_assign_rec(state, call.lhs(), rhs, guard);
+      symex_assign_rec(call.lhs(), rhs, guard);
     }
 
-    state.source.pc++;
+    cur_state->source.pc++;
     return;
   }
 
@@ -215,38 +209,38 @@ goto_symext::symex_function_call_code(
   exprt::operandst arguments = call.arguments();
   for (unsigned i = 0; i < arguments.size(); i++)
   {
-    state.rename(arguments[i], ns);
+    cur_state->rename(arguments[i]);
   }
 
   // increase unwinding counter
   unwinding_counter++;
 
   // produce a new frame
-  assert(!state.call_stack.empty());
-  goto_symex_statet::framet &frame = state.new_frame(state.source.thread_nr);
+  assert(!cur_state->call_stack.empty());
+  goto_symex_statet::framet &frame = cur_state->new_frame(cur_state->source.thread_nr);
 
   // copy L1 renaming from previous frame
-  frame.level1 = state.previous_frame().level1;
-  frame.level1._thread_id = state.source.thread_nr;
+  frame.level1 = cur_state->previous_frame().level1;
+  frame.level1._thread_id = cur_state->source.thread_nr;
 
-  unsigned &frame_nr = state.function_frame[identifier];
+  unsigned &frame_nr = cur_state->function_frame[identifier];
   frame_nr++;
 
-  frame.calling_location = state.source;
+  frame.calling_location = cur_state->source;
 
   // preserve locality of local variables
-  locality(frame_nr, state, goto_function);
+  locality(frame_nr, goto_function);
 
   // assign arguments
-  argument_assignments(goto_function.type, state, arguments);
+  argument_assignments(goto_function.type, arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = call.lhs();
   frame.function_identifier = identifier;
 
-  state.source.is_set = true;
-  state.source.pc = goto_function.body.instructions.begin();
-  state.source.prog = &goto_function.body;
+  cur_state->source.is_set = true;
+  cur_state->source.pc = goto_function.body.instructions.begin();
+  cur_state->source.prog = &goto_function.body;
 }
 
 static std::list<std::pair<guardt, exprt> >
@@ -286,12 +280,10 @@ get_function_list(const exprt &expr)
 }
 
 void
-goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
-  statet &state,
-  const code_function_callt &call)
+goto_symext::symex_function_call_deref(const code_function_callt &call)
 {
 
-  assert(state.top().cur_function_ptr_targets.size() == 0);
+  assert(cur_state->top().cur_function_ptr_targets.size() == 0);
 
   // Indirect function call. The value is dereferenced, so we'll get either an
   // address_of a symbol, or a set of if ireps. For symbols we'll invoke
@@ -306,14 +298,14 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
   // Generate a list of functions to call. We'll then proceed to call them,
   // and will later on merge them.
   exprt funcptr = call.op1();
-  dereference(funcptr, state, false);
+  dereference(funcptr, false);
 
   if (funcptr.invalid_object()) {
     // Emit warning; perform no function call behaviour. Increment PC
     std::cout << call.op1().location().as_string() << std::endl;
     std::cout << "No target candidate for function call " <<
     from_expr(ns, "", call.op1()) << std::endl;
-    state.source.pc++;
+    cur_state->source.pc++;
     return;
   }
 
@@ -335,39 +327,37 @@ goto_symext::symex_function_call_deref(const goto_functionst &goto_functions,
 
     // Set up a merge of the current state into the target function.
     statet::goto_state_listt &goto_state_list =
-      state.top().goto_state_map[fit->second.body.instructions.begin()];
+      cur_state->top().goto_state_map[fit->second.body.instructions.begin()];
 
-    state.top().cur_function_ptr_targets.push_back(
+    cur_state->top().cur_function_ptr_targets.push_back(
       std::pair<goto_programt::const_targett, exprt>(
         fit->second.body.instructions.begin(),
         it->second)
       );
 
-    goto_state_list.push_back(statet::goto_statet(state));
+    goto_state_list.push_back(statet::goto_statet(*cur_state));
     statet::goto_statet &new_state = goto_state_list.back();
     exprt guardexpr = it->first.as_expr();
-    state.rename(guardexpr, ns);
+    cur_state->rename(guardexpr);
     new_state.guard.add(guardexpr);
   }
 
-  state.top().function_ptr_call_loc = state.source.pc;
-  state.top().function_ptr_combine_target = state.source.pc;
-  state.top().function_ptr_combine_target++;
-  state.top().orig_func_ptr_call = new code_function_callt(call);
+  cur_state->top().function_ptr_call_loc = cur_state->source.pc;
+  cur_state->top().function_ptr_combine_target = cur_state->source.pc;
+  cur_state->top().function_ptr_combine_target++;
+  cur_state->top().orig_func_ptr_call = new code_function_callt(call);
 
-  run_next_function_ptr_target(goto_functions, state, true);
+  run_next_function_ptr_target(true);
 }
 
 bool
-goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
-  statet &state,
-  bool first)
+goto_symext::run_next_function_ptr_target(bool first)
 {
 
-  if (state.call_stack.empty())
+  if (cur_state->call_stack.empty())
     return false;
 
-  if (state.top().cur_function_ptr_targets.size() == 0)
+  if (cur_state->top().cur_function_ptr_targets.size() == 0)
     return false;
 
   // Record a merge - when all function ptr target runs are completed, they'll
@@ -376,77 +366,76 @@ goto_symext::run_next_function_ptr_target(const goto_functionst &goto_functions,
   // unconditional.
   if (!first) {
     statet::goto_state_listt &goto_state_list =
-      state.top().goto_state_map[state.top().function_ptr_combine_target];
-    goto_state_list.push_back(statet::goto_statet(state));
+      cur_state->top().goto_state_map[cur_state->top().function_ptr_combine_target];
+    goto_state_list.push_back(statet::goto_statet(*cur_state));
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
   // recorded merge will ensure it gets the right state.
   std::pair<goto_programt::const_targett, exprt> p =
-    state.top().cur_function_ptr_targets.front();
-  state.top().cur_function_ptr_targets.pop_front();
+    cur_state->top().cur_function_ptr_targets.front();
+  cur_state->top().cur_function_ptr_targets.pop_front();
 
   goto_programt::const_targett target = p.first;
   exprt target_symbol = p.second;
 
-  state.guard.make_false();
-  state.source.pc = target;
+  cur_state->guard.make_false();
+  cur_state->source.pc = target;
 
   // Merge pre-function-ptr-call state in immediately.
-  merge_gotos(state);
+  merge_gotos();
 
   // Now switch back to the original call location so that the call appears
   // to originate from there...
-  state.source.pc = state.top().function_ptr_call_loc;
+  cur_state->source.pc = cur_state->top().function_ptr_call_loc;
 
   // And setup the function call.
-  code_function_callt call = *state.top().orig_func_ptr_call;
+  code_function_callt call = *cur_state->top().orig_func_ptr_call;
   call.function() = target_symbol;
-  goto_symex_statet::framet &cur_frame = state.top();
+  goto_symex_statet::framet &cur_frame = cur_state->top();
 
-  if (state.top().cur_function_ptr_targets.size() == 0)
+  if (cur_state->top().cur_function_ptr_targets.size() == 0)
     delete cur_frame.orig_func_ptr_call;
 
-  symex_function_call_code(goto_functions, state, call);
+  symex_function_call_code(call);
 
 
   return true;
 }
 
 void
-goto_symext::pop_frame(statet &state)
+goto_symext::pop_frame(void)
 {
-  assert(!state.call_stack.empty());
+  assert(!cur_state->call_stack.empty());
 
-  statet::framet &frame = state.top();
+  statet::framet &frame = cur_state->top();
 
   // restore state
-  state.source.pc = frame.calling_location.pc;
-  state.source.prog = frame.calling_location.prog;
+  cur_state->source.pc = frame.calling_location.pc;
+  cur_state->source.prog = frame.calling_location.prog;
 
   // clear locals from L2 renaming
   for (statet::framet::local_variablest::const_iterator
        it = frame.local_variables.begin();
        it != frame.local_variables.end();
        it++)
-    state.level2.remove(*it);
+    cur_state->level2.remove(*it);
 
   // decrease recursion unwinding counter
   if (frame.function_identifier != "")
-    state.function_unwind[frame.function_identifier]--;
+    cur_state->function_unwind[frame.function_identifier]--;
 
-  state.pop_frame();
+  cur_state->pop_frame();
 }
 
 void
-goto_symext::symex_end_of_function(statet &state)
+goto_symext::symex_end_of_function()
 {
-  pop_frame(state);
+  pop_frame();
 }
 
 void
-goto_symext::locality(
-  unsigned frame_nr, statet &state,
+goto_symext::locality(unsigned frame_nr,
   const goto_functionst::goto_functiont &goto_function)
 {
   goto_programt::local_variablest local_identifiers;
@@ -459,7 +448,7 @@ goto_symext::locality(
       it->local_variables.begin(),
       it->local_variables.end());
 
-  statet::framet &frame = state.top();
+  statet::framet &frame = cur_state->top();
 
   for (goto_programt::local_variablest::const_iterator
        it = local_identifiers.begin();
@@ -473,17 +462,17 @@ goto_symext::locality(
 }
 
 bool
-goto_symext::make_return_assignment(statet &state, code_assignt &assign,
-  const code_returnt &code)
+goto_symext::make_return_assignment(code_assignt &assign,
+                                    const code_returnt &code)
 {
-  statet::framet &frame = state.top();
+  statet::framet &frame = cur_state->top();
 
-  target->location(state.guard, state.source);
+  target->location(cur_state->guard, cur_state->source);
 
   if (code.operands().size() == 1) {
     exprt value(code.op0());
 
-    dereference(value, state, false);
+    dereference(value, false);
 
     if (frame.return_value.is_not_nil()) {
       assign = code_assignt(frame.return_value, value);
@@ -504,7 +493,7 @@ goto_symext::make_return_assignment(statet &state, code_assignt &assign,
 }
 
 void
-goto_symext::symex_return(statet &state)
+goto_symext::symex_return(void)
 {
 
   // we treat this like an unconditional
@@ -512,10 +501,10 @@ goto_symext::symex_return(statet &state)
 
   // put into state-queue
   statet::goto_state_listt &goto_state_list =
-    state.top().goto_state_map[state.top().end_of_function];
+    cur_state->top().goto_state_map[cur_state->top().end_of_function];
 
-  goto_state_list.push_back(statet::goto_statet(state));
+  goto_state_list.push_back(statet::goto_statet(*cur_state));
 
   // kill this one
-  state.guard.make_false();
+  cur_state->guard.make_false();
 }

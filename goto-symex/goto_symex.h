@@ -45,6 +45,7 @@ public:
    *  @param opts Options we'll be running with.
    */
   goto_symext(const namespacet &_ns, contextt &_new_context,
+              const goto_functionst &goto_functions,
               symex_targett *_target, const optionst &opts);
   goto_symext(const goto_symext &sym);
   goto_symext& operator=(const goto_symext &sym);
@@ -81,12 +82,11 @@ public:
    *  These guards are symbolic names for the truth of a guard on a GOTO jump.
    *  Assertions and other activity during the course of symbolic execution
    *  encode these execution guard in them.
-   *  @param state Symex state the guard is for
    *  @return Name of the guard
    */
-  irep_idt guard_identifier(statet &state)
+  irep_idt guard_identifier(void)
   {
-	  return irep_idt(id2string(guard_identifier_s) + "!" + i2string(state.top().level1._thread_id));
+    return irep_idt(id2string(guard_identifier_s) + "!" + i2string(cur_state->top().level1._thread_id));
   };
 
   // Methods
@@ -103,12 +103,9 @@ public:
    *  control flow beating to occur (goto, func call, return). Threading
    *  specific operations are handled by execution_statet, which overrides
    *  this.
-   *  @param goto_functions Functions to operate over.
    *  @param art Reachability tree we're working with.
    */
-  virtual void symex_step(
-  const goto_functionst &goto_functions,
-  reachability_treet & art);
+  virtual void symex_step(reachability_treet & art);
 
 protected:
   /**
@@ -125,13 +122,9 @@ protected:
    *  it might point at, according to value set tracking, and builds an
    *  if-then-else list of concrete references that it might point at.
    *  @param expr Expression to eliminate dereferences from.
-   *  @param state Thread state we're operating in.
    *  @param write Whether or not we're writing into this object.
    */
-  void dereference(
-    exprt &expr,
-    statet &state,
-    const bool write);
+  void dereference(exprt &expr, const bool write);
 
   /**
    *  Recursive implementation of dereference method.
@@ -155,25 +148,22 @@ protected:
    *  handle editing the unwind bound when these things occur, and set up state
    *  merges in the future to handle each path thats taken. A precise
    *  description of how this is implemented... can go somewhere else.
-   *  @param state Current thread state, containing current GOTO instruction.
    *  @param old_guard Renamed guard on this jump occuring.
    */
-  virtual void symex_goto(statet &state, const exprt &old_guard);
+  virtual void symex_goto(const exprt &old_guard);
 
   /**
    *  Perform interpretation of RETURN instruction.
-   *  @param state Current thread state.
    */
-  void symex_return(statet &state);
+  void symex_return(void);
 
   /**
    *  Interpret an OTHER instruction.
    *  These can take many forms; memory management functions are OTHERs for
    *  example (ideally they should be intrinsics...), but also printf and
    *  variable declarations are handled here.
-   *  @param state Current thread state.
    */
-  void symex_other(statet &state);
+  void symex_other(void);
 
   /**
    *  Perform an assertion.
@@ -181,20 +171,17 @@ protected:
    *  adds the requirement that the current state guard is true as well.
    *  @param expr Expression that must always be true.
    *  @param msg Textual message explaining assertion.
-   *  @param state Current thread state.
    */
   virtual void claim(
     const exprt &expr,
-    const std::string &msg,
-    statet &state);
+    const std::string &msg);
 
   /**
    *  Perform an assumption.
    *  Adds to target an assumption that must always be true.
    *  @param assumption Assumption that must always be true.
-   *  @param state Current thread state.
    */
-  virtual void assume(const exprt &assumption, statet &state);
+  virtual void assume(const exprt &assumption);
 
   // gotos
   /**
@@ -203,9 +190,8 @@ protected:
    *  the future; then when we hit that future state, a phi function is
    *  performed that joins the states converging at this point, according to
    *  the truth of their guards.
-   *  @param state Current thread state.
    */
-  void merge_gotos(statet &state);
+  void merge_gotos(void);
 
   /**
    *  Merge pointer tracking value sets in a phi function.
@@ -214,9 +200,7 @@ protected:
    *  @param goto_state Previously executed goto state to be merged in.
    *  @param dest Thread state for previous jump to be merged into.
    */
-  void merge_value_sets(
-    const statet::goto_statet &goto_state,
-    statet &dest);
+  void merge_value_sets(const statet::goto_statet &goto_state);
 
   /**
    *  Join together a previous jump state into thread state.
@@ -224,9 +208,8 @@ protected:
    *  the new value of a variable, according to the truth of the guards of the
    *  states being joined. 
    *  @param goto_state The previous jumps state to be merged into the current
-   *  @param state The current thread state to be merged into
    */
-  void phi_function(const statet::goto_statet &goto_state, statet &state);
+  void phi_function(const statet::goto_statet &goto_state);
 
   /**
    *  Test whether unwinding bound has been exceeded.
@@ -246,10 +229,9 @@ protected:
    *  If unwinding assertions are on, assert that the unwinding bound is not
    *  exceeded. If partial loops are off, assume that the unwinding bound was
    *  not exceeded. Otherwise, just continue execution.
-   *  @param state Current thread state.
    *  @param guard Current state guard.
    */
-  void loop_bound_exceeded(statet &state, const exprt &guard);
+  void loop_bound_exceeded(const exprt &guard);
 
   // function calls
 
@@ -257,53 +239,39 @@ protected:
    *  Pop a stack frame.
    *  This frees/removes the top stack frame, and removes any relevant local
    *  variables from the l2 renaming, and value set tracking.
-   *  @param state Current thread state.
    */
-  void pop_frame(statet &state);
+  void pop_frame(void);
 
   /**
    *  Create assignment for return statement.
    *  Generate an assignment to the return variable from this return statement.
-   *  @param state Current thread state.
    *  @param assign Assignment expression. Output.
    *  @param code The return statement we're interpreting.
    *  @return True if a return assignment was generated.
    */
-  bool make_return_assignment(statet &state, code_assignt &assign,
-                              const code_returnt &code);
+  bool make_return_assignment(code_assignt &assign, const code_returnt &code);
 
   /** 
    *  Perform function call.
    *  Handles all kinds of function call instructions, symbols or function
    *  pointers.
-   *  @param goto_functions Functions to operate over.
-   *  @param state Thread state to operate on.
    *  @param call Function call we're working on.
    */
-  void symex_function_call(
-    const goto_functionst &goto_functions,
-    statet &state,
-    const code_function_callt &call);
+  void symex_function_call(const code_function_callt &call);
 
   /**
    *  End a functions interpretation.
    *  This routine pops a stack frame, and returns control to the caller;
    *  except in the case of function pointer interpretation, where we instead
    *  switch to interpreting the next pointed to function.
-   *  @param state Thread state we're working on.
    */
-  void symex_end_of_function(statet &state);
+  void symex_end_of_function(void);
 
   /**
    *  Handle a call to a named function.
-   *  @param goto_functions Functions to operate over.
-   *  @param state Thread state to operate on.
    *  @param call Function call we're performing.
    */
-  void symex_function_call_symbol(
-    const goto_functionst &goto_functions,
-    statet &state,
-    const code_function_callt &call);
+  void symex_function_call_symbol(const code_function_callt &call);
 
   /**
    *  Handle an indirect function call, to a pointer.
@@ -312,27 +280,17 @@ protected:
    *  one run, then at the end of each of these function calls we switch to
    *  the next in the list. Finally, when the insn after the func ptr call is
    *  run, all func ptr call states are merged in.
-   *  @param goto_functions Functions to operate over.
-   *  @param state Thread state to operate on.
    *  @param call Function call to interpret.
    */
-  virtual void symex_function_call_deref(
-    const goto_functionst &goto_functions,
-    statet &state,
-    const code_function_callt &call);
+  virtual void symex_function_call_deref(const code_function_callt &call);
 
   /**
    *  Handle function call to fixed function
    *  Like symex_function_call_code, but minus an assertion and location
    *  recording.
-   *  @param goto_functions Functions to operate over
-   *  @param state Thread state to operate on
    *  @param code Function code to actually call
    */
-  virtual void symex_function_call_code(
-    const goto_functionst &goto_functions,
-    statet &state,
-    const code_function_callt &call);
+  virtual void symex_function_call_code(const code_function_callt &call);
 
   /**
    *  Discover whether recursion bound has been exceeded.
@@ -350,12 +308,10 @@ protected:
    *  Assigns the value of arguments to a function to the actual argument
    *  variables of the function being called.
    *  @param function_type type containing argument types of func call.
-   *  @param state Thread state we're working on.
    *  @param arguments The arguments to assign to function arg variables.
    */
   void argument_assignments(
     const code_typet &function_type,
-    statet &state,
     const exprt::operandst &arguments);
 
   /**
@@ -364,24 +320,18 @@ protected:
    *  that we have a list of all variables that are in fact local to this
    *  particular function call.
    *  @param frame_counter The function frame invocation number.
-   *  @param state Thread state we're working on.
    *  @param goto_function The function we're working upon.
    */
-  void locality(
-    unsigned frame_counter,
-    statet &state,
+  void locality(unsigned frame_counter,
     const goto_functionst::goto_functiont &goto_function);
 
   /**
    *  Setup next function in a chain of func ptr calls.
    *  @see symex_function_call_deref
-   *  @param goto_functions Functions we're operating over
-   *  @param state State we're operating upon
    *  @param first Whether this is the first func ptr invocation.
    *  @return True if a function pointer invocation was set up.
    */
-  bool run_next_function_ptr_target(const goto_functionst &goto_functions,
-                                    statet &state, bool first);
+  bool run_next_function_ptr_target(bool first);
 
   /**
    *  Run an intrinsic, something prefixed with __ESBMC.
@@ -423,19 +373,16 @@ protected:
    *  how that information is actually stored in the resulting SMT. In the past
    *  this has been done in the solver backend, but that seems slightly
    *  the wrong place.
-   *  @param state State to operate on.
    *  @param expr Expression we're replacing the contents of.
    */
-  void replace_dynamic_allocation(const statet &state, exprt &expr);
+  void replace_dynamic_allocation(exprt &expr);
 
   /**
    *  Decide if symbol is valid or not.
    *  i.e., whether it's live or not. Not very well understood.
-   *  @param state Current thread state.
-   *  @param symbol Symbol we're inspecting.
    *  @return True if symbol is valid.
    */
-  bool is_valid_object(const statet &state, const symbolt &symbol);
+  bool is_valid_object(const symbolt &symbol);
 
   /**
    *  Make symbolic assignment.
@@ -444,57 +391,52 @@ protected:
    *  is to rewrite assignments to arrays, structs, and byte_selects into the
    *  equivalent uses of WITH, or byte_update, and so forth. The end result is
    *  a single new value to be bound to a new symbol.
-   *  @param state Current thread state.
    *  @param code Code to assign; with lhs and rhs.
    */
-  virtual void symex_assign(statet &state, const codet &code);
+  virtual void symex_assign(const codet &code);
 
   /** Recursively perform symex assign. @see symex_assign */
-  void symex_assign_rec(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_rec(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a symbol.
    *  Renames further, performs goto_symex_statet::assignment and symex target
    *  assignments.
-   *  @param state Current state to operate on.
    *  @param lhs Symbol to assign to
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_symbol(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_symbol(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a typecast irep.
    *  This just ends up moving the typecast from the lhs to the rhs.
-   *  @param state Current state to operate on.
    *  @param lhs Typecast to assign to
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_typecast(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_typecast(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to an array.
    *  lhs transformed to the container of the array, or the symbol for its
    *  destination. rhs converted to a WITH statement, updating the contents of
    *  the original array with the value of the original rhs.
-   *  @param state Current state to operate on.
    *  @param lhs Array to assign to
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_array(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_array(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a struct.
    *  Exactly like with arrays, but with structs and members.
    *  @see symex_assign_array
-   *  @param state Current state to operate on.
    *  @param lhs Struct to assign to
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_member(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_member(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to an "if".
@@ -502,33 +444,31 @@ protected:
    *  other to the other. The appropriate guard is executed in either case.
    *  Possibly defunct; I'm not aware of C supporting nondeterministic
    *  left hand side expressions.
-   *  @param state Current state to operate on.
    *  @param lhs "If" to assign to
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_if(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_if(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a byte extract.
    *  Results in a byte update of the relevant part of the lhs with the
    *  right hand side at the appropriate position. Currently a problem , as
    *  assignments of something that's bigger than a byte fails.
-   *  @param state Current state to operate on.
    *  @param lhs Byte extract to assign to
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_byte_extract(statet &state, const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_byte_extract(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /** Symbolic implementation of malloc. */
-  void symex_malloc(statet &state, const exprt &lhs, const side_effect_exprt &code);
+  void symex_malloc(const exprt &lhs, const side_effect_exprt &code);
   /** Symbolic implementation of c++'s delete. */
-  void symex_cpp_delete(statet &state, const codet &code);
+  void symex_cpp_delete(const codet &code);
   /** Symbolic implementation of c++'s new. */
-  void symex_cpp_new(statet &state, const exprt &lhs, const side_effect_exprt &code);
+  void symex_cpp_new(const exprt &lhs, const side_effect_exprt &code);
   /** Symbolic implementation of printf */
-  void symex_printf(statet &state, const exprt &lhs, const exprt &code);
+  void symex_printf(const exprt &lhs, const exprt &code);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -579,8 +519,12 @@ protected:
   const optionst &options;
   /** Context we're working with */
   contextt &new_context;
+  /** GOTO functions that we're operating over. */
+  const goto_functionst &goto_functions;
   /** Target listening to the execution trace */
   symex_targett *target;
+  /** Target thread we're currently operating upon */
+  goto_symex_statet *cur_state;
 };
 
 #endif

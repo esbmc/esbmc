@@ -56,7 +56,8 @@ public:
    *  @param l2 Global L2 state reference.
    *  @param vs Global value set reference.
    */
-  goto_symex_statet(renaming::level2t &l2, value_sett &vs);
+  goto_symex_statet(renaming::level2t &l2, value_sett &vs,
+                    const namespacet &_ns);
 
   /**
    *  Copy constructor.
@@ -299,9 +300,8 @@ public:
   /**
    *  Perform both levels of renaming on an expression.
    *  @param expr Expression to rename contents of.
-   *  @param ns Namespace to work with.
    */
-  void rename(exprt &expr, const namespacet &ns);
+  void rename(exprt &expr);
 
   /**
    *  Perform renaming of contents of an address_of operation.
@@ -309,18 +309,16 @@ public:
    *  pointer to a global variable or l1 variable on the stack, or a heap
    *  object. So, don't perform second level of renaming in this function.
    *  @param expr Expression to rename contents of.
-   *  @param ns Namespace to work with.
    */
-  void rename_address(exprt &expr, const namespacet &ns);
+  void rename_address(exprt &expr);
 
   /**
    *  Perform type renaming.
    *  Dereferences any types that are "symbol"s to type information stored
    *  elsewhere.
    *  @param type Type to dereference/rename.
-   *  @param ns Namespace to work with.
    */
-  void rename(typet &type, const namespacet &ns);
+  void rename(typet &type);
 
   /**
    *  Make an L2 and value set assignment.
@@ -331,8 +329,7 @@ public:
    *  @param rhs Value being assigned to symbol.
    *  @param record_value Whether to enable constant propagation.
    */
-  void assignment(
-    exprt &lhs, const exprt &rhs, const namespacet &ns, bool record_value);
+  void assignment(exprt &lhs, const exprt &rhs, bool record_value);
 
   /**
    *  Determine whether to constant propagate the value of an expression.
@@ -374,10 +371,9 @@ public:
    *  Print stack trace of state to stdout.
    *  Takes all the current function calls and produces an indented stack
    *  trace, then prints it to stdout.
-   *  @param ns Namespace to work under.
    *  @param indent Number of spaces to indent contents by.
    */
-  void print_stack_trace(const namespacet &ns, unsigned int indent) const;
+  void print_stack_trace(unsigned int indent) const;
 
   /**
    *  Generate set of strings making up a stack trace.
@@ -422,6 +418,9 @@ public:
 
   /** Stack of framet's recording current function call stack */
   call_stackt call_stack;
+
+  /** Namespace to work with. */
+  const namespacet &ns;
 };
 
 #endif

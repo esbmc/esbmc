@@ -230,21 +230,18 @@ class execution_statet : public goto_symext
    *  Take one instruction and interpret it. Can result in any action, such as
    *  a thread ending, causing a context switch, a function call being taken,
    *  a thread being created, and so forth.
-   *  @param goto_functions Functions to operate over (defunct?)
    *  @param art reachability_treet we're operating with (defunct?)
    */
-  virtual void symex_step(const goto_functionst &goto_functions,
-                          reachability_treet &art);
+  virtual void symex_step(reachability_treet &art);
 
   /**
    *  Symbolically assign a value.
    *  Entirely handed off to goto_symext::symex_assign. However this method
    *  also passes the assignment to a reachability_treet analysis function to
    *  see whether the assignment should be generating a context switch.
-   *  @param state State of current thread.
    *  @param code Code representing assignment we're making.
    */
-  virtual void symex_assign(statet &state, const codet &code);
+  virtual void symex_assign(const codet &code);
 
   /**
    *  Symbolically assert something.
@@ -254,9 +251,8 @@ class execution_statet : public goto_symext
    *  in this claim.
    *  @param expr Expression that we're asserting is true.
    *  @param msg Textual message explaining this assertion.
-   *  @param statet State of current thread.
    */
-  virtual void claim(const exprt &expr, const std::string &msg, statet &state);
+  virtual void claim(const exprt &expr, const std::string &msg);
 
   /**
    *  Perform a jump across GOTO code.
@@ -265,10 +261,9 @@ class execution_statet : public goto_symext
    *  read global state, and can thus possibly result in a context switch being
    *  generated; so we pass the guard to a reachability_treet analysis function
    *  too.
-   *  @param statet State of current thread.
    *  @param old_guard Guard of the goto jump being performed.
    */
-  virtual void symex_goto(statet &state, const exprt &old_guard);
+  virtual void symex_goto(const exprt &old_guard);
 
   /**
    *  Assume some expression is true.
@@ -276,9 +271,8 @@ class execution_statet : public goto_symext
    *  so we pass the assumption expression on to a reachability_treet analysis
    *  function.
    *  @param assumption Expression of the thing we're assuming to be true.
-   *  @param state State of the current thread.
    */
-  virtual void assume(const exprt &assumption, statet &state);
+  virtual void assume(const exprt &assumption);
 
   /**
    *  Fetch reference to count of dynamic objects in this state.
@@ -344,9 +338,8 @@ class execution_statet : public goto_symext
    *  for this value into the guards of all currently executing threads. This
    *  means that any assertion after a context switch is guarded by the
    *  conditions on all the previous switches that have happened.
-   *  @param ns The namespace we're operating in (defunct?).
    */
-  void execute_guard(const namespacet & ns);
+  void execute_guard(void);
 
   /**
    *  Attempt to explore a thread.
@@ -489,8 +482,6 @@ class execution_statet : public goto_symext
   unsigned int node_id;
 
   protected:
-  /** GOTO functions that we're operating over. */
-  const goto_functionst &_goto_functions;
   /** Number of context switches performed by this ex_state */
   int CS_number;
   /** Snapshot of global string pool. @see dfs_execution_statet */
@@ -569,7 +560,7 @@ class schedule_execution_statet : public execution_statet
   schedule_execution_statet(const schedule_execution_statet &ref);
   schedule_execution_statet *clone(void) const;
   virtual ~schedule_execution_statet(void);
-  virtual void claim(const exprt &expr, const std::string &msg, statet &state);
+  virtual void claim(const exprt &expr, const std::string &msg);
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;

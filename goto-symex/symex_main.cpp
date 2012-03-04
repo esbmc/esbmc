@@ -29,13 +29,12 @@
 #include "config.h"
 
 void
-goto_symext::claim(
-  const exprt &claim_expr, const std::string &msg, statet &state) {
+goto_symext::claim(const exprt &claim_expr, const std::string &msg) {
 
   total_claims++;
 
   exprt expr = claim_expr;
-  state.rename(expr, ns);
+  cur_state->rename(expr);
 
   // first try simplifier on it
   if (!expr.is_false())
@@ -45,20 +44,20 @@ goto_symext::claim(
       !options.get_bool_option("all-assertions"))
     return;
 
-  state.guard.guard_expr(expr);
+  cur_state->guard.guard_expr(expr);
 
   remaining_claims++;
-  target->assertion(state.guard, expr, msg, state.gen_stack_trace(),
-                    state.source);
+  target->assertion(cur_state->guard, expr, msg, cur_state->gen_stack_trace(),
+                    cur_state->source);
 }
 
 void
-goto_symext::assume(const exprt &assumption, statet &state)
+goto_symext::assume(const exprt &assumption)
 {
 
   // Irritatingly, assumption destroys its expr argument
   exprt assumpt_dup = assumption;
-  target->assumption(state.guard, assumpt_dup, state.source);
+  target->assumption(cur_state->guard, assumpt_dup, cur_state->source);
   return;
 }
 
@@ -70,176 +69,162 @@ goto_symext::get_symex_result(void)
 }
 
 void
-goto_symext::symex_step(
-  const goto_functionst &goto_functions, reachability_treet & art) {
+goto_symext::symex_step(reachability_treet & art)
+{
 
-  execution_statet &ex_state = art.get_cur_state();
-  statet &state = ex_state.get_active_state();
+  assert(!cur_state->call_stack.empty());
 
-  assert(!state.call_stack.empty());
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
-  const goto_programt::instructiont &instruction = *state.source.pc;
-
-  merge_gotos(state);
+  merge_gotos();
 
   // depth exceeded?
   {
     unsigned max_depth = atoi(options.get_option("depth").c_str());
-    if (max_depth != 0 && state.depth > max_depth)
-      state.guard.add(false_exprt());
-    state.depth++;
+    if (max_depth != 0 && cur_state->depth > max_depth)
+      cur_state->guard.add(false_exprt());
+    cur_state->depth++;
   }
 
   // actually do instruction
   switch (instruction.type) {
   case SKIP:
     // really ignore
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   case END_FUNCTION:
-    symex_end_of_function(state);
+    symex_end_of_function();
 
     // Potentially skip to run another function ptr target; if not,
     // continue
-    if (!run_next_function_ptr_target(goto_functions, state, false))
-      state.source.pc++;
+    if (!run_next_function_ptr_target(false))
+      cur_state->source.pc++;
     break;
 
   case LOCATION:
-    target->location(state.guard, state.source);
-    state.source.pc++;
+    target->location(cur_state->guard, cur_state->source);
+    cur_state->source.pc++;
     break;
 
   case GOTO:
   {
     exprt tmp(instruction.guard);
-    replace_dynamic_allocation(state, tmp);
+    replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
-    dereference(tmp, state, false);
+    dereference(tmp, false);
 
-    symex_goto(art.get_cur_state().get_active_state(), tmp);
+    symex_goto(tmp);
   }
   break;
 
   case ASSUME:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       exprt tmp(instruction.guard);
-      replace_dynamic_allocation(state, tmp);
+      replace_dynamic_allocation(tmp);
       replace_nondet(tmp);
-      dereference(tmp, state, false);
+      dereference(tmp, false);
 
       exprt tmp1 = tmp;
-      state.rename(tmp, ns);
+      cur_state->rename(tmp);
 
       do_simplify(tmp);
       if (!tmp.is_true()) {
 	exprt tmp2 = tmp;
-	state.guard.guard_expr(tmp2);
+	cur_state->guard.guard_expr(tmp2);
 
-	assume(tmp2, state);
+	assume(tmp2);
 
 	// we also add it to the state guard
-	state.guard.add(tmp);
+	cur_state->guard.add(tmp);
       }
     }
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   case ASSERT:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       if (!options.get_bool_option("no-assertions") ||
-          !state.source.pc->location.user_provided()
+          !cur_state->source.pc->location.user_provided()
           || options.get_bool_option("deadlock-check")) {
 
-	std::string msg = state.source.pc->location.comment().as_string();
+	std::string msg = cur_state->source.pc->location.comment().as_string();
 	if (msg == "") msg = "assertion";
 	exprt tmp(instruction.guard);
 
-	replace_dynamic_allocation(state, tmp);
+	replace_dynamic_allocation(tmp);
 	replace_nondet(tmp);
-	dereference(tmp, state, false);
+	dereference(tmp, false);
 
-	claim(tmp, msg, state);
+	claim(tmp, msg);
       }
     }
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   case RETURN:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       const code_returnt &code =
         to_code_return(instruction.code);
       code_assignt assign;
-      if (make_return_assignment(state, assign, code))
-	goto_symext::symex_assign(state, assign);
-      symex_return(state);
+      if (make_return_assignment(assign, code))
+	goto_symext::symex_assign(assign);
+      symex_return();
     }
 
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   case ASSIGN:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       codet deref_code = instruction.code;
-      replace_dynamic_allocation(state, deref_code);
+      replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
       assert(deref_code.operands().size() == 2);
 
-      dereference(deref_code.op0(), state, true);
-      dereference(deref_code.op1(), state, false);
+      dereference(deref_code.op0(), true);
+      dereference(deref_code.op1(), false);
 
-      symex_assign(state, deref_code);
+      symex_assign(deref_code);
     }
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   case FUNCTION_CALL:
-    if (!state.guard.is_false()) {
+    if (!cur_state->guard.is_false()) {
       code_function_callt deref_code =
         to_code_function_call(instruction.code);
 
-      replace_dynamic_allocation(state, deref_code);
+      replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
 
       if (deref_code.lhs().is_not_nil()) {
-	dereference(deref_code.lhs(), state, true);
+	dereference(deref_code.lhs(), true);
       }
 
       Forall_expr(it, deref_code.arguments()) {
-	dereference(*it, state, false);
+	dereference(*it, false);
       }
 
       if (has_prefix(deref_code.function().identifier().as_string(),
                      "c::__ESBMC")) {
-	state.source.pc++;
+	cur_state->source.pc++;
 	run_intrinsic(deref_code, art,
 	              deref_code.function().identifier().as_string());
 	return;
       }
 
-      symex_function_call(goto_functions, state, deref_code);
+      symex_function_call(deref_code);
     } else   {
-      state.source.pc++;
+      cur_state->source.pc++;
     }
     break;
 
   case OTHER:
-    if (!state.guard.is_false()) {
-      codet deref_code(instruction.code);
-      const irep_idt &statement = deref_code.get_statement();
-      if (statement == "cpp_delete" ||
-          statement == "cpp_delete[]" ||
-          statement == "free" ||
-          statement == "printf") {
-	replace_dynamic_allocation(state, deref_code);
-	replace_nondet(deref_code);
-	dereference(deref_code, state, false);
-      }
-
-      symex_other(state);
+    if (!cur_state->guard.is_false()) {
+      symex_other();
     }
-    state.source.pc++;
+    cur_state->source.pc++;
     break;
 
   default:

@@ -22,8 +22,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "crypto_hash.h"
 
-goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs)    
-    : guard(), level2(l2), value_set(vs)
+goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
+                                     const namespacet &_ns)
+    : guard(), level2(l2), value_set(vs), ns(_ns)
 {
   use_value_set = true;
   depth = 0;
@@ -34,7 +35,7 @@ goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs)
 goto_symex_statet::goto_symex_statet(const goto_symex_statet &state,
                                      renaming::level2t &l2,
                                      value_sett &vs)
-  : level2(l2), value_set(vs)
+  : level2(l2), value_set(vs), ns(state.ns)
 {
   *this = state;
 }
@@ -185,7 +186,6 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
 void goto_symex_statet::assignment(
   exprt &lhs,
   const exprt &rhs,
-  const namespacet &ns,
   bool record_value)
 {
   crypto_hash hash;
@@ -193,7 +193,7 @@ void goto_symex_statet::assignment(
   assert(lhs.id()==exprt::symbol);
 
   // the type might need renaming
-  rename(lhs.type(), ns);
+  rename(lhs.type());
 
   const irep_idt &identifier= lhs.identifier();
 
@@ -224,11 +224,11 @@ void goto_symex_statet::assignment(
   }
 }
 
-void goto_symex_statet::rename(exprt &expr, const namespacet &ns)
+void goto_symex_statet::rename(exprt &expr)
 {
   // rename all the symbols with their last known value
 
-  rename(expr.type(), ns);
+  rename(expr.type());
 
   if(expr.id()==exprt::symbol)
   {
@@ -240,21 +240,21 @@ void goto_symex_statet::rename(exprt &expr, const namespacet &ns)
           expr.id()=="reference_to")
   {
     assert(expr.operands().size()==1);
-    rename_address(expr.op0(), ns);
+    rename_address(expr.op0());
   }
   else
   {
     // do this recursively
     Forall_operands(it, expr)
-      rename(*it, ns);
+      rename(*it);
   }
 }
 
-void goto_symex_statet::rename_address(exprt &expr, const namespacet &ns)
+void goto_symex_statet::rename_address(exprt &expr)
 {
   // rename all the symbols with their last known value
 
-  rename(expr.type(), ns);
+  rename(expr.type());
 
   if(expr.id()==exprt::symbol)
   {
@@ -264,26 +264,26 @@ void goto_symex_statet::rename_address(exprt &expr, const namespacet &ns)
   else if(expr.id()==exprt::index)
   {
     assert(expr.operands().size()==2);
-    rename_address(expr.op0(), ns);
-    rename(expr.op1(), ns);
+    rename_address(expr.op0());
+    rename(expr.op1());
   }
   else
   {
     // do this recursively
     Forall_operands(it, expr)
-      rename_address(*it, ns);
+      rename_address(*it);
   }
 }
 
-void goto_symex_statet::rename(typet &type, const namespacet &ns)
+void goto_symex_statet::rename(typet &type)
 {
   // rename all the symbols with their last known value
 
   if(type.id()==typet::t_array)
   {
-    rename(type.subtype(), ns);
+    rename(type.subtype());
     exprt tmp = static_cast<const exprt &>(type.size_irep());
-    rename(tmp, ns);
+    rename(tmp);
     type.size(tmp);
   }
   else if(type.id()==typet::t_struct ||
@@ -301,7 +301,7 @@ void goto_symex_statet::rename(typet &type, const namespacet &ns)
   {
 	const symbolt &symbol=ns.lookup(type.identifier());
 	type=symbol.type;
-    rename(type, ns);
+    rename(type);
   }
 }
 
@@ -325,7 +325,7 @@ const irep_idt goto_symex_statet::get_original_name(
          level2.get_original_name(identifier));
 }
 
-void goto_symex_statet::print_stack_trace(const namespacet &ns, unsigned int indent) const
+void goto_symex_statet::print_stack_trace(unsigned int indent) const
 {
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;

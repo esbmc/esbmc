@@ -15,23 +15,23 @@
 #include "goto_symex.h"
 
 void
-goto_symext::symex_goto(statet &state, const exprt &old_guard)
+goto_symext::symex_goto(const exprt &old_guard)
 {
-  const goto_programt::instructiont &instruction = *state.source.pc;
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
   exprt new_guard = old_guard;
-  state.rename(new_guard, ns);
+  cur_state->rename(new_guard);
   do_simplify(new_guard);
 
-  target->location(state.guard, state.source);
+  target->location(cur_state->guard, cur_state->source);
 
   if (new_guard.is_false() ||
-      state.guard.is_false()) {
+      cur_state->guard.is_false()) {
     // reset unwinding counter
-    state.unwind_map[state.source] = 0;
+    cur_state->unwind_map[cur_state->source] = 0;
 
     // next instruction
-    state.source.pc++;
+    cur_state->source.pc++;
 
     return; // nothing to do
   }
@@ -46,29 +46,29 @@ goto_symext::symex_goto(statet &state, const exprt &old_guard)
     instruction.targets.front();
 
   bool forward =
-    state.source.pc->location_number <
+    cur_state->source.pc->location_number <
     goto_target->location_number;
 
   if (!forward) { // backwards?
     unsigned unwind;
 
-    unwind = state.unwind_map[state.source];
+    unwind = cur_state->unwind_map[cur_state->source];
     unwind++;
-    state.unwind_map[state.source] = unwind;
+    cur_state->unwind_map[cur_state->source] = unwind;
 
-    if (get_unwind(state.source, unwind)) {
-      loop_bound_exceeded(state, new_guard);
+    if (get_unwind(cur_state->source, unwind)) {
+      loop_bound_exceeded(new_guard);
 
       // reset unwinding
-      state.unwind_map[state.source] = 0;
+      cur_state->unwind_map[cur_state->source] = 0;
 
       // next instruction
-      state.source.pc++;
+      cur_state->source.pc++;
       return;
     }
 
     if (new_guard.is_true()) {
-      state.source.pc = goto_target;
+      cur_state->source.pc = goto_target;
       return; // nothing else to do
     }
   }
@@ -77,26 +77,26 @@ goto_symext::symex_goto(statet &state, const exprt &old_guard)
 
   if (forward) {
     new_state_pc = goto_target; // goto target instruction
-    state_pc = state.source.pc;
+    state_pc = cur_state->source.pc;
     state_pc++; // next instruction
   } else   {
-    new_state_pc = state.source.pc;
+    new_state_pc = cur_state->source.pc;
     new_state_pc++;
     state_pc = goto_target;
   }
 
-  state.source.pc = state_pc;
+  cur_state->source.pc = state_pc;
 
   // put into state-queue
   statet::goto_state_listt &goto_state_list =
-    state.top().goto_state_map[new_state_pc];
+    cur_state->top().goto_state_map[new_state_pc];
 
-  goto_state_list.push_back(statet::goto_statet(state));
+  goto_state_list.push_back(statet::goto_statet(*cur_state));
   statet::goto_statet &new_state = goto_state_list.back();
 
   // adjust guards
   if (new_guard.is_true()) {
-    state.guard.make_false();
+    cur_state->guard.make_false();
   } else   {
     // produce new guard symbol
     exprt guard_expr;
@@ -107,7 +107,7 @@ goto_symext::symex_goto(statet &state, const exprt &old_guard)
          new_guard.op0().id() == exprt::symbol))
       guard_expr = new_guard;
     else {
-      guard_expr = symbol_exprt(guard_identifier(state), bool_typet());
+      guard_expr = symbol_exprt(guard_identifier(), bool_typet());
       exprt new_rhs = new_guard,
             rhs = old_guard;
       new_rhs.make_not();
@@ -115,7 +115,7 @@ goto_symext::symex_goto(statet &state, const exprt &old_guard)
 
       exprt new_lhs = guard_expr;
 
-      state.assignment(new_lhs, new_rhs, ns, false);
+      cur_state->assignment(new_lhs, new_rhs, false);
 
       guardt guard;
 
@@ -123,20 +123,20 @@ goto_symext::symex_goto(statet &state, const exprt &old_guard)
         guard,
         new_lhs, guard_expr,
         new_rhs,
-        state.source,
-        state.gen_stack_trace(),
+        cur_state->source,
+        cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);
 
       guard_expr.make_not();
-      state.rename(guard_expr, ns);
+      cur_state->rename(guard_expr);
     }
 
     if (forward) {
       new_state.guard.add(guard_expr);
       guard_expr.make_not();
-      state.guard.add(guard_expr);
+      cur_state->guard.add(guard_expr);
     } else   {
-      state.guard.add(guard_expr);
+      cur_state->guard.add(guard_expr);
       guard_expr.make_not();
       new_state.guard.add(guard_expr);
     }
@@ -144,13 +144,13 @@ goto_symext::symex_goto(statet &state, const exprt &old_guard)
 }
 
 void
-goto_symext::merge_gotos(statet &state)
+goto_symext::merge_gotos(void)
 {
-  statet::framet &frame = state.top();
+  statet::framet &frame = cur_state->top();
 
   // first, see if this is a target at all
   statet::goto_state_mapt::iterator state_map_it =
-    frame.goto_state_map.find(state.source.pc);
+    frame.goto_state_map.find(cur_state->source.pc);
 
   if (state_map_it == frame.goto_state_map.end())
     return;  // nothing to do
@@ -166,15 +166,15 @@ goto_symext::merge_gotos(statet &state)
     statet::goto_statet &goto_state = *list_it;
 
     // do SSA phi functions
-    phi_function(goto_state, state);
+    phi_function(goto_state);
 
-    merge_value_sets(goto_state, state);
+    merge_value_sets(goto_state);
 
     // adjust guard
-    state.guard |= goto_state.guard;
+    cur_state->guard |= goto_state.guard;
 
     // adjust depth
-    state.depth = std::min(state.depth, goto_state.depth);
+    cur_state->depth = std::min(cur_state->depth, goto_state.depth);
   }
 
   // clean up to save some memory
@@ -182,26 +182,24 @@ goto_symext::merge_gotos(statet &state)
 }
 
 void
-goto_symext::merge_value_sets(
-  const statet::goto_statet &src, statet &dest)
+goto_symext::merge_value_sets(const statet::goto_statet &src)
 {
-  if (dest.guard.is_false()) {
-    dest.value_set = src.value_set;
+  if (cur_state->guard.is_false()) {
+    cur_state->value_set = src.value_set;
     return;
   }
 
-  dest.value_set.make_union(src.value_set);
+  cur_state->value_set.make_union(src.value_set);
 }
 
 void
-goto_symext::phi_function(
-  const statet::goto_statet &goto_state, statet &state)
+goto_symext::phi_function(const statet::goto_statet &goto_state)
 {
   // go over all variables to see what changed
   std::set<irep_idt> variables;
 
   goto_state.level2.get_variables(variables);
-  state.level2.get_variables(variables);
+  cur_state->level2.get_variables(variables);
 
   for (std::set<irep_idt>::const_iterator
        it = variables.begin();
@@ -209,13 +207,13 @@ goto_symext::phi_function(
        it++)
   {
     if (goto_state.level2.current_number(*it) ==
-        state.level2.current_number(*it))
+        cur_state->level2.current_number(*it))
       continue;  // not changed
 
-    if (*it == guard_identifier(state))
+    if (*it == guard_identifier())
       continue;  // just a guard
 
-    irep_idt original_identifier = state.get_original_name(*it);
+    irep_idt original_identifier = cur_state->get_original_name(*it);
     try
     {
       // changed!
@@ -224,32 +222,32 @@ goto_symext::phi_function(
       typet type(symbol.type);
 
       // type may need renaming
-      state.rename(type, ns);
+      cur_state->rename(type);
 
       exprt rhs;
 
-      if (state.guard.is_false()) {
-	rhs = symbol_exprt(state.current_name(goto_state, symbol.name), type);
+      if (cur_state->guard.is_false()) {
+	rhs = symbol_exprt(cur_state->current_name(goto_state, symbol.name), type);
       } else if (goto_state.guard.is_false())    {
-	rhs = symbol_exprt(state.current_name(symbol.name), type);
+	rhs = symbol_exprt(cur_state->current_name(symbol.name), type);
       } else   {
 	guardt tmp_guard(goto_state.guard);
 
 	// this gets the diff between the guards
-	tmp_guard -= state.guard;
+	tmp_guard -= cur_state->guard;
 
 	rhs = if_exprt();
 	rhs.type() = type;
 	rhs.op0() = tmp_guard.as_expr();
-	rhs.op1() = symbol_exprt(state.current_name(goto_state, symbol.name),
+	rhs.op1() = symbol_exprt(cur_state->current_name(goto_state, symbol.name),
                                  type);
-	rhs.op2() = symbol_exprt(state.current_name(symbol.name), type);
+	rhs.op2() = symbol_exprt(cur_state->current_name(symbol.name), type);
       }
 
       exprt lhs(symbol_expr(symbol));
       exprt new_lhs(lhs);
 
-      state.assignment(new_lhs, rhs, ns, false);
+      cur_state->assignment(new_lhs, rhs, false);
 
       guardt true_guard;
 
@@ -257,8 +255,8 @@ goto_symext::phi_function(
         true_guard,
         new_lhs, lhs,
         rhs,
-        state.source,
-        state.gen_stack_trace(),
+        cur_state->source,
+        cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);
     }
     catch (const std::string e)
@@ -269,9 +267,9 @@ goto_symext::phi_function(
 }
 
 void
-goto_symext::loop_bound_exceeded(statet &state, const exprt &guard)
+goto_symext::loop_bound_exceeded(const exprt &guard)
 {
-  const irep_idt &loop_id = state.source.pc->location.loopid();
+  const irep_idt &loop_id = cur_state->source.pc->location.loopid();
 
   exprt negated_cond;
 
@@ -289,17 +287,16 @@ goto_symext::loop_bound_exceeded(statet &state, const exprt &guard)
   if (!partial_loops) {
     if (unwinding_assertions) {
       // generate unwinding assertion
-      claim(negated_cond,
-            "unwinding assertion loop " + id2string(loop_id), state);
+      claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
     } else   {
       // generate unwinding assumption, unless we permit partial loops
       exprt guarded_expr = negated_cond;
-      state.guard.guard_expr(guarded_expr);
-      target->assumption(state.guard, guarded_expr, state.source);
+      cur_state->guard.guard_expr(guarded_expr);
+      target->assumption(cur_state->guard, guarded_expr, cur_state->source);
     }
 
     // add to state guard to prevent further assignments
-    state.guard.add(negated_cond);
+    cur_state->guard.add(negated_cond);
   }
 }
 
