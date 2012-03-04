@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 
-#include <base_type.h>
 #include <simplify_expr.h>
 #include <i2string.h>
 #include <cprover_prefix.h>
@@ -86,10 +85,7 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
 void goto_symext::do_simplify(exprt &expr)
 {
   if(!options.get_bool_option("no-simplify"))
-  {
-    base_type(expr, ns);
     simplify(expr);
-  }
 }
 
 void goto_symext::symex_assign(const codet &code)
