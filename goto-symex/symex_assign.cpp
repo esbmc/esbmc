@@ -153,7 +153,7 @@ void goto_symext::symex_assign(statet &state, const codet &code)
     else if(statement=="malloc")
       symex_malloc(state, lhs, side_effect_expr);
     else if(statement=="printf")
-      symex_printf(state, lhs, side_effect_expr);
+      symex_printf(lhs, side_effect_expr);
     else
     {
       throw "symex_assign: unexpected sideeffect: "+id2string(statement);

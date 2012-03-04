@@ -138,7 +138,6 @@ Function: goto_symext::symex_printf
 \*******************************************************************/
 
 void goto_symext::symex_printf(
-  statet &state,
   const exprt &lhs __attribute__((unused)),
   const exprt &rhs)
 {
@@ -146,7 +145,7 @@ void goto_symext::symex_printf(
     throw "printf expected to have at least one operand";
 
   exprt tmp_rhs=rhs;
-  state.rename(tmp_rhs, ns);
+  cur_state->rename(tmp_rhs, ns);
 
   const exprt::operandst &operands=tmp_rhs.operands();
   std::list<exprt> args;
@@ -166,7 +165,7 @@ void goto_symext::symex_printf(
     const exprt &fmt_str=format.op0().op0();
     const std::string &fmt=fmt_str.value().as_string();
 
-    target->output(state.guard, state.source, fmt, args);
+    target->output(cur_state->guard, cur_state->source, fmt, args);
   }
 }
 
@@ -255,9 +254,7 @@ Function: goto_symext::symex_cpp_delete
 \*******************************************************************/
 
 // XXX - implement as a call to free?
-void goto_symext::symex_cpp_delete(
-  statet &state __attribute__((unused)),
-  const codet &code __attribute__((unused)))
+void goto_symext::symex_cpp_delete(const codet &code __attribute__((unused)))
 {
   //bool do_array=code.statement()=="delete[]";
 }

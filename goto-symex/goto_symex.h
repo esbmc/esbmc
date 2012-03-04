@@ -162,9 +162,8 @@ protected:
    *  These can take many forms; memory management functions are OTHERs for
    *  example (ideally they should be intrinsics...), but also printf and
    *  variable declarations are handled here.
-   *  @param state Current thread state.
    */
-  void symex_other(statet &state);
+  void symex_other(void);
 
   /**
    *  Perform an assertion.
@@ -404,19 +403,17 @@ protected:
    *  how that information is actually stored in the resulting SMT. In the past
    *  this has been done in the solver backend, but that seems slightly
    *  the wrong place.
-   *  @param state State to operate on.
    *  @param expr Expression we're replacing the contents of.
    */
-  void replace_dynamic_allocation(const statet &state, exprt &expr);
+  void replace_dynamic_allocation(exprt &expr);
 
   /**
    *  Decide if symbol is valid or not.
    *  i.e., whether it's live or not. Not very well understood.
    *  @param state Current thread state.
-   *  @param symbol Symbol we're inspecting.
    *  @return True if symbol is valid.
    */
-  bool is_valid_object(const statet &state, const symbolt &symbol);
+  bool is_valid_object(const symbolt &symbol);
 
   /**
    *  Make symbolic assignment.
@@ -505,11 +502,11 @@ protected:
   /** Symbolic implementation of malloc. */
   void symex_malloc(statet &state, const exprt &lhs, const side_effect_exprt &code);
   /** Symbolic implementation of c++'s delete. */
-  void symex_cpp_delete(statet &state, const codet &code);
+  void symex_cpp_delete(const codet &code);
   /** Symbolic implementation of c++'s new. */
   void symex_cpp_new(statet &state, const exprt &lhs, const side_effect_exprt &code);
   /** Symbolic implementation of printf */
-  void symex_printf(statet &state, const exprt &lhs, const exprt &code);
+  void symex_printf(const exprt &lhs, const exprt &code);
 
   /**
    *  Replace nondet func calls with nondeterminism.

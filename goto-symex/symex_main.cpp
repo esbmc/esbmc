@@ -113,7 +113,7 @@ goto_symext::symex_step(reachability_treet & art) {
   case GOTO:
   {
     exprt tmp(instruction.guard);
-    replace_dynamic_allocation(state, tmp);
+    replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
     dereference(tmp, false);
 
@@ -124,7 +124,7 @@ goto_symext::symex_step(reachability_treet & art) {
   case ASSUME:
     if (!state.guard.is_false()) {
       exprt tmp(instruction.guard);
-      replace_dynamic_allocation(state, tmp);
+      replace_dynamic_allocation(tmp);
       replace_nondet(tmp);
       dereference(tmp, false);
 
@@ -155,7 +155,7 @@ goto_symext::symex_step(reachability_treet & art) {
 	if (msg == "") msg = "assertion";
 	exprt tmp(instruction.guard);
 
-	replace_dynamic_allocation(state, tmp);
+	replace_dynamic_allocation(tmp);
 	replace_nondet(tmp);
 	dereference(tmp, false);
 
@@ -181,7 +181,7 @@ goto_symext::symex_step(reachability_treet & art) {
   case ASSIGN:
     if (!state.guard.is_false()) {
       codet deref_code = instruction.code;
-      replace_dynamic_allocation(state, deref_code);
+      replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
       assert(deref_code.operands().size() == 2);
 
@@ -198,7 +198,7 @@ goto_symext::symex_step(reachability_treet & art) {
       code_function_callt deref_code =
         to_code_function_call(instruction.code);
 
-      replace_dynamic_allocation(state, deref_code);
+      replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
 
       if (deref_code.lhs().is_not_nil()) {
@@ -231,12 +231,12 @@ goto_symext::symex_step(reachability_treet & art) {
           statement == "cpp_delete[]" ||
           statement == "free" ||
           statement == "printf") {
-	replace_dynamic_allocation(state, deref_code);
+	replace_dynamic_allocation(deref_code);
 	replace_nondet(deref_code);
 	dereference(deref_code, false);
       }
 
-      symex_other(state);
+      symex_other();
     }
     state.source.pc++;
     break;
