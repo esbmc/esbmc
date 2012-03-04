@@ -83,18 +83,6 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   return *this;
 }
 
-/*******************************************************************\
-
-Function: goto_symext::do_simplify
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::do_simplify(exprt &expr)
 {
   if(!options.get_bool_option("no-simplify"))
@@ -103,18 +91,6 @@ void goto_symext::do_simplify(exprt &expr)
     simplify(expr);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_assign
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_assign(const codet &code)
 {
@@ -166,18 +142,6 @@ void goto_symext::symex_assign(const codet &code)
   }
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_assign_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_assign_rec(
   const exprt &lhs,
   exprt &rhs,
@@ -205,18 +169,6 @@ void goto_symext::symex_assign_rec(
   else
     throw "assignment to "+lhs.id_string()+" not handled";
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_assign_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_assign_symbol(
   const exprt &lhs,
@@ -256,18 +208,6 @@ void goto_symext::symex_assign_symbol(
 
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_assign_typecast
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_assign_typecast(
   const exprt &lhs,
   exprt &rhs,
@@ -283,18 +223,6 @@ void goto_symext::symex_assign_typecast(
 
   symex_assign_rec(lhs.op0(), rhs_typecasted, guard);
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_assign_array
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_assign_array(
   const exprt &lhs,
@@ -329,18 +257,6 @@ void goto_symext::symex_assign_array(
 
   symex_assign_rec(lhs_array, new_rhs, guard);
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_assign_member
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_assign_member(
   const exprt &lhs,
@@ -401,18 +317,6 @@ void goto_symext::symex_assign_member(
   symex_assign_rec(lhs_struct, new_rhs, guard);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_assign_if
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_assign_if(
   const exprt &lhs,
   exprt &rhs,
@@ -440,18 +344,6 @@ void goto_symext::symex_assign_if(
   symex_assign_rec(lhs.op2(), rhs_copy, guard);
   guard.resize(old_guard_size);
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_assign_byte_extract
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_assign_byte_extract(
   const exprt &lhs,
