@@ -24,7 +24,6 @@
 
 #include <std_expr.h>
 #include "../ansi-c/c_types.h"
-#include <base_type.h>
 #include <simplify_expr.h>
 #include "config.h"
 
