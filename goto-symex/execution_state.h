@@ -230,11 +230,9 @@ class execution_statet : public goto_symext
    *  Take one instruction and interpret it. Can result in any action, such as
    *  a thread ending, causing a context switch, a function call being taken,
    *  a thread being created, and so forth.
-   *  @param goto_functions Functions to operate over (defunct?)
    *  @param art reachability_treet we're operating with (defunct?)
    */
-  virtual void symex_step(const goto_functionst &goto_functions,
-                          reachability_treet &art);
+  virtual void symex_step(reachability_treet &art);
 
   /**
    *  Symbolically assign a value.

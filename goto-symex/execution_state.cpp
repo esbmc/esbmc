@@ -159,8 +159,7 @@ execution_statet::~execution_statet()
 };
 
 void
-execution_statet::symex_step(const goto_functionst &goto_functions,
-                             reachability_treet &art)
+execution_statet::symex_step(reachability_treet &art)
 {
 
   statet &state = get_active_state();
@@ -185,10 +184,10 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
   if (options.get_bool_option("symex-trace")) {
     const goto_programt p_dummy;
     goto_functions_templatet<goto_programt>::function_mapt::const_iterator it =
-      goto_functions.function_map.find(instruction.function);
+      _goto_functions.function_map.find(instruction.function);
 
     const goto_programt &p_real = it->second.body;
-    const goto_programt &p = (it == goto_functions.function_map.end()) ? p_dummy : p_real;
+    const goto_programt &p = (it == _goto_functions.function_map.end()) ? p_dummy : p_real;
     p.output_instruction(ns, "", std::cout, state.source.pc, false, false);
   }
 
@@ -199,7 +198,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
         art.force_cswitch_point();
       } else {
         // Fall through to base class
-        goto_symext::symex_step(goto_functions, art);
+        goto_symext::symex_step(art);
       }
       break;
     case ATOMIC_BEGIN:
@@ -225,7 +224,7 @@ execution_statet::symex_step(const goto_functionst &goto_functions,
       }
       break;
     default:
-      goto_symext::symex_step(goto_functions, art);
+      goto_symext::symex_step(art);
   }
 
   return;

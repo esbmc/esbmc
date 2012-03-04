@@ -655,7 +655,7 @@ reachability_treet::get_next_formula()
   while(!is_has_complete_formula())
   {
     while (!is_at_end_of_run())
-      get_cur_state().symex_step(goto_functions, *this);
+      get_cur_state().symex_step(*this);
 
     create_next_state();
 
@@ -684,7 +684,7 @@ reachability_treet::generate_schedule_formula()
     total_states++;
     while (!is_at_end_of_run())
     {
-      get_cur_state().symex_step(goto_functions, *this);
+      get_cur_state().symex_step(*this);
     }
 
     create_next_state();
@@ -722,7 +722,7 @@ reachability_treet::restore_from_dfs_state(void *_dfs)
         get_cur_state().DFS_traversed[dfspos] = true;
       get_cur_state().DFS_traversed[it->cur_thread] = false;
 
-      get_cur_state().symex_step(goto_functions, *this);
+      get_cur_state().symex_step(*this);
     }
 
     create_next_state();

@@ -104,12 +104,9 @@ public:
    *  control flow beating to occur (goto, func call, return). Threading
    *  specific operations are handled by execution_statet, which overrides
    *  this.
-   *  @param goto_functions Functions to operate over.
    *  @param art Reachability tree we're working with.
    */
-  virtual void symex_step(
-  const goto_functionst &goto_functions,
-  reachability_treet & art);
+  virtual void symex_step(reachability_treet & art);
 
 protected:
   /**

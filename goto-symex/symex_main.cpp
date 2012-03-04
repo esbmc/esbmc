@@ -70,8 +70,7 @@ goto_symext::get_symex_result(void)
 }
 
 void
-goto_symext::symex_step(
-  const goto_functionst &goto_functions, reachability_treet & art) {
+goto_symext::symex_step(reachability_treet & art) {
 
   execution_statet &ex_state = art.get_cur_state();
   statet &state = ex_state.get_active_state();
