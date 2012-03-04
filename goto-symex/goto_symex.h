@@ -201,9 +201,7 @@ protected:
    *  @param goto_state Previously executed goto state to be merged in.
    *  @param dest Thread state for previous jump to be merged into.
    */
-  void merge_value_sets(
-    const statet::goto_statet &goto_state,
-    statet &dest);
+  void merge_value_sets(const statet::goto_statet &goto_state);
 
   /**
    *  Join together a previous jump state into thread state.
