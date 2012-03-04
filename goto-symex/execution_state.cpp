@@ -261,10 +261,10 @@ execution_statet::claim(const exprt &expr, const std::string &msg,
 }
 
 void
-execution_statet::symex_goto(statet &state, const exprt &old_guard)
+execution_statet::symex_goto(const exprt &old_guard)
 {
 
-  goto_symext::symex_goto(state, old_guard);
+  goto_symext::symex_goto(old_guard);
 
   if (!old_guard.is_nil())
     if (threads_state.size() > 1)

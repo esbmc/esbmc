@@ -151,7 +151,7 @@ protected:
    *  @param state Current thread state, containing current GOTO instruction.
    *  @param old_guard Renamed guard on this jump occuring.
    */
-  virtual void symex_goto(statet &state, const exprt &old_guard);
+  virtual void symex_goto(const exprt &old_guard);
 
   /**
    *  Perform interpretation of RETURN instruction.

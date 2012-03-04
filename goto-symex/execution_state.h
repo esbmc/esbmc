@@ -263,10 +263,9 @@ class execution_statet : public goto_symext
    *  read global state, and can thus possibly result in a context switch being
    *  generated; so we pass the guard to a reachability_treet analysis function
    *  too.
-   *  @param statet State of current thread.
    *  @param old_guard Guard of the goto jump being performed.
    */
-  virtual void symex_goto(statet &state, const exprt &old_guard);
+  virtual void symex_goto(const exprt &old_guard);
 
   /**
    *  Assume some expression is true.

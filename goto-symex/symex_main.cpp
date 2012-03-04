@@ -117,7 +117,7 @@ goto_symext::symex_step(reachability_treet & art) {
     replace_nondet(tmp);
     dereference(tmp, false);
 
-    symex_goto(art.get_cur_state().get_active_state(), tmp);
+    symex_goto(tmp);
   }
   break;
 
