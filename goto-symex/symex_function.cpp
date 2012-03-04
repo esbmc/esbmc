@@ -324,6 +324,7 @@ void goto_symext::pop_frame(statet &state)
     state.level2.remove(*it);
     irep_idt orig_name = state.level2.get_original_name(*it);
     state.value_set.erase(orig_name);
+    state.declaration_history.erase(orig_name.as_string());
   }
 
   // decrease recursion unwinding counter
