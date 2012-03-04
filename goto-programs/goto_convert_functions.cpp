@@ -335,7 +335,7 @@ void goto_convert(
 }
 
 static void
-fetch_type_dependancies(const typet &type, std::set<irep_idt> &deps)
+fetch_type_dependancies(const irept &type, std::set<irep_idt> &deps)
 {
 
   if (type.id() == "pointer")
@@ -349,19 +349,19 @@ fetch_type_dependancies(const typet &type, std::set<irep_idt> &deps)
   }
 
   forall_irep(it, type.get_sub())
-    fetch_type_dependancies((const typet&)*it, deps);
+    fetch_type_dependancies(*it, deps);
 
   forall_named_irep(it, type.get_named_sub())
-    fetch_type_dependancies((const typet&)it->second, deps);
+    fetch_type_dependancies(it->second, deps);
 
   forall_named_irep(it, type.get_comments())
-    fetch_type_dependancies((const typet&)it->second, deps);
+    fetch_type_dependancies(it->second, deps);
 
   return;
 }
 
 void
-goto_convert_functionst::rename_types(typet &type)
+goto_convert_functionst::rename_types(irept &type)
 {
 
   if (type.id() == "pointer")
@@ -376,14 +376,14 @@ goto_convert_functionst::rename_types(typet &type)
     }
   }
 
-  forall_irep(it, type.get_sub())
-    rename_types((typet&)*it);
+  Forall_irep(it, type.get_sub())
+    rename_types(*it);
 
-  forall_named_irep(it, type.get_named_sub())
-    rename_types((typet&)it->second);
+  Forall_named_irep(it, type.get_named_sub())
+    rename_types(it->second);
 
-  forall_named_irep(it, type.get_comments())
-    rename_types((typet&)it->second);
+  Forall_named_irep(it, type.get_comments())
+    rename_types(it->second);
 
   return;
 }
