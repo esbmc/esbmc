@@ -21,7 +21,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "reachability_tree.h"
 
 void goto_symext::symex_malloc(
-  statet &state,
   const exprt &lhs,
   const side_effect_exprt &code)
 {
@@ -40,7 +39,7 @@ void goto_symext::symex_malloc(
     size_is_one=true;
   else
   {
-    state.rename(size, ns);
+    cur_state->rename(size, ns);
     mp_integer i;
     size_is_one=(!to_integer(size, i) && i==1);
   }
@@ -94,7 +93,7 @@ void goto_symext::symex_malloc(
   if(rhs.type()!=lhs.type())
     rhs.make_typecast(lhs.type());
 
-  state.rename(rhs, ns);
+  cur_state->rename(rhs, ns);
   
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);

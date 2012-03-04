@@ -151,7 +151,7 @@ void goto_symext::symex_assign(const codet &code)
             statement=="cpp_new[]")
       symex_cpp_new(lhs, side_effect_expr);
     else if(statement=="malloc")
-      symex_malloc(*cur_state, lhs, side_effect_expr);
+      symex_malloc(lhs, side_effect_expr);
     else if(statement=="printf")
       symex_printf(lhs, side_effect_expr);
     else
