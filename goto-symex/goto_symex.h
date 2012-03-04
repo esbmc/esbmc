@@ -273,12 +273,9 @@ protected:
 
   /**
    *  Handle a call to a named function.
-   *  @param state Thread state to operate on.
    *  @param call Function call we're performing.
    */
-  void symex_function_call_symbol(
-    statet &state,
-    const code_function_callt &call);
+  void symex_function_call_symbol(const code_function_callt &call);
 
   /**
    *  Handle an indirect function call, to a pointer.
@@ -287,23 +284,17 @@ protected:
    *  one run, then at the end of each of these function calls we switch to
    *  the next in the list. Finally, when the insn after the func ptr call is
    *  run, all func ptr call states are merged in.
-   *  @param state Thread state to operate on.
    *  @param call Function call to interpret.
    */
-  virtual void symex_function_call_deref(
-    statet &state,
-    const code_function_callt &call);
+  virtual void symex_function_call_deref(const code_function_callt &call);
 
   /**
    *  Handle function call to fixed function
    *  Like symex_function_call_code, but minus an assertion and location
    *  recording.
-   *  @param state Thread state to operate on
    *  @param code Function code to actually call
    */
-  virtual void symex_function_call_code(
-    statet &state,
-    const code_function_callt &call);
+  virtual void symex_function_call_code(const code_function_callt &call);
 
   /**
    *  Discover whether recursion bound has been exceeded.
@@ -321,12 +312,10 @@ protected:
    *  Assigns the value of arguments to a function to the actual argument
    *  variables of the function being called.
    *  @param function_type type containing argument types of func call.
-   *  @param state Thread state we're working on.
    *  @param arguments The arguments to assign to function arg variables.
    */
   void argument_assignments(
     const code_typet &function_type,
-    statet &state,
     const exprt::operandst &arguments);
 
   /**

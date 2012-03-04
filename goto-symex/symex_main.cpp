@@ -216,7 +216,7 @@ goto_symext::symex_step(reachability_treet & art) {
 	return;
       }
 
-      symex_function_call(state, deref_code);
+      symex_function_call(deref_code);
     } else   {
       state.source.pc++;
     }
