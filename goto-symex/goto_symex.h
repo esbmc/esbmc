@@ -190,7 +190,6 @@ protected:
    *  the future; then when we hit that future state, a phi function is
    *  performed that joins the states converging at this point, according to
    *  the truth of their guards.
-   *  @param state Current thread state.
    */
   void merge_gotos(void);
 
@@ -209,7 +208,6 @@ protected:
    *  the new value of a variable, according to the truth of the guards of the
    *  states being joined. 
    *  @param goto_state The previous jumps state to be merged into the current
-   *  @param state The current thread state to be merged into
    */
   void phi_function(const statet::goto_statet &goto_state);
 
@@ -382,7 +380,6 @@ protected:
   /**
    *  Decide if symbol is valid or not.
    *  i.e., whether it's live or not. Not very well understood.
-   *  @param state Current thread state.
    *  @return True if symbol is valid.
    */
   bool is_valid_object(const symbolt &symbol);
