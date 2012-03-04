@@ -29,13 +29,12 @@
 #include "config.h"
 
 void
-goto_symext::claim(
-  const exprt &claim_expr, const std::string &msg, statet &state) {
+goto_symext::claim(const exprt &claim_expr, const std::string &msg) {
 
   total_claims++;
 
   exprt expr = claim_expr;
-  state.rename(expr, ns);
+  cur_state->rename(expr, ns);
 
   // first try simplifier on it
   if (!expr.is_false())
@@ -45,20 +44,20 @@ goto_symext::claim(
       !options.get_bool_option("all-assertions"))
     return;
 
-  state.guard.guard_expr(expr);
+  cur_state->guard.guard_expr(expr);
 
   remaining_claims++;
-  target->assertion(state.guard, expr, msg, state.gen_stack_trace(),
-                    state.source);
+  target->assertion(cur_state->guard, expr, msg, cur_state->gen_stack_trace(),
+                    cur_state->source);
 }
 
 void
-goto_symext::assume(const exprt &assumption, statet &state)
+goto_symext::assume(const exprt &assumption)
 {
 
   // Irritatingly, assumption destroys its expr argument
   exprt assumpt_dup = assumption;
-  target->assumption(state.guard, assumpt_dup, state.source);
+  target->assumption(cur_state->guard, assumpt_dup, cur_state->source);
   return;
 }
 
@@ -136,7 +135,7 @@ goto_symext::symex_step(reachability_treet & art) {
 	exprt tmp2 = tmp;
 	state.guard.guard_expr(tmp2);
 
-	assume(tmp2, state);
+	assume(tmp2);
 
 	// we also add it to the state guard
 	state.guard.add(tmp);
@@ -159,7 +158,7 @@ goto_symext::symex_step(reachability_treet & art) {
 	replace_nondet(tmp);
 	dereference(tmp, false);
 
-	claim(tmp, msg, state);
+	claim(tmp, msg);
       }
     }
     state.source.pc++;

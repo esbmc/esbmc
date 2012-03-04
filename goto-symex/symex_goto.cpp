@@ -289,8 +289,7 @@ goto_symext::loop_bound_exceeded(statet &state, const exprt &guard)
   if (!partial_loops) {
     if (unwinding_assertions) {
       // generate unwinding assertion
-      claim(negated_cond,
-            "unwinding assertion loop " + id2string(loop_id), state);
+      claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
     } else   {
       // generate unwinding assumption, unless we permit partial loops
       exprt guarded_expr = negated_cond;

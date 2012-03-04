@@ -252,9 +252,8 @@ class execution_statet : public goto_symext
    *  in this claim.
    *  @param expr Expression that we're asserting is true.
    *  @param msg Textual message explaining this assertion.
-   *  @param statet State of current thread.
    */
-  virtual void claim(const exprt &expr, const std::string &msg, statet &state);
+  virtual void claim(const exprt &expr, const std::string &msg);
 
   /**
    *  Perform a jump across GOTO code.
@@ -273,9 +272,8 @@ class execution_statet : public goto_symext
    *  so we pass the assumption expression on to a reachability_treet analysis
    *  function.
    *  @param assumption Expression of the thing we're assuming to be true.
-   *  @param state State of the current thread.
    */
-  virtual void assume(const exprt &assumption, statet &state);
+  virtual void assume(const exprt &assumption);
 
   /**
    *  Fetch reference to count of dynamic objects in this state.
@@ -564,7 +562,7 @@ class schedule_execution_statet : public execution_statet
   schedule_execution_statet(const schedule_execution_statet &ref);
   schedule_execution_statet *clone(void) const;
   virtual ~schedule_execution_statet(void);
-  virtual void claim(const exprt &expr, const std::string &msg, statet &state);
+  virtual void claim(const exprt &expr, const std::string &msg);
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;

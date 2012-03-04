@@ -248,11 +248,10 @@ execution_statet::symex_assign(statet &state, const codet &code)
 }
 
 void
-execution_statet::claim(const exprt &expr, const std::string &msg,
-                        statet &state)
+execution_statet::claim(const exprt &expr, const std::string &msg)
 {
 
-  goto_symext::claim(expr, msg, state);
+  goto_symext::claim(expr, msg);
 
   if (threads_state.size() > 1)
     owning_rt->analyse_for_cswitch_after_read(expr);
@@ -274,10 +273,10 @@ execution_statet::symex_goto(const exprt &old_guard)
 }
 
 void
-execution_statet::assume(const exprt &assumption, statet &state)
+execution_statet::assume(const exprt &assumption)
 {
 
-  goto_symext::assume(assumption, state);
+  goto_symext::assume(assumption);
 
   if (threads_state.size() > 1)
     owning_rt->analyse_for_cswitch_after_read(assumption);
@@ -939,15 +938,14 @@ schedule_execution_statet::schedule_execution_statet(const schedule_execution_st
 }
 
 void
-schedule_execution_statet::claim(const exprt &expr, const std::string &msg,
-                                 statet &state)
+schedule_execution_statet::claim(const exprt &expr, const std::string &msg)
 {
   unsigned int tmp_total, tmp_remaining;
 
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
 
-  execution_statet::claim(expr, msg, state);
+  execution_statet::claim(expr, msg);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;

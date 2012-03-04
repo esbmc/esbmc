@@ -171,20 +171,17 @@ protected:
    *  adds the requirement that the current state guard is true as well.
    *  @param expr Expression that must always be true.
    *  @param msg Textual message explaining assertion.
-   *  @param state Current thread state.
    */
   virtual void claim(
     const exprt &expr,
-    const std::string &msg,
-    statet &state);
+    const std::string &msg);
 
   /**
    *  Perform an assumption.
    *  Adds to target an assumption that must always be true.
    *  @param assumption Assumption that must always be true.
-   *  @param state Current thread state.
    */
-  virtual void assume(const exprt &assumption, statet &state);
+  virtual void assume(const exprt &assumption);
 
   // gotos
   /**

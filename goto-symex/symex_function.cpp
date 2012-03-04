@@ -182,7 +182,7 @@ goto_symext::symex_function_call_code(statet &state,
   // see if it's too much
   if (get_unwind_recursion(identifier, unwinding_counter)) {
     if (!options.get_bool_option("no-unwinding-assertions"))
-      claim(false_exprt(), "recursion unwinding assertion", state);
+      claim(false_exprt(), "recursion unwinding assertion");
 
     state.source.pc++;
     return;
