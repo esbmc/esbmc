@@ -229,7 +229,7 @@ goto_symext::symex_function_call_code(const code_function_callt &call)
   frame.calling_location = cur_state->source;
 
   // preserve locality of local variables
-  locality(frame_nr, *cur_state, goto_function);
+  locality(frame_nr, goto_function);
 
   // assign arguments
   argument_assignments(goto_function.type, arguments);
@@ -347,17 +347,17 @@ goto_symext::symex_function_call_deref(const code_function_callt &call)
   cur_state->top().function_ptr_combine_target++;
   cur_state->top().orig_func_ptr_call = new code_function_callt(call);
 
-  run_next_function_ptr_target(*cur_state, true);
+  run_next_function_ptr_target(true);
 }
 
 bool
-goto_symext::run_next_function_ptr_target(statet &state, bool first)
+goto_symext::run_next_function_ptr_target(bool first)
 {
 
-  if (state.call_stack.empty())
+  if (cur_state->call_stack.empty())
     return false;
 
-  if (state.top().cur_function_ptr_targets.size() == 0)
+  if (cur_state->top().cur_function_ptr_targets.size() == 0)
     return false;
 
   // Record a merge - when all function ptr target runs are completed, they'll
@@ -366,35 +366,35 @@ goto_symext::run_next_function_ptr_target(statet &state, bool first)
   // unconditional.
   if (!first) {
     statet::goto_state_listt &goto_state_list =
-      state.top().goto_state_map[state.top().function_ptr_combine_target];
-    goto_state_list.push_back(statet::goto_statet(state));
+      cur_state->top().goto_state_map[cur_state->top().function_ptr_combine_target];
+    goto_state_list.push_back(statet::goto_statet(*cur_state));
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
   // recorded merge will ensure it gets the right state.
   std::pair<goto_programt::const_targett, exprt> p =
-    state.top().cur_function_ptr_targets.front();
-  state.top().cur_function_ptr_targets.pop_front();
+    cur_state->top().cur_function_ptr_targets.front();
+  cur_state->top().cur_function_ptr_targets.pop_front();
 
   goto_programt::const_targett target = p.first;
   exprt target_symbol = p.second;
 
-  state.guard.make_false();
-  state.source.pc = target;
+  cur_state->guard.make_false();
+  cur_state->source.pc = target;
 
   // Merge pre-function-ptr-call state in immediately.
   merge_gotos();
 
   // Now switch back to the original call location so that the call appears
   // to originate from there...
-  state.source.pc = state.top().function_ptr_call_loc;
+  cur_state->source.pc = cur_state->top().function_ptr_call_loc;
 
   // And setup the function call.
-  code_function_callt call = *state.top().orig_func_ptr_call;
+  code_function_callt call = *cur_state->top().orig_func_ptr_call;
   call.function() = target_symbol;
-  goto_symex_statet::framet &cur_frame = state.top();
+  goto_symex_statet::framet &cur_frame = cur_state->top();
 
-  if (state.top().cur_function_ptr_targets.size() == 0)
+  if (cur_state->top().cur_function_ptr_targets.size() == 0)
     delete cur_frame.orig_func_ptr_call;
 
   symex_function_call_code(call);
@@ -435,8 +435,7 @@ goto_symext::symex_end_of_function()
 }
 
 void
-goto_symext::locality(
-  unsigned frame_nr, statet &state,
+goto_symext::locality(unsigned frame_nr,
   const goto_functionst::goto_functiont &goto_function)
 {
   goto_programt::local_variablest local_identifiers;
@@ -449,7 +448,7 @@ goto_symext::locality(
       it->local_variables.begin(),
       it->local_variables.end());
 
-  statet::framet &frame = state.top();
+  statet::framet &frame = cur_state->top();
 
   for (goto_programt::local_variablest::const_iterator
        it = local_identifiers.begin();

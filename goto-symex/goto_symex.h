@@ -324,22 +324,18 @@ protected:
    *  that we have a list of all variables that are in fact local to this
    *  particular function call.
    *  @param frame_counter The function frame invocation number.
-   *  @param state Thread state we're working on.
    *  @param goto_function The function we're working upon.
    */
-  void locality(
-    unsigned frame_counter,
-    statet &state,
+  void locality(unsigned frame_counter,
     const goto_functionst::goto_functiont &goto_function);
 
   /**
    *  Setup next function in a chain of func ptr calls.
    *  @see symex_function_call_deref
-   *  @param state State we're operating upon
    *  @param first Whether this is the first func ptr invocation.
    *  @return True if a function pointer invocation was set up.
    */
-  bool run_next_function_ptr_target(statet &state, bool first);
+  bool run_next_function_ptr_target(bool first);
 
   /**
    *  Run an intrinsic, something prefixed with __ESBMC.

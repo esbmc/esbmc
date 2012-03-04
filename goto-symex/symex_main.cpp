@@ -100,7 +100,7 @@ goto_symext::symex_step(reachability_treet & art) {
 
     // Potentially skip to run another function ptr target; if not,
     // continue
-    if (!run_next_function_ptr_target(state, false))
+    if (!run_next_function_ptr_target(false))
       state.source.pc++;
     break;
 
