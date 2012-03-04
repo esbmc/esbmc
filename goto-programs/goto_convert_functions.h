@@ -27,6 +27,9 @@ public:
   void goto_convert();
   void convert_function(const irep_idt &identifier);
   void thrash_type_symbols(void);
+  void rename_types(typet &type);
+  void wallop_type(irep_idt name,
+                   std::map<irep_idt, std::set<irep_idt> > &typenames);
 
   goto_convert_functionst(
     contextt &_context,

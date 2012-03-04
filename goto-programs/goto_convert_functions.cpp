@@ -361,6 +361,55 @@ fetch_type_dependancies(const typet &type, std::set<irep_idt> &deps)
 }
 
 void
+goto_convert_functionst::rename_types(typet &type)
+{
+
+  if (type.id() == "pointer")
+    return;
+
+  if (type.id() == "symbol") {
+    if (type.identifier().as_string().find("$type") != std::string::npos) {
+      symbolst::const_iterator it = context.symbols.find(type.identifier());
+      assert(it != context.symbols.end());
+      type = it->second.type;
+      return;
+    }
+  }
+
+  forall_irep(it, type.get_sub())
+    rename_types((typet&)*it);
+
+  forall_named_irep(it, type.get_named_sub())
+    rename_types((typet&)it->second);
+
+  forall_named_irep(it, type.get_comments())
+    rename_types((typet&)it->second);
+
+  return;
+}
+
+void
+goto_convert_functionst::wallop_type(irep_idt name,
+                         std::map<irep_idt, std::set<irep_idt> > &typenames)
+{
+
+  // If this type doesn't depend on anything, no need to rename anything.
+  std::set<irep_idt> &deps = typenames.find(name)->second;
+  if (deps.size() == 0)
+    return;
+
+  // Iterate over our dependancies ensuring they're resolved.
+  for (std::set<irep_idt>::iterator it = deps.begin(); it != deps.end(); it++)
+    wallop_type(*it, typenames);
+
+  // And finally perform renaming.
+  symbolst::iterator it = context.symbols.find(name);
+  rename_types(it->second.type);
+  deps.clear();
+  return;
+}
+
+void
 goto_convert_functionst::thrash_type_symbols(void)
 {
 
@@ -382,6 +431,14 @@ goto_convert_functionst::thrash_type_symbols(void)
       typenames[it->second.name] = depset;
     }
   }
+
+  // Now, repeatedly rename all types. When we encounter a type that contains
+  // unresolved symbols, resolve it first, then include it into this type.
+  // This means that we recurse to whatever depth of nested types the user
+  // has. With at least a meg of stack, I doubt that's really a problem.
+  std::map<irep_idt, std::set<irep_idt> >::iterator it;
+  for (it = typenames.begin(); it != typenames.end(); it++)
+    wallop_type(it->first, typenames);
 
   return;
 }
