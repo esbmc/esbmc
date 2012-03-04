@@ -115,7 +115,7 @@ goto_symext::symex_step(reachability_treet & art) {
     exprt tmp(instruction.guard);
     replace_dynamic_allocation(state, tmp);
     replace_nondet(tmp);
-    dereference(tmp, state, false);
+    dereference(tmp, false);
 
     symex_goto(art.get_cur_state().get_active_state(), tmp);
   }
@@ -126,7 +126,7 @@ goto_symext::symex_step(reachability_treet & art) {
       exprt tmp(instruction.guard);
       replace_dynamic_allocation(state, tmp);
       replace_nondet(tmp);
-      dereference(tmp, state, false);
+      dereference(tmp, false);
 
       exprt tmp1 = tmp;
       state.rename(tmp, ns);
@@ -157,7 +157,7 @@ goto_symext::symex_step(reachability_treet & art) {
 
 	replace_dynamic_allocation(state, tmp);
 	replace_nondet(tmp);
-	dereference(tmp, state, false);
+	dereference(tmp, false);
 
 	claim(tmp, msg, state);
       }
@@ -185,8 +185,8 @@ goto_symext::symex_step(reachability_treet & art) {
       replace_nondet(deref_code);
       assert(deref_code.operands().size() == 2);
 
-      dereference(deref_code.op0(), state, true);
-      dereference(deref_code.op1(), state, false);
+      dereference(deref_code.op0(), true);
+      dereference(deref_code.op1(), false);
 
       symex_assign(state, deref_code);
     }
@@ -202,11 +202,11 @@ goto_symext::symex_step(reachability_treet & art) {
       replace_nondet(deref_code);
 
       if (deref_code.lhs().is_not_nil()) {
-	dereference(deref_code.lhs(), state, true);
+	dereference(deref_code.lhs(), true);
       }
 
       Forall_expr(it, deref_code.arguments()) {
-	dereference(*it, state, false);
+	dereference(*it, false);
       }
 
       if (has_prefix(deref_code.function().identifier().as_string(),
@@ -233,7 +233,7 @@ goto_symext::symex_step(reachability_treet & art) {
           statement == "printf") {
 	replace_dynamic_allocation(state, deref_code);
 	replace_nondet(deref_code);
-	dereference(deref_code, state, false);
+	dereference(deref_code, false);
       }
 
       symex_other(state);

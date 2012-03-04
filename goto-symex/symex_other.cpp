@@ -44,7 +44,7 @@ void goto_symext::symex_other(statet &state)
 
     replace_dynamic_allocation(state, deref_code);
     replace_nondet(deref_code);
-    dereference(deref_code, state, false);
+    dereference(deref_code, false);
 
     symex_cpp_delete(state, deref_code);
   }
@@ -58,7 +58,7 @@ void goto_symext::symex_other(statet &state)
 
     replace_dynamic_allocation(state, deref_code);
     replace_nondet(deref_code);
-    dereference(deref_code, state, false);
+    dereference(deref_code, false);
 
     symex_printf(state, static_cast<const exprt &>(get_nil_irep()), deref_code);
   }
@@ -68,7 +68,7 @@ void goto_symext::symex_other(statet &state)
 
     replace_dynamic_allocation(state, deref_code);
     replace_nondet(deref_code);
-    dereference(deref_code, state, false);
+    dereference(deref_code, false);
 
     if(deref_code.operands().size()==2)
       throw "two-operand decl not supported here";

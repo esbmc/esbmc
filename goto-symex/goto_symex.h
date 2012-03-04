@@ -122,13 +122,9 @@ protected:
    *  it might point at, according to value set tracking, and builds an
    *  if-then-else list of concrete references that it might point at.
    *  @param expr Expression to eliminate dereferences from.
-   *  @param state Thread state we're operating in.
    *  @param write Whether or not we're writing into this object.
    */
-  void dereference(
-    exprt &expr,
-    statet &state,
-    const bool write);
+  void dereference(exprt &expr, const bool write);
 
   /**
    *  Recursive implementation of dereference method.

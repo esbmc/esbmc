@@ -302,7 +302,7 @@ goto_symext::symex_function_call_deref(statet &state,
   // Generate a list of functions to call. We'll then proceed to call them,
   // and will later on merge them.
   exprt funcptr = call.op1();
-  dereference(funcptr, state, false);
+  dereference(funcptr, false);
 
   if (funcptr.invalid_object()) {
     // Emit warning; perform no function call behaviour. Increment PC
@@ -477,7 +477,7 @@ goto_symext::make_return_assignment(statet &state, code_assignt &assign,
   if (code.operands().size() == 1) {
     exprt value(code.op0());
 
-    dereference(value, state, false);
+    dereference(value, false);
 
     if (frame.return_value.is_not_nil()) {
       assign = code_assignt(frame.return_value, value);
