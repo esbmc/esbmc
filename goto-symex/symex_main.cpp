@@ -172,7 +172,7 @@ goto_symext::symex_step(reachability_treet & art) {
       code_assignt assign;
       if (make_return_assignment(state, assign, code))
 	goto_symext::symex_assign(state, assign);
-      symex_return(state);
+      symex_return();
     }
 
     state.source.pc++;

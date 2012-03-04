@@ -223,7 +223,7 @@ execution_statet::symex_step(reachability_treet &art)
         if (make_return_assignment(state, assign, code))
           goto_symext::symex_assign(state, assign);
 
-        symex_return(state);
+        symex_return();
 
         owning_rt->analyse_for_cswitch_after_assign(assign);
       }

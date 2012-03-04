@@ -148,16 +148,14 @@ protected:
    *  handle editing the unwind bound when these things occur, and set up state
    *  merges in the future to handle each path thats taken. A precise
    *  description of how this is implemented... can go somewhere else.
-   *  @param state Current thread state, containing current GOTO instruction.
    *  @param old_guard Renamed guard on this jump occuring.
    */
   virtual void symex_goto(const exprt &old_guard);
 
   /**
    *  Perform interpretation of RETURN instruction.
-   *  @param state Current thread state.
    */
-  void symex_return(statet &state);
+  void symex_return(void);
 
   /**
    *  Interpret an OTHER instruction.

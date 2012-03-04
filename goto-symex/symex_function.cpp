@@ -498,7 +498,7 @@ goto_symext::make_return_assignment(statet &state, code_assignt &assign,
 }
 
 void
-goto_symext::symex_return(statet &state)
+goto_symext::symex_return(void)
 {
 
   // we treat this like an unconditional
@@ -506,10 +506,10 @@ goto_symext::symex_return(statet &state)
 
   // put into state-queue
   statet::goto_state_listt &goto_state_list =
-    state.top().goto_state_map[state.top().end_of_function];
+    cur_state->top().goto_state_map[cur_state->top().end_of_function];
 
-  goto_state_list.push_back(statet::goto_statet(state));
+  goto_state_list.push_back(statet::goto_statet(*cur_state));
 
   // kill this one
-  state.guard.make_false();
+  cur_state->guard.make_false();
 }
