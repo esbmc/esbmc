@@ -97,7 +97,7 @@ execution_statet::execution_statet(const execution_statet &ex) :
   threads_state.clear();
   std::vector<goto_symex_statet>::const_iterator it;
   for (it = ex.threads_state.begin(); it != ex.threads_state.end(); it++) {
-    goto_symex_statet state(*it, *state_level2);
+    goto_symex_statet state(*it, *state_level2, global_value_set);
     threads_state.push_back(state);
   }
 
@@ -126,6 +126,7 @@ execution_statet::operator=(const execution_statet &ex)
   nondet_count = ex.nondet_count;
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
+  global_value_set = ex.global_value_set;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;

@@ -35,8 +35,9 @@ goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs)
 }
 
 goto_symex_statet::goto_symex_statet(const goto_symex_statet &state,
-                                     renaming::level2t &l2)
-  : level2(l2), value_set(state.value_set)
+                                     renaming::level2t &l2,
+                                     value_sett &vs)
+  : level2(l2), value_set(vs)
 {
   *this = state;
 }

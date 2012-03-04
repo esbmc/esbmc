@@ -67,7 +67,8 @@ public:
    *  @param state State to copy from
    *  @param l2 New L2 state to refer to.
    */
-  goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2);
+  goto_symex_statet(const goto_symex_statet &state, renaming::level2t &l2,
+                    value_sett &vs);
 
   goto_symex_statet &
   operator=(const goto_symex_statet &state);
