@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 
-#include <base_type.h>
 #include <i2string.h>
 #include <std_expr.h>
 #include <expr_util.h>
@@ -126,7 +125,6 @@ void symex_target_equationt::convert_assignments(
     if(it->is_assignment() && !it->ignore)
     {
       exprt tmp(it->cond);
-      ::base_type(tmp, ns);
       decision_procedure.set_to_true(tmp);
     }
   }
@@ -143,7 +141,6 @@ void symex_target_equationt::convert_guards(
     else
     {
       exprt tmp(it->guard);
-      ::base_type(tmp, ns);
       it->guard_literal=prop_conv.convert(tmp);
     }
   }
@@ -162,7 +159,6 @@ void symex_target_equationt::convert_assumptions(
       else
       {
         exprt tmp(it->cond);
-        ::base_type(tmp, ns);
         it->cond_literal=prop_conv.convert(tmp);
       }
     }
@@ -195,7 +191,6 @@ void symex_target_equationt::convert_assertions(
     if(it->is_assert())
     {
       exprt tmp(it->cond);
-      ::base_type(tmp, ns);
 
       // do the expression
       literalt tmp_literal=prop_conv.convert(tmp);
@@ -239,7 +234,6 @@ void symex_target_equationt::convert_output(
           o_it++)
       {
         exprt tmp=*o_it;
-        ::base_type(tmp, ns);
         if(tmp.is_constant() ||
            tmp.id()=="string-constant")
           it->converted_output_args.push_back(tmp);
