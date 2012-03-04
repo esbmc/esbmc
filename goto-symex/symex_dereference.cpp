@@ -12,18 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "renaming_ns.h"
 
-/*******************************************************************\
-
-   Class: symex_dereference_statet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 class symex_dereference_statet:
   public dereference_callbackt
 {
@@ -61,18 +49,6 @@ protected:
     const symbolt *&symbol);
 };
 
-/*******************************************************************\
-
-Function: symex_dereference_statet::dereference_failure
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_dereference_statet::dereference_failure(
   const std::string &property __attribute__((unused)),
   const std::string &msg __attribute__((unused)),
@@ -81,18 +57,6 @@ void symex_dereference_statet::dereference_failure(
   // XXXjmorse - this is clearly wrong, but we can't do anything about it until
   // we fix the memory model.
 }
-
-/*******************************************************************\
-
-Function: symex_dereference_statet::has_failed_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool symex_dereference_statet::has_failed_symbol(
   const exprt &expr,
@@ -116,18 +80,6 @@ bool symex_dereference_statet::has_failed_symbol(
   return false;
 }
 
-/*******************************************************************\
-
-Function: symex_dereference_statet::get_value_set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_dereference_statet::get_value_set(
   const exprt &expr,
   value_setst::valuest &value_set)
@@ -136,18 +88,6 @@ void symex_dereference_statet::get_value_set(
 
   state.value_set.get_value_set(expr, value_set, renaming_ns);
 }
-
-/*******************************************************************\
-
-Function: goto_symext::dereference_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::dereference_rec(
   exprt &expr,
@@ -189,18 +129,6 @@ void goto_symext::dereference_rec(
       dereference_rec(*it, guard, dereference, write);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_symext::dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::dereference(
   exprt &expr,
