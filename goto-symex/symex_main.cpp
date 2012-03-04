@@ -218,7 +218,7 @@ goto_symext::symex_step(
 	return;
       }
 
-      symex_function_call(goto_functions, state, deref_code);
+      symex_function_call(state, deref_code);
     } else   {
       state.source.pc++;
     }

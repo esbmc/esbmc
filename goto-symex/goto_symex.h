@@ -277,12 +277,10 @@ protected:
    *  Perform function call.
    *  Handles all kinds of function call instructions, symbols or function
    *  pointers.
-   *  @param goto_functions Functions to operate over.
    *  @param state Thread state to operate on.
    *  @param call Function call we're working on.
    */
   void symex_function_call(
-    const goto_functionst &goto_functions,
     statet &state,
     const code_function_callt &call);
 
@@ -297,12 +295,10 @@ protected:
 
   /**
    *  Handle a call to a named function.
-   *  @param goto_functions Functions to operate over.
    *  @param state Thread state to operate on.
    *  @param call Function call we're performing.
    */
   void symex_function_call_symbol(
-    const goto_functionst &goto_functions,
     statet &state,
     const code_function_callt &call);
 
@@ -324,12 +320,10 @@ protected:
    *  Handle function call to fixed function
    *  Like symex_function_call_code, but minus an assertion and location
    *  recording.
-   *  @param goto_functions Functions to operate over
    *  @param state Thread state to operate on
    *  @param code Function code to actually call
    */
   virtual void symex_function_call_code(
-    const goto_functionst &goto_functions,
     statet &state,
     const code_function_callt &call);
 

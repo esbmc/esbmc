@@ -130,34 +130,31 @@ goto_symext::argument_assignments(
 }
 
 void
-goto_symext::symex_function_call(
-  const goto_functionst &goto_functions, statet &state,
-  const code_function_callt &code)
+goto_symext::symex_function_call(statet &state,
+                                 const code_function_callt &code)
 {
   const exprt &function = code.function();
 
   if (function.id() == exprt::symbol)
-    symex_function_call_symbol(goto_functions, state, code);
+    symex_function_call_symbol(state, code);
   else
     symex_function_call_deref(state, code);
 }
 
 void
-goto_symext::symex_function_call_symbol(
-  const goto_functionst &goto_functions, statet  &state,
-  const code_function_callt &code)
+goto_symext::symex_function_call_symbol(statet &state,
+                                        const code_function_callt &code)
 {
   target->location(state.guard, state.source);
 
   assert(code.function().id() == exprt::symbol);
 
-  symex_function_call_code(goto_functions, state, code);
+  symex_function_call_code(state, code);
 }
 
 void
-goto_symext::symex_function_call_code(
-  const goto_functionst &goto_functions, statet &state,
-  const code_function_callt &call)
+goto_symext::symex_function_call_code(statet &state,
+                                      const code_function_callt &call)
 {
   const irep_idt &identifier =
     to_symbol_expr(call.function()).get_identifier();
@@ -165,9 +162,9 @@ goto_symext::symex_function_call_code(
   // find code in function map
 
   goto_functionst::function_mapt::const_iterator it =
-    goto_functions.function_map.find(identifier);
+    _goto_functions.function_map.find(identifier);
 
-  if (it == goto_functions.function_map.end()) {
+  if (it == _goto_functions.function_map.end()) {
     if (call.function().invalid_object()) {
       std::cout << "WARNING: function ptr call with no target, ";
       std::cout << call.location() << std::endl;
@@ -404,7 +401,7 @@ goto_symext::run_next_function_ptr_target(statet &state, bool first)
   if (state.top().cur_function_ptr_targets.size() == 0)
     delete cur_frame.orig_func_ptr_call;
 
-  symex_function_call_code(_goto_functions, state, call);
+  symex_function_call_code(state, call);
 
 
   return true;
