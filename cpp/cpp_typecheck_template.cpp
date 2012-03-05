@@ -342,6 +342,10 @@ void cpp_typecheckt::typecheck_template_member_function(
           cpp_name.get_sub()[3].id()=="operator")
   {
   }
+  else if(declaration.is_destructor())
+  {
+    return; // TODO
+  }
   else
   {
     err_location(cpp_name);
