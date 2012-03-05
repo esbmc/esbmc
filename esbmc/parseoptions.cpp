@@ -312,6 +312,25 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 #endif
   }
 
+#ifndef _WIN32
+  struct rlimit lim;
+  if (cmdline.isset("enable-core-dump")) {
+    lim.rlim_cur = RLIM_INFINITY;
+    lim.rlim_max = RLIM_INFINITY;
+    if (setrlimit(RLIMIT_CORE, &lim) != 0) {
+      perror("Couldn't unlimit core dump size");
+      abort();
+    }
+  } else {
+    lim.rlim_cur = 0;
+    lim.rlim_max = 0;
+    if (setrlimit(RLIMIT_CORE, &lim) != 0) {
+      perror("Couldn't disable core dump size");
+      abort();
+    }
+  }
+#endif
+
   config.options = options;
 }
 
@@ -1132,5 +1151,9 @@ void cbmc_parseoptionst::help()
     " --schedule             schedule mode (experimental)\n"
     " --all-runs                   Run all executions (do not stop at error)\n"
 #endif
+    "\n --- Miscellaneous options -----------------------------------------------------\n\n"
+    " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
+    " --timeout                    configure time limit, integer followed by {s,m,h}\n"
+    " --enable-core-dump           don't disable core dump output\n"
     "\n";
 }
