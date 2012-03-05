@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <assert.h>
 
 #include <expr_util.h>
-#include <rename.h>
 
 #include "goto_symex.h"
 

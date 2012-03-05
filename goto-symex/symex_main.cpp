@@ -13,7 +13,6 @@
 
 #include <prefix.h>
 #include <std_expr.h>
-#include <rename.h>
 #include <expr_util.h>
 
 #include "goto_symex.h"
