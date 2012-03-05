@@ -88,8 +88,8 @@ goto_symext::argument_assignments(
 
       // it should be the same exact type
       if (!base_type_eq(arg_type, rhs.type(), ns)) {
-	const typet &f_arg_type = ns.follow(arg_type);
-	const typet &f_rhs_type = ns.follow(rhs.type());
+	const typet &f_arg_type = arg_type;
+	const typet &f_rhs_type = rhs.type();
 
 	// we are willing to do some limited conversion
 	if ((f_arg_type.id() == typet::t_signedbv ||
