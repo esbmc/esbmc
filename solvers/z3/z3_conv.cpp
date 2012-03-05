@@ -2114,7 +2114,9 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 
   assert(expr.operands().size() == 2);
-  assert(expr.op0().type() == expr.op1().type());
+  assert((expr.op0().type().id() == "pointer" &&
+          expr.op1().type().id() == "pointer") ||
+         expr.op0().type() == expr.op1().type());
 
   Z3_ast args[2];
 
