@@ -2006,8 +2006,8 @@ void cpp_typecheckt::typecheck_method_application(
 
     // Special case. Make it a reference.
     assert(this_type.id()=="pointer");
-    this_type.set("#reference",true);
-    this_type.set("#this",true);
+    this_type.set("#reference", true);
+    this_type.set("#this", true);
 
     if(expr.arguments().size()==func_type.arguments().size())
     {
@@ -2021,66 +2021,15 @@ void cpp_typecheckt::typecheck_method_application(
       implicit_typecast(this_arg, this_type);
       assert(is_reference(this_arg.type()));
       this_arg.type().remove("#reference");
-      expr.arguments().insert(expr.arguments().begin(),this_arg);
+      expr.arguments().insert(expr.arguments().begin(), this_arg);
     }
   }
 
-}
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::function_call_add_this
-
-Inputs:
-
-Outputs:
-
-Purpose:
-
-\*******************************************************************/
-
-void cpp_typecheckt::function_call_add_this(
-  side_effect_expr_function_callt &expr)
-{
-  /*  // add "this" to argument list
-  assert(expr.operands().size()==2);
-
-  typet this_type = to_code_type(lookup(expr.function().type())
-                                 .arguments().front().type();
-
-  // special case. make it reference
-  assert(this_type.id()=="pointer");
-  this_type.set("#refrence",true);
-  this_type.set("#this",true);
-
-  exprt new_expr
-  implicit_typecast()
-
-  // insert operand
-  expr.arguments().insert(expr.arguments().begin(), exprt());
-
-  exprt &member_expr=expr.function();
-  exprt &this_argument_expr=expr.arguments().front();
-
-  assert(member_expr.operands().size()==1);
-
-  exprt &struct_expr=member_expr.op0();
-
-  if(struct_expr.id()=="dereference" &&
-     struct_expr.operands().size()==1 &&
-   struct_expr.op0().type().id()=="pointer")
+  if(symbol.value.id()=="cpp_not_typechecked" &&
+      !symbol.value.get_bool("is_used"))
   {
-    this_argument_expr=struct_expr.op0();
-    if(this_argument_expr.type().reference())
-      this_argument_expr.type().remove("#reference");
+    context.symbols[symbol.name].value.set("is_used", true);
   }
-  else
-  {
-    this_argument_expr=exprt("address_of", typet("pointer"));
-    this_argument_expr.location()=expr.location();
-    this_argument_expr.type().subtype()=member_expr.op0().type();
-    this_argument_expr.copy_to_operands(member_expr.op0());
-  }*/
 }
 
 /*******************************************************************\
@@ -2721,9 +2670,9 @@ void cpp_typecheckt::typecheck_expr_comma(exprt &expr)
     throw 0;
   }
 
-  if(follow(expr.op0().type()).id() == "struct")
+  if(follow(expr.op0().type()).id()=="struct")
   {
-    // TODO: check if the comma operator has been overloaded
+    // TODO: check if the comma operator has been overloaded!
   }
 
   #ifdef CPP_SYSTEMC_EXTENSION
