@@ -99,6 +99,10 @@ void dereferencet::dereference(
     throw "dereference expected pointer type, but got "+
           dest.type().pretty();
 
+  // Pointers type won't have been resolved; do that now.
+  const typet dereftype = ns.follow(dest.type().subtype());
+  dest.type().subtype() = dereftype;
+
   // save the dest for later, dest might be destroyed
   const exprt deref_expr(dest);
 
