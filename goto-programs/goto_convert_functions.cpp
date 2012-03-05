@@ -341,7 +341,7 @@ is_type_symbol(irep_idt name)
 
   if (name.as_string().find("$type") != std::string::npos)
     return true;
-  else if (has_prefix(name.as_string(), "c::tag-"))
+  else if (name.as_string().find("tag-") != std::string::npos)
     return true;
   else
     return false;
