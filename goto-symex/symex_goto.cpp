@@ -23,8 +23,6 @@ goto_symext::symex_goto(const exprt &old_guard)
   cur_state->rename(new_guard);
   do_simplify(new_guard);
 
-  target->location(cur_state->guard, cur_state->source);
-
   if (new_guard.is_false() ||
       cur_state->guard.is_false()) {
     // reset unwinding counter

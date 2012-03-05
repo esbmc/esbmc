@@ -46,11 +46,6 @@ public:
     std::vector<dstring> stack_trace,
     assignment_typet assignment_type);
     
-  // just record a location
-  virtual void location(
-    const guardt &guard,
-    const sourcet &source);
-  
   // output
   virtual void output(
     const guardt &guard,
@@ -96,7 +91,6 @@ public:
     bool is_assert() const     { return type==goto_trace_stept::ASSERT; }
     bool is_assume() const     { return type==goto_trace_stept::ASSUME; }
     bool is_assignment() const { return type==goto_trace_stept::ASSIGNMENT; }
-    bool is_location() const   { return type==goto_trace_stept::LOCATION; }
     bool is_output() const     { return type==goto_trace_stept::OUTPUT; }
     
     exprt guard;

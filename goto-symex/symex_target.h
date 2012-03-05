@@ -52,11 +52,6 @@ public:
     std::vector<dstring> stack_trace,
     assignment_typet assignment_type)=0;
 
-  // just record a location
-  virtual void location(
-    const guardt &guard,
-    const sourcet &source)=0;
-
   // record output
   virtual void output(
     const guardt &guard,

@@ -60,7 +60,6 @@ void goto_trace_stept::output(
   {
   case goto_trace_stept::ASSERT: out << "ASSERT"; break;
   case goto_trace_stept::ASSUME: out << "ASSUME"; break;
-  case goto_trace_stept::LOCATION: out << "LOCATION"; break;
   case goto_trace_stept::ASSIGNMENT: out << "ASSIGNMENT"; break;
   default: assert(false);
   }
@@ -373,9 +372,6 @@ void show_goto_trace(
       break;
 
     case goto_trace_stept::ASSUME:
-      break;
-
-    case goto_trace_stept::LOCATION:
       break;
 
     case goto_trace_stept::ASSIGNMENT:

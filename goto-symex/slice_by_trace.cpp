@@ -410,8 +410,6 @@ void symex_slice_by_tracet::slice_SSA_steps(
   {
     if (it->is_output())
       trace_SSA_steps++;
-    if (it->is_location())
-      location_SSA_steps++;
     bool sliced_SSA_step = false;
     exprt guard (it->guard);
     simplify(guard);
@@ -425,7 +423,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
 	it->rhs.make_true();
 	it->guard.make_false();
 	sliced_SSA_steps++;
-	if (it->is_output() || it->is_location())
+	if (it->is_output())
 	  trace_loc_sliced++;
 	sliced_SSA_step = true;
       }
@@ -439,7 +437,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
 	  it->rhs.make_true();
 	  it->guard.make_false();
 	  sliced_SSA_steps++;
-	  if (it->is_output() || it->is_location())
+	  if (it->is_output())
 	    trace_loc_sliced++;
 	  sliced_SSA_step = true;
 	  break; // Sliced, so no need to consider the rest

@@ -143,7 +143,6 @@ goto_symext::symex_function_call(const code_function_callt &code)
 void
 goto_symext::symex_function_call_symbol(const code_function_callt &code)
 {
-  target->location(cur_state->guard, cur_state->source);
 
   assert(code.function().id() == exprt::symbol);
 
@@ -469,8 +468,6 @@ goto_symext::make_return_assignment(code_assignt &assign,
                                     const code_returnt &code)
 {
   statet::framet &frame = cur_state->top();
-
-  target->location(cur_state->guard, cur_state->source);
 
   if (code.operands().size() == 1) {
     exprt value(code.op0());

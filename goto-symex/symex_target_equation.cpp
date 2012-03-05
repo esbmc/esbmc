@@ -42,19 +42,6 @@ void symex_target_equationt::assignment(
   SSA_step.stack_trace = stack_trace;
 }
 
-void symex_target_equationt::location(
-  const guardt &guard,
-  const sourcet &source)
-{
-  SSA_steps.push_back(SSA_stept());
-  SSA_stept &SSA_step=SSA_steps.back();
-
-  SSA_step.guard=guard.as_expr();
-  SSA_step.lhs.make_nil();
-  SSA_step.type=goto_trace_stept::LOCATION;
-  SSA_step.source=source;
-}
-
 void symex_target_equationt::output(
   const guardt &guard,
   const sourcet &source,
@@ -303,7 +290,6 @@ void symex_target_equationt::SSA_stept::output(
   {
   case goto_trace_stept::ASSERT: out << "ASSERT" << std::endl; break;
   case goto_trace_stept::ASSUME: out << "ASSUME" << std::endl; break;
-  case goto_trace_stept::LOCATION: out << "LOCATION" << std::endl; break;
   case goto_trace_stept::OUTPUT: out << "OUTPUT" << std::endl; break;
 
   case goto_trace_stept::ASSIGNMENT:
@@ -367,15 +353,6 @@ bool symex_target_equationt::SSA_stept::operator<(const SSA_stept p2) const
      * lists? XXX - do this in the future. Shouldn't affect any operation for
      * now */
     return false;
-
-  case goto_trace_stept::LOCATION:
-
-    if (source < p2.source)
-      return true;
-    else if (p2.source < source)
-      return false;
-
-    return false; /* XXX - what else? */
 
   case goto_trace_stept::ASSIGNMENT:
 

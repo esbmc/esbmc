@@ -88,6 +88,7 @@ goto_symext::symex_step(reachability_treet & art)
   // actually do instruction
   switch (instruction.type) {
   case SKIP:
+  case LOCATION:
     // really ignore
     cur_state->source.pc++;
     break;
@@ -99,11 +100,6 @@ goto_symext::symex_step(reachability_treet & art)
     // continue
     if (!run_next_function_ptr_target(false))
       cur_state->source.pc++;
-    break;
-
-  case LOCATION:
-    target->location(cur_state->guard, cur_state->source);
-    cur_state->source.pc++;
     break;
 
   case GOTO:
