@@ -28,7 +28,7 @@ public:
 
   // Returns the scope as a side-effect as 'current_scope'.
   // Should really return explicitly.
-  void resolve_scope(
+  cpp_scopet &resolve_scope(
     const cpp_namet &cpp_name,
     std::string &base_name,
     irept &template_args);
@@ -37,7 +37,6 @@ public:
 
 protected:
   cpp_typecheckt &cpp_typecheck;
-  exprt this_expr;
   locationt location;
   cpp_scopet *original_scope;
 

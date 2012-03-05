@@ -35,8 +35,7 @@ Purpose:
 \*******************************************************************/
 
 cpp_typecheck_resolvet::cpp_typecheck_resolvet(cpp_typecheckt &_cpp_typecheck):
-  cpp_typecheck(_cpp_typecheck),
-  this_expr(_cpp_typecheck.cpp_scopes.current_scope().this_expr)
+  cpp_typecheck(_cpp_typecheck)
 {
 }
 
@@ -343,6 +342,9 @@ void cpp_typecheck_resolvet::convert_identifier(
       std::cout << "I: " << identifier.class_identifier
       << " " << cpp_typecheck.cpp_scopes.current_scope().this_class_identifier << std::endl;
       #endif
+
+      const exprt &this_expr=
+        original_scope->this_expr;
 
       // find the object of the member expression
       if(class_symbol.type.find("#unnamed_object").is_not_nil())
@@ -919,7 +921,7 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::resolve_scope(
+cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
   const cpp_namet &cpp_name,
   std::string &base_name,
   irept &template_args)
@@ -1034,6 +1036,8 @@ void cpp_typecheck_resolvet::resolve_scope(
 
     pos++;
   }
+  
+  return cpp_typecheck.cpp_scopes.current_scope();
 }
 
 /*******************************************************************\
@@ -1215,9 +1219,6 @@ exprt cpp_typecheck_resolvet::resolve(
   std::string base_name;
   cpp_template_args_non_tct template_args;
   template_args.make_nil();
-
-  // save 'this_expr' before resolving the scopes
-  this_expr=cpp_typecheck.cpp_scopes.current_scope().this_expr;
 
   original_scope=&cpp_typecheck.cpp_scopes.current_scope();
   cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
