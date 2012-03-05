@@ -112,6 +112,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"decide",		switc,		""	},
 { 0,	"fixed-pointer-model",	switc,		""	},
 { 0,	"floating-pointer-model",switc,		""	},
+{ 0,	"enable-core-dump",     switc,		""	},
 { 0,	"memstats",		switc,		""	},
 { 0,	"dump-z3-assigns",	switc,		""	},
 { '?',	"",			switc,		""	},
