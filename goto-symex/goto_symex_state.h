@@ -65,7 +65,6 @@ public:
 		function_frame = state.function_frame;
 		unwind_map = state.unwind_map;
 		function_unwind = state.function_unwind;
-		declaration_history = state.declaration_history;
 		use_value_set = state.use_value_set;
 		value_set = state.value_set;
 		call_stack = state.call_stack;
@@ -91,10 +90,6 @@ public:
     // we have a two-level renaming
 
   typedef std::map<irep_idt, irep_idt> original_identifierst;
-  typedef std::set<std::string> declaration_historyt;
-
-  // we remember all declarations
-  declaration_historyt declaration_history;
 
   struct renaming_levelt
   {
@@ -305,6 +300,11 @@ public:
 
     typedef std::set<irep_idt> local_variablest;
     local_variablest local_variables;
+
+    typedef std::set<std::string> declaration_historyt;
+
+    // we remember all declarations
+    declaration_historyt declaration_history;
 
     framet(unsigned int thread_id):
       return_value(static_cast<const exprt &>(get_nil_irep()))

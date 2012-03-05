@@ -590,6 +590,12 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
   typecheck_type(expr.type());
 
   const typet expr_type=follow(expr.type());
+  const typet op_type=follow(op.type());
+
+  // If we have a typecast from the same state to the same state, as generated
+  // by CIL in places, this is just fine.
+  if (full_eq(expr_type, op_type))
+    return;
 
   if(expr_type.id()=="struct" ||
      expr_type.id()=="union")
@@ -627,8 +633,6 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
         << to_string(expr.type()) << "' not permitted";
     throw 0;
   }
-
-  const typet op_type=follow(op.type());
 
   if(is_number(op_type) ||
      op_type.id()=="c_enum" ||
