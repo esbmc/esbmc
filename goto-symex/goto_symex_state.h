@@ -319,14 +319,6 @@ public:
   void rename_address(exprt &expr);
 
   /**
-   *  Perform type renaming.
-   *  Dereferences any types that are "symbol"s to type information stored
-   *  elsewhere.
-   *  @param type Type to dereference/rename.
-   */
-  void rename(typet &type);
-
-  /**
    *  Make an L2 and value set assignment.
    *  Records an assignment with L2 renaming context and the value set pointer
    *  tracking state. Potentially enables constant propagation if record_value

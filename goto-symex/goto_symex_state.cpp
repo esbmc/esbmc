@@ -191,9 +191,6 @@ void goto_symex_statet::assignment(
   assert(lhs.id()=="symbol");
   assert(lhs.id()==exprt::symbol);
 
-  // the type might need renaming
-  rename(lhs.type());
-
   const irep_idt &identifier= lhs.identifier();
 
   // identifier should be l0 or l1, make sure it's l1
@@ -227,8 +224,6 @@ void goto_symex_statet::rename(exprt &expr)
 {
   // rename all the symbols with their last known value
 
-  rename(expr.type());
-
   if(expr.id()==exprt::symbol)
   {
     top().level1.rename(expr);
@@ -253,8 +248,6 @@ void goto_symex_statet::rename_address(exprt &expr)
 {
   // rename all the symbols with their last known value
 
-  rename(expr.type());
-
   if(expr.id()==exprt::symbol)
   {
     // only do L1
@@ -271,36 +264,6 @@ void goto_symex_statet::rename_address(exprt &expr)
     // do this recursively
     Forall_operands(it, expr)
       rename_address(*it);
-  }
-}
-
-void goto_symex_statet::rename(typet &type)
-{
-  // rename all the symbols with their last known value
-
-  if(type.id()==typet::t_array)
-  {
-    rename(type.subtype());
-    exprt tmp = static_cast<const exprt &>(type.size_irep());
-    rename(tmp);
-    type.size(tmp);
-  }
-  else if(type.id()==typet::t_struct ||
-          type.id()==typet::t_union ||
-          type.id()==typet::t_class)
-  {
-    // TODO
-  }
-  else if(type.id()==typet::t_pointer)
-  {
-    // rename(type.subtype(), ns);
-    // don't do this, or it might get cyclic
-  }
-  else if(type.id()==exprt::symbol)
-  {
-	const symbolt &symbol=ns.lookup(type.identifier());
-	type=symbol.type;
-    rename(type);
   }
 }
 
