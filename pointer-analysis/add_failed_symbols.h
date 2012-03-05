@@ -10,7 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_POINTER_ANALYSIS_FAILED_SYMBOLS_H
 
 #include <context.h>
+#include <namespace.h>
 
-void add_failed_symbols(contextt &context);
+void add_failed_symbols(contextt &context, namespacet &ns);
 
 #endif

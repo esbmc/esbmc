@@ -916,7 +916,7 @@ bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
       goto_functions, ns, options, value_set_analysis);
 
     // add failed symbols
-    add_failed_symbols(context);
+    add_failed_symbols(context, ns);
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions);
