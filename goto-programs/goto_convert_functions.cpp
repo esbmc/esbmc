@@ -11,6 +11,7 @@ Date: June 2003
 #include <assert.h>
 
 #include <base_type.h>
+#include <prefix.h>
 #include <std_code.h>
 
 #include "goto_convert_functions.h"
@@ -311,6 +312,7 @@ void goto_convert(
 
   try
   {
+    goto_convert_functions.thrash_type_symbols();
     goto_convert_functions.goto_convert();
   }
 
@@ -331,4 +333,133 @@ void goto_convert(
 
   if(goto_convert_functions.get_error_found())
     throw 0;
+}
+
+static bool
+is_type_symbol(irep_idt name)
+{
+
+  if (name.as_string().find("$type") != std::string::npos)
+    return true;
+  else if (name.as_string().find("tag-") != std::string::npos)
+    return true;
+  else
+    return false;
+}
+
+static void
+fetch_type_dependancies(const irept &type, std::set<irep_idt> &deps)
+{
+
+  if (type.id() == "pointer")
+    return;
+
+  if (type.id() == "symbol") {
+    if (is_type_symbol(type.identifier())) {
+      deps.insert(type.identifier());
+      return;
+    }
+  }
+
+  forall_irep(it, type.get_sub())
+    fetch_type_dependancies(*it, deps);
+
+  forall_named_irep(it, type.get_named_sub())
+    fetch_type_dependancies(it->second, deps);
+
+  forall_named_irep(it, type.get_comments())
+    fetch_type_dependancies(it->second, deps);
+
+  return;
+}
+
+void
+goto_convert_functionst::rename_types(irept &type)
+{
+
+  if (type.id() == "pointer")
+    return;
+
+  if (type.id() == "symbol") {
+    if (is_type_symbol(type.identifier())) {
+      symbolst::const_iterator it = context.symbols.find(type.identifier());
+      assert(it != context.symbols.end());
+      type = it->second.type;
+      return;
+    }
+  }
+
+  Forall_irep(it, type.get_sub())
+    rename_types(*it);
+
+  Forall_named_irep(it, type.get_named_sub())
+    rename_types(it->second);
+
+  Forall_named_irep(it, type.get_comments())
+    rename_types(it->second);
+
+  return;
+}
+
+void
+goto_convert_functionst::wallop_type(irep_idt name,
+                         std::map<irep_idt, std::set<irep_idt> > &typenames)
+{
+
+  // If this type doesn't depend on anything, no need to rename anything.
+  std::set<irep_idt> &deps = typenames.find(name)->second;
+  if (deps.size() == 0)
+    return;
+
+  // Iterate over our dependancies ensuring they're resolved.
+  for (std::set<irep_idt>::iterator it = deps.begin(); it != deps.end(); it++)
+    wallop_type(*it, typenames);
+
+  // And finally perform renaming.
+  symbolst::iterator it = context.symbols.find(name);
+  rename_types(it->second.type);
+  deps.clear();
+  return;
+}
+
+void
+goto_convert_functionst::thrash_type_symbols(void)
+{
+
+  // This function has one purpose: remove as many type symbols as possible.
+  // This is easy enough by just following each type symbol that occurs and
+  // replacing it with the value of the type name. However, if we have a pointer
+  // in a struct to itself, this breaks down. Therefore, don't rename types of
+  // pointers; they have a type already; they're pointers.
+
+  // Start off by collecting all type symbols. Identified by having "$type"
+  // in their names :|. And, compute their dependancies.
+
+  std::map<irep_idt, std::set<irep_idt> > typenames;
+
+  forall_symbols(it, context.symbols) {
+    if (is_type_symbol(it->second.name)) {
+      std::set<irep_idt> depset;
+      fetch_type_dependancies(it->second.type, depset);
+      typenames[it->second.name] = depset;
+    }
+  }
+
+  // Now, repeatedly rename all types. When we encounter a type that contains
+  // unresolved symbols, resolve it first, then include it into this type.
+  // This means that we recurse to whatever depth of nested types the user
+  // has. With at least a meg of stack, I doubt that's really a problem.
+  std::map<irep_idt, std::set<irep_idt> >::iterator it;
+  for (it = typenames.begin(); it != typenames.end(); it++)
+    wallop_type(it->first, typenames);
+
+  // And now all the types have a fixed form, assault all existing code.
+  Forall_symbols(it, context.symbols) {
+    if (!is_type_symbol(it->second.name)) {
+      rename_types(it->second.type);
+      rename_types(it->second.value);
+    }
+  }
+
+  return;
 }

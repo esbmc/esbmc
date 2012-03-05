@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 
-#include <base_type.h>
 #include <simplify_expr.h>
 #include <i2string.h>
 #include <cprover_prefix.h>
@@ -86,10 +85,7 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
 void goto_symext::do_simplify(exprt &expr)
 {
   if(!options.get_bool_option("no-simplify"))
-  {
-    base_type(expr, ns);
     simplify(expr);
-  }
 }
 
 void goto_symext::symex_assign(const codet &code)
@@ -238,7 +234,7 @@ void goto_symext::symex_assign_array(
 
   const exprt &lhs_array=lhs.op0();
   const exprt &lhs_index=lhs.op1();
-  const typet &lhs_type=ns.follow(lhs_array.type());
+  const typet &lhs_type=lhs_array.type();
 
   if(lhs_type.id()!=typet::t_array)
     throw "index must take array type operand";
@@ -272,7 +268,7 @@ void goto_symext::symex_assign_member(
     throw "member must have one operand";
 
   exprt lhs_struct=lhs.op0();
-  typet struct_type=ns.follow(lhs_struct.type());
+  typet struct_type=lhs_struct.type();
 
   if(struct_type.id()!=typet::t_struct &&
      struct_type.id()!=typet::t_union)
@@ -294,7 +290,7 @@ void goto_symext::symex_assign_member(
     {
       // remove the type cast, we assume that the member is there
       exprt tmp(lhs_struct.op0());
-      struct_type=ns.follow(tmp.type());
+      struct_type=tmp.type();
       assert(struct_type.id()==typet::t_struct || struct_type.id()==typet::t_union);
       lhs_struct=tmp;
     }

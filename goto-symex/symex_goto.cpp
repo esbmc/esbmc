@@ -221,9 +221,6 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
       typet type(symbol.type);
 
-      // type may need renaming
-      cur_state->rename(type);
-
       exprt rhs;
 
       if (cur_state->guard.is_false()) {
