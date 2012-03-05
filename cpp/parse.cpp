@@ -822,7 +822,8 @@ bool Parser::rTempArgDeclaration(cpp_declarationt &declaration)
 
     Token tk1, tk2;
 
-    if(lex->GetToken(tk1)!=CLASS || lex->GetToken(tk2)!=Identifier)
+    if(lex->GetToken(tk1)!=CLASS ||
+       lex->GetToken(tk2)!=Identifier)
       return false;
 
     //irept cspec=new ireptClassSpec(new LeafReserved(tk1),
@@ -1276,7 +1277,6 @@ bool Parser::rOtherDeclaration(
       return false;
 
     // it's the name (declarator), not the return type
-
     type_name=typet(is_destructor?"destructor":"constructor");
     declaration.declarators().push_back(constructor_declarator);
   }
@@ -3015,6 +3015,8 @@ bool Parser::rEnumSpec(typet &spec)
   else
     if(!rEnumBody(spec.add("body")))
       return false;
+
+  // there must be closing '}'
 
   if(lex->GetToken(tk)!='}')
     return false;
