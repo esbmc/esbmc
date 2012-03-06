@@ -1146,17 +1146,6 @@ void cbmc_parseoptionst::help()
 
     " --ecp                        perform equivalence checking of programs\n"
 #endif
-#if 0
-    " ---------------  concurrency checking  -------------------------\n"
-    " --data-races-check           enable data race check\n"
-    " --no-deadlock-check          do not do deadlock check\n"
-    " --no-vi-por                     no partial-order-reduction\n"
-    " --no-rw-por                  no read write analysis partial-order-reduction\n"
-    " --context-siwtch nr          set the number of context switches allowed for each thread\n"
-    " --DFS                        Depth first exploration\n"
-    " --schedule             schedule mode (experimental)\n"
-    " --all-runs                   Run all executions (do not stop at error)\n"
-#endif
     "\n --- Miscellaneous options -----------------------------------------------------\n\n"
     " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
     " --timeout                    configure time limit, integer followed by {s,m,h}\n"
