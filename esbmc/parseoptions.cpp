@@ -316,6 +316,25 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 #endif
   }
 
+#ifndef _WIN32
+  struct rlimit lim;
+  if (cmdline.isset("enable-core-dump")) {
+    lim.rlim_cur = RLIM_INFINITY;
+    lim.rlim_max = RLIM_INFINITY;
+    if (setrlimit(RLIMIT_CORE, &lim) != 0) {
+      perror("Couldn't unlimit core dump size");
+      abort();
+    }
+  } else {
+    lim.rlim_cur = 0;
+    lim.rlim_max = 0;
+    if (setrlimit(RLIMIT_CORE, &lim) != 0) {
+      perror("Couldn't disable core dump size");
+      abort();
+    }
+  }
+#endif
+
   config.options = options;
 }
 
@@ -1030,7 +1049,7 @@ void cbmc_parseoptionst::help()
     " esbmc file.c ...              source file names\n"
     "\n"
     "Additonal options:\n\n"
-    " --- front-end options ------------------------------------------------------------------\n\n"
+    " --- front-end options ---------------------------------------------------------\n\n"
     " -I path                      set include path\n"
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
@@ -1049,7 +1068,7 @@ void cbmc_parseoptionst::help()
     " --big-endian                 allow big-endian word-byte conversions\n"
     " --16, --32, --64             set width of machine word\n"
     " --version                    show current ESBMC version and exit\n\n"
-    " --- BMC options ------------------------------------------------------------------------\n\n"
+    " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"
     " --depth nr                   limit search depth\n"
@@ -1057,18 +1076,18 @@ void cbmc_parseoptionst::help()
     " --unwindset nr               unwind given loop nr times\n"
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
     " --no-slice                   do not remove unused equations\n\n"
-    " --- solver configuration ---------------------------------------------------------------\n\n"
+    " --- solver configuration ------------------------------------------------------\n\n"
     //" --minisat                    use the SAT solver MiniSat\n"
-    " --boolector-bv               use BOOLECTOR with bit-vector arithmetic (experimental)\n"
+    " --boolector-bv               use BOOLECTOR with bit-vector arith (experimental)\n"
     " --z3-bv                      use Z3 with bit-vector arithmetic\n"
     " --z3-ir                      use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"
     " --lazy                       use lazy instantiation with Z3 (default)\n"
-    " --btor                       output verification conditions in BTOR format (experimental)\n"
-    " --qf_aufbv                   output verification conditions in QF_AUFBV format (experimental)\n"
-    " --qf_auflira                 output verification conditions in QF_AUFLIRA format (experimental)\n"
-    " --outfile Filename           output verification conditions in SMT lib format to given file\n\n"
-    " --- property checking ------------------------------------------------------------------\n\n"
+    " --btor                       output VCCs in BTOR format (experimental)\n"
+    " --qf_aufbv                   output VCCs in QF_AUFBV format (experimental)\n"
+    " --qf_auflira                 output VCCs in QF_AUFLIRA format (experimental)\n"
+    " --outfile Filename           output VCCs in SMT lib format to given file\n\n"
+    " --- property checking ---------------------------------------------------------\n\n"
     " --no-assertions              ignore assertions\n"
     " --no-bounds-check            do not do array bounds check\n"
     " --no-div-by-zero-check       do not do division by zero check\n"
@@ -1077,16 +1096,16 @@ void cbmc_parseoptionst::help()
     " --overflow-check             enable arithmetic over- and underflow check\n"
     " --deadlock-check             enable global and local deadlock check with mutex\n"
     " --data-races-check           enable data races check\n"
-    " --atomicity-check            enable atomicity violation check at visible assignments\n\n"
-    " --- scheduling approaches ---------------------------------------------------------------\n\n"
+    " --atomicity-check            enable atomicity check at visible assignments\n\n"
+    " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
     " --uw-model                   use under-approximation and widening approach\n"
-    " --core-size nr               limit the number of assumptions in the UW approach (experimental)\n"
+    " --core-size nr               limit num of assumpts in UW model(experimental)\n"
     " --round-robin                use the round robin scheduling approach\n"
     " --time-slice                 set the time slice of the round robin algorithm \n\n"
-    " --- concurrency checking ---------------------------------------------------------------\n\n"
-    " --context-switch nr          limit the number of context switches for each thread \n"
-    " --state-hashing              enable state-hashing to prune the state space exploration\n"
+    " --- concurrency checking -----------------------------------------------------\n\n"
+    " --context-switch nr          limit number of context switches for each thread \n"
+    " --state-hashing              enable state-hashing, prunes duplicate states\n"
     " --control-flow-test          enable context switch before control flow tests\n"
     " --no-lock-check              do not do lock acquisition ordering check\n"
     " --no-por                     do not do partial order reduction\n"
@@ -1128,16 +1147,9 @@ void cbmc_parseoptionst::help()
 
     " --ecp                        perform equivalence checking of programs\n"
 #endif
-#if 0
-    " ---------------  concurrency checking  -------------------------\n"
-    " --data-races-check           enable data race check\n"
-    " --no-deadlock-check          do not do deadlock check\n"
-    " --no-vi-por                     no partial-order-reduction\n"
-    " --no-rw-por                  no read write analysis partial-order-reduction\n"
-    " --context-siwtch nr          set the number of context switches allowed for each thread\n"
-    " --DFS                        Depth first exploration\n"
-    " --schedule             schedule mode (experimental)\n"
-    " --all-runs                   Run all executions (do not stop at error)\n"
-#endif
+    "\n --- Miscellaneous options -----------------------------------------------------\n\n"
+    " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
+    " --timeout                    configure time limit, integer followed by {s,m,h}\n"
+    " --enable-core-dump           don't disable core dump output\n"
     "\n";
 }
