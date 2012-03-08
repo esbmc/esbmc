@@ -693,6 +693,12 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
   goto_programt::instructiont new_insn;
 
+  new_insn.type = FUNCTION_CALL;
+  new_insn.code = code_function_callt();
+  new_insn.function = insn->function;
+  new_insn.code.op1() = symbol_exprt("c::__ESBMC_really_atomic_begin");
+  insn_list.insert(insn, new_insn);
+
   new_insn.type = ASSIGN;
   std::set<std::pair<std::string, exprt> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
@@ -703,6 +709,12 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
     // new_insn location field not set - I believe it gets numbered later.
     insn_list.insert(insn, new_insn);
   }
+
+  new_insn.type = FUNCTION_CALL;
+  new_insn.code = code_function_callt();
+  new_insn.function = insn->function;
+  new_insn.code.op1() = symbol_exprt("c::__ESBMC_really_atomic_end");
+  insn_list.insert(insn, new_insn);
 
   new_insn.type = FUNCTION_CALL;
   new_insn.code = code_function_callt();
