@@ -723,7 +723,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   constant_exprt cexpr(typet("unsignedbv"));
   cexpr.type().width(32);
   cexpr.set_value(irep_idt("0"));
-  new_insn.code.op2().op0() = cexpr;
+  new_insn.code.op2().move_to_operands(cexpr);
   insn_list.insert(insn, new_insn);
 
   return;
