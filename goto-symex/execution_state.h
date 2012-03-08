@@ -480,6 +480,10 @@ class execution_statet : public goto_symext
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;
+  /** TID of monitor thread, for monitor intrinsics. */
+  unsigned int monitor_tid;
+  /** Whether monitor_tid is set. */
+  bool tid_is_set;
 
   protected:
   /** Number of context switches performed by this ex_state */

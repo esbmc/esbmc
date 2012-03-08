@@ -130,6 +130,9 @@ execution_statet::operator=(const execution_statet &ex)
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
 
+  monitor_tid = ex.monitor_tid;
+  tid_is_set = ex.tid_is_set;
+
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
 
