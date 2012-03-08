@@ -430,4 +430,23 @@ goto_symext::intrinsic_switch_from_monitor(reachability_treet &art)
 void
 goto_symext::intrinsic_register_monitor(code_function_callt &call, reachability_treet &art)
 {
+  execution_statet &ex_state = art.get_cur_state();
+
+  if (ex_state.tid_is_set)
+    assert(0 && "Monitor thread ID was already set (__ESBMC_register_monitor)\n");
+
+  statet &state = art.get_cur_state().get_active_state();
+  exprt threadid = call.arguments()[0];
+  state.level2.rename(threadid);
+
+  if (threadid.id() != "constant") {
+    std::cerr << "__ESBMC_register_monitor received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  assert(art.get_cur_state().threads_state.size() >= tid);
+  ex_state.monitor_tid = tid;
+  ex_state.tid_is_set = true;
 }
