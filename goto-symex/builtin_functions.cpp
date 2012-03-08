@@ -240,6 +240,19 @@ goto_symext::intrinsic_switch_to(code_function_callt &call,
 }
 
 void
+goto_symext::intrinsic_switch_from(reachability_treet &art)
+{
+
+  // Mark switching back to this thread as already having been explored
+  art.get_cur_state().DFS_traversed[art.get_cur_state().get_active_state_number()] = true;
+
+  // And force a context switch.
+  art.force_cswitch_point();
+  return;
+}
+
+
+void
 goto_symext::intrinsic_get_thread_id(code_function_callt &call,
                                      reachability_treet &art)
 {

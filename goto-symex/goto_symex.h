@@ -349,6 +349,8 @@ protected:
   void intrinsic_yield(reachability_treet &arg);
   /** Perform switch_to; switches control to explicit thread ID. */
   void intrinsic_switch_to(code_function_callt &call, reachability_treet &art);
+  /** Yield, always switching away from this thread */
+  void intrinsic_switch_from(reachability_treet &arg);
   /** Perform get_thread_id; return the current thread identifier. */
   void intrinsic_get_thread_id(code_function_callt &call,
                                 reachability_treet &art);

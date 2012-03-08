@@ -237,6 +237,8 @@ goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
     intrinsic_yield(art);
   } else if (symname == "c::__ESBMC_switch_to") {
     intrinsic_switch_to(call, art);
+  } else if (symname == "c::__ESBMC_switch_away_from") {
+    intrinsic_switch_from(art);
   } else if (symname == "c::__ESBMC_get_thread_id") {
     intrinsic_get_thread_id(call, art);
   } else if (symname == "c::__ESBMC_set_thread_internal_data") {
