@@ -693,12 +693,6 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
   goto_programt::instructiont new_insn;
 
-  new_insn.type = ATOMIC_BEGIN;
-  new_insn.function = insn->function;
-  insn_list.insert(insn, new_insn);
-
-  insn++;
-
   new_insn.type = ASSIGN;
   std::set<std::pair<std::string, exprt> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
@@ -710,26 +704,14 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
     insn_list.insert(insn, new_insn);
   }
 
-  typet uint32 = typet("unsignedbv");
-  uint32.width(32);
-  new_insn.type = ASSIGN;
-  new_insn.function = insn->function;
-  constant_exprt c_expr = constant_exprt(uint32);
-  c_expr.set_value("1");
-  exprt e = plus_exprt(symbol_exprt("c::_ltl2ba_transition_count", uint32), c_expr);
-  e.type() = uint32;
-  symbol_exprt sym_expr = symbol_exprt("c::_ltl2ba_transition_count", uint32);
-  new_insn.code = code_assignt(sym_expr, e);
-  insn_list.insert(insn, new_insn);
-
-  new_insn.type = ATOMIC_END;
-  new_insn.function = insn->function;
-  insn_list.insert(insn, new_insn);
-
   new_insn.type = FUNCTION_CALL;
   new_insn.code = code_function_callt();
   new_insn.function = insn->function;
-  new_insn.code.op1() = symbol_exprt("c::__ESBMC_yield");
+  new_insn.code.op1() = symbol_exprt("c::__ESBMC_switch_to");
+  constant_exprt cexpr(typet("unsignedbv"));
+  cexpr.type().width(32);
+  cexpr.set_value(irep_idt("0"));
+  new_insn.code.op2().op0() = cexpr;
   insn_list.insert(insn, new_insn);
 
   return;
