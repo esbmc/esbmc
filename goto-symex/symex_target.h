@@ -28,7 +28,7 @@ public:
     const goto_programt *prog;
     bool is_set;
 
-    sourcet():thread_nr(0), is_set(false)
+    sourcet():thread_nr(0), prog(NULL), is_set(false)
     {
     }
 
@@ -52,11 +52,6 @@ public:
     std::vector<dstring> stack_trace,
     assignment_typet assignment_type)=0;
 
-  // just record a location
-  virtual void location(
-    const guardt &guard,
-    const sourcet &source)=0;
-
   // record output
   virtual void output(
     const guardt &guard,
@@ -79,6 +74,10 @@ public:
     const std::string &msg,
     std::vector<dstring> stack_trace,
     const sourcet &source)=0;
+
+  // Abstract method, with the purpose of duplicating a symex_targett from the
+  // subclass.
+  virtual symex_targett *clone(void) const = 0;
 };
 
 bool operator < (

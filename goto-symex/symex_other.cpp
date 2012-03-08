@@ -9,29 +9,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <assert.h>
 
 #include <expr_util.h>
-#include <rename.h>
 
 #include "goto_symex.h"
 
-/*******************************************************************\
-
-Function: goto_symext::symex_other
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::symex_other(
-  const goto_functionst &goto_functions,
-  statet &state,
-  execution_statet &ex_state,
-        unsigned node_id)
+void goto_symext::symex_other(void)
 {
-  const goto_programt::instructiont &instruction=*state.source.pc;
+  const goto_programt::instructiont &instruction=*cur_state->source.pc;
 
   const codet &code=to_code(instruction.code);
 
@@ -46,11 +29,11 @@ void goto_symext::symex_other(
   {
     codet deref_code(code);
 
-    replace_dynamic_allocation(state, deref_code);
-    replace_nondet(deref_code, ex_state);
-    dereference(deref_code, state, false,node_id);
+    replace_dynamic_allocation(deref_code);
+    replace_nondet(deref_code);
+    dereference(deref_code, false);
 
-    symex_cpp_delete(state, deref_code);
+    symex_cpp_delete(deref_code);
   }
   else if(statement=="free")
   {
@@ -60,19 +43,19 @@ void goto_symext::symex_other(
   {
     codet deref_code(code);
 
-    replace_dynamic_allocation(state, deref_code);
-    replace_nondet(deref_code, ex_state);
-    dereference(deref_code, state, false,node_id);
+    replace_dynamic_allocation(deref_code);
+    replace_nondet(deref_code);
+    dereference(deref_code, false);
 
-    symex_printf(state, static_cast<const exprt &>(get_nil_irep()), deref_code,node_id);
+    symex_printf(static_cast<const exprt &>(get_nil_irep()), deref_code);
   }
   else if(statement=="decl")
   {
     codet deref_code(code);
 
-    replace_dynamic_allocation(state, deref_code);
-    replace_nondet(deref_code, ex_state);
-    dereference(deref_code, state, false,node_id);
+    replace_dynamic_allocation(deref_code);
+    replace_nondet(deref_code);
+    dereference(deref_code, false);
 
     if(deref_code.operands().size()==2)
       throw "two-operand decl not supported here";
@@ -86,31 +69,31 @@ void goto_symext::symex_other(
     // just do the L2 renaming to preseve locality
     const irep_idt &identifier=deref_code.op0().identifier();
 
-    std::string l1_identifier=state.top().level1(identifier,node_id);
+    std::string l1_identifier=cur_state->top().level1.get_ident_name(identifier);
 
     const irep_idt &original_id=
-      state.top().level1.get_original_name(l1_identifier);
+      cur_state->top().level1.get_original_name(l1_identifier);
 
     // increase the frame if we have seen this declaration before
-    while(state.top().declaration_history.find(l1_identifier)!=
-          state.top().declaration_history.end())
+    while(cur_state->top().declaration_history.find(l1_identifier)!=
+          cur_state->top().declaration_history.end())
     {
-      unsigned index=state.top().level1.current_names[original_id];
-      state.top().level1.rename(original_id, index+1,node_id);
-      l1_identifier=state.top().level1(original_id,node_id);
+      unsigned index=cur_state->top().level1.current_names[original_id];
+      cur_state->top().level1.rename(original_id, index+1);
+      l1_identifier=cur_state->top().level1.get_ident_name(original_id);
     }
 
-    state.top().declaration_history.insert(l1_identifier);
-    state.top().local_variables.insert(l1_identifier);
+    cur_state->top().declaration_history.insert(l1_identifier);
+    cur_state->top().local_variables.insert(l1_identifier);
 
     // seen it before?
     // it should get a fresh value
-    statet::level2t::current_namest::iterator it=
-      state.level2.current_names.find(l1_identifier);
+    renaming::level2t::current_namest::iterator it=
+      cur_state->level2.current_names.find(l1_identifier);
 
-    if(it!=state.level2.current_names.end())
+    if(it!=cur_state->level2.current_names.end())
     {
-      state.level2.rename(l1_identifier, it->second.count+1,node_id);
+      cur_state->level2.rename(l1_identifier, it->second.count+1);
       it->second.constant.make_nil();
     }
   }

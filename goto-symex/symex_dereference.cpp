@@ -12,18 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "renaming_ns.h"
 
-/*******************************************************************\
-
-   Class: symex_dereference_statet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 class symex_dereference_statet:
   public dereference_callbackt
 {
@@ -41,7 +29,8 @@ protected:
   goto_symext::statet &state;
 
   // overloads from dereference_callbackt
-  virtual bool is_valid_object(const irep_idt &identifier)
+  // XXXjmorse - no it doesn't. This should be virtual pure!
+  virtual bool is_valid_object(const irep_idt &identifier __attribute__((unused)))
   {
     return true;
   }
@@ -60,36 +49,14 @@ protected:
     const symbolt *&symbol);
 };
 
-/*******************************************************************\
-
-Function: symex_dereference_statet::dereference_failure
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_dereference_statet::dereference_failure(
-  const std::string &property,
-  const std::string &msg,
-  const guardt &guard)
+  const std::string &property __attribute__((unused)),
+  const std::string &msg __attribute__((unused)),
+  const guardt &guard __attribute__((unused)))
 {
+  // XXXjmorse - this is clearly wrong, but we can't do anything about it until
+  // we fix the memory model.
 }
-
-/*******************************************************************\
-
-Function: symex_dereference_statet::has_failed_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool symex_dereference_statet::has_failed_symbol(
   const exprt &expr,
@@ -113,18 +80,6 @@ bool symex_dereference_statet::has_failed_symbol(
   return false;
 }
 
-/*******************************************************************\
-
-Function: symex_dereference_statet::get_value_set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_dereference_statet::get_value_set(
   const exprt &expr,
   value_setst::valuest &value_set)
@@ -133,18 +88,6 @@ void symex_dereference_statet::get_value_set(
 
   state.value_set.get_value_set(expr, value_set, renaming_ns);
 }
-
-/*******************************************************************\
-
-Function: goto_symext::dereference_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::dereference_rec(
   exprt &expr,
@@ -187,26 +130,10 @@ void goto_symext::dereference_rec(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_symext::dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::dereference(
-  exprt &expr,
-  statet &state,
-  const bool write,
-  unsigned node_id)
+void goto_symext::dereference(exprt &expr, const bool write)
 {
-  symex_dereference_statet symex_dereference_state(*this, state);
-  renaming_nst renaming_ns(ns, state);
+  symex_dereference_statet symex_dereference_state(*this, *cur_state);
+  renaming_nst renaming_ns(ns, *cur_state);
 
   dereferencet dereference(
     renaming_ns,
@@ -215,8 +142,8 @@ void goto_symext::dereference(
     symex_dereference_state);
 
   // needs to be renamed to level 1
-  assert(!state.call_stack.empty());
-  state.top().level1.rename(expr,node_id);
+  assert(!cur_state->call_stack.empty());
+  cur_state->top().level1.rename(expr);
 
   guardt guard;
   dereference_rec(expr, guard, dereference, write);

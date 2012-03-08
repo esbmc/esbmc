@@ -1,9 +1,9 @@
 /*******************************************************************\
 
-Module: Symbolic Execution
+   Module: Symbolic Execution
 
-Author: Daniel Kroening, kroening@kroening.com
-		Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
+   Author: Daniel Kroening, kroening@kroening.com Lucas Cordeiro,
+     lcc08r@ecs.soton.ac.uk
 
 \*******************************************************************/
 
@@ -11,525 +11,254 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iostream>
 #include <vector>
 
+#include <prefix.h>
 #include <std_expr.h>
-#include <rename.h>
 #include <expr_util.h>
 
 #include "goto_symex.h"
+#include "goto_symex_state.h"
+#include "execution_state.h"
 #include "symex_target_equation.h"
+#include "reachability_tree.h"
 
 #include <std_expr.h>
 #include "../ansi-c/c_types.h"
-#include <base_type.h>
 #include <simplify_expr.h>
 #include "config.h"
 
-/*******************************************************************\
-
-Function: goto_symext::claim
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::claim(
-  const exprt &claim_expr,
-  const std::string &msg,
-  statet &state,
-  unsigned node_id) {
+void
+goto_symext::claim(const exprt &claim_expr, const std::string &msg) {
 
   total_claims++;
 
   exprt expr = claim_expr;
-  state.rename(expr, ns, node_id);
+  cur_state->rename(expr);
 
   // first try simplifier on it
   if (!expr.is_false())
     do_simplify(expr);
 
   if (expr.is_true() &&
-    !options.get_bool_option("all-assertions"))
-  return;
+      !options.get_bool_option("all-assertions"))
+    return;
 
-  state.guard.guard_expr(expr);
+  cur_state->guard.guard_expr(expr);
 
   remaining_claims++;
-  target->assertion(state.guard, expr, msg, state.gen_stack_trace(),
-                    state.source);
+  target->assertion(cur_state->guard, expr, msg, cur_state->gen_stack_trace(),
+                    cur_state->source);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::multi_formulas_init(const goto_functionst &goto_functions)
+void
+goto_symext::assume(const exprt &assumption)
 {
 
-  art1 = new reachability_treet(goto_functions, ns, options);
-}
-
-/*******************************************************************\
-
-Function: goto_symext::multi_formulas_has_more_formula
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool goto_symext::multi_formulas_setup_next()
-{
-  return art1->reset_to_unexplored_state();
-}
-
-
-/*******************************************************************\
-
-Function: goto_symext::multi_formulas_get_next_formula
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-symex_target_equationt *goto_symext::multi_formulas_get_next_formula()
-{
-  static unsigned int total_formulae = 0;
-  static int total_states = 0;
-
-  target = &art1->get_cur_state()._target;
-  art1->get_cur_state().execute_guard(ns, *target);
-  while(!art1->is_go_next_formula())
-  {
-    while (!art1->is_go_next_state())
-      symex_step(art1->_goto_functions, *art1);
-
-    art1->multi_formulae_go_next_state();
-    target = &art1->get_cur_state()._target;
-    total_states++;
-  }
-  art1->_go_next_formula = false;
-  total_formulae++;
-
-  return &art1->get_cur_state()._target;
-}
-
-bool
-goto_symext::restore_from_dfs_state(const reachability_treet::dfs_position &dfs)
-{
-  std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
-  unsigned int i;
-
-  // Symex repeatedly until context switch points. At each point, verify that it
-  // happened where we expected it to, and then switch to the correct thread for
-  // the history we've been provided with.
-  for (it = dfs.states.begin(), i = 0; it != dfs.states.end(); it++, i++) {
-
-    art1->_go_next = false;
-
-    while (!art1->is_go_next_state()) {
-      // Restore the DFS exploration space so that when an interleaving occurs
-      // we take the option leading to the thread we desire to run. This
-      // assumes that the DFS exploration path algorithm never changes.
-      // Has to occur here; between generating new threads, ESBMC messes with
-      // the dfs state.
-      for (int dfspos = 0; dfspos < art1->get_cur_state()._DFS_traversed.size();
-           dfspos++)
-        art1->get_cur_state()._DFS_traversed[dfspos] = true;
-      art1->get_cur_state()._DFS_traversed[it->cur_thread] = false;
-
-      symex_step(art1->_goto_functions, *art1);
-    }
-    art1->get_cur_state()._DFS_traversed = it->explored;
-
-    if (art1->get_cur_state()._threads_state.size() != it->num_threads) {
-      std::cerr << "Unexpected number of threads when reexploring checkpoint"
-                << std::endl;
-      abort();
-    }
-
-    art1->multi_formulae_go_next_state();
-
-    // check we're on the right thread; except on the last run, where there are
-    // no more threads to be run.
-    if (i + 1 < dfs.states.size())
-      assert(art1->get_cur_state().get_active_state_number() == it->cur_thread);
-
-#if 0
-// XXX jmorse: can't quite get these sequence numbers to line up when they're
-// replayed.
-    if (art1->get_cur_state().get_active_state().source.pc->location_number !=
-        it->location_number) {
-      std::cerr << "Interleave at unexpected location when restoring checkpoint"
-                << std::endl;
-      abort();
-    }
-#endif
-  }
-
-  return false;
-}
-
-void goto_symext::save_checkpoint(const std::string fname) const
-{
-
-  reachability_treet::dfs_position pos(*art1);
-  if (pos.write_to_file(fname))
-    std::cerr << "Couldn't save checkpoint; continuing" << std::endl;
-
+  // Irritatingly, assumption destroys its expr argument
+  exprt assumpt_dup = assumption;
+  target->assumption(cur_state->guard, assumpt_dup, cur_state->source);
   return;
 }
 
-/*******************************************************************\
-
-Function: goto_symext::operator()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::operator()(const goto_functionst &goto_functions)
+goto_symext::symex_resultt *
+goto_symext::get_symex_result(void)
 {
 
-  reachability_treet art(goto_functions, ns, options);
-
-  int total_states = 0;
-  while (art.has_more_states())
-  {
-    total_states++;
-    art.get_cur_state().execute_guard(ns, *target);
-    while (!art.is_go_next_state())
-    {
-      symex_step(goto_functions, art);
-    }
-
-    art.go_next_state();
-  }
+  return new goto_symext::symex_resultt(target, total_claims, remaining_claims);
 }
 
-/*******************************************************************\
+void
+goto_symext::symex_step(reachability_treet & art)
+{
 
-Function: goto_symext::symex_step
+  assert(!cur_state->call_stack.empty());
 
-  Inputs:
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::symex_step(
-        const goto_functionst &goto_functions,
-        reachability_treet & art) {
-
-  execution_statet &ex_state = art.get_cur_state();
-  statet &state = ex_state.get_active_state();
-
-  assert(!state.call_stack.empty());
-
-  const goto_programt::instructiont &instruction = *state.source.pc;
-
-  if (config.options.get_option("break-at") != "") {
-    int insn_num = strtol(config.options.get_option("break-at").c_str(), NULL, 10);
-    if (instruction.location_number == insn_num) {
-      // If you're developing ESBMC on a machine that isn't x86, I'll send you
-      // cookies.
-#ifndef _WIN32
-      __asm__("int $3");
-#else
-      std::cerr << "Can't trap on windows, sorry" << std::endl;
-      abort();
-#endif
-    }
-  }
-
-  merge_gotos(state, ex_state, ex_state.node_id);
+  merge_gotos();
 
   // depth exceeded?
   {
-      unsigned max_depth = atoi(options.get_option("depth").c_str());
-      if (max_depth != 0 && state.depth > max_depth)
-          state.guard.add(false_exprt());
-      state.depth++;
+    unsigned max_depth = atoi(options.get_option("depth").c_str());
+    if (max_depth != 0 && cur_state->depth > max_depth)
+      cur_state->guard.add(false_exprt());
+    cur_state->depth++;
   }
 
-  if (options.get_bool_option("symex-trace")) {
-    const goto_programt p_dummy;
-    goto_functions_templatet<goto_programt>::function_mapt::const_iterator it =
-      goto_functions.function_map.find(instruction.function);
+  // actually do instruction
+  switch (instruction.type) {
+  case SKIP:
+  case LOCATION:
+    // really ignore
+    cur_state->source.pc++;
+    break;
 
-    const goto_programt &p_real = it->second.body;
-    const goto_programt &p = (it == goto_functions.function_map.end()) ? p_dummy : p_real;
-    p.output_instruction(ns, "", std::cout, state.source.pc, false, false);
+  case END_FUNCTION:
+    symex_end_of_function();
+
+    // Potentially skip to run another function ptr target; if not,
+    // continue
+    if (!run_next_function_ptr_target(false))
+      cur_state->source.pc++;
+    break;
+
+  case GOTO:
+  {
+    exprt tmp(instruction.guard);
+    replace_dynamic_allocation(tmp);
+    replace_nondet(tmp);
+    dereference(tmp, false);
+
+    symex_goto(tmp);
   }
+  break;
 
-    // actually do instruction
-    switch (instruction.type) {
-        case SKIP:
-            // really ignore
-            state.source.pc++;
-            break;
-        case END_FUNCTION:
-            if(instruction.function == "c::main")
-            {
-                ex_state.end_thread(ns, *target);
-                ex_state.reexecute_instruction = false;
-                art.generate_states_base(exprt());
-                art.set_go_next_state();
-            }
-            else
-            {
-                symex_end_of_function(state);
-                state.source.pc++;
-            }
-            break;
-        case LOCATION:
-            target->location(state.guard, state.source);
-            state.source.pc++;
-            break;
-        case GOTO:
-        {
-            exprt tmp(instruction.guard);
-            replace_dynamic_allocation(state, tmp);
-            replace_nondet(tmp, ex_state);
-            dereference(tmp, state, false, ex_state.node_id);
+  case ASSUME:
+    if (!cur_state->guard.is_false()) {
+      exprt tmp(instruction.guard);
+      replace_dynamic_allocation(tmp);
+      replace_nondet(tmp);
+      dereference(tmp, false);
 
-            if(!tmp.is_nil() && !options.get_bool_option("deadlock-check"))
-            {
-              if(ex_state._threads_state.size() > 1)
-                if (art.generate_states_before_read(tmp))
-                  return;
-            }
+      exprt tmp1 = tmp;
+      cur_state->rename(tmp);
 
-            symex_goto(art.get_cur_state().get_active_state(), ex_state, ex_state.node_id);
-        }
-            break;
-        case ASSUME:
-            if (!state.guard.is_false()) {
-                exprt tmp(instruction.guard);
-                replace_dynamic_allocation(state, tmp);
-                replace_nondet(tmp, ex_state);
-                dereference(tmp, state, false, ex_state.node_id);
+      do_simplify(tmp);
+      if (!tmp.is_true()) {
+	exprt tmp2 = tmp;
+	cur_state->guard.guard_expr(tmp2);
 
-                exprt tmp1 = tmp;
-                state.rename(tmp, ns,ex_state.node_id);
+	assume(tmp2);
 
-                do_simplify(tmp);
-                if (!tmp.is_true())
-                {
-                  if(ex_state._threads_state.size() > 1)
-                    if (art.generate_states_before_read(tmp1))
-                      return;
-
-                    exprt tmp2 = tmp;
-                    state.guard.guard_expr(tmp2);
-                    target->assumption(state.guard, tmp2, state.source);
-
-                    // we also add it to the state guard
-                    state.guard.add(tmp);
-                }
-            }
-            state.source.pc++;
-            break;
-
-        case ASSERT:
-            if (!state.guard.is_false()) {
-                if (!options.get_bool_option("no-assertions") ||
-                        !state.source.pc->location.user_provided()
-                        || options.get_bool_option("deadlock-check")) {
-
-                    std::string msg = state.source.pc->location.comment().as_string();
-                    if (msg == "") msg = "assertion";
-                    exprt tmp(instruction.guard);
-
-                    replace_dynamic_allocation(state, tmp);
-                    replace_nondet(tmp, ex_state);
-                    dereference(tmp, state, false, ex_state.node_id);
-
-                    if(ex_state._threads_state.size() > 1)
-                      if (art.generate_states_before_read(tmp))
-                        return;
-
-                    claim(tmp, msg, state, ex_state.node_id);
-                }
-            }
-            state.source.pc++;
-            break;
-
-        case RETURN:
-        	 if(!state.guard.is_false())
-                         symex_return(state, ex_state, ex_state.node_id);
-
-            state.source.pc++;
-            break;
-
-        case ASSIGN:
-            if (!state.guard.is_false()) {
-                codet deref_code=instruction.code;
-                replace_dynamic_allocation(state, deref_code);
-                replace_nondet(deref_code, ex_state);
-                assert(deref_code.operands().size()==2);
-
-                dereference(deref_code.op0(), state, true, ex_state.node_id);
-                dereference(deref_code.op1(), state, false, ex_state.node_id);
-
-                symex_assign(state, ex_state, deref_code, ex_state.node_id);
-
-                state.source.pc++;
-
-                if(ex_state._threads_state.size() > 1)
-                {
-                  if (art.generate_states_before_assign(deref_code, ex_state))
-                    return;
-                }
-            }
-            else
-              state.source.pc++;
-            break;
-        case FUNCTION_CALL:
-            if (!state.guard.is_false())
-            {
-                code_function_callt deref_code =
-                        to_code_function_call(instruction.code);
-
-                replace_dynamic_allocation(state, deref_code);
-                replace_nondet(deref_code, ex_state);
-
-                if (deref_code.lhs().is_not_nil()) {
-                    dereference(deref_code.lhs(), state, true,ex_state.node_id);
-                }
-
-                dereference(deref_code.function(), state, false, ex_state.node_id);
-
-                if(deref_code.function().identifier() == "c::__ESBMC_yield")
-                {
-                   state.source.pc++;
-                   ex_state.reexecute_instruction = false;
-                   art.generate_states();
-                   return;
-                }
-
-                if (deref_code.function().identifier() == "c::__ESBMC_switch_to")
-                {
-                  state.source.pc++;
-                  ex_state.reexecute_instruction = false;
-
-                  assert(deref_code.arguments().size() == 1);
-
-                  // Switch to other thread.
-                  exprt &num = deref_code.arguments()[0];
-                  if (num.id() != "constant")
-                    throw "Can't switch to non-constant thread id no";
-
-                  unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
-                  ex_state.set_active_state(tid);
-                  return;
-                }
-
-                Forall_expr(it, deref_code.arguments()) {
-                    dereference(*it, state, false,ex_state.node_id);
-                }
-
-                symex_function_call(goto_functions, ex_state, deref_code);
-
-//                ex_state.reexecute_instruction = false;
-//                art.generate_states();
-
-            }
-            else
-            {
-                state.source.pc++;
-            }
-            break;
-
-        case OTHER:
-            if (!state.guard.is_false()) {
-                codet deref_code(instruction.code);
-                const irep_idt &statement = deref_code.get_statement();
-                if (statement == "cpp_delete" ||
-                        statement == "cpp_delete[]" ||
-                        statement == "free" ||
-                        statement == "printf") {
-                    replace_dynamic_allocation(state, deref_code);
-                    replace_nondet(deref_code, ex_state);
-                    dereference(deref_code, state, false,ex_state.node_id);
-                }
-
-                symex_other(goto_functions, state, ex_state,  ex_state.node_id);
-            }
-            state.source.pc++;
-            break;
-
-        case SYNC:
-            throw "SYNC not yet implemented";
-
-        case START_THREAD:
-        	if (!state.guard.is_false())
-        	{
-          	  assert(!instruction.targets.empty());
-          	  goto_programt::const_targett goto_target=instruction.targets.front();
-
-              state.source.pc++;
-              ex_state.add_thread(state);
-              ex_state.get_active_state().source.pc = goto_target;
-
-              //ex_state.deadlock_detection(ns,*target);
-              ex_state.update_trds_count(ns,*target);
-              ex_state.increament_trds_in_run(ns,*target);
-
-              ex_state.generating_new_threads = ex_state._threads_state.size() - 1;
-            }
-        	else
-        	{
-              assert(!instruction.targets.empty());
-              goto_programt::const_targett goto_target=instruction.targets.front();
-              state.source.pc = goto_target;
-            }
-
-            ex_state.reexecute_instruction = false;
-            art.generate_states();
-            art.set_go_next_state();
-
-            break;
-        case END_THREAD:
-            ex_state.end_thread(ns, *target);
-            ex_state.reexecute_instruction = false;
-            art.generate_states();
-            break;
-        case ATOMIC_BEGIN:
-            state.source.pc++;
-            ex_state.increment_active_atomic_number();
-            break;
-        case ATOMIC_END:
-            ex_state.decrement_active_atomic_number();
-            state.source.pc++;
-            ex_state.reexecute_instruction = false;
-            art.generate_states();
-            break;
-        default:
-            assert(false);
+	// we also add it to the state guard
+	cur_state->guard.add(tmp);
+      }
     }
+    cur_state->source.pc++;
+    break;
+
+  case ASSERT:
+    if (!cur_state->guard.is_false()) {
+      if (!options.get_bool_option("no-assertions") ||
+          !cur_state->source.pc->location.user_provided()
+          || options.get_bool_option("deadlock-check")) {
+
+	std::string msg = cur_state->source.pc->location.comment().as_string();
+	if (msg == "") msg = "assertion";
+	exprt tmp(instruction.guard);
+
+	replace_dynamic_allocation(tmp);
+	replace_nondet(tmp);
+	dereference(tmp, false);
+
+	claim(tmp, msg);
+      }
+    }
+    cur_state->source.pc++;
+    break;
+
+  case RETURN:
+    if (!cur_state->guard.is_false()) {
+      const code_returnt &code =
+        to_code_return(instruction.code);
+      code_assignt assign;
+      if (make_return_assignment(assign, code))
+	goto_symext::symex_assign(assign);
+      symex_return();
+    }
+
+    cur_state->source.pc++;
+    break;
+
+  case ASSIGN:
+    if (!cur_state->guard.is_false()) {
+      codet deref_code = instruction.code;
+      replace_dynamic_allocation(deref_code);
+      replace_nondet(deref_code);
+      assert(deref_code.operands().size() == 2);
+
+      dereference(deref_code.op0(), true);
+      dereference(deref_code.op1(), false);
+
+      symex_assign(deref_code);
+    }
+    cur_state->source.pc++;
+    break;
+
+  case FUNCTION_CALL:
+    if (!cur_state->guard.is_false()) {
+      code_function_callt deref_code =
+        to_code_function_call(instruction.code);
+
+      replace_dynamic_allocation(deref_code);
+      replace_nondet(deref_code);
+
+      if (deref_code.lhs().is_not_nil()) {
+	dereference(deref_code.lhs(), true);
+      }
+
+      Forall_expr(it, deref_code.arguments()) {
+	dereference(*it, false);
+      }
+
+      if (has_prefix(deref_code.function().identifier().as_string(),
+                     "c::__ESBMC")) {
+	cur_state->source.pc++;
+	run_intrinsic(deref_code, art,
+	              deref_code.function().identifier().as_string());
+	return;
+      }
+
+      symex_function_call(deref_code);
+    } else   {
+      cur_state->source.pc++;
+    }
+    break;
+
+  case OTHER:
+    if (!cur_state->guard.is_false()) {
+      symex_other();
+    }
+    cur_state->source.pc++;
+    break;
+
+  default:
+    std::cerr << "GOTO instruction type " << instruction.type;
+    std::cerr << " not handled in goto_symext::symex_step" << std::endl;
+    abort();
+  }
+}
+
+void
+goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
+  const std::string symname)
+{
+
+  if (symname == "c::__ESBMC_yield") {
+    intrinsic_yield(art);
+  } else if (symname == "c::__ESBMC_switch_to") {
+    intrinsic_switch_to(call, art);
+  } else if (symname == "c::__ESBMC_switch_away_from") {
+    intrinsic_switch_from(art);
+  } else if (symname == "c::__ESBMC_get_thread_id") {
+    intrinsic_get_thread_id(call, art);
+  } else if (symname == "c::__ESBMC_set_thread_internal_data") {
+    intrinsic_set_thread_data(call, art);
+  } else if (symname == "c::__ESBMC_get_thread_internal_data") {
+    intrinsic_get_thread_data(call, art);
+  } else if (symname == "c::__ESBMC_spawn_thread") {
+    intrinsic_spawn_thread(call, art);
+  } else if (symname == "c::__ESBMC_terminate_thread") {
+    intrinsic_terminate_thread(art);
+  } else if (symname == "c::__ESBMC_get_thread_state") {
+    intrinsic_get_thread_state(call, art);
+  } else {
+    std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
+    std::cerr << std::endl << "The name in question: " << symname << std::endl;
+    std::cerr <<
+    "(NB: the C spec reserves the __ prefix for the compiler and environment)"
+              << std::endl;
+    abort();
+  }
+
+  return;
 }

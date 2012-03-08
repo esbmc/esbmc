@@ -16,8 +16,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <namespace.h>
 
-typedef enum { NO_INSTRUCTION_TYPE, GOTO, ASSUME, ASSERT, OTHER, SYNC, SKIP,
-               START_THREAD, END_THREAD, LOCATION, END_FUNCTION,
+typedef enum { NO_INSTRUCTION_TYPE, GOTO, ASSUME, ASSERT, OTHER, SKIP,
+               LOCATION, END_FUNCTION,
                ATOMIC_BEGIN, ATOMIC_END, RETURN, ASSIGN,
                FUNCTION_CALL }
   goto_program_instruction_typet;
@@ -173,11 +173,8 @@ public:
     inline bool is_other        () const { return type==OTHER;         }
     inline bool is_assume       () const { return type==ASSUME;        }
     inline bool is_assert       () const { return type==ASSERT;        }
-    inline bool is_sync         () const { return type==SYNC;          }
     inline bool is_atomic_begin () const { return type==ATOMIC_BEGIN;  }
     inline bool is_atomic_end   () const { return type==ATOMIC_END;    }
-    inline bool is_start_thread () const { return type==START_THREAD;  }
-    inline bool is_end_thread   () const { return type==END_THREAD;    }
     inline bool is_end_function () const { return type==END_FUNCTION;  }
 
     instructiont():
@@ -281,20 +278,6 @@ public:
       if(!i.guard.is_true())
         successors.push_back(next);
     }
-    else if(i.is_start_thread())
-    {
-      for(typename targetst::const_iterator
-          t_it=i.targets.begin();
-          t_it!=i.targets.end();
-          t_it++)
-        successors.push_back(*t_it);
-  
-      successors.push_back(next);
-    }
-    else if(i.is_end_thread())
-    {
-      // no successors
-    }
     else if(i.is_return())
     {
       // the successor is the end_function at the end
@@ -326,20 +309,6 @@ public:
   
       if(!i.guard.is_true())
         successors.push_back(next);
-    }
-    else if(i.is_start_thread())
-    {
-      for(typename targetst::const_iterator
-          t_it=i.targets.begin();
-          t_it!=i.targets.end();
-          t_it++)
-        successors.push_back(*t_it);
-  
-      successors.push_back(next);
-    }
-    else if(i.is_end_thread())
-    {
-      // no successors
     }
     else if(i.is_return())
     {
@@ -535,7 +504,7 @@ void goto_program_templatet<codeT, guardT>::compute_targets()
       i_it=instructions.begin();
       i_it!=instructions.end();
       i_it++)
-    if(i_it->is_goto() || i_it->is_start_thread())
+    if(i_it->is_goto())
       for(typename instructiont::targetst::const_iterator
           t_it=i_it->targets.begin();
           t_it!=i_it->targets.end();

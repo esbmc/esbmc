@@ -17,7 +17,6 @@ void *thread2(void *arg)
 {
   pthread_mutex_lock(&mutex);
   esbmc=2;
-  __ESBMC_assert(esbmc==2, "test");
   pthread_mutex_unlock(&mutex);
 }
 
