@@ -420,11 +420,25 @@ goto_symext::intrinsic_really_atomic_end(reachability_treet &art)
 void
 goto_symext::intrinsic_switch_to_monitor(reachability_treet &art)
 {
+  execution_statet &ex_state = art.get_cur_state();
+
+  if (ex_state.monitor_tid != ex_state.get_active_state_number())
+    art.get_cur_state().switch_to_thread(ex_state.monitor_tid);
+  else
+    assert(0 && "Switching to monitor thread from self\n");
+
+  return;
 }
 
 void
 goto_symext::intrinsic_switch_from_monitor(reachability_treet &art)
 {
+  execution_statet &ex_state = art.get_cur_state();
+
+  assert(ex_state.monitor_tid == ex_state.get_active_state_number() &&
+         "Must call switch_from_monitor from monitor thread\n");
+
+  intrinsic_switch_from(art);
 }
 
 void
