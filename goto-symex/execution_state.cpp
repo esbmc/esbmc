@@ -44,6 +44,8 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   CS_number = 0;
   TS_number = 0;
   node_id = 0;
+  tid_is_set = false;
+  monitor_tid = 0;
   guard_execution = "execution_statet::\\guard_exec";
 
   goto_functionst::function_mapt::const_iterator it =
