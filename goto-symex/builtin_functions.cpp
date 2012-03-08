@@ -416,3 +416,18 @@ goto_symext::intrinsic_really_atomic_end(reachability_treet &art)
   art.get_cur_state().decrement_active_atomic_number();
   return;
 }
+
+void
+goto_symext::intrinsic_switch_to_monitor(reachability_treet &art)
+{
+}
+
+void
+goto_symext::intrinsic_switch_from_monitor(reachability_treet &art)
+{
+}
+
+void
+goto_symext::intrinsic_register_monitor(code_function_callt &call, reachability_treet &art)
+{
+}
