@@ -366,6 +366,10 @@ protected:
   void intrinsic_terminate_thread(reachability_treet &art);
   /** Perform get_thead_state... defunct. */
   void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
+  /** Really atomic start/end - atomic blocks that just disable ileaves. */
+  void intrinsic_really_atomic_begin(reachability_treet &art);
+  /** Really atomic start/end - atomic blocks that just disable ileaves. */
+  void intrinsic_really_atomic_end(reachability_treet &art);
 
   // dynamic stuff
   /**

@@ -251,6 +251,10 @@ goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
     intrinsic_terminate_thread(art);
   } else if (symname == "c::__ESBMC_get_thread_state") {
     intrinsic_get_thread_state(call, art);
+  } else if (symname == "c::__ESBMC_really_atomic_begin") {
+    intrinsic_really_atomic_begin(art);
+  } else if (symname == "c::__ESBMC_really_atomic_end") {
+    intrinsic_really_atomic_end(art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
     std::cerr << std::endl << "The name in question: " << symname << std::endl;

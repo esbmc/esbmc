@@ -400,3 +400,19 @@ goto_symext::intrinsic_get_thread_state(code_function_callt &call, reachability_
   symex_assign(assign);
   return;
 }
+
+void
+goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)
+{
+
+  art.get_cur_state().increment_active_atomic_number();
+  return;
+}
+
+void
+goto_symext::intrinsic_really_atomic_end(reachability_treet &art)
+{
+
+  art.get_cur_state().decrement_active_atomic_number();
+  return;
+}
