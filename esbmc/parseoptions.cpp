@@ -719,11 +719,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   new_insn.type = FUNCTION_CALL;
   new_insn.code = code_function_callt();
   new_insn.function = insn->function;
-  new_insn.code.op1() = symbol_exprt("c::__ESBMC_switch_to");
-  constant_exprt cexpr(typet("unsignedbv"));
-  cexpr.type().width(32);
-  cexpr.set_value(irep_idt("0"));
-  new_insn.code.op2().move_to_operands(cexpr);
+  new_insn.code.op1() = symbol_exprt("c::__ESBMC_switch_to_monitor");
   insn_list.insert(insn, new_insn);
 
   return;
