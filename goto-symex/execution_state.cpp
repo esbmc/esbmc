@@ -888,6 +888,12 @@ execution_statet::switch_to_monitor(void)
 void
 execution_statet::switch_away_from_monitor(void)
 {
+
+  // Occurs when we rerun the automata to discover whether or not the property
+  // has been violated or not.
+  if (threads_state[monitor_tid].thread_ended)
+    return;
+
   assert(tid_is_set && "Must set monitor thread before switching from mon\n");
   assert(mon_from_tid && "Switching from monitor without switching to\n");
 
