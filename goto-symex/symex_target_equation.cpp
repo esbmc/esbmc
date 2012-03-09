@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 
-#include <base_type.h>
 #include <i2string.h>
 #include <std_expr.h>
 #include <expr_util.h>
@@ -17,18 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_symex_state.h"
 #include "symex_target_equation.h"
-
-/*******************************************************************\
-
-Function: symex_target_equationt::assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose: write to a variable
-
-\*******************************************************************/
 
 void symex_target_equationt::assignment(
   const guardt &guard,
@@ -55,43 +42,6 @@ void symex_target_equationt::assignment(
   SSA_step.stack_trace = stack_trace;
 }
 
-/*******************************************************************\
-
-Function: symex_target_equationt::location
-
-  Inputs:
-
- Outputs:
-
- Purpose: just record a location
-
-\*******************************************************************/
-
-void symex_target_equationt::location(
-  const guardt &guard,
-  const sourcet &source)
-{
-  SSA_steps.push_back(SSA_stept());
-  SSA_stept &SSA_step=SSA_steps.back();
-
-  SSA_step.guard=guard.as_expr();
-  SSA_step.lhs.make_nil();
-  SSA_step.type=goto_trace_stept::LOCATION;
-  SSA_step.source=source;
-}
-
-/*******************************************************************\
-
-Function: symex_target_equationt::trace_event
-
-  Inputs:
-
- Outputs:
-
- Purpose: just record output
-
-\*******************************************************************/
-
 void symex_target_equationt::output(
   const guardt &guard,
   const sourcet &source,
@@ -109,18 +59,6 @@ void symex_target_equationt::output(
   SSA_step.format_string=fmt;
 }
 
-/*******************************************************************\
-
-Function: symex_target_equationt::assumption
-
-  Inputs: cond is destroyed
-
- Outputs:
-
- Purpose: record an assumption
-
-\*******************************************************************/
-
 void symex_target_equationt::assumption(
   const guardt &guard,
   exprt &cond,
@@ -135,18 +73,6 @@ void symex_target_equationt::assumption(
   SSA_step.type=goto_trace_stept::ASSUME;
   SSA_step.source=source;
 }
-
-/*******************************************************************\
-
-Function: symex_target_equationt::assertion
-
-  Inputs: cond is destroyed
-
- Outputs:
-
- Purpose: record an assertion
-
-\*******************************************************************/
 
 void symex_target_equationt::assertion(
   const guardt &guard,
@@ -164,19 +90,8 @@ void symex_target_equationt::assertion(
   SSA_step.type=goto_trace_stept::ASSERT;
   SSA_step.source=source;
   SSA_step.comment=msg;
+  SSA_step.stack_trace = stack_trace;
 }
-
-/*******************************************************************\
-
-Function: symex_target_equationt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_target_equationt::convert(
   prop_convt &prop_conv)
@@ -188,18 +103,6 @@ void symex_target_equationt::convert(
   convert_output(prop_conv);
 }
 
-/*******************************************************************\
-
-Function: symex_target_equationt::convert_assignments
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_target_equationt::convert_assignments(
   decision_proceduret &decision_procedure) const
 {
@@ -209,23 +112,10 @@ void symex_target_equationt::convert_assignments(
     if(it->is_assignment() && !it->ignore)
     {
       exprt tmp(it->cond);
-      ::base_type(tmp, ns);
       decision_procedure.set_to_true(tmp);
     }
   }
 }
-
-/*******************************************************************\
-
-Function: symex_target_equationt::convert_guards
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_target_equationt::convert_guards(
   prop_convt &prop_conv)
@@ -238,23 +128,10 @@ void symex_target_equationt::convert_guards(
     else
     {
       exprt tmp(it->guard);
-      ::base_type(tmp, ns);
       it->guard_literal=prop_conv.convert(tmp);
     }
   }
 }
-
-/*******************************************************************\
-
-Function: symex_target_equationt::convert_assumptions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_target_equationt::convert_assumptions(
   prop_convt &prop_conv)
@@ -269,7 +146,6 @@ void symex_target_equationt::convert_assumptions(
       else
       {
         exprt tmp(it->cond);
-        ::base_type(tmp, ns);
         it->cond_literal=prop_conv.convert(tmp);
       }
     }
@@ -302,7 +178,6 @@ void symex_target_equationt::convert_assertions(
     if(it->is_assert())
     {
       exprt tmp(it->cond);
-      ::base_type(tmp, ns);
 
       // do the expression
       literalt tmp_literal=prop_conv.convert(tmp);
@@ -346,7 +221,6 @@ void symex_target_equationt::convert_output(
           o_it++)
       {
         exprt tmp=*o_it;
-        ::base_type(tmp, ns);
         if(tmp.is_constant() ||
            tmp.id()=="string-constant")
           it->converted_output_args.push_back(tmp);
@@ -416,7 +290,6 @@ void symex_target_equationt::SSA_stept::output(
   {
   case goto_trace_stept::ASSERT: out << "ASSERT" << std::endl; break;
   case goto_trace_stept::ASSUME: out << "ASSUME" << std::endl; break;
-  case goto_trace_stept::LOCATION: out << "LOCATION" << std::endl; break;
   case goto_trace_stept::OUTPUT: out << "OUTPUT" << std::endl; break;
 
   case goto_trace_stept::ASSIGNMENT:
@@ -443,80 +316,6 @@ void symex_target_equationt::SSA_stept::output(
   out << "Guard: " << from_expr(ns, "", guard) << std::endl;
 }
 
-bool symex_target_equationt::SSA_stept::operator<(const SSA_stept p2) const
-{
-
-  if (type < p2.type)
-    return true;
-  else if (type != p2.type)
-    return false;
-
-  if (guard < p2.guard)
-    return true;
-  else if (p2.guard < guard)
-    return false;
-
-  switch (type) {
-  case goto_trace_stept::ASSERT:
-  case goto_trace_stept::ASSUME:
-
-    if (cond < p2.cond)
-      return true;
-    else if (p2.cond < cond)
-      return false;
-
-    if (comment < p2.comment)
-      return true;
-    return false;
-
-  case goto_trace_stept::OUTPUT:
-
-    if (format_string < p2.format_string)
-      return true;
-    else if (p2.format_string < format_string)
-      return false;
-
-    /* So the format string is the same, how on earth does one compare two
-     * lists? XXX - do this in the future. Shouldn't affect any operation for
-     * now */
-    return false;
-
-  case goto_trace_stept::LOCATION:
-
-    if (source < p2.source)
-      return true;
-    else if (p2.source < source)
-      return false;
-
-    return false; /* XXX - what else? */
-
-  case goto_trace_stept::ASSIGNMENT:
-
-    if (lhs < p2.lhs)
-      return true;
-    else if (p2.lhs < lhs)
-      return false;
-
-    if (rhs < p2.rhs)
-      return true;
-    else if (p2.rhs < rhs)
-      return false;
-
-    if (original_lhs < p2.original_lhs)
-      return true;
-    else if (p2.original_lhs < original_lhs)
-      return false;
-
-    if (assignment_type < p2.assignment_type)
-      return true;
-    else if (p2.assignment_type < assignment_type)
-      return false;
-
-    return false;
-  }
-
-  return false;
-}
 /*******************************************************************\
 
 Function: operator <<
@@ -535,75 +334,4 @@ std::ostream &operator<<(
 {
   equation.output(out);
   return out;
-}
-
-exprt
-symex_target_equationt::reconstruct_expr_from_SSA(const exprt expr)
-{
-  exprt tmp;
-
-  if (expr.id() == exprt::symbol)
-    return reconstruct_expr_from_SSA(expr.identifier().as_string());
-
-  tmp = expr;
-  tmp.operands().clear();
-
-  forall_operands(it, expr) {
-    exprt ex = reconstruct_expr_from_SSA(*it);
-    tmp.move_to_operands(ex);
-  }
-
-  return tmp;
-}
-
-exprt
-symex_target_equationt::reconstruct_expr_from_SSA(std::string name)
-{
-  exprt expr;
-  size_t pos;
-  std::string step_name;
-
-  /* Unfortunately we need to sanitise the name */
-  pos = name.find("'");
-  if (pos == std::string::npos)
-    pos = name.find("&");
-
-  std::string tmp = name.substr(0, pos);
-
-  /* Do we have a trailing # character? */
-  pos = name.rfind("#");
-  if (pos != std::string::npos)
-    tmp = tmp + "#" + name[pos+1];
-
-  step_name = tmp;
-
-  /* First, find this SSA step */
-  SSA_stepst::iterator it = SSA_steps.begin();
-  for (; it != SSA_steps.end(); it++) {
-    if (it->type != goto_trace_stept::ASSIGNMENT)
-      continue;
-
-    assert(it->lhs.id() == exprt::symbol);
-    if (it->lhs.identifier().as_string() == step_name)
-      break;
-  }
-
-  if (it == SSA_steps.end()) {
-    /* there's an unpleasent situation where we can reference variables that
-     * were assigned via an ASSUME instruction: that means that their value is
-     * convoluted and nondeterministic, we can't extract anything worthwhile
-     * from it, and we may as well just use the symbol as the state
-     * representation. Ugh. */
-    return symbol_exprt("nonexist(" + name + ")");
-  }
-
-  /* Duplicate its rhs, and for each symbol in there, recurse */
-  expr = it->rhs;
-  expr.operands().clear();
-  forall_operands(op_iter, it->rhs) {
-    exprt ex = reconstruct_expr_from_SSA(*op_iter);
-    expr.move_to_operands(ex);
-  }
-
-  return expr;
 }

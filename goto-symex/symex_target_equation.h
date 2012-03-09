@@ -46,11 +46,6 @@ public:
     std::vector<dstring> stack_trace,
     assignment_typet assignment_type);
     
-  // just record a location
-  virtual void location(
-    const guardt &guard,
-    const sourcet &source);
-  
   // output
   virtual void output(
     const guardt &guard,
@@ -96,7 +91,6 @@ public:
     bool is_assert() const     { return type==goto_trace_stept::ASSERT; }
     bool is_assume() const     { return type==goto_trace_stept::ASSUME; }
     bool is_assignment() const { return type==goto_trace_stept::ASSIGNMENT; }
-    bool is_location() const   { return type==goto_trace_stept::LOCATION; }
     bool is_output() const     { return type==goto_trace_stept::OUTPUT; }
     
     exprt guard;
@@ -130,8 +124,6 @@ public:
     void output(
       const namespacet &ns,
       std::ostream &out) const;
-
-    bool operator<(const SSA_stept s2) const;
   };
   
   unsigned count_ignored_SSA_steps() const
@@ -147,9 +139,6 @@ public:
   typedef std::list<SSA_stept> SSA_stepst;
   SSA_stepst SSA_steps;
 
-  exprt reconstruct_expr_from_SSA(std::string step_name);
-  exprt reconstruct_expr_from_SSA(exprt e);
-  
   SSA_stepst::iterator get_SSA_step(unsigned s)
   {
     SSA_stepst::iterator it=SSA_steps.begin();
@@ -168,6 +157,14 @@ public:
     SSA_steps.clear();
   }
   
+  virtual symex_targett *clone(void) const
+  {
+    // No pointers or anything that requires ownership modification, can just
+    // duplicate self.
+    return new symex_target_equationt(*this);
+  }
+
+
 protected:
   const namespacet &ns;
 };

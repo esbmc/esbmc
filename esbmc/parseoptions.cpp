@@ -24,6 +24,7 @@ extern "C" {
 }
 #endif
 
+#include <irep.h>
 #include <config.h>
 #include <expr_util.h>
 
@@ -352,6 +353,8 @@ Function: cbmc_parseoptionst::doit
 
 int cbmc_parseoptionst::doit()
 {
+  goto_functionst goto_functions;
+
   if(cmdline.isset("version"))
   {
     std::cout << ESBMC_VERSION << std::endl;
@@ -371,14 +374,11 @@ int cbmc_parseoptionst::doit()
     return 1;
   }
 
-  bmct bmc(context, ui_message_handler);
-
   //
   // command line options
   //
 
-  get_command_line_options(bmc.options);
-  set_verbosity(bmc);
+  get_command_line_options(options);
   set_verbosity(*this);
 
   if(cmdline.isset("preprocess"))
@@ -387,9 +387,7 @@ int cbmc_parseoptionst::doit()
     return 0;
   }
 
-  goto_functionst goto_functions;
-
-  if(get_goto_program(bmc, goto_functions))
+  if(get_goto_program(goto_functions))
     return 6;
 
   if(cmdline.isset("show-claims"))
@@ -405,6 +403,9 @@ int cbmc_parseoptionst::doit()
   // slice according to property
 
   // do actual BMC
+  bmct bmc(goto_functions, options, context, ui_message_handler);
+  get_command_line_options(bmc.options);
+  set_verbosity(bmc);
   return do_bmc(bmc, goto_functions);
 }
 
@@ -460,9 +461,7 @@ Function: cbmc_parseoptionst::get_goto_program
 
 \*******************************************************************/
 
-bool cbmc_parseoptionst::get_goto_program(
-  bmc_baset &bmc,
-  goto_functionst &goto_functions)
+bool cbmc_parseoptionst::get_goto_program(goto_functionst &goto_functions)
 {
   try
   {
@@ -504,11 +503,11 @@ bool cbmc_parseoptionst::get_goto_program(
       status("Generating GOTO Program");
 
       goto_convert(
-        context, bmc.options, goto_functions,
+        context, options, goto_functions,
         ui_message_handler);
     }
 
-    if(process_goto_program(bmc, goto_functions))
+    if(process_goto_program(goto_functions))
       return true;
   }
 
@@ -863,9 +862,33 @@ Function: cbmc_parseoptionst::process_goto_program
 
 \*******************************************************************/
 
-bool cbmc_parseoptionst::process_goto_program(
-  bmc_baset &bmc,
-  goto_functionst &goto_functions)
+static void
+relink_calls_from_to(irept &irep, irep_idt from_name, irep_idt to_name)
+{
+
+   if (irep.id() == "symbol") {
+    if (irep.identifier() == from_name)
+      irep.identifier(to_name);
+
+    return;
+  } else {
+    Forall_irep(it, irep.get_sub()) {
+      relink_calls_from_to(*it, from_name, to_name);
+    }
+
+    Forall_named_irep(it, irep.get_named_sub()) {
+      relink_calls_from_to(it->second, from_name, to_name);
+    }
+
+    Forall_named_irep(it, irep.get_comments()) {
+      relink_calls_from_to(it->second, from_name, to_name);
+    }
+  }
+
+  return;
+}
+
+bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
 {
   try
   {
@@ -874,10 +897,6 @@ bool cbmc_parseoptionst::process_goto_program(
       string_instrumentation(
         context, *get_message_handler(), goto_functions);
     }
-
-    remove_function_pointers(
-      context, bmc.options, goto_functions,
-      ui_message_handler);
 
     namespacet ns(context);
 
@@ -888,7 +907,7 @@ bool cbmc_parseoptionst::process_goto_program(
     if(!cmdline.isset("show-features"))
     {
       // add generic checks
-      goto_check(ns, bmc.options, goto_functions);
+      goto_check(ns, options, goto_functions);
     }
 
     if(cmdline.isset("string-abstraction"))
@@ -913,10 +932,10 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // add pointer checks
     pointer_checks(
-      goto_functions, ns, bmc.options, value_set_analysis);
+      goto_functions, ns, options, value_set_analysis);
 
     // add failed symbols
-    add_failed_symbols(context);
+    add_failed_symbols(context, ns);
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions);
@@ -947,17 +966,10 @@ bool cbmc_parseoptionst::process_goto_program(
       return true;
     }
 
-    // show it?
-    if(cmdline.isset("show-goto-functions"))
-    {
-      goto_functions.output(ns, std::cout);
-      return true;
-    }
-
     if(cmdline.isset("show-features"))
     {
       // add generic checks
-      goto_check(ns, bmc.options, goto_functions);
+      goto_check(ns, options, goto_functions);
       return true;
     }
 
@@ -967,6 +979,42 @@ bool cbmc_parseoptionst::process_goto_program(
       return true;
     }
 
+    // Rename pthread functions depending on whether we're doing deadlock
+    // checking or not.
+    if (options.get_bool_option("deadlock-check")) {
+      goto_functionst::function_mapt::iterator checkit;
+      irep_idt mutex_lock("c::pthread_mutex_lock");
+      irep_idt lock_check("c::pthread_mutex_lock_check");
+
+      checkit = goto_functions.function_map.begin();
+      for (; checkit != goto_functions.function_map.end(); checkit++) {
+        goto_programt::instructionst::iterator it =
+          checkit->second.body.instructions.begin();
+        for (; it != checkit->second.body.instructions.end(); it++) {
+          relink_calls_from_to(it->code, mutex_lock, lock_check);
+          relink_calls_from_to(it->guard, mutex_lock, lock_check);
+        }
+      }
+
+      irep_idt cond_wait("c::pthread_cond_wait");
+      irep_idt cond_check("c::pthread_cond_wait_check");
+      checkit = goto_functions.function_map.begin();
+      for (; checkit != goto_functions.function_map.end(); checkit++) {
+        goto_programt::instructionst::iterator it =
+          checkit->second.body.instructions.begin();
+        for (; it != checkit->second.body.instructions.end(); it++) {
+          relink_calls_from_to(it->code, cond_wait, cond_check);
+          relink_calls_from_to(it->guard, cond_wait, cond_check);
+        }
+      }
+    }
+
+    // show it?
+    if(cmdline.isset("show-goto-functions"))
+    {
+      goto_functions.output(ns, std::cout);
+      return true;
+    }
   }
 
   catch(const char *e)
@@ -1002,7 +1050,7 @@ Function: cbmc_parseoptionst::do_bmc
 \*******************************************************************/
 
 int cbmc_parseoptionst::do_bmc(
-  bmc_baset &bmc1,
+  bmct &bmc1,
   const goto_functionst &goto_functions)
 {
   bmc1.set_ui(get_ui());

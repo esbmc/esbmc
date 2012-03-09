@@ -39,32 +39,11 @@ void base_type(typet &type, const namespacet &ns)
       return;
     }
   }
-  //else if(src.id()=="dependent")
-  //  dest=src.find("subtype");
   else if(type.id()=="subtype")
   {
     typet tmp;
     tmp.swap(type.subtype());
     type.swap(tmp);
-  }
-#if 0
-// Disabled by jmorse - no-where else in ESBMC is "predicate" used.
-  else if(type.id()=="predicate")
-  {
-    exprt &predicate=(exprt &)type.add("predicate");
-    base_type(predicate.type(), ns);
-    assert(predicate.type().id()=="mapping");
-    typet tmp;
-    tmp.swap(predicate.type().subtypes()[0]);
-    type.swap(tmp);
-    base_type(type, ns); // recursive call
-  }
-#endif
-  else if(type.id()=="mapping")
-  {
-    assert(type.subtypes().size()==2);
-    base_type(type.subtypes()[0], ns);
-    base_type(type.subtypes()[1], ns);
   }
   else if(type.is_array())
   {

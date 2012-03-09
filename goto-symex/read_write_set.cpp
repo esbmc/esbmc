@@ -7,7 +7,7 @@
 
 #include "read_write_set.h"
 
-read_write_set::read_write_set(const read_write_set& orig) {
+read_write_set::read_write_set(const read_write_set& orig __attribute__((unused))) {
 }
 
 read_write_set::~read_write_set() {

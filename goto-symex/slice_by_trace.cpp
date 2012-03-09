@@ -35,8 +35,7 @@ Function: slice_by_trace
 \*******************************************************************/
 
 void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
-					   symex_target_equationt &equation,
-					   const namespacet &ns)
+					   symex_target_equationt &equation)
 {
   std::cout << "Slicing by trace..." << std::endl;
 
@@ -53,7 +52,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
 
     read_trace(filename);
     
-    compute_ts_back(equation, ns);
+    compute_ts_back(equation);
     
     exprt t_copy (t[0]);
     trace_conditions.push_back(t_copy);
@@ -98,7 +97,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
     }
   }
  
-  slice_SSA_steps(equation, implications, ns); // Slice based on implications
+  slice_SSA_steps(equation, implications); // Slice based on implications
 
   guardt t_guard;
   t_guard.make_true();
@@ -265,9 +264,7 @@ Function: compute_ts_back
 
 \*******************************************************************/
 
-void symex_slice_by_tracet::compute_ts_back(
-  symex_target_equationt &equation,
-  const namespacet &ns)
+void symex_slice_by_tracet::compute_ts_back(symex_target_equationt &equation)
 {
   size_t merge_count = 0;
 
@@ -383,24 +380,6 @@ void symex_slice_by_tracet::compute_ts_back(
 
 /*******************************************************************\
 
-Function: compute_ts_fd
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void symex_slice_by_tracet::compute_ts_fd(
-  symex_target_equationt &equation,
-  const namespacet &ns)
-{
-}
-
-/*******************************************************************\
-
 Function:  slice_SSA_steps
 
   Inputs:
@@ -413,8 +392,7 @@ Function:  slice_SSA_steps
 
 void symex_slice_by_tracet::slice_SSA_steps(
   symex_target_equationt &equation, 
-  std::set<exprt> implications,
-  const namespacet &ns)
+  std::set<exprt> implications)
 {
   //Some statistics for our benefit.
   size_t conds_seen = 0;
@@ -432,8 +410,6 @@ void symex_slice_by_tracet::slice_SSA_steps(
   {
     if (it->is_output())
       trace_SSA_steps++;
-    if (it->is_location())
-      location_SSA_steps++;
     bool sliced_SSA_step = false;
     exprt guard (it->guard);
     simplify(guard);
@@ -447,7 +423,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
 	it->rhs.make_true();
 	it->guard.make_false();
 	sliced_SSA_steps++;
-	if (it->is_output() || it->is_location())
+	if (it->is_output())
 	  trace_loc_sliced++;
 	sliced_SSA_step = true;
       }
@@ -461,7 +437,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
 	  it->rhs.make_true();
 	  it->guard.make_false();
 	  sliced_SSA_steps++;
-	  if (it->is_output() || it->is_location())
+	  if (it->is_output())
 	    trace_loc_sliced++;
 	  sliced_SSA_step = true;
 	  break; // Sliced, so no need to consider the rest
