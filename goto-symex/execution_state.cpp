@@ -868,6 +868,11 @@ void
 execution_statet::switch_to_monitor(void)
 {
 
+  if (threads_state[monitor_tid].thread_ended) {
+    std::cout << "Switching to ended monitor; you need to set its unwind bound to uliminted" << std::endl;
+    abort();
+  }
+
   assert(tid_is_set && "Must set monitor thread before switching to monitor\n");
   assert(!mon_from_tid &&"Switching to monitor without having switched away\n");
 
