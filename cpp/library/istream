@@ -41,7 +41,7 @@ namespace esbmc
 	void esbmc_read_double(int is,  double& d);
 }
 
-namespace std{
+namespace std {
 
 inline istream& operator >> (istream& is, char& c)
 {
@@ -49,9 +49,15 @@ inline istream& operator >> (istream& is, char& c)
 	return is;
 }
 
-inline istream& operator >> (istream& is, char c[])
+template <class T>
+T operator >> (istream& is, char c[]) {
+  return is;
+}
+
+inline bool operator >> (istream& is, char c[])
 {
-	return is;
+//	return is;
+	return nondet_bool();
 }
 
 inline istream& operator >> (istream& is, int& i)
