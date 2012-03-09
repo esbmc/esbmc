@@ -435,6 +435,9 @@ class execution_statet : public goto_symext
    */
   void print_stack_traces(const namespacet &ns, unsigned int indent = 0) const;
 
+  void switch_to_monitor(void);
+  void switch_away_from_monitor(void);
+
   public:
 
   /** Pointer to reachability_treet that owns this ex_state */
@@ -484,6 +487,10 @@ class execution_statet : public goto_symext
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */
   bool tid_is_set;
+  /** TID of thread that switched to monitor */
+  unsigned int monitor_from_tid;
+  /** Whether monitor_from_tid is set */
+  bool mon_from_tid;
 
   protected:
   /** Number of context switches performed by this ex_state */

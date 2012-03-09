@@ -46,6 +46,8 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   node_id = 0;
   tid_is_set = false;
   monitor_tid = 0;
+  mon_from_tid = false;
+  monitor_from_tid = 0;
   guard_execution = "execution_statet::\\guard_exec";
 
   goto_functionst::function_mapt::const_iterator it =
@@ -858,6 +860,35 @@ execution_statet::print_stack_traces(const namespacet &ns,
   }
 
   return;
+}
+
+void
+execution_statet::switch_to_monitor(void)
+{
+
+  assert(tid_is_set && "Must set monitor thread before switching to monitor\n");
+  assert(!mon_from_tid &&"Switching to monitor without having switched away\n");
+
+  monitor_from_tid = active_thread;
+  mon_from_tid = true;
+
+  if (monitor_tid != get_active_state_number())
+    switch_to_thread(monitor_tid);
+  else
+    assert(0 && "Switching to monitor thread from self\n");
+}
+
+void
+execution_statet::switch_away_from_monitor(void)
+{
+  assert(tid_is_set && "Must set monitor thread before switching from mon\n");
+  assert(mon_from_tid && "Switching from monitor without switching to\n");
+
+  assert(monitor_tid == active_thread &&
+         "Must call switch_from_monitor from monitor thread\n");
+
+  switch_to_thread(monitor_from_tid);
+  mon_from_tid = false;
 }
 
 bool execution_statet::expr_id_map_initialized = false;

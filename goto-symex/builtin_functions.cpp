@@ -421,14 +421,7 @@ void
 goto_symext::intrinsic_switch_to_monitor(reachability_treet &art)
 {
   execution_statet &ex_state = art.get_cur_state();
-
-  assert(ex_state.tid_is_set && "Must set monitor thread before switching to monitor\n");
-
-  if (ex_state.monitor_tid != ex_state.get_active_state_number())
-    art.get_cur_state().switch_to_thread(ex_state.monitor_tid);
-  else
-    assert(0 && "Switching to monitor thread from self\n");
-
+  ex_state.switch_to_monitor();
   return;
 }
 
@@ -436,13 +429,7 @@ void
 goto_symext::intrinsic_switch_from_monitor(reachability_treet &art)
 {
   execution_statet &ex_state = art.get_cur_state();
-
-  assert(ex_state.tid_is_set && "Must set monitor thread before switching from monitor\n");
-
-  assert(ex_state.monitor_tid == ex_state.get_active_state_number() &&
-         "Must call switch_from_monitor from monitor thread\n");
-
-  intrinsic_switch_from(art);
+  ex_state.switch_away_from_monitor();
 }
 
 void
