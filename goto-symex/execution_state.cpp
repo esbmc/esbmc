@@ -891,6 +891,16 @@ execution_statet::switch_away_from_monitor(void)
   mon_from_tid = false;
 }
 
+void
+execution_statet::kill_monitor_thread(void)
+{
+  assert(monitor_tid != active_thread &&
+         "You cannot kill monitor thread _from_ the monitor thread\n");
+
+  threads_state[monitor_tid].thread_ended = true;
+  return;
+}
+
 bool execution_statet::expr_id_map_initialized = false;
 
 execution_statet::ex_state_level2t::ex_state_level2t(

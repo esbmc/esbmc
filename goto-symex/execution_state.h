@@ -449,6 +449,8 @@ class execution_statet : public goto_symext
    */
   void switch_away_from_monitor(void);
 
+  void kill_monitor_thread(void);
+
   public:
 
   /** Pointer to reachability_treet that owns this ex_state */

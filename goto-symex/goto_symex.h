@@ -376,6 +376,8 @@ protected:
   void intrinsic_switch_from_monitor(reachability_treet &art);
   /** Register which thread is the monitor thread. */
   void intrinsic_register_monitor(code_function_callt &call, reachability_treet &art);
+  /** Terminate the monitor thread */
+  void intrinsic_kill_monitor(reachability_treet &art);
 
   // dynamic stuff
   /**

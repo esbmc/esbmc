@@ -455,3 +455,10 @@ goto_symext::intrinsic_register_monitor(code_function_callt &call, reachability_
   ex_state.monitor_tid = tid;
   ex_state.tid_is_set = true;
 }
+
+void
+goto_symext::intrinsic_kill_monitor(reachability_treet &art)
+{
+  execution_statet &ex_state = art.get_cur_state();
+  ex_state.kill_monitor_thread();
+}
