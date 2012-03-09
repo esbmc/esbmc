@@ -421,6 +421,11 @@ void
 goto_symext::intrinsic_switch_to_monitor(reachability_treet &art)
 {
   execution_statet &ex_state = art.get_cur_state();
+
+  // Don't do this if we're in the initialization function.
+  if (cur_state->source.pc->function == "main")
+    return;
+
   ex_state.switch_to_monitor();
   return;
 }
