@@ -645,7 +645,7 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
     return false;
   }
 
-  if (ex_state.tid_is_set && ex_state.monitor_tid == tid) {
+  if (ex.tid_is_set && ex.monitor_tid == tid) {
     if (!quiet)
       std::cout << "Can't context switch to a monitor thread" << std::endl;
     return false;
