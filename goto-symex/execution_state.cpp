@@ -136,6 +136,8 @@ execution_statet::operator=(const execution_statet &ex)
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
+  monitor_from_tid = ex.monitor_from_tid;
+  mon_from_tid = ex.mon_from_tid;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
