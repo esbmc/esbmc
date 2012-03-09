@@ -435,7 +435,18 @@ class execution_statet : public goto_symext
    */
   void print_stack_traces(const namespacet &ns, unsigned int indent = 0) const;
 
+  /** Switch to registered monitor thread.
+   *  Switches the currently executing thread to the monitor thread that's been
+   *  previously registered. This does not result in the context switch counter
+   *  being incremented. Stores which thread ID we switched from for a future
+   *  switch back. */
   void switch_to_monitor(void);
+
+  /** Switch away from registered monitor thread.
+   *  Switches away from the registered monitor thread, to whatever thread
+   *  caused switch_to_monitor to be called in the past
+   *  @see switch_to_monitor
+   */
   void switch_away_from_monitor(void);
 
   public:
