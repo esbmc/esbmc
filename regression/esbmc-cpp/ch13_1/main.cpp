@@ -2,7 +2,7 @@
 // A simple exception-handling example that checks for
 // divide-by-zero exceptions.
 #include <iostream>
-
+#include <cassert>
 using std::cout;
 using std::cin;
 using std::endl;
@@ -28,7 +28,7 @@ public:
 #endif
 
    DivideByZeroException()
-		:message("attempted to divide by zero"){}
+		:message("attempted to divide by zero"){assert(0);}
 
 	const char *whato() const
 		{return message;}
