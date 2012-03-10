@@ -241,6 +241,8 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state,
   for(; tid < ex_state.threads_state.size(); tid++)
   {
     /* For all threads: */
+    if (!check_thread_viable(tid, expr, true))
+      continue;
 
     if (!ex_state.dfs_explore_thread(tid))
       continue;
