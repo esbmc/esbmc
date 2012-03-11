@@ -169,14 +169,17 @@ void goto_symext::symex_cpp_new(
   symbol.lvalue=true;
   symbol.mode="C++";
   
+  typet newtype;
   if(do_array)
   {
-    symbol.type=array_typet();
-    symbol.type.subtype()=code.type().subtype();
-    symbol.type.size(code.size_irep());
+    newtype=array_typet();
+    newtype.subtype()=code.type().subtype();
+    newtype.size(code.size_irep());
   }
   else
-    symbol.type=code.type().subtype();
+    newtype=code.type().subtype();
+
+  symbol.type = ns.follow(newtype);
 
   //symbol.type.active(symbol_expr(active_symbol));
   symbol.type.dynamic(true);
