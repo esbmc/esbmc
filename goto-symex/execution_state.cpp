@@ -879,10 +879,15 @@ execution_statet::switch_to_monitor(void)
   monitor_from_tid = active_thread;
   mon_from_tid = true;
 
-  if (monitor_tid != get_active_state_number())
-    switch_to_thread(monitor_tid);
-  else
+  if (monitor_tid != get_active_state_number()) {
+    // Don't call switch_to_thread -- it'll execute the thread guard, which is
+    // an extremely bad plan.
+    last_active_thread = active_thread;
+    active_thread = monitor_tid;
+    cur_state = &threads_state[active_thread];
+  } else {
     assert(0 && "Switching to monitor thread from self\n");
+  }
 }
 
 void
@@ -900,7 +905,12 @@ execution_statet::switch_away_from_monitor(void)
   assert(monitor_tid == active_thread &&
          "Must call switch_from_monitor from monitor thread\n");
 
-  switch_to_thread(monitor_from_tid);
+  // Don't call switch_to_thread -- it'll execute the thread guard, which is
+  // an extremely bad plan.
+  last_active_thread = active_thread;
+  active_thread = monitor_from_tid;
+  cur_state = &threads_state[active_thread];
+
   mon_from_tid = false;
 }
 
