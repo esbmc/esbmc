@@ -885,6 +885,7 @@ execution_statet::switch_to_monitor(void)
     last_active_thread = active_thread;
     active_thread = monitor_tid;
     cur_state = &threads_state[active_thread];
+    cur_state->guard = threads_state[last_active_thread].guard;
   } else {
     assert(0 && "Switching to monitor thread from self\n");
   }
@@ -910,6 +911,8 @@ execution_statet::switch_away_from_monitor(void)
   last_active_thread = active_thread;
   active_thread = monitor_from_tid;
   cur_state = &threads_state[active_thread];
+
+  cur_state->guard = threads_state[monitor_tid].guard;
 
   mon_from_tid = false;
 }
