@@ -703,7 +703,9 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   std::set<std::pair<std::string, exprt> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
     std::string prop_name = "c::" + trig_it->first + "_status";
-    new_insn.code = code_assignt(symbol_exprt(prop_name, typet("bool")), trig_it->second);
+    exprt cast = typecast_exprt(signedbv_typet(32));
+    cast.op0() = trig_it->second;
+    new_insn.code = code_assignt(symbol_exprt(prop_name, signedbv_typet(32)), cast);
     new_insn.function = insn->function;
 
     // new_insn location field not set - I believe it gets numbered later.
