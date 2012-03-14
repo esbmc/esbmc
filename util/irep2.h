@@ -120,3 +120,28 @@ protected:
 public:
   virtual expr2t *clone(void) const;
 };
+
+class constant_array2t : constant2t
+{
+protected:
+  constant_array2t(const type2t &type, const std::vector<exprt *> &members);
+  constant_array2t(const constant_array2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  std::vector<exprt *> datatype_members;
+};
+
+class constant_array_of2t : constant2t
+{
+protected:
+  constant_array2t(const type2t &type, const expr2t *initializer);
+  constant_array2t(const constant_array_of2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  // Type records the size of the array; this records the initializer.
+  const exprt *initializer;
+};
