@@ -70,3 +70,17 @@ protected:
   /** Arbitary precision integer record. */
   BigInt constant_value;
 };
+
+/** Constant class for string constants. */
+class constant_string2t : constant2t
+{
+protected:
+  constant_string2t(const std::string stringref &ref);
+  constant_string2t(const constant_string2t &ref);
+
+  /** Concrete clone implementation. */
+  virtual expr2t *clone(void) const;
+
+  /** Arbitary precision integer record. */
+  const std::string value;
+};
