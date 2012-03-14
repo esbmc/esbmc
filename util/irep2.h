@@ -145,3 +145,17 @@ public:
   // Type records the size of the array; this records the initializer.
   const exprt *initializer;
 };
+
+class symbol2t : expr2t
+{
+protected:
+  symbol2t(const type2t &type, const std::string &name);
+  symbol2t(const symbol2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  // Symbol name - only so long as a symbol is a string. In the future, this
+  // should really really change.
+  const std::string name;
+};
