@@ -41,3 +41,16 @@ public:
   /** Type of this expr. All exprs have a type. */
   const type2t &type;
 };
+
+/** Constant class type. Not designed to contain any piece of data or method in
+ *  particular, but allows for additional type safety. */
+class constant2t : expr2t
+{
+protected:
+  constant2t(type2t &type, expr_ids id);
+  constant2t(const constant2t &ref);
+
+public:
+  /** Clone method. Entirely self explanatory */
+  virtual expr2t *clone(void) const = 0;
+};
