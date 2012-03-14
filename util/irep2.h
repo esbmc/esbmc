@@ -159,3 +159,16 @@ public:
   // should really really change.
   const std::string name;
 };
+
+class typecast2t : expr2t
+{
+protected:
+  typecast2t(const type2t &type, const expr2t &expr);
+  typecast2t(const typecast2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  // Expression to typecast from.
+  const expr2t &from;
+};
