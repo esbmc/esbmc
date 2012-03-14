@@ -149,9 +149,6 @@ protected:
   void convert_template_class_specialization(
     cpp_declarationt &declaration);
 
-  const symbolt& convert_template_specialization(
-    cpp_declarationt &declaration);
-
   void typecheck_template_class(cpp_declarationt &declaration);
 
   void typecheck_function_template(cpp_declarationt &declaration);
