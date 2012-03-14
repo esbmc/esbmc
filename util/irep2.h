@@ -100,3 +100,23 @@ public:
 
   std::vector<exprt *> datatype_members;
 };
+
+class constant_struct2t : constant_datatype2t
+{
+protected:
+  constant_struct2t(const type2t &type, const std::vector<exprt *> &members);
+  constant_struct2t(const constant_struct2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class constant_union2t : constant_datatype2t
+{
+protected:
+  constant_union2t(const type2t &type, const std::vector<exprt *> &members);
+  constant_union2t(const constant_union2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
