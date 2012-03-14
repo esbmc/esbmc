@@ -2,6 +2,8 @@
 /** Base class for all types */
 class type2t
 {
+  type2t(type_ids id);
+
   /** Enumeration identifying each sort of type.
    *  The idea being that we might (for whatever reason) at runtime need to fall
    *  back onto identifying a type through just one field, for some reason. It's
@@ -16,6 +18,8 @@ class type2t
 /** Base class for all expressions */
 class expr2t
 {
+  expr2t(type2t &type, expr_ids id);
+
   /** Enumeration identifying each sort of expr.
    *  The idea being to permit runtime identification of a type, for debugging or
    *  otherwise. See type2t::type_ids. */
