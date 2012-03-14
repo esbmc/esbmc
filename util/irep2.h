@@ -61,7 +61,7 @@ public:
 class constant_int2t : constant2t
 {
 protected:
-  constant_int2t(type2t &type);
+  constant_int2t(const BigInt &input);
   constant_int2t(const constant_int2t &ref);
 
   /** Concrete clone implementation. */
