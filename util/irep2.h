@@ -1,3 +1,4 @@
+#include <big-int/bigint.hh>
 
 /** Base class for all types */
 class type2t
@@ -53,4 +54,19 @@ protected:
 public:
   /** Clone method. Entirely self explanatory */
   virtual expr2t *clone(void) const = 0;
+};
+
+/** Constant integer class. Records a constant integer of an arbitary
+ *  precision */
+class constant_int2t : constant2t
+{
+protected:
+  constant_int2t(type2t &type);
+  constant_int2t(const constant_int2t &ref);
+
+  /** Concrete clone implementation. */
+  virtual expr2t *clone(void) const;
+
+  /** Arbitary precision integer record. */
+  BigInt constant_value;
 };
