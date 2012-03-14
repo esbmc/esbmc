@@ -1,4 +1,5 @@
 
+/** Base class for all types */
 class type2t
 {
   enum type_ids {
@@ -6,6 +7,7 @@ class type2t
   type_ids type_id;
 };
 
+/** Base class for all expressions */
 class expr2t
 {
   enum expr_ids {
