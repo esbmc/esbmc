@@ -1,3 +1,5 @@
+#include <vector>
+
 #include <big-int/bigint.hh>
 
 /** Base class for all types */
@@ -84,4 +86,17 @@ public:
 
   /** Arbitary precision integer record. */
   const std::string value;
+};
+
+/** Const datatype - for holding structs and unions */
+class constant_datatype2t : constant2t
+{
+protected:
+  constant_datatype2t(const type2t &type, const std::vector<exprt *> &members);
+  constant_datatype2t(const constant_datatype2t &ref);
+
+public:
+  virtual expr2t *clone(void) const = 0;
+
+  std::vector<exprt *> datatype_members;
 };
