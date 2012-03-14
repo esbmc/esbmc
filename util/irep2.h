@@ -32,6 +32,9 @@ public:
   enum expr_ids {
   };
 
+  /** Clone method. Entirely self explanatory */
+  virtual expr2t *clone(void) const = 0;
+
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;
 
