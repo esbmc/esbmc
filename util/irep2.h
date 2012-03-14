@@ -78,6 +78,7 @@ protected:
   constant_string2t(const std::string stringref &ref);
   constant_string2t(const constant_string2t &ref);
 
+public:
   /** Concrete clone implementation. */
   virtual expr2t *clone(void) const;
 
