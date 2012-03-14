@@ -36,5 +36,5 @@ public:
   expr_ids expr_id;
 
   /** Type of this expr. All exprs have a type. */
-  type2t type;
+  const type2t &type;
 };
