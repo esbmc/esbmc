@@ -53,8 +53,7 @@ Purpose:
 
 void cpp_typecheck_resolvet::convert_identifiers(
   const cpp_scopest::id_sett &id_set,
-  const locationt &location,
-  const irept &template_args,
+  const wantt want,
   const cpp_typecheck_fargst &fargs,
   resolve_identifierst &identifiers)
 {
@@ -63,10 +62,8 @@ void cpp_typecheck_resolvet::convert_identifiers(
       it!=id_set.end();
       it++)
   {
-    exprt e;
     const cpp_idt &identifier=**it;
-
-    convert_identifier(identifier, location, template_args, fargs, e);
+    exprt e=convert_identifier(identifier, want, fargs);
 
     if(e.is_not_nil())
     {
@@ -298,20 +295,15 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::convert_identifier(
+exprt cpp_typecheck_resolvet::convert_identifier(
   const cpp_idt &identifier,
-  const locationt &location,
-  const irept &template_args,
-  const cpp_typecheck_fargst &fargs,
-  exprt &e)
+  const wantt want,
+  const cpp_typecheck_fargst &fargs)
 {
-  e.make_nil();
-
   if(identifier.id_class==cpp_scopet::TEMPLATE_ARGUMENT)
-  {
-    e=convert_template_argument(identifier);
-    return;
-  }
+    return convert_template_argument(identifier);
+
+  exprt e;
 
   if(identifier.is_member &&
      !identifier.is_constructor &&
@@ -324,6 +316,7 @@ void cpp_typecheck_resolvet::convert_identifier(
 
     const exprt component=struct_type.get_component(identifier.identifier);
     const typet &type=component.type();
+    assert(type.is_not_nil());
 
     if(identifier.id_class==cpp_scopet::TYPEDEF)
     {
@@ -331,16 +324,19 @@ void cpp_typecheck_resolvet::convert_identifier(
     }
     else if(identifier.id_class==cpp_scopet::SYMBOL)
     {
+      // A non-static, non-type member.
+      // There has to be an object.
       e=exprt("member");
       e.component_name(identifier.identifier);
-      e.location() = location;
+      e.location()=location;
 
       exprt object;
       object.make_nil();
 
       #if 0
       std::cout << "I: " << identifier.class_identifier
-      << " " << cpp_typecheck.cpp_scopes.current_scope().this_class_identifier << std::endl;
+                << " "
+                << cpp_typecheck.cpp_scopes.current_scope().this_class_identifier << std::endl;
       #endif
 
       const exprt &this_expr=
@@ -351,15 +347,13 @@ void cpp_typecheck_resolvet::convert_identifier(
       {
         cpp_scopet::id_sett id_set;
         cpp_typecheck.cpp_scopes.current_scope().recursive_lookup(
-                                                                  class_symbol.type.get("#unnamed_object"),
-                                                                  id_set);
+          class_symbol.type.get("#unnamed_object"),
+          id_set);
 
         assert(id_set.size()==1);
 
-        irept nil;
-        nil.make_nil();
-        convert_identifier(**(id_set.begin()),
-                           location,nil, fargs, object);
+        object=convert_identifier(**(id_set.begin()),
+          want, fargs);
         assert(object.is_not_nil());
       }
       else if(fargs.has_object)
@@ -387,15 +381,18 @@ void cpp_typecheck_resolvet::convert_identifier(
         }
       }
 
-      // check if the object has the right member
-      typet object_type = cpp_typecheck.follow(object.type());
-      if(object_type.id() == "struct" || object_type.id() == "union" )
+      // check if the member can be applied to the object
+      typet object_type=cpp_typecheck.follow(object.type());
+
+      if(object_type.id()=="struct" || 
+         object_type.id()=="union")
       {
         const struct_typet& object_struct = to_struct_type(object_type);
         if(object_struct.get_component(identifier.identifier.c_str()).is_nil())
           object.make_nil();
       }
-      else object.make_nil();
+      else
+        object.make_nil();
 
       if(object.is_not_nil())
       {
@@ -466,6 +463,8 @@ void cpp_typecheck_resolvet::convert_identifier(
   }
 
   e.location()=location;
+
+  return e;
 }
 
 /*******************************************************************\
@@ -1355,7 +1354,7 @@ exprt cpp_typecheck_resolvet::resolve(
   {
     // methods and functions
     convert_identifiers(
-      id_set, location, template_args, fargs, identifiers);
+      id_set, want, fargs, identifiers);
 
     apply_template_args(
       identifiers, template_args, fargs);
@@ -1363,7 +1362,7 @@ exprt cpp_typecheck_resolvet::resolve(
   else
   {
     convert_identifiers(
-      id_set, location, template_args, fargs, identifiers);
+      id_set, want, fargs, identifiers);
   }
 
   // change types into constructors if we want a constructor

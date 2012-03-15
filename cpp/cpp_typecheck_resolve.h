@@ -39,25 +39,22 @@ protected:
   cpp_typecheckt &cpp_typecheck;
   locationt location;
   cpp_scopet *original_scope;
-
+  
   typedef std::set<exprt> resolve_identifierst;
 
   void convert_identifiers(
     const cpp_scopest::id_sett &id_set,
-    const locationt &location,
-    const irept &template_args,
+    const wantt want,
     const cpp_typecheck_fargst &fargs,
     resolve_identifierst &identifiers);
 
   exprt convert_template_argument(
     const cpp_idt &id);
 
-  void convert_identifier(
+  exprt convert_identifier(
     const cpp_idt &id,
-    const locationt &location,
-    const irept &template_args,
-    const cpp_typecheck_fargst &fargs,
-    exprt &e);
+    const wantt want,
+    const cpp_typecheck_fargst &fargs);
 
   void disambiguate(
     resolve_identifierst &identifiers,
