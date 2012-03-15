@@ -563,7 +563,7 @@ void cbmc_parseoptionst::preprocessing()
   }
 }
 
-void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
+void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, namespacet &ns)
 {
   std::map<std::string, std::string> strings;
 
@@ -605,6 +605,36 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
     goto_programt &prog = func.body;
     Forall_goto_program_instructions(p_it, prog) {
       add_monitor_exprs(p_it, prog.instructions, monitors);
+    }
+  }
+
+  // Find main function; find first function call; insert updates to each
+  // property expression. This makes sure that there isn't inconsistent
+  // initialization of each monitor boolean.
+  goto_functionst::function_mapt::iterator f_it = goto_functions.function_map.find("main");
+  assert(f_it != goto_functions.function_map.end());
+  Forall_goto_program_instructions(p_it, f_it->second.body) {
+    if (p_it->type == FUNCTION_CALL) {
+      if (p_it->code.op1().identifier().as_string() != "c::main")
+        continue;
+
+      // Insert initializers for each monitor expr.
+      std::map<std::string, std::pair<std::set<std::string>, exprt> >
+        ::const_iterator it;
+      for (it = monitors.begin(); it != monitors.end(); it++) {
+        goto_programt::instructiont new_insn;
+        new_insn.type = ASSIGN;
+        std::string prop_name = "c::" + it->first + "_status";
+        exprt cast = typecast_exprt(signedbv_typet(32));
+        cast.op0() = it->second.second;
+        new_insn.code = code_assignt(symbol_exprt(prop_name, signedbv_typet(32)), cast);
+        new_insn.function = p_it->function;
+
+        // new_insn location field not set - I believe it gets numbered later.
+        f_it->second.body.instructions.insert(p_it, new_insn);
+      }
+
+      break;
     }
   }
 
@@ -909,7 +939,7 @@ bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
     add_failed_symbols(context, ns);
 
     // add re-evaluations of monitored properties
-    add_property_monitors(goto_functions);
+    add_property_monitors(goto_functions, ns);
 
     // recalculate numbers, etc.
     goto_functions.update();
