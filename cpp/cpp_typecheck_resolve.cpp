@@ -309,12 +309,20 @@ exprt cpp_typecheck_resolvet::convert_identifier(
      !identifier.is_constructor &&
      !identifier.is_static_member)
   {
+    // a regular struct or union member
+  
     const symbolt &class_symbol=
       cpp_typecheck.lookup(identifier.class_identifier);
 
-    const struct_typet &struct_type = to_struct_type(class_symbol.type);
+    assert(class_symbol.type.id()=="struct" ||
+           class_symbol.type.id()=="union");
 
-    const exprt component=struct_type.get_component(identifier.identifier);
+    const struct_typet &struct_type=
+      to_struct_type(class_symbol.type);
+
+    const exprt component=
+      struct_type.get_component(identifier.identifier);
+
     const typet &type=component.type();
     assert(type.is_not_nil());
 
@@ -358,7 +366,9 @@ exprt cpp_typecheck_resolvet::convert_identifier(
       }
       else if(fargs.has_object)
       {
-        object = fargs.operands.front();
+        // the object is given to us in fargs
+        assert(!fargs.operands.empty());
+        object=fargs.operands[0];
       }
       else
       {
