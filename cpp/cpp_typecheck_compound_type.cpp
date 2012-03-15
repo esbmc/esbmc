@@ -84,52 +84,57 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheckt::typecheck_compound_type(typet &type)
+void cpp_typecheckt::typecheck_compound_type(
+  typet &type)
 {
   // first save qualifiers
-  c_qualifierst qualifiers;
-  qualifiers.read(type);
+  c_qualifierst qualifiers(type);
 
   // now clear them
   type.remove("#constant");
   type.remove("#volatile");
   type.remove("#restricted");
 
-  // replace by type symbol
-  cpp_namet &cpp_name=static_cast<cpp_namet &>(type.add("tag"));
-
+  // get the tag name
+  bool anonymous=type.find("tag").is_nil();
+  
   std::string identifier, base_name;
-  cpp_name.convert(identifier, base_name);
-
-  if(identifier!=base_name)
-  {
-    err_location(cpp_name.location());
-    throw "no namespaces allowed here";
-  }
-
-  bool anonymous=base_name.empty();
 
   if(anonymous)
   {
-    base_name=identifier="#anon"+i2string(anon_counter++);
-    type.set("#is_anonymous",true);
+    base_name=identifier=
+      "#anon_"+type.id_string()+i2string(anon_counter++);
+    type.set("#is_anonymous", true);
+  }
+  else
+  {
+    const cpp_namet &cpp_name=
+      to_cpp_name(type.find("tag"));
+
+    cpp_name.convert(identifier, base_name);
+
+    if(identifier!=base_name)
+    {
+      err_location(cpp_name.location());
+      throw "no namespaces allowed in compound names";
+    }
   }
 
-  bool has_body=type.body().is_not_nil();
+  bool has_body=type.find("body").is_not_nil();
   bool tag_only_declaration=type.get_bool("#tag_only_declaration");
   
   cpp_scopet &dest_scope=
     tag_scope(base_name, has_body, tag_only_declaration);
-
+  
   const irep_idt symbol_name=
     cpp_identifier_prefix(current_mode)+"::"+
     dest_scope.prefix+
-    "struct"+"."+id2string(identifier);
+    "tag"+"."+identifier;
 
   // check if we have it already
 
-  symbolst::iterator previous_symbol=
-  context.symbols.find(symbol_name);
+  contextt::symbolst::iterator previous_symbol=
+    context.symbols.find(symbol_name);
 
   if(previous_symbol!=context.symbols.end())
   {
@@ -147,7 +152,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
       }
       else
       {
-        err_location(cpp_name.location());
+        err_location(type.location());
         str << "error: struct symbol `" << base_name
             << "' declared previously" << std::endl;
         str << "location of previous definition: "
@@ -164,7 +169,7 @@ void cpp_typecheckt::typecheck_compound_type(typet &type)
     symbol.name=symbol_name;
     symbol.base_name=base_name;
     symbol.value.make_nil();
-    symbol.location=cpp_name.location();
+    symbol.location=type.location();
     symbol.mode=current_mode;
     symbol.module=module;
     symbol.type.swap(type);
@@ -703,7 +708,6 @@ void cpp_typecheckt::put_compound_into_scope(
 {
   const irep_idt &base_name=compound.base_name();
   const irep_idt &name=compound.name();
-
   
   // nothing to do if no base_name (e.g., an anonymous bitfield)
   if(base_name==irep_idt())
@@ -711,7 +715,7 @@ void cpp_typecheckt::put_compound_into_scope(
   
   if(compound.type().id()=="code")
   {
-    // put symbol into scope
+    // put the symbol into scope
     cpp_idt &id=cpp_scopes.current_scope().insert(base_name);
     id.id_class=compound.is_type()?cpp_idt::TYPEDEF:cpp_idt::SYMBOL;
     id.identifier=name;
@@ -754,6 +758,138 @@ void cpp_typecheckt::put_compound_into_scope(
     id.is_member=true;
     id.is_method=false;
     id.is_static_member=compound.get_bool("is_static");
+  }
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_friend_declaration
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_friend_declaration(
+  symbolt &symbol,
+  cpp_declarationt &declaration)
+{
+  // A friend of a class can be a function/method,
+  // or a struct/class/union type.
+
+  if(declaration.get_bool("is_template"))
+  {
+    err_location(declaration.location());
+    str << "friend template not supported";
+    throw 0;
+  }
+
+  if(declaration.type().id() == "struct")
+  {
+    typet &ftype=declaration.type();
+
+    if(ftype.body().is_not_nil())
+    {
+      err_location(declaration.location());
+      str << "class declaration not expected";
+      throw 0;
+    }
+
+    if(!declaration.declarators().empty())
+    {
+      err_location(declaration.location());
+      str << "declarators not excpected";
+      throw 0;
+    }
+
+    // typecheck ftype in the global scope
+    cpp_save_scopet saved_scope(cpp_scopes);
+    cpp_scopes.go_to_global_scope();
+
+    if(ftype.id() == "struct")
+    {
+      cpp_namet cpp_name = to_cpp_name(ftype.add("tag"));
+      irept template_args;
+      template_args.make_nil();
+      std::string base_name;
+
+      cpp_save_scopet saved_scope(cpp_scopes);
+
+      cpp_typecheck_resolvet resolver(*this);
+      resolver.resolve_scope(cpp_name,base_name,template_args);
+
+      if(template_args.is_nil())
+      {
+        cpp_namet tmp_name;
+        tmp_name.get_sub().resize(1);
+        tmp_name.get_sub().front().id("name");
+        tmp_name.get_sub().front().set("identifier",base_name);
+        tmp_name.get_sub().front().add("#location") = cpp_name.location();
+        to_cpp_name(ftype.add("tag")).swap(tmp_name);
+        typecheck_type(ftype);
+        assert(ftype.id() =="symbol");
+        symbol.type.add("#friends").move_to_sub(ftype);
+      }
+      else
+      {
+        saved_scope.restore();
+        // instantiate the template
+        ftype.swap(cpp_name);
+        typecheck_type(ftype);
+        assert(ftype.id() =="symbol");
+        symbol.type.add("#friends").move_to_sub(ftype);
+      }
+    }
+    else
+    {
+      typecheck_type(ftype);
+
+      assert(ftype.id() =="symbol");
+      symbol.type.add("#friends").move_to_sub(ftype);
+    }
+
+    return;
+  }
+
+  // It should be a friend function.
+  // Do the declarators.
+
+  Forall_cpp_declarators(sub_it, declaration)
+  {
+    bool has_value = sub_it->value().is_not_nil();
+
+    if(!has_value)
+    {
+      // If no value is found, then we jump to the
+      // global scope, and we convert the declarator
+      // as if it were declared there
+      cpp_save_scopet saved_scope(cpp_scopes);
+      cpp_scopes.go_to_global_scope();
+      cpp_declarator_convertert cpp_declarator_converter(*this);
+      const symbolt &conv_symb = cpp_declarator_converter.convert(
+          declaration.type(), declaration.storage_spec(),
+          declaration.member_spec(), *sub_it);
+      exprt symb_expr = cpp_symbol_expr(conv_symb);
+      symbol.type.add("#friends").move_to_sub(symb_expr);
+    }
+    else
+    {
+      cpp_declarator_convertert cpp_declarator_converter(*this);
+      cpp_declarator_converter.is_friend = true;
+
+      declaration.member_spec().set_inline(true);
+
+      const symbolt &conv_symb = cpp_declarator_converter.convert(
+        declaration.type(), declaration.storage_spec(),
+        declaration.member_spec(), *sub_it);
+
+      exprt symb_expr = cpp_symbol_expr(conv_symb);
+
+      symbol.type.add("#friends").move_to_sub(symb_expr);
+    }
   }
 }
 
@@ -802,114 +938,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
       if(declaration.member_spec().is_friend())
       {
-        // it's a friend
-
-        if(declaration.get_bool("is_template"))
-        {
-          err_location(declaration.location());
-          str << "friend template not supported";
-          throw 0;
-        }
-
-        if(declaration.type().id() == "struct")
-        {
-          typet& ftype = declaration.type();
-
-          if(ftype.body().is_not_nil())
-          {
-            err_location(declaration.location());
-            str << "class declaration not expected";
-            throw 0;
-          }
-
-          if(!declaration.declarators().empty())
-          {
-            err_location(declaration.location());
-            str << "declarators not excpected";
-            throw 0;
-          }
-
-          // typecheck ftype in the global scope
-          cpp_save_scopet saved_scope(cpp_scopes);
-          cpp_scopes.go_to_global_scope();
-
-          if(ftype.id() == "struct")
-          {
-            cpp_namet cpp_name = to_cpp_name(ftype.add("tag"));
-            irept template_args;
-            template_args.make_nil();
-            std::string base_name;
-
-            cpp_save_scopet saved_scope(cpp_scopes);
-
-            cpp_typecheck_resolvet resolver(*this);
-            resolver.resolve_scope(cpp_name,base_name,template_args);
-
-            if(template_args.is_nil())
-            {
-              cpp_namet tmp_name;
-              tmp_name.get_sub().resize(1);
-              tmp_name.get_sub().front().id("name");
-              tmp_name.get_sub().front().set("identifier",base_name);
-              tmp_name.get_sub().front().add("#location") = cpp_name.location();
-              to_cpp_name(ftype.add("tag")).swap(tmp_name);
-              typecheck_type(ftype);
-              assert(ftype.id() =="symbol");
-              symbol.type.add("#friends").move_to_sub(ftype);
-            }
-            else
-            {
-              saved_scope.restore();
-              // instantiate the template
-              ftype.swap(cpp_name);
-              typecheck_type(ftype);
-              assert(ftype.id() =="symbol");
-              symbol.type.add("#friends").move_to_sub(ftype);
-            }
-          }
-          else
-          {
-            typecheck_type(ftype);
-
-            assert(ftype.id() =="symbol");
-            symbol.type.add("#friends").move_to_sub(ftype);
-          }
-          continue;
-        }
-
-        // do the declarators (optional)
-        Forall_cpp_declarators(sub_it, declaration)
-        {
-          bool has_value = sub_it->value().is_not_nil();
-
-          if(!has_value)
-          {
-            // If no value is found, then we jump to the
-            // global scope, and we convert the declarator
-            // as if it were declared there
-            cpp_save_scopet saved_scope(cpp_scopes);
-            cpp_scopes.go_to_global_scope();
-            cpp_declarator_convertert cpp_declarator_converter(*this);
-            const symbolt& conv_symb = cpp_declarator_converter.convert(
-                                                                        declaration.type(), declaration.storage_spec(),
-                                                                        declaration.member_spec(), *sub_it);
-            exprt symb_expr = cpp_symbol_expr(conv_symb);
-            symbol.type.add("#friends").move_to_sub(symb_expr);
-          }
-          else
-          {
-            cpp_declarator_convertert cpp_declarator_converter(*this);
-            cpp_declarator_converter.is_friend = true;
-
-            declaration.member_spec().set_inline(true);
-
-            const symbolt& conv_symb = cpp_declarator_converter.convert(
-                                                                        declaration.type(), declaration.storage_spec(),
-                                                                        declaration.member_spec(), *sub_it);
-            exprt symb_expr = cpp_symbol_expr(conv_symb);
-            symbol.type.add("#friends").move_to_sub(symb_expr);
-          }
-        }
+      	typecheck_friend_declaration(symbol, declaration);
         continue;
       }
 

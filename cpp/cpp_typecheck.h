@@ -376,6 +376,10 @@ protected:
     bool is_typedef,
     bool is_mutable);
 
+  void typecheck_friend_declaration(
+    symbolt &symbol,
+    cpp_declarationt &cpp_declaration);
+
   void put_compound_into_scope(const irept &compound);
   void typecheck_compound_body(symbolt &symbol);
   void typecheck_enum_body(symbolt &symbol);
