@@ -30,7 +30,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
 {
   typet &type=enum_symbol.type;
   
-  exprt &body=(exprt &)type.add("body");
+  exprt &body=static_cast<exprt &>(type.add("body"));
   irept::subt &components=body.get_sub();
   
   typet enum_type("symbol");
@@ -44,11 +44,11 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
     
     if(it->find("value").is_not_nil())
     {
-      exprt &value=(exprt &)it->add("value");
+      exprt &value=static_cast<exprt &>(it->add("value"));
       typecheck_expr(value);
       make_constant_index(value);
-      bool res = to_integer(value, i);
-      assert(!res);
+      if(to_integer(value, i))
+        throw "failed to produce integer for enum";
     }
     
     exprt final_value("constant", enum_type);
@@ -59,7 +59,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
     symbol.name=id2string(enum_symbol.name)+"::"+id2string(name);
     symbol.base_name=name;
     symbol.value.swap(final_value);
-    symbol.location=(const locationt &)it->find("#location");
+    symbol.location=static_cast<const locationt &>(it->find("#location"));
     symbol.mode=current_mode;
     symbol.module=module;
     symbol.type=enum_type;
@@ -118,7 +118,7 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
 
   // check if we have it
   
-  symbolst::iterator previous_symbol=
+  contextt::symbolst::iterator previous_symbol=
     context.symbols.find(symbol_name);
     
   if(previous_symbol!=context.symbols.end())
