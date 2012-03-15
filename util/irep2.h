@@ -172,3 +172,20 @@ public:
   // Expression to typecast from.
   const expr2t &from;
 };
+
+class if2t : expr2t
+{
+protected:
+  typecast2t(const type2t &type, const expr2t &cond, const expr2t &true_val,
+             const expr2t &false_val);
+  typecast2t(const if2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  // Conditional that this "if" depends on, and which value to take upon each
+  // branch of that condition.
+  const expr2t &cond;
+  const expr2t &true_value;
+  const expr2t &false_value;
+};
