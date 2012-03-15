@@ -370,25 +370,22 @@ exprt cpp_typecheck_resolvet::convert_identifier(
         assert(!fargs.operands.empty());
         object=fargs.operands[0];
       }
-      else
+      else if(component.get_bool("is_operator") &&
+        fargs.operands.size()==to_code_type(component.type()).arguments().size())
       {
-        if(component.get_bool("is_operator") &&
-           fargs.operands.size()==to_code_type(component.type()).arguments().size())
-        {
-          // turn  'OP(a, b)' into 'a.opratorOP(b)'
-          object = fargs.operands.front();
-        }
-        else if(this_expr.is_not_nil())
-        {
-          // use this->...
-          assert(this_expr.type().id()=="pointer");
-          object=exprt("dereference", this_expr.type().subtype());
-          object.copy_to_operands(this_expr);
-          object.type().set("#constant",
-                            this_expr.type().subtype().cmt_constant());
-          object.set("#lvalue",true);
-          object.location()=location;
-        }
+        // turn  'OP(a, b)' into 'a.opratorOP(b)'
+        object = fargs.operands.front();
+      }
+      else if(this_expr.is_not_nil())
+      {
+        // use this->...
+        assert(this_expr.type().id()=="pointer");
+        object=exprt("dereference", this_expr.type().subtype());
+        object.copy_to_operands(this_expr);
+        object.type().set("#constant",
+                          this_expr.type().subtype().cmt_constant());
+        object.set("#lvalue",true);
+        object.location()=location;
       }
 
       // check if the member can be applied to the object
