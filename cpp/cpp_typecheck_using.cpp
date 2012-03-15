@@ -24,6 +24,10 @@ Function: cpp_typecheckt::convert
 
 void cpp_typecheckt::convert(cpp_usingt &cpp_using)
 {
+  // there are two forms of using clauses:
+  // a) using namespace SCOPE;  ("using directive")
+  // b) using SCOPE::id;        ("using declaration")
+  
   cpp_typecheck_resolvet resolver(*this);
   cpp_save_scopet save_scope(this->cpp_scopes);
 
@@ -33,14 +37,18 @@ void cpp_typecheckt::convert(cpp_usingt &cpp_using)
 
   bool qualified=cpp_using.name().is_qualified();
   cpp_scopest::id_sett id_set;
+
   this->cpp_scopes.get_ids(base_name, id_set, qualified);
+
+  bool using_directive=cpp_using.get_namespace();
 
   if(id_set.empty())
   {
     err_location(cpp_using.name().location());
-    this->str
-      << "namespace `"
-      << base_name << "' not found";
+    str << "using "
+        << (using_directive?"namespace":"identifier")
+        << " `"
+        << base_name << "' not found";
     throw 0;
   }
 

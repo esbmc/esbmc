@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <i2string.h>
 #include <arith_tools.h>
 #include <expr_util.h>
+#include <simplify_expr.h>
 #include <simplify_expr_class.h>
 
 #include <ansi-c/c_qualifiers.h>
@@ -649,6 +650,13 @@ void cpp_typecheckt::typecheck_compound_declarator(
       {
         new_symbol->value.swap(value);
         c_typecheck_baset::do_initializer(*new_symbol);
+
+        // these are macros if they are PODs and come with a (constant) value
+        if(new_symbol->type.get_bool("constant"))
+        {
+          simplify(new_symbol->value);
+          new_symbol->is_macro=true;
+        }
       }
       else
       {

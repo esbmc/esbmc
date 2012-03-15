@@ -65,7 +65,7 @@ Function: cpp_typecheckt::typecheck_template_class
 void cpp_typecheckt::typecheck_template_class(
   cpp_declarationt &declaration)
 {
-  // Do template arguments. This also sets up the template scope.
+  // Do template parameters. This also sets up the template scope.
   cpp_scopet &template_scope=
     typecheck_template_parameters(declaration.template_type());
 
@@ -149,10 +149,10 @@ void cpp_typecheckt::typecheck_template_class(
 
     if(has_body)
     {
-      // we replace the template!
+      // We replace the template!
       previous_symbol->second.type.swap(declaration);
 
-      // we also replace the template scope (the old one could be deleted)
+      // We also replace the template scope (the old one could be deleted).
       cpp_scopes.id_map[symbol_name]=&template_scope;
     }
 
@@ -365,7 +365,7 @@ void cpp_typecheckt::typecheck_template_member_function(
   {
     str << cpp_scopes.current_scope();
     err_location(cpp_name);
-    str << "class template `"
+    str << "template function/member identifier `"
         << cpp_name.get_sub().front().get("identifier")
         << "' not found";
     throw 0;
@@ -373,7 +373,7 @@ void cpp_typecheckt::typecheck_template_member_function(
   else if(id_set.size()>1)
   {
     err_location(cpp_name);
-    str << "class template `"
+    str << "template function/member identifier `"
         << cpp_name.get_sub().front().get("identifier")
         << "' is ambiguous";
     throw 0;
@@ -382,7 +382,7 @@ void cpp_typecheckt::typecheck_template_member_function(
   {
     std::cerr << *(*id_set.begin()) << std::endl;
     err_location(cpp_name);
-    str << "class template `"
+    str << "template function/member identifier `"
         << cpp_name.get_sub().front().identifier()
         << "' is not a template";
     throw 0;
@@ -895,7 +895,7 @@ cpp_template_args_tct cpp_typecheckt::typecheck_template_args(
   const template_typet &template_type=
     to_cpp_declaration(template_symbol.type).template_type();
 
-  // bad re-cast, but better than copying the args one by one
+  // bad re-cast
   cpp_template_args_tct result=
     (const cpp_template_args_tct &)(template_args);
 

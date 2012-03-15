@@ -27,15 +27,6 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
   std::set<irep_idt> bases;
   std::set<irep_idt> vbases;
 
-//  TODO
-//  if(type.id() == "union"
-//     && !type.add("bases").get_sub().empty())
-//  {
-//    err_location(type);
-//    str << "error: unions don't have base types";
-//    throw 0;
-//  }
-
   irep_idt default_class_access=
     type.get_bool("#class")?"private":"public";
 
