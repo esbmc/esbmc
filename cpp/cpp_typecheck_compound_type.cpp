@@ -983,7 +983,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       // is it tag-only?
       if(declaration.type().id()=="struct" ||
          declaration.type().id()=="union" ||
-         declaration.type().id()=="enum")
+         declaration.type().id()=="c_enum")
         if(declaration.declarators().empty())
           declaration.type().set("#tag_only_declaration", true);
 
