@@ -829,14 +829,13 @@ void cpp_typecheckt::typecheck_friend_declaration(
     if(ftype.id() == "struct")
     {
       cpp_namet cpp_name = to_cpp_name(ftype.add("tag"));
-      irept template_args;
-      template_args.make_nil();
+      cpp_template_args_non_tct template_args;
       std::string base_name;
 
       cpp_save_scopet saved_scope(cpp_scopes);
 
       cpp_typecheck_resolvet resolver(*this);
-      resolver.resolve_scope(cpp_name,base_name,template_args);
+      resolver.resolve_scope(cpp_name, base_name, template_args);
 
       if(template_args.is_nil())
       {

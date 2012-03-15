@@ -73,7 +73,7 @@ symbolt &cpp_declarator_convertert::convert(
   final_type=declarator.merge_type(type);
   assert(final_type.is_not_nil());
 
-  irept template_args;
+  cpp_template_args_non_tct template_args;
 
   // run resolver on scope
   {

@@ -573,7 +573,7 @@ void cpp_typecheck_resolvet::disambiguate(
 
   identifiers.clear();
 
-  // put in top ones
+  // put in the top ones
   if(!distance_map.empty())
   {
     unsigned distance=distance_map.begin()->first;
@@ -771,12 +771,12 @@ Purpose:
 
 exprt cpp_typecheck_resolvet::do_builtin(
   const irep_idt &base_name,
-  irept &template_args)
+  const cpp_template_args_non_tct &template_args)
 {
   exprt dest;
 
-  irept::subt &arguments=
-    template_args.add("arguments").get_sub();
+  const cpp_template_args_non_tct::argumentst &arguments=
+    template_args.arguments();
 
   if(base_name=="unsignedbv" ||
      base_name=="signedbv")
@@ -788,7 +788,7 @@ exprt cpp_typecheck_resolvet::do_builtin(
         "but got "+i2string((unsigned long)arguments.size());
     }
 
-    exprt &argument=static_cast<exprt &>(arguments.front());
+    const exprt &argument=arguments[0];
 
     if(argument.id()=="type")
     {
@@ -796,8 +796,6 @@ exprt cpp_typecheck_resolvet::do_builtin(
       throw id2string(base_name)+" expects one integer template argument, "
       "but got type";
     }
-
-    cpp_typecheck.typecheck_expr(argument);
 
     mp_integer i;
     if(to_integer(argument, i))
@@ -824,8 +822,8 @@ exprt cpp_typecheck_resolvet::do_builtin(
         "but got "+i2string((unsigned long)arguments.size());
     }
 
-    exprt &argument0=static_cast<exprt &>(arguments.front());
-    exprt &argument1=static_cast<exprt &>(*(++arguments.begin()));
+    const exprt &argument0=arguments[0];
+    const exprt &argument1=arguments[1];
 
     if(argument0.id()=="type")
     {
@@ -840,9 +838,6 @@ exprt cpp_typecheck_resolvet::do_builtin(
       throw id2string(base_name)+" expects two integer template arguments, "
         "but got type";
     }
-
-    cpp_typecheck.typecheck_expr(argument0);
-    cpp_typecheck.typecheck_expr(argument1);
 
     mp_integer width, integer_bits;
 
@@ -930,7 +925,7 @@ Purpose:
 cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
   const cpp_namet &cpp_name,
   std::string &base_name,
-  irept &template_args)
+  cpp_template_args_non_tct &template_args)
 {
   assert(cpp_name.id()=="cpp-name");
   assert(!cpp_name.get_sub().empty());
@@ -1062,7 +1057,8 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_namespace(
   const cpp_namet &cpp_name)
 {
   std::string base_name;
-  irept template_args(get_nil_irep());
+  cpp_template_args_non_tct template_args;
+  template_args.make_nil();
 
   cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
   resolve_scope(cpp_name, base_name, template_args);
@@ -2110,24 +2106,27 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
 
       if(e.type().id() == "symbol")
       {
-        irep_idt identifier=e.type().identifier();
+        symbol_typet type=to_symbol_type(e.type());
 
         while(true)
         {
+          irep_idt identifier=type.identifier();
+
           const symbolt &symbol=cpp_typecheck.lookup(identifier);
           assert(symbol.is_type);
-
+          if(symbol.type.id()=="symbol")
+            type=to_symbol_type(symbol.type);
           if(symbol.type.id()=="struct")
           {
             // this is a scope, too!
             cpp_idt &class_id=
               cpp_typecheck.cpp_scopes.get_id(identifier);
+              
+            assert(class_id.is_scope);
             new_set.insert(&class_id);
             break;
           }
-          else if(symbol.type.id()=="symbol")
-            identifier=symbol.type.identifier();
-          else
+          else // give up
             break;
         }
       }

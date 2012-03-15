@@ -32,7 +32,7 @@ void cpp_typecheckt::convert(cpp_usingt &cpp_using)
   cpp_save_scopet save_scope(this->cpp_scopes);
 
   std::string base_name;
-  irept template_args(get_nil_irep());
+  cpp_template_args_non_tct template_args;
   resolver.resolve_scope(cpp_using.name(), base_name, template_args);
 
   bool qualified=cpp_using.name().is_qualified();
