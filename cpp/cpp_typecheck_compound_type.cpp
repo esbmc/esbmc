@@ -334,9 +334,9 @@ void cpp_typecheckt::typecheck_compound_declarator(
   struct_typet::componentt component;
 
   irep_idt identifier=
-  cpp_identifier_prefix(current_mode)+"::"+
-  cpp_scopes.current_scope().prefix+
-  base_name;
+    cpp_identifier_prefix(current_mode)+"::"+
+    cpp_scopes.current_scope().prefix+
+    base_name;
 
   component.name(identifier);
   component.type()=final_type;
@@ -490,6 +490,8 @@ void cpp_typecheckt::typecheck_compound_declarator(
         components.push_back(compo);
         put_compound_into_scope(compo);
       }
+      
+      assert(vtit->second.type.id()=="struct");
 
       struct_typet &virtual_table=
         to_struct_type(vtit->second.type);
@@ -686,7 +688,11 @@ void cpp_typecheckt::check_array_types(typet &type)
   if(type.id()=="array")
   {
     array_typet &array_type=to_array_type(type);
-    make_constant_index(array_type.size());
+
+    if(array_type.size().is_not_nil())
+      make_constant_index(array_type.size());
+
+    // recursive call for multi-dimensional arrays
     check_array_types(array_type.subtype());
   }
 }
@@ -780,28 +786,31 @@ void cpp_typecheckt::typecheck_friend_declaration(
   // A friend of a class can be a function/method,
   // or a struct/class/union type.
 
-  if(declaration.get_bool("is_template"))
+  if(declaration.is_template())
   {
-    err_location(declaration.location());
+    return; // TODO
+    err_location(declaration.type().location());
     str << "friend template not supported";
     throw 0;
   }
-
-  if(declaration.type().id() == "struct")
+  
+  // we distinguish these whether there is a declarator
+  if(declaration.declarators().empty())
   {
     typet &ftype=declaration.type();
 
-    if(ftype.body().is_not_nil())
+    // must be struct or union
+    if(ftype.id()!="struct" && ftype.id()!="union")
     {
-      err_location(declaration.location());
-      str << "class declaration not expected";
+      err_location(declaration.type());
+      str << "unexpected friend";
       throw 0;
     }
-
-    if(!declaration.declarators().empty())
+       
+    if(ftype.find("body").is_not_nil())
     {
-      err_location(declaration.location());
-      str << "declarators not excpected";
+      err_location(declaration.type());
+      str << "friend declaration must not have compound body";
       throw 0;
     }
 
@@ -912,37 +921,52 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   // enter scope of compound
   cpp_scopes.set_scope(symbol.name);
 
-  struct_typet &type=to_struct_type(symbol.type);
+  assert(symbol.type.id()=="struct" ||
+         symbol.type.id()=="union");
 
-  // put in base types
-  typecheck_compound_bases(type);
+  struct_typet &type=
+    to_struct_type(symbol.type);
+
+  // pull the base types in
+  if(!type.find("bases").get_sub().empty())
+  {
+    if(type.id()=="union")
+    {
+      err_location(symbol.location);
+      throw "union types must not have bases";
+    }
+    
+    typecheck_compound_bases(type);
+  }
 
   exprt &body=(exprt &)type.add("body");
   struct_typet::componentst &components=type.components();
 
-  symbol.type.set("name",symbol.name);
+  symbol.type.set("name", symbol.name);
 
   // default access
-  irep_idt access=type.get_bool("#class")?"private":"public";
+  irep_idt access=
+    type.get_bool("#class")?"private":"public";
 
-  bool found_ctor = false;
-  bool found_dtor = false;
+  bool found_ctor=false;
+  bool found_dtor=false;
+
+  // we first do everything but the constructors
 
   Forall_operands(it, body)
   {
     if(it->id()=="cpp-declaration")
     {
-
       cpp_declarationt &declaration=
-      to_cpp_declaration(*it);
+        to_cpp_declaration(*it);
 
       if(declaration.member_spec().is_friend())
       {
-      	typecheck_friend_declaration(symbol, declaration);
-        continue;
+        typecheck_friend_declaration(symbol, declaration);
+        continue; // done
       }
 
-      if(declaration.get_bool("is_template"))
+      if(declaration.is_template())
       {
         // remember access mode
         declaration.set("#access", access);
@@ -984,7 +1008,8 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
          final_type.get_bool("#is_anonymous"))
       {
         // we only allow this on struct/union types
-        if(final_type.id() != "union")
+        if(final_type.id()!="union" &&
+           final_type.id()!="struct")
         {
           err_location(declaration.type());
           throw "member declaration does not declare anything";
@@ -1029,6 +1054,22 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
     }
   }
 
+  // Add the default dtor, if needed
+  // (we have to do the destructor before building the virtual tables,
+  //  as the destructor may be virtual!)
+
+  if((found_ctor || !cpp_is_pod(symbol.type)) && !found_dtor)
+  {
+    // build declaration
+    cpp_declarationt dtor;
+    default_dtor(symbol, dtor);
+
+    typecheck_compound_declarator(
+      symbol,
+      dtor, dtor.declarators()[0], components,
+      "public", false, false, false);
+  }
+
   // setup virtual tables before doing the constructors
   do_virtual_table(symbol);
 
@@ -1045,7 +1086,8 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
   }
 
   // Reset the access type
-  access=type.get_bool("#class")?"private":"public";
+  access=
+    type.get_bool("#class")?"private":"public";
 
   // All the data members are known now.
   // So let's deal with the constructors that we are given.
@@ -1147,19 +1189,6 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         assignop, assignop.declarators()[0], components,
         "public", false, false, false);
     }
-
-    // Add the default dtor
-    if(!find_dtor(symbol))
-    {
-      // build declaration
-      cpp_declarationt dtor;
-      default_dtor(symbol, dtor);
-      typecheck_compound_declarator(
-                                    symbol,
-                                    dtor, dtor.declarators()[0], components,
-                                    "public", false, false, false);
-    }
-
   }
 
   // clean up!
@@ -1637,7 +1666,8 @@ void cpp_typecheckt::get_bases(
     assert(it->get("type") == "symbol");
 
     const struct_typet &base=
-    to_struct_type(lookup(it->type().identifier()).type);
+      to_struct_type(lookup(it->type().identifier()).type);
+
     set_bases.insert(base.name());
     get_bases(base,set_bases);
   }
@@ -1725,7 +1755,6 @@ void cpp_typecheckt::make_ptr_typecast(
 
   assert(src_type.id()==  "pointer");
   assert(dest_type.id()== "pointer");
-
 
   struct_typet src_struct =
     to_struct_type(static_cast<const typet&>(follow(src_type.subtype())));
