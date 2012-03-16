@@ -227,7 +227,7 @@ public:
 class constant_string2t : constant2t
 {
 public:
-  constant_string2t(const std::string stringref &ref);
+  constant_string2t(const std::string &stringref);
 protected:
   constant_string2t(constant_string2t &ref);
 
