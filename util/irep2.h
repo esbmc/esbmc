@@ -96,6 +96,18 @@ public:
   expr2tc array_size;
 };
 
+/** Pointer type. Simply has a subtype, of what it points to. No other
+ *  attributes */
+class pointer_type2t : type2t
+{
+protected:
+  pointer_type2t(const type2t &subtype);
+  pointer_type2t(const pointer_type2t &ref);
+
+public:
+  type2t &subtype;
+};
+
 /** Base class for all expressions */
 class expr2t
 {
