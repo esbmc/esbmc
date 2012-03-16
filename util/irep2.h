@@ -336,3 +336,88 @@ protected:
 public:
   virtual expr2t *clone(void) const;
 };
+
+/** Binary operations base class. Take a type, probably integer with a width,
+ *  and some operands. */
+class binops2t : expr2t
+{
+protected:
+  binops2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  binops2t(const binops2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &side_1;
+  const expr2t &side_2;
+};
+
+class bitand2t : binops2t
+{
+protected:
+  bitand2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitand2t(const bitand2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class bitor2t : binops2t
+{
+protected:
+  bitor2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitor2t(const bitor2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class bitxor2t : binops2t
+{
+protected:
+  bitxor2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitxor2t(const bitxor2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class bitnand2t : binops2t
+{
+protected:
+  bitnand2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitnand2t(const bitnand2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class bitnor2t : binops2t
+{
+protected:
+  bitnor2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitnor2t(const bitnor2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class bitnxor2t : binops2t
+{
+protected:
+  bitnxor2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitnxor2t(const bitnxor2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class lshr2t : binops2t
+{
+protected:
+  lshr2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  lshr2t(const lshr2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
