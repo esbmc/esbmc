@@ -176,9 +176,9 @@ public:
 class if2t : expr2t
 {
 protected:
-  typecast2t(const type2t &type, const expr2t &cond, const expr2t &true_val,
+  if2t(const type2t &type, const expr2t &cond, const expr2t &true_val,
              const expr2t &false_val);
-  typecast2t(const if2t &ref);
+  if2t(const if2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
