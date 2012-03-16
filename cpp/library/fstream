@@ -11,7 +11,7 @@
 namespace std
 {
 
-struct fstream: istream, ostream{
+struct fstream: istream, ostream {
 	fstream ( );
 	explicit fstream ( const char * filename,
 	                   openmode mode = in | out );
@@ -19,7 +19,7 @@ struct fstream: istream, ostream{
 	ostream& write ( const char* s , streamsize n );
 };
 
-struct ofstream:  ostream, ios{
+struct ofstream:  ostream, ios {
 	ofstream();
 	void open ( const char * filename, ios_base::openmode mode = ios_base::out );
 	explicit ofstream ( const char * filename, ios_base::openmode mode = ios_base::out );
@@ -33,6 +33,8 @@ struct ifstream: istream{
 	void close ( );
 	bool is_open ( );
 	istream& read ( char* s, streamsize n );
+
+	inline bool operator&& (bool other);
 };
 
 struct filebuf{};
