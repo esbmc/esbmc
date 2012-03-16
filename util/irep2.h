@@ -241,20 +241,20 @@ public:
 class constant_datatype2t : constant2t
 {
 public:
-  constant_datatype2t(const type2tc type, const std::vector<exprt *> &members);
+  constant_datatype2t(const type2tc type, const std::vector<expr2tc> &members);
 protected:
   constant_datatype2t(constant_datatype2t &ref);
 
 public:
   virtual expr2tc clone(void) const = 0;
 
-  std::vector<exprt *> datatype_members;
+  const std::vector<expr2tc> datatype_members;
 };
 
 class constant_struct2t : constant_datatype2t
 {
 public:
-  constant_struct2t(const type2tc type, const std::vector<exprt *> &members);
+  constant_struct2t(const type2tc type, const std::vector<expr2tc> &members);
 protected:
   constant_struct2t(constant_struct2t &ref);
 
@@ -265,7 +265,7 @@ public:
 class constant_union2t : constant_datatype2t
 {
 public:
-  constant_union2t(const type2tc type, const std::vector<exprt *> &members);
+  constant_union2t(const type2tc type, const std::vector<expr2tc> &members);
 protected:
   constant_union2t(constant_union2t &ref);
 
@@ -276,14 +276,14 @@ public:
 class constant_array2t : constant2t
 {
 public:
-  constant_array2t(const type2tc type, const std::vector<exprt *> &members);
+  constant_array2t(const type2tc type, const std::vector<expr2tc> &members);
 protected:
   constant_array2t(constant_array2t &ref);
 
 public:
   virtual expr2tc clone(void) const;
 
-  std::vector<exprt *> datatype_members;
+  const std::vector<expr2tc> datatype_members;
 };
 
 class constant_array_of2t : constant2t
