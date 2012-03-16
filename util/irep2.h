@@ -292,6 +292,20 @@ public:
   const exprt &notvalue;
 };
 
+/** Dynamic object operation. Checks to see whether or not the object is a
+ *  dynamically allocated object or not. */
+class dynamic_object2t : lops2t
+{
+protected:
+  dynamic_object2t(const expr2t &val);
+  dynamic_object2t(const dynamic_object2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &ptr_obj
+};
+
 /** Base class for 2-operand boolean oeprators. Always results in a boolean,
  *  takes two operands, both of boolean type. */
 class logical_2ops2t : lops2t
@@ -332,6 +346,18 @@ class xor2t : logical_2ops2t
 protected:
   xor2t(const expr2t &val1, const expr2t &val2);
   xor2t(const xor2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+/** Same object operation. Compares two pointer objects to see if they're the
+ *  same, with a boolean result. */
+class same_object2t : logical_2ops2t
+{
+protected:
+  same_object2t(const expr2t &val1, const expr2t &val2);
+  same_object2t(const same_object2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
