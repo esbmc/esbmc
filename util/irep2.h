@@ -3,6 +3,7 @@
 #include <boost/shared_ptr.hpp>
 
 #include <big-int/bigint.hh>
+#include <dstring.h>
 
 class type2t;
 class expr2t;
@@ -60,7 +61,7 @@ public:
   const dstring symbol_name;
 };
 
-class struct_union_type2t : typet
+class struct_union_type2t : type2t
 {
 protected:
   struct_union_type2t(const std::vector<type2tc> &members);
@@ -455,7 +456,7 @@ protected:
 public:
   virtual expr2tc clone(void) const;
 
-  const exprt &notvalue;
+  const expr2tc notvalue;
 };
 
 /** Dynamic object operation. Checks to see whether or not the object is a
@@ -498,8 +499,8 @@ protected:
 public:
   virtual expr2tc clone(void) const = 0;
 
-  const exprt &side_1;
-  const exprt &side_2;
+  const expr2tc side_1;
+  const expr2tc side_2;
 };
 
 class and2t : logical_2ops2t
