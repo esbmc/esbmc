@@ -38,7 +38,7 @@ public:
   };
 
   /** Clone method. Entirely self explanatory */
-  virtual expr2t *clone(void) const = 0;
+  virtual expr2tc clone(void) const = 0;
 
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;
@@ -59,7 +59,7 @@ protected:
 
 public:
   /** Clone method. Entirely self explanatory */
-  virtual expr2t *clone(void) const = 0;
+  virtual expr2tc clone(void) const = 0;
 };
 
 /** Constant integer class. Records a constant integer of an arbitary
@@ -71,7 +71,7 @@ protected:
   constant_int2t(const constant_int2t &ref);
 
   /** Concrete clone implementation. */
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   /** Arbitary precision integer record. */
   BigInt constant_value;
@@ -86,7 +86,7 @@ protected:
 
 public:
   /** Concrete clone implementation. */
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   /** Arbitary precision integer record. */
   const std::string value;
@@ -100,7 +100,7 @@ protected:
   constant_datatype2t(const constant_datatype2t &ref);
 
 public:
-  virtual expr2t *clone(void) const = 0;
+  virtual expr2tc clone(void) const = 0;
 
   std::vector<exprt *> datatype_members;
 };
@@ -112,7 +112,7 @@ protected:
   constant_struct2t(const constant_struct2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class constant_union2t : constant_datatype2t
@@ -122,7 +122,7 @@ protected:
   constant_union2t(const constant_union2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class constant_array2t : constant2t
@@ -132,7 +132,7 @@ protected:
   constant_array2t(const constant_array2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   std::vector<exprt *> datatype_members;
 };
@@ -144,7 +144,7 @@ protected:
   constant_array2t(const constant_array_of2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   // Type records the size of the array; this records the initializer.
   const expr2tc initializer;
@@ -157,7 +157,7 @@ protected:
   symbol2t(const symbol2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   // Symbol name - only so long as a symbol is a string. In the future, this
   // should really really change.
@@ -171,7 +171,7 @@ protected:
   typecast2t(const typecast2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   // Expression to typecast from.
   const expr2tc from;
@@ -185,7 +185,7 @@ protected:
   if2t(const if2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   // Conditional that this "if" depends on, and which value to take upon each
   // branch of that condition.
@@ -205,7 +205,7 @@ protected:
   rel2t(const rel2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -218,7 +218,7 @@ protected:
   equality2t(const equality2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class notequal2t : rel2t
@@ -228,7 +228,7 @@ protected:
   notequal2t(const notequal2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class lessthan2t : rel2t
@@ -238,7 +238,7 @@ protected:
   lessthan2t(const lessthan2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class greaterthan2t : rel2t
@@ -248,7 +248,7 @@ protected:
   greaterthan2t(const greaterthan2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class lessthanequal2t : rel2t
@@ -258,7 +258,7 @@ protected:
   lessthanequal2t(const lessthanequal2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class greaterthanequal2t : rel2t
@@ -268,7 +268,7 @@ protected:
   greaterthanequal2t(const greaterthanequal2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 /** Logical operations base class. Base for any logical operator. No storage in
@@ -280,7 +280,7 @@ protected:
   lops2t(const lops2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 /** Not operator. Takes a boolean value; results in a boolean value. */
@@ -291,7 +291,7 @@ protected:
   not2t(const not2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const exprt &notvalue;
 };
@@ -305,7 +305,7 @@ protected:
   dynamic_object2t(const dynamic_object2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc ptr_obj
 };
@@ -318,7 +318,7 @@ protected:
   isnan2t(const isnan2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc value;
 };
@@ -332,7 +332,7 @@ protected:
   logical_2ops2t(const logical_2ops2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const exprt &side_1;
   const exprt &side_2;
@@ -345,7 +345,7 @@ protected:
   and2t(const and2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class or2t : logical_2ops2t
@@ -355,7 +355,7 @@ protected:
   or2t(const or2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class xor2t : logical_2ops2t
@@ -365,7 +365,7 @@ protected:
   xor2t(const xor2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 /** Same object operation. Compares two pointer objects to see if they're the
@@ -377,7 +377,7 @@ protected:
   same_object2t(const same_object2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 /** Binary operations base class. Take a type, probably integer with a width,
@@ -389,7 +389,7 @@ protected:
   binops2t(const binops2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -402,7 +402,7 @@ protected:
   bitand2t(const bitand2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class bitor2t : binops2t
@@ -412,7 +412,7 @@ protected:
   bitor2t(const bitor2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class bitxor2t : binops2t
@@ -422,7 +422,7 @@ protected:
   bitxor2t(const bitxor2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class bitnand2t : binops2t
@@ -432,7 +432,7 @@ protected:
   bitnand2t(const bitnand2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class bitnor2t : binops2t
@@ -442,7 +442,7 @@ protected:
   bitnor2t(const bitnor2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class bitnxor2t : binops2t
@@ -452,7 +452,7 @@ protected:
   bitnxor2t(const bitnxor2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class lshr2t : binops2t
@@ -462,7 +462,7 @@ protected:
   lshr2t(const lshr2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 /** Arithmatic base class. For all operations that are essentially integer
@@ -474,7 +474,7 @@ protected:
   arith2t(const arith2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class neg2t : arith2t
@@ -484,7 +484,7 @@ protected:
   neg2t(const neg2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc value;
 };
@@ -496,7 +496,7 @@ protected:
   abs2t(const abs2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc value;
 };
@@ -509,7 +509,7 @@ protected:
   arith_2op2t(const arith_2op2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc part_1;
   const expr2tc part_2;
@@ -522,7 +522,7 @@ protected:
   add2t(const add2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class sub2t : arith_2op2t
@@ -532,7 +532,7 @@ protected:
   sub2t(const sub2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class mul2t : arith_2op2t
@@ -542,7 +542,7 @@ protected:
   mul2t(const mul2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class div2t : arith_2op2t
@@ -552,7 +552,7 @@ protected:
   div2t(const div2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class modulus2t : arith_2op2t
@@ -562,7 +562,7 @@ protected:
   modulus2t(const modulus2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class shl2t : arith_2op2t
@@ -572,7 +572,7 @@ protected:
   shl2t(const shl2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 class ashr2t : arith_2op2t
@@ -582,7 +582,7 @@ protected:
   ashr2t(const ashr2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 /** Pointer offset. Extract pointer offset from a pointer value. Subclass of
@@ -594,7 +594,7 @@ protected:
   pointer_offset2t(const arith2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc pointer_obj;
 };
@@ -608,7 +608,7 @@ protected:
   pointer_object2t(const pointer_object2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc pointer_obj;
 };
@@ -623,7 +623,7 @@ protected:
   byte_ops2t(const byte_ops2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 /** Data extraction from some expression. Type is whatever type we're expecting
@@ -637,7 +637,7 @@ protected:
   byte_extract2t(const byte_extract2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc source_value;
   const expr2tc source_offset;
@@ -655,7 +655,7 @@ protected:
   byte_update2t(const byte_update2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc source_value;
   const expr2tc source_offset;
@@ -670,7 +670,7 @@ protected:
   datatype_ops2t(const datatype_ops2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 };
 
 /** With operation. Some kind of piece of data, another piece of data to
@@ -683,7 +683,7 @@ protected:
   with2t(const with2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc source_data;
   const expr2tc update_data;
@@ -698,7 +698,7 @@ protected:
   member2t(const member2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc source_data;
   const int field;
@@ -712,7 +712,7 @@ protected:
   index2t(const index2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc source_data;
   const expr2tc index;
@@ -727,7 +727,7 @@ protected:
   zero_string2t(const with2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc string;
 };
@@ -740,7 +740,7 @@ protected:
   zero_length_string2t(const with2t &ref);
 
 public:
-  virtual expr2t *clone(void) const;
+  virtual expr2tc clone(void) const;
 
   const expr2tc string;
 };
