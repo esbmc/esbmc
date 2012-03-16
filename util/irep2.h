@@ -590,3 +590,59 @@ public:
   const expr2t &source_offset;
   const expr2t &update_value;
 };
+
+/** Base type of datatype operations. */
+class datatype_ops2t : expr2t
+{
+protected:
+  datatype_ops2t(const type2t &type);
+  datatype_ops2t(const datatype_ops2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+/** With operation. Some kind of piece of data, another piece of data to
+ *  insert into it, and where to put it. */
+class with2t : datatype_ops2t
+{
+protected:
+  with2t(const type2t &type, const expr2t &source, const expr2t &update,
+         const int field);
+  with2t(const with2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &source_data;
+  const expr2t &update_data;
+  const int update_field;
+};
+
+/** Member operation. Extracts some field from a datatype. */
+class member2t : datatype_ops2t
+{
+protected:
+  member2t(const type2t &type, const expr2t &source, const int field);
+  member2t(const member2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &source_data;
+  const int field;
+};
+
+/** Index operation. Extracts an entry from an array. */
+class index2t : datatype_ops2t
+{
+protected:
+  index2t(const type2t &type, const expr2t &source, const expr2t &index);
+  index2t(const index2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &source_data;
+  const expr2t &index;
+};
