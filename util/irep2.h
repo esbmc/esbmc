@@ -421,3 +421,123 @@ protected:
 public:
   virtual expr2t *clone(void) const;
 };
+
+/** Arithmatic base class. For all operations that are essentially integer
+ *  arithmatic. */
+class arith2t : expr2t
+{
+protected:
+  arith2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  arith2t(const arith2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class neg2t : arith2t
+{
+protected:
+  neg2t(const type2t &type, const expr2t &value);
+  neg2t(const neg2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &value;
+};
+
+class abs2t : arith2t
+{
+protected:
+  abs2t(const type2t &type, const expr2t &value);
+  abs2t(const abs2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &value;
+};
+
+/** Base two-operand arithmatic class. */
+class arith_2op2t : arith2t
+{
+protected:
+  arith_2op2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  arith_2op2t(const arith_2op2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &part_1;
+  const expr2t &part_2;
+};
+
+class add2t : arith_2op2t
+{
+protected:
+  add2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  add2t(const add2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class sub2t : arith_2op2t
+{
+protected:
+  sub2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  sub2t(const sub2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class mul2t : arith_2op2t
+{
+protected:
+  mul2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  mul2t(const mul2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class div2t : arith_2op2t
+{
+protected:
+  div2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  div2t(const div2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class modulus2t : arith_2op2t
+{
+protected:
+  modulus2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  modulus2t(const modulus2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class shl2t : arith_2op2t
+{
+protected:
+  shl2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  shl2t(const shl2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class ashr2t : arith_2op2t
+{
+protected:
+  ashr2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  ashr2t(const ashr2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
