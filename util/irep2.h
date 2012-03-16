@@ -59,24 +59,24 @@ public:
 class struct_union_type2t : typet
 {
 protected:
-  struct_union_type2t(std::vector<const type2t *> &members);
+  struct_union_type2t(std::vector<type2tc> &members);
   struct_union_type2t(const struct_union_type2t &ref);
 
 public:
-  const std::vector<const type2t *> &members;
+  const std::vector<type2tc> members;
 };
 
 class struct_type2t : struct_union_type2t
 {
 protected:
-  struct_type2t(std::vector<const type2t *> &members);
+  struct_type2t(std::vector<type2tc> &members);
   struct_type2t(const struct_type2t &ref);
 };
 
 class union_type2t : struct_union_type2t
 {
 protected:
-  union_type2t(std::vector<const type2t *> &members);
+  union_type2t(std::vector<type2tc> &members);
   union_type2t(const union_type2t &ref);
 };
 
@@ -93,12 +93,12 @@ protected:
 class array_type2t : type2t
 {
 protected:
-  array_type2t(const type2t &subtype, const expr2tc size);
+  array_type2t(const type2tc subtype, const expr2tc size);
   array_type2t(const array_type2t &ref);
 
 public:
-  type2t &subtype;
-  expr2tc array_size;
+  const type2tc subtype;
+  const expr2tc array_size;
 };
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
@@ -106,11 +106,11 @@ public:
 class pointer_type2t : type2t
 {
 protected:
-  pointer_type2t(const type2t &subtype);
+  pointer_type2t(const type2tc subtype);
   pointer_type2t(const pointer_type2t &ref);
 
 public:
-  type2t &subtype;
+  const type2tc subtype;
 };
 
 class bv_type2t : type2t
