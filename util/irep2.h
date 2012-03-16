@@ -1,5 +1,7 @@
 #include <vector>
 
+#include <boost/shared_ptr.hpp>
+
 #include <big-int/bigint.hh>
 
 /** Base class for all types */
@@ -44,6 +46,8 @@ public:
   /** Type of this expr. All exprs have a type. */
   const type2t &type;
 };
+
+typedef boost::shared_ptr<expr2t> expr2tc;
 
 /** Constant class type. Not designed to contain any piece of data or method in
  *  particular, but allows for additional type safety. */
@@ -136,14 +140,14 @@ public:
 class constant_array_of2t : constant2t
 {
 protected:
-  constant_array2t(const type2t &type, const expr2t *initializer);
+  constant_array2t(const type2t &type, const expr2tc initializer);
   constant_array2t(const constant_array_of2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
   // Type records the size of the array; this records the initializer.
-  const exprt *initializer;
+  const expr2tc initializer;
 };
 
 class symbol2t : expr2t
@@ -163,21 +167,21 @@ public:
 class typecast2t : expr2t
 {
 protected:
-  typecast2t(const type2t &type, const expr2t &expr);
+  typecast2t(const type2t &type, const expr2tc expr);
   typecast2t(const typecast2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
   // Expression to typecast from.
-  const expr2t &from;
+  const expr2tc from;
 };
 
 class if2t : expr2t
 {
 protected:
-  if2t(const type2t &type, const expr2t &cond, const expr2t &true_val,
-             const expr2t &false_val);
+  if2t(const type2t &type, const expr2tc cond, const expr2tc true_val,
+             const expr2tc false_val);
   if2t(const if2t &ref);
 
 public:
@@ -185,9 +189,9 @@ public:
 
   // Conditional that this "if" depends on, and which value to take upon each
   // branch of that condition.
-  const expr2t &cond;
-  const expr2t &true_value;
-  const expr2t &false_value;
+  const expr2tc cond;
+  const expr2tc true_value;
+  const expr2tc false_value;
 };
 
 /** Relation superclass.
@@ -197,20 +201,20 @@ public:
 class rel2t : expr2t
 {
 protected:
-  rel2t(const expr2t &val1, const expr2t &val2);
+  rel2t(const expr2tc val1, const expr2tc val2);
   rel2t(const rel2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &side_1;
-  const expr2t &side_2;
+  const expr2tc side_1;
+  const expr2tc side_2;
 };
 
 class equality2t : rel2t
 {
 protected:
-  equality2t(const expr2t &val1, const expr2t &val2);
+  equality2t(const expr2tc val1, const expr2tc val2);
   equality2t(const equality2t &ref);
 
 public:
@@ -220,7 +224,7 @@ public:
 class notequal2t : rel2t
 {
 protected:
-  notequal2t(const expr2t &val1, const expr2t &val2);
+  notequal2t(const expr2tc val1, const expr2tc val2);
   notequal2t(const notequal2t &ref);
 
 public:
@@ -230,7 +234,7 @@ public:
 class lessthan2t : rel2t
 {
 protected:
-  lessthan2t(const expr2t &val1, const expr2t &val2);
+  lessthan2t(const expr2tc val1, const expr2tc val2);
   lessthan2t(const lessthan2t &ref);
 
 public:
@@ -240,7 +244,7 @@ public:
 class greaterthan2t : rel2t
 {
 protected:
-  greaterthan2t(const expr2t &val1, const expr2t &val2);
+  greaterthan2t(const expr2tc val1, const expr2tc val2);
   greaterthan2t(const greaterthan2t &ref);
 
 public:
@@ -250,7 +254,7 @@ public:
 class lessthanequal2t : rel2t
 {
 protected:
-  lessthanequal2t(const expr2t &val1, const expr2t &val2);
+  lessthanequal2t(const expr2tc val1, const expr2tc val2);
   lessthanequal2t(const lessthanequal2t &ref);
 
 public:
@@ -260,7 +264,7 @@ public:
 class greaterthanequal2t : rel2t
 {
 protected:
-  greaterthanequal2t(const expr2t &val1, const expr2t &val2);
+  greaterthanequal2t(const expr2tc val1, const expr2tc val2);
   greaterthanequal2t(const greaterthanequal2t &ref);
 
 public:
@@ -283,7 +287,7 @@ public:
 class not2t : lops2t
 {
 protected:
-  not2t(const expr2t &notval);
+  not2t(const expr2tc notval);
   not2t(const not2t &ref);
 
 public:
@@ -297,26 +301,26 @@ public:
 class dynamic_object2t : lops2t
 {
 protected:
-  dynamic_object2t(const expr2t &val);
+  dynamic_object2t(const expr2tc val);
   dynamic_object2t(const dynamic_object2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &ptr_obj
+  const expr2tc ptr_obj
 };
 
 /** Isnan operation. Checks whether expression is a NaN or not. */
 class isnan2t : lops2t
 {
 protected:
-  isnan2t(const expr2t &val);
+  isnan2t(const expr2tc val);
   isnan2t(const isnan2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &value;
+  const expr2tc value;
 };
 
 /** Base class for 2-operand boolean oeprators. Always results in a boolean,
@@ -324,7 +328,7 @@ public:
 class logical_2ops2t : lops2t
 {
 protected:
-  logical_2ops2t(const expr2t &val1, const expr2t &val2);
+  logical_2ops2t(const expr2tc val1, const expr2tc val2);
   logical_2ops2t(const logical_2ops2t &ref);
 
 public:
@@ -337,7 +341,7 @@ public:
 class and2t : logical_2ops2t
 {
 protected:
-  and2t(const expr2t &val1, const expr2t &val2);
+  and2t(const expr2tc val1, const expr2tc val2);
   and2t(const and2t &ref);
 
 public:
@@ -347,7 +351,7 @@ public:
 class or2t : logical_2ops2t
 {
 protected:
-  or2t(const expr2t &val1, const expr2t &val2);
+  or2t(const expr2tc val1, const expr2tc val2);
   or2t(const or2t &ref);
 
 public:
@@ -357,7 +361,7 @@ public:
 class xor2t : logical_2ops2t
 {
 protected:
-  xor2t(const expr2t &val1, const expr2t &val2);
+  xor2t(const expr2tc val1, const expr2tc val2);
   xor2t(const xor2t &ref);
 
 public:
@@ -369,7 +373,7 @@ public:
 class same_object2t : logical_2ops2t
 {
 protected:
-  same_object2t(const expr2t &val1, const expr2t &val2);
+  same_object2t(const expr2tc val1, const expr2tc val2);
   same_object2t(const same_object2t &ref);
 
 public:
@@ -381,20 +385,20 @@ public:
 class binops2t : expr2t
 {
 protected:
-  binops2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  binops2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   binops2t(const binops2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &side_1;
-  const expr2t &side_2;
+  const expr2tc side_1;
+  const expr2tc side_2;
 };
 
 class bitand2t : binops2t
 {
 protected:
-  bitand2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitand2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   bitand2t(const bitand2t &ref);
 
 public:
@@ -404,7 +408,7 @@ public:
 class bitor2t : binops2t
 {
 protected:
-  bitor2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitor2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   bitor2t(const bitor2t &ref);
 
 public:
@@ -414,7 +418,7 @@ public:
 class bitxor2t : binops2t
 {
 protected:
-  bitxor2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitxor2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   bitxor2t(const bitxor2t &ref);
 
 public:
@@ -424,7 +428,7 @@ public:
 class bitnand2t : binops2t
 {
 protected:
-  bitnand2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitnand2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   bitnand2t(const bitnand2t &ref);
 
 public:
@@ -434,7 +438,7 @@ public:
 class bitnor2t : binops2t
 {
 protected:
-  bitnor2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitnor2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   bitnor2t(const bitnor2t &ref);
 
 public:
@@ -444,7 +448,7 @@ public:
 class bitnxor2t : binops2t
 {
 protected:
-  bitnxor2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  bitnxor2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   bitnxor2t(const bitnxor2t &ref);
 
 public:
@@ -454,7 +458,7 @@ public:
 class lshr2t : binops2t
 {
 protected:
-  lshr2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  lshr2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   lshr2t(const lshr2t &ref);
 
 public:
@@ -466,7 +470,7 @@ public:
 class arith2t : expr2t
 {
 protected:
-  arith2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  arith2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   arith2t(const arith2t &ref);
 
 public:
@@ -476,45 +480,45 @@ public:
 class neg2t : arith2t
 {
 protected:
-  neg2t(const type2t &type, const expr2t &value);
+  neg2t(const type2t &type, const expr2tc value);
   neg2t(const neg2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &value;
+  const expr2tc value;
 };
 
 class abs2t : arith2t
 {
 protected:
-  abs2t(const type2t &type, const expr2t &value);
+  abs2t(const type2t &type, const expr2tc value);
   abs2t(const abs2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &value;
+  const expr2tc value;
 };
 
 /** Base two-operand arithmatic class. */
 class arith_2op2t : arith2t
 {
 protected:
-  arith_2op2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  arith_2op2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   arith_2op2t(const arith_2op2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &part_1;
-  const expr2t &part_2;
+  const expr2tc part_1;
+  const expr2tc part_2;
 };
 
 class add2t : arith_2op2t
 {
 protected:
-  add2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  add2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   add2t(const add2t &ref);
 
 public:
@@ -524,7 +528,7 @@ public:
 class sub2t : arith_2op2t
 {
 protected:
-  sub2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  sub2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   sub2t(const sub2t &ref);
 
 public:
@@ -534,7 +538,7 @@ public:
 class mul2t : arith_2op2t
 {
 protected:
-  mul2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  mul2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   mul2t(const mul2t &ref);
 
 public:
@@ -544,7 +548,7 @@ public:
 class div2t : arith_2op2t
 {
 protected:
-  div2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  div2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   div2t(const div2t &ref);
 
 public:
@@ -554,7 +558,7 @@ public:
 class modulus2t : arith_2op2t
 {
 protected:
-  modulus2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  modulus2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   modulus2t(const modulus2t &ref);
 
 public:
@@ -564,7 +568,7 @@ public:
 class shl2t : arith_2op2t
 {
 protected:
-  shl2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  shl2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   shl2t(const shl2t &ref);
 
 public:
@@ -574,7 +578,7 @@ public:
 class ashr2t : arith_2op2t
 {
 protected:
-  ashr2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  ashr2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   ashr2t(const ashr2t &ref);
 
 public:
@@ -586,13 +590,13 @@ public:
 class pointer_offset2t : arith2t
 {
 protected:
-  pointer_offset2t(const expr2t &pointer);
+  pointer_offset2t(const expr2tc pointer);
   pointer_offset2t(const arith2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &pointer_obj;
+  const expr2tc pointer_obj;
 };
 
 /** Pointer object. Extract pointer object from a pointer value. Subclass of
@@ -600,13 +604,13 @@ public:
 class pointer_object2t : arith2t
 {
 protected:
-  pointer_object2t(const expr2t &pointer);
+  pointer_object2t(const expr2tc pointer);
   pointer_object2t(const pointer_object2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &pointer_obj;
+  const expr2tc pointer_obj;
 };
 
 /** Base class for byte operations. Endianness is a global property of the
@@ -615,7 +619,7 @@ public:
 class byte_ops2t : expr2t
 {
 protected:
-  byte_ops2t(const type2t &type, const expr2t &val1, const expr2t &val2);
+  byte_ops2t(const type2t &type, const expr2tc val1, const expr2tc val2);
   byte_ops2t(const byte_ops2t &ref);
 
 public:
@@ -629,14 +633,14 @@ public:
 class byte_extract2t : byte_ops2t
 {
 protected:
-  byte_extract2t(const type2t &type, const expr2t &source, const expr2t &offs);
+  byte_extract2t(const type2t &type, const expr2tc source, const expr2tc offs);
   byte_extract2t(const byte_extract2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &source_value;
-  const expr2t &source_offset;
+  const expr2tc source_value;
+  const expr2tc source_offset;
 };
 
 /** Data insertion. Type is the type of the resulting expression. source_value
@@ -646,16 +650,16 @@ public:
 class byte_update2t : byte_ops2t
 {
 protected:
-  byte_udpate2t(const type2t &type, const expr2t &source, const expr2t &offs,
-                const expr2t &update);
+  byte_udpate2t(const type2t &type, const expr2tc source, const expr2tc offs,
+                const expr2tc update);
   byte_update2t(const byte_update2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &source_value;
-  const expr2t &source_offset;
-  const expr2t &update_value;
+  const expr2tc source_value;
+  const expr2tc source_offset;
+  const expr2tc update_value;
 };
 
 /** Base type of datatype operations. */
@@ -674,15 +678,15 @@ public:
 class with2t : datatype_ops2t
 {
 protected:
-  with2t(const type2t &type, const expr2t &source, const expr2t &update,
+  with2t(const type2t &type, const expr2tc source, const expr2tc update,
          const int field);
   with2t(const with2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &source_data;
-  const expr2t &update_data;
+  const expr2tc source_data;
+  const expr2tc update_data;
   const int update_field;
 };
 
@@ -690,13 +694,13 @@ public:
 class member2t : datatype_ops2t
 {
 protected:
-  member2t(const type2t &type, const expr2t &source, const int field);
+  member2t(const type2t &type, const expr2tc source, const int field);
   member2t(const member2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &source_data;
+  const expr2tc source_data;
   const int field;
 };
 
@@ -704,14 +708,14 @@ public:
 class index2t : datatype_ops2t
 {
 protected:
-  index2t(const type2t &type, const expr2t &source, const expr2t &index);
+  index2t(const type2t &type, const expr2tc source, const expr2tc index);
   index2t(const index2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &source_data;
-  const expr2t &index;
+  const expr2tc source_data;
+  const expr2tc index;
 };
 
 /** Zero string operation. Don't quite understand it. Just operates on the
@@ -719,24 +723,24 @@ public:
 class zero_string2t : datatype_ops2t
 {
 protected:
-  zero_string2t(const expr2t &string);
+  zero_string2t(const expr2tc string);
   zero_string2t(const with2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &string;
+  const expr2tc string;
 };
 
 /** Zero length string. Unknown dirference from zero_string. */
 class zero_length_string2t : datatype_ops2t
 {
 protected:
-  zero_length_string2t(const expr2t &string);
+  zero_length_string2t(const expr2tc string);
   zero_length_string2t(const with2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
 
-  const expr2t &string;
+  const expr2tc string;
 };
