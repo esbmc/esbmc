@@ -31,16 +31,18 @@ public:
 /** Boolean type. No additional data */
 class bool_type2t : type2t
 {
-protected:
+public:
   bool_type2t(void);
+protected:
   bool_type2t(const bool_type2t &ref);
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
 class empty_type2t : type2t
 {
-protected:
+public:
   empty_type2t(void);
+protected:
   empty_type2t(const empty_type2t &ref);
 };
 
@@ -48,8 +50,9 @@ protected:
  *  a struct/array contains a recursive pointer to its own type. */
 class symbol_type2t : type2t
 {
-protected:
+public:
   symbol_type2t(const dstring sym_name);
+protected:
   symbol_type2t(const symbol_type2t &ref);
 
 public:
@@ -68,23 +71,26 @@ public:
 
 class struct_type2t : struct_union_type2t
 {
-protected:
+public:
   struct_type2t(std::vector<type2tc> &members);
+protected:
   struct_type2t(const struct_type2t &ref);
 };
 
 class union_type2t : struct_union_type2t
 {
-protected:
+public:
   union_type2t(std::vector<type2tc> &members);
+protected:
   union_type2t(const union_type2t &ref);
 };
 
 /** Code type. No additional data whatsoever. */
 class code_type2t : type2t
 {
-protected:
+public:
   code_type2t(void);
+protected:
   code_type2t(const code_type2t &ref);
 };
 
@@ -92,8 +98,9 @@ protected:
  *  constant, might be nondeterministic. */
 class array_type2t : type2t
 {
-protected:
+public:
   array_type2t(const type2tc subtype, const expr2tc size);
+protected:
   array_type2t(const array_type2t &ref);
 
 public:
@@ -105,8 +112,9 @@ public:
  *  attributes */
 class pointer_type2t : type2t
 {
-protected:
+public:
   pointer_type2t(const type2tc subtype);
+protected:
   pointer_type2t(const pointer_type2t &ref);
 
 public:
@@ -125,22 +133,25 @@ public:
 
 class unsignedbv_type2t : bv_type2t
 {
-protected:
+public:
   unsignedbv_type2t(unsigned int width);
+protected:
   unsignedbv_type2t(const unsignedbv_type2t &ref);
 };
 
 class signedbv_type2t : bv_type2t
 {
-protected:
+public:
   signedbv_type2t(unsigned int width);
+protected:
   signedbv_type2t(const signedbv_type2t &ref);
 };
 
 class fixedbv_type2t : type2t
 {
-protected:
+public:
   fixedbv_type2t(unsigned int fraction, unsigned int integer);
+protected:
   fixedbv_type2t(const fixedbv_type2t &ref);
 
 public:
@@ -150,8 +161,9 @@ public:
 
 class string_type2t : type2t
 {
-protected:
+public:
   string_type2t(void);
+protected:
   string_type2t(const string_type2t &ref);
 };
 
