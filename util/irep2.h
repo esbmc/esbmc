@@ -206,3 +206,63 @@ public:
   const expr2t &side_1;
   const expr2t &side_2;
 };
+
+class equality2t : rel2t
+{
+protected:
+  equality2t(const expr2t &val1, const expr2t &val2);
+  equality2t(const equality2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class notequal2t : rel2t
+{
+protected:
+  notequal2t(const expr2t &val1, const expr2t &val2);
+  notequal2t(const notequal2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class lessthan2t : rel2t
+{
+protected:
+  lessthan2t(const expr2t &val1, const expr2t &val2);
+  lessthan2t(const lessthan2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class greaterthan2t : rel2t
+{
+protected:
+  greaterthan2t(const expr2t &val1, const expr2t &val2);
+  greaterthan2t(const greaterthan2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class lessthanequal2t : rel2t
+{
+protected:
+  lessthanequal2t(const expr2t &val1, const expr2t &val2);
+  lessthanequal2t(const lessthanequal2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class greaterthanequal2t : rel2t
+{
+protected:
+  greaterthanequal2t(const expr2t &val1, const expr2t &val2);
+  greaterthanequal2t(const greaterthanequal2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
