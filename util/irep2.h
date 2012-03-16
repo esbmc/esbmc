@@ -291,9 +291,9 @@ public:
 class constant_array_of2t : constant2t
 {
 public:
-  constant_array2t(const type2tc type, const expr2tc initializer);
+  constant_array_of2t(const type2tc type, const expr2tc initializer);
 protected:
-  constant_array2t(constant_array_of2t &ref);
+  constant_array_of2t(constant_array_of2t &ref);
 
 public:
   virtual expr2tc clone(void) const;
