@@ -266,3 +266,73 @@ protected:
 public:
   virtual expr2t *clone(void) const;
 };
+
+/** Logical operations base class. Base for any logical operator. No storage in
+ *  this particular class. Result is always of boolean type. */
+class lops2t : expr2t
+{
+protected:
+  lops2t(void);
+  lops2t(const lops2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+/** Not operator. Takes a boolean value; results in a boolean value. */
+class not2t : lops2t
+{
+protected:
+  not2t(const expr2t &notval);
+  not2t(const not2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const exprt &notvalue;
+};
+
+/** Base class for 2-operand boolean oeprators. Always results in a boolean,
+ *  takes two operands, both of boolean type. */
+class logical_2ops2t : lops2t
+{
+protected:
+  logical_2ops2t(const expr2t &val1, const expr2t &val2);
+  logical_2ops2t(const logical_2ops2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const exprt &side_1;
+  const exprt &side_2;
+};
+
+class and2t : logical_2ops2t
+{
+protected:
+  and2t(const expr2t &val1, const expr2t &val2);
+  and2t(const and2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class or2t : logical_2ops2t
+{
+protected:
+  or2t(const expr2t &val1, const expr2t &val2);
+  or2t(const or2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
+
+class xor2t : logical_2ops2t
+{
+protected:
+  xor2t(const expr2t &val1, const expr2t &val2);
+  xor2t(const xor2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+};
