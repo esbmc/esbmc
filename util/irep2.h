@@ -62,7 +62,7 @@ public:
 class struct_union_type2t : typet
 {
 protected:
-  struct_union_type2t(std::vector<type2tc> &members);
+  struct_union_type2t(const std::vector<type2tc> &members);
   struct_union_type2t(const struct_union_type2t &ref);
 
 public:
