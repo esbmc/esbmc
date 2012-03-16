@@ -922,7 +922,7 @@ Purpose:
 
 \*******************************************************************/
 
-cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
+void cpp_typecheck_resolvet::resolve_scope(
   const cpp_namet &cpp_name,
   std::string &base_name,
   cpp_template_args_non_tct &template_args)
@@ -934,12 +934,15 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
   location=cpp_name.location();
 
   irept::subt::const_iterator pos=cpp_name.get_sub().begin();
+  
+  bool recursive=true;
 
   // check if we need to go to the root scope
   if(pos->id()=="::")
   {
     pos++;
     cpp_typecheck.cpp_scopes.go_to_root_scope();
+    recursive=false;
   }
 
   base_name="";
@@ -968,41 +971,42 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
       cpp_scopest::id_sett id_set;
 
       if(template_args.is_not_nil())
-        cpp_typecheck.cpp_scopes.get_ids(base_name,cpp_idt::TEMPLATE, id_set, false);
-      else
-        cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);
-
-      filter_for_named_scopes(id_set);
-
-      if(id_set.empty())
       {
-        cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
-        cpp_typecheck.err_location(location);
-        cpp_typecheck.str << "scope `" << base_name << "' not found";
-        throw 0;
-      }
-      else if(id_set.size()==1)
-      {
-        if(template_args.is_not_nil())
-        {
-          const symbolt& symb_tmpl =
+        cpp_typecheck.cpp_scopes.get_ids(base_name,cpp_idt::TEMPLATE, id_set, !recursive);
+
+        const symbolt& symb_tmpl=
           cpp_typecheck.instantiate_template(cpp_name.location(),
-                                             (*id_set.begin())->identifier, template_args);
+            (*id_set.begin())->identifier, template_args);
 
-          cpp_typecheck.cpp_scopes.go_to(
-                                         cpp_typecheck.cpp_scopes.get_scope(symb_tmpl.name));
-          template_args.make_nil();
+        cpp_typecheck.cpp_scopes.go_to(
+          cpp_typecheck.cpp_scopes.get_scope(symb_tmpl.name));
+        template_args.make_nil();
+      }
+      else
+      {
+        cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, !recursive);
+
+        filter_for_named_scopes(id_set);
+
+        if(id_set.empty())
+        {
+          cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
+          cpp_typecheck.err_location(location);
+          cpp_typecheck.str << "scope `" << base_name << "' not found";
+          throw 0;
+        }
+        else if(id_set.size()==1)
+        {
+          cpp_typecheck.cpp_scopes.go_to(**id_set.begin());
         }
         else
-          cpp_typecheck.cpp_scopes.go_to(**id_set.begin());
-      }
-      else
-      {
-        cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
-        cpp_typecheck.err_location(location);
-        cpp_typecheck.str << "scope `"
-                          << base_name << "' is ambiguous";
-        throw 0;
+        {
+          cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
+          cpp_typecheck.err_location(location);
+          cpp_typecheck.str << "scope `"
+                            << base_name << "' is ambiguous";
+          throw 0;
+        }
       }
 
       // we start from fresh
@@ -1037,8 +1041,6 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
 
     pos++;
   }
-  
-  return cpp_typecheck.cpp_scopes.current_scope();
 }
 
 /*******************************************************************\
@@ -1866,7 +1868,6 @@ void cpp_typecheck_resolvet::apply_template_args(
   }
   #endif
 
-  // TODO
   // We typecheck the template arguments in the context
   // of the original scope!
 //  cpp_template_args_tct template_args_tc;
@@ -1899,10 +1900,8 @@ void cpp_typecheck_resolvet::apply_template_args(
       cpp_typecheck.instantiate_template(
         location, expr.identifier(), template_args_non_tc);
 
-    exprt expr_type("type");
-    expr_type.type().id("symbol");
-    expr_type.type().identifier(new_symbol.name);
-    expr.swap(expr_type);
+    expr=exprt("type", symbol_typet(new_symbol.name));
+    expr.location()=location;
   }
   else
   {
@@ -1912,7 +1911,7 @@ void cpp_typecheck_resolvet::apply_template_args(
         location, expr.identifier(), template_args_non_tc);
 
     // check if it is a method
-    const code_typet &code_type = to_code_type(new_symbol.type);
+    const code_typet &code_type=to_code_type(new_symbol.type);
 
     if(!code_type.arguments().empty() && 
         code_type.arguments()[0].cmt_base_name()=="this")
