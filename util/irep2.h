@@ -51,6 +51,30 @@ public:
   const dstring symbol_name;
 };
 
+class struct_union_type2t : typet
+{
+protected:
+  struct_union_type2t(std::vector<const type2t *> &members);
+  struct_union_type2t(const struct_union_type2t &ref);
+
+public:
+  const std::vector<const type2t *> &members;
+};
+
+class struct_type2t : struct_union_type2t
+{
+protected:
+  struct_type2t(std::vector<const type2t *> &members);
+  struct_type2t(const struct_type2t &ref);
+};
+
+class union_type2t : struct_union_type2t
+{
+protected:
+  union_type2t(std::vector<const type2t *> &members);
+  union_type2t(const union_type2t &ref);
+};
+
 /** Base class for all expressions */
 class expr2t
 {
