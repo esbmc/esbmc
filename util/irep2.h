@@ -75,6 +75,14 @@ protected:
   union_type2t(const union_type2t &ref);
 };
 
+/** Code type. No additional data whatsoever. */
+class code_type2t : type2t
+{
+protected:
+  code_type2t(void);
+  code_type2t(const code_type2t &ref);
+};
+
 /** Base class for all expressions */
 class expr2t
 {
