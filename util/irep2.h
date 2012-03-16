@@ -23,6 +23,34 @@ public:
   type_ids type_id;
 };
 
+/** Boolean type. No additional data */
+class bool_type2t : type2t
+{
+protected:
+  bool_type2t();
+  bool_type2t(const bool_type2t &ref);
+};
+
+/** Empty type. For void pointers and the like, with no type. No extra data */
+class empty_type2t : type2t
+{
+protected:
+  empty_type2t();
+  empty_type2t(const empty_type2t &ref);
+};
+
+/** Symbol type. Temporary, prior to linking up types after parsing, or when
+ *  a struct/array contains a recursive pointer to its own type. */
+class symbol_type2t : type2t
+{
+protected:
+  symbol_type2t(const dstring sym_name);
+  symbol_type2t(const symbol_type2t &ref);
+
+public:
+  const dstring symbol_name;
+};
+
 /** Base class for all expressions */
 class expr2t
 {
