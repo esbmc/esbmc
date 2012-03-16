@@ -713,3 +713,30 @@ public:
   const expr2t &source_data;
   const expr2t &index;
 };
+
+/** Zero string operation. Don't quite understand it. Just operates on the
+ *  string struct as far as I know. Result is boolean. */
+class zero_string2t : datatype_ops2t
+{
+protected:
+  zero_string2t(const expr2t &string);
+  zero_string2t(const with2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &string;
+};
+
+/** Zero length string. Unknown dirference from zero_string. */
+class zero_length_string2t : datatype_ops2t
+{
+protected:
+  zero_length_string2t(const expr2t &string);
+  zero_length_string2t(const with2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &string;
+};
