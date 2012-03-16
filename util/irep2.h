@@ -27,7 +27,7 @@ public:
 class bool_type2t : type2t
 {
 protected:
-  bool_type2t();
+  bool_type2t(void);
   bool_type2t(const bool_type2t &ref);
 };
 
@@ -35,7 +35,7 @@ protected:
 class empty_type2t : type2t
 {
 protected:
-  empty_type2t();
+  empty_type2t(void);
   empty_type2t(const empty_type2t &ref);
 };
 
