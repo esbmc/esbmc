@@ -173,7 +173,7 @@ class expr2t
 {
 public:
   /** Enumeration identifying each sort of expr.
-   *  The idea being to permit runtime identification of a type, for debugging or
+   *  The idea being to permit runtime identification of a type for debugging or
    *  otherwise. See type2t::type_ids. */
   enum expr_ids {
   };
