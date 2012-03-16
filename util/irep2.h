@@ -83,6 +83,19 @@ protected:
   code_type2t(const code_type2t &ref);
 };
 
+/** Array type. Comes with a subtype of the array and a size that might be
+ *  constant, might be nondeterministic. */
+class array_type2t : type2t
+{
+protected:
+  array_type2t(const type2t &subtype, const expr2tc size);
+  array_type2t(const array_type2t &ref);
+
+public:
+  type2t &subtype;
+  expr2tc array_size;
+};
+
 /** Base class for all expressions */
 class expr2t
 {
