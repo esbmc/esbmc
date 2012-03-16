@@ -22,6 +22,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <vector>
 #include <string.h>
 #include <decision_procedure.h>
+#include <irep2.h>
 
 #include "z3_prop.h"
 #include "z3_capi.h"
