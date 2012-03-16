@@ -421,7 +421,6 @@ bool Parser::isTypeSpecifier()
   if(t==Identifier || t==Scope
        || t==CONST || t==VOLATILE
        || t==CHAR || t==INT || t==SHORT || t==LONG
-       || t==WCHAR // new !!!
        || t==SIGNED || t==UNSIGNED || t==FLOAT || t==DOUBLE
        || t==WCHAR_T
        || t==INT8 || t==INT16 || t==INT32 || t==INT64 || t==PTR32 || t==PTR64
@@ -1578,10 +1577,10 @@ bool Parser::rAttribute()
 
 /*
 
-  !!! added WCHAR
+  !!! added WCHAR_T
 
   integral.or.class.spec
-  : (CHAR | WCHAR | INT | SHORT | LONG | SIGNED | UNSIGNED | FLOAT | DOUBLE
+  : (CHAR | WCHAR_T | INT | SHORT | LONG | SIGNED | UNSIGNED | FLOAT | DOUBLE
      | VOID | BOOLEAN)+
   | class.spec
   | enum.spec
@@ -1609,7 +1608,7 @@ bool Parser::optIntegralTypeOrClassSpec(typet &p)
     #endif // DEBUG
 
     if(t==CHAR || t==INT || t==SHORT || t==LONG || t==SIGNED
-       || t==WCHAR // !!!
+       || t==WCHAR_T // !!!
        || t==UNSIGNED || t==FLOAT || t==DOUBLE || t==VOID
        || t==INT8 || t==INT16 || t==INT32 || t==INT64
        || t==BOOLEAN
