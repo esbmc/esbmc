@@ -837,7 +837,7 @@ public:
 class byte_update2t : byte_ops2t
 {
 public:
-  byte_udpate2t(const type2tc type, const expr2tc source, const expr2tc offs,
+  byte_update2t(const type2tc type, const expr2tc source, const expr2tc offs,
                 const expr2tc update);
 protected:
   byte_update2t(const byte_update2t &ref);
