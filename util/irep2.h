@@ -4,6 +4,11 @@
 
 #include <big-int/bigint.hh>
 
+class type2t;
+class expr2t;
+typedef boost::shared_ptr<type2t> type2tc;
+typedef boost::shared_ptr<expr2t> expr2tc;
+
 /** Base class for all types */
 class type2t
 {
@@ -173,8 +178,6 @@ public:
   /** Type of this expr. All exprs have a type. */
   const type2t &type;
 };
-
-typedef boost::shared_ptr<expr2t> expr2tc;
 
 /** Constant class type. Not designed to contain any piece of data or method in
  *  particular, but allows for additional type safety. */
