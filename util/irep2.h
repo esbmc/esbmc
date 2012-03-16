@@ -197,8 +197,8 @@ public:
 class rel2t : expr2t
 {
 protected:
-  typecast2t(const expr2t &val1, const expr2t &val2);
-  typecast2t(const rel2t &ref);
+  rel2t(const expr2t &val1, const expr2t &val2);
+  rel2t(const rel2t &ref);
 
 public:
   virtual expr2t *clone(void) const;
