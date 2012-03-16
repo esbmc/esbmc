@@ -542,6 +542,34 @@ public:
   virtual expr2t *clone(void) const;
 };
 
+/** Pointer offset. Extract pointer offset from a pointer value. Subclass of
+ *  arithmatic because it returns an integer. */
+class pointer_offset2t : arith2t
+{
+protected:
+  pointer_offset2t(const expr2t &pointer);
+  pointer_offset2t(const arith2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &pointer_obj;
+};
+
+/** Pointer object. Extract pointer object from a pointer value. Subclass of
+ *  arithmatic because it returns an integer. */
+class pointer_object2t : arith2t
+{
+protected:
+  pointer_object2t(const expr2t &pointer);
+  pointer_object2t(const pointer_object2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &pointer_obj;
+};
+
 /** Base class for byte operations. Endianness is a global property of the
  *  model that we're building, and we only need to care about it when we build
  *  an smt model in the end, not at any other point. */
