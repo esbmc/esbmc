@@ -20,7 +20,7 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       format_constant.cpp std_expr.cpp \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
       pointer_arithmetic.cpp ieee_float.cpp signal_catcher.cpp \
-      bv_arithmetic.cpp irep2.cpp
+      bv_arithmetic.cpp irep2.cpp migrate.cpp
 
 ifdef MODULE_FLOATBV
   CXXFLAGS += -DHAVE_FLOATBV
