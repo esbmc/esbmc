@@ -108,6 +108,30 @@ public:
   type2t &subtype;
 };
 
+class bv_type2t : type2t
+{
+protected:
+  bv_type2t(unsigned int width);
+  bv_type2t(const bv_type2t &ref);
+
+public:
+  const unsigned int width;
+};
+
+class unsignedbv_type2t : bv_type2t
+{
+protected:
+  unsignedbv_type2t(unsigned int width);
+  unsignedbv_type2t(const unsignedbv_type2t &ref);
+};
+
+class signedbv_type2t : bv_type2t
+{
+protected:
+  signedbv_type2t(unsigned int width);
+  signedbv_type2t(const signedbv_type2t &ref);
+};
+
 /** Base class for all expressions */
 class expr2t
 {
