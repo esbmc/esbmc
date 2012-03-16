@@ -470,7 +470,7 @@ protected:
 public:
   virtual expr2tc clone(void) const;
 
-  const expr2tc ptr_obj
+  const expr2tc ptr_obj;
 };
 
 /** Isnan operation. Checks whether expression is a NaN or not. */
