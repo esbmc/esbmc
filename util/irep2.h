@@ -189,3 +189,20 @@ public:
   const expr2t &true_value;
   const expr2t &false_value;
 };
+
+/** Relation superclass.
+ *  All subclasses should be relation operators -- ie, equality, lt, ge, so
+ *  forth. Stores two expressions (of the _same_ _type_), always has result
+ *  type of a bool. */
+class rel2t : expr2t
+{
+protected:
+  typecast2t(const expr2t &val1, const expr2t &val2);
+  typecast2t(const rel2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &side_1;
+  const expr2t &side_2;
+};
