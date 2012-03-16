@@ -306,6 +306,19 @@ public:
   const expr2t &ptr_obj
 };
 
+/** Isnan operation. Checks whether expression is a NaN or not. */
+class isnan2t : lops2t
+{
+protected:
+  isnan2t(const expr2t &val);
+  isnan2t(const isnan2t &ref);
+
+public:
+  virtual expr2t *clone(void) const;
+
+  const expr2t &value;
+};
+
 /** Base class for 2-operand boolean oeprators. Always results in a boolean,
  *  takes two operands, both of boolean type. */
 class logical_2ops2t : lops2t
