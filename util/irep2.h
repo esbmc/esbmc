@@ -171,10 +171,6 @@ protected:
 /** Base class for all expressions */
 class expr2t
 {
-protected:
-  expr2t(const type2tc type, expr_ids id);
-  expr2t(const expr2t &ref);
-
 public:
   /** Enumeration identifying each sort of expr.
    *  The idea being to permit runtime identification of a type, for debugging or
@@ -182,6 +178,11 @@ public:
   enum expr_ids {
   };
 
+protected:
+  expr2t(const type2tc type, expr_ids id);
+  expr2t(const expr2t &ref);
+
+public:
   /** Clone method. Entirely self explanatory */
   virtual expr2tc clone(void) const = 0;
 
