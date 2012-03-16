@@ -12,10 +12,6 @@ typedef boost::shared_ptr<expr2t> expr2tc;
 /** Base class for all types */
 class type2t
 {
-protected:
-  type2t(type_ids id);
-  type2t(const type2t &ref);
-
 public:
   /** Enumeration identifying each sort of type.
    *  The idea being that we might (for whatever reason) at runtime need to fall
@@ -24,6 +20,11 @@ public:
   enum type_ids {
   };
 
+protected:
+  type2t(type_ids id);
+  type2t(const type2t &ref);
+
+public:
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
 };
