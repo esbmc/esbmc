@@ -958,9 +958,7 @@ class expr2_mapt {
 private: // Deny copy constructor
   expr2_mapt(const expr2_mapt &ref) {}
 public:
-  expr2_mapt(const std::string no_mapping_error);
-
-  void unhandled_expr_map(void);
+  expr2_mapt();
 
   void map(expr2t &expr, va_list args);
   void map(constant2t &expr, va_list args);
@@ -1020,6 +1018,4 @@ public:
   void map(index2t &expr, va_list args);
   void map(zero_string2t &expr, va_list args);
   void map(zero_length_string2t &expr, va_list args);
-
-  const std::string no_map_error;
 };
