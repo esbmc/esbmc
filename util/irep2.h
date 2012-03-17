@@ -951,3 +951,12 @@ public:
  *  To get around this, Use this mapping technique. Each expression type gets
  *  pumped through a virtual "map" method, leading to calling an overloaded
  *  "map" method in the following class. */
+
+class expr2_mapt {
+private: // Deny copy constructor
+  expr2_mapt(const expr2_mapt &ref) {}
+public:
+  expr2_mapt(const std::string no_mapping_error);
+
+  const std::string no_map_error;
+};
