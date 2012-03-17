@@ -938,3 +938,16 @@ public:
 
   const expr2tc string;
 };
+
+/** Expression mapping base class.
+ *  Implements boilerplate for performing operations on different types of
+ *  expression. Some example operations: simplification, smt-conversion,
+ *  typecasting. In these cases the user wishes to perform some action for every
+ *  single kind of expression. However:
+ *   * A huge if-then-else chain is inefficient and error prone
+ *   * Adding a method for that operation to expr2t is vastly cluttering, and
+ *     breaks all kinds of encapsulation things.
+ *
+ *  To get around this, Use this mapping technique. Each expression type gets
+ *  pumped through a virtual "map" method, leading to calling an overloaded
+ *  "map" method in the following class. */
