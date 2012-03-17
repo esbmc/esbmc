@@ -1,3 +1,5 @@
+#include <stdarg.h>
+
 #include <vector>
 
 #include <boost/shared_ptr.hpp>
@@ -957,6 +959,67 @@ private: // Deny copy constructor
   expr2_mapt(const expr2_mapt &ref) {}
 public:
   expr2_mapt(const std::string no_mapping_error);
+
+  void unhandled_expr_map(void);
+
+  void map(expr2t &expr, va_list args);
+  void map(constant2t &expr, va_list args);
+  void map(constant_int2t &expr, va_list args);
+  void map(constant_string2t &expr, va_list args);
+  void map(constant_datatype2t &expr, va_list args);
+  void map(constant_struct2t &expr, va_list args);
+  void map(constant_union2t &expr, va_list args);
+  void map(constant_array2t &expr, va_list args);
+  void map(constant_array_of2t &expr, va_list args);
+  void map(symbol2t &expr, va_list args);
+  void map(typecast2t &expr, va_list args);
+  void map(if2t &expr, va_list args);
+  void map(rel2t &expr, va_list args);
+  void map(equality2t &expr, va_list args);
+  void map(notequal2t &expr, va_list args);
+  void map(lessthan2t &expr, va_list args);
+  void map(greaterthan2t &expr, va_list args);
+  void map(lessthanequal2t &expr, va_list args);
+  void map(greaterthanequal2t &expr, va_list args);
+  void map(lops2t &expr, va_list args);
+  void map(not2t &expr, va_list args);
+  void map(dynamic_object2t &expr, va_list args);
+  void map(isnan2t &expr, va_list args);
+  void map(logical_2ops2t &expr, va_list args);
+  void map(and2t &expr, va_list args);
+  void map(or2t &expr, va_list args);
+  void map(xor2t &expr, va_list args);
+  void map(same_object2t &expr, va_list args);
+  void map(binops2t &expr, va_list args);
+  void map(bitand2t &expr, va_list args);
+  void map(bitor2t &expr, va_list args);
+  void map(bitxor2t &expr, va_list args);
+  void map(bitnand2t &expr, va_list args);
+  void map(bitnor2t &expr, va_list args);
+  void map(bitnxor2t &expr, va_list args);
+  void map(lshr2t &expr, va_list args);
+  void map(arith2t &expr, va_list args);
+  void map(neg2t &expr, va_list args);
+  void map(abs2t &expr, va_list args);
+  void map(arith_2op2t &expr, va_list args);
+  void map(add2t &expr, va_list args);
+  void map(sub2t &expr, va_list args);
+  void map(mul2t &expr, va_list args);
+  void map(div2t &expr, va_list args);
+  void map(modulus2t &expr, va_list args);
+  void map(shl2t &expr, va_list args);
+  void map(ashr2t &expr, va_list args);
+  void map(pointer_offset2t &expr, va_list args);
+  void map(pointer_object2t &expr, va_list args);
+  void map(byte_ops2t &expr, va_list args);
+  void map(byte_extract2t &expr, va_list args);
+  void map(byte_update2t &expr, va_list args);
+  void map(datatype_ops2t &expr, va_list args);
+  void map(with2t &expr, va_list args);
+  void map(member2t &expr, va_list args);
+  void map(index2t &expr, va_list args);
+  void map(zero_string2t &expr, va_list args);
+  void map(zero_length_string2t &expr, va_list args);
 
   const std::string no_map_error;
 };
