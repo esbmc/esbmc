@@ -5,8 +5,6 @@
 #include "definitions.h"
 #include "iomanip"
 
-#include "vector"
-
 namespace std
 {
 struct ostream
