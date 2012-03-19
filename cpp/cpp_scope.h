@@ -66,16 +66,6 @@ public:
     return (cpp_scopet &)cpp_idt::get_parent(i);
   }
 
-  cpp_scopet &get_global_scope()
-  {
-    cpp_scopet *p=this;
-    
-    while(!p->is_global_scope())
-      p=&(p->get_parent());
-    
-    return *p;
-  }
-
   class cpp_scopet &new_scope(const irep_idt &new_scope_name);
 };
 

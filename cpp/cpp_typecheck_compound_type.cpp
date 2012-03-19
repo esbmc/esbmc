@@ -22,7 +22,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::tag_scope
+Function: cpp_typecheckt::compound_identifier
 
 Inputs:
 
@@ -32,45 +32,29 @@ Purpose:
 
 \*******************************************************************/
 
-cpp_scopet &cpp_typecheckt::tag_scope(
-  const irep_idt &base_name,
-  bool has_body,
-  bool tag_only_declaration)
+irep_idt cpp_typecheckt::compound_identifier(
+                                             const irep_idt &identifier,
+                                             const irep_idt &base_name,
+                                             bool has_body)
 {
-  // The scope of a compound identifier is difficult,
-  // and is different from C.
-  //
-  // For instance:
-  // class A { class B {} }   --> A::B
-  // class A { class B; }     --> A::B
-  // class A { class B *p; }  --> ::B
-  // class B { }; class A { class B *p; } --> ::B
-  // class B { }; class A { class B; class B *p; } --> A::B
+  if(!has_body)
+  {
+    // check if we have it already
 
-  // If there is a body, or it's a tag-only declaration,
-  // it's always in the current scope, even if we already have
-  // it in an upwards scope.
+    cpp_scopet::id_sett id_set;
+    cpp_scopes.current_scope().recursive_lookup(base_name, id_set);
 
-  if(has_body || tag_only_declaration)
-    return cpp_scopes.current_scope();
-    
-  // No body. Not a tag-only-declaration.
-  // Check if we have it already. If so, take it.
-
-  // we should only look for tags, but we don't
-  cpp_scopet::id_sett id_set;
-  cpp_scopes.get_ids(base_name, id_set, false);
-
-  for(cpp_scopet::id_sett::const_iterator it=id_set.begin();
-      it!=id_set.end();
-      it++)
+    for(cpp_scopet::id_sett::const_iterator it=id_set.begin();
+        it!=id_set.end();
+        it++)
     if((*it)->is_class())
-      return static_cast<cpp_scopet &>((*it)->get_parent());
-    
-  // Tags without body that we don't have already
-  // and that are not a tag-only declaration go into
-  // the global scope of the namespace.
-  return cpp_scopes.get_global_scope();
+      return (*it)->identifier;
+  }
+
+  return
+  cpp_identifier_prefix(current_mode)+"::"+
+  cpp_scopes.current_scope().prefix+
+  "struct"+"."+id2string(identifier);
 }
 
 /*******************************************************************\
@@ -91,46 +75,35 @@ void cpp_typecheckt::typecheck_compound_type(
   // first save qualifiers
   c_qualifierst qualifiers(type);
 
-  // now clear them
+  // now clear them from the type
   type.remove("#constant");
   type.remove("#volatile");
   type.remove("#restricted");
 
-  // get the tag name
-  bool anonymous=type.find("tag").is_nil();
-  
+  // replace by type symbol
+
+  cpp_namet &cpp_name=static_cast<cpp_namet &>(type.add("tag"));
+  bool has_body=type.body().is_not_nil();
+
   std::string identifier, base_name;
+  cpp_name.convert(identifier, base_name);
+
+  if(identifier!=base_name)
+  {
+    err_location(cpp_name.location());
+    throw "no namespaces allowed here";
+  }
+
+  bool anonymous=base_name.empty();
 
   if(anonymous)
   {
-    base_name=identifier=
-      "#anon_"+type.id_string()+i2string(anon_counter++);
-    type.set("#is_anonymous", true);
-  }
-  else
-  {
-    const cpp_namet &cpp_name=
-      to_cpp_name(type.find("tag"));
-
-    cpp_name.convert(identifier, base_name);
-
-    if(identifier!=base_name)
-    {
-      err_location(cpp_name.location());
-      throw "no namespaces allowed in compound names";
-    }
+    base_name=identifier="#anon"+i2string(anon_counter++);
+    type.set("#is_anonymous",true);
   }
 
-  bool has_body=type.find("body").is_not_nil();
-  bool tag_only_declaration=type.get_bool("#tag_only_declaration");
-  
-  cpp_scopet &dest_scope=
-    tag_scope(base_name, has_body, tag_only_declaration);
-  
   const irep_idt symbol_name=
-    cpp_identifier_prefix(current_mode)+"::"+
-    dest_scope.prefix+
-    "tag"+"."+identifier;
+  std::string(compound_identifier(identifier, base_name, has_body).c_str());
 
   // check if we have it already
 
@@ -153,7 +126,7 @@ void cpp_typecheckt::typecheck_compound_type(
       }
       else
       {
-        err_location(type.location());
+        err_location(cpp_name.location());
         str << "error: struct symbol `" << base_name
             << "' declared previously" << std::endl;
         str << "location of previous definition: "
@@ -170,7 +143,7 @@ void cpp_typecheckt::typecheck_compound_type(
     symbol.name=symbol_name;
     symbol.base_name=base_name;
     symbol.value.make_nil();
-    symbol.location=type.location();
+    symbol.location=cpp_name.location();
     symbol.mode=current_mode;
     symbol.module=module;
     symbol.type.swap(type);

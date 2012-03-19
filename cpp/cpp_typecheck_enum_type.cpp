@@ -105,16 +105,12 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
   bool has_body=enum_type.has_body();
   std::string base_name=id2string(enum_type.get_name());
   bool anonymous=base_name.empty();
-  bool tag_only_declaration=enum_type.get_tag_only_declaration();
 
   if(anonymous)
     base_name="#anon"+i2string(anon_counter++);
-
-  cpp_scopet &dest_scope=
-    tag_scope(base_name, has_body, tag_only_declaration);
-
+  
   const irep_idt symbol_name=
-    dest_scope.prefix+"struct."+base_name;
+    compound_identifier(base_name, base_name, has_body);
 
   // check if we have it
   

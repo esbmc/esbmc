@@ -118,12 +118,11 @@ public:
   // move up to next global scope
   void go_to_global_scope()
   {
-    current_scope_ptr=&get_global_scope();
-  }
-
-  cpp_scopet &get_global_scope()
-  {
-    return current_scope().get_global_scope();
+    while(!current_scope().is_global_scope())
+    {
+      current_scope_ptr=&current_scope().get_parent();
+      assert(current_scope_ptr!=NULL);
+    }
   }
 
   void print_current(std::ostream &out) const;
