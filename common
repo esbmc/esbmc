@@ -14,6 +14,8 @@ OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 
+EXTRACXXFLAGS+=-fpermissive
+
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
 CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 

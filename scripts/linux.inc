@@ -30,12 +30,6 @@ GCCFLAGS += -m32
 LDFLAGS += -m elf_i386
 endif
 
-# Work with latest version of gcc
-GCCVERSIONGTEQ460 := $(shell expr 4.6.0 \<= `$(CC) -dumpversion`)
-ifeq "$(GCCVERSIONGTEQ460)" "1"
-  CXXFLAGS += -fpermissive
-endif
-
 ifdef STATICLINK
 FINLINKTAIL+= -static
 endif
