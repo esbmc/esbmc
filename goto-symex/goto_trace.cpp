@@ -398,6 +398,10 @@ void show_goto_trace(
       }
       break;
 
+    case goto_trace_stept::SKIP:
+      // Something deliberately ignored
+      break;
+
     default:
       assert(false);
     }
