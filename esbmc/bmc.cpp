@@ -529,6 +529,49 @@ bool bmct::run_thread()
       return false;
     }
 
+    if (options.get_bool_option("ltl")) {
+#ifndef Z3
+      std::cerr << "Can't run LTL checking without Z3 compiled in" << std::endl;
+      exit(1);
+#else
+      // LTL checking - first check for whether we have an indeterminate prefix,
+      // and then check for all others.
+
+      // Start by turning all assertions that aren't the negative prefix
+      // assertion into skips.
+      for(symex_target_equationt::SSA_stepst::iterator
+          it=equation->SSA_steps.begin();
+          it!=equation->SSA_steps.end(); it++)
+      {
+        if (it->is_assert()) {
+          if (it->comment != "Indecisive prefix") {
+            it->type = goto_trace_stept::SKIP;
+          }
+        }
+      }
+
+      solver = new z3_solver(*this);
+      ret = solver->run_solver(*equation);
+      delete solver;
+      if (ret)
+        return ret;
+
+      // Didn't find it; turn skip steps back into assertions.
+      for(symex_target_equationt::SSA_stepst::iterator
+          it=equation->SSA_steps.begin();
+          it!=equation->SSA_steps.end(); it++)
+      {
+        if (it->type == goto_trace_stept::SKIP)
+          it->type = goto_trace_stept::ASSERT;
+      }
+
+      solver = new z3_solver(*this);
+      ret = solver->run_solver(*equation);
+      delete solver;
+      return ret;
+#endif
+    }
+
     if (options.get_bool_option("smt"))
       if (interleaving_number !=
           strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
