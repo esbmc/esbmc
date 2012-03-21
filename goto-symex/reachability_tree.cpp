@@ -22,6 +22,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <expr_util.h>
 #include <std_expr.h>
 #include <config.h>
+#include <message.h>
 
 #include "crypto_hash.h"
 
@@ -30,10 +31,12 @@ reachability_treet::reachability_treet(
     const namespacet &ns,
     const optionst &opts,
     symex_targett *target,
-    contextt &context) :
+    contextt &context,
+    message_handlert &_message_handler) :
     goto_functions(goto_functions),
     ns(ns),
-    options(opts)
+    options(opts),
+    message_handler(_message_handler)
 {
   CS_bound = atoi(options.get_option("context-switch").c_str());
   TS_slice = atoi(options.get_option("time-slice").c_str());

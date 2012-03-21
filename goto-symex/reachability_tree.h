@@ -14,6 +14,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <set>
 #include <map>
 #include <options.h>
+#include <message.h>
 #include "goto_symex.h"
 #include "execution_state.h"
 #include "symex_target_equation.h"
@@ -68,13 +69,15 @@ public:
    *  @param ns Namespace to operate in
    *  @param target Target to listen in on assigns/asserts/assumes. Is cloned.
    *  @param context Context to operate in.
+   *  @param message_handler Message object for symex errors/warnings/info
    */
   reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
     const optionst &opts,
     symex_targett *target,
-    contextt &context);
+    contextt &context,
+    message_handlert &message_handler);
 
   /**
    *  Default destructor.
@@ -389,6 +392,8 @@ protected:
   std::set<crypto_hash>hit_hashes;
   /** Options that are enabled */
   optionst options;
+  /** Message handler reference. */
+  message_handlert &message_handler;
 
   friend class execution_statet;
 };

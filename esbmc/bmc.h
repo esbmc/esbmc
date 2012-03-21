@@ -42,7 +42,8 @@ public:
     options(opts),
     context(_context),
     ns(_context, new_context),
-    symex(funcs, ns, options, new symex_target_equationt(ns), new_context),
+    symex(funcs, ns, options, new symex_target_equationt(ns), new_context,
+          _message_handler),
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
