@@ -530,6 +530,7 @@ bool bmct::run_thread()
     }
 
     if (options.get_bool_option("ltl")) {
+      unsigned int num_asserts = 0;
 #ifndef Z3
       std::cerr << "Can't run LTL checking without Z3 compiled in" << std::endl;
       exit(1);
@@ -546,15 +547,19 @@ bool bmct::run_thread()
         if (it->is_assert()) {
           if (it->comment != "Indecisive prefix") {
             it->type = goto_trace_stept::SKIP;
+          } else {
+            num_asserts++;
           }
         }
       }
 
-      solver = new z3_solver(*this);
-      ret = solver->run_solver(*equation);
-      delete solver;
-      if (ret)
-        return ret;
+      if (num_asserts != 0) {
+        solver = new z3_solver(*this);
+        ret = solver->run_solver(*equation);
+        delete solver;
+        if (ret)
+          return ret;
+      }
 
       // Didn't find it; turn skip steps back into assertions.
       for(symex_target_equationt::SSA_stepst::iterator
