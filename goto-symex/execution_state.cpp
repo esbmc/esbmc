@@ -6,6 +6,10 @@
 
 \*******************************************************************/
 
+#include <langapi/mode.h>
+#include <langapi/languages.h>
+#include <langapi/language_ui.h>
+
 #include "execution_state.h"
 #include "reachability_tree.h"
 #include <string>
@@ -27,10 +31,12 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    symex_targett *_target,
                                    contextt &context,
                                    ex_state_level2t *l2init,
-                                   const optionst &options) :
+                                   const optionst &options,
+                                   message_handlert &_message_handler) :
   goto_symext(ns, context, goto_functions, _target, options),
   owning_rt(art),
-  state_level2(l2init)
+  state_level2(l2init),
+  message_handler(_message_handler)
 {
 
   // XXXjmorse - C++s static initialization order trainwreck means
@@ -92,7 +98,8 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(ex.state_level2->clone())
+  state_level2(ex.state_level2->clone()),
+  message_handler(ex.message_handler)
 {
 
   *this = ex;

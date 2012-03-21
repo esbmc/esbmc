@@ -18,6 +18,7 @@
 #include <list>
 #include <algorithm>
 #include <std_expr.h>
+#include <message.h>
 
 #include "symex_target.h"
 #include "goto_symex_state.h"
@@ -69,13 +70,15 @@ class execution_statet : public goto_symext
    *  @param context Context we'll be working in.
    *  @param l2init Initial level2t state (blank).
    *  @param options Options we're going to operate with.
+   *  @param message_handler Message object to collect errors/warnings
    */
   execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
                    reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
                    ex_state_level2t *l2init,
-                   const optionst &options);
+                   const optionst &options,
+                   message_handlert &message_handler);
 
   /**
    *  Default copy constructor.
@@ -508,6 +511,8 @@ class execution_statet : public goto_symext
   bool mon_from_tid;
   /** Are we performing LTL monitor checking? */
   bool check_ltl;
+  /** Message handler object */
+  message_handlert &message_handler;
 
   protected:
   /** Number of context switches performed by this ex_state */
@@ -543,12 +548,13 @@ class dfs_execution_statet : public execution_statet
                    reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
-                   const optionst &options)
+                   const optionst &options,
+                   message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
                          options.get_bool_option("state-hashing")
                              ? new state_hashing_level2t(*this)
                              : new ex_state_level2t(*this),
-                             options)
+                             options, _message_handler)
   {
   };
 
@@ -575,9 +581,10 @@ class schedule_execution_statet : public execution_statet
                    contextt &context,
                    const optionst &options,
                    unsigned int *ptotal_claims,
-                   unsigned int *premaining_claims)
+                   unsigned int *premaining_claims,
+                   message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
-                         new ex_state_level2t(*this), options)
+                         new ex_state_level2t(*this), options, _message_handler)
   {
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;

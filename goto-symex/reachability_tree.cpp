@@ -57,12 +57,14 @@ reachability_treet::reachability_treet(
                          new schedule_execution_statet(goto_functions, ns,
                                                this, target, context, opts,
                                                &schedule_total_claims,
-                                               &schedule_remaining_claims));
+                                               &schedule_remaining_claims,
+                                               message_handler));
     schedule_target = target;
   } else {
     s = reinterpret_cast<execution_statet*>(
                          new dfs_execution_statet(goto_functions, ns, this,
-                                               target, context, opts));
+                                               target, context, opts,
+                                               message_handler));
     schedule_target = NULL;
   }
 
