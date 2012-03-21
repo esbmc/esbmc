@@ -504,6 +504,8 @@ class execution_statet : public goto_symext
   unsigned int monitor_from_tid;
   /** Whether monitor_from_tid is set */
   bool mon_from_tid;
+  /** Are we performing LTL monitor checking? */
+  bool check_ltl;
 
   protected:
   /** Number of context switches performed by this ex_state */

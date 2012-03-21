@@ -84,6 +84,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   dynamic_counter = 0;
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
+  check_ltl = false;
 
   str_state = string_container.take_state_snapshot();
 }
@@ -133,6 +134,7 @@ execution_statet::operator=(const execution_statet &ex)
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
+  check_ltl = ex.check_ltl;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
