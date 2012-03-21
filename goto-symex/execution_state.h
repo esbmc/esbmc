@@ -449,6 +449,8 @@ class execution_statet : public goto_symext
    */
   void switch_away_from_monitor(void);
 
+  /** Makr registered monitor thread as ended. Designed to be used by ltl2ba
+   *  produced code when the monitor is to be ended. */
   void kill_monitor_thread(void);
 
   public:
