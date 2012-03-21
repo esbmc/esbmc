@@ -30,8 +30,9 @@ public:
   bool is_assume() const     { return type==ASSUME; }
   bool is_assert() const     { return type==ASSERT; }
   bool is_output() const     { return type==OUTPUT; }
+  bool is_skip() const       { return type==SKIP; }
 
-  typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT } typet;
+  typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT, SKIP } typet;
   typet type;
     
   goto_programt::const_targett pc;
