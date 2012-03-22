@@ -513,6 +513,8 @@ class execution_statet : public goto_symext
   bool mon_from_tid;
   /** Are we performing LTL monitor checking? */
   bool check_ltl;
+  /** Have we warned of an ended monitor thread already?. */
+  bool mon_thread_warning;
   /** List of monitored properties. */
   std::map<std::string, exprt> property_monitor_strings;
   /** Message handler object */

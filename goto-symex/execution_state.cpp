@@ -91,6 +91,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
   check_ltl = false;
+  mon_thread_warning = false;
 
   str_state = string_container.take_state_snapshot();
 }
@@ -141,6 +142,7 @@ execution_statet::operator=(const execution_statet &ex)
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
+  mon_thread_warning = ex.mon_thread_warning;
   check_ltl = ex.check_ltl;
   property_monitor_strings = ex.property_monitor_strings;
 
@@ -879,8 +881,12 @@ execution_statet::switch_to_monitor(void)
 {
 
   if (threads_state[monitor_tid].thread_ended) {
-    std::cout << "Switching to ended monitor; you need to set its unwind bound to uliminted" << std::endl;
-    abort();
+    if (!mon_thread_warning) {
+      std::cerr << "Switching to ended monitor; you need to increase its context or prefix bound" << std::endl;
+      mon_thread_warning = true;
+    }
+
+    return;
   }
 
   assert(tid_is_set && "Must set monitor thread before switching to monitor\n");
