@@ -545,7 +545,8 @@ bool bmct::run_thread()
           it!=equation->SSA_steps.end(); it++)
       {
         if (it->is_assert()) {
-          if (it->comment != "Indecisive prefix") {
+          if (it->comment != "Succeeding LTL trace" &&
+              it->comment != "Failing LTL trace") {
             it->type = goto_trace_stept::SKIP;
           } else {
             num_asserts++;
