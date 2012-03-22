@@ -142,6 +142,7 @@ execution_statet::operator=(const execution_statet &ex)
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
   check_ltl = ex.check_ltl;
+  property_monitor_strings = ex.property_monitor_strings;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
@@ -934,6 +935,66 @@ execution_statet::kill_monitor_thread(void)
 
   threads_state[monitor_tid].thread_ended = true;
   return;
+}
+
+static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+{
+
+  if (e.id() ==  "symbol") {
+    std::string sym = e.identifier().as_string();
+    used_syms.insert(sym);
+  } else {
+    Forall_operands(it, e)
+      replace_symbol_names(*it, prefix, strings, used_syms);
+  }
+
+  return;
+}
+
+void
+execution_statet::init_property_monitors(void)
+{
+  std::map<std::string, std::string> strings;
+
+  symbolst::const_iterator it;
+  for (it = new_context.symbols.begin(); it != new_context.symbols.end(); it++){
+    if (it->first.as_string().find("__ESBMC_property_") != std::string::npos) {
+      // Munge back into the shape of an actual string
+      std::string str = "";
+      forall_operands(iter2, it->second.value) {
+        char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
+        if (c != 0)
+          str += c;
+        else
+          break;
+      }
+
+      strings[it->first.as_string()] = str;
+    }
+  }
+
+  std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
+  std::map<std::string, std::string>::const_iterator str_it;
+  for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
+    if (str_it->first.find("$type") == std::string::npos) {
+      std::set<std::string> used_syms;
+      exprt main_expr;
+      std::string prop_name = str_it->first.substr(20, std::string::npos);
+
+      namespacet ns(new_context);
+      languagest languages(ns, MODE_C);
+
+      std::string expr_str = strings["c::__ESBMC_property_" + prop_name];
+      std::string dummy_str = "";
+
+      languages.to_expr(expr_str, dummy_str, main_expr, message_handler);
+
+      replace_symbol_names(main_expr, prop_name, strings, used_syms);
+
+      monitors[prop_name] = std::pair<std::set<std::string>, exprt>
+                                      (used_syms, main_expr);
+    }
+  }
 }
 
 bool execution_statet::expr_id_map_initialized = false;

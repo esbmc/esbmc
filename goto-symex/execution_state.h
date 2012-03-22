@@ -456,6 +456,8 @@ class execution_statet : public goto_symext
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread(void);
 
+  void init_property_monitors(void);
+
   public:
 
   /** Pointer to reachability_treet that owns this ex_state */
@@ -511,6 +513,8 @@ class execution_statet : public goto_symext
   bool mon_from_tid;
   /** Are we performing LTL monitor checking? */
   bool check_ltl;
+  /** List of monitored properties. */
+  std::map<std::string, exprt> property_monitor_strings;
   /** Message handler object */
   message_handlert &message_handler;
 
