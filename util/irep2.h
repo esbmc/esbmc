@@ -1,3 +1,6 @@
+#ifndef _UTIL_IREP2_H_
+#define _UTIL_IREP2_H_
+
 #include <stdarg.h>
 
 #include <vector>
@@ -940,3 +943,5 @@ public:
 
   const expr2tc string;
 };
+
+#endif /* _UTIL_IREP2_H_ */
