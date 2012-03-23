@@ -16,6 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string>
 #include <list>
 
+#include <irep2.h>
 #include <config.h>
 #include <hash_cont.h>
 #include <decision_procedure.h>
@@ -96,6 +97,8 @@ protected:
   cachet cache;
   
   virtual void ignoring(const exprt &expr);
+
+  virtual void convert_smt_expr(const expr2t &expr);
   
 public:
   const cachet &get_cache() const { return cache; }

@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <map>
 
+#include <irep2.h>
 #include "symbol.h"
 #include "prop_conv.h"
 
@@ -627,3 +628,9 @@ void prop_convt::print_assignment(std::ostream &out) const
     out << it->first << " = " << prop.l_get(it->second) << std::endl;
 }
 
+void prop_convt::convert_smt_expr(const expr2t &expr)
+{
+  std::cerr << "Unhandled SMT conversion for expr ID " << expr.expr_id <<
+               std::endl;
+  abort();
+}
