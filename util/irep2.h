@@ -7,6 +7,7 @@
 
 #include <boost/shared_ptr.hpp>
 
+#include <irep.h>
 #include <big-int/bigint.hh>
 #include <dstring.h>
 
@@ -374,7 +375,7 @@ public:
 class symbol2t : expr2t
 {
 public:
-  symbol2t(const type2tc type, const std::string &name);
+  symbol2t(const type2tc type, irep_idt name);
 protected:
   symbol2t(const symbol2t &ref);
 
@@ -383,7 +384,7 @@ public:
 
   // Symbol name - only so long as a symbol is a string. In the future, this
   // should really really change.
-  const std::string name;
+  irep_idt name;
 };
 
 class typecast2t : expr2t
