@@ -26,6 +26,18 @@ public:
    *  back onto identifying a type through just one field, for some reason. It's
    *  also highly useful for debugging */
   enum type_ids {
+    bool_id,
+    empty_id,
+    symbol_id,
+    struct_id,
+    union_id,
+    code_id,
+    array_id,
+    pointer_id,
+    unsignedbv_id,
+    signedbv_id,
+    fixedbv_id,
+    string_id
   };
 
 protected:
