@@ -11,6 +11,8 @@
 #include <fstream>
 #include <sstream>
 #include <std_expr.h>
+#include <irep2.h>
+#include <migrate.h>
 #include <arith_tools.h>
 #include <std_types.h>
 #include <config.h>
@@ -3103,12 +3105,16 @@ void
 z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
+  expr2tc new_expr;
 
   irep_idt exprid = expr.id();
 
-  if (exprid == "symbol")
-    convert_identifier(expr.get_string("identifier"), expr.type(), bv);
-  else if (exprid == "nondet_symbol")
+  if (migrate_expr(expr, new_expr)) {
+    new_expr->convert_smt(*this, (void *&)bv);
+    return;
+  }
+
+  if (exprid == "nondet_symbol")
     convert_identifier("nondet$" + expr.get_string("identifier"),
                        expr.type(), bv);
   else if (exprid == "typecast")
