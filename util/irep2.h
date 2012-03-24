@@ -51,7 +51,7 @@ public:
 };
 
 /** Boolean type. No additional data */
-class bool_type2t : type2t
+class bool_type2t : public type2t
 {
 public:
   bool_type2t(void);
@@ -60,7 +60,7 @@ protected:
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
-class empty_type2t : type2t
+class empty_type2t : public type2t
 {
 public:
   empty_type2t(void);
@@ -70,7 +70,7 @@ protected:
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when
  *  a struct/array contains a recursive pointer to its own type. */
-class symbol_type2t : type2t
+class symbol_type2t : public type2t
 {
 public:
   symbol_type2t(const dstring sym_name);
@@ -81,7 +81,7 @@ public:
   const dstring symbol_name;
 };
 
-class struct_union_type2t : type2t
+class struct_union_type2t : public type2t
 {
 protected:
   struct_union_type2t(const std::vector<type2tc> &members);
@@ -91,7 +91,7 @@ public:
   const std::vector<type2tc> members;
 };
 
-class struct_type2t : struct_union_type2t
+class struct_type2t : public struct_union_type2t
 {
 public:
   struct_type2t(std::vector<type2tc> &members);
@@ -99,7 +99,7 @@ protected:
   struct_type2t(const struct_type2t &ref);
 };
 
-class union_type2t : struct_union_type2t
+class union_type2t : public struct_union_type2t
 {
 public:
   union_type2t(std::vector<type2tc> &members);
@@ -108,7 +108,7 @@ protected:
 };
 
 /** Code type. No additional data whatsoever. */
-class code_type2t : type2t
+class code_type2t : public type2t
 {
 public:
   code_type2t(void);
@@ -118,7 +118,7 @@ protected:
 
 /** Array type. Comes with a subtype of the array and a size that might be
  *  constant, might be nondeterministic. */
-class array_type2t : type2t
+class array_type2t : public type2t
 {
 public:
   array_type2t(const type2tc subtype, const expr2tc size);
@@ -132,7 +132,7 @@ public:
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
  *  attributes */
-class pointer_type2t : type2t
+class pointer_type2t : public type2t
 {
 public:
   pointer_type2t(const type2tc subtype);
@@ -143,7 +143,7 @@ public:
   const type2tc subtype;
 };
 
-class bv_type2t : type2t
+class bv_type2t : public type2t
 {
 protected:
   bv_type2t(unsigned int width);
@@ -153,7 +153,7 @@ public:
   const unsigned int width;
 };
 
-class unsignedbv_type2t : bv_type2t
+class unsignedbv_type2t : public bv_type2t
 {
 public:
   unsignedbv_type2t(unsigned int width);
@@ -161,7 +161,7 @@ protected:
   unsignedbv_type2t(const unsignedbv_type2t &ref);
 };
 
-class signedbv_type2t : bv_type2t
+class signedbv_type2t : public bv_type2t
 {
 public:
   signedbv_type2t(unsigned int width);
@@ -169,7 +169,7 @@ protected:
   signedbv_type2t(const signedbv_type2t &ref);
 };
 
-class fixedbv_type2t : type2t
+class fixedbv_type2t : public type2t
 {
 public:
   fixedbv_type2t(unsigned int fraction, unsigned int integer);
@@ -181,7 +181,7 @@ public:
   const unsigned int integer_bits;
 };
 
-class string_type2t : type2t
+class string_type2t : public type2t
 {
 public:
   string_type2t(void);
@@ -265,7 +265,7 @@ public:
 
 /** Constant class type. Not designed to contain any piece of data or method in
  *  particular, but allows for additional type safety. */
-class constant2t : expr2t
+class constant2t : public expr2t
 {
 protected:
   constant2t(const type2tc type, expr_ids id);
@@ -278,7 +278,7 @@ public:
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
-class constant_int2t : constant2t
+class constant_int2t : public constant2t
 {
 public:
   constant_int2t(const BigInt &input);
@@ -294,7 +294,7 @@ public:
 };
 
 /** Constant class for string constants. */
-class constant_string2t : constant2t
+class constant_string2t : public constant2t
 {
 public:
   constant_string2t(const std::string &stringref);
@@ -310,7 +310,7 @@ public:
 };
 
 /** Const datatype - for holding structs and unions */
-class constant_datatype2t : constant2t
+class constant_datatype2t : public constant2t
 {
 public:
   constant_datatype2t(const type2tc type, const std::vector<expr2tc> &members);
@@ -323,7 +323,7 @@ public:
   const std::vector<expr2tc> datatype_members;
 };
 
-class constant_struct2t : constant_datatype2t
+class constant_struct2t : public constant_datatype2t
 {
 public:
   constant_struct2t(const type2tc type, const std::vector<expr2tc> &members);
@@ -334,7 +334,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class constant_union2t : constant_datatype2t
+class constant_union2t : public constant_datatype2t
 {
 public:
   constant_union2t(const type2tc type, const std::vector<expr2tc> &members);
@@ -345,7 +345,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class constant_array2t : constant2t
+class constant_array2t : public constant2t
 {
 public:
   constant_array2t(const type2tc type, const std::vector<expr2tc> &members);
@@ -358,7 +358,7 @@ public:
   const std::vector<expr2tc> datatype_members;
 };
 
-class constant_array_of2t : constant2t
+class constant_array_of2t : public constant2t
 {
 public:
   constant_array_of2t(const type2tc type, const expr2tc initializer);
@@ -372,7 +372,7 @@ public:
   const expr2tc initializer;
 };
 
-class symbol2t : expr2t
+class symbol2t : public expr2t
 {
 public:
   symbol2t(const type2tc type, irep_idt name);
@@ -387,7 +387,7 @@ public:
   irep_idt name;
 };
 
-class typecast2t : expr2t
+class typecast2t : public expr2t
 {
 public:
   typecast2t(const type2tc type, const expr2tc expr);
@@ -401,7 +401,7 @@ public:
   const expr2tc from;
 };
 
-class if2t : expr2t
+class if2t : public expr2t
 {
 public:
   if2t(const type2tc type, const expr2tc cond, const expr2tc true_val,
@@ -423,7 +423,7 @@ public:
  *  All subclasses should be relation operators -- ie, equality, lt, ge, so
  *  forth. Stores two expressions (of the _same_ _type_), always has result
  *  type of a bool. */
-class rel2t : expr2t
+class rel2t : public expr2t
 {
 protected:
   rel2t(const expr2tc val1, const expr2tc val2);
@@ -436,7 +436,7 @@ public:
   const expr2tc side_2;
 };
 
-class equality2t : rel2t
+class equality2t : public rel2t
 {
 public:
   equality2t(const expr2tc val1, const expr2tc val2);
@@ -447,7 +447,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class notequal2t : rel2t
+class notequal2t : public rel2t
 {
 public:
   notequal2t(const expr2tc val1, const expr2tc val2);
@@ -458,7 +458,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class lessthan2t : rel2t
+class lessthan2t : public rel2t
 {
 public:
   lessthan2t(const expr2tc val1, const expr2tc val2);
@@ -469,7 +469,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class greaterthan2t : rel2t
+class greaterthan2t : public rel2t
 {
 public:
   greaterthan2t(const expr2tc val1, const expr2tc val2);
@@ -480,7 +480,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class lessthanequal2t : rel2t
+class lessthanequal2t : public rel2t
 {
 public:
   lessthanequal2t(const expr2tc val1, const expr2tc val2);
@@ -491,7 +491,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class greaterthanequal2t : rel2t
+class greaterthanequal2t : public rel2t
 {
 public:
   greaterthanequal2t(const expr2tc val1, const expr2tc val2);
@@ -504,7 +504,7 @@ public:
 
 /** Logical operations base class. Base for any logical operator. No storage in
  *  this particular class. Result is always of boolean type. */
-class lops2t : expr2t
+class lops2t : public expr2t
 {
 protected:
   lops2t(void);
@@ -515,7 +515,7 @@ public:
 };
 
 /** Not operator. Takes a boolean value; results in a boolean value. */
-class not2t : lops2t
+class not2t : public lops2t
 {
 public:
   not2t(const expr2tc notval);
@@ -530,7 +530,7 @@ public:
 
 /** Dynamic object operation. Checks to see whether or not the object is a
  *  dynamically allocated object or not. */
-class dynamic_object2t : lops2t
+class dynamic_object2t : public lops2t
 {
 public:
   dynamic_object2t(const expr2tc val);
@@ -544,7 +544,7 @@ public:
 };
 
 /** Isnan operation. Checks whether expression is a NaN or not. */
-class isnan2t : lops2t
+class isnan2t : public lops2t
 {
 public:
   isnan2t(const expr2tc val);
@@ -559,7 +559,7 @@ public:
 
 /** Base class for 2-operand boolean oeprators. Always results in a boolean,
  *  takes two operands, both of boolean type. */
-class logical_2ops2t : lops2t
+class logical_2ops2t : public lops2t
 {
 protected:
   logical_2ops2t(const expr2tc val1, const expr2tc val2);
@@ -572,7 +572,7 @@ public:
   const expr2tc side_2;
 };
 
-class and2t : logical_2ops2t
+class and2t : public logical_2ops2t
 {
 public:
   and2t(const expr2tc val1, const expr2tc val2);
@@ -583,7 +583,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class or2t : logical_2ops2t
+class or2t : public logical_2ops2t
 {
 public:
   or2t(const expr2tc val1, const expr2tc val2);
@@ -594,7 +594,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class xor2t : logical_2ops2t
+class xor2t : public logical_2ops2t
 {
 public:
   xor2t(const expr2tc val1, const expr2tc val2);
@@ -607,7 +607,7 @@ public:
 
 /** Same object operation. Compares two pointer objects to see if they're the
  *  same, with a boolean result. */
-class same_object2t : logical_2ops2t
+class same_object2t : public logical_2ops2t
 {
 public:
   same_object2t(const expr2tc val1, const expr2tc val2);
@@ -620,7 +620,7 @@ public:
 
 /** Binary operations base class. Take a type, probably integer with a width,
  *  and some operands. */
-class binops2t : expr2t
+class binops2t : public expr2t
 {
 protected:
   binops2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -633,7 +633,7 @@ public:
   const expr2tc side_2;
 };
 
-class bitand2t : binops2t
+class bitand2t : public binops2t
 {
 public:
   bitand2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -644,7 +644,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class bitor2t : binops2t
+class bitor2t : public binops2t
 {
 public:
   bitor2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -655,7 +655,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class bitxor2t : binops2t
+class bitxor2t : public binops2t
 {
 public:
   bitxor2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -666,7 +666,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class bitnand2t : binops2t
+class bitnand2t : public binops2t
 {
 public:
   bitnand2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -677,7 +677,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class bitnor2t : binops2t
+class bitnor2t : public binops2t
 {
 public:
   bitnor2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -688,7 +688,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class bitnxor2t : binops2t
+class bitnxor2t : public binops2t
 {
 public:
   bitnxor2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -699,7 +699,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class lshr2t : binops2t
+class lshr2t : public binops2t
 {
 public:
   lshr2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -712,7 +712,7 @@ public:
 
 /** Arithmatic base class. For all operations that are essentially integer
  *  arithmatic. */
-class arith2t : expr2t
+class arith2t : public expr2t
 {
 protected:
   arith2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -722,7 +722,7 @@ public:
   virtual expr2tc clone(void) const = 0;
 };
 
-class neg2t : arith2t
+class neg2t : public arith2t
 {
 public:
   neg2t(const type2tc type, const expr2tc value);
@@ -735,7 +735,7 @@ public:
   const expr2tc value;
 };
 
-class abs2t : arith2t
+class abs2t : public arith2t
 {
 public:
   abs2t(const type2tc type, const expr2tc value);
@@ -749,7 +749,7 @@ public:
 };
 
 /** Base two-operand arithmatic class. */
-class arith_2op2t : arith2t
+class arith_2op2t : public arith2t
 {
 protected:
   arith_2op2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -762,7 +762,7 @@ public:
   const expr2tc part_2;
 };
 
-class add2t : arith_2op2t
+class add2t : public arith_2op2t
 {
 public:
   add2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -773,7 +773,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class sub2t : arith_2op2t
+class sub2t : public arith_2op2t
 {
 public:
   sub2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -784,7 +784,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class mul2t : arith_2op2t
+class mul2t : public arith_2op2t
 {
 public:
   mul2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -795,7 +795,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class div2t : arith_2op2t
+class div2t : public arith_2op2t
 {
 public:
   div2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -806,7 +806,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class modulus2t : arith_2op2t
+class modulus2t : public arith_2op2t
 {
 public:
   modulus2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -817,7 +817,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class shl2t : arith_2op2t
+class shl2t : public arith_2op2t
 {
 public:
   shl2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -828,7 +828,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-class ashr2t : arith_2op2t
+class ashr2t : public arith_2op2t
 {
 public:
   ashr2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -841,7 +841,7 @@ public:
 
 /** Pointer offset. Extract pointer offset from a pointer value. Subclass of
  *  arithmatic because it returns an integer. */
-class pointer_offset2t : arith2t
+class pointer_offset2t : public arith2t
 {
 public:
   pointer_offset2t(const expr2tc pointer);
@@ -856,7 +856,7 @@ public:
 
 /** Pointer object. Extract pointer object from a pointer value. Subclass of
  *  arithmatic because it returns an integer. */
-class pointer_object2t : arith2t
+class pointer_object2t : public arith2t
 {
 public:
   pointer_object2t(const expr2tc pointer);
@@ -872,7 +872,7 @@ public:
 /** Base class for byte operations. Endianness is a global property of the
  *  model that we're building, and we only need to care about it when we build
  *  an smt model in the end, not at any other point. */
-class byte_ops2t : expr2t
+class byte_ops2t : public expr2t
 {
 protected:
   byte_ops2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -886,7 +886,7 @@ public:
  *  to pull out of it. source_value is whatever piece of data we're operating
  *  upon. source_offset is the _byte_ offset into source_value to extract data
  *  from. */
-class byte_extract2t : byte_ops2t
+class byte_extract2t : public byte_ops2t
 {
 public:
   byte_extract2t(const type2tc type, const expr2tc source, const expr2tc offs);
@@ -904,7 +904,7 @@ public:
  *  is the piece of data to insert data into. source_offset is the byte offset
  *  of where to put it. udpate_value is the piece of data to shoehorn into
  *  source_value. */
-class byte_update2t : byte_ops2t
+class byte_update2t : public byte_ops2t
 {
 public:
   byte_update2t(const type2tc type, const expr2tc source, const expr2tc offs,
@@ -921,7 +921,7 @@ public:
 };
 
 /** Base type of datatype operations. */
-class datatype_ops2t : expr2t
+class datatype_ops2t : public expr2t
 {
 protected:
   datatype_ops2t(const type2tc type);
@@ -933,7 +933,7 @@ public:
 
 /** With operation. Some kind of piece of data, another piece of data to
  *  insert into it, and where to put it. */
-class with2t : datatype_ops2t
+class with2t : public datatype_ops2t
 {
 public:
   with2t(const type2tc type, const expr2tc source, const expr2tc update,
@@ -950,7 +950,7 @@ public:
 };
 
 /** Member operation. Extracts some field from a datatype. */
-class member2t : datatype_ops2t
+class member2t : public datatype_ops2t
 {
 public:
   member2t(const type2tc type, const expr2tc source, const int field);
@@ -965,7 +965,7 @@ public:
 };
 
 /** Index operation. Extracts an entry from an array. */
-class index2t : datatype_ops2t
+class index2t : public datatype_ops2t
 {
 public:
   index2t(const type2tc type, const expr2tc source, const expr2tc index);
@@ -981,7 +981,7 @@ public:
 
 /** Zero string operation. Don't quite understand it. Just operates on the
  *  string struct as far as I know. Result is boolean. */
-class zero_string2t : datatype_ops2t
+class zero_string2t : public datatype_ops2t
 {
 public:
   zero_string2t(const expr2tc string);
@@ -995,7 +995,7 @@ public:
 };
 
 /** Zero length string. Unknown dirference from zero_string. */
-class zero_length_string2t : datatype_ops2t
+class zero_length_string2t : public datatype_ops2t
 {
 public:
   zero_length_string2t(const expr2tc string);
