@@ -7,4 +7,5 @@ expr2t::expr2t(const type2tc _type, expr_ids id)
 {
 }
 
-void expr2t::convert_smt(prop_convt &obj) const { obj.convert_smt_expr(*this); }
+void expr2t::convert_smt(prop_convt &obj, void *&arg) const
+{ obj.convert_smt_expr(*this, arg); }

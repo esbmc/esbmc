@@ -101,7 +101,7 @@ protected:
 public:
   const cachet &get_cache() const { return cache; }
 
-  virtual void convert_smt_expr(const expr2t &expr);
+  virtual void convert_smt_expr(const expr2t &expr, void *&arg);
 };
 
 #endif
