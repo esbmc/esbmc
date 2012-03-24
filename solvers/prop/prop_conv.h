@@ -98,10 +98,10 @@ protected:
   
   virtual void ignoring(const exprt &expr);
 
-  virtual void convert_smt_expr(const expr2t &expr);
-  
 public:
   const cachet &get_cache() const { return cache; }
+
+  virtual void convert_smt_expr(const expr2t &expr);
 };
 
 #endif
