@@ -263,6 +263,17 @@ public:
   const type2tc type;
 };
 
+template <class dummy>
+class expr_body : expr2t
+{
+protected:
+  expr_body(const expr_body &ref);
+
+public:
+  virtual void convert_smt(prop_convt &obj, void *&arg) const;
+  virtual expr2tc clone(void) const;
+};
+
 /** Constant class type. Not designed to contain any piece of data or method in
  *  particular, but allows for additional type safety. */
 class constant2t : public expr2t
