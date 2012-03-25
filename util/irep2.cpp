@@ -2,6 +2,18 @@
 
 #include <solvers/prop/prop_conv.h>
 
+/*************************** Base type2t definitions **************************/
+
+type2t::type2t(type_ids id)
+  : type_id(id)
+{
+}
+
+bool_type2t::bool_type2t(void)
+  : type2t(bool_id)
+{
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)
