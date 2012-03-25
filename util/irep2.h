@@ -102,7 +102,29 @@ public:
   const std::vector<type2tc> members;
 };
 
-class struct_type2t : public struct_union_type2t
+class bv_type2t : public type_body<bv_type2t>
+{
+protected:
+  bv_type2t(unsigned int width);
+  bv_type2t(const bv_type2t &ref);
+
+public:
+  const unsigned int width;
+};
+
+// A short interlude for classes that inherit not directly from type2t - we
+// need to inherit from type_body again. Except that that requires fiddling
+// with the template. So, behold the below, which specializes templates that
+// inherit in peculiar ways.
+
+class struct_type2t; class union_type2t;
+class unsignedbv_type2t; class signedbv_type2t;
+template <> class type_body<struct_type2t> : public struct_union_type2t { };
+template <> class type_body<union_type2t> : public struct_union_type2t { };
+template <> class type_body<unsignedbv_type2t> : public bv_type2t { };
+template <> class type_body<signedbv_type2t> : public bv_type2t { };
+
+class struct_type2t : public type_body<struct_type2t>
 {
 public:
   struct_type2t(std::vector<type2tc> &members);
@@ -110,7 +132,7 @@ protected:
   struct_type2t(const struct_type2t &ref);
 };
 
-class union_type2t : public struct_union_type2t
+class union_type2t : public type_body<union_type2t>
 {
 public:
   union_type2t(std::vector<type2tc> &members);
@@ -154,17 +176,7 @@ public:
   const type2tc subtype;
 };
 
-class bv_type2t : public type_body<bv_type2t>
-{
-protected:
-  bv_type2t(unsigned int width);
-  bv_type2t(const bv_type2t &ref);
-
-public:
-  const unsigned int width;
-};
-
-class unsignedbv_type2t : public bv_type2t
+class unsignedbv_type2t : public type_body<unsignedbv_type2t>
 {
 public:
   unsignedbv_type2t(unsigned int width);
@@ -172,7 +184,7 @@ protected:
   unsignedbv_type2t(const unsignedbv_type2t &ref);
 };
 
-class signedbv_type2t : public bv_type2t
+class signedbv_type2t : public type_body<signedbv_type2t>
 {
 public:
   signedbv_type2t(unsigned int width);
