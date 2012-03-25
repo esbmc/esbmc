@@ -84,6 +84,7 @@ private:
 
   void create_array_type(const typet &type, Z3_type_ast &bv) const;
   void create_type(const typet &type, Z3_type_ast &bv) const;
+  void create_type(const type2tc &type, Z3_type_ast &bv) const;
   void create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv) const;
   void create_struct_type(const typet &type, Z3_type_ast &bv) const {
     create_struct_union_type(type, false, bv);

@@ -690,6 +690,51 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
 }
 
 void
+z3_convt::create_type(const type2tc &type, Z3_type_ast &bv) const
+{
+
+  unsigned width = config.ansi_c.int_width;
+
+#if 0
+  if (type.id() == "bool") {
+    bv = Z3_mk_bool_type(z3_ctx);
+  } else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
+             type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
+    get_type_width(type, width);
+
+    if (int_encoding)
+      bv = Z3_mk_int_type(z3_ctx);
+    else
+      bv = Z3_mk_bv_type(z3_ctx, width);
+  } else if (type.id() == "fixedbv")   {
+    get_type_width(type, width);
+
+    if (int_encoding)
+      bv = Z3_mk_real_type(z3_ctx);
+    else
+      bv = Z3_mk_bv_type(z3_ctx, width);
+  } else if (type.id() == "array")     {
+    create_array_type(type, bv);
+  } else if (type.id() == "struct")     {
+    create_struct_type(type, bv);
+  } else if (type.id() == "union")     {
+    create_union_type(type, bv);
+  } else if (type.id() == "pointer")     {
+    create_pointer_type(bv);
+  } else if (type.id() == "symbol" || type.id() == "empty" ||
+             type.id() == "c_enum")     {
+    if (int_encoding)
+      bv = Z3_mk_int_type(z3_ctx);
+    else
+      bv = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+  } else
+    throw new conv_error("unexpected type in create_type", type);
+#endif
+
+  return;
+}
+
+void
 z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv) const
 {
   DEBUGLOC;
@@ -826,7 +871,7 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
   }
 
   assert(0);
-//  create_type(type, sort);
+  create_type(sym.type, sort);
   bv = z3_api.mk_var(sym.name.c_str(), sort);
 
   DEBUGLOC;
