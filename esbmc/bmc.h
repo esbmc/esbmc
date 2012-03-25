@@ -33,6 +33,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "bv_cbmc.h"
 
+// Disable these two solvers during irep conversion. I'm not maintaining them;
+// they can eventually live again via some abstract smt interface.
+#undef BOOLECTOR
+#undef MINISAT
+
 class bmct:public messaget
 {
 public:
@@ -89,6 +94,7 @@ protected:
     bmct &bmc;
   };
 
+#ifdef MINISAT
   class minisat_solver : public solver_base {
   public:
     minisat_solver(bmct &bmc);
@@ -98,6 +104,7 @@ protected:
     sat_minimizert satcheck;
     bv_cbmct bv_cbmc;
   };
+#endif
 
 #ifdef BOOLECTOR
   class boolector_solver : public solver_base {
