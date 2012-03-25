@@ -13,7 +13,8 @@ template<class derived>
 void
 type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
 {
-  obj.convert_smt_type(*this, arg);
+  const derived *derived_this = static_cast<const derived *>(this);
+  obj.convert_smt_type(*derived_this, arg);
 }
 
 bool_type2t::bool_type2t(void)
