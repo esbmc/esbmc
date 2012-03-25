@@ -16,6 +16,23 @@ expr2t::expr2t(const expr2t &ref)
 void expr2t::convert_smt(prop_convt &obj, void *&arg) const
 { obj.convert_smt_expr(*this, arg); }
 
+template <class derived>
+void
+expr_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
+{
+  derived *new_this = static_cast<derived>(this);
+  obj.convert_smt_expr(*new_this, arg);
+  return;
+}
+
+template <class derived>
+expr2tc
+expr_body<derived>::clone(void) const
+{
+  derived *new_obj = new derived(*static_cast<derived>(this));
+  return expr2tc(new_obj);
+}
+
 symbol2t::symbol2t(const type2tc type, irep_idt _name)
   : expr2t(type, symbol_id),
     name(_name)
