@@ -17,6 +17,12 @@ void expr2t::convert_smt(prop_convt &obj, void *&arg) const
 { obj.convert_smt_expr(*this, arg); }
 
 template <class derived>
+expr_body<derived>::expr_body(const expr_body<derived> &ref)
+  : expr2t(ref)
+{
+}
+
+template <class derived>
 void
 expr_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
 {
