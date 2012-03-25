@@ -2,6 +2,8 @@
 
 #include <solvers/prop/prop_conv.h>
 
+/*************************** Base expr2t definitions **************************/
+
 expr2t::expr2t(const type2tc _type, expr_ids id)
   : expr_id(id), type(_type)
 {
@@ -15,6 +17,8 @@ expr2t::expr2t(const expr2t &ref)
 
 void expr2t::convert_smt(prop_convt &obj, void *&arg) const
 { obj.convert_smt_expr(*this, arg); }
+
+/***************************** Templated expr body ****************************/
 
 template <class derived>
 expr_body<derived>::expr_body(const expr_body<derived> &ref)
@@ -39,6 +43,8 @@ expr_body<derived>::clone(void) const
   derived *new_obj = new derived(*derived_this);
   return expr2tc(new_obj);
 }
+
+/**************************** Expression constructors *************************/
 
 symbol2t::symbol2t(const type2tc type, irep_idt _name)
   : expr_body<symbol2t>(type, symbol_id),
