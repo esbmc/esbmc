@@ -144,8 +144,10 @@ private:
   void convert_isnan(const exprt &expr, Z3_ast &bv);
   void convert_z3_expr(const exprt &expr, Z3_ast &bv);
 
-  void convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv);
   void convert_bv(const exprt &expr, Z3_ast &bv);
+
+  void convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv);
+  virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
 
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions

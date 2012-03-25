@@ -787,10 +787,8 @@ z3_convt::create_pointer_type(Z3_type_ast &bv) const
 }
 
 void
-z3_convt::convert_identifier(const std::string &identifier, const typet &type,
-  Z3_ast &bv)
+z3_convt::convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv)
 {
-  DEBUGLOC;
 
   Z3_sort sort;
 
@@ -806,6 +804,30 @@ z3_convt::convert_identifier(const std::string &identifier, const typet &type,
 
   create_type(type, sort);
   bv = z3_api.mk_var(identifier.c_str(), sort);
+
+  DEBUGLOC;
+}
+
+void
+z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_sort sort;
+
+  // References to unsigned int identifiers need to be assumed to be > 0,
+  // otherwise the solver is free to assign negative nums to it.
+  if (sym.type->type_id == type2t::unsignedbv_id && int_encoding) {
+    Z3_ast formula;
+    bv = z3_api.mk_int_var(sym.name.c_str());
+    formula = Z3_mk_ge(z3_ctx, bv, z3_api.mk_int(0));
+    assert_formula(formula);
+    return;
+  }
+
+  assert(0);
+//  create_type(type, sort);
+  bv = z3_api.mk_var(sym.name.c_str(), sort);
 
   DEBUGLOC;
 }

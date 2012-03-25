@@ -102,6 +102,7 @@ public:
   const cachet &get_cache() const { return cache; }
 
   virtual void convert_smt_expr(const expr2t &expr, void *&arg);
+  virtual void convert_smt_expr(const symbol2t &sym, void *&arg) = 0;
 };
 
 #endif
