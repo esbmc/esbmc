@@ -384,16 +384,15 @@ public:
   const expr2tc initializer;
 };
 
-class symbol2t : public expr2t
+class symbol2t : public expr_body<symbol2t>
 {
 public:
   symbol2t(const type2tc type, irep_idt name);
-protected:
+private:
   symbol2t(const symbol2t &ref);
+  friend class expr_body<symbol2t>;
 
 public:
-  virtual expr2tc clone(void) const;
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
 
   // Symbol name - only so long as a symbol is a string. In the future, this
   // should really really change.

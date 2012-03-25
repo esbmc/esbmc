@@ -41,19 +41,13 @@ expr_body<derived>::clone(void) const
 }
 
 symbol2t::symbol2t(const type2tc type, irep_idt _name)
-  : expr2t(type, symbol_id),
+  : expr_body<symbol2t>(type, symbol_id),
     name(_name)
 {
 }
 
 symbol2t::symbol2t(const symbol2t &ref)
-  : expr2t(ref),
+  : expr_body<symbol2t>(ref),
     name(ref.name)
 {
 }
-
-expr2tc symbol2t::clone(void) const
-{ return expr2tc(new symbol2t(*this)); }
-
-void symbol2t::convert_smt(prop_convt &obj, void *&arg) const
-{ obj.convert_smt_expr(*this, arg); }
