@@ -263,7 +263,7 @@ public:
   const type2tc type;
 };
 
-template <class dummy>
+template <int exprid>
 class expr_body : expr2t
 {
 protected:
