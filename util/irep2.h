@@ -381,6 +381,7 @@ protected:
 
 public:
   virtual expr2tc clone(void) const;
+  virtual void convert_smt(prop_convt &obj, void *&arg) const;
 
   // Symbol name - only so long as a symbol is a string. In the future, this
   // should really really change.
