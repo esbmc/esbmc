@@ -7,6 +7,12 @@ bool
 migrate_type(const typet &type, type2tc &new_type_ref)
 {
 
+  if (type.id() == "bool") {
+    bool_type2t *b = new bool_type2t();
+    new_type_ref = type2tc(b);
+    return true;
+  }
+
   return false;
 }
 
