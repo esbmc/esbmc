@@ -50,8 +50,19 @@ public:
   type_ids type_id;
 };
 
+template <class derived>
+class type_body : public type2t
+{
+protected:
+  type_body(type_ids id) : type2t(id) {};
+  type_body(const type_body &ref);
+
+public:
+  virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
+};
+
 /** Boolean type. No additional data */
-class bool_type2t : public type2t
+class bool_type2t : public type_body<bool_type2t>
 {
 public:
   bool_type2t(void);
@@ -60,7 +71,7 @@ protected:
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
-class empty_type2t : public type2t
+class empty_type2t : public type_body<empty_type2t>
 {
 public:
   empty_type2t(void);
@@ -70,7 +81,7 @@ protected:
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when
  *  a struct/array contains a recursive pointer to its own type. */
-class symbol_type2t : public type2t
+class symbol_type2t : public type_body<symbol_type2t>
 {
 public:
   symbol_type2t(const dstring sym_name);
@@ -81,7 +92,7 @@ public:
   const dstring symbol_name;
 };
 
-class struct_union_type2t : public type2t
+class struct_union_type2t : public type_body<struct_union_type2t>
 {
 protected:
   struct_union_type2t(const std::vector<type2tc> &members);
@@ -108,7 +119,7 @@ protected:
 };
 
 /** Code type. No additional data whatsoever. */
-class code_type2t : public type2t
+class code_type2t : public type_body<code_type2t>
 {
 public:
   code_type2t(void);
@@ -118,7 +129,7 @@ protected:
 
 /** Array type. Comes with a subtype of the array and a size that might be
  *  constant, might be nondeterministic. */
-class array_type2t : public type2t
+class array_type2t : public type_body<array_type2t>
 {
 public:
   array_type2t(const type2tc subtype, const expr2tc size);
@@ -132,7 +143,7 @@ public:
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
  *  attributes */
-class pointer_type2t : public type2t
+class pointer_type2t : public type_body<pointer_type2t>
 {
 public:
   pointer_type2t(const type2tc subtype);
@@ -143,7 +154,7 @@ public:
   const type2tc subtype;
 };
 
-class bv_type2t : public type2t
+class bv_type2t : public type_body<bv_type2t>
 {
 protected:
   bv_type2t(unsigned int width);
@@ -169,7 +180,7 @@ protected:
   signedbv_type2t(const signedbv_type2t &ref);
 };
 
-class fixedbv_type2t : public type2t
+class fixedbv_type2t : public type_body<fixedbv_type2t>
 {
 public:
   fixedbv_type2t(unsigned int fraction, unsigned int integer);
@@ -181,7 +192,7 @@ public:
   const unsigned int integer_bits;
 };
 
-class string_type2t : public type2t
+class string_type2t : public type_body<string_type2t>
 {
 public:
   string_type2t(void);

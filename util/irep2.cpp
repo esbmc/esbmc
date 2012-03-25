@@ -9,8 +9,15 @@ type2t::type2t(type_ids id)
 {
 }
 
+template<class derived>
+void
+type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
+{
+  obj.convert_smt_type(*this, arg);
+}
+
 bool_type2t::bool_type2t(void)
-  : type2t(bool_id)
+  : type_body<bool_type2t>(bool_id)
 {
 }
 
