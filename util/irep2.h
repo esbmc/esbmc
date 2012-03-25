@@ -264,9 +264,10 @@ public:
 };
 
 template <class derived>
-class expr_body : expr2t
+class expr_body : public expr2t
 {
 protected:
+  expr_body(const type2tc type, expr_ids id) : expr2t(type, id) {};
   expr_body(const expr_body &ref);
 
 public:
