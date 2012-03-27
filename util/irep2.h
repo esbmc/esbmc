@@ -336,20 +336,21 @@ public:
 
 /** Constant class type. Not designed to contain any piece of data or method in
  *  particular, but allows for additional type safety. */
-class constant2t : public expr2t
+class constant2t : public expr_body<constant2t>
 {
 protected:
   constant2t(const type2tc type, expr_ids id);
   constant2t(constant2t &ref);
-
-public:
-  /** Clone method. Entirely self explanatory */
-  virtual expr2tc clone(void) const = 0;
 };
+
+class constant_int2t;
+template <>
+class expr_body<constant_int2t> : public constant2t
+{};
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
-class constant_int2t : public constant2t
+class constant_int2t : public expr_body<constant_int2t>
 {
 public:
   constant_int2t(const BigInt &input);
