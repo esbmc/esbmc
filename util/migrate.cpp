@@ -23,6 +23,24 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     unsignedbv_type2t *s = new unsignedbv_type2t(iwidth);
     new_type_ref = type2tc(s);
     return true;
+  } else if (type.id() == "array") {
+    type2tc subtype;
+    expr2tc size((expr2t *)NULL);
+    bool is_infinite = false;
+
+    if (!migrate_type(type.subtype(), subtype))
+      return false;
+
+    if (type.find("size").id() == "infinity") {
+      is_infinite = true;
+    } else {
+      if (!migrate_expr((const exprt&)type.find("size"), size))
+        return false;
+    }
+
+    array_type2t *a = new array_type2t(subtype, size, is_infinite);
+    new_type_ref = type2tc(a);
+    return true;
   }
 
   return false;
