@@ -46,6 +46,8 @@ protected:
   type2t(const type2t &ref);
 
 public:
+  virtual void convert_smt_type(prop_convt &obj, void *&arg) const = 0;
+
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
 };
