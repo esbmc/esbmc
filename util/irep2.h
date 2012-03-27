@@ -105,7 +105,7 @@ public:
 class bv_type2t : public type_body<bv_type2t>
 {
 protected:
-  bv_type2t(unsigned int width);
+  bv_type2t(type2t::type_ids id, unsigned int width);
   bv_type2t(const bv_type2t &ref);
 
 public:
@@ -119,10 +119,20 @@ public:
 
 class struct_type2t; class union_type2t;
 class unsignedbv_type2t; class signedbv_type2t;
-template <> class type_body<struct_type2t> : public struct_union_type2t { };
-template <> class type_body<union_type2t> : public struct_union_type2t { };
-template <> class type_body<unsignedbv_type2t> : public bv_type2t { };
-template <> class type_body<signedbv_type2t> : public bv_type2t { };
+template <> class type_body<struct_type2t> : public struct_union_type2t
+{ };
+template <> class type_body<union_type2t> : public struct_union_type2t
+{ };
+template <> class type_body<unsignedbv_type2t> : public bv_type2t
+{;
+public:
+  type_body(type_ids id, unsigned int width) : bv_type2t(id, width) {};
+};
+template <> class type_body<signedbv_type2t> : public bv_type2t
+{
+public:
+  type_body(type_ids id, unsigned int width) : bv_type2t(id, width) {};
+};
 
 class struct_type2t : public type_body<struct_type2t>
 {

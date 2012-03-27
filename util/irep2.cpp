@@ -17,8 +17,19 @@ type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
   obj.convert_smt_type(*derived_this, arg);
 }
 
+bv_type2t::bv_type2t(type2t::type_ids id, unsigned int _width)
+  : type_body<bv_type2t>(id),
+    width(_width)
+{
+}
+
 bool_type2t::bool_type2t(void)
   : type_body<bool_type2t>(bool_id)
+{
+}
+
+signedbv_type2t::signedbv_type2t(unsigned int width)
+  : type_body<signedbv_type2t>(signedbv_id, width)
 {
 }
 
