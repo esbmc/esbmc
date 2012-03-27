@@ -47,6 +47,7 @@ protected:
 
 public:
   virtual void convert_smt_type(prop_convt &obj, void *&arg) const = 0;
+  virtual unsigned int get_width(void) const = 0;
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
@@ -68,6 +69,7 @@ class bool_type2t : public type_body<bool_type2t>
 {
 public:
   bool_type2t(void);
+  virtual unsigned int get_width(void) const;
 protected:
   bool_type2t(const bool_type2t &ref);
 };
@@ -77,6 +79,7 @@ class empty_type2t : public type_body<empty_type2t>
 {
 public:
   empty_type2t(void);
+  virtual unsigned int get_width(void) const;
 protected:
   empty_type2t(const empty_type2t &ref);
 };
@@ -87,6 +90,7 @@ class symbol_type2t : public type_body<symbol_type2t>
 {
 public:
   symbol_type2t(const dstring sym_name);
+  virtual unsigned int get_width(void) const;
 protected:
   symbol_type2t(const symbol_type2t &ref);
 
@@ -111,6 +115,7 @@ protected:
   bv_type2t(const bv_type2t &ref);
 
 public:
+  virtual unsigned int get_width(void) const;
   const unsigned int width;
 };
 
@@ -140,6 +145,7 @@ class struct_type2t : public type_body<struct_type2t>
 {
 public:
   struct_type2t(std::vector<type2tc> &members);
+  virtual unsigned int get_width(void) const;
 protected:
   struct_type2t(const struct_type2t &ref);
 };
@@ -148,6 +154,7 @@ class union_type2t : public type_body<union_type2t>
 {
 public:
   union_type2t(std::vector<type2tc> &members);
+  virtual unsigned int get_width(void) const;
 protected:
   union_type2t(const union_type2t &ref);
 };
@@ -157,6 +164,7 @@ class code_type2t : public type_body<code_type2t>
 {
 public:
   code_type2t(void);
+  virtual unsigned int get_width(void) const;
 protected:
   code_type2t(const code_type2t &ref);
 };
@@ -167,6 +175,7 @@ class array_type2t : public type_body<array_type2t>
 {
 public:
   array_type2t(const type2tc subtype, const expr2tc size);
+  virtual unsigned int get_width(void) const;
 protected:
   array_type2t(const array_type2t &ref);
 
@@ -181,6 +190,7 @@ class pointer_type2t : public type_body<pointer_type2t>
 {
 public:
   pointer_type2t(const type2tc subtype);
+  virtual unsigned int get_width(void) const;
 protected:
   pointer_type2t(const pointer_type2t &ref);
 
@@ -208,6 +218,7 @@ class fixedbv_type2t : public type_body<fixedbv_type2t>
 {
 public:
   fixedbv_type2t(unsigned int fraction, unsigned int integer);
+  virtual unsigned int get_width(void) const;
 protected:
   fixedbv_type2t(const fixedbv_type2t &ref);
 
@@ -220,6 +231,7 @@ class string_type2t : public type_body<string_type2t>
 {
 public:
   string_type2t(void);
+  virtual unsigned int get_width(void) const;
 protected:
   string_type2t(const string_type2t &ref);
 };

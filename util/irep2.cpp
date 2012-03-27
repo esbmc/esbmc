@@ -23,9 +23,21 @@ bv_type2t::bv_type2t(type2t::type_ids id, unsigned int _width)
 {
 }
 
+unsigned int
+bv_type2t::get_width(void) const
+{
+  return width;
+}
+
 bool_type2t::bool_type2t(void)
   : type_body<bool_type2t>(bool_id)
 {
+}
+
+unsigned int
+bool_type2t::get_width(void) const
+{
+  return 1;
 }
 
 signedbv_type2t::signedbv_type2t(unsigned int width)
