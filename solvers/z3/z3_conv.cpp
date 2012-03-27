@@ -701,7 +701,7 @@ z3_convt::convert_smt_type(const bool_type2t &type, void *&_bv)
 }
 
 void
-z3_convt::convert_smt_type(const signedbv_type2t &type, void *&_bv)
+z3_convt::convert_smt_type(const bv_type2t &type, void *&_bv)
 {
   Z3_type_ast &bv = (Z3_type_ast &)_bv;
 

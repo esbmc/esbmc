@@ -150,7 +150,7 @@ private:
   virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv);
-  virtual void convert_smt_type(const signedbv_type2t &type, void *&bv);
+  virtual void convert_smt_type(const bv_type2t &type, void *&bv);
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate
