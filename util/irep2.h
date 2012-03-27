@@ -182,6 +182,7 @@ protected:
 public:
   const type2tc subtype;
   const expr2tc array_size;
+  bool size_is_infinite;
 };
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
