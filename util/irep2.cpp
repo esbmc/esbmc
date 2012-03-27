@@ -89,6 +89,17 @@ pointer_type2t::get_width(void) const
   return config.ansi_c.pointer_width;
 }
 
+empty_type2t::empty_type2t(void)
+  : type_body<empty_type2t>(empty_id)
+{
+}
+
+unsigned int
+empty_type2t::get_width(void) const
+{
+  assert(0 && "Fetching width of empty type - invalid operation");
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)

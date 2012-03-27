@@ -57,6 +57,10 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     pointer_type2t *p = new pointer_type2t(subtype);
     new_type_ref = type2tc(p);
     return true;
+  } else if (type.id() == "empty") {
+    empty_type2t *e = new empty_type2t();
+    new_type_ref = type2tc(e);
+    return true;
   }
 
   return false;
