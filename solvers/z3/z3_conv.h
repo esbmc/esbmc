@@ -84,7 +84,6 @@ private:
 
   void create_array_type(const typet &type, Z3_type_ast &bv) const;
   void create_type(const typet &type, Z3_type_ast &bv) const;
-  void create_type(const type2tc &type, Z3_type_ast &bv) const;
   void create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv) const;
   void create_struct_type(const typet &type, Z3_type_ast &bv) const {
     create_struct_union_type(type, false, bv);
@@ -150,6 +149,7 @@ private:
   void convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv);
   virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
 
+  virtual void convert_smt_type(const bool_type2t &type, void *&bv);
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate

@@ -690,10 +690,13 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
 }
 
 void
-z3_convt::create_type(const type2tc &type, Z3_type_ast &bv) const
+z3_convt::convert_smt_type(const bool_type2t &type, void *&_bv)
 {
+  Z3_type_ast &bv = (Z3_type_ast &)_bv;
 
   unsigned width = config.ansi_c.int_width;
+
+  bv = Z3_mk_bool_type(z3_ctx);
 
 #if 0
   if (type.id() == "bool") {
@@ -870,8 +873,7 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
     return;
   }
 
-  assert(0);
-  create_type(sym.type, sort);
+  sym.type->convert_smt_type(*this, (void*&)sort);
   bv = z3_api.mk_var(sym.name.c_str(), sort);
 
   DEBUGLOC;
