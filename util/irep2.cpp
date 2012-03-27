@@ -45,6 +45,11 @@ signedbv_type2t::signedbv_type2t(unsigned int width)
 {
 }
 
+unsignedbv_type2t::unsignedbv_type2t(unsigned int width)
+  : type_body<unsignedbv_type2t>(unsignedbv_id, width)
+{
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)

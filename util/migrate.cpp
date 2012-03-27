@@ -17,6 +17,12 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     signedbv_type2t *s = new signedbv_type2t(iwidth);
     new_type_ref = type2tc(s);
     return true;
+  } else if (type.id() == "unsignedbv") {
+    irep_idt width = type.width();
+    unsigned int iwidth = strtol(width.as_string().c_str(), NULL, 10);
+    unsignedbv_type2t *s = new unsignedbv_type2t(iwidth);
+    new_type_ref = type2tc(s);
+    return true;
   }
 
   return false;
