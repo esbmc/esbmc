@@ -48,6 +48,15 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     array_type2t *a = new array_type2t(subtype, size, is_infinite);
     new_type_ref = type2tc(a);
     return true;
+  } else if (type.id() == "pointer") {
+    type2tc subtype;
+
+    if (!migrate_type(type.subtype(), subtype))
+      return false;
+
+    pointer_type2t *p = new pointer_type2t(subtype);
+    new_type_ref = type2tc(p);
+    return true;
   }
 
   return false;
