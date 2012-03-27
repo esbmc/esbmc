@@ -105,3 +105,10 @@ symbol2t::symbol2t(const symbol2t &ref)
     name(ref.name)
 {
 }
+
+unsigned int
+constant_int2t::as_uint(void) const
+{
+  // XXXjmorse - add assertion that we don't exceed machine word width?
+  return constant_value.to_ulong();
+}

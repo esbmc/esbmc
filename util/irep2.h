@@ -346,8 +346,8 @@ protected:
   constant_int2t(constant_int2t &ref);
 
 public:
-  /** Concrete clone implementation. */
-  virtual expr2tc clone(void) const;
+  /** Accessor for fetching native int of this constant */
+  unsigned int as_uint(void) const;
 
   /** Arbitary precision integer record. */
   BigInt constant_value;
