@@ -715,15 +715,25 @@ z3_convt::convert_smt_type(const bv_type2t &type, void *&_bv)
   return;
 }
 
-#if 0
-  } else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
-             type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
-    get_type_width(type, width);
+void
+z3_convt::convert_smt_type(const array_type2t &type, void *&_bv)
+{
+  Z3_sort elem_sort, idx_sort;
+  Z3_type_ast &bv = (Z3_type_ast &)_bv;
 
-    if (int_encoding)
-      bv = Z3_mk_int_type(z3_ctx);
-    else
-      bv = Z3_mk_bv_type(z3_ctx, width);
+  if (int_encoding) {
+    idx_sort = Z3_mk_int_type(z3_ctx);
+  } else {
+    idx_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+  }
+
+  type.subtype->convert_smt_type(*this, (void*&)elem_sort);
+  bv = Z3_mk_array_type(z3_ctx, idx_sort, elem_sort);
+
+  return;
+}
+
+#if 0
   } else if (type.id() == "fixedbv")   {
     get_type_width(type, width);
 
