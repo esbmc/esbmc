@@ -174,12 +174,23 @@ protected:
 class array_type2t : public type_body<array_type2t>
 {
 public:
-  array_type2t(const type2tc subtype, const expr2tc size);
+  array_type2t(const type2tc subtype, const expr2tc size, bool inf);
   virtual unsigned int get_width(void) const;
 protected:
   array_type2t(const array_type2t &ref);
 
 public:
+
+  // Exception for invalid manipulations of an infinitely sized array. No actual
+  // data stored.
+  class inf_sized_array_excp {
+  };
+
+  // Exception for invalid manipultions of dynamically sized arrays. No actual
+  // data stored.
+  class dyn_sized_array_excp {
+  };
+
   const type2tc subtype;
   const expr2tc array_size;
   bool size_is_infinite;

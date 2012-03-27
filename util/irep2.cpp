@@ -50,6 +50,34 @@ unsignedbv_type2t::unsignedbv_type2t(unsigned int width)
 {
 }
 
+array_type2t::array_type2t(const type2tc t, const expr2tc s, bool inf)
+  : type_body<array_type2t>(array_id), subtype(t), array_size(s),
+    size_is_infinite(inf)
+{
+}
+
+unsigned int
+array_type2t::get_width(void) const
+{
+  // Two edge cases: the array can have infinite size, or it can have a dynamic
+  // size that's determined by the solver.
+  if (size_is_infinite)
+    throw new inf_sized_array_excp();
+
+  if (array_size->expr_id != expr2t::constant_int_id)
+    throw new dyn_sized_array_excp();
+
+  // Otherwise, we can multiply the size of the subtype by the number of elements.
+  unsigned int sub_width = subtype->get_width();
+
+  expr2t *elem_size = array_size.get();
+  constant_int2t *const_elem_size = dynamic_cast<constant_int2t*>(elem_size);
+  assert(const_elem_size != NULL);
+  unsigned int num_elems = const_elem_size->as_uint();
+
+  return num_elems * sub_width;
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)
