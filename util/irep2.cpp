@@ -100,6 +100,17 @@ empty_type2t::get_width(void) const
   assert(0 && "Fetching width of empty type - invalid operation");
 }
 
+symbol_type2t::symbol_type2t(const dstring sym_name)
+  : type_body<symbol_type2t>(symbol_id), symbol_name(sym_name)
+{
+}
+
+unsigned int
+symbol_type2t::get_width(void) const
+{
+  assert(0 && "Fetching width of symbol type - invalid operation");
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)

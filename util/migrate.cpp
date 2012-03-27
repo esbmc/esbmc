@@ -61,6 +61,10 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     empty_type2t *e = new empty_type2t();
     new_type_ref = type2tc(e);
     return true;
+  } else if (type.id() == "symbol") {
+    symbol_type2t *s = new symbol_type2t(type.identifier());
+    new_type_ref = type2tc(s);
+    return true;
   }
 
   return false;
