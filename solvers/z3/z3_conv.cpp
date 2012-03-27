@@ -733,6 +733,33 @@ z3_convt::convert_smt_type(const array_type2t &type, void *&_bv)
   return;
 }
 
+void
+z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
+                           void *&_bv)
+{
+  Z3_symbol mk_tuple_name, proj_names[2];
+  Z3_type_ast proj_types[2];
+  Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
+  Z3_sort native_int_sort;
+  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+
+  if (int_encoding) {
+    native_int_sort = Z3_mk_int_type(z3_ctx);
+  } else {
+    native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+  }
+
+  proj_types[0] = proj_types[1] = native_int_sort;
+
+  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "pointer_tuple");
+  proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
+  proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
+
+  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
+                        &mk_tuple_decl, proj_decls);
+  return;
+}
+
 #if 0
   } else if (type.id() == "fixedbv")   {
     get_type_width(type, width);
