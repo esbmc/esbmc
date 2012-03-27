@@ -697,10 +697,25 @@ z3_convt::convert_smt_type(const bool_type2t &type, void *&_bv)
   unsigned width = config.ansi_c.int_width;
 
   bv = Z3_mk_bool_type(z3_ctx);
+  return;
+}
+
+void
+z3_convt::convert_smt_type(const signedbv_type2t &type, void *&_bv)
+{
+  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+
+  if (int_encoding) {
+    bv = Z3_mk_int_type(z3_ctx);
+  } else {
+    unsigned int width = type.get_width();
+    bv = Z3_mk_bv_type(z3_ctx, width);
+  }
+
+  return;
+}
 
 #if 0
-  if (type.id() == "bool") {
-    bv = Z3_mk_bool_type(z3_ctx);
   } else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
              type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
     get_type_width(type, width);
@@ -733,9 +748,6 @@ z3_convt::convert_smt_type(const bool_type2t &type, void *&_bv)
   } else
     throw new conv_error("unexpected type in create_type", type);
 #endif
-
-  return;
-}
 
 void
 z3_convt::create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv) const
