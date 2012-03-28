@@ -111,6 +111,11 @@ symbol_type2t::get_width(void) const
   assert(0 && "Fetching width of symbol type - invalid operation");
 }
 
+constant_int2t::constant_int2t(type2tc type, const BigInt &input)
+  : expr_body<constant_int2t>(type, constant_int_id), constant_value(input)
+{
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)

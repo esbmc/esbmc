@@ -357,7 +357,7 @@ protected:
 class constant_int2t : public expr_body<constant_int2t>
 {
 public:
-  constant_int2t(const BigInt &input);
+  constant_int2t(type2tc type, const BigInt &input);
 protected:
   constant_int2t(constant_int2t &ref);
 
