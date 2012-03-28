@@ -929,6 +929,29 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  unsigned int bitwidth = sym.type->get_width();
+
+  Z3_sort int_sort;
+  if (int_encoding)
+    int_sort = Z3_mk_int_sort(z3_ctx);
+  else
+    int_sort = Z3_mk_bv_type(z3_ctx, bitwidth);
+
+  if (sym.type->type_id == type2t::unsignedbv_id) {
+    bv = Z3_mk_unsigned_int64(z3_ctx, sym.as_ulong(), int_sort);
+  } else {
+    assert(sym.type->type_id == type2t::signedbv_id);
+    bv = Z3_mk_int64(z3_ctx, sym.as_long(), int_sort);
+  }
+
+  return;
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
