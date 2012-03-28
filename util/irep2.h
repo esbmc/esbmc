@@ -338,15 +338,19 @@ public:
  *  particular, but allows for additional type safety. */
 class constant2t : public expr_body<constant2t>
 {
-protected:
-  constant2t(const type2tc type, expr_ids id);
-  constant2t(constant2t &ref);
+public:
+  constant2t(const type2tc type, expr_ids id) : expr_body<constant2t>(type, id) {}
+  constant2t(const constant2t &ref) : expr_body<constant2t>(ref) {};
 };
 
 class constant_int2t;
 template <>
 class expr_body<constant_int2t> : public constant2t
-{};
+{
+protected:
+  expr_body(const type2tc type, expr_ids id) : constant2t(type, id) {};
+  expr_body(const expr_body &ref);
+};
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
