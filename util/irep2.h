@@ -11,6 +11,8 @@
 #include <big-int/bigint.hh>
 #include <dstring.h>
 
+// XXXjmorse - abstract, access modifies, need consideration
+
 class prop_convt;
 
 class type2t;
