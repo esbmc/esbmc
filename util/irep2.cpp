@@ -73,7 +73,7 @@ array_type2t::get_width(void) const
   expr2t *elem_size = array_size.get();
   constant_int2t *const_elem_size = dynamic_cast<constant_int2t*>(elem_size);
   assert(const_elem_size != NULL);
-  unsigned int num_elems = const_elem_size->as_uint();
+  unsigned long num_elems = const_elem_size->as_ulong();
 
   return num_elems * sub_width;
 }
@@ -172,9 +172,16 @@ symbol2t::symbol2t(const symbol2t &ref)
 {
 }
 
-unsigned int
-constant_int2t::as_uint(void) const
+unsigned long
+constant_int2t::as_ulong(void) const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
   return constant_value.to_ulong();
+}
+
+long
+constant_int2t::as_long(void) const
+{
+  // XXXjmorse - add assertion that we don't exceed machine word width?
+  return constant_value.to_long();
 }
