@@ -176,6 +176,7 @@ unsigned long
 constant_int2t::as_ulong(void) const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
+  assert(!constant_value.is_negative());
   return constant_value.to_ulong();
 }
 
