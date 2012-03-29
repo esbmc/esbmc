@@ -127,20 +127,20 @@ public:
 // inherit in peculiar ways.
 
 class struct_type2t; class union_type2t;
-class unsignedbv_type2t; class signedbv_type2t;
 template <> class type_body<struct_type2t> : public struct_union_type2t
 { };
 template <> class type_body<union_type2t> : public struct_union_type2t
 { };
-template <> class type_body<unsignedbv_type2t> : public bv_type2t
-{;
-public:
-  type_body(type_ids id, unsigned int width) : bv_type2t(id, width) {};
-};
-template <> class type_body<signedbv_type2t> : public bv_type2t
+
+template <class derived>
+class bv_type_body : public bv_type2t
 {
+protected:
+  bv_type_body(type_ids id, unsigned int width) : bv_type2t(id, width) {};
+  bv_type_body(const bv_type_body &ref) : bv_type2t(ref) {};
+
 public:
-  type_body(type_ids id, unsigned int width) : bv_type2t(id, width) {};
+  virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
 };
 
 class struct_type2t : public type_body<struct_type2t>
@@ -212,7 +212,7 @@ public:
   const type2tc subtype;
 };
 
-class unsignedbv_type2t : public type_body<unsignedbv_type2t>
+class unsignedbv_type2t : public bv_type_body<unsignedbv_type2t>
 {
 public:
   unsignedbv_type2t(unsigned int width);
@@ -220,7 +220,7 @@ protected:
   unsignedbv_type2t(const unsignedbv_type2t &ref);
 };
 
-class signedbv_type2t : public type_body<signedbv_type2t>
+class signedbv_type2t : public bv_type_body<signedbv_type2t>
 {
 public:
   signedbv_type2t(unsigned int width);

@@ -17,6 +17,14 @@ type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
   obj.convert_smt_type(*derived_this, arg);
 }
 
+template<class derived>
+void
+bv_type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
+{
+  const derived *derived_this = static_cast<const derived *>(this);
+  obj.convert_smt_type(*derived_this, arg);
+}
+
 bv_type2t::bv_type2t(type2t::type_ids id, unsigned int _width)
   : type_body<bv_type2t>(id),
     width(_width)
@@ -41,12 +49,12 @@ bool_type2t::get_width(void) const
 }
 
 signedbv_type2t::signedbv_type2t(unsigned int width)
-  : type_body<signedbv_type2t>(signedbv_id, width)
+  : bv_type_body<signedbv_type2t>(signedbv_id, width)
 {
 }
 
 unsignedbv_type2t::unsignedbv_type2t(unsigned int width)
-  : type_body<unsignedbv_type2t>(unsignedbv_id, width)
+  : bv_type_body<unsignedbv_type2t>(unsignedbv_id, width)
 {
 }
 
