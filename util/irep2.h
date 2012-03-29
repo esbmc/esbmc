@@ -345,25 +345,25 @@ public:
   constant2t(const constant2t &ref) : expr_body<constant2t>(ref) {};
 };
 
-class constant_int2t;
-template <>
-class expr_body<constant_int2t> : public constant2t
+template <class T>
+class const_expr_body : public constant2t
 {
-protected:
-  expr_body(const type2tc type, expr_ids id) : constant2t(type, id) {};
-  expr_body(const expr_body &ref);
+public:
+  const_expr_body(const type2tc type, expr_ids id) : constant2t(type, id) {};
+  const_expr_body(const const_expr_body &ref) : constant2t(ref) {};
+
+  virtual void convert_smt(prop_convt &obj, void *&arg) const;
+  virtual expr2tc clone(void) const;
 };
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
-class constant_int2t : public expr_body<constant_int2t>
+class constant_int2t : public const_expr_body<constant_int2t>
 {
 public:
   constant_int2t(type2tc type, const BigInt &input);
-protected:
-  constant_int2t(constant_int2t &ref);
+  constant_int2t(const constant_int2t &ref);
 
-public:
   /** Accessor for fetching native int of this constant */
   unsigned long as_ulong(void) const;
   long as_long(void) const;

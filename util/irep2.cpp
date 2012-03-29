@@ -153,6 +153,23 @@ expr_body<derived>::clone(void) const
   return expr2tc(new_obj);
 }
 
+template <class derived>
+void
+const_expr_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
+{
+  const derived *new_this = static_cast<const derived*>(this);
+  obj.convert_smt_expr(*new_this, arg);
+  return;
+}
+
+template <class derived>
+expr2tc const_expr_body<derived>::clone(void) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return expr2tc(new_obj);
+}
+
 /**************************** Expression constructors *************************/
 
 symbol2t::symbol2t(const type2tc type, irep_idt _name)
@@ -168,7 +185,12 @@ symbol2t::symbol2t(const symbol2t &ref)
 }
 
 constant_int2t::constant_int2t(type2tc type, const BigInt &input)
-  : expr_body<constant_int2t>(type, constant_int_id), constant_value(input)
+  : const_expr_body<constant_int2t>(type, constant_int_id), constant_value(input)
+{
+}
+
+constant_int2t::constant_int2t(const constant_int2t &ref)
+  : const_expr_body<constant_int2t>(ref), constant_value(ref.constant_value)
 {
 }
 
