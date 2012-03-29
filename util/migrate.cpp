@@ -86,6 +86,18 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     struct_type2t *s = new struct_type2t(members, names, name);
     new_type_ref = type2tc(s);
     return true;
+  } else if (type.id() == "fixedbv") {
+    std::string fract = type.get_string("width");
+    assert(fract != "");
+    unsigned int frac_bits = strtol(fract.c_str(), NULL, 10);
+
+    std::string ints = type.get_string("integer_bits");
+    assert(ints != "");
+    unsigned int int_bits = strtol(ints.c_str(), NULL, 10);
+
+    fixedbv_type2t *f = new fixedbv_type2t(frac_bits, int_bits);
+    new_type_ref = type2tc(f);
+    return true;
   }
 
   return false;
