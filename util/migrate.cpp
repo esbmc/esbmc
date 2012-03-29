@@ -74,7 +74,9 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     for (struct_union_typet::componentst::const_iterator it = comps.begin();
          it != comps.end(); it++) {
       type2tc ref;
-      migrate_type((const typet&)*it, ref);
+      if (!migrate_type((const typet&)*it, ref))
+        return false;
+
       members.push_back(ref);
       names.push_back(it->get("name").as_string());
     }
