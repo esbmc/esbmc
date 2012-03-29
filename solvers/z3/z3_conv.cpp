@@ -818,6 +818,21 @@ z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv)
   return;
 }
 
+void
+z3_convt::convert_smt_type(const fixedbv_type2t &type, void *&_bv)
+{
+  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+
+  unsigned int width = type.get_width();
+
+  if (int_encoding)
+    bv = Z3_mk_real_type(z3_ctx);
+  else
+    bv = Z3_mk_bv_type(z3_ctx, width);
+
+  return;
+}
+
 #if 0
   } else if (type.id() == "fixedbv")   {
     get_type_width(type, width);
