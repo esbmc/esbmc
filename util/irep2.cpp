@@ -47,8 +47,11 @@ bv_type2t::get_width(void) const
 
 struct_union_type2t::struct_union_type2t(type_ids id,
                                          const std::vector<type2tc> &_members,
+                                         std::vector<std::string> memb_names,
                                          std::string _name)
-  : type_body<struct_union_type2t>(id), members(_members), name(_name)
+  : type_body<struct_union_type2t>(id), members(_members),
+                                        member_names(memb_names),
+                                        name(_name)
 {
 }
 
@@ -134,8 +137,10 @@ symbol_type2t::get_width(void) const
   assert(0 && "Fetching width of symbol type - invalid operation");
 }
 
-struct_type2t::struct_type2t(std::vector<type2tc> &members, std::string name)
-  : struct_union_type_body2t<struct_type2t>(struct_id, members, name)
+struct_type2t::struct_type2t(std::vector<type2tc> &members,
+                             std::vector<std::string> memb_names,
+                             std::string name)
+  : struct_union_type_body2t<struct_type2t>(struct_id, members, memb_names, name)
 {
 }
 

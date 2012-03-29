@@ -67,6 +67,7 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     return true;
   } else if (type.id() == "struct") {
     std::vector<type2tc> members;
+    std::vector<std::string> names;
     struct_typet &strct = (struct_typet&)type;
     struct_union_typet::componentst comps = strct.components();
 
@@ -75,11 +76,12 @@ migrate_type(const typet &type, type2tc &new_type_ref)
       type2tc ref;
       migrate_type((const typet&)*it, ref);
       members.push_back(ref);
+      names.push_back(it->get("name").as_string());
     }
 
     std::string name = type.get_string("tag");
     assert(name != "");
-    struct_type2t *s = new struct_type2t(members, name);
+    struct_type2t *s = new struct_type2t(members, names, name);
     new_type_ref = type2tc(s);
     return true;
   }
