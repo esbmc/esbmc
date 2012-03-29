@@ -1839,6 +1839,7 @@ z3_convt::convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv)
   obj_num.copy_to_operands(expr.op0());
 
   symbol_exprt sym_arr(get_cur_addrspace_ident(), arr);
+  sym_arr.type().set("size", "infinity");
   index_exprt idx(strct);
   idx.array() = sym_arr;
   idx.index() = obj_num;
