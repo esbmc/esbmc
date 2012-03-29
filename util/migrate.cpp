@@ -116,7 +116,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(new_expr);
     return true;
   } else if (expr.id() == "constant" && expr.type().id() != "pointer" &&
-             expr.type().id() != "bool" && expr.type().id() != "c_enum") {
+             expr.type().id() != "bool" && expr.type().id() != "c_enum" &&
+             expr.type().id() != "fixedbv") {
     if (!migrate_type(expr.type(), type))
       return false;
 
