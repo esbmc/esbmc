@@ -70,7 +70,7 @@ void cpp_typecheck_resolvet::convert_identifiers(
       if(e.id()=="type")
         assert(e.type().is_not_nil());
 
-      identifiers.insert(e);
+     identifiers.push_back(e);
     }
   }
 }
@@ -108,7 +108,7 @@ void cpp_typecheck_resolvet::apply_template_args(
       if(e.id()=="type")
         assert(e.type().is_not_nil());
 
-      identifiers.insert(e);
+     identifiers.push_back(e);
     }
   }
 }
@@ -142,7 +142,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     if(e.is_not_nil())
     {
       assert(e.id()!="type");
-      identifiers.insert(e);
+     identifiers.push_back(e);
     }
   }
 
@@ -171,7 +171,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
         template_args);
 
     identifiers.clear();
-    identifiers.insert(
+   identifiers.push_back(
       symbol_exprt(new_symbol.name, new_symbol.type));
   }
 }
@@ -200,7 +200,7 @@ void cpp_typecheck_resolvet::remove_templates(
       it++)
   {
     if(!cpp_typecheck.follow(it->type()).get_bool("is_template"))
-      identifiers.insert(*it);
+     identifiers.push_back(*it);
   }
 }
 
@@ -240,12 +240,12 @@ void cpp_typecheck_resolvet::remove_duplicates(
     if(id=="")
     {
       if(other.insert(*it).second)
-        identifiers.insert(*it);
+       identifiers.push_back(*it);
     }
     else
     {
       if(ids.insert(id).second)
-        identifiers.insert(*it);
+       identifiers.push_back(*it);
     }
   }
 }
@@ -520,7 +520,7 @@ void cpp_typecheck_resolvet::filter(
     }
 
     if(match)
-      identifiers.insert(*it);
+     identifiers.push_back(*it);
   }
 }
 
@@ -582,7 +582,7 @@ void cpp_typecheck_resolvet::disambiguate(
         it=distance_map.begin();
         it!=distance_map.end() && it->first==distance;
         it++)
-    identifiers.insert(it->second);
+   identifiers.push_back(it->second);
   }
 
   if(identifiers.size()>1 && fargs.in_use)
@@ -705,7 +705,7 @@ void cpp_typecheck_resolvet::make_constructors(
     if(it->id()!="type")
     {
       // already an expression
-      new_identifiers.insert(*it);
+      new_identifiers.push_back(*it);
       continue;
     }
 
@@ -715,14 +715,14 @@ void cpp_typecheck_resolvet::make_constructors(
     if(symbol_type.id() != "struct")
     {
       // it's ok
-      new_identifiers.insert(*it);
+      new_identifiers.push_back(*it);
       continue;
     }
 
     if(cpp_typecheck.cpp_is_pod(symbol_type))
     {
       // in that case, there is no constructor to call
-      new_identifiers.insert(*it);
+      new_identifiers.push_back(*it);
       continue;
     }
 
@@ -749,7 +749,7 @@ void cpp_typecheck_resolvet::make_constructors(
           cpp_typecheck.lookup(component.get_name());
         exprt e = cpp_symbol_expr(symb);
         e.type() = type;
-        new_identifiers.insert(e);
+        new_identifiers.push_back(e);
       }
     }
   }

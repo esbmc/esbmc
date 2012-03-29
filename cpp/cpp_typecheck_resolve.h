@@ -41,7 +41,7 @@ protected:
   locationt location;
   cpp_scopet *original_scope;
   
-  typedef std::set<exprt> resolve_identifierst;
+  typedef std::vector<exprt> resolve_identifierst;
 
   void convert_identifiers(
     const cpp_scopest::id_sett &id_set,
