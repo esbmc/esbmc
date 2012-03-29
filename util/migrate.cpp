@@ -82,7 +82,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2t *new_expr = new symbol2t(type, expr.identifier().as_string());
     new_expr_ref = expr2tc(new_expr);
     return true;
-  } else if (expr.id() == "constant" && expr.type().id() != "pointer") {
+  } else if (expr.id() == "constant" && expr.type().id() != "pointer" &&
+             expr.type().id() != "bool" && expr.type().id() != "c_enum") {
     if (!migrate_type(expr.type(), type))
       return false;
 
