@@ -315,7 +315,7 @@ public:
   /** Clone method. Entirely self explanatory */
   virtual expr2tc clone(void) const = 0;
 
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
+  virtual void convert_smt(prop_convt &obj, void *&arg) const = 0;
 
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;
