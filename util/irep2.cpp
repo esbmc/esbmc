@@ -45,6 +45,12 @@ bv_type2t::get_width(void) const
   return width;
 }
 
+struct_union_type2t::struct_union_type2t(type_ids id,
+                                         const std::vector<type2tc> &_members)
+  : type_body<struct_union_type2t>(id), members(_members)
+{
+}
+
 bool_type2t::bool_type2t(void)
   : type_body<bool_type2t>(bool_id)
 {
@@ -125,6 +131,23 @@ unsigned int
 symbol_type2t::get_width(void) const
 {
   assert(0 && "Fetching width of symbol type - invalid operation");
+}
+
+struct_type2t::struct_type2t(std::vector<type2tc> &members)
+  : struct_union_type_body2t<struct_type2t>(struct_id, members)
+{
+}
+
+unsigned int
+struct_type2t::get_width(void) const
+{
+  // Iterate over members accumulating width.
+  std::vector<type2tc>::const_iterator it;
+  unsigned int width = 0;
+  for (it = members.begin(); it != members.end(); it++)
+    width += (*it)->get_width();
+
+  return width;
 }
 
 /*************************** Base expr2t definitions **************************/
