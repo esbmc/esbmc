@@ -26,7 +26,7 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     unsignedbv_type2t *s = new unsignedbv_type2t(iwidth);
     new_type_ref = type2tc(s);
     return true;
-  } else if (type.id() == "c_enum") {
+  } else if (type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
     // 6.7.2.2.3 of C99 says enumeration values shall have "int" types.
     signedbv_type2t *s = new signedbv_type2t(config.ansi_c.int_width);
     new_type_ref = type2tc(s);
