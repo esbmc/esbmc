@@ -156,6 +156,18 @@ struct_type2t::get_width(void) const
   return width;
 }
 
+fixedbv_type2t::fixedbv_type2t(unsigned int fraction, unsigned int integer)
+  : type_body<fixedbv_type2t>(fixedbv_id), fraction_bits(fraction),
+                                           integer_bits(integer)
+{
+}
+
+unsigned int
+fixedbv_type2t::get_width(void) const
+{
+  return fraction_bits;
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)
