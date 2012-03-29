@@ -43,6 +43,7 @@ public:
     struct_typet s;
 
     s.components().resize(3);
+    s.tag("#!strabs_tag");
 
     s.components()[0].name("is_zero");
     s.components()[0].pretty_name("is_zero");
