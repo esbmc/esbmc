@@ -156,6 +156,25 @@ struct_type2t::get_width(void) const
   return width;
 }
 
+union_type2t::union_type2t(std::vector<type2tc> &members,
+                           std::vector<std::string> memb_names,
+                           std::string name)
+  : struct_union_type_body2t<union_type2t>(struct_id, members, memb_names, name)
+{
+}
+
+unsigned int
+union_type2t::get_width(void) const
+{
+  // Iterate over members accumulating width.
+  std::vector<type2tc>::const_iterator it;
+  unsigned int width = 0;
+  for (it = members.begin(); it != members.end(); it++)
+    width = std::max(width, (*it)->get_width());
+
+  return width;
+}
+
 fixedbv_type2t::fixedbv_type2t(unsigned int fraction, unsigned int integer)
   : type_body<fixedbv_type2t>(fixedbv_id), fraction_bits(fraction),
                                            integer_bits(integer)
