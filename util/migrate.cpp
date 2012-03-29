@@ -65,6 +65,21 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     symbol_type2t *s = new symbol_type2t(type.identifier());
     new_type_ref = type2tc(s);
     return true;
+  } else if (type.id() == "struct") {
+    std::vector<type2tc> members;
+    struct_typet &strct = (struct_typet&)type;
+    struct_union_typet::componentst comps = strct.components();
+
+    for (struct_union_typet::componentst::const_iterator it = comps.begin();
+         it != comps.end(); it++) {
+      type2tc ref;
+      migrate_type((const typet&)*it, ref);
+      members.push_back(ref);
+    }
+
+    struct_type2t *s = new struct_type2t(members);
+    new_type_ref = type2tc(s);
+    return true;
   }
 
   return false;
