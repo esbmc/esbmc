@@ -3357,6 +3357,8 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
   else if (exprid == "<=" || exprid == "<" || exprid == ">="
            || exprid == ">")
     bv = convert_cmp(expr);
+  else if (exprid == "unary+")
+    convert_z3_expr(expr.op0(), bv);
   else if (exprid == "+" || exprid == "-")
     convert_add_sub(expr, bv);
   else if (exprid == "/")
