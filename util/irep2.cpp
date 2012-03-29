@@ -168,6 +168,17 @@ fixedbv_type2t::get_width(void) const
   return fraction_bits;
 }
 
+code_type2t::code_type2t(void)
+  : type_body<code_type2t>(code_id)
+{
+}
+
+unsigned int
+code_type2t::get_width(void) const
+{
+  assert(0 && "Fetching width of code type - invalid operation");
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)
