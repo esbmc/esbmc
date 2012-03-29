@@ -25,6 +25,14 @@ bv_type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
   obj.convert_smt_type(*derived_this, arg);
 }
 
+template<class derived>
+void
+struct_union_type_body2t<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
+{
+  const derived *derived_this = static_cast<const derived *>(this);
+  obj.convert_smt_type(*derived_this, arg);
+}
+
 bv_type2t::bv_type2t(type2t::type_ids id, unsigned int _width)
   : type_body<bv_type2t>(id),
     width(_width)

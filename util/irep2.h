@@ -126,11 +126,18 @@ public:
 // with the template. So, behold the below, which specializes templates that
 // inherit in peculiar ways.
 
-class struct_type2t; class union_type2t;
-template <> class type_body<struct_type2t> : public struct_union_type2t
-{ };
-template <> class type_body<union_type2t> : public struct_union_type2t
-{ };
+template <class derived>
+class struct_union_type_body2t : public struct_union_type2t
+{
+protected:
+  struct_union_type_body2t(type_ids id, const std::vector<type2tc> &members)
+    : struct_union_type2t(id, members) {};
+  struct_union_type_body2t(const struct_union_type_body2t &ref)
+    : struct_union_type2t(ref) {};
+
+public:
+  virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
+};
 
 template <class derived>
 class bv_type_body : public bv_type2t
@@ -143,7 +150,7 @@ public:
   virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
 };
 
-class struct_type2t : public type_body<struct_type2t>
+class struct_type2t : public struct_union_type_body2t<struct_type2t>
 {
 public:
   struct_type2t(std::vector<type2tc> &members);
@@ -152,7 +159,7 @@ protected:
   struct_type2t(const struct_type2t &ref);
 };
 
-class union_type2t : public type_body<union_type2t>
+class union_type2t : public struct_union_type_body2t<union_type2t>
 {
 public:
   union_type2t(std::vector<type2tc> &members);
