@@ -760,6 +760,64 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
   return;
 }
 
+void
+z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv)
+{
+  Z3_symbol mk_tuple_name, *proj_names;
+  std::string name;
+  Z3_type_ast *proj_types;
+  Z3_const_decl_ast mk_tuple_decl, *proj_decls;
+  u_int num_elems;
+  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+
+  bool uni = (type.type_id != type2t::struct_id);
+
+  num_elems = type.members.size();
+
+  proj_names = new Z3_symbol[num_elems];
+  proj_types = new Z3_type_ast[num_elems];
+  proj_decls = new Z3_const_decl_ast[num_elems];
+
+  name = ((uni) ? "union" : "struct" );
+  name += "_type_" + type.name;
+  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
+
+  if (!type.members.size()) {
+    bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls);
+    return;
+  }
+
+  u_int i = 0;
+  std::vector<std::string>::const_iterator mname = type.member_names.begin();
+  for (std::vector<type2tc>::const_iterator it = type.members.begin();
+       it != type.members.end(); it++, mname++, i++)
+  {
+    proj_names[i] = Z3_mk_string_symbol(z3_ctx, mname->c_str());
+    (*it)->convert_smt_type(*this, (void*&)proj_types[i]);
+  }
+
+  if (uni) {
+    // ID field records last value written to union
+    proj_names[num_elems - 1] = Z3_mk_string_symbol(z3_ctx, "id");
+    // XXXjmorse - must this field really become a bitfield, ever? It's internal
+    // tracking data, not program data.
+    if (int_encoding)
+      proj_types[num_elems - 1] = Z3_mk_int_type(z3_ctx);
+    else
+      proj_types[num_elems - 1] = Z3_mk_bv_type(z3_ctx,
+                                                config.ansi_c.int_width);
+  }
+
+  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, num_elems, proj_names,
+                        proj_types, &mk_tuple_decl, proj_decls);
+
+  delete[] proj_names;
+  delete[] proj_types;
+  delete[] proj_decls;
+
+  return;
+}
+
 #if 0
   } else if (type.id() == "fixedbv")   {
     get_type_width(type, width);
