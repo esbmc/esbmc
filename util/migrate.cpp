@@ -89,6 +89,27 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     struct_type2t *s = new struct_type2t(members, names, name);
     new_type_ref = type2tc(s);
     return true;
+  } else if (type.id() == "union") {
+    std::vector<type2tc> members;
+    std::vector<std::string> names;
+    union_typet &strct = (union_typet&)type;
+    struct_union_typet::componentst comps = strct.components();
+
+    for (struct_union_typet::componentst::const_iterator it = comps.begin();
+         it != comps.end(); it++) {
+      type2tc ref;
+      if (!migrate_type((const typet&)it->type(), ref))
+        return false;
+
+      members.push_back(ref);
+      names.push_back(it->get("name").as_string());
+    }
+
+    std::string name = type.get_string("tag");
+    assert(name != "");
+    union_type2t *u = new union_type2t(members, names, name);
+    new_type_ref = type2tc(u);
+    return true;
   } else if (type.id() == "fixedbv") {
     std::string fract = type.get_string("width");
     assert(fract != "");
