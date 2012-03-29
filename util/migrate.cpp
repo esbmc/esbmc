@@ -1,6 +1,7 @@
 #include "migrate.h"
 
 #include <config.h>
+#include <simplify_expr.h>
 
 // File for old irep -> new irep conversions.
 
@@ -41,7 +42,9 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     if (type.find("size").id() == "infinity") {
       is_infinite = true;
     } else {
-      if (!migrate_expr((const exprt&)type.find("size"), size))
+      exprt sz = (exprt&)type.find("size");
+      simplify(sz);
+      if (!migrate_expr(sz, size))
         return false;
     }
 
