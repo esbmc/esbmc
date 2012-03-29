@@ -159,7 +159,7 @@ struct_type2t::get_width(void) const
 union_type2t::union_type2t(std::vector<type2tc> &members,
                            std::vector<std::string> memb_names,
                            std::string name)
-  : struct_union_type_body2t<union_type2t>(struct_id, members, memb_names, name)
+  : struct_union_type_body2t<union_type2t>(union_id, members, memb_names, name)
 {
 }
 
