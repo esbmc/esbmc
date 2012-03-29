@@ -773,6 +773,8 @@ z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv)
   bool uni = (type.type_id != type2t::struct_id);
 
   num_elems = type.members.size();
+  if (uni)
+    num_elems++;
 
   proj_names = new Z3_symbol[num_elems];
   proj_types = new Z3_type_ast[num_elems];
