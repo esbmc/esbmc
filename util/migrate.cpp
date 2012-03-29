@@ -77,7 +77,9 @@ migrate_type(const typet &type, type2tc &new_type_ref)
       members.push_back(ref);
     }
 
-    struct_type2t *s = new struct_type2t(members);
+    std::string name = type.get_string("tag");
+    assert(name != "");
+    struct_type2t *s = new struct_type2t(members, name);
     new_type_ref = type2tc(s);
     return true;
   }

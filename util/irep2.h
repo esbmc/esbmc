@@ -103,11 +103,13 @@ public:
 class struct_union_type2t : public type_body<struct_union_type2t>
 {
 protected:
-  struct_union_type2t(type_ids id, const std::vector<type2tc> &members);
+  struct_union_type2t(type_ids id, const std::vector<type2tc> &members,
+                      std::string name);
   struct_union_type2t(const struct_union_type2t &ref);
 
 public:
   const std::vector<type2tc> members;
+  std::string name;
 };
 
 class bv_type2t : public type_body<bv_type2t>
@@ -130,8 +132,9 @@ template <class derived>
 class struct_union_type_body2t : public struct_union_type2t
 {
 protected:
-  struct_union_type_body2t(type_ids id, const std::vector<type2tc> &members)
-    : struct_union_type2t(id, members) {};
+  struct_union_type_body2t(type_ids id, const std::vector<type2tc> &members,
+                           std::string name)
+    : struct_union_type2t(id, members, name) {};
   struct_union_type_body2t(const struct_union_type_body2t &ref)
     : struct_union_type2t(ref) {};
 
@@ -153,7 +156,7 @@ public:
 class struct_type2t : public struct_union_type_body2t<struct_type2t>
 {
 public:
-  struct_type2t(std::vector<type2tc> &members);
+  struct_type2t(std::vector<type2tc> &members, std::string name);
   virtual unsigned int get_width(void) const;
 protected:
   struct_type2t(const struct_type2t &ref);
@@ -162,7 +165,7 @@ protected:
 class union_type2t : public struct_union_type_body2t<union_type2t>
 {
 public:
-  union_type2t(std::vector<type2tc> &members);
+  union_type2t(std::vector<type2tc> &members, std::string name);
   virtual unsigned int get_width(void) const;
 protected:
   union_type2t(const union_type2t &ref);
