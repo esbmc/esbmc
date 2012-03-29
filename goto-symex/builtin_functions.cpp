@@ -101,6 +101,7 @@ void goto_symext::symex_malloc(
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   exprt sym("symbol", array_typet());
   sym.type().subtype() = bool_typet();
+  sym.type().set("size", "infinity");
   sym.set("identifier", "c::__ESBMC_is_dynamic");
   exprt pointerobj("pointer_object", signedbv_typet());
   exprt ptrsrc = lhs;

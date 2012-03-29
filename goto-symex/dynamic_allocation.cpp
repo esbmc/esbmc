@@ -79,6 +79,7 @@ void default_replace_dynamic_allocation(
 
     exprt sym("symbol", array_typet());
     sym.type().subtype() = bool_typet();
+    sym.type().set("size", "infinity");
     sym.set("identifier", "c::__ESBMC_is_dynamic");
     exprt pointerobj("pointer_object", signedbv_typet());
     pointerobj.copy_to_operands(theptr);
