@@ -27,7 +27,7 @@ void cpp_typecheckt::convert(cpp_usingt &cpp_using)
   // there are two forms of using clauses:
   // a) using namespace SCOPE;  ("using directive")
   // b) using SCOPE::id;        ("using declaration")
-  
+
   cpp_typecheck_resolvet resolver(*this);
   cpp_save_scopet save_scope(this->cpp_scopes);
 

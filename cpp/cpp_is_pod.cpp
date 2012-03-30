@@ -74,7 +74,7 @@ bool cpp_typecheckt::cpp_is_pod(const typet &type) const
 
       if(it->get_bool("is_virtual"))
         return false;
-      
+
       const typet &sub_type=it->type();
 
       if(sub_type.id()=="code")

@@ -243,7 +243,7 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
 	    expr.op1().type().subtype() == expr.op2().type().subtype())
     {
       // array-to-pointer conversion
-      
+
       index_exprt index1;
       index1.array() = expr.op1();
       index1.index() = from_integer(0,int_type());
@@ -256,7 +256,7 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
 
       address_of_exprt addr1(index1);
       address_of_exprt addr2(index2);
- 
+
       expr.op1() = addr1;
       expr.op2() = addr2;
       expr.type() = addr1.type();
@@ -415,7 +415,7 @@ void cpp_typecheckt::typecheck_function_expr(
       exprt tmp("already_typechecked");
       tmp.copy_to_operands(functioncall);
       functioncall.swap(tmp);
-      
+
       expr.op0().swap(functioncall);
       typecheck_function_expr(expr, fargs);
       return;
@@ -442,7 +442,7 @@ Purpose:
 bool cpp_typecheckt::overloadable(const exprt &expr)
 {
   // at least one argument must have class or enumerated type
-  
+
   forall_operands(it, expr)
   {
     typet t(it->type());
@@ -515,7 +515,7 @@ bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
   else if(expr.id()=="dereference" &&
           expr.implicit())
     return false;
-    
+
   assert(expr.operands().size()>=1);
 
   if(expr.id()=="explicit-typecast")
@@ -846,7 +846,7 @@ void cpp_typecheckt::typecheck_expr_explicit_typecast(exprt &expr)
     // Explicitly given value, e.g., int(1).
     // There is an expr-vs-type ambiguity, as it is possible to write
     // (f)(1), where 'f' is a function symbol and not a type.
-    
+
     if(expr.type().id()=="cpp_name")
     {
       // try to resolve as type
@@ -868,21 +868,21 @@ void cpp_typecheckt::typecheck_expr_explicit_typecast(exprt &expr)
 
         f_call.location()=expr.location();
         f_call.function().swap(expr.type());
-        
+
         if(expr.op0().id()=="comma")
           f_call.arguments().swap(expr.op0().operands());
         else
           f_call.arguments().push_back(expr.op0());
-        
+
         typecheck_side_effect_function_call(f_call);
-        
+
         expr.swap(f_call);
         return;
       }
     }
     else
       typecheck_type(expr.type());
-    
+
     exprt new_expr;
 
     if(const_typecast(expr.op0(), expr.type(), new_expr) ||
@@ -985,7 +985,7 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
 {
   if(expr.operands().size()!=1)
     throw "delete expects one operand";
-    
+
   const irep_idt statement=expr.statement();
 
   if(statement=="cpp_delete")
@@ -2224,7 +2224,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
       expr.op0().set("#lvalue", true);
 
     c_typecheck_baset::typecheck_side_effect_assignment(expr);
-    
+
     // Note that in C++ (as opposed to C), the assignment yields
     // an lvalue!
     expr.set("#lvalue", true);

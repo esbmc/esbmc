@@ -40,7 +40,7 @@ protected:
   cpp_typecheckt &cpp_typecheck;
   locationt location;
   cpp_scopet *original_scope;
-  
+
   typedef std::vector<exprt> resolve_identifierst;
 
   void convert_identifiers(

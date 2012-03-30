@@ -470,17 +470,17 @@ std::string cpp_typecheckt::template_class_identifier(
   }
 
   identifier += ">";
-  
+
   if(!partial_specialization_args.arguments().empty())
   {
     identifier+="_specialized_to_<";
-  
+
     counter=0;
     for(cpp_template_args_non_tct::argumentst::const_iterator
         it=partial_specialization_args.arguments().begin();
         it!=partial_specialization_args.arguments().end();
         it++, counter++)
-    {  
+    {
       if(counter!=0) identifier+=",";
 
       if(it->id()=="type" || it->id()=="ambiguous")
@@ -488,10 +488,10 @@ std::string cpp_typecheckt::template_class_identifier(
       else
         identifier+=cpp_expr2name(*it);
     }
-    
+
     identifier+=">";
   }
-  
+
   return identifier;
 }
 
@@ -554,7 +554,7 @@ void cpp_typecheckt::convert_template_class_specialization(
     str << "qualifiers not excpected here";
     throw 0;
   }
-  
+
   if(cpp_name.get_sub().size()!=2 ||
      cpp_name.get_sub()[0].id()!="name" ||
      cpp_name.get_sub()[1].id()!="template_args")
@@ -562,14 +562,14 @@ void cpp_typecheckt::convert_template_class_specialization(
     // currently we are more restrictive
     // than the standard
     err_location(cpp_name.location());
-    str << "bad template-class-sepcialization name";                                                
+    str << "bad template-class-sepcialization name";
     throw 0;
   }
 
   irep_idt base_name=
     cpp_name.get_sub()[0].get("identifier");
 
-  // copy the template arguments    
+  // copy the template arguments
   const cpp_template_args_non_tct template_args_non_tc=
     to_cpp_template_args_non_tc(cpp_name.get_sub()[1]);
 
@@ -589,11 +589,11 @@ void cpp_typecheckt::convert_template_class_specialization(
   {
     cpp_scopest::id_sett::iterator next=it;
     next++;
-    
+
     if(lookup((*it)->identifier).type.
          find("specialization_of").is_not_nil())
       id_set.erase(it);
-    
+
     it=next;
   }
 
@@ -610,14 +610,14 @@ void cpp_typecheckt::convert_template_class_specialization(
     str << "class template `" << base_name << "' is ambiguous";
     throw 0;
   }
-  
+
   contextt::symbolst::iterator s_it=
     context.symbols.find((*id_set.begin())->identifier);
-    
+
   assert(s_it!=context.symbols.end());
-  
+
   symbolt &template_symbol=s_it->second;
-    
+
   if(!template_symbol.type.get_bool("is_template"))
   {
     err_location(type);
@@ -625,7 +625,7 @@ void cpp_typecheckt::convert_template_class_specialization(
   }
 
   #if 0
-  // is this partial specialization?  
+  // is this partial specialization?
   if(declaration.template_type().parameters().empty())
   {
     // typecheck arguments -- these are for the 'primary' template!
@@ -634,7 +634,7 @@ void cpp_typecheckt::convert_template_class_specialization(
         declaration.location(),
         to_cpp_declaration(template_symbol.type).template_type(),
         template_args_non_tc);
-    
+
     // Full specialization, i.e., template<>.
     // We instantiate.
     instantiate_template(
@@ -645,7 +645,7 @@ void cpp_typecheckt::convert_template_class_specialization(
   }
   else
   #endif
-  
+
   {
     // partial -- we typecheck
     declaration.partial_specialization_args()=template_args_non_tc;
@@ -658,8 +658,8 @@ void cpp_typecheckt::convert_template_class_specialization(
     {
       err_location(cpp_name.location());
       throw "template specialization with wrong number of arguments";
-    }    
-    
+    }
+
     typecheck_template_class(declaration);
   }
 }
@@ -937,7 +937,7 @@ cpp_template_args_tct cpp_typecheckt::typecheck_template_args(
       }
 
       args.push_back(parameter.default_parameter());
-      
+
       // these need to be typechecked in the scope of the template,
       // not in the current scope!
       cpp_idt *template_scope=cpp_scopes.id_map[template_symbol.name];
@@ -1257,7 +1257,7 @@ void cpp_typecheckt::convert_template_declaration(
        cpp_name.has_template_args())
       return typecheck_template_member_function(declaration);
 
-    // must be function template  
+    // must be function template
     typecheck_function_template(declaration);
     return;
   }

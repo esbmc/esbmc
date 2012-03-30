@@ -293,9 +293,9 @@ void cpp_typecheckt::typecheck_decl(codet &code)
 
   cpp_declarationt &declaration=
     to_cpp_declaration(code.op0());
-    
+
   typet &type=declaration.type();
-    
+
   bool is_typedef=convert_typedef(type);
 
   typecheck_type(type);

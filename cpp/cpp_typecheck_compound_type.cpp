@@ -364,7 +364,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
     if(component.type().get("return_type") == "destructor")
       virtual_name= "@dtor";
-    
+
     // The method may be virtual implicitly.
     std::set<irep_idt> virtual_bases;
 
@@ -437,7 +437,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
       if(vtit == context.symbols.end())
       {
-        // first time: create a virtual-table symbol type 
+        // first time: create a virtual-table symbol type
         symbolt vt_symb_type;
         vt_symb_type.name= vt_name;
         vt_symb_type.base_name="virtual_table::"+symbol.base_name.as_string();
@@ -453,7 +453,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         assert(!failed);
         vtit = context.symbols.find(vt_name);
 
-        // add a virtual-table pointer 
+        // add a virtual-table pointer
         struct_typet::componentt compo;
         compo.type() = pointer_typet(symbol_typet(vt_name));
         compo.set_name(symbol.name.as_string() +"::@vtable_pointer");
@@ -464,7 +464,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         components.push_back(compo);
         put_compound_into_scope(compo);
       }
-      
+
       assert(vtit->second.type.id()=="struct");
 
       struct_typet &virtual_table=
@@ -534,7 +534,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         late_cast.op0()=
           symbol_expr(namespacet(context).lookup(
             args[0].cmt_identifier()));
-        
+
         if(code_type.return_type().id()!="empty" &&
            code_type.return_type().id()!="destructor")
         {
@@ -574,7 +574,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         }
 
         // add this new function to the list of components
-        
+
         struct_typet::componentt new_compo = component;
         new_compo.type() = func_symb.type;
         new_compo.set_name(func_symb.name);
@@ -591,7 +591,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
       }
     }
   }
-  
+
   if(is_static && !is_method) // static non-method member
   {
     // add as global variable to context
@@ -611,7 +611,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     if(context.move(static_symbol, new_symbol))
     {
       err_location(cpp_name.location());
-	str << "redeclaration of symbol `" 
+	str << "redeclaration of symbol `"
 	    << static_symbol.base_name.as_string()
 	    << "'";
       throw 0;
@@ -695,11 +695,11 @@ void cpp_typecheckt::put_compound_into_scope(
 {
   const irep_idt &base_name=compound.base_name();
   const irep_idt &name=compound.name();
-  
+
   // nothing to do if no base_name (e.g., an anonymous bitfield)
   if(base_name==irep_idt())
     return;
-  
+
   if(compound.type().id()=="code")
   {
     // put the symbol into scope
@@ -774,7 +774,7 @@ void cpp_typecheckt::typecheck_friend_declaration(
     str << "friend template not supported";
     throw 0;
   }
-  
+
   // we distinguish these whether there is a declarator
   if(declaration.declarators().empty())
   {
@@ -787,7 +787,7 @@ void cpp_typecheckt::typecheck_friend_declaration(
       str << "unexpected friend";
       throw 0;
     }
-       
+
     if(ftype.find("body").is_not_nil())
     {
       err_location(declaration.type());
@@ -915,7 +915,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       err_location(symbol.location);
       throw "union types must not have bases";
     }
-    
+
     typecheck_compound_bases(type);
   }
 
@@ -1080,7 +1080,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
       if(!declaration.is_constructor())
         continue;
-      
+
       Forall_cpp_declarators(d_it, declaration)
       {
         cpp_declaratort &declarator=*d_it;
@@ -1147,7 +1147,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       typecheck_compound_declarator(
         symbol,
         cpctor, cpctor.declarators()[0], components,
-        "public", false, false, false);      
+        "public", false, false, false);
     }
 
     // Add the default assignment operator
@@ -1483,9 +1483,9 @@ void cpp_typecheckt::convert_compound_ano_union(
   component.location()=declaration.location();
 
   components.push_back(component);
-  
+
   add_anonymous_members_to_scope(struct_union_symbol);
-    
+
   put_compound_into_scope(component);
 
   struct_union_symbol.type.set("#unnamed_object", base_name);

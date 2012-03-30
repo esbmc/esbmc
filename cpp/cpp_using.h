@@ -17,13 +17,13 @@ public:
   cpp_usingt():irept("cpp-using")
   {
   }
-  
+
   cpp_namet &name()
   {
     return (cpp_namet &)add("name");
   }
 
-  const cpp_namet &name() const 
+  const cpp_namet &name() const
   {
     return (cpp_namet &)find("name");
   }

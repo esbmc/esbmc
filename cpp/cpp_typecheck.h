@@ -170,7 +170,7 @@ protected:
     const locationt &location,
     const symbolt &template_symbol,
     const cpp_template_args_non_tct &template_args);
-    
+
   class instantiationt
   {
   public:

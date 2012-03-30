@@ -46,7 +46,7 @@ void cpp_exception_list_rec(
 
   // grab C++ type
   irep_idt cpp_type=src.get("#cpp_type");
-  
+
   if(cpp_type!=irep_idt())
   {
     dest.push_back(id2string(cpp_type)+suffix);
@@ -54,7 +54,7 @@ void cpp_exception_list_rec(
   }
 
   std::cout << "XX: " << src.pretty() << std::endl;
-  
+
   return;
 }
 
@@ -74,13 +74,13 @@ irept cpp_exception_list(const typet &src, const namespacet &ns)
 {
   std::vector<irep_idt> ids;
   irept result("exception_list");
-  
+
   cpp_exception_list_rec(src, ns, "", ids);
   result.get_sub().resize(ids.size());
 
   for(unsigned i=0; i<ids.size(); i++)
     result.get_sub()[i].id(ids[i]);
-  
+
   return result;
 }
 

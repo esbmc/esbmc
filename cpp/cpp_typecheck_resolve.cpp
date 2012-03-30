@@ -70,7 +70,7 @@ void cpp_typecheck_resolvet::convert_identifiers(
       if(e.id()=="type")
         assert(e.type().is_not_nil());
 
-     identifiers.push_back(e);
+      identifiers.push_back(e);
     }
   }
 }
@@ -108,7 +108,7 @@ void cpp_typecheck_resolvet::apply_template_args(
       if(e.id()=="type")
         assert(e.type().is_not_nil());
 
-     identifiers.push_back(e);
+      identifiers.push_back(e);
     }
   }
 }
@@ -142,7 +142,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     if(e.is_not_nil())
     {
       assert(e.id()!="type");
-     identifiers.push_back(e);
+      identifiers.push_back(e);
     }
   }
 
@@ -171,7 +171,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
         template_args);
 
     identifiers.clear();
-   identifiers.push_back(
+    identifiers.push_back(
       symbol_exprt(new_symbol.name, new_symbol.type));
   }
 }
@@ -200,7 +200,7 @@ void cpp_typecheck_resolvet::remove_templates(
       it++)
   {
     if(!cpp_typecheck.follow(it->type()).get_bool("is_template"))
-     identifiers.push_back(*it);
+      identifiers.push_back(*it);
   }
 }
 
@@ -240,12 +240,12 @@ void cpp_typecheck_resolvet::remove_duplicates(
     if(id=="")
     {
       if(other.insert(*it).second)
-       identifiers.push_back(*it);
+        identifiers.push_back(*it);
     }
     else
     {
       if(ids.insert(id).second)
-       identifiers.push_back(*it);
+        identifiers.push_back(*it);
     }
   }
 }
@@ -310,7 +310,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
      !identifier.is_static_member)
   {
     // a regular struct or union member
-  
+
     const symbolt &class_symbol=
       cpp_typecheck.lookup(identifier.class_identifier);
 
@@ -391,7 +391,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
       // check if the member can be applied to the object
       typet object_type=cpp_typecheck.follow(object.type());
 
-      if(object_type.id()=="struct" || 
+      if(object_type.id()=="struct" ||
          object_type.id()=="union")
       {
         const struct_typet& object_struct = to_struct_type(object_type);
@@ -520,7 +520,7 @@ void cpp_typecheck_resolvet::filter(
     }
 
     if(match)
-     identifiers.push_back(*it);
+      identifiers.push_back(*it);
   }
 }
 
@@ -582,7 +582,7 @@ void cpp_typecheck_resolvet::disambiguate(
         it=distance_map.begin();
         it!=distance_map.end() && it->first==distance;
         it++)
-   identifiers.push_back(it->second);
+      identifiers.push_back(it->second);
   }
 
   if(identifiers.size()>1 && fargs.in_use)
@@ -934,7 +934,7 @@ void cpp_typecheck_resolvet::resolve_scope(
   location=cpp_name.location();
 
   irept::subt::const_iterator pos=cpp_name.get_sub().begin();
-  
+
   bool recursive=true;
 
   // check if we need to go to the root scope
@@ -1892,7 +1892,7 @@ void cpp_typecheck_resolvet::apply_template_args(
   // a template is always a declaration
   const cpp_declarationt &cpp_declaration=
     to_cpp_declaration(template_symbol.type);
-    
+
   // is it a template class or function?
   if(cpp_declaration.is_template_class())
   {
@@ -1913,13 +1913,13 @@ void cpp_typecheck_resolvet::apply_template_args(
     // check if it is a method
     const code_typet &code_type=to_code_type(new_symbol.type);
 
-    if(!code_type.arguments().empty() && 
+    if(!code_type.arguments().empty() &&
         code_type.arguments()[0].cmt_base_name()=="this")
     {
       // do we have an object?
       if(fargs.has_object)
       {
-        const symbolt &type_symb = 
+        const symbolt &type_symb =
           cpp_typecheck.lookup(fargs.operands.begin()->type().identifier());
 
         assert(type_symb.type.id()=="struct");
@@ -2120,7 +2120,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
             // this is a scope, too!
             cpp_idt &class_id=
               cpp_typecheck.cpp_scopes.get_id(identifier);
-              
+
             assert(class_id.is_scope);
             new_set.insert(&class_id);
             break;

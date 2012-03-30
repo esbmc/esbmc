@@ -145,7 +145,7 @@ void cpp_typecheckt::typecheck()
 {
   // default linkage is C++
   current_mode="C++";
-  
+
   for(cpp_parse_treet::itemst::iterator
       it=cpp_parse_tree.items.begin();
       it!=cpp_parse_tree.items.end();

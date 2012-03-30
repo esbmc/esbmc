@@ -2419,15 +2419,15 @@ bool Parser::rOperatorName(irept &name)
   int t=lex->LookAhead(0);
   if(t=='+' || t=='-' || t=='*' || t=='/' || t=='%' || t=='^' ||
      t=='&' || t=='|' || t=='~' || t=='!' || t=='=' || t=='<' ||
-     t=='>' || 
+     t=='>' ||
      t==TOK_MULTASSIGN || t==TOK_DIVASSIGN || t==TOK_MODASSIGN ||
      t==TOK_PLUSASSIGN || t==TOK_MINUSASSIGN || t==TOK_SHLASSIGN ||
      t==TOK_SHRASSIGN  || t==TOK_ANDASSIGN ||
-     t==TOK_XORASSIGN  || t==TOK_ORASSIGN ||     
+     t==TOK_XORASSIGN  || t==TOK_ORASSIGN ||
      t==TOK_SHIFTLEFT  || t==TOK_SHIFTRIGHT ||
      t==TOK_EQ || t==TOK_NE ||
-     t==TOK_LE || t==TOK_GE || 
-     t==TOK_ANDAND || t==TOK_OROR || 
+     t==TOK_LE || t==TOK_GE ||
+     t==TOK_ANDAND || t==TOK_OROR ||
      t==TOK_INCR || t==TOK_DECR ||
      t==',' || t==TOK_DOTPM || t==TOK_ARROWPM || t==TOK_ARROW)
   {
@@ -3454,7 +3454,7 @@ bool Parser::rExpression(exprt &exp)
 
   int t=lex->LookAhead(0);
 
-  if(t=='=' || 
+  if(t=='=' ||
      t==TOK_MULTASSIGN || t==TOK_DIVASSIGN || t==TOK_MODASSIGN ||
      t==TOK_PLUSASSIGN || t==TOK_MINUSASSIGN || t==TOK_SHLASSIGN ||
      t==TOK_SHRASSIGN  || t==TOK_ANDASSIGN ||
@@ -4195,7 +4195,7 @@ bool Parser::rThrowExpr(exprt &exp)
   else
   {
     exprt e;
-  
+
     if(!rExpression(e))
       return false;
 
@@ -5592,7 +5592,7 @@ bool Parser::rTryStatement(codet &statement)
   do
   {
     Token op, cp;
-    
+
     if(lex->GetToken(tk)!=TOK_CATCH)
       return false;
 

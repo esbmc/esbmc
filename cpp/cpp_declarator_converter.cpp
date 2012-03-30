@@ -197,7 +197,7 @@ symbolt &cpp_declarator_convertert::convert(
   else
   {
     // no, it's no way a method
-    
+
     // we won't allow the constructor/destructor type
     if(final_type.id()=="code" &&
        to_code_type(final_type).return_type().id()=="constructor")
@@ -270,7 +270,7 @@ void cpp_declarator_convertert::combine_types(
     // to argument names, default values, and inlined-ness
     const code_typet &decl_code_type=to_code_type(decl_type);
     code_typet &symbol_code_type=to_code_type(symbol.type);
-    
+
     if(decl_code_type.get_inlined())
       symbol_code_type.set_inlined(true);
 
@@ -484,12 +484,12 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   symbol.is_macro=is_typedef && !is_template_argument;
   symbol.pretty_name=pretty_name;
   symbol.mode=cpp_typecheck.current_mode;
-  
+
   // Constant? These are propagated.
   if(symbol.type.cmt_constant() &&
      symbol.value.is_not_nil())
     symbol.is_macro=true;
-  
+
   if(member_spec.is_inline())
     symbol.type.set("#inlined", true);
 
