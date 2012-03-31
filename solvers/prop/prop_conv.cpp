@@ -628,7 +628,7 @@ void prop_convt::print_assignment(std::ostream &out) const
     out << it->first << " = " << prop.l_get(it->second) << std::endl;
 }
 
-void prop_convt::convert_smt_type(const type2t &type, void *&arg)
+void prop_convt::convert_smt_type(const type2t &type, void *&arg) const
 {
   std::cerr << "Unhandled SMT conversion for type ID " << type.type_id <<
                std::endl;

@@ -11,7 +11,7 @@ type2t::type2t(type_ids id)
 
 template<class derived>
 void
-type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
+type_body<derived>::convert_smt_type(const prop_convt &obj, void *&arg) const
 {
   const derived *derived_this = static_cast<const derived *>(this);
   obj.convert_smt_type(*derived_this, arg);
@@ -19,7 +19,7 @@ type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
 
 template<class derived>
 void
-bv_type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
+bv_type_body<derived>::convert_smt_type(const prop_convt &obj, void *&arg) const
 {
   const derived *derived_this = static_cast<const derived *>(this);
   obj.convert_smt_type(*derived_this, arg);
@@ -27,7 +27,7 @@ bv_type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
 
 template<class derived>
 void
-struct_union_type_body2t<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
+struct_union_type_body2t<derived>::convert_smt_type(const prop_convt &obj, void *&arg) const
 {
   const derived *derived_this = static_cast<const derived *>(this);
   obj.convert_smt_type(*derived_this, arg);

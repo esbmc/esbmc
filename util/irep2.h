@@ -48,7 +48,7 @@ protected:
   type2t(const type2t &ref);
 
 public:
-  virtual void convert_smt_type(prop_convt &obj, void *&arg) const = 0;
+  virtual void convert_smt_type(const prop_convt &obj, void *&arg) const = 0;
   virtual unsigned int get_width(void) const = 0;
 
   /** Instance of type_ids recording this types type. */
@@ -63,7 +63,7 @@ protected:
   type_body(const type_body &ref);
 
 public:
-  virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
+  virtual void convert_smt_type(const prop_convt &obj, void *&arg) const;
 };
 
 /** Boolean type. No additional data */
@@ -140,7 +140,7 @@ protected:
     : struct_union_type2t(ref) {};
 
 public:
-  virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
+  virtual void convert_smt_type(const prop_convt &obj, void *&arg) const;
 };
 
 template <class derived>
@@ -151,7 +151,7 @@ protected:
   bv_type_body(const bv_type_body &ref) : bv_type2t(ref) {};
 
 public:
-  virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
+  virtual void convert_smt_type(const prop_convt &obj, void *&arg) const;
 };
 
 class struct_type2t : public struct_union_type_body2t<struct_type2t>
