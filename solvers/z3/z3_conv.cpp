@@ -649,6 +649,12 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
   DEBUGLOC;
 
   unsigned width = config.ansi_c.int_width;
+  type2tc new_type;
+
+  if (migrate_type(type, new_type)) {
+    new_type->convert_smt_type(*this, (void*&)bv);
+    return;
+  }
 
   if (type.id() == "bool") {
     bv = Z3_mk_bool_type(z3_ctx);
