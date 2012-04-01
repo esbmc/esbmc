@@ -295,3 +295,13 @@ constant_int2t::as_long(void) const
   // XXXjmorse - add assertion that we don't exceed machine word width?
   return constant_value.to_long();
 }
+
+typecast2t::typecast2t(const type2tc type, const expr2tc expr)
+  : expr_body<typecast2t>(type, typecast_id), from(expr)
+{
+}
+
+typecast2t::typecast2t(const typecast2t &ref)
+  : expr_body<typecast2t>::expr_body(ref), from(ref.from)
+{
+}

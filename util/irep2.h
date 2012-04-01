@@ -481,15 +481,11 @@ public:
   irep_idt name;
 };
 
-class typecast2t : public expr2t
+class typecast2t : public expr_body<typecast2t>
 {
 public:
   typecast2t(const type2tc type, const expr2tc expr);
-protected:
   typecast2t(const typecast2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 
   // Expression to typecast from.
   const expr2tc from;
