@@ -166,6 +166,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2t *new_expr = new constant_int2t(type, val);
     new_expr_ref = expr2tc(new_expr);
     return true;
+#if 0
   } else if (expr.id() == "typecast") {
     assert(expr.op0().id_string() != "");
     type2tc new_type;
@@ -180,6 +181,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     typecast2t *t = new typecast2t(new_type, old_expr);
     new_expr_ref = expr2tc(t);
     return true;
+#endif
   } else {
     return false;
   }
