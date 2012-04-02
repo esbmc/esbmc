@@ -23,6 +23,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_type2name.h"
 #include "cpp_typecheck.h"
 #include "cpp_convert_type.h"
+#include "cpp_class_type.h"
+#include "cpp_exception_id.h"
 #include "expr2cpp.h"
 
 /*******************************************************************\
@@ -96,6 +98,41 @@ void cpp_typecheckt::typecheck_expr_main(exprt &expr)
   {
     std::cerr << "cpp_typecheckt::typecheck_expr_main got nil" << std::endl;
     abort();
+  }
+  else if(expr.id()=="__is_base_of")
+  {
+    // an MS extension
+    // http://msdn.microsoft.com/en-us/library/ms177194(v=vs.80).aspx
+
+    typet base=static_cast<const typet &>(expr.find("type_arg1"));
+    typet deriv=static_cast<const typet &>(expr.find("type_arg2"));
+
+    typecheck_type(base);
+    typecheck_type(deriv);
+
+    follow_symbol(base);
+    follow_symbol(deriv);
+
+    if(base.id()!="struct" || deriv.id()!="struct")
+      expr.make_false();
+    else
+    {
+      irep_idt base_name=base.get("name");
+      const class_typet &class_type=to_class_type(deriv);
+
+      if(class_type.has_base(base_name))
+        expr.make_true();
+      else
+        expr.make_false();
+    }
+  }
+  else if(expr.id()=="msc_uuidof")
+  {
+    // these appear to have type "struct _GUID"
+    // and they are lvalues!
+    expr.type()=symbol_typet("c::struct._GUID");
+    follow(expr.type());
+    expr.set("#lvalue", true);
   }
   else
     c_typecheck_baset::typecheck_expr_main(expr);
@@ -276,6 +313,7 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
   if(expr.op1().cmt_lvalue() &&
      expr.op2().cmt_lvalue())
     expr.set("#lvalue", true);
+
   return;
 }
 
@@ -1328,7 +1366,8 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
 
   irept &template_arg=template_arguments.get_sub().front();
 
-  if(template_arg.id()!="type")
+  if(template_arg.id()!="type" &&
+     template_arg.id()!="ambiguous")
   {
     err_location(expr);
     str << id << " expects a type as template argument";
