@@ -402,6 +402,33 @@ goto_convert_functionst::rename_types(irept &type)
 }
 
 void
+goto_convert_functionst::rename_exprs(irept &expr)
+{
+
+  if (expr.id() == "type" || expr.id() == "subtye") {
+    Forall_irep(it, expr.get_sub())
+      rename_types(*it);
+
+    Forall_named_irep(it, expr.get_named_sub())
+      rename_types(it->second);
+
+    Forall_named_irep(it, expr.get_comments())
+      rename_types(it->second);
+  } else {
+    Forall_irep(it, expr.get_sub())
+      rename_exprs(*it);
+
+    Forall_named_irep(it, expr.get_named_sub())
+      rename_exprs(it->second);
+
+    Forall_named_irep(it, expr.get_comments())
+      rename_exprs(it->second);
+  }
+
+  return;
+}
+
+void
 goto_convert_functionst::wallop_type(irep_idt name,
                          std::map<irep_idt, std::set<irep_idt> > &typenames)
 {
@@ -456,8 +483,8 @@ goto_convert_functionst::thrash_type_symbols(void)
   // And now all the types have a fixed form, assault all existing code.
   Forall_symbols(it, context.symbols) {
     if (!is_type_symbol(it->second.name)) {
-      rename_types(it->second.type);
-      rename_types(it->second.value);
+      rename_exprs(it->second.type);
+      rename_exprs(it->second.value);
     }
   }
 

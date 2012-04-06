@@ -28,6 +28,7 @@ public:
   void convert_function(const irep_idt &identifier);
   void thrash_type_symbols(void);
   void rename_types(irept &type);
+  void rename_exprs(irept &expr);
   void wallop_type(irep_idt name,
                    std::map<irep_idt, std::set<irep_idt> > &typenames);
 
