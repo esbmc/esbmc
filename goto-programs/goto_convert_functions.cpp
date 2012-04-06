@@ -335,18 +335,6 @@ void goto_convert(
     throw 0;
 }
 
-static bool
-is_type_symbol(irep_idt name)
-{
-
-  if (name.as_string().find("$type") != std::string::npos)
-    return true;
-  else if (name.as_string().find("tag-") != std::string::npos)
-    return true;
-  else
-    return false;
-}
-
 void
 goto_convert_functionst::rename_types(irept &type)
 {
@@ -357,13 +345,11 @@ goto_convert_functionst::rename_types(irept &type)
     return;
 
   if (type.id() == "symbol") {
-//    if (is_type_symbol(type.identifier())) {
-      symbolst::const_iterator it = context.symbols.find(type.identifier());
-      assert(it != context.symbols.end());
-      irept dup = it->second.type;
-      type = dup;
-      return;
-//    }
+    symbolst::const_iterator it = context.symbols.find(type.identifier());
+    assert(it != context.symbols.end());
+    irept dup = it->second.type;
+    type = dup;
+    return;
   }
 
   rename_exprs(type);
@@ -442,12 +428,10 @@ goto_convert_functionst::thrash_type_symbols(void)
   std::map<irep_idt, std::set<irep_idt> > typenames;
 
   forall_symbols(it, context.symbols) {
-    if (is_type_symbol(it->second.name)) {
-      std::set<irep_idt> depset;
-      if (it->second.type.id() == "symbol")
-        depset.insert(it->second.type.identifier());
-      typenames[it->second.name] = depset;
-    }
+    std::set<irep_idt> depset;
+    if (it->second.type.id() == "symbol")
+      depset.insert(it->second.type.identifier());
+    typenames[it->second.name] = depset;
   }
 
   // Now, repeatedly rename all types. When we encounter a type that contains
@@ -460,11 +444,9 @@ goto_convert_functionst::thrash_type_symbols(void)
 
   // And now all the types have a fixed form, assault all existing code.
   Forall_symbols(it, context.symbols) {
-    if (!is_type_symbol(it->second.name)) {
-      rename_exprs(it->second.type);
-      rename_exprs(it->second.value);
-      if (it->second.value.pretty(0).find("* identifier: cpp::std::<signed_int>struct.vector") != std::string::npos) { it->second.value.dump(); __asm__("int $3"); }
-    }
+    rename_exprs(it->second.type);
+    rename_exprs(it->second.value);
+    if (it->second.value.pretty(0).find("* identifier: cpp::std::<signed_int>struct.vector") != std::string::npos) { it->second.value.dump(); __asm__("int $3"); }
   }
 
   return;
