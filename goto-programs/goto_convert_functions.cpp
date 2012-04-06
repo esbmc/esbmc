@@ -472,13 +472,17 @@ goto_convert_functionst::thrash_type_symbols(void)
     collect_expr(it->second.type, names);
   }
 
-  std::map<irep_idt, std::set<irep_idt> > typenames;
+  // Try to compute their dependancies.
+
+  typename_mapt typenames;
 
   forall_symbols(it, context.symbols) {
-    std::set<irep_idt> depset;
-    if (it->second.type.id() == "symbol")
-      depset.insert(it->second.type.identifier());
-    typenames[it->second.name] = depset;
+    if (names.find(it->second.name) != names.end()) {
+      typename_sett list;
+      collect_expr(it->second.value, list);
+      collect_expr(it->second.type, list);
+      typenames[it->second.name] = list;
+    }
   }
 
   // Now, repeatedly rename all types. When we encounter a type that contains
