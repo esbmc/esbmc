@@ -380,8 +380,6 @@ void
 goto_convert_functionst::rename_types(irept &type)
 {
 
-//  std::cout << "beating type "; type.dump();
-
   if (type.id() == "pointer")
     return;
 
@@ -397,37 +395,27 @@ goto_convert_functionst::rename_types(irept &type)
   return;
 }
 
-static void checkdeath(irept &expr)
-{
-if (expr.pretty(0).find("* identifier: cpp::std::<signed_int>vector::struct.iterator") != std::string::npos && expr.pretty(0).find("* type: symbol") != std::string::npos && expr.pretty(0).find("40:") != std::string::npos) { expr.dump(); __asm__("int $3"); }
-}
-
 void
 goto_convert_functionst::rename_exprs(irept &expr)
 {
-//  checkdeath(expr);
   std::string origstr = expr.pretty(0);
 
   if (expr.id() == "pointer")
     return;
 
-  Forall_irep(it, expr.get_sub()) {
-//    std::cout << "item irep "; expr.dump();
+  Forall_irep(it, expr.get_sub())
     rename_exprs(*it);
-  }
 
   Forall_named_irep(it, expr.get_named_sub()) {
-//    std::cout << "named irep " ; expr.dump();
-    if (it->first == "type" || it->first == "subtype")
+    if (it->first == "type" || it->first == "subtype") {
       rename_types(it->second);
-    else
+    } else {
       rename_exprs(it->second);
+    }
   }
 
-  Forall_named_irep(it, expr.get_comments()) {
-//    std::cout << "comment irep "; expr.dump();
+  Forall_named_irep(it, expr.get_comments())
     rename_exprs(it->second);
-  }
 
   return;
 }
