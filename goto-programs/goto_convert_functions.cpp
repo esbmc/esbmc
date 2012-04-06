@@ -347,82 +347,59 @@ is_type_symbol(irep_idt name)
     return false;
 }
 
-static void
-fetch_type_dependancies(const irept &type, std::set<irep_idt> &deps)
-{
-
-  if (type.id() == "pointer")
-    return;
-
-  if (type.id() == "symbol") {
-    if (is_type_symbol(type.identifier())) {
-      deps.insert(type.identifier());
-      return;
-    }
-  }
-
-  forall_irep(it, type.get_sub())
-    fetch_type_dependancies(*it, deps);
-
-  forall_named_irep(it, type.get_named_sub())
-    fetch_type_dependancies(it->second, deps);
-
-  forall_named_irep(it, type.get_comments())
-    fetch_type_dependancies(it->second, deps);
-
-  return;
-}
-
 void
 goto_convert_functionst::rename_types(irept &type)
 {
 
+//  std::cout << "beating type "; type.dump();
+
   if (type.id() == "pointer")
     return;
 
   if (type.id() == "symbol") {
-    if (is_type_symbol(type.identifier())) {
+//    if (is_type_symbol(type.identifier())) {
       symbolst::const_iterator it = context.symbols.find(type.identifier());
       assert(it != context.symbols.end());
-      type = it->second.type;
+      irept dup = it->second.type;
+      type = dup;
       return;
-    }
+//    }
   }
 
-  Forall_irep(it, type.get_sub())
-    rename_types(*it);
-
-  Forall_named_irep(it, type.get_named_sub())
-    rename_types(it->second);
-
-  Forall_named_irep(it, type.get_comments())
-    rename_types(it->second);
-
+  rename_exprs(type);
   return;
+}
+
+static void checkdeath(irept &expr)
+{
+if (expr.pretty(0).find("* identifier: cpp::std::<signed_int>vector::struct.iterator") != std::string::npos && expr.pretty(0).find("* type: symbol") != std::string::npos && expr.pretty(0).find("40:") != std::string::npos) { expr.dump(); __asm__("int $3"); }
 }
 
 void
 goto_convert_functionst::rename_exprs(irept &expr)
 {
+//  checkdeath(expr);
+  std::string origstr = expr.pretty(0);
 
-  if (expr.id() == "type" || expr.id() == "subtye") {
-    Forall_irep(it, expr.get_sub())
-      rename_types(*it);
+  if (expr.id() == "pointer")
+    return;
 
-    Forall_named_irep(it, expr.get_named_sub())
+  Forall_irep(it, expr.get_sub()) {
+//    std::cout << "item irep "; expr.dump();
+    rename_exprs(*it);
+  }
+
+  Forall_named_irep(it, expr.get_named_sub()) {
+//    std::cout << "named irep " ; expr.dump();
+    if (it->first == "type" || it->first == "subtype")
       rename_types(it->second);
-
-    Forall_named_irep(it, expr.get_comments())
-      rename_types(it->second);
-  } else {
-    Forall_irep(it, expr.get_sub())
-      rename_exprs(*it);
-
-    Forall_named_irep(it, expr.get_named_sub())
+    else
       rename_exprs(it->second);
+  }
 
-    Forall_named_irep(it, expr.get_comments())
-      rename_exprs(it->second);
+  Forall_named_irep(it, expr.get_comments()) {
+//    std::cout << "comment irep "; expr.dump();
+    rename_exprs(it->second);
   }
 
   return;
@@ -467,7 +444,8 @@ goto_convert_functionst::thrash_type_symbols(void)
   forall_symbols(it, context.symbols) {
     if (is_type_symbol(it->second.name)) {
       std::set<irep_idt> depset;
-      fetch_type_dependancies(it->second.type, depset);
+      if (it->second.type.id() == "symbol")
+        depset.insert(it->second.type.identifier());
       typenames[it->second.name] = depset;
     }
   }
@@ -485,6 +463,7 @@ goto_convert_functionst::thrash_type_symbols(void)
     if (!is_type_symbol(it->second.name)) {
       rename_exprs(it->second.type);
       rename_exprs(it->second.value);
+      if (it->second.value.pretty(0).find("* identifier: cpp::std::<signed_int>struct.vector") != std::string::npos) { it->second.value.dump(); __asm__("int $3"); }
     }
   }
 
