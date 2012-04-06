@@ -498,9 +498,8 @@ goto_convert_functionst::thrash_type_symbols(void)
 
   // And now all the types have a fixed form, assault all existing code.
   Forall_symbols(it, context.symbols) {
-    rename_exprs(it->second.type);
+    rename_types(it->second.type);
     rename_exprs(it->second.value);
-    if (it->second.value.pretty(0).find("* identifier: cpp::std::<signed_int>struct.vector") != std::string::npos) { it->second.value.dump(); __asm__("int $3"); }
   }
 
   return;
