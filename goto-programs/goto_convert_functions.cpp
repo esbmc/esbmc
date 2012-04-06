@@ -485,6 +485,9 @@ goto_convert_functionst::thrash_type_symbols(void)
     }
   }
 
+  for (typename_mapt::iterator it = typenames.begin(); it != typenames.end(); it++)
+    it->second.erase(it->first);
+
   // Now, repeatedly rename all types. When we encounter a type that contains
   // unresolved symbols, resolve it first, then include it into this type.
   // This means that we recurse to whatever depth of nested types the user
