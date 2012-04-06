@@ -24,13 +24,17 @@ void goto_convert(
 class goto_convert_functionst:public goto_convertt
 {
 public:
+  typedef std::map<irep_idt, std::set<irep_idt> > typename_mapt;
+  typedef std::set<irep_idt> typename_sett;
+
   void goto_convert();
   void convert_function(const irep_idt &identifier);
   void thrash_type_symbols(void);
+  void collect_type(const irept &type, typename_sett &set);
+  void collect_expr(const irept &expr, typename_sett &set);
   void rename_types(irept &type);
   void rename_exprs(irept &expr);
-  void wallop_type(irep_idt name,
-                   std::map<irep_idt, std::set<irep_idt> > &typenames);
+  void wallop_type(irep_idt name, typename_mapt &typenames);
 
   goto_convert_functionst(
     contextt &_context,

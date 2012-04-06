@@ -336,6 +336,47 @@ void goto_convert(
 }
 
 void
+goto_convert_functionst::collect_type(const irept &type, typename_sett &deps)
+{
+
+  if (type.id() == "pointer")
+    return;
+
+  if (type.id() == "symbol") {
+    deps.insert(type.identifier());
+    return;
+  }
+
+  collect_expr(type, deps);
+  return;
+}
+
+void
+goto_convert_functionst::collect_expr(const irept &expr, typename_sett &deps)
+{
+
+  if (expr.id() == "pointer")
+    return;
+
+  forall_irep(it, expr.get_sub()) {
+    collect_expr(*it, deps);
+  }
+
+  forall_named_irep(it, expr.get_named_sub()) {
+    if (it->first == "type" || it->first == "subtype")
+      collect_type(it->second, deps);
+    else
+      collect_type(it->second, deps);
+  }
+
+  forall_named_irep(it, expr.get_comments()) {
+    collect_type(it->second, deps);
+  }
+
+  return;
+}
+
+void
 goto_convert_functionst::rename_types(irept &type)
 {
 
@@ -422,8 +463,14 @@ goto_convert_functionst::thrash_type_symbols(void)
   // in a struct to itself, this breaks down. Therefore, don't rename types of
   // pointers; they have a type already; they're pointers.
 
-  // Start off by collecting all type symbols. Identified by having "$type"
-  // in their names :|. And, compute their dependancies.
+  // Collect a list of all type names. This it required before this entire
+  // thing has no types, and there's no way (in C++ converted code at least)
+  // to decide what name is a type or not.
+  typename_sett names;
+  forall_symbols(it, context.symbols) {
+    collect_expr(it->second.value, names);
+    collect_expr(it->second.type, names);
+  }
 
   std::map<irep_idt, std::set<irep_idt> > typenames;
 
