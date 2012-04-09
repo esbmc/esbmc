@@ -51,6 +51,20 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   max_unwind=atol(options.get_option("unwind").c_str());
 
   art1 = NULL;
+
+  // Work out whether or not we'll be modelling with cpp:: or c:: arrays.
+  const symbolt *sp;
+  if (!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp)) {
+    valid_ptr_arr_name = "c::__ESBMC_alloc";
+    alloc_size_arr_name = "c::__ESBMC_alloc_size";
+    deallocd_arr_name = "c::__ESBMC_deallocated";
+    dyn_info_arr_name = "c::__ESBMC_is_dynamic";
+  } else {
+    valid_ptr_arr_name = "cpp::__ESBMC_alloc";
+    alloc_size_arr_name = "cpp::__ESBMC_alloc_size";
+    deallocd_arr_name = "cpp::__ESBMC_deallocated";
+    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic";
+  }
 }
 
 goto_symext::goto_symext(const goto_symext &sym) :
