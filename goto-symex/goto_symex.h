@@ -378,6 +378,7 @@ protected:
    *  @param expr Expression we're replacing the contents of.
    */
   void replace_dynamic_allocation(exprt &expr);
+  void default_replace_dynamic_allocation(exprt &expr);
 
   /**
    *  Decide if symbol is valid or not.
