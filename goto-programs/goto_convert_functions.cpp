@@ -384,10 +384,8 @@ goto_convert_functionst::rename_types(irept &type)
     return;
 
   if (type.id() == "symbol") {
-    symbolst::const_iterator it = context.symbols.find(type.identifier());
-    assert(it != context.symbols.end());
-    irept dup = it->second.type;
-    type = dup;
+    typet type2 = ns.follow((typet&)type);
+    type = type2;
     return;
   }
 
