@@ -377,24 +377,70 @@ goto_convert_functionst::collect_expr(const irept &expr, typename_sett &deps)
 }
 
 void
-goto_convert_functionst::rename_types(irept &type)
+goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym)
 {
 
   if (type.id() == "pointer")
     return;
 
+  // In a vastly irritating turn of events, some type symbols aren't entirely
+  // correct. This is because (in the current 27_exStbFb test) some type
+  // symbols get the module name inserted into the -- so c::int32_t becomes
+  // c::main::int32_t.
+  // Now this makes entire sense, because int32_t could be something else in
+  // some other file. However, because type symbols aren't squashed at type
+  // checking time (which, you know, might make sense) we now don't know
+  // what type symbol to link "c::int32_t" up to. Can't push it back to
+  // type checking either as I don't understand it, and it means touching
+  // the C++ frontend.
+  // So; instead we test to see whether a type symbol is linked correctly, and
+  // if it isn't we look up what module the current block of code came from and
+  // try to guess what type symbol it should have.
+ 
+  typet type2;
   if (type.id() == "symbol") {
-    typet type2 = ns.follow((typet&)type);
+    const symbolt *sym;
+    if (!ns.lookup(type.identifier(), sym)) {
+      // If we can just look up the current type symbol, use that.
+      type2 = ns.follow((typet&)type);
+    } else {
+      // Otherwise, try to guess the namespaced type symbol
+      std::string ident = type.identifier().as_string();
+      std::string ident2;
+
+      // Detect module prefix, then insert module name after it.
+      if (ident.c_str()[0] == 'c' && ident.c_str()[1] == 'p' &&
+          ident.c_str()[2] == 'p') {
+        ident2 = "cpp::" + cur_name_sym.module.as_string() + "::" +
+                 ident.substr(5, std::string::npos);
+      } else {
+        ident2 = "c::" + cur_name_sym.module.as_string() + "::"  +
+                 ident.substr(3, std::string::npos);
+      }
+
+      // Try looking that up.
+      if (!ns.lookup(irep_idt(ident2), sym)) {
+        irept tmptype = type;
+        tmptype.identifier(irep_idt(ident2));
+        type2 = ns.follow((typet&)tmptype);
+      } else {
+        // And if we fail
+        std::cerr << "Can't resolve type symbol " << ident;
+        std::cerr << " at symbol squashing time" << std::endl;
+        abort();
+      }
+    }
+
     type = type2;
     return;
   }
 
-  rename_exprs(type);
+  rename_exprs(type, cur_name_sym);
   return;
 }
 
 void
-goto_convert_functionst::rename_exprs(irept &expr)
+goto_convert_functionst::rename_exprs(irept &expr, const symbolt &cur_name_sym)
 {
   std::string origstr = expr.pretty(0);
 
@@ -402,18 +448,18 @@ goto_convert_functionst::rename_exprs(irept &expr)
     return;
 
   Forall_irep(it, expr.get_sub())
-    rename_exprs(*it);
+    rename_exprs(*it, cur_name_sym);
 
   Forall_named_irep(it, expr.get_named_sub()) {
     if (it->first == "type" || it->first == "subtype") {
-      rename_types(it->second);
+      rename_types(it->second, cur_name_sym);
     } else {
-      rename_exprs(it->second);
+      rename_exprs(it->second, cur_name_sym);
     }
   }
 
   Forall_named_irep(it, expr.get_comments())
-    rename_exprs(it->second);
+    rename_exprs(it->second, cur_name_sym);
 
   return;
 }
@@ -434,7 +480,7 @@ goto_convert_functionst::wallop_type(irep_idt name,
 
   // And finally perform renaming.
   symbolst::iterator it = context.symbols.find(name);
-  rename_types(it->second.type);
+  rename_types(it->second.type, it->second);
   deps.clear();
   return;
 }
@@ -484,8 +530,8 @@ goto_convert_functionst::thrash_type_symbols(void)
 
   // And now all the types have a fixed form, assault all existing code.
   Forall_symbols(it, context.symbols) {
-    rename_types(it->second.type);
-    rename_exprs(it->second.value);
+    rename_types(it->second.type, it->second);
+    rename_exprs(it->second.value, it->second);
   }
 
   return;
