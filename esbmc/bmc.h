@@ -41,7 +41,7 @@ public:
     messaget(_message_handler),
     options(opts),
     context(_context),
-    ns(_context, new_context),
+    ns(_context),
     symex(funcs, ns, options, new symex_target_equationt(ns), _context),
     ui(ui_message_handlert::PLAIN)
   {
@@ -71,7 +71,6 @@ protected:
   const contextt &context;
   namespacet ns;
   reachability_treet symex;
-  contextt new_context;
 
   // use gui format
   language_uit::uit ui;
