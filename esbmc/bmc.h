@@ -37,12 +37,12 @@ class bmct:public messaget
 {
 public:
   bmct(const goto_functionst &funcs, optionst &opts,
-       const contextt &_context, message_handlert &_message_handler):
+       contextt &_context, message_handlert &_message_handler):
     messaget(_message_handler),
     options(opts),
     context(_context),
     ns(_context, new_context),
-    symex(funcs, ns, options, new symex_target_equationt(ns), new_context),
+    symex(funcs, ns, options, new symex_target_equationt(ns), _context),
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
