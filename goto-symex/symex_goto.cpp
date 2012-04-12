@@ -371,7 +371,22 @@ void goto_symext::loop_bound_exceeded(
   bool partial_loops=
     options.get_bool_option("partial-loops");
 
-  if(!partial_loops)
+  bool base_case=
+    options.get_bool_option("base-case");
+
+
+  if (base_case)
+  {
+    // generate unwinding assumption
+    exprt guarded_expr=negated_cond;
+    //std::cout << "guarded_expr: " << guarded_expr.pretty() << std::endl;
+    state.guard.guard_expr(guarded_expr);
+    target->assumption(state.guard, guarded_expr, state.source);
+
+    // add to state guard to prevent further assignments
+    state.guard.add(negated_cond);
+  }
+  else if(!partial_loops)
   {
     if(unwinding_assertions)
     {

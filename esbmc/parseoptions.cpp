@@ -233,6 +233,9 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("inlining"))
     options.set_option("inlining", true);
 
+  if(cmdline.isset("base-case"))
+    options.set_option("base-case", true);
+
   // jmorse
   if(cmdline.isset("timeout")) {
 #ifdef _WIN32
@@ -1097,6 +1100,8 @@ void cbmc_parseoptionst::help()
     " --deadlock-check             enable global and local deadlock check with mutex\n"
     " --data-races-check           enable data races check\n"
     " --atomicity-check            enable atomicity check at visible assignments\n\n"
+    " --- k-induction----------- ----------------------------------------------------\n\n"
+    " --base-case                  check the base case of the k-induction\n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
     " --uw-model                   use under-approximation and widening approach\n"
