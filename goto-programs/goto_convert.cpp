@@ -1413,13 +1413,13 @@ void goto_convertt::convert_for(
   //  A; while(c) { P; B; }
   //-----------------------------
   //    A;
+  // t: inductive step
   // u: sideeffects in c
   // v: if(!c) goto z;
   // w: P;
   // x: B;               <-- continue target
   // y: goto u;
   // z: ;                <-- break target
-
 
   // A;
   code_blockt block;
@@ -1434,16 +1434,29 @@ void goto_convertt::convert_for(
 
   if(inductive_step)
   {
-	assert(cond.operands().size()==2);
+    assert(cond.operands().size()==2);
     state.components().resize(cond.operands().size());
 
-    //set the name and type of the first element of the state struct
-    state.components()[0].set_name(cond.op0().get_string("identifier"));
-	state.components()[0].type() = cond.op0().type();
+    // Copy contents of first element to the state struct
+    state.components()[0] = (struct_typet::componentt &) cond.op0();
 
-	//set the name and type of the second element of the state struct
-	state.components()[1].set_name(cond.op1().get_string("identifier"));
-	state.components()[1].type() = cond.op1().type();
+    // Copy contents of second element to the state struct
+    state.components()[1] = (struct_typet::componentt &) cond.op1();
+
+    //check which variables are involved in the loop
+    forall_operands(it, to_code(code.op3()))
+    {
+      if (it->is_code())
+      {
+        const codet &code=to_code(*it);
+        if (code.op0().is_symbol())
+        {
+          unsigned int size = state.components().size();
+          state.components().resize(size+1);
+          state.components()[size] = (struct_typet::componentt &) code.op0();
+        }
+      }
+    }
   }
 
   goto_programt sideeffects;
@@ -1503,31 +1516,29 @@ void goto_convertt::convert_for(
   goto_programt tmp_w;
   convert(to_code(code.op3()), tmp_w);
 
+  // y: goto u;
+  goto_programt tmp_y;
+  goto_programt::targett y=tmp_y.add_instruction();
+  y->make_goto(u);
+  y->guard.make_true();
+  y->location=code.location();
+
+  // do the t label
   if(inductive_step)
   {
-    //check which variables are involved in the loop
-    forall_operands(it, to_code(code.op3()))
+    const struct_typet::componentst &components = state.components();
+    u_int j=0;
+    for (struct_typet::componentst::const_iterator
+        it = components.begin();
+        it != components.end();
+        it++)
     {
-	  const codet &code=to_code(*it);
-	  if (code.op0().id()=="symbol")
-	  {
-		  unsigned int size = state.components().size();
-		  state.components().resize(size+1);
-		  state.components()[size].set_name(code.op0().get_string("identifier"));
-		  state.components()[size].type() = code.op0().type();
-		  //std::cout << "state.pretty(): " << state.pretty() << std::endl;
-	  }
+      exprt rhs_expr("nondet_symbol", it->type());
+      code_assignt new_assign(state.components()[j],rhs_expr);
+      copy(new_assign, ASSIGN, dest);
+      j++;
     }
   }
-
-  // y: goto u;
-   goto_programt tmp_y;
-   goto_programt::targett y=tmp_y.add_instruction();
-   y->make_goto(u);
-   y->guard.make_true();
-   y->location=code.location();
-
-
 
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
@@ -1565,13 +1576,46 @@ void goto_convertt::convert_while(
   const exprt &cond=code.op0();
   const locationt &location=code.location();
 
+  bool inductive_step=
+    options.get_bool_option("inductive-step");
+
   //    while(c) P;
   //--------------------
+  // t: inductive step
   // v: sideeffects in c
   //    if(!c) goto z;
   // x: P;
   // y: goto v;          <-- continue target
   // z: ;                <-- break target
+
+  struct_typet state;
+
+  if(inductive_step)
+  {
+    assert(cond.operands().size()==2);
+    state.components().resize(cond.operands().size());
+
+    // Copy contents of first element to the state struct
+    state.components()[0] = (struct_typet::componentt &) cond.op0();
+
+    // Copy contents of second element to the state struct
+    state.components()[1] = (struct_typet::componentt &) cond.op1();
+
+    //check which variables are involved in the loop
+    forall_operands(it, to_code(code.op1()))
+    {
+      if (it->is_code())
+      {
+        const codet &code=to_code(*it);
+        if (code.op0().is_symbol())
+        {
+          unsigned int size = state.components().size();
+          state.components().resize(size+1);
+          state.components()[size] = (struct_typet::componentt &) code.op0();
+        }
+      }
+    }
+  }
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -1603,6 +1647,23 @@ void goto_convertt::convert_while(
   y->make_goto(v);
   y->guard.make_true();
   y->location=code.location();
+
+  // do the t label
+  if(inductive_step)
+  {
+    const struct_typet::componentst &components = state.components();
+    u_int j=0;
+    for (struct_typet::componentst::const_iterator
+        it = components.begin();
+        it != components.end();
+        it++)
+    {
+      exprt rhs_expr("nondet_symbol", it->type());
+      code_assignt new_assign(state.components()[j],rhs_expr);
+      copy(new_assign, ASSIGN, dest);
+      j++;
+    }
+  }
 
   dest.destructive_append(tmp_branch);
   dest.destructive_append(tmp_x);
