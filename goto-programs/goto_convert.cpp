@@ -1397,6 +1397,7 @@ void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
+  std::cout << "code.pretty(): " << code.pretty() << std::endl;
   if(code.operands().size()!=4)
   {
     err_location(code);

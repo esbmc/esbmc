@@ -374,8 +374,14 @@ void goto_symext::loop_bound_exceeded(
   bool base_case=
     options.get_bool_option("base-case");
 
+  bool inductive_step=
+    options.get_bool_option("inductive-step");
 
-  if (base_case)
+
+  std::cout << "base_case: " << base_case << std::endl;
+  std::cout << "inductive_step: " << inductive_step << std::endl;
+
+  if (base_case || inductive_step)
   {
     // generate unwinding assumption
     exprt guarded_expr=negated_cond;
