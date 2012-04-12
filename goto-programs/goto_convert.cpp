@@ -1397,7 +1397,7 @@ void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
-  std::cout << "code.pretty(): " << code.pretty() << std::endl;
+  //std::cout << "code.pretty(): " << code.pretty() << std::endl;
   if(code.operands().size()!=4)
   {
     err_location(code);
@@ -1405,6 +1405,9 @@ void goto_convertt::convert_for(
   }
 
   loop_for_block=true;
+
+  bool inductive_step=
+    options.get_bool_option("inductive-step");
 
   // turn for(A; c; B) { P } into
   //  A; while(c) { P; B; }
@@ -1427,6 +1430,21 @@ void goto_convertt::convert_for(
   }
 
   exprt cond=code.op1();
+  struct_typet state;
+
+  if(inductive_step)
+  {
+	assert(cond.operands().size()==2);
+    state.components().resize(cond.operands().size());
+
+    //set the name and type of the first element of the state struct
+    state.components()[0].set_name(cond.op0().get_string("identifier"));
+	state.components()[0].type() = cond.op0().type();
+
+	//set the name and type of the second element of the state struct
+	state.components()[1].set_name(cond.op1().get_string("identifier"));
+	state.components()[1].type() = cond.op1().type();
+  }
 
   goto_programt sideeffects;
 
@@ -1485,12 +1503,31 @@ void goto_convertt::convert_for(
   goto_programt tmp_w;
   convert(to_code(code.op3()), tmp_w);
 
+  if(inductive_step)
+  {
+    //check which variables are involved in the loop
+    forall_operands(it, to_code(code.op3()))
+    {
+	  const codet &code=to_code(*it);
+	  if (code.op0().id()=="symbol")
+	  {
+		  unsigned int size = state.components().size();
+		  state.components().resize(size+1);
+		  state.components()[size].set_name(code.op0().get_string("identifier"));
+		  state.components()[size].type() = code.op0().type();
+		  //std::cout << "state.pretty(): " << state.pretty() << std::endl;
+	  }
+    }
+  }
+
   // y: goto u;
    goto_programt tmp_y;
    goto_programt::targett y=tmp_y.add_instruction();
    y->make_goto(u);
    y->guard.make_true();
    y->location=code.location();
+
+
 
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);

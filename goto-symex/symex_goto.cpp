@@ -378,8 +378,8 @@ void goto_symext::loop_bound_exceeded(
     options.get_bool_option("inductive-step");
 
 
-  std::cout << "base_case: " << base_case << std::endl;
-  std::cout << "inductive_step: " << inductive_step << std::endl;
+  //std::cout << "base_case: " << base_case << std::endl;
+  //std::cout << "inductive_step: " << inductive_step << std::endl;
 
   if (base_case || inductive_step)
   {
