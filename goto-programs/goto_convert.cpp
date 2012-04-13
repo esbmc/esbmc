@@ -1398,7 +1398,6 @@ void goto_convertt::convert_for(
   goto_programt &dest)
 {
   static u_int state_counter=1;
-  //std::cout << "code.pretty(): " << code.pretty() << std::endl;
   if(code.operands().size()!=4)
   {
     err_location(code);
@@ -1480,9 +1479,9 @@ void goto_convertt::convert_for(
 
       char val[2];
       std::string identifier;
-	  sprintf(val,"%i", state_counter);
-	  identifier = "cs";
-	  identifier += val;
+      sprintf(val,"%i", state_counter);
+      identifier = "cs";
+      identifier += val;
 
       lhs_expr.identifier(identifier);
 
@@ -1497,7 +1496,6 @@ void goto_convertt::convert_for(
       copy(new_assign, ASSIGN, dest);
     }
   }
-
 
   goto_programt sideeffects;
 
@@ -1579,23 +1577,23 @@ void goto_convertt::convert_for(
   if (inductive_step)
   {
     //set the type of the state vector
-	state_vector.type().subtype() = state;
+    state_vector.type().subtype() = state;
 
     exprt new_expr(exprt::with, state_vector);
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state_vector);
 
     char val[2];
-    std::string identifier1, identifier2;
-	sprintf(val,"%i", state_counter);
-	identifier1 = "s";
-	identifier1 += val;
+    std::string identifier_lhs, identifier_rhs;
+    sprintf(val,"%i", state_counter);
+    identifier_lhs = "s";
+    identifier_lhs += val;
 
-	identifier2 = "cs";
-	identifier2 += val;
+    identifier_rhs = "cs";
+    identifier_rhs += val;
 
-    lhs_array.identifier(identifier1);
-    rhs.identifier(identifier2);
+    lhs_array.identifier(identifier_lhs);
+    rhs.identifier(identifier_rhs);
 
     //s[k]=cs
     new_expr.reserve_operands(3);
@@ -1603,8 +1601,6 @@ void goto_convertt::convert_for(
     new_expr.copy_to_operands(lhs_index);
     new_expr.move_to_operands(rhs);
 
-
-    //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
     code_assignt new_assign(lhs_array,new_expr);
     copy(new_assign, ASSIGN, dest);
 
@@ -1623,27 +1619,27 @@ void goto_convertt::convert_for(
 	u_int j=0;
 	for (j=0; j < state.components().size(); j++)
 	{
-	  exprt rhs_expr(state.components()[j]);
-	  exprt new_expr(exprt::with, state);
-	  exprt lhs_expr("symbol", state);
+    exprt rhs_expr(state.components()[j]);
+    exprt new_expr(exprt::with, state);
+    exprt lhs_expr("symbol", state);
 
-	  char val[2];
-	  std::string identifier;
-	  sprintf(val,"%i", state_counter);
-	  identifier = "cs";
-	  identifier += val;
+    char val[2];
+    std::string identifier;
+    sprintf(val,"%i", state_counter);
+    identifier = "cs";
+    identifier += val;
 
-      lhs_expr.identifier(identifier);
+    lhs_expr.identifier(identifier);
 
-      new_expr.reserve_operands(3);
-      new_expr.copy_to_operands(lhs_expr);
-      new_expr.copy_to_operands(exprt("member_name"));
-      new_expr.move_to_operands(rhs_expr);
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_expr);
+    new_expr.copy_to_operands(exprt("member_name"));
+    new_expr.move_to_operands(rhs_expr);
 
-      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+    new_expr.op1().component_name(state.components()[j].get_string("identifier"));
 
-      code_assignt new_assign(lhs_expr,new_expr);
-      copy(new_assign, ASSIGN, dest);
+    code_assignt new_assign(lhs_expr,new_expr);
+    copy(new_assign, ASSIGN, dest);
     }
   }
 
