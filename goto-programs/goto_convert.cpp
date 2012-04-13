@@ -1414,13 +1414,14 @@ void goto_convertt::convert_for(
   //  A; while(c) { P; B; }
   //-----------------------------
   //    A;
-  // t: cs assign
+  // t: cs nondet assign
   // u: sideeffects in c
   // c: init s indice
   // v: if(!c) goto z;
   // f: s assign
   // w: P;
   // x: B;               <-- continue target
+  // d: cs assign
   // y: goto u;
   // z: ;                <-- break target
 
@@ -1470,7 +1471,6 @@ void goto_convertt::convert_for(
       }
     }
 
-    const struct_typet::componentst &components = state.components();
     u_int j=0;
     for (j=0; j < state.components().size(); j++)
     {
@@ -1612,11 +1612,41 @@ void goto_convertt::convert_for(
     exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
     code_assignt new_assign_plus(lhs_index,rhs_expr);
     copy(new_assign_plus, ASSIGN, dest);
-
   }
 
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
+
+  //do the c label
+  if (inductive_step)
+  {
+	u_int j=0;
+	for (j=0; j < state.components().size(); j++)
+	{
+	  exprt rhs_expr(state.components()[j]);
+	  exprt new_expr(exprt::with, state);
+	  exprt lhs_expr("symbol", state);
+
+	  char val[2];
+	  std::string identifier;
+	  sprintf(val,"%i", state_counter);
+	  identifier = "cs";
+	  identifier += val;
+
+      lhs_expr.identifier(identifier);
+
+      new_expr.reserve_operands(3);
+      new_expr.copy_to_operands(lhs_expr);
+      new_expr.copy_to_operands(exprt("member_name"));
+      new_expr.move_to_operands(rhs_expr);
+
+      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+
+      code_assignt new_assign(lhs_expr,new_expr);
+      copy(new_assign, ASSIGN, dest);
+    }
+  }
+
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 
