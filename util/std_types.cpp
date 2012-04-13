@@ -122,6 +122,8 @@ const struct_union_typet::componentt &struct_union_typet::get_component(
       it!=c.end();
       it++)
   {
+	//std::cout << "it->get_name(): " << it->get_name() << std::endl;
+	//std::cout << "component_name: " << component_name << std::endl;
     if(it->get_name()==component_name)
       return *it;
   }

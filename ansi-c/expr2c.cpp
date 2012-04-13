@@ -544,6 +544,8 @@ std::string expr2ct::convert_with(
 
     if(src.operands()[i].id()=="member_name")
     {
+      //std::cout << "src.operands()[i].pretty(): " << src.operands()[i].pretty() << std::endl;
+      //std::cout << "src.operands()[i].component_name(): " << src.operands()[i].component_name() << std::endl;
       const irep_idt &component_name=
         src.operands()[i].component_name();
 
@@ -552,9 +554,12 @@ std::string expr2ct::convert_with(
       const struct_typet &struct_type=
         to_struct_type(full_type);
 
+  	  //std::cout << "struct_type.pretty(): " << struct_type.pretty() << std::endl;
+
       const exprt comp_expr=
         struct_type.get_component(component_name);
 
+      //std::cout << "comp_expr.pretty(): " << comp_expr.pretty() << std::endl;
       assert(comp_expr.is_not_nil());
 
       op1=comp_expr.pretty_name().as_string();
@@ -562,6 +567,9 @@ std::string expr2ct::convert_with(
     }
     else
       op1=convert(src.operands()[i], p1);
+
+    //std::cout << "src.operands()[i]: " << src.operands()[i] << std::endl;
+    //std::cout << "op1: " << op1 << std::endl;
 
     op2=convert(src.operands()[i+1], p2);
 

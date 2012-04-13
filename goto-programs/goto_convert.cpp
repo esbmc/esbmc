@@ -1397,6 +1397,7 @@ void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
+  static u_int state_counter=1;
   //std::cout << "code.pretty(): " << code.pretty() << std::endl;
   if(code.operands().size()!=4)
   {
@@ -1439,9 +1440,14 @@ void goto_convertt::convert_for(
 
     // Copy contents of first element to the state struct
     state.components()[0] = (struct_typet::componentt &) cond.op0();
+    state.components()[0].set_name(cond.op0().get_string("identifier"));
+    state.components()[0].pretty_name(cond.op0().get_string("identifier"));
 
     // Copy contents of second element to the state struct
     state.components()[1] = (struct_typet::componentt &) cond.op1();
+    state.components()[1].set_name(cond.op1().get_string("identifier"));
+    state.components()[1].pretty_name(cond.op1().get_string("identifier"));
+
 
     //check which variables are involved in the loop
     forall_operands(it, to_code(code.op3()))
@@ -1454,6 +1460,8 @@ void goto_convertt::convert_for(
           unsigned int size = state.components().size();
           state.components().resize(size+1);
           state.components()[size] = (struct_typet::componentt &) code.op0();
+          state.components()[size].set_name(code.op0().get_string("identifier"));
+          state.components()[size].pretty_name(code.op0().get_string("identifier"));
         }
       }
     }
@@ -1528,17 +1536,32 @@ void goto_convertt::convert_for(
   {
     const struct_typet::componentst &components = state.components();
     u_int j=0;
-    for (struct_typet::componentst::const_iterator
-        it = components.begin();
-        it != components.end();
-        it++)
+    for (j=0; j < state.components().size(); j++)
     {
-      exprt rhs_expr("nondet_symbol", it->type());
-      code_assignt new_assign(state.components()[j],rhs_expr);
+      exprt rhs_expr("nondet_symbol", state.components()[j].type());
+      exprt new_expr(exprt::with, state);
+      exprt lhs_expr("symbol", state);
+
+      char val[2];
+      std::string identifier;
+	  sprintf(val,"%i", state_counter);
+	  identifier = "s";
+	  identifier += val;
+
+      lhs_expr.identifier(identifier);
+
+      new_expr.reserve_operands(3);
+      new_expr.copy_to_operands(lhs_expr);
+      new_expr.copy_to_operands(exprt("member_name"));
+      new_expr.move_to_operands(rhs_expr);
+
+      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+
+      code_assignt new_assign(lhs_expr,new_expr);
       copy(new_assign, ASSIGN, dest);
-      j++;
     }
   }
+  std::cout << "passou aqui2"  << std::endl;
 
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
@@ -1549,6 +1572,7 @@ void goto_convertt::convert_for(
 
   // restore break/continue
   targets.restore(old_targets);
+  state_counter++;
 }
 
 /*******************************************************************\
