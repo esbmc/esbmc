@@ -1413,14 +1413,15 @@ void goto_convertt::convert_for(
   //  A; while(c) { P; B; }
   //-----------------------------
   //    A;
-  // t: cs nondet assign
+  // t: cs=nondet
   // u: sideeffects in c
-  // c: init s indice
+  // c: k=0
   // v: if(!c) goto z;
-  // f: s assign
+  // f: s[k]=cs
   // w: P;
   // x: B;               <-- continue target
   // d: cs assign
+  // e: assume
   // y: goto u;
   // z: ;                <-- break target
 
@@ -1573,15 +1574,15 @@ void goto_convertt::convert_for(
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
 
-  // do the f label
+  //do the f label
   if (inductive_step)
   {
     //set the type of the state vector
-    state_vector.type().subtype() = state;
+	state_vector.subtype() = state;
 
     exprt new_expr(exprt::with, state_vector);
     exprt lhs_array("symbol", state_vector);
-    exprt rhs("symbol", state_vector);
+    exprt rhs("symbol", state);
 
     char val[2];
     std::string identifier_lhs, identifier_rhs;
@@ -1604,10 +1605,6 @@ void goto_convertt::convert_for(
     code_assignt new_assign(lhs_array,new_expr);
     copy(new_assign, ASSIGN, dest);
 
-    exprt one_expr = gen_one(int_type());
-    exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
-    code_assignt new_assign_plus(lhs_index,rhs_expr);
-    copy(new_assign_plus, ASSIGN, dest);
   }
 
   dest.destructive_append(tmp_w);
@@ -1642,6 +1639,51 @@ void goto_convertt::convert_for(
     copy(new_assign, ASSIGN, dest);
     }
   }
+
+  //do the e label
+  if (inductive_step)
+  {
+    //set the type of the state vector
+	state_vector.subtype() = state;
+
+    exprt new_expr(exprt::index, state);
+    exprt lhs_array("symbol", state_vector);
+    //std::cout << "state_vector.pretty(): " << state_vector.pretty() << std::endl;
+    exprt rhs("symbol", state);
+
+    char val[2];
+    std::string identifier1, identifier2;
+	sprintf(val,"%i", state_counter);
+	identifier1 = "s";
+	identifier1 += val;
+
+	identifier2 = "cs";
+	identifier2 += val;
+
+    lhs_array.identifier(identifier1);
+    rhs.identifier(identifier2);
+
+    //s[k]=cs
+    new_expr.reserve_operands(2);
+    new_expr.copy_to_operands(lhs_array);
+    new_expr.copy_to_operands(lhs_index);
+
+    exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
+    //std::cout << result_expr.pretty() << std::endl;
+    //assert(0);
+    // do the z label
+    goto_programt tmp_e;
+    goto_programt::targett e=tmp_e.add_instruction(ASSUME);
+    e->guard.swap(result_expr);
+    dest.destructive_append(tmp_e);
+
+    exprt one_expr = gen_one(int_type());
+    exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
+    code_assignt new_assign_plus(lhs_index,rhs_expr);
+    copy(new_assign_plus, ASSIGN, dest);
+
+  }
+
 
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
