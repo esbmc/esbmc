@@ -1573,7 +1573,7 @@ void goto_convertt::convert_for(
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
 
-  //do the c label
+  // do the f label
   if (inductive_step)
   {
     //set the type of the state vector
@@ -1613,7 +1613,7 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
 
-  //do the c label
+  //do the d label
   if (inductive_step)
   {
 	u_int j=0;
@@ -1667,6 +1667,7 @@ void goto_convertt::convert_while(
   const codet &code,
   goto_programt &dest)
 {
+  static u_int state_counter=1;
   if(code.operands().size()!=2)
   {
     err_location(code);
@@ -1681,15 +1682,20 @@ void goto_convertt::convert_while(
 
   //    while(c) P;
   //--------------------
-  // t: inductive step
+  // t: cs nondet assign
   // v: sideeffects in c
-  //    if(!c) goto z;
+  // c: init s indice
+  // v: if(!c) goto z;
+  // f: s assign
   // x: P;
+  // d: cs assign
   // y: goto v;          <-- continue target
   // z: ;                <-- break target
 
   struct_typet state;
+  array_typet state_vector;
 
+  // do the t label
   if(inductive_step)
   {
     assert(cond.operands().size()==2);
@@ -1697,9 +1703,13 @@ void goto_convertt::convert_while(
 
     // Copy contents of first element to the state struct
     state.components()[0] = (struct_typet::componentt &) cond.op0();
+    state.components()[0].set_name(cond.op0().get_string("identifier"));
+    state.components()[0].pretty_name(cond.op0().get_string("identifier"));
 
     // Copy contents of second element to the state struct
     state.components()[1] = (struct_typet::componentt &) cond.op1();
+    state.components()[1].set_name(cond.op1().get_string("identifier"));
+    state.components()[1].pretty_name(cond.op1().get_string("identifier"));
 
     //check which variables are involved in the loop
     forall_operands(it, to_code(code.op1()))
@@ -1712,8 +1722,36 @@ void goto_convertt::convert_while(
           unsigned int size = state.components().size();
           state.components().resize(size+1);
           state.components()[size] = (struct_typet::componentt &) code.op0();
+          state.components()[size].set_name(code.op0().get_string("identifier"));
+          state.components()[size].pretty_name(code.op0().get_string("identifier"));
         }
       }
+    }
+
+    u_int j=0;
+    for (j=0; j < state.components().size(); j++)
+    {
+      exprt rhs_expr("nondet_symbol", state.components()[j].type());
+      exprt new_expr(exprt::with, state);
+      exprt lhs_expr("symbol", state);
+
+      char val[2];
+      std::string identifier;
+      sprintf(val,"%i", state_counter);
+      identifier = "cs";
+      identifier += val;
+
+      lhs_expr.identifier(identifier);
+
+      new_expr.reserve_operands(3);
+      new_expr.copy_to_operands(lhs_expr);
+      new_expr.copy_to_operands(exprt("member_name"));
+      new_expr.move_to_operands(rhs_expr);
+
+      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+
+      code_assignt new_assign(lhs_expr,new_expr);
+      copy(new_assign, ASSIGN, dest);
     }
   }
 
@@ -1748,30 +1786,91 @@ void goto_convertt::convert_while(
   y->guard.make_true();
   y->location=code.location();
 
-  // do the t label
-  if(inductive_step)
+  //do the c label
+  exprt lhs_index = symbol_exprt("kindice", int_type());
+  if (inductive_step)
   {
-    const struct_typet::componentst &components = state.components();
-    u_int j=0;
-    for (struct_typet::componentst::const_iterator
-        it = components.begin();
-        it != components.end();
-        it++)
-    {
-      exprt rhs_expr("nondet_symbol", it->type());
-      code_assignt new_assign(state.components()[j],rhs_expr);
-      copy(new_assign, ASSIGN, dest);
-      j++;
-    }
+    exprt zero_expr = gen_zero(int_type());
+    code_assignt new_assign(lhs_index,zero_expr);
+    copy(new_assign, ASSIGN, dest);
   }
 
   dest.destructive_append(tmp_branch);
   dest.destructive_append(tmp_x);
+
+  // do the f label
+  if (inductive_step)
+  {
+    //set the type of the state vector
+    state_vector.type().subtype() = state;
+
+    exprt new_expr(exprt::with, state_vector);
+    exprt lhs_array("symbol", state_vector);
+    exprt rhs("symbol", state_vector);
+
+    char val[2];
+    std::string identifier_lhs, identifier_rhs;
+    sprintf(val,"%i", state_counter);
+    identifier_lhs = "s";
+    identifier_lhs += val;
+
+    identifier_rhs = "cs";
+    identifier_rhs += val;
+
+    lhs_array.identifier(identifier_lhs);
+    rhs.identifier(identifier_rhs);
+
+    //s[k]=cs
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_array);
+    new_expr.copy_to_operands(lhs_index);
+    new_expr.move_to_operands(rhs);
+
+    code_assignt new_assign(lhs_array,new_expr);
+    copy(new_assign, ASSIGN, dest);
+
+    exprt one_expr = gen_one(int_type());
+    exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
+    code_assignt new_assign_plus(lhs_index,rhs_expr);
+    copy(new_assign_plus, ASSIGN, dest);
+  }
+
+  //do the d label
+  if (inductive_step)
+  {
+	u_int j=0;
+	for (j=0; j < state.components().size(); j++)
+	{
+    exprt rhs_expr(state.components()[j]);
+    exprt new_expr(exprt::with, state);
+    exprt lhs_expr("symbol", state);
+
+    char val[2];
+    std::string identifier;
+    sprintf(val,"%i", state_counter);
+    identifier = "cs";
+    identifier += val;
+
+    lhs_expr.identifier(identifier);
+
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_expr);
+    new_expr.copy_to_operands(exprt("member_name"));
+    new_expr.move_to_operands(rhs_expr);
+
+    new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+
+    code_assignt new_assign(lhs_expr,new_expr);
+    copy(new_assign, ASSIGN, dest);
+    }
+  }
+
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 
   // restore break/continue
   targets.restore(old_targets);
+  state_counter++;
 }
 
 /*******************************************************************\
