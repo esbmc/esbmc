@@ -1545,7 +1545,7 @@ void goto_convertt::convert_for(
       char val[2];
       std::string identifier;
 	  sprintf(val,"%i", state_counter);
-	  identifier = "s";
+	  identifier = "cs";
 	  identifier += val;
 
       lhs_expr.identifier(identifier);
