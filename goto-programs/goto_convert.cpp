@@ -1513,7 +1513,7 @@ void goto_convertt::convert_for(
   // do the u label
   goto_programt::targett u=sideeffects.instructions.begin();
 
-  //do the c label
+  // do the c label
   exprt lhs_index = symbol_exprt("kindice", int_type());
   if (inductive_step)
   {
@@ -1574,11 +1574,11 @@ void goto_convertt::convert_for(
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
 
-  //do the f label
+  // do the f label
   if (inductive_step)
   {
     //set the type of the state vector
-	state_vector.subtype() = state;
+    state_vector.subtype() = state;
 
     exprt new_expr(exprt::with, state_vector);
     exprt lhs_array("symbol", state_vector);
@@ -1610,7 +1610,7 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
 
-  //do the d label
+  // do the d label
   if (inductive_step)
   {
     u_int j=0;
@@ -1640,28 +1640,27 @@ void goto_convertt::convert_for(
     }
   }
 
-  //do the e label
+  // do the e label
   if (inductive_step)
   {
     //set the type of the state vector
-	state_vector.subtype() = state;
+    state_vector.subtype() = state;
 
     exprt new_expr(exprt::index, state);
     exprt lhs_array("symbol", state_vector);
-    //std::cout << "state_vector.pretty(): " << state_vector.pretty() << std::endl;
     exprt rhs("symbol", state);
 
     char val[2];
-    std::string identifier1, identifier2;
-	sprintf(val,"%i", state_counter);
-	identifier1 = "s";
-	identifier1 += val;
+    std::string identifier_lhs, identifier_rhs;
+    sprintf(val,"%i", state_counter);
+    identifier_lhs = "s";
+    identifier_lhs += val;
 
-	identifier2 = "cs";
-	identifier2 += val;
+    identifier_rhs = "cs";
+    identifier_rhs += val;
 
-    lhs_array.identifier(identifier1);
-    rhs.identifier(identifier2);
+    lhs_array.identifier(identifier_lhs);
+    rhs.identifier(identifier_rhs);
 
     //s[k]=cs
     new_expr.reserve_operands(2);
@@ -1669,9 +1668,7 @@ void goto_convertt::convert_for(
     new_expr.copy_to_operands(lhs_index);
 
     exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
-    //std::cout << result_expr.pretty() << std::endl;
-    //assert(0);
-    // do the z label
+
     goto_programt tmp_e;
     goto_programt::targett e=tmp_e.add_instruction(ASSUME);
     e->guard.swap(result_expr);
@@ -1681,9 +1678,7 @@ void goto_convertt::convert_for(
     exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
     code_assignt new_assign_plus(lhs_index,rhs_expr);
     copy(new_assign_plus, ASSIGN, dest);
-
   }
-
 
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
@@ -1724,13 +1719,14 @@ void goto_convertt::convert_while(
 
   //    while(c) P;
   //--------------------
-  // t: cs nondet assign
+  // t: cs=nondet
   // v: sideeffects in c
-  // c: init s indice
+  // c: k=0
   // v: if(!c) goto z;
-  // f: s assign
+  // f: s[k]=cs
   // x: P;
   // d: cs assign
+  // e: assume
   // y: goto v;          <-- continue target
   // z: ;                <-- break target
 
@@ -1844,11 +1840,11 @@ void goto_convertt::convert_while(
   if (inductive_step)
   {
     //set the type of the state vector
-    state_vector.type().subtype() = state;
+    state_vector.subtype() = state;
 
     exprt new_expr(exprt::with, state_vector);
     exprt lhs_array("symbol", state_vector);
-    exprt rhs("symbol", state_vector);
+    exprt rhs("symbol", state);
 
     char val[2];
     std::string identifier_lhs, identifier_rhs;
@@ -1862,7 +1858,7 @@ void goto_convertt::convert_while(
     lhs_array.identifier(identifier_lhs);
     rhs.identifier(identifier_rhs);
 
-    //s[k]=cs
+    // s[k]=cs
     new_expr.reserve_operands(3);
     new_expr.copy_to_operands(lhs_array);
     new_expr.copy_to_operands(lhs_index);
@@ -1877,7 +1873,7 @@ void goto_convertt::convert_while(
     copy(new_assign_plus, ASSIGN, dest);
   }
 
-  //do the d label
+  // do the d label
   if (inductive_step)
   {
     u_int j=0;
@@ -1905,6 +1901,46 @@ void goto_convertt::convert_while(
       code_assignt new_assign(lhs_expr,new_expr);
       copy(new_assign, ASSIGN, dest);
     }
+  }
+
+  // do the e label
+  if (inductive_step)
+  {
+    //set the type of the state vector
+    state_vector.subtype() = state;
+
+    exprt new_expr(exprt::index, state);
+    exprt lhs_array("symbol", state_vector);
+    exprt rhs("symbol", state);
+
+    char val[2];
+    std::string identifier_lhs, identifier_rhs;
+    sprintf(val,"%i", state_counter);
+    identifier_lhs = "s";
+    identifier_lhs += val;
+
+    identifier_rhs = "cs";
+    identifier_rhs += val;
+
+    lhs_array.identifier(identifier_lhs);
+    rhs.identifier(identifier_rhs);
+
+    //s[k]=cs
+    new_expr.reserve_operands(2);
+    new_expr.copy_to_operands(lhs_array);
+    new_expr.copy_to_operands(lhs_index);
+
+    exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
+
+    goto_programt tmp_e;
+    goto_programt::targett e=tmp_e.add_instruction(ASSUME);
+    e->guard.swap(result_expr);
+    dest.destructive_append(tmp_e);
+
+    exprt one_expr = gen_one(int_type());
+    exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
+    code_assignt new_assign_plus(lhs_index,rhs_expr);
+    copy(new_assign_plus, ASSIGN, dest);
   }
 
   dest.destructive_append(tmp_y);
