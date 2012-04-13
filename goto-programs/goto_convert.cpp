@@ -1383,6 +1383,62 @@ void goto_convertt::convert_assume(
 
 /*******************************************************************\
 
+Function: goto_convertt::compute_component
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void compute_component(const exprt &exp, struct_typet &str)
+{
+  //check which variables are involved in the loop
+  if (exp.operands().size()==2)
+  {
+    if (exp.op0().is_symbol())
+    {
+      unsigned int size = str.components().size();
+      str.components().resize(size+1);
+      str.components()[size] = (struct_typet::componentt &) exp.op0();
+      str.components()[size].set_name(exp.op0().get_string("identifier"));
+      str.components()[size].pretty_name(exp.op0().get_string("identifier"));
+    }
+    else
+    {
+      compute_component(exp.op1(), str);
+    }
+  }
+  else
+  {
+    forall_operands(it, to_code(exp))
+    {
+      if (it->is_code())
+      {
+        const codet &code=to_code(*it);
+        if (code.op0().is_symbol())
+        {
+          unsigned int size = str.components().size();
+          str.components().resize(size+1);
+          str.components()[size] = (struct_typet::componentt &) code.op0();
+          str.components()[size].set_name(code.op0().get_string("identifier"));
+          str.components()[size].pretty_name(code.op0().get_string("identifier"));
+        }
+        else if (code.operands().size()==2)
+        {
+    	  compute_component(code.op1(), str);
+        }
+        else
+          assert(0);
+      }
+    }
+  }
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::convert_for
 
   Inputs:
@@ -1454,22 +1510,7 @@ void goto_convertt::convert_for(
     state.components()[1].set_name(cond.op1().get_string("identifier"));
     state.components()[1].pretty_name(cond.op1().get_string("identifier"));
 
-    //check which variables are involved in the loop
-    forall_operands(it, to_code(code.op3()))
-    {
-      if (it->is_code())
-      {
-        const codet &code=to_code(*it);
-        if (code.op0().is_symbol())
-        {
-          unsigned int size = state.components().size();
-          state.components().resize(size+1);
-          state.components()[size] = (struct_typet::componentt &) code.op0();
-          state.components()[size].set_name(code.op0().get_string("identifier"));
-          state.components()[size].pretty_name(code.op0().get_string("identifier"));
-        }
-      }
-    }
+    compute_component(code.op3(), state);
 
     u_int j=0;
     for (j=0; j < state.components().size(); j++)
