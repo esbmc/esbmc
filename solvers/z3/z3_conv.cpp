@@ -2694,7 +2694,7 @@ void
 z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
-  std::cout << expr.pretty() << std::endl;
+
   assert(expr.operands().size() == 3);
   Z3_ast array_var, array_val, operand0, operand1, operand2;
 
@@ -3196,7 +3196,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     bv = convert_overflow_unary(expr);
   else if (exprid == "memory-leak")
     bv = convert_memory_leak(expr);
-  else 
+  else
     throw new conv_error("Unrecognized expression type", expr);
 }
 
