@@ -1608,6 +1608,11 @@ void goto_convertt::convert_for(
     code_assignt new_assign(lhs_array,new_expr);
     copy(new_assign, ASSIGN, dest);
 
+    exprt one_expr = gen_one(int_type());
+    exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
+    code_assignt new_assign_plus(lhs_index,rhs_expr);
+    copy(new_assign_plus, ASSIGN, dest);
+
   }
 
   dest.destructive_append(tmp_w);
