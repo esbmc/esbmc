@@ -236,8 +236,12 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("base-case"))
     options.set_option("base-case", true);
 
-  if(cmdline.isset("inductive-step"))
+  if(cmdline.isset("inductive-step")) {
     options.set_option("inductive-step", true);
+    options.set_option("no-bounds-check", true);
+    options.set_option("no-div-by-zero-check", true);
+    options.set_option("no-pointer-check", true);
+  }
 
   // jmorse
   if(cmdline.isset("timeout")) {
