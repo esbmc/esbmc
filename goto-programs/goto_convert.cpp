@@ -1414,9 +1414,11 @@ void goto_convertt::convert_for(
   //  A; while(c) { P; B; }
   //-----------------------------
   //    A;
-  // t: inductive step
+  // t: cs assign
   // u: sideeffects in c
+  // c: init s indice
   // v: if(!c) goto z;
+  // f: s assign
   // w: P;
   // x: B;               <-- continue target
   // y: goto u;
@@ -1431,8 +1433,11 @@ void goto_convertt::convert_for(
   }
 
   exprt cond=code.op1();
-  struct_typet state;
 
+  struct_typet state;
+  array_typet state_vector;
+
+  // do the t label
   if(inductive_step)
   {
     assert(cond.operands().size()==2);
@@ -1447,7 +1452,6 @@ void goto_convertt::convert_for(
     state.components()[1] = (struct_typet::componentt &) cond.op1();
     state.components()[1].set_name(cond.op1().get_string("identifier"));
     state.components()[1].pretty_name(cond.op1().get_string("identifier"));
-
 
     //check which variables are involved in the loop
     forall_operands(it, to_code(code.op3()))
@@ -1465,7 +1469,35 @@ void goto_convertt::convert_for(
         }
       }
     }
+
+    const struct_typet::componentst &components = state.components();
+    u_int j=0;
+    for (j=0; j < state.components().size(); j++)
+    {
+      exprt rhs_expr("nondet_symbol", state.components()[j].type());
+      exprt new_expr(exprt::with, state);
+      exprt lhs_expr("symbol", state);
+
+      char val[2];
+      std::string identifier;
+	  sprintf(val,"%i", state_counter);
+	  identifier = "cs";
+	  identifier += val;
+
+      lhs_expr.identifier(identifier);
+
+      new_expr.reserve_operands(3);
+      new_expr.copy_to_operands(lhs_expr);
+      new_expr.copy_to_operands(exprt("member_name"));
+      new_expr.move_to_operands(rhs_expr);
+
+      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+
+      code_assignt new_assign(lhs_expr,new_expr);
+      copy(new_assign, ASSIGN, dest);
+    }
   }
+
 
   goto_programt sideeffects;
 
@@ -1481,6 +1513,15 @@ void goto_convertt::convert_for(
 
   // do the u label
   goto_programt::targett u=sideeffects.instructions.begin();
+
+  //do the c label
+  exprt lhs_index = symbol_exprt("kindice", int_type());
+  if (inductive_step)
+  {
+    exprt zero_expr = gen_zero(int_type());
+    code_assignt new_assign(lhs_index,zero_expr);
+    copy(new_assign, ASSIGN, dest);
+  }
 
   // do the v label
   goto_programt tmp_v;
@@ -1531,40 +1572,44 @@ void goto_convertt::convert_for(
   y->guard.make_true();
   y->location=code.location();
 
-  // do the t label
-  if(inductive_step)
-  {
-    const struct_typet::componentst &components = state.components();
-    u_int j=0;
-    for (j=0; j < state.components().size(); j++)
-    {
-      exprt rhs_expr("nondet_symbol", state.components()[j].type());
-      exprt new_expr(exprt::with, state);
-      exprt lhs_expr("symbol", state);
-
-      char val[2];
-      std::string identifier;
-	  sprintf(val,"%i", state_counter);
-	  identifier = "cs";
-	  identifier += val;
-
-      lhs_expr.identifier(identifier);
-
-      new_expr.reserve_operands(3);
-      new_expr.copy_to_operands(lhs_expr);
-      new_expr.copy_to_operands(exprt("member_name"));
-      new_expr.move_to_operands(rhs_expr);
-
-      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
-
-      code_assignt new_assign(lhs_expr,new_expr);
-      copy(new_assign, ASSIGN, dest);
-    }
-  }
-  std::cout << "passou aqui2"  << std::endl;
-
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
+
+  //do the c label
+  if (inductive_step)
+  {
+    //set the type of the state vector
+	state_vector.type().subtype() = state;
+
+    exprt new_expr(exprt::with, state_vector);
+    exprt lhs_array("symbol", state_vector);
+    exprt rhs("symbol", state_vector);
+
+    char val[2];
+    std::string identifier1, identifier2;
+	sprintf(val,"%i", state_counter);
+	identifier1 = "s";
+	identifier1 += val;
+
+	identifier2 = "cs";
+	identifier2 += val;
+
+    lhs_array.identifier(identifier1);
+    rhs.identifier(identifier2);
+
+    //s[k]=cs
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_array);
+    new_expr.copy_to_operands(lhs_index);
+    new_expr.move_to_operands(rhs);
+
+
+    //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
+    code_assignt new_assign(lhs_array,new_expr);
+    copy(new_assign, ASSIGN, dest);
+
+  }
+
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
   dest.destructive_append(tmp_y);
