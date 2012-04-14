@@ -41,8 +41,6 @@ public:
     is_thread=false;
     loop_for_block=false;
     state_counter=1;
-    inductive_step=
-    options.get_bool_option("inductive-step");
   }
 
   virtual ~goto_convertt()
@@ -345,7 +343,6 @@ protected:
     bool loop_for_block;
     unsigned int state_counter;
     struct_typet state;
-    bool inductive_step;
 };
 
 #endif

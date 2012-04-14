@@ -2696,7 +2696,7 @@ void
 z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
-  //std::cout << expr.pretty() << std::endl;
+  std::cout << expr.pretty() << std::endl;
   assert(expr.operands().size() == 3);
   Z3_ast array_var, array_val, operand0, operand1, operand2;
 

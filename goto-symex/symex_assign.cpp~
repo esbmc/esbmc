@@ -488,6 +488,8 @@ Function: goto_symext::replace_nondet
 
 void goto_symext::replace_nondet(exprt &expr, execution_statet &ex_state)
 {
+  std::cout << "expr.id(): " << expr.id() << std::endl;
+  std::cout << "expr.statement(): " << expr.statement() << std::endl;
   if ((expr.id()=="sideeffect" && expr.statement()=="nondet")
 	|| expr.id()=="nondet_symbol")
   {

@@ -241,6 +241,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-bounds-check", true);
     options.set_option("no-div-by-zero-check", true);
     options.set_option("no-pointer-check", true);
+    options.set_option("no-unwinding-assertions", true);
+    options.set_option("partial-loops", true);
   }
 
   // jmorse

@@ -1733,9 +1733,7 @@ void goto_convertt::convert_for(
   {
     goto_programt tmp_e;
     goto_programt::targett e=tmp_e.add_instruction(ASSUME);
-    exprt result_expr = cond;
-    result_expr.make_not();
-    e->guard.swap(result_expr);
+    e->guard.swap(v->guard);
     dest.destructive_append(tmp_e);
   }
 
