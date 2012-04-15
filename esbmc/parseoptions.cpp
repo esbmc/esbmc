@@ -234,7 +234,14 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("inlining", true);
 
   if(cmdline.isset("base-case"))
+  {
     options.set_option("base-case", true);
+    options.set_option("no-bounds-check", true);
+    options.set_option("no-div-by-zero-check", true);
+    options.set_option("no-pointer-check", true);
+    options.set_option("no-unwinding-assertions", true);
+    options.set_option("partial-loops", true);
+  }
 
   if(cmdline.isset("inductive-step")) {
     options.set_option("inductive-step", true);

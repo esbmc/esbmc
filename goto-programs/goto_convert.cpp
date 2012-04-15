@@ -1428,6 +1428,14 @@ void compute_component(const exprt &exp, struct_typet &str)
           str.components()[size].set_name(code.op0().get_string("identifier"));
           str.components()[size].pretty_name(code.op0().get_string("identifier"));
         }
+	else if (code.op0().operands().size()==1)
+	{
+          unsigned int size = str.components().size();
+          str.components().resize(size+1);
+          str.components()[size] = (struct_typet::componentt &) code.op0().op0();
+          str.components()[size].set_name(code.op0().op0().get_string("identifier"));
+          str.components()[size].pretty_name(code.op0().op0().get_string("identifier"));
+	}
         else if (code.operands().size()==2)
         {
     	  compute_component(code.op1(), str);
@@ -1485,6 +1493,7 @@ void goto_convertt::convert_for(
   // e: assume
   // y: goto u;
   // z: ;                <-- break target
+  // g: assume(!c)
 
   // A;
   code_blockt block;
@@ -1729,6 +1738,8 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 
+  //assume(!c)
+  //do the g label
   if (inductive_step)
   {
     goto_programt tmp_e;
@@ -1782,6 +1793,7 @@ void goto_convertt::convert_while(
   // e: assume
   // y: goto v;          <-- continue target
   // z: ;                <-- break target
+  // g: assume(!c)
 
   array_typet state_vector;
 
@@ -1792,31 +1804,19 @@ void goto_convertt::convert_while(
     state.components().resize(cond.operands().size());
 
     // Copy contents of first element to the state struct
+    std::cout << "cond.op0().operands().size(): " << cond.op0().operands().size() << std::endl;
+    std::cout << "cond.op0(): " << cond.op0() << std::endl;
+    std::cout << "cond.op1(): " << cond.op1() << std::endl;
+
     state.components()[0] = (struct_typet::componentt &) cond.op0();
     state.components()[0].set_name(cond.op0().get_string("identifier"));
     state.components()[0].pretty_name(cond.op0().get_string("identifier"));
 
-    // Copy contents of second element to the state struct
     state.components()[1] = (struct_typet::componentt &) cond.op1();
     state.components()[1].set_name(cond.op1().get_string("identifier"));
     state.components()[1].pretty_name(cond.op1().get_string("identifier"));
 
-    //check which variables are involved in the loop
-    forall_operands(it, to_code(code.op1()))
-    {
-      if (it->is_code())
-      {
-        const codet &code=to_code(*it);
-        if (code.op0().is_symbol())
-        {
-          unsigned int size = state.components().size();
-          state.components().resize(size+1);
-          state.components()[size] = (struct_typet::componentt &) code.op0();
-          state.components()[size].set_name(code.op0().get_string("identifier"));
-          state.components()[size].pretty_name(code.op0().get_string("identifier"));
-        }
-      }
-    }
+    compute_component(code.op1(), state);
 
     u_int j=0;
     for (j=0; j < state.components().size(); j++)
@@ -1918,11 +1918,6 @@ void goto_convertt::convert_while(
 
     code_assignt new_assign(lhs_array,new_expr);
     copy(new_assign, ASSIGN, dest);
-
-    exprt one_expr = gen_one(int_type());
-    exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
-    code_assignt new_assign_plus(lhs_index,rhs_expr);
-    copy(new_assign_plus, ASSIGN, dest);
   }
 
   // do the d label
@@ -1997,6 +1992,18 @@ void goto_convertt::convert_while(
 
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
+
+  //assume(!c)
+  //do the g label
+  if (inductive_step)
+  {
+    goto_programt tmp_e;
+    goto_programt::targett e=tmp_e.add_instruction(ASSUME);
+    exprt result_expr = cond;
+    result_expr.make_not();
+    e->guard.swap(result_expr);
+    dest.destructive_append(tmp_e);
+  }
 
   // restore break/continue
   targets.restore(old_targets);
@@ -2820,7 +2827,7 @@ void goto_convertt::convert_ifthenelse(
 	  else
 	    tmp_guard=code.op0();
 #if 1
-	  if (inductive_step && loop_for_block)
+	  if (inductive_step)
 	  { 
  	    exprt new_expr(exprt::member, tmp_guard.op1().type());
     	    exprt lhs_array("symbol", state);
@@ -2837,6 +2844,7 @@ void goto_convertt::convert_ifthenelse(
             new_expr.copy_to_operands(lhs_array);
 	    new_expr.component_name(tmp_guard.op0().get_string("identifier"));
             tmp_guard = gen_binary(tmp_guard.id().as_string(), bool_typet(), new_expr, tmp_guard.op1());
+            std::cout << "tmp.guard.pretty(): " << tmp_guard.pretty() << std::endl;
           }
 #endif
 	  remove_sideeffects(tmp_guard, dest);
