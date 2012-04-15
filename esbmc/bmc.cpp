@@ -623,8 +623,8 @@ void bmc_baset::setup_unwind()
   symex.max_unwind=atol(options.get_option("unwind").c_str());
 
   // Only one iteration for base-case
-  if(options.get_bool_option("base-case"))
-    symex.max_unwind=1;
+  //if(options.get_bool_option("base-case"))
+    //symex.max_unwind=1;
 }
 
 bool bmc_baset::solver_base::run_solver()
