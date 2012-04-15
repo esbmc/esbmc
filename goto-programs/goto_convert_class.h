@@ -190,11 +190,10 @@ protected:
   //
   // k-induction conversion
   //
-  void make_nondet_assign(const struct_typet &state, goto_programt &dest);
+  void make_nondet_assign(goto_programt &dest);
   void init_k_indice(goto_programt &dest);
-  void assign_state_vector(const struct_typet &state, 
-  const array_typet &state_vector, goto_programt &dest);
-  void assign_current_state(const struct_typet &state, goto_programt &dest);
+  void assign_state_vector(const array_typet &state_vector, goto_programt &dest);
+  void assign_current_state(/*const struct_typet &state,*/ goto_programt &dest);
   void assume_not_cond(const exprt &cond, goto_programt &dest);
 
 

@@ -1496,7 +1496,7 @@ void goto_convertt::convert_for(
     assert(cond.operands().size()==2);
     get_struct_components(cond, state);
     get_struct_components(code.op3(), state);
-    make_nondet_assign(state, dest);
+    make_nondet_assign(dest);
   }
 
   goto_programt sideeffects;
@@ -1574,6 +1574,8 @@ void goto_convertt::convert_for(
   // do the f label
   if (inductive_step)
   {
+    //assign_state_vector(state_vector, dest);
+#if 1
     //set the type of the state vector
     state_vector.subtype() = state;
     exprt lhs_index = symbol_exprt("kindice", int_type());
@@ -1601,7 +1603,7 @@ void goto_convertt::convert_for(
 
     code_assignt new_assign(lhs_array,new_expr);
     copy(new_assign, ASSIGN, dest);
-
+#endif
   }
 
   dest.destructive_append(tmp_w);
@@ -1609,7 +1611,7 @@ void goto_convertt::convert_for(
 
   // do the d label
   if (inductive_step)
-    assign_current_state(state, dest);
+    assign_current_state(dest);
 
   // do the e label
   if (inductive_step)
@@ -1679,7 +1681,6 @@ Function: goto_convertt::make_nondet_assign
 \*******************************************************************/
 
 void goto_convertt::make_nondet_assign(
-  const struct_typet &state,
   goto_programt &dest)
 {
   u_int j=0;
@@ -1722,7 +1723,6 @@ Function: goto_convertt::make_nondet_assign
 \*******************************************************************/
 
 void goto_convertt::assign_current_state(
-  const struct_typet &state,
   goto_programt &dest)
 {
   u_int j=0;
@@ -1764,7 +1764,8 @@ Function: goto_convertt::init_k_indice
 
 \*******************************************************************/
 
-void goto_convertt::init_k_indice(goto_programt &dest)
+void goto_convertt::init_k_indice(
+  goto_programt &dest)
 {
   exprt lhs_index = symbol_exprt("kindice", int_type());
   exprt zero_expr = gen_zero(int_type());
@@ -1785,7 +1786,6 @@ Function: goto_convertt::assign_state_vector
 \*******************************************************************/
 
 void goto_convertt::assign_state_vector(
-  const struct_typet &state, 
   const array_typet &state_vector, 
   goto_programt &dest)
 {
@@ -1889,9 +1889,8 @@ void goto_convertt::convert_while(
   // do the t label
   if(inductive_step)
   {
-    assert(cond.operands().size()==2);
     get_struct_components(code.op1(), state);
-    make_nondet_assign(state, dest);
+    make_nondet_assign(dest);
   }
 
   // save break/continue targets
@@ -1934,7 +1933,8 @@ void goto_convertt::convert_while(
   // do the f label
   if (inductive_step)
   {
-    //assign_state_vector(state, state_vector, dest);
+    //assign_state_vector(state_vector, dest);
+#if 1
     //set the type of the state vector
     state_vector.subtype() = state;
     exprt lhs_index = symbol_exprt("kindice", int_type());
@@ -1962,13 +1962,14 @@ void goto_convertt::convert_while(
 
     code_assignt new_assign(lhs_array,new_expr);
     copy(new_assign, ASSIGN, dest);
+#endif
   }
 
   dest.destructive_append(tmp_x);
 
   // do the d label
   if (inductive_step)
-    assign_current_state(state, dest);
+    assign_current_state(dest);
 
   // do the e label
   if (inductive_step)
