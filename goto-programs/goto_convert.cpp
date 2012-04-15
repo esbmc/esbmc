@@ -1421,7 +1421,7 @@ void get_struct_components(const exprt &exp, struct_typet &str)
     else if (exp.op0().operands().size()==1)
       get_struct_components(exp.op0().op0(), str);
   }
-  else
+  else if (exp.is_code())
   {
     forall_operands(it, to_code(exp))
     {
@@ -1434,6 +1434,10 @@ void get_struct_components(const exprt &exp, struct_typet &str)
 	  get_struct_components(code.op0(), str);
       }
     }
+  }
+  else
+  {
+    std::cout << "expression not supported yet: " << exp.pretty() << std::endl;
   }
 }
 
