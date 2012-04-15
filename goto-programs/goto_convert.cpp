@@ -1383,7 +1383,7 @@ void goto_convertt::convert_assume(
 
 /*******************************************************************\
 
-Function: goto_convertt::compute_component
+Function: goto_convertt::get_struct_components
 
   Inputs:
 
@@ -1393,23 +1393,33 @@ Function: goto_convertt::compute_component
 
 \*******************************************************************/
 
-void compute_component(const exprt &exp, struct_typet &str)
+void get_struct_components(const exprt &exp, struct_typet &str)
 {
+  //std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
+  //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
+  //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
   //check which variables are involved in the loop
-  if (exp.operands().size()==2)
+  if (exp.is_symbol())
   {
-    if (exp.op0().is_symbol())
-    {
       unsigned int size = str.components().size();
       str.components().resize(size+1);
-      str.components()[size] = (struct_typet::componentt &) exp.op0();
-      str.components()[size].set_name(exp.op0().get_string("identifier"));
-      str.components()[size].pretty_name(exp.op0().get_string("identifier"));
-    }
-    else
-    {
-      compute_component(exp.op1(), str);
-    }
+      str.components()[size] = (struct_typet::componentt &) exp;
+      str.components()[size].set_name(exp.get_string("identifier"));
+      str.components()[size].pretty_name(exp.get_string("identifier"));
+  }
+  else if (exp.operands().size()==1)
+  {
+    if (exp.op0().is_symbol())
+      get_struct_components(exp.op0(), str);
+    else if (exp.op0().operands().size()==1)
+      get_struct_components(exp.op0().op0(), str);
+  }
+  else if (exp.operands().size()==2)
+  {
+    if (exp.op0().is_symbol())
+      get_struct_components(exp.op0(), str);
+    else if (exp.op0().operands().size()==1)
+      get_struct_components(exp.op0().op0(), str);
   }
   else
   {
@@ -1418,37 +1428,10 @@ void compute_component(const exprt &exp, struct_typet &str)
       if (it->is_code())
       {
         const codet &code=to_code(*it);
-        //std::cout << "code.op0().pretty: " << code.op0().pretty() << std::endl;
-        //std::cout << "code.operands().size(): " << code.operands().size() << std::endl;
-        if (code.op0().is_symbol())
-        {
-          unsigned int size = str.components().size();
-          str.components().resize(size+1);
-          str.components()[size] = (struct_typet::componentt &) code.op0();
-          str.components()[size].set_name(code.op0().get_string("identifier"));
-          str.components()[size].pretty_name(code.op0().get_string("identifier"));
-        }
-	else if (code.op0().operands().size()==1)
-	{
-          unsigned int size = str.components().size();
-          str.components().resize(size+1);
-          str.components()[size] = (struct_typet::componentt &) code.op0().op0();
-          str.components()[size].set_name(code.op0().op0().get_string("identifier"));
-          str.components()[size].pretty_name(code.op0().op0().get_string("identifier"));
-	}
-        else if (code.operands().size()==2)
-        {
-    	  compute_component(code.op1(), str);
-        }
-        else if (code.operands().size()==3)
-        {
-    	  compute_component(code.op0(), str);
-        }
+        if (code.is_symbol())
+          get_struct_components(code, str);
         else
-        {
-          std::cout << "code.pretty: " << code.pretty() << std::endl;
-          assert(0);
-        }
+	  get_struct_components(code.op0(), str);
       }
     }
   }
@@ -1511,45 +1494,9 @@ void goto_convertt::convert_for(
   if(inductive_step)
   {
     assert(cond.operands().size()==2);
-    state.components().resize(cond.operands().size());
-
-    // Copy contents of first element to the state struct
-    state.components()[0] = (struct_typet::componentt &) cond.op0();
-    state.components()[0].set_name(cond.op0().get_string("identifier"));
-    state.components()[0].pretty_name(cond.op0().get_string("identifier"));
-
-    // Copy contents of second element to the state struct
-    state.components()[1] = (struct_typet::componentt &) cond.op1();
-    state.components()[1].set_name(cond.op1().get_string("identifier"));
-    state.components()[1].pretty_name(cond.op1().get_string("identifier"));
-
-    compute_component(code.op3(), state);
-
-    u_int j=0;
-    for (j=0; j < state.components().size(); j++)
-    {
-      exprt rhs_expr("nondet_symbol", state.components()[j].type());
-      exprt new_expr(exprt::with, state);
-      exprt lhs_expr("symbol", state);
-
-      char val[2];
-      std::string identifier;
-      sprintf(val,"%i", state_counter);
-      identifier = "cs";
-      identifier += val;
-
-      lhs_expr.identifier(identifier);
-
-      new_expr.reserve_operands(3);
-      new_expr.copy_to_operands(lhs_expr);
-      new_expr.copy_to_operands(exprt("member_name"));
-      new_expr.move_to_operands(rhs_expr);
-
-      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
-
-      code_assignt new_assign(lhs_expr,new_expr);
-      copy(new_assign, ASSIGN, dest);
-    }
+    get_struct_components(cond, state);
+    get_struct_components(code.op3(), state);
+    make_nondet_assign(state, dest);
   }
 
   goto_programt sideeffects;
@@ -1568,13 +1515,8 @@ void goto_convertt::convert_for(
   goto_programt::targett u=sideeffects.instructions.begin();
 
   // do the c label
-  exprt lhs_index = symbol_exprt("kindice", int_type());
   if (inductive_step)
-  {
-    exprt zero_expr = gen_zero(int_type());
-    code_assignt new_assign(lhs_index,zero_expr);
-    copy(new_assign, ASSIGN, dest);
-  }
+    init_k_indice(dest);
 
   // do the v label
   goto_programt tmp_v;
@@ -1634,7 +1576,7 @@ void goto_convertt::convert_for(
   {
     //set the type of the state vector
     state_vector.subtype() = state;
-
+    exprt lhs_index = symbol_exprt("kindice", int_type());
     exprt new_expr(exprt::with, state_vector);
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
@@ -1667,40 +1609,14 @@ void goto_convertt::convert_for(
 
   // do the d label
   if (inductive_step)
-  {
-    u_int j=0;
-    for (j=0; j < state.components().size(); j++)
-    {
-      exprt rhs_expr(state.components()[j]);
-      exprt new_expr(exprt::with, state);
-      exprt lhs_expr("symbol", state);
-
-      char val[2];
-      std::string identifier;
-      sprintf(val,"%i", state_counter);
-      identifier = "cs";
-      identifier += val;
-
-      lhs_expr.identifier(identifier);
-
-      new_expr.reserve_operands(3);
-      new_expr.copy_to_operands(lhs_expr);
-      new_expr.copy_to_operands(exprt("member_name"));
-      new_expr.move_to_operands(rhs_expr);
-
-      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
-
-      code_assignt new_assign(lhs_expr,new_expr);
-      copy(new_assign, ASSIGN, dest);
-    }
-  }
+    assign_current_state(state, dest);
 
   // do the e label
   if (inductive_step)
   {
     //set the type of the state vector
     state_vector.subtype() = state;
-
+    exprt lhs_index = symbol_exprt("kindice", int_type());
     exprt new_expr(exprt::index, state);
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
@@ -1741,19 +1657,190 @@ void goto_convertt::convert_for(
   //assume(!c)
   //do the g label
   if (inductive_step)
-  {
-    goto_programt tmp_e;
-    goto_programt::targett e=tmp_e.add_instruction(ASSUME);
-    exprt result_expr = cond;
-    result_expr.make_not();
-    e->guard.swap(result_expr);
-    dest.destructive_append(tmp_e);
-  }
+    assume_not_cond(cond, dest);
 
   // restore break/continue
   targets.restore(old_targets);
   for_block=false;
   state_counter++;
+}
+
+
+/*******************************************************************\
+
+Function: goto_convertt::make_nondet_assign
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::make_nondet_assign(
+  const struct_typet &state,
+  goto_programt &dest)
+{
+  u_int j=0;
+  for (j=0; j < state.components().size(); j++)
+  {
+    exprt rhs_expr("nondet_symbol", state.components()[j].type());
+    exprt new_expr(exprt::with, state);
+    exprt lhs_expr("symbol", state);
+
+    char val[20];
+    std::string identifier;
+    sprintf(val,"%i", state_counter);
+    identifier = "cs";
+    identifier += val;
+
+    lhs_expr.identifier(identifier);
+
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_expr);
+    new_expr.copy_to_operands(exprt("member_name"));
+    new_expr.move_to_operands(rhs_expr);
+
+    new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+
+    code_assignt new_assign(lhs_expr,new_expr);
+    copy(new_assign, ASSIGN, dest);
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::make_nondet_assign
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::assign_current_state(
+  const struct_typet &state,
+  goto_programt &dest)
+{
+  u_int j=0;
+  for (j=0; j < state.components().size(); j++)
+  {
+    exprt rhs_expr(state.components()[j]);
+    exprt new_expr(exprt::with, state);
+    exprt lhs_expr("symbol", state);
+
+    char val[20];
+    std::string identifier;
+    sprintf(val,"%i", state_counter);
+    identifier = "cs";
+    identifier += val;
+
+    lhs_expr.identifier(identifier);
+
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_expr);
+    new_expr.copy_to_operands(exprt("member_name"));
+    new_expr.move_to_operands(rhs_expr);
+
+    new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+
+    code_assignt new_assign(lhs_expr,new_expr);
+    copy(new_assign, ASSIGN, dest);
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::init_k_indice
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::init_k_indice(goto_programt &dest)
+{
+  exprt lhs_index = symbol_exprt("kindice", int_type());
+  exprt zero_expr = gen_zero(int_type());
+  code_assignt new_assign(lhs_index,zero_expr);
+  copy(new_assign, ASSIGN, dest);
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::assign_state_vector
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::assign_state_vector(
+  const struct_typet &state, 
+  const array_typet &state_vector, 
+  goto_programt &dest)
+{
+    //set the type of the state vector
+    state_vector.subtype() = state;
+    exprt lhs_index = symbol_exprt("kindice", int_type());
+    exprt new_expr(exprt::with, state_vector);
+    exprt lhs_array("symbol", state_vector);
+    exprt rhs("symbol", state);
+
+    char val[20];
+    std::string identifier_lhs, identifier_rhs;
+    sprintf(val,"%i", state_counter);
+    identifier_lhs = "s";
+    identifier_lhs += val;
+
+    identifier_rhs = "cs";
+    identifier_rhs += val;
+
+    lhs_array.identifier(identifier_lhs);
+    rhs.identifier(identifier_rhs);
+
+    // s[k]=cs
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_array);
+    new_expr.copy_to_operands(lhs_index);
+    new_expr.move_to_operands(rhs);
+
+    code_assignt new_assign(lhs_array,new_expr);
+    copy(new_assign, ASSIGN, dest);
+}
+
+
+/*******************************************************************\
+
+Function: goto_convertt::assume_not_cond
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::assume_not_cond(
+  const exprt &cond, 
+  goto_programt &dest)
+{
+  goto_programt tmp_e;
+  goto_programt::targett e=tmp_e.add_instruction(ASSUME);
+  exprt result_expr = cond;
+  result_expr.make_not();
+  e->guard.swap(result_expr);
+  dest.destructive_append(tmp_e);
 }
 
 /*******************************************************************\
@@ -1803,49 +1890,8 @@ void goto_convertt::convert_while(
   if(inductive_step)
   {
     assert(cond.operands().size()==2);
-#if 0
-    state.components().resize(cond.operands().size());
-
-    // Copy contents of first element to the state struct
-    std::cout << "cond.op0().operands().size(): " << cond.op0().operands().size() << std::endl;
-    std::cout << "cond.op0(): " << cond.op0() << std::endl;
-    std::cout << "cond.op1(): " << cond.op1() << std::endl;
-
-    state.components()[0] = (struct_typet::componentt &) cond.op0();
-    state.components()[0].set_name(cond.op0().get_string("identifier"));
-    state.components()[0].pretty_name(cond.op0().get_string("identifier"));
-
-    state.components()[1] = (struct_typet::componentt &) cond.op1();
-    state.components()[1].set_name(cond.op1().get_string("identifier"));
-    state.components()[1].pretty_name(cond.op1().get_string("identifier"));
-#endif
-    compute_component(code.op1(), state);
-
-    u_int j=0;
-    for (j=0; j < state.components().size(); j++)
-    {
-      exprt rhs_expr("nondet_symbol", state.components()[j].type());
-      exprt new_expr(exprt::with, state);
-      exprt lhs_expr("symbol", state);
-
-      char val[2];
-      std::string identifier;
-      sprintf(val,"%i", state_counter);
-      identifier = "cs";
-      identifier += val;
-
-      lhs_expr.identifier(identifier);
-
-      new_expr.reserve_operands(3);
-      new_expr.copy_to_operands(lhs_expr);
-      new_expr.copy_to_operands(exprt("member_name"));
-      new_expr.move_to_operands(rhs_expr);
-
-      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
-
-      code_assignt new_assign(lhs_expr,new_expr);
-      copy(new_assign, ASSIGN, dest);
-    }
+    get_struct_components(code.op1(), state);
+    make_nondet_assign(state, dest);
   }
 
   // save break/continue targets
@@ -1880,27 +1926,23 @@ void goto_convertt::convert_while(
   y->location=code.location();
 
   //do the c label
-  exprt lhs_index = symbol_exprt("kindice", int_type());
   if (inductive_step)
-  {
-    exprt zero_expr = gen_zero(int_type());
-    code_assignt new_assign(lhs_index,zero_expr);
-    copy(new_assign, ASSIGN, dest);
-  }
+    init_k_indice(dest);
 
   dest.destructive_append(tmp_branch);
 
   // do the f label
   if (inductive_step)
   {
+    //assign_state_vector(state, state_vector, dest);
     //set the type of the state vector
     state_vector.subtype() = state;
-
+    exprt lhs_index = symbol_exprt("kindice", int_type());
     exprt new_expr(exprt::with, state_vector);
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
 
-    char val[2];
+    char val[20];
     std::string identifier_lhs, identifier_rhs;
     sprintf(val,"%i", state_counter);
     identifier_lhs = "s";
@@ -1926,40 +1968,14 @@ void goto_convertt::convert_while(
 
   // do the d label
   if (inductive_step)
-  {
-    u_int j=0;
-    for (j=0; j < state.components().size(); j++)
-    {
-      exprt rhs_expr(state.components()[j]);
-      exprt new_expr(exprt::with, state);
-      exprt lhs_expr("symbol", state);
-
-      char val[2];
-      std::string identifier;
-      sprintf(val,"%i", state_counter);
-      identifier = "cs";
-      identifier += val;
-
-      lhs_expr.identifier(identifier);
-
-      new_expr.reserve_operands(3);
-      new_expr.copy_to_operands(lhs_expr);
-      new_expr.copy_to_operands(exprt("member_name"));
-      new_expr.move_to_operands(rhs_expr);
-
-      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
-
-      code_assignt new_assign(lhs_expr,new_expr);
-      copy(new_assign, ASSIGN, dest);
-    }
-  }
+    assign_current_state(state, dest);
 
   // do the e label
   if (inductive_step)
   {
     //set the type of the state vector
     state_vector.subtype() = state;
-
+    exprt lhs_index = symbol_exprt("kindice", int_type());
     exprt new_expr(exprt::index, state);
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
@@ -2000,14 +2016,7 @@ void goto_convertt::convert_while(
   //assume(!c)
   //do the g label
   if (inductive_step)
-  {
-    goto_programt tmp_e;
-    goto_programt::targett e=tmp_e.add_instruction(ASSUME);
-    exprt result_expr = cond;
-    result_expr.make_not();
-    e->guard.swap(result_expr);
-    dest.destructive_append(tmp_e);
-  }
+    assume_not_cond(cond, dest);
 
   // restore break/continue
   targets.restore(old_targets);
