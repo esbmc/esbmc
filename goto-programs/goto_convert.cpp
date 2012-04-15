@@ -528,7 +528,7 @@ void goto_convertt::convert_block(
 
   // see if we need to check for forgotten memory
 
-  if (!loop_for_block)
+  if (!for_block)
   {
   if (options.get_bool_option("memory-leak-check"))
   {
@@ -554,7 +554,7 @@ void goto_convertt::convert_block(
   }
   }
   else
-    loop_for_block=false;
+    for_block=false;
 }
 
 /*******************************************************************\
@@ -1476,7 +1476,7 @@ void goto_convertt::convert_for(
     throw "for takes four operands";
   }
 
-  loop_for_block=true;
+  for_block=true;
 
   // turn for(A; c; B) { P } into
   //  A; while(c) { P; B; }
@@ -1752,7 +1752,7 @@ void goto_convertt::convert_for(
 
   // restore break/continue
   targets.restore(old_targets);
-  loop_for_block=false;
+  for_block=false;
   state_counter++;
 }
 
@@ -1781,6 +1781,8 @@ void goto_convertt::convert_while(
   const exprt &cond=code.op0();
   const locationt &location=code.location();
 
+  while_block=true;
+
   //    while(c) P;
   //--------------------
   // t: cs=nondet
@@ -1801,6 +1803,7 @@ void goto_convertt::convert_while(
   if(inductive_step)
   {
     assert(cond.operands().size()==2);
+#if 0
     state.components().resize(cond.operands().size());
 
     // Copy contents of first element to the state struct
@@ -1815,7 +1818,7 @@ void goto_convertt::convert_while(
     state.components()[1] = (struct_typet::componentt &) cond.op1();
     state.components()[1].set_name(cond.op1().get_string("identifier"));
     state.components()[1].pretty_name(cond.op1().get_string("identifier"));
-
+#endif
     compute_component(code.op1(), state);
 
     u_int j=0;
@@ -1886,7 +1889,6 @@ void goto_convertt::convert_while(
   }
 
   dest.destructive_append(tmp_branch);
-  dest.destructive_append(tmp_x);
 
   // do the f label
   if (inductive_step)
@@ -1919,6 +1921,8 @@ void goto_convertt::convert_while(
     code_assignt new_assign(lhs_array,new_expr);
     copy(new_assign, ASSIGN, dest);
   }
+
+  dest.destructive_append(tmp_x);
 
   // do the d label
   if (inductive_step)
@@ -2008,6 +2012,7 @@ void goto_convertt::convert_while(
   // restore break/continue
   targets.restore(old_targets);
   state_counter++;
+  while_block=false;
 }
 
 /*******************************************************************\
@@ -2827,7 +2832,7 @@ void goto_convertt::convert_ifthenelse(
 	  else
 	    tmp_guard=code.op0();
 #if 1
-	  if (inductive_step)
+	  if (inductive_step && (for_block || while_block))
 	  { 
  	    exprt new_expr(exprt::member, tmp_guard.op1().type());
     	    exprt lhs_array("symbol", state);
@@ -2844,7 +2849,7 @@ void goto_convertt::convert_ifthenelse(
             new_expr.copy_to_operands(lhs_array);
 	    new_expr.component_name(tmp_guard.op0().get_string("identifier"));
             tmp_guard = gen_binary(tmp_guard.id().as_string(), bool_typet(), new_expr, tmp_guard.op1());
-            std::cout << "tmp.guard.pretty(): " << tmp_guard.pretty() << std::endl;
+            //std::cout << "tmp.guard.pretty(): " << tmp_guard.pretty() << std::endl;
           }
 #endif
 	  remove_sideeffects(tmp_guard, dest);

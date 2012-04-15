@@ -39,7 +39,8 @@ public:
     tmp_symbol_prefix("goto_convertt::")
   {
     is_thread=false;
-    loop_for_block=false;
+    for_block=false;
+    while_block=false;
     state_counter=1;
     inductive_step=
     options.get_bool_option("inductive-step");
@@ -342,7 +343,7 @@ protected:
 
   private:
     bool is_thread;
-    bool loop_for_block;
+    bool for_block, while_block;
     unsigned int state_counter;
     struct_typet state;
     bool inductive_step;
