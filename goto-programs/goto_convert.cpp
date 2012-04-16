@@ -2787,7 +2787,7 @@ void goto_convertt::replace_ifthenelse(
 
   if (expr.operands().size()==1)
   {
-	exprt new_expr(exprt::member, expr.op0().type());
+	exprt new_expr(exprt::member, bool_typet());
     new_expr.reserve_operands(1);
     new_expr.copy_to_operands(lhs_array);
 	new_expr.component_name(expr.op0().get_string("identifier"));
