@@ -21,7 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "remove_skip.h"
 #include "destructor.h"
 
-#define DEBUG
+//#define DEBUG
 
 #ifdef DEBUG
 #define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
@@ -1406,10 +1406,6 @@ Function: goto_convertt::get_struct_components
 void get_struct_components(const exprt &exp, struct_typet &str)
 {
   DEBUGLOC;
-  //std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
-  //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
-  //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
-  //check which variables are involved in the loop
   if (exp.is_symbol())
   {
       unsigned int size = str.components().size();
@@ -1596,14 +1592,9 @@ void goto_convertt::convert_for(
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
 
-    char val[2];
     std::string identifier_lhs, identifier_rhs;
-    sprintf(val,"%i", state_counter);
-    identifier_lhs = "s";
-    identifier_lhs += val;
-
-    identifier_rhs = "cs";
-    identifier_rhs += val;
+    identifier_lhs = "s$"+i2string(state_counter);
+    identifier_rhs = "cs$"+i2string(state_counter);
 
     lhs_array.identifier(identifier_lhs);
     rhs.identifier(identifier_rhs);
@@ -1636,14 +1627,10 @@ void goto_convertt::convert_for(
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
 
-    char val[2];
     std::string identifier_lhs, identifier_rhs;
-    sprintf(val,"%i", state_counter);
-    identifier_lhs = "s";
-    identifier_lhs += val;
 
-    identifier_rhs = "cs";
-    identifier_rhs += val;
+    identifier_lhs = "s$"+i2string(state_counter);
+    identifier_rhs = "cs$"+i2string(state_counter);
 
     lhs_array.identifier(identifier_lhs);
     rhs.identifier(identifier_rhs);
@@ -1703,11 +1690,8 @@ void goto_convertt::make_nondet_assign(
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
 
-    char val[20];
     std::string identifier;
-    sprintf(val,"%i", state_counter);
-    identifier = "cs";
-    identifier += val;
+    identifier = "cs$"+i2string(state_counter);
 
     lhs_expr.identifier(identifier);
 
@@ -1745,11 +1729,9 @@ void goto_convertt::assign_current_state(
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
 
-    char val[20];
     std::string identifier;
-    sprintf(val,"%i", state_counter);
-    identifier = "cs";
-    identifier += val;
+
+    identifier = "cs$"+i2string(state_counter);
 
     lhs_expr.identifier(identifier);
 
@@ -1809,14 +1791,9 @@ void goto_convertt::assign_state_vector(
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
 
-    char val[20];
     std::string identifier_lhs, identifier_rhs;
-    sprintf(val,"%i", state_counter);
-    identifier_lhs = "s";
-    identifier_lhs += val;
-
-    identifier_rhs = "cs";
-    identifier_rhs += val;
+    identifier_lhs = "s$"+i2string(state_counter);
+    identifier_rhs = "cs$"+i2string(state_counter);
 
     lhs_array.identifier(identifier_lhs);
     rhs.identifier(identifier_rhs);
@@ -1906,6 +1883,7 @@ void goto_convertt::convert_while(
     make_nondet_assign(dest);
   }
 
+
   // save break/continue targets
   break_continue_targetst old_targets(targets);
 
@@ -1930,6 +1908,7 @@ void goto_convertt::convert_while(
 
   // do the x label
   goto_programt tmp_x;
+
   convert(to_code(code.op1()), tmp_x);
 
   // y: if(c) goto v;
@@ -1955,14 +1934,10 @@ void goto_convertt::convert_while(
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
 
-    char val[20];
     std::string identifier_lhs, identifier_rhs;
-    sprintf(val,"%i", state_counter);
-    identifier_lhs = "s";
-    identifier_lhs += val;
 
-    identifier_rhs = "cs";
-    identifier_rhs += val;
+    identifier_lhs = "s$"+i2string(state_counter);
+    identifier_rhs = "cs$"+i2string(state_counter);
 
     lhs_array.identifier(identifier_lhs);
     rhs.identifier(identifier_rhs);
@@ -1994,14 +1969,10 @@ void goto_convertt::convert_while(
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
 
-    char val[2];
     std::string identifier_lhs, identifier_rhs;
-    sprintf(val,"%i", state_counter);
-    identifier_lhs = "s";
-    identifier_lhs += val;
 
-    identifier_rhs = "cs";
-    identifier_rhs += val;
+    identifier_lhs = "s$"+i2string(state_counter);
+    identifier_rhs = "cs$"+i2string(state_counter);
 
     lhs_array.identifier(identifier_lhs);
     rhs.identifier(identifier_rhs);
@@ -2794,6 +2765,47 @@ void goto_convertt::generate_ifthenelse(
 
 /*******************************************************************\
 
+Function: goto_convertt::replace_ifthenelse
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::replace_ifthenelse(
+		exprt &expr)
+{
+  std::string identifier;
+
+  identifier = "cs$"+i2string(state_counter);
+
+  exprt lhs_array("symbol", state);
+  lhs_array.identifier(identifier);
+
+  if (expr.operands().size()==1)
+  {
+	exprt new_expr(exprt::member, expr.op0().type());
+    new_expr.reserve_operands(1);
+    new_expr.copy_to_operands(lhs_array);
+	new_expr.component_name(expr.op0().get_string("identifier"));
+	expr = new_expr;
+  }
+  else
+  {
+	assert(expr.operands().size()==2);
+	exprt new_expr(exprt::member, expr.op1().type());
+    new_expr.reserve_operands(1);
+    new_expr.copy_to_operands(lhs_array);
+	new_expr.component_name(expr.op0().get_string("identifier"));
+	expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
+  }
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::convert_ifthenelse
 
   Inputs:
@@ -2854,27 +2866,10 @@ void goto_convertt::convert_ifthenelse(
 	  }
 	  else
 	    tmp_guard=code.op0();
-#if 1
+
 	  if (inductive_step && (for_block || while_block))
-	  { 
- 	    exprt new_expr(exprt::member, tmp_guard.op1().type());
-    	    exprt lhs_array("symbol", state);
+	    replace_ifthenelse(tmp_guard);
 
-            char val[2];
-            std::string identifier;
-            sprintf(val,"%i", state_counter);
-            identifier = "cs";
-            identifier += val;
-
-            lhs_array.identifier(identifier);
-
-            new_expr.reserve_operands(1);
-            new_expr.copy_to_operands(lhs_array);
-	    new_expr.component_name(tmp_guard.op0().get_string("identifier"));
-            tmp_guard = gen_binary(tmp_guard.id().as_string(), bool_typet(), new_expr, tmp_guard.op1());
-            //std::cout << "tmp.guard.pretty(): " << tmp_guard.pretty() << std::endl;
-          }
-#endif
 	  remove_sideeffects(tmp_guard, dest);
 	  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 #else
