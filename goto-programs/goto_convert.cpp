@@ -21,6 +21,16 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "remove_skip.h"
 #include "destructor.h"
 
+#define DEBUG
+
+#ifdef DEBUG
+#define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
+                        "[" << __LINE__ << "]" << std::endl;
+#else
+#define DEBUGLOC
+#endif
+
+
 static void
 link_up_type_names(irept &irep, const namespacet &ns)
 {
@@ -1395,6 +1405,7 @@ Function: goto_convertt::get_struct_components
 
 void get_struct_components(const exprt &exp, struct_typet &str)
 {
+  DEBUGLOC;
   //std::cout << std::endl << __FUNCTION__ << "[" << __LINE__ << "]" << std::endl;
   //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
   //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
@@ -1428,10 +1439,7 @@ void get_struct_components(const exprt &exp, struct_typet &str)
       if (it->is_code())
       {
         const codet &code=to_code(*it);
-        if (code.is_symbol())
-          get_struct_components(code, str);
-        else
-	  get_struct_components(code.op0(), str);
+        get_struct_components(code, str);
       }
     }
   }
@@ -1439,6 +1447,7 @@ void get_struct_components(const exprt &exp, struct_typet &str)
   {
     std::cout << "expression not supported yet: " << exp.pretty() << std::endl;
   }
+  DEBUGLOC;
 }
 
 /*******************************************************************\
