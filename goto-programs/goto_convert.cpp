@@ -2782,25 +2782,45 @@ void goto_convertt::replace_ifthenelse(
 
   identifier = "cs$"+i2string(state_counter);
 
-  exprt lhs_array("symbol", state);
-  lhs_array.identifier(identifier);
+  exprt lhs_struct("symbol", state);
+  lhs_struct.identifier(identifier);
+
+  bool found=false;
 
   if (expr.operands().size()==1)
   {
-	exprt new_expr(exprt::member, bool_typet());
+    exprt new_expr(exprt::member, bool_typet());
     new_expr.reserve_operands(1);
-    new_expr.copy_to_operands(lhs_array);
-	new_expr.component_name(expr.op0().get_string("identifier"));
-	expr = new_expr;
+    new_expr.copy_to_operands(lhs_struct);
+    new_expr.component_name(expr.op0().get_string("identifier"));
+
+    const struct_typet &struct_type = to_struct_type(lhs_struct.type());
+    const struct_typet::componentst &components = struct_type.components();
+    u_int i = 0;
+
+    for (struct_typet::componentst::const_iterator
+         it = components.begin();
+         it != components.end();
+         it++, i++)
+    {
+      if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
+      {
+	it->swap(expr);
+        found=true;
+      }
+    }
+
+    if (found)
+      expr = new_expr;
   }
   else
   {
-	assert(expr.operands().size()==2);
-	exprt new_expr(exprt::member, expr.op1().type());
+    assert(expr.operands().size()==2);
+    exprt new_expr(exprt::member, expr.op1().type());
     new_expr.reserve_operands(1);
-    new_expr.copy_to_operands(lhs_array);
-	new_expr.component_name(expr.op0().get_string("identifier"));
-	expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
+    new_expr.copy_to_operands(lhs_struct);
+    new_expr.component_name(expr.op0().get_string("identifier"));
+    expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
   }
 }
 
