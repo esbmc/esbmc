@@ -182,6 +182,23 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(t);
     return true;
 #endif
+  } else if (expr.id() == "struct") {
+    type2tc new_type;
+    if (!migrate_type(expr.type(), new_type))
+      return false;
+
+    std::vector<expr2tc> members;
+    forall_operands(it, expr) {
+      expr2tc new_ref;
+      if (!migrate_expr(*it, new_ref))
+        return false;
+
+      members.push_back(new_ref);
+    }
+
+    constant_struct2t *s = new constant_struct2t(new_type, members);
+    new_expr_ref = expr2tc(s);
+    return true;
   } else {
     return false;
   }
