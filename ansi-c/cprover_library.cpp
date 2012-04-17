@@ -69,6 +69,12 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
 {
   std::pair<irep_idt, irep_idt> type;
 
+  if (irep.id() == "symbol") {
+    type = std::pair<irep_idt, irep_idt>(name, irep.identifier());
+    deps.insert(type);
+    return;
+  }
+
   forall_irep(irep_it, irep.get_sub()) {
     if (irep_it->id() == "symbol") {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->identifier());
