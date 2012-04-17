@@ -5,6 +5,7 @@ Module: C++ Language Type Checking
 Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
+
 #include <algorithm>
 #include <expr_util.h>
 #include <arith_tools.h>
@@ -111,40 +112,10 @@ Function: cpp_typecheckt::convert
 
 \*******************************************************************/
 
-void cpp_typecheckt::convert(cpp_linkage_spect &linkage_spec)
-{
-  irep_idt old_mode;
-  old_mode.swap(current_mode);
-
-  current_mode=linkage_spec.linkage().get("value");
-
-  // do the declarations
-  for(cpp_linkage_spect::itemst::iterator
-      it=linkage_spec.items().begin();
-      it!=linkage_spec.items().end();
-      it++)
-    convert(*it);
-
-  // back to previous linkage spec
-  old_mode.swap(current_mode);
-}
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::convert(cpp_itemt &item)
 {
   if(item.is_declaration())
-    convert(item.get_declaration());
+    convert(to_cpp_declaration(item));
   else if(item.is_linkage_spec())
     convert(item.get_linkage_spec());
   else if(item.is_namespace_spec())
@@ -174,7 +145,6 @@ void cpp_typecheckt::typecheck()
 {
   // default linkage is C++
   current_mode="C++";
-
   
   for(cpp_parse_treet::itemst::iterator
       it=cpp_parse_tree.items.begin();
@@ -342,10 +312,10 @@ void cpp_typecheckt::static_initialization()
       else
       {
         exprt symbexpr("symbol", symbol.type);
-        symbexpr.set("identifier", symbol.name);
+        symbexpr.identifier(symbol.name);
 
-        exprt code("code", typet("code"));
-        code.set("statement", "assign");
+        codet code;
+        code.set_statement("assign");
         code.copy_to_operands(symbexpr, symbol.value);
         code.location()=symbol.location;
 
@@ -378,8 +348,8 @@ void cpp_typecheckt::static_initialization()
   // Create the initialization procedure
   symbolt init_symbol;
 
-  init_symbol.name="cpp::#ini#"+module;
-  init_symbol.base_name="#ini#"+module;
+  init_symbol.name="c::#ini#"+id2string(module);
+  init_symbol.base_name="#ini#"+id2string(module);
   init_symbol.value.swap(block_sini);
   init_symbol.mode=current_mode;
   init_symbol.module=module;
@@ -410,45 +380,49 @@ Function: cpp_typecheckt::do_not_typechecked
 void cpp_typecheckt::do_not_typechecked()
 {
   bool cont;
+
   do
   {
     cont = false;
+
     Forall_symbols(s_it, context.symbols)
     {
-        symbolt &symbol=s_it->second;
-        if(symbol.value.id()=="cpp_not_typechecked"
-          && symbol.value.get_bool("is_used"))
-        {
-            assert(symbol.type.id()=="code");
+      symbolt &symbol=s_it->second;
 
-            if(symbol.base_name =="operator=")
-            {
-              cpp_declaratort declarator;
-              declarator.location() = symbol.location;
-              default_assignop_value(
-                lookup(symbol.type.get("#member_name")),declarator);
-              symbol.value.swap(declarator.value());
-              convert_function(symbol);
-              cont = true;
-            }
-            else if(symbol.value.operands().size() == 1)
-            {
-              exprt tmp = symbol.value.operands()[0];
-              symbol.value.swap(tmp);
-              convert_function(symbol);
-              cont = true;
-            }
-            else assert(0); // Don't know what to do!
+      if(symbol.value.id()=="cpp_not_typechecked" &&
+         symbol.value.get_bool("is_used"))
+      {
+        assert(symbol.type.id()=="code");
+
+        if(symbol.base_name =="operator=")
+        {
+          cpp_declaratort declarator;
+          declarator.location() = symbol.location;
+          default_assignop_value(
+            lookup(symbol.type.get("#member_name")),declarator);
+          symbol.value.swap(declarator.value());
+          convert_function(symbol);
+          cont=true;
         }
+        else if(symbol.value.operands().size() == 1)
+        {
+          exprt tmp = symbol.value.operands()[0];
+          symbol.value.swap(tmp);
+          convert_function(symbol);
+          cont=true;
+        }
+        else
+          assert(0); // Don't know what to do!
+      }
     }
   }
   while(cont);
 
   Forall_symbols(s_it, context.symbols)
   {
-      symbolt &symbol=s_it->second;
-      if(symbol.value.id()=="cpp_not_typechecked")
-        symbol.value.make_nil();
+    symbolt &symbol=s_it->second;
+    if(symbol.value.id()=="cpp_not_typechecked")
+      symbol.value.make_nil();
   }
 }
 
@@ -466,41 +440,48 @@ Function: cpp_typecheckt::clean_up
 
 void cpp_typecheckt::clean_up()
 {
-  symbolst::iterator it = context.symbols.begin();
-  while(it != context.symbols.end())
+  contextt::symbolst::iterator it=context.symbols.begin();
+
+  while(it!=context.symbols.end())
   {
-    symbolst::iterator cur_it = it;
+    contextt::symbolst::iterator cur_it = it;
     it++;
 
-    symbolt& symbol = cur_it->second;
+    symbolt &symbol = cur_it->second;
 
     if(symbol.type.get_bool("is_template"))
     {
       context.symbols.erase(cur_it);
       continue;
     }
-    else if(symbol.type.id() == "struct" ||
-            symbol.type.id() == "union")
+    else if(symbol.type.id()=="struct" ||
+            symbol.type.id()=="union")
     {
-      struct_typet& struct_type = to_struct_type(symbol.type);
+      struct_typet &struct_type=
+        to_struct_type(symbol.type);
 
-      const struct_typet::componentst& components = struct_type.components();
+      const struct_typet::componentst &components=
+        struct_type.components();
 
       struct_typet::componentst data_members;
       data_members.reserve(components.size());
 
-      struct_typet::componentst& function_members = struct_type.methods();
+      struct_typet::componentst &function_members=
+        struct_type.methods();
+
       function_members.reserve(components.size());
 
-      for(struct_typet::componentst::const_iterator compo_it = components.begin();
-          compo_it != components.end(); compo_it++)
+      for(struct_typet::componentst::const_iterator
+          compo_it=components.begin();
+          compo_it!=components.end();
+          compo_it++)
       {
         if(compo_it->get_bool("is_static") ||
-           compo_it->get_bool("is_type"))
+           compo_it->is_type())
         {
           // skip it
         }
-        else if(compo_it->type().id() == "code")
+        else if(compo_it->type().id()=="code")
         {
           function_members.push_back(*compo_it);
         }

@@ -105,7 +105,7 @@ void cpp_typecastt::get_bases(
   {
     assert(it->id()=="type");
     assert(it->get("type") == "symbol");
-    const irep_idt &base=it->find("type").get("identifier");
+    const irep_idt &base=it->type().identifier();
     base_count[base]++;
     get_bases(base, base_count);
   }
@@ -148,9 +148,9 @@ bool cpp_typecastt::subtype_typecast(
   irep_idt from_name;
 
   if(from.id()== "struct")
-    from_name = from.get("name");
+    from_name = from.name();
   else if(from.id()== "symbol")
-    from_name = from.get("identifier");
+    from_name = from.identifier();
   else
   {
     err = "types are incompatible";
@@ -160,9 +160,9 @@ bool cpp_typecastt::subtype_typecast(
   irep_idt to_name;
 
   if(to.id()== "struct")
-    to_name = to.get("name");
+    to_name = to.name();
   else if(to.id()== "symbol")
-    to_name = to.get("identifier");
+    to_name = to.identifier();
   else
   {
     err = "types are incompatible";
@@ -225,7 +225,7 @@ void cpp_typecastt::make_ptr_typecast(
       typet pvoid("pointer");
       pvoid.subtype().id("signedbv");
       pvoid.subtype().set("width","8");
-      if(expr.type().subtype().get_bool("#constant"))
+      if(expr.type().subtype().cmt_constant())
         pvoid.subtype().set("#constant",true);
       expr.make_typecast(pvoid);
 
@@ -253,7 +253,7 @@ void cpp_typecastt::make_ptr_typecast(
         typet pvoid("pointer");
         pvoid.subtype().id("signedbv");
         pvoid.subtype().set("width","8");
-        if(expr.type().subtype().get_bool("#constant"))
+        if(expr.type().subtype().cmt_constant())
           pvoid.subtype().set("#constant",true);
         expr.make_typecast(pvoid);
 
@@ -329,7 +329,7 @@ void cpp_typecastt::implicit_typecast_followed(
     }
     else // expr is not a reference
     {
-      if(expr.get_bool("#lvalue"))
+      if(expr.cmt_lvalue())
       {
         std::string err;
         if(subtype_typecast(src_type, dest_type.subtype(),err))
@@ -355,7 +355,7 @@ void cpp_typecastt::implicit_typecast_followed(
       else
       {
         // need temporary object
-        if(dest_type.subtype().get_bool("#constant"))
+        if(dest_type.subtype().cmt_constant())
         {
           if(integral_conversion(src_type, dest_type.subtype()))
           {
@@ -383,8 +383,8 @@ void cpp_typecastt::implicit_typecast_followed(
           // create temporary object
           exprt tmp_object_expr=exprt("sideeffect", expr.type());
 
-          tmp_object_expr.type().set("#constant", false);
-          tmp_object_expr.set("statement", "temporary_object");
+          tmp_object_expr.type().cmt_constant(false);
+          tmp_object_expr.statement("temporary_object");
           tmp_object_expr.set("#lvalue", true);
           tmp_object_expr.location()=expr.location();
 
@@ -517,12 +517,12 @@ void cpp_typecastt::implicit_typecast_followed(
 
       c_qualifierst src_qualifiers(src_type);
       typet src_sym_type("symbol");
-      src_sym_type.set("identifier", src_type.get("name"));
+      src_sym_type.identifier(src_type.name());
       src_qualifiers.write(src_sym_type);
 
       c_qualifierst dest_qualifiers(dest_type);
       typet dest_sym_type("symbol");
-      dest_sym_type.set("identifier", dest_type.get("name"));
+      dest_sym_type.identifier(dest_type.name());
       dest_qualifiers.write(dest_sym_type);
 
       if(src_type == dest_type)
@@ -541,7 +541,7 @@ void cpp_typecastt::implicit_typecast_followed(
         make_ptr_typecast(pointer_to_expr, pointer_to_expr.type(), pointer_dest);
         exprt dereference("dereference", dest_sym_type);
         dereference.move_to_operands(pointer_to_expr);
-        dereference.set("#lvalue",expr.get_bool("#lvalue"));
+        dereference.set("#lvalue",expr.cmt_lvalue());
         expr.swap(dereference);
       }
       return;
@@ -565,12 +565,12 @@ void cpp_typecastt::implicit_typecast_followed(
 
         if(it->get_bool("from_base") ||
           type.id()!="code" ||
-        type.find("return_type").id() !="constructor")
+        type.return_type().id() !="constructor")
         continue;
 
         // TODO: ellipsis
 
-        const irept &arguments = type.find("arguments");
+        const irept &arguments = type.arguments();
 
         if(arguments.get_sub().size() != 2)
           continue;
@@ -611,12 +611,12 @@ void cpp_typecastt::implicit_typecast_followed(
 
       c_qualifierst dest_qualifiers(dest_type);
       typet dest_sym_type("symbol");
-      dest_sym_type.set("identifier", dest_type.get("name"));
+      dest_sym_type.identifier(dest_type.name());
       dest_qualifiers.write(dest_sym_type);
 
       // create temporary object
       exprt tmp_object_expr=exprt("sideeffect", dest_sym_type);
-      tmp_object_expr.set("statement", "temporary_object");
+      tmp_object_expr.statement("temporary_object");
       tmp_object_expr.location()=expr.location();
       tmp_object_expr.set("#lvalue", true);
 

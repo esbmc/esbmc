@@ -28,23 +28,28 @@ void cpp_typecheckt::find_constructor(
 {
   constructor_expr.make_nil();
 
+  locationt location=start_dest_type.location();
   typet dest_type(start_dest_type);
   follow_symbol(dest_type);
 
   if(dest_type.id()!="struct")
     return;
 
-  const irept::subt &components=
-    dest_type.find("components").get_sub();
+  const struct_typet::componentst &components=
+    to_struct_type(dest_type).components();
 
-  forall_irep(it, components)
+  for(struct_typet::componentst::const_iterator
+      it=components.begin();
+      it!=components.end();
+      it++)
   {
-    const exprt &component=(exprt &)*it;
+    const struct_typet::componentt &component=*it;
     const typet &type=component.type();
 
-    if(type.find("return_type").id()=="constructor")
+    if(type.return_type().id()=="constructor")
     {
-      const irept::subt &arguments=type.find("arguments").get_sub();
+      const irept::subt &arguments=
+        type.arguments().get_sub();
 
       namespacet ns(context);
 
@@ -58,13 +63,14 @@ void cpp_typecheckt::find_constructor(
         {
           // found!
           const irep_idt &identifier=
-            component.get("name");
+            component.name();
 
           if(identifier=="")
             throw "constructor without identifier";
 
           constructor_expr=exprt("symbol", type);
-          constructor_expr.set("identifier", identifier);
+          constructor_expr.identifier(identifier);
+          constructor_expr.location()=location;
           return;
         }
       }

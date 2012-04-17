@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include "cpp_template_type.h"
 #include "cpp_typecheck.h"
-#include "irep2name.h"
+#include "cpp_type2name.h"
 #include "cpp_util.h"
 
 /*******************************************************************\
@@ -126,7 +126,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
     const symbolt &msymb=lookup(symbol.type.get("#member_name"));
 
     assert(symbol.value.id()=="code");
-    assert(symbol.value.get("statement") == "block");
+    assert(symbol.value.statement() == "block");
 
     symbol.value.copy_to_operands(dtor(msymb));
   }
@@ -138,7 +138,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   // fix the scope's prefix
   function_scope.prefix+=id2string(symbol.name)+"::";
 
-  // true function definition -- do the parameter declarations
+  // genuine function definition -- do the parameter declarations
   convert_arguments(symbol.mode, function_type);
 
   // create "this" if it's a non-static method
@@ -149,8 +149,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
     assert(arguments.size()>=1);
     code_typet::argumentt &this_argument_expr=arguments.front();
     function_scope.this_expr=exprt("symbol", this_argument_expr.type());
-    function_scope.this_expr.set("identifier", this_argument_expr.get("#identifier"));
-
+    function_scope.this_expr.identifier(this_argument_expr.cmt_identifier());
   }
   else
     function_scope.this_expr.make_nil();
@@ -159,9 +158,15 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   start_typecheck_code();
 
   // save current return type
-  typet old_return_type = return_type;
+  typet old_return_type=return_type;
 
   return_type=function_type.return_type();
+
+  // constructor, destructor?
+  if(return_type.id()=="constructor" ||
+     return_type.id()=="destructor")
+    return_type=empty_typet();
+
   typecheck_code(to_code(symbol.value));
 
   symbol.value.type()=symbol.type;
@@ -207,22 +212,19 @@ irep_idt cpp_typecheckt::function_identifier(const typet &type)
   {
     const typet &pointer=it->type();
     const typet &symbol =pointer.subtype();
-    if(symbol.get_bool("#constant")) result+="const$";
+    if(symbol.cmt_constant()) result+="const$";
     result+="this";
     first=false;
     it++;
   }
 
-  // we skipped the "this"
+  // we skipped the "this", on purpose!
 
   for(; it!=arguments.end(); it++)
   {
     if(first) first=false; else result+=",";
     typet tmp_type=it->type();
-
-    std::string tmp;
-    irep2name(tmp_type, tmp);
-    result+=tmp;
+    result+=cpp_type2name(it->type());
   }
 
   result+=')';

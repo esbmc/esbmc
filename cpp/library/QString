@@ -1,0 +1,18 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+#include "string"
+
+struct QString
+{
+public:
+	QString (){}
+	QString ( const char * unicode ){}
+	std::string	toStdString () const{}
+	~QString (){}
+};

@@ -1,0 +1,27 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+#include "QGraphicsItem"
+
+class QPixmap
+{
+public:
+	QPixmap (){}
+	QPixmap ( int width, int height ){}
+	QPixmap ( const char * xpm ){}
+};
+
+class QGraphicsPixmapItem : public QGraphicsItem
+{
+public:
+	QGraphicsPixmapItem ( QGraphicsItem * parent = 0 );
+	~QGraphicsPixmapItem ();
+	void	setPixmap ( const QPixmap & pixmap ){}
+};
+
+

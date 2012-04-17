@@ -47,14 +47,15 @@ void cpp_scanner_init()
 }
 %}
 
-identifier [a-zA-Z_][0-9a-zA-Z_]*
+identifier [a-zA-Z_$][0-9a-zA-Z_$]*
 
 exponent_part [eE][-+]?[0-9]+
 fractional_constant ([0-9]*"."[0-9]+)|([0-9]+".")
 floating_constant (({fractional_constant}{exponent_part}?)|([0-9]+{exponent_part}))[FfLl]?
 
 integer_suffix [uUlL]
-integer_suffix_opt {integer_suffix}*
+iw_suffix       ("i8"|"i16"|"i32"|"i64"|"i128")
+integer_suffix_opt {integer_suffix}*{iw_suffix}?
 decimal_constant [1-9][0-9]*{integer_suffix_opt}
 octal_constant "0"[0-7]*{integer_suffix_opt}
 hex_constant "0"[xX][0-9a-fA-F]+{integer_suffix_opt}
@@ -73,6 +74,7 @@ v_tab [\013]
 c_return [\015]
 
 horizontal_white [ ]|{h_tab}
+ws {horizontal_white}*
 
 integer         [0-9]+
 cppfile         "\""[ !#-~]*"\""
@@ -139,8 +141,7 @@ __asm               { if(PARSER.mode==cpp_parsert::MSC)
                     }
 __attribute         { BEGIN(GCC_ATTRIBUTE); PARSER.parenthesis_counter=0; }
 __attribute__       { BEGIN(GCC_ATTRIBUTE); PARSER.parenthesis_counter=0; }
-_cdecl		    { /* ignore */ }
-__cdecl		    { /* ignore */ }
+_cdecl|__cdecl		    { /* ignore */ }
 __const             { set_text(); return CONST; }
 __declspec          { BEGIN(MSC_DECLSPEC); PARSER.parenthesis_counter=0; }
 __extension__       { set_text(); return Ignore; }
@@ -156,6 +157,7 @@ __signed            { set_text(); return SIGNED; }
 __signed__          { set_text(); return SIGNED; }
 __vector            { set_text(); return Ignore; }
 __volatile__        { set_text(); return VOLATILE; }
+typeof				{ set_text(); return TYPEOF; }
 __typeof            { set_text(); return TYPEOF; }
 __typeof__          { set_text(); return TYPEOF; }
 __int8              { set_text(); return INT8; }
@@ -228,29 +230,29 @@ while               { set_text(); return WHILE; }
 
 {decimal_constant}  { set_text();
                       convert_integer_literal(yytext, PARSER.current_token().data, 10);
-                      return Constant;
+                      return Integer;
                     }
 
 {octal_constant}    { set_text();
                       convert_integer_literal(yytext, PARSER.current_token().data, 8);
-                      return Constant;
+                      return Integer;
                     }
 
 {hex_constant}      { set_text();
                       convert_integer_literal(yytext, PARSER.current_token().data, 16);
-                      return Constant;
+                      return Integer;
                     }
 
 {floating_constant} {
                       set_text();
                       convert_float_literal(yytext, PARSER.current_token().data);
-                      return Constant;
+                      return Floating;
                     }
 
 "L"?[']{c_char}+['] { 
                       set_text();
                       convert_character_literal(yytext, PARSER.current_token().data);
-                      return Constant;
+                      return CharConst;
                     }
 
 "L"?["]{s_char}*["] {

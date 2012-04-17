@@ -42,7 +42,7 @@ codet cpp_typecheckt::cpp_constructor(
 
   if(tmp_type.id()=="array")
   {
-    // We allow only one operand and it musst be tagged with '#array_ini'
+    // We allow only one operand and it must be tagged with '#array_ini'.
     // Note that the operand is an array that is used for copy-initialization.
     // In the general case, a program is not allow to use this form of
     // construct. This way of initializing an array is used internaly only.
@@ -91,7 +91,7 @@ codet cpp_typecheckt::cpp_constructor(
       exprt op_tc = operands.front();
       typecheck_expr(op_tc);
        // Override constantness
-      object_tc.type().set("#constant", false);
+      object_tc.type().cmt_constant(false);
       object_tc.set("#lvalue", true);
       side_effect_exprt assign("assign");
       assign.location()=location;
@@ -149,7 +149,10 @@ codet cpp_typecheckt::cpp_constructor(
       it=operands_tc.begin();
       it!=operands_tc.end();
       it++)
-    typecheck_expr(*it);
+    {
+      typecheck_expr(*it);
+      add_implicit_dereference(*it);
+    }
 
     if(operands_tc.size()==0)
     {
@@ -159,7 +162,7 @@ codet cpp_typecheckt::cpp_constructor(
     else if(operands_tc.size()==1)
     {
       // Override constantness
-      object_tc.type().set("#constant", false);
+      object_tc.type().cmt_constant(false);
       object_tc.set("#lvalue", true);
       side_effect_exprt assign("assign");
       assign.location()=location;
@@ -174,6 +177,7 @@ codet cpp_typecheckt::cpp_constructor(
              "but got " << operands.size() << std::endl;
       throw 0;
     }
+
     return new_code;
   }
   else if(tmp_type.id()=="union")
@@ -189,24 +193,27 @@ codet cpp_typecheckt::cpp_constructor(
       it=operands_tc.begin();
       it!=operands_tc.end();
       it++)
-    typecheck_expr(*it);
+    {
+      typecheck_expr(*it);
+      add_implicit_dereference(*it);
+    }
 
     const struct_typet &struct_type=
       to_struct_type(tmp_type);
 
     // set most-derived bits
     codet block("block");
-    for(unsigned i = 0; i < struct_type.components().size(); i++)
+    for(unsigned i=0; i < struct_type.components().size(); i++)
     {
-      const irept& component = struct_type.components()[i];
-      if(component.get("base_name") != "@most_derived")
+      const irept &component = struct_type.components()[i];
+      if(component.base_name() != "@most_derived")
         continue;
 
-      exprt member("member",bool_typet());
-      member.set("component_name",component.get("name"));
+      exprt member("member", bool_typet());
+      member.component_name(component.name());
       member.copy_to_operands(object_tc);
       member.location() = location;
-      member.set("#lvalue",object_tc.get_bool("#lvalue"));
+      member.set("#lvalue",object_tc.cmt_lvalue());
 
       exprt val;
       val.make_false();
@@ -225,7 +232,7 @@ codet cpp_typecheckt::cpp_constructor(
 
     // enter struct scope
     cpp_save_scopet save_scope(cpp_scopes);
-    cpp_scopes.set_scope(struct_type.get("name"));
+    cpp_scopes.set_scope(struct_type.name());
 
     // find name of constructor
     const struct_typet::componentst &components=
@@ -242,9 +249,9 @@ codet cpp_typecheckt::cpp_constructor(
 
       if(!it->get_bool("from_base") &&
          type.id()=="code" &&
-         type.find("return_type").id()=="constructor")
+         type.return_type().id()=="constructor")
       {
-        constructor_name=it->get("base_name");
+        constructor_name=it->base_name();
         break;
       }
     }
@@ -254,14 +261,13 @@ codet cpp_typecheckt::cpp_constructor(
 
     irept cpp_name("cpp-name");
     cpp_name.get_sub().push_back(irept("name"));
-    cpp_name.get_sub().back().set("identifier", constructor_name);
+    cpp_name.get_sub().back().identifier(constructor_name);
     cpp_name.get_sub().back().set("#location", location);
 
     side_effect_expr_function_callt function_call;
     function_call.location()=location;
     function_call.function().swap(static_cast<exprt&>(cpp_name));
     function_call.arguments().reserve(operands_tc.size());
-
 
     for(exprt::operandst::iterator
         it=operands_tc.begin();
@@ -270,13 +276,13 @@ codet cpp_typecheckt::cpp_constructor(
       function_call.op1().copy_to_operands(*it);
 
     typecheck_side_effect_function_call(function_call);
-    assert(function_call.get("statement") == "temporary_object");
+    assert(function_call.statement() == "temporary_object");
 
-    exprt& initializer =
-      static_cast<exprt&>(function_call.add("initializer"));
+    exprt &initializer =
+      static_cast<exprt &>(function_call.add("initializer"));
 
     assert(initializer.id()=="code"
-           && initializer.get("statement")=="expression");
+           && initializer.statement()=="expression");
 
     side_effect_expr_function_callt& func_ini =
       to_side_effect_expr_function_call(initializer.op0());
@@ -308,134 +314,6 @@ codet cpp_typecheckt::cpp_constructor(
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::cpp_destructor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-codet cpp_typecheckt::cpp_destructor(
-  const locationt &location,
-  const typet &type,
-  const exprt &object)
-{
-  codet new_code;
-  new_code.location()=location;
-
-  typet tmp_type(type);
-  follow_symbol(tmp_type);
-
-  assert(!is_reference(tmp_type));
-
-  if(cpp_is_pod(tmp_type))
-  {
-      new_code.make_nil();
-      return new_code;
-  }
-
-  if(tmp_type.id()=="array")
-  {
-    const exprt &size_expr=
-      to_array_type(tmp_type).size();
-
-    if(size_expr.id()=="infinity")
-    {
-      // don't initialize
-      new_code.make_nil();
-      return new_code;
-    }
-
-    mp_integer s;
-    if(to_integer(size_expr, s))
-    {
-      err_location(tmp_type);
-      str << "array size `" << to_string(size_expr)
-          << "' is not a constant";
-      throw 0;
-    }
-
-    new_code.type().id("code");
-    new_code.location()=location;
-    new_code.set_statement("block");
-
-    // for each element of the array, call the destructor
-    for(mp_integer i = 0; i < s; ++i)
-    {
-      exprt constant=from_integer(i, int_type());
-      constant.location()=location;
-
-      exprt index("index");
-      index.copy_to_operands(object);
-      index.copy_to_operands(constant);
-      index.location()=location;
-
-      exprt i_code =
-        cpp_destructor(location,tmp_type.subtype(), index);
-      new_code.move_to_operands(i_code);
-    }
-  }
-  else
-  {
-    const struct_typet &struct_type=to_struct_type(tmp_type);
-
-    // find name of destructor
-    const struct_typet::componentst &components=struct_type.components();
-
-    irep_idt dtor_name;
-
-    for(struct_typet::componentst::const_iterator
-        it=components.begin();
-        it!=components.end();
-        it++)
-    {
-      const typet &type=it->type();
-
-      if(!it->get_bool("from_base") &&
-         type.id()=="code" &&
-         type.find("return_type").id()=="destructor")
-      {
-        dtor_name=it->get("base_name");
-        break;
-      }
-    }
-
-    // there is always a destructor for non-PODs
-    assert(dtor_name!="");
-
-    const symbolt &symb=lookup(struct_type.get("name"));
-
-    irept cpp_name("cpp-name");
-    cpp_name.get_sub().push_back(irept("name"));
-    cpp_name.get_sub().back().set("identifier", symb.base_name);
-    cpp_name.get_sub().push_back(irept("::"));
-    cpp_name.get_sub().push_back(irept("name"));
-    cpp_name.get_sub().back().set("identifier", dtor_name);
-    cpp_name.get_sub().back().set("#location", location);
-
-    exprt member_expr("member");
-    member_expr.copy_to_operands(object);
-    member_expr.op0().type().set("#constant", false);
-    member_expr.add("component_cpp_name").swap(cpp_name);
-    member_expr.location()=location;
-
-    side_effect_expr_function_callt function_call;
-    function_call.function().swap(member_expr);
-    function_call.location()=location;
-
-    new_code.move_to_operands(function_call);
-    new_code.set_statement("expression");
-  }
-
-  return new_code;
-}
-
-
-/*******************************************************************\
-
 Function: cpp_typecheckt::new_temporary
 
   Inputs:
@@ -447,14 +325,14 @@ Function: cpp_typecheckt::new_temporary
 \*******************************************************************/
 
 void cpp_typecheckt::new_temporary(
-                   const locationt& location,
-                   const typet& type,
-                   const exprt::operandst& ops,
-                   exprt& temporary)
+  const locationt &location,
+  const typet &type,
+  const exprt::operandst &ops,
+  exprt &temporary)
 {
   // create temporary object
   exprt tmp_object_expr=exprt("sideeffect", type);
-  tmp_object_expr.set("statement", "temporary_object");
+  tmp_object_expr.statement("temporary_object");
   tmp_object_expr.location()= location;
 
   exprt new_object("new_object");
@@ -465,11 +343,11 @@ void cpp_typecheckt::new_temporary(
   already_typechecked(new_object);
 
   codet new_code =
-    cpp_constructor(location,new_object, ops);
+    cpp_constructor(location, new_object, ops);
 
   if(new_code.is_not_nil())
   {
-    if(new_code.get("statement")=="assign")
+    if(new_code.statement()=="assign")
       tmp_object_expr.move_to_operands(new_code.op1());
     else
       tmp_object_expr.add("initializer")=new_code;
@@ -491,10 +369,10 @@ Function: cpp_typecheckt::new_temporary
 \*******************************************************************/
 
 void cpp_typecheckt::new_temporary(
-                   const locationt& location,
-                   const typet& type,
-                   const exprt& op,
-                   exprt& temporary)
+  const locationt &location,
+  const typet &type,
+  const exprt &op,
+  exprt &temporary)
 {
   exprt::operandst ops;
   ops.push_back(op);

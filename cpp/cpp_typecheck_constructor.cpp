@@ -51,9 +51,10 @@ static void copy_parent(
 
   op0.operands().push_back(exprt("cpp-this"));
   op0.type().id("pointer");
-  op0.type().add("subtype").id("cpp-name");
-  op0.type().add("subtype").get_sub().push_back(irept("name"));
-  op0.type().add("subtype").get_sub().back().set("identifier", parent_base_name);
+  op0.type().subtype().id("cpp-name");
+  op0.type().subtype().get_sub().push_back(irept("name"));
+  op0.type().subtype().get_sub().back().identifier(parent_base_name);
+  op0.type().subtype().get_sub().back().set("#location", location);
   op0.location() = location;
 
   code.operands().push_back(exprt("explicit-typecast"));
@@ -61,13 +62,16 @@ static void copy_parent(
 
   op1.type().id("pointer");
   op1.type().set("#reference", true);
-  op1.type().add("subtype").set("#constant",true);
-  op1.type().add("subtype").id("cpp-name");
-  op1.type().add("subtype").get_sub().push_back(irept("name"));
-  op1.type().add("subtype").get_sub().back().set("identifier", parent_base_name);
+  op1.type().subtype().set("#constant",true);
+  op1.type().subtype().id("cpp-name");
+  op1.type().subtype().get_sub().push_back(irept("name"));
+  op1.type().subtype().get_sub().back().identifier(parent_base_name);
+  op1.type().subtype().get_sub().back().set("#location", location);
+
   op1.operands().push_back(exprt("cpp-name"));
   op1.op0().get_sub().push_back(irept("name"));
-  op1.op0().get_sub().back().set("identifier", arg_name);
+  op1.op0().get_sub().back().identifier(arg_name);
+  op1.op0().get_sub().back().set("#location", location);
   op1.location() = location;
 }
 
@@ -93,12 +97,12 @@ static void copy_member(
   exprt &block)
 {
   block.operands().push_back(exprt("code"));
-  exprt& code = block.operands().back();
+  exprt &code=block.operands().back();
 
-  code.set("statement", "expression");
-  code.add("type")=typet("code");
+  code.statement("expression");
+  code.type()=typet("code");
   code.operands().push_back(exprt("sideeffect"));
-  code.op0().set("statement", "assign");
+  code.op0().statement("assign");
   code.op0().operands().push_back(exprt("cpp-name"));
   code.location() = location;
 
@@ -106,7 +110,8 @@ static void copy_member(
   op0.location() = location;
 
   op0.get_sub().push_back(irept("name"));
-  op0.get_sub().back().set("identifier", member_base_name);
+  op0.get_sub().back().identifier(member_base_name);
+  op0.get_sub().back().set("#location", location);
 
   code.op0().operands().push_back(exprt("member"));
 
@@ -114,10 +119,13 @@ static void copy_member(
 
   op1.add("component_cpp_name").id("cpp-name");
   op1.add("component_cpp_name").get_sub().push_back(irept("name"));
-  op1.add("component_cpp_name").get_sub().back().set("identifier", member_base_name);
+  op1.add("component_cpp_name").get_sub().back().identifier(member_base_name);
+  op1.add("component_cpp_name").get_sub().back().set("#location", location);
+
   op1.operands().push_back(exprt("cpp-name"));
   op1.op0().get_sub().push_back(irept("name"));
-  op1.op0().get_sub().back().set("identifier", arg_name);
+  op1.op0().get_sub().back().identifier(arg_name);
+  op1.op0().get_sub().back().set("#location", location);
   op1.location() = location;
 }
 
@@ -151,17 +159,18 @@ static void copy_array(
   exprt& code = block.operands().back();
   code.location() = location;
 
-  code.set("statement", "expression");
-  code.add("type")=typet("code");
+  code.statement("expression");
+  code.type()=typet("code");
   code.operands().push_back(exprt("sideeffect"));
-  code.op0().set("statement", "assign");
+  code.op0().statement("assign");
   code.op0().operands().push_back(exprt("index"));
   exprt& op0 = code.op0().op0();
   op0.operands().push_back(exprt("cpp-name"));
   op0.location() = location;
 
   op0.op0().get_sub().push_back(irept("name"));
-  op0.op0().get_sub().back().set("identifier", member_base_name);
+  op0.op0().get_sub().back().identifier(member_base_name);
+  op0.op0().get_sub().back().set("#location", location);
   op0.copy_to_operands(constant);
 
   code.op0().operands().push_back(exprt("index"));
@@ -170,11 +179,15 @@ static void copy_array(
   op1.operands().push_back(exprt("member"));
   op1.op0().add("component_cpp_name").id("cpp-name");
   op1.op0().add("component_cpp_name").get_sub().push_back(irept("name"));
-  op1.op0().add("component_cpp_name").get_sub().back().set("identifier", member_base_name);
+  op1.op0().add("component_cpp_name").get_sub().back().identifier(member_base_name);
+  op1.op0().add("component_cpp_name").get_sub().back().set("#location", location);
+
   op1.op0().operands().push_back(exprt("cpp-name"));
   op1.op0().op0().get_sub().push_back(irept("name"));
-  op1.op0().op0().get_sub().back().set("identifier", arg_name);
+  op1.op0().op0().get_sub().back().identifier(arg_name);
+  op1.op0().op0().get_sub().back().set("#location", location);
   op1.copy_to_operands(constant);
+
   op1.location() = location;
 }
 
@@ -198,7 +211,7 @@ void cpp_typecheckt::default_ctor(
 {
   exprt name;
   name.id("name");
-  name.set("identifier", base_name);
+  name.identifier(base_name);
   name.location() = location;
 
   cpp_declaratort decl;
@@ -210,7 +223,7 @@ void cpp_typecheckt::default_ctor(
 
   decl.value().id("code");
   decl.value().type()=typet("code");
-  decl.value().set("statement", "block");
+  decl.value().statement("block");
   decl.add("cv").make_nil();
   decl.add("throw_decl").make_nil();
 
@@ -250,14 +263,17 @@ void cpp_typecheckt::default_cpctor(
 
   // Compound name
   irept compname("name");
-  compname.set("identifier", symbol.base_name);
+  compname.identifier(symbol.base_name);
+  compname.set("#location", location);
+
   cpp_namet cppcomp;
   cppcomp.move_to_sub(compname);
 
   // Argument name
   exprt argname("name");
-  argname.location() = location;
-  argname.set("identifier", arg_name);
+  argname.location()=location;
+  argname.identifier(arg_name);
+
   cpp_namet cpparg;
   cpparg.move_to_sub(argname);
 
@@ -273,7 +289,7 @@ void cpp_typecheckt::default_cpctor(
     // Argument declaration
   cpp_declarationt argdecl;
   argdecl.set("type", "merged_type");
-  irept& subt = argdecl.add("type").add("subtypes");
+  irept& subt = argdecl.type().add("subtypes");
   subt.get_sub().push_back(cppcomp);
   irept constnd("const");
   subt.get_sub().push_back(constnd);
@@ -281,7 +297,7 @@ void cpp_typecheckt::default_cpctor(
   argdecl.location() = location;
 
   // Add argument to function type
-  decl0.add("type").add("arguments").get_sub().push_back(argdecl);
+  decl0.type().add("arguments").get_sub().push_back(argdecl);
   decl0.location() = location;
 
   irept& initializers = decl0.add("member_initializers");
@@ -298,7 +314,7 @@ void cpp_typecheckt::default_cpctor(
     assert(parent_it->get("type") == "symbol");
 
     const symbolt &parsymb=
-      lookup(parent_it->find("type").get("identifier"));
+      lookup(parent_it->type().identifier());
 
     if(cpp_is_pod(parsymb.type))
       copy_parent(location, parsymb.base_name, arg_name, block);
@@ -308,13 +324,15 @@ void cpp_typecheckt::default_cpctor(
 
       // Call the parent default copy constructor
       exprt name("name");
-      name.set("identifier", ctor_name);
+      name.identifier(ctor_name);
       name.location() = location;
+
       cpp_namet cppname;
       cppname.move_to_sub(name);
+
       codet mem_init("member_initializer");
       mem_init.location() = location;
-      mem_init.set("member",cppname);
+      mem_init.set("member", cppname);
       mem_init.add("operands").get_sub().push_back(cpparg);
       initializers.move_to_sub(mem_init);
     }
@@ -329,14 +347,16 @@ void cpp_typecheckt::default_cpctor(
     if(mem_it->get_bool("is_vtptr"))
     {
       exprt name("name");
-      name.set("identifier",mem_it->get("base_name"));
+      name.set("identifier",mem_it->base_name());
+      name.location()=location;
+
       cpp_namet cppname;
       cppname.move_to_sub(name);
 
-      const symbolt& virtual_table_symbol_type = 
-        namespacet(context).lookup(mem_it->type().subtype().get("identifier"));
+      const symbolt &virtual_table_symbol_type =
+        namespacet(context).lookup(mem_it->type().subtype().identifier());
 
-      const symbolt& virtual_table_symbol_var  =
+      const symbolt &virtual_table_symbol_var  =
         namespacet(context).lookup(virtual_table_symbol_type.name.as_string() + "@" + symbol.name.as_string());
 
       exprt var = symbol_expr(virtual_table_symbol_var);
@@ -346,7 +366,7 @@ void cpp_typecheckt::default_cpctor(
       already_typechecked(address);
 
       exprt ptrmember("ptrmember");
-      ptrmember.set("component_name",mem_it->get("name"));
+      ptrmember.set("component_name",mem_it->name());
       ptrmember.operands().push_back(exprt("cpp-this"));
 
       code_assignt assign(ptrmember, address);
@@ -355,20 +375,22 @@ void cpp_typecheckt::default_cpctor(
     }
 
     if( mem_it->get_bool("from_base")
-      || mem_it->get_bool("is_type")
+      || mem_it->is_type()
       || mem_it->get_bool("is_static")
       || mem_it->type().id() == "code")
         continue;
 
-    irep_idt mem_name = mem_it->get("base_name");
+    irep_idt mem_name = mem_it->base_name();
 
     exprt name("name");
-    name.set("identifier", mem_name);
+    name.identifier(mem_name);
     name.location() = location;
+
     cpp_namet cppname;
     cppname.move_to_sub(name);
+
     codet mem_init("member_initializer");
-    mem_init.set("member",cppname);
+    mem_init.set("member", cppname);
     mem_init.location() = location;
 
     exprt memberexpr("member");
@@ -417,11 +439,11 @@ void cpp_typecheckt::default_assignop(
   cpctor.operands().push_back(exprt("cpp-declarator"));
   cpctor.location() = location;
 
-  cpp_declaratort& declarator = (cpp_declaratort&) cpctor.op0();
+  cpp_declaratort &declarator = (cpp_declaratort&) cpctor.op0();
   declarator.location() = location;
 
-  cpp_namet& declarator_name = declarator.name();
-  typet& declarator_type = declarator.type();
+  cpp_namet &declarator_name = declarator.name();
+  typet &declarator_type = declarator.type();
 
   declarator_type.location() = location;
 
@@ -446,12 +468,15 @@ void cpp_typecheckt::default_assignop(
   args_decl.type().id("merged_type");
   args_decl_type_sub.get_sub().push_back(irept("cpp-name"));
   args_decl_type_sub.get_sub().back().get_sub().push_back(irept("name"));
-  args_decl_type_sub.get_sub().back().get_sub().back().set("identifier",symbol.base_name);
+  args_decl_type_sub.get_sub().back().get_sub().back().identifier(symbol.base_name);
+  args_decl_type_sub.get_sub().back().get_sub().back().set("#location", location);
+
   args_decl_type_sub.get_sub().push_back(irept("const"));
   args_decl.operands().push_back(exprt("cpp-declarator"));
   args_decl.location() = location;
 
-  cpp_declaratort& args_decl_declor = (cpp_declaratort&) args_decl.operands().back();
+  cpp_declaratort &args_decl_declor=
+    (cpp_declaratort&) args_decl.operands().back();
 
   args_decl_declor.name().id("cpp-name");
   args_decl_declor.name().get_sub().push_back(irept("name"));
@@ -461,7 +486,7 @@ void cpp_typecheckt::default_assignop(
   args_decl_declor.type().id("pointer");
   args_decl_declor.type().set("#reference", true);
   args_decl_declor.type().add("#qualifier").make_nil();
-  args_decl_declor.type().add("subtype").make_nil();
+  args_decl_declor.type().subtype().make_nil();
   args_decl_declor.value().make_nil();
 }
 
@@ -478,53 +503,54 @@ Function: cpp_typecheckt::default_assignop
 \*******************************************************************/
 
 void cpp_typecheckt::default_assignop_value(
-  const symbolt& symbol,
-  cpp_declaratort& declarator)
+  const symbolt &symbol,
+  cpp_declaratort &declarator)
 {
-  locationt& location = declarator.location();
+  // save location
+  locationt location=declarator.location();
   declarator.make_nil();
 
   declarator.value().location() = location;
   declarator.value().id("code");
-  declarator.value().add("statement").id("block");
-  declarator.value().add("type").id("code");
+  declarator.value().statement("block");
+  declarator.value().type()=code_typet();
 
-
-  exprt& block = (exprt&) declarator.value();
+  exprt &block=declarator.value();
 
   std::string arg_name("ref");
 
-
   // First, we copy the parents
-  const irept& bases = symbol.type.find("bases");
+  const irept &bases = symbol.type.find("bases");
 
   forall_irep(parent_it, bases.get_sub())
   {
-
     assert(parent_it->id() == "base");
     assert(parent_it->get("type") == "symbol");
 
-    const symbolt& symb = lookup(parent_it->find("type").get("identifier"));
+    const symbolt& symb=
+      lookup(parent_it->type().identifier());
 
-    copy_parent(location, symb.base_name,arg_name, block);
+    copy_parent(location, symb.base_name, arg_name, block);
   }
 
   // Then, we copy the members
-  const irept& components = symbol.type.find("components");
+  const irept &components=symbol.type.components();
+
   forall_irep(mem_it, components.get_sub())
   {
-    if( mem_it->get_bool("from_base")
-      || mem_it->get_bool("is_type")
-      || mem_it->get_bool("is_static")
-      || mem_it->get_bool("is_vtptr")
-      || mem_it->get("type") == "code")
-        continue;
+    if(mem_it->get_bool("from_base") ||
+       mem_it->is_type() ||
+       mem_it->get_bool("is_static") ||
+       mem_it->get_bool("is_vtptr") ||
+       mem_it->get("type")=="code")
+      continue;
 
-    irep_idt mem_name = mem_it->get("base_name");
+    irep_idt mem_name=mem_it->base_name();
 
     if(mem_it->get("type")== "array")
     {
-      const exprt &size_expr=to_array_type((typet&)mem_it->find("type")).size();
+      const exprt &size_expr=
+        to_array_type((typet&)mem_it->type()).size();
 
       if(size_expr.id()=="infinity")
       {
@@ -533,6 +559,7 @@ void cpp_typecheckt::default_assignop_value(
         // throw 0;
         continue;
       }
+
       mp_integer size;
       bool to_int = to_integer(size_expr, size);
       assert(!to_int);
@@ -548,11 +575,11 @@ void cpp_typecheckt::default_assignop_value(
 
   // Finally we add the return statement
   block.operands().push_back(exprt("code"));
-  exprt& ret_code = declarator.value().operands().back();
+  exprt &ret_code = declarator.value().operands().back();
   ret_code.operands().push_back(exprt("dereference"));
   ret_code.op0().operands().push_back(exprt("cpp-this"));
-  ret_code.add("statement").id("return");
-  ret_code.add("type").id("code");
+  ret_code.statement("return");
+  ret_code.type()=code_typet();
 }
 
 /*******************************************************************\
@@ -575,7 +602,7 @@ Inputs:   bases: the parents of the class
 
 void cpp_typecheckt::check_member_initializers(
   const irept &bases,
-  const irept &components,
+  const struct_typet::componentst &components,
   const irept &initializers)
 {
   assert(initializers.id() == "member_initializers");
@@ -584,28 +611,30 @@ void cpp_typecheckt::check_member_initializers(
   {
     const irept &initializer = *init_it;
     assert(initializer.is_not_nil());
-    std::string identifier;
-    std::string base_name;
-    assert(initializer.get("member") == "cpp-name");
-    const cpp_namet& member_name = (cpp_namet&) initializer.find("member");
 
+    std::string identifier, base_name;
+
+    assert(initializer.get("member") == "cpp-name");
+
+    const cpp_namet &member_name=
+      to_cpp_name(initializer.member_irep());
 
     bool has_template_args = member_name.has_template_args();
 
     if(has_template_args)
     {
       // it has to be a parent constructor
-      typet member_type = (typet&) initializer.find("member");
+      typet member_type = (typet&) initializer.member_irep();
       typecheck_type(member_type);
 
       // check for a direct parent
       bool ok = false;
       forall_irep(parent_it, bases.get_sub())
       {
-        assert(parent_it->get("type") == "symbol" );
+        assert(parent_it->get("type") == "symbol");
 
-        if(member_type.get("identifier")
-           == parent_it->find("type").get("identifier"))
+        if(member_type.identifier()
+           == parent_it->type().identifier())
         {
           ok = true;
           break;
@@ -614,10 +643,8 @@ void cpp_typecheckt::check_member_initializers(
 
       if(!ok)
       {
-        std::string member_str;
-        member_name.to_string(member_str);
         err_location(member_name.location());
-        str << "invalid initializer `" << member_str  << "'";
+        str << "invalid initializer `" << member_name.to_string() << "'";
         throw 0;
       }
       return;
@@ -625,29 +652,32 @@ void cpp_typecheckt::check_member_initializers(
 
     member_name.convert(identifier, base_name);
 
-
     bool ok = false;
-    forall_irep(c_it, components.get_sub())
+
+    for(struct_typet::componentst::const_iterator
+        c_it=components.begin();
+        c_it!=components.end();
+        c_it++)
     {
-      if (c_it->get("base_name") != base_name ) continue;
+      if(c_it->base_name() != base_name ) continue;
 
       // Data member
-      if( !c_it->get_bool("from_base")
-        && !c_it->get_bool("is_static")
-        && c_it->get("type") != "code")
+      if(!c_it->get_bool("from_base") &&
+         !c_it->get_bool("is_static") &&
+         c_it->get("type") != "code")
       {
         ok = true;
         break;
       }
 
       // Maybe it is a parent constructor?
-      if(c_it->get_bool("is_type"))
+      if(c_it->is_type())
       {
-        typet type = static_cast<const typet&>(c_it->find("type"));
+        typet type = static_cast<const typet&>(c_it->type());
         if(type.id() != "symbol")
           continue;
 
-        const symbolt& symb = lookup(type.get("identifier"));
+        const symbolt& symb = lookup(type.identifier());
         if(symb.type.id() != "struct")
           break;
 
@@ -655,7 +685,7 @@ void cpp_typecheckt::check_member_initializers(
         forall_irep(parent_it, bases.get_sub())
         {
           assert(parent_it->get("type") == "symbol" );
-          if(symb.name == parent_it->find("type").get("identifier"))
+          if(symb.name == parent_it->type().identifier())
           {
             ok = true;
             break;
@@ -666,12 +696,12 @@ void cpp_typecheckt::check_member_initializers(
 
       // Parent constructor
       if( c_it->get_bool("from_base")
-        && !c_it->get_bool("is_type")
+        && !c_it->is_type()
         && !c_it->get_bool("is_static")
         && c_it->get("type") == "code"
-        && c_it->find("type").get("return_type") == "constructor")
+        && c_it->type().get("return_type") == "constructor")
       {
-        typet member_type = (typet&) initializer.find("member");
+        typet member_type = (typet&) initializer.member_irep();
         typecheck_type(member_type);
 
         // check for a direct parent
@@ -679,8 +709,8 @@ void cpp_typecheckt::check_member_initializers(
         {
           assert(parent_it->get("type") == "symbol" );
 
-          if(member_type.get("identifier")
-             == parent_it->find("type").get("identifier"))
+          if(member_type.identifier()
+             == parent_it->type().identifier())
           {
             ok = true;
             break;
@@ -721,8 +751,10 @@ void cpp_typecheckt::full_member_initialization(
   const struct_typet &struct_type,
   irept &initializers)
 {
-  const irept& bases = struct_type.find("bases");
-  const struct_typet::componentst& components = struct_type.components();
+  const irept &bases=struct_type.find("bases");
+
+  const struct_typet::componentst &components=
+    struct_type.components();
 
   assert(initializers.id() == "member_initializers");
 
@@ -732,6 +764,7 @@ void cpp_typecheckt::full_member_initialization(
   // we need to construct the virtual bases
   std::list<irep_idt> vbases;
   get_virtual_bases(struct_type,vbases);
+
   if(!vbases.empty())
   {
     codet cond("ifthenelse");
@@ -739,12 +772,15 @@ void cpp_typecheckt::full_member_initialization(
     {
       cpp_namet most_derived;
       most_derived.get_sub().push_back(irept("name"));
-      most_derived.get_sub().back().set("identifier", "@most_derived");
+      most_derived.get_sub().back().identifier("@most_derived");
+
       exprt tmp;
       tmp.swap(most_derived);
       cond.move_to_operands(tmp);
     }
+
     codet block("block");
+
     while(!vbases.empty())
     {
       const symbolt& symb = lookup(vbases.front());
@@ -752,11 +788,13 @@ void cpp_typecheckt::full_member_initialization(
       {
         // default initializer
         irept name("name");
-        name.set("identifier", symb.base_name);
+        name.identifier(symb.base_name);
+
         cpp_namet cppname;
         cppname.move_to_sub(name);
+
         codet mem_init("member_initializer");
-        mem_init.set("member",cppname);
+        mem_init.set("member", cppname);
         block.move_to_sub(mem_init);
       }
       vbases.pop_front();
@@ -772,12 +810,12 @@ void cpp_typecheckt::full_member_initialization(
     assert(parent_it->get("type") == "symbol");
 
     const symbolt &ctorsymb=
-      lookup(parent_it->find("type").get("identifier"));
+      lookup(parent_it->type().identifier());
 
     if(cpp_is_pod(ctorsymb.type))
       continue;
 
-    irep_idt ctor_name = ctorsymb.base_name;
+    irep_idt ctor_name=ctorsymb.base_name;
 
     // Check if the initialization list of the constructor
     // explicitly calls the parent constructor
@@ -790,8 +828,9 @@ void cpp_typecheckt::full_member_initialization(
       std::string base_name;
 
       assert(initializer.get("member") == "cpp-name");
-      const cpp_namet& member_name = (cpp_namet&) initializer.find("member");
 
+      const cpp_namet &member_name=
+        to_cpp_name(initializer.member_irep());
 
       bool has_template_args = member_name.has_template_args();
 
@@ -801,12 +840,13 @@ void cpp_typecheckt::full_member_initialization(
 
         // check if the initializer is a data
         bool is_data = false;
+
         for(struct_typet::componentst::const_iterator c_it =
             components.begin(); c_it != components.end(); c_it++)
         {
-          if (c_it->get("base_name") == base_name
+          if (c_it->base_name() == base_name
               && c_it->get("type") != "code"
-              && !c_it->get_bool("is_type"))
+              && !c_it->is_type())
           {
             is_data = true;
             break;
@@ -817,14 +857,16 @@ void cpp_typecheckt::full_member_initialization(
           continue;
       }
 
-      typet member_type = static_cast<const typet&>(initializer.find("member"));
+      typet member_type=
+        static_cast<const typet&>(initializer.member_irep());
+
       typecheck_type(member_type);
 
       if(member_type.id()!="symbol")
         break;
 
-      if(parent_it->find("type").get("identifier")
-         == member_type.get("identifier"))
+      if(parent_it->type().identifier()==
+         member_type.identifier())
       {
         final_initializers.move_to_sub(initializer);
         found = true;
@@ -836,11 +878,13 @@ void cpp_typecheckt::full_member_initialization(
     if(!found)
     {
       irept name("name");
-      name.set("identifier", ctor_name);
+      name.identifier(ctor_name);
+
       cpp_namet cppname;
       cppname.move_to_sub(name);
+
       codet mem_init("member_initializer");
-      mem_init.set("member",cppname);
+      mem_init.set("member", cppname);
       final_initializers.move_to_sub(mem_init);
     }
 
@@ -851,7 +895,8 @@ void cpp_typecheckt::full_member_initialization(
       {
         cpp_namet most_derived;
         most_derived.get_sub().push_back(irept("name"));
-        most_derived.get_sub().back().set("identifier", "@most_derived");
+        most_derived.get_sub().back().identifier("@most_derived");
+
         exprt tmp;
         tmp.swap(most_derived);
         cond.move_to_operands(tmp);
@@ -874,17 +919,18 @@ void cpp_typecheckt::full_member_initialization(
     if(mem_it->get_bool("is_vtptr"))
     {
       exprt name("name");
-      name.set("identifier",mem_it->get("base_name"));
+      name.set("identifier",mem_it->base_name());
       name.location() = mem_it->location();
+
       cpp_namet cppname;
       cppname.move_to_sub(name);
 
       const symbolt& virtual_table_symbol_type = 
-        lookup(mem_it->type().subtype().get("identifier"));
+        lookup(mem_it->type().subtype().identifier());
 
       const symbolt& virtual_table_symbol_var  =
         lookup(virtual_table_symbol_type.name.as_string() + "@" + 
-            struct_type.get("name").as_string());
+            struct_type.name().as_string());
 
       exprt var =symbol_expr(virtual_table_symbol_var);
       address_of_exprt address(var);
@@ -893,7 +939,7 @@ void cpp_typecheckt::full_member_initialization(
       already_typechecked(address);
 
       exprt ptrmember("ptrmember");
-      ptrmember.set("component_name",mem_it->get("name"));
+      ptrmember.set("component_name",mem_it->name());
       ptrmember.operands().push_back(exprt("cpp-this"));
 
       code_assignt assign(ptrmember, address);
@@ -901,14 +947,13 @@ void cpp_typecheckt::full_member_initialization(
       continue;
     }
 
-
     if( mem_it->get_bool("from_base")
       || mem_it->type().id() == "code"
-      || mem_it->get_bool("is_type")
+      || mem_it->is_type()
       || mem_it->get_bool("is_static"))
         continue;
 
-    irep_idt mem_name = mem_it->get("base_name");
+    irep_idt mem_name = mem_it->base_name();
 
     // Check if the initialization list of the constructor
     // explicitly initializes the data member
@@ -923,7 +968,7 @@ void cpp_typecheckt::full_member_initialization(
       cpp_namet &member_name=(cpp_namet&) initializer.add("member");
 
       if(member_name.has_template_args())
-        continue; //  base-type initializer
+        continue; // base-type initializer
 
       member_name.convert(identifier, base_name);
 
@@ -935,27 +980,29 @@ void cpp_typecheckt::full_member_initialization(
       }
     }
 
-    // If the data member is a reference, it musst be explicitly
+    // If the data member is a reference, it must be explicitly
     // initialized
     if(!found &&
-       mem_it->find("type").id()=="pointer" &&
-       mem_it->find("type").get_bool("#reference"))
+       mem_it->type().id()=="pointer" &&
+       mem_it->type().reference())
     {
       err_location(*mem_it);
-      str << "reference musst be explicitly initialized" << std::endl;
+      str << "reference must be explicitly initialized";
       throw 0;
     }
 
     // If the data member is not POD and is not explicitly initialized,
     // then its default constructor is called.
-    if(!found && !cpp_is_pod((const typet&) (mem_it->find("type"))))
+    if(!found && !cpp_is_pod((const typet&) (mem_it->type())))
     {
       irept name("name");
-      name.set("identifier", mem_name);
+      name.identifier(mem_name);
+
       cpp_namet cppname;
       cppname.move_to_sub(name);
+
       codet mem_init("member_initializer");
-      mem_init.set("member",cppname);
+      mem_init.set("member", cppname);
       final_initializers.move_to_sub(mem_init);
     }
   }
@@ -979,7 +1026,7 @@ Function: find_cpctor
 
 \*******************************************************************/
 
-bool cpp_typecheckt::find_cpctor(const symbolt& symbol)const
+bool cpp_typecheckt::find_cpctor(const symbolt &symbol) const
 {
   const struct_typet &struct_type = to_struct_type(symbol.type);
   const struct_typet::componentst &components = struct_type.components();
@@ -1016,7 +1063,7 @@ bool cpp_typecheckt::find_cpctor(const symbolt& symbol)const
     if(!is_reference(arg1_type))
       continue;
 
-    if(arg1_type.subtype().get("identifier")!=symbol.name)
+    if(arg1_type.subtype().identifier()!=symbol.name)
       continue;
 
     bool defargs = true;
@@ -1056,7 +1103,7 @@ bool cpp_typecheckt::find_assignop(const symbolt& symbol) const
   {
     const struct_typet::componentt& component = components[i];
 
-    if(component.get("base_name")!="operator=")
+    if(component.base_name()!="operator=")
       continue;
 
     if(component.get_bool("is_static"))
@@ -1079,7 +1126,7 @@ bool cpp_typecheckt::find_assignop(const symbolt& symbol) const
     if(!is_reference(arg1_type))
       continue;
 
-    if(arg1_type.subtype().get("identifier")!=symbol.name)
+    if(arg1_type.subtype().identifier()!=symbol.name)
       continue;
 
     return true;
@@ -1101,11 +1148,12 @@ Function: cpp_typecheckt::find_dtor
 
 bool cpp_typecheckt::find_dtor(const symbolt& symbol) const
 {
-  const irept& components = symbol.type.find("components");
+  const irept &components=
+    symbol.type.components();
 
   forall_irep(cit, components.get_sub())
   {
-    if(cit->get("base_name")=="~"+id2string(symbol.base_name))
+    if(cit->base_name()=="~"+id2string(symbol.base_name))
       return true;
   }
 
@@ -1130,24 +1178,26 @@ void cpp_typecheckt::default_dtor(
   const symbolt &symb,
   cpp_declarationt &dtor)
 {
-  assert(symb.type.id() == "struct");
+  assert(symb.type.id()=="struct");
 
   irept name;
   name.id("name");
-  name.set("identifier", "~"+id2string(symb.base_name));
+  name.identifier("~"+id2string(symb.base_name));
+  name.set("#location", symb.location);
+
   cpp_declaratort decl;
   decl.name().id("cpp-name");
   decl.name().move_to_sub(name);
-  decl.add("type").id("function_type");
-  decl.add("type").add("subtype").make_nil();
+  decl.type().id("function_type");
+  decl.type().subtype().make_nil();
 
   decl.value().id("code");
-  decl.value().add("type").id("code");
-  decl.value().add("statement").id("block");
+  decl.value().type().id("code");
+  decl.value().statement("block");
   decl.add("cv").make_nil();
   decl.add("throw_decl").make_nil();
 
-  dtor.add("type").id("destructor");
+  dtor.type().id("destructor");
   dtor.add("storage_spec").id("cpp-storage-spec");
   dtor.add("operands").move_to_sub(decl);
 }
@@ -1160,7 +1210,7 @@ Function: dtor
 
  Outputs:
 
- Purpose:
+ Purpose: produces destructor code for a class object
 
  Note:
 
@@ -1170,16 +1220,15 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
 {
   assert(symb.type.id() == "struct");
 
-  locationt location = symb.type.location();
+  locationt location=symb.type.location();
+
   location.set_function(
     id2string(symb.base_name)+
     "::~"+id2string(symb.base_name)+"()");
 
+  code_blockt block;
 
-  codet block("block");
-  block.set("type","code");
-
-  const struct_typet::componentst& components =
+  const struct_typet::componentst &components =
     to_struct_type(symb.type).components();
 
   // take care of virtual methods
@@ -1191,27 +1240,30 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
     if(cit->get_bool("is_vtptr"))
     {
       exprt name("name");
-      name.set("identifier",cit->get("base_name"));
+      name.set("identifier",cit->base_name());
+
       cpp_namet cppname;
       cppname.move_to_sub(name);
 
-      const symbolt& virtual_table_symbol_type = 
-        namespacet(context).lookup(cit->type().subtype().get("identifier"));
+      const symbolt &virtual_table_symbol_type =
+        namespacet(context).lookup(
+          cit->type().subtype().identifier());
 
-      const symbolt& virtual_table_symbol_var  =
-        namespacet(context).lookup(virtual_table_symbol_type.name.as_string() + "@" + symb.name.as_string());
+      const symbolt &virtual_table_symbol_var  =
+        namespacet(context).lookup(
+          virtual_table_symbol_type.name.as_string() + "@" + symb.name.as_string());
 
-      exprt var = symbol_expr(virtual_table_symbol_var);
+      exprt var=symbol_expr(virtual_table_symbol_var);
       address_of_exprt address(var);
-      assert(address.type() == cit->type());
+      assert(address.type()==cit->type());
 
       already_typechecked(address);
 
       exprt ptrmember("ptrmember");
-      ptrmember.set("component_name",cit->get("name"));
+      ptrmember.component_name(cit->name());
       ptrmember.operands().push_back(exprt("cpp-this"));
 
-      code_assignt assign(ptrmember,address);
+      code_assignt assign(ptrmember, address);
       block.operands().push_back(assign);
       continue;
     }
@@ -1225,47 +1277,51 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
   {
     const typet &type=cit->type();
 
-    if( cit->get_bool("from_base")
-      || cit->get_bool("is_type")
-      || cit->get_bool("is_static")
-      || type.id()=="code"
-      || is_reference(type)
-      || cpp_is_pod(type))
-    continue;
+    if( cit->get_bool("from_base") ||
+       cit->is_type() ||
+       cit->get_bool("is_static") ||
+       type.id()=="code" ||
+       is_reference(type) ||
+       cpp_is_pod(type))
+      continue;
 
     irept name("name");
-    name.set("identifier", cit->get("base_name"));
+    name.identifier(cit->base_name());
+    name.set("#location", location);
+
     cpp_namet cppname;
     cppname.get_sub().push_back(name);
 
     exprt member("ptrmember");
-    member.set("component_cpp_name",cppname);
+    member.set("component_cpp_name", cppname);
     member.operands().push_back(exprt("cpp-this"));
     member.location() = location;
 
     codet dtor_code =
-      cpp_destructor(location, cit->type() ,member);
+      cpp_destructor(location, cit->type(), member);
 
     if(dtor_code.is_not_nil())
       block.move_to_operands(dtor_code);
   }
 
+  const irept::subt &bases=symb.type.find("bases").get_sub();
+
   // call the base destructors in the reverse order
   for(irept::subt::const_reverse_iterator
-      bit=symb.type.find("bases").get_sub().rbegin();
-      bit!=symb.type.find("bases").get_sub().rend();
+      bit=bases.rbegin();
+      bit!=bases.rend();
       bit++)
   {
     assert(bit->id()=="base");
-    assert(bit->find("type").id()=="symbol");
-    const symbolt& psymb = lookup(bit->find("type").get("identifier"));
+    assert(bit->type().id()=="symbol");
+    const symbolt& psymb = lookup(bit->type().identifier());
 
     exprt object("dereference");
     object.operands().push_back(exprt("cpp-this"));
     object.location() = location;
 
     exprt dtor_code =
-    cpp_destructor(location, psymb.type, object);
+      cpp_destructor(location, psymb.type, object);
 
     if(dtor_code.is_not_nil())
       block.move_to_operands(dtor_code);

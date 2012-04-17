@@ -5,6 +5,8 @@
 #include "definitions.h"
 #include "iomanip"
 
+#include "vector"
+
 namespace std
 {
 struct ostream
@@ -14,6 +16,8 @@ struct ostream
 
 	ostream(int id): id(id){}
 	int id;
+	streamsize width ( ) const;
+	streamsize width ( streamsize wide );
 	void fill(char c);
 	void precision(int p);
 	void put(char c);
@@ -43,6 +47,13 @@ namespace esbmc
 }
 
 namespace std{
+
+template < typename T >
+inline ostream& operator <<( ostream& o, T i )
+{
+	return o;
+}
+
 inline ostream& operator << (ostream& o, const char*  cstr)
 {
 	esbmc::esbmc_print_cstr(o.id, cstr);

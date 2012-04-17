@@ -221,6 +221,16 @@ goto_symext::symex_step(reachability_treet & art)
     cur_state->source.pc++;
     break;
 
+  case CATCH:
+    symex_catch(*cur_state);
+    cur_state->source.pc++;
+    break;
+
+  case THROW:
+    symex_throw(*cur_state);
+    cur_state->source.pc++;
+    break;
+
   default:
     std::cerr << "GOTO instruction type " << instruction.type;
     std::cerr << " not handled in goto_symext::symex_step" << std::endl;

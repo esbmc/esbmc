@@ -367,7 +367,12 @@ protected:
   /** Perform get_thead_state... defunct. */
   void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
 
-  // dynamic stuff
+  /** Walk back up stack frame looking for exception handler. */
+  void symex_throw(statet &state);
+
+  /** Register exception handler on stack. */
+  void symex_catch(statet &state);
+
   /**
    *  Replace ireps regarding dynamic allocations with code.
    *  Things like "invalid-object" and suchlike are replaced here with

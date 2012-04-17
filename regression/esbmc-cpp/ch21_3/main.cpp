@@ -1,8 +1,8 @@
 // Fig. 21.15: fig21_15.cpp
 // Testing Standard Library vector class template 
 // element-manipulation functions.
+
 #include <iostream>
-#include <iterator>
 using std::cout;
 using std::endl;
 
@@ -10,13 +10,16 @@ using std::endl;
 #include <algorithm>  // copy algorithm
 
 
+#include <iterator> // ostream_iterator iterator
+#include <stdexcept> // out_of_range exception
+
 int main()
 {
    const int SIZE = 6;   
    int array[ SIZE ] = { 1, 2, 3, 4, 5, 6 };
 
    std::vector< int > integers( array, array + SIZE );
-   std::ostreambuf_iterator< int > output( cout, " " );
+   std::ostream_iterator< int > output( cout, " " );
 
    cout << "Vector integers contains: ";
    std::copy( integers.begin(), integers.end(), output );
@@ -25,6 +28,7 @@ int main()
         << "\nLast element of integers: " << integers.back();
 
    integers[ 0 ] = 7;      // set first element to 7
+
    integers.at( 2 ) = 10;  // set element at position 2 to 10
 
    // insert 22 as 2nd element

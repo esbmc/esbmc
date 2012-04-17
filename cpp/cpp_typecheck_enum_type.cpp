@@ -34,13 +34,13 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
   irept::subt &components=body.get_sub();
   
   typet enum_type("symbol");
-  enum_type.set("identifier", enum_symbol.name);
+  enum_type.identifier(enum_symbol.name);
   
   mp_integer i=0;
   
   Forall_irep(it, components)
   {
-    const irep_idt &name=it->get("name");
+    const irep_idt &name=it->name();
     
     if(it->find("value").is_not_nil())
     {
@@ -52,7 +52,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
     }
     
     exprt final_value("constant", enum_type);
-    final_value.set("value", integer2string(i));
+    final_value.value(integer2string(i));
     
     symbolt symbol;
 
@@ -174,6 +174,6 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
 
   // create type symbol
   type=typet("symbol");
-  type.set("identifier", symbol_name);
+  type.identifier(symbol_name);
   qualifiers.write(type);
 }

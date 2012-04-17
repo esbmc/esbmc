@@ -15,18 +15,6 @@ public:
 void arrowStar( Test * );
 void dotStar( Test * );
 
-int main()
-{
-   Test test;    
-  
-   test.value = 8;      // assign value 8 
-   arrowStar( &test );  // pass address to arrowStar
-   dotStar( &test );    // pass address to dotStar
-
-   return 0;
-   
-}  // end main
-
 // access member function of Test object using ->*
 void arrowStar( Test *testPtr )
 {
@@ -46,6 +34,19 @@ void dotStar( Test *testPtr2 )
    cout << ( *testPtr2 ).*vPtr << endl;  // access value
    
 }  // end dotStar
+
+int main()
+{
+   Test test;    
+  
+   test.value = 8;      // assign value 8 
+   arrowStar( &test );  // pass address to arrowStar
+   dotStar( &test );    // pass address to dotStar
+
+   return 0;
+   
+}  // end main
+
 
 /**************************************************************************
  * (C) Copyright 1992-2003 by Deitel & Associates, Inc. and Prentice      *

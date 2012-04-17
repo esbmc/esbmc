@@ -53,7 +53,7 @@ protected:
   std::vector<tokenst::iterator> token_vector;
   
   post current_pos;
-  
+
   // get another token from lexer
   void read_token();
 };

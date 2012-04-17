@@ -12,7 +12,7 @@
 namespace std
 {
   #define STACK_CAPACITY 20
-  template<class T> class stack
+  template<class T, class Container = deque<T> > class stack
   { 
     T buf[STACK_CAPACITY];
     int _top=0;

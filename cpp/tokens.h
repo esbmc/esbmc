@@ -3,7 +3,8 @@
 enum {
 
 Identifier=	258,
-Constant=	262,
+Integer=	259,
+Floating =  260,
 CharConst=	263,
 StringL	=	264,
 AssignOp=	267,

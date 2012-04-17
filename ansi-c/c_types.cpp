@@ -254,3 +254,37 @@ typet long_double_type()
 {
   return build_float_type(config.ansi_c.long_double_width);
 }
+
+/*******************************************************************\
+
+Function: size_type
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+typet size_type()
+{
+  return unsignedbv_typet(config.ansi_c.pointer_width);
+}
+
+/*******************************************************************\
+
+Function: signed_size_type
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+typet signed_size_type()
+{
+  return signedbv_typet(config.ansi_c.pointer_width);
+}
