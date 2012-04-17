@@ -13,15 +13,16 @@ using std::setw;
 #include <vector>
 
 using std::vector;
+using namespace std;
 
 void outputVector( const vector< int > & );
 void inputVector( vector< int > & );
 
 int main()
 {
-   vector< int > integers1( 7 );   // 7-element vector< int >
-   vector< int > integers2( 10 );  // 10-element vector< int >
- 
+   vector< int > integers1;   // 7-element vector< int >
+   vector< int > integers2;  // 10-element vector< int >
+
    // print integers1 size and contents
    cout << "Size of vector integers1 is " 
         << integers1.size()
@@ -58,6 +59,7 @@ int main()
    cout << "\nSize of vector integers3 is "
         << integers3.size()
         << "\nvector after initialization:\n";
+
    outputVector( integers3 );
 
 
@@ -118,6 +120,8 @@ void inputVector( vector< int > &array )
       cin >> array[ i ];
 
 } // end function inputVector
+
+
 
 /**************************************************************************
  * (C) Copyright 1992-2003 by Deitel & Associates, Inc. and Prentice      *

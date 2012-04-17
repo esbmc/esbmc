@@ -24,15 +24,7 @@ Function: cpp_symbol_expr
 
 \*******************************************************************/
 
-extern inline exprt cpp_symbol_expr(const symbolt &symbol)
-{
-  exprt tmp("symbol", symbol.type);
-  tmp.set("identifier", symbol.name);
-  if(symbol.lvalue)
-    tmp.set("#lvalue",true);
-  return tmp;
-}
-
+exprt cpp_symbol_expr(const symbolt &symbol);
 
 /*******************************************************************\
 
@@ -46,12 +38,11 @@ Function: already_typechecked
 
 \*******************************************************************/
 
-
-extern inline void already_typechecked(exprt& expr)
+extern inline void already_typechecked(irept &irep)
 {
-    exprt tmp("already_typechecked");
-    tmp.copy_to_operands(expr);
-    expr.swap(tmp);
+  exprt tmp("already_typechecked");
+  tmp.copy_to_operands(static_cast<exprt &>(irep));
+  irep.swap(tmp);
 }
 
 #endif

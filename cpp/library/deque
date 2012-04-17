@@ -1,5 +1,18 @@
+/*******************************************************************\
+
+Module: 
+
+Author: 
+
+Date: Feb 2012
+
+\*******************************************************************/
+
+
 #ifndef __STL_DEQUE
 #define __STL_DEQUE
+
+#include <vector>
 
 #include "iterator"
 
@@ -11,14 +24,153 @@ namespace std {
     // types:
     typedef T& reference;
     typedef const T& const_reference;
+
+    class iterator{
+      public:
+      iterator(const iterator&);
+      iterator();
+      iterator& operator=(const iterator&);
+
+      T* operator -> ();
+
+      T& operator * ();
+
+      iterator& operator ++ ();
+      iterator& operator ++ (int);
+
+      iterator& operator -- ();
+      iterator& operator -- (int);
+
+      bool operator == ( const iterator&)const;
+      bool operator != ( const iterator&)const;
+
+      bool operator < ( const iterator&)const;
+      bool operator > ( const iterator&)const;
+
+      bool operator <= ( const iterator&)const;
+      bool operator >= ( const iterator&)const;
+
+      iterator operator + (int) const;
+      iterator operator - (int) const;
+
+      iterator& operator += (int);
+      iterator& operator -= (int);
+    };
+
+    class const_iterator
+    {
+      public:
+      const_iterator(const const_iterator&);
+      const_iterator();
+      const_iterator& operator=(const const_iterator&);
+
+      const T* operator -> ();
+
+      const T& operator * ();
+
+      const_iterator& operator ++ ();
+      const_iterator& operator ++ (int);
+
+      const_iterator& operator -- ();
+      const_iterator& operator -- (int);
+
+      bool operator == ( const const_iterator&)const;
+      bool operator != ( const const_iterator&)const;
+
+      bool operator < ( const const_iterator&)const;
+      bool operator > ( const const_iterator&)const;
+
+      bool operator <= ( const const_iterator&)const;
+      bool operator >= ( const const_iterator&)const;
+
+      const_iterator operator + (int) const;
+      const_iterator operator - (int) const;
+
+      const_iterator& operator += (int);
+      const_iterator& operator -= (int);
+    };
+
+    class reverse_iterator{
+      public:
+      reverse_iterator(const reverse_iterator&);
+      reverse_iterator();
+      reverse_iterator& operator=(const reverse_iterator&);
+
+      T* operator -> ();
+
+      T& operator * ();
+
+      reverse_iterator& operator ++ ();
+      reverse_iterator& operator ++ (int);
+
+      reverse_iterator& operator -- ();
+      reverse_iterator& operator -- (int);
+
+      bool operator == ( const reverse_iterator&)const;
+      bool operator != ( const reverse_iterator&)const;
+
+      bool operator < ( const reverse_iterator&)const;
+      bool operator > ( const reverse_iterator&)const;
+
+      bool operator <= ( const reverse_iterator&)const;
+      bool operator >= ( const reverse_iterator&)const;
+
+      reverse_iterator operator + (int) const;
+      reverse_iterator operator - (int) const;
+
+      reverse_iterator& operator += (int);
+      reverse_iterator& operator -= (int);
+    };
+
+    class  const_reverse_iterator {
+      public:
+      const_reverse_iterator(const const_reverse_iterator&);
+      const_reverse_iterator();
+      const_reverse_iterator& operator=(const const_reverse_iterator&);
+
+      const T* operator -> ();
+
+      const T& operator * ();
+
+      const_reverse_iterator& operator ++ ();
+      const_reverse_iterator& operator ++ (int);
+
+      const_reverse_iterator& operator -- ();
+      const_reverse_iterator& operator -- (int);
+
+      bool operator == ( const const_reverse_iterator&)const;
+      bool operator != ( const const_reverse_iterator&)const;
+
+      bool operator < ( const const_reverse_iterator&)const;
+      bool operator > ( const const_reverse_iterator&)const;
+
+      bool operator <= ( const const_reverse_iterator&)const;
+      bool operator >= ( const const_reverse_iterator&)const;
+
+      const_reverse_iterator operator + (int) const;
+      const_reverse_iterator operator - (int) const;
+
+      const_reverse_iterator& operator += (int);
+      const_reverse_iterator& operator -= (int);
+    };
+
     typedef int size_type;
     typedef int difference_type;
     typedef T value_type;
 
     // construct/copy/destroy:
-    explicit deque();
+    explicit deque(): vecOne(), vecTwo() { }
     explicit deque(size_type n);
     explicit deque(size_type n, const T& value);
+    explicit deque(T t[], T* addr): vecOne(), vecTwo() 
+    {         
+        int i=0;
+				while((t+i)<addr)
+          vecOne.push_back(t[i++]);
+				i--;
+				while((t+i)>=t)
+          vecTwo.push_back(t[i--]);
+    }
     deque(const deque<T>& x);
     ~deque();
 
@@ -37,32 +189,79 @@ namespace std {
     const_reverse_iterator rend() const;
 
     // capacity:
-    size_type size() const;
+    size_type size() const
+    {
+	return vecOne.size() + vecTwo.size();
+    }
     size_type max_size() const;
     void resize(size_type sz);
     void resize(size_type sz, T c);
 
-    bool empty() const;
+    bool empty() const
+    {
+	return vecOne.empty() && vecTwo.empty(); 
+    }
 
     // element access:
-    reference operator[](size_type n);
-    const_reference operator[](size_type n) const;
+    reference operator[](size_type i)
+    {
+        int n = vecOne.size();
+        if (i < n)
+            return vecOne [ (n-1) - i ];
+        else
+            return vecTwo [ i - n ];
+    }
+    const_reference operator[](size_type i) const
+    {
+        int n = vecOne.size();
+        if (i < n)
+            return vecOne [ (n-1) - i ];
+        else
+            return vecTwo [ i - n ];
+    }
+
     reference at(size_type n);
     const_reference at(size_type n) const;
-    reference front();
-    const_reference front() const;
-    reference back();
-    const_reference back() const;
+    reference front()
+    {
+        if (vecOne.empty())
+            return vecTwo.front();
+        else
+            return vecOne.back();
+    }
+    const_reference front() const
+    {
+        if (vecOne.empty())
+            return vecTwo.front();
+        else
+            return vecOne.back();
+    }
+
+    reference back()
+    {
+        if (vecOne.empty())
+            return vecTwo.back();
+        else
+            return vecOne.front();
+    }
+
+    const_reference back() const
+    {
+        if (vecOne.empty())
+            return vecTwo.back();
+        else
+            return vecOne.front();
+    }
 
     // modifiers:
-    void push_front(const T& x);
-    void push_back(const T& x);
+    void push_front(const T& x) { vecOne.push_back(x); }
+    void push_back(const T& x)  { vecTwo.push_back(x); }
     iterator insert(iterator position, const T& x);
     void insert(iterator position, size_type n, const T& x);
 
     void pop_front();
     void pop_back();
-    iterator erase(iterator position);
+    iterator erase(iterator position); 
     iterator erase(iterator first, iterator last);
 
     void swap(deque<T>&);
@@ -73,6 +272,11 @@ namespace std {
     bool operator != (const deque<T>&) const;
     bool operator >= (const deque<T>&) const;
     bool operator <= (const deque<T>&) const;
+
+    protected:
+    	vector<T> vecOne;
+    	vector<T> vecTwo;
+
   };
 }
 #endif

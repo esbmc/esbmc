@@ -20,12 +20,14 @@ public:
 
   typedef enum { VAR, TYPE, BOTH } wantt;
 
-  void resolve(
+  exprt resolve(
     const cpp_namet &cpp_name,
-    wantt want,
+    const wantt want,
     const cpp_typecheck_fargst &fargs,
-    exprt &dest);
+    bool fail_with_exception=true);
 
+  // Returns the scope as a side-effect as 'current_scope'.
+  // Should really return explicitly.
   void resolve_scope(
     const cpp_namet &cpp_name,
     std::string &base_name,
@@ -36,6 +38,8 @@ public:
 protected:
   cpp_typecheckt &cpp_typecheck;
   exprt this_expr;
+  locationt location;
+  cpp_scopet *original_scope;
 
   typedef std::set<exprt> resolve_identifierst;
 
@@ -46,11 +50,8 @@ protected:
     const cpp_typecheck_fargst &fargs,
     resolve_identifierst &identifiers);
 
-  void convert_template_argument(
-    const cpp_idt &id,
-    const locationt &location,
-    const irept &template_args,
-    exprt &e);
+  exprt convert_template_argument(
+    const cpp_idt &id);
 
   void convert_identifier(
     const cpp_idt &id,
@@ -60,56 +61,86 @@ protected:
     exprt &e);
 
   void disambiguate(
-    const resolve_identifierst &old_identifiers,
-    resolve_identifierst &new_identifiers,
-    wantt want,
+    resolve_identifierst &identifiers,
     const cpp_typecheck_fargst &fargs);
+
+  void filter(
+    resolve_identifierst &identifiers,
+    const wantt want);
 
   void make_constructors(
     resolve_identifierst &identifiers);
 
   void apply_template_args(
-    const locationt &location,
+    resolve_identifierst &identifiers,
+    const cpp_template_args_non_tct &template_args,
+    const cpp_typecheck_fargst &fargs);
+
+  void apply_template_args(
     exprt &expr,
-    const irept &template_args,
-    const cpp_typecheck_fargst& fargs);
+    const cpp_template_args_non_tct &template_args_non_tc,
+    const cpp_typecheck_fargst &fargs);
+
+  void guess_function_template_args(
+    resolve_identifierst &identifiers,
+    const cpp_typecheck_fargst &fargs);
+
+  void remove_templates(
+    resolve_identifierst &identifiers);
+
+  void remove_duplicates(
+    resolve_identifierst &identifiers);
+
+  exprt guess_function_template_args(
+    const exprt &expr,
+    const cpp_typecheck_fargst &fargs);
+
+  void guess_template_args(
+    const typet &template_parameter,
+    const typet &desired_type);
+
+  void guess_template_args(
+    const exprt &template_parameter,
+    const exprt &desired_expr);
 
   bool disambiguate(
     const exprt &expr,
-    wantt want,
-    unsigned &distance,
+    unsigned &args_distance,
     const cpp_typecheck_fargst &fargs);
 
-  void do_builtin(
-    const locationt &location,
+  exprt do_builtin(
     const irep_idt &base_name,
-    irept &template_args,
-    exprt &dest);
+    irept &template_args);
+
+  void show_identifiers(
+    const std::string &base_name,
+    const resolve_identifierst &identifiers,
+    std::ostream &out);
 
   void resolve_with_arguments(
-    cpp_scopest::id_sett& id_set,
-    const std::string& base_name,
+    cpp_scopest::id_sett &id_set,
+    const std::string &base_name,
     const cpp_typecheck_fargst &fargs);
 
   void filter_for_named_scopes(cpp_scopest::id_sett &id_set);
   void filter_for_namespaces(cpp_scopest::id_sett &id_set);
 
-
   #ifdef CPP_SYSTEMC_EXTENSION
-  void do_builtin_sc_uint_extension(const cpp_namet cpp_name,
-                                    exprt& template_args,
-                                    exprt& dest);
+  exprt do_builtin_sc_uint_extension(
+    const cpp_namet &cpp_name,
+    const cpp_template_args_non_tct &template_args);
 
-  void do_builtin_sc_int_extension(const cpp_namet cpp_name,
-                                    exprt& template_args,
-                                    exprt& dest);
+  exprt do_builtin_sc_int_extension(
+    const cpp_namet &cpp_name,
+    const cpp_template_args_non_tct &template_args);
 
-  void do_builtin_sc_logic_extension(const cpp_namet cpp_name,
-                                    const exprt& template_args,
-                                    exprt& dest);
-  void do_builtin_sc_lv_extension(const cpp_namet cpp_name,
-                                    exprt& template_args,
-                                    exprt& dest);
+  exprt do_builtin_sc_logic_extension(
+    const cpp_namet &cpp_name,
+    const cpp_template_args_non_tct &template_args);
+
+  exprt do_builtin_sc_lv_extension(
+    const cpp_namet &cpp_name,
+    const cpp_template_args_non_tct &template_args);
   #endif
 };
 

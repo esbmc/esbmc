@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <ansi-c/c_final.h>
+#include <ansi-c/cprover_library.h>
 
 #include "cpp_final.h"
 
@@ -26,22 +27,7 @@ bool cpp_final(
   contextt &context,
   message_handlert &message_handler)
 {
-  try
-  {
-    Forall_symbols(it, context.symbols)
-    {
-      symbolt &symbol=it->second;
-
-      if(symbol.mode=="C++" ||
-         symbol.mode=="C")
-        c_finalize_expression(context, symbol.value, message_handler);
-    }
-  }
-
-  catch(int e)
-  {
-    return true;
-  }
+  add_cprover_library(context, message_handler);
 
   return false;
 }

@@ -367,7 +367,12 @@ protected:
   /** Perform get_thead_state... defunct. */
   void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
 
-  // dynamic stuff
+  /** Walk back up stack frame looking for exception handler. */
+  void symex_throw(statet &state);
+
+  /** Register exception handler on stack. */
+  void symex_catch(statet &state);
+
   /**
    *  Replace ireps regarding dynamic allocations with code.
    *  Things like "invalid-object" and suchlike are replaced here with
@@ -378,6 +383,7 @@ protected:
    *  @param expr Expression we're replacing the contents of.
    */
   void replace_dynamic_allocation(exprt &expr);
+  void default_replace_dynamic_allocation(exprt &expr);
 
   /**
    *  Decide if symbol is valid or not.
@@ -527,6 +533,11 @@ protected:
   symex_targett *target;
   /** Target thread we're currently operating upon */
   goto_symex_statet *cur_state;
+  /** Symbol names for modelling arrays.
+   *  These irep_idts contain the names of the arrays being used to store data
+   *  modelling what pointers are active, which are freed, and so forth. As for
+   *  why, well, that's a trainwreck. */
+  irep_idt valid_ptr_arr_name, alloc_size_arr_name, deallocd_arr_name, dyn_info_arr_name;
 };
 
 #endif

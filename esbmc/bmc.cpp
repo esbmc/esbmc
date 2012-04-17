@@ -120,6 +120,8 @@ void bmct::error_trace(const prop_convt &prop_conv,
   goto_tracet goto_trace;
   build_goto_trace(equation, prop_conv, goto_trace);
 
+  goto_trace.metadata_filename = options.get_option("llvm-metadata");
+
   switch(ui)
   {
   case ui_message_handlert::PLAIN:

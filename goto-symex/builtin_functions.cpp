@@ -60,12 +60,13 @@ void goto_symext::symex_malloc(
   symbol.name="symex_dynamic::"+id2string(symbol.base_name);
   symbol.lvalue=true;
   
+  typet renamedtype = ns.follow(type);
   if(size_is_one)
-    symbol.type=type;
+    symbol.type=renamedtype;
   else
   {
     symbol.type=typet(typet::t_array);
-    symbol.type.subtype()=type;
+    symbol.type.subtype()=renamedtype;
     symbol.type.size(size);
   }
 
@@ -170,14 +171,18 @@ void goto_symext::symex_cpp_new(
   symbol.lvalue=true;
   symbol.mode="C++";
   
+  typet newtype;
+  typet renamedtype = ns.follow(code.type().subtype());
   if(do_array)
   {
-    symbol.type=array_typet();
-    symbol.type.subtype()=code.type().subtype();
-    symbol.type.size(code.size_irep());
+    newtype=array_typet();
+    newtype.subtype()=renamedtype;
+    newtype.size(code.size_irep());
   }
   else
-    symbol.type=code.type().subtype();
+    newtype=renamedtype;
+
+  symbol.type = newtype;
 
   //symbol.type.active(symbol_expr(active_symbol));
   symbol.type.dynamic(true);
@@ -187,11 +192,11 @@ void goto_symext::symex_cpp_new(
   // make symbol expression
 
   exprt rhs(exprt::addrof, typet(typet::t_pointer));
-  rhs.type().subtype()=code.type().subtype();
+  rhs.type().subtype()=renamedtype;
   
   if(do_array)
   {
-    exprt index_expr(exprt::index, code.type().subtype());
+    exprt index_expr(exprt::index, renamedtype);
     index_expr.copy_to_operands(symbol_expr(symbol), gen_zero(int_type()));
     rhs.move_to_operands(index_expr);
   }

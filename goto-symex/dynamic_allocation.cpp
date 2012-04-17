@@ -14,6 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/c_types.h>
 
+#include "goto_symex.h"
 #include "dynamic_allocation.h"
 
 /*******************************************************************\
@@ -28,12 +29,10 @@ Function: default_replace_dynamic_allocation
 
 \*******************************************************************/
 
-void default_replace_dynamic_allocation(
-  const namespacet &ns,
-  exprt &expr)
+void goto_symext::default_replace_dynamic_allocation(exprt &expr)
 {
   Forall_operands(it, expr)
-    default_replace_dynamic_allocation(ns, *it);
+    default_replace_dynamic_allocation(*it);
 
   if(expr.id()=="valid_object")
   {
@@ -45,7 +44,7 @@ void default_replace_dynamic_allocation(
     exprt object_expr("pointer_object", uint_type());
     object_expr.move_to_operands(expr.op0());
 
-    exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "alloc"));
+    exprt alloc_array=symbol_expr(ns.lookup(valid_ptr_arr_name));
 
     exprt index_expr(exprt::index, typet(typet::t_bool));
     index_expr.move_to_operands(alloc_array, object_expr);
@@ -62,7 +61,7 @@ void default_replace_dynamic_allocation(
     exprt object_expr("pointer_object", uint_type());
     object_expr.move_to_operands(expr.op0());
 
-    exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "alloc"));
+    exprt alloc_array=symbol_expr(ns.lookup(valid_ptr_arr_name));
 
     exprt index_expr("index", typet("bool"));
     index_expr.move_to_operands(alloc_array, object_expr);
@@ -77,10 +76,7 @@ void default_replace_dynamic_allocation(
     // So, add the precondition that invalid_ptr only ever applies to dynamic
     // objects.
 
-    exprt sym("symbol", array_typet());
-    sym.type().subtype() = bool_typet();
-    sym.type().set("size", "infinity");
-    sym.set("identifier", "c::__ESBMC_is_dynamic");
+    exprt sym = symbol_expr(ns.lookup(dyn_info_arr_name));
     exprt pointerobj("pointer_object", signedbv_typet());
     pointerobj.copy_to_operands(theptr);
     exprt is_dyn("index", bool_typet());
@@ -113,7 +109,7 @@ void default_replace_dynamic_allocation(
     exprt object_expr("pointer_object", uint_type());
     object_expr.move_to_operands(expr.op0());
 
-    exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "deallocated"));
+    exprt alloc_array=symbol_expr(ns.lookup(deallocd_arr_name));
 
     exprt index_expr("memory-leak", typet(typet::t_bool));
     index_expr.move_to_operands(alloc_array, object_expr);
@@ -130,7 +126,7 @@ void default_replace_dynamic_allocation(
     exprt object_expr("pointer_object", int_type()/*uint_type()*/);
     object_expr.move_to_operands(expr.op0());
 
-    exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "alloc_size"));
+    exprt alloc_array=symbol_expr(ns.lookup(alloc_size_arr_name));
 
     exprt index_expr(exprt::index, ns.follow(alloc_array.type()).subtype());
     index_expr.move_to_operands(alloc_array, object_expr);

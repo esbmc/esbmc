@@ -213,6 +213,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
         {
           // some other anonymous member
           it->name("$anon_member"+i2string(anon_member_counter++));
+          it->set_anonymous(true);
           it++;
         }
       }

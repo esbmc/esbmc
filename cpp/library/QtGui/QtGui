@@ -1,0 +1,78 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+#include "QString"
+//#include "QApplication/QApplication"
+#include "QApplication"
+
+# define SIGNAL(a)   qFlagLocation("2"#a)
+# define SLOT(a)     qFlagLocation("1"#a)
+
+typedef const char * qApp;
+
+enum	ConnectionType { AutoConnection, DirectConnection, QueuedConnection, BlockingQueuedConnection, UniqueConnection, AutoCompatConnection };
+
+const char *qFlagLocation(const char *method){}
+void	clicked ( bool checked = false ){}
+
+class QLayout{
+	QLayout (){}
+};
+
+class QWidget{
+public:
+void	setLayout ( QLayout * layout ){}
+void	setLayout ( void * layout ){}
+void	show (){}
+};
+
+class QTextEdit{
+public:
+	QTextEdit ( QWidget * parent = 0 ){}
+	QTextEdit ( const QString & text, QWidget * parent = 0 ){}
+	~QTextEdit (){}
+};
+
+class QPushButton{
+public:
+	QPushButton ( QWidget * parent = 0 ){}
+	QPushButton ( const QString & text, QWidget * parent = 0 ){}
+};
+
+class QVBoxLayout{
+public:
+	QVBoxLayout (){}
+	QVBoxLayout ( QWidget * parent ){}
+	~QVBoxLayout (){}
+	QVBoxLayout	addWidget ( QTextEdit * w ){}
+	QVBoxLayout	addWidget ( QPushButton * w ){}
+};
+
+class QObject
+{
+public:
+	QObject ( QObject * parent = 0 ){}
+	~QObject (){}
+	static bool connect(QPushButton *, const char *, const char *, const char *){}
+
+#if 0	
+	static bool connect(const QObject *sender, const char *signal,
+                        const QObject *receiver, const char *member, ConnectionType =
+#ifdef qdoc
+                        AutoConnection
+#else
+#ifdef QT3_SUPPORT
+                        AutoCompatConnection
+#else
+                        AutoConnection
+#endif
+#endif
+        ){}
+#endif
+
+};

@@ -291,7 +291,13 @@ public:
   {
     operands().resize(2);
   }
- 
+
+  inline index_exprt(const exprt &_array, const exprt &_index):
+    exprt(exprt::index, _array.type().subtype())
+  {
+    copy_to_operands(_array, _index);
+  }
+
   inline exprt &array()
   {
     return op0();
@@ -477,9 +483,14 @@ dynamic_object_exprt &to_dynamic_object_expr(exprt &expr);
 class typecast_exprt:public exprt
 {
 public:
-  explicit typecast_exprt(const typet &_type):exprt(exprt::typecast, _type)
+  inline explicit typecast_exprt(const typet &_type):exprt(exprt::typecast, _type)
   {
     operands().resize(1);
+  }
+
+  inline typecast_exprt(const exprt &op, const typet &_type):exprt(exprt::typecast, _type)
+  {
+    copy_to_operands(op);
   }
 
   inline exprt &op()
@@ -768,6 +779,16 @@ public:
   void set_component_name(const irep_idt &component_name)
   {
     this->component_name(component_name);
+  }
+
+  inline const exprt &struct_op() const
+  {
+    return op0();
+  }
+
+  inline exprt &struct_op()
+  {
+    return op0();
   }
 };
 

@@ -26,21 +26,23 @@ Function: cpp_typecheckt::convert_initializer
 
  Outputs:
 
- Purpose: Initialize an object with a value.
+ Purpose: Initialize an object with a value
 
 \*******************************************************************/
 
 void cpp_typecheckt::convert_initializer(symbolt &symbol)
 {
   // this is needed for template arguments that are types
+
   if(symbol.is_type)
   {
     if(symbol.value.is_nil()) return;
 
     if(symbol.value.id()!="type")
     {
-      str << "expected type as initializer for `" << symbol.base_name
-          << "'";
+      err_location(symbol.location);
+      str << "expected type as initializer for `"
+          << symbol.base_name << "'";
       throw 0;
     }
 
@@ -55,6 +57,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
     // do we need one?
     if(is_reference(symbol.type))
     {
+      err_location(symbol.location);
       str << "`" << symbol.base_name
           << "' is declared as reference but is not initialized";
       throw 0;
@@ -77,63 +80,64 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
        symbol.type.subtype().id() == "code" &&
        symbol.value.id() == "address_of" &&
        symbol.value.op0().id() == "cpp-name")
+    {
+      // initialization of a function pointer with
+      // the address of a function: use pointer type information
+      // for the sake of overload resolution
+
+      cpp_typecheck_fargst fargs;
+      fargs.in_use = true;
+
+      const code_typet& code_type = to_code_type(symbol.type.subtype());
+
+      for(code_typet::argumentst::const_iterator
+          ait=code_type.arguments().begin();
+          ait!=code_type.arguments().end();
+          ait++)
       {
-        // initialization of a function pointer with
-        // the address of a function: use pointer type information
-        // for the sake of overload resolution
+        exprt new_object("new_object");
+        new_object.set("#lvalue", true);
+        new_object.type() = ait->type();
 
-        cpp_typecheck_fargst fargs;
-        fargs.in_use = true;
-
-        const code_typet& code_type = to_code_type(symbol.type.subtype());
-        for(code_typet::argumentst::const_iterator ait = code_type.arguments().begin();
-            ait != code_type.arguments().end(); ait++)
+        if(ait->cmt_base_name()=="this")
         {
-          exprt new_object("new_object");
-          new_object.set("#lvalue", true);
-          new_object.type() = ait->type();
-
-          if(ait->get("#base_name") == "this")
-          {
-            fargs.has_object = true;
-            new_object.type() = ait->type().subtype();
-          }
-
-          fargs.operands.push_back(new_object);
+          fargs.has_object = true;
+          new_object.type() = ait->type().subtype();
         }
 
-        exprt resolved_expr;
+        fargs.operands.push_back(new_object);
+      }
 
-        resolve(
-        static_cast<cpp_namet &>(static_cast<irept &>(symbol.value.op0())),
-        cpp_typecheck_resolvet::BOTH, fargs, resolved_expr);
-        assert(symbol.type.subtype() == resolved_expr.type());
+      exprt resolved_expr=resolve(
+        to_cpp_name(static_cast<irept &>(symbol.value.op0())),
+        cpp_typecheck_resolvet::BOTH, fargs);
 
-        if(resolved_expr.id() == "symbol")
-        {
-          symbol.value=  
-            address_of_exprt(resolved_expr);
-        }
-        else if(resolved_expr.id() == "member")
-        {
-          symbol.value =
-            address_of_exprt(symbol_expr(lookup(resolved_expr.get("component_name"))));
-          symbol.value.type().add("to-member") = resolved_expr.op0().type();
-        }
-        else
-        {
-          assert(0);
-        }
-        
-        if(symbol.type != symbol.value.type())
-        {
-          err_location(symbol.location);
-          str << "conversion from `"
-              << to_string(symbol.value.type()) << "' to `"
-              << to_string(symbol.type) << "' ";
-          throw 0;
-        }
-        return;
+      assert(symbol.type.subtype() == resolved_expr.type());
+
+      if(resolved_expr.id() == "symbol")
+      {
+        symbol.value=
+          address_of_exprt(resolved_expr);
+      }
+      else if(resolved_expr.id() == "member")
+      {
+        symbol.value =
+          address_of_exprt(symbol_expr(lookup(resolved_expr.component_name())));
+        symbol.value.type().add("to-member") = resolved_expr.op0().type();
+      }
+      else
+        assert(false);
+
+      if(symbol.type != symbol.value.type())
+      {
+        err_location(symbol.location);
+        str << "conversion from `"
+            << to_string(symbol.value.type()) << "' to `"
+            << to_string(symbol.type) << "' ";
+        throw 0;
+      }
+
+      return;
     }
 
     typecheck_expr(symbol.value);
@@ -186,21 +190,20 @@ void cpp_typecheckt::zero_initializer(
   const locationt &location,
   exprt::operandst &ops)
 {
-
   const typet &final_type=follow(type);
 
   if(final_type.id()=="struct")
   {
     std::list<codet> lst;
 
-    forall_irep(cit, final_type.find("components").get_sub())
+    forall_irep(cit, final_type.components().get_sub())
     {
       const exprt &component=static_cast<const exprt &>(*cit);
 
       if(component.type().id()=="code")
         continue;
 
-      if(component.get_bool("is_type"))
+      if(component.is_type())
         continue;
 
       if(component.get_bool("is_static"))
@@ -208,7 +211,7 @@ void cpp_typecheckt::zero_initializer(
 
       exprt member("member");
       member.copy_to_operands(object);
-      member.set("component_name", component.get("name"));
+      member.component_name(component.name());
 
       // recursive call
       zero_initializer(member, component.type(), location, ops);
@@ -225,7 +228,7 @@ void cpp_typecheckt::zero_initializer(
       typecheck_expr(obj);
 
       codet assign;
-      assign.set("statement", "assign");
+      assign.statement("assign");
       assign.copy_to_operands(obj, value);
       assign.location()=location;
       ops.push_back(assign);
@@ -263,7 +266,7 @@ void cpp_typecheckt::zero_initializer(
     exprt comp;
     comp.make_nil();
 
-    forall_irep(it, final_type.find("components").get_sub())
+    forall_irep(it, final_type.components().get_sub())
     {
       const exprt &component=static_cast<const exprt &>(*it);
 
@@ -288,13 +291,13 @@ void cpp_typecheckt::zero_initializer(
     if(comp_size>0)
     {
       irept name("name");
-      name.set("identifier", comp.get("base_name"));
+      name.identifier(comp.base_name());
       cpp_namet cpp_name;
       cpp_name.move_to_sub(name);
 
       exprt member("member");
       member.copy_to_operands(object);
-      member.set("component_cpp_name",cpp_name);
+      member.set("component_cpp_name", cpp_name);
       zero_initializer(member, comp.type(), location, ops);
     }
   }
@@ -308,12 +311,12 @@ void cpp_typecheckt::zero_initializer(
     already_typechecked(zero);
 
     codet assign;
-    assign.set("statement", "assign");
+    assign.statement("assign");
     assign.copy_to_operands(object, zero);
     assign.location()=location;
 
     typecheck_expr(assign.op0());
-    assign.op0().type().set("#constant", false);
+    assign.op0().type().cmt_constant(false);
     already_typechecked(assign.op0());
 
     typecheck_code(assign);
@@ -324,12 +327,12 @@ void cpp_typecheckt::zero_initializer(
     assert(gen_zero(final_type).is_not_nil());
 
     codet assign;
-    assign.set("statement", "assign");
+    assign.statement("assign");
     assign.copy_to_operands(object, gen_zero(final_type));
     assign.location()=location;
 
     typecheck_expr(assign.op0());
-    assign.op0().type().set("#constant", false);
+    assign.op0().type().cmt_constant(false);
     already_typechecked(assign.op0());
 
     typecheck_code(assign);

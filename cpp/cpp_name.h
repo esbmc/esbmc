@@ -49,34 +49,26 @@ public:
 
   bool has_template_args() const
   {
-      forall_irep(it, get_sub())
+    forall_irep(it, get_sub())
       if(it->id()=="template_args")
         return true;
+
     return false;
   }
 
-  void to_string(std::string& str) const
-  {
-    forall_irep(it, get_sub())
-    {
-      if(it->id()=="::")str += "::";
-      else if(it->id()=="template_args")
-        str += "<...>";
-      else str += it->get("identifier").as_string();
-    }
-  }
+  std::string to_string() const;
 };
 
 inline cpp_namet &to_cpp_name(irept &cpp_name)
 {
-    assert(cpp_name.id() == "cpp-name");
-    return static_cast<cpp_namet&>(cpp_name);
+  assert(cpp_name.id() == "cpp-name");
+  return static_cast<cpp_namet&>(cpp_name);
 }
 
 inline const cpp_namet &to_cpp_name(const irept &cpp_name)
 {
-    assert(cpp_name.id() == "cpp-name");
-    return static_cast<const cpp_namet&>(cpp_name);
+  assert(cpp_name.id() == "cpp-name");
+  return static_cast<const cpp_namet&>(cpp_name);
 }
 
 #endif

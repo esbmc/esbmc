@@ -443,6 +443,16 @@ public:
     assert(code.get_statement()=="expression");
     return static_cast<const code_expressiont &>(code);
   }
+
+  inline const exprt &expression() const
+  {
+    return op0();
+  }
+
+  inline exprt &expression()
+  {
+    return op0();
+  }
 };
 
 code_expressiont &to_code_expression(codet &code);

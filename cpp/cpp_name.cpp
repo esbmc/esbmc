@@ -8,8 +8,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <assert.h>
 
-#include "cpp_name.h"
 #include <sstream>
+
+#include "cpp_name.h"
+
 /*******************************************************************\
 
 Function: cpp_namet::convert
@@ -28,7 +30,7 @@ void cpp_namet::convert(
 {
   forall_irep(it, get_sub())
   {
-    const std::string id=it->id_string();
+    const irep_idt id=it->id();
 
     std::string name_component;
 
@@ -51,4 +53,33 @@ void cpp_namet::convert(
     else
       base_name+=name_component;
   }
+}
+
+/*******************************************************************\
+
+Function: cpp_namet::to_string
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string cpp_namet::to_string() const
+{
+  std::string str;
+
+  forall_irep(it, get_sub())
+  {
+    if(it->id()=="::")
+      str += it->id_string();
+    else if(it->id()=="template_args")
+      str += "<...>";
+    else
+      str+=it->get_string("identifier");
+  }
+
+  return str;
 }

@@ -33,7 +33,7 @@ void cpp_declaratort::output(std::ostream &out) const
 
 /*******************************************************************\
 
-Function: cpp_declaratort::convert
+Function: cpp_declaratort::merge_type
 
   Inputs:
 
@@ -43,9 +43,9 @@ Function: cpp_declaratort::convert
 
 \*******************************************************************/
 
-typet cpp_declaratort::convert(const typet &declaration_type) const
+typet cpp_declaratort::merge_type(const typet &declaration_type) const
 {
-  typet dest_type(type());
+  typet dest_type=type();
 
   if(declaration_type.id()=="cpp-cast-operator")
     return dest_type;

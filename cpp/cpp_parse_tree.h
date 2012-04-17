@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 class cpp_parse_treet
 {
 public:
-  // the (global) declarations/definitions
+  // the (top-level) declarations/definitions
 
   typedef std::list<cpp_itemt> itemst;
   itemst items;

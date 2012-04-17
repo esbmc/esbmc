@@ -681,8 +681,7 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
     create_union_type(type, bv);
   } else if (type.id() == "pointer")     {
     create_pointer_type(bv);
-  } else if (type.id() == "symbol" || type.id() == "empty" ||
-             type.id() == "c_enum")     {
+  } else if (type.id() == "empty" || type.id() == "c_enum")     {
     if (int_encoding)
       bv = Z3_mk_int_type(z3_ctx);
     else

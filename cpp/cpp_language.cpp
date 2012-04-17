@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <fstream>
 
 #include <config.h>
+#include <replace_symbol.h>
 
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/c_link.h>
@@ -23,6 +24,34 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_parser.h"
 #include "cpp_typecheck.h"
 #include "cpp_final.h"
+
+/*******************************************************************\
+
+Function: cpp_languaget::extensions
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::set<std::string> cpp_languaget::extensions() const
+{
+  std::set<std::string> s;
+
+  s.insert("cpp");
+  s.insert("cc");
+  s.insert("ipp");
+  s.insert("cxx");
+
+  #ifndef _WIN32
+  s.insert("C");
+  #endif
+
+  return s;
+}
 
 /*******************************************************************\
 
@@ -59,6 +88,9 @@ bool cpp_languaget::preprocess(
   std::ostream &outstream,
   message_handlert &message_handler)
 {
+  if(path=="")
+    return c_preprocess(instream, "", outstream, true, message_handler);
+
   // check extension
 
   const char *ext=strrchr(path.c_str(), '.');
@@ -79,7 +111,7 @@ bool cpp_languaget::preprocess(
 
 /*******************************************************************\
 
-Function: cpp_languaget::interal_additions
+Function: cpp_languaget::internal_additions
 
   Inputs:
 
@@ -104,8 +136,10 @@ void cpp_languaget::internal_additions(std::ostream &out)
 
   // for dynamic objects
   out << "unsigned __CPROVER::constant_infinity_uint;" << std::endl;
-  out << "extern \"C\" bool __ESBMC_alloc[__CPROVER::constant_infinity_uint];" << std::endl;
-  out << "extern \"C\" unsigned __ESBMC_alloc_size[__CPROVER::constant_infinity_uint];" << std::endl;
+  out << "bool __ESBMC_alloc[__CPROVER::constant_infinity_uint];" << std::endl;
+  out << "unsigned __ESBMC_alloc_size[__CPROVER::constant_infinity_uint];" << std::endl;
+  out << " bool __ESBMC_deallocated[__CPROVER::constant_infinity_uint];" << std::endl;
+  out << "bool __ESBMC_is_dynamic[__CPROVER::constant_infinity_uint];" << std::endl;
 
   // GCC stuff
   out << "extern \"C\" {" << std::endl;
@@ -119,6 +153,8 @@ void cpp_languaget::internal_additions(std::ostream &out)
 
   out << "}" << std::endl;
 }
+
+/*******************************************************************\
 
 /*******************************************************************\
 
@@ -222,7 +258,7 @@ bool cpp_languaget::final(
   message_handlert &message_handler)
 {
   if(cpp_final(context, message_handler)) return true;
-  if(c_main(context, "cpp::", "c::main", message_handler)) return true;
+  if(c_main(context, "c::", "c::main", message_handler)) return true;
 
   return false;
 }
@@ -269,9 +305,6 @@ void cpp_languaget::show_parse(
     const cpp_linkage_spect &linkage_spec=
       item.get_linkage_spec();
 
-    out << "LINKAGE " << linkage_spec.linkage().get("value")
-        << ":" << std::endl;
-
     for(cpp_linkage_spect::itemst::const_iterator
         it=linkage_spec.items().begin();
         it!=linkage_spec.items().end();
@@ -300,7 +333,10 @@ void cpp_languaget::show_parse(
   {
     const cpp_usingt &cpp_using=item.get_using();
 
-    out << "USING " << cpp_using.name() << std::endl;
+    out << "USING ";
+    if(cpp_using.get_namespace())
+      out << "NAMESPACE ";
+    out << cpp_using.name() << std::endl;
     out << std::endl;
   }
   else if(item.is_declaration())
@@ -422,29 +458,6 @@ bool cpp_languaget::to_expr(
 
   return result;
 }
-
-
-/*******************************************************************\
-
-Function: cpp_languaget::merge_context
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool cpp_languaget::merge_context(
-  contextt &dest,
-  contextt &src,
-  message_handlert &message_handler,
-  const std::string &module) const
-{
-  return c_link(dest, src, message_handler, module);
-}
-
 
 /*******************************************************************\
 
