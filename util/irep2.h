@@ -17,6 +17,7 @@ class prop_convt;
 
 class type2t;
 class expr2t;
+class constant_array2t;
 typedef boost::shared_ptr<type2t> type2tc;
 typedef boost::shared_ptr<expr2t> expr2tc;
 
@@ -393,6 +394,9 @@ class constant_string2t : public const_expr_body<constant_string2t>
 public:
   constant_string2t(const type2tc type, const std::string &stringref);
   constant_string2t(const constant_string2t &ref);
+
+  /** Convert string to a constant length array */
+  expr2tc to_array(void) const;
 
   /** Arbitary precision integer record. */
   const std::string value;

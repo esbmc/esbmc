@@ -378,6 +378,34 @@ constant_string2t::constant_string2t(const constant_string2t &ref)
 {
 }
 
+expr2tc
+constant_string2t::to_array(void) const
+{
+  std::vector<expr2tc> contents;
+  unsigned int length = value.size(), i;
+
+  unsignedbv_type2t *type = new unsignedbv_type2t(8);
+  type2tc tp(type);
+
+  for (i = 0; i < length; i++) {
+    constant_int2t *v = new constant_int2t(tp, BigInt(value[i]));
+    expr2tc ptr(v);
+    contents.push_back(ptr);
+  }
+
+  unsignedbv_type2t *len_type = new unsignedbv_type2t(config.ansi_c.int_width);
+  type2tc len_tp(len_type);
+  constant_int2t *len_val = new constant_int2t(len_tp, BigInt(length));
+  expr2tc len_val_ref(len_val);
+
+  array_type2t *arr_type = new array_type2t(tp, len_val_ref, false);
+  type2tc arr_tp(arr_type);
+  constant_array2t *a = new constant_array2t(arr_tp, contents);
+
+  expr2tc final_val(a);
+  return final_val;
+}
+
 constant_array2t::constant_array2t(const type2tc type,
                                    const std::vector<expr2tc> &members)
   : const_expr_body<constant_array2t>(type, constant_array_id),
