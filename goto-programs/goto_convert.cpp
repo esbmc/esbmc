@@ -1405,7 +1405,6 @@ Function: goto_convertt::get_struct_components
 
 void get_struct_components(const exprt &exp, struct_typet &str)
 {
-  DEBUGLOC;
   if (exp.is_symbol())
   {
       unsigned int size = str.components().size();
@@ -1443,7 +1442,6 @@ void get_struct_components(const exprt &exp, struct_typet &str)
   {
     std::cout << "expression not supported yet: " << exp.pretty() << std::endl;
   }
-  DEBUGLOC;
 }
 
 /*******************************************************************\
@@ -1700,7 +1698,36 @@ void goto_convertt::make_nondet_assign(
     new_expr.copy_to_operands(exprt("member_name"));
     new_expr.move_to_operands(rhs_expr);
 
-    new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+    if (!state.components()[j].operands().size())
+    {
+      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+      assert(!new_expr.op1().get_string("component_name").empty());
+    }
+    else
+    {
+      forall_operands(it, state.components()[j])
+      {
+        new_expr.op1().component_name(it->get_string("identifier"));
+        assert(!new_expr.op1().get_string("component_name").empty());
+      }
+    }
+
+#if 0
+    if (state.components()[j].is_typecast() && state.components()[j].operands().size())
+    {
+      new_expr.op1().component_name(state.components()[j].op0().get_string("identifier"));
+      assert(!new_expr.op1().get_string("component_name").empty());
+    }
+    else
+    {
+      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+      assert(!new_expr.op1().get_string("component_name").empty());
+    }
+#endif
+
+ 
+//    new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+//    assert(!new_expr.op1().get_string("component_name").empty());
 
     code_assignt new_assign(lhs_expr,new_expr);
     copy(new_assign, ASSIGN, dest);
@@ -1709,7 +1736,7 @@ void goto_convertt::make_nondet_assign(
 
 /*******************************************************************\
 
-Function: goto_convertt::make_nondet_assign
+Function: goto_convertt::assign_current_state
 
   Inputs:
 
@@ -1740,7 +1767,19 @@ void goto_convertt::assign_current_state(
     new_expr.copy_to_operands(exprt("member_name"));
     new_expr.move_to_operands(rhs_expr);
 
-    new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+    if (!state.components()[j].operands().size())
+    {
+      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+      assert(!new_expr.op1().get_string("component_name").empty());
+    }
+    else
+    {
+      forall_operands(it, state.components()[j])
+      {
+      new_expr.op1().component_name(it->get_string("identifier"));
+      assert(!new_expr.op1().get_string("component_name").empty());
+      }
+    }
 
     code_assignt new_assign(lhs_expr,new_expr);
     copy(new_assign, ASSIGN, dest);
@@ -2778,6 +2817,7 @@ Function: goto_convertt::replace_ifthenelse
 void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
+DEBUGLOC;
   std::string identifier;
 
   identifier = "cs$"+i2string(state_counter);
@@ -2793,6 +2833,7 @@ void goto_convertt::replace_ifthenelse(
     new_expr.reserve_operands(1);
     new_expr.copy_to_operands(lhs_struct);
     new_expr.component_name(expr.op0().get_string("identifier"));
+    assert(!new_expr.get_string("component_name").empty());
 
     const struct_typet &struct_type = to_struct_type(lhs_struct.type());
     const struct_typet::componentst &components = struct_type.components();
@@ -2806,6 +2847,7 @@ void goto_convertt::replace_ifthenelse(
       if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
       {
 	it->swap(expr);
+	//it->type() = expr.type();
         found=true;
       }
     }
@@ -2820,7 +2862,26 @@ void goto_convertt::replace_ifthenelse(
     new_expr.reserve_operands(1);
     new_expr.copy_to_operands(lhs_struct);
     new_expr.component_name(expr.op0().get_string("identifier"));
-    expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
+    assert(!new_expr.get_string("component_name").empty());
+
+    const struct_typet &struct_type = to_struct_type(lhs_struct.type());
+    const struct_typet::componentst &components = struct_type.components();
+    u_int i = 0;
+
+    for (struct_typet::componentst::const_iterator
+         it = components.begin();
+         it != components.end();
+         it++, i++)
+    {
+      if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
+      {
+        found=true;
+	break;
+
+      }
+    }
+    if (found)
+      expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
   }
 }
 

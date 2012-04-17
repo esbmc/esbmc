@@ -2762,6 +2762,12 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
   {
     if (it->get("name").compare(rhs.get_string("component_name")) == 0)
       return i;
+    else if (it->is_typecast())
+    {
+      if (it->op0().get_string("identifier").compare(rhs.get_string("component_name")) == 0)
+        return i;
+    } 
+
   }
 
   throw new conv_error("component name not found in struct", lhs);
