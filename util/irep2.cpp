@@ -198,6 +198,17 @@ code_type2t::get_width(void) const
   assert(0 && "Fetching width of code type - invalid operation");
 }
 
+string_type2t::string_type2t()
+  : type_body<string_type2t>(string_id)
+{
+}
+
+unsigned int
+string_type2t::get_width(void) const
+{
+  assert(0 && "Fetching width of string type - needs consideration");
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)
@@ -356,7 +367,8 @@ constant_union2t::constant_union2t(const constant_union2t &ref)
 {
 }
 
-constant_string2t::constant_string2t(type2tc type, const std::string &stringref)
+constant_string2t::constant_string2t(const type2tc type,
+                                     const std::string &stringref)
   : const_expr_body<constant_string2t>(type, constant_string_id), value(stringref)
 {
 }

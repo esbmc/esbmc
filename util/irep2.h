@@ -391,7 +391,7 @@ public:
 class constant_string2t : public const_expr_body<constant_string2t>
 {
 public:
-  constant_string2t(type2tc type, const std::string &stringref);
+  constant_string2t(const type2tc type, const std::string &stringref);
   constant_string2t(const constant_string2t &ref);
 
   /** Arbitary precision integer record. */

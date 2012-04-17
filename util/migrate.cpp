@@ -216,6 +216,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     constant_union2t *u = new constant_union2t(new_type, members);
     new_expr_ref = expr2tc(u);
     return true;
+  } else if (expr.id() == "string-constant") {
+    std::string thestring = expr.value().as_string();
+    type2tc t = type2tc(new string_type2t()); // XXX-global static string type?
+
+    constant_string2t *s = new constant_string2t(t, thestring);
+    new_expr_ref = expr2tc(s);
+    return true;
   } else {
     return false;
   }
