@@ -1032,6 +1032,55 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast value;
+
+  // Converts a static struct/union - IE, one that hasn't had any "with"
+  // operations applied to it, perhaps due to initialization or constant
+  // propagation.
+  struct_union_type2t *type = dynamic_cast<struct_union_type2t*>(data.type.get());
+  u_int i = 0;
+
+  assert(type->members.size() >= data.datatype_members.size());
+  assert(!type->members.empty());
+
+  Z3_sort sort;
+  type->convert_smt_type(*this, (void*&)sort);
+
+  unsigned size = type->members.size();
+  if (data.expr_id == expr2t::constant_union_id)
+    size++;
+
+  Z3_ast *args = (Z3_ast*)alloca(sizeof(Z3_ast) * size);
+
+  int numoperands = data.datatype_members.size();
+  // Populate tuple with members of that struct/union
+  for (std::vector<expr2tc>::const_iterator it = data.datatype_members.begin();
+       it != data.datatype_members.end(); it++, i++)
+  {
+    if (i < numoperands) {
+      (*it)->convert_smt(*this, (void *&)args[i]);
+    } else {
+      // Turns out that unions don't necessarily initialize all members.
+      // If no initialization give, use free (fresh) variable.
+      Z3_sort s;
+      (*it)->type->convert_smt_type(*this, (void*&)sort);
+      args[i] = Z3_mk_fresh_const(z3_ctx, NULL, s);
+    }
+  }
+
+  // Update unions "last-set" member to be the last field
+  if (data.expr_id == expr2t::constant_union_id)
+    args[size-1] = convert_number(i, config.ansi_c.int_width, false);
+
+  // Create tuple itself, return to caller. This is a lump of data, we don't
+  // need to bind it to a name or symbol.
+  bv = z3_api.mk_tuple(sort, args, size);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
