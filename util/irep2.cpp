@@ -257,6 +257,23 @@ expr2tc const_expr_body<derived>::clone(void) const
   return expr2tc(new_obj);
 }
 
+template <class derived>
+void
+const_datatype_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
+{
+  const derived *new_this = static_cast<const derived*>(this);
+  obj.convert_smt_expr(*new_this, arg);
+  return;
+}
+
+template <class derived>
+expr2tc const_datatype_body<derived>::clone(void) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return expr2tc(new_obj);
+}
+
 /**************************** Expression constructors *************************/
 
 symbol2t::symbol2t(const type2tc type, irep_idt _name)
@@ -303,5 +320,27 @@ typecast2t::typecast2t(const type2tc type, const expr2tc expr)
 
 typecast2t::typecast2t(const typecast2t &ref)
   : expr_body<typecast2t>::expr_body(ref), from(ref.from)
+{
+}
+
+constant_datatype2t::constant_datatype2t(const type2tc type, expr_ids id,
+                                         const std::vector<expr2tc> &members)
+  : const_expr_body<constant_datatype2t>(type, id), datatype_members(members)
+{
+}
+
+constant_datatype2t::constant_datatype2t(const constant_datatype2t &ref)
+  : const_expr_body<constant_datatype2t>(ref)
+{
+}
+
+constant_struct2t::constant_struct2t(const type2tc type,
+                                     const std::vector<expr2tc> &members)
+  : const_datatype_body<constant_struct2t>(type, constant_struct_id, members)
+{
+}
+
+constant_struct2t::constant_struct2t(const constant_struct2t &ref)
+  : const_datatype_body<constant_struct2t>(ref)
 {
 }
