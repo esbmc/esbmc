@@ -377,7 +377,8 @@ goto_convert_functionst::collect_expr(const irept &expr, typename_sett &deps)
 }
 
 void
-goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym)
+goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
+                                      const irep_idt &sname)
 {
 
   if (type.id() == "pointer")
@@ -399,6 +400,19 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym)
  
   typet type2;
   if (type.id() == "symbol") {
+    if (type.identifier() == sname) {
+      // A recursive symbol -- the symbol we're about to link to is in fact the
+      // one that initiated this chain of renames. This leads to either infinite
+      // loops or segfaults, depending on the phase of the moon.
+      // It should also never happen, but with C++ code it does, because methods
+      // are part of the type, and methods can take a full struct/object as a
+      // parameter, not just a reference/pointer. So, that's a legitimate place
+      // where we have this recursive symbol dependancy situation.
+      // The workaround to this is to just ignore it, and hope that it doesn't
+      // become a problem in the future.
+      return;
+    }
+
     const symbolt *sym;
     if (!ns.lookup(type.identifier(), sym)) {
       // If we can just look up the current type symbol, use that.
@@ -435,12 +449,13 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym)
     return;
   }
 
-  rename_exprs(type, cur_name_sym);
+  rename_exprs(type, cur_name_sym, sname);
   return;
 }
 
 void
-goto_convert_functionst::rename_exprs(irept &expr, const symbolt &cur_name_sym)
+goto_convert_functionst::rename_exprs(irept &expr, const symbolt &cur_name_sym,
+                                      const irep_idt &sname)
 {
   std::string origstr = expr.pretty(0);
 
@@ -448,25 +463,26 @@ goto_convert_functionst::rename_exprs(irept &expr, const symbolt &cur_name_sym)
     return;
 
   Forall_irep(it, expr.get_sub())
-    rename_exprs(*it, cur_name_sym);
+    rename_exprs(*it, cur_name_sym, sname);
 
   Forall_named_irep(it, expr.get_named_sub()) {
     if (it->first == "type" || it->first == "subtype") {
-      rename_types(it->second, cur_name_sym);
+      rename_types(it->second, cur_name_sym, sname);
     } else {
-      rename_exprs(it->second, cur_name_sym);
+      rename_exprs(it->second, cur_name_sym, sname);
     }
   }
 
   Forall_named_irep(it, expr.get_comments())
-    rename_exprs(it->second, cur_name_sym);
+    rename_exprs(it->second, cur_name_sym, sname);
 
   return;
 }
 
 void
 goto_convert_functionst::wallop_type(irep_idt name,
-                         std::map<irep_idt, std::set<irep_idt> > &typenames)
+                         std::map<irep_idt, std::set<irep_idt> > &typenames,
+                         const irep_idt &sname)
 {
 
   // If this type doesn't depend on anything, no need to rename anything.
@@ -476,11 +492,11 @@ goto_convert_functionst::wallop_type(irep_idt name,
 
   // Iterate over our dependancies ensuring they're resolved.
   for (std::set<irep_idt>::iterator it = deps.begin(); it != deps.end(); it++)
-    wallop_type(*it, typenames);
+    wallop_type(*it, typenames, sname);
 
   // And finally perform renaming.
   symbolst::iterator it = context.symbols.find(name);
-  rename_types(it->second.type, it->second);
+  rename_types(it->second.type, it->second, sname);
   deps.clear();
   return;
 }
@@ -526,12 +542,12 @@ goto_convert_functionst::thrash_type_symbols(void)
   // has. With at least a meg of stack, I doubt that's really a problem.
   std::map<irep_idt, std::set<irep_idt> >::iterator it;
   for (it = typenames.begin(); it != typenames.end(); it++)
-    wallop_type(it->first, typenames);
+    wallop_type(it->first, typenames, it->first);
 
   // And now all the types have a fixed form, assault all existing code.
   Forall_symbols(it, context.symbols) {
-    rename_types(it->second.type, it->second);
-    rename_exprs(it->second.value, it->second);
+    rename_types(it->second.type, it->second, it->first);
+    rename_exprs(it->second.value, it->second, it->first);
   }
 
   return;

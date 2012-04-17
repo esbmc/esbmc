@@ -32,9 +32,12 @@ public:
   void thrash_type_symbols(void);
   void collect_type(const irept &type, typename_sett &set);
   void collect_expr(const irept &expr, typename_sett &set);
-  void rename_types(irept &type, const symbolt &cur_name_sym);
-  void rename_exprs(irept &expr, const symbolt &cur_name_sym);
-  void wallop_type(irep_idt name, typename_mapt &typenames);
+  void rename_types(irept &type, const symbolt &cur_name_sym,
+                    const irep_idt &sname);
+  void rename_exprs(irept &expr, const symbolt &cur_name_sym,
+                    const irep_idt &sname);
+  void wallop_type(irep_idt name, typename_mapt &typenames,
+                   const irep_idt &sname);
 
   goto_convert_functionst(
     contextt &_context,
