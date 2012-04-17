@@ -344,3 +344,14 @@ constant_struct2t::constant_struct2t(const constant_struct2t &ref)
   : const_datatype_body<constant_struct2t>(ref)
 {
 }
+
+constant_union2t::constant_union2t(const type2tc type,
+                                   const std::vector<expr2tc> &members)
+  : const_datatype_body<constant_union2t>(type, constant_union_id, members)
+{
+}
+
+constant_union2t::constant_union2t(const constant_union2t &ref)
+  : const_datatype_body<constant_union2t>(ref)
+{
+}

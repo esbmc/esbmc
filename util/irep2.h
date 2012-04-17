@@ -431,15 +431,11 @@ public:
   constant_struct2t(const constant_struct2t &ref);
 };
 
-class constant_union2t : public constant_datatype2t
+class constant_union2t : public const_datatype_body<constant_union2t>
 {
 public:
   constant_union2t(const type2tc type, const std::vector<expr2tc> &members);
-protected:
-  constant_union2t(constant_union2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
+  constant_union2t(const constant_union2t &ref);
 };
 
 class constant_array2t : public constant2t
