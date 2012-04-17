@@ -30,7 +30,9 @@ public:
 
   cbmc_parseoptionst(int argc, const char **argv):
     parseoptions_baset(esbmc_options, argc, argv),
-    language_uit(cmdline)
+    language_uit(cmdline),
+    k_step(1),
+    base_case(true)
   {
   }
 
@@ -65,6 +67,10 @@ protected:
   void add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, exprt> >monitors);
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
+
+  // k-inductive related
+  int k_step;
+  bool base_case;
 };
 
 #endif

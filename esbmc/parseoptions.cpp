@@ -252,6 +252,19 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", true);
   }
 
+  if(cmdline.isset("k-inductive"))
+  {
+    options.set_option("base-case", base_case);
+    options.set_option("inductive-step", !base_case);
+
+    options.set_option("no-bounds-check", true);
+    options.set_option("no-div-by-zero-check", true);
+    options.set_option("no-pointer-check", true);
+    options.set_option("no-unwinding-assertions", true);
+    options.set_option("partial-loops", true);
+    options.set_option("unwind", i2string(k_step));
+  }
+
   // jmorse
   if(cmdline.isset("timeout")) {
 #ifdef _WIN32
@@ -424,7 +437,26 @@ int cbmc_parseoptionst::doit()
   // slice according to property
 
   // do actual BMC
-  return do_bmc(bmc, goto_functions);
+  bool res = do_bmc(bmc, goto_functions);
+
+  if(!cmdline.isset("k-inductive"))
+    return res;
+
+  if(base_case)
+  {
+    if(k_step > 1 && res)
+      return 0;
+
+    ++k_step;
+  }
+
+  base_case = !base_case;
+  context.clear();
+
+  if(k_step <= atol(cmdline.get_values("k-inductive").front().c_str()))
+  {
+    doit();
+  }
 }
 
 /*******************************************************************\
