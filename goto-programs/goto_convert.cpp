@@ -1405,8 +1405,12 @@ Function: goto_convertt::get_struct_components
 
 void get_struct_components(const exprt &exp, struct_typet &str)
 {
+	DEBUGLOC;
+  //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
+  //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
   if (exp.is_symbol())
   {
+	  //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
       unsigned int size = str.components().size();
       str.components().resize(size+1);
       str.components()[size] = (struct_typet::componentt &) exp;
@@ -1415,6 +1419,7 @@ void get_struct_components(const exprt &exp, struct_typet &str)
   }
   else if (exp.operands().size()==1)
   {
+	DEBUGLOC;
     if (exp.op0().is_symbol())
       get_struct_components(exp.op0(), str);
     else if (exp.op0().operands().size()==1)
@@ -1422,26 +1427,24 @@ void get_struct_components(const exprt &exp, struct_typet &str)
   }
   else if (exp.operands().size()==2)
   {
+	  DEBUGLOC;
     if (exp.op0().is_symbol())
       get_struct_components(exp.op0(), str);
-    else if (exp.op0().operands().size()==1)
+    else if (exp.op0().operands().size())
       get_struct_components(exp.op0().op0(), str);
-  }
-  else if (exp.is_code())
-  {
-    forall_operands(it, to_code(exp))
-    {
-      if (it->is_code())
-      {
-        const codet &code=to_code(*it);
-        get_struct_components(code, str);
-      }
-    }
   }
   else
   {
-    std::cout << "expression not supported yet: " << exp.pretty() << std::endl;
+	//std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
+	forall_operands(it, exp)
+    {
+      //std::cout << "exp.id(): " << exp.id() << std::endl;
+      //std::cout << "it->is_code(): " << it->is_code() << std::endl;
+      DEBUGLOC;
+        get_struct_components(*it, str);
+    }
   }
+  DEBUGLOC;
 }
 
 /*******************************************************************\
@@ -2837,7 +2840,7 @@ DEBUGLOC;
     if (found)
       expr = new_expr;
 
-    //assert(found);
+    assert(found);
   }
   else
   {
@@ -2857,17 +2860,18 @@ DEBUGLOC;
          it != components.end();
          it++, i++)
     {
+      //std::cout << "name: " << it->get("name") << std::endl;
+      //std::cout << "component_name: " << new_expr.get_string("component_name") << std::endl;
       if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
       {
         found=true;
-	break;
-
+	    break;
       }
     }
     if (found)
       expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
-
-    //assert(found);
+    //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
+    assert(found);
   }
 }
 

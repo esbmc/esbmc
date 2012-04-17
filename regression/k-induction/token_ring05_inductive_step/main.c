@@ -48,7 +48,7 @@ int is_transmit4_triggered(void) ;
 int is_transmit5_triggered(void) ;
 void immediate_notify(void) ;
 int token  ;
-int __VERIFIER_nondet_int()  ;
+int __VERIFIER_nondet_int()  {int i; return i;};
 int local  ;
 void master(void) 
 { 
