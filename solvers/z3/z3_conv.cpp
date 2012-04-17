@@ -1081,6 +1081,38 @@ z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  u_int i = 0;
+  Z3_sort native_int_sort;
+  Z3_type_ast z3_array_type, elem_type;
+  Z3_ast int_cte, val_cte;
+
+  native_int_sort = (int_encoding) ? Z3_mk_int_sort(z3_ctx)
+                              : Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+
+  const array_type2t &arr_type = dynamic_cast<array_type2t&>(*array.type.get());
+  arr_type.subtype->convert_smt_type(*this, (void*&)elem_type);
+  z3_array_type = Z3_mk_array_type(z3_ctx, native_int_sort, elem_type);
+
+  bv = Z3_mk_fresh_const(z3_ctx, NULL, z3_array_type);
+
+  i = 0;
+  for (std::vector<expr2tc>::const_iterator it = array.datatype_members.begin();
+       it != array.datatype_members.end(); it++) {
+
+    int_cte = Z3_mk_int(z3_ctx, i, native_int_sort);
+
+    (*it)->convert_smt(*this, (void*&)val_cte);
+
+    bv = Z3_mk_store(z3_ctx, bv, int_cte, val_cte);
+    ++i;
+  }
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

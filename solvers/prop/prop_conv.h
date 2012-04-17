@@ -113,6 +113,7 @@ public:
   virtual void convert_smt_expr(const symbol2t &sym, void *&arg) = 0;
   virtual void convert_smt_expr(const constant_int2t &sym, void *&arg) = 0;
   virtual void convert_smt_expr(const constant_datatype2t &strt, void *&arg) = 0;
+  virtual void convert_smt_expr(const constant_array2t &array, void *&arg) = 0;
 };
 
 #endif
