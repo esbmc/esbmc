@@ -1712,23 +1712,6 @@ void goto_convertt::make_nondet_assign(
       }
     }
 
-#if 0
-    if (state.components()[j].is_typecast() && state.components()[j].operands().size())
-    {
-      new_expr.op1().component_name(state.components()[j].op0().get_string("identifier"));
-      assert(!new_expr.op1().get_string("component_name").empty());
-    }
-    else
-    {
-      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
-      assert(!new_expr.op1().get_string("component_name").empty());
-    }
-#endif
-
- 
-//    new_expr.op1().component_name(state.components()[j].get_string("identifier"));
-//    assert(!new_expr.op1().get_string("component_name").empty());
-
     code_assignt new_assign(lhs_expr,new_expr);
     copy(new_assign, ASSIGN, dest);
   }
@@ -2847,13 +2830,14 @@ DEBUGLOC;
       if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
       {
 	it->swap(expr);
-	//it->type() = expr.type();
         found=true;
       }
     }
 
     if (found)
       expr = new_expr;
+
+    //assert(found);
   }
   else
   {
@@ -2882,6 +2866,8 @@ DEBUGLOC;
     }
     if (found)
       expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
+
+    //assert(found);
   }
 }
 
