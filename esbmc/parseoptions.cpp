@@ -1020,7 +1020,7 @@ Function: cbmc_parseoptionst::do_bmc
 
 \*******************************************************************/
 
-int cbmc_parseoptionst::do_bmc(
+bool cbmc_parseoptionst::do_bmc(
   bmc_baset &bmc1,
   const goto_functionst &goto_functions)
 {
@@ -1030,7 +1030,7 @@ int cbmc_parseoptionst::do_bmc(
 
   status("Starting Bounded Model Checking");
 
-  bmc1.run(goto_functions);
+  bool res = bmc1.run(goto_functions);
 
 #ifndef _WIN32
   if (bmc1.options.get_bool_option("memstats")) {
@@ -1040,7 +1040,7 @@ int cbmc_parseoptionst::do_bmc(
   }
 #endif
 
-  return 0;
+  return res;
 }
 
 

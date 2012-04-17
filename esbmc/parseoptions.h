@@ -36,7 +36,7 @@ public:
 
 protected:
   virtual void get_command_line_options(optionst &options);
-  virtual int do_bmc(bmc_baset &bmc, const goto_functionst &goto_functions);
+  virtual bool do_bmc(bmc_baset &bmc, const goto_functionst &goto_functions);
 
   virtual bool get_goto_program(
     bmc_baset &bmc,
