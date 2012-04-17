@@ -388,16 +388,11 @@ public:
 };
 
 /** Constant class for string constants. */
-class constant_string2t : public constant2t
+class constant_string2t : public const_expr_body<constant_string2t>
 {
 public:
-  constant_string2t(const std::string &stringref);
-protected:
-  constant_string2t(constant_string2t &ref);
-
-public:
-  /** Concrete clone implementation. */
-  virtual expr2tc clone(void) const;
+  constant_string2t(type2tc type, const std::string &stringref);
+  constant_string2t(const constant_string2t &ref);
 
   /** Arbitary precision integer record. */
   const std::string value;

@@ -355,3 +355,13 @@ constant_union2t::constant_union2t(const constant_union2t &ref)
   : const_datatype_body<constant_union2t>(ref)
 {
 }
+
+constant_string2t::constant_string2t(type2tc type, const std::string &stringref)
+  : const_expr_body<constant_string2t>(type, constant_string_id), value(stringref)
+{
+}
+
+constant_string2t::constant_string2t(const constant_string2t &ref)
+  : const_expr_body<constant_string2t>(ref), value(ref.value)
+{
+}
