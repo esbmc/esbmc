@@ -223,6 +223,24 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     constant_string2t *s = new constant_string2t(t, thestring);
     new_expr_ref = expr2tc(s);
     return true;
+  } else if (expr.id() == "constant" && expr.type().id() == "array") {
+    // Fixed size array.
+    type2tc new_type;
+    if (!migrate_type(expr.type(), new_type))
+      return false;
+
+    std::vector<expr2tc> members;
+    forall_operands(it, expr) {
+      expr2tc new_ref;
+      if (!migrate_expr(*it, new_ref))
+        return false;
+
+      members.push_back(new_ref);
+    }
+
+    constant_array2t *a = new constant_array2t(new_type, members);
+    new_expr_ref = expr2tc(a);
+    return true;
   } else {
     return false;
   }

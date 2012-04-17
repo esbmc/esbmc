@@ -377,3 +377,16 @@ constant_string2t::constant_string2t(const constant_string2t &ref)
   : const_expr_body<constant_string2t>(ref), value(ref.value)
 {
 }
+
+constant_array2t::constant_array2t(const type2tc type,
+                                   const std::vector<expr2tc> &members)
+  : const_expr_body<constant_array2t>(type, constant_array_id),
+    datatype_members(members)
+{
+}
+
+constant_array2t::constant_array2t(const constant_array2t &ref)
+  : const_expr_body<constant_array2t>(ref),
+    datatype_members(ref.datatype_members)
+{
+}
