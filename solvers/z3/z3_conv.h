@@ -159,6 +159,14 @@ private:
   void convert_bv(const exprt &expr, Z3_ast &bv);
 
   void convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv);
+
+  typedef Z3_ast (*ast_convert_calltype)(Z3_context ctx, Z3_ast op1, Z3_ast op2);
+
+  void convert_rel(const rel2t &rel, ast_convert_calltype intmode,
+                   ast_convert_calltype signedbv,
+                   ast_convert_calltype unsignedbv,
+                   void *&_bv);
+
   virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
   virtual void convert_smt_expr(const constant_int2t &sym, void *&bv);
   virtual void convert_smt_expr(const constant_datatype2t &strt, void *&bv);

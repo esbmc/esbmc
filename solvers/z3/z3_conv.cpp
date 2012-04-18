@@ -1205,22 +1205,31 @@ z3_convt::convert_smt_expr(const notequal2t &notequal, void *&_bv)
 }
 
 void
-z3_convt::convert_smt_expr(const lessthan2t &lessthan, void *&_bv)
+z3_convt::convert_rel(const rel2t &rel, ast_convert_calltype intmode,
+                      ast_convert_calltype signedbv,
+                      ast_convert_calltype unsignedbv,
+                      void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
 
   Z3_ast args[2];
 
-  lessthan.side_1->convert_smt(*this, (void*&)args[0]);
-  lessthan.side_2->convert_smt(*this, (void*&)args[1]);
+  rel.side_1->convert_smt(*this, (void*&)args[0]);
+  rel.side_2->convert_smt(*this, (void*&)args[1]);
 
   if (int_encoding) {
-    bv = Z3_mk_lt(z3_ctx, args[0], args[1]);
-  } else if (lessthan.side_1->type->type_id == type2t::signedbv_id) {
-    bv = Z3_mk_bvslt(z3_ctx, args[0], args[1]);
+    bv = intmode(z3_ctx, args[0], args[1]);
+  } else if (rel.side_1->type->type_id == type2t::signedbv_id) {
+    bv = signedbv(z3_ctx, args[0], args[1]);
   } else {
-    bv = Z3_mk_bvult(z3_ctx, args[0], args[1]);
+    bv = unsignedbv(z3_ctx, args[0], args[1]);
   }
+}
+
+void
+z3_convt::convert_smt_expr(const lessthan2t &lessthan, void *&_bv)
+{
+  convert_rel(lessthan, Z3_mk_lt, Z3_mk_bvslt, Z3_mk_bvult, _bv);
 }
 
 void
