@@ -285,6 +285,23 @@ expr2tc const_datatype_body<derived>::clone(void) const
   return expr2tc(new_obj);
 }
 
+template <class derived>
+void
+rel_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
+{
+  const derived *new_this = static_cast<const derived*>(this);
+  obj.convert_smt_expr(*new_this, arg);
+  return;
+}
+
+template <class derived>
+expr2tc rel_body<derived>::clone(void) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return expr2tc(new_obj);
+}
+
 /**************************** Expression constructors *************************/
 
 symbol2t::symbol2t(const type2tc type, irep_idt _name)

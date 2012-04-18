@@ -507,83 +507,68 @@ public:
  *  All subclasses should be relation operators -- ie, equality, lt, ge, so
  *  forth. Stores two expressions (of the _same_ _type_), always has result
  *  type of a bool. */
-class rel2t : public expr2t
+class rel2t : public expr_body<rel2t>
 {
-protected:
-  rel2t(const expr2tc val1, const expr2tc val2);
-  rel2t(const rel2t &ref);
-
 public:
-  virtual expr2tc clone(void) const = 0;
+  rel2t(expr_ids id, const expr2tc val1, const expr2tc val2);
+  rel2t(const rel2t &ref);
 
   const expr2tc side_1;
   const expr2tc side_2;
 };
 
-class equality2t : public rel2t
+template <class T>
+class rel_body : public rel2t
+{
+public:
+  rel_body(expr_ids id, const expr2tc val1, expr2tc val2)
+    : rel2t(id, val1, val2) {};
+  rel_body(const rel_body &ref) : rel2t(ref) {};
+
+  virtual void convert_smt(prop_convt &obj, void *&arg) const;
+  virtual expr2tc clone(void) const;
+};
+
+class equality2t : public rel_body<equality2t>
 {
 public:
   equality2t(const expr2tc val1, const expr2tc val2);
-protected:
   equality2t(const equality2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class notequal2t : public rel2t
+class notequal2t : public rel_body<notequal2t>
 {
 public:
   notequal2t(const expr2tc val1, const expr2tc val2);
-protected:
   notequal2t(const notequal2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class lessthan2t : public rel2t
+class lessthan2t : public rel_body<lessthan2t>
 {
 public:
   lessthan2t(const expr2tc val1, const expr2tc val2);
-protected:
   lessthan2t(const lessthan2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class greaterthan2t : public rel2t
+class greaterthan2t : public rel_body<greaterthan2t>
 {
 public:
   greaterthan2t(const expr2tc val1, const expr2tc val2);
-protected:
   greaterthan2t(const greaterthan2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class lessthanequal2t : public rel2t
+class lessthanequal2t : public rel_body<lessthanequal2t>
 {
 public:
   lessthanequal2t(const expr2tc val1, const expr2tc val2);
-protected:
   lessthanequal2t(const lessthanequal2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class greaterthanequal2t : public rel2t
+class greaterthanequal2t : public rel_body<greaterthanequal2t>
 {
 public:
   greaterthanequal2t(const expr2tc val1, const expr2tc val2);
-protected:
   greaterthanequal2t(const greaterthanequal2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
 /** Logical operations base class. Base for any logical operator. No storage in
