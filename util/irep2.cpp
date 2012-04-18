@@ -119,11 +119,8 @@ struct_union_type2t::cmp(const struct_union_type2t &ref) const
   if (members.size() != ref.members.size())
     return false;
 
-  std::vector<type2tc>::const_iterator it2 = ref.members.begin();
-  for (std::vector<type2tc>::const_iterator it = members.begin();
-       it != members.end(); it++, it2++)
-    if (!(*it->get() == *it2->get()))
-      return false;
+  if (members != ref.members)
+    return false;
 
   if (member_names != ref.member_names)
     return false;
@@ -203,7 +200,7 @@ array_type2t::cmp(const array_type2t &ref) const
 {
 
   // Check subtype type matches
-  if (!(*subtype.get() == *ref.subtype.get()))
+  if (subtype != ref.subtype)
     return false;
 
   // If both sizes are infinite, we're the same type
@@ -216,7 +213,7 @@ array_type2t::cmp(const array_type2t &ref) const
     return false;
 
   // Otherwise,
-  return (*array_size->type.get() == *ref.array_size->type.get());
+  return (array_size->type == ref.array_size->type);
 }
 
 pointer_type2t::pointer_type2t(type2tc _sub)
@@ -234,7 +231,7 @@ bool
 pointer_type2t::cmp(const pointer_type2t &ref) const
 {
 
-  return (*subtype.get() == *ref.subtype.get());
+  return subtype == ref.subtype;
 }
 
 empty_type2t::empty_type2t(void)
