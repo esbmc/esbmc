@@ -42,5 +42,8 @@ int main()
 
   assert(g==0);
 
+  pthread_join(id1, NULL);
+  pthread_join(id2, NULL);
+
   return 0;
 }

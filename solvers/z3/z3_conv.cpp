@@ -673,8 +673,7 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
     create_union_type(type, bv);
   } else if (type.id() == "pointer")     {
     create_pointer_type(bv);
-  } else if (type.id() == "symbol" || type.id() == "empty" ||
-             type.id() == "c_enum")     {
+  } else if (type.id() == "empty" || type.id() == "c_enum")     {
     if (int_encoding)
       bv = Z3_mk_int_type(z3_ctx);
     else
@@ -2114,7 +2113,9 @@ z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 
   assert(expr.operands().size() == 2);
-  assert(expr.op0().type() == expr.op1().type());
+  assert((expr.op0().type().id() == "pointer" &&
+          expr.op1().type().id() == "pointer") ||
+         expr.op0().type() == expr.op1().type());
 
   Z3_ast args[2];
 

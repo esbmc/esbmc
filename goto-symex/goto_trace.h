@@ -33,10 +33,9 @@ public:
   bool is_assignment() const { return type==ASSIGNMENT; }
   bool is_assume() const     { return type==ASSUME; }
   bool is_assert() const     { return type==ASSERT; }
-  bool is_location() const   { return type==LOCATION; }
   bool is_output() const     { return type==OUTPUT; }
 
-  typedef enum { ASSIGNMENT, ASSUME, ASSERT, LOCATION, OUTPUT } typet;
+  typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT } typet;
   typet type;
     
   goto_programt::const_targett pc;

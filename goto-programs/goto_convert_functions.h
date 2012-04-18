@@ -21,19 +21,23 @@ void goto_convert(
   goto_functionst &functions,
   message_handlert &message_handler);
   
-// remove function_pointer_calls
-void remove_function_pointers(
-  contextt &context,
-  const optionst &options,
-  goto_functionst &functions,
-  message_handlert &message_handler);
-
 class goto_convert_functionst:public goto_convertt
 {
 public:
+  typedef std::map<irep_idt, std::set<irep_idt> > typename_mapt;
+  typedef std::set<irep_idt> typename_sett;
+
   void goto_convert();
-  bool remove_function_pointers();
   void convert_function(const irep_idt &identifier);
+  void thrash_type_symbols(void);
+  void collect_type(const irept &type, typename_sett &set);
+  void collect_expr(const irept &expr, typename_sett &set);
+  void rename_types(irept &type, const symbolt &cur_name_sym,
+                    const irep_idt &sname);
+  void rename_exprs(irept &expr, const symbolt &cur_name_sym,
+                    const irep_idt &sname);
+  void wallop_type(irep_idt name, typename_mapt &typenames,
+                   const irep_idt &sname);
 
   goto_convert_functionst(
     contextt &_context,
@@ -54,18 +58,6 @@ protected:
   void add_return(
     goto_functionst::goto_functiont &f,
     const locationt &location);
-
-  void remove_function_pointer(
-    class value_setst &value_sets,
-    goto_programt &dest,
-    goto_programt::targett target);
-
-  bool remove_function_pointers(
-    class value_setst &value_sets,
-    goto_programt &dest);
-
-  bool have_function_pointers();
-  bool have_function_pointers(const goto_programt &dest);
 
 private:
   bool inlining;

@@ -63,7 +63,6 @@ void goto_trace_stept::output(
   {
   case goto_trace_stept::ASSERT: out << "ASSERT"; break;
   case goto_trace_stept::ASSUME: out << "ASSUME"; break;
-  case goto_trace_stept::LOCATION: out << "LOCATION"; break;
   case goto_trace_stept::ASSIGNMENT: out << "ASSIGNMENT"; break;
   default: assert(false);
   }
@@ -82,8 +81,6 @@ void goto_trace_stept::output(
     out << "ASSUME ";
   else if(pc->is_assert())
     out << "ASSERT ";
-  else if(pc->is_sync())
-    out << "SYNC   ";
   else if(pc->is_other())
     out << "OTHER  ";
   else if(pc->is_assign())
@@ -526,15 +523,6 @@ void show_goto_trace(
       break;
 
     case goto_trace_stept::ASSUME:
-      break;
-
-    case goto_trace_stept::LOCATION:
-      if(it->pc->is_sync())
-      {
-        show_state_header(out, *it, it->pc->location, it->step_nr);
-
-        out << "SYNC " << it->pc->event << std::endl;
-      }
       break;
 
     case goto_trace_stept::ASSIGNMENT:

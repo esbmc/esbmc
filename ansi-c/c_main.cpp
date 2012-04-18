@@ -343,7 +343,19 @@ bool c_main(
     call.arguments().resize(arguments.size(), static_cast<const exprt &>(get_nil_irep()));
   }
 
+  // Call to main symbol is now in "call"; construct calls to thread library
+  // hooks for main thread start and main thread end.
+
+  code_function_callt thread_start_call;
+  thread_start_call.location()=symbol.location;
+  thread_start_call.function()=symbol_exprt("c::pthread_start_main_hook");
+  code_function_callt thread_end_call;
+  thread_end_call.location()=symbol.location;
+  thread_end_call.function()=symbol_exprt("c::pthread_end_main_hook");
+
+  init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);
+  init_code.move_to_operands(thread_end_call);
 
   // add "main"
   symbolt new_symbol;

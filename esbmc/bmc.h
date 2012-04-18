@@ -29,22 +29,20 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <solvers/sat/cnf_clause_list.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
+#include <goto-symex/reachability_tree.h>
 
-#include "symex_bmc.h"
 #include "bv_cbmc.h"
 
-class bmc_baset:public messaget
+class bmct:public messaget
 {
 public:
-  bmc_baset(
-    const contextt &_context,
-    symex_bmct &_symex,
-    symex_target_equationt &_equation,
-    message_handlert &_message_handler):
+  bmct(const goto_functionst &funcs, optionst &opts,
+       contextt &_context, message_handlert &_message_handler):
     messaget(_message_handler),
+    options(opts),
     context(_context),
-    symex(_symex),
-    equation(&_equation),
+    ns(_context),
+    symex(funcs, ns, options, new symex_target_equationt(ns), _context),
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
@@ -55,49 +53,45 @@ public:
 
   uint _unsat_core;
   uint _number_of_assumptions;
-  optionst options;
+  optionst &options;
 
   unsigned int interleaving_number;
   unsigned int interleaving_failed;
   unsigned int uw_loop;
 
   virtual bool run(const goto_functionst &goto_functions);
-  virtual ~bmc_baset() { }
+  virtual ~bmct() { }
 
   // additional stuff
   expr_listt bmc_constraints;
-
-  friend class cbmc_satt;
-  friend class hw_cbmc_satt;
-  friend class counterexample_beautification_greedyt;
 
   void set_ui(language_uit::uit _ui) { ui=_ui; }
 
 protected:
   const contextt &context;
-  symex_bmct &symex;
-  symex_target_equationt *equation;
+  namespacet ns;
+  reachability_treet symex;
 
   // use gui format
   language_uit::uit ui;
 
   class solver_base {
   public:
-    virtual bool run_solver();
+    virtual bool run_solver(symex_target_equationt &equation);
     virtual ~solver_base() {}
 
   protected:
-    solver_base(bmc_baset &_bmc) : bmc(_bmc)
+    solver_base(bmct &_bmc) : bmc(_bmc)
     { }
 
     prop_convt *conv;
-    bmc_baset &bmc;
+    bmct &bmc;
   };
 
   class minisat_solver : public solver_base {
   public:
-    minisat_solver(bmc_baset &bmc);
-    virtual bool run_solver();
+    minisat_solver(bmct &bmc);
+    virtual bool run_solver(symex_target_equationt &equation);
 
   protected:
     sat_minimizert satcheck;
@@ -107,7 +101,7 @@ protected:
 #ifdef BOOLECTOR
   class boolector_solver : public solver_base {
   public:
-    boolector_solver(bmc_baset &bmc);
+    boolector_solver(bmct &bmc);
   protected:
     boolector_dect boolector_dec;
   };
@@ -116,8 +110,8 @@ protected:
 #ifdef Z3
   class z3_solver : public solver_base {
   public:
-    z3_solver(bmc_baset &bmc);
-    virtual bool run_solver();
+    z3_solver(bmct &bmc);
+    virtual bool run_solver(symex_target_equationt &equation);
   protected:
     z3_convt z3_conv;
   };
@@ -125,54 +119,32 @@ protected:
 
   class output_solver : public solver_base {
   public:
-    output_solver(bmc_baset &bmc);
+    output_solver(bmct &bmc);
     ~output_solver();
-    virtual bool run_solver();
+    virtual bool run_solver(symex_target_equationt &equation);
   protected:
     virtual bool write_output() = 0;
     std::ostream *out_file;
   };
 
   virtual decision_proceduret::resultt
-    run_decision_procedure(prop_convt &prop_conv);
-
-  // unwinding
-  virtual void setup_unwind();
+    run_decision_procedure(prop_convt &prop_conv,
+                           symex_target_equationt &equation);
 
   virtual void do_unwind_module(
     decision_proceduret &decision_procedure);
 
-  virtual void do_cbmc(prop_convt &solver);
-  virtual void show_vcc();
-  virtual void show_vcc(std::ostream &out);
-  virtual void show_program();
+  virtual void do_cbmc(prop_convt &solver, symex_target_equationt &eq);
+  virtual void show_vcc(symex_target_equationt &equation);
+  virtual void show_vcc(std::ostream &out, symex_target_equationt &equation);
+  virtual void show_program(symex_target_equationt &equation);
   virtual void report_success();
   virtual void report_failure();
   virtual void write_checkpoint();
 
   virtual void error_trace(
-    const prop_convt &prop_conv);
-    bool run_thread(const goto_functionst &goto_functions);
-};
-
-class bmct:public bmc_baset
-{
-public:
-  bmct(
-    const contextt &_context,
-    message_handlert &_message_handler):
-    bmc_baset(_context, _symex, _equation, _message_handler),
-    ns(_context, new_context),
-    _equation(ns),
-    _symex(ns, new_context, _equation)
-  {
-  }
-
-protected:
-  contextt new_context;
-  namespacet ns;
-  symex_target_equationt _equation;
-  symex_bmct _symex;
+    const prop_convt &prop_conv, symex_target_equationt &equation);
+    bool run_thread();
 };
 
 #endif

@@ -69,6 +69,12 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
 {
   std::pair<irep_idt, irep_idt> type;
 
+  if (irep.id() == "symbol") {
+    type = std::pair<irep_idt, irep_idt>(name, irep.identifier());
+    deps.insert(type);
+    return;
+  }
+
   forall_irep(irep_it, irep.get_sub()) {
     if (irep_it->id() == "symbol") {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->identifier());
@@ -187,6 +193,18 @@ void add_cprover_library(
     generate_symbol_deps(it->first, it->second.value, symbol_deps);
     generate_symbol_deps(it->first, it->second.type, symbol_deps);
   }
+
+  // Add two hacks; we migth use either pthread_mutex_lock or the checked
+  // variety; so if one version is used, pull in the other too.
+  std::pair<irep_idt,irep_idt>
+    lockcheck(dstring("c::pthread_mutex_lock"),
+              dstring("c::pthread_mutex_lock_check"));
+  symbol_deps.insert(lockcheck);
+
+  std::pair<irep_idt,irep_idt>
+    condcheck(dstring("c::pthread_cond_wait"),
+              dstring("c::pthread_cond_wait_check"));
+  symbol_deps.insert(condcheck);
 
   /* The code just pulled into store_ctx might use other symbols in the C
    * library. So, repeatedly search for new C library symbols that we use but

@@ -40,6 +40,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/slice.h>
 #include <goto-symex/slice_by_trace.h>
 #include <goto-symex/xml_goto_trace.h>
+#include <goto-symex/reachability_tree.h>
 
 #include "bmc.h"
 #include "bv_cbmc.h"
@@ -58,7 +59,7 @@ sigusr1_handler(int sig)
 
 /*******************************************************************\
 
-Function: bmc_baset::do_unwind_module
+Function: bmct::do_unwind_module
 
   Inputs:
 
@@ -68,14 +69,14 @@ Function: bmc_baset::do_unwind_module
 
 \*******************************************************************/
 
-void bmc_baset::do_unwind_module(
+void bmct::do_unwind_module(
   decision_proceduret &decision_procedure)
 {
 }
 
 /*******************************************************************\
 
-Function: bmc_baset::do_cbmc
+Function: bmct::do_cbmc
 
   Inputs:
 
@@ -85,11 +86,11 @@ Function: bmc_baset::do_cbmc
 
 \*******************************************************************/
 
-void bmc_baset::do_cbmc(prop_convt &solver)
+void bmct::do_cbmc(prop_convt &solver, symex_target_equationt &equation)
 {
   solver.set_message_handler(message_handler);
 
-  equation->convert(solver);
+  equation.convert(solver);
 
   forall_expr_list(it, bmc_constraints)
     solver.set_to_true(*it);
@@ -101,7 +102,7 @@ void bmc_baset::do_cbmc(prop_convt &solver)
 
 /*******************************************************************\
 
-Function: bmc_baset::error_trace
+Function: bmct::error_trace
 
   Inputs:
 
@@ -111,12 +112,13 @@ Function: bmc_baset::error_trace
 
 \*******************************************************************/
 
-void bmc_baset::error_trace(const prop_convt &prop_conv)
+void bmct::error_trace(const prop_convt &prop_conv,
+                       symex_target_equationt &equation)
 {
   status("Building error trace");
 
   goto_tracet goto_trace;
-  build_goto_trace(*equation, prop_conv, goto_trace);
+  build_goto_trace(equation, prop_conv, goto_trace);
 
   goto_trace.metadata_filename = options.get_option("llvm-metadata");
 
@@ -124,17 +126,17 @@ void bmc_baset::error_trace(const prop_convt &prop_conv)
   {
   case ui_message_handlert::PLAIN:
     std::cout << std::endl << "Counterexample:" << std::endl;
-    show_goto_trace(std::cout, symex.ns, goto_trace);
+    show_goto_trace(std::cout, ns, goto_trace);
     break;
 
   case ui_message_handlert::OLD_GUI:
-    show_goto_trace_gui(std::cout, symex.ns, goto_trace);
+    show_goto_trace_gui(std::cout, ns, goto_trace);
     break;
 
   case ui_message_handlert::XML_UI:
     {
       xmlt xml;
-      convert(symex.ns, goto_trace, xml);
+      convert(ns, goto_trace, xml);
       std::cout << xml << std::endl;
     }
     break;
@@ -146,7 +148,7 @@ void bmc_baset::error_trace(const prop_convt &prop_conv)
 
 /*******************************************************************\
 
-Function: bmc_baset::run_decision_procedure
+Function: bmct::run_decision_procedure
 
   Inputs:
 
@@ -157,7 +159,8 @@ Function: bmc_baset::run_decision_procedure
 \*******************************************************************/
 
 decision_proceduret::resultt
-bmc_baset::run_decision_procedure(prop_convt &prop_conv)
+bmct::run_decision_procedure(prop_convt &prop_conv,
+                             symex_target_equationt &equation)
 {
   static bool first_uw=false;
   std::string logic;
@@ -179,7 +182,7 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
   fine_timet sat_start=current_time();
 
   do_unwind_module(prop_conv);
-  do_cbmc(prop_conv);
+  do_cbmc(prop_conv, equation);
 
   decision_proceduret::resultt dec_result=prop_conv.dec_solve();
 
@@ -194,7 +197,7 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
     status(str.str());
   }
 
-  if(symex.options.get_bool_option("uw-model") && first_uw)
+  if(options.get_bool_option("uw-model") && first_uw)
   {
     std::cout << "number of assumptions: " << _number_of_assumptions << " literal(s)"<< std::endl;
     std::cout << "size of the unsatisfiable core: " << _unsat_core << " literal(s)"<< std::endl;
@@ -207,7 +210,7 @@ bmc_baset::run_decision_procedure(prop_convt &prop_conv)
 
 /*******************************************************************\
 
-Function: bmc_baset::report_success
+Function: bmct::report_success
 
   Inputs:
 
@@ -217,7 +220,7 @@ Function: bmc_baset::report_success
 
 \*******************************************************************/
 
-void bmc_baset::report_success()
+void bmct::report_success()
 {
   status("VERIFICATION SUCCESSFUL");
 
@@ -252,7 +255,7 @@ void bmc_baset::report_success()
 
 /*******************************************************************\
 
-Function: bmc_baset::report_failure
+Function: bmct::report_failure
 
   Inputs:
 
@@ -262,7 +265,7 @@ Function: bmc_baset::report_failure
 
 \*******************************************************************/
 
-void bmc_baset::report_failure()
+void bmct::report_failure()
 {
   status("VERIFICATION FAILED");
 
@@ -290,7 +293,7 @@ void bmc_baset::report_failure()
 
 /*******************************************************************\
 
-Function: bmc_baset::show_program
+Function: bmct::show_program
 
   Inputs:
 
@@ -300,17 +303,17 @@ Function: bmc_baset::show_program
 
 \*******************************************************************/
 
-void bmc_baset::show_program()
+void bmct::show_program(symex_target_equationt &equation)
 {
   unsigned count=1;
 
-  languagest languages(symex.ns, MODE_C);
+  languagest languages(ns, MODE_C);
 
   std::cout << std::endl << "Program constraints:" << std::endl;
 
   for(symex_target_equationt::SSA_stepst::const_iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+      it=equation.SSA_steps.begin();
+      it!=equation.SSA_steps.end(); it++)
   {
     if(it->is_assignment())
     {
@@ -341,7 +344,7 @@ void bmc_baset::show_program()
 
 /*******************************************************************\
 
-Function: bmc_baset::run
+Function: bmct::run
 
   Inputs:
 
@@ -351,17 +354,12 @@ Function: bmc_baset::run
 
 \*******************************************************************/
 
-bool bmc_baset::run(const goto_functionst &goto_functions)
+bool bmct::run(const goto_functionst &goto_functions)
 {
 #ifndef _WIN32
   struct sigaction act;
 #endif
   bool resp;
-  symex.set_message_handler(message_handler);
-  symex.set_verbosity(get_verbosity());
-  symex.options=options;
-
-  symex.last_location.make_nil();
 
 #ifndef _WIN32
   // Collect SIGUSR1, indicating that we're supposed to checkpoint.
@@ -371,33 +369,25 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   sigaction(SIGUSR1, &act, NULL);
 #endif
 
-  // get unwinding info
-  setup_unwind();
-
-  if(symex.options.get_bool_option("schedule"))
+  if(options.get_bool_option("schedule"))
   {
-    if(symex.options.get_bool_option("uw-model"))
+    if(options.get_bool_option("uw-model"))
         std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
 
-    resp = run_thread(goto_functions);
+    resp = run_thread();
 
 
     //underapproximation-widening model
     while (_unsat_core)
     {
-      equation->clear();
-      symex.total_claims=0;
-      symex.remaining_claims=0;
       std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
-      resp = run_thread(goto_functions);
+      resp = run_thread();
     }
 
     return resp;
   }
   else
   {
-    symex.multi_formulas_init(goto_functions);
-
     if (options.get_bool_option("from-checkpoint")) {
       if (options.get_option("checkpoint-file") == "") {
         std::cerr << "Please provide a checkpoint file" << std::endl;
@@ -406,29 +396,26 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
 
       reachability_treet::dfs_position pos(
                                          options.get_option("checkpoint-file"));
-      symex.restore_from_dfs_state(pos);
+      symex.restore_from_dfs_state((void*)&pos);
     }
 
     do
     {
-      symex.total_claims=0;
-      symex.remaining_claims=0;
-
       if (++interleaving_number>1) {
     	  print(8, "*** Thread interleavings "+
     	           i2string((unsigned long)interleaving_number)+
     	           " ***");
       }
 
-      if(run_thread(goto_functions))
+      if(run_thread())
       {
         ++interleaving_failed;
 
-        if (symex.options.get_bool_option("checkpoint-on-cex")) {
+        if (options.get_bool_option("checkpoint-on-cex")) {
           write_checkpoint();
         }
 
-        if(!symex.options.get_bool_option("all-runs"))
+        if(!options.get_bool_option("all-runs"))
         {
           return true;
         }
@@ -439,13 +426,13 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
       }
 
       // Only run for one run
-      if (symex.options.get_bool_option("interactive-ileaves"))
+      if (options.get_bool_option("interactive-ileaves"))
         return false;
 
-    } while(symex.multi_formulas_setup_next());
+    } while(symex.setup_next_formula());
   }
 
-  if (symex.options.get_bool_option("all-runs"))
+  if (options.get_bool_option("all-runs"))
   {
     std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
     std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
@@ -454,27 +441,28 @@ bool bmc_baset::run(const goto_functionst &goto_functions)
   return false;
 }
 
-bool bmc_baset::run_thread(const goto_functionst &goto_functions)
+bool bmct::run_thread()
 {
+  goto_symext::symex_resultt *result;
   solver_base *solver;
+  symex_target_equationt *equation;
   bool ret;
 
   try
   {
-    if(symex.options.get_bool_option("schedule"))
+    if(options.get_bool_option("schedule"))
     {
-      symex(goto_functions);
+      result = symex.generate_schedule_formula();
     }
     else
     {
-      equation = symex.multi_formulas_get_next_formula();
+      result = symex.get_next_formula();
     }
   }
 
   catch(std::string &error_str)
   {
     message_streamt message_stream(*get_message_handler());
-    message_stream.err_location(symex.last_location);
     message_stream.error(error_str);
     return true;
   }
@@ -482,10 +470,11 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
   catch(const char *error_str)
   {
     message_streamt message_stream(*get_message_handler());
-    message_stream.err_location(symex.last_location);
     message_stream.error(error_str);
     return true;
   }
+
+  equation = dynamic_cast<symex_target_equationt*>(result->target);
 
   print(8, "size of program expression: "+
            i2string((unsigned long)equation->SSA_steps.size())+
@@ -497,7 +486,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
     {
       symex_slice_by_tracet symex_slice_by_trace;
       symex_slice_by_trace.slice_by_trace
-      (options.get_option("slice-by-trace"), *equation, symex.ns);
+      (options.get_option("slice-by-trace"), *equation);
     }
 
     if(!options.get_bool_option("no-slice"))
@@ -511,15 +500,15 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 
     if (options.get_bool_option("program-only") ||
         options.get_bool_option("program-too"))
-      show_program();
+      show_program(*equation);
 
     if (options.get_bool_option("program-only"))
       return false;
 
     {
       std::string msg;
-      msg="Generated "+i2string(symex.total_claims)+
-          " VCC(s), "+i2string(symex.remaining_claims)+
+      msg="Generated "+i2string(result->total_claims)+
+          " VCC(s), "+i2string(result->remaining_claims)+
           " remaining after simplification";
       print(8, msg);
     }
@@ -532,11 +521,11 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
 
     if(options.get_bool_option("show-vcc"))
     {
-      show_vcc();
+      show_vcc(*equation);
       return false;
     }
 
-    if(symex.remaining_claims==0)
+    if(result->remaining_claims==0)
     {
       report_success();
       return false;
@@ -574,7 +563,7 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
       throw "Please specify a SAT/SMT solver to use";
 #endif
 
-    ret = solver->run_solver();
+    ret = solver->run_solver(*equation);
     delete solver;
     return ret;
   }
@@ -592,48 +581,17 @@ bool bmc_baset::run_thread(const goto_functionst &goto_functions)
   }
 }
 
-/*******************************************************************\
-
-Function: bmc_baset::setup_unwind
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmc_baset::setup_unwind()
-{
-  const std::string &set = options.get_option("unwindset");
-  unsigned int length = set.length();
-
-  for(unsigned int idx = 0; idx < length; idx++)
-  {
-    std::string::size_type next = set.find(",", idx);
-    std::string val = set.substr(idx, next - idx);
-    unsigned long id = atoi(val.substr(0, val.find(":", 0)).c_str());
-    unsigned long uw = atol(val.substr(val.find(":", 0) + 1).c_str());
-    symex.unwind_set[id] = uw;
-    if(next == std::string::npos) break;
-    idx = next;
-  }
-
-  symex.max_unwind=atol(options.get_option("unwind").c_str());
-}
-
-bool bmc_baset::solver_base::run_solver()
+bool bmct::solver_base::run_solver(symex_target_equationt &equation)
 {
 
-  switch(bmc.run_decision_procedure(*conv))
+  switch(bmc.run_decision_procedure(*conv, equation))
   {
   case decision_proceduret::D_UNSATISFIABLE:
     bmc.report_success();
     return false;
 
   case decision_proceduret::D_SATISFIABLE:
-    bmc.error_trace(*conv);
+    bmc.error_trace(*conv, equation);
     bmc.report_failure();
     return true;
 
@@ -650,7 +608,7 @@ bool bmc_baset::solver_base::run_solver()
 }
 
 #ifdef MINISAT
-bmc_baset::minisat_solver::minisat_solver(bmc_baset &bmc)
+bmct::minisat_solver::minisat_solver(bmct &bmc)
   : solver_base(bmc), satcheck(), bv_cbmc(satcheck)
 {
   satcheck.set_message_handler(bmc.message_handler);
@@ -664,15 +622,15 @@ bmc_baset::minisat_solver::minisat_solver(bmc_baset &bmc)
   conv = &bv_cbmc;
 }
 
-bool bmc_baset::minisat_solver::run_solver()
+bool bmct::minisat_solver::run_solver(symex_target_equationt &equation)
 {
-  bool result = bmc_baset::solver_base::run_solver();
+  bool result = bmct::solver_base::run_solver(equation);
   return result;
 }
 #endif
 
 #ifdef BOOLECTOR
-bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
+bmct::boolector_solver::boolector_solver(bmct &bmc)
   : solver_base(bmc), boolector_dec()
 {
   boolector_dec.set_file(bmc.options.get_option("outfile"));
@@ -682,7 +640,7 @@ bmc_baset::boolector_solver::boolector_solver(bmc_baset &bmc)
 #endif
 
 #ifdef Z3
-bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
+bmct::z3_solver::z3_solver(bmct &bmc)
   : solver_base(bmc), z3_conv(bmc.options.get_bool_option("uw-model"),
                                bmc.options.get_bool_option("int-encoding"),
                                bmc.options.get_bool_option("smt"))
@@ -692,16 +650,16 @@ bmc_baset::z3_solver::z3_solver(bmc_baset &bmc)
   conv = &z3_conv;
 }
 
-bool bmc_baset::z3_solver::run_solver()
+bool bmct::z3_solver::run_solver(symex_target_equationt &equation)
 {
-  bool result = bmc_baset::solver_base::run_solver();
+  bool result = bmct::solver_base::run_solver(equation);
   bmc._unsat_core = z3_conv.get_z3_core_size();
   bmc._number_of_assumptions = z3_conv.get_z3_number_of_assumptions();
   return result;
 }
 #endif
 
-bmc_baset::output_solver::output_solver(bmc_baset &bmc)
+bmct::output_solver::output_solver(bmct &bmc)
   : solver_base(bmc)
 {
 
@@ -728,7 +686,7 @@ bmc_baset::output_solver::output_solver(bmc_baset &bmc)
   return;
 }
 
-bmc_baset::output_solver::~output_solver()
+bmct::output_solver::~output_solver()
 {
 
   if (out_file != &std::cout)
@@ -736,16 +694,16 @@ bmc_baset::output_solver::~output_solver()
   return;
 }
 
-bool bmc_baset::output_solver::run_solver()
+bool bmct::output_solver::run_solver(symex_target_equationt &equation)
 {
 
   bmc.do_unwind_module(*conv);
-  bmc.do_cbmc(*conv);
+  bmc.do_cbmc(*conv, equation);
   conv->dec_solve();
   return write_output();
 }
 
-void bmc_baset::write_checkpoint(void)
+void bmct::write_checkpoint(void)
 {
   std::string f;
 

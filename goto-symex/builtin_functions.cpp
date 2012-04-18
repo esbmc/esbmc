@@ -17,25 +17,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_types.h>
 
 #include "goto_symex.h"
-
-/*******************************************************************\
-
-Function: goto_symext::symex_malloc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+#include "execution_state.h"
+#include "reachability_tree.h"
 
 void goto_symext::symex_malloc(
-  statet &state,
   const exprt &lhs,
-  const side_effect_exprt &code,
-  execution_statet &ex_state,
-        unsigned node_id)
+  const side_effect_exprt &code)
 {
   if(code.operands().size()!=1)
     throw "malloc expected to have one operand";
@@ -52,7 +39,7 @@ void goto_symext::symex_malloc(
     size_is_one=true;
   else
   {
-    state.rename(size, ns, node_id);
+    cur_state->rename(size);
     mp_integer i;
     size_is_one=(!to_integer(size, i) && i==1);
   }
@@ -60,24 +47,26 @@ void goto_symext::symex_malloc(
   if(type.is_nil())
     type=char_type();
 
-  ex_state.dynamic_counter++;
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
 
   // value
   symbolt symbol;
 
   symbol.base_name="dynamic_"+
-    i2string(ex_state.dynamic_counter)+
+    i2string(dynamic_counter)+
     (size_is_one?"_value":"_array");
 
   symbol.name="symex_dynamic::"+id2string(symbol.base_name);
   symbol.lvalue=true;
   
+  typet renamedtype = ns.follow(type);
   if(size_is_one)
-    symbol.type=type;
+    symbol.type=renamedtype;
   else
   {
     symbol.type=typet(typet::t_array);
-    symbol.type.subtype()=type;
+    symbol.type.subtype()=renamedtype;
     symbol.type.size(size);
   }
 
@@ -105,10 +94,10 @@ void goto_symext::symex_malloc(
   if(rhs.type()!=lhs.type())
     rhs.make_typecast(lhs.type());
 
-  state.rename(rhs, ns,node_id);
+  cur_state->rename(rhs);
   
   guardt guard;
-  symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
+  symex_assign_rec(lhs, rhs, guard);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   exprt sym("symbol", array_typet());
@@ -121,32 +110,18 @@ void goto_symext::symex_malloc(
   index.move_to_operands(sym, pointerobj);
   exprt truth("constant", bool_typet());
   truth.set("value", "true");
-  symex_assign_rec(state, ex_state, index, truth, guard,node_id);
+  symex_assign_rec(index, truth, guard);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_printf
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_printf(
-  statet &state,
-  const exprt &lhs,
-  const exprt &rhs,
-        unsigned node_id)
+  const exprt &lhs __attribute__((unused)),
+  const exprt &rhs)
 {
   if(rhs.operands().empty())
     throw "printf expected to have at least one operand";
 
   exprt tmp_rhs=rhs;
-  state.rename(tmp_rhs, ns, node_id);
+  cur_state->rename(tmp_rhs);
 
   const exprt::operandst &operands=tmp_rhs.operands();
   std::list<exprt> args;
@@ -166,28 +141,13 @@ void goto_symext::symex_printf(
     const exprt &fmt_str=format.op0().op0();
     const std::string &fmt=fmt_str.value().as_string();
 
-    target->output(state.guard, state.source, fmt, args);
+    target->output(cur_state->guard, cur_state->source, fmt, args);
   }
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_cpp_new
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_cpp_new(
-  statet &state,
   const exprt &lhs,
-  const side_effect_exprt &code,
-  execution_statet &ex_state,
-        unsigned node_id)
+  const side_effect_exprt &code)
 {
   bool do_array;
 
@@ -196,9 +156,10 @@ void goto_symext::symex_cpp_new(
 
   do_array=(code.statement()=="cpp_new[]");
       
-  ex_state.dynamic_counter++;
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
 
-  const std::string count_string(i2string(ex_state.dynamic_counter));
+  const std::string count_string(i2string(dynamic_counter));
 
   // value
   symbolt symbol;
@@ -209,14 +170,18 @@ void goto_symext::symex_cpp_new(
   symbol.lvalue=true;
   symbol.mode="C++";
   
+  typet newtype;
+  typet renamedtype = ns.follow(code.type().subtype());
   if(do_array)
   {
-    symbol.type=array_typet();
-    symbol.type.subtype()=code.type().subtype();
-    symbol.type.size(code.size_irep());
+    newtype=array_typet();
+    newtype.subtype()=renamedtype;
+    newtype.size(code.size_irep());
   }
   else
-    symbol.type=code.type().subtype();
+    newtype=renamedtype;
+
+  symbol.type = newtype;
 
   //symbol.type.active(symbol_expr(active_symbol));
   symbol.type.dynamic(true);
@@ -226,38 +191,217 @@ void goto_symext::symex_cpp_new(
   // make symbol expression
 
   exprt rhs(exprt::addrof, typet(typet::t_pointer));
-  rhs.type().subtype()=code.type().subtype();
+  rhs.type().subtype()=renamedtype;
   
   if(do_array)
   {
-    exprt index_expr(exprt::index, code.type().subtype());
+    exprt index_expr(exprt::index, renamedtype);
     index_expr.copy_to_operands(symbol_expr(symbol), gen_zero(int_type()));
     rhs.move_to_operands(index_expr);
   }
   else
     rhs.copy_to_operands(symbol_expr(symbol));
   
-  state.rename(rhs, ns,node_id);
+  cur_state->rename(rhs);
 
   guardt guard;
-  symex_assign_rec(state, ex_state, lhs, rhs, guard,node_id);
+  symex_assign_rec(lhs, rhs, guard);
 }
 
-/*******************************************************************\
-
-Function: goto_symext::symex_cpp_delete
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::symex_cpp_delete(
-  statet &state,
-  const codet &code)
+// XXX - implement as a call to free?
+void goto_symext::symex_cpp_delete(const codet &code __attribute__((unused)))
 {
   //bool do_array=code.statement()=="delete[]";
+}
+
+void
+goto_symext::intrinsic_yield(reachability_treet &art)
+{
+
+  art.force_cswitch_point();
+  return;
+}
+
+
+void
+goto_symext::intrinsic_switch_to(code_function_callt &call,
+                                 reachability_treet &art)
+{
+
+  assert(call.arguments().size() == 1);
+
+  // Switch to other thread.
+  exprt &num = call.arguments()[0];
+  if (num.id() != "constant") {
+    std::cerr << "Can't switch to non-constant thread id no";
+    abort();
+  }
+
+  unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
+  if (tid != art.get_cur_state().get_active_state_number())
+    art.get_cur_state().switch_to_thread(tid);
+
+  return;
+}
+
+void
+goto_symext::intrinsic_switch_from(reachability_treet &art)
+{
+
+  // Mark switching back to this thread as already having been explored
+  art.get_cur_state().DFS_traversed[art.get_cur_state().get_active_state_number()] = true;
+
+  // And force a context switch.
+  art.force_cswitch_point();
+  return;
+}
+
+
+void
+goto_symext::intrinsic_get_thread_id(code_function_callt &call,
+                                     reachability_treet &art)
+{
+  statet &state = art.get_cur_state().get_active_state();
+  unsigned int thread_id;
+
+  thread_id = art.get_cur_state().get_active_state_number();
+  constant_exprt tid(unsignedbv_typet(config.ansi_c.int_width));
+  tid.set_value(integer2binary(thread_id, config.ansi_c.int_width));
+
+  code_assignt assign(call.lhs(), tid);
+  assert(call.lhs().type() == tid.type());
+  state.value_set.assign(call.lhs(), tid, ns);
+  symex_assign(assign);
+  return;
+}
+
+void
+goto_symext::intrinsic_set_thread_data(code_function_callt &call,
+                                       reachability_treet &art)
+{
+  statet &state = art.get_cur_state().get_active_state();
+  exprt threadid = call.arguments()[0];
+  exprt startdata = call.arguments()[1];
+
+  state.rename(threadid);
+  state.rename(startdata);
+
+  if (threadid.id() != "constant") {
+    std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  art.get_cur_state().set_thread_start_data(tid, startdata);
+}
+
+void
+goto_symext::intrinsic_get_thread_data(code_function_callt &call,
+                                       reachability_treet &art)
+{
+  statet &state = art.get_cur_state().get_active_state();
+  exprt &threadid = call.arguments()[0];
+
+  state.level2.rename(threadid);
+
+  if (threadid.id() != "constant") {
+    std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  const exprt &startdata = art.get_cur_state().get_thread_start_data(tid);
+
+  code_assignt assign(call.lhs(), startdata);
+  assert(call.lhs().type() == startdata.type());
+  state.value_set.assign(call.lhs(), startdata, ns);
+  symex_assign(assign);
+  return;
+}
+
+void
+goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art)
+{
+
+  // As an argument, we expect the address of a symbol.
+  const exprt &args = call.operands()[2];
+  assert(args.id() == "arguments");
+  const exprt &addrof = args.operands()[0];
+  assert(addrof.id() == "address_of");
+  const exprt &symexpr = addrof.operands()[0];
+  assert(symexpr.id() == "symbol");
+  irep_idt symname = symexpr.get("identifier");
+
+  goto_functionst::function_mapt::const_iterator it =
+    art.goto_functions.function_map.find(symname);
+  if (it == art.goto_functions.function_map.end()) {
+    std::cerr << "Spawning thread \"" << symname << "\": symbol not found";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  if (!it->second.body_available) {
+    std::cerr << "Spawning thread \"" << symname << "\": no body" << std::endl;
+    abort();
+  }
+
+  const goto_programt &prog = it->second.body;
+  // Invalidates current state reference!
+  unsigned int thread_id = art.get_cur_state().add_thread(&prog);
+
+  statet &state = art.get_cur_state().get_active_state();
+
+  constant_exprt thread_id_expr(unsignedbv_typet(config.ansi_c.int_width));
+  thread_id_expr.set_value(integer2binary(thread_id, config.ansi_c.int_width));
+  code_assignt assign(call.lhs(), thread_id_expr);
+  state.value_set.assign(call.lhs(), thread_id_expr, ns);
+  symex_assign(assign);
+
+  // Force a context switch point. If the caller is in an atomic block, it'll be
+  // blocked, but a context switch will be forced when we exit the atomic block.
+  // Otherwise, this will cause the required context switch.
+  art.force_cswitch_point();
+
+  return;
+}
+
+void
+goto_symext::intrinsic_terminate_thread(reachability_treet &art)
+{
+
+  art.get_cur_state().end_thread();
+  // No need to force a context switch; an ended thread will cause the run to
+  // end and the switcher to be invoked.
+  return;
+}
+
+void
+goto_symext::intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art)
+{
+  statet &state = art.get_cur_state().get_active_state();
+  exprt threadid = call.arguments()[0];
+  state.level2.rename(threadid);
+
+  if (threadid.id() != "constant") {
+    std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  // Possibly we should handle this error; but meh.
+  assert(art.get_cur_state().threads_state.size() >= tid);
+
+  // Thread state is simply whether the thread is ended or not.
+  unsigned int flags = (art.get_cur_state().threads_state[tid].thread_ended)
+                       ? 1 : 0;
+
+  // Reuse threadid
+  constant_exprt flag_expr(unsignedbv_typet(config.ansi_c.int_width));
+  flag_expr.set_value(integer2binary(flags, config.ansi_c.int_width));
+  code_assignt assign(call.lhs(), flag_expr);
+  symex_assign(assign);
+  return;
 }

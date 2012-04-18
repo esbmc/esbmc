@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "dynamic_allocation.h"
 
-/*******************************************************************\
-
-Function: get_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static irep_idt get_object(const exprt &expr)
 {
   if(expr.id()==exprt::symbol)
@@ -43,24 +31,10 @@ static irep_idt get_object(const exprt &expr)
   return "";
 }
 
-/*******************************************************************\
-
-Function: goto_symext::do_valid_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::replace_dynamic_allocation(
-  const statet &state,
-  exprt &expr)
+void goto_symext::replace_dynamic_allocation(exprt &expr)
 {
   Forall_operands(it, expr)
-    replace_dynamic_allocation(state, *it);
+    replace_dynamic_allocation(*it);
 
   if(expr.id()=="valid_object" || expr.id()=="deallocated_object")
   {
@@ -80,7 +54,7 @@ void goto_symext::replace_dynamic_allocation(
       if(identifier!="")
       {        
         const irep_idt l0_identifier=
-          state.get_original_name(identifier);
+          cur_state->get_original_name(identifier);
 
         const symbolt &symbol=ns.lookup(l0_identifier);
         
@@ -91,24 +65,24 @@ void goto_symext::replace_dynamic_allocation(
         }
         else
         {
-          expr.make_bool(is_valid_object(state, symbol));
+          expr.make_bool(is_valid_object(symbol));
           return; // done
         }
       }
     }
 
     // default behavior
-    default_replace_dynamic_allocation(ns, expr);
+    default_replace_dynamic_allocation(expr);
   }
   else if(expr.id()=="dynamic_size")
   {
     // default behavior
-    default_replace_dynamic_allocation(ns, expr);
+    default_replace_dynamic_allocation(expr);
   }
    else if(expr.id()=="invalid-pointer")
   {
     // default behavior
-    default_replace_dynamic_allocation(ns, expr);
+    default_replace_dynamic_allocation(expr);
   }
   else if(expr.id()=="object_value")
   {
@@ -117,21 +91,7 @@ void goto_symext::replace_dynamic_allocation(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_symext::is_valid_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool goto_symext::is_valid_object(
-  const statet &state,
-  const symbolt &symbol)
+bool goto_symext::is_valid_object(const symbolt &symbol)
 {
   if(symbol.static_lifetime) return true; // global
   
@@ -140,15 +100,15 @@ bool goto_symext::is_valid_object(
     return false;
 
   // current location?
-  if(state.source.is_set &&
-     state.source.pc->local_variables.find(symbol.name)!=
-     state.source.pc->local_variables.end())
+  if(cur_state->source.is_set &&
+     cur_state->source.pc->local_variables.find(symbol.name)!=
+     cur_state->source.pc->local_variables.end())
     return true;
 
   // search call stack frames
   for(goto_symext::statet::call_stackt::const_iterator
-      it=state.call_stack.begin();
-      it!=state.call_stack.end();
+      it=cur_state->call_stack.begin();
+      it!=cur_state->call_stack.end();
       it++)
     if(it->calling_location.is_set &&
        it->calling_location.pc->local_variables.find(symbol.name)!=
