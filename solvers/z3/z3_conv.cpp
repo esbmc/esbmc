@@ -1057,9 +1057,7 @@ z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
 
   int numoperands = data.datatype_members.size();
   // Populate tuple with members of that struct/union
-  for (std::vector<expr2tc>::const_iterator it = data.datatype_members.begin();
-       it != data.datatype_members.end(); it++, i++)
-  {
+  forall_exprs(it, data.datatype_members) {
     if (i < numoperands) {
       (*it)->convert_smt(*this, (void *&)args[i]);
     } else {
@@ -1069,6 +1067,8 @@ z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
       (*it)->type->convert_smt_type(*this, (void*&)sort);
       args[i] = Z3_mk_fresh_const(z3_ctx, NULL, s);
     }
+
+    i++;
   }
 
   // Update unions "last-set" member to be the last field
@@ -1100,9 +1100,7 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
   bv = Z3_mk_fresh_const(z3_ctx, NULL, z3_array_type);
 
   i = 0;
-  for (std::vector<expr2tc>::const_iterator it = array.datatype_members.begin();
-       it != array.datatype_members.end(); it++) {
-
+  forall_exprs(it, array.datatype_members) {
     int_cte = Z3_mk_int(z3_ctx, i, native_int_sort);
 
     (*it)->convert_smt(*this, (void*&)val_cte);
