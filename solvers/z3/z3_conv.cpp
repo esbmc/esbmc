@@ -1185,7 +1185,7 @@ z3_convt::convert_smt_expr(const equality2t &equality, void *&_bv)
   Z3_ast args[2];
 
   equality.side_1->convert_smt(*this, (void*&)args[0]);
-  equality.side_2->convert_smt(*this, (void*&)args[0]);
+  equality.side_2->convert_smt(*this, (void*&)args[1]);
 
   bv = Z3_mk_eq(z3_ctx, args[0], args[1]);
 }
