@@ -1115,7 +1115,7 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
 {
   Z3_ast value, index;
   Z3_type_ast array_type = 0;
-  std::string tmp, out, identifier;
+  std::string tmp, identifier;
   int64_t size;
   u_int j;
   unsigned width;
@@ -1150,7 +1150,6 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
   {
     index = convert_number(j, config.ansi_c.int_width, true);
     bv = Z3_mk_store(z3_ctx, bv, index, value);
-    out = "j: " + j;
   }
 }
 
