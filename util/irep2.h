@@ -21,6 +21,14 @@
   for (std::vector<expr2tc>::iterator (it) (vector).begin();\
        it != (vector).end(); it++)
 
+#define forall_types(it, vect) \
+  for (std::vector<type2tc>::const_iterator (it) = (vect).begin();\
+       it != (vect).end(); it++)
+
+#define Forall_types(it, vector) \
+  for (std::vector<type2tc>::iterator (it) (vector).begin();\
+       it != (vector).end(); it++)
+
 class prop_convt;
 
 class type2t;
