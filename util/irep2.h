@@ -17,17 +17,17 @@
   for (std::vector<expr2tc>::const_iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
-#define Forall_exprs(it, vector) \
-  for (std::vector<expr2tc>::iterator (it) (vector).begin();\
-       it != (vector).end(); it++)
+#define Forall_exprs(it, vect) \
+  for (std::vector<expr2tc>::iterator (it) = (vect).begin();\
+       it != (vect).end(); it++
 
 #define forall_types(it, vect) \
   for (std::vector<type2tc>::const_iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
-#define Forall_types(it, vector) \
-  for (std::vector<type2tc>::iterator (it) (vector).begin();\
-       it != (vector).end(); it++)
+#define Forall_types(it, vect) \
+  for (std::vector<type2tc>::iterator (it) = (vect).begin();\
+       it != (vect).end(); it++)
 
 class prop_convt;
 
