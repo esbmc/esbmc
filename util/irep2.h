@@ -600,7 +600,7 @@ public:
 
 /** Logical operations base class. Base for any logical operator. No storage in
  *  this particular class. Result is always of boolean type. */
-class lops2t : public expr2t
+class lops2t : public expr_body<lops2t>
 {
 protected:
   lops2t(void);
@@ -610,8 +610,20 @@ public:
   virtual expr2tc clone(void) const = 0;
 };
 
+template <class T>
+class lops2_body : public lops2t
+{
+public:
+  lops2_body(expr_ids id, const expr2tc val1, expr2tc val2)
+    : lops2t(id, val1, val2) {};
+  lops2_body(const lops2_body &ref) : lops2t(ref) {};
+
+  virtual void convert_smt(prop_convt &obj, void *&arg) const;
+  virtual expr2tc clone(void) const;
+};
+
 /** Not operator. Takes a boolean value; results in a boolean value. */
-class not2t : public lops2t
+class not2t : public lops2_body<not2t>
 {
 public:
   not2t(const expr2tc notval);
