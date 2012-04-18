@@ -1064,7 +1064,7 @@ z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
       // Turns out that unions don't necessarily initialize all members.
       // If no initialization give, use free (fresh) variable.
       Z3_sort s;
-      (*it)->type->convert_smt_type(*this, (void*&)sort);
+      (*it)->type->convert_smt_type(*this, (void*&)s);
       args[i] = Z3_mk_fresh_const(z3_ctx, NULL, s);
     }
 
