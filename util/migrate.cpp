@@ -300,6 +300,26 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     lessthan2t *n = new lessthan2t(side1, side2);
     new_expr_ref = expr2tc(n);
     return true;
+   } else if (expr.id() == ">") {
+    expr2tc side1, side2;
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    greaterthan2t *n = new greaterthan2t(side1, side2);
+    new_expr_ref = expr2tc(n);
+    return true;
+  } else if (expr.id() == "<=") {
+    expr2tc side1, side2;
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    lessthanequal2t *n = new lessthanequal2t(side1, side2);
+    new_expr_ref = expr2tc(n);
+    return true;
   } else {
     return false;
   }

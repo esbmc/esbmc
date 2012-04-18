@@ -1233,6 +1233,18 @@ z3_convt::convert_smt_expr(const lessthan2t &lessthan, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const greaterthan2t &greaterthan, void *&_bv)
+{
+  convert_rel(greaterthan, Z3_mk_gt, Z3_mk_bvsgt, Z3_mk_bvugt, _bv);
+}
+
+void
+z3_convt::convert_smt_expr(const lessthanequal2t &le, void *&_bv)
+{
+  convert_rel(le, Z3_mk_le, Z3_mk_bvsle, Z3_mk_bvule, _bv);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

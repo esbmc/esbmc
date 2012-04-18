@@ -177,6 +177,8 @@ private:
   virtual void convert_smt_expr(const equality2t &equality, void *&bv);
   virtual void convert_smt_expr(const notequal2t &notequal, void *&bv);
   virtual void convert_smt_expr(const lessthan2t &lessthan, void *&bv);
+  virtual void convert_smt_expr(const greaterthan2t &greaterthan, void *&bv);
+  virtual void convert_smt_expr(const lessthanequal2t &le, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv) const;
   virtual void convert_smt_type(const bv_type2t &type, void *&bv) const;
