@@ -68,6 +68,7 @@ public:
   virtual void convert_smt_type(const prop_convt &obj, void *&arg) const = 0;
   virtual unsigned int get_width(void) const = 0;
   virtual bool operator==(const type2t &ref) const = 0;
+  bool operator!=(const type2t &ref) const;
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;

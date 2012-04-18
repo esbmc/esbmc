@@ -9,6 +9,13 @@ type2t::type2t(type_ids id)
 {
 }
 
+bool
+type2t::operator!=(const type2t &ref) const
+{
+
+  return !(*this == ref);
+}
+
 template<class derived>
 void
 type_body<derived>::convert_smt_type(const prop_convt &obj, void *&arg) const
