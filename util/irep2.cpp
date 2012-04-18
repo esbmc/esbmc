@@ -460,3 +460,23 @@ if2t::if2t(const if2t &ref) : expr_body<if2t>(ref), cond(ref.cond),
                               false_value(ref.false_value)
 {
 }
+
+rel2t::rel2t(expr_ids id, const expr2tc val1, const expr2tc val2)
+  : expr_body<rel2t>(type2tc(new bool_type2t()), id), side_1(val1), side_2(val2)
+{
+}
+
+rel2t::rel2t(const rel2t &ref)
+  : expr_body<rel2t>(ref)
+{
+}
+
+equality2t::equality2t(const expr2tc val1, const expr2tc val2)
+  : rel_body<equality2t>(equality_id, val1, val2)
+{
+}
+
+equality2t::equality2t(const equality2t &ref)
+  : rel_body<equality2t>(ref)
+{
+}
