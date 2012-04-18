@@ -1113,6 +1113,16 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const constant_string2t &str, void *&_bv)
+{
+
+  // Convert to array; convert array.
+  expr2tc newarray = str.to_array();
+  newarray->convert_smt(*this, _bv);
+  return;
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
