@@ -254,6 +254,22 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     constant_array_of2t *a = new constant_array_of2t(new_type, new_value);
     new_expr_ref = expr2tc(a);
     return true;
+  } else if (expr.id() == "if") {
+    type2tc new_type;
+    if (!migrate_type(expr.type(), new_type))
+      return false;
+
+    expr2tc cond, true_val, false_val;
+    if (!migrate_expr(expr.op0(), cond))
+      return false;
+    if (!migrate_expr(expr.op1(), true_val))
+      return false;
+    if (!migrate_expr(expr.op2(), false_val))
+      return false;
+
+    if2t *i = new if2t(type, cond, true_val, false_val);
+    new_expr_ref = expr2tc(i);
+    return true;
   } else {
     return false;
   }

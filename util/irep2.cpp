@@ -430,3 +430,16 @@ constant_array_of2t::constant_array_of2t(const constant_array_of2t &ref)
     initializer(ref.initializer)
 {
 }
+
+if2t::if2t(const type2tc type, const expr2tc _cond, const expr2tc true_val,
+           const expr2tc false_val)
+  : expr_body<if2t>(type, if_id), cond(_cond), true_value(true_val),
+    false_value(false_val)
+{
+}
+
+if2t::if2t(const if2t &ref) : expr_body<if2t>(ref), cond(ref.cond),
+                              true_value(ref.true_value),
+                              false_value(ref.false_value)
+{
+}

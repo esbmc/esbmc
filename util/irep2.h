@@ -489,16 +489,12 @@ public:
   const expr2tc from;
 };
 
-class if2t : public expr2t
+class if2t : public expr_body<if2t>
 {
 public:
   if2t(const type2tc type, const expr2tc cond, const expr2tc true_val,
              const expr2tc false_val);
-protected:
   if2t(const if2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 
   // Conditional that this "if" depends on, and which value to take upon each
   // branch of that condition.
