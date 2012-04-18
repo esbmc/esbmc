@@ -84,6 +84,14 @@ bv_type2t::get_width(void) const
   return width;
 }
 
+bool
+bv_type2t::cmp(const bv_type2t &ref) const
+{
+  if (width == ref.width)
+    return true;
+  return false;
+}
+
 struct_union_type2t::struct_union_type2t(type_ids id,
                                          const std::vector<type2tc> &_members,
                                          std::vector<std::string> memb_names,
@@ -92,6 +100,28 @@ struct_union_type2t::struct_union_type2t(type_ids id,
                                         member_names(memb_names),
                                         name(_name)
 {
+}
+
+bool
+struct_union_type2t::cmp(const struct_union_type2t &ref) const
+{
+
+  if (name != ref.name)
+    return false;
+
+  if (members.size() != ref.members.size())
+    return false;
+
+  std::vector<type2tc>::const_iterator it2 = ref.members.begin();
+  for (std::vector<type2tc>::const_iterator it = members.begin();
+       it != members.end(); it++, it2++)
+    if (!(*it->get() == *it2->get()))
+      return false;
+
+  if (member_names != ref.member_names)
+    return false;
+
+  return true;
 }
 
 bool_type2t::bool_type2t(void)
@@ -105,14 +135,32 @@ bool_type2t::get_width(void) const
   return 1;
 }
 
+bool
+bool_type2t::cmp(const bool_type2t &ref __attribute__((unused))) const
+{
+  return true; // No data stored in bool type
+}
+
 signedbv_type2t::signedbv_type2t(unsigned int width)
   : bv_type_body<signedbv_type2t>(signedbv_id, width)
 {
 }
 
+bool
+signedbv_type2t::cmp(const signedbv_type2t &ref) const
+{
+  return bv_type2t::cmp(ref);
+}
+
 unsignedbv_type2t::unsignedbv_type2t(unsigned int width)
   : bv_type_body<unsignedbv_type2t>(unsignedbv_id, width)
 {
+}
+
+bool
+unsignedbv_type2t::cmp(const unsignedbv_type2t &ref) const
+{
+  return bv_type2t::cmp(ref);
 }
 
 array_type2t::array_type2t(const type2tc t, const expr2tc s, bool inf)
@@ -143,6 +191,27 @@ array_type2t::get_width(void) const
   return num_elems * sub_width;
 }
 
+bool
+array_type2t::cmp(const array_type2t &ref) const
+{
+
+  // Check subtype type matches
+  if (!(*subtype.get() == *ref.subtype.get()))
+    return false;
+
+  // If both sizes are infinite, we're the same type
+  if (size_is_infinite && ref.size_is_infinite)
+    return true;
+
+  // If only one size is infinite, then we're not the same, and liable to step
+  // on a null pointer if we access array_size.
+  if (size_is_infinite || ref.size_is_infinite)
+    return false;
+
+  // Otherwise,
+  return (*array_size->type.get() == *ref.array_size->type.get());
+}
+
 pointer_type2t::pointer_type2t(type2tc _sub)
   : type_body<pointer_type2t>(pointer_id), subtype(_sub)
 {
@@ -152,6 +221,13 @@ unsigned int
 pointer_type2t::get_width(void) const
 {
   return config.ansi_c.pointer_width;
+}
+
+bool
+pointer_type2t::cmp(const pointer_type2t &ref) const
+{
+
+  return (*subtype.get() == *ref.subtype.get());
 }
 
 empty_type2t::empty_type2t(void)
@@ -165,6 +241,12 @@ empty_type2t::get_width(void) const
   assert(0 && "Fetching width of empty type - invalid operation");
 }
 
+bool
+empty_type2t::cmp(const empty_type2t &ref __attribute__((unused))) const
+{
+  return true; // Two empty types always compare true.
+}
+
 symbol_type2t::symbol_type2t(const dstring sym_name)
   : type_body<symbol_type2t>(symbol_id), symbol_name(sym_name)
 {
@@ -174,6 +256,12 @@ unsigned int
 symbol_type2t::get_width(void) const
 {
   assert(0 && "Fetching width of symbol type - invalid operation");
+}
+
+bool
+symbol_type2t::cmp(const symbol_type2t &ref) const
+{
+  return symbol_name == ref.symbol_name;
 }
 
 struct_type2t::struct_type2t(std::vector<type2tc> &members,
@@ -195,6 +283,13 @@ struct_type2t::get_width(void) const
   return width;
 }
 
+bool
+struct_type2t::cmp(const struct_type2t &ref) const
+{
+
+  return struct_union_type2t::cmp(ref);
+}
+
 union_type2t::union_type2t(std::vector<type2tc> &members,
                            std::vector<std::string> memb_names,
                            std::string name)
@@ -214,6 +309,13 @@ union_type2t::get_width(void) const
   return width;
 }
 
+bool
+union_type2t::cmp(const union_type2t &ref) const
+{
+
+  return struct_union_type2t::cmp(ref);
+}
+
 fixedbv_type2t::fixedbv_type2t(unsigned int fraction, unsigned int integer)
   : type_body<fixedbv_type2t>(fixedbv_id), fraction_bits(fraction),
                                            integer_bits(integer)
@@ -224,6 +326,19 @@ unsigned int
 fixedbv_type2t::get_width(void) const
 {
   return fraction_bits;
+}
+
+bool
+fixedbv_type2t::cmp(const fixedbv_type2t &ref) const
+{
+
+  if (fraction_bits != ref.fraction_bits)
+    return false;
+
+  if (integer_bits != ref.integer_bits)
+    return false;
+
+  return true;
 }
 
 code_type2t::code_type2t(void)
@@ -237,6 +352,12 @@ code_type2t::get_width(void) const
   assert(0 && "Fetching width of code type - invalid operation");
 }
 
+bool
+code_type2t::cmp(const code_type2t &ref) const
+{
+  return true; // All code is the same. Ish.
+}
+
 string_type2t::string_type2t()
   : type_body<string_type2t>(string_id)
 {
@@ -246,6 +367,12 @@ unsigned int
 string_type2t::get_width(void) const
 {
   assert(0 && "Fetching width of string type - needs consideration");
+}
+
+bool
+string_type2t::cmp(const string_type2t &ref) const
+{
+  return true; // All strings are the same.
 }
 
 /*************************** Base expr2t definitions **************************/
