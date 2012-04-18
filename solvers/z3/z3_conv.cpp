@@ -1123,21 +1123,22 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
 
   const array_type2t &arr = dynamic_cast<array_type2t&>(*array.type.get());
 
-  // Pick an array size. If the size is a constant integer just use that, if
-  // not then default to 100. XXX this default is somewhat broken.
+  array.type->convert_smt_type(*this, (void*&)array_type);
 
-  if (!arr.size_is_infinite &&
-      arr.array_size->expr_id == expr2t::constant_int_id) {
-    const constant_int2t &sz =
-      dynamic_cast<constant_int2t&>(*arr.array_size.get());
-    size = sz.as_long();
-  } else {
-    size = 100;
+  if (arr.size_is_infinite) {
+    // Don't attempt to do anything with this. The user is on their own.
+    bv = Z3_mk_fresh_const(z3_ctx, NULL, array_type);
+    return;
   }
 
-  array.initializer->convert_smt(*this, (void*&)value);
+  assert(arr.array_size->expr_id == expr2t::constant_int_id &&
+         "array_of sizes should be constant");
 
-  array.type->convert_smt_type(*this, (void*&)array_type);
+  const constant_int2t &sz =
+    dynamic_cast<constant_int2t&>(*arr.array_size.get());
+  size = sz.as_long();
+
+  array.initializer->convert_smt(*this, (void*&)value);
 
   if (arr.subtype->type_id == type2t::bool_id) {
     value = Z3_mk_false(z3_ctx);
