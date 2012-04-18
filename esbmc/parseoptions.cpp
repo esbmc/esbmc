@@ -252,7 +252,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", true);
   }
 
-  if(cmdline.isset("k-inductive"))
+  if(cmdline.isset("k-induction"))
   {
     options.set_option("base-case", base_case);
     options.set_option("inductive-step", !base_case);
@@ -439,7 +439,7 @@ int cbmc_parseoptionst::doit()
   // do actual BMC
   bool res = do_bmc(bmc, goto_functions);
 
-  if(!cmdline.isset("k-inductive"))
+  if(!cmdline.isset("k-induction"))
     return res;
 
   if(base_case)
@@ -453,7 +453,7 @@ int cbmc_parseoptionst::doit()
   base_case = !base_case;
   context.clear();
 
-  if(k_step <= atol(cmdline.get_values("k-inductive").front().c_str()))
+  if(k_step <= atol(cmdline.get_values("k-induction").front().c_str()))
   {
     doit();
   }
@@ -1151,7 +1151,7 @@ void cbmc_parseoptionst::help()
     " --- k-induction----------------------------------------------------------------\n\n"
     " --base-case                  check the base case\n"
     " --inductive-step             check the inductive step\n"
-    " --k-inductive nr             inductive step nr times\n\n"
+    " --k-induction nr             prove by k-induction (where nr is an optional k)\n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
     " --uw-model                   use under-approximation and widening approach\n"
