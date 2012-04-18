@@ -1178,6 +1178,19 @@ z3_convt::convert_smt_expr(const if2t &ifirep, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const equality2t &equality, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast args[2];
+
+  equality.side_1->convert_smt(*this, (void*&)args[0]);
+  equality.side_2->convert_smt(*this, (void*&)args[0]);
+
+  bv = Z3_mk_eq(z3_ctx, args[0], args[1]);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
