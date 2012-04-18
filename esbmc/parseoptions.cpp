@@ -436,6 +436,16 @@ int cbmc_parseoptionst::doit()
 
   // slice according to property
 
+  if(cmdline.isset("k-induction"))
+    print(8, "*** K-Induction Loop Iteration "+
+	      i2string((unsigned long)k_step)+
+	      " ***");
+
+  if(base_case)
+    print(8, "*** Checking base case ");
+  else
+    print(8, "*** Checking inductive step ");
+
   // do actual BMC
   bool res = do_bmc(bmc, goto_functions);
 
@@ -449,11 +459,13 @@ int cbmc_parseoptionst::doit()
 
     ++k_step;
   }
+  else if (!res)
+    return 0;
 
   base_case = !base_case;
   context.clear();
 
-  if(k_step <= atol(cmdline.get_values("k-induction").front().c_str()))
+  if(k_step <= atol(cmdline.get_values("k-step").front().c_str()))
   {
     doit();
   }
@@ -1151,13 +1163,14 @@ void cbmc_parseoptionst::help()
     " --- k-induction----------------------------------------------------------------\n\n"
     " --base-case                  check the base case\n"
     " --inductive-step             check the inductive step\n"
-    " --k-induction nr             prove by k-induction (where nr is an optional k)\n\n"
+    " --k-induction                prove by k-induction \n"
+    " --k-step nr                  set the k time step (default is 2) \n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
     " --uw-model                   use under-approximation and widening approach\n"
     " --core-size nr               limit num of assumpts in UW model(experimental)\n"
     " --round-robin                use the round robin scheduling approach\n"
-    " --time-slice                 set the time slice of the round robin algorithm \n\n"
+    " --time-slice nr              set the time slice of the round robin algorithm (default is 1) \n\n"
     " --- concurrency checking -----------------------------------------------------\n\n"
     " --context-switch nr          limit number of context switches for each thread \n"
     " --state-hashing              enable state-hashing, prunes duplicate states\n"

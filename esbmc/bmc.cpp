@@ -637,8 +637,11 @@ bool bmc_baset::solver_base::run_solver()
     return false;
 
   case decision_proceduret::D_SATISFIABLE:
-    bmc.error_trace(*conv);
-    bmc.report_failure();
+    if(!bmc.options.get_bool_option("inductive-step"))
+    {
+      bmc.error_trace(*conv);
+   	  bmc.report_failure();
+    }
     return true;
 
   // Return failure if we didn't actually check anything, we just emitted the

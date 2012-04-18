@@ -2774,9 +2774,9 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
     else if (it->is_typecast())
     {
       //std::cout << "it->pretty(): " << it->pretty() << std::endl;
-      //std::cout << "dentro do if name do it: " << it->op0().get_string("identifier") << std::endl;
+      //std::cout << "name: " << it->op0().get_string("identifier") << std::endl;
       //std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
-      //std::cout << "dentro do if component name do rhs: " << rhs.get_string("component_name") << std::endl;
+      //std::cout << "component name do rhs: " << rhs.get_string("component_name") << std::endl;
       if (it->op0().get_string("identifier").compare(rhs.get_string("component_name")) == 0)
         return i;
     } 

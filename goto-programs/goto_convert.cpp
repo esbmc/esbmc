@@ -2865,7 +2865,7 @@ DEBUGLOC;
     assert(found);
     expr = new_expr;
 
-    //std::cout << "expr1: " << expr.pretty() << std::endl;
+    std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
     //assert(0);
   }
   else
