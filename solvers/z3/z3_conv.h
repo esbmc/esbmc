@@ -48,6 +48,7 @@ public:
     s_is_uw = uw;
     total_mem_space = 0;
     model = NULL;
+    array_of_count = 0;
 
     Z3_push(z3_ctx);
     z3_prop.z3_ctx = z3_ctx;
@@ -218,6 +219,8 @@ private:
 
   typedef std::map<std::string, unsigned int> union_varst;
   union_varst union_vars;
+
+  unsigned int array_of_count;
 
   // Array of obj ID -> address range tuples
   unsigned int addr_space_sym_num;

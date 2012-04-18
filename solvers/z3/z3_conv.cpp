@@ -1118,7 +1118,6 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
   std::string tmp, out, identifier;
   int64_t size;
   u_int j;
-  static u_int inc = 0; // valid-ish as static, should be member.
   unsigned width;
   Z3_ast &bv = (Z3_ast &)_bv;
 
@@ -1151,8 +1150,8 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
     bv = z3_api.mk_var(identifier.c_str(), array_type);
   } else if (arr.subtype->type_id == type2t::signedbv_id ||
              arr.subtype->type_id == type2t::unsignedbv_id) {
-    ++inc;
-    identifier = "ARRAY_OF(0)" + width + inc;
+    ++array_of_count;
+    identifier = "ARRAY_OF(0)" + width + array_of_count;
     bv = z3_api.mk_var(identifier.c_str(), array_type);
   } else if (arr.subtype->type_id == type2t::fixedbv_id) {
     identifier = "ARRAY_OF(0l)" + width;
@@ -1173,8 +1172,8 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
     bv = z3_api.mk_var(identifier.c_str(), array_type);
 #endif
   } else if (arr.subtype->type_id == type2t::array_id)     {
-    ++inc;
-    identifier = "ARRAY_OF(0a)" + width + inc;
+    ++array_of_count;
+    identifier = "ARRAY_OF(0a)" + width + array_of_count;
     out = "identifier: " + identifier;
     bv = z3_api.mk_var(identifier.c_str(), array_type);
   }
@@ -2885,7 +2884,6 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
   std::string tmp, out, identifier;
   int64_t size;
   u_int j;
-  static u_int inc = 0; // valid-ish as static, should be member.
   unsigned width;
 
   size = binary2integer(array_type_size.size().get_string("value"), false)
@@ -2906,8 +2904,8 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
     bv = z3_api.mk_var(identifier.c_str(), array_type);
   } else if (expr.type().subtype().id() == "signedbv" ||
              expr.type().subtype().id() == "unsignedbv")       {
-    ++inc;
-    identifier = "ARRAY_OF(0)" + width + inc;
+    ++array_of_count;
+    identifier = "ARRAY_OF(0)" + width + array_of_count;
     bv = z3_api.mk_var(identifier.c_str(), array_type);
   } else if (expr.type().subtype().id() == "fixedbv")     {
     identifier = "ARRAY_OF(0l)" + width;
@@ -2926,8 +2924,8 @@ z3_convt::convert_array_of(const exprt &expr, Z3_ast &bv)
     identifier = "array_of_" + expr.op0().type().tag().as_string();
     bv = z3_api.mk_var(identifier.c_str(), array_type);
   } else if (expr.type().subtype().id() == "array")     {
-    ++inc;
-    identifier = "ARRAY_OF(0a)" + width + inc;
+    ++array_of_count;
+    identifier = "ARRAY_OF(0a)" + width + array_of_count;
     out = "identifier: " + identifier;
     bv = z3_api.mk_var(identifier.c_str(), array_type);
   }
