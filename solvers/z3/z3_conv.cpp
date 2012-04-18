@@ -1217,6 +1217,13 @@ z3_convt::convert_rel(const rel2t &rel, ast_convert_calltype intmode,
   rel.side_1->convert_smt(*this, (void*&)args[0]);
   rel.side_2->convert_smt(*this, (void*&)args[1]);
 
+  // XXXjmorse -- pointer comparisons are still broken.
+  if (rel.side_1->type->type_id == type2t::pointer_id)
+    args[0] = z3_api.mk_tuple_select(args[0], 1);
+
+  if (rel.side_2->type->type_id == type2t::pointer_id)
+    args[1] = z3_api.mk_tuple_select(args[1], 1);
+
   if (int_encoding) {
     bv = intmode(z3_ctx, args[0], args[1]);
   } else if (rel.side_1->type->type_id == type2t::signedbv_id) {
