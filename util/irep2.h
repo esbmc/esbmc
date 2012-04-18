@@ -13,6 +13,14 @@
 
 // XXXjmorse - abstract, access modifies, need consideration
 
+#define forall_exprs(it, vect) \
+  for (std::vector<expr2tc>::const_iterator (it) = (vect).begin();\
+       it != (vect).end(); it++)
+
+#define Forall_exprs(it, vector) \
+  for (std::vector<expr2tc>::iterator (it) (vector).begin();\
+       it != (vector).end(); it++)
+
 class prop_convt;
 
 class type2t;
