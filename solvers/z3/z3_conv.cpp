@@ -1138,45 +1138,12 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
   array.initializer->convert_smt(*this, (void*&)value);
 
   array.type->convert_smt_type(*this, (void*&)array_type);
-  width = array.initializer->type->get_width();
-
-// XXX jmorse  - string plus integer != what the author expected...
 
   if (arr.subtype->type_id == type2t::bool_id) {
-
     value = Z3_mk_false(z3_ctx);
-    if (width == 1) out = "width: " + width;
-    identifier = "ARRAY_OF(false)" + width;
-    bv = z3_api.mk_var(identifier.c_str(), array_type);
-  } else if (arr.subtype->type_id == type2t::signedbv_id ||
-             arr.subtype->type_id == type2t::unsignedbv_id) {
-    ++array_of_count;
-    identifier = "ARRAY_OF(0)" + width + array_of_count;
-    bv = z3_api.mk_var(identifier.c_str(), array_type);
-  } else if (arr.subtype->type_id == type2t::fixedbv_id) {
-    identifier = "ARRAY_OF(0l)" + width;
-    bv = z3_api.mk_var(identifier.c_str(), array_type);
-  } else if (arr.subtype->type_id == type2t::pointer_id) {
-    identifier = "ARRAY_OF(0p)" + width;
-    bv = z3_api.mk_var(identifier.c_str(), array_type);
-#if 0
-  } else if (expr.type().id() == "array" && expr.type().subtype().id() ==
-             "struct")       {
-    std::string identifier;
-    identifier = "array_of_" + expr.op0().type().tag().as_string();
-    bv = z3_api.mk_var(identifier.c_str(), array_type);
-  } else if (expr.type().id() == "array" && expr.type().subtype().id() ==
-             "union")       {
-    std::string identifier;
-    identifier = "array_of_" + expr.op0().type().tag().as_string();
-    bv = z3_api.mk_var(identifier.c_str(), array_type);
-#endif
-  } else if (arr.subtype->type_id == type2t::array_id)     {
-    ++array_of_count;
-    identifier = "ARRAY_OF(0a)" + width + array_of_count;
-    out = "identifier: " + identifier;
-    bv = z3_api.mk_var(identifier.c_str(), array_type);
   }
+
+  bv = Z3_mk_fresh_const(z3_ctx, NULL, array_type);
 
   //update array
   for (j = 0; j < size; j++)
