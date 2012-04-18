@@ -1127,7 +1127,8 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
   // Pick an array size. If the size is a constant integer just use that, if
   // not then default to 100. XXX this default is somewhat broken.
 
-  if (arr.array_size->expr_id == expr2t::constant_int_id) {
+  if (!arr.size_is_infinite &&
+      arr.array_size->expr_id == expr2t::constant_int_id) {
     const constant_int2t &sz =
       dynamic_cast<constant_int2t&>(*arr.array_size.get());
     size = sz.as_long();
