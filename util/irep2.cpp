@@ -18,6 +18,19 @@ type_body<derived>::convert_smt_type(const prop_convt &obj, void *&arg) const
 }
 
 template<class derived>
+bool
+type_body<derived>::operator==(const type2t &ref) const
+{
+
+  if (type_id != ref.type_id)
+    return false;
+
+  const derived &castedref = dynamic_cast<const derived&>(ref);
+  const derived &thiscasted = dynamic_cast<const derived&>(*this);
+  return thiscasted.cmp(castedref);
+}
+
+template<class derived>
 void
 bv_type_body<derived>::convert_smt_type(const prop_convt &obj, void *&arg) const
 {
@@ -26,11 +39,37 @@ bv_type_body<derived>::convert_smt_type(const prop_convt &obj, void *&arg) const
 }
 
 template<class derived>
+bool
+bv_type_body<derived>::operator==(const type2t &ref) const
+{
+
+  if (type_id != ref.type_id)
+    return false;
+
+  const derived &castedref = dynamic_cast<const derived&>(ref);
+  const derived &thiscasted = dynamic_cast<const derived&>(*this);
+  return thiscasted.cmp(castedref);
+}
+
+template<class derived>
 void
 struct_union_type_body2t<derived>::convert_smt_type(const prop_convt &obj, void *&arg) const
 {
   const derived *derived_this = static_cast<const derived *>(this);
   obj.convert_smt_type(*derived_this, arg);
+}
+
+template<class derived>
+bool
+struct_union_type_body2t<derived>::operator==(const type2t &ref) const
+{
+
+  if (type_id != ref.type_id)
+    return false;
+
+  const derived &castedref = dynamic_cast<const derived&>(ref);
+  const derived &thiscasted = dynamic_cast<const derived&>(*this);
+  return thiscasted.cmp(castedref);
 }
 
 bv_type2t::bv_type2t(type2t::type_ids id, unsigned int _width)
