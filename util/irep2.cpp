@@ -690,3 +690,13 @@ lessthanequal2t::lessthanequal2t(const lessthanequal2t &ref)
   : rel_body<lessthanequal2t>(ref)
 {
 }
+
+greaterthanequal2t::greaterthanequal2t(const expr2tc val1, const expr2tc val2)
+  : rel_body<greaterthanequal2t>(greaterthanequal_id, val1, val2)
+{
+}
+
+greaterthanequal2t::greaterthanequal2t(const greaterthanequal2t &ref)
+  : rel_body<greaterthanequal2t>(ref)
+{
+}

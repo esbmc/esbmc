@@ -320,6 +320,16 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     lessthanequal2t *n = new lessthanequal2t(side1, side2);
     new_expr_ref = expr2tc(n);
     return true;
+  } else if (expr.id() == ">=") {
+    expr2tc side1, side2;
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    greaterthanequal2t *n = new greaterthanequal2t(side1, side2);
+    new_expr_ref = expr2tc(n);
+    return true;
   } else {
     return false;
   }

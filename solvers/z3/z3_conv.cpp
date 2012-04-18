@@ -1245,6 +1245,12 @@ z3_convt::convert_smt_expr(const lessthanequal2t &le, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const greaterthanequal2t &ge, void *&_bv)
+{
+  convert_rel(ge, Z3_mk_ge, Z3_mk_bvsge, Z3_mk_bvuge, _bv);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
