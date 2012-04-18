@@ -1405,21 +1405,21 @@ Function: goto_convertt::get_struct_components
 
 void get_struct_components(const exprt &exp, struct_typet &str)
 {
-	DEBUGLOC;
+  DEBUGLOC;
   //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
   //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
-  if (exp.is_symbol())
+  if (exp.is_symbol() && exp.type().id()!="code")
   {
-	  //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
-      unsigned int size = str.components().size();
-      str.components().resize(size+1);
-      str.components()[size] = (struct_typet::componentt &) exp;
-      str.components()[size].set_name(exp.get_string("identifier"));
-      str.components()[size].pretty_name(exp.get_string("identifier"));
+    //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
+    unsigned int size = str.components().size();
+    str.components().resize(size+1);
+    str.components()[size] = (struct_typet::componentt &) exp;
+    str.components()[size].set_name(exp.get_string("identifier"));
+    str.components()[size].pretty_name(exp.get_string("identifier"));
   }
   else if (exp.operands().size()==1)
   {
-	DEBUGLOC;
+    DEBUGLOC;
     if (exp.op0().is_symbol())
       get_struct_components(exp.op0(), str);
     else if (exp.op0().operands().size()==1)
@@ -1427,7 +1427,7 @@ void get_struct_components(const exprt &exp, struct_typet &str)
   }
   else if (exp.operands().size()==2)
   {
-	  DEBUGLOC;
+    DEBUGLOC;
     if (exp.op0().is_symbol())
       get_struct_components(exp.op0(), str);
     else if (exp.op0().operands().size())
@@ -1435,8 +1435,8 @@ void get_struct_components(const exprt &exp, struct_typet &str)
   }
   else
   {
-	//std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
-	forall_operands(it, exp)
+    //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
+    forall_operands(it, exp)
     {
       //std::cout << "exp.id(): " << exp.id() << std::endl;
       //std::cout << "it->is_code(): " << it->is_code() << std::endl;
@@ -2836,15 +2836,13 @@ DEBUGLOC;
         found=true;
       }
     }
-
-    if (found)
-      expr = new_expr;
-
     assert(found);
+    expr = new_expr;
   }
   else
   {
     assert(expr.operands().size()==2);
+    assert(expr.op0().type() == expr.op1().type());
     exprt new_expr(exprt::member, expr.op1().type());
     new_expr.reserve_operands(1);
     new_expr.copy_to_operands(lhs_struct);
@@ -2868,10 +2866,9 @@ DEBUGLOC;
 	    break;
       }
     }
-    if (found)
-      expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
-    //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
     assert(found);
+    expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
+    //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
   }
 }
 

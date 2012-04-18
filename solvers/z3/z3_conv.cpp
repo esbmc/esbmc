@@ -651,7 +651,8 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
   if (type.id() == "bool") {
     bv = Z3_mk_bool_type(z3_ctx);
   } else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
-             type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
+             type.id() == "c_enum" || type.id() == "incomplete_c_enum" /*||
+	     type.get("return_type") == "signedbv"*/) {
     get_type_width(type, width);
 
     if (int_encoding)
@@ -674,14 +675,17 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
   } else if (type.id() == "pointer")     {
     create_pointer_type(bv);
   } else if (type.id() == "symbol" || type.id() == "empty" ||
-             type.id() == "c_enum")     {
+             type.id() == "c_enum" /*|| type.get("return_type") == "empty"*/) {
     if (int_encoding)
       bv = Z3_mk_int_type(z3_ctx);
     else
       bv = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
-  } else
+  } else {
+    std::cout << "type.pretty(): " << type.pretty() << std::endl;
+    std::cout << "return_type: " << type.get("return_type") << std::endl;
+    assert(0);
     throw new conv_error("unexpected type in create_type", type);
-
+  }
   DEBUGLOC;
 
   return;
@@ -2696,7 +2700,7 @@ void
 z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
-  //std::cout << expr.pretty() << std::endl;
+  //std::cout << "convert_with: " << expr.pretty() << std::endl;
   assert(expr.operands().size() == 3);
   Z3_ast array_var, array_val, operand0, operand1, operand2;
 
@@ -2707,8 +2711,10 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
     convert_bv(expr.op2(), array_val);
 
     idx = convert_member_name(expr.op0(), expr.op1());
+    //std::cout << "idx: " << idx << std::endl;
+    //DEBUGLOC;
     bv = z3_api.mk_tuple_update(array_var, idx, array_val);
-
+    //DEBUGLOC;
     // Update last-updated-field field if it's a union
     if (expr.type().id() == "union") {
        unsigned int components_size =
@@ -2760,10 +2766,15 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
        it != components.end();
        it++, i++)
   {
+    //std::cout << "it->is_typecast(): " << it->is_typecast() << std::endl;
+    //std::cout << "name: " << it->get("name") << std::endl;
+    //std::cout << "component_name: " << rhs.get_string("component_name") << std::endl; 
     if (it->get("name").compare(rhs.get_string("component_name")) == 0)
       return i;
     else if (it->is_typecast())
     {
+      //std::cout << "it->pretty(): " << it->pretty() << std::endl;
+      //std::cout << "dentro do if name: " << it->op0().get_string("identifier") << std::endl;
       if (it->op0().get_string("identifier").compare(rhs.get_string("component_name")) == 0)
         return i;
     } 
