@@ -1588,7 +1588,11 @@ void goto_convertt::convert_for(
 #if 1
     //set the type of the state vector
     state_vector.subtype() = state;
-    exprt lhs_index = symbol_exprt("kindice", int_type());
+
+    std::string identifier;
+    identifier = "kindice$"+i2string(state_counter);
+
+    exprt lhs_index = symbol_exprt(identifier, int_type());
     exprt new_expr(exprt::with, state_vector);
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
@@ -1623,7 +1627,11 @@ void goto_convertt::convert_for(
   {
     //set the type of the state vector
     state_vector.subtype() = state;
-    exprt lhs_index = symbol_exprt("kindice", int_type());
+
+    std::string identifier;
+    identifier = "kindice$"+i2string(state_counter);
+
+    exprt lhs_index = symbol_exprt(identifier, int_type());
     exprt new_expr(exprt::index, state);
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
@@ -1787,7 +1795,9 @@ Function: goto_convertt::init_k_indice
 void goto_convertt::init_k_indice(
   goto_programt &dest)
 {
-  exprt lhs_index = symbol_exprt("kindice", int_type());
+  std::string identifier;
+  identifier = "kindice$"+i2string(state_counter);
+  exprt lhs_index = symbol_exprt(identifier, int_type());
   exprt zero_expr = gen_zero(int_type());
   code_assignt new_assign(lhs_index,zero_expr);
   copy(new_assign, ASSIGN, dest);
@@ -1811,7 +1821,11 @@ void goto_convertt::assign_state_vector(
 {
     //set the type of the state vector
     state_vector.subtype() = state;
-    exprt lhs_index = symbol_exprt("kindice", int_type());
+
+    std::string identifier;
+    identifier = "kindice$"+i2string(state_counter);
+
+    exprt lhs_index = symbol_exprt(identifier, int_type());
     exprt new_expr(exprt::with, state_vector);
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
@@ -1954,7 +1968,11 @@ void goto_convertt::convert_while(
 #if 1
     //set the type of the state vector
     state_vector.subtype() = state;
-    exprt lhs_index = symbol_exprt("kindice", int_type());
+
+    std::string identifier;
+    identifier = "kindice$"+i2string(state_counter);
+
+    exprt lhs_index = symbol_exprt(identifier, int_type());
     exprt new_expr(exprt::with, state_vector);
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
@@ -1989,7 +2007,11 @@ void goto_convertt::convert_while(
   {
     //set the type of the state vector
     state_vector.subtype() = state;
-    exprt lhs_index = symbol_exprt("kindice", int_type());
+
+    std::string identifier;
+    identifier = "kindice$"+i2string(state_counter);
+
+    exprt lhs_index = symbol_exprt(identifier, int_type());
     exprt new_expr(exprt::index, state);
     exprt lhs_array("symbol", state_vector);
     exprt rhs("symbol", state);
@@ -2819,7 +2841,11 @@ DEBUGLOC;
     new_expr.reserve_operands(1);
     new_expr.copy_to_operands(lhs_struct);
     new_expr.component_name(expr.op0().get_string("identifier"));
+    new_expr.type() = bool_typet();
+
     assert(!new_expr.get_string("component_name").empty());
+    assert(new_expr.type().is_bool());
+
 
     const struct_typet &struct_type = to_struct_type(lhs_struct.type());
     const struct_typet::componentst &components = struct_type.components();
@@ -2832,22 +2858,30 @@ DEBUGLOC;
     {
       if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
       {
-	it->swap(expr);
+	    it->swap(expr);
         found=true;
       }
     }
     assert(found);
     expr = new_expr;
+
+    //std::cout << "expr1: " << expr.pretty() << std::endl;
+    //assert(0);
   }
   else
   {
     assert(expr.operands().size()==2);
     assert(expr.op0().type() == expr.op1().type());
-    exprt new_expr(exprt::member, expr.op1().type());
+
+    exprt new_expr(exprt::member, expr.op0().type());
     new_expr.reserve_operands(1);
     new_expr.copy_to_operands(lhs_struct);
     new_expr.component_name(expr.op0().get_string("identifier"));
+
     assert(!new_expr.get_string("component_name").empty());
+
+    //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
+    assert(new_expr.type().id() == expr.op0().type().id());
 
     const struct_typet &struct_type = to_struct_type(lhs_struct.type());
     const struct_typet::componentst &components = struct_type.components();
