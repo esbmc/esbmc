@@ -34,7 +34,7 @@ typedef unsigned int uint;
 class z3_convt: public prop_convt
 {
 public:
-  z3_convt(bool uw, bool int_encoding, bool smt)
+  z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
                                :prop_convt(z3_prop),
                                 z3_prop(uw, *this)
   {
@@ -59,6 +59,17 @@ public:
     z3_prop.z3_api.set_z3_ctx(z3_ctx);
 
     init_addr_space_array();
+
+    // Pick a modelling array to shoehorn initialization data into. Because
+    // we don't yet have complete data for whether pointers are dynamic or not,
+    // this is the one modelling array that absolutely _has_ to be initialized
+    // to false for each element, which is going to be shoved into
+    // convert_identifier_pointer.
+    if (is_cpp) {
+      dyn_info_arr_name = "cpp::__ESBMC_is_dynamic&0#1";
+    } else {
+      dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
+    }
   }
 
   virtual ~z3_convt();
@@ -223,6 +234,7 @@ private:
   union_varst union_vars;
 
   unsigned int array_of_count;
+  irep_idt dyn_info_arr_name;
 
   // Array of obj ID -> address range tuples
   unsigned int addr_space_sym_num;

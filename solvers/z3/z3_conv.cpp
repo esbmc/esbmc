@@ -2216,6 +2216,20 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 
     // Update array
     bump_addrspace_array(obj_num, range_tuple);
+
+    // Finally, ensure that the array storing whether this pointer is dynamic,
+    // is initialized for this ptr to false. That way, only pointers created
+    // through malloc will be marked dynamic.
+
+    array_typet arraytype;
+    arraytype.size() = exprt("infinity");
+    arraytype.subtype() = bool_typet();
+    Z3_ast allocarray;
+    convert_identifier(dyn_info_arr_name.as_string(), arraytype, allocarray);
+    Z3_ast idxnum = Z3_mk_int(z3_ctx, obj_num, native_int_sort);
+    Z3_ast select = Z3_mk_select(z3_ctx, allocarray, idxnum);
+    Z3_ast isfalse = Z3_mk_eq(z3_ctx, Z3_mk_false(z3_ctx), select);
+    assert_formula(isfalse);
   }
 }
 

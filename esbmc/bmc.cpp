@@ -550,7 +550,7 @@ bool bmct::run_thread()
 #endif
     else if(options.get_bool_option("z3"))
 #ifdef Z3
-      solver = new z3_solver(*this);
+      solver = new z3_solver(*this, is_cpp);
 #else
       throw "This version of ESBMC was not compiled with Z3 support";
 #endif
@@ -558,7 +558,7 @@ bool bmct::run_thread()
       // If we have Z3, default to Z3. Otherwise, user needs to explicitly
       // select an SMT solver
 #ifdef Z3
-      solver = new z3_solver(*this);
+      solver = new z3_solver(*this, is_cpp);
 #else
       throw "Please specify a SAT/SMT solver to use";
 #endif
@@ -640,10 +640,11 @@ bmct::boolector_solver::boolector_solver(bmct &bmc)
 #endif
 
 #ifdef Z3
-bmct::z3_solver::z3_solver(bmct &bmc)
+bmct::z3_solver::z3_solver(bmct &bmc, bool is_cpp)
   : solver_base(bmc), z3_conv(bmc.options.get_bool_option("uw-model"),
                                bmc.options.get_bool_option("int-encoding"),
-                               bmc.options.get_bool_option("smt"))
+                               bmc.options.get_bool_option("smt"),
+                               is_cpp)
 {
   z3_conv.set_filename(bmc.options.get_option("outfile"));
   z3_conv.set_z3_core_size(atol(bmc.options.get_option("core-size").c_str()));

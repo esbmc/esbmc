@@ -54,6 +54,12 @@ public:
     interleaving_number = 0;
     interleaving_failed = 0;
     uw_loop = 0;
+
+    const symbolt *sp;
+    if (ns.lookup(irep_idt("c::__ESBMC_alloc"), sp))
+      is_cpp = true;
+    else
+      is_cpp = false;
   }
 
   uint _unsat_core;
@@ -63,6 +69,7 @@ public:
   unsigned int interleaving_number;
   unsigned int interleaving_failed;
   unsigned int uw_loop;
+  bool is_cpp;
 
   virtual bool run(const goto_functionst &goto_functions);
   virtual ~bmct() { }
@@ -117,7 +124,7 @@ protected:
 #ifdef Z3
   class z3_solver : public solver_base {
   public:
-    z3_solver(bmct &bmc);
+    z3_solver(bmct &bmc, bool is_cpp);
     virtual bool run_solver(symex_target_equationt &equation);
   protected:
     z3_convt z3_conv;
