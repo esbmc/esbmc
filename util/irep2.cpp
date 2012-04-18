@@ -650,3 +650,23 @@ equality2t::equality2t(const equality2t &ref)
   : rel_body<equality2t>(ref)
 {
 }
+
+notequal2t::notequal2t(const expr2tc val1, const expr2tc val2)
+  : rel_body<notequal2t>(notequal_id, val1, val2)
+{
+}
+
+notequal2t::notequal2t(const notequal2t &ref)
+  : rel_body<notequal2t>(ref)
+{
+}
+
+lessthan2t::lessthan2t(const expr2tc val1, const expr2tc val2)
+  : rel_body<lessthan2t>(lessthan_id, val1, val2)
+{
+}
+
+lessthan2t::lessthan2t(const lessthan2t &ref)
+  : rel_body<lessthan2t>(ref)
+{
+}

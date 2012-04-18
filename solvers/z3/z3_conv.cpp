@@ -1192,6 +1192,38 @@ z3_convt::convert_smt_expr(const equality2t &equality, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const notequal2t &notequal, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast args[2];
+
+  notequal.side_1->convert_smt(*this, (void*&)args[0]);
+  notequal.side_2->convert_smt(*this, (void*&)args[1]);
+
+  bv = Z3_mk_distinct(z3_ctx, 2, args);
+}
+
+void
+z3_convt::convert_smt_expr(const lessthan2t &lessthan, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast args[2];
+
+  lessthan.side_1->convert_smt(*this, (void*&)args[0]);
+  lessthan.side_2->convert_smt(*this, (void*&)args[1]);
+
+  if (int_encoding) {
+    bv = Z3_mk_lt(z3_ctx, args[0], args[1]);
+  } else if (lessthan.side_1->type->type_id == type2t::signedbv_id) {
+    bv = Z3_mk_bvslt(z3_ctx, args[0], args[1]);
+  } else {
+    bv = Z3_mk_bvult(z3_ctx, args[0], args[1]);
+  }
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

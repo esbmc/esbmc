@@ -280,6 +280,26 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     equality2t *e = new equality2t(side1, side2);
     new_expr_ref = expr2tc(e);
     return true;
+  } else if (expr.id() == "!=") {
+    expr2tc side1, side2;
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    notequal2t *n = new notequal2t(side1, side2);
+    new_expr_ref = expr2tc(n);
+    return true;
+   } else if (expr.id() == "<") {
+    expr2tc side1, side2;
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    lessthan2t *n = new lessthan2t(side1, side2);
+    new_expr_ref = expr2tc(n);
+    return true;
   } else {
     return false;
   }

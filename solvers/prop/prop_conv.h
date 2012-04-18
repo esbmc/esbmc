@@ -118,6 +118,8 @@ public:
   virtual void convert_smt_expr(const constant_string2t &str, void *&arg) = 0;
   virtual void convert_smt_expr(const if2t &ifirep, void *&arg) = 0;
   virtual void convert_smt_expr(const equality2t &equality, void *&arg) = 0;
+  virtual void convert_smt_expr(const notequal2t &notequal, void *&arg) = 0;
+  virtual void convert_smt_expr(const lessthan2t &lessthan, void *&arg) = 0;
 };
 
 #endif
