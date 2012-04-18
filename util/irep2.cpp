@@ -418,3 +418,15 @@ constant_array2t::constant_array2t(const constant_array2t &ref)
     datatype_members(ref.datatype_members)
 {
 }
+
+constant_array_of2t::constant_array_of2t(const type2tc type, expr2tc init)
+  : const_expr_body<constant_array_of2t>(type, constant_array_id),
+    initializer(init)
+{
+}
+
+constant_array_of2t::constant_array_of2t(const constant_array_of2t &ref)
+  : const_expr_body<constant_array_of2t>(ref),
+    initializer(ref.initializer)
+{
+}

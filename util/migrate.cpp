@@ -241,6 +241,19 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     constant_array2t *a = new constant_array2t(new_type, members);
     new_expr_ref = expr2tc(a);
     return true;
+  } else if (expr.id() == "array_of") {
+    type2tc new_type;
+    if (!migrate_type(expr.type(), new_type))
+      return false;
+
+    assert(expr.operands().size() == 1);
+    expr2tc new_value;
+    if (!migrate_expr(expr.op0(), new_value))
+      return false;
+
+    constant_array_of2t *a = new constant_array_of2t(new_type, new_value);
+    new_expr_ref = expr2tc(a);
+    return true;
   } else {
     return false;
   }

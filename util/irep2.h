@@ -454,15 +454,11 @@ public:
   const std::vector<expr2tc> datatype_members;
 };
 
-class constant_array_of2t : public constant2t
+class constant_array_of2t : public const_expr_body<constant_array_of2t>
 {
 public:
   constant_array_of2t(const type2tc type, const expr2tc initializer);
-protected:
-  constant_array_of2t(constant_array_of2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
+  constant_array_of2t(const constant_array_of2t &ref);
 
   // Type records the size of the array; this records the initializer.
   const expr2tc initializer;
