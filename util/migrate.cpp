@@ -270,6 +270,16 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if2t *i = new if2t(type, cond, true_val, false_val);
     new_expr_ref = expr2tc(i);
     return true;
+  } else if (expr.id() == "=") {
+    expr2tc side1, side2;
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    equality2t *e = new equality2t(side1, side2);
+    new_expr_ref = expr2tc(e);
+    return true;
   } else {
     return false;
   }
