@@ -116,6 +116,7 @@ public:
   virtual void convert_smt_expr(const constant_array2t &array, void *&arg) = 0;
   virtual void convert_smt_expr(const constant_array_of2t &array, void *&arg) = 0;
   virtual void convert_smt_expr(const constant_string2t &str, void *&arg) = 0;
+  virtual void convert_smt_expr(const if2t &ifirep, void *&arg) = 0;
 };
 
 #endif

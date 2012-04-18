@@ -1164,6 +1164,20 @@ z3_convt::convert_smt_expr(const constant_string2t &str, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const if2t &ifirep, void *&_bv)
+{
+  Z3_ast operand0, operand1, operand2;
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  ifirep.cond->convert_smt(*this, (void*&)operand0);
+  ifirep.true_value->convert_smt(*this, (void*&)operand1);
+  ifirep.false_value->convert_smt(*this, (void*&)operand2);
+
+  bv = Z3_mk_ite(z3_ctx, operand0, operand1, operand2);
+  return;
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
