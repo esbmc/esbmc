@@ -1040,16 +1040,16 @@ z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
   // Converts a static struct/union - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
-  struct_union_type2t *type = dynamic_cast<struct_union_type2t*>(data.type.get());
+  struct_union_type2t &type = dynamic_cast<struct_union_type2t&>(*data.type.get());
   u_int i = 0;
 
-  assert(type->members.size() >= data.datatype_members.size());
-  assert(!type->members.empty());
+  assert(type.members.size() >= data.datatype_members.size());
+  assert(!type.members.empty());
 
   Z3_sort sort;
-  type->convert_smt_type(*this, (void*&)sort);
+  type.convert_smt_type(*this, (void*&)sort);
 
-  unsigned size = type->members.size();
+  unsigned size = type.members.size();
   if (data.expr_id == expr2t::constant_union_id)
     size++;
 
