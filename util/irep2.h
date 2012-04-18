@@ -1104,4 +1104,14 @@ public:
   const expr2tc string;
 };
 
+inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+{
+  return (*a.get() == *b.get());
+}
+
+inline bool operator!=(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+{
+  return (*a.get() != *b.get());
+}
+
 #endif /* _UTIL_IREP2_H_ */
