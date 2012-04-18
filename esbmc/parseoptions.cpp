@@ -454,7 +454,7 @@ int cbmc_parseoptionst::doit()
 
   if(base_case)
   {
-    if(k_step > 1 && res)
+    if(k_step >= 1 && res)
       return 0;
 
     ++k_step;

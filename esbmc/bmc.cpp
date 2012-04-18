@@ -642,6 +642,9 @@ bool bmc_baset::solver_base::run_solver()
       bmc.error_trace(*conv);
    	  bmc.report_failure();
     }
+    else
+      bmc.report_failure();
+
     return true;
 
   // Return failure if we didn't actually check anything, we just emitted the

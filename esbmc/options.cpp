@@ -89,7 +89,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"btor",			switc,		""	},
 { 0,	"context-switch",	number,		"-1"	},
 { 0,	"time-slice",   	number,		"1"	},
-{ 0,	"k-step",   	number,		"2"	},
+{ 0,	"k-step",   	number,		"100"	},
 { 0,	"no-por",		switc,		""	},
 { 0,	"data-races-check",	switc,		""	},
 { 0,	"DFS",			switc,		""	},
