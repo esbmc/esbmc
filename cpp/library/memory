@@ -4,9 +4,11 @@
 namespace std
 {
 template <class X> class auto_ptr{
+  X* ptr;
 	public:
 	explicit auto_ptr (X* p=0) throw()
 	{
+   ptr=p;
 		//model
 	}
 	auto_ptr (auto_ptr& a) throw()
@@ -21,12 +23,16 @@ template <class X> class auto_ptr{
 	X* operator->() const throw()
 	{
 		//model
+    return ptr;
 	}
 	X& operator*() const throw()
 	{
 		//model
+    X& ptr2 = *ptr;
+    return ptr2;
 	}
 };
+
 }
 
 #endif
