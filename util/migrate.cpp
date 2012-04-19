@@ -331,17 +331,15 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(n);
     return true;
   } else if (expr.id() == "not") {
-    type2tc new_type;
-    if (!migrate_type(expr.type(), new_type))
-      return false;
-
+    assert(expr.type().id() == "bool");
     expr2tc theval;
     if (!migrate_expr(expr.op0(), theval))
       return false;
 
-    not2t *n = new not2t(new_type, theval);
+    not2t *n = new not2t(theval);
     new_expr_ref = expr2tc(n);
   } else if (expr.id() == "and") {
+    assert(expr.type().id() == "bool");
     expr2tc side1, side2;
     if (expr.operands().size() > 2) {
       // Duplicate a few times

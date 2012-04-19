@@ -735,8 +735,8 @@ greaterthanequal2t::greaterthanequal2t(const greaterthanequal2t &ref)
 {
 }
 
-lops2t::lops2t(const type2tc type, expr_ids id)
-  : expr_body<lops2t>(type, id)
+lops2t::lops2t(expr_ids id)
+  : expr_body<lops2t>(type2tc(new bool_type2t()), id)
 {
 }
 
@@ -745,8 +745,8 @@ lops2t::lops2t(const lops2t &ref)
 {
 }
 
-not2t::not2t(const type2tc type, const expr2tc val)
-  : lops2_body<not2t>(type, not_id), notvalue(val)
+not2t::not2t(const expr2tc val)
+  : lops2_body<not2t>(not_id), notvalue(val)
 {
 }
 
@@ -757,7 +757,7 @@ not2t::not2t(const not2t &ref)
 
 logical_2ops2t::logical_2ops2t(expr_ids id, const expr2tc val1,
                                const expr2tc val2)
-  : lops2_body<logical_2ops2t>(type2tc(new bool_type2t()), id),
+  : lops2_body<logical_2ops2t>(id),
     side_1(val1), side_2(val2)
 {
 }

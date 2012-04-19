@@ -603,7 +603,7 @@ public:
 class lops2t : public expr_body<lops2t>
 {
 public:
-  lops2t(const type2tc type, expr_ids id);
+  lops2t(expr_ids id);
   lops2t(const lops2t &ref);
 };
 
@@ -611,8 +611,7 @@ template <class T>
 class lops2_body : public lops2t
 {
 public:
-  lops2_body(const type2tc type, expr_ids id)
-    : lops2t(type, id) {};
+  lops2_body(expr_ids id) : lops2t(id) {};
   lops2_body(const lops2_body &ref) : lops2t(ref) {};
 
   virtual void convert_smt(prop_convt &obj, void *&arg) const;
@@ -623,7 +622,7 @@ public:
 class not2t : public lops2_body<not2t>
 {
 public:
-  not2t(const type2tc type, const expr2tc notval);
+  not2t(const expr2tc notval);
   not2t(const not2t &ref);
 
   const expr2tc notvalue;
