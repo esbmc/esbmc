@@ -506,6 +506,24 @@ expr2tc logic_2ops2t_body<derived>::clone(void) const
   return expr2tc(new_obj);
 }
 
+template <class derived>
+void
+binops_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
+{
+  const derived *new_this = static_cast<const derived*>(this);
+  obj.convert_smt_expr(*new_this, arg);
+  return;
+}
+
+template <class derived>
+expr2tc binops_body<derived>::clone(void) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return expr2tc(new_obj);
+}
+
+
 /**************************** Expression constructors *************************/
 
 symbol2t::symbol2t(const type2tc type, irep_idt _name)
@@ -794,5 +812,26 @@ xor2t::xor2t(const expr2tc val1, const expr2tc val2)
 
 xor2t::xor2t(const xor2t &ref)
   : logic_2ops2t_body<xor2t>(ref)
+{
+}
+
+binops2t::binops2t(const type2tc type, expr_ids id,
+                   const expr2tc val1, const expr2tc val2)
+  : expr_body<binops2t>(type, id), side_1(val1), side_2(val2)
+{
+}
+
+binops2t::binops2t(const binops2t &ref)
+  : expr_body<binops2t>(ref)
+{
+}
+
+bitand2t::bitand2t(const type2tc type, const expr2tc val1, const expr2tc val2)
+  : binops_body<bitand2t>(type, bitand_id, val1, val2)
+{
+}
+
+bitand2t::bitand2t(const bitand2t &ref)
+  : binops_body<bitand2t>(ref)
 {
 }

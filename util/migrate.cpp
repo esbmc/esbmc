@@ -405,6 +405,36 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     xor2t *x = new xor2t(side1, side2);
     new_expr_ref = expr2tc(x);
     return true;
+  } else if (expr.id() == "bitand") {
+    type2tc new_type;
+    if (!migrate_type(expr.type(), new_type))
+      return false;
+
+    expr2tc side1, side2;
+    if (expr.operands().size() > 2) {
+      // Duplicate a few times
+      exprt expr_twopart = expr;
+      exprt expr_recurse = expr;
+
+      exprt popped = expr_recurse.operands()[expr_recurse.operands().size()-1];
+      expr_recurse.operands().pop_back();
+
+      expr_twopart.operands().clear();
+      expr_twopart.copy_to_operands(popped, expr_recurse);
+
+      if (!migrate_expr(expr_twopart, new_expr_ref))
+        return false;
+      return true;
+    }
+
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    bitand2t *a = new bitand2t(type, side1, side2);
+    new_expr_ref = expr2tc(a);
+    return true;
   } else {
     return false;
   }

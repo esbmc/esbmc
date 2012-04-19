@@ -1306,6 +1306,27 @@ z3_convt::convert_smt_expr(const xor2t &xorval, void  *&_bv)
 }
 
 void
+z3_convt::convert_binop(const binops2t &bin,
+                        ast_convert_calltype converter,
+                        void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast args[2];
+
+  bin.side_1->convert_smt(*this, (void*&)args[0]);
+  bin.side_2->convert_smt(*this, (void*&)args[1]);
+
+  bv = converter(z3_ctx, args[0], args[1]);
+}
+
+void
+z3_convt::convert_smt_expr(const bitand2t &bitval, void *&_bv)
+{
+  convert_binop(bitval, Z3_mk_bvand, _bv);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
