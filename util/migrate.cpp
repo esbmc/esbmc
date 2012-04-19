@@ -131,6 +131,23 @@ migrate_type(const typet &type, type2tc &new_type_ref)
   return false;
 }
 
+static bool
+splice_expr(const exprt &expr, expr2tc &new_expr_ref)
+{
+  exprt expr_twopart = expr;
+  exprt expr_recurse = expr;
+
+  exprt popped = expr_recurse.operands()[expr_recurse.operands().size()-1];
+  expr_recurse.operands().pop_back();
+
+  expr_twopart.operands().clear();
+  expr_twopart.copy_to_operands(popped, expr_recurse);
+
+  if (!migrate_expr(expr_twopart, new_expr_ref))
+    return false;
+  return true;
+}
+
 bool
 migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
@@ -341,21 +358,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == "and") {
     assert(expr.type().id() == "bool");
     expr2tc side1, side2;
-    if (expr.operands().size() > 2) {
-      // Duplicate a few times
-      exprt expr_twopart = expr;
-      exprt expr_recurse = expr;
-
-      exprt popped = expr_recurse.operands()[expr_recurse.operands().size()-1];
-      expr_recurse.operands().pop_back();
-
-      expr_twopart.operands().clear();
-      expr_twopart.copy_to_operands(popped, expr_recurse);
-
-      if (!migrate_expr(expr_twopart, new_expr_ref))
-        return false;
-      return true;
-    }
+    if (expr.operands().size() > 2)
+      return splice_expr(expr, new_expr_ref);
 
     if (!migrate_expr(expr.op0(), side1))
       return false;
@@ -368,21 +372,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == "or") {
     assert(expr.type().id() == "bool");
     expr2tc side1, side2;
-    if (expr.operands().size() > 2) {
-      // Duplicate a few times
-      exprt expr_twopart = expr;
-      exprt expr_recurse = expr;
 
-      exprt popped = expr_recurse.operands()[expr_recurse.operands().size()-1];
-      expr_recurse.operands().pop_back();
-
-      expr_twopart.operands().clear();
-      expr_twopart.copy_to_operands(popped, expr_recurse);
-
-      if (!migrate_expr(expr_twopart, new_expr_ref))
-        return false;
-      return true;
-    }
+    if (expr.operands().size() > 2)
+      return splice_expr(expr, new_expr_ref);
 
     if (!migrate_expr(expr.op0(), side1))
       return false;
@@ -411,21 +403,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       return false;
 
     expr2tc side1, side2;
-    if (expr.operands().size() > 2) {
-      // Duplicate a few times
-      exprt expr_twopart = expr;
-      exprt expr_recurse = expr;
-
-      exprt popped = expr_recurse.operands()[expr_recurse.operands().size()-1];
-      expr_recurse.operands().pop_back();
-
-      expr_twopart.operands().clear();
-      expr_twopart.copy_to_operands(popped, expr_recurse);
-
-      if (!migrate_expr(expr_twopart, new_expr_ref))
-        return false;
-      return true;
-    }
+    if (expr.operands().size() > 2)
+      return splice_expr(expr, new_expr_ref);
 
     if (!migrate_expr(expr.op0(), side1))
       return false;
