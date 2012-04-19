@@ -646,7 +646,7 @@ class logic_2ops2t_body : public logical_2ops2t
 public:
   logic_2ops2t_body(expr_ids id, const expr2tc val1, const expr2tc val2)
     : logical_2ops2t(id, val1, val2) {};
-  logic_2ops2t_body(const lops2_body &ref) : logical_2ops2t(ref) {};
+  logic_2ops2t_body(const logic_2ops2t_body &ref) : logical_2ops2t(ref) {};
 
   virtual void convert_smt(prop_convt &obj, void *&arg) const;
   virtual expr2tc clone(void) const;
