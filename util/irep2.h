@@ -631,50 +631,47 @@ public:
 
 /** Base class for 2-operand boolean oeprators. Always results in a boolean,
  *  takes two operands, both of boolean type. */
-class logical_2ops2t : public lops2t
+class logical_2ops2t : public lops2_body<logical_2ops2t>
 {
-protected:
-  logical_2ops2t(const expr2tc val1, const expr2tc val2);
-  logical_2ops2t(const logical_2ops2t &ref);
-
 public:
-  virtual expr2tc clone(void) const = 0;
+  logical_2ops2t(expr_ids id, const expr2tc val1, const expr2tc val2);
+  logical_2ops2t(const logical_2ops2t &ref);
 
   const expr2tc side_1;
   const expr2tc side_2;
 };
 
-class and2t : public logical_2ops2t
+template <class T>
+class logic_2ops2t_body : public logical_2ops2t
+{
+public:
+  logic_2ops2t_body(expr_ids id, const expr2tc val1, const expr2tc val2)
+    : logical_2ops2t(id, val1, val2) {};
+  logic_2ops2t_body(const lops2_body &ref) : logical_2ops2t(ref) {};
+
+  virtual void convert_smt(prop_convt &obj, void *&arg) const;
+  virtual expr2tc clone(void) const;
+};
+
+class and2t : public logic_2ops2t_body<and2t>
 {
 public:
   and2t(const expr2tc val1, const expr2tc val2);
-protected:
   and2t(const and2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class or2t : public logical_2ops2t
+class or2t : public logic_2ops2t_body<or2t>
 {
 public:
   or2t(const expr2tc val1, const expr2tc val2);
-protected:
   or2t(const or2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class xor2t : public logical_2ops2t
+class xor2t : public logic_2ops2t_body<xor2t>
 {
 public:
   xor2t(const expr2tc val1, const expr2tc val2);
-protected:
   xor2t(const xor2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
 /** Dynamic object operation. Checks to see whether or not the object is a
