@@ -365,6 +365,33 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     and2t *a = new and2t(side1, side2);
     new_expr_ref = expr2tc(a);
     return true;
+  } else if (expr.id() == "or") {
+    assert(expr.type().id() == "bool");
+    expr2tc side1, side2;
+    if (expr.operands().size() > 2) {
+      // Duplicate a few times
+      exprt expr_twopart = expr;
+      exprt expr_recurse = expr;
+
+      exprt popped = expr_recurse.operands()[expr_recurse.operands().size()-1];
+      expr_recurse.operands().pop_back();
+
+      expr_twopart.operands().clear();
+      expr_twopart.copy_to_operands(popped, expr_recurse);
+
+      if (!migrate_expr(expr_twopart, new_expr_ref))
+        return false;
+      return true;
+    }
+
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    or2t *o = new or2t(side1, side2);
+    new_expr_ref = expr2tc(o);
+    return true;
   } else {
     return false;
   }
