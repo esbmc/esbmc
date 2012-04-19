@@ -1317,7 +1317,24 @@ z3_convt::convert_binop(const binops2t &bin,
   bin.side_1->convert_smt(*this, (void*&)args[0]);
   bin.side_2->convert_smt(*this, (void*&)args[1]);
 
+  // XXXjmorse - int2bv trainwreck.
+  if (int_encoding) {
+    unsigned int width = bin.side_1->type->get_width();
+    args[0] = Z3_mk_int2bv(z3_ctx, width, args[0]);
+    width = bin.side_1->type->get_width();
+    args[1] = Z3_mk_int2bv(z3_ctx, width, args[1]);
+  }
+
   bv = converter(z3_ctx, args[0], args[1]);
+
+  if (int_encoding) {
+    if (bin.type->type_id == type2t::signedbv_id) {
+      bv = Z3_mk_bv2int(z3_ctx, bv, true);
+    } else {
+      assert(bin.type->type_id == type2t::unsignedbv_id);
+      bv = Z3_mk_bv2int(z3_ctx, bv, false);
+    }
+  }
 }
 
 void
