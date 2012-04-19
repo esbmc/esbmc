@@ -148,6 +148,18 @@ splice_expr(const exprt &expr, expr2tc &new_expr_ref)
   return true;
 }
 
+static bool
+convert_operand_pair(const exprt expr, expr2tc &arg1, expr2tc &arg2)
+{
+
+  if (!migrate_expr(expr.op0(), arg1))
+    return false;
+  if (!migrate_expr(expr.op1(), arg2))
+    return false;
+
+  return true;
+}
+
 bool
 migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
@@ -283,30 +295,27 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return true;
   } else if (expr.id() == "=") {
     expr2tc side1, side2;
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     equality2t *e = new equality2t(side1, side2);
     new_expr_ref = expr2tc(e);
     return true;
   } else if (expr.id() == "!=") {
     expr2tc side1, side2;
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     notequal2t *n = new notequal2t(side1, side2);
     new_expr_ref = expr2tc(n);
     return true;
    } else if (expr.id() == "<") {
     expr2tc side1, side2;
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     lessthan2t *n = new lessthan2t(side1, side2);
     new_expr_ref = expr2tc(n);
@@ -323,20 +332,18 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return true;
   } else if (expr.id() == "<=") {
     expr2tc side1, side2;
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     lessthanequal2t *n = new lessthanequal2t(side1, side2);
     new_expr_ref = expr2tc(n);
     return true;
   } else if (expr.id() == ">=") {
     expr2tc side1, side2;
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     greaterthanequal2t *n = new greaterthanequal2t(side1, side2);
     new_expr_ref = expr2tc(n);
@@ -356,10 +363,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.operands().size() > 2)
       return splice_expr(expr, new_expr_ref);
 
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     and2t *a = new and2t(side1, side2);
     new_expr_ref = expr2tc(a);
@@ -371,10 +376,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.operands().size() > 2)
       return splice_expr(expr, new_expr_ref);
 
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     or2t *o = new or2t(side1, side2);
     new_expr_ref = expr2tc(o);
@@ -384,10 +387,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 2);
     expr2tc side1, side2;
 
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     xor2t *x = new xor2t(side1, side2);
     new_expr_ref = expr2tc(x);
@@ -400,10 +401,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.operands().size() > 2)
       return splice_expr(expr, new_expr_ref);
 
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     bitand2t *a = new bitand2t(type, side1, side2);
     new_expr_ref = expr2tc(a);
@@ -416,10 +415,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.operands().size() > 2)
       return splice_expr(expr, new_expr_ref);
 
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     bitor2t *o = new bitor2t(type, side1, side2);
     new_expr_ref = expr2tc(o);
@@ -432,10 +429,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.operands().size() > 2)
       return splice_expr(expr, new_expr_ref);
 
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     bitxor2t *x = new bitxor2t(type, side1, side2);
     new_expr_ref = expr2tc(x);
@@ -448,10 +443,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.operands().size() > 2)
       return splice_expr(expr, new_expr_ref);
 
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     bitnand2t *n = new bitnand2t(type, side1, side2);
     new_expr_ref = expr2tc(n);
@@ -464,10 +457,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.operands().size() > 2)
       return splice_expr(expr, new_expr_ref);
 
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     bitnor2t *o = new bitnor2t(type, side1, side2);
     new_expr_ref = expr2tc(o);
@@ -480,10 +471,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.operands().size() > 2)
       return splice_expr(expr, new_expr_ref);
 
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     bitnxor2t *x = new bitnxor2t(type, side1, side2);
     new_expr_ref = expr2tc(x);
@@ -496,10 +485,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.operands().size() > 2)
       return splice_expr(expr, new_expr_ref);
 
-    if (!migrate_expr(expr.op0(), side1))
-      return false;
-    if (!migrate_expr(expr.op1(), side2))
-      return false;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
 
     lshr2t *s = new lshr2t(type, side1, side2);
     new_expr_ref = expr2tc(s);
