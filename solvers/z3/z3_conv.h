@@ -176,8 +176,8 @@ private:
                     ast_convert_calltype converter,
                     void *&_bv);
   void convert_arith2ops(const arith_2op2t &log,
-                         ast_convert_calltype converter,
-                         ast_convert_multiargs bulkconverter,
+                         ast_convert_calltype bvconvert,
+                         ast_convert_multiargs intmodeconvert,
                          void *&_bv);
 
   virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
