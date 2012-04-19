@@ -186,22 +186,20 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 #if 0
   } else if (expr.id() == "typecast") {
     assert(expr.op0().id_string() != "");
-    type2tc new_type;
     expr2tc old_expr;
 
-    if (!migrate_type(expr.type(), new_type))
+    if (!migrate_type(expr.type(), type))
       return false;
 
     if (!migrate_expr(expr.op0(), old_expr))
       return false;
 
-    typecast2t *t = new typecast2t(new_type, old_expr);
+    typecast2t *t = new typecast2t(type, old_expr);
     new_expr_ref = expr2tc(t);
     return true;
 #endif
   } else if (expr.id() == "struct") {
-    type2tc new_type;
-    if (!migrate_type(expr.type(), new_type))
+    if (!migrate_type(expr.type(), type))
       return false;
 
     std::vector<expr2tc> members;
@@ -213,12 +211,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       members.push_back(new_ref);
     }
 
-    constant_struct2t *s = new constant_struct2t(new_type, members);
+    constant_struct2t *s = new constant_struct2t(type, members);
     new_expr_ref = expr2tc(s);
     return true;
   } else if (expr.id() == "union") {
-    type2tc new_type;
-    if (!migrate_type(expr.type(), new_type))
+    if (!migrate_type(expr.type(), type))
       return false;
 
     std::vector<expr2tc> members;
@@ -230,7 +227,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       members.push_back(new_ref);
     }
 
-    constant_union2t *u = new constant_union2t(new_type, members);
+    constant_union2t *u = new constant_union2t(type, members);
     new_expr_ref = expr2tc(u);
     return true;
   } else if (expr.id() == "string-constant") {
@@ -242,8 +239,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return true;
   } else if (expr.id() == "constant" && expr.type().id() == "array") {
     // Fixed size array.
-    type2tc new_type;
-    if (!migrate_type(expr.type(), new_type))
+    if (!migrate_type(expr.type(), type))
       return false;
 
     std::vector<expr2tc> members;
@@ -255,12 +251,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       members.push_back(new_ref);
     }
 
-    constant_array2t *a = new constant_array2t(new_type, members);
+    constant_array2t *a = new constant_array2t(type, members);
     new_expr_ref = expr2tc(a);
     return true;
   } else if (expr.id() == "array_of") {
-    type2tc new_type;
-    if (!migrate_type(expr.type(), new_type))
+    if (!migrate_type(expr.type(), type))
       return false;
 
     assert(expr.operands().size() == 1);
@@ -268,12 +263,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (!migrate_expr(expr.op0(), new_value))
       return false;
 
-    constant_array_of2t *a = new constant_array_of2t(new_type, new_value);
+    constant_array_of2t *a = new constant_array_of2t(type, new_value);
     new_expr_ref = expr2tc(a);
     return true;
   } else if (expr.id() == "if") {
-    type2tc new_type;
-    if (!migrate_type(expr.type(), new_type))
+    if (!migrate_type(expr.type(), type))
       return false;
 
     expr2tc cond, true_val, false_val;
@@ -399,8 +393,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(x);
     return true;
   } else if (expr.id() == "bitand") {
-    type2tc new_type;
-    if (!migrate_type(expr.type(), new_type))
+    if (!migrate_type(expr.type(), type))
       return false;
 
     expr2tc side1, side2;
@@ -416,8 +409,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(a);
     return true;
   } else if (expr.id() == "bitor") {
-    type2tc new_type;
-    if (!migrate_type(expr.type(), new_type))
+    if (!migrate_type(expr.type(), type))
       return false;
 
     expr2tc side1, side2;
@@ -433,8 +425,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(o);
     return true;
   } else if (expr.id() == "bitxor") {
-    type2tc new_type;
-    if (!migrate_type(expr.type(), new_type))
+    if (!migrate_type(expr.type(), type))
       return false;
 
     expr2tc side1, side2;
@@ -450,8 +441,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(x);
     return true;
   } else if (expr.id() == "bitnand") {
-    type2tc new_type;
-    if (!migrate_type(expr.type(), new_type))
+    if (!migrate_type(expr.type(), type))
       return false;
 
     expr2tc side1, side2;
