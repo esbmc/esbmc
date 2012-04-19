@@ -175,7 +175,10 @@ private:
   void convert_binop(const binops2t &log,
                     ast_convert_calltype converter,
                     void *&_bv);
-
+  void convert_arith2ops(const arith_2op2t &log,
+                         ast_convert_calltype converter,
+                         ast_convert_multiargs bulkconverter,
+                         void *&_bv);
 
   virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
   virtual void convert_smt_expr(const constant_int2t &sym, void *&bv);
@@ -203,6 +206,7 @@ private:
   virtual void convert_smt_expr(const lshr2t &bitval, void *&bv);
   virtual void convert_smt_expr(const neg2t &neg, void *&bv);
   virtual void convert_smt_expr(const abs2t &abs, void *&bv);
+  virtual void convert_smt_expr(const add2t &add, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv) const;
   virtual void convert_smt_type(const bv_type2t &type, void *&bv) const;

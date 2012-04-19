@@ -540,6 +540,22 @@ expr2tc arith_body<derived>::clone(void) const
   return expr2tc(new_obj);
 }
 
+template <class derived>
+void
+arith_2ops_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
+{
+  const derived *new_this = static_cast<const derived*>(this);
+  obj.convert_smt_expr(*new_this, arg);
+  return;
+}
+
+template <class derived>
+expr2tc arith_2ops_body<derived>::clone(void) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return expr2tc(new_obj);
+}
 
 /**************************** Expression constructors *************************/
 
@@ -940,5 +956,28 @@ abs2t::abs2t(const type2tc type, const expr2tc _value)
 
 abs2t::abs2t(const abs2t &ref)
   : arith_body<abs2t>(ref)
+{
+}
+
+arith_2op2t::arith_2op2t(const type2tc type, expr_ids id,
+                         const expr2tc val1, const expr2tc val2)
+  : arith_body<arith_2op2t>(type, id), part_1(val1), part_2(val2)
+{
+}
+
+arith_2op2t::arith_2op2t(const arith_2op2t &ref)
+  : arith_body<arith_2op2t>(ref)
+{
+}
+
+
+
+add2t::add2t(const type2tc type, const expr2tc val1, const expr2tc val2)
+  : arith_2ops_body<add2t>(type, add_id, val1, val2)
+{
+}
+
+add2t::add2t(const add2t &ref)
+  : arith_2ops_body<add2t>(ref)
 {
 }

@@ -819,7 +819,8 @@ public:
 class arith_2op2t : public arith_body<arith_2op2t>
 {
 public:
-  arith_2op2t(const type2tc type, const expr2tc val1, const expr2tc val2);
+  arith_2op2t(const type2tc type, expr_ids id,
+              const expr2tc val1, const expr2tc val2);
   arith_2op2t(const arith_2op2t &ref);
 
   const expr2tc part_1;

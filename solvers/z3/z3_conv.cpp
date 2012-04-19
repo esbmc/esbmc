@@ -1463,6 +1463,31 @@ z3_convt::convert_smt_expr(const abs2t &abs, void *&_bv)
 }
 
 void
+z3_convt::convert_arith2ops(const arith_2op2t &arith,
+                            ast_convert_calltype converter,
+                            ast_convert_multiargs bulkconverter,
+                            void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast args[2];
+
+  arith.part_1->convert_smt(*this, (void*&)args[0]);
+  arith.part_2->convert_smt(*this, (void*&)args[1]);
+
+  if (converter != NULL)
+    bv = converter(z3_ctx, args[0], args[1]);
+  else
+    bv = bulkconverter(z3_ctx, 2, args);
+}
+
+void
+z3_convt::convert_smt_expr(const add2t &add, void *&_bv)
+{
+  convert_arith2ops(add, NULL, Z3_mk_add, _bv);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
