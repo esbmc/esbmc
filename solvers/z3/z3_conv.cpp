@@ -1472,6 +1472,15 @@ z3_convt::convert_arith2ops(const arith_2op2t &arith,
 
   Z3_ast args[2];
 
+  if (arith.part_1->type->type_id == type2t::pointer_id ||
+      arith.part_2->type->type_id == type2t::pointer_id) {
+    std::cerr << "Pointer arithmatic not implemented for Z3 yet" << std::endl;
+    abort();
+  }
+
+  if (expr.type().id() == "pointer" || expr.op0().type().id() == "pointer" ||
+      expr.op1().type().id() == "pointer") {
+
   arith.part_1->convert_smt(*this, (void*&)args[0]);
   arith.part_2->convert_smt(*this, (void*&)args[1]);
 
