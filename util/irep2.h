@@ -781,7 +781,7 @@ public:
 class arith2t : public expr_body<arith2t>
 {
 public:
-  arith2t(const type2tc type);
+  arith2t(const type2tc type, expr_ids id);
   arith2t(const arith2t &ref);
 };
 

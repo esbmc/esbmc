@@ -491,6 +491,17 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     lshr2t *s = new lshr2t(type, side1, side2);
     new_expr_ref = expr2tc(s);
     return true;
+  } else if (expr.id() == "neg") {
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    expr2tc theval;
+    if (!migrate_expr(expr.op0(), theval))
+      return false;
+
+    neg2t *n = new neg2t(type, theval);
+    new_expr_ref = expr2tc(n);
+    return true;
   } else {
     return false;
   }

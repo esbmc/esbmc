@@ -523,6 +523,23 @@ expr2tc binops_body<derived>::clone(void) const
   return expr2tc(new_obj);
 }
 
+template <class derived>
+void
+arith_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
+{
+  const derived *new_this = static_cast<const derived*>(this);
+  obj.convert_smt_expr(*new_this, arg);
+  return;
+}
+
+template <class derived>
+expr2tc arith_body<derived>::clone(void) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return expr2tc(new_obj);
+}
+
 
 /**************************** Expression constructors *************************/
 
@@ -893,5 +910,25 @@ lshr2t::lshr2t(const type2tc type, const expr2tc val1, const expr2tc val2)
 
 lshr2t::lshr2t(const lshr2t &ref)
   : binops_body<lshr2t>(ref)
+{
+}
+
+arith2t::arith2t(const type2tc type, expr_ids id)
+  : expr_body<arith2t>(type, id)
+{
+}
+
+arith2t::arith2t(const arith2t &ref)
+  : expr_body<arith2t>(ref)
+{
+}
+
+neg2t::neg2t(const type2tc type, const expr2tc _value)
+  : arith_body<neg2t>(type, neg_id), value(_value)
+{
+}
+
+neg2t::neg2t(const neg2t &ref)
+  : arith_body<neg2t>(ref)
 {
 }

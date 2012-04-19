@@ -1380,6 +1380,29 @@ z3_convt::convert_smt_expr(const lshr2t &bitval, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const neg2t &neg, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast args[2];
+
+  neg.value->convert_smt(*this, (void*&)args[0]);
+
+  if (int_encoding) {
+    type2t::type_ids id = neg.type->type_id;
+    if (id == type2t::signedbv_id || id == type2t::unsignedbv_id) {
+      args[1] = z3_api.mk_int(-1);
+    } else {
+      assert(id == type2t::fixedbv_id);
+      args[1] = Z3_mk_int(z3_ctx, -1, Z3_mk_real_type(z3_ctx));
+    }
+    bv = Z3_mk_mul(z3_ctx, 2, args);
+  } else   {
+    bv = Z3_mk_bvneg(z3_ctx, args[0]);
+  }
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
