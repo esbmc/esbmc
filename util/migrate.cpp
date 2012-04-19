@@ -529,6 +529,19 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     add2t *a = new add2t(type, side1, side2);
     new_expr_ref = expr2tc(a);
     return true;
+  } else if (expr.id() == "sub") {
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    assert(expr.operands().size() == 2);
+
+    expr2tc side1, side2;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
+
+    sub2t *s = new sub2t(type, side1, side2);
+    new_expr_ref = expr2tc(s);
+    return true;
   } else {
     return false;
   }

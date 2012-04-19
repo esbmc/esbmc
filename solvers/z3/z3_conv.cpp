@@ -1488,6 +1488,12 @@ z3_convt::convert_smt_expr(const add2t &add, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const sub2t &sub, void *&_bv)
+{
+  convert_arith2ops(sub, NULL, Z3_mk_sub, _bv);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

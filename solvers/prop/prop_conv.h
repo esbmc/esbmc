@@ -137,6 +137,7 @@ public:
   virtual void convert_smt_expr(const neg2t &neg, void *&arg) = 0;
   virtual void convert_smt_expr(const abs2t &abs, void *&arg) = 0;
   virtual void convert_smt_expr(const add2t &add, void *&arg) = 0;
+  virtual void convert_smt_expr(const sub2t &sub, void *&arg) = 0;
 };
 
 #endif

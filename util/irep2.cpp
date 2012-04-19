@@ -970,8 +970,6 @@ arith_2op2t::arith_2op2t(const arith_2op2t &ref)
 {
 }
 
-
-
 add2t::add2t(const type2tc type, const expr2tc val1, const expr2tc val2)
   : arith_2ops_body<add2t>(type, add_id, val1, val2)
 {
@@ -979,5 +977,15 @@ add2t::add2t(const type2tc type, const expr2tc val1, const expr2tc val2)
 
 add2t::add2t(const add2t &ref)
   : arith_2ops_body<add2t>(ref)
+{
+}
+
+sub2t::sub2t(const type2tc type, const expr2tc val1, const expr2tc val2)
+  : arith_2ops_body<sub2t>(type, sub_id, val1, val2)
+{
+}
+
+sub2t::sub2t(const sub2t &ref)
+  : arith_2ops_body<sub2t>(ref)
 {
 }
