@@ -132,6 +132,7 @@ public:
   virtual void convert_smt_expr(const bitxor2t &bitval, void *&arg) = 0;
   virtual void convert_smt_expr(const bitnand2t &bitval, void *&arg) = 0;
   virtual void convert_smt_expr(const bitnor2t &bitval, void *&arg) = 0;
+  virtual void convert_smt_expr(const bitnxor2t &bitval, void *&arg) = 0;
 };
 
 #endif
