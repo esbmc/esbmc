@@ -189,6 +189,7 @@ private:
   virtual void convert_smt_expr(const not2t &notval, void *&bv);
   virtual void convert_smt_expr(const and2t &andval, void *&bv);
   virtual void convert_smt_expr(const or2t &orval, void *&bv);
+  virtual void convert_smt_expr(const xor2t &xorval, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv) const;
   virtual void convert_smt_type(const bv_type2t &type, void *&bv) const;

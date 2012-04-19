@@ -392,6 +392,19 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     or2t *o = new or2t(side1, side2);
     new_expr_ref = expr2tc(o);
     return true;
+  } else if (expr.id() == "xor") {
+    assert(expr.type().id() == "bool");
+    assert(expr.operands().size() == 2);
+    expr2tc side1, side2;
+
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    xor2t *x = new xor2t(side1, side2);
+    new_expr_ref = expr2tc(x);
+    return true;
   } else {
     return false;
   }

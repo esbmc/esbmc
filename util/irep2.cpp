@@ -786,3 +786,13 @@ or2t::or2t(const or2t &ref)
   : logic_2ops2t_body<or2t>(ref)
 {
 }
+
+xor2t::xor2t(const expr2tc val1, const expr2tc val2)
+  : logic_2ops2t_body<xor2t>(xor_id, val1, val2)
+{
+}
+
+xor2t::xor2t(const xor2t &ref)
+  : logic_2ops2t_body<xor2t>(ref)
+{
+}

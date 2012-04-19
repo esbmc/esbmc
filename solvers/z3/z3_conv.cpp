@@ -1300,6 +1300,12 @@ z3_convt::convert_smt_expr(const or2t &orval, void  *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const xor2t &xorval, void  *&_bv)
+{
+  convert_logic_2ops(xorval, Z3_mk_xor, NULL, _bv);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

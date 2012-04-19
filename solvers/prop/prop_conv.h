@@ -126,6 +126,7 @@ public:
   virtual void convert_smt_expr(const not2t &notval, void *&arg) = 0;
   virtual void convert_smt_expr(const and2t &andval, void *&arg) = 0;
   virtual void convert_smt_expr(const or2t &orval, void *&arg) = 0;
+  virtual void convert_smt_expr(const xor2t &xorval, void *&arg) = 0;
 };
 
 #endif
