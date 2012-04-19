@@ -849,6 +849,7 @@ public:
 
 class sub2t : public arith_2ops_body<sub2t>
 {
+public:
   sub2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   sub2t(const sub2t &ref);
 };
