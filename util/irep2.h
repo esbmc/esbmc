@@ -280,14 +280,14 @@ protected:
 class fixedbv_type2t : public type_body<fixedbv_type2t>
 {
 public:
-  fixedbv_type2t(unsigned int fraction, unsigned int integer);
+  fixedbv_type2t(unsigned int width, unsigned int integer);
   bool cmp(const fixedbv_type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   fixedbv_type2t(const fixedbv_type2t &ref);
 
 public:
-  const unsigned int fraction_bits;
+  const unsigned int width;
   const unsigned int integer_bits;
 };
 

@@ -320,8 +320,8 @@ union_type2t::cmp(const union_type2t &ref) const
   return struct_union_type2t::cmp(ref);
 }
 
-fixedbv_type2t::fixedbv_type2t(unsigned int fraction, unsigned int integer)
-  : type_body<fixedbv_type2t>(fixedbv_id), fraction_bits(fraction),
+fixedbv_type2t::fixedbv_type2t(unsigned int _width, unsigned int integer)
+  : type_body<fixedbv_type2t>(fixedbv_id), width(_width),
                                            integer_bits(integer)
 {
 }
@@ -329,14 +329,14 @@ fixedbv_type2t::fixedbv_type2t(unsigned int fraction, unsigned int integer)
 unsigned int
 fixedbv_type2t::get_width(void) const
 {
-  return fraction_bits;
+  return width;
 }
 
 bool
 fixedbv_type2t::cmp(const fixedbv_type2t &ref) const
 {
 
-  if (fraction_bits != ref.fraction_bits)
+  if (width != ref.width)
     return false;
 
   if (integer_bits != ref.integer_bits)
