@@ -342,8 +342,23 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     not2t *n = new not2t(new_type, theval);
     new_expr_ref = expr2tc(n);
   } else if (expr.id() == "and") {
-    assert(expr.operands().size() == 2); // Not necessarily true.
     expr2tc side1, side2;
+    if (expr.operands().size() > 2) {
+      // Duplicate a few times
+      exprt expr_twopart = expr;
+      exprt expr_recurse = expr;
+
+      exprt popped = expr_recurse.operands()[expr_recurse.operands().size()-1];
+      expr_recurse.operands().pop_back();
+
+      expr_twopart.operands().clear();
+      expr_twopart.copy_to_operands(popped, expr_recurse);
+
+      if (!migrate_expr(expr_twopart, new_expr_ref))
+        return false;
+      return true;
+    }
+
     if (!migrate_expr(expr.op0(), side1))
       return false;
     if (!migrate_expr(expr.op1(), side2))
