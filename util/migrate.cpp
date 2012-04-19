@@ -432,7 +432,24 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     bitor2t *o = new bitor2t(type, side1, side2);
     new_expr_ref = expr2tc(o);
     return true;
-   } else {
+  } else if (expr.id() == "bitxor") {
+    type2tc new_type;
+    if (!migrate_type(expr.type(), new_type))
+      return false;
+
+    expr2tc side1, side2;
+    if (expr.operands().size() > 2)
+      return splice_expr(expr, new_expr_ref);
+
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    bitxor2t *x = new bitxor2t(type, side1, side2);
+    new_expr_ref = expr2tc(x);
+    return true;
+  } else {
     return false;
   }
 }

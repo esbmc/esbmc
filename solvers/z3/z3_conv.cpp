@@ -1333,6 +1333,12 @@ z3_convt::convert_smt_expr(const bitor2t &bitval, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const bitxor2t &bitval, void *&_bv)
+{
+  convert_binop(bitval, Z3_mk_bvxor, _bv);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
