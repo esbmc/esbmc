@@ -141,7 +141,7 @@ splice_expr(const exprt &expr, expr2tc &new_expr_ref)
   expr_recurse.operands().pop_back();
 
   expr_twopart.operands().clear();
-  expr_twopart.copy_to_operands(popped, expr_recurse);
+  expr_twopart.copy_to_operands(expr_recurse, popped);
 
   if (!migrate_expr(expr_twopart, new_expr_ref))
     return false;
