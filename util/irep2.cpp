@@ -989,3 +989,13 @@ sub2t::sub2t(const sub2t &ref)
   : arith_2ops_body<sub2t>(ref)
 {
 }
+
+mul2t::mul2t(const type2tc type, const expr2tc val1, const expr2tc val2)
+  : arith_2ops_body<mul2t>(type, mul_id, val1, val2)
+{
+}
+
+mul2t::mul2t(const mul2t &ref)
+  : arith_2ops_body<mul2t>(ref)
+{
+}

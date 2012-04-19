@@ -1500,6 +1500,41 @@ z3_convt::convert_smt_expr(const sub2t &sub, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const mul2t &mul, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  if (mul.part_1->type->type_id == type2t::pointer_id ||
+      mul.part_2->type->type_id == type2t::pointer_id) {
+    std::cerr << "Pointer arithmetic not valid in a multiply" << std::endl;
+    abort();
+  }
+
+  Z3_ast args[2];
+  u_int i = 0, size;
+  unsigned fraction_bits = 0;
+
+  mul.part_1->convert_smt(*this, (void*&)args[0]);
+  mul.part_2->convert_smt(*this, (void*&)args[1]);
+
+  if (int_encoding) {
+    bv = Z3_mk_mul(z3_ctx, 2, args);
+  } else if (mul.type->type_id != type2t::fixedbv_id) {
+    bv = Z3_mk_bvmul(z3_ctx, args[0], args[1]);
+  } else {
+    // fixedbv in bv mode. I've no idea if this actually works.
+    const fixedbv_type2t &fbvt = dynamic_cast<const fixedbv_type2t&>
+                                              (*mul.type.get());
+    fraction_bits = fbvt.width - fbvt.integer_bits;
+    args[0] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[0]);
+    args[1] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[1]);
+    bv = Z3_mk_bvmul(z3_ctx, args[0], args[1]);
+    bv = Z3_mk_extract(z3_ctx, fbvt.width + fraction_bits - 1,
+                       fraction_bits, bv);
+  }
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
