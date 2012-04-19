@@ -778,131 +778,113 @@ public:
 
 /** Arithmatic base class. For all operations that are essentially integer
  *  arithmatic. */
-class arith2t : public expr2t
+class arith2t : public expr_body<arith2t>
 {
-protected:
-  arith2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  arith2t(const arith2t &ref);
-
 public:
-  virtual expr2tc clone(void) const = 0;
+  arith2t(const type2tc type);
+  arith2t(const arith2t &ref);
 };
 
-class neg2t : public arith2t
+template <class T>
+class arith_body : public arith2t
+{
+public:
+  arith_body(type2tc type, expr_ids id)
+    : arith2t(type, id) {};
+  arith_body(const arith_body &ref) : arith2t(ref) {};
+
+  virtual void convert_smt(prop_convt &obj, void *&arg) const;
+  virtual expr2tc clone(void) const;
+};
+
+class neg2t : public arith_body<neg2t>
 {
 public:
   neg2t(const type2tc type, const expr2tc value);
-protected:
   neg2t(const neg2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 
   const expr2tc value;
 };
 
-class abs2t : public arith2t
+class abs2t : public arith_body<abs2t>
 {
 public:
   abs2t(const type2tc type, const expr2tc value);
-protected:
   abs2t(const abs2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 
   const expr2tc value;
 };
 
 /** Base two-operand arithmatic class. */
-class arith_2op2t : public arith2t
+class arith_2op2t : public arith_body<arith_2op2t>
 {
-protected:
+public:
   arith_2op2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   arith_2op2t(const arith_2op2t &ref);
-
-public:
-  virtual expr2tc clone(void) const = 0;
 
   const expr2tc part_1;
   const expr2tc part_2;
 };
 
-class add2t : public arith_2op2t
+template <class T>
+class arith_2ops_body : public arith_2op2t
+{
+public:
+  arith_2ops_body(type2tc type, expr_ids id,
+                  const expr2tc val1, const expr2tc val2)
+    : arith_2op2t(type, id, val1, val2) {};
+  arith_2ops_body(const arith_2ops_body &ref) : arith_2op2t(ref) {};
+
+  virtual void convert_smt(prop_convt &obj, void *&arg) const;
+  virtual expr2tc clone(void) const;
+};
+
+class add2t : public arith_2ops_body<add2t>
 {
 public:
   add2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-protected:
   add2t(const add2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class sub2t : public arith_2op2t
+class sub2t : public arith_2ops_body<sub2t>
 {
-public:
   sub2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-protected:
   sub2t(const sub2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class mul2t : public arith_2op2t
+class mul2t : public arith_2ops_body<mul2t>
 {
 public:
   mul2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-protected:
   mul2t(const mul2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class div2t : public arith_2op2t
+class div2t : public arith_2ops_body<div2t>
 {
 public:
   div2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-protected:
   div2t(const div2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class modulus2t : public arith_2op2t
+class modulus2t : public arith_2ops_body<modulus2t>
 {
 public:
   modulus2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-protected:
   modulus2t(const modulus2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class shl2t : public arith_2op2t
+class shl2t : public arith_2ops_body<shl2t>
 {
 public:
   shl2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-protected:
   shl2t(const shl2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
-class ashr2t : public arith_2op2t
+class ashr2t : public arith_2ops_body<ashr2t>
 {
 public:
   ashr2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-protected:
   ashr2t(const ashr2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 };
 
 /** Pointer offset. Extract pointer offset from a pointer value. Subclass of
