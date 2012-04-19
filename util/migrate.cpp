@@ -341,6 +341,16 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     not2t *n = new not2t(new_type, theval);
     new_expr_ref = expr2tc(n);
+  } else if (expr.id() == "and") {
+    assert(expr.operands().size() == 2); // Not necessarily true.
+    expr2tc side1, side2;
+    if (!migrate_expr(expr.op0(), side1))
+      return false;
+    if (!migrate_expr(expr.op1(), side2))
+      return false;
+
+    and2t *a = new and2t(side1, side2);
+    new_expr_ref = expr2tc(a);
     return true;
   } else {
     return false;

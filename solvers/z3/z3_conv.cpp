@@ -1269,6 +1269,31 @@ z3_convt::convert_smt_expr(const not2t &notval, void  *&_bv)
 }
 
 void
+z3_convt::convert_logic_2ops(const logical_2ops2t &log,
+                      ast_convert_calltype converter,
+                      ast_convert_multiargs bulkconverter,
+                      void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast args[2];
+
+  log.side_1->convert_smt(*this, (void*&)args[0]);
+  log.side_2->convert_smt(*this, (void*&)args[1]);
+
+  if (converter != NULL)
+    bv = converter(z3_ctx, args[0], args[1]);
+  else
+    bv = bulkconverter(z3_ctx, 2, args);
+}
+
+void
+z3_convt::convert_smt_expr(const and2t &andval, void  *&_bv)
+{
+  convert_logic_2ops(andval, NULL, Z3_mk_and, _bv);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

@@ -161,11 +161,17 @@ private:
   void convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv);
 
   typedef Z3_ast (*ast_convert_calltype)(Z3_context ctx, Z3_ast op1, Z3_ast op2);
+  typedef Z3_ast (*ast_convert_multiargs)(Z3_context ctx, unsigned int numargs,
+                                          Z3_ast const args[]);
 
   void convert_rel(const rel2t &rel, ast_convert_calltype intmode,
                    ast_convert_calltype signedbv,
                    ast_convert_calltype unsignedbv,
                    void *&_bv);
+  void convert_logic_2ops(const logical_2ops2t &log,
+                          ast_convert_calltype converter,
+                          ast_convert_multiargs bulkconverter,
+                          void *&_bv);
 
   virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
   virtual void convert_smt_expr(const constant_int2t &sym, void *&bv);
@@ -181,6 +187,7 @@ private:
   virtual void convert_smt_expr(const lessthanequal2t &le, void *&bv);
   virtual void convert_smt_expr(const greaterthanequal2t &le, void *&bv);
   virtual void convert_smt_expr(const not2t &notval, void *&bv);
+  virtual void convert_smt_expr(const and2t &andval, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv) const;
   virtual void convert_smt_type(const bv_type2t &type, void *&bv) const;

@@ -489,6 +489,23 @@ expr2tc lops2_body<derived>::clone(void) const
   return expr2tc(new_obj);
 }
 
+template <class derived>
+void
+logic_2ops2t_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
+{
+  const derived *new_this = static_cast<const derived*>(this);
+  obj.convert_smt_expr(*new_this, arg);
+  return;
+}
+
+template <class derived>
+expr2tc logic_2ops2t_body<derived>::clone(void) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return expr2tc(new_obj);
+}
+
 /**************************** Expression constructors *************************/
 
 symbol2t::symbol2t(const type2tc type, irep_idt _name)
@@ -735,5 +752,27 @@ not2t::not2t(const type2tc type, const expr2tc val)
 
 not2t::not2t(const not2t &ref)
   : lops2_body<not2t>(ref)
+{
+}
+
+logical_2ops2t::logical_2ops2t(expr_ids id, const expr2tc val1,
+                               const expr2tc val2)
+  : lops2_body<logical_2ops2t>(type2tc(new bool_type2t()), id),
+    side_1(val1), side_2(val2)
+{
+}
+
+  logical_2ops2t::logical_2ops2t(const logical_2ops2t &ref)
+  : lops2_body<logical_2ops2t>(ref), side_1(ref.side_1), side_2(ref.side_2)
+{
+}
+
+and2t::and2t(const expr2tc val1, const expr2tc val2)
+  : logic_2ops2t_body<and2t>(and_id, val1, val2)
+{
+}
+
+and2t::and2t(const and2t &ref)
+  : logic_2ops2t_body<and2t>(ref)
 {
 }
