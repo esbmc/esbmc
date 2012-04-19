@@ -264,7 +264,7 @@ namespace std{
     reference front();
     const_reference front() const;
 
-    reference back()
+    value_type back()
     {      
       return buf[_size-1];
     }
