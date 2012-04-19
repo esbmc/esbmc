@@ -355,6 +355,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     not2t *n = new not2t(theval);
     new_expr_ref = expr2tc(n);
+    return true;
   } else if (expr.id() == "and") {
     assert(expr.type().id() == "bool");
     expr2tc side1, side2;
