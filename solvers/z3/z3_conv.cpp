@@ -1478,9 +1478,6 @@ z3_convt::convert_arith2ops(const arith_2op2t &arith,
     abort();
   }
 
-  if (expr.type().id() == "pointer" || expr.op0().type().id() == "pointer" ||
-      expr.op1().type().id() == "pointer") {
-
   arith.part_1->convert_smt(*this, (void*&)args[0]);
   arith.part_2->convert_smt(*this, (void*&)args[1]);
 
