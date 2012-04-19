@@ -932,3 +932,13 @@ neg2t::neg2t(const neg2t &ref)
   : arith_body<neg2t>(ref)
 {
 }
+
+abs2t::abs2t(const type2tc type, const expr2tc _value)
+  : arith_body<abs2t>(type, abs_id), value(_value)
+{
+}
+
+abs2t::abs2t(const abs2t &ref)
+  : arith_body<abs2t>(ref)
+{
+}

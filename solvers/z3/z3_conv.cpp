@@ -1403,6 +1403,66 @@ z3_convt::convert_smt_expr(const neg2t &neg, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const abs2t &abs, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+#if 0
+  unsigned width;
+  //std::string out;
+
+  get_type_width(expr.type(), width);
+
+  const exprt::operandst &operands = expr.operands();
+
+  const exprt &op0 = expr.op0();
+  Z3_ast zero, is_negative, operand[2], val_mul;
+
+
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast args[2];
+
+  if (expr.type().id() == "signedbv") {
+    zero = convert_number(0, width, true);
+    operand[1] = convert_number(-1, width, true);
+  } else if (expr.type().id() == "fixedbv")     {
+    if (int_encoding) {
+      zero = Z3_mk_int(z3_ctx, 0, Z3_mk_real_type(z3_ctx));
+      operand[1] = Z3_mk_int(z3_ctx, -1, Z3_mk_real_type(z3_ctx));
+    } else   {
+      zero = convert_number(0, width, true);
+      operand[1] = convert_number(-1, width, true);
+    }
+  } else if (expr.type().id() == "unsignedbv")     {
+    zero = convert_number(0, width, false);
+    operand[1] = convert_number(-1, width, true);
+  }
+
+  convert_bv(op0, operand[0]);
+
+  if (expr.type().id() == "signedbv" || expr.type().id() == "fixedbv") {
+    if (int_encoding)
+      is_negative = Z3_mk_lt(z3_ctx, operand[0], zero);
+    else
+      is_negative = Z3_mk_bvslt(z3_ctx, operand[0], zero);
+  } else {
+    // XXXjmorse - the other case handled in this function is unsignedbv, which
+    // is never < 0, so is_negative is always false. However I don't know
+    // where the guarentee that only those types come here is.
+    is_negative = false;
+  }
+
+  if (int_encoding)
+    val_mul = Z3_mk_mul(z3_ctx, 2, operand);
+  else
+    val_mul = Z3_mk_bvmul(z3_ctx, operand[0], operand[1]);
+
+  bv = Z3_mk_ite(z3_ctx, is_negative, val_mul, operand[0]);
+#endif
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
