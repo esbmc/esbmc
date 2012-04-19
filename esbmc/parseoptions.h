@@ -68,7 +68,9 @@ protected:
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
 
-  // k-inductive related
+  // k-induction related
+  int doit_k_induction();
+
   int k_step;
   bool base_case;
 };

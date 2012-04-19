@@ -436,38 +436,108 @@ int cbmc_parseoptionst::doit()
 
   // slice according to property
 
-  if(cmdline.isset("k-induction"))
-    print(8, "*** K-Induction Loop Iteration "+
-	      i2string((unsigned long)k_step)+
-	      " ***");
+  // do actual BMC
+  do_bmc(bmc, goto_functions);
+}
 
-  if(base_case)
-    print(8, "*** Checking base case ");
-  else
-    print(8, "*** Checking inductive step ");
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::doit_k_induction
+
+  Inputs:
+
+ Outputs:
+
+ Purpose: invoke main modules
+
+\*******************************************************************/
+
+int cbmc_parseoptionst::doit_k_induction()
+{
+  if(cmdline.isset("version"))
+  {
+    std::cout << ESBMC_VERSION << std::endl;
+    return 0;
+  }
+
+  //
+  // unwinding of transition systems
+  //
+
+  if(cmdline.isset("module") ||
+    cmdline.isset("gen-interface"))
+
+  {
+    error("This version has no support for "
+          " hardware modules.");
+    return 1;
+  }
+
+  bmct bmc(context, ui_message_handler);
+
+  //
+  // command line options
+  //
+
+  get_command_line_options(bmc.options);
+  set_verbosity(bmc);
+  set_verbosity(*this);
+
+  if(cmdline.isset("preprocess"))
+  {
+    preprocessing();
+    return 0;
+  }
+
+  goto_functionst goto_functions;
+
+  if(get_goto_program(bmc, goto_functions))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions);
+    return 0;
+  }
+
+  if(set_claims(goto_functions))
+    return 7;
+
+  std::cout << std::endl << "*** K-Induction Loop Iteration ";
+  std::cout << i2string((unsigned long)k_step);
+  std::cout << " ***" << std::endl;
+  std::cout << "*** Checking ";
 
   // do actual BMC
-  bool res = do_bmc(bmc, goto_functions);
-
-  if(!cmdline.isset("k-induction"))
-    return res;
-
+  bool res;
   if(base_case)
   {
+    std::cout << "base case " << std::endl;
+
+    res = do_bmc(bmc, goto_functions);
+
     if(k_step >= 1 && res)
       return 0;
 
     ++k_step;
   }
-  else if (!res)
-    return 0;
+  else
+  {
+    std::cout << "inductive step " << std::endl;
+
+    res = do_bmc(bmc, goto_functions);
+
+    if (!res)
+      return 0;
+  }
 
   base_case = !base_case;
   context.clear();
 
   if(k_step <= atol(cmdline.get_values("k-step").front().c_str()))
   {
-    doit();
+    doit_k_induction();
   }
 }
 

@@ -19,14 +19,15 @@ public:
   parseoptions_baset(const struct opt_templ *opts, int argc, const char **argv);
 
   cmdlinet cmdline;
-  
+
   virtual void help();
-  
+
   virtual int doit()=0;
-  
+  virtual int doit_k_induction()=0;
+
   virtual int main();
   virtual ~parseoptions_baset() { }
-  
+
 private:
   bool parse_result;
 };
