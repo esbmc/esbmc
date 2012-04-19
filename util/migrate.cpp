@@ -491,7 +491,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     lshr2t *s = new lshr2t(type, side1, side2);
     new_expr_ref = expr2tc(s);
     return true;
-  } else if (expr.id() == "neg") {
+  } else if (expr.id() == "unary-") {
     if (!migrate_type(expr.type(), type))
       return false;
 
