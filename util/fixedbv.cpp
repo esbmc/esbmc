@@ -74,7 +74,7 @@ void fixedbvt::from_expr(const expr2t &expr)
   const fixedbv_type2t &ref = dynamic_cast<const fixedbv_type2t&>
                                                            (*expr.type.get());
   const constant_int2t &intref = dynamic_cast<const constant_int2t&>(expr);
-  spec = fixedbv_spect(ref.fraction_bits, ref.integer_bits);
+  spec = fixedbv_spect(ref.width, ref.integer_bits);
   v = intref.constant_value;
 }
 
