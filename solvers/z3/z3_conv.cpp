@@ -1474,7 +1474,7 @@ z3_convt::convert_arith2ops(const arith_2op2t &arith,
 
   if (arith.part_1->type->type_id == type2t::pointer_id ||
       arith.part_2->type->type_id == type2t::pointer_id) {
-    std::cerr << "Pointer arithmatic not implemented for Z3 yet" << std::endl;
+    std::cerr << "Pointer arithmetic not implemented for Z3 yet" << std::endl;
     abort();
   }
 
