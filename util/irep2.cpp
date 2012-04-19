@@ -865,3 +865,13 @@ bitnand2t::bitnand2t(const bitnand2t &ref)
   : binops_body<bitnand2t>(ref)
 {
 }
+
+bitnor2t::bitnor2t(const type2tc type, const expr2tc val1, const expr2tc val2)
+  : binops_body<bitnor2t>(type, bitnor_id, val1, val2)
+{
+}
+
+bitnor2t::bitnor2t(const bitnor2t &ref)
+  : binops_body<bitnor2t>(ref)
+{
+}

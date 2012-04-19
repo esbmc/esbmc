@@ -198,6 +198,7 @@ private:
   virtual void convert_smt_expr(const bitor2t &bitval, void *&bv);
   virtual void convert_smt_expr(const bitxor2t &bitval, void *&bv);
   virtual void convert_smt_expr(const bitnand2t &bitval, void *&bv);
+  virtual void convert_smt_expr(const bitnor2t &bitval, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv) const;
   virtual void convert_smt_type(const bv_type2t &type, void *&bv) const;
