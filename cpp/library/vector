@@ -263,7 +263,12 @@ namespace std{
     reference at(size_type n);
     reference front();
     const_reference front() const;
-    reference back();
+
+    reference back()
+    {      
+      return buf[_size-1];
+    }
+
     const_reference back() const;
 
     // modifiers:
