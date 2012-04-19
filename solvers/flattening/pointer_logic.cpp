@@ -185,7 +185,8 @@ exprt pointer_logict::object_rec(
   const typet &pointer_type,
   const exprt &src) const
 {
-  assert(offset>=0);
+#warning jmorse - I am covered in bees.
+//  assert(offset>=0);
 
   if(src.type().is_array())
   {
