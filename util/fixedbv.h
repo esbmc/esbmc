@@ -44,10 +44,12 @@ public:
   }
 
   explicit fixedbvt(const class exprt &expr);
+  explicit fixedbvt(const class expr2t &expr);
 
   void from_integer(const mp_integer &i);
   mp_integer to_integer() const; // this rounds to zero
   void from_expr(const class exprt &expr);
+  void from_expr(const class expr2t &expr);
   exprt to_expr() const;
   void round(const fixedbv_spect &dest_spec);
 

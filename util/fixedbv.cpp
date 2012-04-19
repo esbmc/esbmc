@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "std_types.h"
 #include "fixedbv.h"
 #include "arith_tools.h"
+#include "irep2.h"
 
 /*******************************************************************\
 
@@ -45,6 +46,11 @@ fixedbvt::fixedbvt(const exprt &expr)
   from_expr(expr);
 }
 
+fixedbvt::fixedbvt(const expr2t &expr)
+{
+  from_expr(expr);
+}
+
 /*******************************************************************\
 
 Function: fixedbvt::from_expr
@@ -61,6 +67,15 @@ void fixedbvt::from_expr(const exprt &expr)
 {
   spec=to_fixedbv_type(expr.type());
   v=binary2integer(id2string(expr.value().as_string()), true);
+}
+
+void fixedbvt::from_expr(const expr2t &expr)
+{
+  const fixedbv_type2t &ref = dynamic_cast<const fixedbv_type2t&>
+                                                           (*expr.type.get());
+  const constant_int2t &intref = dynamic_cast<const constant_int2t&>(expr);
+  spec = fixedbv_spect(ref.fraction_bits, ref.integer_bits);
+  v = intref.constant_value;
 }
 
 /*******************************************************************\
