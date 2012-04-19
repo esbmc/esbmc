@@ -2876,9 +2876,12 @@ DEBUGLOC;
     exprt new_expr(exprt::member, expr.op0().type());
     new_expr.reserve_operands(1);
     new_expr.copy_to_operands(lhs_struct);
-    new_expr.component_name(expr.op0().get_string("identifier"));
 
-    //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
+    if (expr.op0().operands().size())
+      new_expr.component_name(expr.op0().op0().get_string("identifier"));
+    else 
+      new_expr.component_name(expr.op0().get_string("identifier"));
+
     assert(!new_expr.get_string("component_name").empty());
 
     //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
