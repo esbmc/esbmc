@@ -330,6 +330,18 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     greaterthanequal2t *n = new greaterthanequal2t(side1, side2);
     new_expr_ref = expr2tc(n);
     return true;
+  } else if (expr.id() == "not") {
+    type2tc new_type;
+    if (!migrate_type(expr.type(), new_type))
+      return false;
+
+    expr2tc theval;
+    if (!migrate_expr(expr.op0(), theval))
+      return false;
+
+    not2t *n = new not2t(new_type, theval);
+    new_expr_ref = expr2tc(n);
+    return true;
   } else {
     return false;
   }

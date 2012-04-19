@@ -123,6 +123,7 @@ public:
   virtual void convert_smt_expr(const greaterthan2t &greaterthan, void *&arg) = 0;
   virtual void convert_smt_expr(const lessthanequal2t &le, void *&arg) = 0;
   virtual void convert_smt_expr(const greaterthanequal2t &le, void *&arg) = 0;
+  virtual void convert_smt_expr(const not2t &notval, void *&arg) = 0;
 };
 
 #endif

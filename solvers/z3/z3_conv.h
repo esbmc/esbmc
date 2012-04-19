@@ -180,6 +180,7 @@ private:
   virtual void convert_smt_expr(const greaterthan2t &greaterthan, void *&bv);
   virtual void convert_smt_expr(const lessthanequal2t &le, void *&bv);
   virtual void convert_smt_expr(const greaterthanequal2t &le, void *&bv);
+  virtual void convert_smt_expr(const not2t &notval, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv) const;
   virtual void convert_smt_type(const bv_type2t &type, void *&bv) const;

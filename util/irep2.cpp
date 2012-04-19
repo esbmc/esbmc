@@ -472,6 +472,23 @@ expr2tc rel_body<derived>::clone(void) const
   return expr2tc(new_obj);
 }
 
+template <class derived>
+void
+lops2_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
+{
+  const derived *new_this = static_cast<const derived*>(this);
+  obj.convert_smt_expr(*new_this, arg);
+  return;
+}
+
+template <class derived>
+expr2tc lops2_body<derived>::clone(void) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return expr2tc(new_obj);
+}
+
 /**************************** Expression constructors *************************/
 
 symbol2t::symbol2t(const type2tc type, irep_idt _name)
@@ -698,5 +715,25 @@ greaterthanequal2t::greaterthanequal2t(const expr2tc val1, const expr2tc val2)
 
 greaterthanequal2t::greaterthanequal2t(const greaterthanequal2t &ref)
   : rel_body<greaterthanequal2t>(ref)
+{
+}
+
+lops2t::lops2t(const type2tc type, expr_ids id)
+  : expr_body<lops2t>(type, id)
+{
+}
+
+lops2t::lops2t(const lops2t &ref)
+  : expr_body<lops2t>(ref)
+{
+}
+
+not2t::not2t(const type2tc type, const expr2tc val)
+  : lops2_body<not2t>(type, not_id), notvalue(val)
+{
+}
+
+not2t::not2t(const not2t &ref)
+  : lops2_body<not2t>(ref)
 {
 }

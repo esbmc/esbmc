@@ -1258,6 +1258,17 @@ z3_convt::convert_smt_expr(const greaterthanequal2t &ge, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const not2t &notval, void  *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast z3val;
+
+  notval.notvalue->convert_smt(*this, (void*&)z3val);
+  bv = Z3_mk_not(z3_ctx, z3val);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
