@@ -885,3 +885,13 @@ bitnxor2t::bitnxor2t(const bitnxor2t &ref)
   : binops_body<bitnxor2t>(ref)
 {
 }
+
+lshr2t::lshr2t(const type2tc type, const expr2tc val1, const expr2tc val2)
+  : binops_body<lshr2t>(type, lshr_id, val1, val2)
+{
+}
+
+lshr2t::lshr2t(const lshr2t &ref)
+  : binops_body<lshr2t>(ref)
+{
+}
