@@ -325,12 +325,9 @@ public:
     lessthanequal_id,
     greaterthanequal_id,
     not_id,
-    dynamic_object_id,
-    is_nan_id,
     and_id,
     or_id,
     xor_id,
-    same_object_id,
     bitand_id,
     bitor_id,
     bitxor_id,
@@ -347,6 +344,8 @@ public:
     modulus_id,
     shl_id,
     ashr_id,
+    dynamic_object_id,
+    same_object_id,
     pointer_offset_id,
     pointer_object_id,
     byte_extract_id,
@@ -355,7 +354,8 @@ public:
     member_id,
     index_id,
     zero_string_id,
-    zero_length_string_id
+    zero_length_string_id,
+    is_nan_id
   };
 
 protected:
@@ -629,35 +629,6 @@ public:
   const expr2tc notvalue;
 };
 
-/** Dynamic object operation. Checks to see whether or not the object is a
- *  dynamically allocated object or not. */
-class dynamic_object2t : public lops2t
-{
-public:
-  dynamic_object2t(const expr2tc val);
-protected:
-  dynamic_object2t(const dynamic_object2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
-
-  const expr2tc ptr_obj;
-};
-
-/** Isnan operation. Checks whether expression is a NaN or not. */
-class isnan2t : public lops2t
-{
-public:
-  isnan2t(const expr2tc val);
-protected:
-  isnan2t(const isnan2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
-
-  const expr2tc value;
-};
-
 /** Base class for 2-operand boolean oeprators. Always results in a boolean,
  *  takes two operands, both of boolean type. */
 class logical_2ops2t : public lops2t
@@ -704,6 +675,21 @@ protected:
 
 public:
   virtual expr2tc clone(void) const;
+};
+
+/** Dynamic object operation. Checks to see whether or not the object is a
+ *  dynamically allocated object or not. */
+class dynamic_object2t : public lops2t
+{
+public:
+  dynamic_object2t(const expr2tc val);
+protected:
+  dynamic_object2t(const dynamic_object2t &ref);
+
+public:
+  virtual expr2tc clone(void) const;
+
+  const expr2tc ptr_obj;
 };
 
 /** Same object operation. Compares two pointer objects to see if they're the
@@ -1107,6 +1093,20 @@ public:
   virtual expr2tc clone(void) const;
 
   const expr2tc string;
+};
+
+/** Isnan operation. Checks whether expression is a NaN or not. */
+class isnan2t : public lops2t
+{
+public:
+  isnan2t(const expr2tc val);
+protected:
+  isnan2t(const isnan2t &ref);
+
+public:
+  virtual expr2tc clone(void) const;
+
+  const expr2tc value;
 };
 
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
