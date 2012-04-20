@@ -1593,6 +1593,11 @@ z3_convt::convert_shift(const expr2t &shift, const expr2t &part1,
   width_op0 = part1.type->get_width();
   width_op1 = part2.type->get_width();
 
+  if (int_encoding) {
+    op0 = Z3_mk_int2bv(z3_ctx, width_op0, op0);
+    op1 = Z3_mk_int2bv(z3_ctx, width_op1, op1);
+  }
+
   if (width_op0 > width_expr)
     op0 = Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op0);
   if (width_op1 > width_expr)
@@ -1606,6 +1611,15 @@ z3_convt::convert_shift(const expr2t &shift, const expr2t &part1,
   }
 
   bv = convert(z3_ctx, op0, op1);
+
+  if (int_encoding) {
+    if (shift.type->type_id == type2t::signedbv_id) {
+      bv = Z3_mk_bv2int(z3_ctx, bv, true);
+    } else {
+      assert(shift.type->type_id == type2t::unsignedbv_id);
+      bv = Z3_mk_bv2int(z3_ctx, bv, false);
+    }
+  }
 }
 
 void
