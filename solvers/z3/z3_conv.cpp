@@ -1023,9 +1023,27 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
 
   if (sym.type->type_id == type2t::unsignedbv_id) {
     bv = Z3_mk_unsigned_int64(z3_ctx, sym.as_ulong(), int_sort);
-  } else {
-    assert(sym.type->type_id == type2t::signedbv_id);
+  } else if (sym.type->type_id == type2t::signedbv_id) {
     bv = Z3_mk_int64(z3_ctx, sym.as_long(), int_sort);
+  } else {
+    assert(sym.type->type_id == type2t::fixedbv_id);
+
+    std::string theval = integer2binary(sym.constant_value, bitwidth);
+
+    if (int_encoding) {
+      std::string result = fixed_point(theval, bitwidth);
+      bv = Z3_mk_numeral(z3_ctx, result.c_str(), Z3_mk_real_type(z3_ctx));
+    } else {
+      Z3_ast magnitude, fraction;
+      std::string m, f, c;
+      m = extract_magnitude(theval, bitwidth);
+      f = extract_fraction(theval, bitwidth);
+      magnitude =
+        Z3_mk_int(z3_ctx, atoi(m.c_str()), Z3_mk_bv_type(z3_ctx, bitwidth / 2));
+      fraction =
+        Z3_mk_int(z3_ctx, atoi(f.c_str()), Z3_mk_bv_type(z3_ctx, bitwidth / 2));
+      bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
+    }
   }
 
   return;
@@ -1406,9 +1424,9 @@ void
 z3_convt::convert_smt_expr(const abs2t &abs, void *&_bv)
 {
 
-  assert(abs.type->type_id != type2t::fixedbv_id &&
-         "Fixedbv multiplies not currently implemented");
-  type2tc sign(new signedbv_type2t(config.ansi_c.int_width));
+  type2tc sign((abs.type->type_id == type2t::fixedbv_id)
+      ? (type2t* )new fixedbv_type2t(64, 32)
+      : (type2t* )new signedbv_type2t(config.ansi_c.int_width));
   expr2tc min1(new constant_int2t(sign, BigInt(-1)));
   expr2tc zero(new constant_int2t(sign, BigInt(0)));
   expr2tc muled(new mul2t(sign, min1, abs.value));
