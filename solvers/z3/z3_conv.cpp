@@ -2182,9 +2182,8 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
 
   // First, sanity check -- typecast from one kind of a pointer to another kind
   // is a simple operation. Check for that first.
-  if (expr.op0().type().id() == "pointer") {
-    // Yup.
-    convert_bv(expr.op0(), bv);
+  if (cast.from->type->type_id == type2t::pointer_id) {
+    // bv is already plain-converted.
     return;
   }
 
@@ -2195,10 +2194,9 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
 
   // First cast it to an unsignedbv
   Z3_ast target;
-  unsignedbv_typet int_type(config.ansi_c.int_width);
-  typecast_exprt cast(int_type);
-  cast.op() = expr.op0();
-  convert_bv(cast, target);
+  type2tc int_type(new unsignedbv_type2t(config.ansi_c.int_width));
+  typecast2t cast_to_unsignedbv(int_type, cast.from);
+  cast_to_unsignedbv.convert_smt(*this, (void*&)target);
 
   // Construct array for all possible object outcomes
   Z3_ast *is_in_range = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
