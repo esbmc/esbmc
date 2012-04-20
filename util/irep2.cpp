@@ -1190,3 +1190,16 @@ member2t::member2t(const member2t &ref)
                            member(ref.member)
 {
 }
+
+index2t::index2t(const type2tc type, const expr2tc source,
+                 const expr2tc _index)
+  : datatype_body<index2t>(type, index_id), source_data(source),
+                           index(_index)
+{
+}
+
+index2t::index2t(const index2t &ref)
+  : datatype_body<index2t>(ref), source_data(ref.source_data),
+                           index(ref.index)
+{
+}

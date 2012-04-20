@@ -2365,6 +2365,21 @@ z3_convt::convert_smt_expr(const typecast2t &cast, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const index2t &index, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast source, idx;
+
+  index.source_data->convert_smt(*this, (void*&)source);
+  index.index->convert_smt(*this, (void*&)idx);
+
+  // XXXjmorse - consider situation where a pointer is indexed. Should it
+  // give the address of ptroffset + (typesize * index)?
+  bv = Z3_mk_select(z3_ctx, source, idx);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

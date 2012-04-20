@@ -232,6 +232,7 @@ private:
   virtual void convert_smt_expr(const with2t &with, void *&bv);
   virtual void convert_smt_expr(const member2t &member, void *&bv);
   virtual void convert_smt_expr(const typecast2t &cast, void *&bv);
+  virtual void convert_smt_expr(const index2t &index, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv) const;
   virtual void convert_smt_type(const bv_type2t &type, void *&bv) const;

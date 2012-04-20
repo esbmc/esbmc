@@ -703,6 +703,18 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     member2t *m = new member2t(type, sourcedata, idx);
     new_expr_ref = expr2tc(m);
     return true;
+  } else if (expr.id() == "index") {
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    assert(expr.operands().size() == 2);
+    expr2tc source, index;
+    if (!convert_operand_pair(expr, source, index))
+        return false;
+
+    index2t *i = new index2t(type, source, index);
+    new_expr_ref = expr2tc(i);
+    return true;
   } else {
     return false;
   }
