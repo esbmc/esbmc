@@ -2897,6 +2897,14 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
 
     new_expr1 = tmp;
   }
+  else if (expr.id()=="+")
+  {
+    exprt operand0, operand1;
+	get_new_expr(expr.op0(), operand0, found);
+	get_new_expr(expr.op1(), operand1, found);
+
+	new_expr1 = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
+  }
   else
   {
     std::cerr << "warning: the expression '" << expr.pretty()
@@ -2964,9 +2972,6 @@ DEBUGLOC;
     else
       assert(new_expr2.type().id() == expr.op1().op0().type().id());
 
-
-    //std::cout << "new_expr1.pretty()" << new_expr1.pretty() << std::endl;
-    //std::cout << "new_expr2.pretty()" << new_expr2.pretty() << std::endl;
 
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
   }
