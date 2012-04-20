@@ -1394,7 +1394,8 @@ z3_convt::convert_smt_expr(const bitnxor2t &bitval, void *&_bv)
 void
 z3_convt::convert_smt_expr(const lshr2t &bitval, void *&_bv)
 {
-  convert_binop(bitval, Z3_mk_bvlshr, _bv);
+  convert_shift(bitval, *bitval.side_1.get(), *bitval.side_2.get(),
+                Z3_mk_bvlshr, _bv);
 }
 
 void
