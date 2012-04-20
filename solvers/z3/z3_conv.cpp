@@ -1685,6 +1685,7 @@ z3_convt::convert_smt_expr(const pointer_object2t &obj, void *&_bv)
   bv = z3_api.mk_tuple_select(pointer, 0); //select pointer offset
 }
 
+#if 0
 void
 z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
 {
@@ -1752,6 +1753,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
   }
 }
 
+#endif
 
 
 void
@@ -3362,6 +3364,7 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 }
 
+#if 0
 void
 z3_convt::convert_identifier_pointer(const expr2t &expr, std::string symbol,
                                      Z3_ast &bv)
@@ -3476,6 +3479,7 @@ z3_convt::convert_identifier_pointer(const expr2t &expr, std::string symbol,
     assert_formula(isfalse);
   }
 }
+#endif
 
 void
 z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
