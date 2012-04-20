@@ -197,6 +197,7 @@ protected:
   void assume_not_cond(const exprt &cond, goto_programt &dest);
   void replace_ifthenelse(exprt &expr);
   void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
+  void get_new_expr(exprt &expr, exprt &new_expr1, bool &found);
 
   //
   // gotos

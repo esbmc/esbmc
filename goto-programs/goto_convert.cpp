@@ -2838,10 +2838,11 @@ void goto_convertt::get_cs_member(
   exprt new_expr(exprt::member, type);
   new_expr.reserve_operands(1);
   new_expr.copy_to_operands(lhs_struct);
-  new_expr.component_name(expr.op0().get_string("identifier"));
+  new_expr.component_name(expr.get_string("identifier"));
 
+  //std::cout << "get_cs_member: " << expr.pretty() << std::endl;
   assert(!new_expr.get_string("component_name").empty());
-#if 1
+
   const struct_typet &struct_type = to_struct_type(lhs_struct.type());
   const struct_typet::componentst &components = struct_type.components();
   u_int i = 0;
@@ -2858,8 +2859,58 @@ void goto_convertt::get_cs_member(
       found=true;
     }
   }
-#endif
+
   result = new_expr;
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::get_new_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
+{
+  if (expr.is_symbol())
+    get_cs_member(expr, new_expr1, expr.type(), found);
+  else if (expr.is_constant())
+  {
+    new_expr1 = expr;
+    found=true;
+  }
+  else if (expr.is_index())
+  {
+    exprt array, index;
+    get_cs_member(expr.op0(), array, expr.op0().type(), found);
+    get_cs_member(expr.op1(), index, expr.op1().type(), found);
+
+    exprt tmp(exprt::index, expr.op0().type());
+    tmp.reserve_operands(2);
+    tmp.copy_to_operands(array);
+    tmp.copy_to_operands(index);
+
+    new_expr1 = tmp;
+  }
+  else
+  {
+    std::cerr << "warning: the expression '" << expr.pretty()
+  		  << "' is not supported yet" << std::endl;
+	assert(0);
+  }
+
+  if (!found)
+  {
+    new_expr1 = expr;
+    std::cerr << "warning: the symbol '" << expr.get_string("identifier")
+  		  << "' is not a member of the state struct" << std::endl;
+  }
+
 }
 
 /*******************************************************************\
@@ -2878,32 +2929,46 @@ void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
 DEBUGLOC;
+  //std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
 
   bool found=false;
 
   if (expr.operands().size()==1)
   {
     exprt new_expr;
-    get_cs_member(expr, new_expr, bool_typet(), found);
+    get_cs_member(expr.op0(), new_expr, bool_typet(), found);
     assert(found);
     assert(new_expr.type().is_bool());
     expr = new_expr;
-
-    //std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
-    //assert(0);
   }
   else
   {
     assert(expr.operands().size()==2);
     assert(expr.op0().type() == expr.op1().type());
     
-    exprt new_expr;
-    get_cs_member(expr, new_expr, expr.op0().type(), found);
-    assert(found);
-    assert(new_expr.type().id() == expr.op0().type().id());
+    exprt new_expr1, new_expr2;
 
-    expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
-    //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
+    get_new_expr(expr.op0(), new_expr1, found);
+
+    if (!expr.op0().is_index())
+      assert(new_expr1.type().id() == expr.op0().type().id());
+    else
+      assert(new_expr1.type().id() == expr.op0().op0().type().id());
+
+    found=false;
+
+    get_new_expr(expr.op1(), new_expr2, found);
+
+    if (!expr.op1().is_index())
+      assert(new_expr2.type().id() == expr.op1().type().id());
+    else
+      assert(new_expr2.type().id() == expr.op1().op0().type().id());
+
+
+    //std::cout << "new_expr1.pretty()" << new_expr1.pretty() << std::endl;
+    //std::cout << "new_expr2.pretty()" << new_expr2.pretty() << std::endl;
+
+    expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
   }
 }
 
