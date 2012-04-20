@@ -1019,3 +1019,13 @@ modulus2t::modulus2t(const modulus2t &ref)
   : arith_2ops_body<modulus2t>(ref)
 {
 }
+
+shl2t::shl2t(const type2tc type, const expr2tc val1,const expr2tc val2)
+  : arith_2ops_body<shl2t>(type, shl_id, val1, val2)
+{
+}
+
+shl2t::shl2t(const shl2t &ref)
+  : arith_2ops_body<shl2t>(ref)
+{
+}
