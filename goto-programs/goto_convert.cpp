@@ -1805,7 +1805,7 @@ void goto_convertt::make_nondet_assign(
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
 
-#if 0
+#if 1
     if (state.components()[j].type().is_array())
     {
  	    const array_typet &array_type=to_array_type(state.components()[j].type());
@@ -1824,11 +1824,10 @@ void goto_convertt::make_nondet_assign(
  	      if(size<=0) return true;
  	    }
 
- 	    exprt lhs_expr=exprt("array_of", state.components()[j].type());
+ 	    rhs_expr=exprt("array_of", state.components()[j].type());
  	    exprt value("nondet_symbol", state.components()[j].type().subtype());
- 	    lhs_expr.move_to_operands(value);
- 	    //std::cout << "lhs_expr.pretty(): " << lhs_expr.pretty() << std::endl;
-
+ 	    rhs_expr.move_to_operands(value);
+ 	    //std::cout << "rhs_expr.pretty(): " << rhs_expr.pretty() << std::endl;
     }
 #endif
 
@@ -1855,6 +1854,9 @@ void goto_convertt::make_nondet_assign(
         assert(!new_expr.op1().get_string("component_name").empty());
       }
     }
+
+    //std::cout << "lhs_expr.pretty(): " << lhs_expr.pretty() << std::endl;
+    //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
 
     code_assignt new_assign(lhs_expr,new_expr);
     copy(new_assign, ASSIGN, dest);
