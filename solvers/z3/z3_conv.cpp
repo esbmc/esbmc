@@ -1686,6 +1686,75 @@ z3_convt::convert_smt_expr(const pointer_object2t &obj, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_type_ast pointer_type;
+  Z3_ast offset;
+  std::string symbol_name, out;
+
+  obj.type->convert_smt_type(*this, (void*&)pointer_type);
+  offset = convert_number(0, config.ansi_c.int_width, true);
+
+  if (obj.pointer_obj->expr_id == expr2t::index_id) {
+    const index2t &idx = dynamic_cast<const index2t &>(*obj.pointer_obj.get());
+    const array_type2t &arr = dynamic_cast<const array_type2t&>
+                                          (*idx.source_data->type.get());
+
+    // Pick pointer-to array subtype; need to make pointer arith work.
+    expr2tc addrof(new address_of2t(arr.subtype, idx.source_data));
+    expr2tc plus(new add2t(addrof->type, addrof, idx.index));
+    plus->convert_smt(*this, (void*&)bv);
+  } else if (obj.pointer_obj->expr_id == expr2t::member_id) {
+    const member2t &memb = dynamic_cast<const member2t&>
+                                       (*obj.pointer_obj.get());
+
+    int64_t offs;
+    if (memb.source_data->type->type_id == type2t::struct_id) {
+      const struct_type2t &type = dynamic_cast<const struct_type2t&>
+                                              (*obj.pointer_obj->type.get());
+      offs = member_offset(type, irep_idt(memb.member.value)).to_long();
+    } else {
+      offs = 0; // Offset is always zero for unions.
+    }
+
+    address_of2t addr(type2tc(new pointer_type2t(memb.source_data->type)),
+                       memb.source_data);
+    addr.convert_smt(*this, (void*&)bv);
+
+    // Update pointer offset to offset to that field.
+    Z3_ast num = convert_number(offs, config.ansi_c.int_width, true);
+    bv = z3_api.mk_tuple_update(bv, 1, num);
+  } else if (obj.pointer_obj->expr_id == expr2t::symbol_id) {
+// XXXjmorse             obj.pointer_obj->expr_id == expr2t::code_id) {
+    convert_identifier_pointer(expr.op0(), expr.op0().get_string("identifier"),
+                               bv);
+  } else if (obj.pointer_obj->expr_id == expr2t::constant_string_id) {
+    // XXXjmorse - we should avoid encoding invalid characters in the symbol,
+    // but this works for now.
+    const constant_string2t &str = dynamic_cast<const constant_string2t&>
+                                               (*obj.pointer_obj.get());
+    std::string identifier = "address_of_str_const(" + str.value + ")";
+    convert_identifier_pointer(expr.op0(), identifier, bv);
+  } else if (obj.pointer_obj->expr_id == expr2t::if_id) {
+    // We can't nondeterministically take the address of something; So instead
+    // rewrite this to be if (cond) ? &a : &b;.
+
+    const if2t &ifval = dynamic_cast<const if2t &>(*obj.pointer_obj.get());
+
+    expr2tc addrof1(new address_of2t(obj.type, ifval.true_val));
+    expr2tc addrof2(new address_of2t(obj.type, ifval.false_val));
+    if2t newif(obj.type, ifval.cond, addrof1, addrof2);
+    newif.convert_smt(*this, (void*&)bv);
+  } else {
+    throw new conv_error("Unrecognized address_of operand", exprt());
+  }
+}
+
+
+
+void
 z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
