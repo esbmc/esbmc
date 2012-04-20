@@ -196,7 +196,7 @@ protected:
   void assign_current_state(/*const struct_typet &state,*/ goto_programt &dest);
   void assume_not_cond(const exprt &cond, goto_programt &dest);
   void replace_ifthenelse(exprt &expr);
-  void get_cs_member(const exprt &expr, exprt &result, const typet type);
+  void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
 
   //
   // gotos

@@ -2810,10 +2810,23 @@ void goto_convertt::generate_ifthenelse(
   dest.destructive_append(tmp_z);
 }
 
+/*******************************************************************\
+
+Function: goto_convertt::get_cs_member
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
 void goto_convertt::get_cs_member(
-  const exprt &expr, 
+  exprt &expr,
   exprt &result, 
-  const typet type)
+  const typet &type,
+  bool &found)
 {
   std::string identifier;
 
@@ -2828,7 +2841,24 @@ void goto_convertt::get_cs_member(
   new_expr.component_name(expr.op0().get_string("identifier"));
 
   assert(!new_expr.get_string("component_name").empty());
+#if 1
+  const struct_typet &struct_type = to_struct_type(lhs_struct.type());
+  const struct_typet::componentst &components = struct_type.components();
+  u_int i = 0;
 
+  for (struct_typet::componentst::const_iterator
+       it = components.begin();
+       it != components.end();
+       it++, i++)
+  {
+    if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
+    {
+      if (expr.operands().size()==1)
+	    it->swap(expr);
+      found=true;
+    }
+  }
+#endif
   result = new_expr;
 }
 
@@ -2849,35 +2879,14 @@ void goto_convertt::replace_ifthenelse(
 {
 DEBUGLOC;
 
-  std::string identifier;
-  identifier = "cs$"+i2string(state_counter);
-  exprt lhs_struct("symbol", state);
-  lhs_struct.identifier(identifier);
-
   bool found=false;
 
   if (expr.operands().size()==1)
   {
     exprt new_expr;
-    get_cs_member(expr, new_expr, bool_typet());
-    assert(new_expr.type().is_bool());
-
-    const struct_typet &struct_type = to_struct_type(lhs_struct.type());
-    const struct_typet::componentst &components = struct_type.components();
-    u_int i = 0;
-
-    for (struct_typet::componentst::const_iterator
-         it = components.begin();
-         it != components.end();
-         it++, i++)
-    {
-      if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
-      {
-	    it->swap(expr);
-        found=true;
-      }
-    }
+    get_cs_member(expr, new_expr, bool_typet(), found);
     assert(found);
+    assert(new_expr.type().is_bool());
     expr = new_expr;
 
     //std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
@@ -2889,27 +2898,10 @@ DEBUGLOC;
     assert(expr.op0().type() == expr.op1().type());
     
     exprt new_expr;
-    get_cs_member(expr, new_expr, expr.op0().type());
+    get_cs_member(expr, new_expr, expr.op0().type(), found);
+    assert(found);
     assert(new_expr.type().id() == expr.op0().type().id());
 
-    const struct_typet &struct_type = to_struct_type(lhs_struct.type());
-    const struct_typet::componentst &components = struct_type.components();
-    u_int i = 0;
-
-    for (struct_typet::componentst::const_iterator
-         it = components.begin();
-         it != components.end();
-         it++, i++)
-    {
-      //std::cout << "name: " << it->get("name") << std::endl;
-      //std::cout << "component_name: " << new_expr.get_string("component_name") << std::endl;
-      if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
-      {
-        found=true;
-	    break;
-      }
-    }
-    assert(found);
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr, expr.op1());
     //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
   }
