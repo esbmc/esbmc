@@ -122,6 +122,14 @@ private:
   void convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv);
   void convert_typecast_struct(const exprt &expr, Z3_ast &bv);
   void convert_typecast_enum(const exprt &expr, Z3_ast &bv);
+
+  void convert_typecast_bool(const typecast2t &cast, Z3_ast &bv);
+  void convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv);
+  void convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv);
+  void convert_typecast_to_ptr(const typecast2t &castj, Z3_ast &bv);
+  void convert_typecast_from_ptr(const typecast2t &cast, Z3_ast &bv);
+  void convert_typecast_struct(const typecast2t &cast, Z3_ast &bv);
+
   void convert_struct_union(const exprt &expr, Z3_ast &bv);
   void convert_identifier_pointer(const exprt &expr, std::string symbol,
                                   Z3_ast &bv);
@@ -223,6 +231,7 @@ private:
   virtual void convert_smt_expr(const byte_update2t &data, void *&bv);
   virtual void convert_smt_expr(const with2t &with, void *&bv);
   virtual void convert_smt_expr(const member2t &member, void *&bv);
+  virtual void convert_smt_expr(const typecast2t &cast, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv) const;
   virtual void convert_smt_type(const bv_type2t &type, void *&bv) const;

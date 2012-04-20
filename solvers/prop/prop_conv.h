@@ -150,6 +150,7 @@ public:
   virtual void convert_smt_expr(const byte_update2t &data, void *&arg) = 0;
   virtual void convert_smt_expr(const with2t &with, void *&arg) = 0;
   virtual void convert_smt_expr(const member2t &member, void *&arg) = 0;
+  virtual void convert_smt_expr(const typecast2t &cast, void *&arg) = 0;
 };
 
 #endif
