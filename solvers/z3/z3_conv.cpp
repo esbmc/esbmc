@@ -2316,8 +2316,7 @@ z3_convt::convert_typecast_from_ptr(const typecast2t &cast, Z3_ast &bv)
   names.push_back("start");
   names.push_back("end");
   type2tc strct(new struct_type2t(members, names, "addr_space_tuple"));
-  type2tc addrspace_type(new array_type2t(strct, expr2tc(new empty_type2t()),
-                                          true));
+  type2tc addrspace_type(new array_type2t(strct, expr2tc((expr2t*)NULL), true));
 
   expr2tc obj_num(new pointer_object2t(inttype, cast.from));
 
