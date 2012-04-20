@@ -2848,13 +2848,12 @@ void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
 DEBUGLOC;
-  std::string identifier;
-#if 0
-  identifier = "cs$"+i2string(state_counter);
 
+  std::string identifier;
+  identifier = "cs$"+i2string(state_counter);
   exprt lhs_struct("symbol", state);
   lhs_struct.identifier(identifier);
-#endif
+
   bool found=false;
 
   if (expr.operands().size()==1)
