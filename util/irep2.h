@@ -673,34 +673,6 @@ public:
   xor2t(const xor2t &ref);
 };
 
-/** Dynamic object operation. Checks to see whether or not the object is a
- *  dynamically allocated object or not. */
-class dynamic_object2t : public lops2t
-{
-public:
-  dynamic_object2t(const expr2tc val);
-protected:
-  dynamic_object2t(const dynamic_object2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
-
-  const expr2tc ptr_obj;
-};
-
-/** Same object operation. Compares two pointer objects to see if they're the
- *  same, with a boolean result. */
-class same_object2t : public logical_2ops2t
-{
-public:
-  same_object2t(const expr2tc val1, const expr2tc val2);
-protected:
-  same_object2t(const same_object2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
-};
-
 /** Binary operations base class. Take a type, probably integer with a width,
  *  and some operands. */
 class binops2t : public expr_body<binops2t>
@@ -887,6 +859,30 @@ class ashr2t : public arith_2ops_body<ashr2t>
 public:
   ashr2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   ashr2t(const ashr2t &ref);
+};
+
+/** Dynamic object operation. Checks to see whether or not the object is a
+ *  dynamically allocated object or not. */
+class dynamic_object2t : public lops2t
+{
+public:
+  dynamic_object2t(const expr2tc val);
+protected:
+  dynamic_object2t(const dynamic_object2t &ref);
+
+public:
+  virtual expr2tc clone(void) const;
+
+  const expr2tc ptr_obj;
+};
+
+/** Same object operation. Compares two pointer objects to see if they're the
+ *  same, with a boolean result. */
+class same_object2t : public arith_2ops_body<same_object2t>
+{
+public:
+  same_object2t(const expr2tc val1, const expr2tc val2);
+  same_object2t(const same_object2t &ref);
 };
 
 /** Pointer offset. Extract pointer offset from a pointer value. Subclass of
