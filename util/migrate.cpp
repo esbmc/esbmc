@@ -629,7 +629,23 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     pointer_object2t *p = new pointer_object2t(type, theval);
     new_expr_ref = expr2tc(p);
     return true;
-  } else {
+  } else if (expr.id() == "byte_extract_little_endian" ||
+             expr.id() == "byte_extract_big_endian") {
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    assert(expr.operands().size() == 2);
+
+    expr2tc side1, side2;
+    if (!convert_operand_pair(expr, side1, side2))
+        return false;
+
+    bool big_endian = (expr.id() == "byte_extract_big_endian") ? true : false;
+
+    byte_extract2t *b = new byte_extract2t(type, big_endian, side1, side2);
+    new_expr_ref = expr2tc(b);
+    return true;
+   } else {
     return false;
   }
 }

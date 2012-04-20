@@ -935,9 +935,11 @@ public:
 class byte_extract2t : public byte_ops_body<byte_extract2t>
 {
 public:
-  byte_extract2t(const type2tc type, const expr2tc source, const expr2tc offs);
+  byte_extract2t(const type2tc type, bool big_endian,
+                 const expr2tc source, const expr2tc offs);
   byte_extract2t(const byte_extract2t &ref);
 
+  bool big_endian;
   const expr2tc source_value;
   const expr2tc source_offset;
 };

@@ -1675,6 +1675,101 @@ z3_convt::convert_smt_expr(const pointer_object2t &obj, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  const constant_int2t *intref = dynamic_cast<const constant_int2t*>
+                                             (data.source_offset.get());
+  assert(intref != NULL && "byte_extract expects constant 2nd arg");
+
+  unsigned width, w;
+  width = data.source_value->type->get_width();
+  // XXXjmorse - looks like this only ever reads a single byte, not the desired
+  // number of bytes to fill the type.
+  w = data.type->get_width();
+
+  uint64_t upper, lower;
+  if (!data.big_endian) {
+    upper = ((intref->constant_value.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
+    lower = intref->constant_value.to_long() * 8; //i*w;
+  } else {
+    uint64_t max = width - 1;
+    upper = max - (intref->constant_value.to_long() * 8); //max-(i*w);
+    lower = max - ((intref->constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
+  }
+
+  Z3_ast source;
+
+  data.source_value->convert_smt(*this, (void*&)source);
+
+  if (data.source_value->type->type_id == type2t::struct_id) {
+    const struct_type2t &struct_type = dynamic_cast<const struct_type2t&>
+                                                  (*data.source_value->type.get());
+    unsigned i = 0, num_elems = struct_type.members.size();
+    Z3_ast struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
+
+    forall_types(it, struct_type.members) {
+      struct_elem[i] = z3_api.mk_tuple_select(source, i);
+      i++;
+    }
+
+    for (unsigned k = 0; k < num_elems; k++)
+      struct_elem_inv[(num_elems - 1) - k] = struct_elem[k];
+
+    for (unsigned k = 0; k < num_elems; k++)
+    {
+      if (k == 1)
+        struct_elem_inv[num_elems] = Z3_mk_concat(
+          z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]);
+      else if (k > 1)
+        struct_elem_inv[num_elems] = Z3_mk_concat(
+          z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]);
+    }
+
+    source = struct_elem_inv[num_elems];
+  }
+
+  bv = Z3_mk_extract(z3_ctx, upper, lower, source);
+
+#if 0
+  if (expr.op0().id() == "index") {
+    Z3_ast args[2];
+
+    const exprt &symbol = expr.op0().operands()[0];
+    const exprt &index = expr.op0().operands()[1];
+
+    convert_bv(symbol, args[0]);
+    convert_bv(index, args[1]);
+
+    bv = Z3_mk_select(z3_ctx, args[0], args[1]);
+
+    unsigned width_expr;
+    get_type_width(expr.type(), width_expr);
+
+    if (width_expr > width) {
+      if (expr.type().id() == "unsignedbv") {
+        bv = Z3_mk_zero_ext(z3_ctx, (width_expr - width), bv);
+      }
+    }
+  }
+#endif
+
+#if 0
+  if (expr.op1().id()=="constant") {
+    unsigned width0, width1;
+    get_type_width(expr.op0().type(), width0);
+    get_type_width(expr.op1().type(), width1);
+    if (width1 > width0) {
+      if (expr.op0().type().id() == "unsignedbv") {
+        bv = Z3_mk_zero_ext(z3_ctx, width1-width0, bv);
+      }
+    }
+  }
+#endif
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
