@@ -1226,3 +1226,13 @@ zero_length_string2t::zero_length_string2t(const zero_length_string2t &ref)
   : datatype_body<zero_length_string2t>(ref), string(ref.string)
 {
 }
+
+isnan2t::isnan2t(const expr2tc val)
+  : lops2_body<isnan2t>(is_nan_id), value(val)
+{
+}
+
+isnan2t::isnan2t(const isnan2t &ref)
+  : lops2_body<isnan2t>(ref), value(ref.value)
+{
+}

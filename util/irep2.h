@@ -1048,15 +1048,11 @@ public:
 };
 
 /** Isnan operation. Checks whether expression is a NaN or not. */
-class isnan2t : public lops2t
+class isnan2t : public lops2_body<isnan2t>
 {
 public:
   isnan2t(const expr2tc val);
-protected:
   isnan2t(const isnan2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 
   const expr2tc value;
 };

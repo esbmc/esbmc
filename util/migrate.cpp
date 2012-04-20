@@ -733,7 +733,17 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     zero_length_string2t *s = new zero_length_string2t(string);
     new_expr_ref = expr2tc(s);
     return true;
-    } else {
+  } else if (expr.id() == "isnan") {
+    assert(expr.operands().size() == 1);
+
+    expr2tc val;
+    if (!migrate_expr(expr.op0(), val))
+      return false;
+
+    isnan2t *i = new isnan2t(val);
+    new_expr_ref = expr2tc(i);
+    return true;
+  } else {
     return false;
   }
 }

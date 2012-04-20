@@ -154,6 +154,7 @@ public:
   virtual void convert_smt_expr(const index2t &index, void *&arg) = 0;
   virtual void convert_smt_expr(const zero_string2t &zstr, void *&arg) = 0;
   virtual void convert_smt_expr(const zero_length_string2t &s, void *&arg) = 0;
+  virtual void convert_smt_expr(const isnan2t &isnan, void *&arg) = 0;
 };
 
 #endif

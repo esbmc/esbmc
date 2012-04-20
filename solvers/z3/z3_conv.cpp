@@ -2408,6 +2408,34 @@ z3_convt::convert_smt_expr(const zero_length_string2t &s, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const isnan2t &isnan, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  if (isnan.value->type->type_id == type2t::fixedbv_id) {
+    Z3_ast op0;
+    unsigned width = isnan.value->type->get_width();
+
+    isnan.value->convert_smt(*this, (void*&)op0);
+
+    if (int_encoding)
+      bv =
+        Z3_mk_ite(z3_ctx,
+                  Z3_mk_ge(z3_ctx,
+                           Z3_mk_real2int(z3_ctx,
+                                          op0), convert_number(0, width, true)),
+                  Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));
+    else
+      bv =
+        Z3_mk_ite(z3_ctx, Z3_mk_bvsge(z3_ctx, op0, convert_number(0, width,
+                                                                  true)),
+                  Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));
+  } else {
+    throw new conv_error("isnan with unsupported operand type", exprt());
+  }
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
