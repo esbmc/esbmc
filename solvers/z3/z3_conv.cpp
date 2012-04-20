@@ -1615,6 +1615,12 @@ z3_convt::convert_smt_expr(const shl2t &shl, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const ashr2t &ashr, void *&_bv)
+{
+  convert_shift(ashr, *ashr.part_1.get(), *ashr.part_2.get(), Z3_mk_bvashr, _bv);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

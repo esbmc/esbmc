@@ -1029,3 +1029,13 @@ shl2t::shl2t(const shl2t &ref)
   : arith_2ops_body<shl2t>(ref)
 {
 }
+
+ashr2t::ashr2t(const type2tc type, const expr2tc val1,const expr2tc val2)
+  : arith_2ops_body<ashr2t>(type, ashr_id, val1, val2)
+{
+}
+
+ashr2t::ashr2t(const ashr2t &ref)
+  : arith_2ops_body<ashr2t>(ref)
+{
+}

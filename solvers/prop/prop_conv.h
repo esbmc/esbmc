@@ -142,6 +142,7 @@ public:
   virtual void convert_smt_expr(const div2t &mul, void *&arg) = 0;
   virtual void convert_smt_expr(const modulus2t &mod, void *&arg) = 0;
   virtual void convert_smt_expr(const shl2t &shl, void *&arg) = 0;
+  virtual void convert_smt_expr(const ashr2t &ashr, void *&arg) = 0;
 };
 
 #endif
