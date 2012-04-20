@@ -898,15 +898,11 @@ public:
 
 /** Pointer object. Extract pointer object from a pointer value. Subclass of
  *  arithmatic because it returns an integer. */
-class pointer_object2t : public arith2t
+class pointer_object2t : public arith_body<pointer_object2t>
 {
 public:
-  pointer_object2t(const expr2tc pointer);
-protected:
+  pointer_object2t(const type2tc type, const expr2tc pointer);
   pointer_object2t(const pointer_object2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 
   const expr2tc pointer_obj;
 };

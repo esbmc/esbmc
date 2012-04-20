@@ -1060,3 +1060,13 @@ pointer_offset2t::pointer_offset2t(const pointer_offset2t &ref)
   : arith_body<pointer_offset2t>(ref), pointer_obj(ref.pointer_obj)
 {
 }
+
+pointer_object2t::pointer_object2t(const type2tc type, const expr2tc val)
+  : arith_body<pointer_object2t>(type, pointer_object_id), pointer_obj(val)
+{
+}
+
+pointer_object2t::pointer_object2t(const pointer_object2t &ref)
+  : arith_body<pointer_object2t>(ref), pointer_obj(ref.pointer_obj)
+{
+}

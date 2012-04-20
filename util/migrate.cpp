@@ -618,7 +618,18 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     pointer_offset2t *p = new pointer_offset2t(type, theval);
     new_expr_ref = expr2tc(p);
     return true;
-   } else {
+  } else if (expr.id() == "pointer_object") {
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    expr2tc theval;
+    if (!migrate_expr(expr.op0(), theval))
+      return false;
+
+    pointer_object2t *p = new pointer_object2t(type, theval);
+    new_expr_ref = expr2tc(p);
+    return true;
+    } else {
     return false;
   }
 }
