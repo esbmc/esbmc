@@ -63,6 +63,33 @@ mp_integer member_offset(
   return result;
 }
 
+mp_integer member_offset(
+  const struct_type2t &type,
+  const irep_idt &member)
+{
+  mp_integer result=0;
+  unsigned bit_field_bits=0, idx = 0;
+
+  forall_types(it, type.members) {
+    if (type.member_names[idx] == member.as_string())
+      break;
+
+    // XXXjmorse - just assume we break horribly on bitfields.
+#if 0
+    if(it->get_bool("#is_bit_field"))
+    {
+      bit_field_bits+=binary2integer(it->type().get("width").as_string(), 2).to_long();
+    }
+#endif
+
+    mp_integer sub_size=pointer_offset_size(**it);
+    if(sub_size==-1) return -1; // give up
+    result+=sub_size;
+  }
+
+  return result;
+}
+
 /*******************************************************************\
 
 Function: pointer_offset_size
@@ -110,6 +137,13 @@ mp_integer pointer_offset_size(const typet &type)
   }
   else
     return mp_integer(1);
+}
+
+mp_integer pointer_offset_size(const type2t &type)
+{
+  mp_integer bees(type.get_width());
+  bees /= 8; // bits to bytes.
+  return bees;
 }
 
 /*******************************************************************\
