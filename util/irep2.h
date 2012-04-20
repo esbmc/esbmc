@@ -887,15 +887,11 @@ public:
 
 /** Pointer offset. Extract pointer offset from a pointer value. Subclass of
  *  arithmatic because it returns an integer. */
-class pointer_offset2t : public arith2t
+class pointer_offset2t : public arith_body<pointer_offset2t>
 {
 public:
-  pointer_offset2t(const expr2tc pointer);
-protected:
-  pointer_offset2t(const arith2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
+  pointer_offset2t(const type2tc type, const expr2tc pointer);
+  pointer_offset2t(const pointer_offset2t &ref);
 
   const expr2tc pointer_obj;
 };

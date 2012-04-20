@@ -1050,3 +1050,13 @@ same_object2t::same_object2t(const same_object2t &ref)
   : arith_2ops_body<same_object2t>(ref)
 {
 }
+
+pointer_offset2t::pointer_offset2t(const type2tc type, const expr2tc val)
+  : arith_body<pointer_offset2t>(type, pointer_offset_id), pointer_obj(val)
+{
+}
+
+pointer_offset2t::pointer_offset2t(const pointer_offset2t &ref)
+  : arith_body<pointer_offset2t>(ref), pointer_obj(ref.pointer_obj)
+{
+}

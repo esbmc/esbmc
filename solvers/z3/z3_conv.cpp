@@ -1653,6 +1653,17 @@ z3_convt::convert_smt_expr(const same_object2t &same, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const pointer_offset2t &offs, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast pointer;
+
+  offs.pointer_obj->convert_smt(*this, (void*&)pointer);
+
+  bv = z3_api.mk_tuple_select(pointer, 1); //select pointer offset
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
