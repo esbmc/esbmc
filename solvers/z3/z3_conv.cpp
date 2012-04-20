@@ -2121,66 +2121,58 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 void
 z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
 {
+  const struct_type2t &from_struct_type = dynamic_cast<const struct_type2t&>
+                                                      (*cast.from->type.get());
+  const struct_type2t &to_struct_type = dynamic_cast<const struct_type2t&>
+                                                    (*cast.type.get());
 
-  const struct_typet &struct_type = to_struct_type(expr.op0().type());
-  const struct_typet::componentst &components = struct_type.components();
-  const struct_typet &struct_type2 = to_struct_type(expr.type());
-  const struct_typet::componentst &components2 = struct_type2.components();
-  struct_typet s;
-  Z3_ast operand;
-  u_int i = 0, i2 = 0, j = 0;
+  Z3_ast freshval;
+  u_int i = 0, i2 = 0;
 
-  s.components().resize(struct_type2.components().size());
+  std::vector<type2tc> new_members;
+  std::vector<std::string> new_names;
+  new_members.resize(to_struct_type.members.size());
+  new_names.resize(to_struct_type.members.size());
 
-  for (struct_typet::componentst::const_iterator
-       it2 = components2.begin();
-       it2 != components2.end();
-       it2++, i2++)
-  {
-    for (struct_typet::componentst::const_iterator
-         it = components.begin();
-         it != components.end();
-         it++, i++)
-    {
-      if (it->name().compare(it2->name()) == 0) {
-	unsigned width;
-	get_type_width(it->type(), width);
+  forall_types(it2, to_struct_type.members) {
+    forall_types(it, from_struct_type.members) {
+      if (from_struct_type.member_names[i] == to_struct_type.member_names[i2]) {
+	unsigned width = (*it)->get_width();
 
-	if (it->type().id() == "signedbv") {
-	  s.components()[j].set_name(it->name());
-	  s.components()[j].type() = signedbv_typet(width);
-	} else if (it->type().id() == "unsignedbv")     {
-	  s.components()[j].set_name(it->name());
-	  s.components()[j].type() = unsignedbv_typet(width);
-	} else if (it->type().id() == "bool")     {
-	  s.components()[j].set_name(it->name());
-	  s.components()[j].type() = bool_typet();
-	} else   {
-          throw new conv_error("Unexpected type when casting struct", *it);
+	if ((*it)->type_id == type2t::signedbv_id) {
+          new_members.push_back(type2tc(new signedbv_typet(width)));
+	} else if ((*it)->type_id == type2t::unsignedbv_id) {
+          new_members.push_back(type2tc(new unsignedbv_typet(width)));
+	} else if ((*it)->type_id == type2t::bool_id)     {
+          new_members.push_back(type2tc(new bool_type2t()));
+	} else {
+          throw new conv_error("Unexpected type when casting struct", exprt());
 	}
-	j++;
+        new_names.push_back(from_struct_type.member_names[i]);
       }
-    }
-  }
-  exprt new_struct("symbol", s);
-  new_struct.type().tag(expr.type().tag().as_string());
-  new_struct.identifier("typecast_" + expr.op0().identifier().as_string());
 
-  convert_bv(new_struct, operand);
+      i++;
+    }
+
+    i2++;
+  }
+
+  struct_type2t newstruct(new_members, new_names, "typecasted_struct");
+  Z3_sort sort;
+  newstruct.convert_smt_type(*this, (void*&)sort);
+
+  freshval = Z3_mk_fresh_const(z3_ctx, NULL, sort);
 
   i2 = 0;
-  for (struct_typet::componentst::const_iterator
-       it2 = components2.begin();
-       it2 != components2.end();
-       it2++, i2++)
-  {
+  forall_types(it, newstruct.members) {
     Z3_ast formula;
-    formula = Z3_mk_eq(z3_ctx, z3_api.mk_tuple_select(operand, i2),
+    formula = Z3_mk_eq(z3_ctx, z3_api.mk_tuple_select(freshval, i2),
                        z3_api.mk_tuple_select(bv, i2));
     assert_formula(formula);
+    i2++;
   }
 
-  bv = operand;
+  bv = freshval;
   return;
 }
 
