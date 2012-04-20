@@ -2133,8 +2133,8 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
 
   std::vector<type2tc> new_members;
   std::vector<std::string> new_names;
-  new_members.resize(to_struct_type.members.size());
-  new_names.resize(to_struct_type.members.size());
+  new_members.reserve(to_struct_type.members.size());
+  new_names.reserve(to_struct_type.members.size());
 
   forall_types(it2, to_struct_type.members) {
     i = 0;
