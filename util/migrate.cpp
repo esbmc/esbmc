@@ -666,7 +666,22 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
                                          sourceval, offs, update);
     new_expr_ref = expr2tc(u);
     return true;
-  } else {
+  } else if (expr.id() == "with") {
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    expr2tc sourcedata, idx;
+    if (!convert_operand_pair(expr, sourcedata, idx))
+        return false;
+
+    expr2tc update;
+    if (!migrate_expr(expr.op2(), update))
+      return false;
+
+    with2t *w = new with2t(type, sourcedata, idx, update);
+    new_expr_ref = expr2tc(w);
+    return true;
+   } else {
     return false;
   }
 }
