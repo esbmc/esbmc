@@ -2140,9 +2140,9 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
 	unsigned width = (*it)->get_width();
 
 	if ((*it)->type_id == type2t::signedbv_id) {
-          new_members.push_back(type2tc(new signedbv_typet(width)));
+          new_members.push_back(type2tc(new signedbv_type2t(width)));
 	} else if ((*it)->type_id == type2t::unsignedbv_id) {
-          new_members.push_back(type2tc(new unsignedbv_typet(width)));
+          new_members.push_back(type2tc(new unsignedbv_type2t(width)));
 	} else if ((*it)->type_id == type2t::bool_id)     {
           new_members.push_back(type2tc(new bool_type2t()));
 	} else {
@@ -2341,25 +2341,24 @@ void
 z3_convt::convert_smt_expr(const typecast2t &cast, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
-  const exprt &op = expr.op0();
 
   cast.from->convert_smt(*this, (void*&)bv);
 
   if (cast.type->type_id == type2t::pointer_id) {
-    convert_typecast_to_ptr(expr, bv);
+    convert_typecast_to_ptr(cast, bv);
   } else if (cast.from->type->type_id == type2t::pointer_id) {
-    convert_typecast_from_ptr(expr, bv);
+    convert_typecast_from_ptr(cast, bv);
   } else if (cast.type->type_id == type2t::bool_id) {
-    convert_typecast_bool(expr, bv);
+    convert_typecast_bool(cast, bv);
   } else if (cast.type->type_id == type2t::fixedbv_id && !int_encoding)      {
-    convert_typecast_fixedbv_nonint(expr, bv);
+    convert_typecast_fixedbv_nonint(cast, bv);
   } else if ((cast.type->type_id == type2t::signedbv_id ||
               cast.type->type_id == type2t::unsignedbv_id ||
               cast.type->type_id == type2t::fixedbv_id ||
               cast.type->type_id == type2t::pointer_id)) {
-    convert_typecast_to_ints(expr, bv);
+    convert_typecast_to_ints(cast, bv);
   } else if (cast.type->type_id == type2t::struct_id)     {
-    convert_typecast_struct(expr, bv);
+    convert_typecast_struct(cast, bv);
   } else {
     // XXXjmorse -- what about all other types, eh?
     throw new conv_error("Typecast for unexpected type", exprt());
