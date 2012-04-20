@@ -1050,6 +1050,17 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const constant_bool2t &b, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  if (b.constant_value)
+    bv = Z3_mk_true(z3_ctx);
+  else
+    bv = Z3_mk_false(z3_ctx);
+}
+
+void
 z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;

@@ -630,6 +630,19 @@ constant_int2t::as_long(void) const
   return constant_value.to_long();
 }
 
+
+constant_bool2t::constant_bool2t(bool value)
+  : const_expr_body<constant_bool2t>(type2tc(new bool_type2t()),
+                                     constant_bool_id),
+                                     constant_value(value)
+{
+}
+
+constant_bool2t::constant_bool2t(const constant_bool2t &ref)
+  : const_expr_body<constant_bool2t>(ref), constant_value(ref.constant_value)
+{
+}
+
 typecast2t::typecast2t(const type2tc type, const expr2tc expr)
   : expr_body<typecast2t>(type, typecast_id), from(expr)
 {

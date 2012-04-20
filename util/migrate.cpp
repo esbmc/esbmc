@@ -197,6 +197,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2t *new_expr = new constant_int2t(type, val);
     new_expr_ref = expr2tc(new_expr);
     return true;
+  } else if (expr.id() == "constant" && expr.type().id() == "bool") {
+    std::string theval = expr.value().as_string();
+    if (theval == "true")
+      new_expr_ref = expr2tc(new constant_bool2t(true));
+    else
+      new_expr_ref = expr2tc(new constant_bool2t(false));
+    return true;
   } else if (expr.id() == "typecast") {
     assert(expr.op0().id_string() != "");
     expr2tc old_expr;

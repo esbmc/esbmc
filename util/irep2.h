@@ -318,6 +318,7 @@ public:
    *  otherwise. See type2t::type_ids. */
   enum expr_ids {
     constant_int_id,
+    constant_bool_id,
     constant_string_id,
     constant_struct_id,
     constant_union_id,
@@ -429,6 +430,16 @@ public:
 
   /** Arbitary precision integer record. */
   BigInt constant_value;
+};
+
+class constant_bool2t : public const_expr_body<constant_bool2t>
+{
+public:
+  constant_bool2t(bool value);
+  constant_bool2t(const constant_bool2t &ref);
+
+  /** Arbitary precision integer record. */
+  bool constant_value;
 };
 
 /** Constant class for string constants. */
