@@ -991,8 +991,8 @@ public:
   with2t(const with2t &ref);
 
   const expr2tc source_data;
+  const expr2tc update_field;
   const expr2tc update_data;
-  const int update_field;
 };
 
 /** Member operation. Extracts some field from a datatype. */
