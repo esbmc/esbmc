@@ -1952,91 +1952,76 @@ z3_convt::convert_typecast_bool(const typecast2t &cast, Z3_ast &bv)
 void
 z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv)
 {
-  const exprt &op = expr.op0();
-  Z3_ast args[2];
 
-  const fixedbv_typet &fixedbv_type = to_fixedbv_type(expr.type());
-  unsigned to_fraction_bits = fixedbv_type.get_fraction_bits();
-  unsigned to_integer_bits = fixedbv_type.get_integer_bits();
+  const fixedbv_type2t &fbvt = dynamic_cast<const fixedbv_type2t&>
+                                           (*cast.type.get());
+  unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
+  unsigned to_integer_bits = fbvt.integer_bits;
 
-  if (op.type().id() == "pointer") {
+  if (cast.from->type->type_id == type2t::pointer_id) {
     std::cerr << "Converting pointer to a float is unsupported" << std::endl;
     abort();
   }
 
-  if (op.type().id() == "unsignedbv" ||
-      op.type().id() == "signedbv" ||
-      op.type().id() == "enum") {
-    unsigned from_width;
-
-    get_type_width(op.type(), from_width);
+  if (cast.from->type->type_id == type2t::unsignedbv_id ||
+      cast.from->type->type_id == type2t::signedbv_id) {
+    unsigned from_width = cast.from->type->get_width();
 
     if (from_width == to_integer_bits) {
-      convert_bv(op, bv);
-    } else if (from_width > to_integer_bits)      {
-      convert_bv(op, args[0]);
-      bv = Z3_mk_extract(z3_ctx, (from_width - 1), to_integer_bits, args[0]);
-    } else   {
+      ; // No-op, already converted by higher caller
+    } else if (from_width > to_integer_bits) {
+      bv = Z3_mk_extract(z3_ctx, (from_width - 1), to_integer_bits, bv);
+    } else {
       assert(from_width < to_integer_bits);
-      convert_bv(op, args[0]);
-      bv = Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_width), args[0]);
+      bv = Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_width), bv);
     }
 
     bv = Z3_mk_concat(z3_ctx, bv, convert_number(0, to_fraction_bits, true));
-  } else if (op.type().id() == "bool")      {
+  } else if (cast.from->type->type_id == type2t::bool_id)      {
     Z3_ast zero, one;
-    unsigned width;
-
-    get_type_width(expr.type(), width);
-
     zero = convert_number(0, to_integer_bits, true);
     one =  convert_number(1, to_integer_bits, true);
     bv = Z3_mk_ite(z3_ctx, bv, one, zero);
     bv = Z3_mk_concat(z3_ctx, bv, convert_number(0, to_fraction_bits, true));
-  } else if (op.type().id() == "fixedbv")      {
+  } else if (cast.from->type->type_id == type2t::fixedbv_id)      {
     Z3_ast magnitude, fraction;
-    const fixedbv_typet &from_fixedbv_type = to_fixedbv_type(op.type());
-    unsigned from_fraction_bits = from_fixedbv_type.get_fraction_bits();
-    unsigned from_integer_bits = from_fixedbv_type.get_integer_bits();
-    unsigned from_width = from_fixedbv_type.get_width();
+
+    const fixedbv_type2t &from_fbvt = dynamic_cast<const fixedbv_type2t&>
+                                             (*cast.from->type.get());
+
+    unsigned from_fraction_bits = from_fbvt.width - from_fbvt.integer_bits;
+    unsigned from_integer_bits = from_fbvt.integer_bits;
+    unsigned from_width = from_fbvt.width;
 
     if (to_integer_bits <= from_integer_bits) {
-      convert_bv(op, args[0]);
-
       magnitude =
         Z3_mk_extract(z3_ctx, (from_fraction_bits + to_integer_bits - 1),
-                      from_fraction_bits, args[0]);
+                      from_fraction_bits, bv);
     } else   {
       assert(to_integer_bits > from_integer_bits);
-
-      convert_bv(op, args[0]);
 
       magnitude =
         Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_integer_bits),
                        Z3_mk_extract(z3_ctx, from_width - 1, from_fraction_bits,
-                                     args[0]));
+                                     bv));
     }
 
     if (to_fraction_bits <= from_fraction_bits) {
-      convert_bv(op, args[0]);
-
       fraction =
         Z3_mk_extract(z3_ctx, (from_fraction_bits - 1),
                       from_fraction_bits - to_fraction_bits,
-                      args[0]);
+                      bv);
     } else   {
       assert(to_fraction_bits > from_fraction_bits);
-      convert_bv(op, args[0]);
-
       fraction =
         Z3_mk_concat(z3_ctx,
-                     Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0,args[0]),
+                     Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0, bv),
                      convert_number(0, to_fraction_bits - from_fraction_bits,
                                     true));
     }
     bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
   } else {
-    throw new conv_error("unexpected typecast to fixedbv", expr);
+    throw new conv_error("unexpected typecast to fixedbv", exprt());
   }
 
   return;
