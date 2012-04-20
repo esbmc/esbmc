@@ -2160,7 +2160,7 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
     i2++;
   }
 
-  struct_type2t newstruct(new_members, new_names, "typecasted_struct");
+  struct_type2t newstruct(new_members, new_names, to_struct_type.name);
   Z3_sort sort;
   newstruct.convert_smt_type(*this, (void*&)sort);
 
