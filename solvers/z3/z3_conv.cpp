@@ -1427,11 +1427,10 @@ z3_convt::convert_smt_expr(const abs2t &abs, void *&_bv)
   type2tc sign((abs.type->type_id == type2t::fixedbv_id)
       ? (type2t* )new fixedbv_type2t(64, 32)
       : (type2t* )new signedbv_type2t(config.ansi_c.int_width));
-  expr2tc min1(new constant_int2t(sign, BigInt(-1)));
   expr2tc zero(new constant_int2t(sign, BigInt(0)));
-  expr2tc muled(new mul2t(sign, min1, abs.value));
+  expr2tc neg(new neg2t(sign, abs.value));
   expr2tc is_negative(new lessthan2t(abs.value, expr2tc(zero)));
-  if2t result(sign, is_negative, muled, abs.value);
+  if2t result(sign, is_negative, neg, abs.value);
   result.convert_smt(*this, _bv);
 }
 
