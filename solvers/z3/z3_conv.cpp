@@ -1901,10 +1901,12 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
   if (member.source_data->type->type_id == type2t::union_id) {
     // This is going to fail horribly when the source data isn't a symbol.
     const symbol2t *sym = dynamic_cast<const symbol2t*>(member.source_data.get());
-    assert(sym != NULL);
 
-    union_varst::const_iterator cache_result =
-                                    union_vars.find(sym->name.as_string().c_str());
+    union_varst::const_iterator cache_result;
+    if (sym != NULL)
+      cache_result = union_vars.find(sym->name.as_string().c_str());
+    else
+      cache_result = union_vars.end();
 
     if (cache_result != union_vars.end()) {
       const struct_union_type2t &type = dynamic_cast<const struct_union_type2t&>
