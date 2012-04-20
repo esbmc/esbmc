@@ -202,6 +202,7 @@ protected:
   bool is_for_block() const {return for_block;}
   void set_while_block(bool opt) {while_block=opt;}
   bool is_while_block() const {return while_block;}
+  bool nondet_initializer(exprt &value, const typet &type, exprt &rhs_expr) const;
 
   //
   // gotos

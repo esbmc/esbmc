@@ -21,6 +21,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "remove_skip.h"
 #include "destructor.h"
 
+#include <arith_tools.h>
+
 //#define DEBUG
 
 #ifdef DEBUG
@@ -1677,6 +1679,110 @@ void goto_convertt::convert_for(
 }
 
 
+bool goto_convertt::nondet_initializer(
+  exprt &value,
+  const typet &type,
+  exprt &rhs_expr) const
+{
+  const std::string &type_id=type.id_string();
+
+  if(type_id=="bool")
+  {
+    value=rhs_expr;
+    return false;
+  }
+  else if(type_id=="unsignedbv" ||
+          type_id=="signedbv" ||
+          type_id=="floatbv" ||
+          type_id=="fixedbv" ||
+          type_id=="pointer")
+  {
+    value=rhs_expr;
+    return false;
+  }
+#if 0
+  else if(type_id=="code")
+    return false;
+  else if(type_id=="c_enum" ||
+          type_id=="incomplete_c_enum")
+  {
+    value=exprt("constant", type);
+    value.value(i2string(0));
+    return false;
+  }
+  else if(type_id=="array")
+  {
+    const array_typet &array_type=to_array_type(type);
+
+    exprt tmpval;
+    if(zero_initializer(tmpval, array_type.subtype())) return true;
+
+    const exprt &size_expr=array_type.size();
+
+    if(size_expr.id()=="infinity")
+    {
+    }
+    else
+    {
+      mp_integer size;
+
+      if(to_integer(size_expr, size))
+        return true;
+
+      if(size<=0) return true;
+    }
+
+    value=exprt("array_of", type);
+    value.move_to_operands(tmpval);
+
+    return false;
+  }
+  else if(type_id=="struct")
+  {
+    const irept::subt &components=
+      type.components().get_sub();
+
+    value=exprt("struct", type);
+
+    forall_irep(it, components)
+    {
+      exprt tmp;
+
+      if(zero_initializer(tmp, (const typet &)it->type()))
+        return true;
+
+      value.move_to_operands(tmp);
+    }
+
+    return false;
+  }
+  else if(type_id=="union")
+  {
+    const irept::subt &components=
+      type.components().get_sub();
+
+    value=exprt("union", type);
+
+    if(components.empty())
+      return true;
+
+    value.component_name(components.front().name());
+
+    exprt tmp;
+
+    if(zero_initializer(tmp, (const typet &)components.front().type()))
+      return true;
+
+    value.move_to_operands(tmp);
+
+    return false;
+  }
+  else if(type_id=="symbol")
+    return zero_initializer(value, follow(type));
+#endif
+  return true;
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::make_nondet_assign
@@ -1698,6 +1804,33 @@ void goto_convertt::make_nondet_assign(
     exprt rhs_expr("nondet_symbol", state.components()[j].type());
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
+
+#if 0
+    if (state.components()[j].type().is_array())
+    {
+ 	    const array_typet &array_type=to_array_type(state.components()[j].type());
+ 	    const exprt &size_expr=array_type.size();
+
+ 	    if(size_expr.id()=="infinity")
+ 	    {
+ 	    }
+ 	    else
+ 	    {
+ 	      mp_integer size;
+
+ 	      if(to_integer(size_expr, size))
+ 	        return true;
+
+ 	      if(size<=0) return true;
+ 	    }
+
+ 	    exprt lhs_expr=exprt("array_of", state.components()[j].type());
+ 	    exprt value("nondet_symbol", state.components()[j].type().subtype());
+ 	    lhs_expr.move_to_operands(value);
+ 	    //std::cout << "lhs_expr.pretty(): " << lhs_expr.pretty() << std::endl;
+
+    }
+#endif
 
     std::string identifier;
     identifier = "cs$"+i2string(state_counter);
