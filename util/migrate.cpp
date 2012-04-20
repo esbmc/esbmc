@@ -755,6 +755,6 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(new constant_int2t(inttype, BigInt(thewidth)));
     return true;
   } else {
-    return false;
+    assert(0);
   }
 }
