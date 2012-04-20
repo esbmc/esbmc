@@ -1039,3 +1039,14 @@ ashr2t::ashr2t(const ashr2t &ref)
   : arith_2ops_body<ashr2t>(ref)
 {
 }
+
+same_object2t::same_object2t(const expr2tc val1,const expr2tc val2)
+  : arith_2ops_body<same_object2t>(type2tc(new bool_type2t()), same_object_id,
+                                   val1, val2)
+{
+}
+
+same_object2t::same_object2t(const same_object2t &ref)
+  : arith_2ops_body<same_object2t>(ref)
+{
+}

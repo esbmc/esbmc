@@ -216,6 +216,7 @@ private:
   virtual void convert_smt_expr(const modulus2t &mod, void *&bv);
   virtual void convert_smt_expr(const shl2t &shl, void *&bv);
   virtual void convert_smt_expr(const ashr2t &ashr, void *&bv);
+  virtual void convert_smt_expr(const same_object2t &same, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv) const;
   virtual void convert_smt_type(const bv_type2t &type, void *&bv) const;

@@ -1635,6 +1635,24 @@ z3_convt::convert_smt_expr(const ashr2t &ashr, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const same_object2t &same, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  Z3_ast pointer[2], objs[2];
+
+  assert(same.part_1->type->type_id == type2t::pointer_id);
+  assert(same.part_2->type->type_id == type2t::pointer_id);
+
+  same.part_1->convert_smt(*this, (void*&)pointer[0]);
+  same.part_2->convert_smt(*this, (void*&)pointer[1]);
+
+  objs[0] = z3_api.mk_tuple_select(pointer[0], 0);
+  objs[1] = z3_api.mk_tuple_select(pointer[1], 0);
+  bv = Z3_mk_eq(z3_ctx, objs[0], objs[1]);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
