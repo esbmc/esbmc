@@ -963,28 +963,32 @@ public:
 };
 
 /** Base type of datatype operations. */
-class datatype_ops2t : public expr2t
+class datatype_ops2t : public expr_body<datatype_ops2t>
 {
-protected:
+public:
   datatype_ops2t(const type2tc type);
   datatype_ops2t(const datatype_ops2t &ref);
+};
 
+template <class T>
+class datatype_body : public datatype_ops2t
+{
 public:
-  virtual expr2tc clone(void) const = 0;
+  datatype_body(const type2tc type, expr_ids id) : datatype_ops2t(type, id) {};
+  datatype_body(const datatype_body &ref) : datatype_ops2t(ref) {};
+
+  virtual void convert_smt(prop_convt &obj, void *&arg) const;
+  virtual expr2tc clone(void) const;
 };
 
 /** With operation. Some kind of piece of data, another piece of data to
  *  insert into it, and where to put it. */
-class with2t : public datatype_ops2t
+class with2t : public datatype_body<with2t>
 {
 public:
   with2t(const type2tc type, const expr2tc source, const expr2tc update,
          const int field);
-protected:
   with2t(const with2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 
   const expr2tc source_data;
   const expr2tc update_data;
@@ -992,30 +996,22 @@ public:
 };
 
 /** Member operation. Extracts some field from a datatype. */
-class member2t : public datatype_ops2t
+class member2t : public datatype_body<member2t>
 {
 public:
   member2t(const type2tc type, const expr2tc source, const int field);
-protected:
   member2t(const member2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 
   const expr2tc source_data;
   const int field;
 };
 
 /** Index operation. Extracts an entry from an array. */
-class index2t : public datatype_ops2t
+class index2t : public datatype_body<index2t>
 {
 public:
   index2t(const type2tc type, const expr2tc source, const expr2tc index);
-protected:
   index2t(const index2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
 
   const expr2tc source_data;
   const expr2tc index;
