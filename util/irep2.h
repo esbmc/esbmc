@@ -966,7 +966,7 @@ public:
 class datatype_ops2t : public expr_body<datatype_ops2t>
 {
 public:
-  datatype_ops2t(const type2tc type);
+  datatype_ops2t(const type2tc type, expr_ids id);
   datatype_ops2t(const datatype_ops2t &ref);
 };
 
@@ -986,8 +986,8 @@ public:
 class with2t : public datatype_body<with2t>
 {
 public:
-  with2t(const type2tc type, const expr2tc source, const expr2tc update,
-         const int field);
+  with2t(const type2tc type, const expr2tc source, const expr2tc field,
+         const expr2tc update);
   with2t(const with2t &ref);
 
   const expr2tc source_data;
