@@ -1703,70 +1703,104 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 
   data.source_value->convert_smt(*this, (void*&)source);
 
-  if (data.source_value->type->type_id == type2t::struct_id) {
-    const struct_type2t &struct_type = dynamic_cast<const struct_type2t&>
-                                                  (*data.source_value->type.get());
-    unsigned i = 0, num_elems = struct_type.members.size();
-    Z3_ast struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
+  if (int_encoding) {
+    if (data.source_value->type->type_id == type2t::fixedbv_id) {
+      if (data.type->type_id == type2t::signedbv_id ||
+          data.type->type_id == type2t::unsignedbv_id) {
+	Z3_ast tmp;
+	source = Z3_mk_real2int(z3_ctx, source);
+	tmp = Z3_mk_int2bv(z3_ctx, width, source);
+	bv = Z3_mk_extract(z3_ctx, upper, lower, tmp);
+	if (data.type->type_id == type2t::signedbv_id)
+	  bv = Z3_mk_bv2int(z3_ctx, bv, 1);
+	else
+	  bv = Z3_mk_bv2int(z3_ctx, bv, 0);
+      } else {
+	throw new conv_error("unsupported type for byte_extract", exprt());
+      }
+    } else if (data.source_value->type->type_id == type2t::signedbv_id ||
+               data.source_value->type->type_id == type2t::unsignedbv_id) {
+      Z3_ast tmp;
+      tmp = Z3_mk_int2bv(z3_ctx, width, source);
 
-    forall_types(it, struct_type.members) {
-      struct_elem[i] = z3_api.mk_tuple_select(source, i);
-      i++;
+      if (width >= upper)
+	bv = Z3_mk_extract(z3_ctx, upper, lower, tmp);
+      else
+	bv = Z3_mk_extract(z3_ctx, upper - lower, 0, tmp);
+
+      if (data.source_value->type->type_id == type2t::signedbv_id)
+	bv = Z3_mk_bv2int(z3_ctx, bv, 1);
+      else
+	bv = Z3_mk_bv2int(z3_ctx, bv, 0);
+    } else {
+      throw new conv_error("unsupported type for byte_extract", exprt());
+    }
+  } else {
+    if (data.source_value->type->type_id == type2t::struct_id) {
+      const struct_type2t &struct_type = dynamic_cast<const struct_type2t&>
+                                                    (*data.source_value->type.get());
+      unsigned i = 0, num_elems = struct_type.members.size();
+      Z3_ast struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
+
+      forall_types(it, struct_type.members) {
+        struct_elem[i] = z3_api.mk_tuple_select(source, i);
+        i++;
+      }
+
+      for (unsigned k = 0; k < num_elems; k++)
+        struct_elem_inv[(num_elems - 1) - k] = struct_elem[k];
+
+      for (unsigned k = 0; k < num_elems; k++)
+      {
+        if (k == 1)
+          struct_elem_inv[num_elems] = Z3_mk_concat(
+            z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]);
+        else if (k > 1)
+          struct_elem_inv[num_elems] = Z3_mk_concat(
+            z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]);
+      }
+
+      source = struct_elem_inv[num_elems];
     }
 
-    for (unsigned k = 0; k < num_elems; k++)
-      struct_elem_inv[(num_elems - 1) - k] = struct_elem[k];
-
-    for (unsigned k = 0; k < num_elems; k++)
-    {
-      if (k == 1)
-        struct_elem_inv[num_elems] = Z3_mk_concat(
-          z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]);
-      else if (k > 1)
-        struct_elem_inv[num_elems] = Z3_mk_concat(
-          z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]);
-    }
-
-    source = struct_elem_inv[num_elems];
-  }
-
-  bv = Z3_mk_extract(z3_ctx, upper, lower, source);
+    bv = Z3_mk_extract(z3_ctx, upper, lower, source);
 
 #if 0
-  if (expr.op0().id() == "index") {
-    Z3_ast args[2];
+    if (expr.op0().id() == "index") {
+      Z3_ast args[2];
 
-    const exprt &symbol = expr.op0().operands()[0];
-    const exprt &index = expr.op0().operands()[1];
+      const exprt &symbol = expr.op0().operands()[0];
+      const exprt &index = expr.op0().operands()[1];
 
-    convert_bv(symbol, args[0]);
-    convert_bv(index, args[1]);
+      convert_bv(symbol, args[0]);
+      convert_bv(index, args[1]);
 
-    bv = Z3_mk_select(z3_ctx, args[0], args[1]);
+      bv = Z3_mk_select(z3_ctx, args[0], args[1]);
 
-    unsigned width_expr;
-    get_type_width(expr.type(), width_expr);
+      unsigned width_expr;
+      get_type_width(expr.type(), width_expr);
 
-    if (width_expr > width) {
-      if (expr.type().id() == "unsignedbv") {
-        bv = Z3_mk_zero_ext(z3_ctx, (width_expr - width), bv);
+      if (width_expr > width) {
+        if (expr.type().id() == "unsignedbv") {
+          bv = Z3_mk_zero_ext(z3_ctx, (width_expr - width), bv);
+        }
       }
     }
-  }
 #endif
 
 #if 0
-  if (expr.op1().id()=="constant") {
-    unsigned width0, width1;
-    get_type_width(expr.op0().type(), width0);
-    get_type_width(expr.op1().type(), width1);
-    if (width1 > width0) {
-      if (expr.op0().type().id() == "unsignedbv") {
-        bv = Z3_mk_zero_ext(z3_ctx, width1-width0, bv);
+    if (expr.op1().id()=="constant") {
+      unsigned width0, width1;
+      get_type_width(expr.op0().type(), width0);
+      get_type_width(expr.op1().type(), width1);
+      if (width1 > width0) {
+        if (expr.op0().type().id() == "unsignedbv") {
+          bv = Z3_mk_zero_ext(z3_ctx, width1-width0, bv);
+        }
       }
     }
-  }
 #endif
+  }
 }
 
 void
