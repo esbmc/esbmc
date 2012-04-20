@@ -1,3 +1,3 @@
 main.c
---base-case --unwind 1
+--k-induction  
 ^VERIFICATION SUCCESSFUL$
