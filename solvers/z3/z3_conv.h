@@ -131,6 +131,8 @@ private:
   void convert_struct_union(const exprt &expr, Z3_ast &bv);
   void convert_identifier_pointer(const exprt &expr, std::string symbol,
                                   Z3_ast &bv);
+  void convert_identifier_pointer(const expr2t &expr, std::string symbol,
+                                  Z3_ast &bv);
   void convert_zero_string(const exprt &expr, Z3_ast &bv);
   void convert_array(const exprt &expr, Z3_ast &bv);
   void convert_constant(const exprt &expr, Z3_ast &bv);
