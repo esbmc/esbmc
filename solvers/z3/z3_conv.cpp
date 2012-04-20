@@ -1546,6 +1546,36 @@ z3_convt::convert_smt_expr(const div2t &div, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const modulus2t &mod, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  assert(mod.type->type_id != type2t::pointer_id &&
+         mod.part_1->type->type_id != type2t::pointer_id &&
+         mod.part_2->type->type_id != type2t::pointer_id &&
+         "Can't modulus pointers");
+
+  Z3_ast op0, op1;
+
+  mod.part_1->convert_smt(*this, (void*&)op0);
+  mod.part_2->convert_smt(*this, (void*&)op1);
+
+  assert((mod.type->type_id == type2t::signedbv_id ||
+         mod.type->type_id == type2t::unsignedbv_id) &&
+         "Can only modulus integers");
+
+  if (int_encoding) {
+    bv = Z3_mk_mod(z3_ctx, op0, op0);
+  } else   {
+    if (mod.type->type_id == type2t::signedbv_id) {
+      bv = Z3_mk_bvsrem(z3_ctx, op0, op1);
+    } else if (mod.type->type_id == type2t::unsignedbv_id) {
+      bv = Z3_mk_bvurem(z3_ctx, op0, op1);
+    }
+  }
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

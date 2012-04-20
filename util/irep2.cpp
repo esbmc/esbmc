@@ -1009,3 +1009,13 @@ div2t::div2t(const div2t &ref)
   : arith_2ops_body<div2t>(ref)
 {
 }
+
+modulus2t::modulus2t(const type2tc type, const expr2tc val1,const expr2tc val2)
+  : arith_2ops_body<modulus2t>(type, modulus_id, val1, val2)
+{
+}
+
+modulus2t::modulus2t(const modulus2t &ref)
+  : arith_2ops_body<modulus2t>(ref)
+{
+}
