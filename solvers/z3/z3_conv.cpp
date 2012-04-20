@@ -1931,12 +1931,11 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
 void
 z3_convt::convert_typecast_bool(const typecast2t &cast, Z3_ast &bv)
 {
-  const exprt &op = expr.op0();
   Z3_ast args[2];
 
-  if (op.type().id() == "signedbv" ||
-      op.type().id() == "unsignedbv" ||
-      op.type().id() == "pointer") {
+  if (cast.from->type->type_id == type2t::signedbv_id ||
+      cast.from->type->type_id == type2t::unsignedbv_id ||
+      cast.from->type->type_id == type2t::pointer_id) {
     args[0] = bv;
     if (int_encoding)
       args[1] = z3_api.mk_int(0);
@@ -1946,10 +1945,9 @@ z3_convt::convert_typecast_bool(const typecast2t &cast, Z3_ast &bv)
 
     bv = Z3_mk_distinct(z3_ctx, 2, args);
   } else {
-    throw new conv_error("Unimplemented bool typecast", expr);
+    throw new conv_error("Unimplemented bool typecast", exprt());
   }
 }
-
 
 void
 z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv)
