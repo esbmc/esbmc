@@ -999,3 +999,13 @@ mul2t::mul2t(const mul2t &ref)
   : arith_2ops_body<mul2t>(ref)
 {
 }
+
+div2t::div2t(const type2tc type, const expr2tc val1, const expr2tc val2)
+  : arith_2ops_body<div2t>(type, div_id, val1, val2)
+{
+}
+
+div2t::div2t(const div2t &ref)
+  : arith_2ops_body<div2t>(ref)
+{
+}

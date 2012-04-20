@@ -1507,6 +1507,45 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const div2t &div, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  assert(div.type->type_id != type2t::pointer_id &&
+         div.part_1->type->type_id != type2t::pointer_id &&
+         div.part_2->type->type_id != type2t::pointer_id &&
+         "Can't divide pointers");
+
+  Z3_ast op0, op1;
+
+  div.part_1->convert_smt(*this, (void*&)op0);
+  div.part_2->convert_smt(*this, (void*&)op1);
+
+  if (int_encoding) {
+    bv = Z3_mk_div(z3_ctx, op0, op1);
+  } else   {
+    if (div.type->type_id == type2t::signedbv_id) {
+      bv = Z3_mk_bvsdiv(z3_ctx, op0, op1);
+    } else if (div.type->type_id == type2t::unsignedbv_id) {
+      bv = Z3_mk_bvudiv(z3_ctx, op0, op1);
+    } else {
+      // Not the foggiest. Copied from convert_div
+      assert(div.type->type_id == type2t::fixedbv_id);
+      const fixedbv_type2t &fbvt = dynamic_cast<const fixedbv_type2t &>
+                                               (*div.type.get());
+
+      unsigned fraction_bits = fbvt.width - fbvt.integer_bits;
+
+      bv = Z3_mk_extract(z3_ctx, fbvt.width - 1, 0,
+                         Z3_mk_bvsdiv(z3_ctx,
+                                      Z3_mk_concat(z3_ctx, op0,
+                                           convert_number(0, fraction_bits, true)),
+                                      Z3_mk_sign_ext(z3_ctx, fraction_bits, op1)));
+    }
+  }
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
