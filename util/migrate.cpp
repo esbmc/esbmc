@@ -723,7 +723,17 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     zero_string2t *s = new zero_string2t(string);
     new_expr_ref = expr2tc(s);
     return true;
-   } else {
+  } else if (expr.id() == "zero_string_length") {
+    assert(expr.operands().size() == 1);
+
+    expr2tc string;
+    if (!migrate_expr(expr.op0(), string))
+      return false;
+
+    zero_length_string2t *s = new zero_length_string2t(string);
+    new_expr_ref = expr2tc(s);
+    return true;
+    } else {
     return false;
   }
 }

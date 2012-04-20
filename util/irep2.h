@@ -1038,15 +1038,11 @@ public:
 };
 
 /** Zero length string. Unknown dirference from zero_string. */
-class zero_length_string2t : public datatype_ops2t
+class zero_length_string2t : public datatype_body<zero_length_string2t>
 {
 public:
   zero_length_string2t(const expr2tc string);
-protected:
-  zero_length_string2t(const with2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
+  zero_length_string2t(const zero_length_string2t &ref);
 
   const expr2tc string;
 };

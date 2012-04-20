@@ -2398,6 +2398,16 @@ z3_convt::convert_smt_expr(const zero_string2t &zstr, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const zero_length_string2t &s, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast operand;
+
+  s.string->convert_smt(*this, (void*&)operand);
+  bv = z3_api.mk_tuple_select(operand, 0);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
