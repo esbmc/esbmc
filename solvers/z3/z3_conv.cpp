@@ -2030,83 +2030,67 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv)
 void
 z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 {
-  const exprt &op = expr.op0();
-  Z3_ast args[2];
-  unsigned to_width;
+  unsigned to_width = cast.type->get_width();
 
-  get_type_width(expr.type(), to_width);
-
-  if (op.type().id() == "signedbv" || op.type().id() == "c_enum" ||
-      op.type().id() == "fixedbv") {
-    unsigned from_width;
-    get_type_width(op.type(), from_width);
+  if (cast.from->type->type_id == type2t::signedbv_id ||
+      cast.from->type->type_id == type2t::fixedbv_id) {
+    unsigned from_width = cast.from->type->get_width();
 
     if (from_width == to_width) {
-      convert_bv(op, bv);
-
-      if (int_encoding && op.type().id() == "signedbv" &&
-               expr.type().id() == "fixedbv")
+      if (int_encoding && cast.from->type->type_id == type2t::signedbv_id &&
+               cast.type->type_id == type2t::fixedbv_id)
 	bv = Z3_mk_int2real(z3_ctx, bv);
-      else if (int_encoding && op.type().id() == "fixedbv" &&
-               expr.type().id() == "signedbv")
+      else if (int_encoding && cast.from->type->type_id == type2t::fixedbv_id &&
+               cast.type->type_id == type2t::signedbv_id)
 	bv = Z3_mk_real2int(z3_ctx, bv);
       // XXXjmorse - there isn't a case here for if !int_encoding
 
     } else if (from_width < to_width)      {
-      convert_bv(op, args[0]);
-
       if (int_encoding &&
-          ((expr.type().id() == "fixedbv" && op.type().id() == "signedbv")))
-	bv = Z3_mk_int2real(z3_ctx, args[0]);
+          ((cast.type->type_id == type2t::fixedbv_id &&
+            cast.from->type->type_id == type2t::signedbv_id)))
+	bv = Z3_mk_int2real(z3_ctx, bv);
       else if (int_encoding)
-	bv = args[0];
+	; // bv = bv
       else
-	bv = Z3_mk_sign_ext(z3_ctx, (to_width - from_width), args[0]);
+	bv = Z3_mk_sign_ext(z3_ctx, (to_width - from_width), bv);
     } else if (from_width > to_width)     {
-      convert_bv(op, args[0]);
-
       if (int_encoding &&
-          ((op.type().id() == "signedbv" && expr.type().id() == "fixedbv")))
-	bv = Z3_mk_int2real(z3_ctx, args[0]);
+          ((cast.from->type->type_id == type2t::signedbv_id &&
+            cast.type->type_id == type2t::fixedbv_id)))
+	bv = Z3_mk_int2real(z3_ctx, bv);
       else if (int_encoding &&
-               (op.type().id() == "fixedbv" && expr.type().id() == "signedbv"))
-	bv = Z3_mk_real2int(z3_ctx, args[0]);
+               (cast.from->type->type_id == type2t::fixedbv_id &&
+                cast.type->type_id == type2t::signedbv_id))
+	bv = Z3_mk_real2int(z3_ctx, bv);
       else if (int_encoding)
-	bv = args[0];
+	; // bv = bv
       else {
 	if (!to_width) to_width = config.ansi_c.int_width;
-	bv = Z3_mk_extract(z3_ctx, (to_width - 1), 0, args[0]);
+	bv = Z3_mk_extract(z3_ctx, (to_width - 1), 0, bv);
       }
     }
-  } else if (op.type().id() == "unsignedbv") {
-    unsigned from_width;
-
-    get_type_width(op.type(), from_width);
+  } else if (cast.from->type->type_id == type2t::unsignedbv_id) {
+    unsigned from_width = cast.from->type->get_width();
 
     if (from_width == to_width) {
-      convert_bv(op, bv);
+      ; // bv = bv
     } else if (from_width < to_width)      {
-      convert_bv(op, args[0]);
-
       if (int_encoding)
-	bv = args[0];
+	; // bv = bv
       else
-	bv = Z3_mk_zero_ext(z3_ctx, (to_width - from_width), args[0]);
+	bv = Z3_mk_zero_ext(z3_ctx, (to_width - from_width), bv);
     } else if (from_width > to_width)     {
-      convert_bv(op, args[0]);
-
       if (int_encoding)
-	bv = args[0];
+	; // bv = bv
       else
-	bv = Z3_mk_extract(z3_ctx, (to_width - 1), 0, args[0]);
+	bv = Z3_mk_extract(z3_ctx, (to_width - 1), 0, bv);
     }
-  } else if (op.type().id() == "bool")     {
+  } else if (cast.from->type->type_id == type2t::bool_id)     {
     Z3_ast zero = 0, one = 0;
-    unsigned width;
+    unsigned width = cast.type->get_width();
 
-    get_type_width(expr.type(), width);
-
-    if (expr.type().id() == "signedbv") {
+    if (cast.type->type_id == type2t::signedbv_id) {
       if (int_encoding) {
 	zero = Z3_mk_int(z3_ctx, 0, Z3_mk_int_type(z3_ctx));
 	one = Z3_mk_int(z3_ctx, 1, Z3_mk_int_type(z3_ctx));
@@ -2114,7 +2098,7 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 	zero = convert_number(0, width, true);
 	one =  convert_number(1, width, true);
       }
-    } else if (expr.type().id() == "unsignedbv")     {
+    } else if (cast.type->type_id == type2t::unsignedbv_id)     {
       if (int_encoding) {
 	zero = Z3_mk_int(z3_ctx, 0, Z3_mk_int_type(z3_ctx));
 	one = Z3_mk_int(z3_ctx, 1, Z3_mk_int_type(z3_ctx));
@@ -2122,15 +2106,15 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 	zero = convert_number(0, width, false);
 	one =  convert_number(1, width, false);
       }
-    } else if (expr.type().id() == "fixedbv") {
+    } else if (cast.type->type_id == type2t::fixedbv_id) {
       zero = Z3_mk_numeral(z3_ctx, "0", Z3_mk_real_type(z3_ctx));
       one = Z3_mk_numeral(z3_ctx, "1", Z3_mk_real_type(z3_ctx));
     } else {
-      throw new conv_error("Unexpected type in typecast of bool", expr);
+      throw new conv_error("Unexpected type in typecast of bool", exprt());
     }
     bv = Z3_mk_ite(z3_ctx, bv, one, zero);
   } else   {
-    throw new conv_error("Unexpected type in int/ptr typecast", expr);
+    throw new conv_error("Unexpected type in int/ptr typecast", exprt());
   }
 }
 
