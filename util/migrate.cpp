@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 #include "migrate.h"
 
 #include <config.h>
@@ -742,6 +744,15 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     isnan2t *i = new isnan2t(val);
     new_expr_ref = expr2tc(i);
+    return true;
+  } else if (expr.id() == "width") {
+    assert(expr.operands().size() == 1);
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    uint64_t thewidth = type->get_width();
+    type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+    new_expr_ref = expr2tc(new constant_int2t(inttype, BigInt(thewidth)));
     return true;
   } else {
     return false;
