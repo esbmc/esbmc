@@ -629,7 +629,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     pointer_object2t *p = new pointer_object2t(type, theval);
     new_expr_ref = expr2tc(p);
     return true;
-    } else {
+  } else {
     return false;
   }
 }
