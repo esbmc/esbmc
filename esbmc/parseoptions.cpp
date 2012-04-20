@@ -254,9 +254,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("k-induction"))
   {
-    options.set_option("base-case", base_case);
-    options.set_option("inductive-step", !base_case);
-
     options.set_option("no-bounds-check", true);
     options.set_option("no-div-by-zero-check", true);
     options.set_option("no-pointer-check", true);
@@ -473,14 +470,18 @@ int cbmc_parseoptionst::doit_k_induction()
     return 1;
   }
 
-  bmct bmc(context, ui_message_handler);
+  // Do all the stuff to the base case goto program
+  bmct bmc_base_case(context, ui_message_handler);
 
   //
   // command line options
   //
 
-  get_command_line_options(bmc.options);
-  set_verbosity(bmc);
+  get_command_line_options(bmc_base_case.options);
+  bmc_base_case.options.set_option("base-case", true);
+  bmc_base_case.options.set_option("inductive-step", false);
+
+  set_verbosity(bmc_base_case);
   set_verbosity(*this);
 
   if(cmdline.isset("preprocess"))
@@ -489,56 +490,107 @@ int cbmc_parseoptionst::doit_k_induction()
     return 0;
   }
 
-  goto_functionst goto_functions;
+  goto_functionst goto_functions_base_case;
 
-  if(get_goto_program(bmc, goto_functions))
+  if(get_goto_program(bmc_base_case, goto_functions_base_case))
     return 6;
 
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, get_ui(), goto_functions);
+    show_claims(ns, get_ui(), goto_functions_base_case);
     return 0;
   }
 
-  if(set_claims(goto_functions))
+  if(set_claims(goto_functions_base_case))
     return 7;
 
-  std::cout << std::endl << "*** K-Induction Loop Iteration ";
-  std::cout << i2string((unsigned long)k_step);
-  std::cout << " ***" << std::endl;
-  std::cout << "*** Checking ";
+  context_base_case = context;
+
+  // Do all the stuff to the inductive step goto program
+  context.clear(); // We need to clear the previous context
+
+  bmct bmc_inductive_step(context, ui_message_handler);
+
+  //
+  // command line options
+  //
+
+  get_command_line_options(bmc_inductive_step.options);
+  bmc_inductive_step.options.set_option("base-case", false);
+  bmc_inductive_step.options.set_option("inductive-step", true);
+
+  set_verbosity(bmc_inductive_step);
+  set_verbosity(*this);
+
+  if(cmdline.isset("preprocess"))
+  {
+    preprocessing();
+    return 0;
+  }
+
+  goto_functionst goto_functions_inductive_step;
+
+  if(get_goto_program(bmc_inductive_step, goto_functions_inductive_step))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions_inductive_step);
+    return 0;
+  }
+
+  if(set_claims(goto_functions_inductive_step))
+    return 7;
+
+  context_inductive_step = context;
+
+  context.clear();
 
   // do actual BMC
   bool res;
-  if(base_case)
-  {
-    std::cout << "base case " << std::endl;
 
-    res = do_bmc(bmc, goto_functions);
+  do {
+    std::cout << std::endl << "*** K-Induction Loop Iteration ";
+    std::cout << i2string((unsigned long)k_step);
+    std::cout << " ***" << std::endl;
+    std::cout << "*** Checking ";
 
-    if(k_step >= 1 && res)
-      return 0;
+    if(base_case)
+    {
+      std::cout << "base case " << std::endl;
 
-    ++k_step;
-  }
-  else
-  {
-    std::cout << "inductive step " << std::endl;
+      // We need to set the right context
+      context.clear();
+      context = context_base_case;
 
-    res = do_bmc(bmc, goto_functions);
+      res = do_bmc(bmc_base_case, goto_functions_base_case);
 
-    if (!res)
-      return 0;
-  }
+      if(k_step >= 1 && res)
+        return 0;
 
-  base_case = !base_case;
-  context.clear();
+      ++k_step;
+    }
+    else
+    {
+      std::cout << "inductive step " << std::endl;
 
-  if(k_step <= atol(cmdline.get_values("k-step").front().c_str()))
-  {
-    doit_k_induction();
-  }
+      // We need to set the right context
+      context.clear();
+      context = context_inductive_step;
+
+      res = do_bmc(bmc_inductive_step, goto_functions_inductive_step);
+
+      if (!res)
+        return 0;
+    }
+
+    base_case = !base_case;
+    bmc_base_case.options.set_option("unwind", i2string(k_step));
+    bmc_inductive_step.options.set_option("unwind", i2string(k_step));
+
+  } while (k_step <= atol(cmdline.get_values("k-step").front().c_str()));
 }
 
 /*******************************************************************\

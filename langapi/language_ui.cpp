@@ -50,11 +50,13 @@ Function: language_uit::language_uit
 
 language_uit::language_uit(const cmdlinet &__cmdline):
   ui_message_handler(get_ui_cmdline(__cmdline)),
-  _cmdline(__cmdline)
+  _cmdline(__cmdline),
+  k_step(1),
+  base_case(true)
 {
   set_message_handler(&ui_message_handler);
 }
-   
+
 /*******************************************************************\
 
 Function: language_uit::~language_uit
@@ -90,7 +92,7 @@ bool language_uit::parse()
     if(parse(_cmdline.args[i]))
       return true;
   }
-   
+
   return false;
 }
 
@@ -146,7 +148,7 @@ bool language_uit::parse(const std::string &filename)
   }
 
   lf.get_modules();
-   
+
   return false;
 }
 
@@ -165,7 +167,7 @@ Function: language_uit::typecheck
 bool language_uit::typecheck()
 {
   status("Converting");
-  
+
   language_files.set_message_handler(message_handler);
   language_files.set_verbosity(get_verbosity());
 
@@ -173,13 +175,13 @@ bool language_uit::typecheck()
   {
     if(get_ui()==ui_message_handlert::PLAIN)
       std::cerr << "CONVERSION ERROR" << std::endl;
-      
+
     return true;
   }
 
   return false;
 }
- 
+
 /*******************************************************************\
 
 Function: language_uit::final
@@ -269,13 +271,13 @@ Function: language_uit::show_symbol_table_plain
 void language_uit::show_symbol_table_plain(std::ostream &out)
 {
   out << std::endl << "Symbols:" << std::endl << std::endl;
-  
+
   const namespacet ns(context);
 
   forall_symbols(it, context.symbols)
   {
     const symbolt &symbol=it->second;
-    
+
     int mode;
 
     if(symbol.mode=="")
@@ -288,13 +290,13 @@ void language_uit::show_symbol_table_plain(std::ostream &out)
 
     std::auto_ptr<languaget> p(mode_table[mode].new_language());
     std::string type_str, value_str;
-    
+
     if(symbol.type.is_not_nil())
       p->from_type(symbol.type, type_str, ns);
-    
+
     if(symbol.value.is_not_nil())
       p->from_expr(symbol.value, value_str, ns);
-    
+
     out << "Symbol......: " << symbol.name << std::endl;
     out << "Pretty name.: " << symbol.pretty_name << std::endl;
     out << "Module......: " << symbol.module << std::endl;
@@ -321,7 +323,7 @@ void language_uit::show_symbol_table_plain(std::ostream &out)
 
     out << std::endl;
     out << "Location....: " << symbol.location << std::endl;
-    
+
     out << std::endl;
   }
 }

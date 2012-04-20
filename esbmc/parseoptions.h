@@ -30,9 +30,7 @@ public:
 
   cbmc_parseoptionst(int argc, const char **argv):
     parseoptions_baset(esbmc_options, argc, argv),
-    language_uit(cmdline),
-    k_step(1),
-    base_case(true)
+    language_uit(cmdline)
   {
   }
 
@@ -70,9 +68,6 @@ protected:
 
   // k-induction related
   int doit_k_induction();
-
-  int k_step;
-  bool base_case;
 };
 
 #endif
