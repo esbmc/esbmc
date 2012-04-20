@@ -1888,7 +1888,7 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
   Z3_ast struct_var;
 
   const struct_union_type2t &struct_type = dynamic_cast<const struct_union_type2t&>
-                                                       (*member.type.get());
+                                               (*member.source_data->type.get());
 
   forall_names(it, struct_type.member_names) {
     if (*it == member.member.value)
