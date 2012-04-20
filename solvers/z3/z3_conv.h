@@ -179,6 +179,9 @@ private:
                          ast_convert_calltype bvconvert,
                          ast_convert_multiargs intmodeconvert,
                          void *&_bv);
+  void convert_shift(const expr2t &shift, const expr2t &part1,
+                     const expr2t &part2, ast_convert_calltype convert,
+                     void *&_bv);
 
   virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
   virtual void convert_smt_expr(const constant_int2t &sym, void *&bv);

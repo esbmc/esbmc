@@ -1576,19 +1576,21 @@ z3_convt::convert_smt_expr(const modulus2t &mod, void *&_bv)
 }
 
 void
-z3_convt::convert_smt_expr(const shl2t &shl, void *&_bv)
+z3_convt::convert_shift(const expr2t &shift, const expr2t &part1,
+                        const expr2t &part2, ast_convert_calltype convert,
+                        void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
 
   Z3_ast op0, op1;
   unsigned width_expr, width_op0, width_op1;
 
-  shl.part_1->convert_smt(*this, (void*&)op0);
-  shl.part_2->convert_smt(*this, (void*&)op1);
+  part1.convert_smt(*this, (void*&)op0);
+  part2.convert_smt(*this, (void*&)op1);
 
-  width_expr = shl.type->get_width();
-  width_op0 = shl.part_1->type->get_width();
-  width_op1 = shl.part_2->type->get_width();
+  width_expr = shift.type->get_width();
+  width_op0 = part1.type->get_width();
+  width_op1 = part2.type->get_width();
 
   if (width_op0 > width_expr)
     op0 = Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op0);
@@ -1596,13 +1598,19 @@ z3_convt::convert_smt_expr(const shl2t &shl, void *&_bv)
     op1 = Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op1);
 
   if (width_op0 > width_op1) {
-    if (shl.part_1->type->type_id == type2t::unsignedbv_id)
+    if (part1.type->type_id == type2t::unsignedbv_id)
       op1 = Z3_mk_zero_ext(z3_ctx, (width_op0 - width_op1), op1);
     else
       op1 = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op1), op1);
   }
 
-  bv = Z3_mk_bvshl(z3_ctx, op0, op1);
+  bv = convert(z3_ctx, op0, op1);
+}
+
+void
+z3_convt::convert_smt_expr(const shl2t &shl, void *&_bv)
+{
+  convert_shift(shl, *shl.part_1.get(), *shl.part_2.get(), Z3_mk_bvshl, _bv);
 }
 
 void
