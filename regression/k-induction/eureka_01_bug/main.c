@@ -1,7 +1,8 @@
 int INFINITY = 899;
+unsigned int nondet_uint();
 void main(){
-  int nodecount = 5;
-  int edgecount = 20;
+  int nodecount = nondet_uint()%5;
+  int edgecount = nondet_uint()%20;
   int source = 0;
   int Source[20] = {0,4,1,1,0,0,1,3,4,4,2,2,3,0,0,3,1,2,2,3};
   int Dest[20] = {1,3,4,1,1,4,3,4,3,0,0,0,0,2,3,0,2,1,0,4};
@@ -45,5 +46,6 @@ void main(){
     {
       assert(distance[i]>=0);
     }
+
 }
 
