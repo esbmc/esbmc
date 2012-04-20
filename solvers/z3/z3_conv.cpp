@@ -1918,14 +1918,9 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
 
       // Union field and expected type mismatch. Need to insert a cast.
       // Duplicate expr as we're changing it
-assert(0);
-#if 0
-      exprt expr2 = expr;
-      typecast_exprt cast(expr2.type());
-      expr2.type() = source_type;
-      cast.op0() = expr2;
-      convert_z3_expr(cast, bv);
-#endif
+      expr2tc memb2(new member2t(source_type, member.source_data, member.member));
+      typecast2t cast(member.type, memb2);
+      cast.convert_smt(*this, _bv);
       return;
     }
   }
