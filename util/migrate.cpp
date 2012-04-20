@@ -689,7 +689,21 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     with2t *w = new with2t(type, sourcedata, idx, update);
     new_expr_ref = expr2tc(w);
     return true;
-   } else {
+  } else if (expr.id() == "member") {
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    expr2tc sourcedata;
+    if (!migrate_expr(expr.op0(), sourcedata))
+      return false;
+
+    constant_string2t idx(type2tc(new string_type2t()),
+                          expr.get_string("component_name"));
+
+    member2t *m = new member2t(type, sourcedata, idx);
+    new_expr_ref = expr2tc(m);
+    return true;
+  } else {
     return false;
   }
 }

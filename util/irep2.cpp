@@ -1177,3 +1177,16 @@ with2t::with2t(const with2t &ref)
                          update_data(ref.update_data)
 {
 }
+
+member2t::member2t(const type2tc type, const expr2tc source,
+                   const constant_string2t &idx)
+  : datatype_body<member2t>(type, member_id), source_data(source),
+                          member(idx)
+{
+}
+
+member2t::member2t(const member2t &ref)
+  : datatype_body<member2t>(ref), source_data(ref.source_data),
+                           member(ref.member)
+{
+}

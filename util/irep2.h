@@ -1007,11 +1007,12 @@ public:
 class member2t : public datatype_body<member2t>
 {
 public:
-  member2t(const type2tc type, const expr2tc source, const int field);
+  member2t(const type2tc type, const expr2tc source,
+           const constant_string2t &member);
   member2t(const member2t &ref);
 
   const expr2tc source_data;
-  const int field;
+  const constant_string2t member;
 };
 
 /** Index operation. Extracts an entry from an array. */

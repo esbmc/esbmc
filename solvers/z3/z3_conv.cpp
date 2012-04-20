@@ -1881,6 +1881,59 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+  u_int j = 0;
+  Z3_ast struct_var;
+
+  const struct_union_type2t &struct_type = dynamic_cast<const struct_union_type2t&>
+                                                       (*member.type.get());
+
+  forall_names(it, struct_type.member_names) {
+    if (*it == member.member.value)
+      break;
+    j++;
+  }
+
+  member.source_data->convert_smt(*this, (void*&)struct_var);
+
+  if (member.source_data->type->type_id == type2t::union_id) {
+    // This is going to fail horribly when the source data isn't a symbol.
+    const symbol2t *sym = dynamic_cast<const symbol2t*>(member.source_data.get());
+    assert(sym != NULL);
+
+    union_varst::const_iterator cache_result =
+                                    union_vars.find(sym->name.as_string().c_str());
+
+    if (cache_result != union_vars.end()) {
+      const struct_union_type2t &type = dynamic_cast<const struct_union_type2t&>
+                                                 (*member.source_data->type.get());
+      const type2tc source_type = type.members[cache_result->second];
+      if (source_type == member.type) {
+        // Type we're fetching from union matches expected type; just return it.
+        bv = z3_api.mk_tuple_select(struct_var, cache_result->second);
+        return;
+      }
+
+      // Union field and expected type mismatch. Need to insert a cast.
+      // Duplicate expr as we're changing it
+assert(0);
+#if 0
+      exprt expr2 = expr;
+      typecast_exprt cast(expr2.type());
+      expr2.type() = source_type;
+      cast.op0() = expr2;
+      convert_z3_expr(cast, bv);
+#endif
+      return;
+    }
+  }
+
+  bv = z3_api.mk_tuple_select(struct_var, j);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
