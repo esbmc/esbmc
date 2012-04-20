@@ -344,7 +344,7 @@ public:
     modulus_id,
     shl_id,
     ashr_id,
-    dynamic_object_id,
+    dynamic_object_id, // Not converted in Z3, only in goto-symex
     same_object_id,
     pointer_offset_id,
     pointer_object_id,
