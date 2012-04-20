@@ -2383,6 +2383,21 @@ z3_convt::convert_smt_expr(const index2t &index, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const zero_string2t &zstr, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  // XXXjmorse - this method appears to just return a free variable. Surely
+  // it should be selecting the zero_string field out of the referenced
+  // string?
+  Z3_type_ast array_type;
+
+  zstr.type->convert_smt_type(*this, (void*&)array_type);
+
+  bv = z3_api.mk_var("zero_string", array_type);
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

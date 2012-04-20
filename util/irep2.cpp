@@ -1203,3 +1203,14 @@ index2t::index2t(const index2t &ref)
                            index(ref.index)
 {
 }
+
+zero_string2t::zero_string2t(const expr2tc _string)
+  : datatype_body<zero_string2t>(type2tc(new bool_type2t()), zero_string_id),
+                                string(_string)
+{
+}
+
+zero_string2t::zero_string2t(const zero_string2t &ref)
+  : datatype_body<zero_string2t>(ref), string(ref.string)
+{
+}

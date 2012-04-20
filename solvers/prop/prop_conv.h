@@ -152,6 +152,7 @@ public:
   virtual void convert_smt_expr(const member2t &member, void *&arg) = 0;
   virtual void convert_smt_expr(const typecast2t &cast, void *&arg) = 0;
   virtual void convert_smt_expr(const index2t &index, void *&arg) = 0;
+  virtual void convert_smt_expr(const zero_string2t &zstr, void *&arg) = 0;
 };
 
 #endif
