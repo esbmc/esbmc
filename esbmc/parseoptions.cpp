@@ -590,7 +590,14 @@ int cbmc_parseoptionst::doit_k_induction()
     bmc_base_case.options.set_option("unwind", i2string(k_step));
     bmc_inductive_step.options.set_option("unwind", i2string(k_step));
 
+
   } while (k_step <= atol(cmdline.get_values("k-step").front().c_str()));
+
+  std::cout << std::endl;
+  std::cout << "***************************************" << std::endl;
+  std::cout << "ESBMC was unable to prove the property!" << std::endl;
+  std::cout << "***************************************" << std::endl;
+  std::cout << std::endl;
 }
 
 /*******************************************************************\
@@ -1286,7 +1293,7 @@ void cbmc_parseoptionst::help()
     " --base-case                  check the base case\n"
     " --inductive-step             check the inductive step\n"
     " --k-induction                prove by k-induction \n"
-    " --k-step nr                  set the k time step (default is 2) \n\n"
+    " --k-step nr                  set the k time step (default is 50) \n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
     " --uw-model                   use under-approximation and widening approach\n"
