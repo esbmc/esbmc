@@ -1833,7 +1833,7 @@ void
 z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
-  Z3_ast array_var, array_val, operand0, operand1, operand2;
+  Z3_ast operand0, operand1, operand2;
   Z3_ast tuple, value;
 
   if (with.type->type_id == type2t::struct_id ||
@@ -1858,7 +1858,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
     assert(idx != struct_type.member_names.size() &&
            "Member name of with expr not found in struct/union type");
 
-    bv = z3_api.mk_tuple_update(array_var, idx, array_val);
+    bv = z3_api.mk_tuple_update(tuple, idx, value);
 
     // Update last-updated-field field if it's a union
     if (with.type->type_id == type2t::union_id) {
