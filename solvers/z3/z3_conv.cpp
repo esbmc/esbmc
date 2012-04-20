@@ -1768,6 +1768,68 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+
+  // op0 is the object to update
+  // op1 is the byte number
+  // op2 is the value to update with
+  //
+  const constant_int2t *intref = dynamic_cast<const constant_int2t*>
+                                             (data.source_offset.get());
+  assert(intref != NULL && "byte_extract expects constant 2nd arg");
+
+  Z3_ast tuple, value;
+  uint width_op0, width_op2;
+
+  data.source_value->convert_smt(*this, (void*&)tuple);
+  data.update_value->convert_smt(*this, (void*&)value);
+
+  width_op2 = data.update_value->type->get_width();
+
+  if (data.source_value->type->type_id == type2t::struct_id) {
+    const struct_type2t &struct_type = dynamic_cast<const struct_type2t&>
+                                                  (*data.source_value->type.get());
+    bool has_field = false;
+
+    // XXXjmorse, this isn't going to be the case if it's a with.
+
+    forall_types(it, struct_type.members) {
+      width_op0 = (*it)->get_width();
+
+      if (((*it)->type_id == data.update_value->type->type_id) &&
+          (width_op0 == width_op2))
+	has_field = true;
+    }
+
+    if (has_field)
+      bv = z3_api.mk_tuple_update(tuple, intref->constant_value.to_long(), value);
+    else
+      bv = tuple;
+  } else if (data.source_value->type->type_id == type2t::signedbv_id) {
+    if (int_encoding) {
+      bv = value;
+      return;
+    }
+
+    width_op0 = data.source_value->type->get_width();
+
+    if (width_op0 == 0)
+      // XXXjmorse - can this ever happen now?
+      throw new conv_error("failed to get width of byte_update operand", exprt());
+
+    if (width_op0 > width_op2)
+      bv = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value);
+    else
+      throw new conv_error("unsupported irep for conver_byte_update", exprt());
+  } else {
+    throw new conv_error("unsupported irep for conver_byte_update", exprt());
+  }
+
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;

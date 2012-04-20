@@ -645,7 +645,28 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     byte_extract2t *b = new byte_extract2t(type, big_endian, side1, side2);
     new_expr_ref = expr2tc(b);
     return true;
-   } else {
+  } else if (expr.id() == "byte_update_little_endian" ||
+             expr.id() == "byte_update_big_endian") {
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    assert(expr.operands().size() == 3);
+
+    expr2tc sourceval, offs;
+    if (!convert_operand_pair(expr, sourceval, offs))
+        return false;
+
+    expr2tc update;
+    if (!migrate_expr(expr.op2(), update))
+      return false;
+
+    bool big_endian = (expr.id() == "byte_update_big_endian") ? true : false;
+
+    byte_update2t *u = new byte_update2t(type, big_endian,
+                                         sourceval, offs, update);
+    new_expr_ref = expr2tc(u);
+    return true;
+  } else {
     return false;
   }
 }

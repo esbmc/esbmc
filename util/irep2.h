@@ -951,10 +951,12 @@ public:
 class byte_update2t : public byte_ops_body<byte_update2t>
 {
 public:
-  byte_update2t(const type2tc type, const expr2tc source, const expr2tc offs,
-                const expr2tc update);
+  byte_update2t(const type2tc type, bool big_endian,
+                const expr2tc source, const expr2tc offs,
+                const expr2tc update_val);
   byte_update2t(const byte_update2t &ref);
 
+  bool big_endian;
   const expr2tc source_value;
   const expr2tc source_offset;
   const expr2tc update_value;

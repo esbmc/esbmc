@@ -1115,3 +1115,23 @@ byte_extract2t::byte_extract2t(const byte_extract2t &ref)
                               source_offset(ref.source_offset)
 {
 }
+
+byte_update2t::byte_update2t(const type2tc type, bool is_big_endian,
+                             const expr2tc source, const expr2tc offs,
+                             const expr2tc update)
+  : byte_ops_body<byte_update2t>(type, byte_update_id),
+                                 big_endian(is_big_endian),
+                                 source_value(source),
+                                 source_offset(offs),
+                                 update_value(update)
+{
+}
+
+byte_update2t::byte_update2t(const byte_update2t &ref)
+  : byte_ops_body<byte_update2t>(ref),
+                              big_endian(ref.big_endian),
+                              source_value(ref.source_value),
+                              source_offset(ref.source_offset),
+                              update_value(ref.update_value)
+{
+}
