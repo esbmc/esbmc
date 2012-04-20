@@ -2302,47 +2302,39 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
 void
 z3_convt::convert_typecast_from_ptr(const typecast2t &cast, Z3_ast &bv)
 {
-  unsignedbv_typet int_type(config.ansi_c.int_width);
+  type2tc int_type(new unsignedbv_type2t(config.ansi_c.int_width));
 
   // The plan: index the object id -> address-space array and pick out the
   // start address, then add it to any additional pointer offset.
 
   // Generate type of address space array
-  struct_typet strct;
-  struct_union_typet::componentt cmp;
-  cmp.type() = int_type;
-  cmp.set_name("start");
-  strct.components().push_back(cmp);
-  cmp.set_name("end");
-  strct.components().push_back(cmp);
-  strct.set("tag", "addr_space_tuple");
+  std::vector<type2tc> members;
+  std::vector<std::string> names;
+  type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+  members.push_back(inttype);
+  members.push_back(inttype);
+  names.push_back("start");
+  names.push_back("end");
+  type2tc strct(new struct_type2t(members, names, "addr_space_tuple"));
+  type2tc addrspace_type(new array_type2t(strct, expr2tc(new empty_type2t()),
+                                          true));
 
-  array_typet arr;
-  arr.subtype() = strct;
+  expr2tc obj_num(new pointer_object2t(inttype, cast.from));
 
-  exprt obj_num("pointer_object", int_type);
-  obj_num.copy_to_operands(expr.op0());
-
-  symbol_exprt sym_arr(get_cur_addrspace_ident(), arr);
-  sym_arr.type().set("size", "infinity");
-  index_exprt idx(strct);
-  idx.array() = sym_arr;
-  idx.index() = obj_num;
+  expr2tc addrspacesym(new symbol2t(addrspace_type, get_cur_addrspace_ident()));
+  expr2tc idx(new index2t(strct, addrspacesym, obj_num));
 
   // We've now grabbed the pointer struct, now get first element
-  member_exprt memb(int_type);
-  memb.op0() = idx;
-  memb.set_component_name("start");
+  expr2tc memb(new member2t(int_type, idx, constant_string2t(
+                                             type2tc(new string_type2t()),
+                                             "start")));
 
-  exprt ptr_offs("pointer_offset", int_type);
-  ptr_offs.copy_to_operands(expr.op0());
-  exprt add("+", int_type);
-  add.copy_to_operands(memb, ptr_offs);
+  expr2tc ptr_offs(new pointer_offset2t(int_type, cast.from));
+  expr2tc add(new add2t(int_type, memb, ptr_offs));
 
   // Finally, replace typecast
-  typecast_exprt cast(expr.type());
-  cast.op() = add;
-  convert_bv(cast, bv);
+  typecast2t new_cast(cast.type, add);
+  new_cast.convert_smt(*this, (void*&)bv);
 }
 
 void
