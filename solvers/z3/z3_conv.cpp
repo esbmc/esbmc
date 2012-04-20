@@ -1764,42 +1764,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
     }
 
     bv = Z3_mk_extract(z3_ctx, upper, lower, source);
-
-#if 0
-    if (expr.op0().id() == "index") {
-      Z3_ast args[2];
-
-      const exprt &symbol = expr.op0().operands()[0];
-      const exprt &index = expr.op0().operands()[1];
-
-      convert_bv(symbol, args[0]);
-      convert_bv(index, args[1]);
-
-      bv = Z3_mk_select(z3_ctx, args[0], args[1]);
-
-      unsigned width_expr;
-      get_type_width(expr.type(), width_expr);
-
-      if (width_expr > width) {
-        if (expr.type().id() == "unsignedbv") {
-          bv = Z3_mk_zero_ext(z3_ctx, (width_expr - width), bv);
-        }
-      }
-    }
-#endif
-
-#if 0
-    if (expr.op1().id()=="constant") {
-      unsigned width0, width1;
-      get_type_width(expr.op0().type(), width0);
-      get_type_width(expr.op1().type(), width1);
-      if (width1 > width0) {
-        if (expr.op0().type().id() == "unsignedbv") {
-          bv = Z3_mk_zero_ext(z3_ctx, width1-width0, bv);
-        }
-      }
-    }
-#endif
   }
 }
 
