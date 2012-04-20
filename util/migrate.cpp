@@ -195,7 +195,6 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2t *new_expr = new constant_int2t(type, val);
     new_expr_ref = expr2tc(new_expr);
     return true;
-#if 0
   } else if (expr.id() == "typecast") {
     assert(expr.op0().id_string() != "");
     expr2tc old_expr;
@@ -209,7 +208,6 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     typecast2t *t = new typecast2t(type, old_expr);
     new_expr_ref = expr2tc(t);
     return true;
-#endif
   } else if (expr.id() == "struct") {
     if (!migrate_type(expr.type(), type))
       return false;
