@@ -594,9 +594,9 @@ int cbmc_parseoptionst::doit_k_induction()
   } while (k_step <= atol(cmdline.get_values("k-step").front().c_str()));
 
   std::cout << std::endl;
-  std::cout << "***************************************" << std::endl;
-  std::cout << "ESBMC was unable to prove the property!" << std::endl;
-  std::cout << "***************************************" << std::endl;
+  std::cout << "**************************************************" << std::endl;
+  std::cout << "ESBMC was unable to prove the property, giving up." << std::endl;
+  std::cout << "**************************************************" << std::endl;
   std::cout << std::endl;
 }
 
