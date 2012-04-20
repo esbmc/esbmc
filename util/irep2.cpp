@@ -1118,6 +1118,17 @@ pointer_object2t::pointer_object2t(const pointer_object2t &ref)
 {
 }
 
+address_of2t::address_of2t(const type2tc subtype, const expr2tc val)
+  : arith_body<address_of2t>(subtype, address_of_id),
+                             pointer_obj(val)
+{
+}
+
+address_of2t::address_of2t(const address_of2t &ref)
+  : arith_body<address_of2t>(ref), pointer_obj(ref.pointer_obj)
+{
+}
+
 byte_ops2t::byte_ops2t(const type2tc type, expr_ids id)
   : expr_body<byte_ops2t>(type, id)
 {

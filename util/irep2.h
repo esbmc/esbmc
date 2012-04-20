@@ -357,6 +357,7 @@ public:
     same_object_id,
     pointer_offset_id,
     pointer_object_id,
+    address_of_id,
     byte_extract_id,
     byte_update_id,
     with_id,
@@ -922,6 +923,15 @@ class pointer_object2t : public arith_body<pointer_object2t>
 public:
   pointer_object2t(const type2tc type, const expr2tc pointer);
   pointer_object2t(const pointer_object2t &ref);
+
+  const expr2tc pointer_obj;
+};
+
+class address_of2t : public arith_body<address_of2t>
+{
+public:
+  address_of2t(const type2tc subtype, const expr2tc pointer);
+  address_of2t(const address_of2t &ref);
 
   const expr2tc pointer_obj;
 };

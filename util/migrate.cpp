@@ -636,7 +636,20 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     pointer_object2t *p = new pointer_object2t(type, theval);
     new_expr_ref = expr2tc(p);
     return true;
-  } else if (expr.id() == "byte_extract_little_endian" ||
+  } else if (expr.id() == "address_of") {
+    assert(expr.type().id() == "pointer");
+
+    if (!migrate_type(expr.type().subtype(), type))
+      return false;
+
+    expr2tc theval;
+    if (!migrate_expr(expr.op0(), theval))
+      return false;
+
+    address_of2t *a = new address_of2t(type, theval);
+    new_expr_ref = expr2tc(a);
+    return true;
+   } else if (expr.id() == "byte_extract_little_endian" ||
              expr.id() == "byte_extract_big_endian") {
     if (!migrate_type(expr.type(), type))
       return false;

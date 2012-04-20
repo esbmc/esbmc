@@ -226,6 +226,7 @@ private:
   virtual void convert_smt_expr(const same_object2t &same, void *&bv);
   virtual void convert_smt_expr(const pointer_offset2t &offs, void *&bv);
   virtual void convert_smt_expr(const pointer_object2t &obj, void *&bv);
+  virtual void convert_smt_expr(const address_of2t &obj, void *&bv);
   virtual void convert_smt_expr(const byte_extract2t &data, void *&bv);
   virtual void convert_smt_expr(const byte_update2t &data, void *&bv);
   virtual void convert_smt_expr(const with2t &with, void *&bv);
