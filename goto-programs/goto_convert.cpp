@@ -2810,6 +2810,28 @@ void goto_convertt::generate_ifthenelse(
   dest.destructive_append(tmp_z);
 }
 
+void goto_convertt::get_cs_member(
+  const exprt &expr, 
+  exprt &result, 
+  const typet type)
+{
+  std::string identifier;
+
+  identifier = "cs$"+i2string(state_counter);
+
+  exprt lhs_struct("symbol", state);
+  lhs_struct.identifier(identifier);
+
+  exprt new_expr(exprt::member, type);
+  new_expr.reserve_operands(1);
+  new_expr.copy_to_operands(lhs_struct);
+  new_expr.component_name(expr.op0().get_string("identifier"));
+
+  assert(!new_expr.get_string("component_name").empty());
+
+  result = new_expr;
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::replace_ifthenelse
@@ -2827,25 +2849,19 @@ void goto_convertt::replace_ifthenelse(
 {
 DEBUGLOC;
   std::string identifier;
-
+#if 0
   identifier = "cs$"+i2string(state_counter);
 
   exprt lhs_struct("symbol", state);
   lhs_struct.identifier(identifier);
-
+#endif
   bool found=false;
 
   if (expr.operands().size()==1)
   {
-    exprt new_expr(exprt::member, bool_typet());
-    new_expr.reserve_operands(1);
-    new_expr.copy_to_operands(lhs_struct);
-    new_expr.component_name(expr.op0().get_string("identifier"));
-    new_expr.type() = bool_typet();
-
-    assert(!new_expr.get_string("component_name").empty());
+    exprt new_expr;
+    get_cs_member(expr, new_expr, bool_typet());
     assert(new_expr.type().is_bool());
-
 
     const struct_typet &struct_type = to_struct_type(lhs_struct.type());
     const struct_typet::componentst &components = struct_type.components();
@@ -2865,22 +2881,16 @@ DEBUGLOC;
     assert(found);
     expr = new_expr;
 
-    std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
+    //std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
     //assert(0);
   }
   else
   {
     assert(expr.operands().size()==2);
     assert(expr.op0().type() == expr.op1().type());
-
-    exprt new_expr(exprt::member, expr.op0().type());
-    new_expr.reserve_operands(1);
-    new_expr.copy_to_operands(lhs_struct);
-
-    new_expr.component_name(expr.op0().get_string("identifier"));
-    assert(!new_expr.get_string("component_name").empty());
-
-    //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
+    
+    exprt new_expr;
+    get_cs_member(expr, new_expr, expr.op0().type());
     assert(new_expr.type().id() == expr.op0().type().id());
 
     const struct_typet &struct_type = to_struct_type(lhs_struct.type());
