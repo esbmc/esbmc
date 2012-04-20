@@ -537,7 +537,7 @@ void goto_convertt::convert_block(
   }
 
   // see if we need to check for forgotten memory
-
+#if 0
   if (!for_block)
   {
   if (options.get_bool_option("memory-leak-check"))
@@ -565,6 +565,7 @@ void goto_convertt::convert_block(
   }
   else
     for_block=false;
+#endif
 }
 
 /*******************************************************************\
@@ -1463,13 +1464,15 @@ void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
+  DEBUGLOC;
+
+  set_for_block(true);
+
   if(code.operands().size()!=4)
   {
     err_location(code);
     throw "for takes four operands";
   }
-
-  for_block=true;
 
   // turn for(A; c; B) { P } into
   //  A; while(c) { P; B; }
@@ -1523,22 +1526,22 @@ void goto_convertt::convert_for(
 
   // do the u label
   goto_programt::targett u=sideeffects.instructions.begin();
-
+  DEBUGLOC;
   // do the c label
   if (inductive_step)
     init_k_indice(dest);
-
+  DEBUGLOC;
   // do the v label
   goto_programt tmp_v;
   goto_programt::targett v=tmp_v.add_instruction();
-
+  DEBUGLOC;
   // do the z label
   goto_programt tmp_z;
   goto_programt::targett z=tmp_z.add_instruction(SKIP);
-
+  DEBUGLOC;
   // do the x label
   goto_programt tmp_x;
-
+  DEBUGLOC;
   if(code.op2().is_nil())
     tmp_x.add_instruction(SKIP);
   else
@@ -1570,7 +1573,6 @@ void goto_convertt::convert_for(
   goto_programt tmp_w;
   convert(to_code(code.op3()), tmp_w);
 
-  
   // y: goto u;
   goto_programt tmp_y;
   goto_programt::targett y=tmp_y.add_instruction();
@@ -1585,7 +1587,6 @@ void goto_convertt::convert_for(
   if (inductive_step)
   {
     //assign_state_vector(state_vector, dest);
-#if 1
     //set the type of the state vector
     state_vector.subtype() = state;
 
@@ -1612,7 +1613,6 @@ void goto_convertt::convert_for(
 
     code_assignt new_assign(lhs_array,new_expr);
     copy(new_assign, ASSIGN, dest);
-#endif
   }
 
   dest.destructive_append(tmp_w);
@@ -1672,7 +1672,7 @@ void goto_convertt::convert_for(
 
   // restore break/continue
   targets.restore(old_targets);
-  for_block=false;
+  set_for_block(false);
   state_counter++;
 }
 
@@ -1897,7 +1897,7 @@ void goto_convertt::convert_while(
   const exprt &cond=code.op0();
   const locationt &location=code.location();
 
-  while_block=true;
+  set_while_block(true);
 
   //    while(c) P;
   //--------------------
@@ -2053,7 +2053,7 @@ void goto_convertt::convert_while(
   // restore break/continue
   targets.restore(old_targets);
   state_counter++;
-  while_block=false;
+  set_while_block(false);
 }
 
 /*******************************************************************\
@@ -2828,6 +2828,7 @@ void goto_convertt::get_cs_member(
   const typet &type,
   bool &found)
 {
+  found=false;
   std::string identifier;
 
   identifier = "cs$"+i2string(state_counter);
@@ -2859,6 +2860,15 @@ void goto_convertt::get_cs_member(
       found=true;
     }
   }
+
+  if (!found)
+  {
+    new_expr = expr;
+    std::cerr << "warning: the symbol '" << expr.get_string("identifier")
+  		  << "' at line " << expr.location().get_line()
+  		  << " is not a member of the state struct" << std::endl;
+  }
+
 
   result = new_expr;
 }
@@ -2897,7 +2907,7 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
 
     new_expr1 = tmp;
   }
-  else if (expr.id()=="+")
+  else if (expr.id()=="+" || expr.id()=="=")
   {
     exprt operand0, operand1;
 	get_new_expr(expr.op0(), operand0, found);
@@ -2905,18 +2915,15 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
 
 	new_expr1 = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
   }
+  else if (expr.id() == "unary-")
+  {
+	get_new_expr(expr.op0(), new_expr1, found);
+  }
   else
   {
     std::cerr << "warning: the expression '" << expr.pretty()
   		  << "' is not supported yet" << std::endl;
 	assert(0);
-  }
-
-  if (!found)
-  {
-    new_expr1 = expr;
-    std::cerr << "warning: the symbol '" << expr.get_string("identifier")
-  		  << "' is not a member of the state struct" << std::endl;
   }
 
 }
@@ -3040,7 +3047,7 @@ void goto_convertt::convert_ifthenelse(
 	  else
 	    tmp_guard=code.op0();
 
-	  if (inductive_step && (for_block || while_block))
+	  if (inductive_step && (is_for_block() ||is_while_block()))
 	    replace_ifthenelse(tmp_guard);
 
 	  remove_sideeffects(tmp_guard, dest);

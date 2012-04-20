@@ -198,6 +198,10 @@ protected:
   void replace_ifthenelse(exprt &expr);
   void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
   void get_new_expr(exprt &expr, exprt &new_expr1, bool &found);
+  void set_for_block(bool opt) {for_block=opt;}
+  bool is_for_block() const {return for_block;}
+  void set_while_block(bool opt) {while_block=opt;}
+  bool is_while_block() const {return while_block;}
 
   //
   // gotos
