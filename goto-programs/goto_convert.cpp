@@ -828,6 +828,62 @@ void goto_convertt::convert_expression(
 
 /*******************************************************************\
 
+Function: goto_convertt::get_struct_components
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void get_struct_components(const exprt &exp, struct_typet &str)
+{
+  DEBUGLOC;
+  //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
+  //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
+  if (exp.is_symbol() && exp.type().id()!="code")
+  {
+    //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
+    unsigned int size = str.components().size();
+    str.components().resize(size+1);
+    str.components()[size] = (struct_typet::componentt &) exp;
+    str.components()[size].set_name(exp.get_string("identifier"));
+    str.components()[size].pretty_name(exp.get_string("identifier"));
+  }
+  else if (exp.operands().size()==1)
+  {
+    DEBUGLOC;
+    if (exp.op0().is_symbol())
+      get_struct_components(exp.op0(), str);
+    else if (exp.op0().operands().size()==1)
+      get_struct_components(exp.op0().op0(), str);
+  }
+  else if (exp.operands().size()==2)
+  {
+    DEBUGLOC;
+    if (exp.op0().is_symbol())
+      get_struct_components(exp.op0(), str);
+    else if (exp.op0().operands().size())
+      get_struct_components(exp.op0().op0(), str);
+  }
+  else
+  {
+    //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
+    forall_operands(it, exp)
+    {
+      //std::cout << "exp.id(): " << exp.id() << std::endl;
+      //std::cout << "it->is_code(): " << it->is_code() << std::endl;
+      DEBUGLOC;
+        get_struct_components(*it, str);
+    }
+  }
+  DEBUGLOC;
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::convert_decl
 
   Inputs:
@@ -890,6 +946,8 @@ void goto_convertt::convert_decl(
     // break up into decl and assignment
     copy(tmp, OTHER, dest);
 
+    //std::cout << "code.op0(): " << code.op0() << std::endl;
+    get_struct_components(code.op0(), state);
     code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
     assign.location()=tmp.location();
 
@@ -1394,61 +1452,6 @@ void goto_convertt::convert_assume(
   t->location=code.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::get_struct_components
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void get_struct_components(const exprt &exp, struct_typet &str)
-{
-  DEBUGLOC;
-  //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
-  //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
-  if (exp.is_symbol() && exp.type().id()!="code")
-  {
-    //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
-    unsigned int size = str.components().size();
-    str.components().resize(size+1);
-    str.components()[size] = (struct_typet::componentt &) exp;
-    str.components()[size].set_name(exp.get_string("identifier"));
-    str.components()[size].pretty_name(exp.get_string("identifier"));
-  }
-  else if (exp.operands().size()==1)
-  {
-    DEBUGLOC;
-    if (exp.op0().is_symbol())
-      get_struct_components(exp.op0(), str);
-    else if (exp.op0().operands().size()==1)
-      get_struct_components(exp.op0().op0(), str);
-  }
-  else if (exp.operands().size()==2)
-  {
-    DEBUGLOC;
-    if (exp.op0().is_symbol())
-      get_struct_components(exp.op0(), str);
-    else if (exp.op0().operands().size())
-      get_struct_components(exp.op0().op0(), str);
-  }
-  else
-  {
-    //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
-    forall_operands(it, exp)
-    {
-      //std::cout << "exp.id(): " << exp.id() << std::endl;
-      //std::cout << "it->is_code(): " << it->is_code() << std::endl;
-      DEBUGLOC;
-        get_struct_components(*it, str);
-    }
-  }
-  DEBUGLOC;
-}
 
 /*******************************************************************\
 
