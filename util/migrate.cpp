@@ -671,8 +671,16 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       return false;
 
     expr2tc sourcedata, idx;
-    if (!convert_operand_pair(expr, sourcedata, idx))
+    if (!migrate_expr(expr.op0(), sourcedata))
+      return false;
+
+    if (expr.op1().id() == "member_name") {
+      idx = expr2tc(new constant_string2t(type2tc(new string_type2t()),
+                                    expr.op1().get_string("component_name")));
+    } else {
+      if (!migrate_expr(expr.op1(), idx))
         return false;
+    }
 
     expr2tc update;
     if (!migrate_expr(expr.op2(), update))

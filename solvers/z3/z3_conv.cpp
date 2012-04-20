@@ -1838,13 +1838,26 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 
   if (with.type->type_id == type2t::struct_id ||
       with.type->type_id == type2t::union_id) {
-    unsigned int idx;
+    unsigned int idx = 0;
+    const struct_union_type2t &struct_type =
+                                   dynamic_cast<const struct_union_type2t&>
+                                   (*with.type.get());
 
     with.source_data->convert_smt(*this, (void*&)tuple);
     with.update_data->convert_smt(*this, (void*&)value);
 
-    __asm__("int $3");
-//    idx = convert_member_name(expr.op0(), expr.op1());
+    const constant_string2t &str = dynamic_cast<const constant_string2t&>
+                                               (*with.update_field.get());
+
+    forall_names(it, struct_type.member_names) {
+      if (*it == str.value)
+        break;
+      idx++;
+    }
+
+    assert(idx != struct_type.member_names.size() &&
+           "Member name of with expr not found in struct/union type");
+
     bv = z3_api.mk_tuple_update(array_var, idx, array_val);
 
     // Update last-updated-field field if it's a union
