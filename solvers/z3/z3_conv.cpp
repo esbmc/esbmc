@@ -2137,6 +2137,7 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
   new_names.resize(to_struct_type.members.size());
 
   forall_types(it2, to_struct_type.members) {
+    i = 0;
     forall_types(it, from_struct_type.members) {
       if (from_struct_type.member_names[i] == to_struct_type.member_names[i2]) {
 	unsigned width = (*it)->get_width();
