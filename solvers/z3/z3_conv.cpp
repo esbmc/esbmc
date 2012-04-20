@@ -1830,6 +1830,44 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast array_var, array_val, operand0, operand1, operand2;
+  Z3_ast tuple, value;
+
+  if (with.type->type_id == type2t::struct_id ||
+      with.type->type_id == type2t::union_id) {
+    unsigned int idx;
+
+    with.source_data->convert_smt(*this, (void*&)tuple);
+    with.update_data->convert_smt(*this, (void*&)value);
+
+    __asm__("int $3");
+//    idx = convert_member_name(expr.op0(), expr.op1());
+    bv = z3_api.mk_tuple_update(array_var, idx, array_val);
+
+    // Update last-updated-field field if it's a union
+    if (with.type->type_id == type2t::union_id) {
+      const union_type2t &unionref = dynamic_cast<const union_type2t&>
+                                                 (*with.type.get());
+       unsigned int components_size = unionref.members.size();
+       bv = z3_api.mk_tuple_update(bv, components_size,
+                              convert_number(idx, config.ansi_c.int_width, 0));
+    }
+  } else if (with.type->type_id == type2t::array_id) {
+
+    with.source_data->convert_smt(*this, (void*&)operand0);
+    with.update_field->convert_smt(*this, (void*&)operand1);
+    with.update_data->convert_smt(*this, (void*&)operand2);
+
+    bv = Z3_mk_store(z3_ctx, operand0, operand1, operand2);
+  } else {
+    throw new conv_error("with applied to non-struct/union/array obj", exprt());
+  }
+}
+
+void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
