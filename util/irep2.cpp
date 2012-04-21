@@ -1249,6 +1249,20 @@ not2t::not2t(const not2t &ref)
 {
 }
 
+bool
+not2t::cmp(const expr2t &ref) const
+{
+  const not2t &ref2 = static_cast<const not2t &>(ref);
+  return notvalue == ref2.notvalue;
+}
+
+int
+not2t::lt(const expr2t &ref) const
+{
+  const not2t &ref2 = static_cast<const not2t &>(ref);
+  return notvalue->ltchecked(*ref2.notvalue.get());
+}
+
 logical_2ops2t::logical_2ops2t(expr_ids id, const expr2tc val1,
                                const expr2tc val2)
   : lops2_body<logical_2ops2t>(id),
