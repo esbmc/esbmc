@@ -1482,6 +1482,20 @@ abs2t::abs2t(const abs2t &ref)
 {
 }
 
+bool
+abs2t::cmp(const expr2t &ref) const
+{
+  const abs2t &ref2 = static_cast<const abs2t &>(ref);
+  return value == ref2.value;
+}
+
+int
+abs2t::lt(const expr2t &ref) const
+{
+  const abs2t &ref2 = static_cast<const abs2t &>(ref);
+  return value->ltchecked(*ref2.value.get());
+}
+
 arith_2op2t::arith_2op2t(const type2tc type, expr_ids id,
                          const expr2tc val1, const expr2tc val2)
   : arith_body<arith_2op2t>(type, id), part_1(val1), part_2(val2)
