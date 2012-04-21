@@ -495,13 +495,13 @@ code_type2t::get_width(void) const
 }
 
 bool
-code_type2t::cmp(const code_type2t &ref) const
+code_type2t::cmp(const code_type2t &ref __attribute__((unused))) const
 {
   return true; // All code is the same. Ish.
 }
 
 int
-code_type2t::lt(const type2t &ref) const
+code_type2t::lt(const type2t &ref __attribute__((unused))) const
 {
   return 0; // All code is the same. Ish.
 }
@@ -518,13 +518,13 @@ string_type2t::get_width(void) const
 }
 
 bool
-string_type2t::cmp(const string_type2t &ref) const
+string_type2t::cmp(const string_type2t &ref __attribute__((unused))) const
 {
   return true; // All strings are the same.
 }
 
 int
-string_type2t::lt(const type2t &ref) const
+string_type2t::lt(const type2t &ref __attribute__((unused))) const
 {
   return 0; // All strings are the same.
 }
