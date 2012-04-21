@@ -1100,6 +1100,39 @@ if2t::if2t(const if2t &ref) : expr_body<if2t>(ref), cond(ref.cond),
 {
 }
 
+bool
+if2t::cmp(const expr2t &ref) const
+{
+  const if2t &ref2 = static_cast<const if2t &>(ref);
+
+  if (cond != ref2.cond)
+    return false;
+
+  if (true_value != ref2.true_value)
+    return false;
+
+  if (false_value != ref2.false_value)
+    return false;
+
+  return true;
+}
+
+int
+if2t::lt(const expr2t &ref) const
+{
+  const if2t &ref2 = static_cast<const if2t &>(ref);
+
+  int tmp = cond->ltchecked(*ref2.cond.get());
+  if (tmp != 0)
+    return tmp;
+
+  tmp = true_value->ltchecked(*ref2.true_value.get());
+  if (tmp != 0)
+    return tmp;
+
+  return false_value->ltchecked(*ref2.false_value.get());
+}
+
 rel2t::rel2t(expr_ids id, const expr2tc val1, const expr2tc val2)
   : expr_body<rel2t>(type2tc(new bool_type2t()), id), side_1(val1), side_2(val2)
 {
