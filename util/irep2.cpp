@@ -1881,6 +1881,33 @@ member2t::member2t(const member2t &ref)
 {
 }
 
+bool
+member2t::cmp(const expr2t &ref) const
+{
+  const member2t &ref2 = static_cast<const member2t &>(ref);
+
+  if (source_data != ref2.source_data)
+    return false;
+
+  if (member != ref2.member)
+    return false;
+
+  return true;
+}
+
+int
+member2t::lt(const expr2t &ref) const
+{
+  const member2t &ref2 = static_cast<const member2t &>(ref);
+
+  int tmp = source_data->ltchecked(*ref2.source_data.get());
+  if (tmp != 0)
+    return tmp;
+
+  return member.ltchecked(ref2.member);
+}
+
+
 index2t::index2t(const type2tc type, const expr2tc source,
                  const expr2tc _index)
   : datatype_body<index2t>(type, index_id), source_data(source),
