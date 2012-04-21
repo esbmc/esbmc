@@ -823,6 +823,27 @@ symbol2t::symbol2t(const symbol2t &ref)
 {
 }
 
+bool
+symbol2t::cmp(const expr2t &ref) const
+{
+  const symbol2t &ref2 = static_cast<const symbol2t &>(ref);
+  if (name == ref2.name)
+    return true;
+  return false;
+}
+
+int
+symbol2t::lt(const expr2t &ref) const
+{
+  const symbol2t &ref2 = static_cast<const symbol2t &>(ref);
+  if (name < ref2.name)
+    return -1;
+  else if (ref2.name < name)
+    return 1;
+  else
+    return 0;
+}
+
 constant_int2t::constant_int2t(type2tc type, const BigInt &input)
   : const_expr_body<constant_int2t>(type, constant_int_id), constant_value(input)
 {
