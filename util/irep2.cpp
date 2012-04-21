@@ -2009,3 +2009,17 @@ isnan2t::isnan2t(const isnan2t &ref)
   : lops2_body<isnan2t>(ref), value(ref.value)
 {
 }
+
+bool
+isnan2t::cmp(const expr2t &ref) const
+{
+  const isnan2t &ref2 = static_cast<const isnan2t &> (ref);
+  return value == ref2.value;
+}
+
+int
+isnan2t::lt(const expr2t &ref) const
+{
+  const isnan2t &ref2 = static_cast<const isnan2t &> (ref);
+  return value->ltchecked(*ref2.value.get());
+}
