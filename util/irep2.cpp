@@ -1342,6 +1342,32 @@ binops2t::binops2t(const binops2t &ref)
 {
 }
 
+bool
+binops2t::cmp(const expr2t &ref) const
+{
+  const binops2t &ref2 = static_cast<const binops2t &>(ref);
+
+  if (side_1 != ref2.side_1)
+    return false;
+
+  if (side_2 != ref2.side_2)
+    return false;
+
+  return true;
+}
+
+int
+binops2t::lt(const expr2t &ref) const
+{
+  const binops2t &ref2 = static_cast<const binops2t &>(ref);
+
+  int tmp = side_1->ltchecked(*ref2.side_1.get());
+  if (tmp != 0)
+    return tmp;
+
+  return side_2->ltchecked(*ref2.side_2.get());
+}
+
 bitand2t::bitand2t(const type2tc type, const expr2tc val1, const expr2tc val2)
   : binops_body<bitand2t>(type, bitand_id, val1, val2)
 {
