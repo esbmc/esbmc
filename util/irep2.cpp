@@ -1015,6 +1015,27 @@ constant_array2t::constant_array2t(const constant_array2t &ref)
 {
 }
 
+bool
+constant_array2t::cmp(const expr2t &ref) const
+{
+  const constant_array2t &ref2 = static_cast<const constant_array2t &> (ref);
+  if (datatype_members == ref2.datatype_members)
+    return true;
+  return false;
+}
+
+int
+constant_array2t::lt(const expr2t &ref) const
+{
+  const constant_array2t &ref2 = static_cast<const constant_array2t &> (ref);
+  if (datatype_members < ref2.datatype_members)
+    return -1;
+  else if (ref2.datatype_members < datatype_members)
+    return 1;
+  else
+    return 0;
+}
+
 constant_array_of2t::constant_array_of2t(const type2tc type, expr2tc init)
   : const_expr_body<constant_array_of2t>(type, constant_array_id),
     initializer(init)
