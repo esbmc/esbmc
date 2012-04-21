@@ -844,6 +844,21 @@ constant_int2t::as_long(void) const
   return constant_value.to_long();
 }
 
+bool
+constant_int2t::cmp(const expr2t &ref) const
+{
+  const constant_int2t &ref2 = static_cast<const constant_int2t &>(ref);
+  if (constant_value == ref2.constant_value)
+    return true;
+  return false;
+}
+
+int
+constant_int2t::lt(const expr2t &ref) const
+{
+  const constant_int2t &ref2 = static_cast<const constant_int2t &>(ref);
+  return constant_value.compare(ref2.constant_value);
+}
 
 constant_bool2t::constant_bool2t(bool value)
   : const_expr_body<constant_bool2t>(type2tc(new bool_type2t()),
