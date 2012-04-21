@@ -448,6 +448,8 @@ public:
   /** Accessor for fetching native int of this constant */
   unsigned long as_ulong(void) const;
   long as_long(void) const;
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   /** Arbitary precision integer record. */
   BigInt constant_value;
@@ -458,6 +460,9 @@ class constant_bool2t : public const_expr_body<constant_bool2t>
 public:
   constant_bool2t(bool value);
   constant_bool2t(const constant_bool2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   /** Arbitary precision integer record. */
   bool constant_value;
@@ -473,6 +478,9 @@ public:
   /** Convert string to a constant length array */
   expr2tc to_array(void) const;
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   /** Arbitary precision integer record. */
   const std::string value;
 };
@@ -483,6 +491,9 @@ class constant_datatype2t : public const_expr_body<constant_datatype2t>
 public:
   constant_datatype2t(const type2tc type, expr_ids id, const std::vector<expr2tc> &members);
   constant_datatype2t(const constant_datatype2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   const std::vector<expr2tc> datatype_members;
 };
@@ -518,6 +529,9 @@ public:
   constant_array2t(const type2tc type, const std::vector<expr2tc> &members);
   constant_array2t(const constant_array2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   const std::vector<expr2tc> datatype_members;
 };
 
@@ -526,6 +540,9 @@ class constant_array_of2t : public const_expr_body<constant_array_of2t>
 public:
   constant_array_of2t(const type2tc type, const expr2tc initializer);
   constant_array_of2t(const constant_array_of2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   // Type records the size of the array; this records the initializer.
   const expr2tc initializer;
@@ -540,6 +557,8 @@ private:
   friend class expr_body<symbol2t>;
 
 public:
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   // Symbol name - only so long as a symbol is a string. In the future, this
   // should really really change.
@@ -563,6 +582,9 @@ public:
              const expr2tc false_val);
   if2t(const if2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   // Conditional that this "if" depends on, and which value to take upon each
   // branch of that condition.
   const expr2tc cond;
@@ -579,6 +601,9 @@ class rel2t : public expr_body<rel2t>
 public:
   rel2t(expr_ids id, const expr2tc val1, const expr2tc val2);
   rel2t(const rel2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -665,6 +690,9 @@ public:
   not2t(const expr2tc notval);
   not2t(const not2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   const expr2tc notvalue;
 };
 
@@ -675,6 +703,9 @@ class logical_2ops2t : public lops2_body<logical_2ops2t>
 public:
   logical_2ops2t(expr_ids id, const expr2tc val1, const expr2tc val2);
   logical_2ops2t(const logical_2ops2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -721,6 +752,9 @@ public:
   binops2t(const type2tc type, expr_ids id,
            const expr2tc val1, const expr2tc val2);
   binops2t(const binops2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -815,6 +849,9 @@ public:
   neg2t(const type2tc type, const expr2tc value);
   neg2t(const neg2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   const expr2tc value;
 };
 
@@ -823,6 +860,9 @@ class abs2t : public arith_body<abs2t>
 public:
   abs2t(const type2tc type, const expr2tc value);
   abs2t(const abs2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   const expr2tc value;
 };
@@ -834,6 +874,9 @@ public:
   arith_2op2t(const type2tc type, expr_ids id,
               const expr2tc val1, const expr2tc val2);
   arith_2op2t(const arith_2op2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   const expr2tc part_1;
   const expr2tc part_2;
@@ -913,6 +956,9 @@ protected:
 public:
   virtual expr2tc clone(void) const;
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   const expr2tc ptr_obj;
 };
 
@@ -933,6 +979,9 @@ public:
   pointer_offset2t(const type2tc type, const expr2tc pointer);
   pointer_offset2t(const pointer_offset2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   const expr2tc pointer_obj;
 };
 
@@ -944,6 +993,9 @@ public:
   pointer_object2t(const type2tc type, const expr2tc pointer);
   pointer_object2t(const pointer_object2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   const expr2tc pointer_obj;
 };
 
@@ -952,6 +1004,9 @@ class address_of2t : public arith_body<address_of2t>
 public:
   address_of2t(const type2tc subtype, const expr2tc pointer);
   address_of2t(const address_of2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   const expr2tc pointer_obj;
 };
@@ -988,6 +1043,9 @@ public:
                  const expr2tc source, const expr2tc offs);
   byte_extract2t(const byte_extract2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   bool big_endian;
   const expr2tc source_value;
   const expr2tc source_offset;
@@ -1004,6 +1062,9 @@ public:
                 const expr2tc source, const expr2tc offs,
                 const expr2tc update_val);
   byte_update2t(const byte_update2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   bool big_endian;
   const expr2tc source_value;
@@ -1039,6 +1100,9 @@ public:
          const expr2tc update);
   with2t(const with2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   const expr2tc source_data;
   const expr2tc update_field;
   const expr2tc update_data;
@@ -1052,6 +1116,9 @@ public:
            const constant_string2t &member);
   member2t(const member2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   const expr2tc source_data;
   const constant_string2t member;
 };
@@ -1062,6 +1129,9 @@ class index2t : public datatype_body<index2t>
 public:
   index2t(const type2tc type, const expr2tc source, const expr2tc index);
   index2t(const index2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   const expr2tc source_data;
   const expr2tc index;
@@ -1075,6 +1145,9 @@ public:
   zero_string2t(const expr2tc string);
   zero_string2t(const zero_string2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   const expr2tc string;
 };
 
@@ -1085,6 +1158,9 @@ public:
   zero_length_string2t(const expr2tc string);
   zero_length_string2t(const zero_length_string2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   const expr2tc string;
 };
 
@@ -1094,6 +1170,9 @@ class isnan2t : public lops2_body<isnan2t>
 public:
   isnan2t(const expr2tc val);
   isnan2t(const isnan2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 
   const expr2tc value;
 };
