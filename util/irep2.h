@@ -378,6 +378,12 @@ public:
 
   virtual void convert_smt(prop_convt &obj, void *&arg) const = 0;
 
+  bool operator==(const expr2t &ref) const;
+  bool operator<(const expr2t &ref) const;
+  bool operator!=(const expr2t &ref) const;
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;
 
@@ -1086,6 +1092,21 @@ inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<ty
 inline bool operator!=(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() != *b.get());
+}
+
+inline bool operator==(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<expr2t> const & b)
+{
+  return (*a.get() == *b.get());
+}
+
+inline bool operator!=(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<expr2t> const & b)
+{
+  return (*a.get() != *b.get());
+}
+
+inline bool operator<(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<expr2t> const & b)
+{
+  return (*a.get() < *b.get());
 }
 
 #endif /* _UTIL_IREP2_H_ */

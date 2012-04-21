@@ -395,6 +395,56 @@ expr2t::expr2t(const expr2t &ref)
 void expr2t::convert_smt(prop_convt &obj, void *&arg) const
 { obj.convert_smt_expr(*this, arg); }
 
+
+bool
+expr2t::operator==(const expr2t &ref) const
+{
+  return cmp(ref);
+}
+
+bool
+expr2t::operator!=(const expr2t &ref) const
+{
+  return !cmp(ref);
+}
+
+bool
+expr2t::operator<(const expr2t &ref) const
+{
+  return (lt(ref) < 0);
+}
+
+bool
+expr2t::cmp(const expr2t &ref) const
+{
+  if (expr_id != ref.expr_id)
+    return false;
+
+  if (type != ref.type)
+    return false;
+
+  return true;
+}
+
+int
+expr2t::lt(const expr2t &ref) const
+{
+  if (expr_id < ref.expr_id)
+    return -1;
+  if (expr_id > ref.expr_id)
+    return 1;
+
+  assert(0 && "type2t lessthan operator");
+#if 0
+  if (type < ref.type)
+    return -1;
+  if (type > ref.type)
+    return 1;
+#endif
+
+  return 0;
+}
+
 /***************************** Templated expr body ****************************/
 
 template <class derived>
