@@ -1673,6 +1673,20 @@ address_of2t::address_of2t(const address_of2t &ref)
 {
 }
 
+bool
+address_of2t::cmp(const expr2t &ref) const
+{
+  const address_of2t &ref2 = static_cast<const address_of2t &>(ref);
+  return pointer_obj == ref2.pointer_obj;
+}
+
+int
+address_of2t::lt(const expr2t &ref) const
+{
+  const address_of2t &ref2 = static_cast<const address_of2t &>(ref);
+  return pointer_obj->ltchecked(*ref2.pointer_obj.get());
+}
+
 byte_ops2t::byte_ops2t(const type2tc type, expr_ids id)
   : expr_body<byte_ops2t>(type, id)
 {
