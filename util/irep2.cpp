@@ -1270,7 +1270,7 @@ logical_2ops2t::logical_2ops2t(expr_ids id, const expr2tc val1,
 {
 }
 
-  logical_2ops2t::logical_2ops2t(const logical_2ops2t &ref)
+logical_2ops2t::logical_2ops2t(const logical_2ops2t &ref)
   : lops2_body<logical_2ops2t>(ref), side_1(ref.side_1), side_2(ref.side_2)
 {
 }
