@@ -62,10 +62,6 @@ public:
     return invalid_object;
   }
   
-  bool is_dynamic_object(const exprt &expr) const;
-  
-  void get_dynamic_objects(std::vector<unsigned> &objects) const;
-
 protected:
   unsigned null_object, invalid_object;  
 

@@ -18,55 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
-Function: pointer_logict::is_dynamic_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool pointer_logict::is_dynamic_object(const exprt &expr) const
-{
-  if(expr.type().dynamic()) return true;
-  
-  if(expr.id()=="symbol")
-    if(has_prefix(id2string(to_symbol_expr(expr).get_identifier()),
-                  "symex_dynamic::"))
-      return true;
-
-  return false;
-}
-
-/*******************************************************************\
-
-Function: pointer_logict::get_dynamic_objects
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void pointer_logict::get_dynamic_objects(std::vector<unsigned> &o) const
-{
-  o.clear();
-  unsigned nr=0;
-  
-  for(pointer_logict::objectst::const_iterator
-      it=objects.begin();
-      it!=objects.end();
-      it++, nr++)
-    if(is_dynamic_object(*it))
-      o.push_back(nr);
-}
-
-/*******************************************************************\
-
 Function: pointer_logict::add_object
 
   Inputs:
