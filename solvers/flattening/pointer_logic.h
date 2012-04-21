@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_LOGIC_H
 #define CPROVER_POINTER_LOGIC_H
 
+#include <irep2.h>
 #include <mp_arith.h>
 #include <hash_cont.h>
 #include <expr.h>
@@ -18,8 +19,10 @@ class pointer_logict
 {
 public:
   // this numbers the objects
-  typedef hash_numbering<exprt, irep_hash> objectst;
+  typedef std::map<expr2tc, unsigned int> objectst;
   objectst objects;
+  typedef std::vector<expr2tc> obj_lookupt;
+  obj_lookupt lookup;
 
   struct pointert
   {
@@ -36,19 +39,15 @@ public:
   };
   
   // converts an (object,offset) pair to an expression
-  exprt pointer_expr(
-    const pointert &pointer,
-    const typet &type) const;
+  expr2tc pointer_expr(const pointert &pointer, const type2tc &type) const;
 
   // converts an (object,0) pair to an expression
-  exprt pointer_expr(
-    unsigned object,
-    const typet &type) const;
+  expr2tc pointer_expr(unsigned object, const type2tc &type) const;
     
   ~pointer_logict();
   pointer_logict();
   
-  unsigned add_object(const exprt &expr);
+  unsigned add_object(const expr2tc &expr);
 
   // number of NULL object  
   unsigned get_null_object() const
@@ -65,14 +64,10 @@ public:
 protected:
   unsigned null_object, invalid_object;  
 
-  exprt pointer_expr(
-    const mp_integer &offset,
-    const exprt &object) const;
+  expr2tc pointer_expr(const mp_integer &offset, const expr2t &object) const;
 
-  exprt object_rec(
-    const mp_integer &offset,
-    const typet &pointer_type,
-    const exprt &src) const;
+  expr2tc object_rec(const mp_integer &offset, const type2tc &pointer_type,
+                     const expr2tc &src) const;
 };
 
 #endif
