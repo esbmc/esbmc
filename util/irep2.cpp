@@ -1958,6 +1958,20 @@ zero_string2t::zero_string2t(const zero_string2t &ref)
 {
 }
 
+bool
+zero_string2t::cmp(const expr2t &ref) const
+{
+  const zero_string2t &ref2 = static_cast<const zero_string2t &>(ref);
+  return string == ref2.string;
+}
+
+int
+zero_string2t::lt(const expr2t &ref) const
+{
+  const zero_string2t &ref2 = static_cast<const zero_string2t &>(ref);
+  return string->ltchecked(*ref2.string.get());
+}
+
 zero_length_string2t::zero_length_string2t(const expr2tc _string)
   : datatype_body<zero_length_string2t>(type2tc(new bool_type2t()),
                                         zero_length_string_id),
