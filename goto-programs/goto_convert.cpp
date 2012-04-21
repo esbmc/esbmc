@@ -1505,7 +1505,7 @@ void goto_convertt::convert_for(
   }
 
   exprt cond=code.op1();
- 
+
   array_typet state_vector;
 
   // do the t label
@@ -1567,6 +1567,16 @@ void goto_convertt::convert_for(
   // set the targets
   targets.set_break(z);
   targets.set_continue(tmp_x.instructions.begin());
+
+#if 0
+  if(inductive_step)
+  {
+    std::cout << "antes cond: " << cond.pretty() << std::endl;
+    replace_ifthenelse(cond);
+    std::cout << "depois cond: " << cond.pretty() << std::endl;
+//    assert(0);
+  }
+#endif
 
   // v: if(!c) goto z;
   v->make_goto(z);
