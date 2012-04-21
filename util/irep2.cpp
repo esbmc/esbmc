@@ -914,6 +914,29 @@ constant_datatype2t::constant_datatype2t(const constant_datatype2t &ref)
 {
 }
 
+bool
+constant_datatype2t::cmp(const expr2t &ref) const
+{
+  const constant_datatype2t &ref2 = static_cast<const constant_datatype2t &>
+                                               (ref);
+  if (datatype_members == ref2.datatype_members)
+    return true;
+  return false;
+}
+
+int
+constant_datatype2t::lt(const expr2t &ref) const
+{
+  const constant_datatype2t &ref2 = static_cast<const constant_datatype2t &>
+                                               (ref);
+  if (datatype_members < ref2.datatype_members)
+    return -1;
+  else if (ref2.datatype_members < datatype_members)
+    return 1;
+  else
+    return 0;
+}
+
 constant_struct2t::constant_struct2t(const type2tc type,
                                      const std::vector<expr2tc> &members)
   : const_datatype_body<constant_struct2t>(type, constant_struct_id, members)
