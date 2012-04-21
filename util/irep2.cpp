@@ -579,15 +579,7 @@ expr2t::lt(const expr2t &ref) const
   if (expr_id > ref.expr_id)
     return 1;
 
-  assert(0 && "type2t lessthan operator");
-#if 0
-  if (type < ref.type)
-    return -1;
-  if (type > ref.type)
-    return 1;
-#endif
-
-  return 0;
+  return type->lt(*ref.type.get());
 }
 
 /***************************** Templated expr body ****************************/
