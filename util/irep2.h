@@ -75,9 +75,11 @@ protected:
 public:
   virtual void convert_smt_type(const prop_convt &obj, void *&arg) const = 0;
   virtual unsigned int get_width(void) const = 0;
-  virtual bool operator==(const type2t &ref) const = 0;
+  bool operator==(const type2t &ref) const;
   bool operator!=(const type2t &ref) const;
-  virtual bool operator<(const type2t &ref) const = 0;
+  bool operator<(const type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
@@ -92,8 +94,6 @@ protected:
 
 public:
   virtual void convert_smt_type(const prop_convt &obj, void *&arg) const;
-  virtual bool operator==(const type2t &ref) const;
-  virtual bool operator<(const type2t &ref) const;
 };
 
 /** Boolean type. No additional data */
@@ -101,8 +101,8 @@ class bool_type2t : public type_body<bool_type2t>
 {
 public:
   bool_type2t(void);
-  bool cmp(const bool_type2t &ref) const;
-  int lt(const bool_type2t &ref) const;
+  virtual bool cmp(const bool_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   bool_type2t(const bool_type2t &ref);
@@ -113,8 +113,8 @@ class empty_type2t : public type_body<empty_type2t>
 {
 public:
   empty_type2t(void);
-  bool cmp(const empty_type2t &ref) const;
-  int lt(const empty_type2t &ref) const;
+  virtual bool cmp(const empty_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   empty_type2t(const empty_type2t &ref);
@@ -126,8 +126,8 @@ class symbol_type2t : public type_body<symbol_type2t>
 {
 public:
   symbol_type2t(const dstring sym_name);
-  bool cmp(const symbol_type2t &ref) const;
-  int lt(const symbol_type2t &ref) const;
+  virtual bool cmp(const symbol_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   symbol_type2t(const symbol_type2t &ref);
@@ -144,8 +144,8 @@ protected:
   struct_union_type2t(const struct_union_type2t &ref);
 
 public:
-  bool cmp(const struct_union_type2t &ref) const;
-  int lt(const struct_union_type2t &ref) const;
+  virtual bool cmp(const struct_union_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   const std::vector<type2tc> members;
   std::vector<std::string> member_names;
   std::string name;
@@ -158,8 +158,8 @@ protected:
   bv_type2t(const bv_type2t &ref);
 
 public:
-  bool cmp(const bv_type2t &ref) const;
-  int lt(const bv_type2t &ref) const;
+  virtual  bool cmp(const bv_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
   const unsigned int width;
 };
@@ -180,8 +180,6 @@ protected:
     : struct_union_type2t(ref) {};
 
 public:
-  virtual bool operator==(const type2t &ref) const;
-  virtual bool operator<(const type2t &ref) const;
   virtual void convert_smt_type(const prop_convt &obj, void *&arg) const;
 };
 
@@ -193,8 +191,6 @@ protected:
   bv_type_body(const bv_type_body &ref) : bv_type2t(ref) {};
 
 public:
-  virtual bool operator==(const type2t &ref) const;
-  virtual bool operator<(const type2t &ref) const;
   virtual void convert_smt_type(const prop_convt &obj, void *&arg) const;
 };
 
@@ -204,8 +200,8 @@ public:
   struct_type2t(std::vector<type2tc> &members,
                 std::vector<std::string> memb_names,
                 std::string name);
-  bool cmp(const struct_type2t &ref) const;
-  int lt(const struct_type2t &ref) const;
+  virtual bool cmp(const struct_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   struct_type2t(const struct_type2t &ref);
@@ -217,8 +213,8 @@ public:
   union_type2t(std::vector<type2tc> &members,
                std::vector<std::string> memb_names,
                std::string name);
-  bool cmp(const union_type2t &ref) const;
-  int lt(const union_type2t &ref) const;
+  virtual bool cmp(const union_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   union_type2t(const union_type2t &ref);
@@ -229,8 +225,8 @@ class code_type2t : public type_body<code_type2t>
 {
 public:
   code_type2t(void);
-  bool cmp(const code_type2t &ref) const;
-  int lt(const code_type2t &ref) const;
+  virtual bool cmp(const code_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   code_type2t(const code_type2t &ref);
@@ -242,8 +238,8 @@ class array_type2t : public type_body<array_type2t>
 {
 public:
   array_type2t(const type2tc subtype, const expr2tc size, bool inf);
-  bool cmp(const array_type2t &ref) const;
-  int lt(const array_type2t &ref) const;
+  virtual bool cmp(const array_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   array_type2t(const array_type2t &ref);
@@ -271,8 +267,8 @@ class pointer_type2t : public type_body<pointer_type2t>
 {
 public:
   pointer_type2t(const type2tc subtype);
-  bool cmp(const pointer_type2t &ref) const;
-  int lt(const pointer_type2t &ref) const;
+  virtual bool cmp(const pointer_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   pointer_type2t(const pointer_type2t &ref);
@@ -285,8 +281,8 @@ class unsignedbv_type2t : public bv_type_body<unsignedbv_type2t>
 {
 public:
   unsignedbv_type2t(unsigned int width);
-  bool cmp(const unsignedbv_type2t &ref) const;
-  int lt(const unsignedbv_type2t &ref) const;
+  virtual bool cmp(const unsignedbv_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
 protected:
   unsignedbv_type2t(const unsignedbv_type2t &ref);
 };
@@ -295,8 +291,8 @@ class signedbv_type2t : public bv_type_body<signedbv_type2t>
 {
 public:
   signedbv_type2t(unsigned int width);
-  bool cmp(const signedbv_type2t &ref) const;
-  int lt(const signedbv_type2t &ref) const;
+  virtual bool cmp(const signedbv_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
 protected:
   signedbv_type2t(const signedbv_type2t &ref);
 };
@@ -305,8 +301,8 @@ class fixedbv_type2t : public type_body<fixedbv_type2t>
 {
 public:
   fixedbv_type2t(unsigned int width, unsigned int integer);
-  bool cmp(const fixedbv_type2t &ref) const;
-  int lt(const fixedbv_type2t &ref) const;
+  virtual bool cmp(const fixedbv_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   fixedbv_type2t(const fixedbv_type2t &ref);
@@ -320,8 +316,8 @@ class string_type2t : public type_body<string_type2t>
 {
 public:
   string_type2t(void);
-  bool cmp(const string_type2t &ref) const;
-  int lt(const string_type2t &ref) const;
+  virtual bool cmp(const string_type2t &ref) const;
+  virtual int lt(const type2t &ref) const;
   virtual unsigned int get_width(void) const;
 protected:
   string_type2t(const string_type2t &ref);
