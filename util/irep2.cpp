@@ -30,7 +30,7 @@ type2t::operator<(const type2t &ref) const
   if (tmp != 0)
     return tmp;
 
-  return (lt(ref) == -1);
+  return (lt(ref) < 0);
 }
 
 bool
