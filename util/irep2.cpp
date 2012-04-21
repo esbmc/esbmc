@@ -27,10 +27,12 @@ bool
 type2t::operator<(const type2t &ref) const
 {
   int tmp = type2t::lt(ref);
-  if (tmp != 0)
-    return tmp;
-
-  return (lt(ref) < 0);
+  if (tmp < 0)
+    return true;
+  else if (tmp > 0)
+    return false;
+  else
+    return (lt(ref) < 0);
 }
 
 int
