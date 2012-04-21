@@ -615,7 +615,8 @@ exprt bv_pointerst::bv_get_rec(
   pointer.object=integer2long(binary2integer(value_addr, false));
   pointer.offset=binary2integer(value_offset, true);
 
-  return pointer_logic.pointer_expr(pointer, type);
+  assert(0 && "jmorse killing pointer_logic");
+  return exprt();
 }
 
 /*******************************************************************\
@@ -748,12 +749,15 @@ Function: bv_pointerst::add_addr
 
 void bv_pointerst::add_addr(const exprt &expr, bvt &bv)
 {
+  assert(0 && "jmorse killing pointer_logic");
+#if 0
   unsigned a=pointer_logic.add_object(expr);
 
   if(a==(unsigned(1)>>addr_bits))
     throw "too many variables";
 
   encode(a, bv);
+#endif
 }
 
 /*******************************************************************\
@@ -771,6 +775,8 @@ Function: bv_pointerst::do_is_dynamic_object
 void bv_pointerst::do_is_dynamic_object(
   const is_dynamic_objectt &is_dynamic_object)
 {
+  assert(0 && "jmorse killing pointer_logic");
+#if 0
   const pointer_logict::objectst &objects=
     pointer_logic.objects;
     
@@ -801,6 +807,7 @@ void bv_pointerst::do_is_dynamic_object(
     
     prop.l_set_to(prop.limplies(l1, l2), true);
   }
+#endif
 }
 
 /*******************************************************************\
