@@ -1921,6 +1921,32 @@ index2t::index2t(const index2t &ref)
 {
 }
 
+bool
+index2t::cmp(const expr2t &ref) const
+{
+  const index2t &ref2 = static_cast<const index2t &>(ref);
+
+  if (source_data != ref2.source_data)
+    return false;
+
+  if (index != ref2.index)
+    return false;
+
+  return true;
+}
+
+int
+index2t::lt(const expr2t &ref) const
+{
+  const index2t &ref2 = static_cast<const index2t &>(ref);
+
+  int tmp = source_data->ltchecked(*ref2.source_data.get());
+  if (tmp != 0)
+    return tmp;
+
+  return index->ltchecked(*ref2.index.get());
+}
+
 zero_string2t::zero_string2t(const expr2tc _string)
   : datatype_body<zero_string2t>(type2tc(new bool_type2t()), zero_string_id),
                                 string(_string)
