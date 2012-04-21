@@ -1507,6 +1507,32 @@ arith_2op2t::arith_2op2t(const arith_2op2t &ref)
 {
 }
 
+bool
+arith_2op2t::cmp(const expr2t &ref) const
+{
+  const arith_2op2t &ref2 = static_cast<const arith_2op2t &>(ref);
+
+  if (part_1 != ref2.part_1)
+    return false;
+
+  if (part_2 != ref2.part_2)
+    return false;
+
+  return true;
+}
+
+int
+arith_2op2t::lt(const expr2t &ref) const
+{
+  const arith_2op2t &ref2 = static_cast<const arith_2op2t &>(ref);
+
+  int tmp = part_1->ltchecked(*ref2.part_1.get());
+  if (tmp != 0)
+    return tmp;
+
+  return part_2->ltchecked(*ref2.part_2.get());
+}
+
 add2t::add2t(const type2tc type, const expr2tc val1, const expr2tc val2)
   : arith_2ops_body<add2t>(type, add_id, val1, val2)
 {
