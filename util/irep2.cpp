@@ -1048,6 +1048,24 @@ constant_array_of2t::constant_array_of2t(const constant_array_of2t &ref)
 {
 }
 
+bool
+constant_array_of2t::cmp(const expr2t &ref) const
+{
+  const constant_array_of2t &ref2 = static_cast<const constant_array_of2t &>
+                                               (ref);
+  if (initializer == ref2.initializer)
+    return true;
+  return false;
+}
+
+int
+constant_array_of2t::lt(const expr2t &ref) const
+{
+  const constant_array_of2t &ref2 = static_cast<const constant_array_of2t &>
+                                               (ref);
+  return initializer->ltchecked(*ref2.initializer.get());
+}
+
 if2t::if2t(const type2tc type, const expr2tc _cond, const expr2tc true_val,
            const expr2tc false_val)
   : expr_body<if2t>(type, if_id), cond(_cond), true_value(true_val),
