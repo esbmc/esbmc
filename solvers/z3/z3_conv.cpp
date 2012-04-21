@@ -2711,7 +2711,7 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
     convert_bv(expr.op2(), array_val);
 
     idx = convert_member_name(expr.op0(), expr.op1());
-    //std::cout << "idx: " << idx << std::endl;
+    
     //DEBUGLOC;
     bv = z3_api.mk_tuple_update(array_var, idx, array_val);
     //DEBUGLOC;
@@ -2768,14 +2768,20 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
   {
     //std::cout << "it->is_typecast(): " << it->is_typecast() << std::endl;
     //std::cout << "name: " << it->get("name") << std::endl;
-    //std::cout << "component_name: " << rhs.get_string("component_name") << std::endl; 
+    //std::cout << "component_name: " << rhs.get_string("component_name") << std::endl;
+    //std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
+    //std::cout << "rhs.type().id(): " << rhs.type().id() << std::endl;
+    //std::cout << "it->type().id(): " << it->type().id() << std::endl;
+ 
     if (it->get("name").compare(rhs.get_string("component_name")) == 0)
       return i;
     else if (it->is_typecast())
     {
-      //std::cout << "it->pretty(): " << it->pretty() << std::endl;
+      //std::cout << "dentro do typecast it->pretty(): " << it->pretty() << std::endl;
       //std::cout << "name: " << it->op0().get_string("identifier") << std::endl;
       //std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
+      //std::cout << "rhs.type().id(): " << rhs.type().id() << std::endl;
+      //std::cout << "it->type().id(): " << it->type().id() << std::endl;
       //std::cout << "component name do rhs: " << rhs.get_string("component_name") << std::endl;
       if (it->op0().get_string("identifier").compare(rhs.get_string("component_name")) == 0)
         return i;
@@ -2811,6 +2817,11 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 
   j = convert_member_name(expr.op0(), expr);
 
+    //std::cout << "j: " << j << std::endl;
+    //std::cout << "expr.op0(): " << expr.op0().pretty() << std::endl;
+    //std::cout << "expr.op0(): " << expr.op0().components()[j] << std::endl;
+    //std::cout << "expr: " << expr.type().id() << std::endl;
+
   if (expr.op0().type().id() == "union") {
     union_varst::const_iterator cache_result = union_vars.find(
       expr.op0().get_string("identifier").c_str());
@@ -2838,6 +2849,29 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 
   bv = z3_api.mk_tuple_select(struct_var, j);
 
+
+  if (config.options.get_bool_option("k-induction"))
+  {
+    if (expr.type().is_bool() && 
+        expr.op0().type().is_struct())
+    {
+      Z3_ast cond;
+      unsigned width;
+      const struct_typet &struct_type = to_struct_type(expr.op0().type());
+      //std::cout << "struct_type.components[j].pretty(): " << struct_type.components()[j].pretty() << std::endl;
+ 
+      get_type_width(struct_type.components()[j].type(), width);
+    
+      if (struct_type.components()[j].type().id() == "signedbv")
+        cond = Z3_mk_eq(z3_ctx, bv, convert_number(1, width, true));
+      else if (struct_type.components()[j].type().id() == "unsignedbv")
+        cond = Z3_mk_eq(z3_ctx, bv, convert_number(1, width, false));
+      else
+        assert(0);
+   
+      bv = Z3_mk_ite(z3_ctx, cond, Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));    
+    }
+  }
   DEBUGLOC;
 }
 

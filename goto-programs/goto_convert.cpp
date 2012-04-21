@@ -3003,8 +3003,15 @@ void goto_convertt::get_cs_member(
   {
     if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
     {
-      if (expr.operands().size()==1)
-	    it->swap(expr);
+#if 0
+      if (!expr.operands().size())
+      {
+        exprt tmp = expr;
+        tmp.make_typecast(bool_typet());
+        new_expr.type() = bool_typet();
+        it->swap(tmp);
+      }
+#endif
       found=true;
     }
   }
