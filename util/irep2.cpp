@@ -314,7 +314,7 @@ array_type2t::cmp(const array_type2t &ref) const
     return false;
 
   // Otherwise,
-  return (array_size->type == ref.array_size->type);
+  return (array_size == ref.array_size);
 }
 
 int
