@@ -1275,6 +1275,32 @@ logical_2ops2t::logical_2ops2t(const logical_2ops2t &ref)
 {
 }
 
+bool
+logical_2ops2t::cmp(const expr2t &ref) const
+{
+  const logical_2ops2t &ref2 = static_cast<const logical_2ops2t &>(ref);
+
+  if (side_1 != ref2.side_1)
+    return false;
+
+  if (side_2 != ref2.side_2)
+    return false;
+
+  return true;
+}
+
+int
+logical_2ops2t::lt(const expr2t &ref) const
+{
+  const logical_2ops2t &ref2 = static_cast<const logical_2ops2t &>(ref);
+
+  int tmp = side_1->ltchecked(*ref2.side_1.get());
+  if (tmp != 0)
+    return tmp;
+
+  return side_2->ltchecked(*ref2.side_2.get());
+}
+
 and2t::and2t(const expr2tc val1, const expr2tc val2)
   : logic_2ops2t_body<and2t>(and_id, val1, val2)
 {
