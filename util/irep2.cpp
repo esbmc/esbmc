@@ -872,6 +872,27 @@ constant_bool2t::constant_bool2t(const constant_bool2t &ref)
 {
 }
 
+bool
+constant_bool2t::cmp(const expr2t &ref) const
+{
+  const constant_bool2t &ref2 = static_cast<const constant_bool2t &>(ref);
+  if (constant_value == ref2.constant_value)
+    return true;
+  return false;
+}
+
+int
+constant_bool2t::lt(const expr2t &ref) const
+{
+  const constant_bool2t &ref2 = static_cast<const constant_bool2t &>(ref);
+  if (constant_value < ref2.constant_value)
+    return -1;
+  else if (ref2.constant_value < constant_value)
+    return 1;
+  else
+    return 0;
+}
+
 typecast2t::typecast2t(const type2tc type, const expr2tc expr)
   : expr_body<typecast2t>(type, typecast_id), from(expr)
 {
