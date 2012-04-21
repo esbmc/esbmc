@@ -147,9 +147,7 @@ public:
   virtual void convert_smt_expr(const same_object2t &same, void *&arg) = 0;
   virtual void convert_smt_expr(const pointer_offset2t &offs, void *&arg) = 0;
   virtual void convert_smt_expr(const pointer_object2t &obj, void *&arg) = 0;
-#if 0
   virtual void convert_smt_expr(const address_of2t &obj, void *&arg) = 0;
-#endif
   virtual void convert_smt_expr(const byte_extract2t &data, void *&arg) = 0;
   virtual void convert_smt_expr(const byte_update2t &data, void *&arg) = 0;
   virtual void convert_smt_expr(const with2t &with, void *&arg) = 0;

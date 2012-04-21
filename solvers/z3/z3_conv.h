@@ -105,8 +105,6 @@ private:
   }
   void create_enum_type(Z3_type_ast &bv) const;
   void create_pointer_type(Z3_type_ast &bv) const;
-  Z3_ast convert_cmp(const exprt &expr);
-  Z3_ast convert_eq(const exprt &expr);
   Z3_ast convert_same_object(const exprt &expr);
   Z3_ast convert_invalid_object(const exprt &expr);
   Z3_ast convert_overflow_sum_sub_mul(const exprt &expr);
@@ -230,9 +228,7 @@ private:
   virtual void convert_smt_expr(const same_object2t &same, void *&bv);
   virtual void convert_smt_expr(const pointer_offset2t &offs, void *&bv);
   virtual void convert_smt_expr(const pointer_object2t &obj, void *&bv);
-#if 0
   virtual void convert_smt_expr(const address_of2t &obj, void *&bv);
-#endif
   virtual void convert_smt_expr(const byte_extract2t &data, void *&bv);
   virtual void convert_smt_expr(const byte_update2t &data, void *&bv);
   virtual void convert_smt_expr(const with2t &with, void *&bv);

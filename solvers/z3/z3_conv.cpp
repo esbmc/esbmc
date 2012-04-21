@@ -1685,7 +1685,6 @@ z3_convt::convert_smt_expr(const pointer_object2t &obj, void *&_bv)
   bv = z3_api.mk_tuple_select(pointer, 0); //select pointer offset
 }
 
-#if 0
 void
 z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
 {
@@ -1753,7 +1752,6 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
   }
 }
 
-#endif
 
 
 void
@@ -2536,86 +2534,6 @@ z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 
   return;
-}
-
-Z3_ast
-z3_convt::convert_cmp(const exprt &expr)
-{
-  DEBUGLOC;
-
-  typedef Z3_ast (*calltype)(Z3_context ctx, Z3_ast op1, Z3_ast op2);
-  calltype signedbvcall, unsignedbvcall, intcall;
-
-  if (expr.id() == "<=") {
-    intcall = Z3_mk_le;
-    signedbvcall = Z3_mk_bvsle;
-    unsignedbvcall = Z3_mk_bvule;
-  } else if (expr.id() == ">=") {
-    intcall = Z3_mk_ge;
-    signedbvcall = Z3_mk_bvsge;
-    unsignedbvcall = Z3_mk_bvuge;
-  } else if (expr.id() == "<") {
-    intcall = Z3_mk_lt;
-    signedbvcall = Z3_mk_bvslt;
-    unsignedbvcall = Z3_mk_bvult;
-  } else if (expr.id() == ">") {
-    intcall = Z3_mk_gt;
-    signedbvcall = Z3_mk_bvsgt;
-    unsignedbvcall = Z3_mk_bvugt;
-  } else {
-    throw new conv_error("Unexpected expr in convert_cmp", expr);
-  }
-
-  assert(expr.operands().size() == 2);
-  Z3_ast bv, operand[2];
-
-  convert_bv(expr.op0(), operand[0]);
-  convert_bv(expr.op1(), operand[1]);
-
-  // XXXjmorse - pointer comparison needs serious consideration
-  if (expr.op0().type().id() == "pointer")
-    operand[0] = z3_api.mk_tuple_select(operand[0], 1);
-
-  if (expr.op1().type().id() == "pointer")
-    operand[1] = z3_api.mk_tuple_select(operand[1], 1);
-
-  if (int_encoding) {
-    bv = intcall(z3_ctx, operand[0], operand[1]);
-  } else   {
-    if (expr.op1().type().id() == "signedbv" || expr.op1().type().id() ==
-        "fixedbv" || expr.op1().type().id() == "pointer") {
-      bv = signedbvcall(z3_ctx, operand[0], operand[1]);
-    } else if (expr.op1().type().id() == "unsignedbv") {
-      bv = unsignedbvcall(z3_ctx, operand[0], operand[1]);
-    } else {
-      throw new conv_error("Unexpected type in convert_cmp", expr);
-    }
-  }
-
-  return bv;
-}
-
-Z3_ast
-z3_convt::convert_eq(const exprt &expr)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 2);
-  Z3_ast bv, operand[2];
-  const exprt &op0 = expr.op0();
-  const exprt &op1 = expr.op1();
-
-  convert_bv(op0, operand[0]);
-  convert_bv(op1, operand[1]);
-
-  if (expr.id() == "=")
-    bv = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
-  else
-    bv = Z3_mk_distinct(z3_ctx, 2, operand);
-
-  DEBUGLOC;
-
-  return bv;
 }
 
 Z3_ast
@@ -3444,7 +3362,6 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
   DEBUGLOC;
 }
 
-#if 0
 void
 z3_convt::convert_identifier_pointer(const expr2t &expr, std::string symbol,
                                      Z3_ast &bv)
@@ -3559,7 +3476,6 @@ z3_convt::convert_identifier_pointer(const expr2t &expr, std::string symbol,
     assert_formula(isfalse);
   }
 }
-#endif
 
 void
 z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
@@ -4980,9 +4896,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_logical_not(expr, bv);
   else if (exprid == "=" || exprid == "notequal")
     convert_equality(expr, bv);
-  else if (exprid == "<=" || exprid == "<" || exprid == ">="
-           || exprid == ">")
-    bv = convert_cmp(expr);
   else if (exprid == "unary+")
     convert_z3_expr(expr.op0(), bv);
   else if (exprid == "+" || exprid == "-")
