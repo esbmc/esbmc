@@ -279,10 +279,9 @@ array_type2t::lt(const type2t &ref) const
 {
   const array_type2t &ref2 = static_cast<const array_type2t&>(ref);
 
-  if (subtype < ref2.subtype)
-    return -1;
-  if (ref2.subtype < subtype)
-    return 1;
+  int tmp = subtype->lt(*ref2.subtype.get());
+  if (tmp != 0)
+    return tmp;
 
   if (size_is_infinite < ref2.size_is_infinite)
     return -1;
@@ -315,11 +314,7 @@ pointer_type2t::lt(const type2t &ref) const
 {
   const pointer_type2t &ref2 = static_cast<const pointer_type2t&>(ref);
 
-  if (subtype < ref2.subtype)
-    return -1;
-  if (ref2.subtype < subtype)
-    return 1;
-  return 0;
+  return subtype->lt(*ref2.subtype.get());
 }
 
 empty_type2t::empty_type2t(void)
