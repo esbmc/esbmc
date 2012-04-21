@@ -279,6 +279,14 @@ array_type2t::lt(const type2t &ref) const
 {
   const array_type2t &ref2 = static_cast<const array_type2t&>(ref);
 
+  // Optimise lt - if both operands are the same type, just call lt method.
+  if (subtype->type_id < ref2.subtype->type_id)
+    return -1;
+  if (subtype->type_id > ref2.subtype->type_id)
+    return 1;
+
+  // So they're the same type, call lt. Calling without checking the type first
+  // would lead to explosions.
   int tmp = subtype->lt(*ref2.subtype.get());
   if (tmp != 0)
     return tmp;
@@ -286,6 +294,11 @@ array_type2t::lt(const type2t &ref) const
   if (size_is_infinite < ref2.size_is_infinite)
     return -1;
   if (size_is_infinite > ref2.size_is_infinite)
+    return 1;
+
+  if (array_size->expr_id < ref2.array_size->expr_id)
+    return -1;
+  if (array_size->expr_id > ref2.array_size->expr_id)
     return 1;
 
   return array_size->lt(*ref2.array_size.get());
@@ -313,6 +326,11 @@ int
 pointer_type2t::lt(const type2t &ref) const
 {
   const pointer_type2t &ref2 = static_cast<const pointer_type2t&>(ref);
+
+  if (subtype->type_id < ref2.subtype->type_id)
+    return -1;
+  if (subtype->type_id > ref2.subtype->type_id)
+    return 1;
 
   return subtype->lt(*ref2.subtype.get());
 }
