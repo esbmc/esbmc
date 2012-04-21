@@ -1458,6 +1458,20 @@ neg2t::neg2t(const neg2t &ref)
 {
 }
 
+bool
+neg2t::cmp(const expr2t &ref) const
+{
+  const neg2t &ref2 = static_cast<const neg2t &>(ref);
+  return value == ref2.value;
+}
+
+int
+neg2t::lt(const expr2t &ref) const
+{
+  const neg2t &ref2 = static_cast<const neg2t &>(ref);
+  return value->ltchecked(*ref2.value.get());
+}
+
 abs2t::abs2t(const type2tc type, const expr2tc _value)
   : arith_body<abs2t>(type, abs_id), value(_value)
 {
