@@ -1984,6 +1984,22 @@ zero_length_string2t::zero_length_string2t(const zero_length_string2t &ref)
 {
 }
 
+bool
+zero_length_string2t::cmp(const expr2t &ref) const
+{
+  const zero_length_string2t &ref2 = static_cast<const zero_length_string2t &>
+                                                (ref);
+  return string == ref2.string;
+}
+
+int
+zero_length_string2t::lt(const expr2t &ref) const
+{
+  const zero_length_string2t &ref2 = static_cast<const zero_length_string2t &>
+                                                (ref);
+  return string->ltchecked(*ref2.string.get());
+}
+
 isnan2t::isnan2t(const expr2tc val)
   : lops2_body<isnan2t>(is_nan_id), value(val)
 {
