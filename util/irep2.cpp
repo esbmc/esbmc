@@ -1624,6 +1624,20 @@ pointer_offset2t::pointer_offset2t(const pointer_offset2t &ref)
 {
 }
 
+bool
+pointer_offset2t::cmp(const expr2t &ref) const
+{
+  const pointer_offset2t &ref2 = static_cast<const pointer_offset2t &>(ref);
+  return pointer_obj == ref2.pointer_obj;
+}
+
+int
+pointer_offset2t::lt(const expr2t &ref) const
+{
+  const pointer_offset2t &ref2 = static_cast<const pointer_offset2t &>(ref);
+  return pointer_obj->ltchecked(*ref2.pointer_obj.get());
+}
+
 pointer_object2t::pointer_object2t(const type2tc type, const expr2tc val)
   : arith_body<pointer_object2t>(type, pointer_object_id), pointer_obj(val)
 {
