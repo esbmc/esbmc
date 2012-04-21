@@ -1143,6 +1143,32 @@ rel2t::rel2t(const rel2t &ref)
 {
 }
 
+bool
+rel2t::cmp(const expr2t &ref) const
+{
+  const rel2t &ref2 = static_cast<const rel2t &>(ref);
+
+  if (side_1 != ref2.side_1)
+    return false;
+
+  if (side_2 != ref2.side_2)
+    return false;
+
+  return true;
+}
+
+int
+rel2t::lt(const expr2t &ref) const
+{
+  const rel2t &ref2 = static_cast<const rel2t &>(ref);
+
+  int tmp = side_1->ltchecked(*ref2.side_1.get());
+  if (tmp != 0)
+    return tmp;
+
+  return side_2->ltchecked(*ref2.side_2.get());
+}
+
 equality2t::equality2t(const expr2tc val1, const expr2tc val2)
   : rel_body<equality2t>(equality_id, val1, val2)
 {
