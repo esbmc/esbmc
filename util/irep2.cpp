@@ -1835,6 +1835,39 @@ with2t::with2t(const with2t &ref)
 {
 }
 
+bool
+with2t::cmp(const expr2t &ref) const
+{
+  const with2t &ref2 = static_cast<const with2t &>(ref);
+ 
+  if (source_data != ref2.source_data)
+    return false;
+
+  if (update_field != ref2.update_field)
+    return false;
+
+  if (update_data != ref2.update_data)
+    return false;
+
+  return true;
+}
+
+int
+with2t::lt(const expr2t &ref) const
+{
+  const with2t &ref2 = static_cast<const with2t &>(ref);
+
+  int tmp = source_data->ltchecked(*ref2.source_data.get());
+  if (tmp != 0)
+    return tmp;
+
+  tmp = update_field->ltchecked(*ref2.update_field.get());
+  if (tmp != 0)
+    return tmp;
+
+  return update_data->ltchecked(*ref2.update_data.get());
+}
+
 member2t::member2t(const type2tc type, const expr2tc source,
                    const constant_string2t &idx)
   : datatype_body<member2t>(type, member_id), source_data(source),
