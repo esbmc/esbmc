@@ -1648,6 +1648,20 @@ pointer_object2t::pointer_object2t(const pointer_object2t &ref)
 {
 }
 
+bool
+pointer_object2t::cmp(const expr2t &ref) const
+{
+  const pointer_object2t &ref2 = static_cast<const pointer_object2t &>(ref);
+  return pointer_obj == ref2.pointer_obj;
+}
+
+int
+pointer_object2t::lt(const expr2t &ref) const
+{
+  const pointer_object2t &ref2 = static_cast<const pointer_object2t &>(ref);
+  return pointer_obj->ltchecked(*ref2.pointer_obj.get());
+}
+
 address_of2t::address_of2t(const type2tc subtype, const expr2tc val)
   : arith_body<address_of2t>(subtype, address_of_id),
                              pointer_obj(val)
