@@ -2863,13 +2863,13 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
       get_type_width(struct_type.components()[j].type(), width);
     
       if (struct_type.components()[j].type().id() == "signedbv")
-        cond = Z3_mk_eq(z3_ctx, bv, convert_number(1, width, true));
+        cond = Z3_mk_eq(z3_ctx, bv, convert_number(0, width, true));
       else if (struct_type.components()[j].type().id() == "unsignedbv")
-        cond = Z3_mk_eq(z3_ctx, bv, convert_number(1, width, false));
+        cond = Z3_mk_eq(z3_ctx, bv, convert_number(0, width, false));
       else
         assert(0);
    
-      bv = Z3_mk_ite(z3_ctx, cond, Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));    
+      bv = Z3_mk_ite(z3_ctx, cond, Z3_mk_false(z3_ctx), Z3_mk_true(z3_ctx));    
     }
   }
   DEBUGLOC;
