@@ -288,7 +288,7 @@ array_type2t::lt(const type2t &ref) const
   if (size_is_infinite > ref2.size_is_infinite)
     return 1;
 
-  return array_size->cmp(*ref2.array_size.get());
+  return array_size->lt(*ref2.array_size.get());
 }
 
 pointer_type2t::pointer_type2t(type2tc _sub)
