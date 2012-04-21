@@ -1715,6 +1715,40 @@ byte_extract2t::byte_extract2t(const byte_extract2t &ref)
 {
 }
 
+bool
+byte_extract2t::cmp(const expr2t &ref) const
+{
+  const byte_extract2t &ref2 = static_cast<const byte_extract2t &>(ref);
+ 
+  if (big_endian != ref2.big_endian)
+    return false;
+
+  if (source_value != ref2.source_value)
+    return false;
+
+  if (source_offset != ref2.source_offset)
+    return false;
+
+  return true;
+}
+
+int
+byte_extract2t::lt(const expr2t &ref) const
+{
+  const byte_extract2t &ref2 = static_cast<const byte_extract2t &>(ref);
+
+  if (big_endian < ref2.big_endian)
+    return -1;
+  if (big_endian > ref2.big_endian)
+    return 1;
+
+  int tmp = source_value->ltchecked(*ref2.source_value.get());
+  if (tmp != 0)
+    return tmp;
+
+  return source_offset->ltchecked(*ref2.source_offset.get());
+}
+
 byte_update2t::byte_update2t(const type2tc type, bool is_big_endian,
                              const expr2tc source, const expr2tc offs,
                              const expr2tc update)
