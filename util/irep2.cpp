@@ -38,6 +38,21 @@ type_body<derived>::operator==(const type2t &ref) const
 }
 
 template<class derived>
+bool
+type_body<derived>::operator<(const type2t &ref) const
+{
+
+  if (type_id < ref.type_id)
+    return -1;
+  if (type_id > ref.type_id)
+    return 1;
+
+  const derived &castedref = dynamic_cast<const derived&>(ref);
+  const derived &thiscasted = dynamic_cast<const derived&>(*this);
+  return thiscasted.lt(castedref);
+}
+
+template<class derived>
 void
 bv_type_body<derived>::convert_smt_type(const prop_convt &obj, void *&arg) const
 {
@@ -56,6 +71,21 @@ bv_type_body<derived>::operator==(const type2t &ref) const
   const derived &castedref = dynamic_cast<const derived&>(ref);
   const derived &thiscasted = dynamic_cast<const derived&>(*this);
   return thiscasted.cmp(castedref);
+}
+
+template<class derived>
+bool
+bv_type_body<derived>::operator<(const type2t &ref) const
+{
+
+  if (type_id < ref.type_id)
+    return -1;
+  if (type_id > ref.type_id)
+    return 1;
+
+  const derived &castedref = dynamic_cast<const derived&>(ref);
+  const derived &thiscasted = dynamic_cast<const derived&>(*this);
+  return thiscasted.lt(castedref);
 }
 
 template<class derived>
@@ -79,6 +109,21 @@ struct_union_type_body2t<derived>::operator==(const type2t &ref) const
   return thiscasted.cmp(castedref);
 }
 
+template<class derived>
+bool
+struct_union_type_body2t<derived>::operator<(const type2t &ref) const
+{
+
+  if (type_id < ref.type_id)
+    return -1;
+  if (type_id > ref.type_id)
+    return 1;
+
+  const derived &castedref = dynamic_cast<const derived&>(ref);
+  const derived &thiscasted = dynamic_cast<const derived&>(*this);
+  return thiscasted.lt(castedref);
+}
+
 bv_type2t::bv_type2t(type2t::type_ids id, unsigned int _width)
   : type_body<bv_type2t>(id),
     width(_width)
@@ -97,6 +142,17 @@ bv_type2t::cmp(const bv_type2t &ref) const
   if (width == ref.width)
     return true;
   return false;
+}
+
+int
+bv_type2t::lt(const bv_type2t &ref) const
+{
+  if (width < ref.width)
+    return -1;
+  if (width > ref.width)
+    return 1;
+
+  return 0;
 }
 
 struct_union_type2t::struct_union_type2t(type_ids id,
@@ -128,6 +184,33 @@ struct_union_type2t::cmp(const struct_union_type2t &ref) const
   return true;
 }
 
+int
+struct_union_type2t::lt(const struct_union_type2t &ref) const
+{
+
+  if (name < ref.name)
+    return -1;
+  if (name > ref.name)
+    return 1;
+
+  if (members.size() < ref.members.size())
+    return -1;
+  if (members.size() > ref.members.size())
+    return 1;
+
+  if (members < ref.members)
+    return -1;
+  if (members > ref.members)
+    return 1;
+
+  if (member_names < ref.member_names)
+    return -1;
+  if (member_names > ref.member_names)
+    return 1;
+
+  return 0;
+}
+
 bool_type2t::bool_type2t(void)
   : type_body<bool_type2t>(bool_id)
 {
@@ -145,6 +228,12 @@ bool_type2t::cmp(const bool_type2t &ref __attribute__((unused))) const
   return true; // No data stored in bool type
 }
 
+int
+bool_type2t::lt(const bool_type2t &ref __attribute__((unused))) const
+{
+  return 0; // No data stored in bool type
+}
+
 signedbv_type2t::signedbv_type2t(unsigned int width)
   : bv_type_body<signedbv_type2t>(signedbv_id, width)
 {
@@ -156,6 +245,12 @@ signedbv_type2t::cmp(const signedbv_type2t &ref) const
   return bv_type2t::cmp(ref);
 }
 
+int
+signedbv_type2t::lt(const signedbv_type2t &ref) const
+{
+  return bv_type2t::lt(ref);
+}
+
 unsignedbv_type2t::unsignedbv_type2t(unsigned int width)
   : bv_type_body<unsignedbv_type2t>(unsignedbv_id, width)
 {
@@ -165,6 +260,12 @@ bool
 unsignedbv_type2t::cmp(const unsignedbv_type2t &ref) const
 {
   return bv_type2t::cmp(ref);
+}
+
+int
+unsignedbv_type2t::lt(const unsignedbv_type2t &ref) const
+{
+  return bv_type2t::lt(ref);
 }
 
 array_type2t::array_type2t(const type2tc t, const expr2tc s, bool inf)
@@ -216,6 +317,23 @@ array_type2t::cmp(const array_type2t &ref) const
   return (array_size->type == ref.array_size->type);
 }
 
+int
+array_type2t::lt(const array_type2t &ref) const
+{
+
+  if (subtype < ref.subtype)
+    return -1;
+  if (ref.subtype < subtype)
+    return 1;
+
+  if (size_is_infinite < ref.size_is_infinite)
+    return -1;
+  if (size_is_infinite > ref.size_is_infinite)
+    return 1;
+
+  return array_size->cmp(*ref.array_size.get());
+}
+
 pointer_type2t::pointer_type2t(type2tc _sub)
   : type_body<pointer_type2t>(pointer_id), subtype(_sub)
 {
@@ -232,6 +350,17 @@ pointer_type2t::cmp(const pointer_type2t &ref) const
 {
 
   return subtype == ref.subtype;
+}
+
+int
+pointer_type2t::lt(const pointer_type2t &ref) const
+{
+
+  if (subtype < ref.subtype)
+    return -1;
+  if (ref.subtype < subtype)
+    return 1;
+  return 0;
 }
 
 empty_type2t::empty_type2t(void)
@@ -251,6 +380,12 @@ empty_type2t::cmp(const empty_type2t &ref __attribute__((unused))) const
   return true; // Two empty types always compare true.
 }
 
+int
+empty_type2t::lt(const empty_type2t &ref __attribute__((unused))) const
+{
+  return 0; // Two empty types always same.
+}
+
 symbol_type2t::symbol_type2t(const dstring sym_name)
   : type_body<symbol_type2t>(symbol_id), symbol_name(sym_name)
 {
@@ -266,6 +401,16 @@ bool
 symbol_type2t::cmp(const symbol_type2t &ref) const
 {
   return symbol_name == ref.symbol_name;
+}
+
+int
+symbol_type2t::lt(const symbol_type2t &ref) const
+{
+  if (symbol_name < ref.symbol_name)
+    return -1;
+  if (ref.symbol_name < symbol_name)
+    return 1;
+  return 0;
 }
 
 struct_type2t::struct_type2t(std::vector<type2tc> &members,
@@ -294,6 +439,13 @@ struct_type2t::cmp(const struct_type2t &ref) const
   return struct_union_type2t::cmp(ref);
 }
 
+int
+struct_type2t::lt(const struct_type2t &ref) const
+{
+
+  return struct_union_type2t::lt(ref);
+}
+
 union_type2t::union_type2t(std::vector<type2tc> &members,
                            std::vector<std::string> memb_names,
                            std::string name)
@@ -318,6 +470,13 @@ union_type2t::cmp(const union_type2t &ref) const
 {
 
   return struct_union_type2t::cmp(ref);
+}
+
+int
+union_type2t::lt(const union_type2t &ref) const
+{
+
+  return struct_union_type2t::lt(ref);
 }
 
 fixedbv_type2t::fixedbv_type2t(unsigned int _width, unsigned int integer)
@@ -345,6 +504,23 @@ fixedbv_type2t::cmp(const fixedbv_type2t &ref) const
   return true;
 }
 
+int
+fixedbv_type2t::lt(const fixedbv_type2t &ref) const
+{
+
+  if (width < ref.width)
+    return -1;
+  if (width > ref.width)
+    return 1;
+
+  if (integer_bits < ref.integer_bits)
+    return -1;
+  if (integer_bits > ref.integer_bits)
+    return 1;
+
+  return 0;
+}
+
 code_type2t::code_type2t(void)
   : type_body<code_type2t>(code_id)
 {
@@ -362,6 +538,12 @@ code_type2t::cmp(const code_type2t &ref) const
   return true; // All code is the same. Ish.
 }
 
+int
+code_type2t::lt(const code_type2t &ref) const
+{
+  return 0; // All code is the same. Ish.
+}
+
 string_type2t::string_type2t()
   : type_body<string_type2t>(string_id)
 {
@@ -377,6 +559,12 @@ bool
 string_type2t::cmp(const string_type2t &ref) const
 {
   return true; // All strings are the same.
+}
+
+int
+string_type2t::lt(const string_type2t &ref) const
+{
+  return 0; // All strings are the same.
 }
 
 /*************************** Base expr2t definitions **************************/
