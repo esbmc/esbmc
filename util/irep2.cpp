@@ -562,19 +562,28 @@ void expr2t::convert_smt(prop_convt &obj, void *&arg) const
 bool
 expr2t::operator==(const expr2t &ref) const
 {
+  if (!expr2t::cmp(ref))
+    return false;
+
   return cmp(ref);
 }
 
 bool
 expr2t::operator!=(const expr2t &ref) const
 {
-  return !cmp(ref);
+  return !(*this == ref);
 }
 
 bool
 expr2t::operator<(const expr2t &ref) const
 {
-  return (lt(ref) < 0);
+  int tmp = expr2t::lt(ref);
+  if (tmp < 0)
+    return true;
+  else if (tmp > 0)
+    return false;
+  else
+    return (lt(ref) < 0);
 }
 
 bool
