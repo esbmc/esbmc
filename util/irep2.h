@@ -78,6 +78,7 @@ public:
   bool operator==(const type2t &ref) const;
   bool operator!=(const type2t &ref) const;
   bool operator<(const type2t &ref) const;
+  int ltchecked(const type2t &ref) const;
   virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
 
@@ -395,6 +396,7 @@ public:
   bool operator==(const expr2t &ref) const;
   bool operator<(const expr2t &ref) const;
   bool operator!=(const expr2t &ref) const;
+  int ltchecked(const expr2t &ref) const;
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
 

@@ -33,6 +33,16 @@ type2t::operator<(const type2t &ref) const
   return (lt(ref) < 0);
 }
 
+int
+type2t::ltchecked(const type2t &ref) const
+{
+  int tmp = type2t::lt(ref);
+  if (tmp != 0)
+    return tmp;
+
+  return lt(ref);
+}
+
 bool
 type2t::cmp(const type2t &ref) const
 {
@@ -279,15 +289,7 @@ array_type2t::lt(const type2t &ref) const
 {
   const array_type2t &ref2 = static_cast<const array_type2t&>(ref);
 
-  // Optimise lt - if both operands are the same type, just call lt method.
-  if (subtype->type_id < ref2.subtype->type_id)
-    return -1;
-  if (subtype->type_id > ref2.subtype->type_id)
-    return 1;
-
-  // So they're the same type, call lt. Calling without checking the type first
-  // would lead to explosions.
-  int tmp = subtype->lt(*ref2.subtype.get());
+  int tmp = subtype->ltchecked(*ref2.subtype.get());
   if (tmp != 0)
     return tmp;
 
@@ -296,12 +298,7 @@ array_type2t::lt(const type2t &ref) const
   if (size_is_infinite > ref2.size_is_infinite)
     return 1;
 
-  if (array_size->expr_id < ref2.array_size->expr_id)
-    return -1;
-  if (array_size->expr_id > ref2.array_size->expr_id)
-    return 1;
-
-  return array_size->lt(*ref2.array_size.get());
+  return array_size->ltchecked(*ref2.array_size.get());
 }
 
 pointer_type2t::pointer_type2t(type2tc _sub)
@@ -327,12 +324,7 @@ pointer_type2t::lt(const type2t &ref) const
 {
   const pointer_type2t &ref2 = static_cast<const pointer_type2t&>(ref);
 
-  if (subtype->type_id < ref2.subtype->type_id)
-    return -1;
-  if (subtype->type_id > ref2.subtype->type_id)
-    return 1;
-
-  return subtype->lt(*ref2.subtype.get());
+  return subtype->ltchecked(*ref2.subtype.get());
 }
 
 empty_type2t::empty_type2t(void)
@@ -584,6 +576,16 @@ expr2t::operator<(const expr2t &ref) const
     return false;
   else
     return (lt(ref) < 0);
+}
+
+int
+expr2t::ltchecked(const expr2t &ref) const
+{
+  int tmp = expr2t::lt(ref);
+  if (tmp != 0)
+    return tmp;
+
+  return lt(ref);
 }
 
 bool
