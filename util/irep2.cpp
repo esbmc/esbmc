@@ -1023,6 +1023,27 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
+bool
+constant_string2t::cmp(const expr2t &ref) const
+{
+  const constant_string2t &ref2 = static_cast<const constant_string2t &> (ref);
+  if (value == ref2.value)
+    return true;
+  return false;
+}
+
+int
+constant_string2t::lt(const expr2t &ref) const
+{
+  const constant_string2t &ref2 = static_cast<const constant_string2t &> (ref);
+  if (value < ref2.value)
+    return -1;
+  else if (ref2.value < value)
+    return 1;
+  else
+    return 0;
+}
+
 constant_array2t::constant_array2t(const type2tc type,
                                    const std::vector<expr2tc> &members)
   : const_expr_body<constant_array2t>(type, constant_array_id),
