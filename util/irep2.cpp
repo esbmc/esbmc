@@ -1041,6 +1041,17 @@ constant_int2t::lt(const expr2t &ref) const
   return constant_value.compare(ref2.constant_value);
 }
 
+list_of_memberst
+constant_int2t::tostring(void) const
+{
+  list_of_memberst membs;
+  char buffer[256], *buf;
+
+  buf = constant_value.as_string(buffer, 256);
+  membs.push_back(member_entryt("value", std::string(buf)));
+  return membs;
+}
+
 constant_bool2t::constant_bool2t(bool value)
   : const_expr_body<constant_bool2t>(type2tc(new bool_type2t()),
                                      constant_bool_id),
