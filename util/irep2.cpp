@@ -1853,6 +1853,14 @@ arith_2op2t::lt(const expr2t &ref) const
   return part_2->ltchecked(*ref2.part_2.get());
 }
 
+list_of_memberst
+arith_2op2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"operand0", &part_1,
+                                (const char *)"operand0", &part_2,
+                                (const char *)"");
+}
+
 add2t::add2t(const type2tc type, const expr2tc val1, const expr2tc val2)
   : arith_2ops_body<add2t>(type, add_id, val1, val2)
 {
