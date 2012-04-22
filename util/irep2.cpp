@@ -2407,6 +2407,13 @@ zero_length_string2t::lt(const expr2t &ref) const
   return string->ltchecked(*ref2.string.get());
 }
 
+list_of_memberst
+zero_length_string2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"string", &string,
+                                (const char *)"");
+}
+
 isnan2t::isnan2t(const expr2tc val)
   : lops2_body<isnan2t>(is_nan_id), value(val)
 {
