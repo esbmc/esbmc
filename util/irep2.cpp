@@ -93,6 +93,21 @@ type2t::lt(const type2t &ref) const
   return 0;
 }
 
+const char *type2t::type_names[] = {
+  "bool",
+  "empty",
+  "symbol",
+  "struct",
+  "union",
+  "code",
+  "array",
+  "poiner",
+  "unsignedbv",
+  "signedbv",
+  "fixedbv",
+  "string"
+};
+
 template<class derived>
 void
 type_body<derived>::convert_smt_type(const prop_convt &obj, void *&arg) const
