@@ -1728,23 +1728,25 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
     bv = z3_api.mk_tuple_update(bv, 1, num);
   } else if (obj.pointer_obj->expr_id == expr2t::symbol_id) {
 // XXXjmorse             obj.pointer_obj->expr_id == expr2t::code_id) {
-    convert_identifier_pointer(expr.op0(), expr.op0().get_string("identifier"),
-                               bv);
+
+    const symbol2t &symbol = dynamic_cast<const symbol2t&>
+                                         (*obj.pointer_obj.get());
+    convert_identifier_pointer(obj.pointer_obj, symbol.name.as_string(), bv);
   } else if (obj.pointer_obj->expr_id == expr2t::constant_string_id) {
     // XXXjmorse - we should avoid encoding invalid characters in the symbol,
     // but this works for now.
     const constant_string2t &str = dynamic_cast<const constant_string2t&>
                                                (*obj.pointer_obj.get());
     std::string identifier = "address_of_str_const(" + str.value + ")";
-    convert_identifier_pointer(expr.op0(), identifier, bv);
+    convert_identifier_pointer(obj.pointer_obj, identifier, bv);
   } else if (obj.pointer_obj->expr_id == expr2t::if_id) {
     // We can't nondeterministically take the address of something; So instead
     // rewrite this to be if (cond) ? &a : &b;.
 
     const if2t &ifval = dynamic_cast<const if2t &>(*obj.pointer_obj.get());
 
-    expr2tc addrof1(new address_of2t(obj.type, ifval.true_val));
-    expr2tc addrof2(new address_of2t(obj.type, ifval.false_val));
+    expr2tc addrof1(new address_of2t(obj.type, ifval.true_value));
+    expr2tc addrof2(new address_of2t(obj.type, ifval.false_value));
     if2t newif(obj.type, ifval.cond, addrof1, addrof2);
     newif.convert_smt(*this, (void*&)bv);
   } else {
@@ -3363,7 +3365,7 @@ z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
 }
 
 void
-z3_convt::convert_identifier_pointer(const expr2t &expr, std::string symbol,
+z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                      Z3_ast &bv)
 {
   Z3_ast num;
@@ -3420,13 +3422,13 @@ z3_convt::convert_identifier_pointer(const expr2t &expr, std::string symbol,
 
     // Another thing to note is that the end var must be /the size of the obj/
     // from start. Express this in irep.
-    uint64_t type_size = expr.type->get_width() / 8;
+    uint64_t type_size = expr->type->get_width() / 8;
     expr2tc const_offs(new constant_int2t(ptr_loc_type, BigInt(type_size)));
     expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, const_offs));
     expr2tc endisequal(new equality2t(start_plus_offs, end_sym));
 
     // Also record the amount of memory space we're working with for later usage
-    total_mem_space += pointer_offset_size(*expr.type.get()).to_long() + 1;
+    total_mem_space += pointer_offset_size(*expr->type.get()).to_long() + 1;
 
     // Assert that start + offs == end
     Z3_ast offs_eq;
@@ -3443,7 +3445,8 @@ z3_convt::convert_identifier_pointer(const expr2t &expr, std::string symbol,
 
     // We'll place constraints on those addresses later, in finalize_pointer_chain
 
-    addr_space_data[obj_num] = pointer_offset_size(expr.type()).to_long() + 1;
+    addr_space_data[obj_num] =
+          pointer_offset_size(*expr->type.get()).to_long() + 1;
 
     Z3_ast start_ast, end_ast;
     start_sym->convert_smt(*this, (void*&)start_ast);
@@ -3502,7 +3505,8 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
     obj_num = pointer_logic.get_null_object();
   } else {
     // add object won't duplicate objs for identical exprs (it's a map)
-    obj_num = pointer_logic.add_object(expr);
+    assert(0 && "jmorse has now broken pointer logic");
+    //obj_num = pointer_logic.add_object(expr);
   }
 
   bv = z3_api.mk_var(symbol.c_str(), tuple_type);
