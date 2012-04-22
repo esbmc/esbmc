@@ -1778,6 +1778,13 @@ neg2t::lt(const expr2t &ref) const
   return value->ltchecked(*ref2.value.get());
 }
 
+list_of_memberst
+neg2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"value", &value,
+                                (const char *)"");
+}
+
 abs2t::abs2t(const type2tc type, const expr2tc _value)
   : arith_body<abs2t>(type, abs_id), value(_value)
 {
