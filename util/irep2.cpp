@@ -2031,6 +2031,13 @@ address_of2t::lt(const expr2t &ref) const
   return pointer_obj->ltchecked(*ref2.pointer_obj.get());
 }
 
+list_of_memberst
+address_of2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"pointer_obj", &pointer_obj,
+                                (const char *)"");
+}
+
 byte_ops2t::byte_ops2t(const type2tc type, expr_ids id)
   : expr_body<byte_ops2t>(type, id)
 {
