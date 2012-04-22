@@ -1572,19 +1572,19 @@ lops2t::lops2t(const lops2t &ref)
 bool
 lops2t::cmp(const expr2t &ref) const
 {
-  assert(0 && "datatype_ops2t is abstract-ish");
+  assert(0 && "lops2t is abstract-ish");
 }
 
 int
 lops2t::lt(const expr2t &ref) const
 {
-  assert(0 && "datatype_ops2t is abstract-ish");
+  assert(0 && "lops2t is abstract-ish");
 }
 
 list_of_memberst
 lops2t::tostring(void) const
 {
-  assert(0 && "datatype_ops2t is abstract-ish");
+  assert(0 && "lops2t is abstract-ish");
   abort();
 }
 
@@ -1823,19 +1823,19 @@ arith2t::arith2t(const arith2t &ref)
 bool
 arith2t::cmp(const expr2t &ref) const
 {
-  assert(0 && "datatype_ops2t is abstract-ish");
+  assert(0 && "arith2t is abstract-ish");
 }
 
 int
 arith2t::lt(const expr2t &ref) const
 {
-  assert(0 && "datatype_ops2t is abstract-ish");
+  assert(0 && "arith2t is abstract-ish");
 }
 
 list_of_memberst
 arith2t::tostring(void) const
 {
-  assert(0 && "datatype_ops2t is abstract-ish");
+  assert(0 && "arith2t is abstract-ish");
   abort();
 }
 
@@ -2136,19 +2136,19 @@ byte_ops2t::byte_ops2t(const byte_ops2t &ref)
 bool
 byte_ops2t::cmp(const expr2t &ref) const
 {
-  assert(0 && "datatype_ops2t is abstract-ish");
+  assert(0 && "byte_ops2t is abstract-ish");
 }
 
 int
 byte_ops2t::lt(const expr2t &ref) const
 {
-  assert(0 && "datatype_ops2t is abstract-ish");
+  assert(0 && "byte_ops2t is abstract-ish");
 }
 
 list_of_memberst
 byte_ops2t::tostring(void) const
 {
-  assert(0 && "datatype_ops2t is abstract-ish");
+  assert(0 && "byte_ops2t is abstract-ish");
   abort();
 }
 
