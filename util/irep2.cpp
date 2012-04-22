@@ -2290,6 +2290,15 @@ member2t::lt(const expr2t &ref) const
   return member.ltchecked(ref2.member);
 }
 
+list_of_memberst
+member2t::tostring(void) const
+{
+  list_of_memberst memb;
+
+  memb.push_back(member_entryt("source", source_data->pretty(2)));
+  memb.push_back(member_entryt("member name", member.value));
+  return memb;
+}
 
 index2t::index2t(const type2tc type, const expr2tc source,
                  const expr2tc _index)
