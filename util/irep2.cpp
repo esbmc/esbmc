@@ -1142,6 +1142,27 @@ constant_datatype2t::lt(const expr2t &ref) const
     return 0;
 }
 
+list_of_memberst
+constant_datatype2t::tostring(void) const
+{
+  list_of_memberst membs;
+  char buffer[256];
+  const struct_union_type2t &type2 = static_cast<const struct_union_type2t&>
+                                                (*type.get());
+
+  unsigned int i;
+  for (i = 0; i < datatype_members.size(); i++) {
+    snprintf(buffer, 255, "field \"%s\" (%d)", type2.member_names[i].c_str(),i);
+    buffer[255] = '\0';
+    list_of_memberst tmp = tostring_func<expr2tc>((const char *)buffer,
+                                                  &datatype_members[i],
+                                                  (const char *)"");
+    membs.push_back(tmp[0]);
+  }
+
+  return membs;
+}
+
 constant_struct2t::constant_struct2t(const type2tc type,
                                      const std::vector<expr2tc> &members)
   : const_datatype_body<constant_struct2t>(type, constant_struct_id, members)
