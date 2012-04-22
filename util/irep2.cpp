@@ -769,6 +769,58 @@ expr2t::lt(const expr2t &ref) const
   return type->ltchecked(*ref.type.get());
 }
 
+const char *expr2t::expr_names[] = {
+  "constant_int",
+  "constant_bool",
+  "constant_string",
+  "constant_struct",
+  "constant_union",
+  "constant_array",
+  "constant_array_of",
+  "symbol",
+  "typecast",
+  "if",
+  "equality",
+  "notequal",
+  "lessthan",
+  "greaterthan",
+  "lessthanequal",
+  "greaterthanequal",
+  "not",
+  "and",
+  "or",
+  "xor",
+  "bitand",
+  "bitor",
+  "bitxor",
+  "bitnand",
+  "bitnor",
+  "bitnxor",
+  "lshr",
+  "neg",
+  "abs",
+  "add",
+  "sub",
+  "mul",
+  "div",
+  "modulus",
+  "shl",
+  "ashr",
+  "dynamic_object",
+  "same_object",
+  "pointer_offset",
+  "pointer_object",
+  "address_of",
+  "byte_extract",
+  "byte_update",
+  "with",
+  "member",
+  "index",
+  "zero_string",
+  "zero_length_string",
+  "is_nan"
+};
+
 /***************************** Templated expr body ****************************/
 
 template <class derived>

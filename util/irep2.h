@@ -426,6 +426,8 @@ public:
 
   /** Type of this expr. All exprs have a type. */
   const type2tc type;
+
+  static const char *expr_names[];
 };
 
 template <class derived>
