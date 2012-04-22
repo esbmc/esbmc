@@ -2172,6 +2172,18 @@ byte_update2t::lt(const expr2t &ref) const
   return update_value->ltchecked(*ref2.update_value.get());
 }
 
+list_of_memberst
+byte_update2t::tostring(void) const
+{
+  list_of_memberst membs =
+         tostring_func<expr2tc>((const char *)"source_value", &source_value,
+                                (const char *)"source_offset", &source_offset,
+                                (const char *)"update_value", &update_value,
+                                (const char *)"");
+  membs.push_back(member_entryt("big_endian", (big_endian) ? "true" : "false"));
+  return membs;
+}
+
 datatype_ops2t::datatype_ops2t(const type2tc type, expr_ids id)
   : expr_body<datatype_ops2t>(type, id)
 {
