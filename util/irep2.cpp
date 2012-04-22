@@ -286,7 +286,7 @@ struct_union_type2t::tostring(unsigned int indent) const
   forall_types(it, members) {
     snprintf(bees, 255, "member \"%s\" (%d)", member_names[i].c_str(), i);
     bees[255] = '\0';
-    membs.push_back(member_entryt(std::string(bees), (*it)->pretty(2)));
+    membs.push_back(member_entryt(std::string(bees), (*it)->pretty(indent +2)));
   }
 
   return membs;
