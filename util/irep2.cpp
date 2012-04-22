@@ -2242,6 +2242,15 @@ with2t::lt(const expr2t &ref) const
   return update_data->ltchecked(*ref2.update_data.get());
 }
 
+list_of_memberst
+with2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"source_data", &source_data,
+                                (const char *)"update_field", &update_field,
+                                (const char *)"update_data", &update_data,
+                                (const char *)"");
+}
+
 member2t::member2t(const type2tc type, const expr2tc source,
                    const constant_string2t &idx)
   : datatype_body<member2t>(type, member_id), source_data(source),
