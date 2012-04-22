@@ -1000,6 +1000,14 @@ symbol2t::lt(const expr2t &ref) const
     return 0;
 }
 
+list_of_memberst
+symbol2t::tostring(void) const
+{
+  list_of_memberst memb;
+  memb.push_back(member_entryt("symbol name", name.as_string()));
+  return memb;
+}
+
 constant_int2t::constant_int2t(type2tc type, const BigInt &input)
   : const_expr_body<constant_int2t>(type, constant_int_id), constant_value(input)
 {
