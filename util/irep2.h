@@ -868,6 +868,10 @@ class arith2t : public expr_body<arith2t>
 public:
   arith2t(const type2tc type, expr_ids id);
   arith2t(const arith2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+  virtual list_of_memberst tostring(void) const;
 };
 
 template <class T>

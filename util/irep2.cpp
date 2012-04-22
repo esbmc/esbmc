@@ -1782,6 +1782,25 @@ arith2t::arith2t(const arith2t &ref)
 {
 }
 
+bool
+arith2t::cmp(const expr2t &ref) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+}
+
+int
+arith2t::lt(const expr2t &ref) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+}
+
+list_of_memberst
+arith2t::tostring(void) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+  abort();
+}
+
 neg2t::neg2t(const type2tc type, const expr2tc _value)
   : arith_body<neg2t>(type, neg_id), value(_value)
 {
