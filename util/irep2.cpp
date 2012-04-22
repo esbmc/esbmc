@@ -130,6 +130,13 @@ type2t::pretty(unsigned int indent) const
   return pretty_print_func<const type2t&>(indent, type_names[type_id], *this);
 }
 
+void
+type2t::dump(void) const
+{
+  std::cout << pretty(0) << std::endl;
+  return;
+}
+
 const char *type2t::type_names[] = {
   "bool",
   "empty",
@@ -878,6 +885,13 @@ expr2t::pretty(unsigned int indent) const
 {
 
   return pretty_print_func<const expr2t&>(indent, expr_names[expr_id], *this);
+}
+
+void
+expr2t::dump(void) const
+{
+  std::cout << pretty(0) << std::endl;
+  return;
 }
 
 /***************************** Templated expr body ****************************/

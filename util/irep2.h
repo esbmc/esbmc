@@ -83,6 +83,7 @@ public:
   bool operator<(const type2t &ref) const;
   int ltchecked(const type2t &ref) const;
   std::string pretty(unsigned int indent = 0) const;
+  void dump(void) const;
   virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(void) const = 0;
@@ -419,6 +420,7 @@ public:
   bool operator!=(const expr2t &ref) const;
   int ltchecked(const expr2t &ref) const;
   std::string pretty(unsigned int indent = 0) const;
+  void dump(void) const;
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(void) const = 0;
