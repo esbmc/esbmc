@@ -601,6 +601,10 @@ public:
   typecast2t(const type2tc type, const expr2tc expr);
   typecast2t(const typecast2t &ref);
 
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+  virtual list_of_memberst tostring(void) const;
+
   // Expression to typecast from.
   const expr2tc from;
 };

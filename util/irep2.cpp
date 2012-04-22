@@ -1116,6 +1116,34 @@ typecast2t::typecast2t(const typecast2t &ref)
 {
 }
 
+bool
+typecast2t::cmp(const expr2t &ref) const
+{
+  const typecast2t &ref2 = static_cast<const typecast2t &>(ref);
+  if (from == ref2.from)
+    return true;
+  return false;
+}
+
+int
+typecast2t::lt(const expr2t &ref) const
+{
+  const typecast2t &ref2 = static_cast<const typecast2t &>(ref);
+  if (from < ref2.from)
+    return -1;
+  else if (ref2.from < from)
+    return 1;
+  else
+    return 0;
+}
+
+list_of_memberst
+typecast2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"from", &from,
+                                (const char *)"");
+}
+
 constant_datatype2t::constant_datatype2t(const type2tc type, expr_ids id,
                                          const std::vector<expr2tc> &members)
   : const_expr_body<constant_datatype2t>(type, id), datatype_members(members)
