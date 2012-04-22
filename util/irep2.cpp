@@ -208,6 +208,24 @@ struct_union_type2t::lt(const type2t &ref) const
   return 0;
 }
 
+list_of_memberst
+struct_union_type2t::tostring(void) const
+{
+  char bees[256];
+  list_of_memberst membs;
+
+  membs.push_back(member_entryt("struct name", name));
+
+  unsigned int i = 0;
+  forall_types(it, members) {
+    snprintf(bees, 255, "member \"%s\" (%d)", member_names[i].c_str(), i);
+    bees[255] = '\0';
+    membs.push_back(member_entryt(std::string(bees), (*it)->pretty(2)));
+  }
+
+  return membs;
+}
+
 bool_type2t::bool_type2t(void)
   : type_body<bool_type2t>(bool_id)
 {
