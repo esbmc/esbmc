@@ -1085,6 +1085,19 @@ constant_bool2t::lt(const expr2t &ref) const
     return 0;
 }
 
+list_of_memberst
+constant_bool2t::tostring(void) const
+{
+  list_of_memberst membs;
+
+  if (constant_value)
+    membs.push_back(member_entryt("value", "true"));
+  else
+    membs.push_back(member_entryt("value", "false"));
+
+  return membs;
+}
+
 typecast2t::typecast2t(const type2tc type, const expr2tc expr)
   : expr_body<typecast2t>(type, typecast_id), from(expr)
 {
