@@ -1966,6 +1966,13 @@ pointer_offset2t::lt(const expr2t &ref) const
   return pointer_obj->ltchecked(*ref2.pointer_obj.get());
 }
 
+list_of_memberst
+pointer_offset2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"pointer_obj", &pointer_obj,
+                                (const char *)"");
+}
+
 pointer_object2t::pointer_object2t(const type2tc type, const expr2tc val)
   : arith_body<pointer_object2t>(type, pointer_object_id), pointer_obj(val)
 {
