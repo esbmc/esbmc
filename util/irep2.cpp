@@ -1809,6 +1809,13 @@ abs2t::lt(const expr2t &ref) const
   return value->ltchecked(*ref2.value.get());
 }
 
+list_of_memberst
+abs2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"value", &value,
+                                (const char *)"");
+}
+
 arith_2op2t::arith_2op2t(const type2tc type, expr_ids id,
                          const expr2tc val1, const expr2tc val2)
   : arith_body<arith_2op2t>(type, id), part_1(val1), part_2(val2)
