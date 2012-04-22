@@ -603,6 +603,12 @@ code_type2t::lt(const type2t &ref __attribute__((unused))) const
   return 0; // All code is the same. Ish.
 }
 
+list_of_memberst
+code_type2t::tostring(void) const
+{
+  return list_of_memberst();
+}
+
 string_type2t::string_type2t()
   : type_body<string_type2t>(string_id)
 {
