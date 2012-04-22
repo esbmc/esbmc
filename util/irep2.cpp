@@ -2222,6 +2222,24 @@ datatype_ops2t::datatype_ops2t(const datatype_ops2t &ref)
 {
 }
 
+bool
+datatype_ops2t::cmp(const expr2t &ref) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+}
+
+int
+datatype_ops2t::lt(const expr2t &ref) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+}
+
+list_of_memberst
+datatype_ops2t::tostring(void) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+  abort();
+}
 
 with2t::with2t(const type2tc type, const expr2tc source, const expr2tc idx,
                const expr2tc update)

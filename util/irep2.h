@@ -1126,6 +1126,12 @@ class datatype_ops2t : public expr_body<datatype_ops2t>
 public:
   datatype_ops2t(const type2tc type, expr_ids id);
   datatype_ops2t(const datatype_ops2t &ref);
+
+  // Should all be overridden; implementations all abort. A better templating
+  // situation in the future should fix this.
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+  virtual list_of_memberst tostring(void) const;
 };
 
 template <class T>
