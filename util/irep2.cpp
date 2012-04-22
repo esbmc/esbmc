@@ -1404,7 +1404,8 @@ if2t::tostring(void) const
 {
   return tostring_func<expr2tc>((const char *)"condition", &cond,
                                 (const char *)"true value", &true_value,
-                                (const char *)"false value", &false_value);
+                                (const char *)"false value", &false_value,
+                                (const char *)"");
 }
 
 rel2t::rel2t(expr_ids id, const expr2tc val1, const expr2tc val2)
@@ -1447,7 +1448,8 @@ list_of_memberst
 rel2t::tostring(void) const
 {
   return tostring_func<expr2tc>((const char *)"operand0", &side_1,
-                                (const char *)"operand1", &side_2);
+                                (const char *)"operand1", &side_2,
+                                (const char *)"");
 }
 
 equality2t::equality2t(const expr2tc val1, const expr2tc val2)
