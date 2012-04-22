@@ -447,6 +447,10 @@ class constant2t : public expr_body<constant2t>
 public:
   constant2t(const type2tc type, expr_ids id) : expr_body<constant2t>(type, id) {}
   constant2t(const constant2t &ref) : expr_body<constant2t>(ref) {};
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+  virtual list_of_memberst tostring(void) const;
 };
 
 template <class T>

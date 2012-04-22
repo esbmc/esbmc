@@ -1008,6 +1008,25 @@ symbol2t::tostring(void) const
   return memb;
 }
 
+bool
+constant2t::cmp(const expr2t &ref) const
+{
+  assert(0 && "constant2t is abstract-ish");
+}
+
+int
+constant2t::lt(const expr2t &ref) const
+{
+  assert(0 && "constant2t is abstract-ish");
+}
+
+list_of_memberst
+constant2t::tostring(void) const
+{
+  assert(0 && "constant2t is abstract-ish");
+  abort();
+}
+
 constant_int2t::constant_int2t(type2tc type, const BigInt &input)
   : const_expr_body<constant_int2t>(type, constant_int_id), constant_value(input)
 {
