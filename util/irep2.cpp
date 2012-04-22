@@ -5,8 +5,9 @@
 
 #include <solvers/prop/prop_conv.h>
 
-static std::vector<std::pair<std::string,std::string> >
-tostring_func(const char *name, const expr2tc *val, ...)
+template <class T>
+std::vector<std::pair<std::string,std::string> >
+tostring_func(const char *name, const T *val, ...)
 {
   va_list list;
 
@@ -22,7 +23,7 @@ tostring_func(const char *name, const expr2tc *val, ...)
     if (strlen(listname) == 0)
       return thevector;
 
-    const expr2tc *v2 = va_arg(list, const expr2tc *);
+    const T *v2 = va_arg(list, const T *);
     stringval = (*v2)->pretty(2);
     thevector.push_back(std::pair<std::string,std::string>
                                  (std::string(name), stringval));
