@@ -1,6 +1,33 @@
+#include <stdarg.h>
+#include <string.h>
+
 #include "irep2.h"
 
 #include <solvers/prop/prop_conv.h>
+
+static std::vector<std::pair<std::string,std::string> >
+tostring_func(const char *name, const expr2tc *val, ...)
+{
+  va_list list;
+
+  std::vector<std::pair<std::string,std::string> > thevector;
+
+  std::string stringval = (*val)->pretty(2);
+  thevector.push_back(std::pair<std::string,std::string>
+                               (std::string(name), stringval));
+
+  va_start(list, val);
+  do {
+    const char *listname = va_arg(list, const char *);
+    if (strlen(listname) == 0)
+      return thevector;
+
+    const expr2tc *v2 = va_arg(list, const expr2tc *);
+    stringval = (*v2)->pretty(2);
+    thevector.push_back(std::pair<std::string,std::string>
+                                 (std::string(name), stringval));
+  } while (1);
+}
 
 /*************************** Base type2t definitions **************************/
 
