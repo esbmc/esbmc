@@ -123,6 +123,13 @@ type2t::lt(const type2t &ref) const
   return 0;
 }
 
+std::string
+type2t::pretty(unsigned int indent) const
+{
+
+  return pretty_print_func<const type2t&>(indent, type_names[type_id], *this);
+}
+
 const char *type2t::type_names[] = {
   "bool",
   "empty",
