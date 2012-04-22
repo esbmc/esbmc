@@ -2100,6 +2100,17 @@ byte_extract2t::lt(const expr2t &ref) const
   return source_offset->ltchecked(*ref2.source_offset.get());
 }
 
+list_of_memberst
+byte_extract2t::tostring(void) const
+{
+  list_of_memberst membs =
+         tostring_func<expr2tc>((const char *)"source_value", &source_value,
+                                (const char *)"source_offset", &source_offset,
+                                (const char *)"");
+  membs.push_back(member_entryt("big_endian", (big_endian) ? "true" : "false"));
+  return membs;
+}
+
 byte_update2t::byte_update2t(const type2tc type, bool is_big_endian,
                              const expr2tc source, const expr2tc offs,
                              const expr2tc update)
