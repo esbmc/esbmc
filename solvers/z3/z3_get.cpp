@@ -239,6 +239,11 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;
 
+    if (num_fields != 2) {
+      std::cerr << "I am covered in pointer symbol bees" << std::endl;
+      return exprt();
+    }
+
     assert(num_fields == 2);
 
     const typet &subtype = static_cast<const typet &>(type.subtype());
