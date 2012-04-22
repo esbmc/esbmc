@@ -85,7 +85,7 @@ public:
   std::string pretty(unsigned int indent = 0) const;
   virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(void) const;
+  virtual list_of_memberst tostring(void) const = 0;
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
@@ -419,7 +419,7 @@ public:
   std::string pretty(unsigned int indent = 0) const;
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(void) const;
+  virtual list_of_memberst tostring(void) const = 0;
 
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;
