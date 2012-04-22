@@ -2372,6 +2372,13 @@ zero_string2t::lt(const expr2t &ref) const
   return string->ltchecked(*ref2.string.get());
 }
 
+list_of_memberst
+zero_string2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"string", &string,
+                                (const char *)"");
+}
+
 zero_length_string2t::zero_length_string2t(const expr2tc _string)
   : datatype_body<zero_length_string2t>(type2tc(new bool_type2t()),
                                         zero_length_string_id),
