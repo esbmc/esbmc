@@ -79,8 +79,10 @@ public:
   bool operator!=(const type2t &ref) const;
   bool operator<(const type2t &ref) const;
   int ltchecked(const type2t &ref) const;
+  std::string pretty(unsigned int indent = 0);
   virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
@@ -104,6 +106,7 @@ public:
   bool_type2t(void);
   virtual bool cmp(const bool_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
 protected:
   bool_type2t(const bool_type2t &ref);
@@ -116,6 +119,7 @@ public:
   empty_type2t(void);
   virtual bool cmp(const empty_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
 protected:
   empty_type2t(const empty_type2t &ref);
@@ -129,6 +133,7 @@ public:
   symbol_type2t(const dstring sym_name);
   virtual bool cmp(const symbol_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
 protected:
   symbol_type2t(const symbol_type2t &ref);
@@ -147,6 +152,7 @@ protected:
 public:
   virtual bool cmp(const struct_union_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   const std::vector<type2tc> members;
   std::vector<std::string> member_names;
   std::string name;
@@ -161,6 +167,7 @@ protected:
 public:
   virtual  bool cmp(const bv_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
   const unsigned int width;
 };
@@ -203,6 +210,7 @@ public:
                 std::string name);
   virtual bool cmp(const struct_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
 protected:
   struct_type2t(const struct_type2t &ref);
@@ -216,6 +224,7 @@ public:
                std::string name);
   virtual bool cmp(const union_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
 protected:
   union_type2t(const union_type2t &ref);
@@ -228,6 +237,7 @@ public:
   code_type2t(void);
   virtual bool cmp(const code_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
 protected:
   code_type2t(const code_type2t &ref);
@@ -241,6 +251,7 @@ public:
   array_type2t(const type2tc subtype, const expr2tc size, bool inf);
   virtual bool cmp(const array_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
 protected:
   array_type2t(const array_type2t &ref);
@@ -270,6 +281,7 @@ public:
   pointer_type2t(const type2tc subtype);
   virtual bool cmp(const pointer_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
 protected:
   pointer_type2t(const pointer_type2t &ref);
@@ -284,6 +296,7 @@ public:
   unsignedbv_type2t(unsigned int width);
   virtual bool cmp(const unsignedbv_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 protected:
   unsignedbv_type2t(const unsignedbv_type2t &ref);
 };
@@ -294,6 +307,7 @@ public:
   signedbv_type2t(unsigned int width);
   virtual bool cmp(const signedbv_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 protected:
   signedbv_type2t(const signedbv_type2t &ref);
 };
@@ -304,6 +318,7 @@ public:
   fixedbv_type2t(unsigned int width, unsigned int integer);
   virtual bool cmp(const fixedbv_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
 protected:
   fixedbv_type2t(const fixedbv_type2t &ref);
@@ -319,6 +334,7 @@ public:
   string_type2t(void);
   virtual bool cmp(const string_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
   virtual unsigned int get_width(void) const;
 protected:
   string_type2t(const string_type2t &ref);
@@ -397,8 +413,10 @@ public:
   bool operator<(const expr2t &ref) const;
   bool operator!=(const expr2t &ref) const;
   int ltchecked(const expr2t &ref) const;
+  std::string pretty(unsigned int indent = 0);
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;
@@ -452,6 +470,7 @@ public:
   long as_long(void) const;
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   /** Arbitary precision integer record. */
   BigInt constant_value;
@@ -465,6 +484,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   /** Arbitary precision integer record. */
   bool constant_value;
@@ -482,6 +502,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   /** Arbitary precision integer record. */
   const std::string value;
@@ -496,6 +517,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const std::vector<expr2tc> datatype_members;
 };
@@ -533,6 +555,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const std::vector<expr2tc> datatype_members;
 };
@@ -545,6 +568,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   // Type records the size of the array; this records the initializer.
   const expr2tc initializer;
@@ -561,6 +585,7 @@ private:
 public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   // Symbol name - only so long as a symbol is a string. In the future, this
   // should really really change.
@@ -586,6 +611,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   // Conditional that this "if" depends on, and which value to take upon each
   // branch of that condition.
@@ -606,6 +632,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -694,6 +721,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc notvalue;
 };
@@ -708,6 +736,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -757,6 +786,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -853,6 +883,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc value;
 };
@@ -865,6 +896,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc value;
 };
@@ -879,6 +911,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc part_1;
   const expr2tc part_2;
@@ -960,6 +993,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc ptr_obj;
 };
@@ -983,6 +1017,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc pointer_obj;
 };
@@ -997,6 +1032,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc pointer_obj;
 };
@@ -1009,6 +1045,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc pointer_obj;
 };
@@ -1047,6 +1084,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   bool big_endian;
   const expr2tc source_value;
@@ -1067,6 +1105,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   bool big_endian;
   const expr2tc source_value;
@@ -1104,6 +1143,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc source_data;
   const expr2tc update_field;
@@ -1120,6 +1160,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc source_data;
   const constant_string2t member;
@@ -1134,6 +1175,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc source_data;
   const expr2tc index;
@@ -1149,6 +1191,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc string;
 };
@@ -1162,6 +1205,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc string;
 };
@@ -1175,6 +1219,7 @@ public:
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual std::vector<std::pair<std::string,std::string> > tostring();
 
   const expr2tc value;
 };
