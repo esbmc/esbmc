@@ -686,6 +686,12 @@ string_type2t::lt(const type2t &ref __attribute__((unused))) const
   return 0; // All strings are the same.
 }
 
+list_of_memberst
+string_type2t::tostring(void) const
+{
+  return list_of_memberst();
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)
