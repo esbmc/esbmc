@@ -140,7 +140,7 @@ const char *type2t::type_names[] = {
   "union",
   "code",
   "array",
-  "poiner",
+  "pointer",
   "unsignedbv",
   "signedbv",
   "fixedbv",
