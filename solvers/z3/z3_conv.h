@@ -191,6 +191,8 @@ private:
                      const expr2t &part2, ast_convert_calltype convert,
                      void *&_bv);
 
+  void convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv);
+
   virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
   virtual void convert_smt_expr(const constant_int2t &sym, void *&bv);
   virtual void convert_smt_expr(const constant_bool2t &b, void *&bv);
