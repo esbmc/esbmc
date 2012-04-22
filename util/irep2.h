@@ -1065,6 +1065,10 @@ class byte_ops2t : public expr_body<byte_ops2t>
 public:
   byte_ops2t(const type2tc type, expr_ids id);
   byte_ops2t(const byte_ops2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+  virtual list_of_memberst tostring(void) const;
 };
 
 template <class derived>

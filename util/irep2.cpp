@@ -2076,6 +2076,25 @@ byte_ops2t::byte_ops2t(const byte_ops2t &ref)
 {
 }
 
+bool
+byte_ops2t::cmp(const expr2t &ref) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+}
+
+int
+byte_ops2t::lt(const expr2t &ref) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+}
+
+list_of_memberst
+byte_ops2t::tostring(void) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+  abort();
+}
+
 byte_extract2t::byte_extract2t(const type2tc type, bool is_big_endian,
                                const expr2tc source,
                                const expr2tc offs)
