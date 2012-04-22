@@ -845,6 +845,7 @@ void get_struct_components(const exprt &exp, struct_typet &str)
   //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
   if (exp.is_symbol() && exp.type().id()!="code")
   {
+    //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
     //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
     unsigned int size = str.components().size();
     str.components().resize(size+1);
@@ -1814,7 +1815,8 @@ void goto_convertt::make_nondet_assign(
   u_int j=0;
   for (j=0; j < state.components().size(); j++)
   {
-    exprt rhs_expr("nondet_symbol", state.components()[j].type());
+    exprt rhs_expr=side_effect_expr_nondett(state.components()[j].type());
+    //exprt rhs_expr("nondet_symbol", state.components()[j].type());
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
 
@@ -1838,7 +1840,8 @@ void goto_convertt::make_nondet_assign(
  	    }
 
  	    rhs_expr=exprt("array_of", state.components()[j].type());
- 	    exprt value("nondet_symbol", state.components()[j].type().subtype());
+            exprt value=side_effect_expr_nondett(state.components()[j].type().subtype());
+ 	    //exprt value("nondet_symbol", state.components()[j].type().subtype());
  	    rhs_expr.move_to_operands(value);
  	    //std::cout << "rhs_expr.pretty(): " << rhs_expr.pretty() << std::endl;
     }
@@ -1846,7 +1849,6 @@ void goto_convertt::make_nondet_assign(
 
     std::string identifier;
     identifier = "cs$"+i2string(state_counter);
-
     lhs_expr.identifier(identifier);
 
     new_expr.reserve_operands(3);
@@ -1874,6 +1876,29 @@ void goto_convertt::make_nondet_assign(
     code_assignt new_assign(lhs_expr,new_expr);
     copy(new_assign, ASSIGN, dest);
   }
+
+#if 0   
+   std::string identifier;
+   identifier = "cs$"+i2string(state_counter);
+   exprt new_expr(exprt::with, state);
+   exprt lhs_expr("symbol", state);
+   lhs_expr.identifier(identifier);
+
+   exprt nondet_expr("nondet_symbol", int_type());
+   identifier = "n$"+i2string(state_counter);
+
+   new_expr.reserve_operands(3);
+   new_expr.copy_to_operands(lhs_expr);
+   new_expr.copy_to_operands(exprt("member_name"));
+   new_expr.move_to_operands(nondet_expr);
+
+   new_expr.op1().component_name(identifier);
+   assert(!new_expr.op1().get_string("component_name").empty());
+ 
+    code_assignt new_assign(lhs_expr,nondet_expr);
+    copy(new_assign, ASSIGN, dest);
+#endif
+
 }
 
 /*******************************************************************\
@@ -2042,6 +2067,58 @@ void goto_convertt::convert_while(
     throw "while takes two operands";
   }
 
+#if 0
+  exprt tmp=code.op0();
+
+  if(inductive_step)
+  {
+    std::string identifier;
+    identifier = "c::i$"+i2string(state_counter);
+    exprt indice = symbol_exprt(identifier, uint_type());
+
+    unsigned int size = state.components().size();
+    state.components().resize(size+1);
+    state.components()[size] = (struct_typet::componentt &) indice;
+    state.components()[size].set_name(indice.get_string("identifier"));
+    state.components()[size].pretty_name(indice.get_string("identifier"));
+
+
+    identifier = "c::n$"+i2string(state_counter);
+    exprt n_expr = symbol_exprt(identifier, uint_type());
+
+    size = state.components().size();
+    state.components().resize(size+1);
+    state.components()[size] = (struct_typet::componentt &) n_expr;
+    state.components()[size].set_name(n_expr.get_string("identifier"));
+    state.components()[size].pretty_name(n_expr.get_string("identifier"));
+
+
+    exprt nondet_expr=side_effect_expr_nondett(uint_type());
+    //rhs.location()=function.location();
+    //assignment.location()=function.location();
+
+    //exprt nondet_expr("nondet_symbol", uint_type());
+
+    //declare variable i$ of type int
+    exprt zero_expr = gen_zero(uint_type());
+
+    //initialize i=0
+    code_assignt new_assign(indice,zero_expr);
+    copy(new_assign, ASSIGN, dest);
+
+    //declare variables n$ of type int
+    //assign n=nondet_int();
+    code_assignt new_assign_nondet(n_expr,nondet_expr);
+    copy(new_assign_nondet, ASSIGN, dest);
+
+    exprt one_expr = gen_one(uint_type());
+    
+    //replace the condition c by i<n;
+    tmp = gen_binary(exprt::i_lt, bool_typet(), indice, n_expr);
+}
+#endif
+
+  array_typet state_vector;
   const exprt &cond=code.op0();
   const locationt &location=code.location();
 
@@ -2060,8 +2137,6 @@ void goto_convertt::convert_while(
   // y: goto v;          <-- continue target
   // z: ;                <-- break target
   // g: assume(!c)
-
-  array_typet state_vector;
 
   // do the t label
   if(inductive_step)
@@ -2113,11 +2188,11 @@ void goto_convertt::convert_while(
   if (inductive_step)
   {
     //assign_state_vector(state_vector, dest);
-#if 1
     //set the type of the state vector
     state_vector.subtype() = state;
 
     std::string identifier;
+
     identifier = "kindice$"+i2string(state_counter);
 
     exprt lhs_index = symbol_exprt(identifier, int_type());
@@ -2141,10 +2216,23 @@ void goto_convertt::convert_while(
 
     code_assignt new_assign(lhs_array,new_expr);
     copy(new_assign, ASSIGN, dest);
-#endif
   }
 
   dest.destructive_append(tmp_x);
+
+#if 0
+  if (inductive_step)
+  {
+    //increment the variable i by 1
+    std::string identifier;
+    identifier = "c::i$"+i2string(state_counter);
+    exprt lhs_indice = symbol_exprt(identifier, uint_type());
+    exprt one_expr = gen_one(int_type());
+    exprt rhs_indice = gen_binary(exprt::plus, int_type(), lhs_indice, one_expr);
+    code_assignt new_assign_indice(lhs_indice,rhs_indice);
+    copy(new_assign_indice, ASSIGN, dest);
+  }
+#endif
 
   // do the d label
   if (inductive_step)
@@ -2157,6 +2245,7 @@ void goto_convertt::convert_while(
     state_vector.subtype() = state;
 
     std::string identifier;
+
     identifier = "kindice$"+i2string(state_counter);
 
     exprt lhs_index = symbol_exprt(identifier, int_type());
@@ -2191,6 +2280,7 @@ void goto_convertt::convert_while(
   }
 
   dest.destructive_append(tmp_y);
+
   dest.destructive_append(tmp_z);
 
   //assume(!c)
@@ -3042,6 +3132,8 @@ Function: goto_convertt::get_new_expr
 
 void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
 {
+  irep_idt exprid = expr.id();
+
   if (expr.is_symbol())
     get_cs_member(expr, new_expr1, expr.type(), found);
   else if (expr.is_constant())
@@ -3062,7 +3154,8 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
 
     new_expr1 = tmp;
   }
-  else if (expr.id()=="+" || expr.id()=="=")
+  else if (exprid=="+" || exprid=="-" || exprid=="=" || exprid=="notequal" ||
+	   exprid == "<=" || exprid == "<" || exprid == ">=" || exprid == ">")
   {
     exprt operand0, operand1;
 	get_new_expr(expr.op0(), operand0, found);
@@ -3070,7 +3163,7 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
 
 	new_expr1 = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
   }
-  else if (expr.id() == "unary-")
+  else if (exprid == "unary-" || exprid == "typecast")
   {
 	get_new_expr(expr.op0(), new_expr1, found);
   }
@@ -3106,9 +3199,14 @@ DEBUGLOC;
   if (expr.operands().size()==1)
   {
     exprt new_expr;
-    get_cs_member(expr.op0(), new_expr, bool_typet(), found);
+    //std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
+    //get_cs_member(expr.op0(), new_expr, bool_typet(), found);
+    get_new_expr(expr.op0(), new_expr, found);
     assert(found);
-    assert(new_expr.type().is_bool());
+    //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
+    //assert(new_expr.type().is_bool());
+    if (!new_expr.type().is_bool())
+      new_expr.make_typecast(bool_typet());
     expr = new_expr;
   }
   else
