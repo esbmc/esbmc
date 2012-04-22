@@ -150,6 +150,18 @@ bv_type2t::lt(const type2t &ref) const
   return 0;
 }
 
+list_of_memberst
+bv_type2t::tostring(void) const
+{
+  char bees[256];
+  list_of_memberst membs;
+
+  snprintf(bees, 255, "%d", width);
+  bees[255] = '\0';
+  membs.push_back(member_entryt("width", bees));
+  return membs;
+}
+
 struct_union_type2t::struct_union_type2t(type_ids id,
                                          const std::vector<type2tc> &_members,
                                          std::vector<std::string> memb_names,
