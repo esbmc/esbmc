@@ -610,7 +610,7 @@ expr2t::lt(const expr2t &ref) const
   if (expr_id > ref.expr_id)
     return 1;
 
-  return type->lt(*ref.type.get());
+  return type->ltchecked(*ref.type.get());
 }
 
 /***************************** Templated expr body ****************************/
