@@ -492,6 +492,12 @@ struct_type2t::lt(const type2t &ref) const
   return struct_union_type2t::lt(ref);
 }
 
+list_of_memberst
+struct_type2t::tostring(void) const
+{
+  return struct_union_type2t::tostring();
+}
+
 union_type2t::union_type2t(std::vector<type2tc> &members,
                            std::vector<std::string> memb_names,
                            std::string name)
@@ -523,6 +529,12 @@ union_type2t::lt(const type2t &ref) const
 {
 
   return struct_union_type2t::lt(ref);
+}
+
+list_of_memberst
+union_type2t::tostring(void) const
+{
+  return struct_union_type2t::tostring();
 }
 
 fixedbv_type2t::fixedbv_type2t(unsigned int _width, unsigned int integer)
