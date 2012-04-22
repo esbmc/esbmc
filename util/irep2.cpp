@@ -2339,6 +2339,14 @@ index2t::lt(const expr2t &ref) const
   return index->ltchecked(*ref2.index.get());
 }
 
+list_of_memberst
+index2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"source_data", &source_data,
+                                (const char *)"index", &index,
+                                (const char *)"");
+}
+
 zero_string2t::zero_string2t(const expr2tc _string)
   : datatype_body<zero_string2t>(type2tc(new bool_type2t()), zero_string_id),
                                 string(_string)
