@@ -1269,6 +1269,16 @@ inline bool operator!=(boost::shared_ptr<type2t> const & a, boost::shared_ptr<ty
   return (*a.get() != *b.get());
 }
 
+inline bool operator<(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+{
+  return (*a.get() < *b.get());
+}
+
+inline bool operator>(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+{
+  return (*b.get() < *a.get());
+}
+
 inline bool operator==(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<expr2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -1282,6 +1292,11 @@ inline bool operator!=(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<ex
 inline bool operator<(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<expr2t> const & b)
 {
   return (*a.get() < *b.get());
+}
+
+inline bool operator>(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<expr2t> const & b)
+{
+  return (*b.get() < *a.get());
 }
 
 #endif /* _UTIL_IREP2_H_ */
