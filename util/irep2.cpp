@@ -2437,3 +2437,10 @@ isnan2t::lt(const expr2t &ref) const
   const isnan2t &ref2 = static_cast<const isnan2t &> (ref);
   return value->ltchecked(*ref2.value.get());
 }
+
+list_of_memberst
+isnan2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"value", &value,
+                                (const char *)"");
+}
