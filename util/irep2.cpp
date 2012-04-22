@@ -1224,6 +1224,15 @@ constant_string2t::lt(const expr2t &ref) const
     return 0;
 }
 
+list_of_memberst
+constant_string2t::tostring(void) const
+{
+  list_of_memberst membs;
+
+  membs.push_back(member_entryt("value", value));
+  return membs;
+}
+
 constant_array2t::constant_array2t(const type2tc type,
                                    const std::vector<expr2tc> &members)
   : const_expr_body<constant_array2t>(type, constant_array_id),
