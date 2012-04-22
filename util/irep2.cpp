@@ -883,7 +883,13 @@ std::string
 expr2t::pretty(unsigned int indent) const
 {
 
-  return pretty_print_func<const expr2t&>(indent, expr_names[expr_id], *this);
+  std::string ret = pretty_print_func<const expr2t&>(indent,
+                                                     expr_names[expr_id],
+                                                     *this);
+  // Dump the type on the end.
+  ret += std::string("\n") + indent_str(indent) + "type : "
+         + type->pretty(indent + 2);
+  return ret;
 }
 
 void
