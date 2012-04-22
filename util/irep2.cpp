@@ -1399,6 +1399,14 @@ if2t::lt(const expr2t &ref) const
   return false_value->ltchecked(*ref2.false_value.get());
 }
 
+list_of_memberst
+if2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"condition", &cond,
+                                (const char *)"true value", &true_value,
+                                (const char *)"false value", &false_value);
+}
+
 rel2t::rel2t(expr_ids id, const expr2tc val1, const expr2tc val2)
   : expr_body<rel2t>(type2tc(new bool_type2t()), id), side_1(val1), side_2(val2)
 {
