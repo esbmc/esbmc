@@ -410,6 +410,14 @@ pointer_type2t::lt(const type2t &ref) const
   return subtype->ltchecked(*ref2.subtype.get());
 }
 
+list_of_memberst
+pointer_type2t::tostring(void) const
+{
+  list_of_memberst membs = tostring_func<type2tc>
+                          ((const char *)"subtype", &subtype, (const char *)"");
+  return membs;
+}
+
 empty_type2t::empty_type2t(void)
   : type_body<empty_type2t>(empty_id)
 {
