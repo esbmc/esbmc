@@ -1,3 +1,3 @@
 main.c
---base-case --unwind 1
-^VERIFICATION SUCCESSFUL$
+--k-induction
+^VERIFICATION FAILED$
