@@ -6,12 +6,12 @@
 #include <solvers/prop/prop_conv.h>
 
 template <class T>
-std::vector<std::pair<std::string,std::string> >
+list_of_memberst
 tostring_func(const char *name, const T *val, ...)
 {
   va_list list;
 
-  std::vector<std::pair<std::string,std::string> > thevector;
+  list_of_memberst thevector;
 
   std::string stringval = (*val)->pretty(2);
   thevector.push_back(std::pair<std::string,std::string>
