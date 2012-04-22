@@ -3373,6 +3373,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   Z3_sort native_int_sort;
   std::string cte, identifier;
   unsigned int obj_num;
+  bool got_obj_num = false;
 
   if (int_encoding)
     native_int_sort = Z3_mk_int_sort(z3_ctx);
@@ -3383,17 +3384,17 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
   // XXXjmorse, not handled right now.
 #warning nulls not handled
-#if 0
-  if (expr.get("value").compare("NULL") == 0 ||
-      identifier == "0") {
-    obj_num = pointer_logic.get_null_object();
-  } else {
-#endif
+  if (expr->expr_id == expr2t::symbol_id) {
+    const symbol2t &sym = static_cast<const symbol2t &>(*expr.get());
+    if (sym.name.as_string() == "NULL" || sym.name.as_string() == "0") {
+      obj_num = pointer_logic.get_null_object();
+      got_obj_num = true;
+    }
+  }
+
+  if (!got_obj_num)
     // add object won't duplicate objs for identical exprs (it's a map)
     obj_num = pointer_logic.add_object(expr);
-#if 0
-  }
-#endif
 
   bv = z3_api.mk_var(symbol.c_str(), tuple_type);
 
