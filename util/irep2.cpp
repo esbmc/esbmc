@@ -1443,6 +1443,13 @@ rel2t::lt(const expr2t &ref) const
   return side_2->ltchecked(*ref2.side_2.get());
 }
 
+list_of_memberst
+rel2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"operand0", &side_1,
+                                (const char *)"operand1", &side_2);
+}
+
 equality2t::equality2t(const expr2tc val1, const expr2tc val2)
   : rel_body<equality2t>(equality_id, val1, val2)
 {
