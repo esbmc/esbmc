@@ -1589,6 +1589,14 @@ logical_2ops2t::lt(const expr2t &ref) const
   return side_2->ltchecked(*ref2.side_2.get());
 }
 
+list_of_memberst
+logical_2ops2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"operand0", &side_1,
+                                (const char *)"operand0", &side_2,
+                                (const char *)"");
+}
+
 and2t::and2t(const expr2tc val1, const expr2tc val2)
   : logic_2ops2t_body<and2t>(and_id, val1, val2)
 {
