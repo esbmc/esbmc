@@ -5,6 +5,8 @@
 
 #include <solvers/prop/prop_conv.h>
 
+#include <boost/algorithm/string.hpp>
+
 template <class T>
 list_of_memberst
 tostring_func(const char *name, const T *val, ...)
@@ -28,6 +30,34 @@ tostring_func(const char *name, const T *val, ...)
     thevector.push_back(std::pair<std::string,std::string>
                                  (std::string(name), stringval));
   } while (1);
+}
+
+template <class T>
+std::string
+pretty_print_func(unsigned int indent, std::string ident, T obj)
+{
+  list_of_memberst memb = obj.tostring();
+
+  std::string exprstr = ident;
+  exprstr += "\n";
+
+  std::string indentstr;
+  for (int i = 0; i < indent; i++)
+    indentstr += " ";
+
+  for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
+       it++) {
+    exprstr += indentstr;
+    exprstr += it->first;
+    exprstr += " : ";
+
+    std::string targetstr = it->second;
+    std::string replacestr = "\n" + indentstr;
+    boost::replace_all(targetstr, "\n", replacestr);
+    exprstr += targetstr;
+  }
+
+  return exprstr;
 }
 
 /*************************** Base type2t definitions **************************/
@@ -835,6 +865,13 @@ const char *expr2t::expr_names[] = {
   "zero_length_string",
   "is_nan"
 };
+
+std::string
+expr2t::pretty(unsigned int indent) const
+{
+
+  return pretty_print_func<const expr2t&>(indent, expr_names[expr_id], *this);
+}
 
 /***************************** Templated expr body ****************************/
 
