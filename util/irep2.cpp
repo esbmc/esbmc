@@ -9,13 +9,13 @@
 
 template <class T>
 list_of_memberst
-tostring_func(const char *name, const T *val, ...)
+tostring_func(unsigned int indent, const char *name, const T *val, ...)
 {
   va_list list;
 
   list_of_memberst thevector;
 
-  std::string stringval = (*val)->pretty(2);
+  std::string stringval = (*val)->pretty(indent + 2);
   thevector.push_back(std::pair<std::string,std::string>
                                (std::string(name), stringval));
 
@@ -26,35 +26,30 @@ tostring_func(const char *name, const T *val, ...)
       return thevector;
 
     const T *v2 = va_arg(list, const T *);
-    stringval = (*v2)->pretty(2);
+    stringval = (*v2)->pretty(indent + 2);
     thevector.push_back(std::pair<std::string,std::string>
                                  (std::string(name), stringval));
   } while (1);
+}
+
+std::string
+indent_str(unsigned int indent)
+{
+  return std::string(indent, ' ');
 }
 
 template <class T>
 std::string
 pretty_print_func(unsigned int indent, std::string ident, T obj)
 {
-  list_of_memberst memb = obj.tostring();
+  list_of_memberst memb = obj.tostring(indent);
 
+  std::string indentstr = indent_str(indent);
   std::string exprstr = ident;
-  exprstr += "\n";
-
-  std::string indentstr;
-  for (int i = 0; i < indent; i++)
-    indentstr += " ";
 
   for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
        it++) {
-    exprstr += indentstr;
-    exprstr += it->first;
-    exprstr += " : ";
-
-    std::string targetstr = it->second;
-    std::string replacestr = "\n" + indentstr;
-    boost::replace_all(targetstr, "\n", replacestr);
-    exprstr += targetstr;
+    exprstr += "\n" + indentstr + it->first + " : " + it->second;
   }
 
   return exprstr;
@@ -210,7 +205,7 @@ bv_type2t::lt(const type2t &ref) const
 }
 
 list_of_memberst
-bv_type2t::tostring(void) const
+bv_type2t::tostring(unsigned int indent) const
 {
   char bees[256];
   list_of_memberst membs;
@@ -280,7 +275,7 @@ struct_union_type2t::lt(const type2t &ref) const
 }
 
 list_of_memberst
-struct_union_type2t::tostring(void) const
+struct_union_type2t::tostring(unsigned int indent) const
 {
   char bees[256];
   list_of_memberst membs;
@@ -321,7 +316,7 @@ bool_type2t::lt(const type2t &ref __attribute__((unused))) const
 }
 
 list_of_memberst
-bool_type2t::tostring(void) const
+bool_type2t::tostring(unsigned int indent) const
 {
   return list_of_memberst(); // No data here
 }
@@ -344,9 +339,9 @@ signedbv_type2t::lt(const type2t &ref) const
 }
 
 list_of_memberst
-signedbv_type2t::tostring(void) const
+signedbv_type2t::tostring(unsigned int indent) const
 {
-  return bv_type2t::tostring();
+  return bv_type2t::tostring(indent);
 }
 
 unsignedbv_type2t::unsignedbv_type2t(unsigned int width)
@@ -367,9 +362,9 @@ unsignedbv_type2t::lt(const type2t &ref) const
 }
 
 list_of_memberst
-unsignedbv_type2t::tostring(void) const
+unsignedbv_type2t::tostring(unsigned int indent) const
 {
-  return bv_type2t::tostring();
+  return bv_type2t::tostring(indent);
 }
 
 array_type2t::array_type2t(const type2tc t, const expr2tc s, bool inf)
@@ -439,16 +434,19 @@ array_type2t::lt(const type2t &ref) const
 }
 
 list_of_memberst
-array_type2t::tostring(void) const
+array_type2t::tostring(unsigned int indent) const
 {
-  list_of_memberst membs = tostring_func<type2tc>
-                          ((const char *)"subtype", &subtype, (const char *)"");
+  list_of_memberst membs = tostring_func<type2tc> (indent,
+                                                  (const char *)"subtype",
+                                                  &subtype, (const char *)"");
 
   if (size_is_infinite) {
     membs.push_back(member_entryt("size", "inifinite"));
   } else {
-    list_of_memberst membs2 = tostring_func<expr2tc>
-                          ((const char *)"size", &array_size, (const char *)"");
+    list_of_memberst membs2 = tostring_func<expr2tc> (indent,
+                                                     (const char *)"size",
+                                                     &array_size,
+                                                     (const char *)"");
     membs.push_back(membs2[0]);
   }
 
@@ -482,10 +480,11 @@ pointer_type2t::lt(const type2t &ref) const
 }
 
 list_of_memberst
-pointer_type2t::tostring(void) const
+pointer_type2t::tostring(unsigned int indent) const
 {
-  list_of_memberst membs = tostring_func<type2tc>
-                          ((const char *)"subtype", &subtype, (const char *)"");
+  list_of_memberst membs = tostring_func<type2tc> (indent,
+                                                  (const char *)"subtype",
+                                                  &subtype, (const char *)"");
   return membs;
 }
 
@@ -513,7 +512,7 @@ empty_type2t::lt(const type2t &ref __attribute__((unused))) const
 }
 
 list_of_memberst
-empty_type2t::tostring(void) const
+empty_type2t::tostring(unsigned int indent) const
 {
   return list_of_memberst(); // No data here
 }
@@ -548,7 +547,7 @@ symbol_type2t::lt(const type2t &ref) const
 }
 
 list_of_memberst
-symbol_type2t::tostring(void) const
+symbol_type2t::tostring(unsigned int indent) const
 {
   list_of_memberst membs;
   membs.push_back(member_entryt("symbol", symbol_name.as_string()));
@@ -589,9 +588,9 @@ struct_type2t::lt(const type2t &ref) const
 }
 
 list_of_memberst
-struct_type2t::tostring(void) const
+struct_type2t::tostring(unsigned int indent) const
 {
-  return struct_union_type2t::tostring();
+  return struct_union_type2t::tostring(indent);
 }
 
 union_type2t::union_type2t(std::vector<type2tc> &members,
@@ -628,9 +627,9 @@ union_type2t::lt(const type2t &ref) const
 }
 
 list_of_memberst
-union_type2t::tostring(void) const
+union_type2t::tostring(unsigned int indent) const
 {
-  return struct_union_type2t::tostring();
+  return struct_union_type2t::tostring(indent);
 }
 
 fixedbv_type2t::fixedbv_type2t(unsigned int _width, unsigned int integer)
@@ -677,7 +676,7 @@ fixedbv_type2t::lt(const type2t &ref) const
 }
 
 list_of_memberst
-fixedbv_type2t::tostring(void) const
+fixedbv_type2t::tostring(unsigned int indent) const
 {
   char buffer[256];
   list_of_memberst membs;
@@ -717,7 +716,7 @@ code_type2t::lt(const type2t &ref __attribute__((unused))) const
 }
 
 list_of_memberst
-code_type2t::tostring(void) const
+code_type2t::tostring(unsigned int indent) const
 {
   return list_of_memberst();
 }
@@ -746,7 +745,7 @@ string_type2t::lt(const type2t &ref __attribute__((unused))) const
 }
 
 list_of_memberst
-string_type2t::tostring(void) const
+string_type2t::tostring(unsigned int indent) const
 {
   return list_of_memberst();
 }
@@ -1126,7 +1125,7 @@ symbol2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-symbol2t::tostring(void) const
+symbol2t::tostring(unsigned int indent) const
 {
   list_of_memberst memb;
   memb.push_back(member_entryt("symbol name", name.as_string()));
@@ -1146,7 +1145,7 @@ constant2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-constant2t::tostring(void) const
+constant2t::tostring(unsigned int indent) const
 {
   assert(0 && "constant2t is abstract-ish");
   abort();
@@ -1194,7 +1193,7 @@ constant_int2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-constant_int2t::tostring(void) const
+constant_int2t::tostring(unsigned int indent) const
 {
   list_of_memberst membs;
   char buffer[256], *buf;
@@ -1238,7 +1237,7 @@ constant_bool2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-constant_bool2t::tostring(void) const
+constant_bool2t::tostring(unsigned int indent) const
 {
   list_of_memberst membs;
 
@@ -1282,9 +1281,9 @@ typecast2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-typecast2t::tostring(void) const
+typecast2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"from", &from,
+  return tostring_func<expr2tc>(indent, (const char *)"from", &from,
                                 (const char *)"");
 }
 
@@ -1323,7 +1322,7 @@ constant_datatype2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-constant_datatype2t::tostring(void) const
+constant_datatype2t::tostring(unsigned int indent) const
 {
   list_of_memberst membs;
   char buffer[256];
@@ -1334,7 +1333,8 @@ constant_datatype2t::tostring(void) const
   for (i = 0; i < datatype_members.size(); i++) {
     snprintf(buffer, 255, "field \"%s\" (%d)", type2.member_names[i].c_str(),i);
     buffer[255] = '\0';
-    list_of_memberst tmp = tostring_func<expr2tc>((const char *)buffer,
+    list_of_memberst tmp = tostring_func<expr2tc>(indent,
+                                                  (const char *)buffer,
                                                   &datatype_members[i],
                                                   (const char *)"");
     membs.push_back(tmp[0]);
@@ -1426,7 +1426,7 @@ constant_string2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-constant_string2t::tostring(void) const
+constant_string2t::tostring(unsigned int indent) const
 {
   list_of_memberst membs;
 
@@ -1469,7 +1469,7 @@ constant_array2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-constant_array2t::tostring(void) const
+constant_array2t::tostring(unsigned int indent) const
 {
   list_of_memberst membs;
   char buffer[256];
@@ -1478,7 +1478,8 @@ constant_array2t::tostring(void) const
   forall_exprs(it, datatype_members) {
     snprintf(buffer, 255, "field %d", i);
     buffer[255] = '\0';
-    list_of_memberst tmp = tostring_func<expr2tc>((const char *)buffer,
+    list_of_memberst tmp = tostring_func<expr2tc>(indent,
+                                                  (const char *)buffer,
                                                   &datatype_members[i],
                                                   (const char *)"");
     membs.push_back(tmp[0]);
@@ -1519,9 +1520,10 @@ constant_array_of2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-constant_array_of2t::tostring(void) const
+constant_array_of2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"initializer", &initializer,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"initializer", &initializer,
                                 (const char *)"");
 }
 
@@ -1572,9 +1574,10 @@ if2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-if2t::tostring(void) const
+if2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"condition", &cond,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"condition", &cond,
                                 (const char *)"true value", &true_value,
                                 (const char *)"false value", &false_value,
                                 (const char *)"");
@@ -1617,9 +1620,10 @@ rel2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-rel2t::tostring(void) const
+rel2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"operand0", &side_1,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"operand0", &side_1,
                                 (const char *)"operand1", &side_2,
                                 (const char *)"");
 }
@@ -1707,7 +1711,7 @@ lops2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-lops2t::tostring(void) const
+lops2t::tostring(unsigned int indent) const
 {
   assert(0 && "lops2t is abstract-ish");
   abort();
@@ -1738,9 +1742,10 @@ not2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-not2t::tostring(void) const
+not2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"value", &notvalue,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"value", &notvalue,
                                 (const char *)"");
 }
 
@@ -1783,9 +1788,10 @@ logical_2ops2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-logical_2ops2t::tostring(void) const
+logical_2ops2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"operand0", &side_1,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"operand0", &side_1,
                                 (const char *)"operand0", &side_2,
                                 (const char *)"");
 }
@@ -1858,9 +1864,10 @@ binops2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-binops2t::tostring(void) const
+binops2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"operand0", &side_1,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"operand0", &side_1,
                                 (const char *)"operand0", &side_2,
                                 (const char *)"");
 }
@@ -1958,7 +1965,7 @@ arith2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-arith2t::tostring(void) const
+arith2t::tostring(unsigned int indent) const
 {
   assert(0 && "arith2t is abstract-ish");
   abort();
@@ -1989,9 +1996,10 @@ neg2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-neg2t::tostring(void) const
+neg2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"value", &value,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"value", &value,
                                 (const char *)"");
 }
 
@@ -2020,9 +2028,10 @@ abs2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-abs2t::tostring(void) const
+abs2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"value", &value,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"value", &value,
                                 (const char *)"");
 }
 
@@ -2064,9 +2073,10 @@ arith_2op2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-arith_2op2t::tostring(void) const
+arith_2op2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"operand0", &part_1,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"operand0", &part_1,
                                 (const char *)"operand0", &part_2,
                                 (const char *)"");
 }
@@ -2177,9 +2187,10 @@ pointer_offset2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-pointer_offset2t::tostring(void) const
+pointer_offset2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"pointer_obj", &pointer_obj,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"pointer_obj", &pointer_obj,
                                 (const char *)"");
 }
 
@@ -2208,9 +2219,10 @@ pointer_object2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-pointer_object2t::tostring(void) const
+pointer_object2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"pointer_obj", &pointer_obj,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"pointer_obj", &pointer_obj,
                                 (const char *)"");
 }
 
@@ -2242,9 +2254,10 @@ address_of2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-address_of2t::tostring(void) const
+address_of2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"pointer_obj", &pointer_obj,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"pointer_obj", &pointer_obj,
                                 (const char *)"");
 }
 
@@ -2271,7 +2284,7 @@ byte_ops2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-byte_ops2t::tostring(void) const
+byte_ops2t::tostring(unsigned int indent) const
 {
   assert(0 && "byte_ops2t is abstract-ish");
   abort();
@@ -2330,10 +2343,11 @@ byte_extract2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-byte_extract2t::tostring(void) const
+byte_extract2t::tostring(unsigned int indent) const
 {
   list_of_memberst membs =
-         tostring_func<expr2tc>((const char *)"source_value", &source_value,
+         tostring_func<expr2tc>(indent,
+                                (const char *)"source_value", &source_value,
                                 (const char *)"source_offset", &source_offset,
                                 (const char *)"");
   membs.push_back(member_entryt("big_endian", (big_endian) ? "true" : "false"));
@@ -2402,10 +2416,11 @@ byte_update2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-byte_update2t::tostring(void) const
+byte_update2t::tostring(unsigned int indent) const
 {
   list_of_memberst membs =
-         tostring_func<expr2tc>((const char *)"source_value", &source_value,
+         tostring_func<expr2tc>(indent,
+                                (const char *)"source_value", &source_value,
                                 (const char *)"source_offset", &source_offset,
                                 (const char *)"update_value", &update_value,
                                 (const char *)"");
@@ -2436,7 +2451,7 @@ datatype_ops2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-datatype_ops2t::tostring(void) const
+datatype_ops2t::tostring(unsigned int indent) const
 {
   assert(0 && "datatype_ops2t is abstract-ish");
   abort();
@@ -2490,9 +2505,10 @@ with2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-with2t::tostring(void) const
+with2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"source_data", &source_data,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"source_data", &source_data,
                                 (const char *)"update_field", &update_field,
                                 (const char *)"update_data", &update_data,
                                 (const char *)"");
@@ -2538,7 +2554,7 @@ member2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-member2t::tostring(void) const
+member2t::tostring(unsigned int indent) const
 {
   list_of_memberst memb;
 
@@ -2587,9 +2603,10 @@ index2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-index2t::tostring(void) const
+index2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"source_data", &source_data,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"source_data", &source_data,
                                 (const char *)"index", &index,
                                 (const char *)"");
 }
@@ -2620,9 +2637,10 @@ zero_string2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-zero_string2t::tostring(void) const
+zero_string2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"string", &string,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"string", &string,
                                 (const char *)"");
 }
 
@@ -2655,9 +2673,10 @@ zero_length_string2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-zero_length_string2t::tostring(void) const
+zero_length_string2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"string", &string,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"string", &string,
                                 (const char *)"");
 }
 
@@ -2686,8 +2705,9 @@ isnan2t::lt(const expr2t &ref) const
 }
 
 list_of_memberst
-isnan2t::tostring(void) const
+isnan2t::tostring(unsigned int indent) const
 {
-  return tostring_func<expr2tc>((const char *)"value", &value,
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"value", &value,
                                 (const char *)"");
 }
