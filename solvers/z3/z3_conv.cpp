@@ -2549,7 +2549,7 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
   int ret_is_ptr, op1_is_ptr, op2_is_ptr;
   ret_is_ptr = (expr.type->type_id == type2t::pointer_id) ? 4 : 0;
   op1_is_ptr = (expr.part_1->type->type_id == type2t::pointer_id) ? 2 : 0;
-  op2_is_ptr = (expr.part_1->type->type_id == type2t::pointer_id) ? 1 : 0;
+  op2_is_ptr = (expr.part_2->type->type_id == type2t::pointer_id) ? 1 : 0;
 
   const exprt *ptr_op, *non_ptr_op;
   switch (ret_is_ptr | op1_is_ptr | op2_is_ptr) {
