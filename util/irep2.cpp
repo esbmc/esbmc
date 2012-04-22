@@ -367,6 +367,23 @@ array_type2t::lt(const type2t &ref) const
   return array_size->ltchecked(*ref2.array_size.get());
 }
 
+list_of_memberst
+array_type2t::tostring(void) const
+{
+  list_of_memberst membs = tostring_func<type2tc>
+                          ((const char *)"subtype", &subtype, (const char *)"");
+
+  if (size_is_infinite) {
+    membs.push_back(member_entryt("size", "inifinite"));
+  } else {
+    list_of_memberst membs2 = tostring_func<expr2tc>
+                          ((const char *)"size", &array_size, (const char *)"");
+    membs.push_back(membs2[0]);
+  }
+
+  return membs;
+}
+
 pointer_type2t::pointer_type2t(type2tc _sub)
   : type_body<pointer_type2t>(pointer_id), subtype(_sub)
 {
