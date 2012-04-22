@@ -1544,6 +1544,13 @@ not2t::lt(const expr2t &ref) const
   return notvalue->ltchecked(*ref2.notvalue.get());
 }
 
+list_of_memberst
+not2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"value", &notvalue,
+                                (const char *)"");
+}
+
 logical_2ops2t::logical_2ops2t(expr_ids id, const expr2tc val1,
                                const expr2tc val2)
   : lops2_body<logical_2ops2t>(id),
