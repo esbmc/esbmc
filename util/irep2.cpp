@@ -617,6 +617,23 @@ fixedbv_type2t::lt(const type2t &ref) const
   return 0;
 }
 
+list_of_memberst
+fixedbv_type2t::tostring(void) const
+{
+  char buffer[256];
+  list_of_memberst membs;
+
+  snprintf(buffer, 255, "%d", width);
+  buffer[255] = '\0';
+  membs.push_back(member_entryt("width", buffer));
+
+  snprintf(buffer, 255, "%d", integer_bits);
+  buffer[255] = '\0';
+  membs.push_back(member_entryt("integer_bits", buffer));
+
+  return membs;
+}
+
 code_type2t::code_type2t(void)
   : type_body<code_type2t>(code_id)
 {
