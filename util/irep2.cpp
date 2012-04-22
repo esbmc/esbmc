@@ -1338,6 +1338,13 @@ constant_array_of2t::lt(const expr2t &ref) const
   return initializer->ltchecked(*ref2.initializer.get());
 }
 
+list_of_memberst
+constant_array_of2t::tostring(void) const
+{
+  return tostring_func<expr2tc>((const char *)"initializer", &initializer,
+                                (const char *)"");
+}
+
 if2t::if2t(const type2tc type, const expr2tc _cond, const expr2tc true_val,
            const expr2tc false_val)
   : expr_body<if2t>(type, if_id), cond(_cond), true_value(true_val),
