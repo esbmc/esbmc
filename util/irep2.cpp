@@ -1288,6 +1288,26 @@ constant_array2t::lt(const expr2t &ref) const
     return 0;
 }
 
+list_of_memberst
+constant_array2t::tostring(void) const
+{
+  list_of_memberst membs;
+  char buffer[256];
+
+  unsigned int i = 0;
+  forall_exprs(it, datatype_members) {
+    snprintf(buffer, 255, "field %d", i);
+    buffer[255] = '\0';
+    list_of_memberst tmp = tostring_func<expr2tc>((const char *)buffer,
+                                                  &datatype_members[i],
+                                                  (const char *)"");
+    membs.push_back(tmp[0]);
+    i++;
+  }
+
+  return membs;
+}
+
 constant_array_of2t::constant_array_of2t(const type2tc type, expr2tc init)
   : const_expr_body<constant_array_of2t>(type, constant_array_id),
     initializer(init)
