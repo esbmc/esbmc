@@ -1684,7 +1684,8 @@ pointer_object2t::lt(const expr2t &ref) const
 }
 
 address_of2t::address_of2t(const type2tc subtype, const expr2tc val)
-  : arith_body<address_of2t>(subtype, address_of_id),
+  : arith_body<address_of2t>(type2tc(new pointer_type2t(subtype)),
+                             address_of_id),
                              pointer_obj(val)
 {
 }
