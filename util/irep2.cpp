@@ -1550,6 +1550,25 @@ lops2t::lops2t(const lops2t &ref)
 {
 }
 
+bool
+lops2t::cmp(const expr2t &ref) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+}
+
+int
+lops2t::lt(const expr2t &ref) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+}
+
+list_of_memberst
+lops2t::tostring(void) const
+{
+  assert(0 && "datatype_ops2t is abstract-ish");
+  abort();
+}
+
 not2t::not2t(const expr2tc val)
   : lops2_body<not2t>(not_id), notvalue(val)
 {

@@ -706,6 +706,10 @@ class lops2t : public expr_body<lops2t>
 public:
   lops2t(expr_ids id);
   lops2t(const lops2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+  virtual list_of_memberst tostring(void) const;
 };
 
 template <class T>
