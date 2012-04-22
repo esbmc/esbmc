@@ -11,6 +11,7 @@
 #include <iostream>
 #include <iomanip>
 #include <math.h>
+#include <migrate.h>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -257,7 +258,12 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       return result;
     }
 
-    return pointer_logic.pointer_expr(pointer, type);
+    type2tc newtype;
+    if (!migrate_type(type, newtype))
+      assert(0 && "migrate type failed");
+    expr2tc faces = pointer_logic.pointer_expr(pointer, newtype);
+#warning jmorse - returning expressions to counterexamples is hosed
+    return exprt();
   } else if (type.id() == "signedbv" || type.id() == "unsignedbv") {
     unsigned width;
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
