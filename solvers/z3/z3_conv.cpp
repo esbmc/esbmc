@@ -3380,6 +3380,7 @@ z3_convt::convert_identifier_pointer(const expr2t &expr, std::string symbol,
   create_pointer_type(tuple_type);
 
   // XXXjmorse, not handled right now.
+#warning nulls not handled
 #if 0
   if (expr.get("value").compare("NULL") == 0 ||
       identifier == "0") {
