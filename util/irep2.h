@@ -45,7 +45,8 @@ class constant_array2t;
 typedef boost::shared_ptr<type2t> type2tc;
 typedef boost::shared_ptr<expr2t> expr2tc;
 
-typedef std::vector<std::pair<std::string,std::string> > list_of_memberst;
+typedef std::pair<std::string,std::string> member_entryt;
+typedef std::vector<member_entryt> list_of_memberst;
 
 /** Base class for all types */
 class type2t

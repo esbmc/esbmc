@@ -231,6 +231,12 @@ bool_type2t::lt(const type2t &ref __attribute__((unused))) const
   return 0; // No data stored in bool type
 }
 
+list_of_memberst
+bool_type2t::tostring(void) const
+{
+  return list_of_memberst(); // No data here
+}
+
 signedbv_type2t::signedbv_type2t(unsigned int width)
   : bv_type_body<signedbv_type2t>(signedbv_id, width)
 {
@@ -380,6 +386,12 @@ empty_type2t::lt(const type2t &ref __attribute__((unused))) const
   return 0; // Two empty types always same.
 }
 
+list_of_memberst
+empty_type2t::tostring(void) const
+{
+  return list_of_memberst(); // No data here
+}
+
 symbol_type2t::symbol_type2t(const dstring sym_name)
   : type_body<symbol_type2t>(symbol_id), symbol_name(sym_name)
 {
@@ -407,6 +419,14 @@ symbol_type2t::lt(const type2t &ref) const
   if (ref2.symbol_name < symbol_name)
     return 1;
   return 0;
+}
+
+list_of_memberst
+symbol_type2t::tostring(void) const
+{
+  list_of_memberst membs;
+  membs.push_back(member_entryt("symbol", symbol_name.as_string()));
+  return membs;
 }
 
 struct_type2t::struct_type2t(std::vector<type2tc> &members,
