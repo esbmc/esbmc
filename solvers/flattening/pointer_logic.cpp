@@ -215,14 +215,16 @@ Function: pointer_logict::pointer_logict
 
 pointer_logict::pointer_logict()
 {
-  assert(0 && "null pointer object ipml");
-#if 0
+
+  type2tc type(new pointer_type2t(type2tc(new empty_type2t())));
+  expr2tc sym(new symbol2t(type, "NULL"));
+
   // add NULL
-  null_object=objects.number(exprt("NULL"));
+  null_object = add_object(sym);
 
   // add INVALID
-  invalid_object=objects.number(exprt("INVALID"));
-#endif
+  expr2tc invalid(new symbol2t(type, "INVALID"));
+  invalid_object = add_object(invalid);
 }
 
 /*******************************************************************\
