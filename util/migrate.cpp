@@ -213,6 +213,15 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2t *new_expr = new symbol2t(type, std::string("NULL"));
     new_expr_ref = expr2tc(new_expr);
     return true;
+  } else if (expr.id() == "constant" && expr.type().id() == "fixedbv") {
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    fixedbvt bv(expr);
+
+    expr2t *new_expr = new constant_fixedbv2t(type, bv);
+    new_expr_ref = expr2tc(new_expr);
+    return true;
   } else if (expr.id() == "typecast") {
     assert(expr.op0().id_string() != "");
     expr2tc old_expr;
