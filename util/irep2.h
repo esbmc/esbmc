@@ -8,6 +8,7 @@
 #include <boost/shared_ptr.hpp>
 
 #include <irep.h>
+#include <fixedbv.h>
 #include <big-int/bigint.hh>
 #include <dstring.h>
 
@@ -496,16 +497,14 @@ public:
 class constant_fixedbv2t : public const_expr_body<constant_fixedbv2t>
 {
 public:
-  constant_fixedbv2t(type2tc type, const BigInt &integer_part,
-                     const BigInt &fraction_part);
+  constant_fixedbv2t(type2tc type, const fixedbvt &value);
   constant_fixedbv2t(const constant_fixedbv2t &ref);
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
 
-  BigInt integer_value;
-  BigInt fraction_value;
+  const fixedbvt value;
 };
 
 class constant_bool2t : public const_expr_body<constant_bool2t>
