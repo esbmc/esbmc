@@ -829,6 +829,7 @@ expr2t::lt(const expr2t &ref) const
 
 const char *expr2t::expr_names[] = {
   "constant_int",
+  "constant_fixedbv",
   "constant_bool",
   "constant_string",
   "constant_struct",

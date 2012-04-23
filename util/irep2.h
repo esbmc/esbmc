@@ -355,6 +355,7 @@ public:
    *  otherwise. See type2t::type_ids. */
   enum expr_ids {
     constant_int_id,
+    constant_fixedbv_id,
     constant_bool_id,
     constant_string_id,
     constant_struct_id,
