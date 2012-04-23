@@ -827,19 +827,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(s);
     return true;
   } else if (expr.id() == "invalid-object") {
-    // Model this as equality between the pointer object of what the operand is,
-    // and the pointer object of the symbol "INVALID", which should represent
-    // the invalid object.
-    expr2tc val;
-    if (!migrate_expr(expr.op0(), val))
-      return false;
-
-    type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+    assert(expr.type().id() == "pointer");
     type2tc pointertype(new pointer_type2t(type2tc(new empty_type2t())));
-    expr2tc operand_obj(new pointer_object2t(inttype, val));
-    expr2tc invalid_sym(new symbol2t(pointertype, "INVALID"));
-    expr2tc invalid_obj(new pointer_object2t(inttype, invalid_sym));
-    new_expr_ref = expr2tc(new equality2t(operand_obj, invalid_obj));
+    new_expr_ref = expr2tc(new symbol2t(pointertype, "INVALID"));
   } else {
     return false;
 //    assert(0);
