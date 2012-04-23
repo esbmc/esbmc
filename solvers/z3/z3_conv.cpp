@@ -205,6 +205,22 @@ z3_convt::init_addr_space_array(void)
   Z3_ast constraint = Z3_mk_eq(z3_ctx, zero_sym, ptr_val);
   assert_formula(constraint);
 
+  // Do the same thing, for the name "NULL".
+  Z3_ast null_sym = z3_api.mk_var("NULL", pointer_type);
+  constraint = Z3_mk_eq(z3_ctx, null_sym, ptr_val);
+  assert_formula(constraint);
+
+  // And for the "INVALID" object (which we're issuing with a name now), have
+  // a pointer object num of 1, and a free pointer offset. Anything of worth
+  // using this should extract only the object number.
+
+  args[0] = Z3_mk_int(z3_ctx, 1, native_int_sort);
+  args[1] = Z3_mk_fresh_const(z3_ctx, NULL, pointer_type);
+  Z3_ast invalid = z3_api.mk_tuple_update(args[1], 0, args[0]);
+  Z3_ast invalid_name = z3_api.mk_var("INVALID", pointer_type);
+  constraint = Z3_mk_eq(z3_ctx, invalid, invalid_name);
+  assert_formula(constraint);
+
   // Record the fact that we've registered these objects
   addr_space_data[0] = 0;
   addr_space_data[1] = 0;
