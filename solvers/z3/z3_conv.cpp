@@ -2600,9 +2600,9 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
 
       expr2tc newexpr;
       if (expr.expr_id == expr2t::add_id)
-        newexpr = expr2tc(new add2t(expr.type, mul, ptr_offset));
+        newexpr = expr2tc(new add2t(inttype, mul, ptr_offset));
       else
-        newexpr = expr2tc(new sub2t(expr.type, mul, ptr_offset));
+        newexpr = expr2tc(new sub2t(inttype, mul, ptr_offset));
 
       // Voila, we have our pointer arithmatic
       newexpr->convert_smt(*this, (void*&)bv);
