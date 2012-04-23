@@ -197,6 +197,16 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2t *new_expr = new constant_int2t(type, val);
     new_expr_ref = expr2tc(new_expr);
     return true;
+  } else if (expr.id() == "constant" && expr.type().id() == "c_enum") {
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+
+    uint64_t enumval = atoi(expr.value().as_string().c_str());
+
+    expr2t *new_expr = new constant_int2t(type, BigInt(enumval));
+    new_expr_ref = expr2tc(new_expr);
+    return true;
   } else if (expr.id() == "constant" && expr.type().id() == "bool") {
     std::string theval = expr.value().as_string();
     if (theval == "true")
