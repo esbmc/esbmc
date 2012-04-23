@@ -1046,7 +1046,7 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *&_bv)
 
   assert(sym.type->type_id == type2t::fixedbv_id);
 
-  std::string theval = integer2binary(sym.value.to_integer(), bitwidth);
+  std::string theval = sym.value.to_expr().value().as_string();
 
   if (int_encoding) {
     std::string result = fixed_point(theval, bitwidth);
