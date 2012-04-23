@@ -309,7 +309,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     equality2t *e = new equality2t(side1, side2);
     new_expr_ref = expr2tc(e);
     return true;
-  } else if (expr.id() == "!=") {
+  } else if (expr.id() == "!=" || expr.id() == "notequal") {
     expr2tc side1, side2;
 
     if (!convert_operand_pair(expr, side1, side2))
