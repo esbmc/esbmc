@@ -1452,19 +1452,25 @@ z3_convt::convert_smt_expr(const neg2t &neg, void *&_bv)
 void
 z3_convt::convert_smt_expr(const abs2t &abs, void *&_bv)
 {
+  type2tc sign;
+  expr2tc zero;
 
   if (abs.type->type_id == type2t::fixedbv_id) {
-    assert(0 && "abs for fixedbvs not implemented yet");
+    sign = abs.type;
+    fixedbvt bv;
+    bv.from_integer(BigInt(0));
+    zero = expr2tc(new constant_fixedbv2t(sign, bv));
   } else {
     assert(abs.type->type_id == type2t::unsignedbv_id ||
            abs.type->type_id == type2t::signedbv_id);
-    type2tc sign(new signedbv_type2t(config.ansi_c.int_width));
-    expr2tc zero(new constant_int2t(sign, BigInt(0)));
-    expr2tc neg(new neg2t(sign, abs.value));
-    expr2tc is_negative(new lessthan2t(abs.value, expr2tc(zero)));
-    if2t result(sign, is_negative, neg, abs.value);
-    result.convert_smt(*this, _bv);
+    sign = type2tc(new signedbv_type2t(config.ansi_c.int_width));
+    zero = expr2tc(new constant_int2t(sign, BigInt(0)));
   }
+
+  expr2tc neg(new neg2t(sign, abs.value));
+  expr2tc is_negative(new lessthan2t(abs.value, zero));
+  if2t result(sign, is_negative, neg, abs.value);
+  result.convert_smt(*this, _bv);
 }
 
 void
