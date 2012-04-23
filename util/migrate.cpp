@@ -744,6 +744,20 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     index2t *i = new index2t(type, source, index);
     new_expr_ref = expr2tc(i);
     return true;
+  } else if (expr.id() == "memory-leak") {
+    // Memory leaks are in fact selects/indexes.
+    if (!migrate_type(expr.type(), type))
+      return false;
+
+    assert(expr.operands().size() == 2);
+    assert(expr.type().id() == "bool");
+    expr2tc source, index;
+    if (!convert_operand_pair(expr, source, index))
+        return false;
+
+    index2t *i = new index2t(type, source, index);
+    new_expr_ref = expr2tc(i);
+    return true;
   } else if (expr.id() == "zero_string") {
     assert(expr.operands().size() == 1);
 
