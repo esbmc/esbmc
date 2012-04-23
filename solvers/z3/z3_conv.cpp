@@ -1800,7 +1800,9 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 
   const constant_int2t *intref = dynamic_cast<const constant_int2t*>
                                              (data.source_offset.get());
-  assert(intref != NULL && "byte_extract expects constant 2nd arg");
+  if (intref == NULL)
+    throw new conv_error("byte_extract expects constant 2nd arg", exprt());
+  //assert(intref != NULL && "byte_extract expects constant 2nd arg");
 
   unsigned width, w;
   width = data.source_value->type->get_width();
