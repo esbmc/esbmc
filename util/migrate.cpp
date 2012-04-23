@@ -816,6 +816,16 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
     new_expr_ref = expr2tc(new constant_int2t(inttype, BigInt(thewidth)));
     return true;
+  } else if (expr.id() == "same-object") {
+    assert(expr.operands().size() == 2);
+    assert(expr.type().id() == "bool");
+    expr2tc op0, op1;
+    if (!convert_operand_pair(expr, op0, op1))
+        return false;
+
+    same_object2t *s = new same_object2t(op0, op1);
+    new_expr_ref = expr2tc(s);
+    return true;
   } else {
     return false;
 //    assert(0);
