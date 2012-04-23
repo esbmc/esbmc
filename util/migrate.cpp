@@ -204,6 +204,15 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     else
       new_expr_ref = expr2tc(new constant_bool2t(false));
     return true;
+  } else if (expr.id() == "constant" && expr.type().id() == "pointer" &&
+             expr.value() == "NULL") {
+    // Null is a symbol with pointer type.
+     if (!migrate_type(expr.type(), type))
+      return false;
+
+    expr2t *new_expr = new symbol2t(type, std::string("NULL"));
+    new_expr_ref = expr2tc(new_expr);
+    return true;
   } else if (expr.id() == "typecast") {
     assert(expr.op0().id_string() != "");
     expr2tc old_expr;
