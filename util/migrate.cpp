@@ -529,7 +529,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     abs2t *a = new abs2t(type, theval);
     new_expr_ref = expr2tc(a);
     return true;
-  } else if (expr.id() == "add") {
+  } else if (expr.id() == "+") {
     if (!migrate_type(expr.type(), type))
       return false;
 
@@ -543,7 +543,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     add2t *a = new add2t(type, side1, side2);
     new_expr_ref = expr2tc(a);
     return true;
-  } else if (expr.id() == "sub") {
+  } else if (expr.id() == "-") {
     if (!migrate_type(expr.type(), type))
       return false;
 
@@ -557,7 +557,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     sub2t *s = new sub2t(type, side1, side2);
     new_expr_ref = expr2tc(s);
     return true;
-  } else if (expr.id() == "mul") {
+  } else if (expr.id() == "*") {
     if (!migrate_type(expr.type(), type))
       return false;
 
@@ -571,7 +571,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     mul2t *s = new mul2t(type, side1, side2);
     new_expr_ref = expr2tc(s);
     return true;
-  } else if (expr.id() == "div") {
+  } else if (expr.id() == "/") {
     if (!migrate_type(expr.type(), type))
       return false;
 
