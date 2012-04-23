@@ -490,6 +490,24 @@ public:
   BigInt constant_value;
 };
 
+/** Constant fixedbv class. Records a floating point number in what I assume
+ *  to be mantissa/exponent form, but which is described throughout CBMC code
+ *  as fraction/integer parts. */
+class constant_fixedbv2t : public const_expr_body<constant_fixedbv2t>
+{
+public:
+  constant_fixedbv2t(type2tc type, const BigInt &integer_part,
+                     const BigInt &fraction_part);
+  constant_fixedbv2t(const constant_fixedbv2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+  virtual list_of_memberst tostring(unsigned int indent) const;
+
+  BigInt integer_value;
+  BigInt fraction_value;
+};
+
 class constant_bool2t : public const_expr_body<constant_bool2t>
 {
 public:

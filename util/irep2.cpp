@@ -1210,6 +1210,58 @@ constant_int2t::tostring(unsigned int indent) const
   return membs;
 }
 
+constant_fixedbv2t::constant_fixedbv2t(type2tc type, const BigInt &integer_part,
+                                       const BigInt &fraction_part)
+  : const_expr_body<constant_fixedbv2t>(type, constant_int_id),
+                                       integer_value(integer_part),
+                                       fraction_value(fraction_part)
+{
+}
+
+constant_fixedbv2t::constant_fixedbv2t(const constant_fixedbv2t &ref)
+  : const_expr_body<constant_fixedbv2t>(ref),
+                                       integer_value(ref.integer_value),
+                                       fraction_value(ref.fraction_value)
+{
+}
+
+bool
+constant_fixedbv2t::cmp(const expr2t &ref) const
+{
+  const constant_fixedbv2t &ref2 = static_cast<const constant_fixedbv2t &>(ref);
+  if (integer_value != ref2.integer_value)
+    return false;
+
+  if (fraction_value != ref2.fraction_value)
+    return false;
+
+  return true;
+}
+
+int
+constant_fixedbv2t::lt(const expr2t &ref) const
+{
+  const constant_fixedbv2t &ref2 = static_cast<const constant_fixedbv2t &>(ref);
+  int tmp = integer_value.compare(ref2.integer_value);
+  if (tmp != 0)
+    return tmp;
+
+  return fraction_value.compare(ref2.fraction_value);
+}
+
+list_of_memberst
+constant_fixedbv2t::tostring(unsigned int indent) const
+{
+  list_of_memberst membs;
+  char buffer[256], *buf;
+
+  buf = integer_value.as_string(buffer, 256);
+  membs.push_back(member_entryt("integer_value", std::string(buf)));
+  buf = fraction_value.as_string(buffer, 256);
+  membs.push_back(member_entryt("fraction_value", std::string(buf)));
+  return membs;
+}
+
 constant_bool2t::constant_bool2t(bool value)
   : const_expr_body<constant_bool2t>(type2tc(new bool_type2t()),
                                      constant_bool_id),
