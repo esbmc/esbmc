@@ -1023,27 +1023,9 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
 
   if (sym.type->type_id == type2t::unsignedbv_id) {
     bv = Z3_mk_unsigned_int64(z3_ctx, sym.as_ulong(), int_sort);
-  } else if (sym.type->type_id == type2t::signedbv_id) {
-    bv = Z3_mk_int64(z3_ctx, sym.as_long(), int_sort);
   } else {
-    assert(sym.type->type_id == type2t::fixedbv_id);
-
-    std::string theval = integer2binary(sym.constant_value, bitwidth);
-
-    if (int_encoding) {
-      std::string result = fixed_point(theval, bitwidth);
-      bv = Z3_mk_numeral(z3_ctx, result.c_str(), Z3_mk_real_type(z3_ctx));
-    } else {
-      Z3_ast magnitude, fraction;
-      std::string m, f, c;
-      m = extract_magnitude(theval, bitwidth);
-      f = extract_fraction(theval, bitwidth);
-      magnitude =
-        Z3_mk_int(z3_ctx, atoi(m.c_str()), Z3_mk_bv_type(z3_ctx, bitwidth / 2));
-      fraction =
-        Z3_mk_int(z3_ctx, atoi(f.c_str()), Z3_mk_bv_type(z3_ctx, bitwidth / 2));
-      bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
-    }
+    assert(sym.type->type_id == type2t::signedbv_id);
+    bv = Z3_mk_int64(z3_ctx, sym.as_long(), int_sort);
   }
 
   return;
