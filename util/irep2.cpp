@@ -430,6 +430,9 @@ array_type2t::lt(const type2t &ref) const
   if (size_is_infinite > ref2.size_is_infinite)
     return 1;
 
+  if (size_is_infinite)
+    return 0; // Both are infinite; and array_size is null.
+
   return array_size->ltchecked(*ref2.array_size.get());
 }
 
