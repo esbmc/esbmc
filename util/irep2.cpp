@@ -496,7 +496,7 @@ empty_type2t::empty_type2t(void)
 unsigned int
 empty_type2t::get_width(void) const
 {
-  assert(0 && "Fetching width of empty type - invalid operation");
+  throw new symbolic_type_excp();
 }
 
 bool
@@ -700,7 +700,7 @@ code_type2t::code_type2t(void)
 unsigned int
 code_type2t::get_width(void) const
 {
-  assert(0 && "Fetching width of code type - invalid operation");
+  throw new symbolic_type_excp();
 }
 
 bool

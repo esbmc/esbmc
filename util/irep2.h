@@ -72,6 +72,12 @@ public:
     string_id
   };
 
+  // Class to be thrown when attempting to fetch the width of a symbolic type,
+  // such as empty or code. Caller will have to worry about what to do about
+  // that.
+  class symbolic_type_excp {
+  };
+
 protected:
   type2t(type_ids id);
   type2t(const type2t &ref);
