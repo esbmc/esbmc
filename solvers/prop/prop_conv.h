@@ -159,6 +159,7 @@ public:
   virtual void convert_smt_expr(const zero_length_string2t &s, void *&arg) = 0;
   virtual void convert_smt_expr(const isnan2t &isnan, void *&arg) = 0;
   virtual void convert_smt_expr(const overflow2t &overflow, void *&arg) = 0;
+  virtual void convert_smt_expr(const overflow_cast2t &ocast, void *&arg) = 0;
 };
 
 #endif

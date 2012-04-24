@@ -2630,6 +2630,65 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast operand[3], mid, overflow[2], tmp, minus_one, two;
+  uint64_t result;
+  u_int width;
+
+  width = ocast.operand->type->get_width();
+
+  if (ocast.bits >= width || ocast.bits == 0)
+    throw new conv_error("overflow-typecast got wrong number of bits", exprt());
+
+  assert(ocast.bits <= 32 && ocast.bits != 0);
+  result = 1 << ocast.bits;
+
+  ocast.operand->convert_smt(*this, (void*&)operand[0]);
+
+  // XXXjmorse - int2bv trainwreck.
+  if (int_encoding)
+    operand[0] = Z3_mk_int2bv(z3_ctx, width, operand[0]);
+
+  // XXXjmorse - fixedbv is /not/ always partitioned at width/2
+  if (ocast.operand->type->type_id == type2t::fixedbv_id) {
+    unsigned size = (width / 2) + 1;
+    operand[0] = Z3_mk_extract(z3_ctx, width - 1, size - 1, operand[0]);
+  }
+
+  if (ocast.operand->type->type_id == type2t::signedbv_id ||
+      ocast.operand->type->type_id == type2t::fixedbv_id) {
+    // Produce some useful constants
+    unsigned int nums_width = (ocast.operand->type->type_id ==
+                                                            type2t::signedbv_id)
+                               ? width : width / 2;
+    tmp = convert_number_bv(result, nums_width, true);
+    two = convert_number_bv(2, nums_width, true);
+    minus_one = convert_number_bv(-1, nums_width, true);
+
+    // Now produce numbers that bracket the selected bitwidth. So for 16 bis
+    // we would generate 2^15-1 and -2^15
+    mid = Z3_mk_bvsdiv(z3_ctx, tmp, two);
+    operand[1] = Z3_mk_bvsub(z3_ctx, mid, minus_one);
+    operand[2] = Z3_mk_bvmul(z3_ctx, operand[1], minus_one);
+
+    // Ensure operand lies between these braces
+    overflow[0] = Z3_mk_bvslt(z3_ctx, operand[0], operand[1]);
+    overflow[1] = Z3_mk_bvsgt(z3_ctx, operand[0], operand[2]);
+  } else if (ocast.operand->type->type_id == type2t::unsignedbv_id) {
+    // Create zero and 2^bitwidth,
+    operand[2] = convert_number_bv(0, width, false);
+    operand[1] = convert_number_bv(result, width, false);
+    // Ensure operand lies between those numbers.
+    overflow[0] = Z3_mk_bvult(z3_ctx, operand[0], operand[1]);
+    overflow[1] = Z3_mk_bvuge(z3_ctx, operand[0], operand[2]);
+  }
+
+  bv = Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, overflow));
+}
+
+void
 z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
 {
 
