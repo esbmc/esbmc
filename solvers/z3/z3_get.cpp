@@ -109,7 +109,16 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
 
   app = Z3_to_app(z3_ctx, bv); // Just typecasting.
 
-  get_type_width(type, width);
+  type2tc thetype;
+  if (!migrate_type(type, thetype))
+    assert(0 && "Failed to migrate type in z3_convt::bv_get_reg");
+
+  try {
+    width = thetype->get_width();
+  } catch (array_type2t::inf_sized_array_excp *) {
+    // Not a problem, we don't use the array size in extraction
+    width = 0;
+  }
 
   if (type.is_bool()) {
     Z3_app app = Z3_to_app(z3_ctx, bv);
@@ -273,11 +282,9 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
 #warning jmorse - returning expressions to counterexamples is hosed
     return exprt();
   } else if (type.id() == "signedbv" || type.id() == "unsignedbv") {
-    unsigned width;
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return nil_exprt();
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
-    get_type_width(type, width);
     constant_exprt value_expr(type);
     value_expr.set_value(integer2binary(string2integer(value), width));
     return value_expr;
@@ -285,7 +292,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return nil_exprt();
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
-    get_type_width(type, width);
     constant_exprt value_expr(type);
     value_expr.set_value(get_fixed_point(width, value));
     return value_expr;
@@ -294,7 +300,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     // constant irep, afaik
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return nil_exprt();
-    get_type_width(type, width);
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
     constant_exprt value_expr(type);
     value_expr.set_value(integer2binary(string2integer(value), width));
