@@ -2995,40 +2995,6 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 }
 
 void
-z3_convt::convert_isnan(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 1);
-
-  const typet &op_type = expr.op0().type();
-
-  if (op_type.id() == "fixedbv") {
-    Z3_ast op0;
-    unsigned width;
-
-    get_type_width(op_type, width);
-
-    convert_bv(expr.op0(), op0);
-
-    if (int_encoding)
-      bv =
-        Z3_mk_ite(z3_ctx,
-                  Z3_mk_ge(z3_ctx,
-                           Z3_mk_real2int(z3_ctx,
-                                          op0), convert_number(0, width, true)),
-                  Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));
-    else
-      bv =
-        Z3_mk_ite(z3_ctx, Z3_mk_bvsge(z3_ctx, op0, convert_number(0, width,
-                                                                  true)),
-                  Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));
-  } else {
-    throw new conv_error("isnan with unsupported operand type", expr);
-  }
-}
-
-void
 z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3041,19 +3007,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     return;
   }
 
-  if (exprid == "unary+")
-    convert_z3_expr(expr.op0(), bv);
-  else if (exprid == "string-constant") {
-    exprt tmp;
-    string2array(expr, tmp);
-    convert_bv(tmp, bv);
-#if 1
-  } else if (exprid == "isnan")
-    convert_isnan(expr, bv);
-#endif
-  else {
-    throw new conv_error("Unrecognized expression type", expr);
-  }
+  throw new conv_error("Unrecognized expression type", expr);
 }
 
 bool

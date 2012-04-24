@@ -115,7 +115,6 @@ private:
 
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   Z3_ast &bv);
-  void convert_isnan(const exprt &expr, Z3_ast &bv);
   void convert_z3_expr(const exprt &expr, Z3_ast &bv);
 
   void convert_bv(const exprt &expr, Z3_ast &bv);
