@@ -3222,47 +3222,6 @@ z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 }
 
 void
-z3_convt::convert_if(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 3);
-
-  Z3_ast operand0, operand1, operand2;
-
-  convert_bv(expr.op0(), operand0);
-  convert_bv(expr.op1(), operand1);
-  convert_bv(expr.op2(), operand2);
-
-  bv = Z3_mk_ite(z3_ctx, operand0, operand1, operand2);
-
-  DEBUGLOC;
-}
-
-void
-z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 2);
-  assert((expr.op0().type().id() == "pointer" &&
-          expr.op1().type().id() == "pointer") ||
-         expr.op0().type() == expr.op1().type());
-
-  Z3_ast args[2];
-
-  convert_bv(expr.op0(), args[0]);
-  convert_bv(expr.op1(), args[1]);
-
-  if (expr.id() == "=")
-    bv = Z3_mk_eq(z3_ctx, args[0], args[1]);
-  else
-    bv = Z3_mk_distinct(z3_ctx, 2, args);
-
-  DEBUGLOC;
-}
-
-void
 z3_convt::convert_pointer_arith(const exprt &expr, Z3_ast &bv)
 {
 
@@ -3732,24 +3691,6 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
   }
 }
 
-void
-z3_convt::convert_bitnot(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 1);
-  Z3_ast operand0;
-
-  convert_bv(expr.op0(), operand0);
-
-  if (int_encoding)
-    bv = Z3_mk_not(z3_ctx, operand0);
-  else
-    bv = Z3_mk_bvnot(z3_ctx, operand0);
-
-  DEBUGLOC;
-}
-
 u_int
 z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 {
@@ -3891,12 +3832,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
                        expr.type(), bv);
   else if (exprid == "struct" || exprid == "union")
     convert_struct_union(expr, bv);
-  else if (exprid == "bitnot")
-    convert_bitnot(expr, bv);
-  else if (exprid == "if")
-    convert_if(expr, bv);
-  else if (exprid == "=" || exprid == "notequal")
-    convert_equality(expr, bv);
   else if (exprid == "unary+")
     convert_z3_expr(expr.op0(), bv);
   else if (exprid == "+" || exprid == "-")
