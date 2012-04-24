@@ -357,6 +357,33 @@ public:
   unsigned int elements;
 };
 
+// Generate some "is-this-a-blah" macros. This is fine in terms of using
+// keywords in syntax, because the preprocessor preprocesses everything out.
+#define is_xxx_type(name) \
+  inline bool is_##name##_type(const type2tc &t) \
+    { return t->type_id == type2t::name##_id; }
+is_xxx_type(bool);
+is_xxx_type(empty);
+is_xxx_type(symbol);
+is_xxx_type(struct);
+is_xxx_type(union);
+is_xxx_type(code);
+is_xxx_type(array);
+is_xxx_type(pointer);
+is_xxx_type(unsignedbv);
+is_xxx_type(signedbv);
+is_xxx_type(fixedbv);
+is_xxx_type(string);
+#undef is_xxx_type
+
+inline bool is_bv_type(const type2tc &t) \
+{ return (t->type_id == type2t::unsignedbv_id ||
+          t->type_id == type2t::signedbv_id); }
+
+inline bool is_structure_type(const type2tc &t) \
+{ return (t->type_id == type2t::union_id ||
+          t->type_id == type2t::struct_id); }
+
 /** Base class for all expressions */
 class expr2t
 {

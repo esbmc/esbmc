@@ -787,7 +787,7 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
 
   // References to unsigned int identifiers need to be assumed to be > 0,
   // otherwise the solver is free to assign negative nums to it.
-  if (sym.type->type_id == type2t::unsignedbv_id && int_encoding) {
+  if (is_unsignedbv_type(sym.type) && int_encoding) {
     Z3_ast formula;
     bv = z3_api.mk_int_var(sym.name.c_str());
     formula = Z3_mk_ge(z3_ctx, bv, z3_api.mk_int(0));
@@ -812,10 +812,10 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
   else
     int_sort = Z3_mk_bv_type(z3_ctx, bitwidth);
 
-  if (sym.type->type_id == type2t::unsignedbv_id) {
+  if (is_unsignedbv_type(sym.type)) {
     bv = Z3_mk_unsigned_int64(z3_ctx, sym.as_ulong(), int_sort);
   } else {
-    assert(sym.type->type_id == type2t::signedbv_id);
+    assert(is_signedbv_type(sym.type));
     bv = Z3_mk_int64(z3_ctx, sym.as_long(), int_sort);
   }
 
@@ -835,7 +835,7 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *&_bv)
   else
     int_sort = Z3_mk_bv_type(z3_ctx, bitwidth);
 
-  assert(sym.type->type_id == type2t::fixedbv_id);
+  assert(is_fixedbv_type(sym.type));
 
   std::string theval = sym.value.to_expr().value().as_string();
 
@@ -977,7 +977,7 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
 
   convert_bv(array.initializer, value);
 
-  if (arr.subtype->type_id == type2t::bool_id) {
+  if (is_bool_type(arr.subtype)) {
     value = Z3_mk_false(z3_ctx);
   }
 
@@ -1056,15 +1056,15 @@ z3_convt::convert_rel(const rel2t &rel, ast_convert_calltype intmode,
   convert_bv(rel.side_2, args[1]);
 
   // XXXjmorse -- pointer comparisons are still broken.
-  if (rel.side_1->type->type_id == type2t::pointer_id)
+  if (is_pointer_type(rel.side_1->type))
     args[0] = z3_api.mk_tuple_select(args[0], 1);
 
-  if (rel.side_2->type->type_id == type2t::pointer_id)
+  if (is_pointer_type(rel.side_2->type))
     args[1] = z3_api.mk_tuple_select(args[1], 1);
 
   if (int_encoding) {
     bv = intmode(z3_ctx, args[0], args[1]);
-  } else if (rel.side_1->type->type_id == type2t::signedbv_id) {
+  } else if (is_signedbv_type(rel.side_1->type)) {
     bv = signedbv(z3_ctx, args[0], args[1]);
   } else {
     bv = unsignedbv(z3_ctx, args[0], args[1]);
@@ -1166,10 +1166,10 @@ z3_convt::convert_binop(const binops2t &bin,
   bv = converter(z3_ctx, args[0], args[1]);
 
   if (int_encoding) {
-    if (bin.type->type_id == type2t::signedbv_id) {
+    if (is_signedbv_type(bin.type)) {
       bv = Z3_mk_bv2int(z3_ctx, bv, true);
     } else {
-      assert(bin.type->type_id == type2t::unsignedbv_id);
+      assert(is_unsignedbv_type(bin.type));
       bv = Z3_mk_bv2int(z3_ctx, bv, false);
     }
   }
@@ -1227,11 +1227,10 @@ z3_convt::convert_smt_expr(const neg2t &neg, void *&_bv)
   convert_bv(neg.value, args[0]);
 
   if (int_encoding) {
-    type2t::type_ids id = neg.type->type_id;
-    if (id == type2t::signedbv_id || id == type2t::unsignedbv_id) {
+    if (is_bv_type(neg.type)) {
       args[1] = z3_api.mk_int(-1);
     } else {
-      assert(id == type2t::fixedbv_id);
+      assert(is_fixedbv_type(neg.type));
       args[1] = Z3_mk_int(z3_ctx, -1, Z3_mk_real_type(z3_ctx));
     }
     bv = Z3_mk_mul(z3_ctx, 2, args);
@@ -1247,15 +1246,14 @@ z3_convt::convert_smt_expr(const abs2t &abs, void *&_bv)
   expr2tc zero;
   Z3_ast &bv = (Z3_ast &)_bv;
 
-  if (abs.type->type_id == type2t::fixedbv_id) {
+  if (is_fixedbv_type(abs.type)) {
     sign = abs.type;
     fixedbvt bv; // Defaults to zero.
     bv.spec = fixedbv_spect(32, 64);
     exprt face = bv.to_expr();
     zero = expr2tc(new constant_fixedbv2t(sign, bv));
   } else {
-    assert(abs.type->type_id == type2t::unsignedbv_id ||
-           abs.type->type_id == type2t::signedbv_id);
+    assert(is_bv_type(abs.type));
     sign = type2tc(new signedbv_type2t(config.ansi_c.int_width));
     zero = expr2tc(new constant_int2t(sign, BigInt(0)));
   }
@@ -1276,8 +1274,8 @@ z3_convt::convert_arith2ops(const arith_2op2t &arith,
 
   Z3_ast args[2];
 
-  if (arith.part_1->type->type_id == type2t::pointer_id ||
-      arith.part_2->type->type_id == type2t::pointer_id) {
+  if (is_pointer_type(arith.part_1->type) ||
+      is_pointer_type(arith.part_2->type)) {
     std::cerr << "Pointer arithmetic not implemented for Z3 yet" << std::endl;
     abort();
   }
@@ -1294,9 +1292,9 @@ z3_convt::convert_arith2ops(const arith_2op2t &arith,
 void
 z3_convt::convert_smt_expr(const add2t &add, void *&_bv)
 {
-  if (add.type->type_id == type2t::pointer_id ||
-      add.part_1->type->type_id == type2t::pointer_id ||
-      add.part_2->type->type_id == type2t::pointer_id)
+  if (is_pointer_type(add.type) ||
+      is_pointer_type(add.part_1->type) ||
+      is_pointer_type(add.part_2->type))
     return convert_pointer_arith(add, (Z3_ast &)_bv);
 
   convert_arith2ops(add, Z3_mk_bvadd, Z3_mk_add, _bv);
@@ -1305,9 +1303,9 @@ z3_convt::convert_smt_expr(const add2t &add, void *&_bv)
 void
 z3_convt::convert_smt_expr(const sub2t &sub, void *&_bv)
 {
-  if (sub.type->type_id == type2t::pointer_id ||
-      sub.part_1->type->type_id == type2t::pointer_id ||
-      sub.part_2->type->type_id == type2t::pointer_id)
+  if (is_pointer_type(sub.type) ||
+      is_pointer_type(sub.part_1->type) ||
+      is_pointer_type(sub.part_2->type))
     return convert_pointer_arith(sub, (Z3_ast&)_bv);
 
   convert_arith2ops(sub, Z3_mk_bvsub, Z3_mk_sub, _bv);
@@ -1318,8 +1316,8 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
 
-  if (mul.part_1->type->type_id == type2t::pointer_id ||
-      mul.part_2->type->type_id == type2t::pointer_id) {
+  if (is_pointer_type(mul.part_1->type) ||
+      is_pointer_type(mul.part_2->type)) {
     std::cerr << "Pointer arithmetic not valid in a multiply" << std::endl;
     abort();
   }
@@ -1333,7 +1331,7 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *&_bv)
 
   if (int_encoding) {
     bv = Z3_mk_mul(z3_ctx, 2, args);
-  } else if (mul.type->type_id != type2t::fixedbv_id) {
+  } else if (!is_fixedbv_type(mul.type)) {
     bv = Z3_mk_bvmul(z3_ctx, args[0], args[1]);
   } else {
     // fixedbv in bv mode. I've no idea if this actually works.
@@ -1353,9 +1351,9 @@ z3_convt::convert_smt_expr(const div2t &div, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
 
-  assert(div.type->type_id != type2t::pointer_id &&
-         div.part_1->type->type_id != type2t::pointer_id &&
-         div.part_2->type->type_id != type2t::pointer_id &&
+  assert(!is_pointer_type(div.type) &&
+         !is_pointer_type(div.part_1->type) &&
+         !is_pointer_type(div.part_2->type) &&
          "Can't divide pointers");
 
   Z3_ast op0, op1;
@@ -1366,13 +1364,13 @@ z3_convt::convert_smt_expr(const div2t &div, void *&_bv)
   if (int_encoding) {
     bv = Z3_mk_div(z3_ctx, op0, op1);
   } else   {
-    if (div.type->type_id == type2t::signedbv_id) {
+    if (is_signedbv_type(div.type)) {
       bv = Z3_mk_bvsdiv(z3_ctx, op0, op1);
-    } else if (div.type->type_id == type2t::unsignedbv_id) {
+    } else if (is_unsignedbv_type(div.type)) {
       bv = Z3_mk_bvudiv(z3_ctx, op0, op1);
     } else {
       // Not the foggiest. Copied from convert_div
-      assert(div.type->type_id == type2t::fixedbv_id);
+      assert(is_fixedbv_type(div.type));
       const fixedbv_type2t &fbvt = dynamic_cast<const fixedbv_type2t &>
                                                (*div.type.get());
 
@@ -1392,9 +1390,9 @@ z3_convt::convert_smt_expr(const modulus2t &mod, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
 
-  assert(mod.type->type_id != type2t::pointer_id &&
-         mod.part_1->type->type_id != type2t::pointer_id &&
-         mod.part_2->type->type_id != type2t::pointer_id &&
+  assert(!is_pointer_type(mod.type) &&
+         !is_pointer_type(mod.part_1->type) &&
+         !is_pointer_type(mod.part_2->type) &&
          "Can't modulus pointers");
 
   Z3_ast op0, op1;
@@ -1402,16 +1400,14 @@ z3_convt::convert_smt_expr(const modulus2t &mod, void *&_bv)
   convert_bv(mod.part_1, op0);
   convert_bv(mod.part_2, op1);
 
-  assert((mod.type->type_id == type2t::signedbv_id ||
-         mod.type->type_id == type2t::unsignedbv_id) &&
-         "Can only modulus integers");
+  assert(is_bv_type(mod.type) && "Can only modulus integers");
 
   if (int_encoding) {
     bv = Z3_mk_mod(z3_ctx, op0, op0);
   } else   {
-    if (mod.type->type_id == type2t::signedbv_id) {
+    if (is_signedbv_type(mod.type)) {
       bv = Z3_mk_bvsrem(z3_ctx, op0, op1);
-    } else if (mod.type->type_id == type2t::unsignedbv_id) {
+    } else if (is_unsignedbv_type(mod.type)) {
       bv = Z3_mk_bvurem(z3_ctx, op0, op1);
     }
   }
@@ -1445,7 +1441,7 @@ z3_convt::convert_shift(const expr2t &shift, const expr2tc &part1,
     op1 = Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op1);
 
   if (width_op0 > width_op1) {
-    if (part1->type->type_id == type2t::unsignedbv_id)
+    if (is_unsignedbv_type(part1->type))
       op1 = Z3_mk_zero_ext(z3_ctx, (width_op0 - width_op1), op1);
     else
       op1 = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op1), op1);
@@ -1454,10 +1450,10 @@ z3_convt::convert_shift(const expr2t &shift, const expr2tc &part1,
   bv = convert(z3_ctx, op0, op1);
 
   if (int_encoding) {
-    if (shift.type->type_id == type2t::signedbv_id) {
+    if (is_signedbv_type(shift.type)) {
       bv = Z3_mk_bv2int(z3_ctx, bv, true);
     } else {
-      assert(shift.type->type_id == type2t::unsignedbv_id);
+      assert(is_unsignedbv_type(shift.type));
       bv = Z3_mk_bv2int(z3_ctx, bv, false);
     }
   }
@@ -1482,8 +1478,8 @@ z3_convt::convert_smt_expr(const same_object2t &same, void *&_bv)
 
   Z3_ast pointer[2], objs[2];
 
-  assert(same.part_1->type->type_id == type2t::pointer_id);
-  assert(same.part_2->type->type_id == type2t::pointer_id);
+  assert(is_pointer_type(same.part_1->type));
+  assert(is_pointer_type(same.part_2->type));
 
   convert_bv(same.part_1, pointer[0]);
   convert_bv(same.part_2, pointer[1]);
@@ -1530,7 +1526,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
   if (obj.pointer_obj->expr_id == expr2t::index_id) {
     const index2t &idx = dynamic_cast<const index2t &>(*obj.pointer_obj.get());
 
-    if (idx.source_data->type->type_id != type2t::string_id) {
+    if (!is_string_type(idx.source_data->type)) {
       const array_type2t &arr = dynamic_cast<const array_type2t&>
                                             (*idx.source_data->type.get());
 
@@ -1550,7 +1546,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
                                        (*obj.pointer_obj.get());
 
     int64_t offs;
-    if (memb.source_data->type->type_id == type2t::struct_id) {
+    if (is_struct_type(memb.source_data->type)) {
       const struct_type2t &type = dynamic_cast<const struct_type2t&>
                                               (*memb.source_data->type.get());
       offs = member_offset(type, irep_idt(memb.member.value)).to_long();
@@ -1629,22 +1625,20 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
   convert_bv(data.source_value, source);
 
   if (int_encoding) {
-    if (data.source_value->type->type_id == type2t::fixedbv_id) {
-      if (data.type->type_id == type2t::signedbv_id ||
-          data.type->type_id == type2t::unsignedbv_id) {
+    if (is_fixedbv_type(data.source_value->type)) {
+      if (is_bv_type(data.type)) {
 	Z3_ast tmp;
 	source = Z3_mk_real2int(z3_ctx, source);
 	tmp = Z3_mk_int2bv(z3_ctx, width, source);
 	bv = Z3_mk_extract(z3_ctx, upper, lower, tmp);
-	if (data.type->type_id == type2t::signedbv_id)
+	if (is_signedbv_type(data.type))
 	  bv = Z3_mk_bv2int(z3_ctx, bv, 1);
 	else
 	  bv = Z3_mk_bv2int(z3_ctx, bv, 0);
       } else {
 	throw new conv_error("unsupported type for byte_extract");
       }
-    } else if (data.source_value->type->type_id == type2t::signedbv_id ||
-               data.source_value->type->type_id == type2t::unsignedbv_id) {
+    } else if (is_bv_type(data.source_value->type)) {
       Z3_ast tmp;
       tmp = Z3_mk_int2bv(z3_ctx, width, source);
 
@@ -1653,7 +1647,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
       else
 	bv = Z3_mk_extract(z3_ctx, upper - lower, 0, tmp);
 
-      if (data.source_value->type->type_id == type2t::signedbv_id)
+      if (is_signedbv_type(data.source_value->type))
 	bv = Z3_mk_bv2int(z3_ctx, bv, 1);
       else
 	bv = Z3_mk_bv2int(z3_ctx, bv, 0);
@@ -1661,7 +1655,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
       throw new conv_error("unsupported type for byte_extract");
     }
   } else {
-    if (data.source_value->type->type_id == type2t::struct_id) {
+    if (is_struct_type(data.source_value->type)) {
       const struct_type2t &struct_type = dynamic_cast<const struct_type2t&>
                                                     (*data.source_value->type.get());
       unsigned i = 0, num_elems = struct_type.members.size();
@@ -1714,7 +1708,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
 
   width_op2 = data.update_value->type->get_width();
 
-  if (data.source_value->type->type_id == type2t::struct_id) {
+  if (is_struct_type(data.source_value->type)) {
     const struct_type2t &struct_type = dynamic_cast<const struct_type2t&>
                                                   (*data.source_value->type.get());
     bool has_field = false;
@@ -1733,7 +1727,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
       bv = z3_api.mk_tuple_update(tuple, intref->constant_value.to_long(), value);
     else
       bv = tuple;
-  } else if (data.source_value->type->type_id == type2t::signedbv_id) {
+  } else if (is_signedbv_type(data.source_value->type)) {
     if (int_encoding) {
       bv = value;
       return;
@@ -1762,8 +1756,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
   Z3_ast operand0, operand1, operand2;
   Z3_ast tuple, value;
 
-  if (with.type->type_id == type2t::struct_id ||
-      with.type->type_id == type2t::union_id) {
+  if (is_structure_type(with.type)) {
     unsigned int idx = 0;
     const struct_union_type2t &struct_type =
                                    dynamic_cast<const struct_union_type2t&>
@@ -1787,14 +1780,14 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
     bv = z3_api.mk_tuple_update(tuple, idx, value);
 
     // Update last-updated-field field if it's a union
-    if (with.type->type_id == type2t::union_id) {
+    if (is_union_type(with.type)) {
       const union_type2t &unionref = dynamic_cast<const union_type2t&>
                                                  (*with.type.get());
        unsigned int components_size = unionref.members.size();
        bv = z3_api.mk_tuple_update(bv, components_size,
                               convert_number(idx, config.ansi_c.int_width, 0));
     }
-  } else if (with.type->type_id == type2t::array_id) {
+  } else if (is_array_type(with.type)) {
 
     convert_bv(with.source_data, operand0);
     convert_bv(with.update_field, operand1);
@@ -1824,7 +1817,7 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
 
   convert_bv(member.source_data, struct_var);
 
-  if (member.source_data->type->type_id == type2t::union_id) {
+  if (is_union_type(member.source_data->type)) {
     // This is going to fail horribly when the source data isn't a symbol.
     const symbol2t *sym = dynamic_cast<const symbol2t*>(member.source_data.get());
 
@@ -1861,9 +1854,8 @@ z3_convt::convert_typecast_bool(const typecast2t &cast, Z3_ast &bv)
 {
   Z3_ast args[2];
 
-  if (cast.from->type->type_id == type2t::signedbv_id ||
-      cast.from->type->type_id == type2t::unsignedbv_id ||
-      cast.from->type->type_id == type2t::pointer_id) {
+  if (is_bv_type(cast.from->type) ||
+      is_pointer_type(cast.from->type)) {
     args[0] = bv;
     if (int_encoding)
       args[1] = z3_api.mk_int(0);
@@ -1886,13 +1878,12 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv)
   unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
   unsigned to_integer_bits = fbvt.integer_bits;
 
-  if (cast.from->type->type_id == type2t::pointer_id) {
+  if (is_pointer_type(cast.from->type)) {
     std::cerr << "Converting pointer to a float is unsupported" << std::endl;
     abort();
   }
 
-  if (cast.from->type->type_id == type2t::unsignedbv_id ||
-      cast.from->type->type_id == type2t::signedbv_id) {
+  if (is_bv_type(cast.from->type)) {
     unsigned from_width = cast.from->type->get_width();
 
     if (from_width == to_integer_bits) {
@@ -1905,13 +1896,13 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv)
     }
 
     bv = Z3_mk_concat(z3_ctx, bv, convert_number(0, to_fraction_bits, true));
-  } else if (cast.from->type->type_id == type2t::bool_id)      {
+  } else if (is_bool_type(cast.from->type)) {
     Z3_ast zero, one;
     zero = convert_number(0, to_integer_bits, true);
     one =  convert_number(1, to_integer_bits, true);
     bv = Z3_mk_ite(z3_ctx, bv, one, zero);
     bv = Z3_mk_concat(z3_ctx, bv, convert_number(0, to_fraction_bits, true));
-  } else if (cast.from->type->type_id == type2t::fixedbv_id)      {
+  } else if (is_fixedbv_type(cast.from->type)) {
     Z3_ast magnitude, fraction;
 
     const fixedbv_type2t &from_fbvt = dynamic_cast<const fixedbv_type2t&>
@@ -1960,23 +1951,23 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 {
   unsigned to_width = cast.type->get_width();
 
-  if (cast.from->type->type_id == type2t::signedbv_id ||
-      cast.from->type->type_id == type2t::fixedbv_id) {
+  if (is_signedbv_type(cast.from->type) ||
+      is_fixedbv_type(cast.from->type)) {
     unsigned from_width = cast.from->type->get_width();
 
     if (from_width == to_width) {
-      if (int_encoding && cast.from->type->type_id == type2t::signedbv_id &&
-               cast.type->type_id == type2t::fixedbv_id)
+      if (int_encoding && is_signedbv_type(cast.from->type) &&
+               is_fixedbv_type(cast.type))
 	bv = Z3_mk_int2real(z3_ctx, bv);
-      else if (int_encoding && cast.from->type->type_id == type2t::fixedbv_id &&
-               cast.type->type_id == type2t::signedbv_id)
+      else if (int_encoding && is_fixedbv_type(cast.from->type) &&
+               is_signedbv_type(cast.type))
 	bv = Z3_mk_real2int(z3_ctx, bv);
       // XXXjmorse - there isn't a case here for if !int_encoding
 
     } else if (from_width < to_width)      {
       if (int_encoding &&
-          ((cast.type->type_id == type2t::fixedbv_id &&
-            cast.from->type->type_id == type2t::signedbv_id)))
+          ((is_fixedbv_type(cast.type) &&
+            is_signedbv_type(cast.from->type))))
 	bv = Z3_mk_int2real(z3_ctx, bv);
       else if (int_encoding)
 	; // bv = bv
@@ -1984,12 +1975,12 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 	bv = Z3_mk_sign_ext(z3_ctx, (to_width - from_width), bv);
     } else if (from_width > to_width)     {
       if (int_encoding &&
-          ((cast.from->type->type_id == type2t::signedbv_id &&
-            cast.type->type_id == type2t::fixedbv_id)))
+          ((is_signedbv_type(cast.from->type) &&
+            is_fixedbv_type(cast.type))))
 	bv = Z3_mk_int2real(z3_ctx, bv);
       else if (int_encoding &&
-               (cast.from->type->type_id == type2t::fixedbv_id &&
-                cast.type->type_id == type2t::signedbv_id))
+               (is_fixedbv_type(cast.from->type) &&
+                is_signedbv_type(cast.type)))
 	bv = Z3_mk_real2int(z3_ctx, bv);
       else if (int_encoding)
 	; // bv = bv
@@ -1998,7 +1989,7 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 	bv = Z3_mk_extract(z3_ctx, (to_width - 1), 0, bv);
       }
     }
-  } else if (cast.from->type->type_id == type2t::unsignedbv_id) {
+  } else if (is_unsignedbv_type(cast.from->type)) {
     unsigned from_width = cast.from->type->get_width();
 
     if (from_width == to_width) {
@@ -2014,11 +2005,11 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
       else
 	bv = Z3_mk_extract(z3_ctx, (to_width - 1), 0, bv);
     }
-  } else if (cast.from->type->type_id == type2t::bool_id)     {
+  } else if (is_bool_type(cast.from->type)) {
     Z3_ast zero = 0, one = 0;
     unsigned width = cast.type->get_width();
 
-    if (cast.type->type_id == type2t::signedbv_id) {
+    if (is_signedbv_type(cast.type)) {
       if (int_encoding) {
 	zero = Z3_mk_int(z3_ctx, 0, Z3_mk_int_type(z3_ctx));
 	one = Z3_mk_int(z3_ctx, 1, Z3_mk_int_type(z3_ctx));
@@ -2026,7 +2017,7 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 	zero = convert_number(0, width, true);
 	one =  convert_number(1, width, true);
       }
-    } else if (cast.type->type_id == type2t::unsignedbv_id)     {
+    } else if (is_unsignedbv_type(cast.type)) {
       if (int_encoding) {
 	zero = Z3_mk_int(z3_ctx, 0, Z3_mk_int_type(z3_ctx));
 	one = Z3_mk_int(z3_ctx, 1, Z3_mk_int_type(z3_ctx));
@@ -2034,7 +2025,7 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 	zero = convert_number(0, width, false);
 	one =  convert_number(1, width, false);
       }
-    } else if (cast.type->type_id == type2t::fixedbv_id) {
+    } else if (is_fixedbv_type(cast.type)) {
       zero = Z3_mk_numeral(z3_ctx, "0", Z3_mk_real_type(z3_ctx));
       one = Z3_mk_numeral(z3_ctx, "1", Z3_mk_real_type(z3_ctx));
     } else {
@@ -2068,11 +2059,11 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
       if (from_struct_type.member_names[i] == to_struct_type.member_names[i2]) {
 	unsigned width = (*it)->get_width();
 
-	if ((*it)->type_id == type2t::signedbv_id) {
+	if (is_signedbv_type(*it)) {
           new_members.push_back(type2tc(new signedbv_type2t(width)));
-	} else if ((*it)->type_id == type2t::unsignedbv_id) {
+	} else if (is_unsignedbv_type(*it)) {
           new_members.push_back(type2tc(new unsignedbv_type2t(width)));
-	} else if ((*it)->type_id == type2t::bool_id)     {
+	} else if (is_bool_type(*it))     {
           new_members.push_back(type2tc(new bool_type2t()));
 	} else {
           throw new conv_error("Unexpected type when casting struct");
@@ -2111,7 +2102,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
 
   // First, sanity check -- typecast from one kind of a pointer to another kind
   // is a simple operation. Check for that first.
-  if (cast.from->type->type_id == type2t::pointer_id) {
+  if (is_pointer_type(cast.from->type)) {
     // bv is already plain-converted.
     return;
   }
@@ -2272,20 +2263,19 @@ z3_convt::convert_smt_expr(const typecast2t &cast, void *&_bv)
 
   convert_bv(cast.from, bv);
 
-  if (cast.type->type_id == type2t::pointer_id) {
+  if (is_pointer_type(cast.type)) {
     convert_typecast_to_ptr(cast, bv);
-  } else if (cast.from->type->type_id == type2t::pointer_id) {
+  } else if (is_pointer_type(cast.from->type)) {
     convert_typecast_from_ptr(cast, bv);
-  } else if (cast.type->type_id == type2t::bool_id) {
+  } else if (is_bool_type(cast.type)) {
     convert_typecast_bool(cast, bv);
-  } else if (cast.type->type_id == type2t::fixedbv_id && !int_encoding)      {
+  } else if (is_fixedbv_type(cast.type) && !int_encoding)      {
     convert_typecast_fixedbv_nonint(cast, bv);
-  } else if ((cast.type->type_id == type2t::signedbv_id ||
-              cast.type->type_id == type2t::unsignedbv_id ||
-              cast.type->type_id == type2t::fixedbv_id ||
-              cast.type->type_id == type2t::pointer_id)) {
+  } else if (is_bv_type(cast.type) ||
+             is_fixedbv_type(cast.type) ||
+             is_pointer_type(cast.type)) {
     convert_typecast_to_ints(cast, bv);
-  } else if (cast.type->type_id == type2t::struct_id)     {
+  } else if (is_struct_type(cast.type))     {
     convert_typecast_struct(cast, bv);
   } else {
     // XXXjmorse -- what about all other types, eh?
@@ -2338,7 +2328,7 @@ z3_convt::convert_smt_expr(const isnan2t &isnan, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
 
-  if (isnan.value->type->type_id == type2t::fixedbv_id) {
+  if (is_fixedbv_type(isnan.value->type)) {
     Z3_ast op0;
     unsigned width = isnan.value->type->get_width();
 
@@ -2409,8 +2399,8 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *&_bv)
   // inferred.
 
   bool is_signed = false;
-  if (operation.side_1->type->type_id == type2t::signedbv_id ||
-      operation.side_2->type->type_id == type2t::signedbv_id)
+  if (is_signedbv_type(operation.side_1->type) ||
+      is_signedbv_type(operation.side_2->type))
     is_signed = true;
 
   result[0] = call1(z3_ctx, operand[0], operand[1], is_signed);
@@ -2441,16 +2431,15 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *&_bv)
     operand[0] = Z3_mk_int2bv(z3_ctx, width, operand[0]);
 
   // XXXjmorse - fixedbv is /not/ always partitioned at width/2
-  if (ocast.operand->type->type_id == type2t::fixedbv_id) {
+  if (is_fixedbv_type(ocast.operand->type)) {
     unsigned size = (width / 2) + 1;
     operand[0] = Z3_mk_extract(z3_ctx, width - 1, size - 1, operand[0]);
   }
 
-  if (ocast.operand->type->type_id == type2t::signedbv_id ||
-      ocast.operand->type->type_id == type2t::fixedbv_id) {
+  if (is_signedbv_type(ocast.operand->type) ||
+      is_fixedbv_type(ocast.operand->type)) {
     // Produce some useful constants
-    unsigned int nums_width = (ocast.operand->type->type_id ==
-                                                            type2t::signedbv_id)
+    unsigned int nums_width = (is_signedbv_type(ocast.operand->type))
                                ? width : width / 2;
     tmp = convert_number_bv(result, nums_width, true);
     two = convert_number_bv(2, nums_width, true);
@@ -2465,7 +2454,7 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *&_bv)
     // Ensure operand lies between these braces
     overflow[0] = Z3_mk_bvslt(z3_ctx, operand[0], operand[1]);
     overflow[1] = Z3_mk_bvsgt(z3_ctx, operand[0], operand[2]);
-  } else if (ocast.operand->type->type_id == type2t::unsignedbv_id) {
+  } else if (is_unsignedbv_type(ocast.operand->type)) {
     // Create zero and 2^bitwidth,
     operand[2] = convert_number_bv(0, width, false);
     operand[1] = convert_number_bv(result, width, false);
@@ -2487,7 +2476,7 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *&_bv)
   convert_bv(neg.operand, operand);
 
   // XXX jmorse - clearly wrong. Neg of pointer?
-  if (neg.operand->type->type_id == type2t::pointer_id)
+  if (is_pointer_type(neg.operand->type))
     operand = z3_api.mk_tuple_select(operand, 1);
 
   width = neg.operand->type->get_width();
@@ -2519,9 +2508,9 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
   //      all dereference switch cases. So, we need to verify that all derefs
   //      have a finally case that asserts the val was a valid ptr XXXjmorse.
   int ret_is_ptr, op1_is_ptr, op2_is_ptr;
-  ret_is_ptr = (expr.type->type_id == type2t::pointer_id) ? 4 : 0;
-  op1_is_ptr = (expr.part_1->type->type_id == type2t::pointer_id) ? 2 : 0;
-  op2_is_ptr = (expr.part_2->type->type_id == type2t::pointer_id) ? 1 : 0;
+  ret_is_ptr = (is_pointer_type(expr.type)) ? 4 : 0;
+  op1_is_ptr = (is_pointer_type(expr.part_1->type)) ? 2 : 0;
+  op2_is_ptr = (is_pointer_type(expr.part_2->type)) ? 1 : 0;
 
   const exprt *ptr_op, *non_ptr_op;
   switch (ret_is_ptr | op1_is_ptr | op2_is_ptr) {
