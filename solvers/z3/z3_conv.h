@@ -113,7 +113,6 @@ private:
   void convert_typecast_from_ptr(const typecast2t &cast, Z3_ast &bv);
   void convert_typecast_struct(const typecast2t &cast, Z3_ast &bv);
 
-  void convert_struct_union(const exprt &expr, Z3_ast &bv);
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   Z3_ast &bv);
   void select_pointer_offset(const exprt &expr, Z3_ast &bv);

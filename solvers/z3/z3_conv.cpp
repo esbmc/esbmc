@@ -2848,66 +2848,6 @@ z3_convt::convert_rest(const exprt &expr)
 }
 
 void
-z3_convt::convert_struct_union(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  Z3_ast value;
-
-  // XXXjmorse - original convert_struct and convert_union were used both when
-  // either expr.id() or expr.type().id() was struct/union. This can (still)
-  // lead to an arbitary irep with type struct/union being fed here, which
-  // could be invalid.
-
-  // Converts a static struct/union - IE, one that hasn't had any "with"
-  // operations applied to it, perhaps due to initialization or constant
-  // propagation.
-  const struct_typet &struct_type = to_struct_type(expr.type());
-  const struct_typet::componentst &components = struct_type.components();
-  u_int i = 0;
-
-  assert(components.size() >= expr.operands().size());
-  assert(!components.empty());
-
-  Z3_sort sort;
-  create_type(expr.type(), sort);
-
-  unsigned size = components.size();
-  if (expr.id() == "union")
-    size++;
-
-  Z3_ast *args = (Z3_ast*)alloca(sizeof(Z3_ast) * size);
-
-  int numoperands = expr.operands().size();
-  // Populate tuple with members of that struct/union
-  for (struct_typet::componentst::const_iterator
-       it = components.begin();
-       it != components.end();
-       it++, i++)
-  {
-    if (i < numoperands) {
-      convert_bv(expr.operands()[i], args[i]);
-    } else {
-      // Turns out that unions don't necessarily initialize all members.
-      // If no initialization give, use free (fresh) variable.
-      Z3_sort s;
-      create_type(it->type(), s);
-      args[i] = Z3_mk_fresh_const(z3_ctx, NULL, s);
-    }
-  }
-
-  // Update unions "last-set" member to be the last field
-  if (expr.id() == "union")
-    args[size-1] = convert_number(i, config.ansi_c.int_width, false);
-
-  // Create tuple itself, return to caller. This is a lump of data, we don't
-  // need to bind it to a name or symbol.
-  bv = z3_api.mk_tuple(sort, args, size);
-
-  DEBUGLOC;
-}
-
-void
 z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                      Z3_ast &bv)
 {
@@ -3134,9 +3074,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     return;
   }
 
-  if (exprid == "struct" || exprid == "union")
-    convert_struct_union(expr, bv);
-  else if (exprid == "unary+")
+  if (exprid == "unary+")
     convert_z3_expr(expr.op0(), bv);
   else if (exprid == "pointer_offset")
     select_pointer_offset(expr, bv);
