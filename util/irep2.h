@@ -357,24 +357,31 @@ public:
   unsigned int elements;
 };
 
-// Generate some "is-this-a-blah" macros. This is fine in terms of using
-// keywords in syntax, because the preprocessor preprocesses everything out.
-#define is_xxx_type(name) \
+// Generate some "is-this-a-blah" macros, and type conversion macros. This is
+// fine in terms of using/ keywords in syntax, because the preprocessor
+// preprocesses everything out. One more used to C++ templates might raise their
+// eyebrows at using the preprocessor; nuts to you, this works.
+#define type_macros(name) \
   inline bool is_##name##_type(const type2tc &t) \
-    { return t->type_id == type2t::name##_id; }
-is_xxx_type(bool);
-is_xxx_type(empty);
-is_xxx_type(symbol);
-is_xxx_type(struct);
-is_xxx_type(union);
-is_xxx_type(code);
-is_xxx_type(array);
-is_xxx_type(pointer);
-is_xxx_type(unsignedbv);
-is_xxx_type(signedbv);
-is_xxx_type(fixedbv);
-is_xxx_type(string);
-#undef is_xxx_type
+    { return t->type_id == type2t::name##_id; } \
+  inline const name##_type2t & to_##name##_type(const type2tc &t) \
+    { return dynamic_cast<const name##_type2t &> (*t.get()); } \
+  inline name##_type2t & to_##name##_type(type2tc &t) \
+    { return dynamic_cast<name##_type2t &> (*t.get()); }
+
+type_macros(bool);
+type_macros(empty);
+type_macros(symbol);
+type_macros(struct);
+type_macros(union);
+type_macros(code);
+type_macros(array);
+type_macros(pointer);
+type_macros(unsignedbv);
+type_macros(signedbv);
+type_macros(fixedbv);
+type_macros(string);
+#undef type_macros
 
 inline bool is_bv_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
