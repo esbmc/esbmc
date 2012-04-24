@@ -721,27 +721,32 @@ code_type2t::tostring(unsigned int indent) const
   return list_of_memberst();
 }
 
-string_type2t::string_type2t()
-  : type_body<string_type2t>(string_id)
+string_type2t::string_type2t(unsigned int _elements)
+  : type_body<string_type2t>(string_id), elements(_elements)
 {
 }
 
 unsigned int
 string_type2t::get_width(void) const
 {
-  assert(0 && "Fetching width of string type - needs consideration");
+  return elements * 8;
 }
 
 bool
-string_type2t::cmp(const string_type2t &ref __attribute__((unused))) const
+string_type2t::cmp(const string_type2t &ref) const
 {
-  return true; // All strings are the same.
+  return (elements == ref.elements);
 }
 
 int
-string_type2t::lt(const type2t &ref __attribute__((unused))) const
+string_type2t::lt(const type2t &ref) const
 {
-  return 0; // All strings are the same.
+  const string_type2t &ref2 = static_cast<const string_type2t &>(ref);
+  if (elements < ref2.elements)
+    return -1;
+  else if (elements > ref2.elements)
+    return 1;
+  return 0;
 }
 
 list_of_memberst

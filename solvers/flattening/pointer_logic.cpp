@@ -184,9 +184,9 @@ expr2tc pointer_logict::object_rec(
       if(new_offset>offset)
       {
         // found it
-        expr2tc tmp(new member2t(*it, src,
-                                 constant_string2t(type2tc(new string_type2t()),
-                                                   type2.member_names[idx])));
+        expr2tc tmp(new member2t(*it, src, constant_string2t(
+                   type2tc( new string_type2t( type2.member_names[idx].size())),
+                   type2.member_names[idx])));
         
         return object_rec(offset-current_offset, pointer_type, tmp);
       }

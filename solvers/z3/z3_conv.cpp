@@ -2476,7 +2476,7 @@ z3_convt::convert_typecast_from_ptr(const typecast2t &cast, Z3_ast &bv)
 
   // We've now grabbed the pointer struct, now get first element
   expr2tc memb(new member2t(int_type, idx, constant_string2t(
-                                             type2tc(new string_type2t()),
+                                             type2tc(new string_type2t(1)),
                                              "start")));
 
   expr2tc ptr_offs(new pointer_offset2t(int_type, cast.from));

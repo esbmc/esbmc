@@ -347,13 +347,14 @@ public:
 class string_type2t : public type_body<string_type2t>
 {
 public:
-  string_type2t(void);
+  string_type2t(unsigned int elements);
   virtual bool cmp(const string_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual unsigned int get_width(void) const;
-protected:
   string_type2t(const string_type2t &ref);
+
+  unsigned int elements;
 };
 
 /** Base class for all expressions */

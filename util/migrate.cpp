@@ -280,7 +280,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return true;
   } else if (expr.id() == "string-constant") {
     std::string thestring = expr.value().as_string();
-    type2tc t = type2tc(new string_type2t()); // XXX-global static string type?
+    typet thetype = expr.type();
+    assert(thetype.add("size").id() == "constant");
+    exprt &face = (exprt&)thetype.add("size");
+    std::string thelen = face.value().as_string();
+    mp_integer val = binary2integer(thelen, false);
+
+    type2tc t = type2tc(new string_type2t(val.to_long()));
 
     new_expr_ref = expr2tc(new constant_string2t(t, thestring));
     return true;
@@ -723,7 +729,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       return false;
 
     if (expr.op1().id() == "member_name") {
-      idx = expr2tc(new constant_string2t(type2tc(new string_type2t()),
+      idx = expr2tc(new constant_string2t(type2tc(new string_type2t(1)),
                                     expr.op1().get_string("component_name")));
     } else {
       if (!migrate_expr(expr.op1(), idx))
@@ -745,7 +751,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (!migrate_expr(expr.op0(), sourcedata))
       return false;
 
-    constant_string2t idx(type2tc(new string_type2t()),
+    constant_string2t idx(type2tc(new string_type2t(1)),
                           expr.get_string("component_name"));
 
     member2t *m = new member2t(type, sourcedata, idx);
