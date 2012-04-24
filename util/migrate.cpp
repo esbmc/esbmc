@@ -835,6 +835,30 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (!migrate_expr(expr.op0(), new_expr_ref))
       return false;
     return true;
+  } else if (expr.id() == "overflow-+") {
+    assert(expr.type().id() == "bool");
+    expr2tc op0, op1;
+    if (!convert_operand_pair(expr, op0, op1))
+        return false;
+    expr2tc add = expr2tc(new add2t(op0->type, op0, op1)); // XXX type?
+    new_expr_ref = expr2tc(new overflow2t(add));
+    return true;
+  } else if (expr.id() == "overflow--") {
+    assert(expr.type().id() == "bool");
+    expr2tc op0, op1;
+    if (!convert_operand_pair(expr, op0, op1))
+        return false;
+    expr2tc sub = expr2tc(new sub2t(op0->type, op0, op1)); // XXX type?
+    new_expr_ref = expr2tc(new overflow2t(sub));
+    return true;
+  } else if (expr.id() == "overflow-*") {
+    assert(expr.type().id() == "bool");
+    expr2tc op0, op1;
+    if (!convert_operand_pair(expr, op0, op1))
+        return false;
+    expr2tc mul = expr2tc(new mul2t(op0->type, op0, op1)); // XXX type?
+    new_expr_ref = expr2tc(new overflow2t(mul));
+    return true;
   } else {
     return false;
 //    assert(0);
