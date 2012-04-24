@@ -338,14 +338,13 @@ z3_capi::mk_tuple_select(Z3_ast t, unsigned i)
   ty = Z3_get_type(z3_ctx, t);
 
   if (Z3_get_type_kind(z3_ctx, ty) != Z3_TUPLE_TYPE) {
-    throw new z3_convt::conv_error("argument must be a tuple", irept());
+    throw new z3_convt::conv_error("argument must be a tuple");
   }
 
   num_fields = Z3_get_tuple_type_num_fields(z3_ctx, ty);
 
   if (i >= num_fields) {
-    throw new z3_convt::conv_error("invalid tuple select, index is too big",
-                                   irept());
+    throw new z3_convt::conv_error("invalid tuple select, index is too big");
   }
 
   Z3_const_decl_ast proj_decl = Z3_get_tuple_type_field_decl(z3_ctx, ty, i);

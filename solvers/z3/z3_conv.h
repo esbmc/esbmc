@@ -258,39 +258,17 @@ private:
 
 public:
   class conv_error {
-    void *backtrace_ptrs[50];
-    char **backtrace_syms;
-    int num_frames;
     std::string msg;
-    irept irep;
 
   public:
-    conv_error(std::string msg, irept irep) {
+    conv_error(std::string msg) {
       this->msg = msg;
-      this->irep = irep;
-#ifndef _WIN32
-      num_frames = backtrace(backtrace_ptrs, 50);
-      backtrace_syms = backtrace_symbols(backtrace_ptrs, num_frames);
-#else
-      num_frames = 0;
-      backtrace_syms = NULL;
-#endif
       return;
     }
 
     std::string to_string(void) {
       std::string out;
-      out = "Encountered Z3 conversion error: \"" + msg + "\" at:\n";
-      for (int i = 0; i < num_frames; i++) {
-        out += backtrace_syms[i];
-        out += "\n";
-      }
-
-      if (num_frames == 0)
-        out += "(couldn't get a backtrace)\n";
-
-      out += "For irep:" + irep.pretty(0);
-
+      out = "Encountered Z3 conversion error: \"" + msg + "\"\n";
       return out;
     }
   };

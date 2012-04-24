@@ -1615,7 +1615,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
     if2t newif(obj.type, ifval.cond, addrof1, addrof2);
     newif.convert_smt(*this, (void*&)bv);
   } else {
-    throw new conv_error("Unrecognized address_of operand", exprt());
+    throw new conv_error("Unrecognized address_of operand");
   }
 }
 
@@ -1629,7 +1629,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
   const constant_int2t *intref = dynamic_cast<const constant_int2t*>
                                              (data.source_offset.get());
   if (intref == NULL)
-    throw new conv_error("byte_extract expects constant 2nd arg", exprt());
+    throw new conv_error("byte_extract expects constant 2nd arg");
   //assert(intref != NULL && "byte_extract expects constant 2nd arg");
 
   unsigned width, w;
@@ -1665,7 +1665,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 	else
 	  bv = Z3_mk_bv2int(z3_ctx, bv, 0);
       } else {
-	throw new conv_error("unsupported type for byte_extract", exprt());
+	throw new conv_error("unsupported type for byte_extract");
       }
     } else if (data.source_value->type->type_id == type2t::signedbv_id ||
                data.source_value->type->type_id == type2t::unsignedbv_id) {
@@ -1682,7 +1682,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
       else
 	bv = Z3_mk_bv2int(z3_ctx, bv, 0);
     } else {
-      throw new conv_error("unsupported type for byte_extract", exprt());
+      throw new conv_error("unsupported type for byte_extract");
     }
   } else {
     if (data.source_value->type->type_id == type2t::struct_id) {
@@ -1728,7 +1728,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
   const constant_int2t *intref = dynamic_cast<const constant_int2t*>
                                              (data.source_offset.get());
   if (intref == NULL)
-    throw new conv_error("byte_extract expects constant 2nd arg", exprt());
+    throw new conv_error("byte_extract expects constant 2nd arg");
 
   Z3_ast tuple, value;
   uint width_op0, width_op2;
@@ -1767,14 +1767,14 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
 
     if (width_op0 == 0)
       // XXXjmorse - can this ever happen now?
-      throw new conv_error("failed to get width of byte_update operand", exprt());
+      throw new conv_error("failed to get width of byte_update operand");
 
     if (width_op0 > width_op2)
       bv = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value);
     else
-      throw new conv_error("unsupported irep for conver_byte_update", exprt());
+      throw new conv_error("unsupported irep for conver_byte_update");
   } else {
-    throw new conv_error("unsupported irep for conver_byte_update", exprt());
+    throw new conv_error("unsupported irep for conver_byte_update");
   }
 
 }
@@ -1826,7 +1826,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 
     bv = Z3_mk_store(z3_ctx, operand0, operand1, operand2);
   } else {
-    throw new conv_error("with applied to non-struct/union/array obj", exprt());
+    throw new conv_error("with applied to non-struct/union/array obj");
   }
 }
 
@@ -1897,7 +1897,7 @@ z3_convt::convert_typecast_bool(const typecast2t &cast, Z3_ast &bv)
 
     bv = Z3_mk_distinct(z3_ctx, 2, args);
   } else {
-    throw new conv_error("Unimplemented bool typecast", exprt());
+    throw new conv_error("Unimplemented bool typecast");
   }
 }
 
@@ -1973,7 +1973,7 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv)
     }
     bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
   } else {
-    throw new conv_error("unexpected typecast to fixedbv", exprt());
+    throw new conv_error("unexpected typecast to fixedbv");
   }
 
   return;
@@ -2062,11 +2062,11 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
       zero = Z3_mk_numeral(z3_ctx, "0", Z3_mk_real_type(z3_ctx));
       one = Z3_mk_numeral(z3_ctx, "1", Z3_mk_real_type(z3_ctx));
     } else {
-      throw new conv_error("Unexpected type in typecast of bool", exprt());
+      throw new conv_error("Unexpected type in typecast of bool");
     }
     bv = Z3_mk_ite(z3_ctx, bv, one, zero);
   } else   {
-    throw new conv_error("Unexpected type in int/ptr typecast", exprt());
+    throw new conv_error("Unexpected type in int/ptr typecast");
   }
 }
 
@@ -2099,7 +2099,7 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
 	} else if ((*it)->type_id == type2t::bool_id)     {
           new_members.push_back(type2tc(new bool_type2t()));
 	} else {
-          throw new conv_error("Unexpected type when casting struct", exprt());
+          throw new conv_error("Unexpected type when casting struct");
 	}
         new_names.push_back(from_struct_type.member_names[i]);
       }
@@ -2313,7 +2313,7 @@ z3_convt::convert_smt_expr(const typecast2t &cast, void *&_bv)
     convert_typecast_struct(cast, bv);
   } else {
     // XXXjmorse -- what about all other types, eh?
-    throw new conv_error("Typecast for unexpected type", exprt());
+    throw new conv_error("Typecast for unexpected type");
   }
 }
 
@@ -2381,7 +2381,7 @@ z3_convt::convert_smt_expr(const isnan2t &isnan, void *&_bv)
                                                                   true)),
                   Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx));
   } else {
-    throw new conv_error("isnan with unsupported operand type", exprt());
+    throw new conv_error("isnan with unsupported operand type");
   }
 }
 
@@ -2453,7 +2453,7 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *&_bv)
   width = ocast.operand->type->get_width();
 
   if (ocast.bits >= width || ocast.bits == 0)
-    throw new conv_error("overflow-typecast got wrong number of bits", exprt());
+    throw new conv_error("overflow-typecast got wrong number of bits");
 
   assert(ocast.bits <= 32 && ocast.bits != 0);
   result = 1 << ocast.bits;
@@ -2554,14 +2554,13 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
       break;
     case 3:
     case 7:
-      throw new conv_error("Pointer arithmatic with two pointer operands",
-                           exprt());
+      throw new conv_error("Pointer arithmatic with two pointer operands");
       break;
     case 4:
       // Artithmatic operation that has the result type of ptr.
       // Should have been handled at a higher level
       throw new conv_error("Non-pointer op being interpreted as pointer without"
-                           " typecast", exprt());
+                           " typecast");
       break;
     case 1:
     case 2:
@@ -2824,7 +2823,7 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
       return i;
   }
 
-  throw new conv_error("component name not found in struct", lhs);
+  throw new conv_error("component name not found in struct");
 }
 
 void
@@ -2840,7 +2839,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     return;
   }
 
-  throw new conv_error("Unrecognized expression type", expr);
+  throw new conv_error("Unrecognized expression type");
 }
 
 bool
