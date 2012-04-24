@@ -361,6 +361,9 @@ public:
 // fine in terms of using/ keywords in syntax, because the preprocessor
 // preprocesses everything out. One more used to C++ templates might raise their
 // eyebrows at using the preprocessor; nuts to you, this works.
+#ifdef NDEBUG
+#define dynamic_cast static_cast
+#endif
 #define type_macros(name) \
   inline bool is_##name##_type(const type2tc &t) \
     { return t->type_id == type2t::name##_id; } \
@@ -382,6 +385,9 @@ type_macros(signedbv);
 type_macros(fixedbv);
 type_macros(string);
 #undef type_macros
+#ifdef dynamic_cast
+#undef dynamic_cast
+#endif
 
 inline bool is_bv_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
