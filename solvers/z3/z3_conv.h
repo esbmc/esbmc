@@ -127,8 +127,8 @@ private:
                          ast_convert_calltype bvconvert,
                          ast_convert_multiargs intmodeconvert,
                          void *&_bv);
-  void convert_shift(const expr2t &shift, const expr2t &part1,
-                     const expr2t &part2, ast_convert_calltype convert,
+  void convert_shift(const expr2t &shift, const expr2tc &part1,
+                     const expr2tc &part2, ast_convert_calltype convert,
                      void *&_bv);
 
   void convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv);
