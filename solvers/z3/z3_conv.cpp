@@ -4118,60 +4118,6 @@ z3_convt::convert_if(const exprt &expr, Z3_ast &bv)
 }
 
 void
-z3_convt::convert_logical_ops(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.type().id() == "bool");
-  assert(expr.operands().size() >= 1);
-
-  Z3_ast *args;
-  u_int i = 0, size;
-
-  size = expr.operands().size();
-  args = new Z3_ast[size];
-
-  if (expr.operands().size() == 1) {
-    convert_bv(expr.op0(), bv);
-  } else   {
-    forall_operands(it, expr)
-    {
-      convert_bv(*it, args[i]);
-
-      if (i >= 1 && expr.id() == "xor")
-	args[i] = Z3_mk_xor(z3_ctx, args[i - 1], args[i]);
-      ++i;
-    }
-
-    if (expr.id() == "and")
-      bv = Z3_mk_and(z3_ctx, i, args);
-    else if (expr.id() == "or")
-      bv = Z3_mk_or(z3_ctx, i, args);
-    else if (expr.id() == "xor")
-      bv = args[size - 1];
-  }
-
-  delete[] args;
-
-  DEBUGLOC;
-}
-
-void
-z3_convt::convert_logical_not(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 1);
-  Z3_ast operand0;
-
-  convert_bv(expr.op0(), operand0);
-
-  bv = Z3_mk_not(z3_ctx, operand0);
-
-  DEBUGLOC;
-}
-
-void
 z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4838,10 +4784,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_unary_minus(expr, bv);
   else if (exprid == "if")
     convert_if(expr, bv);
-  else if (exprid == "and" || exprid == "or" || exprid == "xor")
-    convert_logical_ops(expr, bv);
-  else if (exprid == "not")
-    convert_logical_not(expr, bv);
   else if (exprid == "=" || exprid == "notequal")
     convert_equality(expr, bv);
   else if (exprid == "unary+")
