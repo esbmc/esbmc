@@ -831,6 +831,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.type().id() == "pointer");
     type2tc pointertype(new pointer_type2t(type2tc(new empty_type2t())));
     new_expr_ref = expr2tc(new symbol2t(pointertype, "INVALID"));
+  } else if (expr.id() == "unary+") {
+    if (!migrate_expr(expr.op0(), new_expr_ref))
+      return false;
+    return true;
   } else {
     return false;
 //    assert(0);
