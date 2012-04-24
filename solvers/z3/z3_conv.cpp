@@ -3180,110 +3180,6 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
   }
 }
 
-void
-z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  unsigned width;
-  //std::string out;
-
-  get_type_width(expr.type(), width);
-
-  const exprt::operandst &operands = expr.operands();
-
-  if (operands.size() != 1)
-    throw new conv_error("abs takes one operand", expr);
-
-  const exprt &op0 = expr.op0();
-  Z3_ast zero, is_negative, operand[2], val_mul;
-
-  if (expr.type().id() == "signedbv") {
-    if (int_encoding) {
-      zero = z3_api.mk_int(0);
-      operand[1] = z3_api.mk_int(-1);
-    } else   {
-      zero = convert_number(0, width, true);
-      operand[1] = convert_number(-1, width, true);
-    }
-  } else if (expr.type().id() == "fixedbv")     {
-    if (int_encoding) {
-      zero = Z3_mk_int(z3_ctx, 0, Z3_mk_real_type(z3_ctx));
-      operand[1] = Z3_mk_int(z3_ctx, -1, Z3_mk_real_type(z3_ctx));
-    } else   {
-      zero = convert_number(0, width, true);
-      operand[1] = convert_number(-1, width, true);
-    }
-  } else if (expr.type().id() == "unsignedbv")     {
-    if (int_encoding) {
-      zero = z3_api.mk_int(0);
-      operand[1] = z3_api.mk_int(-1);
-    } else   {
-      zero = convert_number(0, width, false);
-      operand[1] = convert_number(-1, width, true);
-    }
-  } else {
-    throw new conv_error("Unexpected type in convert_abs", expr);
-  }
-
-  convert_bv(op0, operand[0]);
-
-  if (expr.type().id() == "signedbv" || expr.type().id() == "fixedbv") {
-    if (int_encoding)
-      is_negative = Z3_mk_lt(z3_ctx, operand[0], zero);
-    else
-      is_negative = Z3_mk_bvslt(z3_ctx, operand[0], zero);
-  } else {
-    // XXXjmorse - the other case handled in this function is unsignedbv, which
-    // is never < 0, so is_negative is always false. However I don't know
-    // where the guarentee that only those types come here is.
-    is_negative = false;
-  }
-
-  if (int_encoding)
-    val_mul = Z3_mk_mul(z3_ctx, 2, operand);
-  else
-    val_mul = Z3_mk_bvmul(z3_ctx, operand[0], operand[1]);
-
-  bv = Z3_mk_ite(z3_ctx, is_negative, val_mul, operand[0]);
-}
-
-void
-z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 3);
-  Z3_ast array_var, array_val, operand0, operand1, operand2;
-
-  if (expr.type().id() == "struct" || expr.type().id() == "union") {
-    unsigned int idx;
-
-    convert_bv(expr.op0(), array_var);
-    convert_bv(expr.op2(), array_val);
-
-    idx = convert_member_name(expr.op0(), expr.op1());
-    bv = z3_api.mk_tuple_update(array_var, idx, array_val);
-
-    // Update last-updated-field field if it's a union
-    if (expr.type().id() == "union") {
-       unsigned int components_size =
-                  to_struct_union_type( expr.op0().type()).components().size();
-       bv = z3_api.mk_tuple_update(bv, components_size,
-                              convert_number(idx, config.ansi_c.int_width, 0));
-    }
-  } else if (expr.type().id() == "array") {
-
-    convert_bv(expr.op0(), operand0);
-    convert_bv(expr.op1(), operand1);
-    convert_bv(expr.op2(), operand2);
-
-    bv = Z3_mk_store(z3_ctx, operand0, operand1, operand2);
-  } else {
-    throw new conv_error("with applied to non-struct/union/array obj", expr);
-  }
-}
-
 u_int
 z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 {
@@ -3316,48 +3212,6 @@ z3_convt::select_pointer_offset(const exprt &expr, Z3_ast &bv)
   convert_bv(expr.op0(), pointer);
 
   bv = z3_api.mk_tuple_select(pointer, 1); //select pointer offset
-}
-
-void
-z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  u_int j = 0;
-  Z3_ast struct_var;
-
-  convert_bv(expr.op0(), struct_var);
-
-  j = convert_member_name(expr.op0(), expr);
-
-  if (expr.op0().type().id() == "union") {
-    union_varst::const_iterator cache_result = union_vars.find(
-      expr.op0().get_string("identifier").c_str());
-
-    if (cache_result != union_vars.end()) {
-      const struct_union_typet &type = (const struct_union_typet&)expr.op0().type();
-      const struct_union_typet::componentst components = type.components();
-      const typet &source_type = components[cache_result->second].type();
-      if (source_type.compare(expr.type()) == 0) {
-        // Type we're fetching from union matches expected type; just return it.
-        bv = z3_api.mk_tuple_select(struct_var, cache_result->second);
-        return;
-      }
-
-      // Union field and expected type mismatch. Need to insert a cast.
-      // Duplicate expr as we're changing it
-      exprt expr2 = expr;
-      typecast_exprt cast(expr2.type());
-      expr2.type() = source_type;
-      cast.op0() = expr2;
-      convert_z3_expr(cast, bv);
-      return;
-    }
-  }
-
-  bv = z3_api.mk_tuple_select(struct_var, j);
-
-  DEBUGLOC;
 }
 
 void
@@ -3427,12 +3281,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_struct_union(expr, bv);
   else if (exprid == "unary+")
     convert_z3_expr(expr.op0(), bv);
-  else if (exprid == "abs")
-    convert_abs(expr, bv);
-  else if (exprid == "with")
-    convert_with(expr, bv);
-  else if (exprid == "member")
-    convert_member(expr, bv);
   else if (exprid == "pointer_offset")
     select_pointer_offset(expr, bv);
   else if (exprid == "pointer_object")
