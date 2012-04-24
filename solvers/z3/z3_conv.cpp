@@ -877,7 +877,7 @@ z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
   // Converts a static struct/union - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
-  struct_union_type2t &type = dynamic_cast<struct_union_type2t&>(*data.type.get());
+  const struct_union_type2t &type = to_structure_type(data.type);
   u_int i = 0;
 
   assert(type.members.size() >= data.datatype_members.size());
@@ -930,7 +930,7 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
   native_int_sort = (int_encoding) ? Z3_mk_int_sort(z3_ctx)
                               : Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
 
-  const array_type2t &arr_type = dynamic_cast<array_type2t&>(*array.type.get());
+  const array_type2t &arr_type = to_array_type(array.type);
   arr_type.subtype->convert_smt_type(*this, (void*&)elem_type);
   z3_array_type = Z3_mk_array_type(z3_ctx, native_int_sort, elem_type);
 
@@ -958,7 +958,7 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
   unsigned width;
   Z3_ast &bv = (Z3_ast &)_bv;
 
-  const array_type2t &arr = dynamic_cast<array_type2t&>(*array.type.get());
+  const array_type2t &arr = to_array_type(array.type);
 
   array.type->convert_smt_type(*this, (void*&)array_type);
 
@@ -1335,8 +1335,7 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *&_bv)
     bv = Z3_mk_bvmul(z3_ctx, args[0], args[1]);
   } else {
     // fixedbv in bv mode. I've no idea if this actually works.
-    const fixedbv_type2t &fbvt = dynamic_cast<const fixedbv_type2t&>
-                                              (*mul.type.get());
+    const fixedbv_type2t &fbvt = to_fixedbv_type(mul.type);
     fraction_bits = fbvt.width - fbvt.integer_bits;
     args[0] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[0]);
     args[1] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[1]);
@@ -1371,8 +1370,7 @@ z3_convt::convert_smt_expr(const div2t &div, void *&_bv)
     } else {
       // Not the foggiest. Copied from convert_div
       assert(is_fixedbv_type(div.type));
-      const fixedbv_type2t &fbvt = dynamic_cast<const fixedbv_type2t &>
-                                               (*div.type.get());
+      const fixedbv_type2t &fbvt = to_fixedbv_type(div.type);
 
       unsigned fraction_bits = fbvt.width - fbvt.integer_bits;
 
@@ -1527,8 +1525,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
     const index2t &idx = dynamic_cast<const index2t &>(*obj.pointer_obj.get());
 
     if (!is_string_type(idx.source_data->type)) {
-      const array_type2t &arr = dynamic_cast<const array_type2t&>
-                                            (*idx.source_data->type.get());
+      const array_type2t &arr = to_array_type(idx.source_data->type);
 
       // Pick pointer-to array subtype; need to make pointer arith work.
       expr2tc addrof(new address_of2t(arr.subtype, idx.source_data));
@@ -1547,8 +1544,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
 
     int64_t offs;
     if (is_struct_type(memb.source_data->type)) {
-      const struct_type2t &type = dynamic_cast<const struct_type2t&>
-                                              (*memb.source_data->type.get());
+      const struct_type2t &type = to_struct_type(memb.source_data->type);
       offs = member_offset(type, irep_idt(memb.member.value)).to_long();
     } else {
       offs = 0; // Offset is always zero for unions.
@@ -1656,8 +1652,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
     }
   } else {
     if (is_struct_type(data.source_value->type)) {
-      const struct_type2t &struct_type = dynamic_cast<const struct_type2t&>
-                                                    (*data.source_value->type.get());
+      const struct_type2t &struct_type =to_struct_type(data.source_value->type);
       unsigned i = 0, num_elems = struct_type.members.size();
       Z3_ast struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
 
@@ -1709,8 +1704,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
   width_op2 = data.update_value->type->get_width();
 
   if (is_struct_type(data.source_value->type)) {
-    const struct_type2t &struct_type = dynamic_cast<const struct_type2t&>
-                                                  (*data.source_value->type.get());
+    const struct_type2t &struct_type = to_struct_type(data.source_value->type);
     bool has_field = false;
 
     // XXXjmorse, this isn't going to be the case if it's a with.
@@ -1758,9 +1752,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 
   if (is_structure_type(with.type)) {
     unsigned int idx = 0;
-    const struct_union_type2t &struct_type =
-                                   dynamic_cast<const struct_union_type2t&>
-                                   (*with.type.get());
+    const struct_union_type2t &struct_type = to_structure_type(with.type);
 
     convert_bv(with.source_data, tuple);
     convert_bv(with.update_data, value);
@@ -1781,8 +1773,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 
     // Update last-updated-field field if it's a union
     if (is_union_type(with.type)) {
-      const union_type2t &unionref = dynamic_cast<const union_type2t&>
-                                                 (*with.type.get());
+      const union_type2t &unionref = to_union_type(with.type);
        unsigned int components_size = unionref.members.size();
        bv = z3_api.mk_tuple_update(bv, components_size,
                               convert_number(idx, config.ansi_c.int_width, 0));
@@ -1806,8 +1797,8 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
   u_int j = 0;
   Z3_ast struct_var;
 
-  const struct_union_type2t &struct_type = dynamic_cast<const struct_union_type2t&>
-                                               (*member.source_data->type.get());
+  const struct_union_type2t &struct_type =
+    to_structure_type(member.source_data->type);
 
   forall_names(it, struct_type.member_names) {
     if (*it == member.member.value)
@@ -1828,8 +1819,9 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
       cache_result = union_vars.end();
 
     if (cache_result != union_vars.end()) {
-      const struct_union_type2t &type = dynamic_cast<const struct_union_type2t&>
-                                                 (*member.source_data->type.get());
+      const struct_union_type2t &type =
+        to_structure_type(member.source_data->type);
+
       const type2tc source_type = type.members[cache_result->second];
       if (source_type == member.type) {
         // Type we're fetching from union matches expected type; just return it.
@@ -1873,8 +1865,7 @@ void
 z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv)
 {
 
-  const fixedbv_type2t &fbvt = dynamic_cast<const fixedbv_type2t&>
-                                           (*cast.type.get());
+  const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
   unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
   unsigned to_integer_bits = fbvt.integer_bits;
 
@@ -1905,8 +1896,7 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv)
   } else if (is_fixedbv_type(cast.from->type)) {
     Z3_ast magnitude, fraction;
 
-    const fixedbv_type2t &from_fbvt = dynamic_cast<const fixedbv_type2t&>
-                                             (*cast.from->type.get());
+    const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
 
     unsigned from_fraction_bits = from_fbvt.width - from_fbvt.integer_bits;
     unsigned from_integer_bits = from_fbvt.integer_bits;
@@ -2040,23 +2030,21 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 void
 z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
 {
-  const struct_type2t &from_struct_type = dynamic_cast<const struct_type2t&>
-                                                      (*cast.from->type.get());
-  const struct_type2t &to_struct_type = dynamic_cast<const struct_type2t&>
-                                                    (*cast.type.get());
+  const struct_type2t &struct_type_from = to_struct_type(cast.from->type);
+  const struct_type2t &struct_type_to = to_struct_type(cast.type);
 
   Z3_ast freshval;
   u_int i = 0, i2 = 0;
 
   std::vector<type2tc> new_members;
   std::vector<std::string> new_names;
-  new_members.reserve(to_struct_type.members.size());
-  new_names.reserve(to_struct_type.members.size());
+  new_members.reserve(struct_type_to.members.size());
+  new_names.reserve(struct_type_to.members.size());
 
-  forall_types(it2, to_struct_type.members) {
+  forall_types(it2, struct_type_to.members) {
     i = 0;
-    forall_types(it, from_struct_type.members) {
-      if (from_struct_type.member_names[i] == to_struct_type.member_names[i2]) {
+    forall_types(it, struct_type_from.members) {
+      if (struct_type_from.member_names[i] == struct_type_to.member_names[i2]) {
 	unsigned width = (*it)->get_width();
 
 	if (is_signedbv_type(*it)) {
@@ -2068,7 +2056,7 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
 	} else {
           throw new conv_error("Unexpected type when casting struct");
 	}
-        new_names.push_back(from_struct_type.member_names[i]);
+        new_names.push_back(struct_type_from.member_names[i]);
       }
 
       i++;
@@ -2077,7 +2065,7 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
     i2++;
   }
 
-  struct_type2t newstruct(new_members, new_names, to_struct_type.name);
+  struct_type2t newstruct(new_members, new_names, struct_type_to.name);
   Z3_sort sort;
   newstruct.convert_smt_type(*this, (void*&)sort);
 
@@ -2546,8 +2534,7 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
       expr2tc non_ptr_op = (op1_is_ptr) ? expr.part_2 : expr.part_1;
 
       // Actually perform some pointer arith
-      const pointer_type2t &ptr_type = static_cast<const pointer_type2t>
-                                                  (ptr_op->type);
+      const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
       mp_integer type_size = pointer_offset_size(*ptr_type.subtype.get());
 
       // Generate nonptr * constant.

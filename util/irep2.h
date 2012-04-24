@@ -397,6 +397,16 @@ inline bool is_structure_type(const type2tc &t) \
 { return (t->type_id == type2t::union_id ||
           t->type_id == type2t::struct_id); }
 
+inline const struct_union_type2t & to_structure_type(const type2tc &t)
+  { return dynamic_cast<const struct_union_type2t &> (*t.get()); }
+inline struct_union_type2t & to_structure_type(type2tc &t)
+  { return dynamic_cast<struct_union_type2t &> (*t.get()); }
+
+inline const bv_type2t & to_bv_type(const type2tc &t)
+  { return dynamic_cast<const bv_type2t &> (*t.get()); }
+inline bv_type2t & to_bv_type(type2tc &t)
+  { return dynamic_cast<bv_type2t &> (*t.get()); }
+
 /** Base class for all expressions */
 class expr2t
 {
