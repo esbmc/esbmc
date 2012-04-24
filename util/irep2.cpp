@@ -2796,8 +2796,6 @@ overflow2t::tostring(unsigned int indent) const
 overflow_cast2t::overflow_cast2t(const expr2tc val, unsigned int _bits)
   : lops2_body<overflow_cast2t>(overflow_cast_id), operand(val), bits(_bits)
 {
-  assert(operand->expr_id == typecast_id && "operand to overflow_cast must be "
-          "a cast");
 }
 
 overflow_cast2t::overflow_cast2t(const overflow_cast2t &ref)
