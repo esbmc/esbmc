@@ -3572,10 +3572,19 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     // Another thing to note is that the end var must be /the size of the obj/
     // from start. Express this in irep.
-    uint64_t type_size = expr->type->get_width() / 8;
-    expr2tc const_offs(new constant_int2t(ptr_loc_type, BigInt(type_size)));
-    expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, const_offs));
-    expr2tc endisequal(new equality2t(start_plus_offs, end_sym));
+    expr2tc endisequal;
+    try {
+      uint64_t type_size = expr->type->get_width() / 8;
+      expr2tc const_offs(new constant_int2t(ptr_loc_type, BigInt(type_size)));
+      expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, const_offs));
+      endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      // Dynamically (nondet) sized array; take that size and use it for the
+      // offset-to-end expression.
+      const expr2tc size_expr = e->size;
+      expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, size_expr));
+      endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
+    }
 
     // Also record the amount of memory space we're working with for later usage
     total_mem_space += pointer_offset_size(*expr->type.get()).to_long() + 1;
