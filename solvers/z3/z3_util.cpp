@@ -10,30 +10,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include "z3_conv.h"
 
-void z3_convt::print_data_types(Z3_ast operand0, Z3_ast operand1)
-{
-  Z3_type_ast a, b;
-
-  a = Z3_get_type(z3_ctx, operand0);
-  std::cout << "operand0 type:" << std::endl;
-  std::cout << Z3_get_symbol_string(z3_ctx,Z3_get_type_name(z3_ctx, a)) << std::endl;
-
-  b = Z3_get_type(z3_ctx, operand1);
-  std::cout << "operand1:" << std::endl;
-  std::cout << Z3_get_symbol_string(z3_ctx,Z3_get_type_name(z3_ctx, b)) << std::endl;
-}
-
-void z3_convt::show_bv_size(Z3_ast operand)
-{
-  Z3_type_ast a;
-
-  a = Z3_get_type(z3_ctx, operand);
-  std::cout << "operand type: ";
-  std::cout << Z3_get_symbol_string(z3_ctx,Z3_get_type_name(z3_ctx, a)) << std::endl;
-  std::cout << "operand size: ";
-  std::cout << Z3_get_bv_type_size(z3_ctx, a) << std::endl;
-}
-
 Z3_ast z3_convt::convert_number(int64_t value, u_int width, bool type)
 {
 
