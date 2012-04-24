@@ -19,7 +19,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"no-bounds-check",	switc,		""	},
 { 0,	"z3-bv",		switc,		""	},
 { 0,	"z3-ir",		switc,		""	},
-{ 0,	"boolector-bv",		switc,		""	},
 { 0,	"z3",			switc,		""	},
 { 0,	"smt",			switc,		""	},
 { 0,	"outfile",		string,		""	},

@@ -29,8 +29,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/sat/satcheck.h>
 
-#include <solvers/boolector/boolector_dec.h>
-
 #include <langapi/mode.h>
 #include <langapi/languages.h>
 #include <langapi/language_util.h>
@@ -542,12 +540,6 @@ bool bmct::run_thread()
 #else
       throw "This version of ESBMC was not compiled with minisat support";
 #endif
-    else if(options.get_bool_option("boolector-bv"))
-#ifdef BOOLECTOR
-      solver = new boolector_solver(*this);
-#else
-      throw "This version of ESBMC was not compiled with boolector support";
-#endif
     else if(options.get_bool_option("z3"))
 #ifdef Z3
       solver = new z3_solver(*this, is_cpp);
@@ -626,16 +618,6 @@ bool bmct::minisat_solver::run_solver(symex_target_equationt &equation)
 {
   bool result = bmct::solver_base::run_solver(equation);
   return result;
-}
-#endif
-
-#ifdef BOOLECTOR
-bmct::boolector_solver::boolector_solver(bmct &bmc)
-  : solver_base(bmc), boolector_dec()
-{
-  boolector_dec.set_file(bmc.options.get_option("outfile"));
-  boolector_dec.set_btor(bmc.options.get_bool_option("btor"));
-  conv = &boolector_dec;
 }
 #endif
 

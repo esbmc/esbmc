@@ -17,9 +17,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <solvers/prop/prop.h>
 #include <solvers/prop/prop_conv.h>
-#ifdef BOOLECTOR
-#include <solvers/boolector/boolector_dec.h>
-#endif
 #ifdef Z3
 #include <solvers/z3/z3_conv.h>
 #endif
@@ -35,7 +32,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 // Disable these two solvers during irep conversion. I'm not maintaining them;
 // they can eventually live again via some abstract smt interface.
-#undef BOOLECTOR
 #undef MINISAT
 
 class bmct:public messaget
@@ -109,15 +105,6 @@ protected:
   protected:
     sat_minimizert satcheck;
     bv_cbmct bv_cbmc;
-  };
-#endif
-
-#ifdef BOOLECTOR
-  class boolector_solver : public solver_base {
-  public:
-    boolector_solver(bmct &bmc);
-  protected:
-    boolector_dect boolector_dec;
   };
 #endif
 

@@ -8,11 +8,6 @@ DIRS= sat flattening prop
 
 ###############################################################################
 
-ifdef BOOLECTOR
-OBJS+= boolector/$(OBJDIR)/boolector.o
-DIRS+= boolector
-endif
-
 ifdef Z3
 OBJS+= z3/$(OBJDIR)/z3.o
 DIRS+= z3

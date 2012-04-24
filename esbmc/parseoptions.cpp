@@ -127,12 +127,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("arrays-uf", "auto");
 
-  if(cmdline.isset("boolector-bv"))
-  {
-    options.set_option("boolector-bv", true);
-    options.set_option("int-encoding", false);
-  }
-
   if(cmdline.isset("z3-bv"))
   {
     options.set_option("z3", true);
@@ -153,7 +147,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("btor"))
   {
     options.set_option("btor", true);
-    options.set_option("boolector-bv", true);
   }
 
   if(cmdline.isset("z3-ir"))
@@ -169,7 +162,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.set_option("string-abstraction", true);
   options.set_option("fixedbv", true);
 
-  if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3"))
+  if (!options.get_bool_option("z3"))
   {
     // If no solver options given, default to z3 integer encoding
     options.set_option("z3", true);
@@ -1126,7 +1119,6 @@ void cbmc_parseoptionst::help()
     " --no-slice                   do not remove unused equations\n\n"
     " --- solver configuration ------------------------------------------------------\n\n"
     //" --minisat                    use the SAT solver MiniSat\n"
-    " --boolector-bv               use BOOLECTOR with bit-vector arith (experimental)\n"
     " --z3-bv                      use Z3 with bit-vector arithmetic\n"
     " --z3-ir                      use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"
