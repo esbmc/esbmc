@@ -72,7 +72,10 @@ z3_convt::get(const exprt &expr) const
     Z3_func_decl func;
 
     identifier = expr.identifier().as_string();
-    create_type(expr.type(), sort);
+    type2tc thetype;
+    if (!migrate_type(expr.type(), thetype))
+      assert(0 && "Couldn't migrate type in z3_convt::get");
+    thetype->convert_smt_type(*this, (void*&)sort);
     bv = z3_api.mk_var(identifier.c_str(), sort);
     func = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, bv));
 
