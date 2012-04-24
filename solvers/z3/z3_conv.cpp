@@ -36,15 +36,6 @@ static u_int assumptions_status = 0;
 
 extern void finalize_symbols(void);
 
-//#define DEBUG
-
-#ifdef DEBUG
-#define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
-                        "[" << __LINE__ << "]" << std::endl;
-#else
-#define DEBUGLOC
-#endif
-
 z3_convt::~z3_convt()
 {
 
@@ -309,8 +300,6 @@ z3_convt::extract_fraction(std::string v, unsigned width)
 std::string
 z3_convt::fixed_point(std::string v, unsigned width)
 {
-  DEBUGLOC;
-
   const int precision = 10000;
   std::string i, f, b, result;
   double integer, fraction, base;
@@ -345,8 +334,6 @@ z3_convt::fixed_point(std::string v, unsigned width)
 void
 z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
 {
-  DEBUGLOC
-
   std::string literal;
 
   literal = expr.op0().identifier().c_str();
@@ -526,8 +513,6 @@ z3_convt::dec_solve(void)
 Z3_lbool
 z3_convt::check2_z3_properties(void)
 {
-  DEBUGLOC
-
   Z3_lbool result;
   unsigned i;
 
@@ -773,11 +758,6 @@ z3_convt::convert_smt_type(const fixedbv_type2t &type, void *&_bv) const
 void
 z3_convt::create_pointer_type(Z3_type_ast &bv) const
 {
-  DEBUGLOC;
-
-  // XXXjmorse - this assertion should never fail, but it does...
-  //assert(type.id() == "pointer" || type.id() == "reference");
-
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_type_ast proj_types[2];
   Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
@@ -797,8 +777,6 @@ z3_convt::create_pointer_type(Z3_type_ast &bv) const
 
   bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
                         &mk_tuple_decl, proj_decls);
-
-  DEBUGLOC;
 
   return;
 }
@@ -822,8 +800,6 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
 
   sym.type->convert_smt_type(*this, (void*&)sort);
   bv = z3_api.mk_var(sym.name.c_str(), sort);
-
-  DEBUGLOC;
 }
 
 void
@@ -2619,7 +2595,6 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
 void
 z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
 {
-  DEBUGLOC;
 
   bv_cachet::const_iterator cache_result = bv_cache.find(expr);
   if (cache_result != bv_cache.end()) {
@@ -2632,16 +2607,12 @@ z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
   // insert into cache
   bv_cache.insert(std::pair<const exprt, Z3_ast>(expr, bv));
 
-  DEBUGLOC;
-
   return;
 }
 
 literalt
 z3_convt::convert_rest(const exprt &expr)
 {
-  DEBUGLOC;
-
   literalt l = z3_prop.new_variable();
   Z3_ast formula, constraint;
 
@@ -2808,8 +2779,6 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 u_int
 z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 {
-  DEBUGLOC;
-
   const struct_typet &struct_type = to_struct_type(lhs.type());
   const struct_typet::componentst &components = struct_type.components();
   u_int i = 0;
@@ -2829,7 +2798,6 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 void
 z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 {
-  DEBUGLOC;
   expr2tc new_expr;
 
   irep_idt exprid = expr.id();
@@ -2861,9 +2829,7 @@ z3_convt::assign_z3_expr(const exprt expr)
 void
 z3_convt::set_to(const exprt &expr, bool value)
 {
-  DEBUGLOC;
 
-#if 1
   if (expr.type().id() != "bool") {
     std::string msg = "prop_convt::set_to got "
                       "non-boolean expression:\n";
@@ -2932,8 +2898,6 @@ z3_convt::set_to(const exprt &expr, bool value)
   if (expr.op1().id() != "with")
     prop.l_set_to(convert(expr), value);
 
-#endif
-
   if (value && expr.id() == "and") {
     forall_operands(it, expr)
     set_to(*it, true);
@@ -2942,8 +2906,6 @@ z3_convt::set_to(const exprt &expr, bool value)
 
   if (value && expr.is_true())
     return;
-
-
 
   try {
     if (expr.id() == "=" && value) {
@@ -3006,8 +2968,6 @@ z3_convt::set_to(const exprt &expr, bool value)
     std::cerr << e->to_string() << std::endl;
     ignoring(expr);
   }
-
-  DEBUGLOC;
 
 }
 
