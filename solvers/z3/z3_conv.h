@@ -241,6 +241,7 @@ private:
   virtual void convert_smt_expr(const zero_string2t &zstr, void *&bv);
   virtual void convert_smt_expr(const zero_length_string2t &s, void *&bv);
   virtual void convert_smt_expr(const isnan2t &isnan, void *&bv);
+  virtual void convert_smt_expr(const overflow2t &overflow, void *&bv);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv) const;
   virtual void convert_smt_type(const bv_type2t &type, void *&bv) const;

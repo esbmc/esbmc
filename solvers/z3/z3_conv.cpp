@@ -2573,6 +2573,63 @@ z3_convt::convert_smt_expr(const isnan2t &isnan, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const overflow2t &overflow, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast result[2], operand[2];
+  unsigned width_op0, width_op1;
+
+  const rel2t &operation = static_cast<const rel2t &>(*overflow.operand.get());
+
+  operation.side_1->convert_smt(*this, (void*&)operand[0]);
+  operation.side_2->convert_smt(*this, (void*&)operand[1]);
+
+  width_op0 = operation.side_1->type->get_width();
+  width_op1 = operation.side_2->type->get_width();
+
+  // XXX jmorse - int2bv trainwreck.
+  if (int_encoding) {
+    operand[0] = Z3_mk_int2bv(z3_ctx, width_op0, operand[0]);
+    operand[1] = Z3_mk_int2bv(z3_ctx, width_op1, operand[1]);
+  }
+
+  typedef Z3_ast (*type1)(Z3_context, Z3_ast, Z3_ast, Z3_bool);
+  typedef Z3_ast (*type2)(Z3_context, Z3_ast, Z3_ast);
+  type1 call1;
+  type2 call2;
+
+  if (operation.expr_id == expr2t::add_id) {
+    call1 = Z3_mk_bvadd_no_overflow;
+    call2 = Z3_mk_bvadd_no_underflow;
+  } else if (operation.expr_id == expr2t::sub_id) {
+    call1 = Z3_mk_bvsub_no_underflow;
+    call2 = Z3_mk_bvsub_no_overflow;
+  } else if (operation.expr_id == expr2t::mul_id) {
+    call1 = Z3_mk_bvmul_no_overflow;
+    call2 = Z3_mk_bvmul_no_underflow;
+  } else {
+    std::cerr << "Overflow operation with invalid operand";
+    abort();
+  }
+
+  // XXX jmorse - we can't tell whether or not we're supposed to be treating
+  // the _result_ as being a signedbv or an unsignedbv, because we only have
+  // operands. Ideally, this needs to be encoded somewhere.
+  // Specifically, when irep2 conversion reaches code creation, we should
+  // encode the resulting type in the overflow operands type. Right now it's
+  // inferred.
+
+  bool is_signed = false;
+  if (operation.side_1->type->type_id == type2t::signedbv_id ||
+      operation.side_2->type->type_id == type2t::signedbv_id)
+    is_signed = true;
+
+  result[0] = call1(z3_ctx, operand[0], operand[1], is_signed);
+  result[1] = call2(z3_ctx, operand[0], operand[1]);
+  bv = Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, result));
+}
+
+void
 z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
 {
 
