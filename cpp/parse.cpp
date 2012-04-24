@@ -2259,7 +2259,7 @@ bool Parser::optPtrOperator(typet &ptrs)
       Token tk;
       lex->GetToken(tk);
       typet op("pointer");
-      op.set("#reference",true);
+      op.set("#reference",true); // TODO: check ID
       set_location(op, tk);
       t_list.push_front(op);
     }
