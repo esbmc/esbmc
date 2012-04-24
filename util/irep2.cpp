@@ -879,7 +879,8 @@ const char *expr2t::expr_names[] = {
   "zero_length_string",
   "is_nan",
   "overflow",
-  "overflow_cast"
+  "overflow_cast",
+  "overflow_neg"
 };
 
 std::string
@@ -2835,4 +2836,36 @@ overflow_cast2t::tostring(unsigned int indent) const
   buffer[63] = '\0';
   membs.push_back(member_entryt("width", std::string(buffer)));
   return membs;
+}
+
+overflow_neg2t::overflow_neg2t(const expr2tc val)
+  : lops2_body<overflow_neg2t>(overflow_neg_id), operand(val)
+{
+}
+
+overflow_neg2t::overflow_neg2t(const overflow_neg2t &ref)
+  : lops2_body<overflow_neg2t>(ref), operand(ref.operand)
+{
+}
+
+bool
+overflow_neg2t::cmp(const expr2t &ref) const
+{
+  const overflow_neg2t &ref2 = static_cast<const overflow_neg2t &> (ref);
+  return operand == ref2.operand;
+}
+
+int
+overflow_neg2t::lt(const expr2t &ref) const
+{
+  const overflow_neg2t &ref2 = static_cast<const overflow_neg2t &> (ref);
+  return operand->ltchecked(*ref2.operand.get());
+}
+
+list_of_memberst
+overflow_neg2t::tostring(unsigned int indent) const
+{
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"operand", &operand,
+                                (const char *)"");
 }

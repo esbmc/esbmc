@@ -409,7 +409,8 @@ public:
     zero_length_string_id,
     is_nan_id,
     overflow_id,
-    overflow_cast_id
+    overflow_cast_id,
+    overflow_neg_id,
   };
 
 protected:
@@ -1311,6 +1312,19 @@ public:
 
   const expr2tc operand;
   unsigned int bits;
+};
+
+class overflow_neg2t : public lops2_body<overflow_neg2t>
+{
+public:
+  overflow_neg2t(const expr2tc val1);
+  overflow_neg2t(const overflow_neg2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+  virtual list_of_memberst tostring(unsigned int indent) const;
+
+  const expr2tc operand;
 };
 
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
