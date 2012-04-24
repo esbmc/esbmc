@@ -624,12 +624,6 @@ z3_convt::assert_literal(literalt l, Z3_ast formula)
   return;
 }
 
-bool
-z3_convt::is_ptr(const typet &type)
-{
-  return type.id() == "pointer" || type.id() == "reference";
-}
-
 void
 z3_convt::convert_smt_type(const bool_type2t &type, void *&_bv) const
 {

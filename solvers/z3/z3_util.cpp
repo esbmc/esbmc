@@ -34,23 +34,6 @@ void z3_convt::show_bv_size(Z3_ast operand)
   std::cout << Z3_get_bv_type_size(z3_ctx, a) << std::endl;
 }
 
-bool z3_convt::is_bv(const typet &type)
-{
-  if (type.id()=="signedbv" || type.id()=="unsignedbv" ||
-	  type.id() == "fixedbv")
-    return true;
-
-  return false;
-}
-
-bool z3_convt::is_signed(const typet &type)
-{
-  if (type.id()=="signedbv" || type.id()=="fixedbv")
-    return true;
-
-  return false;
-}
-
 Z3_ast z3_convt::convert_number(int64_t value, u_int width, bool type)
 {
 
