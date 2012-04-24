@@ -119,9 +119,6 @@ private:
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   Z3_ast &bv);
   void convert_array(const exprt &expr, Z3_ast &bv);
-  void convert_constant(const exprt &expr, Z3_ast &bv);
-  void convert_bitwise(const exprt &expr, Z3_ast &bv);
-  void convert_unary_minus(const exprt &expr, Z3_ast &bv);
   void convert_if(const exprt &expr, Z3_ast &bv);
   void convert_equality(const exprt &expr, Z3_ast &bv);
   void convert_pointer_arith(const exprt &expr, Z3_ast &bv);
