@@ -114,8 +114,6 @@ private:
   void convert_typecast_struct(const typecast2t &cast, Z3_ast &bv);
 
   void convert_struct_union(const exprt &expr, Z3_ast &bv);
-  void convert_identifier_pointer(const exprt &expr, std::string symbol,
-                                  Z3_ast &bv);
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   Z3_ast &bv);
   void select_pointer_offset(const exprt &expr, Z3_ast &bv);
@@ -125,8 +123,6 @@ private:
   void convert_z3_expr(const exprt &expr, Z3_ast &bv);
 
   void convert_bv(const exprt &expr, Z3_ast &bv);
-
-  void convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv);
 
   typedef Z3_ast (*ast_convert_calltype)(Z3_context ctx, Z3_ast op1, Z3_ast op2);
   typedef Z3_ast (*ast_convert_multiargs)(Z3_context ctx, unsigned int numargs,

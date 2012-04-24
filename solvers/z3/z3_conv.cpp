@@ -980,28 +980,6 @@ z3_convt::create_pointer_type(Z3_type_ast &bv) const
 }
 
 void
-z3_convt::convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv)
-{
-
-  Z3_sort sort;
-
-  // References to unsigned int identifiers need to be assumed to be > 0,
-  // otherwise the solver is free to assign negative nums to it.
-  if (type.id() == "unsignedbv" && int_encoding) {
-    Z3_ast formula;
-    bv = z3_api.mk_int_var(identifier.c_str());
-    formula = Z3_mk_ge(z3_ctx, bv, z3_api.mk_int(0));
-    assert_formula(formula);
-    return;
-  }
-
-  create_type(type, sort);
-  bv = z3_api.mk_var(identifier.c_str(), sort);
-
-  DEBUGLOC;
-}
-
-void
 z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
@@ -3064,122 +3042,6 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   }
 }
 
-void
-z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
-                                     Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  Z3_ast num;
-  Z3_type_ast tuple_type;
-  Z3_sort native_int_sort;
-  std::string cte, identifier;
-  unsigned int obj_num;
-
-  if (int_encoding)
-    native_int_sort = Z3_mk_int_sort(z3_ctx);
-  else
-    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
-
-  create_pointer_type(tuple_type);
-
-  if (expr.get("value").compare("NULL") == 0 ||
-      identifier == "0") {
-    obj_num = pointer_logic.get_null_object();
-  } else {
-    // add object won't duplicate objs for identical exprs (it's a map)
-    assert(0 && "jmorse has now broken pointer logic");
-    //obj_num = pointer_logic.add_object(expr);
-  }
-
-  bv = z3_api.mk_var(symbol.c_str(), tuple_type);
-
-  // If this object hasn't yet been put in the address space record, we need to
-  // assert that the symbol has the object ID we've allocated, and then fill out
-  // the address space record.
-  if (addr_space_data.find(obj_num) == addr_space_data.end()) {
-
-    Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, tuple_type);
-
-    Z3_ast args[2];
-    args[0] = Z3_mk_int(z3_ctx, obj_num, native_int_sort);
-    args[1] = Z3_mk_int(z3_ctx, 0, native_int_sort);
-
-    Z3_ast ptr_val = Z3_mk_app(z3_ctx, decl, 2, args);
-    Z3_ast constraint = Z3_mk_eq(z3_ctx, bv, ptr_val);
-    assert_formula(constraint);
-
-    typet ptr_loc_type = unsignedbv_typet(config.ansi_c.int_width);
-
-    std::string start_name = "__ESBMC_ptr_obj_start_" + itos(obj_num);
-    std::string end_name = "__ESBMC_ptr_obj_end_" + itos(obj_num);
-
-    exprt start_sym = symbol_exprt(start_name, ptr_loc_type);
-    exprt end_sym = symbol_exprt(end_name, ptr_loc_type);
-
-    // Another thing to note is that the end var must be /the size of the obj/
-    // from start. Express this in irep.
-    std::string offs = integer2string(pointer_offset_size(expr.type()), 2);
-    exprt const_offs_expr("constant", ptr_loc_type);
-    const_offs_expr.set("value", offs);
-    exprt start_plus_offs_expr("+", ptr_loc_type);
-    start_plus_offs_expr.copy_to_operands(start_sym, const_offs_expr);
-    exprt equality_expr("=", ptr_loc_type);
-    equality_expr.copy_to_operands(end_sym, start_plus_offs_expr);
-
-    // Also record the amount of memory space we're working with for later usage
-    total_mem_space += pointer_offset_size(expr.type()).to_long() + 1;
-
-    // Assert that start + offs == end
-    Z3_ast offs_eq;
-    convert_bv(equality_expr, offs_eq);
-    assert_formula(offs_eq);
-
-    // Even better, if we're operating in bitvector mode, it's possible that
-    // Z3 will try to be clever and arrange the pointer range to cross the end
-    // of the address space (ie, wrap around). So, also assert that end > start
-    exprt wraparound_expr(">", ptr_loc_type);
-    wraparound_expr.copy_to_operands(end_sym, start_sym);
-    Z3_ast wraparound_eq;
-    convert_bv(wraparound_expr, wraparound_eq);
-    assert_formula(wraparound_eq);
-
-    // We'll place constraints on those addresses later, in finalize_pointer_chain
-
-    addr_space_data[obj_num] = pointer_offset_size(expr.type()).to_long() + 1;
-
-    Z3_ast start_ast, end_ast;
-    convert_bv(start_sym, start_ast);
-    convert_bv(end_sym, end_ast);
-
-    // Actually store into array
-    Z3_ast range_tuple = z3_api.mk_var(
-                       ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
-                       addr_space_tuple_sort);
-    Z3_ast init_val = z3_api.mk_tuple(addr_space_tuple_sort, start_ast,
-                                      end_ast, NULL);
-    Z3_ast eq = Z3_mk_eq(z3_ctx, range_tuple, init_val);
-    assert_formula(eq);
-
-    // Update array
-    bump_addrspace_array(obj_num, range_tuple);
-
-    // Finally, ensure that the array storing whether this pointer is dynamic,
-    // is initialized for this ptr to false. That way, only pointers created
-    // through malloc will be marked dynamic.
-
-    array_typet arraytype;
-    arraytype.size() = exprt("infinity");
-    arraytype.subtype() = bool_typet();
-    Z3_ast allocarray;
-    convert_identifier(dyn_info_arr_name.as_string(), arraytype, allocarray);
-    Z3_ast idxnum = Z3_mk_int(z3_ctx, obj_num, native_int_sort);
-    Z3_ast select = Z3_mk_select(z3_ctx, allocarray, idxnum);
-    Z3_ast isfalse = Z3_mk_eq(z3_ctx, Z3_mk_false(z3_ctx), select);
-    assert_formula(isfalse);
-  }
-}
-
 u_int
 z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 {
@@ -3272,12 +3134,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     return;
   }
 
-  if (exprid == "symbol")
-    convert_identifier(expr.get_string("identifier"), expr.type(), bv);
-  else if (exprid == "nondet_symbol")
-    convert_identifier("nondet$" + expr.get_string("identifier"),
-                       expr.type(), bv);
-  else if (exprid == "struct" || exprid == "union")
+  if (exprid == "struct" || exprid == "union")
     convert_struct_union(expr, bv);
   else if (exprid == "unary+")
     convert_z3_expr(expr.op0(), bv);
