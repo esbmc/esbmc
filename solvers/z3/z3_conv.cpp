@@ -3011,18 +3011,6 @@ z3_convt::set_to(const exprt &expr, bool value)
 
 }
 
-u_int
-z3_convt::get_number_vcs_z3(void)
-{
-  return number_vcs_z3;
-}
-
-u_int
-z3_convt::get_number_variables_z3(void)
-{
-  return number_variables_z3;
-}
-
 Z3_context z3_convt::z3_ctx = NULL;
 
 unsigned int z3_convt::num_ctx_ileaves = 0;

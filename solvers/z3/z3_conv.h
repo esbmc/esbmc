@@ -85,9 +85,6 @@ public:
   // overloading
   virtual exprt get(const exprt &expr) const;
 
-  u_int get_number_variables_z3(void);
-  u_int get_number_vcs_z3(void);
-
 private:
   virtual literalt convert_rest(const exprt &expr);
   virtual void set_to(const exprt &expr, bool value);
