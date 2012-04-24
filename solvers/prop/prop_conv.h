@@ -160,6 +160,7 @@ public:
   virtual void convert_smt_expr(const isnan2t &isnan, void *&arg) = 0;
   virtual void convert_smt_expr(const overflow2t &overflow, void *&arg) = 0;
   virtual void convert_smt_expr(const overflow_cast2t &ocast, void *&arg) = 0;
+  virtual void convert_smt_expr(const overflow_neg2t &neg, void *&arg) = 0;
 };
 
 #endif

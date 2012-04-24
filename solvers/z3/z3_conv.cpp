@@ -2689,6 +2689,28 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *&_bv)
+{
+  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast operand;
+  unsigned width;
+
+  neg.operand->convert_smt(*this, (void*&)operand);
+
+  // XXX jmorse - clearly wrong. Neg of pointer?
+  if (neg.operand->type->type_id == type2t::pointer_id)
+    operand = z3_api.mk_tuple_select(operand, 1);
+
+  width = neg.operand->type->get_width();
+
+  // XXX jmorse - int2bv trainwreck
+  if (int_encoding)
+    operand = Z3_mk_int2bv(z3_ctx, width, operand);
+
+  bv = Z3_mk_not(z3_ctx, Z3_mk_bvneg_no_overflow(z3_ctx, operand));
+}
+
+void
 z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
 {
 

@@ -860,6 +860,20 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc mul = expr2tc(new mul2t(op0->type, op0, op1)); // XXX type?
     new_expr_ref = expr2tc(new overflow2t(mul));
     return true;
+  } else if (has_prefix(expr.id_string(), "overflow-typecast-")) {
+    unsigned bits = atoi(expr.id_string().c_str() + 18);
+    expr2tc operand;
+    if (!migrate_expr(expr.op0(), operand))
+      return false;
+    new_expr_ref = expr2tc(new overflow_cast2t(operand, bits));
+    return true;
+  } else if (expr.id() == "overflow-unary-") {
+    assert(expr.type().id() == "bool");
+    expr2tc operand;
+    if (!migrate_expr(expr.op0(), operand))
+      return false;
+    new_expr_ref = expr2tc(new overflow_neg2t(operand));
+    return true;
   } else {
     return false;
 //    assert(0);
