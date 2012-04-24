@@ -217,7 +217,6 @@ private:
   std::string fixed_point(std::string v, unsigned width);
   std::string extract_magnitude(std::string v, unsigned width);
   std::string extract_fraction(std::string v, unsigned width);
-  void print_location(const exprt &expr);
   void debug_label_formula(std::string name, Z3_ast formula);
   Z3_ast convert_number(int64_t value, u_int width, bool type);
   Z3_ast convert_number_int(int64_t value, u_int width, bool type);
