@@ -3722,6 +3722,14 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
       const expr2tc size_expr = e->size;
       expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, size_expr));
       endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
+    } catch (type2t::symbolic_type_excp *e) {
+      // Type is empty or code -- something that we can never have a real size
+      // for. In that case, create an object of size 1: this means we have a
+      // valid entry in the address map, but that any modification of the
+      // pointer leads to invalidness, because there's no size to think about.
+      expr2tc const_offs(new constant_int2t(ptr_loc_type, BigInt(1)));
+      expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, const_offs));
+      endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
     }
 
     // Also record the amount of memory space we're working with for later usage
