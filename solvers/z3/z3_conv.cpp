@@ -1473,8 +1473,9 @@ z3_convt::convert_smt_expr(const abs2t &abs, void *&_bv)
 
   if (abs.type->type_id == type2t::fixedbv_id) {
     sign = abs.type;
-    fixedbvt bv;
-    bv.from_integer(BigInt(0));
+    fixedbvt bv; // Defaults to zero.
+    bv.spec = fixedbv_spect(32, 64);
+    exprt face = bv.to_expr();
     zero = expr2tc(new constant_fixedbv2t(sign, bv));
   } else {
     assert(abs.type->type_id == type2t::unsignedbv_id ||
