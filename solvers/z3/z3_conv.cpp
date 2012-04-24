@@ -2644,10 +2644,14 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
       expr2tc ptr_offset(new pointer_offset2t(inttype, ptr_op));
 
       expr2tc newexpr;
-      if (expr.expr_id == expr2t::add_id)
+      if (expr.expr_id == expr2t::add_id) {
         newexpr = expr2tc(new add2t(inttype, mul, ptr_offset));
-      else
-        newexpr = expr2tc(new sub2t(inttype, mul, ptr_offset));
+      } else {
+        // Preserve order for subtraction.
+        expr2tc tmp_op1 = (op1_is_ptr) ? ptr_offset : mul;
+        expr2tc tmp_op2 = (op1_is_ptr) ? mul : ptr_offset;
+        newexpr = expr2tc(new sub2t(inttype, tmp_op1, tmp_op2));
+      }
 
       // Voila, we have our pointer arithmatic
       newexpr->convert_smt(*this, (void*&)bv);
