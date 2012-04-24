@@ -141,9 +141,41 @@ mp_integer pointer_offset_size(const typet &type)
 
 mp_integer pointer_offset_size(const type2t &type)
 {
+  if(type.type_id == type2t::array_id)
+  {
+    const array_type2t &ref = static_cast<const array_type2t&>(type);
+    mp_integer sub=pointer_offset_size(*ref.subtype.get());
+
+    // get size
+    if (ref.array_size->expr_id != expr2t::constant_int_id)
+      // Follow previous behaviour
+      return mp_integer(1);
+
+    const constant_int2t &sizeref = static_cast<const constant_int2t &>
+                                               (*ref.array_size.get());
+    return sub * sizeref.constant_value;
+  }
+  else if(type.type_id == type2t::struct_id ||
+          type.type_id == type2t::union_id)
+  {
+    const struct_union_type2t &ref = static_cast<const struct_union_type2t&>
+                                                (type);
+
+    mp_integer result=1; // for the struct itself
+
+    forall_types(it, ref.members) {
+      result += pointer_offset_size(**it);
+    }
+
+    return result;
+  }
+  else
+    return mp_integer(1);
+#if 0
   mp_integer bees(type.get_width());
   bees /= 8; // bits to bytes.
   return bees;
+#endif
 }
 
 /*******************************************************************\
