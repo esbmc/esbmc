@@ -3181,78 +3181,6 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 }
 
 void
-z3_convt::convert_index(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 2);
-
-  Z3_ast args[2];
-  std::string identifier;
-
-  convert_bv(expr.op0(), args[0]);
-  convert_bv(expr.op1(), args[1]);
-
-  // XXXjmorse - consider situation where a pointer is indexed. Should it
-  // give the address of ptroffset + (typesize * index)?
-  bv = Z3_mk_select(z3_ctx, args[0], args[1]);
-
-  DEBUGLOC;
-}
-
-void
-z3_convt::convert_shift(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 2);
-  Z3_ast operand0, operand1;
-  unsigned width_expr, width_op0, width_op1;
-
-  convert_bv(expr.op0(), operand0);
-  convert_bv(expr.op1(), operand1);
-
-  get_type_width(expr.type(), width_expr);
-  get_type_width(expr.op0().type(), width_op0);
-  get_type_width(expr.op1().type(), width_op1);
-
-  if (int_encoding) {
-    operand0 = Z3_mk_int2bv(z3_ctx, width_op0, operand0);
-    operand1 = Z3_mk_int2bv(z3_ctx, width_op1, operand1);
-  }
-
-  if (width_op0 > width_expr)
-    operand0 = Z3_mk_extract(z3_ctx, (width_expr - 1), 0, operand0);
-  if (width_op1 > width_expr)
-    operand1 = Z3_mk_extract(z3_ctx, (width_expr - 1), 0, operand1);
-
-  if (width_op0 > width_op1) {
-    if (expr.op0().type().id() == "unsignedbv")
-      operand1 = Z3_mk_zero_ext(z3_ctx, (width_op0 - width_op1), operand1);
-    else
-      operand1 = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op1), operand1);
-  }
-
-  if (expr.id() == "ashr")
-    bv = Z3_mk_bvashr(z3_ctx, operand0, operand1);
-  else if (expr.id() == "lshr")
-    bv = Z3_mk_bvlshr(z3_ctx, operand0, operand1);
-  else if (expr.id() == "shl")
-    bv = Z3_mk_bvshl(z3_ctx, operand0, operand1);
-  else
-    throw new conv_error("Non-shift operation in convert_shift", expr);
-
-  if (int_encoding) {
-    if (expr.type().id() == "signedbv")
-      bv = Z3_mk_bv2int(z3_ctx, bv, true);
-    else if (expr.type().id() == "unsignedbv")
-      bv = Z3_mk_bv2int(z3_ctx, bv, false);
-    else
-      throw new conv_error("No bitshift ops for expr type", expr);
-  }
-}
-
-void
 z3_convt::convert_abs(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3499,10 +3427,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_struct_union(expr, bv);
   else if (exprid == "unary+")
     convert_z3_expr(expr.op0(), bv);
-  else if (exprid == "index")
-    convert_index(expr, bv);
-  else if (exprid == "ashr" || exprid == "lshr" || exprid == "shl")
-    convert_shift(expr, bv);
   else if (exprid == "abs")
     convert_abs(expr, bv);
   else if (exprid == "with")
