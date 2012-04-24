@@ -105,13 +105,6 @@ private:
   }
   void create_enum_type(Z3_type_ast &bv) const;
   void create_pointer_type(Z3_type_ast &bv) const;
-  Z3_ast convert_same_object(const exprt &expr);
-  Z3_ast convert_invalid_object(const exprt &expr);
-  Z3_ast convert_overflow_sum_sub_mul(const exprt &expr);
-  Z3_ast convert_overflow_unary(const exprt &expr);
-  Z3_ast convert_overflow_typecast(const exprt &expr);
-  Z3_ast convert_memory_leak(const exprt &expr);
-  Z3_ast convert_width(const exprt &expr);
 
   void convert_typecast_bool(const typecast2t &cast, Z3_ast &bv);
   void convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv);
