@@ -282,9 +282,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     std::string thestring = expr.value().as_string();
     type2tc t = type2tc(new string_type2t()); // XXX-global static string type?
 
-    constant_string2t s(t, thestring);
-
-    new_expr_ref = s.to_array();
+    new_expr_ref = expr2tc(new constant_string2t(t, thestring));
     return true;
   } else if (expr.id() == "constant" && expr.type().id() == "array") {
     // Fixed size array.

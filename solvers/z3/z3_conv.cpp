@@ -1753,13 +1753,22 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
 
   if (obj.pointer_obj->expr_id == expr2t::index_id) {
     const index2t &idx = dynamic_cast<const index2t &>(*obj.pointer_obj.get());
-    const array_type2t &arr = dynamic_cast<const array_type2t&>
-                                          (*idx.source_data->type.get());
 
-    // Pick pointer-to array subtype; need to make pointer arith work.
-    expr2tc addrof(new address_of2t(arr.subtype, idx.source_data));
-    expr2tc plus(new add2t(addrof->type, addrof, idx.index));
-    plus->convert_smt(*this, (void*&)bv);
+    if (idx.source_data->type->type_id != type2t::string_id) {
+      const array_type2t &arr = dynamic_cast<const array_type2t&>
+                                            (*idx.source_data->type.get());
+
+      // Pick pointer-to array subtype; need to make pointer arith work.
+      expr2tc addrof(new address_of2t(arr.subtype, idx.source_data));
+      expr2tc plus(new add2t(addrof->type, addrof, idx.index));
+      plus->convert_smt(*this, (void*&)bv);
+    } else {
+      // Strings; convert with slightly different types.
+      type2tc stringtype(new unsignedbv_type2t(8));
+      expr2tc addrof(new address_of2t(stringtype, idx.source_data));
+      expr2tc plus(new add2t(addrof->type, addrof, idx.index));
+      plus->convert_smt(*this, (void*&)bv);
+    }
   } else if (obj.pointer_obj->expr_id == expr2t::member_id) {
     const member2t &memb = dynamic_cast<const member2t&>
                                        (*obj.pointer_obj.get());
