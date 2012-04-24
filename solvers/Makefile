@@ -1,10 +1,9 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 
-OBJS= sat/$(OBJDIR)/satsolvers.o flattening/$(OBJDIR)/flattening.o \
-      prop/$(OBJDIR)/propobj.o
+OBJS= sat/$(OBJDIR)/satsolvers.o prop/$(OBJDIR)/propobj.o
 
-DIRS= sat flattening prop
+DIRS= sat prop
 
 ###############################################################################
 

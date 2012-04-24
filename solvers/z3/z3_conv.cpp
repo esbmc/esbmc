@@ -22,10 +22,7 @@
 #include <pointer_offset_size.h>
 #include <find_symbols.h>
 #include <prefix.h>
-#include <solvers/flattening/boolbv_width.h>
 #include <fixedbv.h>
-#include <solvers/flattening/boolbv.h>
-#include <solvers/flattening/boolbv_type.h>
 
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"

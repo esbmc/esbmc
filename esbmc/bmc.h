@@ -22,13 +22,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #endif
 #include <solvers/sat/cnf.h>
 #include <solvers/sat/satcheck.h>
-#include <solvers/flattening/sat_minimizer.h>
 #include <solvers/sat/cnf_clause_list.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
 #include <goto-symex/reachability_tree.h>
-
-#include "bv_cbmc.h"
 
 // Disable these two solvers during irep conversion. I'm not maintaining them;
 // they can eventually live again via some abstract smt interface.

@@ -41,7 +41,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/reachability_tree.h>
 
 #include "bmc.h"
-#include "bv_cbmc.h"
 #include "document_subgoals.h"
 #include "version.h"
 
