@@ -96,6 +96,11 @@ private:
 
   void create_pointer_type(Z3_type_ast &bv) const;
 
+  void convert_z3_expr(const exprt &expr, Z3_ast &bv);
+
+  void convert_bv(const exprt &expr, Z3_ast &bv);
+
+
   void convert_typecast_bool(const typecast2t &cast, Z3_ast &bv);
   void convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv);
   void convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv);
@@ -105,9 +110,6 @@ private:
 
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   Z3_ast &bv);
-  void convert_z3_expr(const exprt &expr, Z3_ast &bv);
-
-  void convert_bv(const exprt &expr, Z3_ast &bv);
 
   typedef Z3_ast (*ast_convert_calltype)(Z3_context ctx, Z3_ast op1, Z3_ast op2);
   typedef Z3_ast (*ast_convert_multiargs)(Z3_context ctx, unsigned int numargs,
