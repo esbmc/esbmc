@@ -596,7 +596,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (!migrate_type(expr.type(), type))
       return false;
 
-    assert(expr.operands().size() > 2);
+    assert(expr.operands().size() == 2);
 
     expr2tc side1, side2;
     if (!convert_operand_pair(expr, side1, side2))
