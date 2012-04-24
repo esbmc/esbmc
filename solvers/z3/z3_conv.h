@@ -118,9 +118,6 @@ private:
                                   Z3_ast &bv);
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   Z3_ast &bv);
-  void convert_array(const exprt &expr, Z3_ast &bv);
-  void convert_address_of(const exprt &expr, Z3_ast &bv);
-  void convert_array_of(const exprt &expr, Z3_ast &bv);
   void convert_index(const exprt &expr, Z3_ast &bv);
   void convert_shift(const exprt &expr, Z3_ast &bv);
   void convert_abs(const exprt &expr, Z3_ast &bv);
