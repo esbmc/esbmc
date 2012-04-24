@@ -1282,7 +1282,9 @@ public:
 };
 
 /** Check whether operand overflows. Operand must be either add, subtract,
- *  or multiply. */
+ *  or multiply. XXXjmorse - in the future we should ensure the type of the
+ *  operand is the expected type result of the operation. That way we can tell
+ *  whether to do a signed or unsigned over/underflow test. */
 class overflow2t : public lops2_body<overflow2t>
 {
 public:
