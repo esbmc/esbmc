@@ -235,7 +235,6 @@ private:
   z3_capi z3_api;
 
   bool int_encoding, ignoring_expr, equivalence_checking;
-  //Z3_ast assumptions[Z3_UNSAT_CORE_LIMIT];
   std::list<Z3_ast> assumptions;
   std::string filename;
 
