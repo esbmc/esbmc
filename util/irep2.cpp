@@ -2602,7 +2602,7 @@ member2t::tostring(unsigned int indent) const
 {
   list_of_memberst memb;
 
-  memb.push_back(member_entryt("source", source_data->pretty(2)));
+  memb.push_back(member_entryt("source", source_data->pretty(indent + 2)));
   memb.push_back(member_entryt("member name", member.value));
   return memb;
 }
