@@ -1916,7 +1916,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
   //
   const constant_int2t *intref = dynamic_cast<const constant_int2t*>
                                              (data.source_offset.get());
-  assert(intref != NULL && "byte_extract expects constant 2nd arg");
+  if (intref == NULL)
+    throw new conv_error("byte_extract expects constant 2nd arg", exprt());
 
   Z3_ast tuple, value;
   uint width_op0, width_op2;
