@@ -143,9 +143,6 @@ private:
   void convert_equality(const exprt &expr, Z3_ast &bv);
   void convert_pointer_arith(const exprt &expr, Z3_ast &bv);
   void convert_add_sub(const exprt &expr, Z3_ast &bv);
-  void convert_div(const exprt &expr, Z3_ast &bv);
-  void convert_mod(const exprt &expr, Z3_ast &bv);
-  void convert_mul(const exprt &expr, Z3_ast &bv);
   void convert_address_of(const exprt &expr, Z3_ast &bv);
   void convert_array_of(const exprt &expr, Z3_ast &bv);
   void convert_index(const exprt &expr, Z3_ast &bv);

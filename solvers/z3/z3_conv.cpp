@@ -4341,132 +4341,6 @@ z3_convt::convert_add_sub(const exprt &expr, Z3_ast &bv)
 }
 
 void
-z3_convt::convert_div(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  if (expr.type().id() == "pointer" || expr.op0().type().id() == "pointer" ||
-      expr.op1().type().id() == "pointer") {
-    throw new conv_error("Pointer operands to mod are not permitted", expr);
-  }
-
-  assert(expr.operands().size() == 2);
-  Z3_ast operand0, operand1;
-
-  convert_bv(expr.op0(), operand0);
-  convert_bv(expr.op1(), operand1);
-
-  if (int_encoding) {
-    bv = Z3_mk_div(z3_ctx, operand0, operand1);
-  } else   {
-    if (expr.type().id() == "signedbv")
-      bv = Z3_mk_bvsdiv(z3_ctx, operand0, operand1);
-    else if (expr.type().id() == "unsignedbv")
-      bv = Z3_mk_bvudiv(z3_ctx, operand0, operand1);
-    else if (expr.type().id() == "fixedbv") {
-      fixedbvt fbt(expr);
-      unsigned fraction_bits = fbt.spec.get_fraction_bits();
-
-      bv = Z3_mk_extract(z3_ctx, fbt.spec.width - 1, 0,
-                         Z3_mk_bvsdiv(z3_ctx,
-                                      Z3_mk_concat(z3_ctx, operand0,
-                                                   convert_number(0,
-                                                                  fraction_bits, true)),
-                                      Z3_mk_sign_ext(z3_ctx, fraction_bits,
-                                                     operand1)));
-    } else {
-      throw new conv_error("unsupported type for /: ", expr);
-    }
-  }
-}
-
-void
-z3_convt::convert_mod(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  if (expr.type().id() == "pointer" || expr.op0().type().id() == "pointer" ||
-      expr.op1().type().id() == "pointer") {
-    throw new conv_error("Pointer operands to divide are not permitted", expr);
-  }
-
-  assert(expr.operands().size() == 2);
-  Z3_ast operand0, operand1;
-
-  convert_bv(expr.op0(), operand0);
-  convert_bv(expr.op1(), operand1);
-
-  if (expr.type().id() != "signedbv" && expr.type().id() != "unsignedbv")
-    throw new conv_error("unsupported type for mod", expr);
-
-  if (int_encoding) {
-    bv = Z3_mk_mod(z3_ctx, operand0, operand1);
-  } else   {
-    if (expr.type().id() == "signedbv") {
-      bv = Z3_mk_bvsrem(z3_ctx, operand0, operand1);
-    }   else if (expr.type().id() == "unsignedbv") {
-      bv = Z3_mk_bvurem(z3_ctx, operand0, operand1);
-    }
-  }
-}
-
-void
-z3_convt::convert_mul(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  if (expr.type().id() == "pointer" || expr.op0().type().id() == "pointer" ||
-      expr.op1().type().id() == "pointer") {
-    throw new conv_error("Pointer operands to mod are not permitted", expr);
-  }
-
-  assert(expr.operands().size() >= 2);
-  Z3_ast *args;
-  u_int i = 0, size;
-  unsigned fraction_bits = 0;
-  size = expr.operands().size() + 1;
-  args = new Z3_ast[size];
-
-  if (expr.type().id() == "fixedbv") {
-    fixedbvt fbt(expr);
-    fraction_bits = fbt.spec.get_fraction_bits();
-  }
-
-  forall_operands(it, expr)
-  {
-    convert_bv(*it, args[i]);
-
-    if (expr.type().id() == "fixedbv" && !int_encoding)
-      args[i] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[i]);
-
-    if (!int_encoding) {
-      if (i == 1) {
-        args[size - 1] = Z3_mk_bvmul(z3_ctx, args[0], args[1]);
-      } else if (i > 1)     {
-        args[size - 1] = Z3_mk_bvmul(z3_ctx, args[size - 1], args[i]);
-      }
-    }
-    ++i;
-  }
-
-  if (int_encoding)
-    args[i] = Z3_mk_mul(z3_ctx, i, args);
-
-  bv = args[i];
-
-  if (expr.type().id() == "fixedbv" && !int_encoding) {
-    fixedbvt fbt(expr);
-    bv =
-      Z3_mk_extract(z3_ctx, fbt.spec.width + fraction_bits - 1, fraction_bits,
-                    bv);
-  }
-
-  delete[] args;
-
-  DEBUGLOC;
-}
-
-void
 z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4974,12 +4848,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_z3_expr(expr.op0(), bv);
   else if (exprid == "+" || exprid == "-")
     convert_add_sub(expr, bv);
-  else if (exprid == "/")
-    convert_div(expr, bv);
-  else if (exprid == "mod")
-    convert_mod(expr, bv);
-  else if (exprid == "*")
-    convert_mul(expr, bv);
   else if (exprid == "address_of" || exprid == "implicit_address_of"
            || exprid == "reference_to")
     return convert_address_of(expr, bv);
@@ -5008,7 +4876,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     string2array(expr, tmp);
     convert_bv(tmp, bv);
 #if 1
-  else if (exprid == "isnan")
+  } else if (exprid == "isnan")
     convert_isnan(expr, bv);
 #endif
   else if (exprid == "width")
