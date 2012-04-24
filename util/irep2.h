@@ -273,6 +273,9 @@ public:
   // Exception for invalid manipultions of dynamically sized arrays. No actual
   // data stored.
   class dyn_sized_array_excp {
+  public:
+    dyn_sized_array_excp(const expr2tc _size) : size(_size) {}
+    expr2tc size;
   };
 
   const type2tc subtype;

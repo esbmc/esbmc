@@ -382,7 +382,7 @@ array_type2t::get_width(void) const
     throw new inf_sized_array_excp();
 
   if (array_size->expr_id != expr2t::constant_int_id)
-    throw new dyn_sized_array_excp();
+    throw new dyn_sized_array_excp(array_size);
 
   // Otherwise, we can multiply the size of the subtype by the number of elements.
   unsigned int sub_width = subtype->get_width();
