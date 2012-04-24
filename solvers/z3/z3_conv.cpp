@@ -2593,7 +2593,7 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
 }
 
 void
-z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
+z3_convt::convert_bv(const expr2tc &expr, Z3_ast &bv)
 {
 
   bv_cachet::const_iterator cache_result = bv_cache.find(expr);
@@ -2602,11 +2602,10 @@ z3_convt::convert_bv(const exprt &expr, Z3_ast &bv)
     return;
   }
 
-  convert_z3_expr(expr, bv);
+  expr->convert_smt(*this, (void *&)bv);
 
   // insert into cache
-  bv_cache.insert(std::pair<const exprt, Z3_ast>(expr, bv));
-
+  bv_cache.insert(std::pair<const expr2tc, Z3_ast>(expr, bv));
   return;
 }
 
@@ -2624,7 +2623,7 @@ z3_convt::convert_rest(const exprt &expr)
       ignoring(expr);
       return l;
     }
-    convert_bv(expr, constraint);
+    convert_z3_expr(expr, constraint);
   } catch (conv_error *e) {
     std::cerr << e->to_string() << std::endl;
     ignoring(expr);
@@ -2916,8 +2915,8 @@ z3_convt::set_to(const exprt &expr, bool value)
       const exprt &op1 = expr.op1();
 
       if (assign_z3_expr(expr) && ignoring_expr) {
-        convert_bv(op0, operand[0]);
-        convert_bv(op1, operand[1]);
+        convert_z3_expr(op0, operand[0]);
+        convert_z3_expr(op1, operand[1]);
 
         if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
           Z3_ast pointer[2], formula[2];

@@ -95,8 +95,8 @@ private:
 
   void convert_z3_expr(const exprt &expr, Z3_ast &bv);
 
-  void convert_bv(const exprt &expr, Z3_ast &bv);
 
+  void convert_bv(const expr2tc &expr, Z3_ast &bv);
 
   void convert_typecast_bool(const typecast2t &cast, Z3_ast &bv);
   void convert_typecast_fixedbv_nonint(const typecast2t &cast, Z3_ast &bv);
@@ -209,7 +209,8 @@ private:
 
   pointer_logict pointer_logic;
 
-  typedef hash_map_cont<const exprt, Z3_ast, irep_hash> bv_cachet;
+  // XXXjmorse - map is a fallback from hash map, as there's no expr2t hashing.
+  typedef std::map<const expr2tc, Z3_ast> bv_cachet;
   bv_cachet bv_cache;
 
   std::string itos(int i);
