@@ -877,7 +877,8 @@ const char *expr2t::expr_names[] = {
   "index",
   "zero_string",
   "zero_length_string",
-  "is_nan"
+  "is_nan",
+  "overflow"
 };
 
 std::string
@@ -2753,5 +2754,40 @@ isnan2t::tostring(unsigned int indent) const
 {
   return tostring_func<expr2tc>(indent,
                                 (const char *)"value", &value,
+                                (const char *)"");
+}
+
+overflow2t::overflow2t(const expr2tc val)
+  : lops2_body<overflow2t>(overflow_id), operand(val)
+{
+  assert((operand->expr_id == add_id || operand->expr_id == sub_id ||
+          operand->expr_id == mul_id) && "operand to overflow2t must be "
+          "add, sub or mul");
+}
+
+overflow2t::overflow2t(const overflow2t &ref)
+  : lops2_body<overflow2t>(ref), operand(ref.operand)
+{
+}
+
+bool
+overflow2t::cmp(const expr2t &ref) const
+{
+  const overflow2t &ref2 = static_cast<const overflow2t &> (ref);
+  return operand == ref2.operand;
+}
+
+int
+overflow2t::lt(const expr2t &ref) const
+{
+  const overflow2t &ref2 = static_cast<const overflow2t &> (ref);
+  return operand->ltchecked(*ref2.operand.get());
+}
+
+list_of_memberst
+overflow2t::tostring(unsigned int indent) const
+{
+  return tostring_func<expr2tc>(indent,
+                                (const char *)"operand", &operand,
                                 (const char *)"");
 }

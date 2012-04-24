@@ -407,7 +407,8 @@ public:
     index_id,
     zero_string_id,
     zero_length_string_id,
-    is_nan_id
+    is_nan_id,
+    overflow_id
   };
 
 protected:
@@ -1278,6 +1279,21 @@ public:
   virtual list_of_memberst tostring(unsigned int indent) const;
 
   const expr2tc value;
+};
+
+/** Check whether operand overflows. Operand must be either add, subtract,
+ *  or multiply. */
+class overflow2t : public lops2_body<overflow2t>
+{
+public:
+  overflow2t(const expr2tc val1);
+  overflow2t(const overflow2t &ref);
+
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+  virtual list_of_memberst tostring(unsigned int indent) const;
+
+  const expr2tc operand;
 };
 
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
