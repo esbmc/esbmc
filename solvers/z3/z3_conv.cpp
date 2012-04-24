@@ -1766,7 +1766,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
     int64_t offs;
     if (memb.source_data->type->type_id == type2t::struct_id) {
       const struct_type2t &type = dynamic_cast<const struct_type2t&>
-                                              (*obj.pointer_obj->type.get());
+                                              (*memb.source_data->type.get());
       offs = member_offset(type, irep_idt(memb.member.value)).to_long();
     } else {
       offs = 0; // Offset is always zero for unions.
