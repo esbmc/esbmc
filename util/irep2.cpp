@@ -878,7 +878,8 @@ const char *expr2t::expr_names[] = {
   "zero_string",
   "zero_length_string",
   "is_nan",
-  "overflow"
+  "overflow",
+  "overflow_cast"
 };
 
 std::string
@@ -2790,4 +2791,50 @@ overflow2t::tostring(unsigned int indent) const
   return tostring_func<expr2tc>(indent,
                                 (const char *)"operand", &operand,
                                 (const char *)"");
+}
+
+overflow_cast2t::overflow_cast2t(const expr2tc val, unsigned int _bits)
+  : lops2_body<overflow_cast2t>(overflow_cast_id), operand(val), bits(_bits)
+{
+  assert(operand->expr_id == typecast_id && "operand to overflow_cast must be "
+          "a cast");
+}
+
+overflow_cast2t::overflow_cast2t(const overflow_cast2t &ref)
+  : lops2_body<overflow_cast2t>(ref), operand(ref.operand), bits(ref.bits)
+{
+}
+
+bool
+overflow_cast2t::cmp(const expr2t &ref) const
+{
+  const overflow_cast2t &ref2 = static_cast<const overflow_cast2t &> (ref);
+  if (bits != ref2.bits)
+    return false;
+  return operand == ref2.operand;
+}
+
+int
+overflow_cast2t::lt(const expr2t &ref) const
+{
+  const overflow_cast2t &ref2 = static_cast<const overflow_cast2t &> (ref);
+  if (bits < ref2.bits)
+    return -1;
+  else if (bits > ref2.bits)
+    return 1;
+
+  return operand->ltchecked(*ref2.operand.get());
+}
+
+list_of_memberst
+overflow_cast2t::tostring(unsigned int indent) const
+{
+  list_of_memberst membs = tostring_func<expr2tc>(indent,
+                                (const char *)"operand", &operand,
+                                (const char *)"");
+  char buffer[64];
+  snprintf(buffer, 63, "%d", bits);
+  buffer[63] = '\0';
+  membs.push_back(member_entryt("width", std::string(buffer)));
+  return membs;
 }
