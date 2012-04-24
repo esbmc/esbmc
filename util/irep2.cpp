@@ -2086,7 +2086,7 @@ arith_2op2t::arith_2op2t(const type2tc type, expr_ids id,
 }
 
 arith_2op2t::arith_2op2t(const arith_2op2t &ref)
-  : arith_body<arith_2op2t>(ref)
+  : arith_body<arith_2op2t>(ref), part_1(ref.part_1), part_2(ref.part_2)
 {
 }
 
