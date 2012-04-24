@@ -631,15 +631,6 @@ z3_convt::is_ptr(const typet &type)
 }
 
 void
-z3_convt::select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  bv = Z3_mk_select(z3_ctx, object, offset);
-  return;
-}
-
-void
 z3_convt::create_array_type(const typet &type, Z3_type_ast &bv) const
 {
   DEBUGLOC;
@@ -3004,30 +2995,6 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
 }
 
 void
-z3_convt::select_pointer_offset(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 1);
-  Z3_ast pointer;
-
-  convert_bv(expr.op0(), pointer);
-
-  bv = z3_api.mk_tuple_select(pointer, 1); //select pointer offset
-}
-
-void
-z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 1 && is_ptr(expr.op0().type()));
-
-  convert_bv(expr.op0(), bv);
-  bv = z3_api.mk_tuple_select(bv, 0);
-}
-
-void
 z3_convt::convert_isnan(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -3076,10 +3043,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 
   if (exprid == "unary+")
     convert_z3_expr(expr.op0(), bv);
-  else if (exprid == "pointer_offset")
-    select_pointer_offset(expr, bv);
-  else if (exprid == "pointer_object")
-    convert_pointer_object(expr, bv);
   else if (exprid == "string-constant") {
     exprt tmp;
     string2array(expr, tmp);
