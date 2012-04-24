@@ -118,6 +118,9 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
   } catch (array_type2t::inf_sized_array_excp *) {
     // Not a problem, we don't use the array size in extraction
     width = 0;
+  } catch (array_type2t::dyn_sized_array_excp *e) {
+    // Also fine.
+    width = 0;
   }
 
   if (type.is_bool()) {
