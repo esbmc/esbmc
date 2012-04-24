@@ -27,8 +27,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <time_stopping.h>
 #include <message_stream.h>
 
-#include <solvers/sat/satcheck.h>
-
 #include <langapi/mode.h>
 #include <langapi/languages.h>
 #include <langapi/language_util.h>
@@ -168,8 +166,7 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   else
     logic = "integer/real arithmetic";
 
-  if (!(options.get_bool_option("minisat")) && !options.get_bool_option("smt")
-        && !options.get_bool_option("btor"))
+  if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
     std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
 
   prop_conv.set_message_handler(message_handler);
@@ -533,13 +530,7 @@ bool bmct::run_thread()
           strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
         return false;
 
-    if(options.get_bool_option("minisat"))
-#ifdef MINISAT
-      solver = new minisat_solver(*this);
-#else
-      throw "This version of ESBMC was not compiled with minisat support";
-#endif
-    else if(options.get_bool_option("z3"))
+    if(options.get_bool_option("z3"))
 #ifdef Z3
       solver = new z3_solver(*this, is_cpp);
 #else
@@ -597,28 +588,6 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
     return true;
   }
 }
-
-#ifdef MINISAT
-bmct::minisat_solver::minisat_solver(bmct &bmc)
-  : solver_base(bmc), satcheck(), bv_cbmc(satcheck)
-{
-  satcheck.set_message_handler(bmc.message_handler);
-  satcheck.set_verbosity(bmc.get_verbosity());
-
-  if(bmc.options.get_option("arrays-uf")=="never")
-    bv_cbmc.unbounded_array=bv_cbmct::U_NONE;
-  else if(bmc.options.get_option("arrays-uf")=="always")
-    bv_cbmc.unbounded_array=bv_cbmct::U_ALL;
-
-  conv = &bv_cbmc;
-}
-
-bool bmct::minisat_solver::run_solver(symex_target_equationt &equation)
-{
-  bool result = bmct::solver_base::run_solver(equation);
-  return result;
-}
-#endif
 
 #ifdef Z3
 bmct::z3_solver::z3_solver(bmct &bmc, bool is_cpp)

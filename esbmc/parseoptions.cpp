@@ -194,7 +194,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    {
      options.set_option("uw-model", true);
      options.set_option("schedule", true);
-     options.set_option("minisat", false);
    }
    else
      options.set_option("uw-model", false);
@@ -1118,7 +1117,6 @@ void cbmc_parseoptionst::help()
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
     " --no-slice                   do not remove unused equations\n\n"
     " --- solver configuration ------------------------------------------------------\n\n"
-    //" --minisat                    use the SAT solver MiniSat\n"
     " --z3-bv                      use Z3 with bit-vector arithmetic\n"
     " --z3-ir                      use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"

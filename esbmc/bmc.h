@@ -20,16 +20,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifdef Z3
 #include <solvers/z3/z3_conv.h>
 #endif
-#include <solvers/sat/cnf.h>
-#include <solvers/sat/satcheck.h>
-#include <solvers/sat/cnf_clause_list.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
 #include <goto-symex/reachability_tree.h>
-
-// Disable these two solvers during irep conversion. I'm not maintaining them;
-// they can eventually live again via some abstract smt interface.
-#undef MINISAT
 
 class bmct:public messaget
 {
@@ -92,18 +85,6 @@ protected:
     prop_convt *conv;
     bmct &bmc;
   };
-
-#ifdef MINISAT
-  class minisat_solver : public solver_base {
-  public:
-    minisat_solver(bmct &bmc);
-    virtual bool run_solver(symex_target_equationt &equation);
-
-  protected:
-    sat_minimizert satcheck;
-    bv_cbmct bv_cbmc;
-  };
-#endif
 
 #ifdef Z3
   class z3_solver : public solver_base {
