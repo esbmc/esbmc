@@ -5007,8 +5007,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     exprt tmp;
     string2array(expr, tmp);
     convert_bv(tmp, bv);
-  } else if (exprid == "replication")
-    assert(expr.operands().size() == 2);
 #if 1
   else if (exprid == "isnan")
     convert_isnan(expr, bv);
