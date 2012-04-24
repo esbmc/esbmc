@@ -3914,21 +3914,6 @@ z3_convt::convert_identifier_pointer(const exprt &expr, std::string symbol,
 }
 
 void
-z3_convt::convert_zero_string(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  // XXXjmorse - this method appears to just return a free variable. Surely
-  // it should be selecting the zero_string field out of the referenced
-  // string?
-  Z3_type_ast array_type;
-
-  create_array_type(expr.type(), array_type);
-
-  bv = z3_api.mk_var("zero_string", array_type);
-}
-
-void
 z3_convt::convert_array(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -4911,19 +4896,6 @@ z3_convt::convert_pointer_object(const exprt &expr, Z3_ast &bv)
 }
 
 void
-z3_convt::convert_zero_string_length(const exprt &expr, Z3_ast &bv)
-{
-  DEBUGLOC;
-
-  assert(expr.operands().size() == 1);
-  Z3_ast operand;
-
-  convert_bv(expr.op0(), operand);
-
-  bv = z3_api.mk_tuple_select(operand, 0);
-}
-
-void
 z3_convt::convert_isnan(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
@@ -5023,8 +4995,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     convert_with(expr, bv);
   else if (exprid == "member")
     convert_member(expr, bv);
-  else if (exprid == "zero_string")
-    convert_zero_string(expr, bv);
   else if (exprid == "pointer_offset")
     select_pointer_offset(expr, bv);
   else if (exprid == "pointer_object")
@@ -5037,9 +5007,7 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     exprt tmp;
     string2array(expr, tmp);
     convert_bv(tmp, bv);
-  } else if (exprid == "zero_string_length")
-    convert_zero_string_length(expr.op0(), bv);
-  else if (exprid == "replication")
+  } else if (exprid == "replication")
     assert(expr.operands().size() == 2);
 #if 1
   else if (exprid == "isnan")

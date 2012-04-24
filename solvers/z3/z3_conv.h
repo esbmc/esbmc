@@ -133,7 +133,6 @@ private:
                                   Z3_ast &bv);
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   Z3_ast &bv);
-  void convert_zero_string(const exprt &expr, Z3_ast &bv);
   void convert_array(const exprt &expr, Z3_ast &bv);
   void convert_constant(const exprt &expr, Z3_ast &bv);
   void convert_bitwise(const exprt &expr, Z3_ast &bv);
@@ -157,7 +156,6 @@ private:
   void select_pointer_offset(const exprt &expr, Z3_ast &bv);
   void convert_member(const exprt &expr, Z3_ast &bv);
   void convert_pointer_object(const exprt &expr, Z3_ast &bv);
-  void convert_zero_string_length(const exprt &expr, Z3_ast &bv);
   void select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv);
   void convert_isnan(const exprt &expr, Z3_ast &bv);
   void convert_z3_expr(const exprt &expr, Z3_ast &bv);
