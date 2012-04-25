@@ -370,8 +370,6 @@ z3_convt::finalize_pointer_chain(void)
   if (num_ptrs == 0)
     return;
 
-  Z3_ast *ptr_idxs = (Z3_ast*)alloca(sizeof(Z3_ast) * num_ptrs);
-
   Z3_sort native_int_sort;
   if (int_encoding)
     native_int_sort = Z3_mk_int_sort(z3_ctx);
@@ -603,11 +601,10 @@ z3_convt::assert_literal(literalt l, Z3_ast formula)
 }
 
 void
-z3_convt::convert_smt_type(const bool_type2t &type, void *&_bv) const
+z3_convt::convert_smt_type(const bool_type2t &type __attribute__((unused)),
+                           void *&_bv) const
 {
   Z3_type_ast &bv = (Z3_type_ast &)_bv;
-
-  unsigned width = config.ansi_c.int_width;
 
   bv = Z3_mk_bool_type(z3_ctx);
   return;
@@ -825,12 +822,6 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *&_bv)
 
   unsigned int bitwidth = sym.type->get_width();
 
-  Z3_sort int_sort;
-  if (int_encoding)
-    int_sort = Z3_mk_int_sort(z3_ctx);
-  else
-    int_sort = Z3_mk_bv_type(z3_ctx, bitwidth);
-
   assert(is_fixedbv_type(sym.type));
 
   std::string theval = sym.value.to_expr().value().as_string();
@@ -868,7 +859,6 @@ void
 z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
-  Z3_ast value;
 
   // Converts a static struct/union - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
@@ -951,7 +941,6 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
   std::string tmp, identifier;
   int64_t size;
   u_int j;
-  unsigned width;
   Z3_ast &bv = (Z3_ast &)_bv;
 
   const array_type2t &arr = to_array_type(array.type);
@@ -1318,7 +1307,6 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *&_bv)
   }
 
   Z3_ast args[2];
-  u_int i = 0, size;
   unsigned fraction_bits = 0;
 
   convert_bv(mul.part_1, args[0]);
@@ -1510,11 +1498,9 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
   Z3_ast &bv = (Z3_ast &)_bv;
 
   Z3_type_ast pointer_type;
-  Z3_ast offset;
   std::string symbol_name, out;
 
   obj.type->convert_smt_type(*this, (void*&)pointer_type);
-  offset = convert_number(0, config.ansi_c.int_width, true);
 
   if (is_index2t(obj.pointer_obj)) {
     const index2t &idx = to_index2t(obj.pointer_obj);
@@ -1591,11 +1577,10 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
-  unsigned width, w;
+  unsigned width;
   width = data.source_value->type->get_width();
   // XXXjmorse - looks like this only ever reads a single byte, not the desired
   // number of bytes to fill the type.
-  w = data.type->get_width();
 
   uint64_t upper, lower;
   if (!data.big_endian) {
@@ -2101,11 +2086,6 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
   Z3_ast *obj_ids = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
   Z3_ast *obj_starts = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
 
-  // Get symbol for current array of addrspace data
-  std::string arr_sym_name = get_cur_addrspace_ident();
-  Z3_ast addr_sym = z3_api.mk_var(arr_sym_name.c_str(),
-                                  addr_space_arr_sort);
-
   Z3_sort native_int_sort;
   if (int_encoding) {
     native_int_sort = Z3_mk_int_type(z3_ctx);
@@ -2490,7 +2470,6 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
   op1_is_ptr = (is_pointer_type(expr.part_1->type)) ? 2 : 0;
   op2_is_ptr = (is_pointer_type(expr.part_2->type)) ? 1 : 0;
 
-  const exprt *ptr_op, *non_ptr_op;
   switch (ret_is_ptr | op1_is_ptr | op2_is_ptr) {
     case 0:
       assert(false);
@@ -2610,7 +2589,6 @@ void
 z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                      Z3_ast &bv)
 {
-  Z3_ast num;
   Z3_type_ast tuple_type;
   Z3_sort native_int_sort;
   std::string cte, identifier;
@@ -2762,8 +2740,6 @@ void
 z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 {
   expr2tc new_expr;
-
-  irep_idt exprid = expr.id();
 
   try {
     migrate_expr(expr, new_expr);
