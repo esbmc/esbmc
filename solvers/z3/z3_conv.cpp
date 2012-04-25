@@ -2628,8 +2628,6 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
   create_pointer_type(tuple_type);
 
-  // XXXjmorse, not handled right now.
-#warning nulls not handled
   if (is_symbol2t(expr)) {
     const symbol2t &sym = to_symbol2t(expr);
     if (sym.name.as_string() == "NULL" || sym.name.as_string() == "0") {
