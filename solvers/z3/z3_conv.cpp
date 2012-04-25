@@ -858,31 +858,33 @@ z3_convt::convert_smt_expr(const constant_bool2t &b, void *&_bv)
 }
 
 void
-z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
+z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
+                               const type2tc &wrappedtype, bool is_union,
+                               void *&_bv)
 {
   Z3_ast &bv = cast_to_z3(_bv);
 
   // Converts a static struct/union - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
-  const struct_union_type2t &type = to_structure_type(data.type);
+  const struct_union_type2t &type = to_structure_type(wrappedtype);
   u_int i = 0;
 
-  assert(type.members.size() >= data.datatype_members.size());
+  assert(type.members.size() >= members.size());
   assert(!type.members.empty());
 
   Z3_sort sort;
   type.convert_smt_type(*this, (void*&)sort);
 
   unsigned size = type.members.size();
-  if (is_constant_union2t(data))
+  if (is_union)
     size++;
 
   Z3_ast *args = (Z3_ast*)alloca(sizeof(Z3_ast) * size);
 
-  unsigned int numoperands = data.datatype_members.size();
+  unsigned int numoperands = members.size();
   // Populate tuple with members of that struct/union
-  forall_exprs(it, data.datatype_members) {
+  forall_exprs(it, members) {
     if (i < numoperands) {
       convert_bv(*it, args[i]);
     } else {
@@ -897,12 +899,24 @@ z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
   }
 
   // Update unions "last-set" member to be the last field
-  if (is_constant_union2t(data))
+  if (is_union)
     args[size-1] = convert_number(i, config.ansi_c.int_width, false);
 
   // Create tuple itself, return to caller. This is a lump of data, we don't
   // need to bind it to a name or symbol.
   bv = z3_api.mk_tuple(sort, args, size);
+}
+
+void
+z3_convt::convert_smt_expr(const constant_struct2t &data, void *&_bv)
+{
+  convert_struct_union(data.datatype_members, data.type, false, _bv);
+}
+
+void
+z3_convt::convert_smt_expr(const constant_union2t &data, void *&_bv)
+{
+  convert_struct_union(data.datatype_members, data.type, true, _bv);
 }
 
 void

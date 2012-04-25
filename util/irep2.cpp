@@ -941,23 +941,6 @@ expr_body<derived>::clone(void) const
 
 template <class derived>
 void
-const_datatype_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc const_datatype_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
-template <class derived>
-void
 rel_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1308,19 +1291,9 @@ typecast2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
-constant_datatype2t::constant_datatype2t(const type2tc type, expr_ids id,
-                                         const std::vector<expr2tc> &members)
-  : constant2t<constant_datatype2t>(type, id), datatype_members(members)
-{
-}
-
-constant_datatype2t::constant_datatype2t(const constant_datatype2t &ref)
-  : constant2t<constant_datatype2t>(ref)
-{
-}
-
+template<class derived>
 bool
-constant_datatype2t::cmp(const expr2t &ref) const
+constant_datatype2t<derived>::cmp(const expr2t &ref) const
 {
   const constant_datatype2t &ref2 = static_cast<const constant_datatype2t &>
                                                (ref);
@@ -1329,8 +1302,9 @@ constant_datatype2t::cmp(const expr2t &ref) const
   return false;
 }
 
+template<class derived>
 int
-constant_datatype2t::lt(const expr2t &ref) const
+constant_datatype2t<derived>::lt(const expr2t &ref) const
 {
   const constant_datatype2t &ref2 = static_cast<const constant_datatype2t &>
                                                (ref);
@@ -1342,13 +1316,14 @@ constant_datatype2t::lt(const expr2t &ref) const
     return 0;
 }
 
+template<class derived>
 list_of_memberst
-constant_datatype2t::tostring(unsigned int indent) const
+constant_datatype2t<derived>::tostring(unsigned int indent) const
 {
   list_of_memberst membs;
   char buffer[256];
   const struct_union_type2t &type2 = static_cast<const struct_union_type2t&>
-                                                (*type.get());
+                                                (*this->type.get());
 
   unsigned int i;
   for (i = 0; i < datatype_members.size(); i++) {
@@ -1366,23 +1341,23 @@ constant_datatype2t::tostring(unsigned int indent) const
 
 constant_struct2t::constant_struct2t(const type2tc type,
                                      const std::vector<expr2tc> &members)
-  : const_datatype_body<constant_struct2t>(type, constant_struct_id, members)
+  : constant_datatype2t<constant_struct2t>(type, constant_struct_id, members)
 {
 }
 
 constant_struct2t::constant_struct2t(const constant_struct2t &ref)
-  : const_datatype_body<constant_struct2t>(ref)
+  : constant_datatype2t<constant_struct2t>(ref)
 {
 }
 
 constant_union2t::constant_union2t(const type2tc type,
                                    const std::vector<expr2tc> &members)
-  : const_datatype_body<constant_union2t>(type, constant_union_id, members)
+  : constant_datatype2t<constant_union2t>(type, constant_union_id, members)
 {
 }
 
 constant_union2t::constant_union2t(const constant_union2t &ref)
-  : const_datatype_body<constant_union2t>(ref)
+  : constant_datatype2t<constant_union2t>(ref)
 {
 }
 

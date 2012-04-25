@@ -589,11 +589,20 @@ public:
 };
 
 /** Const datatype - for holding structs and unions */
-class constant_datatype2t : public constant2t<constant_datatype2t>
+template <class derived>
+class constant_datatype2t : public constant2t<derived>
 {
 public:
-  constant_datatype2t(const type2tc type, expr_ids id, const std::vector<expr2tc> &members);
-  constant_datatype2t(const constant_datatype2t &ref);
+  constant_datatype2t(const type2tc type, expr2t::expr_ids id,
+                      const std::vector<expr2tc> &members)
+    : constant2t<derived>(type, id), datatype_members(members)
+  {
+  }
+
+  constant_datatype2t(const constant_datatype2t &ref)
+    : constant2t<derived>(ref), datatype_members(ref.datatype_members)
+  {
+  }
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
@@ -602,25 +611,14 @@ public:
   const std::vector<expr2tc> datatype_members;
 };
 
-template <class T>
-class const_datatype_body : public constant_datatype2t
-{
-public:
-  const_datatype_body(const type2tc type, expr_ids id, const std::vector<expr2tc> &members) : constant_datatype2t(type, id, members) {};
-  const_datatype_body(const const_datatype_body &ref) : constant_datatype2t(ref) {};
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
-};
-
-class constant_struct2t : public const_datatype_body<constant_struct2t>
+class constant_struct2t : public constant_datatype2t<constant_struct2t>
 {
 public:
   constant_struct2t(const type2tc type, const std::vector<expr2tc> &members);
   constant_struct2t(const constant_struct2t &ref);
 };
 
-class constant_union2t : public const_datatype_body<constant_union2t>
+class constant_union2t : public constant_datatype2t<constant_union2t>
 {
 public:
   constant_union2t(const type2tc type, const std::vector<expr2tc> &members);

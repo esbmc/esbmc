@@ -133,11 +133,15 @@ private:
 
   void convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv);
 
+  void convert_struct_union(const std::vector<expr2tc> &members,
+                            const type2tc &type, bool is_union, void *&_bv);
+
   virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
   virtual void convert_smt_expr(const constant_int2t &sym, void *&bv);
   virtual void convert_smt_expr(const constant_fixedbv2t &sym, void *&bv);
   virtual void convert_smt_expr(const constant_bool2t &b, void *&bv);
-  virtual void convert_smt_expr(const constant_datatype2t &strt, void *&bv);
+  virtual void convert_smt_expr(const constant_struct2t &strt, void *&bv);
+  virtual void convert_smt_expr(const constant_union2t &strt, void *&bv);
   virtual void convert_smt_expr(const constant_array2t &array, void *&bv);
   virtual void convert_smt_expr(const constant_array_of2t &array, void *&bv);
   virtual void convert_smt_expr(const constant_string2t &str, void *&bv);

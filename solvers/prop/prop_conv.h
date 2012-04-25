@@ -114,7 +114,8 @@ public:
   virtual void convert_smt_expr(const constant_int2t &sym, void *&arg) = 0;
   virtual void convert_smt_expr(const constant_fixedbv2t &bv, void *&arg) = 0;
   virtual void convert_smt_expr(const constant_bool2t &sym, void *&arg) = 0;
-  virtual void convert_smt_expr(const constant_datatype2t &strt, void *&arg) = 0;
+  virtual void convert_smt_expr(const constant_struct2t &strt, void *&arg) = 0;
+  virtual void convert_smt_expr(const constant_union2t &strct, void *&arg) = 0;
   virtual void convert_smt_expr(const constant_array2t &array, void *&arg) = 0;
   virtual void convert_smt_expr(const constant_array_of2t &array, void *&arg) = 0;
   virtual void convert_smt_expr(const constant_string2t &str, void *&arg) = 0;
