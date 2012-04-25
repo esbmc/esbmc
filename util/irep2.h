@@ -1429,14 +1429,12 @@ class type_poolt {
 public:
   type_poolt(void);
 
-  const type2tc bool_type;
-  const type2tc empty_type;
-  const type2tc symbol_type;
-  const type2tc code_type;
+  type2tc bool_type;
+  type2tc empty_type;
+  type2tc code_type;
 
   const type2tc &get_bool() const { return bool_type; }
   const type2tc &get_empty() const { return empty_type; }
-  const type2tc &get_symbol() const { return symbol_type; }
   const type2tc &get_code() const { return code_type; }
 
   // For other types, have a pool of them for quick lookup.
@@ -1448,6 +1446,7 @@ public:
   std::map<const typet, type2tc> signedbv_map;
   std::map<const typet, type2tc> fixedbv_map;
   std::map<const typet, type2tc> string_map;
+  std::map<const typet, type2tc> symbol_map;
 
   // And refs to some of those for /really/ quick lookup;
   const type2tc *uint8;
@@ -1468,6 +1467,7 @@ public:
   const type2tc &get_signedbv(const typet &val);
   const type2tc &get_fixedbv(const typet &val);
   const type2tc &get_string(const typet &val);
+  const type2tc &get_symbol(const typet &val);
 
   const type2tc &get_uint8() const { return *uint8; }
   const type2tc &get_uint16() const { return *uint16; }

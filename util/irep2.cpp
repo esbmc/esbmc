@@ -2882,6 +2882,9 @@ overflow_neg2t::tostring(unsigned int indent) const
 
 type_poolt::type_poolt(void)
 {
+  bool_type = type2tc(new bool_type2t());
+  empty_type = type2tc(new empty_type2t());
+  code_type = type2tc(new code_type2t());
 
   // Create some int types.
   type2tc ubv8(new unsignedbv_type2t(8));
@@ -2974,6 +2977,12 @@ const type2tc &
 type_poolt::get_string(const typet &val)
 {
   return get_type_from_pool(val, string_map);
+}
+
+const type2tc &
+type_poolt::get_symbol(const typet &val)
+{
+  return get_type_from_pool(val, symbol_map);
 }
 
 type_poolt type_pool;
