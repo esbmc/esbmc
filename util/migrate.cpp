@@ -929,7 +929,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(new overflow_neg2t(operand));
     return true;
   } else {
-    return false;
+    expr.dump();
 //    assert(0);
+    return false;
   }
 }
