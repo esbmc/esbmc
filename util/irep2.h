@@ -464,7 +464,7 @@ public:
     index_id,
     zero_string_id,
     zero_length_string_id,
-    is_nan_id,
+    isnan_id,
     overflow_id,
     overflow_cast_id,
     overflow_neg_id,
@@ -1423,6 +1423,76 @@ inline bool operator>(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<exp
 {
   return (*b.get() < *a.get());
 }
+
+// Same deal as for "type_macros".
+#ifdef NDEBUG
+#define dynamic_cast static_cast
+#endif
+#define expr_macros(name) \
+  inline bool is_##name##_expr(const expr2tc &t) \
+    { return t->expr_id == expr2t::name##_id; } \
+  inline const name##2t & to_##name##2t(const expr2tc &t) \
+    { return dynamic_cast<const name##2t &> (*t.get()); } \
+  inline name##2t & to_##name##2t(expr2tc &t) \
+    { return dynamic_cast<name##2t &> (*t.get()); }
+
+expr_macros(constant_int);
+expr_macros(constant_fixedbv);
+expr_macros(constant_bool);
+expr_macros(constant_string);
+expr_macros(constant_struct);
+expr_macros(constant_union);
+expr_macros(constant_array);
+expr_macros(constant_array_of);
+expr_macros(symbol);
+expr_macros(typecast);
+expr_macros(if);
+expr_macros(equality);
+expr_macros(notequal);
+expr_macros(lessthan);
+expr_macros(greaterthan);
+expr_macros(lessthanequal);
+expr_macros(greaterthanequal);
+expr_macros(not);
+expr_macros(and);
+expr_macros(or);
+expr_macros(xor);
+expr_macros(bitand);
+expr_macros(bitor);
+expr_macros(bitxor);
+expr_macros(bitnand);
+expr_macros(bitnor);
+expr_macros(bitnxor);
+expr_macros(lshr);
+expr_macros(neg);
+expr_macros(abs);
+expr_macros(add);
+expr_macros(sub);
+expr_macros(mul);
+expr_macros(div);
+expr_macros(modulus);
+expr_macros(shl);
+expr_macros(ashr);
+expr_macros(dynamic_object);
+expr_macros(same_object);
+expr_macros(pointer_offset);
+expr_macros(pointer_object);
+expr_macros(address_of);
+expr_macros(byte_extract);
+expr_macros(byte_update);
+expr_macros(with);
+expr_macros(member);
+expr_macros(index);
+expr_macros(zero_string);
+expr_macros(zero_length_string);
+expr_macros(isnan);
+expr_macros(overflow);
+expr_macros(overflow_cast);
+expr_macros(overflow_neg);
+#undef expr_macros
+#ifdef dynamic_cast
+#undef dynamic_cast
+#endif
 
 // And now, some more utilities.
 class type_poolt {

@@ -887,7 +887,7 @@ const char *expr2t::expr_names[] = {
   "index",
   "zero_string",
   "zero_length_string",
-  "is_nan",
+  "isnan",
   "overflow",
   "overflow_cast",
   "overflow_neg"
@@ -2738,7 +2738,7 @@ zero_length_string2t::tostring(unsigned int indent) const
 }
 
 isnan2t::isnan2t(const expr2tc val)
-  : lops2_body<isnan2t>(is_nan_id), value(val)
+  : lops2_body<isnan2t>(isnan_id), value(val)
 {
 }
 
