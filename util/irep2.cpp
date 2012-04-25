@@ -2925,7 +2925,7 @@ get_type_from_pool(const typet &val, std::map<const typet, type2tc> &map)
     return it->second;
 
   type2tc new_type;
-  bool ret = migrate_type(val, new_type);
+  bool ret = real_migrate_type(val, new_type);
   assert(ret);
   map[val] = new_type;
   return map[val];
