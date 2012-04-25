@@ -941,23 +941,6 @@ expr_body<derived>::clone(void) const
 
 template <class derived>
 void
-arith_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc arith_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
-template <class derived>
-void
 arith_2ops_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1817,42 +1800,13 @@ lshr2t::lshr2t(const lshr2t &ref)
 {
 }
 
-arith2t::arith2t(const type2tc type, expr_ids id)
-  : expr_body<arith2t>(type, id)
-{
-}
-
-arith2t::arith2t(const arith2t &ref)
-  : expr_body<arith2t>(ref)
-{
-}
-
-bool
-arith2t::cmp(const expr2t &ref) const
-{
-  assert(0 && "arith2t is abstract-ish");
-}
-
-int
-arith2t::lt(const expr2t &ref) const
-{
-  assert(0 && "arith2t is abstract-ish");
-}
-
-list_of_memberst
-arith2t::tostring(unsigned int indent) const
-{
-  assert(0 && "arith2t is abstract-ish");
-  abort();
-}
-
 neg2t::neg2t(const type2tc type, const expr2tc _value)
-  : arith_body<neg2t>(type, neg_id), value(_value)
+  : arith2t<neg2t>(type, neg_id), value(_value)
 {
 }
 
 neg2t::neg2t(const neg2t &ref)
-  : arith_body<neg2t>(ref)
+  : arith2t<neg2t>(ref)
 {
 }
 
@@ -1879,12 +1833,12 @@ neg2t::tostring(unsigned int indent) const
 }
 
 abs2t::abs2t(const type2tc type, const expr2tc _value)
-  : arith_body<abs2t>(type, abs_id), value(_value)
+  : arith2t<abs2t>(type, abs_id), value(_value)
 {
 }
 
 abs2t::abs2t(const abs2t &ref)
-  : arith_body<abs2t>(ref)
+  : arith2t<abs2t>(ref)
 {
 }
 
@@ -1912,12 +1866,12 @@ abs2t::tostring(unsigned int indent) const
 
 arith_2op2t::arith_2op2t(const type2tc type, expr_ids id,
                          const expr2tc val1, const expr2tc val2)
-  : arith_body<arith_2op2t>(type, id), part_1(val1), part_2(val2)
+  : arith2t<arith_2op2t>(type, id), part_1(val1), part_2(val2)
 {
 }
 
 arith_2op2t::arith_2op2t(const arith_2op2t &ref)
-  : arith_body<arith_2op2t>(ref), part_1(ref.part_1), part_2(ref.part_2)
+  : arith2t<arith_2op2t>(ref), part_1(ref.part_1), part_2(ref.part_2)
 {
 }
 
@@ -2038,12 +1992,12 @@ same_object2t::same_object2t(const same_object2t &ref)
 }
 
 pointer_offset2t::pointer_offset2t(const type2tc type, const expr2tc val)
-  : arith_body<pointer_offset2t>(type, pointer_offset_id), pointer_obj(val)
+  : arith2t<pointer_offset2t>(type, pointer_offset_id), pointer_obj(val)
 {
 }
 
 pointer_offset2t::pointer_offset2t(const pointer_offset2t &ref)
-  : arith_body<pointer_offset2t>(ref), pointer_obj(ref.pointer_obj)
+  : arith2t<pointer_offset2t>(ref), pointer_obj(ref.pointer_obj)
 {
 }
 
@@ -2070,12 +2024,12 @@ pointer_offset2t::tostring(unsigned int indent) const
 }
 
 pointer_object2t::pointer_object2t(const type2tc type, const expr2tc val)
-  : arith_body<pointer_object2t>(type, pointer_object_id), pointer_obj(val)
+  : arith2t<pointer_object2t>(type, pointer_object_id), pointer_obj(val)
 {
 }
 
 pointer_object2t::pointer_object2t(const pointer_object2t &ref)
-  : arith_body<pointer_object2t>(ref), pointer_obj(ref.pointer_obj)
+  : arith2t<pointer_object2t>(ref), pointer_obj(ref.pointer_obj)
 {
 }
 
@@ -2103,14 +2057,14 @@ pointer_object2t::tostring(unsigned int indent) const
 
 
 address_of2t::address_of2t(const type2tc subtype, const expr2tc val)
-  : arith_body<address_of2t>(type2tc(new pointer_type2t(subtype)),
+  : arith2t<address_of2t>(type2tc(new pointer_type2t(subtype)),
                              address_of_id),
                              pointer_obj(val)
 {
 }
 
 address_of2t::address_of2t(const address_of2t &ref)
-  : arith_body<address_of2t>(ref), pointer_obj(ref.pointer_obj)
+  : arith2t<address_of2t>(ref), pointer_obj(ref.pointer_obj)
 {
 }
 

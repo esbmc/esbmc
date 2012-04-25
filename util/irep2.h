@@ -905,30 +905,16 @@ public:
 
 /** Arithmatic base class. For all operations that are essentially integer
  *  arithmatic. */
-class arith2t : public expr_body<arith2t>
+template <class derived>
+class arith2t : public expr_body<derived>
 {
 public:
-  arith2t(const type2tc type, expr_ids id);
-  arith2t(const arith2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
+  arith2t(const type2tc type, expr2t::expr_ids id)
+    : expr_body<derived>(type, id) { }
+  arith2t(const arith2t &ref) : expr_body<derived>(ref) { }
 };
 
-template <class T>
-class arith_body : public arith2t
-{
-public:
-  arith_body(type2tc type, expr_ids id)
-    : arith2t(type, id) {};
-  arith_body(const arith_body &ref) : arith2t(ref) {};
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
-};
-
-class neg2t : public arith_body<neg2t>
+class neg2t : public arith2t<neg2t>
 {
 public:
   neg2t(const type2tc type, const expr2tc value);
@@ -941,7 +927,7 @@ public:
   const expr2tc value;
 };
 
-class abs2t : public arith_body<abs2t>
+class abs2t : public arith2t<abs2t>
 {
 public:
   abs2t(const type2tc type, const expr2tc value);
@@ -955,7 +941,7 @@ public:
 };
 
 /** Base two-operand arithmatic class. */
-class arith_2op2t : public arith_body<arith_2op2t>
+class arith_2op2t : public arith2t<arith_2op2t>
 {
 public:
   arith_2op2t(const type2tc type, expr_ids id,
@@ -1062,7 +1048,7 @@ public:
 
 /** Pointer offset. Extract pointer offset from a pointer value. Subclass of
  *  arithmatic because it returns an integer. */
-class pointer_offset2t : public arith_body<pointer_offset2t>
+class pointer_offset2t : public arith2t<pointer_offset2t>
 {
 public:
   pointer_offset2t(const type2tc type, const expr2tc pointer);
@@ -1077,7 +1063,7 @@ public:
 
 /** Pointer object. Extract pointer object from a pointer value. Subclass of
  *  arithmatic because it returns an integer. */
-class pointer_object2t : public arith_body<pointer_object2t>
+class pointer_object2t : public arith2t<pointer_object2t>
 {
 public:
   pointer_object2t(const type2tc type, const expr2tc pointer);
@@ -1090,7 +1076,7 @@ public:
   const expr2tc pointer_obj;
 };
 
-class address_of2t : public arith_body<address_of2t>
+class address_of2t : public arith2t<address_of2t>
 {
 public:
   address_of2t(const type2tc subtype, const expr2tc pointer);
