@@ -1424,4 +1424,59 @@ inline bool operator>(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<exp
   return (*b.get() < *a.get());
 }
 
+// And now, some more utilities.
+class type_poolt {
+public:
+  type_poolt(void);
+
+  const type2tc bool_type;
+  const type2tc empty_type;
+  const type2tc symbol_type;
+  const type2tc code_type;
+
+  const type2tc &get_bool() const { return bool_type; }
+  const type2tc &get_empty() const { return empty_type; }
+  const type2tc &get_symbol() const { return symbol_type; }
+  const type2tc &get_code() const { return code_type; }
+
+  // For other types, have a pool of them for quick lookup.
+  std::map<const typet, type2tc> struct_map;
+  std::map<const typet, type2tc> union_map;
+  std::map<const typet, type2tc> array_map;
+  std::map<const typet, type2tc> pointer_map;
+  std::map<const typet, type2tc> unsignedbv_map;
+  std::map<const typet, type2tc> signedbv_map;
+  std::map<const typet, type2tc> fixedbv_map;
+  std::map<const typet, type2tc> string_map;
+
+  // And refs to some of those for /really/ quick lookup;
+  const type2tc *uint8;
+  const type2tc *uint16;
+  const type2tc *uint32;
+  const type2tc *uint64;
+  const type2tc *int8;
+  const type2tc *int16;
+  const type2tc *int32;
+  const type2tc *int64;
+
+  // Some accessors.
+  const type2tc &get_struct(const typet &val);
+  const type2tc &get_union(const typet &val);
+  const type2tc &get_array(const typet &val);
+  const type2tc &get_pointer(const typet &val);
+  const type2tc &get_unsignedbv(const typet &val);
+  const type2tc &get_signedbv(const typet &val);
+  const type2tc &get_fixedbv(const typet &val);
+  const type2tc &get_string(const typet &val);
+
+  const type2tc &get_uint8() const { return *uint8; }
+  const type2tc &get_uint16() const { return *uint16; }
+  const type2tc &get_uint32() const { return *uint32; }
+  const type2tc &get_uint64() const { return *uint64; }
+  const type2tc &get_int8() const { return *int8; }
+  const type2tc &get_int16() const { return *int16; }
+  const type2tc &get_int32() const { return *int32; }
+  const type2tc &get_int64() const { return *int64; }
+};
+
 #endif /* _UTIL_IREP2_H_ */

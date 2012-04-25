@@ -2,6 +2,8 @@
 #include <string.h>
 
 #include "irep2.h"
+#include "std_types.h"
+#include "migrate.h"
 
 #include <solvers/prop/prop_conv.h>
 
@@ -2876,4 +2878,100 @@ overflow_neg2t::tostring(unsigned int indent) const
   return tostring_func<expr2tc>(indent,
                                 (const char *)"operand", &operand,
                                 (const char *)"");
+}
+
+type_poolt::type_poolt(void)
+{
+
+  // Create some int types.
+  type2tc ubv8(new unsignedbv_type2t(8));
+  type2tc ubv16(new unsignedbv_type2t(16));
+  type2tc ubv32(new unsignedbv_type2t(32));
+  type2tc ubv64(new unsignedbv_type2t(64));
+  type2tc sbv8(new signedbv_type2t(8));
+  type2tc sbv16(new signedbv_type2t(16));
+  type2tc sbv32(new signedbv_type2t(32));
+  type2tc sbv64(new signedbv_type2t(64));
+
+  unsignedbv_map[unsignedbv_typet(8)] = ubv8;
+  unsignedbv_map[unsignedbv_typet(16)] = ubv16;
+  unsignedbv_map[unsignedbv_typet(32)] = ubv32;
+  unsignedbv_map[unsignedbv_typet(64)] = ubv64;
+  signedbv_map[signedbv_typet(8)] = sbv8;
+  signedbv_map[signedbv_typet(16)] = sbv16;
+  signedbv_map[signedbv_typet(32)] = sbv32;
+  signedbv_map[signedbv_typet(64)] = sbv64;
+
+  uint8 = &unsignedbv_map[unsignedbv_typet(8)];
+  uint16 = &unsignedbv_map[unsignedbv_typet(16)];
+  uint32 = &unsignedbv_map[unsignedbv_typet(32)];
+  uint64 = &unsignedbv_map[unsignedbv_typet(64)];
+  int8 = &signedbv_map[signedbv_typet(8)];
+  int16 = &signedbv_map[signedbv_typet(16)];
+  int32 = &signedbv_map[signedbv_typet(32)];
+  int64 = &signedbv_map[signedbv_typet(64)];
+
+  return;
+}
+
+static const type2tc &
+get_type_from_pool(const typet &val, std::map<const typet, type2tc> &map)
+{
+  std::map<const typet, type2tc>::const_iterator it = map.find(val);
+  if (it != map.end())
+    return it->second;
+
+  type2tc new_type;
+  bool ret = migrate_type(val, new_type);
+  assert(ret);
+  map[val] = new_type;
+  return map[val];
+}
+
+const type2tc &
+type_poolt::get_struct(const typet &val)
+{
+  return get_type_from_pool(val, struct_map);
+}
+
+const type2tc &
+type_poolt::get_union(const typet &val)
+{
+  return get_type_from_pool(val, union_map);
+}
+
+const type2tc &
+type_poolt::get_array(const typet &val)
+{
+  return get_type_from_pool(val, array_map);
+}
+
+const type2tc &
+type_poolt::get_pointer(const typet &val)
+{
+  return get_type_from_pool(val, pointer_map);
+}
+
+const type2tc &
+type_poolt::get_unsignedbv(const typet &val)
+{
+  return get_type_from_pool(val, unsignedbv_map);
+}
+
+const type2tc &
+type_poolt::get_signedbv(const typet &val)
+{
+  return get_type_from_pool(val, signedbv_map);
+}
+
+const type2tc &
+type_poolt::get_fixedbv(const typet &val)
+{
+  return get_type_from_pool(val, fixedbv_map);
+}
+
+const type2tc &
+type_poolt::get_string(const typet &val)
+{
+  return get_type_from_pool(val, string_map);
 }
