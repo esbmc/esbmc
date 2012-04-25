@@ -941,23 +941,6 @@ expr_body<derived>::clone(void) const
 
 template <class derived>
 void
-logic_2ops2t_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc logic_2ops2t_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
-template <class derived>
-void
 binops_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1675,20 +1658,9 @@ not2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
-logical_2ops2t::logical_2ops2t(expr_ids id, const expr2tc val1,
-                               const expr2tc val2)
-  : lops2t<logical_2ops2t>(id),
-    side_1(val1), side_2(val2)
-{
-}
-
-logical_2ops2t::logical_2ops2t(const logical_2ops2t &ref)
-  : lops2t<logical_2ops2t>(ref), side_1(ref.side_1), side_2(ref.side_2)
-{
-}
-
+template <class derived>
 bool
-logical_2ops2t::cmp(const expr2t &ref) const
+logical_2ops2t<derived>::cmp(const expr2t &ref) const
 {
   const logical_2ops2t &ref2 = static_cast<const logical_2ops2t &>(ref);
 
@@ -1701,8 +1673,9 @@ logical_2ops2t::cmp(const expr2t &ref) const
   return true;
 }
 
+template <class derived>
 int
-logical_2ops2t::lt(const expr2t &ref) const
+logical_2ops2t<derived>::lt(const expr2t &ref) const
 {
   const logical_2ops2t &ref2 = static_cast<const logical_2ops2t &>(ref);
 
@@ -1713,8 +1686,9 @@ logical_2ops2t::lt(const expr2t &ref) const
   return side_2->ltchecked(*ref2.side_2.get());
 }
 
+template <class derived>
 list_of_memberst
-logical_2ops2t::tostring(unsigned int indent) const
+logical_2ops2t<derived>::tostring(unsigned int indent) const
 {
   return tostring_func<expr2tc>(indent,
                                 (const char *)"operand0", &side_1,
@@ -1723,32 +1697,32 @@ logical_2ops2t::tostring(unsigned int indent) const
 }
 
 and2t::and2t(const expr2tc val1, const expr2tc val2)
-  : logic_2ops2t_body<and2t>(and_id, val1, val2)
+  : logical_2ops2t<and2t>(and_id, val1, val2)
 {
 }
 
 and2t::and2t(const and2t &ref)
-  : logic_2ops2t_body<and2t>(ref)
+  : logical_2ops2t<and2t>(ref)
 {
 }
 
 or2t::or2t(const expr2tc val1, const expr2tc val2)
-  : logic_2ops2t_body<or2t>(or_id, val1, val2)
+  : logical_2ops2t<or2t>(or_id, val1, val2)
 {
 }
 
 or2t::or2t(const or2t &ref)
-  : logic_2ops2t_body<or2t>(ref)
+  : logical_2ops2t<or2t>(ref)
 {
 }
 
 xor2t::xor2t(const expr2tc val1, const expr2tc val2)
-  : logic_2ops2t_body<xor2t>(xor_id, val1, val2)
+  : logical_2ops2t<xor2t>(xor_id, val1, val2)
 {
 }
 
 xor2t::xor2t(const xor2t &ref)
-  : logic_2ops2t_body<xor2t>(ref)
+  : logical_2ops2t<xor2t>(ref)
 {
 }
 

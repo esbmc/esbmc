@@ -796,11 +796,14 @@ public:
 
 /** Base class for 2-operand boolean oeprators. Always results in a boolean,
  *  takes two operands, both of boolean type. */
-class logical_2ops2t : public lops2t<logical_2ops2t>
+template <class derived>
+class logical_2ops2t : public lops2t<derived>
 {
 public:
-  logical_2ops2t(expr_ids id, const expr2tc val1, const expr2tc val2);
-  logical_2ops2t(const logical_2ops2t &ref);
+  logical_2ops2t(expr2t::expr_ids id, const expr2tc val1, const expr2tc val2) :
+    lops2t<derived>(id), side_1(val1), side_2(val2) { }
+  logical_2ops2t(const logical_2ops2t &ref) : lops2t<derived>(ref),
+                        side_1(ref.side_1), side_2(ref.side_2) { }
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
@@ -810,33 +813,21 @@ public:
   const expr2tc side_2;
 };
 
-template <class T>
-class logic_2ops2t_body : public logical_2ops2t
-{
-public:
-  logic_2ops2t_body(expr_ids id, const expr2tc val1, const expr2tc val2)
-    : logical_2ops2t(id, val1, val2) {};
-  logic_2ops2t_body(const logic_2ops2t_body &ref) : logical_2ops2t(ref) {};
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
-};
-
-class and2t : public logic_2ops2t_body<and2t>
+class and2t : public logical_2ops2t<and2t>
 {
 public:
   and2t(const expr2tc val1, const expr2tc val2);
   and2t(const and2t &ref);
 };
 
-class or2t : public logic_2ops2t_body<or2t>
+class or2t : public logical_2ops2t<or2t>
 {
 public:
   or2t(const expr2tc val1, const expr2tc val2);
   or2t(const or2t &ref);
 };
 
-class xor2t : public logic_2ops2t_body<xor2t>
+class xor2t : public logical_2ops2t<xor2t>
 {
 public:
   xor2t(const expr2tc val1, const expr2tc val2);
