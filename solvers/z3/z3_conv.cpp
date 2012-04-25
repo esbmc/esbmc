@@ -2777,12 +2777,8 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 
   irep_idt exprid = expr.id();
 
-  if (migrate_expr(expr, new_expr)) {
-    new_expr->convert_smt(*this, (void *&)bv);
-    return;
-  }
-
-  throw new conv_error("Unrecognized expression type");
+  migrate_expr(expr, new_expr);
+  new_expr->convert_smt(*this, (void *&)bv);
 }
 
 bool

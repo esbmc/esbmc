@@ -73,8 +73,7 @@ z3_convt::get(const exprt &expr) const
 
     identifier = expr.identifier().as_string();
     type2tc thetype;
-    if (!migrate_type(expr.type(), thetype))
-      assert(0 && "Couldn't migrate type in z3_convt::get");
+    migrate_type(expr.type(), thetype);
     thetype->convert_smt_type(*this, (void*&)sort);
     bv = z3_api.mk_var(identifier.c_str(), sort);
     func = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, bv));
@@ -110,8 +109,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
   app = Z3_to_app(z3_ctx, bv); // Just typecasting.
 
   type2tc thetype;
-  if (!migrate_type(type, thetype))
-    assert(0 && "Failed to migrate type in z3_convt::bv_get_reg");
+  migrate_type(type, thetype);
 
   try {
     width = thetype->get_width();
@@ -279,8 +277,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     }
 
     type2tc newtype;
-    if (!migrate_type(type, newtype))
-      assert(0 && "migrate type failed");
+    migrate_type(type, newtype);
     expr2tc faces = pointer_logic.pointer_expr(pointer, newtype);
 #warning jmorse - returning expressions to counterexamples is hosed
     return exprt();
