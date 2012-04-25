@@ -971,8 +971,7 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
   assert(arr.array_size->expr_id == expr2t::constant_int_id &&
          "array_of sizes should be constant");
 
-  const constant_int2t &sz =
-    dynamic_cast<constant_int2t&>(*arr.array_size.get());
+  const constant_int2t &sz = to_constant_int2t(arr.array_size);
   size = sz.as_long();
 
   convert_bv(array.initializer, value);
@@ -1522,7 +1521,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
   offset = convert_number(0, config.ansi_c.int_width, true);
 
   if (obj.pointer_obj->expr_id == expr2t::index_id) {
-    const index2t &idx = dynamic_cast<const index2t &>(*obj.pointer_obj.get());
+    const index2t &idx = to_index2t(obj.pointer_obj);
 
     if (!is_string_type(idx.source_data->type)) {
       const array_type2t &arr = to_array_type(idx.source_data->type);
@@ -1539,8 +1538,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
       convert_bv(plus, bv);
     }
   } else if (obj.pointer_obj->expr_id == expr2t::member_id) {
-    const member2t &memb = dynamic_cast<const member2t&>
-                                       (*obj.pointer_obj.get());
+    const member2t &memb = to_member2t(obj.pointer_obj);
 
     int64_t offs;
     if (is_struct_type(memb.source_data->type)) {
@@ -1562,21 +1560,19 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
   } else if (obj.pointer_obj->expr_id == expr2t::symbol_id) {
 // XXXjmorse             obj.pointer_obj->expr_id == expr2t::code_id) {
 
-    const symbol2t &symbol = dynamic_cast<const symbol2t&>
-                                         (*obj.pointer_obj.get());
+    const symbol2t &symbol = to_symbol2t(obj.pointer_obj);
     convert_identifier_pointer(obj.pointer_obj, symbol.name.as_string(), bv);
   } else if (obj.pointer_obj->expr_id == expr2t::constant_string_id) {
     // XXXjmorse - we should avoid encoding invalid characters in the symbol,
     // but this works for now.
-    const constant_string2t &str = dynamic_cast<const constant_string2t&>
-                                               (*obj.pointer_obj.get());
+    const constant_string2t &str = to_constant_string2t(obj.pointer_obj);
     std::string identifier = "address_of_str_const(" + str.value + ")";
     convert_identifier_pointer(obj.pointer_obj, identifier, bv);
   } else if (obj.pointer_obj->expr_id == expr2t::if_id) {
     // We can't nondeterministically take the address of something; So instead
     // rewrite this to be if (cond) ? &a : &b;.
 
-    const if2t &ifval = dynamic_cast<const if2t &>(*obj.pointer_obj.get());
+    const if2t &ifval = to_if2t(obj.pointer_obj);
 
     expr2tc addrof1(new address_of2t(obj.type, ifval.true_value));
     expr2tc addrof2(new address_of2t(obj.type, ifval.false_value));
@@ -1594,11 +1590,10 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 {
   Z3_ast &bv = (Z3_ast &)_bv;
 
-  const constant_int2t *intref = dynamic_cast<const constant_int2t*>
-                                             (data.source_offset.get());
-  if (intref == NULL)
+  if (data.source_offset->expr_id != expr2t::constant_int_id)
     throw new conv_error("byte_extract expects constant 2nd arg");
-  //assert(intref != NULL && "byte_extract expects constant 2nd arg");
+
+  const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
   unsigned width, w;
   width = data.source_value->type->get_width();
@@ -1608,12 +1603,12 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 
   uint64_t upper, lower;
   if (!data.big_endian) {
-    upper = ((intref->constant_value.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
-    lower = intref->constant_value.to_long() * 8; //i*w;
+    upper = ((intref.constant_value.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
+    lower = intref.constant_value.to_long() * 8; //i*w;
   } else {
     uint64_t max = width - 1;
-    upper = max - (intref->constant_value.to_long() * 8); //max-(i*w);
-    lower = max - ((intref->constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
+    upper = max - (intref.constant_value.to_long() * 8); //max-(i*w);
+    lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
 
   Z3_ast source;
@@ -1689,11 +1684,11 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
   // op0 is the object to update
   // op1 is the byte number
   // op2 is the value to update with
-  //
-  const constant_int2t *intref = dynamic_cast<const constant_int2t*>
-                                             (data.source_offset.get());
-  if (intref == NULL)
+
+  if (data.source_offset->expr_id != expr2t::constant_int_id)
     throw new conv_error("byte_extract expects constant 2nd arg");
+
+  const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
   Z3_ast tuple, value;
   uint width_op0, width_op2;
@@ -1718,7 +1713,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
     }
 
     if (has_field)
-      bv = z3_api.mk_tuple_update(tuple, intref->constant_value.to_long(), value);
+      bv = z3_api.mk_tuple_update(tuple, intref.constant_value.to_long(), value);
     else
       bv = tuple;
   } else if (is_signedbv_type(data.source_value->type)) {
@@ -1757,8 +1752,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
     convert_bv(with.source_data, tuple);
     convert_bv(with.update_data, value);
 
-    const constant_string2t &str = dynamic_cast<const constant_string2t&>
-                                               (*with.update_field.get());
+    const constant_string2t &str = to_constant_string2t(with.update_field);
 
     forall_names(it, struct_type.member_names) {
       if (*it == str.value)
@@ -1809,14 +1803,14 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
   convert_bv(member.source_data, struct_var);
 
   if (is_union_type(member.source_data->type)) {
-    // This is going to fail horribly when the source data isn't a symbol.
-    const symbol2t *sym = dynamic_cast<const symbol2t*>(member.source_data.get());
-
     union_varst::const_iterator cache_result;
-    if (sym != NULL)
-      cache_result = union_vars.find(sym->name.as_string().c_str());
-    else
+
+    if (member.source_data->expr_id == expr2t::symbol_id) {
+      const symbol2t &sym = to_symbol2t(member.source_data);
+      cache_result = union_vars.find(sym.name.as_string().c_str());
+    } else {
       cache_result = union_vars.end();
+    }
 
     if (cache_result != union_vars.end()) {
       const struct_union_type2t &type =
@@ -2346,7 +2340,7 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *&_bv)
   Z3_ast result[2], operand[2];
   unsigned width_op0, width_op1;
 
-  const rel2t &operation = static_cast<const rel2t &>(*overflow.operand.get());
+  const rel2t &operation = to_rel2t(overflow.operand);
 
   convert_bv(operation.side_1, operand[0]);
   convert_bv(operation.side_2, operand[1]);
@@ -2637,7 +2631,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   // XXXjmorse, not handled right now.
 #warning nulls not handled
   if (expr->expr_id == expr2t::symbol_id) {
-    const symbol2t &sym = static_cast<const symbol2t &>(*expr.get());
+    const symbol2t &sym = to_symbol2t(expr);
     if (sym.name.as_string() == "NULL" || sym.name.as_string() == "0") {
       obj_num = pointer_logic.get_null_object();
       got_obj_num = true;

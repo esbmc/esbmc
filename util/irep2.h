@@ -1494,6 +1494,11 @@ expr_macros(overflow_neg);
 #undef dynamic_cast
 #endif
 
+inline const rel2t & to_rel2t(const expr2tc &t)
+  { return dynamic_cast<const rel2t &> (*t.get()); }
+inline rel2t & to_rel2t(expr2tc &t)
+  { return dynamic_cast<rel2t &> (*t.get()); }
+
 // And now, some more utilities.
 class type_poolt {
 public:
