@@ -878,7 +878,7 @@ z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
 
   Z3_ast *args = (Z3_ast*)alloca(sizeof(Z3_ast) * size);
 
-  int numoperands = data.datatype_members.size();
+  unsigned int numoperands = data.datatype_members.size();
   // Populate tuple with members of that struct/union
   forall_exprs(it, data.datatype_members) {
     if (i < numoperands) {
