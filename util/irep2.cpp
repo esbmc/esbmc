@@ -2975,3 +2975,5 @@ type_poolt::get_string(const typet &val)
 {
   return get_type_from_pool(val, string_map);
 }
+
+type_poolt type_pool;

@@ -1479,4 +1479,6 @@ public:
   const type2tc &get_int64() const { return *int64; }
 };
 
+extern type_poolt type_pool;
+
 #endif /* _UTIL_IREP2_H_ */
