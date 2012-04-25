@@ -151,103 +151,31 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     return true;
   } else if (type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
     // 6.7.2.2.3 of C99 says enumeration values shall have "int" types.
-    signedbv_type2t *s = new signedbv_type2t(config.ansi_c.int_width);
-    new_type_ref = type2tc(s);
+    new_type_ref = type_pool.get_int(config.ansi_c.int_width);
     return true;
   } else if (type.id() == "array") {
-    type2tc subtype;
-    expr2tc size((expr2t *)NULL);
-    bool is_infinite = false;
-
-    if (!migrate_type(type.subtype(), subtype))
-      return false;
-
-    if (type.find("size").id() == "infinity") {
-      is_infinite = true;
-    } else {
-      exprt sz = (exprt&)type.find("size");
-      simplify(sz);
-      if (!migrate_expr(sz, size))
-        return false;
-    }
-
-    array_type2t *a = new array_type2t(subtype, size, is_infinite);
-    new_type_ref = type2tc(a);
+    new_type_ref = type_pool.get_array(type);
     return true;
   } else if (type.id() == "pointer") {
-    type2tc subtype;
-
-    if (!migrate_type(type.subtype(), subtype))
-      return false;
-
-    pointer_type2t *p = new pointer_type2t(subtype);
-    new_type_ref = type2tc(p);
+    new_type_ref = type_pool.get_pointer(type);
     return true;
   } else if (type.id() == "empty") {
-    empty_type2t *e = new empty_type2t();
-    new_type_ref = type2tc(e);
+    new_type_ref = type_pool.get_empty();
     return true;
   } else if (type.id() == "symbol") {
-    symbol_type2t *s = new symbol_type2t(type.identifier());
-    new_type_ref = type2tc(s);
+    new_type_ref = type_pool.get_symbol(type);
     return true;
   } else if (type.id() == "struct") {
-    std::vector<type2tc> members;
-    std::vector<std::string> names;
-    struct_typet &strct = (struct_typet&)type;
-    struct_union_typet::componentst comps = strct.components();
-
-    for (struct_union_typet::componentst::const_iterator it = comps.begin();
-         it != comps.end(); it++) {
-      type2tc ref;
-      if (!migrate_type((const typet&)it->type(), ref))
-        return false;
-
-      members.push_back(ref);
-      names.push_back(it->get("name").as_string());
-    }
-
-    std::string name = type.get_string("tag");
-    assert(name != "");
-    struct_type2t *s = new struct_type2t(members, names, name);
-    new_type_ref = type2tc(s);
+    new_type_ref = type_pool.get_struct(type);
     return true;
   } else if (type.id() == "union") {
-    std::vector<type2tc> members;
-    std::vector<std::string> names;
-    union_typet &strct = (union_typet&)type;
-    struct_union_typet::componentst comps = strct.components();
-
-    for (struct_union_typet::componentst::const_iterator it = comps.begin();
-         it != comps.end(); it++) {
-      type2tc ref;
-      if (!migrate_type((const typet&)it->type(), ref))
-        return false;
-
-      members.push_back(ref);
-      names.push_back(it->get("name").as_string());
-    }
-
-    std::string name = type.get_string("tag");
-    assert(name != "");
-    union_type2t *u = new union_type2t(members, names, name);
-    new_type_ref = type2tc(u);
+    new_type_ref = type_pool.get_union(type);
     return true;
   } else if (type.id() == "fixedbv") {
-    std::string fract = type.get_string("width");
-    assert(fract != "");
-    unsigned int frac_bits = strtol(fract.c_str(), NULL, 10);
-
-    std::string ints = type.get_string("integer_bits");
-    assert(ints != "");
-    unsigned int int_bits = strtol(ints.c_str(), NULL, 10);
-
-    fixedbv_type2t *f = new fixedbv_type2t(frac_bits, int_bits);
-    new_type_ref = type2tc(f);
+    new_type_ref = type_pool.get_fixedbv(type);
     return true;
   } else if (type.id() == "code") {
-    code_type2t *c = new code_type2t();
-    new_type_ref = type2tc(c);
+    new_type_ref = type_pool.get_code();
     return true;
   }
 
