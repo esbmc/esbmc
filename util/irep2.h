@@ -656,11 +656,8 @@ class symbol2t : public expr_body<symbol2t>
 {
 public:
   symbol2t(const type2tc type, irep_idt name);
-private:
   symbol2t(const symbol2t &ref);
-  friend class expr_body<symbol2t>;
 
-public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
