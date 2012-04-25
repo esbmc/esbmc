@@ -102,7 +102,6 @@ z3_convt::get(const exprt &expr) const
 exprt
 z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
 {
-  Z3_ast tmp;
   Z3_app app;
   unsigned width;
 
@@ -122,7 +121,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
   }
 
   if (type.is_bool()) {
-    Z3_app app = Z3_to_app(z3_ctx, bv);
     if (Z3_get_bool_value(z3_ctx, Z3_app_to_ast(z3_ctx, app)) == Z3_L_TRUE)
       return true_exprt();
     else
@@ -182,7 +180,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
 
     exprt expr;
     unsigned i = 0;
-    Z3_app app = Z3_to_app(z3_ctx, bv);
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;
 
@@ -217,7 +214,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     exprt expr;
     unsigned int i = 0;
     int comp_nr;
-    Z3_app app = Z3_to_app(z3_ctx, bv);
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;
 
@@ -248,7 +244,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     return value;
   } else if (type.id() == "pointer") {
     exprt object, offset;
-    Z3_app app = Z3_to_app(z3_ctx, bv);
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;
 
@@ -258,8 +253,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     }
 
     assert(num_fields == 2);
-
-    const typet &subtype = static_cast<const typet &>(type.subtype());
 
     tmp = Z3_get_app_arg(z3_ctx, app, 0); //object
     object = bv_get_rec(tmp, unsignedbv_typet(config.ansi_c.int_width));
