@@ -941,23 +941,6 @@ expr_body<derived>::clone(void) const
 
 template <class derived>
 void
-const_expr_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc const_expr_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
-template <class derived>
-void
 const_datatype_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1152,32 +1135,13 @@ symbol2t::tostring(unsigned int indent) const
   return memb;
 }
 
-bool
-constant2t::cmp(const expr2t &ref) const
-{
-  assert(0 && "constant2t is abstract-ish");
-}
-
-int
-constant2t::lt(const expr2t &ref) const
-{
-  assert(0 && "constant2t is abstract-ish");
-}
-
-list_of_memberst
-constant2t::tostring(unsigned int indent) const
-{
-  assert(0 && "constant2t is abstract-ish");
-  abort();
-}
-
 constant_int2t::constant_int2t(type2tc type, const BigInt &input)
-  : const_expr_body<constant_int2t>(type, constant_int_id), constant_value(input)
+  : constant2t<constant_int2t>(type, constant_int_id), constant_value(input)
 {
 }
 
 constant_int2t::constant_int2t(const constant_int2t &ref)
-  : const_expr_body<constant_int2t>(ref), constant_value(ref.constant_value)
+  : constant2t<constant_int2t>(ref), constant_value(ref.constant_value)
 {
 }
 
@@ -1224,12 +1188,12 @@ constant_int2t::tostring(unsigned int indent) const
 }
 
 constant_fixedbv2t::constant_fixedbv2t(type2tc type, const fixedbvt &val)
-  : const_expr_body<constant_fixedbv2t>(type, constant_int_id), value(val)
+  : constant2t<constant_fixedbv2t>(type, constant_int_id), value(val)
 {
 }
 
 constant_fixedbv2t::constant_fixedbv2t(const constant_fixedbv2t &ref)
-  : const_expr_body<constant_fixedbv2t>(ref), value(ref.value)
+  : constant2t<constant_fixedbv2t>(ref), value(ref.value)
 {
 }
 
@@ -1261,14 +1225,14 @@ constant_fixedbv2t::tostring(unsigned int indent) const
 }
 
 constant_bool2t::constant_bool2t(bool value)
-  : const_expr_body<constant_bool2t>(type2tc(new bool_type2t()),
+  : constant2t<constant_bool2t>(type2tc(new bool_type2t()),
                                      constant_bool_id),
                                      constant_value(value)
 {
 }
 
 constant_bool2t::constant_bool2t(const constant_bool2t &ref)
-  : const_expr_body<constant_bool2t>(ref), constant_value(ref.constant_value)
+  : constant2t<constant_bool2t>(ref), constant_value(ref.constant_value)
 {
 }
 
@@ -1346,12 +1310,12 @@ typecast2t::tostring(unsigned int indent) const
 
 constant_datatype2t::constant_datatype2t(const type2tc type, expr_ids id,
                                          const std::vector<expr2tc> &members)
-  : const_expr_body<constant_datatype2t>(type, id), datatype_members(members)
+  : constant2t<constant_datatype2t>(type, id), datatype_members(members)
 {
 }
 
 constant_datatype2t::constant_datatype2t(const constant_datatype2t &ref)
-  : const_expr_body<constant_datatype2t>(ref)
+  : constant2t<constant_datatype2t>(ref)
 {
 }
 
@@ -1424,12 +1388,12 @@ constant_union2t::constant_union2t(const constant_union2t &ref)
 
 constant_string2t::constant_string2t(const type2tc type,
                                      const std::string &stringref)
-  : const_expr_body<constant_string2t>(type, constant_string_id), value(stringref)
+  : constant2t<constant_string2t>(type, constant_string_id), value(stringref)
 {
 }
 
 constant_string2t::constant_string2t(const constant_string2t &ref)
-  : const_expr_body<constant_string2t>(ref), value(ref.value)
+  : constant2t<constant_string2t>(ref), value(ref.value)
 {
 }
 
@@ -1493,13 +1457,13 @@ constant_string2t::tostring(unsigned int indent) const
 
 constant_array2t::constant_array2t(const type2tc type,
                                    const std::vector<expr2tc> &members)
-  : const_expr_body<constant_array2t>(type, constant_array_id),
+  : constant2t<constant_array2t>(type, constant_array_id),
     datatype_members(members)
 {
 }
 
 constant_array2t::constant_array2t(const constant_array2t &ref)
-  : const_expr_body<constant_array2t>(ref),
+  : constant2t<constant_array2t>(ref),
     datatype_members(ref.datatype_members)
 {
 }
@@ -1547,13 +1511,13 @@ constant_array2t::tostring(unsigned int indent) const
 }
 
 constant_array_of2t::constant_array_of2t(const type2tc type, expr2tc init)
-  : const_expr_body<constant_array_of2t>(type, constant_array_id),
+  : constant2t<constant_array_of2t>(type, constant_array_id),
     initializer(init)
 {
 }
 
 constant_array_of2t::constant_array_of2t(const constant_array_of2t &ref)
-  : const_expr_body<constant_array_of2t>(ref),
+  : constant2t<constant_array_of2t>(ref),
     initializer(ref.initializer)
 {
 }

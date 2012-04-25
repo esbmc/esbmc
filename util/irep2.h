@@ -513,31 +513,17 @@ public:
 
 /** Constant class type. Not designed to contain any piece of data or method in
  *  particular, but allows for additional type safety. */
-class constant2t : public expr_body<constant2t>
+template <class derived>
+class constant2t : public expr_body<derived>
 {
 public:
-  constant2t(const type2tc type, expr_ids id) : expr_body<constant2t>(type, id) {}
-  constant2t(const constant2t &ref) : expr_body<constant2t>(ref) {};
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-};
-
-template <class T>
-class const_expr_body : public constant2t
-{
-public:
-  const_expr_body(const type2tc type, expr_ids id) : constant2t(type, id) {};
-  const_expr_body(const const_expr_body &ref) : constant2t(ref) {};
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
+  constant2t(const type2tc type, expr2t::expr_ids id) : expr_body<derived>(type, id) {}
+  constant2t(const constant2t &ref) : expr_body<derived>(ref) {};
 };
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
-class constant_int2t : public const_expr_body<constant_int2t>
+class constant_int2t : public constant2t<constant_int2t>
 {
 public:
   constant_int2t(type2tc type, const BigInt &input);
@@ -557,7 +543,7 @@ public:
 /** Constant fixedbv class. Records a floating point number in what I assume
  *  to be mantissa/exponent form, but which is described throughout CBMC code
  *  as fraction/integer parts. */
-class constant_fixedbv2t : public const_expr_body<constant_fixedbv2t>
+class constant_fixedbv2t : public constant2t<constant_fixedbv2t>
 {
 public:
   constant_fixedbv2t(type2tc type, const fixedbvt &value);
@@ -570,7 +556,7 @@ public:
   const fixedbvt value;
 };
 
-class constant_bool2t : public const_expr_body<constant_bool2t>
+class constant_bool2t : public constant2t<constant_bool2t>
 {
 public:
   constant_bool2t(bool value);
@@ -585,7 +571,7 @@ public:
 };
 
 /** Constant class for string constants. */
-class constant_string2t : public const_expr_body<constant_string2t>
+class constant_string2t : public constant2t<constant_string2t>
 {
 public:
   constant_string2t(const type2tc type, const std::string &stringref);
@@ -603,7 +589,7 @@ public:
 };
 
 /** Const datatype - for holding structs and unions */
-class constant_datatype2t : public const_expr_body<constant_datatype2t>
+class constant_datatype2t : public constant2t<constant_datatype2t>
 {
 public:
   constant_datatype2t(const type2tc type, expr_ids id, const std::vector<expr2tc> &members);
@@ -641,7 +627,7 @@ public:
   constant_union2t(const constant_union2t &ref);
 };
 
-class constant_array2t : public const_expr_body<constant_array2t>
+class constant_array2t : public constant2t<constant_array2t>
 {
 public:
   constant_array2t(const type2tc type, const std::vector<expr2tc> &members);
@@ -654,7 +640,7 @@ public:
   const std::vector<expr2tc> datatype_members;
 };
 
-class constant_array_of2t : public const_expr_body<constant_array_of2t>
+class constant_array_of2t : public constant2t<constant_array_of2t>
 {
 public:
   constant_array_of2t(const type2tc type, const expr2tc initializer);
