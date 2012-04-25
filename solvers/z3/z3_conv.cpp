@@ -3197,8 +3197,10 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
     bv = convert_overflow_unary(expr);
   else if (exprid == "memory-leak")
     bv = convert_memory_leak(expr);
-  else 
+  else {
+    std::cout << "### id " << exprid << std::endl;
     throw new conv_error("Unrecognized expression type", expr);
+  }
 }
 
 bool

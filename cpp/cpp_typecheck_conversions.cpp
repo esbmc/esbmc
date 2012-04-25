@@ -1235,6 +1235,42 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
             return true;
       }
   }
+  else if(to.id() == "bool")
+  {
+    if(expr.id_string() != "string-constant")
+    {
+      if(follow(expr.type()).name().as_string().find("struct.istream") != std::string::npos) {
+        struct_typet expr_struct = to_struct_type(follow(expr.type()));
+
+        int count = 0, i=0;
+        exprt or_expr, tmp_expr;
+        for(struct_typet::componentst::const_iterator
+            it = expr_struct.components().begin();
+            it != expr_struct.components().end(); it++, i++)
+        {
+          const irept& component = *it;
+          const typet comp_type = static_cast<const typet&>(component.type());
+
+          if(component.base_name() == "failbit"
+            || component.base_name() == "eofbit"
+            || component.base_name() == "badbit")
+          {
+              count++;
+              if(count == 2) {
+                or_expr = gen_binary(exprt::i_or, bool_typet(), expr_struct.components()[i], tmp_expr);
+              }
+//              } else if(count > 2) {
+//                or_expr = gen_binary(exprt::i_or, bool_typet(), or_expr, expr_struct.components()[i]);
+//              }
+
+              tmp_expr = expr_struct.components()[i];
+          }
+        }
+
+        new_expr.swap(or_expr);
+      }
+    }
+  }
 
   // conversion operators
   if(from.id() == "struct")
