@@ -941,23 +941,6 @@ expr_body<derived>::clone(void) const
 
 template <class derived>
 void
-rel_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc rel_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
-template <class derived>
-void
 lops2_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1579,18 +1562,9 @@ if2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
-rel2t::rel2t(expr_ids id, const expr2tc val1, const expr2tc val2)
-  : expr_body<rel2t>(type2tc(new bool_type2t()), id), side_1(val1), side_2(val2)
-{
-}
-
-rel2t::rel2t(const rel2t &ref)
-  : expr_body<rel2t>(ref)
-{
-}
-
+template <class derived>
 bool
-rel2t::cmp(const expr2t &ref) const
+rel2t<derived>::cmp(const expr2t &ref) const
 {
   const rel2t &ref2 = static_cast<const rel2t &>(ref);
 
@@ -1603,8 +1577,9 @@ rel2t::cmp(const expr2t &ref) const
   return true;
 }
 
+template <class derived>
 int
-rel2t::lt(const expr2t &ref) const
+rel2t<derived>::lt(const expr2t &ref) const
 {
   const rel2t &ref2 = static_cast<const rel2t &>(ref);
 
@@ -1615,8 +1590,9 @@ rel2t::lt(const expr2t &ref) const
   return side_2->ltchecked(*ref2.side_2.get());
 }
 
+template <class derived>
 list_of_memberst
-rel2t::tostring(unsigned int indent) const
+rel2t<derived>::tostring(unsigned int indent) const
 {
   return tostring_func<expr2tc>(indent,
                                 (const char *)"operand0", &side_1,
@@ -1625,62 +1601,62 @@ rel2t::tostring(unsigned int indent) const
 }
 
 equality2t::equality2t(const expr2tc val1, const expr2tc val2)
-  : rel_body<equality2t>(equality_id, val1, val2)
+  : rel2t<equality2t>(equality_id, val1, val2)
 {
 }
 
 equality2t::equality2t(const equality2t &ref)
-  : rel_body<equality2t>(ref)
+  : rel2t<equality2t>(ref)
 {
 }
 
 notequal2t::notequal2t(const expr2tc val1, const expr2tc val2)
-  : rel_body<notequal2t>(notequal_id, val1, val2)
+  : rel2t<notequal2t>(notequal_id, val1, val2)
 {
 }
 
 notequal2t::notequal2t(const notequal2t &ref)
-  : rel_body<notequal2t>(ref)
+  : rel2t<notequal2t>(ref)
 {
 }
 
 lessthan2t::lessthan2t(const expr2tc val1, const expr2tc val2)
-  : rel_body<lessthan2t>(lessthan_id, val1, val2)
+  : rel2t<lessthan2t>(lessthan_id, val1, val2)
 {
 }
 
 lessthan2t::lessthan2t(const lessthan2t &ref)
-  : rel_body<lessthan2t>(ref)
+  : rel2t<lessthan2t>(ref)
 {
 }
 
 greaterthan2t::greaterthan2t(const expr2tc val1, const expr2tc val2)
-  : rel_body<greaterthan2t>(greaterthan_id, val1, val2)
+  : rel2t<greaterthan2t>(greaterthan_id, val1, val2)
 {
 }
 
 greaterthan2t::greaterthan2t(const greaterthan2t &ref)
-  : rel_body<greaterthan2t>(ref)
+  : rel2t<greaterthan2t>(ref)
 {
 }
 
 lessthanequal2t::lessthanequal2t(const expr2tc val1, const expr2tc val2)
-  : rel_body<lessthanequal2t>(lessthanequal_id, val1, val2)
+  : rel2t<lessthanequal2t>(lessthanequal_id, val1, val2)
 {
 }
 
 lessthanequal2t::lessthanequal2t(const lessthanequal2t &ref)
-  : rel_body<lessthanequal2t>(ref)
+  : rel2t<lessthanequal2t>(ref)
 {
 }
 
 greaterthanequal2t::greaterthanequal2t(const expr2tc val1, const expr2tc val2)
-  : rel_body<greaterthanequal2t>(greaterthanequal_id, val1, val2)
+  : rel2t<greaterthanequal2t>(greaterthanequal_id, val1, val2)
 {
 }
 
 greaterthanequal2t::greaterthanequal2t(const greaterthanequal2t &ref)
-  : rel_body<greaterthanequal2t>(ref)
+  : rel2t<greaterthanequal2t>(ref)
 {
 }
 

@@ -703,11 +703,20 @@ public:
  *  All subclasses should be relation operators -- ie, equality, lt, ge, so
  *  forth. Stores two expressions (of the _same_ _type_), always has result
  *  type of a bool. */
-class rel2t : public expr_body<rel2t>
+template <class derived>
+class rel2t : public expr_body<derived>
 {
 public:
-  rel2t(expr_ids id, const expr2tc val1, const expr2tc val2);
-  rel2t(const rel2t &ref);
+  rel2t(expr2t::expr_ids id, const expr2tc val1, const expr2tc val2) :
+    expr_body<derived>(type2tc(new bool_type2t()), id),
+                       side_1(val1), side_2(val2)
+  {
+  }
+
+  rel2t(const rel2t &ref) :
+    expr_body<derived>(ref), side_1(ref.side_1), side_2(ref.side_2)
+  {
+  }
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
@@ -717,54 +726,42 @@ public:
   const expr2tc side_2;
 };
 
-template <class T>
-class rel_body : public rel2t
-{
-public:
-  rel_body(expr_ids id, const expr2tc val1, expr2tc val2)
-    : rel2t(id, val1, val2) {};
-  rel_body(const rel_body &ref) : rel2t(ref) {};
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
-};
-
-class equality2t : public rel_body<equality2t>
+class equality2t : public rel2t<equality2t>
 {
 public:
   equality2t(const expr2tc val1, const expr2tc val2);
   equality2t(const equality2t &ref);
 };
 
-class notequal2t : public rel_body<notequal2t>
+class notequal2t : public rel2t<notequal2t>
 {
 public:
   notequal2t(const expr2tc val1, const expr2tc val2);
   notequal2t(const notequal2t &ref);
 };
 
-class lessthan2t : public rel_body<lessthan2t>
+class lessthan2t : public rel2t<lessthan2t>
 {
 public:
   lessthan2t(const expr2tc val1, const expr2tc val2);
   lessthan2t(const lessthan2t &ref);
 };
 
-class greaterthan2t : public rel_body<greaterthan2t>
+class greaterthan2t : public rel2t<greaterthan2t>
 {
 public:
   greaterthan2t(const expr2tc val1, const expr2tc val2);
   greaterthan2t(const greaterthan2t &ref);
 };
 
-class lessthanequal2t : public rel_body<lessthanequal2t>
+class lessthanequal2t : public rel2t<lessthanequal2t>
 {
 public:
   lessthanequal2t(const expr2tc val1, const expr2tc val2);
   lessthanequal2t(const lessthanequal2t &ref);
 };
 
-class greaterthanequal2t : public rel_body<greaterthanequal2t>
+class greaterthanequal2t : public rel2t<greaterthanequal2t>
 {
 public:
   greaterthanequal2t(const expr2tc val1, const expr2tc val2);
@@ -1476,11 +1473,6 @@ expr_macros(overflow_neg);
 #ifdef dynamic_cast
 #undef dynamic_cast
 #endif
-
-inline const rel2t & to_rel2t(const expr2tc &t)
-  { return dynamic_cast<const rel2t &> (*t.get()); }
-inline rel2t & to_rel2t(expr2tc &t)
-  { return dynamic_cast<rel2t &> (*t.get()); }
 
 inline const arith_2op2t & to_arith_2op2t(const expr2tc &t)
   { return dynamic_cast<const arith_2op2t &> (*t.get()); }

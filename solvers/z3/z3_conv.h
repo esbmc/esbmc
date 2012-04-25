@@ -112,7 +112,8 @@ private:
   typedef Z3_ast (*ast_convert_multiargs)(Z3_context ctx, unsigned int numargs,
                                           Z3_ast const args[]);
 
-  void convert_rel(const rel2t &rel, ast_convert_calltype intmode,
+  void convert_rel(const expr2tc &side1, const expr2tc &side2,
+                   ast_convert_calltype intmode,
                    ast_convert_calltype signedbv,
                    ast_convert_calltype unsignedbv,
                    void *&_bv);
