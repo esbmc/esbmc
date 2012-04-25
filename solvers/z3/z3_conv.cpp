@@ -1110,7 +1110,7 @@ z3_convt::convert_smt_expr(const not2t &notval, void  *&_bv)
 }
 
 void
-z3_convt::convert_logic_2ops(const logical_2ops2t &log,
+z3_convt::convert_logic_2ops(const expr2tc &side1, const expr2tc &side2,
                       ast_convert_calltype converter,
                       ast_convert_multiargs bulkconverter,
                       void *&_bv)
@@ -1119,8 +1119,8 @@ z3_convt::convert_logic_2ops(const logical_2ops2t &log,
 
   Z3_ast args[2];
 
-  convert_bv(log.side_1, args[0]);
-  convert_bv(log.side_2, args[1]);
+  convert_bv(side1, args[0]);
+  convert_bv(side2, args[1]);
 
   if (converter != NULL)
     bv = converter(z3_ctx, args[0], args[1]);
@@ -1131,19 +1131,19 @@ z3_convt::convert_logic_2ops(const logical_2ops2t &log,
 void
 z3_convt::convert_smt_expr(const and2t &andval, void  *&_bv)
 {
-  convert_logic_2ops(andval, NULL, Z3_mk_and, _bv);
+  convert_logic_2ops(andval.side_1, andval.side_2, NULL, Z3_mk_and, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const or2t &orval, void  *&_bv)
 {
-  convert_logic_2ops(orval, NULL, Z3_mk_or, _bv);
+  convert_logic_2ops(orval.side_1, orval.side_2, NULL, Z3_mk_or, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const xor2t &xorval, void  *&_bv)
 {
-  convert_logic_2ops(xorval, Z3_mk_xor, NULL, _bv);
+  convert_logic_2ops(xorval.side_1, xorval.side_2, Z3_mk_xor, NULL, _bv);
 }
 
 void

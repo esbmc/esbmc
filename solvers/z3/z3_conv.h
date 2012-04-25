@@ -117,7 +117,7 @@ private:
                    ast_convert_calltype signedbv,
                    ast_convert_calltype unsignedbv,
                    void *&_bv);
-  void convert_logic_2ops(const logical_2ops2t &log,
+  void convert_logic_2ops(const expr2tc &side1, const expr2tc &side2,
                           ast_convert_calltype converter,
                           ast_convert_multiargs bulkconverter,
                           void *&_bv);
