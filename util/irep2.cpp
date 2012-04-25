@@ -941,23 +941,6 @@ expr_body<derived>::clone(void) const
 
 template <class derived>
 void
-binops_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc binops_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
-template <class derived>
-void
 arith_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1726,19 +1709,9 @@ xor2t::xor2t(const xor2t &ref)
 {
 }
 
-binops2t::binops2t(const type2tc type, expr_ids id,
-                   const expr2tc val1, const expr2tc val2)
-  : expr_body<binops2t>(type, id), side_1(val1), side_2(val2)
-{
-}
-
-binops2t::binops2t(const binops2t &ref)
-  : expr_body<binops2t>(ref)
-{
-}
-
+template <class derived>
 bool
-binops2t::cmp(const expr2t &ref) const
+binops2t<derived>::cmp(const expr2t &ref) const
 {
   const binops2t &ref2 = static_cast<const binops2t &>(ref);
 
@@ -1751,8 +1724,9 @@ binops2t::cmp(const expr2t &ref) const
   return true;
 }
 
+template <class derived>
 int
-binops2t::lt(const expr2t &ref) const
+binops2t<derived>::lt(const expr2t &ref) const
 {
   const binops2t &ref2 = static_cast<const binops2t &>(ref);
 
@@ -1763,8 +1737,9 @@ binops2t::lt(const expr2t &ref) const
   return side_2->ltchecked(*ref2.side_2.get());
 }
 
+template <class derived>
 list_of_memberst
-binops2t::tostring(unsigned int indent) const
+binops2t<derived>::tostring(unsigned int indent) const
 {
   return tostring_func<expr2tc>(indent,
                                 (const char *)"operand0", &side_1,
@@ -1773,72 +1748,72 @@ binops2t::tostring(unsigned int indent) const
 }
 
 bitand2t::bitand2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : binops_body<bitand2t>(type, bitand_id, val1, val2)
+  : binops2t<bitand2t>(type, bitand_id, val1, val2)
 {
 }
 
 bitand2t::bitand2t(const bitand2t &ref)
-  : binops_body<bitand2t>(ref)
+  : binops2t<bitand2t>(ref)
 {
 }
 
 bitor2t::bitor2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : binops_body<bitor2t>(type, bitor_id, val1, val2)
+  : binops2t<bitor2t>(type, bitor_id, val1, val2)
 {
 }
 
 bitor2t::bitor2t(const bitor2t &ref)
-  : binops_body<bitor2t>(ref)
+  : binops2t<bitor2t>(ref)
 {
 }
 
 bitxor2t::bitxor2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : binops_body<bitxor2t>(type, bitxor_id, val1, val2)
+  : binops2t<bitxor2t>(type, bitxor_id, val1, val2)
 {
 }
 
 bitxor2t::bitxor2t(const bitxor2t &ref)
-  : binops_body<bitxor2t>(ref)
+  : binops2t<bitxor2t>(ref)
 {
 }
 
 bitnand2t::bitnand2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : binops_body<bitnand2t>(type, bitnand_id, val1, val2)
+  : binops2t<bitnand2t>(type, bitnand_id, val1, val2)
 {
 }
 
 bitnand2t::bitnand2t(const bitnand2t &ref)
-  : binops_body<bitnand2t>(ref)
+  : binops2t<bitnand2t>(ref)
 {
 }
 
 bitnor2t::bitnor2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : binops_body<bitnor2t>(type, bitnor_id, val1, val2)
+  : binops2t<bitnor2t>(type, bitnor_id, val1, val2)
 {
 }
 
 bitnor2t::bitnor2t(const bitnor2t &ref)
-  : binops_body<bitnor2t>(ref)
+  : binops2t<bitnor2t>(ref)
 {
 }
 
 bitnxor2t::bitnxor2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : binops_body<bitnxor2t>(type, bitnxor_id, val1, val2)
+  : binops2t<bitnxor2t>(type, bitnxor_id, val1, val2)
 {
 }
 
 bitnxor2t::bitnxor2t(const bitnxor2t &ref)
-  : binops_body<bitnxor2t>(ref)
+  : binops2t<bitnxor2t>(ref)
 {
 }
 
 lshr2t::lshr2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : binops_body<lshr2t>(type, lshr_id, val1, val2)
+  : binops2t<lshr2t>(type, lshr_id, val1, val2)
 {
 }
 
 lshr2t::lshr2t(const lshr2t &ref)
-  : binops_body<lshr2t>(ref)
+  : binops2t<lshr2t>(ref)
 {
 }
 

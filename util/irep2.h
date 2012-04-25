@@ -836,12 +836,15 @@ public:
 
 /** Binary operations base class. Take a type, probably integer with a width,
  *  and some operands. */
-class binops2t : public expr_body<binops2t>
+template <class derived>
+class binops2t : public expr_body<derived>
 {
 public:
-  binops2t(const type2tc type, expr_ids id,
-           const expr2tc val1, const expr2tc val2);
-  binops2t(const binops2t &ref);
+  binops2t(const type2tc type, expr2t::expr_ids id,
+           const expr2tc val1, const expr2tc val2) :
+    expr_body<derived>(type, id), side_1(val1), side_2(val2) { }
+  binops2t(const binops2t &ref) :
+    expr_body<derived>(ref), side_1(ref.side_1), side_2(ref.side_2) { }
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
@@ -851,62 +854,49 @@ public:
   const expr2tc side_2;
 };
 
-template <class T>
-class binops_body : public binops2t
-{
-public:
-  binops_body(const type2tc type, expr_ids id,
-              const expr2tc val1, const expr2tc val2)
-    : binops2t(type, id, val1, val2) {};
-  binops_body(const binops_body &ref) : binops2t(ref) {};
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
-};
-
-class bitand2t : public binops_body<bitand2t>
+class bitand2t : public binops2t<bitand2t>
 {
 public:
   bitand2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   bitand2t(const bitand2t &ref);
 };
 
-class bitor2t : public binops_body<bitor2t>
+class bitor2t : public binops2t<bitor2t>
 {
 public:
   bitor2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   bitor2t(const bitor2t &ref);
 };
 
-class bitxor2t : public binops_body<bitxor2t>
+class bitxor2t : public binops2t<bitxor2t>
 {
 public:
   bitxor2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   bitxor2t(const bitxor2t &ref);
 };
 
-class bitnand2t : public binops_body<bitnand2t>
+class bitnand2t : public binops2t<bitnand2t>
 {
 public:
   bitnand2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   bitnand2t(const bitnand2t &ref);
 };
 
-class bitnor2t : public binops_body<bitnor2t>
+class bitnor2t : public binops2t<bitnor2t>
 {
 public:
   bitnor2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   bitnor2t(const bitnor2t &ref);
 };
 
-class bitnxor2t : public binops_body<bitnxor2t>
+class bitnxor2t : public binops2t<bitnxor2t>
 {
 public:
   bitnxor2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   bitnxor2t(const bitnxor2t &ref);
 };
 
-class lshr2t : public binops_body<lshr2t>
+class lshr2t : public binops2t<lshr2t>
 {
 public:
   lshr2t(const type2tc type, const expr2tc val1, const expr2tc val2);

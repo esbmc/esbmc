@@ -1146,33 +1146,34 @@ z3_convt::convert_smt_expr(const xor2t &xorval, void  *&_bv)
   convert_logic_2ops(xorval.side_1, xorval.side_2, Z3_mk_xor, NULL, _bv);
 }
 
+
 void
-z3_convt::convert_binop(const binops2t &bin,
-                        ast_convert_calltype converter,
+z3_convt::convert_binop(const expr2tc &side1, const expr2tc &side2,
+                        const type2tc &type, ast_convert_calltype converter,
                         void *&_bv)
 {
   Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast args[2];
 
-  convert_bv(bin.side_1, args[0]);
-  convert_bv(bin.side_2, args[1]);
+  convert_bv(side1, args[0]);
+  convert_bv(side2, args[1]);
 
   // XXXjmorse - int2bv trainwreck.
   if (int_encoding) {
-    unsigned int width = bin.side_1->type->get_width();
+    unsigned int width = side1->type->get_width();
     args[0] = Z3_mk_int2bv(z3_ctx, width, args[0]);
-    width = bin.side_1->type->get_width();
+    width = side1->type->get_width();
     args[1] = Z3_mk_int2bv(z3_ctx, width, args[1]);
   }
 
   bv = converter(z3_ctx, args[0], args[1]);
 
   if (int_encoding) {
-    if (is_signedbv_type(bin.type)) {
+    if (is_signedbv_type(type)) {
       bv = Z3_mk_bv2int(z3_ctx, bv, true);
     } else {
-      assert(is_unsignedbv_type(bin.type));
+      assert(is_unsignedbv_type(type));
       bv = Z3_mk_bv2int(z3_ctx, bv, false);
     }
   }
@@ -1181,37 +1182,37 @@ z3_convt::convert_binop(const binops2t &bin,
 void
 z3_convt::convert_smt_expr(const bitand2t &bitval, void *&_bv)
 {
-  convert_binop(bitval, Z3_mk_bvand, _bv);
+  convert_binop(bitval.side_1, bitval.side_2, bitval.type, Z3_mk_bvand, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const bitor2t &bitval, void *&_bv)
 {
-  convert_binop(bitval, Z3_mk_bvor, _bv);
+  convert_binop(bitval.side_1, bitval.side_2, bitval.type, Z3_mk_bvor, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const bitxor2t &bitval, void *&_bv)
 {
-  convert_binop(bitval, Z3_mk_bvxor, _bv);
+  convert_binop(bitval.side_1, bitval.side_2, bitval.type, Z3_mk_bvxor, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const bitnand2t &bitval, void *&_bv)
 {
-  convert_binop(bitval, Z3_mk_bvnand, _bv);
+  convert_binop(bitval.side_1, bitval.side_2, bitval.type, Z3_mk_bvnand, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const bitnor2t &bitval, void *&_bv)
 {
-  convert_binop(bitval, Z3_mk_bvnor, _bv);
+  convert_binop(bitval.side_1, bitval.side_2, bitval.type, Z3_mk_bvnor, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const bitnxor2t &bitval, void *&_bv)
 {
-  convert_binop(bitval, Z3_mk_bvxnor, _bv);
+  convert_binop(bitval.side_1, bitval.side_2, bitval.type, Z3_mk_bvxnor, _bv);
 }
 
 void

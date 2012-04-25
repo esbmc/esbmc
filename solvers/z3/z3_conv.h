@@ -121,8 +121,8 @@ private:
                           ast_convert_calltype converter,
                           ast_convert_multiargs bulkconverter,
                           void *&_bv);
-  void convert_binop(const binops2t &log,
-                    ast_convert_calltype converter,
+  void convert_binop(const expr2tc &side1, const expr2tc &side2,
+                    const type2tc &type, ast_convert_calltype converter,
                     void *&_bv);
   void convert_arith2ops(const arith_2op2t &log,
                          ast_convert_calltype bvconvert,
