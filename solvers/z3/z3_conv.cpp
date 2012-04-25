@@ -154,10 +154,6 @@ z3_convt::init_addr_space_array(void)
   eq = Z3_mk_eq(z3_ctx, first_name, initial_const);
   assert_formula(eq);
 
-  // Actually store into array
-  Z3_ast obj_idx = convert_number(pointer_logic.get_null_object(),
-                                  config.ansi_c.int_width, true);
-
   Z3_ast range_tuple = z3_api.mk_var("__ESBMC_ptr_addr_range_0",
                                      addr_space_tuple_sort);
   initial_val = z3_api.mk_tuple(addr_space_tuple_sort, num, num, NULL);
