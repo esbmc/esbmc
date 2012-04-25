@@ -12,7 +12,7 @@ namespace std
 {
 
 struct fstream: istream, ostream {
-  fstream ( );
+  fstream ();
   explicit fstream ( const char * filename,
                      openmode mode = in | out );
   istream& read ( char* s, streamsize n );
@@ -40,6 +40,17 @@ struct ifstream: istream{
 };
 
 struct filebuf{};
+
+fstream::fstream ( const char * filename,
+  openmode mode = in | out )
+  : istream(),
+    ostream()
+{
+  if(!stcmp(filename,""))
+    failbit = true; // TODO: correct this! This line is for test only!
 }
+
+}
+
 
 #endif

@@ -43,10 +43,19 @@ struct ios: ios_base{
   typedef int streampos;
   typedef int streamoff;
 
+  ios() : ios_base() {}
+
 public:
   bool operator ! ( ) const;
   void clear ( iostate state = goodbit );
 };
+
+ios_base::ios_base()
+{
+  failbit = false;
+  badbit = false;
+  eofbit = false;
+}
 
 bool ios_base::good() const
 {

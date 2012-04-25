@@ -10,7 +10,7 @@ struct istream: ios
 {
   streamsize width ( ) const;
   streamsize width ( streamsize wide );
-  istream(int id = 0): id(id){}
+  istream(int id = 0): id(id), ios() {}
   int id;
   istream& ignore(int i = 1, int delim = EOF);
   int get();
