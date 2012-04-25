@@ -1469,6 +1469,9 @@ public:
   const type2tc &get_string(const typet &val);
   const type2tc &get_symbol(const typet &val);
 
+  const type2tc &get_uint(unsigned int size);
+  const type2tc &get_int(unsigned int size);
+
   const type2tc &get_uint8() const { return *uint8; }
   const type2tc &get_uint16() const { return *uint16; }
   const type2tc &get_uint32() const { return *uint32; }

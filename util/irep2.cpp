@@ -2985,4 +2985,38 @@ type_poolt::get_symbol(const typet &val)
   return get_type_from_pool(val, symbol_map);
 }
 
+const type2tc &
+type_poolt::get_uint(unsigned int size)
+{
+  switch (size) {
+  case 8:
+    return get_uint8();
+  case 16:
+    return get_uint16();
+  case 32:
+    return get_uint32();
+  case 64:
+    return get_uint64();
+  default:
+    return get_unsignedbv(unsignedbv_typet(size));
+  }
+}
+
+const type2tc &
+type_poolt::get_int(unsigned int size)
+{
+  switch (size) {
+  case 8:
+    return get_int8();
+  case 16:
+    return get_int16();
+  case 32:
+    return get_int32();
+  case 64:
+    return get_int64();
+  default:
+    return get_signedbv(signedbv_typet(size));
+  }
+}
+
 type_poolt type_pool;
