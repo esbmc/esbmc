@@ -27,6 +27,8 @@
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
 
+#define cast_to_z3(arg) reinterpret_cast<Z3_ast &>((arg))
+
 static std::vector<Z3_ast> core_vector;
 static u_int unsat_core_size = 0;
 static u_int assumptions_status = 0;
@@ -774,7 +776,7 @@ z3_convt::create_pointer_type(Z3_type_ast &bv) const
 void
 z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_sort sort;
 
@@ -795,7 +797,7 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
 void
 z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   unsigned int bitwidth = sym.type->get_width();
 
@@ -818,7 +820,7 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
 void
 z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   unsigned int bitwidth = sym.type->get_width();
 
@@ -847,7 +849,7 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *&_bv)
 void
 z3_convt::convert_smt_expr(const constant_bool2t &b, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   if (b.constant_value)
     bv = Z3_mk_true(z3_ctx);
@@ -858,7 +860,7 @@ z3_convt::convert_smt_expr(const constant_bool2t &b, void *&_bv)
 void
 z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   // Converts a static struct/union - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
@@ -906,7 +908,7 @@ z3_convt::convert_smt_expr(const constant_datatype2t &data, void *&_bv)
 void
 z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   u_int i = 0;
   Z3_sort native_int_sort;
@@ -941,7 +943,7 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
   std::string tmp, identifier;
   int64_t size;
   u_int j;
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   const array_type2t &arr = to_array_type(array.type);
 
@@ -978,7 +980,7 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
 void
 z3_convt::convert_smt_expr(const constant_string2t &str, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   // Convert to array; convert array.
   expr2tc newarray = str.to_array();
@@ -990,7 +992,7 @@ void
 z3_convt::convert_smt_expr(const if2t &ifirep, void *&_bv)
 {
   Z3_ast operand0, operand1, operand2;
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   convert_bv(ifirep.cond, operand0);
   convert_bv(ifirep.true_value, operand1);
@@ -1003,7 +1005,7 @@ z3_convt::convert_smt_expr(const if2t &ifirep, void *&_bv)
 void
 z3_convt::convert_smt_expr(const equality2t &equality, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast args[2];
 
@@ -1016,7 +1018,7 @@ z3_convt::convert_smt_expr(const equality2t &equality, void *&_bv)
 void
 z3_convt::convert_smt_expr(const notequal2t &notequal, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast args[2];
 
@@ -1032,7 +1034,7 @@ z3_convt::convert_rel(const rel2t &rel, ast_convert_calltype intmode,
                       ast_convert_calltype unsignedbv,
                       void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast args[2];
 
@@ -1082,7 +1084,7 @@ z3_convt::convert_smt_expr(const greaterthanequal2t &ge, void *&_bv)
 void
 z3_convt::convert_smt_expr(const not2t &notval, void  *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast z3val;
 
@@ -1096,7 +1098,7 @@ z3_convt::convert_logic_2ops(const logical_2ops2t &log,
                       ast_convert_multiargs bulkconverter,
                       void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast args[2];
 
@@ -1132,7 +1134,7 @@ z3_convt::convert_binop(const binops2t &bin,
                         ast_convert_calltype converter,
                         void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast args[2];
 
@@ -1204,7 +1206,7 @@ z3_convt::convert_smt_expr(const lshr2t &bitval, void *&_bv)
 void
 z3_convt::convert_smt_expr(const neg2t &neg, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast args[2];
 
@@ -1228,7 +1230,7 @@ z3_convt::convert_smt_expr(const abs2t &abs, void *&_bv)
 {
   type2tc sign;
   expr2tc zero;
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   if (is_fixedbv_type(abs.type)) {
     sign = abs.type;
@@ -1254,7 +1256,7 @@ z3_convt::convert_arith2ops(const arith_2op2t &arith,
                             ast_convert_multiargs intmodeconvert,
                             void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast args[2];
 
@@ -1279,7 +1281,7 @@ z3_convt::convert_smt_expr(const add2t &add, void *&_bv)
   if (is_pointer_type(add.type) ||
       is_pointer_type(add.part_1->type) ||
       is_pointer_type(add.part_2->type))
-    return convert_pointer_arith(add, (Z3_ast &)_bv);
+    return convert_pointer_arith(add, cast_to_z3(_bv));
 
   convert_arith2ops(add, Z3_mk_bvadd, Z3_mk_add, _bv);
 }
@@ -1298,7 +1300,7 @@ z3_convt::convert_smt_expr(const sub2t &sub, void *&_bv)
 void
 z3_convt::convert_smt_expr(const mul2t &mul, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   if (is_pointer_type(mul.part_1->type) ||
       is_pointer_type(mul.part_2->type)) {
@@ -1331,7 +1333,7 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *&_bv)
 void
 z3_convt::convert_smt_expr(const div2t &div, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   assert(!is_pointer_type(div.type) &&
          !is_pointer_type(div.part_1->type) &&
@@ -1369,7 +1371,7 @@ z3_convt::convert_smt_expr(const div2t &div, void *&_bv)
 void
 z3_convt::convert_smt_expr(const modulus2t &mod, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   assert(!is_pointer_type(mod.type) &&
          !is_pointer_type(mod.part_1->type) &&
@@ -1399,7 +1401,7 @@ z3_convt::convert_shift(const expr2t &shift, const expr2tc &part1,
                         const expr2tc &part2, ast_convert_calltype convert,
                         void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast op0, op1;
   unsigned width_expr, width_op0, width_op1;
@@ -1455,7 +1457,7 @@ z3_convt::convert_smt_expr(const ashr2t &ashr, void *&_bv)
 void
 z3_convt::convert_smt_expr(const same_object2t &same, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast pointer[2], objs[2];
 
@@ -1473,7 +1475,7 @@ z3_convt::convert_smt_expr(const same_object2t &same, void *&_bv)
 void
 z3_convt::convert_smt_expr(const pointer_offset2t &offs, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
   Z3_ast pointer;
 
   convert_bv(offs.pointer_obj, pointer);
@@ -1484,7 +1486,7 @@ z3_convt::convert_smt_expr(const pointer_offset2t &offs, void *&_bv)
 void
 z3_convt::convert_smt_expr(const pointer_object2t &obj, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
   Z3_ast pointer;
 
   convert_bv(obj.pointer_obj, pointer);
@@ -1495,7 +1497,7 @@ z3_convt::convert_smt_expr(const pointer_object2t &obj, void *&_bv)
 void
 z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_type_ast pointer_type;
   std::string symbol_name, out;
@@ -1570,7 +1572,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
 void
 z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   if (!is_constant_int2t(data.source_offset))
     throw new conv_error("byte_extract expects constant 2nd arg");
@@ -1660,7 +1662,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 void
 z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   // op0 is the object to update
   // op1 is the byte number
@@ -1722,7 +1724,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *&_bv)
 void
 z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
   Z3_ast operand0, operand1, operand2;
   Z3_ast tuple, value;
 
@@ -1768,7 +1770,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 void
 z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
   u_int j = 0;
   Z3_ast struct_var;
 
@@ -2217,7 +2219,7 @@ z3_convt::convert_typecast_from_ptr(const typecast2t &cast, Z3_ast &bv)
 void
 z3_convt::convert_smt_expr(const typecast2t &cast, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   convert_bv(cast.from, bv);
 
@@ -2244,7 +2246,7 @@ z3_convt::convert_smt_expr(const typecast2t &cast, void *&_bv)
 void
 z3_convt::convert_smt_expr(const index2t &index, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   Z3_ast source, idx;
 
@@ -2259,7 +2261,7 @@ z3_convt::convert_smt_expr(const index2t &index, void *&_bv)
 void
 z3_convt::convert_smt_expr(const zero_string2t &zstr, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   // XXXjmorse - this method appears to just return a free variable. Surely
   // it should be selecting the zero_string field out of the referenced
@@ -2274,7 +2276,7 @@ z3_convt::convert_smt_expr(const zero_string2t &zstr, void *&_bv)
 void
 z3_convt::convert_smt_expr(const zero_length_string2t &s, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
   Z3_ast operand;
 
   convert_bv(s.string, operand);
@@ -2284,7 +2286,7 @@ z3_convt::convert_smt_expr(const zero_length_string2t &s, void *&_bv)
 void
 z3_convt::convert_smt_expr(const isnan2t &isnan, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
 
   if (is_fixedbv_type(isnan.value->type)) {
     Z3_ast op0;
@@ -2312,7 +2314,7 @@ z3_convt::convert_smt_expr(const isnan2t &isnan, void *&_bv)
 void
 z3_convt::convert_smt_expr(const overflow2t &overflow, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
   Z3_ast result[2], operand[2];
   unsigned width_op0, width_op1;
 
@@ -2369,7 +2371,7 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *&_bv)
 void
 z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
   Z3_ast operand[3], mid, overflow[2], tmp, minus_one, two;
   uint64_t result;
   u_int width;
@@ -2427,7 +2429,7 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *&_bv)
 void
 z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *&_bv)
 {
-  Z3_ast &bv = (Z3_ast &)_bv;
+  Z3_ast &bv = cast_to_z3(_bv);
   Z3_ast operand;
   unsigned width;
 
