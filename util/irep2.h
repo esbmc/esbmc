@@ -1501,6 +1501,11 @@ inline const rel2t & to_rel2t(const expr2tc &t)
 inline rel2t & to_rel2t(expr2tc &t)
   { return dynamic_cast<rel2t &> (*t.get()); }
 
+inline const arith_2op2t & to_arith_2op2t(const expr2tc &t)
+  { return dynamic_cast<const arith_2op2t &> (*t.get()); }
+inline arith_2op2t & to_arith_2op2t(expr2tc &t)
+  { return dynamic_cast<arith_2op2t &> (*t.get()); }
+
 // And now, some more utilities.
 class type_poolt {
 public:

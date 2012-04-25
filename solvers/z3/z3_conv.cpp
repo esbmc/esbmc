@@ -2316,13 +2316,13 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *&_bv)
   Z3_ast result[2], operand[2];
   unsigned width_op0, width_op1;
 
-  const rel2t &operation = to_rel2t(overflow.operand);
+  const arith_2op2t &operation = to_arith_2op2t(overflow.operand);
 
-  convert_bv(operation.side_1, operand[0]);
-  convert_bv(operation.side_2, operand[1]);
+  convert_bv(operation.part_1, operand[0]);
+  convert_bv(operation.part_2, operand[1]);
 
-  width_op0 = operation.side_1->type->get_width();
-  width_op1 = operation.side_2->type->get_width();
+  width_op0 = operation.part_1->type->get_width();
+  width_op1 = operation.part_2->type->get_width();
 
   // XXX jmorse - int2bv trainwreck.
   if (int_encoding) {
@@ -2357,8 +2357,8 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *&_bv)
   // inferred.
 
   bool is_signed = false;
-  if (is_signedbv_type(operation.side_1->type) ||
-      is_signedbv_type(operation.side_2->type))
+  if (is_signedbv_type(operation.part_1->type) ||
+      is_signedbv_type(operation.part_2->type))
     is_signed = true;
 
   result[0] = call1(z3_ctx, operand[0], operand[1], is_signed);
