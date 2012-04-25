@@ -1431,6 +1431,8 @@ inline bool operator>(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<exp
 #define expr_macros(name) \
   inline bool is_##name##2t(const expr2tc &t) \
     { return t->expr_id == expr2t::name##_id; } \
+  inline bool is_##name##2t(const expr2t &r) \
+    { return r.expr_id == expr2t::name##_id; } \
   inline const name##2t & to_##name##2t(const expr2tc &t) \
     { return dynamic_cast<const name##2t &> (*t.get()); } \
   inline name##2t & to_##name##2t(expr2tc &t) \
