@@ -770,30 +770,18 @@ public:
 
 /** Logical operations base class. Base for any logical operator. No storage in
  *  this particular class. Result is always of boolean type. */
-class lops2t : public expr_body<lops2t>
+template <class derived>
+class lops2t : public expr_body<derived>
 {
 public:
-  lops2t(expr_ids id);
-  lops2t(const lops2t &ref);
+  lops2t(expr2t::expr_ids id) :
+    expr_body<derived>(type2tc(new bool_type2t()), id) { }
 
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-};
-
-template <class T>
-class lops2_body : public lops2t
-{
-public:
-  lops2_body(expr_ids id) : lops2t(id) {};
-  lops2_body(const lops2_body &ref) : lops2t(ref) {};
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
+  lops2t(const lops2t &ref) : expr_body<derived> (ref) {}
 };
 
 /** Not operator. Takes a boolean value; results in a boolean value. */
-class not2t : public lops2_body<not2t>
+class not2t : public lops2t<not2t>
 {
 public:
   not2t(const expr2tc notval);
@@ -808,7 +796,7 @@ public:
 
 /** Base class for 2-operand boolean oeprators. Always results in a boolean,
  *  takes two operands, both of boolean type. */
-class logical_2ops2t : public lops2_body<logical_2ops2t>
+class logical_2ops2t : public lops2t<logical_2ops2t>
 {
 public:
   logical_2ops2t(expr_ids id, const expr2tc val1, const expr2tc val2);
@@ -1065,7 +1053,7 @@ public:
 
 /** Dynamic object operation. Checks to see whether or not the object is a
  *  dynamically allocated object or not. */
-class dynamic_object2t : public lops2t
+class dynamic_object2t : public lops2t<dynamic_object2t>
 {
 public:
   dynamic_object2t(const expr2tc val);
@@ -1305,7 +1293,7 @@ public:
 };
 
 /** Isnan operation. Checks whether expression is a NaN or not. */
-class isnan2t : public lops2_body<isnan2t>
+class isnan2t : public lops2t<isnan2t>
 {
 public:
   isnan2t(const expr2tc val);
@@ -1322,7 +1310,7 @@ public:
  *  or multiply. XXXjmorse - in the future we should ensure the type of the
  *  operand is the expected type result of the operation. That way we can tell
  *  whether to do a signed or unsigned over/underflow test. */
-class overflow2t : public lops2_body<overflow2t>
+class overflow2t : public lops2t<overflow2t>
 {
 public:
   overflow2t(const expr2tc val1);
@@ -1335,7 +1323,7 @@ public:
   const expr2tc operand;
 };
 
-class overflow_cast2t : public lops2_body<overflow_cast2t>
+class overflow_cast2t : public lops2t<overflow_cast2t>
 {
 public:
   overflow_cast2t(const expr2tc val1, unsigned int bits);
@@ -1349,7 +1337,7 @@ public:
   unsigned int bits;
 };
 
-class overflow_neg2t : public lops2_body<overflow_neg2t>
+class overflow_neg2t : public lops2t<overflow_neg2t>
 {
 public:
   overflow_neg2t(const expr2tc val1);

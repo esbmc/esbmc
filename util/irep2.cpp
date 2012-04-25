@@ -941,23 +941,6 @@ expr_body<derived>::clone(void) const
 
 template <class derived>
 void
-lops2_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc lops2_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
-template <class derived>
-void
 logic_2ops2t_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1660,42 +1643,13 @@ greaterthanequal2t::greaterthanequal2t(const greaterthanequal2t &ref)
 {
 }
 
-lops2t::lops2t(expr_ids id)
-  : expr_body<lops2t>(type2tc(new bool_type2t()), id)
-{
-}
-
-lops2t::lops2t(const lops2t &ref)
-  : expr_body<lops2t>(ref)
-{
-}
-
-bool
-lops2t::cmp(const expr2t &ref) const
-{
-  assert(0 && "lops2t is abstract-ish");
-}
-
-int
-lops2t::lt(const expr2t &ref) const
-{
-  assert(0 && "lops2t is abstract-ish");
-}
-
-list_of_memberst
-lops2t::tostring(unsigned int indent) const
-{
-  assert(0 && "lops2t is abstract-ish");
-  abort();
-}
-
 not2t::not2t(const expr2tc val)
-  : lops2_body<not2t>(not_id), notvalue(val)
+  : lops2t<not2t>(not_id), notvalue(val)
 {
 }
 
 not2t::not2t(const not2t &ref)
-  : lops2_body<not2t>(ref)
+  : lops2t<not2t>(ref)
 {
 }
 
@@ -1723,13 +1677,13 @@ not2t::tostring(unsigned int indent) const
 
 logical_2ops2t::logical_2ops2t(expr_ids id, const expr2tc val1,
                                const expr2tc val2)
-  : lops2_body<logical_2ops2t>(id),
+  : lops2t<logical_2ops2t>(id),
     side_1(val1), side_2(val2)
 {
 }
 
 logical_2ops2t::logical_2ops2t(const logical_2ops2t &ref)
-  : lops2_body<logical_2ops2t>(ref), side_1(ref.side_1), side_2(ref.side_2)
+  : lops2t<logical_2ops2t>(ref), side_1(ref.side_1), side_2(ref.side_2)
 {
 }
 
@@ -2653,12 +2607,12 @@ zero_length_string2t::tostring(unsigned int indent) const
 }
 
 isnan2t::isnan2t(const expr2tc val)
-  : lops2_body<isnan2t>(isnan_id), value(val)
+  : lops2t<isnan2t>(isnan_id), value(val)
 {
 }
 
 isnan2t::isnan2t(const isnan2t &ref)
-  : lops2_body<isnan2t>(ref), value(ref.value)
+  : lops2t<isnan2t>(ref), value(ref.value)
 {
 }
 
@@ -2685,7 +2639,7 @@ isnan2t::tostring(unsigned int indent) const
 }
 
 overflow2t::overflow2t(const expr2tc val)
-  : lops2_body<overflow2t>(overflow_id), operand(val)
+  : lops2t<overflow2t>(overflow_id), operand(val)
 {
   assert((operand->expr_id == add_id || operand->expr_id == sub_id ||
           operand->expr_id == mul_id) && "operand to overflow2t must be "
@@ -2693,7 +2647,7 @@ overflow2t::overflow2t(const expr2tc val)
 }
 
 overflow2t::overflow2t(const overflow2t &ref)
-  : lops2_body<overflow2t>(ref), operand(ref.operand)
+  : lops2t<overflow2t>(ref), operand(ref.operand)
 {
 }
 
@@ -2720,12 +2674,12 @@ overflow2t::tostring(unsigned int indent) const
 }
 
 overflow_cast2t::overflow_cast2t(const expr2tc val, unsigned int _bits)
-  : lops2_body<overflow_cast2t>(overflow_cast_id), operand(val), bits(_bits)
+  : lops2t<overflow_cast2t>(overflow_cast_id), operand(val), bits(_bits)
 {
 }
 
 overflow_cast2t::overflow_cast2t(const overflow_cast2t &ref)
-  : lops2_body<overflow_cast2t>(ref), operand(ref.operand), bits(ref.bits)
+  : lops2t<overflow_cast2t>(ref), operand(ref.operand), bits(ref.bits)
 {
 }
 
@@ -2764,12 +2718,12 @@ overflow_cast2t::tostring(unsigned int indent) const
 }
 
 overflow_neg2t::overflow_neg2t(const expr2tc val)
-  : lops2_body<overflow_neg2t>(overflow_neg_id), operand(val)
+  : lops2t<overflow_neg2t>(overflow_neg_id), operand(val)
 {
 }
 
 overflow_neg2t::overflow_neg2t(const overflow_neg2t &ref)
-  : lops2_body<overflow_neg2t>(ref), operand(ref.operand)
+  : lops2t<overflow_neg2t>(ref), operand(ref.operand)
 {
 }
 
