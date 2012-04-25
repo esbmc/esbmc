@@ -7,20 +7,30 @@
 namespace std
 {
 struct ios_base {
-	typedef int iostate;
-	typedef int fmtflags;
-	typedef int openmode;
-	static const iostate badbit = 3;
-	static const iostate eofbit = 2;
-	static const iostate failbit = 1;
-	static const iostate goodbit = 0;
-        typedef int seekdir;
-	static const openmode app, ate, binary, in, out, trunc;
-        static const seekdir beg;
-        static const seekdir cur;
-        static const seekdir end;
+  typedef int iostate;
+  typedef int fmtflags;
+  typedef int openmode;
+//  static const iostate badbit = 3;
+//  static const iostate eofbit = 2;
+//  static const iostate failbit = 1;
+  static const iostate goodbit = 0;
+  bool failbit;
+  bool eofbit;
+  bool badbit;
 
-	ios_base ();
+  typedef int seekdir;
+  static const openmode app, ate, binary, in, out, trunc;
+  static const seekdir beg;
+  static const seekdir cur;
+  static const seekdir end;
+
+
+public:
+  ios_base ();
+  bool fail() const;
+  bool bad() const;
+  bool eof() const;
+  bool good() const;
 
 private:
   ios_base (const ios_base&);
@@ -28,14 +38,36 @@ private:
 };
 
 struct ios: ios_base{
-	//	typedef fpos<mbstate_t> streampos;
-	//	typedef fpos<mbstate_t> streamoff;
-	typedef int streampos;
-	typedef int streamoff;
+  //	typedef fpos<mbstate_t> streampos;
+  //	typedef fpos<mbstate_t> streamoff;
+  typedef int streampos;
+  typedef int streamoff;
 
-	bool operator ! ( ) const;
-	void clear ( iostate state = goodbit );
+public:
+  bool operator ! ( ) const;
+  void clear ( iostate state = goodbit );
 };
+
+bool ios_base::good() const
+{
+  return !(failbit || badbit || eofbit);
+}
+
+bool ios_base::bad() const
+{
+  return badbit;
+}
+
+bool ios_base::eof() const
+{
+  return eofbit;
+}
+
+bool ios_base::fail() const
+{
+  return (failbit || badbit);
+}
+
 }
 
 #endif

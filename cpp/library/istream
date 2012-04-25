@@ -8,45 +8,41 @@ namespace std
 {
 struct istream: ios
 {
-	streamsize width ( ) const;
-	streamsize width ( streamsize wide );
-	istream(int id = 0): id(id){}
-	int id;
-	istream& ignore(int i = 1, int delim = EOF);
-	bool eof();
-	int get();
-	istream& get(char str[], int n);
-	istream& getline(char str[], int size, char delim = '\n');
-	void read(char str[], int size);
-	int gcount();
-	int rdstate();
-	bool fail ( ) const;
-	bool bad ( ) const;
-	bool good ( ) const;
-	istream& seekg ( streampos pos ); // model
-	istream& seekg ( streamoff off, ios_base::seekdir dir ); // model
-	streampos tellg ( ); //model
+  streamsize width ( ) const;
+  streamsize width ( streamsize wide );
+  istream(int id = 0): id(id){}
+  int id;
+  istream& ignore(int i = 1, int delim = EOF);
+  int get();
+  istream& get(char str[], int n);
+  istream& getline(char str[], int size, char delim = '\n');
+  void read(char str[], int size);
+  int gcount();
+  int rdstate();
+  istream& seekg ( streampos pos ); // model
+  istream& seekg ( streamoff off, ios_base::seekdir dir ); // model
+  streampos tellg ( ); //model
 
 private:
-	istream(const istream&); // disabled
-	istream& operator=(const istream&); // disabled
+  istream(const istream&); // disabled
+  istream& operator=(const istream&); // disabled
 };
 }
 
 namespace esbmc
 {
-	void esbmc_read_char(int is, char& c);
-	void esbmc_read_int(int is,  int& i);
-	void esbmc_read_unsigned_long(int is,  unsigned long& l);
-	void esbmc_read_double(int is,  double& d);
+  void esbmc_read_char(int is, char& c);
+  void esbmc_read_int(int is,  int& i);
+  void esbmc_read_unsigned_long(int is,  unsigned long& l);
+  void esbmc_read_double(int is,  double& d);
 }
 
 namespace std {
 
 inline istream& operator >> (istream& is, char& c)
 {
-	esbmc::esbmc_read_char(is.id,c);
-	return is;
+  esbmc::esbmc_read_char(is.id,c);
+  return is;
 }
 
 template <class T>
@@ -56,86 +52,81 @@ T operator >> (istream& is, char c[]) {
 
 inline bool operator >> (istream& is, char c[])
 {
-//	return is;
-	return nondet_bool();
+  //	return is;
+  return nondet_bool();
 }
 
 inline istream& operator >> (istream& is, int& i)
 {
-	esbmc::esbmc_read_int(is.id,i);
-	return is;
+  esbmc::esbmc_read_int(is.id,i);
+  return is;
 }
 
 inline istream& operator >> (istream& is, setw)
 {
-	return is;
+  return is;
 }
 
 inline istream& operator >> (istream& is, unsigned long& l)
 {
-	esbmc::esbmc_read_unsigned_long(is.id,l);
-	return is;
+  esbmc::esbmc_read_unsigned_long(is.id,l);
+  return is;
 }
 
 inline istream& operator >> (istream& is, double& d)
 {
-	esbmc::esbmc_read_double(is.id,d);
-	return is;
+  esbmc::esbmc_read_double(is.id,d);
+  return is;
 }
 
 int istream::get()
 {
-	if (nondet_bool())
-		return (int) nondet_char();
-	else
-		return EOF;
+  if (nondet_bool())
+    return (int) nondet_char();
+  else
+    return EOF;
 }
 
 istream& get(char str[], int n)
 {
-	#if 0
-		char *out[nondet_uint() % n];
-		str = out;
-	#endif
-	return istream();
+#if 0
+  char *out[nondet_uint() % n];
+  str = out;
+#endif
+  return istream();
 }
 
 istream& getline(char str[], int size, char delim = '\n')
 {
-	#if 0
-		char *out[nondet_uint() % n];
-		str = out;
-	#endif
-	return istream();
+#if 0
+  char *out[nondet_uint() % n];
+  str = out;
+#endif
+  return istream();
 }
 
 istream& read(char str[], int size)
 {
-	#if 0
-		char *out[nondet_uint() % size];
-		str = out;
-	#endif
-	return istream();
+#if 0
+  char *out[nondet_uint() % size];
+  str = out;
+#endif
+  return istream();
 }
 
 istream& ignore(int i = 1, int delim = EOF)
 {
-	return istream();
-}
-
-bool istream::eof()
-{
-	return nondet_bool();
+  return istream();
 }
 
 int istream::gcount()
 {
-	return nondet_uint();
+  return nondet_uint();
 }
 
 int istream::rdstate()
 {
-	return nondet_uint();
+  return nondet_uint();
 }
 }
 
