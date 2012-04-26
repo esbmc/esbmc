@@ -22,16 +22,6 @@ void propt::set_equal(literalt a, literalt b)
   lcnf(bv);
 }
 
-void propt::set_assignment(literalt a, bool value)
-{
-  assert(false);
-}
-
-void propt::copy_assignment_from(const propt &src)
-{
-  assert(false);
-}
-
 bvt propt::new_variables(unsigned width)
 {
   bvt result;

@@ -51,11 +51,6 @@ public:
 
   // constraints
   virtual void lcnf(const bvt &bv)=0;
-  virtual bool has_set_to() const { return true; }
-
-  // assumptions
-  virtual void set_assumptions() { }
-  virtual bool has_set_assumptions() const { return false; }
 
   // variables
   virtual literalt new_variable()=0;
@@ -69,8 +64,6 @@ public:
 
   // satisfying assignment
   virtual tvt l_get(literalt a) const=0;
-  virtual void set_assignment(literalt a, bool value);
-  virtual void copy_assignment_from(const propt &prop);
 };
 
 #endif
