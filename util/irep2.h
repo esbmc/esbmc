@@ -1135,33 +1135,19 @@ public:
 };
 
 /** Base type of datatype operations. */
-class datatype_ops2t : public expr_body<datatype_ops2t>
+template <class derived>
+class datatype_ops2t : public expr_body<derived>
 {
 public:
-  datatype_ops2t(const type2tc type, expr_ids id);
-  datatype_ops2t(const datatype_ops2t &ref);
-
-  // Should all be overridden; implementations all abort. A better templating
-  // situation in the future should fix this.
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-};
-
-template <class T>
-class datatype_body : public datatype_ops2t
-{
-public:
-  datatype_body(const type2tc type, expr_ids id) : datatype_ops2t(type, id) {};
-  datatype_body(const datatype_body &ref) : datatype_ops2t(ref) {};
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
+  datatype_ops2t(const type2tc type, expr2t::expr_ids id)
+    : expr_body<derived>(type, id) {}
+  datatype_ops2t(const datatype_ops2t &ref)
+    : expr_body<derived>(ref) {}
 };
 
 /** With operation. Some kind of piece of data, another piece of data to
  *  insert into it, and where to put it. */
-class with2t : public datatype_body<with2t>
+class with2t : public datatype_ops2t<with2t>
 {
 public:
   with2t(const type2tc type, const expr2tc source, const expr2tc field,
@@ -1178,7 +1164,7 @@ public:
 };
 
 /** Member operation. Extracts some field from a datatype. */
-class member2t : public datatype_body<member2t>
+class member2t : public datatype_ops2t<member2t>
 {
 public:
   member2t(const type2tc type, const expr2tc source,
@@ -1194,7 +1180,7 @@ public:
 };
 
 /** Index operation. Extracts an entry from an array. */
-class index2t : public datatype_body<index2t>
+class index2t : public datatype_ops2t<index2t>
 {
 public:
   index2t(const type2tc type, const expr2tc source, const expr2tc index);
@@ -1210,7 +1196,7 @@ public:
 
 /** Zero string operation. Don't quite understand it. Just operates on the
  *  string struct as far as I know. Result is boolean. */
-class zero_string2t : public datatype_body<zero_string2t>
+class zero_string2t : public datatype_ops2t<zero_string2t>
 {
 public:
   zero_string2t(const expr2tc string);
@@ -1224,7 +1210,7 @@ public:
 };
 
 /** Zero length string. Unknown dirference from zero_string. */
-class zero_length_string2t : public datatype_body<zero_length_string2t>
+class zero_length_string2t : public datatype_ops2t<zero_length_string2t>
 {
 public:
   zero_length_string2t(const expr2tc string);

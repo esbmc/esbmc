@@ -939,23 +939,6 @@ expr_body<derived>::clone(void) const
   return expr2tc(new_obj);
 }
 
-template <class derived>
-void
-datatype_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc datatype_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
 /**************************** Expression constructors *************************/
 
 symbol2t::symbol2t(const type2tc type, irep_idt _name)
@@ -2188,44 +2171,15 @@ byte_update2t::tostring(unsigned int indent) const
   return membs;
 }
 
-datatype_ops2t::datatype_ops2t(const type2tc type, expr_ids id)
-  : expr_body<datatype_ops2t>(type, id)
-{
-}
-
-datatype_ops2t::datatype_ops2t(const datatype_ops2t &ref)
-  : expr_body<datatype_ops2t>(ref)
-{
-}
-
-bool
-datatype_ops2t::cmp(const expr2t &ref) const
-{
-  assert(0 && "datatype_ops2t is abstract-ish");
-}
-
-int
-datatype_ops2t::lt(const expr2t &ref) const
-{
-  assert(0 && "datatype_ops2t is abstract-ish");
-}
-
-list_of_memberst
-datatype_ops2t::tostring(unsigned int indent) const
-{
-  assert(0 && "datatype_ops2t is abstract-ish");
-  abort();
-}
-
 with2t::with2t(const type2tc type, const expr2tc source, const expr2tc idx,
                const expr2tc update)
-  : datatype_body<with2t>(type, with_id), source_data(source),
+  : datatype_ops2t<with2t>(type, with_id), source_data(source),
                           update_field(idx), update_data(update)
 {
 }
 
 with2t::with2t(const with2t &ref)
-  : datatype_body<with2t>(ref), source_data(ref.source_data),
+  : datatype_ops2t<with2t>(ref), source_data(ref.source_data),
                          update_field(ref.update_field),
                          update_data(ref.update_data)
 {
@@ -2276,13 +2230,13 @@ with2t::tostring(unsigned int indent) const
 
 member2t::member2t(const type2tc type, const expr2tc source,
                    const constant_string2t &idx)
-  : datatype_body<member2t>(type, member_id), source_data(source),
+  : datatype_ops2t<member2t>(type, member_id), source_data(source),
                           member(idx)
 {
 }
 
 member2t::member2t(const member2t &ref)
-  : datatype_body<member2t>(ref), source_data(ref.source_data),
+  : datatype_ops2t<member2t>(ref), source_data(ref.source_data),
                            member(ref.member)
 {
 }
@@ -2325,13 +2279,13 @@ member2t::tostring(unsigned int indent) const
 
 index2t::index2t(const type2tc type, const expr2tc source,
                  const expr2tc _index)
-  : datatype_body<index2t>(type, index_id), source_data(source),
+  : datatype_ops2t<index2t>(type, index_id), source_data(source),
                            index(_index)
 {
 }
 
 index2t::index2t(const index2t &ref)
-  : datatype_body<index2t>(ref), source_data(ref.source_data),
+  : datatype_ops2t<index2t>(ref), source_data(ref.source_data),
                            index(ref.index)
 {
 }
@@ -2372,13 +2326,13 @@ index2t::tostring(unsigned int indent) const
 }
 
 zero_string2t::zero_string2t(const expr2tc _string)
-  : datatype_body<zero_string2t>(type2tc(new bool_type2t()), zero_string_id),
+  : datatype_ops2t<zero_string2t>(type2tc(new bool_type2t()), zero_string_id),
                                 string(_string)
 {
 }
 
 zero_string2t::zero_string2t(const zero_string2t &ref)
-  : datatype_body<zero_string2t>(ref), string(ref.string)
+  : datatype_ops2t<zero_string2t>(ref), string(ref.string)
 {
 }
 
@@ -2405,14 +2359,14 @@ zero_string2t::tostring(unsigned int indent) const
 }
 
 zero_length_string2t::zero_length_string2t(const expr2tc _string)
-  : datatype_body<zero_length_string2t>(type2tc(new bool_type2t()),
+  : datatype_ops2t<zero_length_string2t>(type2tc(new bool_type2t()),
                                         zero_length_string_id),
                                         string(_string)
 {
 }
 
 zero_length_string2t::zero_length_string2t(const zero_length_string2t &ref)
-  : datatype_body<zero_length_string2t>(ref), string(ref.string)
+  : datatype_ops2t<zero_length_string2t>(ref), string(ref.string)
 {
 }
 
