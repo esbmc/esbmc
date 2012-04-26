@@ -14,20 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "symbol.h"
 #include "prop_conv.h"
 
-//#define DEBUG
-
-/*******************************************************************\
-
-Function: prop_convt::literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool prop_convt::literal(const exprt &expr, literalt &dest) const
 {
   assert(expr.type().is_bool());
@@ -46,18 +32,6 @@ bool prop_convt::literal(const exprt &expr, literalt &dest) const
   throw "found no literal for expression";
 }
 
-/*******************************************************************\
-
-Function: prop_convt::get_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 literalt prop_convt::get_literal(const irep_idt &identifier)
 {
   std::pair<symbolst::iterator, bool> result=
@@ -73,18 +47,6 @@ literalt prop_convt::get_literal(const irep_idt &identifier)
 
   return literal;
 }
-
-/*******************************************************************\
-
-Function: prop_convt::get_bool
-
-  Inputs:
-
- Outputs:
-
- Purpose: get a boolean value from counter example if not valid
-
-\*******************************************************************/
 
 bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 {
@@ -160,18 +122,6 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
   return false;
 }
 
-/*******************************************************************\
-
-Function: prop_convt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 literalt prop_convt::convert(const exprt &expr, bool do_cache)
 {
   if(!do_cache ||
@@ -193,24 +143,8 @@ literalt prop_convt::convert(const exprt &expr, bool do_cache)
 
   result.first->second=literal;
 
-  #if 0
-  std::cout << literal << "=" << expr << std::endl;
-  #endif
-
   return literal;
 }
-
-/*******************************************************************\
-
-Function: prop_convt::convert_bool
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 literalt prop_convt::convert_bool(const exprt &expr)
 {
@@ -237,36 +171,12 @@ literalt prop_convt::convert_bool(const exprt &expr)
   return convert_rest(expr);
 }
 
-/*******************************************************************\
-
-Function: prop_convt::convert_rest
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 literalt prop_convt::convert_rest(const exprt &expr)
 {
   // fall through
   ignoring(expr);
   return prop.new_variable();
 }
-
-/*******************************************************************\
-
-Function: prop_convt::set_equality_to_true
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool prop_convt::set_equality_to_true(const exprt &expr)
 {
@@ -296,18 +206,6 @@ bool prop_convt::set_equality_to_true(const exprt &expr)
 
   return true;
 }
-
-/*******************************************************************\
-
-Function: prop_convt::set_to
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void prop_convt::set_to(const exprt &expr, bool value)
 {
@@ -407,18 +305,6 @@ void prop_convt::set_to(const exprt &expr, bool value)
   prop.l_set_to(convert(expr), value);
 }
 
-/*******************************************************************\
-
-Function: prop_convt::ignoring
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void prop_convt::ignoring(const exprt &expr)
 {
   // fall through
@@ -428,33 +314,9 @@ void prop_convt::ignoring(const exprt &expr)
   print(2, msg);
 }
 
-/*******************************************************************\
-
-Function: prop_convt::post_process
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void prop_convt::post_process()
 {
 }
-
-/*******************************************************************\
-
-Function: prop_convt::solve
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 decision_proceduret::resultt prop_convt::dec_solve()
 {
@@ -473,18 +335,6 @@ decision_proceduret::resultt prop_convt::dec_solve()
 
   return D_ERROR;
 }
-
-/*******************************************************************\
-
-Function: prop_convt::get
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt prop_convt::get(const exprt &expr) const
 {
@@ -507,18 +357,6 @@ exprt prop_convt::get(const exprt &expr) const
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: prop_convt::print_assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void prop_convt::print_assignment(std::ostream &out) const
 {
