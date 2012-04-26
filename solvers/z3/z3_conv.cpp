@@ -2800,24 +2800,14 @@ z3_convt::set_to(const exprt &expr, bool value)
     return;
 
   try {
-    if (expr.id() == "=" && value) {
-      assert(expr.operands().size() == 2);
+    if (expr.id() == "=" && value && expr.op0().type().id() == "union" &&
+        expr.op1().id() == "with") {
 
-      Z3_ast result, operand[2];
-      const exprt &op0 = expr.op0();
-      const exprt &op1 = expr.op1();
-
-      convert_z3_expr(op0, operand[0]);
-      convert_z3_expr(op1, operand[1]);
-
-#if 1
-        if (op0.type().id() == "union" && op1.id() == "with") {
-          union_vars.insert(std::pair<std::string,
-                                   unsigned int>(op0.get_string("identifier"),
-                                                    convert_member_name(
-                                                      op1.op0(), op1.op1())));
-        }
-#endif
+      union_vars.insert(std::pair<std::string, unsigned int>
+                                         (expr.op0().get_string("identifier"),
+                                                convert_member_name(
+                                                  expr.op1().op0(),
+                                                  expr.op1().op1())));
 
     }
   } catch (conv_error *e) {
