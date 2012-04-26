@@ -46,10 +46,6 @@ public:
   virtual literalt convert(const exprt &expr)
   { return convert(expr, use_cache); }
 
-  // conversion without cache
-  virtual literalt convert_nocache(const exprt &expr)
-  { return convert(expr, false); }
-
   // get a boolean value from counterexample if not valid
   virtual bool get_bool(const exprt &expr, tvt &value) const;
 
