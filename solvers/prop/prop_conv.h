@@ -28,7 +28,6 @@ class prop_convt : public messaget
 {
 public:
   explicit prop_convt(propt &_prop):
-    equality_propagation(true),
     prop(_prop)
   {
     if (config.options.get_bool_option("no-lit-cache"))
@@ -56,7 +55,6 @@ public:
   virtual bool literal(const exprt &expr, literalt &literal) const;
   
   bool use_cache;
-  bool equality_propagation;
   
   propt &prop;
   
