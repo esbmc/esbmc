@@ -71,14 +71,6 @@ public:
   virtual tvt l_get(literalt a) const=0;
   virtual void set_assignment(literalt a, bool value);
   virtual void copy_assignment_from(const propt &prop);
-
-  // returns true if an assumption is in the final conflict
-  virtual bool is_in_conflict(literalt l) const;
-  virtual bool has_is_in_conflict() const { return false; }
-
-  // cores -- will be removed
-  virtual bool is_in_core(literalt l) const;
-  virtual bool has_in_core() const { return false; }
 };
 
 #endif

@@ -32,18 +32,6 @@ void propt::copy_assignment_from(const propt &src)
   assert(false);
 }
 
-bool propt::is_in_conflict(literalt l) const
-{
-  assert(false);
-  return false;
-}
-
-bool propt::is_in_core(literalt l) const
-{
-  assert(false);
-  return false;
-}
-
 bvt propt::new_variables(unsigned width)
 {
   bvt result;
