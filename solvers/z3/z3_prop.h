@@ -25,11 +25,6 @@ public:
 
 //  virtual literalt constant(bool value)
 //  { return value?l_const1:l_const0; }
-#if 1
-  virtual void land(literalt a, literalt b, literalt o);
-  virtual void lor(literalt a, literalt b, literalt o);
-  virtual void limplies(literalt a, literalt b, literalt o);
-#endif
   virtual literalt land(literalt a, literalt b);
   virtual literalt lor(literalt a, literalt b);
   virtual literalt land(const bvt &bv);

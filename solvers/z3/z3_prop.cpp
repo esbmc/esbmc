@@ -26,64 +26,6 @@ z3_propt::~z3_propt()
 {
 }
 
-void
-z3_propt::land(literalt a, literalt b, literalt o)
-{
-  // a*b=c <==> (a + o')( b + o')(a'+b'+o)
-  bvt lits;
-
-  lits.clear();
-  lits.reserve(2);
-  lits.push_back(pos(a));
-  lits.push_back(neg(o));
-  lcnf(lits);
-
-  lits.clear();
-  lits.reserve(2);
-  lits.push_back(pos(b));
-  lits.push_back(neg(o));
-  lcnf(lits);
-
-  lits.clear();
-  lits.reserve(3);
-  lits.push_back(neg(a));
-  lits.push_back(neg(b));
-  lits.push_back(pos(o));
-  lcnf(lits);
-}
-
-void
-z3_propt::lor(literalt a, literalt b, literalt o)
-{
-  // a+b=c <==> (a' + c)( b' + c)(a + b + c')
-  bvt lits;
-
-  lits.clear();
-  lits.reserve(2);
-  lits.push_back(neg(a));
-  lits.push_back(pos(o));
-  lcnf(lits);
-
-  lits.clear();
-  lits.reserve(2);
-  lits.push_back(neg(b));
-  lits.push_back(pos(o));
-  lcnf(lits);
-
-  lits.clear();
-  lits.reserve(3);
-  lits.push_back(pos(a));
-  lits.push_back(pos(b));
-  lits.push_back(neg(o));
-  lcnf(lits);
-}
-
-void
-z3_propt::limplies(literalt a, literalt b, literalt o)
-{
-  lor(lnot(a), b, o);
-}
-
 literalt
 z3_propt::land(const bvt &bv)
 {
