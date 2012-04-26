@@ -171,13 +171,6 @@ literalt prop_convt::convert_bool(const exprt &expr)
   return convert_rest(expr);
 }
 
-literalt prop_convt::convert_rest(const exprt &expr)
-{
-  // fall through
-  ignoring(expr);
-  return prop.new_variable();
-}
-
 void prop_convt::ignoring(const exprt &expr)
 {
   // fall through

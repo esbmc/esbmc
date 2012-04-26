@@ -67,7 +67,7 @@ public:
   
 protected:
   virtual literalt convert(const exprt &expr, bool do_cache);
-  virtual literalt convert_rest(const exprt &expr);
+  virtual literalt convert_rest(const exprt &expr) = 0;
   virtual literalt convert_bool(const exprt &expr);
   
   // symbols
