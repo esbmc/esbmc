@@ -29,7 +29,6 @@ public:
   virtual void land(literalt a, literalt b, literalt o);
   virtual void lor(literalt a, literalt b, literalt o);
   virtual void lxor(literalt a, literalt b, literalt o);
-  virtual void lequal(literalt a, literalt b, literalt o);
   virtual void limplies(literalt a, literalt b, literalt o);
 #endif
   virtual literalt land(literalt a, literalt b);
@@ -39,9 +38,7 @@ public:
   virtual literalt lxor(const bvt &bv);
   virtual literalt lnot(literalt a);
   virtual literalt lxor(literalt a, literalt b);
-  virtual literalt lequal(literalt a, literalt b);
   virtual literalt limplies(literalt a, literalt b);
-  virtual literalt lselect(literalt a, literalt b, literalt c); // a?b:c
   virtual literalt new_variable();
   virtual unsigned no_variables() const { return _no_variables; }
   virtual void set_no_variables(unsigned no) { _no_variables=no; }

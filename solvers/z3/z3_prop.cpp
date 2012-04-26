@@ -117,12 +117,6 @@ z3_propt::lxor(literalt a, literalt b, literalt o)
 }
 
 void
-z3_propt::lequal(literalt a, literalt b, literalt o)
-{
-  lxor(a, b, lnot(o));
-}
-
-void
 z3_propt::limplies(literalt a, literalt b, literalt o)
 {
   lor(lnot(a), b, o);
@@ -273,33 +267,9 @@ z3_propt::lxor(literalt a, literalt b)
 }
 
 literalt
-z3_propt::lequal(literalt a, literalt b)
-{
-  return lnot(lxor(a, b));
-}
-
-literalt
 z3_propt::limplies(literalt a, literalt b)
 {
   return lor(lnot(a), b);
-}
-
-literalt
-z3_propt::lselect(literalt a, literalt b, literalt c)
-{
-#if 1
-  if (a == const_literal(true)) return b;
-  if (a == const_literal(false)) return c;
-  if (b == c) return b;
-#endif
-  literalt l = new_variable();
-  Z3_ast result, formula;
-
-  result = Z3_mk_ite(z3_ctx, z3_literal(a), z3_literal(b), z3_literal(c));
-  formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  assert_formula(formula);
-
-  return l;
 }
 
 literalt

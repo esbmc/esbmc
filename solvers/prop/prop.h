@@ -32,9 +32,7 @@ public:
   virtual literalt lnot(literalt a)=0;
   virtual literalt lxor(literalt a, literalt b)=0;
   virtual literalt lxor(const bvt &bv)=0;
-  virtual literalt lequal(literalt a, literalt b)=0;
   virtual literalt limplies(literalt a, literalt b)=0;
-  virtual literalt lselect(literalt a, literalt b, literalt c)=0; // a?b:c
   virtual void set_equal(literalt a, literalt b);
 
   virtual void l_set_to(literalt a, bool value)
