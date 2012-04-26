@@ -941,23 +941,6 @@ expr_body<derived>::clone(void) const
 
 template <class derived>
 void
-byte_ops_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc byte_ops_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
-template <class derived>
-void
 datatype_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -2067,39 +2050,10 @@ address_of2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
-byte_ops2t::byte_ops2t(const type2tc type, expr_ids id)
-  : expr_body<byte_ops2t>(type, id)
-{
-}
-
-byte_ops2t::byte_ops2t(const byte_ops2t &ref)
-  : expr_body<byte_ops2t>(ref)
-{
-}
-
-bool
-byte_ops2t::cmp(const expr2t &ref) const
-{
-  assert(0 && "byte_ops2t is abstract-ish");
-}
-
-int
-byte_ops2t::lt(const expr2t &ref) const
-{
-  assert(0 && "byte_ops2t is abstract-ish");
-}
-
-list_of_memberst
-byte_ops2t::tostring(unsigned int indent) const
-{
-  assert(0 && "byte_ops2t is abstract-ish");
-  abort();
-}
-
 byte_extract2t::byte_extract2t(const type2tc type, bool is_big_endian,
                                const expr2tc source,
                                const expr2tc offs)
-  : byte_ops_body<byte_extract2t>(type, byte_extract_id),
+  : byte_ops2t<byte_extract2t>(type, byte_extract_id),
                                  big_endian(is_big_endian),
                                  source_value(source),
                                  source_offset(offs)
@@ -2107,7 +2061,7 @@ byte_extract2t::byte_extract2t(const type2tc type, bool is_big_endian,
 }
 
 byte_extract2t::byte_extract2t(const byte_extract2t &ref)
-  : byte_ops_body<byte_extract2t>(ref),
+  : byte_ops2t<byte_extract2t>(ref),
                               big_endian(ref.big_endian),
                               source_value(ref.source_value),
                               source_offset(ref.source_offset)
@@ -2163,7 +2117,7 @@ byte_extract2t::tostring(unsigned int indent) const
 byte_update2t::byte_update2t(const type2tc type, bool is_big_endian,
                              const expr2tc source, const expr2tc offs,
                              const expr2tc update)
-  : byte_ops_body<byte_update2t>(type, byte_update_id),
+  : byte_ops2t<byte_update2t>(type, byte_update_id),
                                  big_endian(is_big_endian),
                                  source_value(source),
                                  source_offset(offs),
@@ -2172,7 +2126,7 @@ byte_update2t::byte_update2t(const type2tc type, bool is_big_endian,
 }
 
 byte_update2t::byte_update2t(const byte_update2t &ref)
-  : byte_ops_body<byte_update2t>(ref),
+  : byte_ops2t<byte_update2t>(ref),
                               big_endian(ref.big_endian),
                               source_value(ref.source_value),
                               source_offset(ref.source_offset),

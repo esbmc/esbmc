@@ -1082,33 +1082,21 @@ public:
 /** Base class for byte operations. Endianness is a global property of the
  *  model that we're building, and we only need to care about it when we build
  *  an smt model in the end, not at any other point. */
-class byte_ops2t : public expr_body<byte_ops2t>
-{
-public:
-  byte_ops2t(const type2tc type, expr_ids id);
-  byte_ops2t(const byte_ops2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-};
-
 template <class derived>
-class byte_ops_body : public byte_ops2t
+class byte_ops2t : public expr_body<derived>
 {
 public:
-  byte_ops_body(const type2tc type, expr_ids id) : byte_ops2t(type, id) {};
-  byte_ops_body(const byte_ops_body &ref) : byte_ops2t(ref) {};
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
+  byte_ops2t(const type2tc type, expr2t::expr_ids id)
+    : expr_body<derived>(type, id) {}
+  byte_ops2t(const byte_ops2t &ref)
+    : expr_body<derived> (ref) {}
 };
 
 /** Data extraction from some expression. Type is whatever type we're expecting
  *  to pull out of it. source_value is whatever piece of data we're operating
  *  upon. source_offset is the _byte_ offset into source_value to extract data
  *  from. */
-class byte_extract2t : public byte_ops_body<byte_extract2t>
+class byte_extract2t : public byte_ops2t<byte_extract2t>
 {
 public:
   byte_extract2t(const type2tc type, bool big_endian,
@@ -1128,7 +1116,7 @@ public:
  *  is the piece of data to insert data into. source_offset is the byte offset
  *  of where to put it. udpate_value is the piece of data to shoehorn into
  *  source_value. */
-class byte_update2t : public byte_ops_body<byte_update2t>
+class byte_update2t : public byte_ops2t<byte_update2t>
 {
 public:
   byte_update2t(const type2tc type, bool big_endian,
