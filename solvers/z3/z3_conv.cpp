@@ -2810,25 +2810,6 @@ z3_convt::set_to(const exprt &expr, bool value)
       convert_z3_expr(op0, operand[0]);
       convert_z3_expr(op1, operand[1]);
 
-      if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
-        Z3_ast pointer[2], formula[2];
-
-        pointer[0] = z3_api.mk_tuple_select(operand[0], 0);
-        pointer[1] = z3_api.mk_tuple_select(operand[1], 0);
-
-        formula[0] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
-        pointer[0] = z3_api.mk_tuple_select(operand[0], 1);
-
-        pointer[1] = z3_api.mk_tuple_select(operand[1], 1);
-        formula[1] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
-
-        if (expr.op0().type().id() == "bool")
-          result = Z3_mk_iff(z3_ctx, formula[0], formula[1]);
-        else
-          result = Z3_mk_and(z3_ctx, 2, formula);
-
-        assert_formula(result);
-      } else   {
 #if 1
         if (op0.type().id() == "union" && op1.id() == "with") {
           union_vars.insert(std::pair<std::string,
@@ -2851,7 +2832,6 @@ z3_convt::set_to(const exprt &expr, bool value)
           if (!op1.is_true())
             generate_assumptions(expr, operand[0]);
         }
-      }
     }
   } catch (conv_error *e) {
     std::cerr << e->to_string() << std::endl;
