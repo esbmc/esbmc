@@ -53,7 +53,7 @@ public:
 
   // solving
   virtual const std::string solver_text()=0;
-  typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR } resultt;
+  typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
   virtual resultt prop_solve()=0;
 
   // satisfying assignment

@@ -64,8 +64,7 @@ Function: bmct::do_unwind_module
 
 \*******************************************************************/
 
-void bmct::do_unwind_module(
-  decision_proceduret &decision_procedure)
+void bmct::do_unwind_module(prop_convt &prop_conv)
 {
 }
 
@@ -88,7 +87,7 @@ void bmct::do_cbmc(prop_convt &solver, symex_target_equationt &equation)
   equation.convert(solver);
 
   forall_expr_list(it, bmc_constraints)
-    solver.set_to_true(*it);
+    solver.set_to(*it, true);
 
   // After all conversions, clear cache, which tends to contain a large
   // amount of stuff.
@@ -153,7 +152,7 @@ Function: bmct::run_decision_procedure
 
 \*******************************************************************/
 
-decision_proceduret::resultt
+propt::resultt
 bmct::run_decision_procedure(prop_convt &prop_conv,
                              symex_target_equationt &equation)
 {
@@ -178,7 +177,7 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   do_unwind_module(prop_conv);
   do_cbmc(prop_conv, equation);
 
-  decision_proceduret::resultt dec_result=prop_conv.dec_solve();
+  propt::resultt dec_result=prop_conv.dec_solve();
 
   // output runtime
   if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
@@ -568,11 +567,11 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
 
   switch(bmc.run_decision_procedure(*conv, equation))
   {
-  case decision_proceduret::D_UNSATISFIABLE:
+  case propt::P_UNSATISFIABLE:
     bmc.report_success();
     return false;
 
-  case decision_proceduret::D_SATISFIABLE:
+  case propt::P_SATISFIABLE:
     bmc.error_trace(*conv, equation);
     bmc.report_failure();
     return true;
@@ -580,7 +579,7 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
   // Return failure if we didn't actually check anything, we just emitted the
   // test information to an SMTLIB formatted file. Causes esbmc to quit
   // immediately (with no error reported)
-  case decision_proceduret::D_SMTLIB:
+  case propt::P_SMTLIB:
     return true;
 
   default:

@@ -19,12 +19,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <irep2.h>
 #include <config.h>
 #include <hash_cont.h>
-#include <decision_procedure.h>
+#include <message.h>
 #include <threeval.h>
 
 #include "prop.h"
 
-class prop_convt:virtual public decision_proceduret
+class prop_convt : public messaget
 {
 public:
   explicit prop_convt(propt &_prop):
@@ -40,7 +40,7 @@ public:
 
   // overloading
   virtual void set_to(const exprt &expr, bool value);
-  virtual decision_proceduret::resultt dec_solve();
+  virtual propt::resultt dec_solve();
 
   // conversion with cache
   virtual literalt convert(const exprt &expr)

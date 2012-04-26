@@ -103,8 +103,7 @@ void symex_target_equationt::convert(
   convert_output(prop_conv);
 }
 
-void symex_target_equationt::convert_assignments(
-  decision_proceduret &decision_procedure) const
+void symex_target_equationt::convert_assignments(prop_convt &prop_conv) const
 {
   for(SSA_stepst::const_iterator it=SSA_steps.begin();
       it!=SSA_steps.end(); it++)
@@ -112,7 +111,7 @@ void symex_target_equationt::convert_assignments(
     if(it->is_assignment() && !it->ignore)
     {
       exprt tmp(it->cond);
-      decision_procedure.set_to_true(tmp);
+      prop_conv.set_to(tmp, true);
     }
   }
 }
@@ -206,8 +205,7 @@ Function: symex_target_equationt::convert_output
 
 \*******************************************************************/
 
-void symex_target_equationt::convert_output(
-  decision_proceduret &dec_proc)
+void symex_target_equationt::convert_output(prop_convt &prop_conv)
 {
   unsigned output_count=0;
 
@@ -229,7 +227,7 @@ void symex_target_equationt::convert_output(
           symbol_exprt symbol;
           symbol.type()=tmp.type();
           symbol.set_identifier("symex::output::"+i2string(output_count++));
-          dec_proc.set_to(equality_exprt(tmp, symbol), true);
+          prop_conv.set_to(equality_exprt(tmp, symbol), true);
           it->converted_output_args.push_back(symbol);
         }
       }

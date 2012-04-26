@@ -25,6 +25,7 @@
 #include <fixedbv.h>
 
 #include "z3_conv.h"
+#include <solvers/prop/prop.h>
 #include "../ansi-c/c_types.h"
 
 #define cast_to_z3(arg) reinterpret_cast<Z3_ast &>((arg))
@@ -471,7 +472,7 @@ z3_convt::finalize_pointer_chain(void)
   return;
 }
 
-decision_proceduret::resultt
+propt::resultt
 z3_convt::dec_solve(void)
 {
   unsigned major, minor, build, revision;
@@ -491,16 +492,16 @@ z3_convt::dec_solve(void)
   bv_cache.clear();
 
   if (z3_prop.smtlib)
-    return D_SMTLIB;
+    return propt::P_SMTLIB;
 
   result = check2_z3_properties();
 
   if (result == Z3_L_FALSE)
-    return D_UNSATISFIABLE;
+    return propt::P_UNSATISFIABLE;
   else if (result == Z3_L_UNDEF)
-    return D_UNKNOWN;
+    return propt::P_ERROR;
   else
-    return D_SATISFIABLE;
+    return propt::P_SATISFIABLE;
 }
 
 Z3_lbool

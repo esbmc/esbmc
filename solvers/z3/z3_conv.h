@@ -21,7 +21,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/prop/pointer_logic.h>
 #include <vector>
 #include <string.h>
-#include <decision_procedure.h>
 #include <irep2.h>
 
 #include "z3_prop.h"
@@ -72,7 +71,7 @@ public:
   }
 
   virtual ~z3_convt();
-  virtual decision_proceduret::resultt dec_solve(void);
+  virtual propt::resultt dec_solve(void);
   Z3_lbool check2_z3_properties(void);
   bool get_z3_encoding(void) const;
   void set_filename(std::string file);

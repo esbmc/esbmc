@@ -245,7 +245,7 @@ void prop_convt::set_to(const exprt &expr, bool value)
         if(expr.is_and())
         {
           forall_operands(it, expr)
-            set_to_true(*it);
+            set_to(*it, true);
 
           return;
         }
@@ -288,14 +288,14 @@ void prop_convt::set_to(const exprt &expr, bool value)
         {
           if(expr.operands().size()==2)
           {
-            set_to_true(expr.op0());
-            set_to_false(expr.op1());
+            set_to(expr.op0(), true);
+            set_to(expr.op1(), false);
           }
         }
         else if(expr.id()=="or") // !(a || b)  ==  (!a && !b)
         {
           forall_operands(it, expr)
-            set_to_false(*it);
+            set_to(*it, false);
         }
       }
     }
@@ -318,22 +318,13 @@ void prop_convt::post_process()
 {
 }
 
-decision_proceduret::resultt prop_convt::dec_solve()
+propt::resultt prop_convt::dec_solve()
 {
   post_process();
 
   print(7, "Solving with "+prop.solver_text());
 
-  propt::resultt result=prop.prop_solve();
-
-  switch(result)
-  {
-   case propt::P_SATISFIABLE: return D_SATISFIABLE;
-   case propt::P_UNSATISFIABLE: return D_UNSATISFIABLE;
-   default: return D_ERROR;
-  }
-
-  return D_ERROR;
+  return prop.prop_solve();
 }
 
 exprt prop_convt::get(const exprt &expr) const
