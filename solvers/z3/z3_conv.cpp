@@ -2819,19 +2819,6 @@ z3_convt::set_to(const exprt &expr, bool value)
         }
 #endif
 
-        if (op0.type().id() == "bool")
-          result = Z3_mk_iff(z3_ctx, operand[0], operand[1]);
-        else
-          result = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
-
-        assert_formula(result);
-
-        if (z3_prop.uw && expr.op0().get_string("identifier").find("guard_exec") !=
-            std::string::npos
-            && z3_prop.assumpt.size() < max_core_size) {
-          if (!op1.is_true())
-            generate_assumptions(expr, operand[0]);
-        }
     }
   } catch (conv_error *e) {
     std::cerr << e->to_string() << std::endl;
