@@ -2796,12 +2796,6 @@ z3_convt::set_to(const exprt &expr, bool value)
   if (expr.op1().id() != "with")
     prop.l_set_to(convert(expr), value);
 
-  if (value && expr.id() == "and") {
-    forall_operands(it, expr)
-    set_to(*it, true);
-    return;
-  }
-
   if (value && expr.is_true())
     return;
 
