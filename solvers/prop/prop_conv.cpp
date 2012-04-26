@@ -32,22 +32,6 @@ bool prop_convt::literal(const exprt &expr, literalt &dest) const
   throw "found no literal for expression";
 }
 
-literalt prop_convt::get_literal(const irep_idt &identifier)
-{
-  std::pair<symbolst::iterator, bool> result=
-    symbols.insert(std::pair<irep_idt, literalt>(identifier, literalt()));
-
-  if(!result.second)
-    return result.first->second;
-
-  literalt literal=prop.new_variable();
-
-  // insert
-  result.first->second=literal;
-
-  return literal;
-}
-
 bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 {
   // trivial cases

@@ -74,8 +74,6 @@ protected:
   typedef std::map<irep_idt, literalt> symbolst;
   symbolst symbols;
 
-  virtual literalt get_literal(const irep_idt &symbol);
-
   // cache
   typedef hash_map_cont<exprt, literalt, irep_hash> cachet;
   cachet cache;
