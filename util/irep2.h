@@ -1365,6 +1365,11 @@ inline bool operator>(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<exp
   return (*b.get() < *a.get());
 }
 
+struct irep2_hash
+{
+  size_t operator()(const expr2tc &ref) const { return ref->crc(); }
+};
+
 // Same deal as for "type_macros".
 #ifdef NDEBUG
 #define dynamic_cast static_cast
