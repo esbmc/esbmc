@@ -12,7 +12,7 @@
 static void
 crc_a_bigint(const BigInt &theint, boost::crc_32_type &crc)
 {
-  char buffer[256];
+  unsigned char buffer[256];
 
   if (theint.dump(buffer, sizeof(buffer))) {
     // Zero has no data in bigints.
@@ -1104,6 +1104,14 @@ symbol2t::tostring(unsigned int indent) const
   return memb;
 }
 
+void
+symbol2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  crc.process_bytes(name.as_string().c_str(), name.as_string().size());
+  return;
+}
+
 constant_int2t::constant_int2t(type2tc type, const BigInt &input)
   : constant2t<constant_int2t>(type, constant_int_id), constant_value(input)
 {
@@ -1156,6 +1164,15 @@ constant_int2t::tostring(unsigned int indent) const
   return membs;
 }
 
+void
+constant_int2t::do_crc(boost::crc_32_type &crc) const
+{
+
+  expr2t::do_crc(crc);
+  crc_a_bigint(constant_value, crc);
+  return;
+}
+
 constant_fixedbv2t::constant_fixedbv2t(type2tc type, const fixedbvt &val)
   : constant2t<constant_fixedbv2t>(type, constant_int_id), value(val)
 {
@@ -1191,6 +1208,15 @@ constant_fixedbv2t::tostring(unsigned int indent) const
 
   membs.push_back(member_entryt("value", value.to_ansi_c_string()));
   return membs;
+}
+
+void
+constant_fixedbv2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  mp_integer val = value.to_integer();
+  crc_a_bigint(val, crc);
+  return;
 }
 
 constant_bool2t::constant_bool2t(bool value)
@@ -1239,6 +1265,17 @@ constant_bool2t::tostring(unsigned int indent) const
   return membs;
 }
 
+void
+constant_bool2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  if (constant_value)
+    crc.process_byte(0);
+  else
+    crc.process_byte(1);
+  return;
+}
+
 typecast2t::typecast2t(const type2tc type, const expr2tc expr)
   : expr_body<typecast2t>(type, typecast_id), from(expr)
 {
@@ -1277,7 +1314,15 @@ typecast2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
-template<class derived>
+void
+typecast2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  from->do_crc(crc);
+  return;
+}
+
+template <class derived>
 bool
 constant_datatype2t<derived>::cmp(const expr2t &ref) const
 {
@@ -1323,6 +1368,16 @@ constant_datatype2t<derived>::tostring(unsigned int indent) const
   }
 
   return membs;
+}
+
+template <class derived>
+void
+constant_datatype2t<derived>::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  forall_exprs(it, datatype_members)
+    (*it)->do_crc(crc);
+  return;
 }
 
 constant_struct2t::constant_struct2t(const type2tc type,
@@ -1416,6 +1471,14 @@ constant_string2t::tostring(unsigned int indent) const
   return membs;
 }
 
+void
+constant_string2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  crc.process_bytes(value.c_str(), value.size());
+  return;
+}
+
 constant_array2t::constant_array2t(const type2tc type,
                                    const std::vector<expr2tc> &members)
   : constant2t<constant_array2t>(type, constant_array_id),
@@ -1471,6 +1534,15 @@ constant_array2t::tostring(unsigned int indent) const
   return membs;
 }
 
+void
+constant_array2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  forall_exprs(it, datatype_members)
+    (*it)->do_crc(crc);
+  return;
+}
+
 constant_array_of2t::constant_array_of2t(const type2tc type, expr2tc init)
   : constant2t<constant_array_of2t>(type, constant_array_id),
     initializer(init)
@@ -1507,6 +1579,14 @@ constant_array_of2t::tostring(unsigned int indent) const
   return tostring_func<expr2tc>(indent,
                                 (const char *)"initializer", &initializer,
                                 (const char *)"");
+}
+
+void
+constant_array_of2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  initializer->do_crc(crc);
+  return;
 }
 
 if2t::if2t(const type2tc type, const expr2tc _cond, const expr2tc true_val,
@@ -1565,6 +1645,16 @@ if2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
+void
+if2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  cond->do_crc(crc);
+  true_value->do_crc(crc);
+  false_value->do_crc(crc);
+  return;
+}
+
 template <class derived>
 bool
 rel2t<derived>::cmp(const expr2t &ref) const
@@ -1601,6 +1691,16 @@ rel2t<derived>::tostring(unsigned int indent) const
                                 (const char *)"operand0", &side_1,
                                 (const char *)"operand1", &side_2,
                                 (const char *)"");
+}
+
+template <class derived>
+void
+rel2t<derived>::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  side_1->do_crc(crc);
+  side_2->do_crc(crc);
+  return;
 }
 
 equality2t::equality2t(const expr2tc val1, const expr2tc val2)
@@ -1695,6 +1795,14 @@ not2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
+void
+not2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  notvalue->do_crc(crc);
+  return;
+}
+
 template <class derived>
 bool
 logical_2ops2t<derived>::cmp(const expr2t &ref) const
@@ -1731,6 +1839,16 @@ logical_2ops2t<derived>::tostring(unsigned int indent) const
                                 (const char *)"operand0", &side_1,
                                 (const char *)"operand0", &side_2,
                                 (const char *)"");
+}
+
+template <class derived>
+void
+logical_2ops2t<derived>::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  side_1->do_crc(crc);
+  side_2->do_crc(crc);
+  return;
 }
 
 and2t::and2t(const expr2tc val1, const expr2tc val2)
@@ -1799,6 +1917,16 @@ binops2t<derived>::tostring(unsigned int indent) const
                                 (const char *)"operand0", &side_1,
                                 (const char *)"operand0", &side_2,
                                 (const char *)"");
+}
+
+template <class derived>
+void
+binops2t<derived>::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  side_1->do_crc(crc);
+  side_2->do_crc(crc);
+  return;
 }
 
 bitand2t::bitand2t(const type2tc type, const expr2tc val1, const expr2tc val2)
@@ -1903,6 +2031,13 @@ neg2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
+void
+neg2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  value->do_crc(crc);
+}
+
 abs2t::abs2t(const type2tc type, const expr2tc _value)
   : arith2t<abs2t>(type, abs_id), value(_value)
 {
@@ -1933,6 +2068,13 @@ abs2t::tostring(unsigned int indent) const
   return tostring_func<expr2tc>(indent,
                                 (const char *)"value", &value,
                                 (const char *)"");
+}
+
+void
+abs2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  value->do_crc(crc);
 }
 
 template <class derived>
@@ -1973,6 +2115,16 @@ arith_2op2t<derived>::tostring(unsigned int indent) const
                                 (const char *)"operand0", &part_1,
                                 (const char *)"operand0", &part_2,
                                 (const char *)"");
+}
+
+template <class derived>
+void
+arith_2op2t<derived>::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  part_1->do_crc(crc);
+  part_2->do_crc(crc);
+  return;
 }
 
 add2t::add2t(const type2tc type, const expr2tc val1, const expr2tc val2)
@@ -2088,6 +2240,14 @@ pointer_offset2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
+void
+pointer_offset2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  pointer_obj->do_crc(crc);
+  return;
+}
+
 pointer_object2t::pointer_object2t(const type2tc type, const expr2tc val)
   : arith2t<pointer_object2t>(type, pointer_object_id), pointer_obj(val)
 {
@@ -2120,6 +2280,13 @@ pointer_object2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
+void
+pointer_object2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  pointer_obj->do_crc(crc);
+  return;
+}
 
 address_of2t::address_of2t(const type2tc subtype, const expr2tc val)
   : arith2t<address_of2t>(type2tc(new pointer_type2t(subtype)),
@@ -2153,6 +2320,14 @@ address_of2t::tostring(unsigned int indent) const
   return tostring_func<expr2tc>(indent,
                                 (const char *)"pointer_obj", &pointer_obj,
                                 (const char *)"");
+}
+
+void
+address_of2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  pointer_obj->do_crc(crc);
+  return;
 }
 
 byte_extract2t::byte_extract2t(const type2tc type, bool is_big_endian,
@@ -2217,6 +2392,19 @@ byte_extract2t::tostring(unsigned int indent) const
                                 (const char *)"");
   membs.push_back(member_entryt("big_endian", (big_endian) ? "true" : "false"));
   return membs;
+}
+
+void
+byte_extract2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  if (big_endian)
+    crc.process_byte(1);
+  else
+    crc.process_byte(0);
+  source_value->do_crc(crc);
+  source_offset->do_crc(crc);
+  return;
 }
 
 byte_update2t::byte_update2t(const type2tc type, bool is_big_endian,
@@ -2293,6 +2481,20 @@ byte_update2t::tostring(unsigned int indent) const
   return membs;
 }
 
+void
+byte_update2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  if (big_endian)
+    crc.process_byte(1);
+  else
+    crc.process_byte(0);
+  source_value->do_crc(crc);
+  source_offset->do_crc(crc);
+  update_value->do_crc(crc);
+  return;
+}
+
 with2t::with2t(const type2tc type, const expr2tc source, const expr2tc idx,
                const expr2tc update)
   : datatype_ops2t<with2t>(type, with_id), source_data(source),
@@ -2350,6 +2552,16 @@ with2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
+void
+with2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  source_data->do_crc(crc);
+  update_field->do_crc(crc);
+  update_data->do_crc(crc);
+  return;
+}
+
 member2t::member2t(const type2tc type, const expr2tc source,
                    const constant_string2t &idx)
   : datatype_ops2t<member2t>(type, member_id), source_data(source),
@@ -2397,6 +2609,15 @@ member2t::tostring(unsigned int indent) const
   memb.push_back(member_entryt("source", source_data->pretty(indent + 2)));
   memb.push_back(member_entryt("member name", member.value));
   return memb;
+}
+
+void
+member2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  source_data->do_crc(crc);
+  member.do_crc(crc);
+  return;
 }
 
 index2t::index2t(const type2tc type, const expr2tc source,
@@ -2447,6 +2668,15 @@ index2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
+void
+index2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  source_data->do_crc(crc);
+  index->do_crc(crc);
+  return;
+}
+
 zero_string2t::zero_string2t(const expr2tc _string)
   : datatype_ops2t<zero_string2t>(type2tc(new bool_type2t()), zero_string_id),
                                 string(_string)
@@ -2478,6 +2708,14 @@ zero_string2t::tostring(unsigned int indent) const
   return tostring_func<expr2tc>(indent,
                                 (const char *)"string", &string,
                                 (const char *)"");
+}
+
+void
+zero_string2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  string->do_crc(crc);
+  return;
 }
 
 zero_length_string2t::zero_length_string2t(const expr2tc _string)
@@ -2516,6 +2754,14 @@ zero_length_string2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
+void
+zero_length_string2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  string->do_crc(crc);
+  return;
+}
+
 isnan2t::isnan2t(const expr2tc val)
   : lops2t<isnan2t>(isnan_id), value(val)
 {
@@ -2546,6 +2792,14 @@ isnan2t::tostring(unsigned int indent) const
   return tostring_func<expr2tc>(indent,
                                 (const char *)"value", &value,
                                 (const char *)"");
+}
+
+void
+isnan2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  value->do_crc(crc);
+  return;
 }
 
 overflow2t::overflow2t(const expr2tc val)
@@ -2581,6 +2835,14 @@ overflow2t::tostring(unsigned int indent) const
   return tostring_func<expr2tc>(indent,
                                 (const char *)"operand", &operand,
                                 (const char *)"");
+}
+
+void
+overflow2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  operand->do_crc(crc);
+  return;
 }
 
 overflow_cast2t::overflow_cast2t(const expr2tc val, unsigned int _bits)
@@ -2627,6 +2889,16 @@ overflow_cast2t::tostring(unsigned int indent) const
   return membs;
 }
 
+void
+overflow_cast2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  operand->do_crc(crc);
+  crc.process_bytes(&bits, sizeof(bits));
+  return;
+}
+
+
 overflow_neg2t::overflow_neg2t(const expr2tc val)
   : lops2t<overflow_neg2t>(overflow_neg_id), operand(val)
 {
@@ -2657,6 +2929,14 @@ overflow_neg2t::tostring(unsigned int indent) const
   return tostring_func<expr2tc>(indent,
                                 (const char *)"operand", &operand,
                                 (const char *)"");
+}
+
+void
+overflow_neg2t::do_crc(boost::crc_32_type &crc) const
+{
+  expr2t::do_crc(crc);
+  operand->do_crc(crc);
+  return;
 }
 
 type_poolt::type_poolt(void)
