@@ -1253,7 +1253,7 @@ z3_convt::convert_smt_expr(const abs2t &abs, void *&_bv)
   if (is_fixedbv_type(abs.type)) {
     sign = abs.type;
     fixedbvt bv; // Defaults to zero.
-    bv.spec = fixedbv_spect(32, 64);
+    bv.spec = fixedbv_spect(64, 32);
     exprt face = bv.to_expr();
     zero = expr2tc(new constant_fixedbv2t(sign, bv));
   } else {
