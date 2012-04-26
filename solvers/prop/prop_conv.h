@@ -39,7 +39,7 @@ public:
   virtual ~prop_convt() { }
 
   // overloading
-  virtual void set_to(const exprt &expr, bool value);
+  virtual void set_to(const exprt &expr, bool value) = 0;
   virtual propt::resultt dec_solve();
 
   // conversion with cache
