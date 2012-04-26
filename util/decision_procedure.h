@@ -34,8 +34,6 @@ public:
                  D_UNSATISFIABLE, D_ERROR, D_UNKNOWN, D_SMTLIB } resultt;
 
   virtual resultt dec_solve()=0;
-
-  virtual bool in_core(const exprt &expr);
 };
 
 #endif
