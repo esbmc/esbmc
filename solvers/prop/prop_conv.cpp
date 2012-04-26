@@ -56,11 +56,9 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
   return false;
 }
 
-literalt prop_convt::convert(const exprt &expr, bool do_cache)
+literalt prop_convt::convert(const exprt &expr)
 {
-  if(!do_cache ||
-     expr.id()=="symbol" ||
-     expr.id()=="constant")
+  if(expr.id()=="symbol" || expr.id()=="constant")
     return convert_bool(expr);
 
   // check cache first

@@ -107,7 +107,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"interactive-ileaves",	switc,		""	},
 { 0,	"round-robin",	switc,		""	},
 { 0,	"break-at",		string,		""	},
-{ 0,    "no-lit-cache",         switc,          ""      },
 { 0,	"decide",		switc,		""	},
 { 0,	"fixed-pointer-model",	switc,		""	},
 { 0,	"floating-pointer-model",switc,		""	},

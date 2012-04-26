@@ -30,10 +30,6 @@ public:
   explicit prop_convt(propt &_prop):
     prop(_prop)
   {
-    if (config.options.get_bool_option("no-lit-cache"))
-      use_cache = false;
-    else
-      use_cache = true;
   }
   virtual ~prop_convt() { }
 
@@ -41,9 +37,7 @@ public:
   virtual void set_to(const exprt &expr, bool value) = 0;
   virtual propt::resultt dec_solve() = 0;
 
-  // conversion with cache
-  virtual literalt convert(const exprt &expr)
-  { return convert(expr, use_cache); }
+  virtual literalt convert(const exprt &expr);
 
   // get a boolean value from counterexample if not valid
   virtual bool get_bool(const exprt &expr, tvt &value) const;
@@ -53,8 +47,6 @@ public:
   
   // get literal for expression, if available
   virtual bool literal(const exprt &expr, literalt &literal) const;
-  
-  bool use_cache;
   
   propt &prop;
   
@@ -66,7 +58,6 @@ public:
   }
   
 protected:
-  virtual literalt convert(const exprt &expr, bool do_cache);
   virtual literalt convert_rest(const exprt &expr) = 0;
   virtual literalt convert_bool(const exprt &expr);
   
