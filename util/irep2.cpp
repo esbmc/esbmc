@@ -8,6 +8,7 @@
 #include <solvers/prop/prop_conv.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/static_assert.hpp>
 
 static void
 crc_a_bigint(const BigInt &theint, boost::crc_32_type &crc)
@@ -3078,3 +3079,9 @@ type_poolt::get_int(unsigned int size)
 }
 
 type_poolt type_pool;
+
+// For CRCing to actually be accurate, expr/type ids mustn't overflow out of
+// a byte. If this happens then a) there are too many exprs, and b) the expr
+// crcing code has to change.
+BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
+BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);

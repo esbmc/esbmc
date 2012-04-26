@@ -70,7 +70,8 @@ public:
     unsignedbv_id,
     signedbv_id,
     fixedbv_id,
-    string_id
+    string_id,
+    end_type_id
   };
 
   // Class to be thrown when attempting to fetch the width of a symbolic type,
@@ -478,6 +479,7 @@ public:
     overflow_id,
     overflow_cast_id,
     overflow_neg_id,
+    end_expr_id
   };
 
 protected:
