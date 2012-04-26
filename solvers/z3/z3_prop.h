@@ -28,16 +28,13 @@ public:
 #if 1
   virtual void land(literalt a, literalt b, literalt o);
   virtual void lor(literalt a, literalt b, literalt o);
-  virtual void lxor(literalt a, literalt b, literalt o);
   virtual void limplies(literalt a, literalt b, literalt o);
 #endif
   virtual literalt land(literalt a, literalt b);
   virtual literalt lor(literalt a, literalt b);
   virtual literalt land(const bvt &bv);
   virtual literalt lor(const bvt &bv);
-  virtual literalt lxor(const bvt &bv);
   virtual literalt lnot(literalt a);
-  virtual literalt lxor(literalt a, literalt b);
   virtual literalt limplies(literalt a, literalt b);
   virtual literalt new_variable();
   virtual unsigned no_variables() const { return _no_variables; }

@@ -30,8 +30,6 @@ public:
   virtual literalt land(const bvt &bv)=0;
   virtual literalt lor(const bvt &bv)=0;
   virtual literalt lnot(literalt a)=0;
-  virtual literalt lxor(literalt a, literalt b)=0;
-  virtual literalt lxor(const bvt &bv)=0;
   virtual literalt limplies(literalt a, literalt b)=0;
   virtual void set_equal(literalt a, literalt b);
 

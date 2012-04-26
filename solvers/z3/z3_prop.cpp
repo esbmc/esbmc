@@ -79,44 +79,6 @@ z3_propt::lor(literalt a, literalt b, literalt o)
 }
 
 void
-z3_propt::lxor(literalt a, literalt b, literalt o)
-{
-  // a xor b = o <==> (a' + b' + o')
-  //                  (a + b + o' )
-  //                  (a' + b + o)
-  //                  (a + b' + o)
-  bvt lits;
-
-  lits.clear();
-  lits.reserve(3);
-  lits.push_back(neg(a));
-  lits.push_back(neg(b));
-  lits.push_back(neg(o));
-  lcnf(lits);
-
-  lits.clear();
-  lits.reserve(3);
-  lits.push_back(pos(a));
-  lits.push_back(pos(b));
-  lits.push_back(neg(o));
-  lcnf(lits);
-
-  lits.clear();
-  lits.reserve(3);
-  lits.push_back(neg(a));
-  lits.push_back(pos(b));
-  lits.push_back(pos(o));
-  lcnf(lits);
-
-  lits.clear();
-  lits.reserve(3);
-  lits.push_back(pos(a));
-  lits.push_back(neg(b));
-  lits.push_back(pos(o));
-  lcnf(lits);
-}
-
-void
 z3_propt::limplies(literalt a, literalt b, literalt o)
 {
   lor(lnot(a), b, o);
@@ -159,35 +121,6 @@ z3_propt::lor(const bvt &bv)
   assert_formula(formula);
 
   return l;
-}
-
-literalt
-z3_propt::lxor(const bvt &bv)
-{
-
-  if (bv.size() == 0) return const_literal(false);
-  if (bv.size() == 1) return bv[0];
-
-  literalt l = new_variable();
-  uint size = bv.size();
-  Z3_ast *args = (Z3_ast *)alloca(size * sizeof(Z3_ast));
-  Z3_ast result = 0, formula;
-
-  for (unsigned int i = 0; i < bv.size(); i++)
-  {
-    args[i] = z3_literal(bv[i]);
-
-    if (i == 1)
-      result = Z3_mk_xor(z3_ctx, args[0], args[1]);
-    else if (i > 1)
-      result = Z3_mk_xor(z3_ctx, result, args[i]);
-  }
-
-  formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  assert_formula(formula);
-
-  return l;
-
 }
 
 literalt
@@ -242,28 +175,6 @@ z3_propt::lnot(literalt a)
   a.invert();
 
   return a;
-}
-
-literalt
-z3_propt::lxor(literalt a, literalt b)
-{
-#if 1
-  if (a == const_literal(false)) return b;
-  if (b == const_literal(false)) return a;
-  if (a == const_literal(true)) return lnot(b);
-  if (b == const_literal(true)) return lnot(a);
-#endif
-  literalt l = new_variable();
-  Z3_ast result, operand[2], formula;
-
-  operand[0] = z3_literal(a);
-  operand[1] = z3_literal(b);
-  result = Z3_mk_xor(z3_ctx, operand[0], operand[1]);
-  formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
-  assert_formula(formula);
-
-  return l;
-
 }
 
 literalt
