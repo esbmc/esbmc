@@ -216,8 +216,7 @@ private:
 
   pointer_logict pointer_logic;
 
-  // XXXjmorse - map is a fallback from hash map, as there's no expr2t hashing.
-  typedef std::map<const expr2tc, Z3_ast> bv_cachet;
+  typedef hash_map_cont<const expr2tc, Z3_ast, irep2_hash> bv_cachet;
   bv_cachet bv_cache;
 
   std::string itos(int i);

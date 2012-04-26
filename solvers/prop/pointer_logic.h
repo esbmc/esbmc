@@ -19,7 +19,7 @@ class pointer_logict
 {
 public:
   // this numbers the objects
-  typedef std::map<expr2tc, unsigned int> objectst;
+  typedef hash_map_cont<expr2tc, unsigned int, irep2_hash> objectst;
   objectst objects;
   typedef std::vector<expr2tc> obj_lookupt;
   obj_lookupt lookup;
