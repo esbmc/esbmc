@@ -42,7 +42,6 @@ public:
   { return "Z3"; }
 
   virtual tvt l_get(literalt a) const;
-  virtual propt::resultt prop_solve();
 
   friend class z3_convt;
 

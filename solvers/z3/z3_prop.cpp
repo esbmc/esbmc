@@ -238,12 +238,6 @@ z3_propt::z3_literal(literalt l)
   return literal_l;
 }
 
-propt::resultt
-z3_propt::prop_solve()
-{
-  return P_ERROR;
-}
-
 tvt
 z3_propt::l_get(literalt a) const
 {

@@ -40,7 +40,7 @@ public:
 
   // overloading
   virtual void set_to(const exprt &expr, bool value) = 0;
-  virtual propt::resultt dec_solve();
+  virtual propt::resultt dec_solve() = 0;
 
   // conversion with cache
   virtual literalt convert(const exprt &expr)
