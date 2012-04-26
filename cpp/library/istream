@@ -8,8 +8,8 @@ namespace std
 {
 struct istream: ios
 {
-  streamsize width ( ) const;
-  streamsize width ( streamsize wide );
+//  streamsize width ( ) const;
+//  streamsize width ( streamsize wide );
   istream(int id = 0): id(id), ios() {}
   int id;
   istream& ignore(int i = 1, int delim = EOF);
@@ -18,10 +18,18 @@ struct istream: ios
   istream& getline(char str[], int size, char delim = '\n');
   void read(char str[], int size);
   int gcount();
-  int rdstate();
+//  int rdstate();
   istream& seekg ( streampos pos ); // model
   istream& seekg ( streamoff off, ios_base::seekdir dir ); // model
   streampos tellg ( ); //model
+
+  int peek ( );
+  streamsize readsome ( char* s, streamsize n );
+  istream& putback ( char c );
+  istream& unget ( );
+
+  int sync ( );
+
 
 private:
   istream(const istream&); // disabled
@@ -124,10 +132,10 @@ int istream::gcount()
   return nondet_uint();
 }
 
-int istream::rdstate()
-{
-  return nondet_uint();
-}
+//int istream::rdstate()
+//{
+//  return nondet_uint();
+//}
 }
 
 #endif
