@@ -2785,12 +2785,7 @@ void
 z3_convt::set_to(const exprt &expr, bool value)
 {
 
-  if (expr.type().id() != "bool") {
-    std::string msg = "prop_convt::set_to got "
-                      "non-boolean expression:\n";
-    msg += expr.to_string();
-    throw msg;
-  }
+  assert(expr.type().id() == "bool");
 
   bool boolean = true;
 
