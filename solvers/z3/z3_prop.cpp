@@ -143,32 +143,6 @@ z3_propt::lnand(literalt a, literalt b, literalt o)
 }
 
 void
-z3_propt::lnor(literalt a, literalt b, literalt o)
-{
-  // a Nor b = o <==> (a' + o')( b' + o')(a + b + o)
-  bvt lits;
-
-  lits.clear();
-  lits.reserve(2);
-  lits.push_back(neg(a));
-  lits.push_back(neg(o));
-  lcnf(lits);
-
-  lits.clear();
-  lits.reserve(2);
-  lits.push_back(neg(b));
-  lits.push_back(neg(o));
-  lcnf(lits);
-
-  lits.clear();
-  lits.reserve(3);
-  lits.push_back(pos(a));
-  lits.push_back(pos(b));
-  lits.push_back(pos(o));
-  lcnf(lits);
-}
-
-void
 z3_propt::lequal(literalt a, literalt b, literalt o)
 {
   lxor(a, b, lnot(o));
@@ -328,12 +302,6 @@ literalt
 z3_propt::lnand(literalt a, literalt b)
 {
   return lnot(land(a, b));
-}
-
-literalt
-z3_propt::lnor(literalt a, literalt b)
-{
-  return lnot(lor(a, b));
 }
 
 literalt

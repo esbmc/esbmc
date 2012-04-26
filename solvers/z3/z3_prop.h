@@ -30,7 +30,6 @@ public:
   virtual void lor(literalt a, literalt b, literalt o);
   virtual void lxor(literalt a, literalt b, literalt o);
   virtual void lnand(literalt a, literalt b, literalt o);
-  virtual void lnor(literalt a, literalt b, literalt o);
   virtual void lequal(literalt a, literalt b, literalt o);
   virtual void limplies(literalt a, literalt b, literalt o);
 #endif
@@ -42,7 +41,6 @@ public:
   virtual literalt lnot(literalt a);
   virtual literalt lxor(literalt a, literalt b);
   virtual literalt lnand(literalt a, literalt b);
-  virtual literalt lnor(literalt a, literalt b);
   virtual literalt lequal(literalt a, literalt b);
   virtual literalt limplies(literalt a, literalt b);
   virtual literalt lselect(literalt a, literalt b, literalt c); // a?b:c

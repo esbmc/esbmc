@@ -33,7 +33,6 @@ public:
   virtual literalt lxor(literalt a, literalt b)=0;
   virtual literalt lxor(const bvt &bv)=0;
   virtual literalt lnand(literalt a, literalt b)=0;
-  virtual literalt lnor(literalt a, literalt b)=0;
   virtual literalt lequal(literalt a, literalt b)=0;
   virtual literalt limplies(literalt a, literalt b)=0;
   virtual literalt lselect(literalt a, literalt b, literalt c)=0; // a?b:c
