@@ -583,6 +583,9 @@ public:
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual void do_crc(boost::crc_32_type &crc) const;
 
+  bool is_true(void) const;
+  bool is_false(void) const;
+
   /** Arbitary precision integer record. */
   bool constant_value;
 };

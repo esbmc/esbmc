@@ -1277,6 +1277,18 @@ constant_bool2t::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
+bool
+constant_bool2t::is_true(void) const
+{
+  return constant_value;
+}
+
+bool
+constant_bool2t::is_false(void) const
+{
+  return !constant_value;
+}
+
 typecast2t::typecast2t(const type2tc type, const expr2tc expr)
   : expr_body<typecast2t>(type, typecast_id), from(expr)
 {
