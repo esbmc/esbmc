@@ -178,35 +178,6 @@ literalt prop_convt::convert_rest(const exprt &expr)
   return prop.new_variable();
 }
 
-bool prop_convt::set_equality_to_true(const exprt &expr)
-{
-  if(!equality_propagation) return true;
-
-  if(expr.operands().size()==2)
-  {
-    // optimization for constraint of the form
-    // new_variable = value
-
-    if(expr.op0().id()=="symbol")
-    {
-      const irep_idt &identifier=
-        expr.op0().identifier();
-
-      literalt tmp=convert(expr.op1());
-
-      std::pair<symbolst::iterator, bool> result=
-        symbols.insert(std::pair<irep_idt, literalt>(identifier, tmp));
-
-      if(result.second)
-        return false; // ok, inserted!
-
-      // nah, already there
-    }
-  }
-
-  return true;
-}
-
 void prop_convt::ignoring(const exprt &expr)
 {
   // fall through

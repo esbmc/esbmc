@@ -72,8 +72,6 @@ protected:
   virtual literalt convert_rest(const exprt &expr);
   virtual literalt convert_bool(const exprt &expr);
   
-  virtual bool set_equality_to_true(const exprt &expr);
-
   // symbols
   typedef std::map<irep_idt, literalt> symbolst;
   symbolst symbols;
