@@ -216,13 +216,8 @@ void prop_convt::ignoring(const exprt &expr)
   print(2, msg);
 }
 
-void prop_convt::post_process()
-{
-}
-
 propt::resultt prop_convt::dec_solve()
 {
-  post_process();
 
   print(7, "Solving with "+prop.solver_text());
 

@@ -62,8 +62,6 @@ public:
   
   friend class prop_conv_store_constraintt;
 
-  virtual void post_process();
-  
   virtual void clear_cache()
   {
     cache.clear();

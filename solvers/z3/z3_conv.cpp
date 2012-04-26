@@ -485,8 +485,6 @@ z3_convt::dec_solve(void)
 
   std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
 
-  post_process(); // Appears to do nothing
-
   finalize_pointer_chain();
 
   bv_cache.clear();
