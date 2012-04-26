@@ -68,13 +68,12 @@ z3_propt::lor(const bvt &bv)
 literalt
 z3_propt::land(literalt a, literalt b)
 {
-#if 1
   if (a == const_literal(true)) return b;
   if (b == const_literal(true)) return a;
   if (a == const_literal(false)) return const_literal(false);
   if (b == const_literal(false)) return const_literal(false);
   if (a == b) return a;
-#endif
+
   literalt l = new_variable();
   Z3_ast result, operand[2], formula;
 
@@ -91,13 +90,12 @@ z3_propt::land(literalt a, literalt b)
 literalt
 z3_propt::lor(literalt a, literalt b)
 {
-#if 1
   if (a == const_literal(false)) return b;
   if (b == const_literal(false)) return a;
   if (a == const_literal(true)) return const_literal(true);
   if (b == const_literal(true)) return const_literal(true);
   if (a == b) return a;
-#endif
+
   literalt l = new_variable();
   Z3_ast result, operand[2], formula;
 
