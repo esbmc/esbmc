@@ -75,7 +75,6 @@ public:
   Z3_lbool check2_z3_properties(void);
   bool get_z3_encoding(void) const;
   void set_filename(std::string file);
-  void set_z3_ecp(bool ecp);
   uint get_z3_core_size(void);
   uint get_z3_number_of_assumptions(void);
   void set_z3_core_size(uint val);
@@ -240,7 +239,7 @@ private:
   z3_propt z3_prop;
   z3_capi z3_api;
 
-  bool int_encoding, equivalence_checking;
+  bool int_encoding;
   std::list<Z3_ast> assumptions;
   std::string filename;
 

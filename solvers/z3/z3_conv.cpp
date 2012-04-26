@@ -275,12 +275,6 @@ z3_convt::set_filename(std::string file)
   filename = file;
 }
 
-void
-z3_convt::set_z3_ecp(bool ecp)
-{
-  equivalence_checking = ecp;
-}
-
 std::string
 z3_convt::extract_magnitude(std::string v, unsigned width)
 {
