@@ -615,7 +615,7 @@ BigInt::as_string (char *p, unsigned l, onedig_t b) const
 }
 
 bool
-BigInt::dump (unsigned char *p, unsigned n)
+BigInt::dump (unsigned char *p, unsigned n) const
 {
   // Access most significant digit.
   onedig_t *t = digit + length;

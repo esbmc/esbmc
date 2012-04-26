@@ -194,7 +194,7 @@ public:
   // Write and read in a compact byte-wise binary form. Effectively
   // print in base 256 with the most significant digit first. Also
   // read back from such a representation. Return success.
-  bool dump (unsigned char *, unsigned) _fast;
+  bool dump (unsigned char *, unsigned) _fast const;
   void load (unsigned char const *, unsigned) _fast;
   unsigned int get_len(void) const { return length; }
 
