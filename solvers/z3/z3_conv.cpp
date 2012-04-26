@@ -2793,7 +2793,7 @@ z3_convt::set_to(const exprt &expr, bool value)
   assert(expr.type().id() == "bool");
 
   // fall back to convert
-  if (expr.op1().id() != "with")
+//  if (expr.op1().id() != "with")
     prop.l_set_to(convert(expr), value);
 
   if (value && expr.is_true())
