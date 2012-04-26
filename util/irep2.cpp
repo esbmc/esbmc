@@ -922,6 +922,22 @@ expr2t::lt(const expr2t &ref) const
   return type->ltchecked(*ref.type.get());
 }
 
+uint32_t
+expr2t::crc(void) const
+{
+  boost::crc_32_type crc;
+  do_crc(crc);
+  return crc.checksum();
+}
+
+void
+expr2t::do_crc(boost::crc_32_type &crc) const
+{
+  crc.process_byte(expr_id);
+  type->do_crc(crc);
+  return;
+}
+
 const char *expr2t::expr_names[] = {
   "constant_int",
   "constant_fixedbv",

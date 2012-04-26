@@ -496,9 +496,11 @@ public:
   int ltchecked(const expr2t &ref) const;
   std::string pretty(unsigned int indent = 0) const;
   void dump(void) const;
+  uint32_t crc(void) const;
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;
@@ -545,6 +547,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   /** Arbitary precision integer record. */
   BigInt constant_value;
@@ -562,6 +565,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const fixedbvt value;
 };
@@ -575,6 +579,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   /** Arbitary precision integer record. */
   bool constant_value;
@@ -593,6 +598,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   /** Arbitary precision integer record. */
   const std::string value;
@@ -617,6 +623,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const std::vector<expr2tc> datatype_members;
 };
@@ -644,6 +651,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const std::vector<expr2tc> datatype_members;
 };
@@ -657,6 +665,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   // Type records the size of the array; this records the initializer.
   const expr2tc initializer;
@@ -671,6 +680,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   // Symbol name - only so long as a symbol is a string. In the future, this
   // should really really change.
@@ -686,6 +696,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   // Expression to typecast from.
   const expr2tc from;
@@ -701,6 +712,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   // Conditional that this "if" depends on, and which value to take upon each
   // branch of that condition.
@@ -731,6 +743,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -800,6 +813,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc notvalue;
 };
@@ -818,6 +832,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -859,6 +874,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc side_1;
   const expr2tc side_2;
@@ -933,6 +949,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc value;
 };
@@ -946,6 +963,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc value;
 };
@@ -964,6 +982,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc part_1;
   const expr2tc part_2;
@@ -1033,6 +1052,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc ptr_obj;
 };
@@ -1057,6 +1077,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc pointer_obj;
 };
@@ -1072,6 +1093,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc pointer_obj;
 };
@@ -1085,6 +1107,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc pointer_obj;
 };
@@ -1116,6 +1139,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   bool big_endian;
   const expr2tc source_value;
@@ -1137,6 +1161,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   bool big_endian;
   const expr2tc source_value;
@@ -1167,6 +1192,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc source_data;
   const expr2tc update_field;
@@ -1184,6 +1210,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc source_data;
   const constant_string2t member;
@@ -1199,6 +1226,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc source_data;
   const expr2tc index;
@@ -1215,6 +1243,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc string;
 };
@@ -1229,6 +1258,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc string;
 };
@@ -1243,6 +1273,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc value;
 };
@@ -1260,6 +1291,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc operand;
 };
@@ -1273,6 +1305,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc operand;
   unsigned int bits;
@@ -1287,6 +1320,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 
   const expr2tc operand;
 };
