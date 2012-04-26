@@ -1221,7 +1221,7 @@ constant_fixedbv2t::do_crc(boost::crc_32_type &crc) const
 }
 
 constant_bool2t::constant_bool2t(bool value)
-  : constant2t<constant_bool2t>(type2tc(new bool_type2t()),
+  : constant2t<constant_bool2t>(type_pool.get_bool(),
                                      constant_bool_id),
                                      constant_value(value)
 {
@@ -1420,11 +1420,10 @@ constant_string2t::to_array(void) const
   std::vector<expr2tc> contents;
   unsigned int length = value.size(), i;
 
-  unsignedbv_type2t *type = new unsignedbv_type2t(8);
-  type2tc tp(type);
+  type2tc type = type_pool.get_uint8();
 
   for (i = 0; i < length; i++) {
-    constant_int2t *v = new constant_int2t(tp, BigInt(value[i]));
+    constant_int2t *v = new constant_int2t(type, BigInt(value[i]));
     expr2tc ptr(v);
     contents.push_back(ptr);
   }
@@ -1434,7 +1433,7 @@ constant_string2t::to_array(void) const
   constant_int2t *len_val = new constant_int2t(len_tp, BigInt(length));
   expr2tc len_val_ref(len_val);
 
-  array_type2t *arr_type = new array_type2t(tp, len_val_ref, false);
+  array_type2t *arr_type = new array_type2t(type, len_val_ref, false);
   type2tc arr_tp(arr_type);
   constant_array2t *a = new constant_array2t(arr_tp, contents);
 
@@ -2199,7 +2198,7 @@ ashr2t::ashr2t(const ashr2t &ref)
 }
 
 same_object2t::same_object2t(const expr2tc val1,const expr2tc val2)
-  : arith_2op2t<same_object2t>(type2tc(new bool_type2t()), same_object_id,
+  : arith_2op2t<same_object2t>(type_pool.get_bool(), same_object_id,
                                    val1, val2)
 {
 }
@@ -2679,7 +2678,7 @@ index2t::do_crc(boost::crc_32_type &crc) const
 }
 
 zero_string2t::zero_string2t(const expr2tc _string)
-  : datatype_ops2t<zero_string2t>(type2tc(new bool_type2t()), zero_string_id),
+  : datatype_ops2t<zero_string2t>(type_pool.get_bool(), zero_string_id),
                                 string(_string)
 {
 }
@@ -2720,7 +2719,7 @@ zero_string2t::do_crc(boost::crc_32_type &crc) const
 }
 
 zero_length_string2t::zero_length_string2t(const expr2tc _string)
-  : datatype_ops2t<zero_length_string2t>(type2tc(new bool_type2t()),
+  : datatype_ops2t<zero_length_string2t>(type_pool.get_bool(),
                                         zero_length_string_id),
                                         string(_string)
 {
