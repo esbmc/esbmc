@@ -49,7 +49,6 @@ public:
   // variables
   virtual literalt new_variable()=0;
   virtual unsigned no_variables() const=0;
-  bvt new_variables(unsigned width);
 
   // solving
   virtual const std::string solver_text()=0;

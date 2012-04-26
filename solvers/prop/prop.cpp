@@ -21,12 +21,3 @@ void propt::set_equal(literalt a, literalt b)
   bv[1]=b;
   lcnf(bv);
 }
-
-bvt propt::new_variables(unsigned width)
-{
-  bvt result;
-  result.resize(width);
-  for(unsigned i=0; i<width; i++)
-    result[i]=new_variable();
-  return result;
-}
