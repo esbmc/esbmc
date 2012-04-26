@@ -134,6 +134,21 @@ type2t::dump(void) const
   return;
 }
 
+uint32_t
+type2t::crc(void) const
+{
+  boost::crc_32_type crc;
+  do_crc(crc);
+  return crc.checksum();
+}
+
+void
+type2t::do_crc(boost::crc_32_type &crc) const
+{
+  crc.process_byte(type_id);
+  return;
+}
+
 const char *type2t::type_names[] = {
   "bool",
   "empty",
@@ -218,6 +233,14 @@ bv_type2t::tostring(unsigned int indent) const
   return membs;
 }
 
+void
+bv_type2t::do_crc(boost::crc_32_type &crc) const
+{
+  type2t::do_crc(crc);
+  crc.process_bytes(&width, sizeof(width));
+  return;
+}
+
 struct_union_type2t::struct_union_type2t(type_ids id,
                                          const std::vector<type2tc> &_members,
                                          std::vector<std::string> memb_names,
@@ -292,6 +315,22 @@ struct_union_type2t::tostring(unsigned int indent) const
   }
 
   return membs;
+}
+
+void
+struct_union_type2t::do_crc(boost::crc_32_type &crc) const
+{
+  type2t::do_crc(crc);
+  crc.process_bytes(name.c_str(), name.size());
+
+  forall_types(it, members)
+    (*it)->do_crc(crc);
+
+  for (std::vector<std::string>::const_iterator it = member_names.begin();
+       it != member_names.end(); it++)
+    crc.process_bytes(it->c_str(), it->size());
+
+  return;
 }
 
 bool_type2t::bool_type2t(void)
@@ -458,6 +497,19 @@ array_type2t::tostring(unsigned int indent) const
   return membs;
 }
 
+void
+array_type2t::do_crc(boost::crc_32_type &crc) const
+{
+  type2t::do_crc(crc);
+  subtype->do_crc(crc);
+  if (size_is_infinite) {
+    crc.process_byte(1);
+  } else {
+    crc.process_byte(0);
+    array_size->do_crc(crc);
+  }
+}
+
 pointer_type2t::pointer_type2t(type2tc _sub)
   : type_body<pointer_type2t>(pointer_id), subtype(_sub)
 {
@@ -491,6 +543,14 @@ pointer_type2t::tostring(unsigned int indent) const
                                                   (const char *)"subtype",
                                                   &subtype, (const char *)"");
   return membs;
+}
+
+void
+pointer_type2t::do_crc(boost::crc_32_type &crc) const
+{
+  type2t::do_crc(crc);
+  subtype->do_crc(crc);
+  return;
 }
 
 empty_type2t::empty_type2t(void)
@@ -557,6 +617,14 @@ symbol_type2t::tostring(unsigned int indent) const
   list_of_memberst membs;
   membs.push_back(member_entryt("symbol", symbol_name.as_string()));
   return membs;
+}
+
+void
+symbol_type2t::do_crc(boost::crc_32_type &crc) const
+{
+  type2t::do_crc(crc);
+  crc.process_bytes(symbol_name.c_str(), symbol_name.size());
+  return;
 }
 
 struct_type2t::struct_type2t(std::vector<type2tc> &members,
@@ -697,6 +765,15 @@ fixedbv_type2t::tostring(unsigned int indent) const
   return membs;
 }
 
+void
+fixedbv_type2t::do_crc(boost::crc_32_type &crc) const
+{
+  type2t::do_crc(crc);
+  crc.process_bytes(&width, sizeof(width));
+  crc.process_bytes(&integer_bits, sizeof(integer_bits));
+  return;
+}
+
 code_type2t::code_type2t(void)
   : type_body<code_type2t>(code_id)
 {
@@ -758,6 +835,14 @@ list_of_memberst
 string_type2t::tostring(unsigned int indent) const
 {
   return list_of_memberst();
+}
+
+void
+string_type2t::do_crc(boost::crc_32_type &crc) const
+{
+  type2t::do_crc(crc);
+  crc.process_bytes(&elements, sizeof(elements));
+  return;
 }
 
 /*************************** Base expr2t definitions **************************/
