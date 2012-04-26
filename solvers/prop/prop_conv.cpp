@@ -46,56 +46,6 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
     value=tvt(false);
     return false;
   }
-  else if(expr.id()=="symbol")
-  {
-    symbolst::const_iterator result=symbols.find(expr.identifier());
-    if(result==symbols.end()) return true;
-
-    value=prop.l_get(result->second);
-    return false;
-  }
-
-  // sub-expressions
-
-  if(expr.id()=="not")
-  {
-    if(expr.type().is_bool() &&
-       expr.operands().size()==1)
-    {
-      if(get_bool(expr.op0(), value)) return true;
-      value=!value;
-      return false;
-    }
-  }
-  else if(expr.is_and() || expr.id()=="or")
-  {
-    if(expr.type().is_bool() &&
-       expr.operands().size()>=1)
-    {
-      value=tvt(expr.is_and());
-
-      forall_operands(it, expr)
-      {
-        tvt tmp;
-        if(get_bool(*it, tmp)) return true;
-
-        if(expr.is_and())
-        {
-          if(tmp.is_false()) { value=tvt(false); return false; }
-
-          value=value && tmp;
-        }
-        else // or
-        {
-          if(tmp.is_true()) { value=tvt(true); return false; }
-
-          value=value || tmp;
-        }
-      }
-
-      return false;
-    }
-  }
 
   // check cache
 
