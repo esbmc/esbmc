@@ -1146,6 +1146,11 @@ z3_convt::convert_smt_expr(const xor2t &xorval, void  *&_bv)
   convert_logic_2ops(xorval.side_1, xorval.side_2, Z3_mk_xor, NULL, _bv);
 }
 
+void
+z3_convt::convert_smt_expr(const implies2t &implies, void  *&_bv)
+{
+  convert_logic_2ops(implies.side_1, implies.side_2, Z3_mk_implies, NULL, _bv);
+}
 
 void
 z3_convt::convert_binop(const expr2tc &side1, const expr2tc &side2,
@@ -2793,14 +2798,6 @@ z3_convt::set_to(const exprt &expr, bool value)
   if (it->type().id() != "bool") {
     boolean = false;
     break;
-  }
-
-  if (expr.id() == "=>") {
-    exprt rewrite("or", bool_typet());
-    not_exprt notop0(expr.op0());
-    rewrite.copy_to_operands(notop0, expr.op1());
-    set_to(rewrite, value);
-    return;
   }
 
   // fall back to convert

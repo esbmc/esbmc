@@ -393,6 +393,15 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     xor2t *x = new xor2t(side1, side2);
     new_expr_ref = expr2tc(x);
+  } else if (expr.id() == "=>") {
+    assert(expr.type().id() == "bool");
+    assert(expr.operands().size() == 2);
+    expr2tc side1, side2;
+
+    convert_operand_pair(expr, side1, side2);
+
+    implies2t *i = new implies2t(side1, side2);
+    new_expr_ref = expr2tc(i);
   } else if (expr.id() == "bitand") {
     migrate_type(expr.type(), type);
 

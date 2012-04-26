@@ -861,6 +861,13 @@ public:
   xor2t(const xor2t &ref);
 };
 
+class implies2t : public logical_2ops2t<implies2t>
+{
+public:
+  implies2t(const expr2tc val1, const expr2tc val2);
+  implies2t(const implies2t &ref);
+};
+
 /** Binary operations base class. Take a type, probably integer with a width,
  *  and some operands. */
 template <class derived>

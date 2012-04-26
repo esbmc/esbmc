@@ -158,6 +158,7 @@ private:
   virtual void convert_smt_expr(const and2t &andval, void *&bv);
   virtual void convert_smt_expr(const or2t &orval, void *&bv);
   virtual void convert_smt_expr(const xor2t &xorval, void *&bv);
+  virtual void convert_smt_expr(const implies2t &implies, void *&bv);
   virtual void convert_smt_expr(const bitand2t &bitval, void *&bv);
   virtual void convert_smt_expr(const bitor2t &bitval, void *&bv);
   virtual void convert_smt_expr(const bitxor2t &bitval, void *&bv);
