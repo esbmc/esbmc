@@ -358,14 +358,6 @@ exprt prop_convt::get(const exprt &expr) const
   return dest;
 }
 
-void prop_convt::print_assignment(std::ostream &out) const
-{
-  for(symbolst::const_iterator it=symbols.begin();
-      it!=symbols.end();
-      it++)
-    out << it->first << " = " << prop.l_get(it->second) << std::endl;
-}
-
 void prop_convt::convert_smt_type(const type2t &type, void *&arg) const
 {
   std::cerr << "Unhandled SMT conversion for type ID " << type.type_id <<

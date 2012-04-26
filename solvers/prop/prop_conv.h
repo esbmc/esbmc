@@ -42,9 +42,6 @@ public:
   virtual void set_to(const exprt &expr, bool value);
   virtual decision_proceduret::resultt dec_solve();
 
-  virtual const std::string decision_procedure_text()
-  { return "propositional reduction"; }
-
   // conversion with cache
   virtual literalt convert(const exprt &expr)
   { return convert(expr, use_cache); }
@@ -58,9 +55,6 @@ public:
 
   // get a value from counterexample if not valid
   virtual exprt get(const exprt &expr) const;
-  
-  // dump satisfying assignment
-  virtual void print_assignment(std::ostream &out) const;
   
   // get literal for expression, if available
   virtual bool literal(const exprt &expr, literalt &literal) const;

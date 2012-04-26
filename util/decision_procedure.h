@@ -19,9 +19,6 @@ public:
   // returns nil if not available
   virtual exprt get(const exprt &expr) const=0;
 
-  // print satisfying assignment
-  virtual void print_assignment(std::ostream &out) const=0;
-
   // add constraints
   // the expression must be of Boolean type
   virtual void set_to(const exprt &expr, bool value)=0;
@@ -39,9 +36,6 @@ public:
   virtual resultt dec_solve()=0;
 
   virtual bool in_core(const exprt &expr);
-
-  // return a textual description of the decision procedure
-  virtual const std::string decision_procedure_text()=0;
 };
 
 #endif
