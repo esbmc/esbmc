@@ -1269,7 +1269,7 @@ z3_convt::convert_smt_expr(const abs2t &abs, void *&_bv)
 }
 
 void
-z3_convt::convert_arith2ops(const arith_2op2t &arith,
+z3_convt::convert_arith2ops(const expr2tc &side1, const expr2tc &side2,
                             ast_convert_calltype bvconvert,
                             ast_convert_multiargs intmodeconvert,
                             void *&_bv)
@@ -1278,14 +1278,14 @@ z3_convt::convert_arith2ops(const arith_2op2t &arith,
 
   Z3_ast args[2];
 
-  if (is_pointer_type(arith.part_1->type) ||
-      is_pointer_type(arith.part_2->type)) {
+  if (is_pointer_type(side1->type) ||
+      is_pointer_type(side2->type)) {
     std::cerr << "Pointer arithmetic not implemented for Z3 yet" << std::endl;
     abort();
   }
 
-  convert_bv(arith.part_1, args[0]);
-  convert_bv(arith.part_2, args[1]);
+  convert_bv(side1, args[0]);
+  convert_bv(side2, args[1]);
 
   if (int_encoding)
     bv = intmodeconvert(z3_ctx, 2, args);
@@ -1299,9 +1299,10 @@ z3_convt::convert_smt_expr(const add2t &add, void *&_bv)
   if (is_pointer_type(add.type) ||
       is_pointer_type(add.part_1->type) ||
       is_pointer_type(add.part_2->type))
-    return convert_pointer_arith(add, cast_to_z3(_bv));
+    return convert_pointer_arith(add.expr_id, add.part_1, add.part_2,
+                                 add.type, cast_to_z3(_bv));
 
-  convert_arith2ops(add, Z3_mk_bvadd, Z3_mk_add, _bv);
+  convert_arith2ops(add.part_1, add.part_2, Z3_mk_bvadd, Z3_mk_add, _bv);
 }
 
 void
@@ -1310,9 +1311,10 @@ z3_convt::convert_smt_expr(const sub2t &sub, void *&_bv)
   if (is_pointer_type(sub.type) ||
       is_pointer_type(sub.part_1->type) ||
       is_pointer_type(sub.part_2->type))
-    return convert_pointer_arith(sub, (Z3_ast&)_bv);
+    return convert_pointer_arith(sub.expr_id, sub.part_1, sub.part_2,
+                                 sub.type,(Z3_ast&)_bv);
 
-  convert_arith2ops(sub, Z3_mk_bvsub, Z3_mk_sub, _bv);
+  convert_arith2ops(sub.part_1, sub.part_2, Z3_mk_bvsub, Z3_mk_sub, _bv);
 }
 
 void
@@ -2336,50 +2338,61 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *&_bv)
   Z3_ast result[2], operand[2];
   unsigned width_op0, width_op1;
 
-  const arith_2op2t &operation = to_arith_2op2t(overflow.operand);
-
-  convert_bv(operation.part_1, operand[0]);
-  convert_bv(operation.part_2, operand[1]);
-
-  width_op0 = operation.part_1->type->get_width();
-  width_op1 = operation.part_2->type->get_width();
-
-  // XXX jmorse - int2bv trainwreck.
-  if (int_encoding) {
-    operand[0] = Z3_mk_int2bv(z3_ctx, width_op0, operand[0]);
-    operand[1] = Z3_mk_int2bv(z3_ctx, width_op1, operand[1]);
-  }
-
-  typedef Z3_ast (*type1)(Z3_context, Z3_ast, Z3_ast, Z3_bool);
-  typedef Z3_ast (*type2)(Z3_context, Z3_ast, Z3_ast);
-  type1 call1;
-  type2 call2;
-
-  if (is_add2t(operation)) {
-    call1 = Z3_mk_bvadd_no_overflow;
-    call2 = Z3_mk_bvadd_no_underflow;
-  } else if (is_sub2t(operation)) {
-    call1 = Z3_mk_bvsub_no_underflow;
-    call2 = Z3_mk_bvsub_no_overflow;
-  } else if (is_mul2t(operation)) {
-    call1 = Z3_mk_bvmul_no_overflow;
-    call2 = Z3_mk_bvmul_no_underflow;
-  } else {
-    std::cerr << "Overflow operation with invalid operand";
-    abort();
-  }
-
   // XXX jmorse - we can't tell whether or not we're supposed to be treating
   // the _result_ as being a signedbv or an unsignedbv, because we only have
   // operands. Ideally, this needs to be encoded somewhere.
   // Specifically, when irep2 conversion reaches code creation, we should
   // encode the resulting type in the overflow operands type. Right now it's
   // inferred.
-
   bool is_signed = false;
-  if (is_signedbv_type(operation.part_1->type) ||
-      is_signedbv_type(operation.part_2->type))
+
+  typedef Z3_ast (*type1)(Z3_context, Z3_ast, Z3_ast, Z3_bool);
+  typedef Z3_ast (*type2)(Z3_context, Z3_ast, Z3_ast);
+  type1 call1;
+  type2 call2;
+
+  // Unseen downside of flattening templates. Should consider reformatting
+  // typecast2t.
+  if (is_add2t(overflow.operand)) {
+    convert_bv(to_add2t(overflow.operand).part_1, operand[0]);
+    convert_bv(to_add2t(overflow.operand).part_2, operand[1]);
+    width_op0 = to_add2t(overflow.operand).part_1->type->get_width();
+    width_op1 = to_add2t(overflow.operand).part_2->type->get_width();
+    call1 = Z3_mk_bvadd_no_overflow;
+    call2 = Z3_mk_bvadd_no_underflow;
+    if (is_signedbv_type(to_add2t(overflow.operand).part_1->type) ||
+        is_signedbv_type(to_add2t(overflow.operand).part_2->type))
     is_signed = true;
+  } else if (is_sub2t(overflow.operand)) {
+    convert_bv(to_sub2t(overflow.operand).part_1, operand[0]);
+    convert_bv(to_sub2t(overflow.operand).part_2, operand[1]);
+    width_op0 = to_sub2t(overflow.operand).part_1->type->get_width();
+    width_op1 = to_sub2t(overflow.operand).part_2->type->get_width();
+    call1 = Z3_mk_bvsub_no_underflow;
+    call2 = Z3_mk_bvsub_no_overflow;
+    if (is_signedbv_type(to_sub2t(overflow.operand).part_1->type) ||
+        is_signedbv_type(to_sub2t(overflow.operand).part_2->type))
+    is_signed = true;
+  } else if (is_mul2t(overflow.operand)) {
+    convert_bv(to_mul2t(overflow.operand).part_1, operand[0]);
+    convert_bv(to_mul2t(overflow.operand).part_2, operand[1]);
+    width_op0 = to_mul2t(overflow.operand).part_1->type->get_width();
+    width_op1 = to_mul2t(overflow.operand).part_2->type->get_width();
+    call1 = Z3_mk_bvmul_no_overflow;
+    call2 = Z3_mk_bvmul_no_underflow;
+    if (is_signedbv_type(to_mul2t(overflow.operand).part_1->type) ||
+        is_signedbv_type(to_mul2t(overflow.operand).part_2->type))
+    is_signed = true;
+  } else {
+    std::cerr << "Overflow operation with invalid operand";
+    abort();
+  }
+
+  // XXX jmorse - int2bv trainwreck.
+  if (int_encoding) {
+    operand[0] = Z3_mk_int2bv(z3_ctx, width_op0, operand[0]);
+    operand[1] = Z3_mk_int2bv(z3_ctx, width_op1, operand[1]);
+  }
 
   result[0] = call1(z3_ctx, operand[0], operand[1], is_signed);
   result[1] = call2(z3_ctx, operand[0], operand[1]);
@@ -2467,7 +2480,9 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *&_bv)
 }
 
 void
-z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
+z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
+                                const expr2tc &side2,
+                                const type2tc &type, Z3_ast &bv)
 {
 
   // So eight cases; one for each combination of two operands and the return
@@ -2486,9 +2501,9 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
   //      all dereference switch cases. So, we need to verify that all derefs
   //      have a finally case that asserts the val was a valid ptr XXXjmorse.
   int ret_is_ptr, op1_is_ptr, op2_is_ptr;
-  ret_is_ptr = (is_pointer_type(expr.type)) ? 4 : 0;
-  op1_is_ptr = (is_pointer_type(expr.part_1->type)) ? 2 : 0;
-  op2_is_ptr = (is_pointer_type(expr.part_2->type)) ? 1 : 0;
+  ret_is_ptr = (is_pointer_type(type)) ? 4 : 0;
+  op1_is_ptr = (is_pointer_type(side1->type)) ? 2 : 0;
+  op2_is_ptr = (is_pointer_type(side2->type)) ? 1 : 0;
 
   switch (ret_is_ptr | op1_is_ptr | op2_is_ptr) {
     case 0:
@@ -2507,20 +2522,20 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
     case 1:
     case 2:
       { // Block required to give a variable lifetime to the cast/add variables
-      expr2tc ptr_op = (op1_is_ptr) ? expr.part_1 : expr.part_2;
-      expr2tc non_ptr_op = (op1_is_ptr) ? expr.part_2 : expr.part_1;
+      expr2tc ptr_op = (op1_is_ptr) ? side1 : side2;
+      expr2tc non_ptr_op = (op1_is_ptr) ? side2 : side1;
 
       expr2tc add(new add2t(ptr_op->type, ptr_op, non_ptr_op));
       // That'll generate the correct pointer arithmatic; now typecast
-      expr2tc cast(new typecast2t(expr.type, add));
+      expr2tc cast(new typecast2t(type, add));
       convert_bv(cast, bv);
       break;
       }
     case 5:
     case 6:
       {
-      expr2tc ptr_op = (op1_is_ptr) ? expr.part_1 : expr.part_2;
-      expr2tc non_ptr_op = (op1_is_ptr) ? expr.part_2 : expr.part_1;
+      expr2tc ptr_op = (op1_is_ptr) ? side1 : side2;
+      expr2tc non_ptr_op = (op1_is_ptr) ? side2 : side1;
 
       // Actually perform some pointer arith
       const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
@@ -2535,7 +2550,7 @@ z3_convt::convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv)
       expr2tc ptr_offset(new pointer_offset2t(inttype, ptr_op));
 
       expr2tc newexpr;
-      if (is_add2t(expr)) {
+      if (id == expr2t::add_id) {
         newexpr = expr2tc(new add2t(inttype, mul, ptr_offset));
       } else {
         // Preserve order for subtraction.

@@ -941,23 +941,6 @@ expr_body<derived>::clone(void) const
 
 template <class derived>
 void
-arith_2ops_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc arith_2ops_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
-template <class derived>
-void
 byte_ops_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1864,21 +1847,12 @@ abs2t::tostring(unsigned int indent) const
                                 (const char *)"");
 }
 
-arith_2op2t::arith_2op2t(const type2tc type, expr_ids id,
-                         const expr2tc val1, const expr2tc val2)
-  : arith2t<arith_2op2t>(type, id), part_1(val1), part_2(val2)
-{
-}
-
-arith_2op2t::arith_2op2t(const arith_2op2t &ref)
-  : arith2t<arith_2op2t>(ref), part_1(ref.part_1), part_2(ref.part_2)
-{
-}
-
+template <class derived>
 bool
-arith_2op2t::cmp(const expr2t &ref) const
+arith_2op2t<derived>::cmp(const expr2t &ref) const
 {
-  const arith_2op2t &ref2 = static_cast<const arith_2op2t &>(ref);
+  const arith_2op2t<derived> &ref2 =
+    static_cast<const arith_2op2t<derived> &>(ref);
 
   if (part_1 != ref2.part_1)
     return false;
@@ -1889,10 +1863,12 @@ arith_2op2t::cmp(const expr2t &ref) const
   return true;
 }
 
+template <class derived>
 int
-arith_2op2t::lt(const expr2t &ref) const
+arith_2op2t<derived>::lt(const expr2t &ref) const
 {
-  const arith_2op2t &ref2 = static_cast<const arith_2op2t &>(ref);
+  const arith_2op2t<derived> &ref2 =
+    static_cast<const arith_2op2t<derived> &>(ref);
 
   int tmp = part_1->ltchecked(*ref2.part_1.get());
   if (tmp != 0)
@@ -1901,8 +1877,9 @@ arith_2op2t::lt(const expr2t &ref) const
   return part_2->ltchecked(*ref2.part_2.get());
 }
 
+template <class derived>
 list_of_memberst
-arith_2op2t::tostring(unsigned int indent) const
+arith_2op2t<derived>::tostring(unsigned int indent) const
 {
   return tostring_func<expr2tc>(indent,
                                 (const char *)"operand0", &part_1,
@@ -1911,83 +1888,83 @@ arith_2op2t::tostring(unsigned int indent) const
 }
 
 add2t::add2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : arith_2ops_body<add2t>(type, add_id, val1, val2)
+  : arith_2op2t<add2t>(type, add_id, val1, val2)
 {
 }
 
 add2t::add2t(const add2t &ref)
-  : arith_2ops_body<add2t>(ref)
+  : arith_2op2t<add2t>(ref)
 {
 }
 
 sub2t::sub2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : arith_2ops_body<sub2t>(type, sub_id, val1, val2)
+  : arith_2op2t<sub2t>(type, sub_id, val1, val2)
 {
 }
 
 sub2t::sub2t(const sub2t &ref)
-  : arith_2ops_body<sub2t>(ref)
+  : arith_2op2t<sub2t>(ref)
 {
 }
 
 mul2t::mul2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : arith_2ops_body<mul2t>(type, mul_id, val1, val2)
+  : arith_2op2t<mul2t>(type, mul_id, val1, val2)
 {
 }
 
 mul2t::mul2t(const mul2t &ref)
-  : arith_2ops_body<mul2t>(ref)
+  : arith_2op2t<mul2t>(ref)
 {
 }
 
 div2t::div2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : arith_2ops_body<div2t>(type, div_id, val1, val2)
+  : arith_2op2t<div2t>(type, div_id, val1, val2)
 {
 }
 
 div2t::div2t(const div2t &ref)
-  : arith_2ops_body<div2t>(ref)
+  : arith_2op2t<div2t>(ref)
 {
 }
 
 modulus2t::modulus2t(const type2tc type, const expr2tc val1,const expr2tc val2)
-  : arith_2ops_body<modulus2t>(type, modulus_id, val1, val2)
+  : arith_2op2t<modulus2t>(type, modulus_id, val1, val2)
 {
 }
 
 modulus2t::modulus2t(const modulus2t &ref)
-  : arith_2ops_body<modulus2t>(ref)
+  : arith_2op2t<modulus2t>(ref)
 {
 }
 
 shl2t::shl2t(const type2tc type, const expr2tc val1,const expr2tc val2)
-  : arith_2ops_body<shl2t>(type, shl_id, val1, val2)
+  : arith_2op2t<shl2t>(type, shl_id, val1, val2)
 {
 }
 
 shl2t::shl2t(const shl2t &ref)
-  : arith_2ops_body<shl2t>(ref)
+  : arith_2op2t<shl2t>(ref)
 {
 }
 
 ashr2t::ashr2t(const type2tc type, const expr2tc val1,const expr2tc val2)
-  : arith_2ops_body<ashr2t>(type, ashr_id, val1, val2)
+  : arith_2op2t<ashr2t>(type, ashr_id, val1, val2)
 {
 }
 
 ashr2t::ashr2t(const ashr2t &ref)
-  : arith_2ops_body<ashr2t>(ref)
+  : arith_2op2t<ashr2t>(ref)
 {
 }
 
 same_object2t::same_object2t(const expr2tc val1,const expr2tc val2)
-  : arith_2ops_body<same_object2t>(type2tc(new bool_type2t()), same_object_id,
+  : arith_2op2t<same_object2t>(type2tc(new bool_type2t()), same_object_id,
                                    val1, val2)
 {
 }
 
 same_object2t::same_object2t(const same_object2t &ref)
-  : arith_2ops_body<same_object2t>(ref)
+  : arith_2op2t<same_object2t>(ref)
 {
 }
 

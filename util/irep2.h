@@ -941,12 +941,15 @@ public:
 };
 
 /** Base two-operand arithmatic class. */
-class arith_2op2t : public arith2t<arith_2op2t>
+template <class derived>
+class arith_2op2t : public arith2t<derived>
 {
 public:
-  arith_2op2t(const type2tc type, expr_ids id,
-              const expr2tc val1, const expr2tc val2);
-  arith_2op2t(const arith_2op2t &ref);
+  arith_2op2t(const type2tc type, expr2t::expr_ids id,
+              const expr2tc val1, const expr2tc val2)
+    : arith2t<derived>(type, id), part_1(val1), part_2(val2) { }
+  arith_2op2t(const arith_2op2t &ref)
+    : arith2t<derived>(ref), part_1(ref.part_1), part_2(ref.part_2) { }
 
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
@@ -956,62 +959,49 @@ public:
   const expr2tc part_2;
 };
 
-template <class T>
-class arith_2ops_body : public arith_2op2t
-{
-public:
-  arith_2ops_body(type2tc type, expr_ids id,
-                  const expr2tc val1, const expr2tc val2)
-    : arith_2op2t(type, id, val1, val2) {};
-  arith_2ops_body(const arith_2ops_body &ref) : arith_2op2t(ref) {};
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
-};
-
-class add2t : public arith_2ops_body<add2t>
+class add2t : public arith_2op2t<add2t>
 {
 public:
   add2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   add2t(const add2t &ref);
 };
 
-class sub2t : public arith_2ops_body<sub2t>
+class sub2t : public arith_2op2t<sub2t>
 {
 public:
   sub2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   sub2t(const sub2t &ref);
 };
 
-class mul2t : public arith_2ops_body<mul2t>
+class mul2t : public arith_2op2t<mul2t>
 {
 public:
   mul2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   mul2t(const mul2t &ref);
 };
 
-class div2t : public arith_2ops_body<div2t>
+class div2t : public arith_2op2t<div2t>
 {
 public:
   div2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   div2t(const div2t &ref);
 };
 
-class modulus2t : public arith_2ops_body<modulus2t>
+class modulus2t : public arith_2op2t<modulus2t>
 {
 public:
   modulus2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   modulus2t(const modulus2t &ref);
 };
 
-class shl2t : public arith_2ops_body<shl2t>
+class shl2t : public arith_2op2t<shl2t>
 {
 public:
   shl2t(const type2tc type, const expr2tc val1, const expr2tc val2);
   shl2t(const shl2t &ref);
 };
 
-class ashr2t : public arith_2ops_body<ashr2t>
+class ashr2t : public arith_2op2t<ashr2t>
 {
 public:
   ashr2t(const type2tc type, const expr2tc val1, const expr2tc val2);
@@ -1039,7 +1029,7 @@ public:
 
 /** Same object operation. Compares two pointer objects to see if they're the
  *  same, with a boolean result. */
-class same_object2t : public arith_2ops_body<same_object2t>
+class same_object2t : public arith_2op2t<same_object2t>
 {
 public:
   same_object2t(const expr2tc val1, const expr2tc val2);
@@ -1428,11 +1418,6 @@ expr_macros(overflow_neg);
 #ifdef dynamic_cast
 #undef dynamic_cast
 #endif
-
-inline const arith_2op2t & to_arith_2op2t(const expr2tc &t)
-  { return dynamic_cast<const arith_2op2t &> (*t.get()); }
-inline arith_2op2t & to_arith_2op2t(expr2tc &t)
-  { return dynamic_cast<arith_2op2t &> (*t.get()); }
 
 // And now, some more utilities.
 class type_poolt {

@@ -124,7 +124,7 @@ private:
   void convert_binop(const expr2tc &side1, const expr2tc &side2,
                     const type2tc &type, ast_convert_calltype converter,
                     void *&_bv);
-  void convert_arith2ops(const arith_2op2t &log,
+  void convert_arith2ops(const expr2tc &side1, const expr2tc &side2,
                          ast_convert_calltype bvconvert,
                          ast_convert_multiargs intmodeconvert,
                          void *&_bv);
@@ -132,7 +132,9 @@ private:
                      const expr2tc &part2, ast_convert_calltype convert,
                      void *&_bv);
 
-  void convert_pointer_arith(const arith_2op2t &expr, Z3_ast &bv);
+  void convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
+                             const expr2tc &side2,
+                             const type2tc &type, Z3_ast &bv);
 
   void convert_struct_union(const std::vector<expr2tc> &members,
                             const type2tc &type, bool is_union, void *&_bv);
