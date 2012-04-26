@@ -52,7 +52,6 @@ public:
 
     Z3_push(z3_ctx);
     z3_prop.z3_ctx = z3_ctx;
-    ignoring_expr=true;
     max_core_size=Z3_UNSAT_CORE_LIMIT;
 
     z3_api.set_z3_ctx(z3_ctx);
@@ -241,7 +240,7 @@ private:
   z3_propt z3_prop;
   z3_capi z3_api;
 
-  bool int_encoding, ignoring_expr, equivalence_checking;
+  bool int_encoding, equivalence_checking;
   std::list<Z3_ast> assumptions;
   std::string filename;
 

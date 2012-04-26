@@ -2596,9 +2596,6 @@ z3_convt::convert_rest(const exprt &expr)
   Z3_ast formula, constraint;
 
   try {
-    if (!assign_z3_expr(expr) && !ignoring_expr)
-      return l;
-
     if (expr.id() == "is_zero_string") {
       ignoring(expr);
       return l;
@@ -2784,22 +2781,6 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
   }
 }
 
-bool
-z3_convt::assign_z3_expr(const exprt expr)
-{
-  u_int size = expr.operands().size();
-
-  //ignore these IRep expressions for now. I don't know what they mean.
-
-  if (size == 2 && expr.op1().id() == "unary+") {
-    ignoring(expr.op1());
-    ignoring_expr = false;
-    return false;
-  }
-
-  return true;
-}
-
 void
 z3_convt::set_to(const exprt &expr, bool value)
 {
@@ -2889,55 +2870,52 @@ z3_convt::set_to(const exprt &expr, bool value)
       const exprt &op0 = expr.op0();
       const exprt &op1 = expr.op1();
 
-      if (assign_z3_expr(expr) && ignoring_expr) {
-        convert_z3_expr(op0, operand[0]);
-        convert_z3_expr(op1, operand[1]);
+      convert_z3_expr(op0, operand[0]);
+      convert_z3_expr(op1, operand[1]);
 
-        if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
-          Z3_ast pointer[2], formula[2];
+      if (op0.type().id() == "pointer" && op1.type().id() == "pointer") {
+        Z3_ast pointer[2], formula[2];
 
-          pointer[0] = z3_api.mk_tuple_select(operand[0], 0);
-          pointer[1] = z3_api.mk_tuple_select(operand[1], 0);
+        pointer[0] = z3_api.mk_tuple_select(operand[0], 0);
+        pointer[1] = z3_api.mk_tuple_select(operand[1], 0);
 
-          formula[0] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
-          pointer[0] = z3_api.mk_tuple_select(operand[0], 1);
+        formula[0] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
+        pointer[0] = z3_api.mk_tuple_select(operand[0], 1);
 
-          pointer[1] = z3_api.mk_tuple_select(operand[1], 1);
-          formula[1] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
+        pointer[1] = z3_api.mk_tuple_select(operand[1], 1);
+        formula[1] = Z3_mk_eq(z3_ctx, pointer[0], pointer[1]);
 
-          if (expr.op0().type().id() == "bool")
-            result = Z3_mk_iff(z3_ctx, formula[0], formula[1]);
-          else
-            result = Z3_mk_and(z3_ctx, 2, formula);
+        if (expr.op0().type().id() == "bool")
+          result = Z3_mk_iff(z3_ctx, formula[0], formula[1]);
+        else
+          result = Z3_mk_and(z3_ctx, 2, formula);
 
-          assert_formula(result);
-        } else   {
+        assert_formula(result);
+      } else   {
 #if 1
-          if (op0.type().id() == "union" && op1.id() == "with") {
-            union_vars.insert(std::pair<std::string,
-                                     unsigned int>(op0.get_string("identifier"),
-                                                      convert_member_name(
-                                                        op1.op0(), op1.op1())));
-          }
+        if (op0.type().id() == "union" && op1.id() == "with") {
+          union_vars.insert(std::pair<std::string,
+                                   unsigned int>(op0.get_string("identifier"),
+                                                    convert_member_name(
+                                                      op1.op0(), op1.op1())));
+        }
 #endif
 
-          if (op0.type().id() == "bool")
-            result = Z3_mk_iff(z3_ctx, operand[0], operand[1]);
-          else
-            result = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
+        if (op0.type().id() == "bool")
+          result = Z3_mk_iff(z3_ctx, operand[0], operand[1]);
+        else
+          result = Z3_mk_eq(z3_ctx, operand[0], operand[1]);
 
-          assert_formula(result);
+        assert_formula(result);
 
-          if (z3_prop.uw && expr.op0().get_string("identifier").find("guard_exec") !=
-              std::string::npos
-              && z3_prop.assumpt.size() < max_core_size) {
-            if (!op1.is_true())
-              generate_assumptions(expr, operand[0]);
-          }
+        if (z3_prop.uw && expr.op0().get_string("identifier").find("guard_exec") !=
+            std::string::npos
+            && z3_prop.assumpt.size() < max_core_size) {
+          if (!op1.is_true())
+            generate_assumptions(expr, operand[0]);
         }
       }
     }
-    ignoring_expr = true;
   } catch (conv_error *e) {
     std::cerr << e->to_string() << std::endl;
     ignoring(expr);
