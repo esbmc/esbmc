@@ -24,10 +24,17 @@ struct ios_base {
   static const seekdir cur;
   static const seekdir end;
 
+  static const iostate goodbit = 0;
+  bool failbit;
+  bool eofbit;
+  bool badbit;
+
 
 public:
   ios_base ();
 
+  fmtflags flags ( ) const;
+  fmtflags flags ( fmtflags fmtfl );
   fmtflags setf ( fmtflags fmtfl );
   fmtflags setf ( fmtflags fmtfl, fmtflags mask );
   void unsetf ( fmtflags mask );
@@ -54,11 +61,6 @@ struct ios: ios_base{
   //	typedef fpos<mbstate_t> streamoff;
   typedef int streampos;
   typedef int streamoff;
-
-  static const iostate goodbit = 0;
-  bool failbit;
-  bool eofbit;
-  bool badbit;
 
   ios() : ios_base() {}
 
@@ -89,7 +91,7 @@ public:
 
 };
 
-ios::ios()
+ios_base::ios_base()
 {
   failbit = false;
   badbit = false;
@@ -98,22 +100,22 @@ ios::ios()
 
 bool ios::good() const
 {
-  return !(failbit || badbit || eofbit);
+  return !(ios_base::failbit || ios_base::badbit || ios_base::eofbit);
 }
 
 bool ios::bad() const
 {
-  return badbit;
+  return ios_base::badbit;
 }
 
 bool ios::eof() const
 {
-  return eofbit;
+  return ios_base::eofbit;
 }
 
 bool ios::fail() const
 {
-  return (failbit || badbit);
+  return (ios_base::failbit || ios_base::badbit);
 }
 
 int ios::rdstate() const
