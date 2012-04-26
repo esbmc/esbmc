@@ -2795,53 +2795,12 @@ z3_convt::set_to(const exprt &expr, bool value)
     break;
   }
 
-  if (boolean) {
-    if (expr.id() == "not") {
-      if (expr.operands().size() == 1) {
-	set_to(expr.op0(), !value);
-	return;
-      }
-    } else   {
-      if (value) {
-	// set_to_true
-	if (expr.id() == "and") {
-	  forall_operands(it, expr)
-	  set_to_true(*it);
-
-	  return;
-	} else if (expr.id() == "or")      {
-	  if (expr.operands().size() > 0) {
-	    bvt bv;
-	    bv.reserve(expr.operands().size());
-
-	    forall_operands(it, expr)
-	    bv.push_back(convert(*it));
-	    prop.lcnf(bv);
-	    return;
-	  }
-	} else if (expr.id() == "=>")      {
-	  if (expr.operands().size() == 2) {
-	    bvt bv;
-	    bv.resize(2);
-	    bv[0] = prop.lnot(convert(expr.op0()));
-	    bv[1] = convert(expr.op1());
-	    prop.lcnf(bv);
-	    return;
-	  }
-	}
-      } else   {
-	// set_to_false
-	if (expr.id() == "=>") { // !(a=>b)  ==  (a && !b)
-	  if (expr.operands().size() == 2) {
-	    set_to_true(expr.op0());
-	    set_to_false(expr.op1());
-	  }
-	} else if (expr.id() == "or")      { // !(a || b)  ==  (!a && !b)
-	  forall_operands(it, expr)
-	  set_to_false(*it);
-	}
-      }
-    }
+  if (expr.id() == "=>") {
+    exprt rewrite("or", bool_typet());
+    not_exprt notop0(expr.op0());
+    rewrite.copy_to_operands(notop0, expr.op1());
+    set_to(rewrite, value);
+    return;
   }
 
   // fall back to convert
