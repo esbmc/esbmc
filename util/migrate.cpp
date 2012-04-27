@@ -1135,10 +1135,50 @@ migrate_expr_back(const expr2tc &ref)
     return abs;
   }
   case expr2t::add_id:
+  {
+    const add2t &ref2 = to_add2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt addval("+", thetype);
+    addval.copy_to_operands(migrate_expr_back(ref2.part_1),
+                            migrate_expr_back(ref2.part_1));
+    return addval;
+  }
   case expr2t::sub_id:
+  {
+    const sub2t &ref2 = to_sub2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt subval("-", thetype);
+    subval.copy_to_operands(migrate_expr_back(ref2.part_1),
+                            migrate_expr_back(ref2.part_1));
+    return subval;
+  }
   case expr2t::mul_id:
+  {
+    const mul2t &ref2 = to_mul2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt mulval("*", thetype);
+    mulval.copy_to_operands(migrate_expr_back(ref2.part_1),
+                            migrate_expr_back(ref2.part_1));
+    return mulval;
+  }
   case expr2t::div_id:
+  {
+    const div2t &ref2 = to_div2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt divval("+", thetype);
+    divval.copy_to_operands(migrate_expr_back(ref2.part_1),
+                            migrate_expr_back(ref2.part_1));
+    return divval;
+  }
   case expr2t::modulus_id:
+  {
+    const modulus2t &ref2 = to_modulus2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt modval("mod", thetype);
+    modval.copy_to_operands(migrate_expr_back(ref2.part_1),
+                            migrate_expr_back(ref2.part_1));
+    return modval;
+  }
   case expr2t::shl_id:
   case expr2t::ashr_id:
   case expr2t::dynamic_object_id:
