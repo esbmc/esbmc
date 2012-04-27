@@ -1056,12 +1056,68 @@ migrate_expr_back(const expr2tc &ref)
     return xorval;
   }
   case expr2t::bitand_id:
+  {
+    const bitand2t &ref2 = to_bitand2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt bitandval("bitand", thetype);
+    bitandval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                               migrate_expr_back(ref2.side_2));
+    return bitandval;
+  }
   case expr2t::bitor_id:
+  {
+    const bitor2t &ref2 = to_bitor2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt bitorval("bitor", thetype);
+    bitorval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                               migrate_expr_back(ref2.side_2));
+    return bitorval;
+  }
   case expr2t::bitxor_id:
+  {
+    const bitxor2t &ref2 = to_bitxor2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt bitxorval("bitxor", thetype);
+    bitxorval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                               migrate_expr_back(ref2.side_2));
+    return bitxorval;
+  }
   case expr2t::bitnand_id:
+  {
+    const bitnand2t &ref2 = to_bitnand2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt bitnandval("bitnand", thetype);
+    bitnandval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                                migrate_expr_back(ref2.side_2));
+    return bitnandval;
+  }
   case expr2t::bitnor_id:
+  {
+    const bitnor2t &ref2 = to_bitnor2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt bitnorval("bitnor", thetype);
+    bitnorval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                               migrate_expr_back(ref2.side_2));
+    return bitnorval;
+  }
   case expr2t::bitnxor_id:
+  {
+    const bitnxor2t &ref2 = to_bitnxor2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt bitnxorval("bitnxor", thetype);
+    bitnxorval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                                migrate_expr_back(ref2.side_2));
+    return bitnxorval;
+  }
   case expr2t::lshr_id:
+  {
+    const lshr2t &ref2 = to_lshr2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt lshrval("lshr", thetype);
+    lshrval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                             migrate_expr_back(ref2.side_2));
+    return lshrval;
+  }
   case expr2t::neg_id:
   case expr2t::abs_id:
   case expr2t::add_id:
