@@ -1180,7 +1180,23 @@ migrate_expr_back(const expr2tc &ref)
     return modval;
   }
   case expr2t::shl_id:
+  {
+    const shl2t &ref2 = to_shl2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt shlval("shl", thetype);
+    shlval.copy_to_operands(migrate_expr_back(ref2.part_1),
+                            migrate_expr_back(ref2.part_1));
+    return shlval;
+  }
   case expr2t::ashr_id:
+  {
+    const ashr2t &ref2 = to_ashr2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt ashrval("ashr", thetype);
+    ashrval.copy_to_operands(migrate_expr_back(ref2.part_1),
+                            migrate_expr_back(ref2.part_1));
+    return ashrval;
+  }
   case expr2t::dynamic_object_id:
   case expr2t::same_object_id:
   case expr2t::pointer_offset_id:
