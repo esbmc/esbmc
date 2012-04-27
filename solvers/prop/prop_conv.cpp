@@ -14,24 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "symbol.h"
 #include "prop_conv.h"
 
-bool prop_convt::literal(const exprt &expr, literalt &dest) const
-{
-  assert(expr.type().is_bool());
-
-  if(expr.id()=="symbol")
-  {
-    const irep_idt &identifier=expr.identifier();
-
-    symbolst::const_iterator result=symbols.find(identifier);
-
-    if(result==symbols.end()) return true;
-    dest=result->second;
-    return false;
-  }
-
-  throw "found no literal for expression";
-}
-
 bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 {
   // trivial cases

@@ -45,9 +45,6 @@ public:
   // get a value from counterexample if not valid
   virtual exprt get(const exprt &expr) const;
   
-  // get literal for expression, if available
-  virtual bool literal(const exprt &expr, literalt &literal) const;
-  
   propt &prop;
   
   friend class prop_conv_store_constraintt;
