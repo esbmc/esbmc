@@ -1256,8 +1256,34 @@ migrate_expr_back(const expr2tc &ref)
     return byte_update;
   }
   case expr2t::with_id:
+  {
+    const with2t &ref2 = to_with2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt with("with", thetype);
+    with.copy_to_operands(migrate_expr_back(ref2.source_data),
+                                  migrate_expr_back(ref2.update_field),
+                                  migrate_expr_back(ref2.update_data));
+    return with;
+  }
   case expr2t::member_id:
+  {
+    const member2t &ref2 = to_member2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt member("member", thetype);
+    exprt member_name("member_name");
+    member_name.set("component_name", ref2.member.value);
+    member.copy_to_operands(migrate_expr_back(ref2.source_data), member_name);
+    return member;
+  }
   case expr2t::index_id:
+  {
+    const index2t &ref2 = to_index2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt index("index", thetype);
+    index.copy_to_operands(migrate_expr_back(ref2.source_data),
+                                  migrate_expr_back(ref2.index));
+    return index;
+  }
   case expr2t::zero_string_id:
   case expr2t::zero_length_string_id:
   case expr2t::isnan_id:
