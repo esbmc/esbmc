@@ -58,13 +58,7 @@ literalt prop_convt::convert(const exprt &expr)
 
 literalt prop_convt::convert_bool(const exprt &expr)
 {
-  if(!expr.type().is_bool())
-  {
-    std::string msg="prop_convt::convert_bool got "
-                    "non-boolean expression:\n";
-    msg+=expr.to_string();
-    throw msg;
-  }
+  assert(expr.type().id() == "bool");
 
   const exprt::operandst &op=expr.operands();
 
