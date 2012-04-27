@@ -884,13 +884,80 @@ migrate_expr_back(const expr2tc &ref)
 
   switch (ref->expr_id) {
   case expr2t::constant_int_id:
+  {
+    const constant_int2t &ref2 = to_constant_int2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    constant_exprt theexpr(thetype);
+    mp_integer width = binary2integer(theexpr.value().as_string(), (ref->type->type_id == type2t::unsignedbv_id) ? false : true);
+    theexpr.set_value(integer2binary(ref2.constant_value, width.to_ulong()));
+    return theexpr;
+  }
   case expr2t::constant_fixedbv_id:
+  {
+    const constant_fixedbv2t &ref2 = to_constant_fixedbv2t(ref);
+    return ref2.value.to_expr();
+  }
   case expr2t::constant_bool_id:
+  {
+    const constant_bool2t &ref2 = to_constant_bool2t(ref);
+    if (ref2.constant_value)
+      return true_exprt();
+    else
+      return false_exprt();
+  }
   case expr2t::constant_string_id:
+  {
+    const constant_string2t &ref2 = to_constant_string2t(ref);
+    exprt thestring("string-constant", string_typet());
+    thestring.set("value", irep_idt(ref2.value));
+    const string_type2t &typeref = to_string_type(ref->type);
+    constant_exprt sizeexpr(unsignedbv_typet(32));
+    sizeexpr.set("value", typeref.elements);
+    thestring.size(sizeexpr);
+    return thestring;
+  }
   case expr2t::constant_struct_id:
+  {
+    const constant_struct2t &ref2 = to_constant_struct2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt thestruct("struct", thetype);
+    forall_exprs(it, ref2.datatype_members) {
+      exprt tmp = migrate_expr_back(*it);
+      thestruct.operands().push_back(tmp);
+    }
+    return thestruct;
+  }
   case expr2t::constant_union_id:
+  {
+    const constant_union2t &ref2 = to_constant_union2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt theunion("union", thetype);
+    forall_exprs(it, ref2.datatype_members) {
+      exprt tmp = migrate_expr_back(*it);
+      theunion.operands().push_back(tmp);
+    }
+    return theunion;
+  }
   case expr2t::constant_array_id:
+  {
+    const constant_array2t &ref2 = to_constant_array2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt thearray("array", thetype);
+    forall_exprs(it, ref2.datatype_members) {
+      exprt tmp = migrate_expr_back(*it);
+      thearray.operands().push_back(tmp);
+    }
+    return thearray;
+  }
   case expr2t::constant_array_of_id:
+  {
+    const constant_array_of2t &ref2 = to_constant_array_of2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt thearray("array_of", thetype);
+    exprt initializer = migrate_expr_back(ref2.initializer);
+    thearray.operands().push_back(initializer);
+    return thearray;
+  }
   case expr2t::symbol_id:
   case expr2t::typecast_id:
   case expr2t::if_id:
