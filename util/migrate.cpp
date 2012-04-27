@@ -1285,7 +1285,21 @@ migrate_expr_back(const expr2tc &ref)
     return index;
   }
   case expr2t::zero_string_id:
+  {
+    const zero_string2t &ref2 = to_zero_string2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt zerostring("zero_string", thetype);
+    zerostring.copy_to_operands(migrate_expr_back(ref2.string));
+    return zerostring;
+  }
   case expr2t::zero_length_string_id:
+  {
+    const zero_length_string2t &ref2 = to_zero_length_string2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt zerostring("zero_string_length", thetype);
+    zerostring.copy_to_operands(migrate_expr_back(ref2.string));
+    return zerostring;
+  }
   case expr2t::isnan_id:
   case expr2t::overflow_id:
   case expr2t::overflow_cast_id:
