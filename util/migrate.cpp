@@ -882,6 +882,9 @@ exprt
 migrate_expr_back(const expr2tc &ref)
 {
 
+  if (ref.get() == NULL)
+    return nil_exprt();
+
   switch (ref->expr_id) {
   case expr2t::constant_int_id:
   {
