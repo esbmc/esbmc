@@ -11,6 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <i2string.h>
 #include <std_expr.h>
 #include <expr_util.h>
+#include <irep2.h>
+#include <migrate.h>
 
 #include <langapi/language_util.h>
 
@@ -111,7 +113,9 @@ void symex_target_equationt::convert_assignments(prop_convt &prop_conv) const
     if(it->is_assignment() && !it->ignore)
     {
       exprt tmp(it->cond);
-      prop_conv.set_to(tmp, true);
+      expr2tc new_expr;
+      migrate_expr(tmp, new_expr);
+      prop_conv.set_to(new_expr, true);
     }
   }
 }
@@ -127,7 +131,9 @@ void symex_target_equationt::convert_guards(
     else
     {
       exprt tmp(it->guard);
-      it->guard_literal=prop_conv.convert(tmp);
+      expr2tc new_expr;
+      migrate_expr(tmp, new_expr);
+      it->guard_literal=prop_conv.convert(new_expr);
     }
   }
 }
@@ -145,7 +151,9 @@ void symex_target_equationt::convert_assumptions(
       else
       {
         exprt tmp(it->cond);
-        it->cond_literal=prop_conv.convert(tmp);
+        expr2tc new_expr;
+        migrate_expr(tmp, new_expr);
+        it->cond_literal=prop_conv.convert(new_expr);
       }
     }
   }
@@ -179,7 +187,9 @@ void symex_target_equationt::convert_assertions(
       exprt tmp(it->cond);
 
       // do the expression
-      literalt tmp_literal=prop_conv.convert(tmp);
+      expr2tc new_expr;
+      migrate_expr(tmp, new_expr);
+      literalt tmp_literal=prop_conv.convert(new_expr);
 
       it->cond_literal=prop_conv.limplies(assumption_literal, tmp_literal);
 
@@ -227,7 +237,9 @@ void symex_target_equationt::convert_output(prop_convt &prop_conv)
           symbol_exprt symbol;
           symbol.type()=tmp.type();
           symbol.set_identifier("symex::output::"+i2string(output_count++));
-          prop_conv.set_to(equality_exprt(tmp, symbol), true);
+          expr2tc new_expr;
+          migrate_expr(equality_exprt(tmp, symbol), new_expr);
+          prop_conv.set_to(new_expr, true);
           it->converted_output_args.push_back(symbol);
         }
       }

@@ -22,10 +22,12 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <sstream>
 #include <fstream>
 
+#include <irep2.h>
 #include <i2string.h>
 #include <location.h>
 #include <time_stopping.h>
 #include <message_stream.h>
+#include <migrate.h>
 
 #include <langapi/mode.h>
 #include <langapi/languages.h>
@@ -86,8 +88,11 @@ void bmct::do_cbmc(prop_convt &solver, symex_target_equationt &equation)
 
   equation.convert(solver);
 
-  forall_expr_list(it, bmc_constraints)
-    solver.set_to(*it, true);
+  forall_expr_list(it, bmc_constraints) {
+    expr2tc new_expr;
+    migrate_expr(*it, new_expr);
+    solver.set_to(new_expr, true);
+  }
 
   // After all conversions, clear cache, which tends to contain a large
   // amount of stuff.

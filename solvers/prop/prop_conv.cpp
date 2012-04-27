@@ -27,19 +27,16 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
   return false;
 }
 
-literalt prop_convt::convert(const exprt &expr)
+literalt prop_convt::convert(const expr2tc &expr)
 {
 
-  expr2tc new_expr;
-  migrate_expr(expr, new_expr);
-
   std::pair<cachet::iterator, bool> result=
-    cache.insert(std::pair<expr2tc, literalt>(new_expr, literalt()));
+    cache.insert(std::pair<expr2tc, literalt>(expr, literalt()));
 
   if(!result.second)
     return result.first->second;
 
-  literalt literal = convert_expr(new_expr);
+  literalt literal = convert_expr(expr);
 
   // insert into cache
 

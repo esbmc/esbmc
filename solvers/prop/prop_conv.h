@@ -33,10 +33,10 @@ public:
   typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
 
   // overloading
-  virtual void set_to(const exprt &expr, bool value) = 0;
+  virtual void set_to(const expr2tc &expr, bool value) = 0;
   virtual resultt dec_solve() = 0;
 
-  virtual literalt convert(const exprt &expr);
+  virtual literalt convert(const expr2tc &expr);
 
   // get a boolean value from counterexample if not valid
   virtual bool get_bool(const exprt &expr, tvt &value) const;

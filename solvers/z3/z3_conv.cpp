@@ -2732,45 +2732,33 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   }
 }
 
-u_int
-z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
-{
-  const struct_typet &struct_type = to_struct_type(lhs.type());
-  const struct_typet::componentst &components = struct_type.components();
-  u_int i = 0;
-
-  for (struct_typet::componentst::const_iterator
-       it = components.begin();
-       it != components.end();
-       it++, i++)
-  {
-    if (it->get("name").compare(rhs.get_string("component_name")) == 0)
-      return i;
-  }
-
-  throw new conv_error("component name not found in struct");
-}
-
 void
-z3_convt::set_to(const exprt &expr, bool value)
+z3_convt::set_to(const expr2tc &expr, bool value)
 {
-
-  assert(expr.type().id() == "bool");
 
   l_set_to(convert(expr), value);
 
-  if (value && expr.is_true())
-    return;
+  if (is_equality2t(expr) && value) {
+    const equality2t eq = to_equality2t(expr);
+    if (is_union_type(eq.side_1->type) && is_with2t(eq.side_2)) {
+      const symbol2t sym = to_symbol2t(eq.side_1);
+      const with2t with = to_with2t(eq.side_2);
+      const union_type2t &type = to_union_type(eq.side_1->type);
+      const std::string &ref = sym.name.as_string();
+      const constant_string2t &str = to_constant_string2t(with.update_field);
 
-  if (expr.id() == "=" && value && expr.op0().type().id() == "union" &&
-      expr.op1().id() == "with") {
+      unsigned int idx;
+      forall_names(it, type.member_names) {
+        if (*it == str.value)
+          break;
+        idx++;
+      }
 
-    union_vars.insert(std::pair<std::string, unsigned int>
-                                       (expr.op0().get_string("identifier"),
-                                              convert_member_name(
-                                                expr.op1().op0(),
-                                                expr.op1().op1())));
+      assert(idx != type.member_names.size() &&
+             "Member name of with expr not found in struct/union type");
 
+      union_vars.insert(std::pair<std::string, unsigned int>(ref, idx));
+    }
   }
 
 }
