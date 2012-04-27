@@ -21,8 +21,11 @@ all: $(OBJDIR)/.depends
 	$(MAKE) $(OBJDIR)/solvers.o
 
 dirs:
-	@for dir in $(DIRS); do \
+	for dir in $(DIRS); do \
 	    $(MAKE) -C $$dir; \
+	    if test $$? -ne 0; then \
+	        exit 1; \
+	    fi \
 	done
 
 $(OBJDIR)/solvers.o: $(OBJS)
@@ -30,7 +33,7 @@ $(OBJDIR)/solvers.o: $(OBJS)
 
 clean:
 	-rm $(OBJDIR)/solvers.o
-	@for dir in $(DIRS); do \
+	for dir in $(DIRS); do \
 	    make -C $$dir clean; \
 	done
 	-rm $(OBJDIR)/.depends
