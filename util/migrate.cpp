@@ -881,4 +881,64 @@ migrate_type_back(const type2tc &ref)
 exprt
 migrate_expr_back(const expr2tc &ref)
 {
+
+  switch (ref->expr_id) {
+  case expr2t::constant_int_id:
+  case expr2t::constant_fixedbv_id:
+  case expr2t::constant_bool_id:
+  case expr2t::constant_string_id:
+  case expr2t::constant_struct_id:
+  case expr2t::constant_union_id:
+  case expr2t::constant_array_id:
+  case expr2t::constant_array_of_id:
+  case expr2t::symbol_id:
+  case expr2t::typecast_id:
+  case expr2t::if_id:
+  case expr2t::equality_id:
+  case expr2t::notequal_id:
+  case expr2t::lessthan_id:
+  case expr2t::greaterthan_id:
+  case expr2t::lessthanequal_id:
+  case expr2t::greaterthanequal_id:
+  case expr2t::not_id:
+  case expr2t::and_id:
+  case expr2t::or_id:
+  case expr2t::xor_id:
+  case expr2t::bitand_id:
+  case expr2t::bitor_id:
+  case expr2t::bitxor_id:
+  case expr2t::bitnand_id:
+  case expr2t::bitnor_id:
+  case expr2t::bitnxor_id:
+  case expr2t::lshr_id:
+  case expr2t::neg_id:
+  case expr2t::abs_id:
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  case expr2t::mul_id:
+  case expr2t::div_id:
+  case expr2t::modulus_id:
+  case expr2t::shl_id:
+  case expr2t::ashr_id:
+  case expr2t::dynamic_object_id:
+  case expr2t::same_object_id:
+  case expr2t::pointer_offset_id:
+  case expr2t::pointer_object_id:
+  case expr2t::address_of_id:
+  case expr2t::byte_extract_id:
+  case expr2t::byte_update_id:
+  case expr2t::with_id:
+  case expr2t::member_id:
+  case expr2t::index_id:
+  case expr2t::zero_string_id:
+  case expr2t::zero_length_string_id:
+  case expr2t::isnan_id:
+  case expr2t::overflow_id:
+  case expr2t::overflow_cast_id:
+  case expr2t::overflow_neg_id:
+  default:
+    assert(0 && "Unrecognized expr in migrate_expr_back");
+  };
+
+
 }
