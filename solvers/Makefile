@@ -29,6 +29,9 @@ all: $(OBJDIR)/.depends
 dirs:
 	for dir in $(DIRS); do \
 	    $(MAKE) -C $$dir; \
+	    if test $$? -ne 0; then \
+	        exit 1; \
+	    fi \
 	done
 
 $(OBJDIR)/solvers.o: $(OBJS)
