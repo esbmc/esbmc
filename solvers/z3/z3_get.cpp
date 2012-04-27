@@ -246,7 +246,8 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
     offset = bv_get_rec(tmp, type_pool.get_uint(config.ansi_c.int_width));
 
     assert(is_unsignedbv_type(object->type));
-    assert(is_signedbv_type(offset->type));
+// XXXjmorse - some thought should go in here.
+//    assert(is_signedbv_type(offset->type));
     const constant_int2t &objref = to_constant_int2t(object);
     const constant_int2t &offsref = to_constant_int2t(offset);
 
