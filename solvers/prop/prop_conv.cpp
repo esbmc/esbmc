@@ -40,10 +40,6 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 
 literalt prop_convt::convert(const exprt &expr)
 {
-  if(expr.id()=="symbol" || expr.id()=="constant")
-    return convert_bool(expr);
-
-  // check cache first
 
   std::pair<cachet::iterator, bool> result=
     cache.insert(std::pair<exprt, literalt>(expr, literalt()));
