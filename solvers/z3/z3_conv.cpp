@@ -2577,10 +2577,6 @@ z3_convt::convert_rest(const exprt &expr)
   Z3_ast formula, constraint;
 
   try {
-    if (expr.id() == "is_zero_string") {
-      ignoring(expr);
-      return l;
-    }
     convert_z3_expr(expr, constraint);
   } catch (conv_error *e) {
     std::cerr << e->to_string() << std::endl;
