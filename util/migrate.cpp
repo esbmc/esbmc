@@ -1027,9 +1027,34 @@ migrate_expr_back(const expr2tc &ref)
     return greaterthanequal;
   }
   case expr2t::not_id:
+  {
+    const not2t &ref2 = to_not2t(ref);
+    return not_exprt(migrate_expr_back(ref2.notvalue));
+  }
   case expr2t::and_id:
+  {
+    const and2t &ref2 = to_and2t(ref);
+    exprt andval("and", bool_typet());
+    andval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_2));
+    return andval;
+  }
   case expr2t::or_id:
+  {
+    const or2t &ref2 = to_or2t(ref);
+    exprt orval("or", bool_typet());
+    orval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                           migrate_expr_back(ref2.side_2));
+    return orval;
+  }
   case expr2t::xor_id:
+  {
+    const xor2t &ref2 = to_xor2t(ref);
+    exprt xorval("xor", bool_typet());
+    xorval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_2));
+    return xorval;
+  }
   case expr2t::bitand_id:
   case expr2t::bitor_id:
   case expr2t::bitxor_id:
