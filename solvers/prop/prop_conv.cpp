@@ -60,18 +60,6 @@ literalt prop_convt::convert_bool(const exprt &expr)
 {
   assert(expr.type().id() == "bool");
 
-  const exprt::operandst &op=expr.operands();
-
-  if(expr.is_constant())
-  {
-    if(expr.is_true())
-      return const_literal(true);
-    else if(expr.is_false())
-      return const_literal(false);
-    else
-      throw "unknown boolean constant: "+expr.to_string();
-  }
-
   return convert_rest(expr);
 }
 
