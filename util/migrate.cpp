@@ -981,11 +981,51 @@ migrate_expr_back(const expr2tc &ref)
     return theif;
   }
   case expr2t::equality_id:
+  {
+    const equality2t &ref2 = to_equality2t(ref);
+    return equality_exprt(migrate_expr_back(ref2.side_1),
+                          migrate_expr_back(ref2.side_2));
+  }
   case expr2t::notequal_id:
+  {
+    const notequal2t &ref2 = to_notequal2t(ref);
+    exprt notequal("notequal", bool_typet());
+    notequal.copy_to_operands(migrate_expr_back(ref2.side_1),
+                              migrate_expr_back(ref2.side_2));
+    return notequal;
+  }
   case expr2t::lessthan_id:
+  {
+    const lessthan2t &ref2 = to_lessthan2t(ref);
+    exprt lessthan("<", bool_typet());
+    lessthan.copy_to_operands(migrate_expr_back(ref2.side_1), 
+                              migrate_expr_back(ref2.side_2));
+    return lessthan;
+  }
   case expr2t::greaterthan_id:
+  {
+    const greaterthan2t &ref2 = to_greaterthan2t(ref);
+    exprt greaterthan(">", bool_typet());
+    greaterthan.copy_to_operands(migrate_expr_back(ref2.side_1),
+                              migrate_expr_back(ref2.side_2));
+    return greaterthan;
+  }
   case expr2t::lessthanequal_id:
+  {
+    const lessthanequal2t &ref2 = to_lessthanequal2t(ref);
+    exprt lessthanequal("<=", bool_typet());
+    lessthanequal.copy_to_operands(migrate_expr_back(ref2.side_1),
+                                   migrate_expr_back(ref2.side_2));
+    return lessthanequal;
+  }
   case expr2t::greaterthanequal_id:
+  {
+    const greaterthanequal2t &ref2 = to_greaterthanequal2t(ref);
+    exprt greaterthanequal(">=", bool_typet());
+    greaterthanequal.copy_to_operands(migrate_expr_back(ref2.side_1),
+                                      migrate_expr_back(ref2.side_2));
+    return greaterthanequal;
+  }
   case expr2t::not_id:
   case expr2t::and_id:
   case expr2t::or_id:
