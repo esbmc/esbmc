@@ -771,3 +771,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     throw new std::string("migrate expr failed");
   }
 }
+
+typet
+migrate_type_back(const type2tc &ref)
+{
+}
+
+exprt
+migrate_expr_back(const expr2tc &ref)
+{
+}
