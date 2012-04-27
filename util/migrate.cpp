@@ -959,8 +959,27 @@ migrate_expr_back(const expr2tc &ref)
     return thearray;
   }
   case expr2t::symbol_id:
+  {
+    const symbol2t &ref2 = to_symbol2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    return symbol_exprt(ref2.name, thetype);
+  }
   case expr2t::typecast_id:
+  {
+    const typecast2t &ref2 = to_typecast2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    return typecast_exprt(migrate_expr_back(ref2.from), thetype);
+  }
   case expr2t::if_id:
+  {
+    const if2t &ref2 = to_if2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    if_exprt theif(migrate_expr_back(ref2.cond),
+                   migrate_expr_back(ref2.true_value),
+                   migrate_expr_back(ref2.false_value));
+    theif.type() = thetype;
+    return theif;
+  }
   case expr2t::equality_id:
   case expr2t::notequal_id:
   case expr2t::lessthan_id:
