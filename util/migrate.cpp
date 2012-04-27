@@ -1309,11 +1309,55 @@ migrate_expr_back(const expr2tc &ref)
     return isnan;
   }
   case expr2t::overflow_id:
+  {
+    const overflow2t &ref2 = to_overflow2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt theexpr;
+    theexpr.type() = thetype;
+    if (is_add2t(ref2.operand)) {
+      theexpr.id() == "overflow-+";
+      const add2t &addref = to_add2t(ref2.operand);
+      theexpr.copy_to_operands(migrate_expr_back(addref.part_1),
+                               migrate_expr_back(addref.part_2));
+    } else if (is_sub2t(ref2.operand)) {
+      theexpr.id() == "overflow--";
+      const sub2t &subref = to_sub2t(ref2.operand);
+      theexpr.copy_to_operands(migrate_expr_back(subref.part_1),
+                               migrate_expr_back(subref.part_2));
+    } else if (is_mul2t(ref2.operand)) {
+      theexpr.id() == "overflow-*";
+      const mul2t &mulref = to_mul2t(ref2.operand);
+      theexpr.copy_to_operands(migrate_expr_back(mulref.part_1),
+                               migrate_expr_back(mulref.part_2));
+    } else {
+      assert(0 && "Invalid operand to overflow2t when backmigrating");
+    }
+    return theexpr;
+  }
   case expr2t::overflow_cast_id:
+  {
+    const overflow_cast2t &ref2 = to_overflow_cast2t(ref);
+    char buffer[32];
+    snprintf(buffer, 31, "%d", ref2.bits);
+    buffer[31] = '\0';
+
+    irep_idt tmp("overflow-typecast-" + std::string(buffer));
+    exprt theexpr(tmp);
+    typet thetype = migrate_type_back(ref->type);
+    theexpr.type() = thetype;
+    theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    return theexpr;
+  }
   case expr2t::overflow_neg_id:
+  {
+    const overflow_neg2t &ref2 = to_overflow_neg2t(ref);
+    exprt theexpr("overflow-unary-");
+    typet thetype = migrate_type_back(ref->type);
+    theexpr.type() = thetype;
+    theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    return theexpr;
+  }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
-  };
-
-
+  }
 }
