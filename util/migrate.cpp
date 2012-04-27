@@ -1198,10 +1198,40 @@ migrate_expr_back(const expr2tc &ref)
     return ashrval;
   }
   case expr2t::dynamic_object_id:
+    assert(0 && "dynamic_object EUNIMPLEMENTED");
   case expr2t::same_object_id:
+  {
+    const same_object2t &ref2 = to_same_object2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt same_objectval("same-object", thetype);
+    same_objectval.copy_to_operands(migrate_expr_back(ref2.part_1),
+                                    migrate_expr_back(ref2.part_1));
+    return same_objectval;
+  }
   case expr2t::pointer_offset_id:
+  {
+    const pointer_offset2t &ref2 = to_pointer_offset2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt pointer_offsetval("pointer_offset", thetype);
+    pointer_offsetval.copy_to_operands(migrate_expr_back(ref2.pointer_obj));
+    return pointer_offsetval;
+  }
   case expr2t::pointer_object_id:
+  {
+    const pointer_object2t &ref2 = to_pointer_object2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt pointer_objectval("pointer_object", thetype);
+    pointer_objectval.copy_to_operands(migrate_expr_back(ref2.pointer_obj));
+    return pointer_objectval;
+  }
   case expr2t::address_of_id:
+  {
+    const address_of2t &ref2 = to_address_of2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt address_ofval("address_of", thetype);
+    address_ofval.copy_to_operands(migrate_expr_back(ref2.pointer_obj));
+    return address_ofval;
+  }
   case expr2t::byte_extract_id:
   case expr2t::byte_update_id:
   case expr2t::with_id:
