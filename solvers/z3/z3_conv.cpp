@@ -2747,7 +2747,7 @@ z3_convt::set_to(const expr2tc &expr, bool value)
       const std::string &ref = sym.name.as_string();
       const constant_string2t &str = to_constant_string2t(with.update_field);
 
-      unsigned int idx;
+      unsigned int idx = 0;
       forall_names(it, type.member_names) {
         if (*it == str.value)
           break;
