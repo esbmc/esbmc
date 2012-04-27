@@ -775,6 +775,107 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 typet
 migrate_type_back(const type2tc &ref)
 {
+
+  switch (ref->type_id) {
+  case type2t::bool_id:
+    return bool_typet();
+  case type2t::empty_id:
+    return empty_typet();
+  case type2t::symbol_id:
+    {
+    const symbol_type2t &ref2 = to_symbol_type(ref);
+    return symbol_typet(ref2.symbol_name);
+    }
+  case type2t::struct_id:
+    {
+    unsigned int idx;
+    struct_typet thetype;
+    struct_union_typet::componentst comps;
+    const struct_type2t &ref2 = to_struct_type(ref);
+
+    idx = 0;
+    forall_types(it, ref2.members) {
+      struct_union_typet::componentt component;
+      component.type() = migrate_type_back(*it);
+      component.set_name(irep_idt(ref2.member_names[idx]));
+      comps.push_back(component);
+      idx++;
+    }
+
+    thetype.components() = comps;
+    thetype.set("tag", irep_idt(ref2.name));
+    return thetype;
+    }
+  case type2t::union_id:
+    {
+    unsigned int idx;
+    union_typet thetype;
+    struct_union_typet::componentst comps;
+    const struct_type2t &ref2 = to_struct_type(ref);
+
+    idx = 0;
+    forall_types(it, ref2.members) {
+      struct_union_typet::componentt component;
+      component.type() = migrate_type_back(*it);
+      component.set_name(irep_idt(ref2.member_names[idx]));
+      comps.push_back(component);
+      idx++;
+    }
+
+    thetype.components() = comps;
+    thetype.set("tag", irep_idt(ref2.name));
+    return thetype;
+    }
+  case type2t::code_id:
+    return code_typet();
+  case type2t::array_id:
+    {
+    const array_type2t &ref2 = to_array_type(ref);
+
+    array_typet thetype;
+    thetype.subtype() = migrate_type_back(ref2.subtype);
+    if (ref2.size_is_infinite) {
+      thetype.set("size", "infinity");
+    } else {
+      thetype.size() = migrate_expr_back(ref2.array_size);
+    }
+
+    return thetype;
+    }
+  case type2t::pointer_id:
+    {
+    const pointer_type2t &ref2 = to_pointer_type(ref);
+
+    typet subtype = migrate_type_back(ref2.subtype);
+    pointer_typet thetype(subtype);
+    return thetype;
+    }
+  case type2t::unsignedbv_id:
+    {
+    const unsignedbv_type2t &ref2 = to_unsignedbv_type(ref);
+
+    return unsignedbv_typet(ref2.width);
+    }
+  case type2t::signedbv_id:
+    {
+    const signedbv_type2t &ref2 = to_signedbv_type(ref);
+
+    return signedbv_typet(ref2.width);
+    }
+  case type2t::fixedbv_id:
+    {
+    const fixedbv_type2t &ref2 = to_fixedbv_type(ref);
+
+    fixedbv_typet thetype;
+    thetype.set_integer_bits(ref2.integer_bits);
+    thetype.set("width", ref2.width);
+    return thetype;
+    }
+  case type2t::string_id:
+    return string_typet();
+  default:
+    assert(0 && "Unrecognized type in migrate_type_back");
+  }
 }
 
 exprt
