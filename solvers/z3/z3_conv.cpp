@@ -2585,6 +2585,10 @@ z3_convt::convert_expr(const exprt &expr)
     std::cerr << "Failed to convert an expression" << std::endl;
     ignoring(expr);
     return l;
+  } catch (conv_error *e) {
+    std::cerr << e->to_string() << std::endl;
+    ignoring(expr);
+    return l;
   }
 
   formula = Z3_mk_iff(z3_ctx, z3_literal(l), constraint);
