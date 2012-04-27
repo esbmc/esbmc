@@ -1301,6 +1301,13 @@ migrate_expr_back(const expr2tc &ref)
     return zerostring;
   }
   case expr2t::isnan_id:
+  {
+    const isnan2t &ref2 = to_isnan2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt isnan("isnan", thetype);
+    isnan.copy_to_operands(migrate_expr_back(ref2.value));
+    return isnan;
+  }
   case expr2t::overflow_id:
   case expr2t::overflow_cast_id:
   case expr2t::overflow_neg_id:
