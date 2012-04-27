@@ -888,8 +888,8 @@ migrate_expr_back(const expr2tc &ref)
     const constant_int2t &ref2 = to_constant_int2t(ref);
     typet thetype = migrate_type_back(ref->type);
     constant_exprt theexpr(thetype);
-    mp_integer width = binary2integer(theexpr.value().as_string(), (ref->type->type_id == type2t::unsignedbv_id) ? false : true);
-    theexpr.set_value(integer2binary(ref2.constant_value, width.to_ulong()));
+    unsigned int width = atoi(thetype.width().as_string().c_str());
+    theexpr.set_value(integer2binary(ref2.constant_value, width));
     return theexpr;
   }
   case expr2t::constant_fixedbv_id:
