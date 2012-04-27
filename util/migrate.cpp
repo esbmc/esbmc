@@ -1119,7 +1119,21 @@ migrate_expr_back(const expr2tc &ref)
     return lshrval;
   }
   case expr2t::neg_id:
+  {
+    const neg2t &ref2 = to_neg2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt neg("unary-", thetype);
+    neg.copy_to_operands(migrate_expr_back(ref2.value));
+    return neg;
+  }
   case expr2t::abs_id:
+  {
+    const abs2t &ref2 = to_abs2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt abs("abs", thetype);
+    abs.copy_to_operands(migrate_expr_back(ref2.value));
+    return abs;
+  }
   case expr2t::add_id:
   case expr2t::sub_id:
   case expr2t::mul_id:
