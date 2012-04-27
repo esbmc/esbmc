@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 
 #include <irep2.h>
-#include "symbol.h"
 #include "prop_conv.h"
 
 bool prop_convt::get_bool(const exprt &expr, tvt &value) const
