@@ -2571,7 +2571,7 @@ z3_convt::convert_bv(const expr2tc &expr, Z3_ast &bv)
 }
 
 literalt
-z3_convt::convert_expr(const exprt &expr)
+z3_convt::convert_expr(const expr2tc &expr)
 {
   literalt l = new_variable();
   Z3_ast formula, constraint;
@@ -2579,8 +2579,7 @@ z3_convt::convert_expr(const exprt &expr)
   expr2tc new_expr;
 
   try {
-    migrate_expr(expr, new_expr);
-    new_expr->convert_smt(*this, (void *&)constraint);
+    expr->convert_smt(*this, (void *&)constraint);
   } catch (std::string *e) {
     std::cerr << "Failed to convert an expression" << std::endl;
     ignoring(expr);

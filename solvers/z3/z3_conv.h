@@ -80,7 +80,7 @@ public:
   virtual exprt get(const exprt &expr) const;
 
 private:
-  virtual literalt convert_expr(const exprt &expr);
+  virtual literalt convert_expr(const expr2tc &expr);
   virtual void set_to(const exprt &expr, bool value);
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);

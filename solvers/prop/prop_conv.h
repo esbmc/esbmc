@@ -77,17 +77,17 @@ public:
   virtual tvt l_get(literalt a) const=0;
 
 protected:
-  virtual literalt convert_expr(const exprt &expr) = 0;
+  virtual literalt convert_expr(const expr2tc &expr) = 0;
   
   // symbols
   typedef std::map<irep_idt, literalt> symbolst;
   symbolst symbols;
 
   // cache
-  typedef hash_map_cont<exprt, literalt, irep_hash> cachet;
+  typedef hash_map_cont<expr2tc, literalt, irep2_hash> cachet;
   cachet cache;
   
-  virtual void ignoring(const exprt &expr);
+  virtual void ignoring(const expr2tc &expr);
 
 public:
   const cachet &get_cache() const { return cache; }

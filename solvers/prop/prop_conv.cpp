@@ -11,12 +11,16 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 
 #include <irep2.h>
+#include <migrate.h>
 #include "prop_conv.h"
 
 bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 {
 
-  cachet::const_iterator cache_result=cache.find(expr);
+  expr2tc new_expr;
+  migrate_expr(expr, new_expr);
+
+  cachet::const_iterator cache_result=cache.find(new_expr);
   if(cache_result==cache.end()) return true;
 
   value=l_get(cache_result->second);
@@ -26,13 +30,16 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 literalt prop_convt::convert(const exprt &expr)
 {
 
+  expr2tc new_expr;
+  migrate_expr(expr, new_expr);
+
   std::pair<cachet::iterator, bool> result=
-    cache.insert(std::pair<exprt, literalt>(expr, literalt()));
+    cache.insert(std::pair<expr2tc, literalt>(new_expr, literalt()));
 
   if(!result.second)
     return result.first->second;
 
-  literalt literal = convert_expr(expr);
+  literalt literal = convert_expr(new_expr);
 
   // insert into cache
 
@@ -41,11 +48,11 @@ literalt prop_convt::convert(const exprt &expr)
   return literal;
 }
 
-void prop_convt::ignoring(const exprt &expr)
+void prop_convt::ignoring(const expr2tc &expr)
 {
   // fall through
 
-  std::string msg="warning: ignoring "+expr.pretty();
+  std::string msg="warning: ignoring "+expr->pretty();
 
   print(2, msg);
 }
