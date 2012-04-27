@@ -16,20 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 bool prop_convt::get_bool(const exprt &expr, tvt &value) const
 {
-  // trivial cases
-
-  if(expr.is_true())
-  {
-    value=tvt(true);
-    return false;
-  }
-  else if(expr.is_false())
-  {
-    value=tvt(false);
-    return false;
-  }
-
-  // check cache
 
   cachet::const_iterator cache_result=cache.find(expr);
   if(cache_result==cache.end()) return true;
