@@ -1175,7 +1175,7 @@ constant_int2t::do_crc(boost::crc_32_type &crc) const
 }
 
 constant_fixedbv2t::constant_fixedbv2t(type2tc type, const fixedbvt &val)
-  : constant2t<constant_fixedbv2t>(type, constant_int_id), value(val)
+  : constant2t<constant_fixedbv2t>(type, constant_fixedbv_id), value(val)
 {
 }
 
