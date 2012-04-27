@@ -2763,20 +2763,15 @@ z3_convt::set_to(const exprt &expr, bool value)
   if (value && expr.is_true())
     return;
 
-  try {
-    if (expr.id() == "=" && value && expr.op0().type().id() == "union" &&
-        expr.op1().id() == "with") {
+  if (expr.id() == "=" && value && expr.op0().type().id() == "union" &&
+      expr.op1().id() == "with") {
 
-      union_vars.insert(std::pair<std::string, unsigned int>
-                                         (expr.op0().get_string("identifier"),
-                                                convert_member_name(
-                                                  expr.op1().op0(),
-                                                  expr.op1().op1())));
+    union_vars.insert(std::pair<std::string, unsigned int>
+                                       (expr.op0().get_string("identifier"),
+                                              convert_member_name(
+                                                expr.op1().op0(),
+                                                expr.op1().op1())));
 
-    }
-  } catch (conv_error *e) {
-    std::cerr << e->to_string() << std::endl;
-    ignoring(expr);
   }
 
 }
