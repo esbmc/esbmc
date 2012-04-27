@@ -1233,7 +1233,28 @@ migrate_expr_back(const expr2tc &ref)
     return address_ofval;
   }
   case expr2t::byte_extract_id:
+  {
+    const byte_extract2t &ref2 = to_byte_extract2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt byte_extract((ref2.big_endian) ? "byte_extract_big_endian"
+                                         : "byte_extract_little_endian",
+                       thetype);
+    byte_extract.copy_to_operands(migrate_expr_back(ref2.source_value),
+                                  migrate_expr_back(ref2.source_offset));
+    return byte_extract;
+  }
   case expr2t::byte_update_id:
+  {
+    const byte_update2t &ref2 = to_byte_update2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt byte_update((ref2.big_endian) ? "byte_update_big_endian"
+                                        : "byte_update_little_endian",
+                       thetype);
+    byte_update.copy_to_operands(migrate_expr_back(ref2.source_value),
+                                  migrate_expr_back(ref2.source_offset),
+                                  migrate_expr_back(ref2.update_value));
+    return byte_update;
+  }
   case expr2t::with_id:
   case expr2t::member_id:
   case expr2t::index_id:
