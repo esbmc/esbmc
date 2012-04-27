@@ -152,7 +152,7 @@ Function: bmct::run_decision_procedure
 
 \*******************************************************************/
 
-propt::resultt
+prop_convt::resultt
 bmct::run_decision_procedure(prop_convt &prop_conv,
                              symex_target_equationt &equation)
 {
@@ -177,7 +177,7 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   do_unwind_module(prop_conv);
   do_cbmc(prop_conv, equation);
 
-  propt::resultt dec_result=prop_conv.dec_solve();
+  prop_convt::resultt dec_result=prop_conv.dec_solve();
 
   // output runtime
   if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
@@ -567,11 +567,11 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
 
   switch(bmc.run_decision_procedure(*conv, equation))
   {
-  case propt::P_UNSATISFIABLE:
+  case prop_convt::P_UNSATISFIABLE:
     bmc.report_success();
     return false;
 
-  case propt::P_SATISFIABLE:
+  case prop_convt::P_SATISFIABLE:
     bmc.error_trace(*conv, equation);
     bmc.report_failure();
     return true;
@@ -579,7 +579,7 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
   // Return failure if we didn't actually check anything, we just emitted the
   // test information to an SMTLIB formatted file. Causes esbmc to quit
   // immediately (with no error reported)
-  case propt::P_SMTLIB:
+  case prop_convt::P_SMTLIB:
     return true;
 
   default:

@@ -23,7 +23,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <string.h>
 #include <irep2.h>
 
-#include "z3_prop.h"
 #include "z3_capi.h"
 
 #define Z3_UNSAT_CORE_LIMIT 10000
@@ -33,28 +32,26 @@ typedef unsigned int uint;
 class z3_convt: public prop_convt
 {
 public:
-  z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
-                               :prop_convt(z3_prop),
-                                z3_prop(uw, *this)
+  z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp) : prop_convt()
   {
     if (z3_ctx == NULL) {
       z3_ctx = z3_api.mk_proof_context(uw);
     }
 
     this->int_encoding = int_encoding;
-    this->z3_prop.smtlib = smt;
-    this->z3_prop.store_assumptions = (smt || uw);
+    smtlib = smt;
+    store_assumptions = (smt || uw);
     s_is_uw = uw;
+    this->uw = uw;
     total_mem_space = 0;
     model = NULL;
     array_of_count = 0;
+    _no_variables = 1;
 
     Z3_push(z3_ctx);
-    z3_prop.z3_ctx = z3_ctx;
     max_core_size=Z3_UNSAT_CORE_LIMIT;
 
     z3_api.set_z3_ctx(z3_ctx);
-    z3_prop.z3_api.set_z3_ctx(z3_ctx);
 
     init_addr_space_array();
 
@@ -71,7 +68,7 @@ public:
   }
 
   virtual ~z3_convt();
-  virtual propt::resultt dec_solve(void);
+  virtual prop_convt::resultt dec_solve(void);
   Z3_lbool check2_z3_properties(void);
   bool get_z3_encoding(void) const;
   void set_filename(std::string file);
@@ -231,15 +228,37 @@ private:
   void link_syms_to_literals(void);
   void finalize_pointer_chain(void);
   void init_addr_space_array(void);
+
+  virtual literalt land(literalt a, literalt b);
+  virtual literalt lor(literalt a, literalt b);
+  virtual literalt land(const bvt &bv);
+  virtual literalt lor(const bvt &bv);
+  virtual literalt lnot(literalt a);
+  virtual literalt limplies(literalt a, literalt b);
+  virtual literalt new_variable();
+  virtual unsigned no_variables() const { return _no_variables; }
+  virtual void set_no_variables(unsigned no) { _no_variables=no; }
+  virtual void lcnf(const bvt &bv);
+
+  static void eliminate_duplicates(const bvt &bv, bvt &dest);
+
+  virtual const std::string solver_text()
+  { return "Z3"; }
+
+  virtual tvt l_get(literalt a) const;
+
+  Z3_ast z3_literal(literalt l);
+
+  bool process_clause(const bvt &bv, bvt &dest);
+
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
 	    max_core_size;
 
   Z3_model model; // Model of satisfying program.
 
-  z3_propt z3_prop;
   z3_capi z3_api;
 
-  bool int_encoding;
+  bool int_encoding, smtlib, store_assumptions, uw;
   std::list<Z3_ast> assumptions;
   std::string filename;
 
@@ -248,6 +267,9 @@ private:
 
   unsigned int array_of_count;
   irep_idt dyn_info_arr_name;
+
+  unsigned _no_variables;
+  std::list<Z3_ast> assumpt;
 
   // Array of obj ID -> address range tuples
   unsigned int addr_space_sym_num;

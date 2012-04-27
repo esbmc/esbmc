@@ -22,20 +22,19 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <message.h>
 #include <threeval.h>
 
-#include "prop.h"
+#include "literal.h"
 
 class prop_convt : public messaget
 {
 public:
-  explicit prop_convt(propt &_prop):
-    prop(_prop)
-  {
-  }
+  explicit prop_convt() { }
   virtual ~prop_convt() { }
+
+  typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
 
   // overloading
   virtual void set_to(const exprt &expr, bool value) = 0;
-  virtual propt::resultt dec_solve() = 0;
+  virtual resultt dec_solve() = 0;
 
   virtual literalt convert(const exprt &expr);
 
@@ -45,15 +44,38 @@ public:
   // get a value from counterexample if not valid
   virtual exprt get(const exprt &expr) const;
   
-  propt &prop;
-  
-  friend class prop_conv_store_constraintt;
-
   virtual void clear_cache()
   {
     cache.clear();
   }
   
+  // Literal manipulation routines inhereted from propt.
+  virtual literalt land(literalt a, literalt b)=0;
+  virtual literalt lor(literalt a, literalt b)=0;
+  virtual literalt land(const bvt &bv)=0;
+  virtual literalt lor(const bvt &bv)=0;
+  virtual literalt lnot(literalt a)=0;
+  virtual literalt limplies(literalt a, literalt b)=0;
+  virtual void set_equal(literalt a, literalt b);
+
+  virtual void l_set_to(literalt a, bool value)
+  {
+    set_equal(a, const_literal(value));
+  }
+
+  // constraints
+  virtual void lcnf(const bvt &bv)=0;
+
+  // variables
+  virtual literalt new_variable()=0;
+  virtual unsigned no_variables() const=0;
+
+  // solving
+  virtual const std::string solver_text()=0;
+
+  // satisfying assignment
+  virtual tvt l_get(literalt a) const=0;
+
 protected:
   virtual literalt convert_rest(const exprt &expr) = 0;
   virtual literalt convert_bool(const exprt &expr);

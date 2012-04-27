@@ -15,7 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <hash_cont.h>
 #include <options.h>
 
-#include <solvers/prop/prop.h>
 #include <solvers/prop/prop_conv.h>
 #ifdef Z3
 #include <solvers/z3/z3_conv.h>
@@ -106,7 +105,7 @@ protected:
     std::ostream *out_file;
   };
 
-  virtual propt::resultt
+  virtual prop_convt::resultt
     run_decision_procedure(prop_convt &prop_conv,
                            symex_target_equationt &equation);
 

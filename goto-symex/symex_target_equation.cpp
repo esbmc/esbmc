@@ -181,16 +181,16 @@ void symex_target_equationt::convert_assertions(
       // do the expression
       literalt tmp_literal=prop_conv.convert(tmp);
 
-      it->cond_literal=prop_conv.prop.limplies(assumption_literal, tmp_literal);
+      it->cond_literal=prop_conv.limplies(assumption_literal, tmp_literal);
 
-      bv.push_back(prop_conv.prop.lnot(it->cond_literal));
+      bv.push_back(prop_conv.lnot(it->cond_literal));
     }
     else if(it->is_assume())
       assumption_literal=
-        prop_conv.prop.land(assumption_literal, it->cond_literal);
+        prop_conv.land(assumption_literal, it->cond_literal);
 
   if(!bv.empty())
-    prop_conv.prop.lcnf(bv);
+    prop_conv.lcnf(bv);
 }
 
 /*******************************************************************\

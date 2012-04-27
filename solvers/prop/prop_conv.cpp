@@ -34,7 +34,7 @@ bool prop_convt::get_bool(const exprt &expr, tvt &value) const
   cachet::const_iterator cache_result=cache.find(expr);
   if(cache_result==cache.end()) return true;
 
-  value=prop.l_get(cache_result->second);
+  value=l_get(cache_result->second);
   return false;
 }
 
@@ -128,4 +128,16 @@ void prop_convt::convert_smt_expr(const expr2t &expr, void *&arg)
   std::cerr << "Unhandled SMT conversion for expr ID " << expr.expr_id <<
                std::endl;
   abort();
+}
+
+void prop_convt::set_equal(literalt a, literalt b)
+{
+  bvt bv;
+  bv.resize(2);
+  bv[0]=a;
+  bv[1]=lnot(b);
+  lcnf(bv);
+  bv[0]=lnot(a);
+  bv[1]=b;
+  lcnf(bv);
 }

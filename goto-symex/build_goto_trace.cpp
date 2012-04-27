@@ -38,7 +38,7 @@ void build_goto_trace(
   {
     const symex_target_equationt::SSA_stept &SSA_step=*it;
     tvt result;
-    result=prop_conv.prop.l_get(SSA_step.guard_literal);
+    result=prop_conv.l_get(SSA_step.guard_literal);
 
     if(result!=tvt(true) && result!=tvt(tvt::TV_ASSUME))
       continue;
@@ -85,7 +85,7 @@ void build_goto_trace(
     if(SSA_step.is_assert() ||
        SSA_step.is_assume())
     {
-      result = prop_conv.prop.l_get(SSA_step.cond_literal);
+      result = prop_conv.l_get(SSA_step.cond_literal);
       if ((result==tvt(tvt::TV_ASSUME) && SSA_step.comment.compare("arithmetic overflow on *")==0) ||
     	 (result==tvt(false) && SSA_step.comment.compare("arithmetic overflow on *")==0))
         goto_trace_step.guard=true;

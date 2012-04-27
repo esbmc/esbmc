@@ -25,7 +25,6 @@
 #include <fixedbv.h>
 
 #include "z3_conv.h"
-#include <solvers/prop/prop.h>
 #include "../ansi-c/c_types.h"
 
 #define cast_to_z3(arg) reinterpret_cast<Z3_ast &>((arg))
@@ -42,17 +41,17 @@ z3_convt::~z3_convt()
   if (model != NULL)
     Z3_del_model(z3_ctx, model);
 
-  if (z3_prop.smtlib) {
+  if (smtlib) {
     std::ofstream temp_out;
     Z3_string smt_lib_str, logic;
     Z3_ast *assumpt_array =
-	          (Z3_ast *)alloca((z3_prop.assumpt.size() + 1) * sizeof(Z3_ast));
+	          (Z3_ast *)alloca((assumpt.size() + 1) * sizeof(Z3_ast));
     Z3_ast formula;
     formula = Z3_mk_true(z3_ctx);
 
     std::list<Z3_ast>::const_iterator it;
     unsigned int i;
-    for (it = z3_prop.assumpt.begin(), i = 0; it != z3_prop.assumpt.end(); it++, i++) {
+    for (it = assumpt.begin(), i = 0; it != assumpt.end(); it++, i++) {
       assumpt_array[i] = *it;
     }
 
@@ -62,7 +61,7 @@ z3_convt::~z3_convt()
       logic = "QF_AUFBV";
 
     smt_lib_str = Z3_benchmark_to_smtlib_string(z3_ctx, "ESBMC", logic,
-                                    "unknown", "", z3_prop.assumpt.size(),
+                                    "unknown", "", assumpt.size(),
                                     assumpt_array, formula);
 
     temp_out.open(filename.c_str(), std::ios_base::out | std::ios_base::trunc);
@@ -70,7 +69,7 @@ z3_convt::~z3_convt()
     temp_out << smt_lib_str << std::endl;
   }
 
-  if (!z3_prop.uw)
+  if (!uw)
     Z3_pop(z3_ctx, 1);
 
   // Experimental: if we're handled say, 10,000 ileaves, refresh the z3 ctx.
@@ -349,14 +348,14 @@ z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
       if (id.find(literal.c_str()) != std::string::npos)
 	return;
     }
-    z3_prop.assumpt.push_back(Z3_mk_not(z3_ctx, result));
+    assumpt.push_back(Z3_mk_not(z3_ctx, result));
   } else
-    z3_prop.assumpt.push_back(Z3_mk_not(z3_ctx, result));
+    assumpt.push_back(Z3_mk_not(z3_ctx, result));
 
   // Ensure addrspace array makes its way to the output
   std::string sym = get_cur_addrspace_ident();
   Z3_ast addr_sym = z3_api.mk_var(sym.c_str(), addr_space_arr_sort);
-  z3_prop.assumpt.push_back(addr_sym);
+  assumpt.push_back(addr_sym);
 }
 
 void
@@ -466,7 +465,7 @@ z3_convt::finalize_pointer_chain(void)
   return;
 }
 
-propt::resultt
+prop_convt::resultt
 z3_convt::dec_solve(void)
 {
   unsigned major, minor, build, revision;
@@ -483,17 +482,17 @@ z3_convt::dec_solve(void)
 
   bv_cache.clear();
 
-  if (z3_prop.smtlib)
-    return propt::P_SMTLIB;
+  if (smtlib)
+    return prop_convt::P_SMTLIB;
 
   result = check2_z3_properties();
 
   if (result == Z3_L_FALSE)
-    return propt::P_UNSATISFIABLE;
+    return prop_convt::P_UNSATISFIABLE;
   else if (result == Z3_L_UNDEF)
-    return propt::P_ERROR;
+    return prop_convt::P_ERROR;
   else
-    return propt::P_SATISFIABLE;
+    return prop_convt::P_SATISFIABLE;
 }
 
 Z3_lbool
@@ -502,26 +501,26 @@ z3_convt::check2_z3_properties(void)
   Z3_lbool result;
   unsigned i;
 
-  assumptions_status = z3_prop.assumpt.size();
+  assumptions_status = assumpt.size();
 
   Z3_ast proof, *core = (Z3_ast *)alloca(assumptions_status * sizeof(Z3_ast)),
          *assumptions_core = (Z3_ast *)alloca(assumptions_status * sizeof(Z3_ast));
   std::string literal;
 
 
-  if (z3_prop.uw) {
+  if (uw) {
     std::list<Z3_ast>::const_iterator it;
-    for (it = z3_prop.assumpt.begin(), i = 0; it != z3_prop.assumpt.end(); it++, i++) {
+    for (it = assumpt.begin(), i = 0; it != assumpt.end(); it++, i++) {
       assumptions_core[i] = *it;
     }
   }
 
   try
   {
-    if (z3_prop.uw) {
-      unsat_core_size = z3_prop.assumpt.size();
+    if (uw) {
+      unsat_core_size = assumpt.size();
       memset(core, 0, sizeof(Z3_ast) * unsat_core_size);
-      result = Z3_check_assumptions(z3_ctx, z3_prop.assumpt.size(),
+      result = Z3_check_assumptions(z3_ctx, assumpt.size(),
                              assumptions_core, &model, &proof, &unsat_core_size,
                              core);
     } else {
@@ -549,7 +548,7 @@ z3_convt::check2_z3_properties(void)
   if (config.options.get_bool_option("dump-z3-assigns") && model != NULL)
     std::cout << Z3_model_to_string(z3_ctx, model);
 
-  if (z3_prop.uw && result == Z3_L_FALSE)   {
+  if (uw && result == Z3_L_FALSE)   {
     for (i = 0; i < unsat_core_size; ++i)
     {
       std::string id = Z3_ast_to_string(z3_ctx, core[i]);
@@ -574,25 +573,9 @@ z3_convt::link_syms_to_literals(void)
     // Generate an equivalence between the symbol and the literal
     Z3_ast sym = z3_api.mk_var(it->first.as_string().c_str(),
                                 Z3_mk_bool_sort(z3_ctx));
-    Z3_ast formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(it->second), sym);
+    Z3_ast formula = Z3_mk_iff(z3_ctx, z3_literal(it->second), sym);
     assert_formula(formula);
  }
-}
-
-void
-z3_convt::assert_formula(Z3_ast ast, bool needs_literal)
-{
-
-  z3_prop.assert_formula(ast, needs_literal);
-  return;
-}
-
-void
-z3_convt::assert_literal(literalt l, Z3_ast formula)
-{
-
-  z3_prop.assert_literal(l, formula);
-  return;
 }
 
 void
@@ -2590,7 +2573,7 @@ z3_convt::convert_bv(const expr2tc &expr, Z3_ast &bv)
 literalt
 z3_convt::convert_rest(const exprt &expr)
 {
-  literalt l = z3_prop.new_variable();
+  literalt l = new_variable();
   Z3_ast formula, constraint;
 
   try {
@@ -2605,7 +2588,7 @@ z3_convt::convert_rest(const exprt &expr)
     return l;
   }
 
-  formula = Z3_mk_iff(z3_ctx, z3_prop.z3_literal(l), constraint);
+  formula = Z3_mk_iff(z3_ctx, z3_literal(l), constraint);
 
   // While we have a literal, don't assert that it's true, only the link
   // between the formula and the literal. Otherwise, we risk asserting that a
@@ -2785,7 +2768,7 @@ z3_convt::set_to(const exprt &expr, bool value)
 
   assert(expr.type().id() == "bool");
 
-  prop.l_set_to(convert(expr), value);
+  l_set_to(convert(expr), value);
 
   if (value && expr.is_true())
     return;
@@ -2806,6 +2789,289 @@ z3_convt::set_to(const exprt &expr, bool value)
     ignoring(expr);
   }
 
+}
+
+literalt
+z3_convt::land(const bvt &bv)
+{
+
+  literalt l = new_variable();
+  uint size = bv.size();
+  Z3_ast *args = (Z3_ast*)alloca(size * sizeof(Z3_ast));
+  Z3_ast result, formula;
+
+  for (unsigned int i = 0; i < bv.size(); i++)
+    args[i] = z3_literal(bv[i]);
+
+  result = Z3_mk_and(z3_ctx, bv.size(), args);
+  formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
+  assert_formula(formula);
+
+  return l;
+}
+
+literalt
+z3_convt::lor(const bvt &bv)
+{
+
+  literalt l = new_variable();
+  uint size = bv.size();
+  Z3_ast *args = (Z3_ast*)alloca(size * sizeof(Z3_ast));
+  Z3_ast result, formula;
+
+  for (unsigned int i = 0; i < bv.size(); i++)
+    args[i] = z3_literal(bv[i]);
+
+  result = Z3_mk_or(z3_ctx, bv.size(), args);
+
+  formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
+  assert_formula(formula);
+
+  return l;
+}
+
+literalt
+z3_convt::land(literalt a, literalt b)
+{
+  if (a == const_literal(true)) return b;
+  if (b == const_literal(true)) return a;
+  if (a == const_literal(false)) return const_literal(false);
+  if (b == const_literal(false)) return const_literal(false);
+  if (a == b) return a;
+
+  literalt l = new_variable();
+  Z3_ast result, operand[2], formula;
+
+  operand[0] = z3_literal(a);
+  operand[1] = z3_literal(b);
+  result = Z3_mk_and(z3_ctx, 2, operand);
+  formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
+  assert_formula(formula);
+
+  return l;
+
+}
+
+literalt
+z3_convt::lor(literalt a, literalt b)
+{
+  if (a == const_literal(false)) return b;
+  if (b == const_literal(false)) return a;
+  if (a == const_literal(true)) return const_literal(true);
+  if (b == const_literal(true)) return const_literal(true);
+  if (a == b) return a;
+
+  literalt l = new_variable();
+  Z3_ast result, operand[2], formula;
+
+  operand[0] = z3_literal(a);
+  operand[1] = z3_literal(b);
+  result = Z3_mk_or(z3_ctx, 2, operand);
+  formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
+  assert_formula(formula);
+
+  return l;
+
+}
+
+literalt
+z3_convt::lnot(literalt a)
+{
+  a.invert();
+
+  return a;
+}
+
+literalt
+z3_convt::limplies(literalt a, literalt b)
+{
+  return lor(lnot(a), b);
+}
+
+literalt
+z3_convt::new_variable()
+{
+  literalt l;
+
+  l.set(_no_variables, false);
+
+  set_no_variables(_no_variables + 1);
+
+  return l;
+}
+
+void
+z3_convt::eliminate_duplicates(const bvt &bv, bvt &dest)
+{
+  std::set<literalt> s;
+
+  dest.reserve(bv.size());
+
+  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
+  {
+    if (s.insert(*it).second)
+      dest.push_back(*it);
+  }
+}
+
+bool
+z3_convt::process_clause(const bvt &bv, bvt &dest)
+{
+
+  dest.clear();
+
+  // empty clause! this is UNSAT
+  if (bv.empty()) return false;
+
+  std::set<literalt> s;
+
+  dest.reserve(bv.size());
+
+  for (bvt::const_iterator it = bv.begin();
+       it != bv.end();
+       it++)
+  {
+    literalt l = *it;
+
+    // we never use index 0
+    assert(l.var_no() != 0);
+
+    if (l.is_true())
+      return true;  // clause satisfied
+
+    if (l.is_false())
+      continue;
+
+    assert(l.var_no() < _no_variables);
+
+    // prevent duplicate literals
+    if (s.insert(l).second)
+      dest.push_back(l);
+
+    if (s.find(lnot(l)) != s.end())
+      return true;  // clause satisfied
+  }
+
+  return false;
+}
+
+void
+z3_convt::lcnf(const bvt &bv)
+{
+
+  bvt new_bv;
+
+  if (process_clause(bv, new_bv))
+    return;
+
+  if (new_bv.size() == 0)
+    return;
+
+  Z3_ast lor_var, *args = (Z3_ast*)alloca(new_bv.size() * sizeof(Z3_ast));
+  unsigned int i = 0;
+
+  for (bvt::const_iterator it = new_bv.begin(); it != new_bv.end(); it++, i++)
+    args[i] = z3_literal(*it);
+
+  if (i > 1) {
+    lor_var = Z3_mk_or(z3_ctx, i, args);
+    assert_formula(lor_var);
+  } else   {
+    assert_formula(args[0]);
+  }
+}
+
+Z3_ast
+z3_convt::z3_literal(literalt l)
+{
+
+  Z3_ast literal_l;
+  std::string literal_s;
+
+  if (l == const_literal(false))
+    return Z3_mk_false(z3_ctx);
+  else if (l == const_literal(true))
+    return Z3_mk_true(z3_ctx);
+
+  literal_s = "l" + i2string(l.var_no());
+  literal_l = z3_api.mk_bool_var(literal_s.c_str());
+
+  if (l.sign()) {
+    return Z3_mk_not(z3_ctx, literal_l);
+  }
+
+  return literal_l;
+}
+
+tvt
+z3_convt::l_get(literalt a) const
+{
+  tvt result = tvt(tvt::TV_ASSUME);
+  std::string literal;
+
+  if (a.is_true()) {
+    return tvt(true);
+  } else if (a.is_false())    {
+    return tvt(false);
+  }
+
+  symbol_exprt sym("l" + i2string(a.var_no()), bool_typet());
+  exprt res = get(sym);
+
+  if (res.is_true())
+    result = tvt(true);
+  else if (res.is_false())
+    result = tvt(false);
+  else
+    result = tvt(tvt::TV_UNKNOWN);
+
+  if (a.sign())
+    result = !result;
+
+  return result;
+}
+
+void
+z3_convt::assert_formula(Z3_ast ast, bool needs_literal)
+{
+
+  // If we're not going to be using the assumptions (ie, for unwidening and for
+  // smtlib) then just assert the fact to be true.
+  if (!store_assumptions) {
+    Z3_assert_cnstr(z3_ctx, ast);
+    return;
+  }
+
+  if (!needs_literal) {
+    Z3_assert_cnstr(z3_ctx, ast);
+    assumpt.push_front(ast);
+  } else {
+    literalt l = new_variable();
+    Z3_ast formula = Z3_mk_iff(z3_ctx, z3_literal(l), ast);
+    Z3_assert_cnstr(z3_ctx, formula);
+
+    if (smtlib)
+      assumpt.push_front(ast);
+    else
+      assumpt.push_front(z3_literal(l));
+  }
+
+  return;
+}
+
+void
+z3_convt::assert_literal(literalt l, Z3_ast formula)
+{
+
+  Z3_assert_cnstr(z3_ctx, formula);
+  if (store_assumptions) {
+    if (smtlib)
+      assumpt.push_front(formula);
+    else
+      assumpt.push_front(z3_literal(l));
+  }
+
+  return;
 }
 
 Z3_context z3_convt::z3_ctx = NULL;
