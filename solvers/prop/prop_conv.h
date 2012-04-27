@@ -77,8 +77,7 @@ public:
   virtual tvt l_get(literalt a) const=0;
 
 protected:
-  virtual literalt convert_rest(const exprt &expr) = 0;
-  virtual literalt convert_bool(const exprt &expr);
+  virtual literalt convert_expr(const exprt &expr) = 0;
   
   // symbols
   typedef std::map<irep_idt, literalt> symbolst;

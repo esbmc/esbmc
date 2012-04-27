@@ -47,20 +47,13 @@ literalt prop_convt::convert(const exprt &expr)
   if(!result.second)
     return result.first->second;
 
-  literalt literal=convert_bool(expr);
+  literalt literal = convert_expr(expr);
 
   // insert into cache
 
   result.first->second=literal;
 
   return literal;
-}
-
-literalt prop_convt::convert_bool(const exprt &expr)
-{
-  assert(expr.type().id() == "bool");
-
-  return convert_rest(expr);
 }
 
 void prop_convt::ignoring(const exprt &expr)

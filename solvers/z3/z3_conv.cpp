@@ -2571,7 +2571,7 @@ z3_convt::convert_bv(const expr2tc &expr, Z3_ast &bv)
 }
 
 literalt
-z3_convt::convert_rest(const exprt &expr)
+z3_convt::convert_expr(const exprt &expr)
 {
   literalt l = new_variable();
   Z3_ast formula, constraint;
