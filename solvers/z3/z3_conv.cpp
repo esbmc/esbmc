@@ -2576,10 +2576,13 @@ z3_convt::convert_expr(const exprt &expr)
   literalt l = new_variable();
   Z3_ast formula, constraint;
 
+  expr2tc new_expr;
+
   try {
-    convert_z3_expr(expr, constraint);
-  } catch (conv_error *e) {
-    std::cerr << e->to_string() << std::endl;
+    migrate_expr(expr, new_expr);
+    new_expr->convert_smt(*this, (void *&)constraint);
+  } catch (std::string *e) {
+    std::cerr << "Failed to convert an expression" << std::endl;
     ignoring(expr);
     return l;
   }
@@ -2743,19 +2746,6 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
   }
 
   throw new conv_error("component name not found in struct");
-}
-
-void
-z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
-{
-  expr2tc new_expr;
-
-  try {
-    migrate_expr(expr, new_expr);
-    new_expr->convert_smt(*this, (void *&)bv);
-  } catch (std::string *e) {
-    throw new conv_error("Failed to convert an expression");
-  }
 }
 
 void

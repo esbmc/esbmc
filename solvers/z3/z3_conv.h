@@ -87,9 +87,6 @@ private:
 
   void create_pointer_type(Z3_type_ast &bv) const;
 
-  void convert_z3_expr(const exprt &expr, Z3_ast &bv);
-
-
   void convert_bv(const expr2tc &expr, Z3_ast &bv);
 
   void convert_typecast_bool(const typecast2t &cast, Z3_ast &bv);
