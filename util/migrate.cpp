@@ -811,7 +811,7 @@ migrate_type_back(const type2tc &ref)
     unsigned int idx;
     union_typet thetype;
     struct_union_typet::componentst comps;
-    const struct_type2t &ref2 = to_struct_type(ref);
+    const union_type2t &ref2 = to_union_type(ref);
 
     idx = 0;
     forall_types(it, ref2.members) {
