@@ -1454,6 +1454,18 @@ expr_macros(overflow_neg);
 #undef dynamic_cast
 #endif
 
+inline bool is_constant_expr(const expr2tc &t)
+{
+  return t->expr_id == expr2t::constant_int_id ||
+         t->expr_id == expr2t::constant_fixedbv_id ||
+         t->expr_id == expr2t::constant_bool_id ||
+         t->expr_id == expr2t::constant_string_id ||
+         t->expr_id == expr2t::constant_struct_id ||
+         t->expr_id == expr2t::constant_union_id ||
+         t->expr_id == expr2t::constant_array_id ||
+         t->expr_id == expr2t::constant_array_of_id;
+}
+
 // And now, some more utilities.
 class type_poolt {
 public:

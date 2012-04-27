@@ -201,7 +201,7 @@ private:
 	const unsigned width,
     std::string value) const;
 
-  exprt bv_get_rec(const Z3_ast bv, const typet &type) const;
+  expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type) const;
 
   pointer_logict pointer_logic;
 
