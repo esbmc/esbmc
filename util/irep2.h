@@ -609,7 +609,7 @@ public:
 };
 
 template <class derived, class field1 = expr2t::blank_value>
-class expr_body2 : public expr2t, field1::fieldtype
+class expr_body2 : public expr2t, public field1::fieldtype
 {
 protected:
   expr_body2(const type2tc type, expr_ids id) : expr2t(type, id) {};
