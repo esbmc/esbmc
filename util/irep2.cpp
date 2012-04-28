@@ -3106,5 +3106,3 @@ type_poolt type_pool;
 // crcing code has to change.
 BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
 BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);
-
-constant_int_hacky tmp_death(type2tc(), BigInt());
