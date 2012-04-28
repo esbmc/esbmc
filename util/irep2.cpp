@@ -3123,18 +3123,18 @@ list_of_memberst constant_int_hacky::tostring(unsigned int indent) const
   abort();
 }
 
-template <class derived, class field1>
+template <class derived, class field1, class field2>
 void
-expr_body2<derived, field1>::convert_smt(prop_convt &obj, void *&arg) const
+expr_body2<derived, field1, field2>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
   obj.convert_smt_expr(*new_this, arg);
   return;
 }
 
-template <class derived, class field1>
+template <class derived, class field1, class field2>
 expr2tc
-expr_body2<derived, field1>::clone(void) const
+expr_body2<derived, field1, field2>::clone(void) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
