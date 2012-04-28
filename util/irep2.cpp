@@ -3106,3 +3106,43 @@ type_poolt type_pool;
 // crcing code has to change.
 BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
 BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);
+
+constant_int_hacky::constant_int_hacky(type2tc type, const BigInt &input)
+  : expr_body2<constant_int_hacky, expr2t::constant_int_value>(type, expr2t::constant_int_id)
+{
+}
+
+constant_int_hacky::constant_int_hacky(const constant_int_hacky &ref)
+  : expr_body2<constant_int_hacky, expr2t::constant_int_value>(ref)
+{
+}
+
+
+list_of_memberst constant_int_hacky::tostring(unsigned int indent) const
+{
+  abort();
+}
+
+template <class derived, class field1>
+expr_body2<derived, field1>::expr_body2(const expr_body2<derived, field1> &ref)
+  : expr2t(ref)
+{
+}
+
+template <class derived, class field1>
+void
+expr_body2<derived, field1>::convert_smt(prop_convt &obj, void *&arg) const
+{
+  const derived *new_this = static_cast<const derived*>(this);
+  obj.convert_smt_expr(*new_this, arg);
+  return;
+}
+
+template <class derived, class field1>
+expr2tc
+expr_body2<derived, field1>::clone(void) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return expr2tc(new_obj);
+}
