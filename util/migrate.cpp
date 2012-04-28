@@ -13,6 +13,7 @@ void
 real_migrate_type(const typet &type, type2tc &new_type_ref)
 {
   constant_int_hacky *tmp_hacks = new constant_int_hacky(type2tc(), BigInt());
+  int face = tmp_hacks->constant_value;
 
   if (type.id() == "bool") {
     bool_type2t *b = new bool_type2t();
