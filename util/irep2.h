@@ -540,6 +540,17 @@ public:
   field_type_macro(expr2tc_type_tag, expr2tc);
   #undef field_type_macro
 
+  #define member_record_macro(thename, isenabled, thetype, fieldname) \
+  struct thename { \
+    typedef boost::mpl::if_c<isenabled, fieldname<thetype>, name_empty>::type \
+            fieldtype; \
+    typedef boost::mpl::if_c<isenabled, thetype, name_empty>::type type; \
+    const static int enabled = isenabled; \
+  };
+
+  member_record_macro(contant_int_value, true, int, name_constant_value);
+  #undef member_record_macro
+
 protected:
   expr2t(const type2tc type, expr_ids id);
   expr2t(const expr2t &ref);
