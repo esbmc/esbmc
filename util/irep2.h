@@ -616,11 +616,11 @@ public:
 template <class derived, class field1 = expr2t::blank_value>
 class expr_body2 : public expr2t, public field1::fieldtype
 {
-protected:
-  expr_body2(const type2tc type, expr_ids id) : expr2t(type, id) {};
-  expr_body2(const expr_body2 &ref);
-
 public:
+
+  expr_body2(const type2tc type, expr_ids id, BigInt arg1) : expr2t(type, id), field1::fieldtype(arg1) {};
+  expr_body2(const expr_body2 &ref) : expr2t(ref), field1::fieldtype(ref) { }
+
   virtual void convert_smt(prop_convt &obj, void *&arg) const;
   virtual expr2tc clone(void) const;
 };
