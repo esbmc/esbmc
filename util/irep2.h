@@ -620,6 +620,26 @@ public:
   virtual expr2tc clone(void) const;
 };
 
+
+
+
+
+class constant_int_hacky : public expr_body2<constant_int_hacky>
+{
+public:
+  constant_int_hacky(type2tc type, const BigInt &input);
+  constant_int_hacky(const constant_int_hacky &ref);
+
+  virtual list_of_memberst tostring(unsigned int indent) const;
+};
+
+
+
+
+
+
+
+
 /** Constant class type. Not designed to contain any piece of data or method in
  *  particular, but allows for additional type safety. */
 template <class derived>
