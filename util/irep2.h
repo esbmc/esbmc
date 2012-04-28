@@ -531,14 +531,6 @@ public:
     typedef name_class_empty type;
   };
 
-  template <class T>
-  struct name_empty_tmpl {
-  public:
-    typedef name_class_empty type;
-    T notgonnabeused;
-  };
-
-
   // Type tags
   #define field_type_macro(name, thetype) \
   class name { \
