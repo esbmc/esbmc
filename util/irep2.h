@@ -520,6 +520,14 @@ public:
   field_name_macro(bits);
   #undef field_name_macro
 
+  struct name_class_empty {
+  public:
+  };
+  struct name_empty {
+  public:
+    typedef name_class_empty type;
+  };
+
 protected:
   expr2t(const type2tc type, expr_ids id);
   expr2t(const expr2t &ref);
