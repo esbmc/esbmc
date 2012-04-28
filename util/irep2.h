@@ -556,7 +556,7 @@ public:
     const static int enabled = true; \
   };
 
-  member_record_macro(contant_int_value, int_type_tag, name_constant_value);
+  member_record_macro(constant_int_value, int_type_tag, name_constant_value);
   #undef member_record_macro
 
   struct blank_value {
@@ -624,7 +624,7 @@ public:
 
 
 
-class constant_int_hacky : public expr_body2<constant_int_hacky>
+class constant_int_hacky : public expr_body2<constant_int_hacky, expr2t::constant_int_value>
 {
 public:
   constant_int_hacky(type2tc type, const BigInt &input);
