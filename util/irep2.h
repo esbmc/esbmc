@@ -563,6 +563,18 @@ public:
   virtual expr2tc clone(void) const;
 };
 
+template <class derived>
+class expr_body2 : public expr2t
+{
+protected:
+  expr_body2(const type2tc type, expr_ids id) : expr2t(type, id) {};
+  expr_body2(const expr_body2 &ref);
+
+public:
+  virtual void convert_smt(prop_convt &obj, void *&arg) const;
+  virtual expr2tc clone(void) const;
+};
+
 /** Constant class type. Not designed to contain any piece of data or method in
  *  particular, but allows for additional type safety. */
 template <class derived>
