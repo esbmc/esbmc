@@ -5,6 +5,7 @@
 
 #include <vector>
 
+#include <boost/utility/enable_if.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/crc.hpp>
 
@@ -481,6 +482,43 @@ public:
     overflow_neg_id,
     end_expr_id
   };
+
+  // Template metaprogramming (vomit) -- define tag classes to instanciate
+  // different class fields with different names and different types.
+
+  #define field_name_macro(name) \
+  template <class fieldtype> \
+  struct name_class_##name { \
+  public: \
+    fieldtype name; \
+  }; \
+  template <class fieldtype> \
+  struct name_##name { \
+  public: \
+    typedef name_class_##name<fieldtype> type; \
+  };
+
+  field_name_macro(value);
+  field_name_macro(datatype_members);
+  field_name_macro(name);
+  field_name_macro(from);
+  field_name_macro(cond);
+  field_name_macro(true_value);
+  field_name_macro(false_value);
+  field_name_macro(side_1);
+  field_name_macro(side_2);
+  field_name_macro(notvalue);
+  field_name_macro(ptr_obj);
+  field_name_macro(big_endian);
+  field_name_macro(source_value);
+  field_name_macro(source_offset);
+  field_name_macro(update_value);
+  field_name_macro(update_field);
+  field_name_macro(member);
+  field_name_macro(index);
+  field_name_macro(string);
+  field_name_macro(bits);
+  #undef field_name_macro
 
 protected:
   expr2t(const type2tc type, expr_ids id);
