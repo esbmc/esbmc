@@ -551,7 +551,7 @@ public:
 
   #define member_record_macro(thename, thetype, fieldname) \
   struct thename { \
-    typedef fieldname<thetype>::type fieldtype; \
+    typedef fieldname<thetype::type>::type fieldtype; \
     typedef thetype::type type; \
     const static int enabled = true; \
   };
