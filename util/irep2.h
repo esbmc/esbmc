@@ -628,7 +628,7 @@ public:
 
 
 
-class constant_int_hacky : public expr_body2<constant_int_hacky, expr2t::constant_bigint_value>
+class constant_int_hacky : public expr_body2<constant_int_hacky, expr2t::constant_bigint_value, expr2t::is_big_endian_val>
 {
 public:
   constant_int_hacky(type2tc type, const BigInt &input);

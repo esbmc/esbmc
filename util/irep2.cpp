@@ -3108,12 +3108,12 @@ BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
 BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);
 
 constant_int_hacky::constant_int_hacky(type2tc type, const BigInt &input)
-  : expr_body2<constant_int_hacky, expr2t::constant_bigint_value>(type, expr2t::constant_int_id, input)
+  : expr_body2<constant_int_hacky, expr2t::constant_bigint_value, expr2t::is_big_endian_val>(type, expr2t::constant_int_id, input, true)
 {
 }
 
 constant_int_hacky::constant_int_hacky(const constant_int_hacky &ref)
-  : expr_body2<constant_int_hacky, expr2t::constant_bigint_value>(ref)
+  : expr_body2<constant_int_hacky, expr2t::constant_bigint_value, expr2t::is_big_endian_val>(ref)
 {
 }
 
