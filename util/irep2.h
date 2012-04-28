@@ -619,7 +619,7 @@ class expr_body2 : public expr2t, public field1::fieldtype
 {
 public:
 
-  expr_body2(const type2tc type, expr_ids id, typename field1::type arg1) : expr2t(type, id), field1::fieldtype(arg1) {};
+  expr_body2(const type2tc type, expr_ids id, typename field1::type arg1 = field1::defaultval) : expr2t(type, id), field1::fieldtype(arg1) {};
   expr_body2(const expr_body2 &ref) : expr2t(ref), field1::fieldtype(ref) { }
 
   virtual void convert_smt(prop_convt &obj, void *&arg) const;
