@@ -529,9 +529,18 @@ public:
     typedef name_class_empty type;
   };
 
+  template <class T>
+  struct name_empty_tmpl {
+  public:
+    typedef name_class_empty type;
+    T notgonnabeused;
+  };
+
+
   // Type tags
   #define field_type_macro(name, thetype) \
   class name { \
+    public: \
     typedef thetype type; \
   };
 
@@ -540,16 +549,21 @@ public:
   field_type_macro(expr2tc_type_tag, expr2tc);
   #undef field_type_macro
 
-  #define member_record_macro(thename, isenabled, thetype, fieldname) \
+  #define member_record_macro(thename, thetype, fieldname) \
   struct thename { \
-    typedef boost::mpl::if_c<isenabled, fieldname<thetype>, name_empty>::type \
-            fieldtype; \
-    typedef boost::mpl::if_c<isenabled, thetype, name_empty>::type type; \
-    const static int enabled = isenabled; \
+    typedef fieldname<thetype>::type fieldtype; \
+    typedef thetype::type type; \
+    const static int enabled = true; \
   };
 
-  member_record_macro(contant_int_value, true, int, name_constant_value);
+  member_record_macro(contant_int_value, int_type_tag, name_constant_value);
   #undef member_record_macro
+
+  struct blank_value {
+    typedef name_empty::type fieldtype;
+    typedef name_empty type;
+    const static int enabled = false;
+  };
 
 protected:
   expr2t(const type2tc type, expr_ids id);
