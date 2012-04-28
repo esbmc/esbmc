@@ -608,8 +608,8 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-template <class derived, bool arg1, typename type1>
-class expr_body2 : public expr2t, boost::mpl::if_c<arg1, typename type1::type, expr2t::name_empty>::type
+template <class derived, class field1>
+class expr_body2 : public expr2t, field1::fieldtype
 {
 protected:
   expr_body2(const type2tc type, expr_ids id) : expr2t(type, id) {};
