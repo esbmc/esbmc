@@ -529,6 +529,17 @@ public:
     typedef name_class_empty type;
   };
 
+  // Type tags
+  #define field_type_macro(name, thetype) \
+  class name { \
+    typedef thetype type; \
+  };
+
+  field_type_macro(int_type_tag, int);
+  field_type_macro(bool_type_tag, bool);
+  field_type_macro(expr2tc_type_tag, expr2tc);
+  #undef field_type_macro
+
 protected:
   expr2t(const type2tc type, expr_ids id);
   expr2t(const expr2t &ref);
