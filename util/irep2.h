@@ -5,7 +5,7 @@
 
 #include <vector>
 
-#include <boost/utility/enable_if.hpp>
+#include <boost/mpl/if.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/crc.hpp>
 
@@ -571,8 +571,8 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-template <class derived>
-class expr_body2 : public expr2t
+template <class derived, bool arg1, typename type1>
+class expr_body2 : public expr2t, boost::mpl::if_c<arg1, typename type1::type, expr2t::name_empty>::type
 {
 protected:
   expr_body2(const type2tc type, expr_ids id) : expr2t(type, id) {};
