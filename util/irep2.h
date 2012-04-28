@@ -490,6 +490,8 @@ public:
   template <class fieldtype> \
   struct name_class_##name { \
   public: \
+    name_class_##name(fieldtype &someval) : name(someval) {} \
+    name_class_##name(const name_class_##name &ref) : name(ref.name) {} \
     fieldtype name; \
   }; \
   template <class fieldtype> \
