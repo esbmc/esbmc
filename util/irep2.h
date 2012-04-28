@@ -498,6 +498,7 @@ public:
     typedef name_class_##name<fieldtype> type; \
   };
 
+  field_name_macro(constant_value);
   field_name_macro(value);
   field_name_macro(datatype_members);
   field_name_macro(name);
