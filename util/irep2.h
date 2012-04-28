@@ -558,6 +558,7 @@ public:
   member_record_macro(constant_int_value, int_type_tag, name_constant_value);
   member_record_macro(constant_bigint_value, bigint_type_tag,
                       name_constant_value);
+  member_record_macro(is_big_endian_val, bool_type_tag, name_big_endian);
   #undef member_record_macro
 
   struct blank_value {
