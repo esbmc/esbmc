@@ -523,17 +523,28 @@ public:
   field_name_macro(bits);
   #undef field_name_macro
 
-  class name_empty;
-  struct name_class_empty {
-  public:
-    name_class_empty() { }
-    name_class_empty(const name_class_empty &ref __attribute__((unused))) {}
-    name_class_empty(const name_empty &ref __attribute__((unused))) {}
+  // Multiple empty name tags are required to avoid inheretance of the same type
+
+  #define empty_names_macro(num) \
+  class name_empty_##num; \
+  struct name_class_empty_##num { \
+  public: \
+    name_class_empty_##num() { } \
+    name_class_empty_##num(const name_class_empty_##num &ref \
+                           __attribute__((unused))) {} \
+    name_class_empty_##num(const name_empty_##num &ref \
+                           __attribute__((unused))) {} \
+  }; \
+  class name_empty_##num { \
+  public: \
+    typedef name_class_empty_##num type; \
   };
-  struct name_empty {
-  public:
-    typedef name_class_empty type;
-  };
+
+  empty_names_macro(1);
+  empty_names_macro(2);
+  empty_names_macro(3);
+  empty_names_macro(4);
+  #undef empty_names_macro
 
   // Type tags
   #define field_type_macro(name, thetype) \
@@ -561,10 +572,11 @@ public:
   member_record_macro(is_big_endian_val, bool_type_tag, name_big_endian);
   #undef member_record_macro
 
+  template <class thename>
   struct blank_value {
-    typedef name_empty::type fieldtype;
-    typedef name_empty type;
-    const static name_empty defaultval;
+    typedef typename thename::type fieldtype;
+    typedef thename type;
+    const static thename defaultval;
     const static int enabled = false;
   };
 
@@ -612,8 +624,8 @@ public:
 };
 
 template <class derived,
-          class field1 = expr2t::blank_value,
-          class field2 = expr2t::blank_value>
+          class field1 = expr2t::blank_value<expr2t::name_empty_1>,
+          class field2 = expr2t::blank_value<expr2t::name_empty_2> >
 class expr_body2 :
   public expr2t,
   public field1::fieldtype,
