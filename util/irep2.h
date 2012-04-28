@@ -546,6 +546,7 @@ public:
 
   field_type_macro(int_type_tag, int);
   field_type_macro(bool_type_tag, bool);
+  field_type_macro(bigint_type_tag, BigInt);
   field_type_macro(expr2tc_type_tag, expr2tc);
   #undef field_type_macro
 
@@ -557,6 +558,8 @@ public:
   };
 
   member_record_macro(constant_int_value, int_type_tag, name_constant_value);
+  member_record_macro(constant_bigint_value, bigint_type_tag,
+                      name_constant_value);
   #undef member_record_macro
 
   struct blank_value {
@@ -624,7 +627,7 @@ public:
 
 
 
-class constant_int_hacky : public expr_body2<constant_int_hacky, expr2t::constant_int_value>
+class constant_int_hacky : public expr_body2<constant_int_hacky, expr2t::constant_bigint_value>
 {
 public:
   constant_int_hacky(type2tc type, const BigInt &input);
