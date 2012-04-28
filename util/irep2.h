@@ -608,7 +608,7 @@ public:
   virtual expr2tc clone(void) const;
 };
 
-template <class derived, class field1>
+template <class derived, class field1 = expr2t::blank_value>
 class expr_body2 : public expr2t, field1::fieldtype
 {
 protected:
