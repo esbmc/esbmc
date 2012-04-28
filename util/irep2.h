@@ -523,8 +523,12 @@ public:
   field_name_macro(bits);
   #undef field_name_macro
 
+  class name_empty;
   struct name_class_empty {
   public:
+    name_class_empty() { }
+    name_class_empty(const name_class_empty &ref __attribute__((unused))) {}
+    name_class_empty(const name_empty &ref __attribute__((unused))) {}
   };
   struct name_empty {
   public:
@@ -559,6 +563,7 @@ public:
   struct blank_value {
     typedef name_empty::type fieldtype;
     typedef name_empty type;
+    const static name_empty defaultval;
     const static int enabled = false;
   };
 
@@ -607,12 +612,12 @@ public:
 
 template <class derived, class field1 = expr2t::blank_value,
           class field2 = expr2t::blank_value>
-class expr_body2 : public expr2t, public field1::fieldtype
+class expr_body2 : public expr2t, public field1::fieldtype, public field2::fieldtype
 {
 public:
 
-  expr_body2(const type2tc type, expr_ids id, typename field1::type arg1 = field1::defaultval) : expr2t(type, id), field1::fieldtype(arg1) {};
-  expr_body2(const expr_body2 &ref) : expr2t(ref), field1::fieldtype(ref) { }
+  expr_body2(const type2tc type, expr_ids id, typename field1::type arg1 = field1::defaultval, typename field2::type arg2 = field2::defaultval) : expr2t(type, id), field1::fieldtype(arg1), field2::fieldtype(arg2) {};
+  expr_body2(const expr_body2 &ref) : expr2t(ref), field1::fieldtype(ref), field2::fieldtype(ref){ }
 
   virtual void convert_smt(prop_convt &obj, void *&arg) const;
   virtual expr2tc clone(void) const;
