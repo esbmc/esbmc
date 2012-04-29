@@ -3162,7 +3162,7 @@ expr_body2<derived, field1, field2, field3, field4>::tostring(unsigned int inden
   field2::fieldtype::tostring(thevector, indent);
   field3::fieldtype::tostring(thevector, indent);
   field4::fieldtype::tostring(thevector, indent);
-  abort();
+  return thevector;
 }
 
 template <class derived, class field1, class field2, class field3, class field4>
