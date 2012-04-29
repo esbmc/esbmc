@@ -625,26 +625,36 @@ public:
 
 template <class derived,
           class field1 = expr2t::blank_value<expr2t::name_empty_1>,
-          class field2 = expr2t::blank_value<expr2t::name_empty_2> >
+          class field2 = expr2t::blank_value<expr2t::name_empty_2>,
+          class field3 = expr2t::blank_value<expr2t::name_empty_3>,
+          class field4 = expr2t::blank_value<expr2t::name_empty_4> >
 class expr_body2 :
   public expr2t,
   public field1::fieldtype,
-  public field2::fieldtype
+  public field2::fieldtype,
+  public field3::fieldtype,
+  public field4::fieldtype
 {
 public:
 
   expr_body2(const type2tc type, expr_ids id,
       typename field1::type arg1 = field1::defaultval,
-      typename field2::type arg2 = field2::defaultval)
+      typename field2::type arg2 = field2::defaultval,
+      typename field3::type arg3 = field3::defaultval,
+      typename field4::type arg4 = field4::defaultval)
     : expr2t(type, id),
       field1::fieldtype(arg1),
-      field2::fieldtype(arg2)
+      field2::fieldtype(arg2),
+      field3::fieldtype(arg3),
+      field4::fieldtype(arg4)
   {};
 
   expr_body2(const expr_body2 &ref)
     : expr2t(ref),
       field1::fieldtype(ref),
-      field2::fieldtype(ref)
+      field2::fieldtype(ref),
+      field3::fieldtype(ref),
+      field4::fieldtype(ref)
   {}
 
   virtual void convert_smt(prop_convt &obj, void *&arg) const;
