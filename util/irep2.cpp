@@ -3140,5 +3140,10 @@ template <class derived, class field1, class field2, class field3, class field4>
 list_of_memberst
 expr_body2<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
 {
+  list_of_memberst thevector;
+  field1::fieldtype::tostring(thevector);
+  field2::fieldtype::tostring(thevector);
+  field3::fieldtype::tostring(thevector);
+  field4::fieldtype::tostring(thevector);
   abort();
 }
