@@ -3203,3 +3203,16 @@ expr_body2<derived, field1, field2, field3, field4>::cmp(const expr2t &ref)const
 
   return true;
 }
+
+template <class derived, class field1, class field2, class field3, class field4>
+int
+expr_body2<derived, field1, field2, field3, field4>::lt(const expr2t &ref)const
+{
+  int tmp;
+  const derived &ref2 = static_cast<const derived &>(ref);
+
+  tmp = field1::fieldtype::lt(
+                static_cast<const typename field1::fieldtype &>(ref2));
+
+  return true;
+}

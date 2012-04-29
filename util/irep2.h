@@ -425,6 +425,9 @@ static inline std::string type_to_string(const T &theval, int indent);
 template <class T>
 static inline bool do_type_cmp(const T &side1, const T &side2);
 
+template <class T>
+static inline int do_type_lt(const T &side1, const T &side2);
+
 /** Base class for all expressions */
 class expr2t
 {
@@ -503,6 +506,8 @@ public:
                              type_to_string<fieldtype>(name, indent)));}\
     inline bool cmp(const name_class_##name &theother) const { \
       return do_type_cmp<fieldtype>(name, theother.name); }\
+    inline int lt(const name_class_##name &theother) const { \
+      return do_type_lt<fieldtype>(name, theother.name); }\
     fieldtype name; \
   }; \
   template <class fieldtype> \
@@ -550,6 +555,8 @@ public:
     { return; } \
     inline bool cmp(const name_class_empty_##num &ref __attribute__((unused)))\
     const { return true; }\
+    inline int lt(const name_class_empty_##num &ref __attribute__((unused)))\
+    const { return 0; }\
   }; \
   class name_empty_##num { \
   public: \
@@ -677,6 +684,7 @@ public:
   virtual expr2tc clone(void) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
 };
 
 
