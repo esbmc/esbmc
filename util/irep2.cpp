@@ -3048,6 +3048,21 @@ do_type_cmp<BigInt>(const BigInt &side1, const BigInt &side2)
 }
 
 template <>
+inline bool
+do_type_cmp<fixedbvt>(const fixedbvt &side1, const fixedbvt &side2)
+{
+  return (side1 == side2) ? true : false;
+}
+
+template <>
+inline std::string
+type_to_string<fixedbvt>(const fixedbvt &theval,
+                         int indent __attribute__((unused)))
+{
+  return theval.to_ansi_c_string();
+}
+
+template <>
 inline int
 do_type_lt<bool>(const bool &side1, const bool &side2)
 {
@@ -3065,6 +3080,17 @@ do_type_lt<BigInt>(const BigInt &side1, const BigInt &side2)
 {
   // BigInt also has its own less than comparator.
   return side1.compare(side2);
+}
+
+template <>
+inline int
+do_type_lt<fixedbvt>(const fixedbvt &side1, const fixedbvt &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side1 > side2)
+    return 1;
+  return 0;
 }
 
 template <>
@@ -3097,6 +3123,15 @@ do_type_crc<BigInt>(const BigInt &theint, boost::crc_32_type &crc)
     // at the price of possible crc collisions.
     ;
   }
+  return;
+}
+
+template <>
+inline void
+do_type_crc<fixedbvt>(const fixedbvt &theval, boost::crc_32_type &crc)
+{
+
+  do_type_crc<BigInt>(theval.to_integer(), crc);
   return;
 }
 
