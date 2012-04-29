@@ -766,16 +766,6 @@ public:
   virtual void do_crc(boost::crc_32_type &crc) const;
 };
 
-/** Constant class type. Not designed to contain any piece of data or method in
- *  particular, but allows for additional type safety. */
-template <class derived>
-class constant2t : public expr_body<derived>
-{
-public:
-  constant2t(const type2tc type, expr2t::expr_ids id) : expr_body<derived>(type, id) {}
-  constant2t(const constant2t &ref) : expr_body<derived>(ref) {};
-};
-
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
 class constant_int2t : public expr_body2<constant_int2t,
