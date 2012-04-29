@@ -1097,48 +1097,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-address_of2t::address_of2t(const type2tc subtype, const expr2tc val)
-  : arith2t<address_of2t>(type2tc(new pointer_type2t(subtype)),
-                             address_of_id),
-                             pointer_obj(val)
-{
-}
-
-address_of2t::address_of2t(const address_of2t &ref)
-  : arith2t<address_of2t>(ref), pointer_obj(ref.pointer_obj)
-{
-}
-
-bool
-address_of2t::cmp(const expr2t &ref) const
-{
-  const address_of2t &ref2 = static_cast<const address_of2t &>(ref);
-  return pointer_obj == ref2.pointer_obj;
-}
-
-int
-address_of2t::lt(const expr2t &ref) const
-{
-  const address_of2t &ref2 = static_cast<const address_of2t &>(ref);
-  return pointer_obj->ltchecked(*ref2.pointer_obj.get());
-}
-
-list_of_memberst
-address_of2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"pointer_obj", &pointer_obj,
-                                (const char *)"");
-}
-
-void
-address_of2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  pointer_obj->do_crc(crc);
-  return;
-}
-
 byte_extract2t::byte_extract2t(const type2tc type, bool is_big_endian,
                                const expr2tc source,
                                const expr2tc offs)

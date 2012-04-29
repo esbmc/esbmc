@@ -1351,19 +1351,17 @@ public:
 };
 template class expr_body2<pointer_object2t, expr2t::expr2tc_ptr_obj>;
 
-class address_of2t : public arith2t<address_of2t>
+class address_of2t : public expr_body2<address_of2t,
+                                           expr2t::expr2tc_ptr_obj>
 {
 public:
-  address_of2t(const type2tc subtype, const expr2tc pointer);
-  address_of2t(const address_of2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc pointer_obj;
+  address_of2t(const type2tc &type, const expr2tc &ptrobj)
+    : expr_body2<address_of2t, expr2t::expr2tc_ptr_obj>
+      (type, address_of_id, ptrobj) {}
+  address_of2t(const address_of2t &ref)
+    : expr_body2<address_of2t, expr2t::expr2tc_ptr_obj> (ref) {}
 };
+template class expr_body2<address_of2t, expr2t::expr2tc_ptr_obj>;
 
 /** Base class for byte operations. Endianness is a global property of the
  *  model that we're building, and we only need to care about it when we build

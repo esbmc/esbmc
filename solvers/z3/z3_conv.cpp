@@ -1505,8 +1505,8 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
 
   obj.type->convert_smt_type(*this, (void*&)pointer_type);
 
-  if (is_index2t(obj.pointer_obj)) {
-    const index2t &idx = to_index2t(obj.pointer_obj);
+  if (is_index2t(obj.ptr_obj)) {
+    const index2t &idx = to_index2t(obj.ptr_obj);
 
     if (!is_string_type(idx.source_data->type)) {
       const array_type2t &arr = to_array_type(idx.source_data->type);
@@ -1522,8 +1522,8 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
       expr2tc plus(new add2t(addrof->type, addrof, idx.index));
       convert_bv(plus, bv);
     }
-  } else if (is_member2t(obj.pointer_obj)) {
-    const member2t &memb = to_member2t(obj.pointer_obj);
+  } else if (is_member2t(obj.ptr_obj)) {
+    const member2t &memb = to_member2t(obj.ptr_obj);
 
     int64_t offs;
     if (is_struct_type(memb.source_data->type)) {
@@ -1542,22 +1542,22 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
     // Update pointer offset to offset to that field.
     Z3_ast num = convert_number(offs, config.ansi_c.int_width, true);
     bv = z3_api.mk_tuple_update(bv, 1, num);
-  } else if (is_symbol2t(obj.pointer_obj)) {
-// XXXjmorse             obj.pointer_obj->expr_id == expr2t::code_id) {
+  } else if (is_symbol2t(obj.ptr_obj)) {
+// XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
 
-    const symbol2t &symbol = to_symbol2t(obj.pointer_obj);
-    convert_identifier_pointer(obj.pointer_obj, symbol.name.as_string(), bv);
-  } else if (is_constant_string2t(obj.pointer_obj)) {
+    const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
+    convert_identifier_pointer(obj.ptr_obj, symbol.name.as_string(), bv);
+  } else if (is_constant_string2t(obj.ptr_obj)) {
     // XXXjmorse - we should avoid encoding invalid characters in the symbol,
     // but this works for now.
-    const constant_string2t &str = to_constant_string2t(obj.pointer_obj);
+    const constant_string2t &str = to_constant_string2t(obj.ptr_obj);
     std::string identifier = "address_of_str_const(" + str.value + ")";
-    convert_identifier_pointer(obj.pointer_obj, identifier, bv);
-  } else if (is_if2t(obj.pointer_obj)) {
+    convert_identifier_pointer(obj.ptr_obj, identifier, bv);
+  } else if (is_if2t(obj.ptr_obj)) {
     // We can't nondeterministically take the address of something; So instead
     // rewrite this to be if (cond) ? &a : &b;.
 
-    const if2t &ifval = to_if2t(obj.pointer_obj);
+    const if2t &ifval = to_if2t(obj.ptr_obj);
 
     expr2tc addrof1(new address_of2t(obj.type, ifval.true_value));
     expr2tc addrof2(new address_of2t(obj.type, ifval.false_value));

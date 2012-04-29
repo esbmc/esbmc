@@ -1232,7 +1232,7 @@ migrate_expr_back(const expr2tc &ref)
     const address_of2t &ref2 = to_address_of2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt address_ofval("address_of", thetype);
-    address_ofval.copy_to_operands(migrate_expr_back(ref2.pointer_obj));
+    address_ofval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
     return address_ofval;
   }
   case expr2t::byte_extract_id:
