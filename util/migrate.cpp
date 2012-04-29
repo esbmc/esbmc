@@ -1032,7 +1032,7 @@ migrate_expr_back(const expr2tc &ref)
   case expr2t::not_id:
   {
     const not2t &ref2 = to_not2t(ref);
-    return not_exprt(migrate_expr_back(ref2.notvalue));
+    return not_exprt(migrate_expr_back(ref2.value));
   }
   case expr2t::and_id:
   {

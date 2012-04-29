@@ -679,6 +679,7 @@ public:
   member_record_macro(expr2tc_false_value, expr2tc_type_tag, name_false_value);
   member_record_macro(expr2tc_side_1, expr2tc_type_tag, name_side_1);
   member_record_macro(expr2tc_side_2, expr2tc_type_tag, name_side_2);
+  member_record_macro(expr2tc_value, expr2tc_type_tag, name_value);
   #undef member_record_macro
 
   template <class thename>
@@ -1017,20 +1018,17 @@ public:
   lops2t(const lops2t &ref) : expr_body<derived> (ref) {}
 };
 
-/** Not operator. Takes a boolean value; results in a boolean value. */
-class not2t : public lops2t<not2t>
+class not2t : public expr_body2<not2t, expr2t::expr2tc_value>
 {
 public:
-  not2t(const expr2tc notval);
-  not2t(const not2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc notvalue;
+  not2t(const expr2tc &val)
+  : expr_body2<not2t, expr2t::expr2tc_value>
+    (type_pool.get_bool(), not_id, val) {}
+  not2t(const not2t &ref)
+  : expr_body2<not2t, expr2t::expr2tc_value>
+    (ref) {}
 };
+template class expr_body2<not2t, expr2t::expr2tc_value>;
 
 /** Base class for 2-operand boolean oeprators. Always results in a boolean,
  *  takes two operands, both of boolean type. */

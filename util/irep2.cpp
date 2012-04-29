@@ -1097,46 +1097,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-not2t::not2t(const expr2tc val)
-  : lops2t<not2t>(not_id), notvalue(val)
-{
-}
-
-not2t::not2t(const not2t &ref)
-  : lops2t<not2t>(ref)
-{
-}
-
-bool
-not2t::cmp(const expr2t &ref) const
-{
-  const not2t &ref2 = static_cast<const not2t &>(ref);
-  return notvalue == ref2.notvalue;
-}
-
-int
-not2t::lt(const expr2t &ref) const
-{
-  const not2t &ref2 = static_cast<const not2t &>(ref);
-  return notvalue->ltchecked(*ref2.notvalue.get());
-}
-
-list_of_memberst
-not2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"value", &notvalue,
-                                (const char *)"");
-}
-
-void
-not2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  notvalue->do_crc(crc);
-  return;
-}
-
 template <class derived>
 bool
 logical_2ops2t<derived>::cmp(const expr2t &ref) const

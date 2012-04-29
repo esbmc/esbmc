@@ -1081,7 +1081,7 @@ z3_convt::convert_smt_expr(const not2t &notval, void  *&_bv)
 
   Z3_ast z3val;
 
-  convert_bv(notval.notvalue, z3val);
+  convert_bv(notval.value, z3val);
   bv = Z3_mk_not(z3_ctx, z3val);
 }
 
