@@ -10,27 +10,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/static_assert.hpp>
 
-static void
-crc_a_bigint(const BigInt &theint, boost::crc_32_type &crc)
-{
-  unsigned char buffer[256];
-
-  if (theint.dump(buffer, sizeof(buffer))) {
-    // Zero has no data in bigints.
-    if (theint.is_zero())
-      crc.process_byte(0);
-    else
-      crc.process_bytes(buffer, theint.get_len());
-  } else {
-    // bigint is too large to fit in that static buffer. This is insane; but
-    // rather than wasting time heap allocing we'll just skip recording data,
-    // at the price of possible crc collisions.
-    ;
-  }
-
-  return;
-}
-
 template <class T>
 list_of_memberst
 tostring_func(unsigned int indent, const char *name, const T *val, ...)
