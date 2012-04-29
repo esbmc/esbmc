@@ -1105,12 +1105,19 @@ public:
   const expr2tc side_2;
 };
 
-class bitand2t : public binops2t<bitand2t>
+class bitand2t : public expr_body2<bitand2t, expr2t::expr2tc_side_1,
+                                             expr2t::expr2tc_side_2>
 {
 public:
-  bitand2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  bitand2t(const bitand2t &ref);
+  bitand2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<bitand2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type, bitand_id, v1, v2) {}
+  bitand2t(const bitand2t &ref)
+    : expr_body2<bitand2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<bitand2t, expr2t::expr2tc_side_1,
+                                    expr2t::expr2tc_side_2>;
 
 class bitor2t : public binops2t<bitor2t>
 {
