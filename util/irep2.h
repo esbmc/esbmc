@@ -501,8 +501,8 @@ public:
     inline void tostring(list_of_memberst &membs, int indent) const \
     { return membs.push_back(member_entryt("" #name, \
                              type_to_string<fieldtype>(name, indent)));}\
-    inline bool cmp(const fieldtype &theother) const { \
-      return do_type_cmp<fieldtype>(name, theother); }\
+    inline bool cmp(const name_class_##name &theother) const { \
+      return do_type_cmp<fieldtype>(name, theother.name); }\
     fieldtype name; \
   }; \
   template <class fieldtype> \
