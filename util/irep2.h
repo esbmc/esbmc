@@ -419,7 +419,7 @@ inline const bv_type2t & to_bv_type(const type2tc &t)
 inline bv_type2t & to_bv_type(type2tc &t)
   { return dynamic_cast<bv_type2t &> (*t.get()); }
 
-template <class T> std::string type_to_string(const T &theval);
+template <class T> static inline std::string type_to_string(const T &theval);
 
 /** Base class for all expressions */
 class expr2t

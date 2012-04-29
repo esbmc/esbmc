@@ -3118,14 +3118,14 @@ constant_int_hacky::constant_int_hacky(const constant_int_hacky &ref)
 }
 
 template <>
-std::string
+inline std::string
 type_to_string<bool>(const bool &thebool)
 {
   return (thebool) ? "true" : "false";
 }
 
 template <>
-std::string
+inline std::string
 type_to_string<BigInt>(const BigInt &theint)
 {
   char buffer[256], *buf;
