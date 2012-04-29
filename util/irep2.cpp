@@ -1128,63 +1128,6 @@ constant_int2t::as_long(void) const
   return constant_value.to_long();
 }
 
-constant_bool2t::constant_bool2t(bool value)
-  : constant2t<constant_bool2t>(type_pool.get_bool(),
-                                     constant_bool_id),
-                                     constant_value(value)
-{
-}
-
-constant_bool2t::constant_bool2t(const constant_bool2t &ref)
-  : constant2t<constant_bool2t>(ref), constant_value(ref.constant_value)
-{
-}
-
-bool
-constant_bool2t::cmp(const expr2t &ref) const
-{
-  const constant_bool2t &ref2 = static_cast<const constant_bool2t &>(ref);
-  if (constant_value == ref2.constant_value)
-    return true;
-  return false;
-}
-
-int
-constant_bool2t::lt(const expr2t &ref) const
-{
-  const constant_bool2t &ref2 = static_cast<const constant_bool2t &>(ref);
-  if (constant_value < ref2.constant_value)
-    return -1;
-  else if (ref2.constant_value < constant_value)
-    return 1;
-  else
-    return 0;
-}
-
-list_of_memberst
-constant_bool2t::tostring(unsigned int indent) const
-{
-  list_of_memberst membs;
-
-  if (constant_value)
-    membs.push_back(member_entryt("value", "true"));
-  else
-    membs.push_back(member_entryt("value", "false"));
-
-  return membs;
-}
-
-void
-constant_bool2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  if (constant_value)
-    crc.process_byte(0);
-  else
-    crc.process_byte(1);
-  return;
-}
-
 bool
 constant_bool2t::is_true(void) const
 {

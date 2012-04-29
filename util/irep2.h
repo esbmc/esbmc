@@ -663,6 +663,7 @@ public:
                       name_constant_value);
   member_record_macro(is_big_endian_val, bool_type_tag, name_big_endian);
   member_record_macro(fixedbv_value, fixedbv_type_tag, name_value);
+  member_record_macro(constant_bool_value, bool_type_tag, name_constant_value);
   #undef member_record_macro
 
   template <class thename>
@@ -801,23 +802,20 @@ public:
 };
 template class expr_body2<constant_fixedbv2t, expr2t::fixedbv_value>;
 
-class constant_bool2t : public constant2t<constant_bool2t>
+class constant_bool2t : public expr_body2<constant_bool2t,
+                                          expr2t::constant_bool_value>
 {
 public:
-  constant_bool2t(bool value);
-  constant_bool2t(const constant_bool2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
+  constant_bool2t(bool value)
+    : expr_body2<constant_bool2t, expr2t::constant_bool_value>
+                (type_pool.get_bool(), constant_bool_id, value) { }
+  constant_bool2t(const constant_bool2t &ref)
+    : expr_body2<constant_bool2t, expr2t::constant_bool_value>(ref) { }
 
   bool is_true(void) const;
   bool is_false(void) const;
-
-  /** Arbitary precision integer record. */
-  bool constant_value;
 };
+template class expr_body2<constant_bool2t, expr2t::constant_bool_value>;
 
 /** Constant class for string constants. */
 class constant_string2t : public constant2t<constant_string2t>
