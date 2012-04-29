@@ -3233,6 +3233,21 @@ expr_body2<derived, field1, field2, field3, field4>::lt(const expr2t &ref)const
 
   tmp = field1::fieldtype::lt(
                 static_cast<const typename field1::fieldtype &>(ref2));
+  if (tmp != 0)
+    return tmp;
 
-  return true;
+  tmp = field2::fieldtype::lt(
+                static_cast<const typename field2::fieldtype &>(ref2));
+  if (tmp != 0)
+    return tmp;
+
+  tmp = field3::fieldtype::lt(
+                static_cast<const typename field3::fieldtype &>(ref2));
+  if (tmp != 0)
+    return tmp;
+
+  tmp = field4::fieldtype::lt(
+                static_cast<const typename field4::fieldtype &>(ref2));
+
+  return tmp;
 }
