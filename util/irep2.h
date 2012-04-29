@@ -1193,19 +1193,15 @@ public:
   arith2t(const arith2t &ref) : expr_body<derived>(ref) { }
 };
 
-class neg2t : public arith2t<neg2t>
+class neg2t : public expr_body2<neg2t,expr2t::expr2tc_value>
 {
 public:
-  neg2t(const type2tc type, const expr2tc value);
-  neg2t(const neg2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc value;
+  neg2t(const type2tc &type, const expr2tc &val)
+    : expr_body2<neg2t, expr2t::expr2tc_value> (type, neg_id, val) {}
+  neg2t(const neg2t &ref)
+    : expr_body2<neg2t, expr2t::expr2tc_value> (ref) {}
 };
+template class expr_body2<neg2t, expr2t::expr2tc_value>;
 
 class abs2t : public arith2t<abs2t>
 {

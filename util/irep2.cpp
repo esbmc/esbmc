@@ -1097,45 +1097,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-neg2t::neg2t(const type2tc type, const expr2tc _value)
-  : arith2t<neg2t>(type, neg_id), value(_value)
-{
-}
-
-neg2t::neg2t(const neg2t &ref)
-  : arith2t<neg2t>(ref)
-{
-}
-
-bool
-neg2t::cmp(const expr2t &ref) const
-{
-  const neg2t &ref2 = static_cast<const neg2t &>(ref);
-  return value == ref2.value;
-}
-
-int
-neg2t::lt(const expr2t &ref) const
-{
-  const neg2t &ref2 = static_cast<const neg2t &>(ref);
-  return value->ltchecked(*ref2.value.get());
-}
-
-list_of_memberst
-neg2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"value", &value,
-                                (const char *)"");
-}
-
-void
-neg2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  value->do_crc(crc);
-}
-
 abs2t::abs2t(const type2tc type, const expr2tc _value)
   : arith2t<abs2t>(type, abs_id), value(_value)
 {
