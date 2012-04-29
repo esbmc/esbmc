@@ -587,6 +587,7 @@ public:
   field_type_macro(bool_type_tag, bool);
   field_type_macro(bigint_type_tag, BigInt);
   field_type_macro(expr2tc_type_tag, expr2tc);
+  field_type_macro(fixedbv_type_tag, fixedbvt);
   #undef field_type_macro
 
   #define member_record_macro(thename, thetype, fieldname) \
@@ -600,6 +601,7 @@ public:
   member_record_macro(constant_bigint_value, bigint_type_tag,
                       name_constant_value);
   member_record_macro(is_big_endian_val, bool_type_tag, name_big_endian);
+  member_record_macro(fixedbv_value, fixedbv_type_tag, name_value);
   #undef member_record_macro
 
   template <class thename>
@@ -725,18 +727,15 @@ public:
 /** Constant fixedbv class. Records a floating point number in what I assume
  *  to be mantissa/exponent form, but which is described throughout CBMC code
  *  as fraction/integer parts. */
-class constant_fixedbv2t : public constant2t<constant_fixedbv2t>
+class constant_fixedbv2t : public expr_body2<constant_fixedbv2t,
+                                             expr2t::fixedbv_value>
 {
 public:
-  constant_fixedbv2t(type2tc type, const fixedbvt &value);
-  constant_fixedbv2t(const constant_fixedbv2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const fixedbvt value;
+  constant_fixedbv2t(type2tc type, const fixedbvt &value)
+    : expr_body2<constant_fixedbv2t, expr2t::fixedbv_value>
+                (type, constant_fixedbv_id, value) { }
+  constant_fixedbv2t(const constant_fixedbv2t &ref)
+    : expr_body2<constant_fixedbv2t, expr2t::fixedbv_value> (ref) { }
 };
 
 class constant_bool2t : public constant2t<constant_bool2t>
