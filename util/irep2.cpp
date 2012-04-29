@@ -1192,52 +1192,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-constant_array_of2t::constant_array_of2t(const type2tc type, expr2tc init)
-  : constant2t<constant_array_of2t>(type, constant_array_id),
-    initializer(init)
-{
-}
-
-constant_array_of2t::constant_array_of2t(const constant_array_of2t &ref)
-  : constant2t<constant_array_of2t>(ref),
-    initializer(ref.initializer)
-{
-}
-
-bool
-constant_array_of2t::cmp(const expr2t &ref) const
-{
-  const constant_array_of2t &ref2 = static_cast<const constant_array_of2t &>
-                                               (ref);
-  if (initializer == ref2.initializer)
-    return true;
-  return false;
-}
-
-int
-constant_array_of2t::lt(const expr2t &ref) const
-{
-  const constant_array_of2t &ref2 = static_cast<const constant_array_of2t &>
-                                               (ref);
-  return initializer->ltchecked(*ref2.initializer.get());
-}
-
-list_of_memberst
-constant_array_of2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"initializer", &initializer,
-                                (const char *)"");
-}
-
-void
-constant_array_of2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  initializer->do_crc(crc);
-  return;
-}
-
 if2t::if2t(const type2tc type, const expr2tc _cond, const expr2tc true_val,
            const expr2tc false_val)
   : expr_body<if2t>(type, if_id), cond(_cond), true_value(true_val),

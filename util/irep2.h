@@ -603,6 +603,7 @@ public:
   field_name_macro(index);
   field_name_macro(string);
   field_name_macro(bits);
+  field_name_macro(initializer);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -669,6 +670,7 @@ public:
   member_record_macro(string_value, string_type_tag, name_value);
   member_record_macro(expr2tc_vec_datatype_members, expr2tc_vec_type_tag,
                       name_datatype_members);
+  member_record_macro(expr2tc_initializer, expr2tc_type_tag, name_initializer);
   #undef member_record_macro
 
   template <class thename>
@@ -874,20 +876,17 @@ public:
 };
 template class expr_body2<constant_array2t, expr2t::expr2tc_vec_datatype_members>;
 
-class constant_array_of2t : public constant2t<constant_array_of2t>
+class constant_array_of2t : public expr_body2<constant_array_of2t,
+                                              expr2t::expr2tc_initializer>
 {
 public:
-  constant_array_of2t(const type2tc type, const expr2tc initializer);
-  constant_array_of2t(const constant_array_of2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  // Type records the size of the array; this records the initializer.
-  const expr2tc initializer;
+  constant_array_of2t(const type2tc type, const expr2tc init)
+    : expr_body2<constant_array_of2t, expr2t::expr2tc_initializer>
+      (type, constant_array_of_id, init) { }
+  constant_array_of2t(const constant_array_of2t &ref)
+    : expr_body2<constant_array_of2t, expr2t::expr2tc_initializer>(ref){}
 };
+template class expr_body2<constant_array_of2t, expr2t::expr2tc_initializer>;
 
 class symbol2t : public expr_body<symbol2t>
 {
