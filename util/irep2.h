@@ -872,6 +872,7 @@ public:
   constant_struct2t(const constant_struct2t &ref)
     : expr_body2<constant_struct2t, expr2t::expr2tc_vec_datatype_members>(ref){}
 };
+template class expr_body2<constant_struct2t, expr2t::expr2tc_vec_datatype_members>;
 
 class constant_union2t : public constant_datatype2t<constant_union2t>
 {
