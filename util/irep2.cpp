@@ -1097,56 +1097,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-template <class derived>
-bool
-arith_2op2t<derived>::cmp(const expr2t &ref) const
-{
-  const arith_2op2t<derived> &ref2 =
-    static_cast<const arith_2op2t<derived> &>(ref);
-
-  if (part_1 != ref2.part_1)
-    return false;
-
-  if (part_2 != ref2.part_2)
-    return false;
-
-  return true;
-}
-
-template <class derived>
-int
-arith_2op2t<derived>::lt(const expr2t &ref) const
-{
-  const arith_2op2t<derived> &ref2 =
-    static_cast<const arith_2op2t<derived> &>(ref);
-
-  int tmp = part_1->ltchecked(*ref2.part_1.get());
-  if (tmp != 0)
-    return tmp;
-
-  return part_2->ltchecked(*ref2.part_2.get());
-}
-
-template <class derived>
-list_of_memberst
-arith_2op2t<derived>::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"operand0", &part_1,
-                                (const char *)"operand0", &part_2,
-                                (const char *)"");
-}
-
-template <class derived>
-void
-arith_2op2t<derived>::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  part_1->do_crc(crc);
-  part_2->do_crc(crc);
-  return;
-}
-
 pointer_offset2t::pointer_offset2t(const type2tc type, const expr2tc val)
   : arith2t<pointer_offset2t>(type, pointer_offset_id), pointer_obj(val)
 {

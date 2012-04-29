@@ -1213,26 +1213,6 @@ public:
 };
 template class expr_body2<abs2t, expr2t::expr2tc_value>;
 
-/** Base two-operand arithmatic class. */
-template <class derived>
-class arith_2op2t : public arith2t<derived>
-{
-public:
-  arith_2op2t(const type2tc type, expr2t::expr_ids id,
-              const expr2tc val1, const expr2tc val2)
-    : arith2t<derived>(type, id), part_1(val1), part_2(val2) { }
-  arith_2op2t(const arith_2op2t &ref)
-    : arith2t<derived>(ref), part_1(ref.part_1), part_2(ref.part_2) { }
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc part_1;
-  const expr2tc part_2;
-};
-
 class add2t : public expr_body2<add2t, expr2t::expr2tc_side_1,
                                        expr2t::expr2tc_side_2>
 {
