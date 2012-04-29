@@ -1113,16 +1113,6 @@ symbol2t::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-constant_int2t::constant_int2t(type2tc type, const BigInt &input)
-  : constant2t<constant_int2t>(type, constant_int_id), constant_value(input)
-{
-}
-
-constant_int2t::constant_int2t(const constant_int2t &ref)
-  : constant2t<constant_int2t>(ref), constant_value(ref.constant_value)
-{
-}
-
 unsigned long
 constant_int2t::as_ulong(void) const
 {
@@ -1136,42 +1126,6 @@ constant_int2t::as_long(void) const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
   return constant_value.to_long();
-}
-
-bool
-constant_int2t::cmp(const expr2t &ref) const
-{
-  const constant_int2t &ref2 = static_cast<const constant_int2t &>(ref);
-  if (constant_value == ref2.constant_value)
-    return true;
-  return false;
-}
-
-int
-constant_int2t::lt(const expr2t &ref) const
-{
-  const constant_int2t &ref2 = static_cast<const constant_int2t &>(ref);
-  return constant_value.compare(ref2.constant_value);
-}
-
-list_of_memberst
-constant_int2t::tostring(unsigned int indent) const
-{
-  list_of_memberst membs;
-  char buffer[256], *buf;
-
-  buf = constant_value.as_string(buffer, 256);
-  membs.push_back(member_entryt("value", std::string(buf)));
-  return membs;
-}
-
-void
-constant_int2t::do_crc(boost::crc_32_type &crc) const
-{
-
-  expr2t::do_crc(crc);
-  crc_a_bigint(constant_value, crc);
-  return;
 }
 
 constant_fixedbv2t::constant_fixedbv2t(type2tc type, const fixedbvt &val)

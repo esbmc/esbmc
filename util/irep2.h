@@ -707,22 +707,19 @@ public:
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
-class constant_int2t : public constant2t<constant_int2t>
+class constant_int2t : public expr_body2<constant_int2t,
+                                         expr2t::constant_bigint_value>
 {
 public:
-  constant_int2t(type2tc type, const BigInt &input);
-  constant_int2t(const constant_int2t &ref);
+  constant_int2t(type2tc type, const BigInt &input)
+    : expr_body2<constant_int2t, expr2t::constant_bigint_value>
+               (type, constant_int_id, input) { }
+  constant_int2t(const constant_int2t &ref)
+    : expr_body2<constant_int2t, constant_bigint_value> (ref) { }
 
   /** Accessor for fetching native int of this constant */
   unsigned long as_ulong(void) const;
   long as_long(void) const;
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  /** Arbitary precision integer record. */
-  BigInt constant_value;
 };
 
 /** Constant fixedbv class. Records a floating point number in what I assume
