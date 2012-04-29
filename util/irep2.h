@@ -650,6 +650,7 @@ public:
   field_type_macro(expr2tc_type_tag, expr2tc);
   field_type_macro(fixedbv_type_tag, fixedbvt);
   field_type_macro(string_type_tag, std::string);
+  field_type_macro(expr2tc_vec_type_tag, std::vector<expr2tc>);
   #undef field_type_macro
 
   #define member_record_macro(thename, thetype, fieldname) \
@@ -666,6 +667,8 @@ public:
   member_record_macro(fixedbv_value, fixedbv_type_tag, name_value);
   member_record_macro(constant_bool_value, bool_type_tag, name_constant_value);
   member_record_macro(string_value, string_type_tag, name_value);
+  member_record_macro(expr2tc_vec_datatype_members, expr2tc_vec_type_tag,
+                      name_datatype_members);
   #undef member_record_macro
 
   template <class thename>
@@ -859,11 +862,15 @@ public:
   const std::vector<expr2tc> datatype_members;
 };
 
-class constant_struct2t : public constant_datatype2t<constant_struct2t>
+class constant_struct2t : public expr_body2<constant_struct2t,
+                                           expr2t::expr2tc_vec_datatype_members>
 {
 public:
-  constant_struct2t(const type2tc type, const std::vector<expr2tc> &members);
-  constant_struct2t(const constant_struct2t &ref);
+  constant_struct2t(const type2tc type, const std::vector<expr2tc> &members)
+    : expr_body2<constant_struct2t, expr2t::expr2tc_vec_datatype_members>
+      (type, constant_struct_id, members) { }
+  constant_struct2t(const constant_struct2t &ref)
+    : expr_body2<constant_struct2t, expr2t::expr2tc_vec_datatype_members>(ref){}
 };
 
 class constant_union2t : public constant_datatype2t<constant_union2t>
