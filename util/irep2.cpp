@@ -1145,16 +1145,6 @@ logical_2ops2t<derived>::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-xor2t::xor2t(const expr2tc val1, const expr2tc val2)
-  : logical_2ops2t<xor2t>(xor_id, val1, val2)
-{
-}
-
-xor2t::xor2t(const xor2t &ref)
-  : logical_2ops2t<xor2t>(ref)
-{
-}
-
 implies2t::implies2t(const expr2tc val1, const expr2tc val2)
   : logical_2ops2t<implies2t>(or_id, val1, val2)
 {

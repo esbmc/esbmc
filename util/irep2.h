@@ -1078,12 +1078,18 @@ public:
 };
 template class expr_body2<or2t, expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>;
 
-class xor2t : public logical_2ops2t<xor2t>
+class xor2t : public expr_body2<xor2t, expr2t::expr2tc_side_1,
+                                       expr2t::expr2tc_side_2>
 {
 public:
-  xor2t(const expr2tc val1, const expr2tc val2);
-  xor2t(const xor2t &ref);
+  xor2t(const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<xor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type_pool.get_bool(), xor_id, v1, v2) {}
+  xor2t(const xor2t &ref)
+    : expr_body2<xor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<xor2t, expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>;
 
 class implies2t : public logical_2ops2t<implies2t>
 {
