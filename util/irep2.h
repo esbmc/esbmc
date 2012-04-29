@@ -419,6 +419,8 @@ inline const bv_type2t & to_bv_type(const type2tc &t)
 inline bv_type2t & to_bv_type(type2tc &t)
   { return dynamic_cast<bv_type2t &> (*t.get()); }
 
+template <class T> std::string type_to_string(const T &theval);
+
 /** Base class for all expressions */
 class expr2t
 {
@@ -486,8 +488,6 @@ public:
   // Template metaprogramming (vomit) -- define tag classes to instanciate
   // different class fields with different names and different types.
 
-  template <class T> std::string type_to_string(const T &theval);
-
   #define field_name_macro(name) \
   template <class fieldtype> \
   struct name_class_##name { \
@@ -495,7 +495,7 @@ public:
     name_class_##name(fieldtype &someval) : name(someval) {} \
     name_class_##name(const name_class_##name &ref) : name(ref.name) {} \
     member_entryt tostring(void) const { \
-      return member_entryt("" #name, expr2t::type_to_string<fieldtype>(name));}\
+      return member_entryt("" #name, type_to_string<fieldtype>(name));}\
     fieldtype name; \
   }; \
   template <class fieldtype> \
