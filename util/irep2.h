@@ -666,7 +666,6 @@ public:
   member_record_macro(constant_int_value, int_type_tag, name_constant_value);
   member_record_macro(constant_bigint_value, bigint_type_tag,
                       name_constant_value);
-  member_record_macro(is_big_endian_val, bool_type_tag, name_big_endian);
   member_record_macro(fixedbv_value, fixedbv_type_tag, name_value);
   member_record_macro(constant_bool_value, bool_type_tag, name_constant_value);
   member_record_macro(string_value, string_type_tag, name_value);
@@ -682,6 +681,11 @@ public:
   member_record_macro(expr2tc_side_2, expr2tc_type_tag, name_side_2);
   member_record_macro(expr2tc_value, expr2tc_type_tag, name_value);
   member_record_macro(expr2tc_ptr_obj, expr2tc_type_tag, name_ptr_obj);
+  member_record_macro(bool_big_endian, bool_type_tag, name_big_endian);
+  member_record_macro(expr2tc_source_value, expr2tc_type_tag,
+                      name_source_value);
+  member_record_macro(expr2tc_source_offset, expr2tc_type_tag,
+                      name_source_offset);
   #undef member_record_macro
 
   template <class thename>
@@ -1365,26 +1369,25 @@ public:
     : expr_body<derived> (ref) {}
 };
 
-/** Data extraction from some expression. Type is whatever type we're expecting
- *  to pull out of it. source_value is whatever piece of data we're operating
- *  upon. source_offset is the _byte_ offset into source_value to extract data
- *  from. */
-class byte_extract2t : public byte_ops2t<byte_extract2t>
+
+class byte_extract2t : public expr_body2<byte_extract2t,
+                                           expr2t::bool_big_endian,
+                                           expr2t::expr2tc_source_value,
+                                           expr2t::expr2tc_source_offset>
 {
 public:
-  byte_extract2t(const type2tc type, bool big_endian,
-                 const expr2tc source, const expr2tc offs);
-  byte_extract2t(const byte_extract2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  bool big_endian;
-  const expr2tc source_value;
-  const expr2tc source_offset;
+  byte_extract2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
+                 const expr2tc &offset)
+    : expr_body2<byte_extract2t, expr2t::bool_big_endian,
+                 expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset>
+      (type, byte_extract_id, is_big_endian, source, offset) {}
+  byte_extract2t(const byte_extract2t &ref)
+    : expr_body2<byte_extract2t, expr2t::bool_big_endian,
+                 expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset>
+      (ref) {}
 };
+template class expr_body2<byte_extract2t, expr2t::bool_big_endian,
+                  expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset>;
 
 /** Data insertion. Type is the type of the resulting expression. source_value
  *  is the piece of data to insert data into. source_offset is the byte offset
