@@ -1145,16 +1145,6 @@ rel2t<derived>::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-notequal2t::notequal2t(const expr2tc val1, const expr2tc val2)
-  : rel2t<notequal2t>(notequal_id, val1, val2)
-{
-}
-
-notequal2t::notequal2t(const notequal2t &ref)
-  : rel2t<notequal2t>(ref)
-{
-}
-
 lessthan2t::lessthan2t(const expr2tc val1, const expr2tc val2)
   : rel2t<lessthan2t>(lessthan_id, val1, val2)
 {
