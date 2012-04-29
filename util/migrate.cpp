@@ -1216,7 +1216,7 @@ migrate_expr_back(const expr2tc &ref)
     const pointer_offset2t &ref2 = to_pointer_offset2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt pointer_offsetval("pointer_offset", thetype);
-    pointer_offsetval.copy_to_operands(migrate_expr_back(ref2.pointer_obj));
+    pointer_offsetval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
     return pointer_offsetval;
   }
   case expr2t::pointer_object_id:

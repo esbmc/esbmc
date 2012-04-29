@@ -681,6 +681,7 @@ public:
   member_record_macro(expr2tc_side_1, expr2tc_type_tag, name_side_1);
   member_record_macro(expr2tc_side_2, expr2tc_type_tag, name_side_2);
   member_record_macro(expr2tc_value, expr2tc_type_tag, name_value);
+  member_record_macro(expr2tc_ptr_obj, expr2tc_type_tag, name_ptr_obj);
   #undef member_record_macro
 
   template <class thename>
@@ -1325,21 +1326,18 @@ public:
 template class expr_body2<same_object2t, expr2t::expr2tc_side_1,
                                          expr2t::expr2tc_side_2>;
 
-/** Pointer offset. Extract pointer offset from a pointer value. Subclass of
- *  arithmatic because it returns an integer. */
-class pointer_offset2t : public arith2t<pointer_offset2t>
+
+class pointer_offset2t : public expr_body2<pointer_offset2t,
+                                           expr2t::expr2tc_ptr_obj>
 {
 public:
-  pointer_offset2t(const type2tc type, const expr2tc pointer);
-  pointer_offset2t(const pointer_offset2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc pointer_obj;
+  pointer_offset2t(const type2tc &type, const expr2tc &ptrobj)
+    : expr_body2<pointer_offset2t, expr2t::expr2tc_ptr_obj>
+      (type, pointer_offset_id, ptrobj) {}
+  pointer_offset2t(const pointer_offset2t &ref)
+    : expr_body2<pointer_offset2t, expr2t::expr2tc_ptr_obj> (ref) {}
 };
+template class expr_body2<pointer_offset2t, expr2t::expr2tc_ptr_obj>;
 
 /** Pointer object. Extract pointer object from a pointer value. Subclass of
  *  arithmatic because it returns an integer. */
