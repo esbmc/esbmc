@@ -422,6 +422,9 @@ inline bv_type2t & to_bv_type(type2tc &t)
 template <class T>
 static inline std::string type_to_string(const T &theval, int indent);
 
+template <class T>
+static inline bool do_type_cmp(const T &side1, const T &side2);
+
 /** Base class for all expressions */
 class expr2t
 {
@@ -498,6 +501,8 @@ public:
     inline void tostring(list_of_memberst &membs, int indent) const \
     { return membs.push_back(member_entryt("" #name, \
                              type_to_string<fieldtype>(name, indent)));}\
+    inline bool cmp(const fieldtype &theother) const { \
+      return do_type_cmp<fieldtype>(name, theother); }\
     fieldtype name; \
   }; \
   template <class fieldtype> \
