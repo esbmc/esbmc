@@ -3251,3 +3251,16 @@ expr_body2<derived, field1, field2, field3, field4>::lt(const expr2t &ref)const
 
   return tmp;
 }
+
+template <class derived, class field1, class field2, class field3, class field4>
+void
+expr_body2<derived, field1, field2, field3, field4>::do_crc
+          (boost::crc_32_type &crc) const
+{
+
+  field1::fieldtype::do_crc(crc);
+  field2::fieldtype::do_crc(crc);
+  field3::fieldtype::do_crc(crc);
+  field4::fieldtype::do_crc(crc);
+  return;
+}

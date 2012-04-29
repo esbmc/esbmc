@@ -428,6 +428,9 @@ static inline bool do_type_cmp(const T &side1, const T &side2);
 template <class T>
 static inline int do_type_lt(const T &side1, const T &side2);
 
+template <class T>
+static inline void do_type_crc(boost::crc_32_type &crc);
+
 /** Base class for all expressions */
 class expr2t
 {
@@ -508,6 +511,8 @@ public:
       return do_type_cmp<fieldtype>(name, theother.name); }\
     inline int lt(const name_class_##name &theother) const { \
       return do_type_lt<fieldtype>(name, theother.name); }\
+    inline void do_crc(boost::crc_32_type &crc) const { \
+      do_type_crc<fieldtype>(crc); return; }\
     fieldtype name; \
   }; \
   template <class fieldtype> \
@@ -557,6 +562,8 @@ public:
     const { return true; }\
     inline int lt(const name_class_empty_##num &ref __attribute__((unused)))\
     const { return 0; }\
+    inline void do_crc(boost::crc_32_type &crc __attribute__((unused))) const \
+    { return; }\
   }; \
   class name_empty_##num { \
   public: \
@@ -685,6 +692,7 @@ public:
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
+  virtual void do_crc(boost::crc_32_type &crc) const;
 };
 
 
