@@ -2935,6 +2935,14 @@ type_to_string<fixedbvt>(const fixedbvt &theval,
 }
 
 template <>
+inline std::string
+type_to_string<std::string>(const std::string &theval,
+                         int indent __attribute__((unused)))
+{
+  return theval;
+}
+
+template <>
 inline bool
 do_type_cmp<bool>(const bool &side1, const bool &side2)
 {
@@ -2952,6 +2960,13 @@ do_type_cmp<BigInt>(const BigInt &side1, const BigInt &side2)
 template <>
 inline bool
 do_type_cmp<fixedbvt>(const fixedbvt &side1, const fixedbvt &side2)
+{
+  return (side1 == side2) ? true : false;
+}
+
+template <>
+inline bool
+do_type_cmp<std::string>(const std::string &side1, const std::string &side2)
 {
   return (side1 == side2) ? true : false;
 }
@@ -2983,6 +2998,17 @@ do_type_lt<fixedbvt>(const fixedbvt &side1, const fixedbvt &side2)
   if (side1 < side2)
     return -1;
   else if (side1 > side2)
+    return 1;
+  return 0;
+}
+
+template <>
+inline int
+do_type_lt<std::string>(const std::string &side1, const std::string &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
     return 1;
   return 0;
 }
@@ -3027,6 +3053,13 @@ do_type_crc<fixedbvt>(const fixedbvt &theval, boost::crc_32_type &crc)
 
   do_type_crc<BigInt>(theval.to_integer(), crc);
   return;
+}
+
+template <>
+inline void
+do_type_crc<std::string>(const std::string &theval, boost::crc_32_type &crc)
+{
+  crc.process_bytes(theval.c_str(), theval.size());
 }
 
 template <class derived, class field1, class field2, class field3, class field4>
