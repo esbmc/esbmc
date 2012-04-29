@@ -1183,17 +1183,6 @@ public:
 template class expr_body2<lshr2t, expr2t::expr2tc_side_1,
                                   expr2t::expr2tc_side_2>;
 
-/** Arithmatic base class. For all operations that are essentially integer
- *  arithmatic. */
-template <class derived>
-class arith2t : public expr_body<derived>
-{
-public:
-  arith2t(const type2tc type, expr2t::expr_ids id)
-    : expr_body<derived>(type, id) { }
-  arith2t(const arith2t &ref) : expr_body<derived>(ref) { }
-};
-
 class neg2t : public expr_body2<neg2t,expr2t::expr2tc_value>
 {
 public:
