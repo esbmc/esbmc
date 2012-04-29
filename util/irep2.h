@@ -673,6 +673,7 @@ public:
                       name_datatype_members);
   member_record_macro(expr2tc_initializer, expr2tc_type_tag, name_initializer);
   member_record_macro(irepidt_name, irepidt_type_tag, name_name);
+  member_record_macro(expr2tc_from, expr2tc_type_tag, name_from);
   #undef member_record_macro
 
   template <class thename>
@@ -890,20 +891,15 @@ public:
 };
 template class expr_body2<symbol2t, expr2t::irepidt_name>;
 
-class typecast2t : public expr_body<typecast2t>
+class typecast2t : public expr_body2<typecast2t, expr2t::expr2tc_from>
 {
 public:
-  typecast2t(const type2tc type, const expr2tc expr);
-  typecast2t(const typecast2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  // Expression to typecast from.
-  const expr2tc from;
+  typecast2t(const type2tc type, const expr2tc &from)
+    : expr_body2<typecast2t, expr2t::expr2tc_from> (type, typecast_id, from) { }
+  typecast2t(const typecast2t &ref)
+    : expr_body2<typecast2t, expr2t::expr2tc_from>(ref){}
 };
+template class expr_body2<typecast2t, expr2t::expr2tc_from>;
 
 class if2t : public expr_body<if2t>
 {

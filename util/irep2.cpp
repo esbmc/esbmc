@@ -1070,52 +1070,6 @@ constant_bool2t::is_false(void) const
   return !constant_value;
 }
 
-typecast2t::typecast2t(const type2tc type, const expr2tc expr)
-  : expr_body<typecast2t>(type, typecast_id), from(expr)
-{
-}
-
-typecast2t::typecast2t(const typecast2t &ref)
-  : expr_body<typecast2t>::expr_body(ref), from(ref.from)
-{
-}
-
-bool
-typecast2t::cmp(const expr2t &ref) const
-{
-  const typecast2t &ref2 = static_cast<const typecast2t &>(ref);
-  if (from == ref2.from)
-    return true;
-  return false;
-}
-
-int
-typecast2t::lt(const expr2t &ref) const
-{
-  const typecast2t &ref2 = static_cast<const typecast2t &>(ref);
-  if (from < ref2.from)
-    return -1;
-  else if (ref2.from < from)
-    return 1;
-  else
-    return 0;
-}
-
-list_of_memberst
-typecast2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent, (const char *)"from", &from,
-                                (const char *)"");
-}
-
-void
-typecast2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  from->do_crc(crc);
-  return;
-}
-
 expr2tc
 constant_string2t::to_array(void) const
 {
