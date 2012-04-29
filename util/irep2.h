@@ -993,12 +993,18 @@ public:
 };
 template class expr_body2<lessthan2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
 
-class greaterthan2t : public rel2t<greaterthan2t>
+class greaterthan2t : public expr_body2<greaterthan2t, expr2t::expr2tc_side_1,
+                                     expr2t::expr2tc_side_2>
 {
 public:
-  greaterthan2t(const expr2tc val1, const expr2tc val2);
-  greaterthan2t(const greaterthan2t &ref);
+  greaterthan2t(const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<greaterthan2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type_pool.get_bool(), greaterthan_id, v1, v2) {}
+  greaterthan2t(const greaterthan2t &ref)
+    : expr_body2<greaterthan2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<greaterthan2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
 
 class lessthanequal2t : public rel2t<lessthanequal2t>
 {

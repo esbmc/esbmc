@@ -1145,16 +1145,6 @@ rel2t<derived>::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-greaterthan2t::greaterthan2t(const expr2tc val1, const expr2tc val2)
-  : rel2t<greaterthan2t>(greaterthan_id, val1, val2)
-{
-}
-
-greaterthan2t::greaterthan2t(const greaterthan2t &ref)
-  : rel2t<greaterthan2t>(ref)
-{
-}
-
 lessthanequal2t::lessthanequal2t(const expr2tc val1, const expr2tc val2)
   : rel2t<lessthanequal2t>(lessthanequal_id, val1, val2)
 {
