@@ -686,6 +686,8 @@ public:
                       name_source_value);
   member_record_macro(expr2tc_source_offset, expr2tc_type_tag,
                       name_source_offset);
+  member_record_macro(expr2tc_update_value, expr2tc_type_tag,
+                      name_update_value);
   #undef member_record_macro
 
   template <class thename>
@@ -1389,28 +1391,28 @@ public:
 template class expr_body2<byte_extract2t, expr2t::bool_big_endian,
                   expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset>;
 
-/** Data insertion. Type is the type of the resulting expression. source_value
- *  is the piece of data to insert data into. source_offset is the byte offset
- *  of where to put it. udpate_value is the piece of data to shoehorn into
- *  source_value. */
-class byte_update2t : public byte_ops2t<byte_update2t>
+class byte_update2t : public expr_body2<byte_update2t,
+                                           expr2t::bool_big_endian,
+                                           expr2t::expr2tc_source_value,
+                                           expr2t::expr2tc_source_offset,
+                                           expr2t::expr2tc_update_value>
 {
 public:
-  byte_update2t(const type2tc type, bool big_endian,
-                const expr2tc source, const expr2tc offs,
-                const expr2tc update_val);
-  byte_update2t(const byte_update2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  bool big_endian;
-  const expr2tc source_value;
-  const expr2tc source_offset;
-  const expr2tc update_value;
+  byte_update2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
+                 const expr2tc &offset, const expr2tc &updateval)
+    : expr_body2<byte_update2t, expr2t::bool_big_endian,
+                 expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset,
+                 expr2t::expr2tc_update_value>
+      (type, byte_update_id, is_big_endian, source, offset, updateval) {}
+  byte_update2t(const byte_update2t &ref)
+    : expr_body2<byte_update2t, expr2t::bool_big_endian,
+                 expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset,
+                 expr2t::expr2tc_update_value>
+      (ref) {}
 };
+template class expr_body2<byte_update2t, expr2t::bool_big_endian,
+                  expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset,
+                  expr2t::expr2tc_update_value>;
 
 /** Base type of datatype operations. */
 template <class derived>
