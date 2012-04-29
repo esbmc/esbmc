@@ -677,6 +677,8 @@ public:
   member_record_macro(expr2tc_cond, expr2tc_type_tag, name_cond);
   member_record_macro(expr2tc_true_value, expr2tc_type_tag, name_true_value);
   member_record_macro(expr2tc_false_value, expr2tc_type_tag, name_false_value);
+  member_record_macro(expr2tc_side_1, expr2tc_type_tag, name_side_1);
+  member_record_macro(expr2tc_side_2, expr2tc_type_tag, name_side_2);
   #undef member_record_macro
 
   template <class thename>
@@ -951,12 +953,19 @@ public:
   const expr2tc side_2;
 };
 
-class equality2t : public rel2t<equality2t>
+
+class equality2t : public expr_body2<equality2t, expr2t::expr2tc_side_1,
+                                     expr2t::expr2tc_side_2>
 {
 public:
-  equality2t(const expr2tc val1, const expr2tc val2);
-  equality2t(const equality2t &ref);
+  equality2t(const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<equality2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type_pool.get_bool(), equality_id, v1, v2) {}
+  equality2t(const equality2t &ref)
+    : expr_body2<equality2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<equality2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
 
 class notequal2t : public rel2t<notequal2t>
 {

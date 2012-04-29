@@ -1145,16 +1145,6 @@ rel2t<derived>::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-equality2t::equality2t(const expr2tc val1, const expr2tc val2)
-  : rel2t<equality2t>(equality_id, val1, val2)
-{
-}
-
-equality2t::equality2t(const equality2t &ref)
-  : rel2t<equality2t>(ref)
-{
-}
-
 notequal2t::notequal2t(const expr2tc val1, const expr2tc val2)
   : rel2t<notequal2t>(notequal_id, val1, val2)
 {
