@@ -2927,6 +2927,14 @@ type_to_string<BigInt>(const BigInt &theint, int indent __attribute__((unused)))
 }
 
 template <>
+inline std::string
+type_to_string<fixedbvt>(const fixedbvt &theval,
+                         int indent __attribute__((unused)))
+{
+  return theval.to_ansi_c_string();
+}
+
+template <>
 inline bool
 do_type_cmp<bool>(const bool &side1, const bool &side2)
 {
@@ -2946,14 +2954,6 @@ inline bool
 do_type_cmp<fixedbvt>(const fixedbvt &side1, const fixedbvt &side2)
 {
   return (side1 == side2) ? true : false;
-}
-
-template <>
-inline std::string
-type_to_string<fixedbvt>(const fixedbvt &theval,
-                         int indent __attribute__((unused)))
-{
-  return theval.to_ansi_c_string();
 }
 
 template <>
