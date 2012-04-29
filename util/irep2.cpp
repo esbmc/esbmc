@@ -1145,16 +1145,6 @@ binops2t<derived>::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-bitnxor2t::bitnxor2t(const type2tc type, const expr2tc val1, const expr2tc val2)
-  : binops2t<bitnxor2t>(type, bitnxor_id, val1, val2)
-{
-}
-
-bitnxor2t::bitnxor2t(const bitnxor2t &ref)
-  : binops2t<bitnxor2t>(ref)
-{
-}
-
 lshr2t::lshr2t(const type2tc type, const expr2tc val1, const expr2tc val2)
   : binops2t<lshr2t>(type, lshr_id, val1, val2)
 {

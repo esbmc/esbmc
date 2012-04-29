@@ -1175,12 +1175,19 @@ public:
 template class expr_body2<bitnor2t, expr2t::expr2tc_side_1,
                                     expr2t::expr2tc_side_2>;
 
-class bitnxor2t : public binops2t<bitnxor2t>
+class bitnxor2t : public expr_body2<bitnxor2t, expr2t::expr2tc_side_1,
+                                               expr2t::expr2tc_side_2>
 {
 public:
-  bitnxor2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  bitnxor2t(const bitnxor2t &ref);
+  bitnxor2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<bitnxor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type, bitnxor_id, v1, v2) {}
+  bitnxor2t(const bitnxor2t &ref)
+    : expr_body2<bitnxor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<bitnxor2t, expr2t::expr2tc_side_1,
+                                     expr2t::expr2tc_side_2>;
 
 class lshr2t : public binops2t<lshr2t>
 {
