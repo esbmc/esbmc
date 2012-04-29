@@ -429,7 +429,7 @@ template <class T>
 static inline int do_type_lt(const T &side1, const T &side2);
 
 template <class T>
-static inline void do_type_crc(boost::crc_32_type &crc);
+static inline void do_type_crc(const T &theval, boost::crc_32_type &crc);
 
 /** Base class for all expressions */
 class expr2t
@@ -512,7 +512,7 @@ public:
     inline int lt(const name_class_##name &theother) const { \
       return do_type_lt<fieldtype>(name, theother.name); }\
     inline void do_crc(boost::crc_32_type &crc) const { \
-      do_type_crc<fieldtype>(crc); return; }\
+      do_type_crc<fieldtype>(name, crc); return; }\
     fieldtype name; \
   }; \
   template <class fieldtype> \

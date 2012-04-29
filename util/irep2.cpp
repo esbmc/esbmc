@@ -3169,6 +3169,39 @@ do_type_lt<BigInt>(const BigInt &side1, const BigInt &side2)
   return side1.compare(side2);
 }
 
+template <>
+inline void
+do_type_crc<bool>(const bool &thebool, boost::crc_32_type &crc)
+{
+
+  if (thebool)
+    crc.process_byte(0);
+  else
+    crc.process_byte(1);
+  return;
+}
+
+template <>
+inline void
+do_type_crc<BigInt>(const BigInt &theint, boost::crc_32_type &crc)
+{
+  unsigned char buffer[256];
+
+  if (theint.dump(buffer, sizeof(buffer))) {
+    // Zero has no data in bigints.
+    if (theint.is_zero())
+      crc.process_byte(0);
+    else
+      crc.process_bytes(buffer, theint.get_len());
+  } else {
+    // bigint is too large to fit in that static buffer. This is insane; but
+    // rather than wasting time heap allocing we'll just skip recording data,
+    // at the price of possible crc collisions.
+    ;
+  }
+  return;
+}
+
 template <class derived, class field1, class field2, class field3, class field4>
 void
 expr_body2<derived, field1, field2, field3, field4>::convert_smt(prop_convt &obj, void *&arg) const
