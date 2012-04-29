@@ -1244,17 +1244,6 @@ constant_datatype2t<derived>::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-constant_union2t::constant_union2t(const type2tc type,
-                                   const std::vector<expr2tc> &members)
-  : constant_datatype2t<constant_union2t>(type, constant_union_id, members)
-{
-}
-
-constant_union2t::constant_union2t(const constant_union2t &ref)
-  : constant_datatype2t<constant_union2t>(ref)
-{
-}
-
 expr2tc
 constant_string2t::to_array(void) const
 {

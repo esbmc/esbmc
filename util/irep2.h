@@ -874,12 +874,17 @@ public:
 };
 template class expr_body2<constant_struct2t, expr2t::expr2tc_vec_datatype_members>;
 
-class constant_union2t : public constant_datatype2t<constant_union2t>
+class constant_union2t : public expr_body2<constant_union2t,
+                                           expr2t::expr2tc_vec_datatype_members>
 {
 public:
-  constant_union2t(const type2tc type, const std::vector<expr2tc> &members);
-  constant_union2t(const constant_union2t &ref);
+  constant_union2t(const type2tc type, const std::vector<expr2tc> &members)
+    : expr_body2<constant_union2t, expr2t::expr2tc_vec_datatype_members>
+      (type, constant_union_id, members) { }
+  constant_union2t(const constant_union2t &ref)
+    : expr_body2<constant_union2t, expr2t::expr2tc_vec_datatype_members>(ref){}
 };
+template class expr_body2<constant_union2t, expr2t::expr2tc_vec_datatype_members>;
 
 class constant_array2t : public constant2t<constant_array2t>
 {
