@@ -1358,20 +1358,6 @@ public:
 };
 template class expr_body2<address_of2t, expr2t::expr2tc_ptr_obj>;
 
-/** Base class for byte operations. Endianness is a global property of the
- *  model that we're building, and we only need to care about it when we build
- *  an smt model in the end, not at any other point. */
-template <class derived>
-class byte_ops2t : public expr_body<derived>
-{
-public:
-  byte_ops2t(const type2tc type, expr2t::expr_ids id)
-    : expr_body<derived>(type, id) {}
-  byte_ops2t(const byte_ops2t &ref)
-    : expr_body<derived> (ref) {}
-};
-
-
 class byte_extract2t : public expr_body2<byte_extract2t,
                                            expr2t::bool_big_endian,
                                            expr2t::expr2tc_source_value,
