@@ -548,6 +548,8 @@ public:
     inline void tostring(list_of_memberst &membs __attribute__((unused)),\
                          int indent __attribute__((unused))) const\
     { return; } \
+    inline bool cmp(const name_class_empty_##num &ref __attribute__((unused)))\
+    const { return true; }\
   }; \
   class name_empty_##num { \
   public: \

@@ -3185,5 +3185,8 @@ expr_body2<derived, field1, field2, field3, field4>::cmp(const expr2t &ref)const
 {
   const derived &ref2 = static_cast<const derived &>(ref);
   field1::fieldtype::cmp(static_cast<const typename field1::fieldtype &>(ref2));
+  field2::fieldtype::cmp(static_cast<const typename field2::fieldtype &>(ref2));
+  field3::fieldtype::cmp(static_cast<const typename field3::fieldtype &>(ref2));
+  field4::fieldtype::cmp(static_cast<const typename field4::fieldtype &>(ref2));
   abort();
 }
