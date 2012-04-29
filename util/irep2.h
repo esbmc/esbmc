@@ -723,6 +723,7 @@ public:
   unsigned long as_ulong(void) const;
   long as_long(void) const;
 };
+template class expr_body2<constant_int2t, expr2t::constant_bigint_value>;
 
 /** Constant fixedbv class. Records a floating point number in what I assume
  *  to be mantissa/exponent form, but which is described throughout CBMC code
@@ -737,6 +738,7 @@ public:
   constant_fixedbv2t(const constant_fixedbv2t &ref)
     : expr_body2<constant_fixedbv2t, expr2t::fixedbv_value> (ref) { }
 };
+template class expr_body2<constant_fixedbv2t, expr2t::fixedbv_value>;
 
 class constant_bool2t : public constant2t<constant_bool2t>
 {
