@@ -2711,6 +2711,14 @@ type_to_string<expr2tc>(const expr2tc &theval, int indent)
 }
 
 template <>
+inline std::string
+type_to_string<irep_idt>(const irep_idt &theval,
+                         int indent __attribute__((unused)))
+{
+  return theval.as_string();
+}
+
+template <>
 inline bool
 do_type_cmp<bool>(const bool &side1, const bool &side2)
 {
@@ -2750,6 +2758,13 @@ do_type_cmp<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
 template <>
 inline bool
 do_type_cmp<expr2tc>(const expr2tc &side1, const expr2tc &side2)
+{
+  return (side1 == side2);
+}
+
+template <>
+inline bool
+do_type_cmp<irep_idt>(const irep_idt &side1, const irep_idt &side2)
 {
   return (side1 == side2);
 }
@@ -2816,6 +2831,17 @@ do_type_lt<expr2tc>(const expr2tc &side1, const expr2tc &side2)
 }
 
 template <>
+inline int
+do_type_lt<irep_idt>(const irep_idt &side1, const irep_idt &side2)
+{
+  if (side1 < side2)
+    return -1;
+  if (side2 < side1)
+    return 1;
+  return 0;
+}
+
+template <>
 inline void
 do_type_crc<bool>(const bool &thebool, boost::crc_32_type &crc)
 {
@@ -2879,6 +2905,15 @@ do_type_crc<expr2tc>(const expr2tc &theval, boost::crc_32_type &crc)
 {
 
   theval->do_crc(crc);
+  return;
+}
+
+template <>
+inline void
+do_type_crc<irep_idt>(const irep_idt &theval, boost::crc_32_type &crc)
+{
+
+  crc.process_bytes(theval.as_string().c_str(), theval.as_string().size());
   return;
 }
 
