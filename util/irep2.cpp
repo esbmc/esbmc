@@ -3163,3 +3163,11 @@ expr_body2<derived, field1, field2, field3, field4>::tostring(unsigned int inden
   field4::fieldtype::tostring(thevector, indent);
   abort();
 }
+
+template <class derived, class field1, class field2, class field3, class field4>
+bool
+expr_body2<derived, field1, field2, field3, field4>::cmp(const expr2t &ref)const
+{
+  const derived &ref2 = static_cast<const derived &>(ref);
+  abort();
+}

@@ -674,6 +674,7 @@ public:
   virtual void convert_smt(prop_convt &obj, void *&arg) const;
   virtual expr2tc clone(void) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
+  virtual bool cmp(const expr2t &ref) const;
 };
 
 
