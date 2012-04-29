@@ -695,24 +695,6 @@ public:
   virtual void do_crc(boost::crc_32_type &crc) const;
 };
 
-
-
-
-
-class constant_int_hacky : public expr_body2<constant_int_hacky, expr2t::constant_bigint_value, expr2t::is_big_endian_val>
-{
-public:
-  constant_int_hacky(type2tc type, const BigInt &input);
-  constant_int_hacky(const constant_int_hacky &ref);
-};
-
-
-
-
-
-
-
-
 /** Constant class type. Not designed to contain any piece of data or method in
  *  particular, but allows for additional type safety. */
 template <class derived>

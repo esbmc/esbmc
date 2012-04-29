@@ -12,11 +12,6 @@
 void
 real_migrate_type(const typet &type, type2tc &new_type_ref)
 {
-  constant_int_hacky *tmp_hacks = new constant_int_hacky(type2tc(), BigInt());
-  BigInt face = tmp_hacks->constant_value;
-  tmp_hacks->constant_value = face;
-  bool beards = tmp_hacks->big_endian;
-  tmp_hacks->big_endian = beards;
 
   if (type.id() == "bool") {
     bool_type2t *b = new bool_type2t();
