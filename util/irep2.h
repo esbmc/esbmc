@@ -494,8 +494,8 @@ public:
   public: \
     name_class_##name(fieldtype &someval) : name(someval) {} \
     name_class_##name(const name_class_##name &ref) : name(ref.name) {} \
-    member_entryt tostring(void) const { \
-      return member_entryt("" #name, type_to_string<fieldtype>(name));}\
+    void tostring(list_of_memberst &membs) const { return membs.push_back( \
+        member_entryt("" #name, type_to_string<fieldtype>(name)));}\
     fieldtype name; \
   }; \
   template <class fieldtype> \
