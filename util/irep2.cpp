@@ -3291,6 +3291,7 @@ expr_body2<derived, field1, field2, field3, field4>::do_crc
           (boost::crc_32_type &crc) const
 {
 
+  expr2t::do_crc(crc);
   field1::fieldtype::do_crc(crc);
   field2::fieldtype::do_crc(crc);
   field3::fieldtype::do_crc(crc);
