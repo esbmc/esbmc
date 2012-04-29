@@ -521,6 +521,7 @@ public:
     and_id,
     or_id,
     xor_id,
+    implies_id,
     bitand_id,
     bitor_id,
     bitxor_id,
@@ -1091,12 +1092,19 @@ public:
 };
 template class expr_body2<xor2t, expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>;
 
-class implies2t : public logical_2ops2t<implies2t>
+class implies2t : public expr_body2<implies2t, expr2t::expr2tc_side_1,
+                                               expr2t::expr2tc_side_2>
 {
 public:
-  implies2t(const expr2tc val1, const expr2tc val2);
-  implies2t(const implies2t &ref);
+  implies2t(const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<implies2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type_pool.get_bool(), implies_id, v1, v2) {}
+  implies2t(const implies2t &ref)
+    : expr_body2<implies2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<implies2t, expr2t::expr2tc_side_1,
+                                     expr2t::expr2tc_side_2>;
 
 /** Binary operations base class. Take a type, probably integer with a width,
  *  and some operands. */

@@ -1145,16 +1145,6 @@ logical_2ops2t<derived>::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-implies2t::implies2t(const expr2tc val1, const expr2tc val2)
-  : logical_2ops2t<implies2t>(or_id, val1, val2)
-{
-}
-
-implies2t::implies2t(const implies2t &ref)
-  : logical_2ops2t<implies2t>(ref)
-{
-}
-
 template <class derived>
 bool
 binops2t<derived>::cmp(const expr2t &ref) const
