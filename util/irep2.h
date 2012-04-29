@@ -1050,12 +1050,20 @@ public:
   const expr2tc side_2;
 };
 
-class and2t : public logical_2ops2t<and2t>
+
+
+class and2t : public expr_body2<and2t, expr2t::expr2tc_side_1,
+                                       expr2t::expr2tc_side_2>
 {
 public:
-  and2t(const expr2tc val1, const expr2tc val2);
-  and2t(const and2t &ref);
+  and2t(const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<and2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type_pool.get_bool(), and_id, v1, v2) {}
+  and2t(const and2t &ref)
+    : expr_body2<and2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<and2t, expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>;
 
 class or2t : public logical_2ops2t<or2t>
 {
