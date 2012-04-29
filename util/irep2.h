@@ -1084,27 +1084,6 @@ public:
 template class expr_body2<implies2t, expr2t::expr2tc_side_1,
                                      expr2t::expr2tc_side_2>;
 
-/** Binary operations base class. Take a type, probably integer with a width,
- *  and some operands. */
-template <class derived>
-class binops2t : public expr_body<derived>
-{
-public:
-  binops2t(const type2tc type, expr2t::expr_ids id,
-           const expr2tc val1, const expr2tc val2) :
-    expr_body<derived>(type, id), side_1(val1), side_2(val2) { }
-  binops2t(const binops2t &ref) :
-    expr_body<derived>(ref), side_1(ref.side_1), side_2(ref.side_2) { }
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc side_1;
-  const expr2tc side_2;
-};
-
 class bitand2t : public expr_body2<bitand2t, expr2t::expr2tc_side_1,
                                              expr2t::expr2tc_side_2>
 {
