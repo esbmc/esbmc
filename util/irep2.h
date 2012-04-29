@@ -717,7 +717,7 @@ public:
     : expr_body2<constant_int2t, expr2t::constant_bigint_value>
                (type, constant_int_id, input) { }
   constant_int2t(const constant_int2t &ref)
-    : expr_body2<constant_int2t, constant_bigint_value> (ref) { }
+    : expr_body2<constant_int2t, expr2t::constant_bigint_value> (ref) { }
 
   /** Accessor for fetching native int of this constant */
   unsigned long as_ulong(void) const;
