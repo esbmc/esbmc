@@ -688,6 +688,9 @@ public:
                       name_source_offset);
   member_record_macro(expr2tc_update_value, expr2tc_type_tag,
                       name_update_value);
+  member_record_macro(expr2tc_update_field, expr2tc_type_tag,
+                      name_update_field);
+
   #undef member_record_macro
 
   template <class thename>
@@ -1411,24 +1414,25 @@ public:
     : expr_body<derived>(ref) {}
 };
 
-/** With operation. Some kind of piece of data, another piece of data to
- *  insert into it, and where to put it. */
-class with2t : public datatype_ops2t<with2t>
+class with2t : public expr_body2<with2t, expr2t::expr2tc_source_value,
+                                         expr2t::expr2tc_update_field,
+                                         expr2t::expr2tc_update_value>
 {
 public:
-  with2t(const type2tc type, const expr2tc source, const expr2tc field,
-         const expr2tc update);
-  with2t(const with2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc source_data;
-  const expr2tc update_field;
-  const expr2tc update_data;
+  with2t(const type2tc &type, const expr2tc &source, const expr2tc &field,
+         const expr2tc &value)
+    : expr_body2<with2t, expr2t::expr2tc_source_value,
+                         expr2t::expr2tc_update_field,
+                         expr2t::expr2tc_update_value>
+      (type, with_id, source, field, value) {}
+  with2t(const with2t &ref)
+    : expr_body2<with2t, expr2t::expr2tc_source_value,
+                         expr2t::expr2tc_update_field,
+                         expr2t::expr2tc_update_value> (ref) {}
 };
+template class expr_body2<with2t, expr2t::expr2tc_source_value,
+                                  expr2t::expr2tc_update_field,
+                                  expr2t::expr2tc_update_value>;
 
 /** Member operation. Extracts some field from a datatype. */
 class member2t : public datatype_ops2t<member2t>

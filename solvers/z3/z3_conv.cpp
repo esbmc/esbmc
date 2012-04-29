@@ -1733,8 +1733,8 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
     unsigned int idx = 0;
     const struct_union_type2t &struct_type = to_structure_type(with.type);
 
-    convert_bv(with.source_data, tuple);
-    convert_bv(with.update_data, value);
+    convert_bv(with.source_value, tuple);
+    convert_bv(with.update_value, value);
 
     const constant_string2t &str = to_constant_string2t(with.update_field);
 
@@ -1758,9 +1758,9 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
     }
   } else if (is_array_type(with.type)) {
 
-    convert_bv(with.source_data, operand0);
+    convert_bv(with.source_value, operand0);
     convert_bv(with.update_field, operand1);
-    convert_bv(with.update_data, operand2);
+    convert_bv(with.update_value, operand2);
 
     bv = Z3_mk_store(z3_ctx, operand0, operand1, operand2);
   } else {

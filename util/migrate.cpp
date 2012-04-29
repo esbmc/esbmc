@@ -1263,9 +1263,9 @@ migrate_expr_back(const expr2tc &ref)
     const with2t &ref2 = to_with2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt with("with", thetype);
-    with.copy_to_operands(migrate_expr_back(ref2.source_data),
+    with.copy_to_operands(migrate_expr_back(ref2.source_value),
                                   migrate_expr_back(ref2.update_field),
-                                  migrate_expr_back(ref2.update_data));
+                                  migrate_expr_back(ref2.update_value));
     return with;
   }
   case expr2t::member_id:
