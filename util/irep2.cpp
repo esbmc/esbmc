@@ -3134,6 +3134,21 @@ type_to_string<BigInt>(const BigInt &theint, int indent __attribute__((unused)))
   return std::string(buf);
 }
 
+template <>
+inline bool
+do_type_cmp<bool>(const bool &side1, const bool &side2)
+{
+  return (side1 == side2) ? true : false;
+}
+
+template <>
+inline bool
+do_type_cmp<BigInt>(const BigInt &side1, const BigInt &side2)
+{
+  // BigInt has its own equality operator.
+  return (side1 == side2) ? true : false;
+}
+
 template <class derived, class field1, class field2, class field3, class field4>
 void
 expr_body2<derived, field1, field2, field3, field4>::convert_smt(prop_convt &obj, void *&arg) const
