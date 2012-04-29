@@ -41,7 +41,7 @@ unsigned pointer_logict::add_object(const expr2tc &expr)
   else if (expr->expr_id == expr2t::member_id)
   {
     const member2t &memb = static_cast<const member2t &>(*expr.get());
-    return add_object(memb.source_data);
+    return add_object(memb.source_value);
   }
   std::pair<objectst::iterator, bool> ret = objects.insert(
                                      std::pair<expr2tc,unsigned int>(expr, 0));
@@ -184,9 +184,7 @@ expr2tc pointer_logict::object_rec(
       if(new_offset>offset)
       {
         // found it
-        expr2tc tmp(new member2t(*it, src, constant_string2t(
-                   type2tc( new string_type2t( type2.member_names[idx].size())),
-                   type2.member_names[idx])));
+        expr2tc tmp(new member2t(*it, src, type2.member_names[idx]));
         
         return object_rec(offset-current_offset, pointer_type, tmp);
       }

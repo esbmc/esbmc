@@ -1526,16 +1526,16 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
     const member2t &memb = to_member2t(obj.ptr_obj);
 
     int64_t offs;
-    if (is_struct_type(memb.source_data->type)) {
-      const struct_type2t &type = to_struct_type(memb.source_data->type);
-      offs = member_offset(type, irep_idt(memb.member.value)).to_long();
+    if (is_struct_type(memb.source_value->type)) {
+      const struct_type2t &type = to_struct_type(memb.source_value->type);
+      offs = member_offset(type, memb.member).to_long();
     } else {
       offs = 0; // Offset is always zero for unions.
     }
 
     expr2tc addr(new address_of2t(type2tc(
-                                    new pointer_type2t(memb.source_data->type)),
-                       memb.source_data));
+                                   new pointer_type2t(memb.source_value->type)),
+                       memb.source_value));
 
     convert_bv(addr, bv);
 
@@ -1776,21 +1776,21 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
   Z3_ast struct_var;
 
   const struct_union_type2t &struct_type =
-    to_structure_type(member.source_data->type);
+    to_structure_type(member.source_value->type);
 
   forall_names(it, struct_type.member_names) {
-    if (*it == member.member.value)
+    if (*it == member.member.as_string())
       break;
     j++;
   }
 
-  convert_bv(member.source_data, struct_var);
+  convert_bv(member.source_value, struct_var);
 
-  if (is_union_type(member.source_data->type)) {
+  if (is_union_type(member.source_value->type)) {
     union_varst::const_iterator cache_result;
 
-    if (is_symbol2t(member.source_data)) {
-      const symbol2t &sym = to_symbol2t(member.source_data);
+    if (is_symbol2t(member.source_value)) {
+      const symbol2t &sym = to_symbol2t(member.source_value);
       cache_result = union_vars.find(sym.name.as_string().c_str());
     } else {
       cache_result = union_vars.end();
@@ -1798,7 +1798,7 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
 
     if (cache_result != union_vars.end()) {
       const struct_union_type2t &type =
-        to_structure_type(member.source_data->type);
+        to_structure_type(member.source_value->type);
 
       const type2tc source_type = type.members[cache_result->second];
       if (source_type == member.type) {
@@ -1809,7 +1809,7 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
 
       // Union field and expected type mismatch. Need to insert a cast.
       // Duplicate expr as we're changing it
-      expr2tc memb2(new member2t(source_type, member.source_data, member.member));
+      expr2tc memb2(new member2t(source_type, member.source_value, member.member));
       expr2tc cast(new typecast2t(member.type, memb2));
       convert_bv(cast, bv);
       return;
@@ -2205,9 +2205,7 @@ z3_convt::convert_typecast_from_ptr(const typecast2t &cast, Z3_ast &bv)
   expr2tc idx(new index2t(strct, addrspacesym, obj_num));
 
   // We've now grabbed the pointer struct, now get first element
-  expr2tc memb(new member2t(int_type, idx, constant_string2t(
-                                             type2tc(new string_type2t(1)),
-                                             "start")));
+  expr2tc memb(new member2t(int_type, idx, irep_idt("start")));
 
   expr2tc ptr_offs(new pointer_offset2t(int_type, cast.from));
   expr2tc add(new add2t(int_type, memb, ptr_offs));

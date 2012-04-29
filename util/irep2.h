@@ -690,6 +690,7 @@ public:
                       name_update_value);
   member_record_macro(expr2tc_update_field, expr2tc_type_tag,
                       name_update_field);
+  member_record_macro(irepidt_member, irepidt_type_tag, name_member);
 
   #undef member_record_macro
 
@@ -1434,22 +1435,19 @@ template class expr_body2<with2t, expr2t::expr2tc_source_value,
                                   expr2t::expr2tc_update_field,
                                   expr2t::expr2tc_update_value>;
 
-/** Member operation. Extracts some field from a datatype. */
-class member2t : public datatype_ops2t<member2t>
+class member2t : public expr_body2<member2t, expr2t::expr2tc_source_value,
+                                         expr2t::irepidt_member>
 {
 public:
-  member2t(const type2tc type, const expr2tc source,
-           const constant_string2t &member);
-  member2t(const member2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc source_data;
-  const constant_string2t member;
+  member2t(const type2tc &type, const expr2tc &source, const irep_idt memb)
+    : expr_body2<member2t, expr2t::expr2tc_source_value, expr2t::irepidt_member>
+      (type, member_id, source, memb) {}
+  member2t(const member2t &ref)
+    : expr_body2<member2t, expr2t::expr2tc_source_value, expr2t::irepidt_member>
+      (ref) {}
 };
+template class expr_body2<member2t, expr2t::expr2tc_source_value,
+                                  expr2t::irepidt_member>;
 
 /** Index operation. Extracts an entry from an array. */
 class index2t : public datatype_ops2t<index2t>

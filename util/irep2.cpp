@@ -1097,64 +1097,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-member2t::member2t(const type2tc type, const expr2tc source,
-                   const constant_string2t &idx)
-  : datatype_ops2t<member2t>(type, member_id), source_data(source),
-                          member(idx)
-{
-}
-
-member2t::member2t(const member2t &ref)
-  : datatype_ops2t<member2t>(ref), source_data(ref.source_data),
-                           member(ref.member)
-{
-}
-
-bool
-member2t::cmp(const expr2t &ref) const
-{
-  const member2t &ref2 = static_cast<const member2t &>(ref);
-
-  if (source_data != ref2.source_data)
-    return false;
-
-  if (member != ref2.member)
-    return false;
-
-  return true;
-}
-
-int
-member2t::lt(const expr2t &ref) const
-{
-  const member2t &ref2 = static_cast<const member2t &>(ref);
-
-  int tmp = source_data->ltchecked(*ref2.source_data.get());
-  if (tmp != 0)
-    return tmp;
-
-  return member.ltchecked(ref2.member);
-}
-
-list_of_memberst
-member2t::tostring(unsigned int indent) const
-{
-  list_of_memberst memb;
-
-  memb.push_back(member_entryt("source", source_data->pretty(indent + 2)));
-  memb.push_back(member_entryt("member name", member.value));
-  return memb;
-}
-
-void
-member2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  source_data->do_crc(crc);
-  member.do_crc(crc);
-  return;
-}
-
 index2t::index2t(const type2tc type, const expr2tc source,
                  const expr2tc _index)
   : datatype_ops2t<index2t>(type, index_id), source_data(source),

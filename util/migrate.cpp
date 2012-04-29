@@ -668,10 +668,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc sourcedata;
     migrate_expr(expr.op0(), sourcedata);
 
-    constant_string2t idx(type2tc(new string_type2t(1)),
-                          expr.get_string("component_name"));
-
-    member2t *m = new member2t(type, sourcedata, idx);
+    member2t *m = new member2t(type, sourcedata, expr.component_name());
     new_expr_ref = expr2tc(m);
   } else if (expr.id() == "index") {
     migrate_type(expr.type(), type);
@@ -1274,8 +1271,8 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt member("member", thetype);
     exprt member_name("member_name");
-    member_name.set("component_name", ref2.member.value);
-    member.copy_to_operands(migrate_expr_back(ref2.source_data), member_name);
+    member_name.set("component_name", ref2.member);
+    member.copy_to_operands(migrate_expr_back(ref2.source_value), member_name);
     return member;
   }
   case expr2t::index_id:
