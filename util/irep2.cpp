@@ -1099,54 +1099,6 @@ constant_string2t::to_array(void) const
 
 template <class derived>
 bool
-logical_2ops2t<derived>::cmp(const expr2t &ref) const
-{
-  const logical_2ops2t &ref2 = static_cast<const logical_2ops2t &>(ref);
-
-  if (side_1 != ref2.side_1)
-    return false;
-
-  if (side_2 != ref2.side_2)
-    return false;
-
-  return true;
-}
-
-template <class derived>
-int
-logical_2ops2t<derived>::lt(const expr2t &ref) const
-{
-  const logical_2ops2t &ref2 = static_cast<const logical_2ops2t &>(ref);
-
-  int tmp = side_1->ltchecked(*ref2.side_1.get());
-  if (tmp != 0)
-    return tmp;
-
-  return side_2->ltchecked(*ref2.side_2.get());
-}
-
-template <class derived>
-list_of_memberst
-logical_2ops2t<derived>::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"operand0", &side_1,
-                                (const char *)"operand0", &side_2,
-                                (const char *)"");
-}
-
-template <class derived>
-void
-logical_2ops2t<derived>::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  side_1->do_crc(crc);
-  side_2->do_crc(crc);
-  return;
-}
-
-template <class derived>
-bool
 binops2t<derived>::cmp(const expr2t &ref) const
 {
   const binops2t &ref2 = static_cast<const binops2t &>(ref);

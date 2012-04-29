@@ -1031,28 +1031,6 @@ public:
 };
 template class expr_body2<not2t, expr2t::expr2tc_value>;
 
-/** Base class for 2-operand boolean oeprators. Always results in a boolean,
- *  takes two operands, both of boolean type. */
-template <class derived>
-class logical_2ops2t : public lops2t<derived>
-{
-public:
-  logical_2ops2t(expr2t::expr_ids id, const expr2tc val1, const expr2tc val2) :
-    lops2t<derived>(id), side_1(val1), side_2(val2) { }
-  logical_2ops2t(const logical_2ops2t &ref) : lops2t<derived>(ref),
-                        side_1(ref.side_1), side_2(ref.side_2) { }
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc side_1;
-  const expr2tc side_2;
-};
-
-
-
 class and2t : public expr_body2<and2t, expr2t::expr2tc_side_1,
                                        expr2t::expr2tc_side_2>
 {
