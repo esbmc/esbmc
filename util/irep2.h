@@ -925,35 +925,6 @@ template class expr_body2<if2t, expr2t::expr2tc_cond,
                           expr2t::expr2tc_true_value,
                           expr2t::expr2tc_false_value>;
 
-/** Relation superclass.
- *  All subclasses should be relation operators -- ie, equality, lt, ge, so
- *  forth. Stores two expressions (of the _same_ _type_), always has result
- *  type of a bool. */
-template <class derived>
-class rel2t : public expr_body<derived>
-{
-public:
-  rel2t(expr2t::expr_ids id, const expr2tc val1, const expr2tc val2) :
-    expr_body<derived>(type2tc(new bool_type2t()), id),
-                       side_1(val1), side_2(val2)
-  {
-  }
-
-  rel2t(const rel2t &ref) :
-    expr_body<derived>(ref), side_1(ref.side_1), side_2(ref.side_2)
-  {
-  }
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc side_1;
-  const expr2tc side_2;
-};
-
-
 class equality2t : public expr_body2<equality2t, expr2t::expr2tc_side_1,
                                      expr2t::expr2tc_side_2>
 {
