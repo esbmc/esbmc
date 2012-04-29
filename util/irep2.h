@@ -1203,19 +1203,15 @@ public:
 };
 template class expr_body2<neg2t, expr2t::expr2tc_value>;
 
-class abs2t : public arith2t<abs2t>
+class abs2t : public expr_body2<abs2t,expr2t::expr2tc_value>
 {
 public:
-  abs2t(const type2tc type, const expr2tc value);
-  abs2t(const abs2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc value;
+  abs2t(const type2tc &type, const expr2tc &val)
+    : expr_body2<abs2t, expr2t::expr2tc_value> (type, abs_id, val) {}
+  abs2t(const abs2t &ref)
+    : expr_body2<abs2t, expr2t::expr2tc_value> (ref) {}
 };
+template class expr_body2<abs2t, expr2t::expr2tc_value>;
 
 /** Base two-operand arithmatic class. */
 template <class derived>

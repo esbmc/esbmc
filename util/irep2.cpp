@@ -1097,45 +1097,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-abs2t::abs2t(const type2tc type, const expr2tc _value)
-  : arith2t<abs2t>(type, abs_id), value(_value)
-{
-}
-
-abs2t::abs2t(const abs2t &ref)
-  : arith2t<abs2t>(ref)
-{
-}
-
-bool
-abs2t::cmp(const expr2t &ref) const
-{
-  const abs2t &ref2 = static_cast<const abs2t &>(ref);
-  return value == ref2.value;
-}
-
-int
-abs2t::lt(const expr2t &ref) const
-{
-  const abs2t &ref2 = static_cast<const abs2t &>(ref);
-  return value->ltchecked(*ref2.value.get());
-}
-
-list_of_memberst
-abs2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"value", &value,
-                                (const char *)"");
-}
-
-void
-abs2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  value->do_crc(crc);
-}
-
 template <class derived>
 bool
 arith_2op2t<derived>::cmp(const expr2t &ref) const
