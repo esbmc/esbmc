@@ -1233,83 +1233,117 @@ public:
   const expr2tc part_2;
 };
 
-class add2t : public arith_2op2t<add2t>
+class add2t : public expr_body2<add2t, expr2t::expr2tc_side_1,
+                                       expr2t::expr2tc_side_2>
 {
 public:
-  add2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  add2t(const add2t &ref);
+  add2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<add2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type, add_id, v1, v2) {}
+  add2t(const add2t &ref)
+    : expr_body2<add2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<add2t, expr2t::expr2tc_side_1,
+                                 expr2t::expr2tc_side_2>;
 
-class sub2t : public arith_2op2t<sub2t>
+class sub2t : public expr_body2<sub2t, expr2t::expr2tc_side_1,
+                                       expr2t::expr2tc_side_2>
 {
 public:
-  sub2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  sub2t(const sub2t &ref);
+  sub2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<sub2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type, sub_id, v1, v2) {}
+  sub2t(const sub2t &ref)
+    : expr_body2<sub2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<sub2t, expr2t::expr2tc_side_1,
+                                 expr2t::expr2tc_side_2>;
 
-class mul2t : public arith_2op2t<mul2t>
+class mul2t : public expr_body2<mul2t, expr2t::expr2tc_side_1,
+                                       expr2t::expr2tc_side_2>
 {
 public:
-  mul2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  mul2t(const mul2t &ref);
+  mul2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<mul2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type, mul_id, v1, v2) {}
+  mul2t(const mul2t &ref)
+    : expr_body2<mul2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<mul2t, expr2t::expr2tc_side_1,
+                                 expr2t::expr2tc_side_2>;
 
-class div2t : public arith_2op2t<div2t>
+class div2t : public expr_body2<div2t, expr2t::expr2tc_side_1,
+                                       expr2t::expr2tc_side_2>
 {
 public:
-  div2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  div2t(const div2t &ref);
+  div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<div2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type, div_id, v1, v2) {}
+  div2t(const div2t &ref)
+    : expr_body2<div2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<div2t, expr2t::expr2tc_side_1,
+                                 expr2t::expr2tc_side_2>;
 
-class modulus2t : public arith_2op2t<modulus2t>
+class modulus2t : public expr_body2<modulus2t, expr2t::expr2tc_side_1,
+                                               expr2t::expr2tc_side_2>
 {
 public:
-  modulus2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  modulus2t(const modulus2t &ref);
+  modulus2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<modulus2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type, modulus_id, v1, v2) {}
+  modulus2t(const modulus2t &ref)
+    : expr_body2<modulus2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<modulus2t, expr2t::expr2tc_side_1,
+                                     expr2t::expr2tc_side_2>;
 
-class shl2t : public arith_2op2t<shl2t>
+class shl2t : public expr_body2<shl2t, expr2t::expr2tc_side_1,
+                                       expr2t::expr2tc_side_2>
 {
 public:
-  shl2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  shl2t(const shl2t &ref);
+  shl2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<shl2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type, shl_id, v1, v2) {}
+  shl2t(const shl2t &ref)
+    : expr_body2<shl2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<shl2t, expr2t::expr2tc_side_1,
+                                 expr2t::expr2tc_side_2>;
 
-class ashr2t : public arith_2op2t<ashr2t>
+class ashr2t : public expr_body2<ashr2t, expr2t::expr2tc_side_1,
+                                         expr2t::expr2tc_side_2>
 {
 public:
-  ashr2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  ashr2t(const ashr2t &ref);
+  ashr2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<ashr2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type, ashr_id, v1, v2) {}
+  ashr2t(const ashr2t &ref)
+    : expr_body2<ashr2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<ashr2t, expr2t::expr2tc_side_1,
+                                  expr2t::expr2tc_side_2>;
 
-/** Dynamic object operation. Checks to see whether or not the object is a
- *  dynamically allocated object or not. */
-class dynamic_object2t : public lops2t<dynamic_object2t>
+class same_object2t : public expr_body2<same_object2t, expr2t::expr2tc_side_1,
+                                                       expr2t::expr2tc_side_2>
 {
 public:
-  dynamic_object2t(const expr2tc val);
-protected:
-  dynamic_object2t(const dynamic_object2t &ref);
-
-public:
-  virtual expr2tc clone(void) const;
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc ptr_obj;
+  same_object2t(const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<same_object2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type_pool.get_bool(), same_object_id, v1, v2) {}
+  same_object2t(const same_object2t &ref)
+    : expr_body2<same_object2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
-
-/** Same object operation. Compares two pointer objects to see if they're the
- *  same, with a boolean result. */
-class same_object2t : public arith_2op2t<same_object2t>
-{
-public:
-  same_object2t(const expr2tc val1, const expr2tc val2);
-  same_object2t(const same_object2t &ref);
-};
+template class expr_body2<same_object2t, expr2t::expr2tc_side_1,
+                                         expr2t::expr2tc_side_2>;
 
 /** Pointer offset. Extract pointer offset from a pointer value. Subclass of
  *  arithmatic because it returns an integer. */
@@ -1666,7 +1700,6 @@ expr_macros(div);
 expr_macros(modulus);
 expr_macros(shl);
 expr_macros(ashr);
-expr_macros(dynamic_object);
 expr_macros(same_object);
 expr_macros(pointer_offset);
 expr_macros(pointer_object);

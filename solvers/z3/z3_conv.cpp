@@ -1278,24 +1278,24 @@ void
 z3_convt::convert_smt_expr(const add2t &add, void *&_bv)
 {
   if (is_pointer_type(add.type) ||
-      is_pointer_type(add.part_1->type) ||
-      is_pointer_type(add.part_2->type))
-    return convert_pointer_arith(add.expr_id, add.part_1, add.part_2,
+      is_pointer_type(add.side_1->type) ||
+      is_pointer_type(add.side_2->type))
+    return convert_pointer_arith(add.expr_id, add.side_1, add.side_2,
                                  add.type, cast_to_z3(_bv));
 
-  convert_arith2ops(add.part_1, add.part_2, Z3_mk_bvadd, Z3_mk_add, _bv);
+  convert_arith2ops(add.side_1, add.side_2, Z3_mk_bvadd, Z3_mk_add, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const sub2t &sub, void *&_bv)
 {
   if (is_pointer_type(sub.type) ||
-      is_pointer_type(sub.part_1->type) ||
-      is_pointer_type(sub.part_2->type))
-    return convert_pointer_arith(sub.expr_id, sub.part_1, sub.part_2,
+      is_pointer_type(sub.side_1->type) ||
+      is_pointer_type(sub.side_2->type))
+    return convert_pointer_arith(sub.expr_id, sub.side_1, sub.side_2,
                                  sub.type,(Z3_ast&)_bv);
 
-  convert_arith2ops(sub.part_1, sub.part_2, Z3_mk_bvsub, Z3_mk_sub, _bv);
+  convert_arith2ops(sub.side_1, sub.side_2, Z3_mk_bvsub, Z3_mk_sub, _bv);
 }
 
 void
@@ -1303,8 +1303,8 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *&_bv)
 {
   Z3_ast &bv = cast_to_z3(_bv);
 
-  if (is_pointer_type(mul.part_1->type) ||
-      is_pointer_type(mul.part_2->type)) {
+  if (is_pointer_type(mul.side_1->type) ||
+      is_pointer_type(mul.side_2->type)) {
     std::cerr << "Pointer arithmetic not valid in a multiply" << std::endl;
     abort();
   }
@@ -1312,8 +1312,8 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *&_bv)
   Z3_ast args[2];
   unsigned fraction_bits = 0;
 
-  convert_bv(mul.part_1, args[0]);
-  convert_bv(mul.part_2, args[1]);
+  convert_bv(mul.side_1, args[0]);
+  convert_bv(mul.side_2, args[1]);
 
   if (int_encoding) {
     bv = Z3_mk_mul(z3_ctx, 2, args);
@@ -1337,14 +1337,14 @@ z3_convt::convert_smt_expr(const div2t &div, void *&_bv)
   Z3_ast &bv = cast_to_z3(_bv);
 
   assert(!is_pointer_type(div.type) &&
-         !is_pointer_type(div.part_1->type) &&
-         !is_pointer_type(div.part_2->type) &&
+         !is_pointer_type(div.side_1->type) &&
+         !is_pointer_type(div.side_2->type) &&
          "Can't divide pointers");
 
   Z3_ast op0, op1;
 
-  convert_bv(div.part_1, op0);
-  convert_bv(div.part_2, op1);
+  convert_bv(div.side_1, op0);
+  convert_bv(div.side_2, op1);
 
   if (int_encoding) {
     bv = Z3_mk_div(z3_ctx, op0, op1);
@@ -1375,14 +1375,14 @@ z3_convt::convert_smt_expr(const modulus2t &mod, void *&_bv)
   Z3_ast &bv = cast_to_z3(_bv);
 
   assert(!is_pointer_type(mod.type) &&
-         !is_pointer_type(mod.part_1->type) &&
-         !is_pointer_type(mod.part_2->type) &&
+         !is_pointer_type(mod.side_1->type) &&
+         !is_pointer_type(mod.side_2->type) &&
          "Can't modulus pointers");
 
   Z3_ast op0, op1;
 
-  convert_bv(mod.part_1, op0);
-  convert_bv(mod.part_2, op1);
+  convert_bv(mod.side_1, op0);
+  convert_bv(mod.side_2, op1);
 
   assert(is_bv_type(mod.type) && "Can only modulus integers");
 
@@ -1446,13 +1446,13 @@ z3_convt::convert_shift(const expr2t &shift, const expr2tc &part1,
 void
 z3_convt::convert_smt_expr(const shl2t &shl, void *&_bv)
 {
-  convert_shift(shl, shl.part_1, shl.part_2, Z3_mk_bvshl, _bv);
+  convert_shift(shl, shl.side_1, shl.side_2, Z3_mk_bvshl, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const ashr2t &ashr, void *&_bv)
 {
-  convert_shift(ashr, ashr.part_1, ashr.part_2, Z3_mk_bvashr, _bv);
+  convert_shift(ashr, ashr.side_1, ashr.side_2, Z3_mk_bvashr, _bv);
 }
 
 void
@@ -1462,11 +1462,11 @@ z3_convt::convert_smt_expr(const same_object2t &same, void *&_bv)
 
   Z3_ast pointer[2], objs[2];
 
-  assert(is_pointer_type(same.part_1->type));
-  assert(is_pointer_type(same.part_2->type));
+  assert(is_pointer_type(same.side_1->type));
+  assert(is_pointer_type(same.side_2->type));
 
-  convert_bv(same.part_1, pointer[0]);
-  convert_bv(same.part_2, pointer[1]);
+  convert_bv(same.side_1, pointer[0]);
+  convert_bv(same.side_2, pointer[1]);
 
   objs[0] = z3_api.mk_tuple_select(pointer[0], 0);
   objs[1] = z3_api.mk_tuple_select(pointer[1], 0);
@@ -2335,34 +2335,34 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *&_bv)
   // Unseen downside of flattening templates. Should consider reformatting
   // typecast2t.
   if (is_add2t(overflow.operand)) {
-    convert_bv(to_add2t(overflow.operand).part_1, operand[0]);
-    convert_bv(to_add2t(overflow.operand).part_2, operand[1]);
-    width_op0 = to_add2t(overflow.operand).part_1->type->get_width();
-    width_op1 = to_add2t(overflow.operand).part_2->type->get_width();
+    convert_bv(to_add2t(overflow.operand).side_1, operand[0]);
+    convert_bv(to_add2t(overflow.operand).side_2, operand[1]);
+    width_op0 = to_add2t(overflow.operand).side_1->type->get_width();
+    width_op1 = to_add2t(overflow.operand).side_2->type->get_width();
     call1 = Z3_mk_bvadd_no_overflow;
     call2 = Z3_mk_bvadd_no_underflow;
-    if (is_signedbv_type(to_add2t(overflow.operand).part_1->type) ||
-        is_signedbv_type(to_add2t(overflow.operand).part_2->type))
+    if (is_signedbv_type(to_add2t(overflow.operand).side_1->type) ||
+        is_signedbv_type(to_add2t(overflow.operand).side_2->type))
     is_signed = true;
   } else if (is_sub2t(overflow.operand)) {
-    convert_bv(to_sub2t(overflow.operand).part_1, operand[0]);
-    convert_bv(to_sub2t(overflow.operand).part_2, operand[1]);
-    width_op0 = to_sub2t(overflow.operand).part_1->type->get_width();
-    width_op1 = to_sub2t(overflow.operand).part_2->type->get_width();
+    convert_bv(to_sub2t(overflow.operand).side_1, operand[0]);
+    convert_bv(to_sub2t(overflow.operand).side_2, operand[1]);
+    width_op0 = to_sub2t(overflow.operand).side_1->type->get_width();
+    width_op1 = to_sub2t(overflow.operand).side_2->type->get_width();
     call1 = Z3_mk_bvsub_no_underflow;
     call2 = Z3_mk_bvsub_no_overflow;
-    if (is_signedbv_type(to_sub2t(overflow.operand).part_1->type) ||
-        is_signedbv_type(to_sub2t(overflow.operand).part_2->type))
+    if (is_signedbv_type(to_sub2t(overflow.operand).side_1->type) ||
+        is_signedbv_type(to_sub2t(overflow.operand).side_2->type))
     is_signed = true;
   } else if (is_mul2t(overflow.operand)) {
-    convert_bv(to_mul2t(overflow.operand).part_1, operand[0]);
-    convert_bv(to_mul2t(overflow.operand).part_2, operand[1]);
-    width_op0 = to_mul2t(overflow.operand).part_1->type->get_width();
-    width_op1 = to_mul2t(overflow.operand).part_2->type->get_width();
+    convert_bv(to_mul2t(overflow.operand).side_1, operand[0]);
+    convert_bv(to_mul2t(overflow.operand).side_2, operand[1]);
+    width_op0 = to_mul2t(overflow.operand).side_1->type->get_width();
+    width_op1 = to_mul2t(overflow.operand).side_2->type->get_width();
     call1 = Z3_mk_bvmul_no_overflow;
     call2 = Z3_mk_bvmul_no_underflow;
-    if (is_signedbv_type(to_mul2t(overflow.operand).part_1->type) ||
-        is_signedbv_type(to_mul2t(overflow.operand).part_2->type))
+    if (is_signedbv_type(to_mul2t(overflow.operand).side_1->type) ||
+        is_signedbv_type(to_mul2t(overflow.operand).side_2->type))
     is_signed = true;
   } else {
     std::cerr << "Overflow operation with invalid operand";

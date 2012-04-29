@@ -1142,8 +1142,8 @@ migrate_expr_back(const expr2tc &ref)
     const add2t &ref2 = to_add2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt addval("+", thetype);
-    addval.copy_to_operands(migrate_expr_back(ref2.part_1),
-                            migrate_expr_back(ref2.part_1));
+    addval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_1));
     return addval;
   }
   case expr2t::sub_id:
@@ -1151,8 +1151,8 @@ migrate_expr_back(const expr2tc &ref)
     const sub2t &ref2 = to_sub2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt subval("-", thetype);
-    subval.copy_to_operands(migrate_expr_back(ref2.part_1),
-                            migrate_expr_back(ref2.part_1));
+    subval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_1));
     return subval;
   }
   case expr2t::mul_id:
@@ -1160,8 +1160,8 @@ migrate_expr_back(const expr2tc &ref)
     const mul2t &ref2 = to_mul2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt mulval("*", thetype);
-    mulval.copy_to_operands(migrate_expr_back(ref2.part_1),
-                            migrate_expr_back(ref2.part_1));
+    mulval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_1));
     return mulval;
   }
   case expr2t::div_id:
@@ -1169,8 +1169,8 @@ migrate_expr_back(const expr2tc &ref)
     const div2t &ref2 = to_div2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt divval("+", thetype);
-    divval.copy_to_operands(migrate_expr_back(ref2.part_1),
-                            migrate_expr_back(ref2.part_1));
+    divval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_1));
     return divval;
   }
   case expr2t::modulus_id:
@@ -1178,8 +1178,8 @@ migrate_expr_back(const expr2tc &ref)
     const modulus2t &ref2 = to_modulus2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt modval("mod", thetype);
-    modval.copy_to_operands(migrate_expr_back(ref2.part_1),
-                            migrate_expr_back(ref2.part_1));
+    modval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_1));
     return modval;
   }
   case expr2t::shl_id:
@@ -1187,8 +1187,8 @@ migrate_expr_back(const expr2tc &ref)
     const shl2t &ref2 = to_shl2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt shlval("shl", thetype);
-    shlval.copy_to_operands(migrate_expr_back(ref2.part_1),
-                            migrate_expr_back(ref2.part_1));
+    shlval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_1));
     return shlval;
   }
   case expr2t::ashr_id:
@@ -1196,8 +1196,8 @@ migrate_expr_back(const expr2tc &ref)
     const ashr2t &ref2 = to_ashr2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt ashrval("ashr", thetype);
-    ashrval.copy_to_operands(migrate_expr_back(ref2.part_1),
-                            migrate_expr_back(ref2.part_1));
+    ashrval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_1));
     return ashrval;
   }
   case expr2t::dynamic_object_id:
@@ -1207,8 +1207,8 @@ migrate_expr_back(const expr2tc &ref)
     const same_object2t &ref2 = to_same_object2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt same_objectval("same-object", thetype);
-    same_objectval.copy_to_operands(migrate_expr_back(ref2.part_1),
-                                    migrate_expr_back(ref2.part_1));
+    same_objectval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                                    migrate_expr_back(ref2.side_1));
     return same_objectval;
   }
   case expr2t::pointer_offset_id:
@@ -1320,18 +1320,18 @@ migrate_expr_back(const expr2tc &ref)
     if (is_add2t(ref2.operand)) {
       theexpr.id() == "overflow-+";
       const add2t &addref = to_add2t(ref2.operand);
-      theexpr.copy_to_operands(migrate_expr_back(addref.part_1),
-                               migrate_expr_back(addref.part_2));
+      theexpr.copy_to_operands(migrate_expr_back(addref.side_1),
+                               migrate_expr_back(addref.side_2));
     } else if (is_sub2t(ref2.operand)) {
       theexpr.id() == "overflow--";
       const sub2t &subref = to_sub2t(ref2.operand);
-      theexpr.copy_to_operands(migrate_expr_back(subref.part_1),
-                               migrate_expr_back(subref.part_2));
+      theexpr.copy_to_operands(migrate_expr_back(subref.side_1),
+                               migrate_expr_back(subref.side_2));
     } else if (is_mul2t(ref2.operand)) {
       theexpr.id() == "overflow-*";
       const mul2t &mulref = to_mul2t(ref2.operand);
-      theexpr.copy_to_operands(migrate_expr_back(mulref.part_1),
-                               migrate_expr_back(mulref.part_2));
+      theexpr.copy_to_operands(migrate_expr_back(mulref.side_1),
+                               migrate_expr_back(mulref.side_2));
     } else {
       assert(0 && "Invalid operand to overflow2t when backmigrating");
     }
