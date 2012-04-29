@@ -674,6 +674,9 @@ public:
   member_record_macro(expr2tc_initializer, expr2tc_type_tag, name_initializer);
   member_record_macro(irepidt_name, irepidt_type_tag, name_name);
   member_record_macro(expr2tc_from, expr2tc_type_tag, name_from);
+  member_record_macro(expr2tc_cond, expr2tc_type_tag, name_cond);
+  member_record_macro(expr2tc_true_value, expr2tc_type_tag, name_true_value);
+  member_record_macro(expr2tc_false_value, expr2tc_type_tag, name_false_value);
   #undef member_record_macro
 
   template <class thename>
@@ -901,24 +904,24 @@ public:
 };
 template class expr_body2<typecast2t, expr2t::expr2tc_from>;
 
-class if2t : public expr_body<if2t>
+class if2t : public expr_body2<if2t,
+                               expr2t::expr2tc_cond,
+                               expr2t::expr2tc_true_value,
+                               expr2t::expr2tc_false_value>
 {
 public:
-  if2t(const type2tc type, const expr2tc cond, const expr2tc true_val,
-             const expr2tc false_val);
-  if2t(const if2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  // Conditional that this "if" depends on, and which value to take upon each
-  // branch of that condition.
-  const expr2tc cond;
-  const expr2tc true_value;
-  const expr2tc false_value;
+  if2t(const type2tc type, const expr2tc &cond, const expr2tc &trueval,
+       const expr2tc &falseval)
+    : expr_body2<if2t, expr2t::expr2tc_cond, expr2t::expr2tc_true_value,
+                 expr2t::expr2tc_false_value>
+                 (type, if_id, cond, trueval, falseval) {}
+  if2t(const if2t &ref)
+    : expr_body2<if2t, expr2t::expr2tc_cond, expr2t::expr2tc_true_value,
+                 expr2t::expr2tc_false_value>(ref) {}
 };
+template class expr_body2<if2t, expr2t::expr2tc_cond,
+                          expr2t::expr2tc_true_value,
+                          expr2t::expr2tc_false_value>;
 
 /** Relation superclass.
  *  All subclasses should be relation operators -- ie, equality, lt, ge, so
