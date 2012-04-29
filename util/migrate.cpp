@@ -1224,7 +1224,7 @@ migrate_expr_back(const expr2tc &ref)
     const pointer_object2t &ref2 = to_pointer_object2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt pointer_objectval("pointer_object", thetype);
-    pointer_objectval.copy_to_operands(migrate_expr_back(ref2.pointer_obj));
+    pointer_objectval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
     return pointer_objectval;
   }
   case expr2t::address_of_id:

@@ -1490,7 +1490,7 @@ z3_convt::convert_smt_expr(const pointer_object2t &obj, void *&_bv)
   Z3_ast &bv = cast_to_z3(_bv);
   Z3_ast pointer;
 
-  convert_bv(obj.pointer_obj, pointer);
+  convert_bv(obj.ptr_obj, pointer);
 
   bv = z3_api.mk_tuple_select(pointer, 0); //select pointer offset
 }

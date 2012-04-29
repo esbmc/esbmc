@@ -1339,21 +1339,17 @@ public:
 };
 template class expr_body2<pointer_offset2t, expr2t::expr2tc_ptr_obj>;
 
-/** Pointer object. Extract pointer object from a pointer value. Subclass of
- *  arithmatic because it returns an integer. */
-class pointer_object2t : public arith2t<pointer_object2t>
+class pointer_object2t : public expr_body2<pointer_object2t,
+                                           expr2t::expr2tc_ptr_obj>
 {
 public:
-  pointer_object2t(const type2tc type, const expr2tc pointer);
-  pointer_object2t(const pointer_object2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc pointer_obj;
+  pointer_object2t(const type2tc &type, const expr2tc &ptrobj)
+    : expr_body2<pointer_object2t, expr2t::expr2tc_ptr_obj>
+      (type, pointer_object_id, ptrobj) {}
+  pointer_object2t(const pointer_object2t &ref)
+    : expr_body2<pointer_object2t, expr2t::expr2tc_ptr_obj> (ref) {}
 };
+template class expr_body2<pointer_object2t, expr2t::expr2tc_ptr_obj>;
 
 class address_of2t : public arith2t<address_of2t>
 {

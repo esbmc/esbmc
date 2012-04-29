@@ -1097,46 +1097,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-pointer_object2t::pointer_object2t(const type2tc type, const expr2tc val)
-  : arith2t<pointer_object2t>(type, pointer_object_id), pointer_obj(val)
-{
-}
-
-pointer_object2t::pointer_object2t(const pointer_object2t &ref)
-  : arith2t<pointer_object2t>(ref), pointer_obj(ref.pointer_obj)
-{
-}
-
-bool
-pointer_object2t::cmp(const expr2t &ref) const
-{
-  const pointer_object2t &ref2 = static_cast<const pointer_object2t &>(ref);
-  return pointer_obj == ref2.pointer_obj;
-}
-
-int
-pointer_object2t::lt(const expr2t &ref) const
-{
-  const pointer_object2t &ref2 = static_cast<const pointer_object2t &>(ref);
-  return pointer_obj->ltchecked(*ref2.pointer_obj.get());
-}
-
-list_of_memberst
-pointer_object2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"pointer_obj", &pointer_obj,
-                                (const char *)"");
-}
-
-void
-pointer_object2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  pointer_obj->do_crc(crc);
-  return;
-}
-
 address_of2t::address_of2t(const type2tc subtype, const expr2tc val)
   : arith2t<address_of2t>(type2tc(new pointer_type2t(subtype)),
                              address_of_id),
