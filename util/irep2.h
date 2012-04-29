@@ -649,6 +649,7 @@ public:
   field_type_macro(bigint_type_tag, BigInt);
   field_type_macro(expr2tc_type_tag, expr2tc);
   field_type_macro(fixedbv_type_tag, fixedbvt);
+  field_type_macro(string_type_tag, std::string);
   #undef field_type_macro
 
   #define member_record_macro(thename, thetype, fieldname) \
@@ -664,6 +665,7 @@ public:
   member_record_macro(is_big_endian_val, bool_type_tag, name_big_endian);
   member_record_macro(fixedbv_value, fixedbv_type_tag, name_value);
   member_record_macro(constant_bool_value, bool_type_tag, name_constant_value);
+  member_record_macro(string_value, string_type_tag, name_value);
   #undef member_record_macro
 
   template <class thename>
@@ -818,23 +820,20 @@ public:
 template class expr_body2<constant_bool2t, expr2t::constant_bool_value>;
 
 /** Constant class for string constants. */
-class constant_string2t : public constant2t<constant_string2t>
+class constant_string2t : public expr_body2<constant_string2t,
+                                            expr2t::string_value>
 {
 public:
-  constant_string2t(const type2tc type, const std::string &stringref);
-  constant_string2t(const constant_string2t &ref);
+  constant_string2t(const type2tc type, const std::string &stringref)
+    : expr_body2<constant_string2t, expr2t::string_value>
+      (type, constant_string_id, stringref) { }
+  constant_string2t(const constant_string2t &ref)
+    : expr_body2<constant_string2t, expr2t::string_value>(ref) { }
 
   /** Convert string to a constant length array */
   expr2tc to_array(void) const;
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  /** Arbitary precision integer record. */
-  const std::string value;
 };
+template class expr_body2<constant_string2t, expr2t::string_value>;
 
 /** Const datatype - for holding structs and unions */
 template <class derived>

@@ -1266,17 +1266,6 @@ constant_union2t::constant_union2t(const constant_union2t &ref)
 {
 }
 
-constant_string2t::constant_string2t(const type2tc type,
-                                     const std::string &stringref)
-  : constant2t<constant_string2t>(type, constant_string_id), value(stringref)
-{
-}
-
-constant_string2t::constant_string2t(const constant_string2t &ref)
-  : constant2t<constant_string2t>(ref), value(ref.value)
-{
-}
-
 expr2tc
 constant_string2t::to_array(void) const
 {
@@ -1302,44 +1291,6 @@ constant_string2t::to_array(void) const
 
   expr2tc final_val(a);
   return final_val;
-}
-
-bool
-constant_string2t::cmp(const expr2t &ref) const
-{
-  const constant_string2t &ref2 = static_cast<const constant_string2t &> (ref);
-  if (value == ref2.value)
-    return true;
-  return false;
-}
-
-int
-constant_string2t::lt(const expr2t &ref) const
-{
-  const constant_string2t &ref2 = static_cast<const constant_string2t &> (ref);
-  if (value < ref2.value)
-    return -1;
-  else if (ref2.value < value)
-    return 1;
-  else
-    return 0;
-}
-
-list_of_memberst
-constant_string2t::tostring(unsigned int indent) const
-{
-  list_of_memberst membs;
-
-  membs.push_back(member_entryt("value", value));
-  return membs;
-}
-
-void
-constant_string2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  crc.process_bytes(value.c_str(), value.size());
-  return;
 }
 
 constant_array2t::constant_array2t(const type2tc type,
