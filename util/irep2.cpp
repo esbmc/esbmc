@@ -3149,6 +3149,26 @@ do_type_cmp<BigInt>(const BigInt &side1, const BigInt &side2)
   return (side1 == side2) ? true : false;
 }
 
+template <>
+inline int
+do_type_lt<bool>(const bool &side1, const bool &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
+    return 1;
+  else
+    return 0;
+}
+
+template <>
+inline int
+do_type_lt<BigInt>(const BigInt &side1, const BigInt &side2)
+{
+  // BigInt also has its own less than comparator.
+  return side1.compare(side2);
+}
+
 template <class derived, class field1, class field2, class field3, class field4>
 void
 expr_body2<derived, field1, field2, field3, field4>::convert_smt(prop_convt &obj, void *&arg) const
