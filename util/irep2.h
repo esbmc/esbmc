@@ -659,6 +659,7 @@ public:
 
   virtual void convert_smt(prop_convt &obj, void *&arg) const;
   virtual expr2tc clone(void) const;
+  virtual list_of_memberst tostring(unsigned int indent) const;
 };
 
 
@@ -670,8 +671,6 @@ class constant_int_hacky : public expr_body2<constant_int_hacky, expr2t::constan
 public:
   constant_int_hacky(type2tc type, const BigInt &input);
   constant_int_hacky(const constant_int_hacky &ref);
-
-  virtual list_of_memberst tostring(unsigned int indent) const;
 };
 
 

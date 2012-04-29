@@ -3118,11 +3118,6 @@ constant_int_hacky::constant_int_hacky(const constant_int_hacky &ref)
 }
 
 
-list_of_memberst constant_int_hacky::tostring(unsigned int indent) const
-{
-  abort();
-}
-
 template <class derived, class field1, class field2, class field3, class field4>
 void
 expr_body2<derived, field1, field2, field3, field4>::convert_smt(prop_convt &obj, void *&arg) const
@@ -3139,4 +3134,11 @@ expr_body2<derived, field1, field2, field3, field4>::clone(void) const
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
   return expr2tc(new_obj);
+}
+
+template <class derived, class field1, class field2, class field3, class field4>
+list_of_memberst
+expr_body2<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
+{
+  abort();
 }
