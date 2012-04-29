@@ -1020,12 +1020,19 @@ public:
 };
 template class expr_body2<lessthanequal2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
 
-class greaterthanequal2t : public rel2t<greaterthanequal2t>
+class greaterthanequal2t : public expr_body2<greaterthanequal2t,
+                                          expr2t::expr2tc_side_1,
+                                          expr2t::expr2tc_side_2>
 {
 public:
-  greaterthanequal2t(const expr2tc val1, const expr2tc val2);
-  greaterthanequal2t(const greaterthanequal2t &ref);
+  greaterthanequal2t(const expr2tc &v1, const expr2tc &v2)
+  : expr_body2<greaterthanequal2t,expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>
+      (type_pool.get_bool(), greaterthanequal_id, v1, v2) {}
+  greaterthanequal2t(const greaterthanequal2t &ref)
+  : expr_body2<greaterthanequal2t,expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<greaterthanequal2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
 
 /** Logical operations base class. Base for any logical operator. No storage in
  *  this particular class. Result is always of boolean type. */
