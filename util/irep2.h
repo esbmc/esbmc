@@ -494,7 +494,7 @@ public:
   public: \
     name_class_##name(fieldtype &someval) : name(someval) {} \
     name_class_##name(const name_class_##name &ref) : name(ref.name) {} \
-    void tostring(list_of_memberst &membs) const { return membs.push_back( \
+    inline void tostring(list_of_memberst &membs)const{ return membs.push_back(\
         member_entryt("" #name, type_to_string<fieldtype>(name)));}\
     fieldtype name; \
   }; \
@@ -538,7 +538,7 @@ public:
                            __attribute__((unused))) {} \
     name_class_empty_##num(const name_empty_##num &ref \
                            __attribute__((unused))) {} \
-    void tostring(list_of_memberst &membs __attribute__((unused))) const \
+    inline void tostring(list_of_memberst &membs __attribute__((unused))) const\
     { return; } \
   }; \
   class name_empty_##num { \
