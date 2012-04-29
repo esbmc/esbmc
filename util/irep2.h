@@ -862,19 +862,17 @@ public:
 };
 template class expr_body2<constant_union2t, expr2t::expr2tc_vec_datatype_members>;
 
-class constant_array2t : public constant2t<constant_array2t>
+class constant_array2t : public expr_body2<constant_array2t,
+                                           expr2t::expr2tc_vec_datatype_members>
 {
 public:
-  constant_array2t(const type2tc type, const std::vector<expr2tc> &members);
-  constant_array2t(const constant_array2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const std::vector<expr2tc> datatype_members;
+  constant_array2t(const type2tc type, const std::vector<expr2tc> &members)
+    : expr_body2<constant_array2t, expr2t::expr2tc_vec_datatype_members>
+      (type, constant_array_id, members) { }
+  constant_array2t(const constant_array2t &ref)
+    : expr_body2<constant_array2t, expr2t::expr2tc_vec_datatype_members>(ref){}
 };
+template class expr_body2<constant_array2t, expr2t::expr2tc_vec_datatype_members>;
 
 class constant_array_of2t : public constant2t<constant_array_of2t>
 {
