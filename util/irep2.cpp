@@ -3119,14 +3119,14 @@ constant_int_hacky::constant_int_hacky(const constant_int_hacky &ref)
 
 template <>
 inline std::string
-type_to_string<bool>(const bool &thebool)
+type_to_string<bool>(const bool &thebool, int indent __attribute__((unused)))
 {
   return (thebool) ? "true" : "false";
 }
 
 template <>
 inline std::string
-type_to_string<BigInt>(const BigInt &theint)
+type_to_string<BigInt>(const BigInt &theint, int indent __attribute__((unused)))
 {
   char buffer[256], *buf;
 
@@ -3157,9 +3157,9 @@ list_of_memberst
 expr_body2<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
 {
   list_of_memberst thevector;
-  field1::fieldtype::tostring(thevector);
-  field2::fieldtype::tostring(thevector);
-  field3::fieldtype::tostring(thevector);
-  field4::fieldtype::tostring(thevector);
+  field1::fieldtype::tostring(thevector, indent);
+  field2::fieldtype::tostring(thevector, indent);
+  field3::fieldtype::tostring(thevector, indent);
+  field4::fieldtype::tostring(thevector, indent);
   abort();
 }

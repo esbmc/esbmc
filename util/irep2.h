@@ -419,7 +419,8 @@ inline const bv_type2t & to_bv_type(const type2tc &t)
 inline bv_type2t & to_bv_type(type2tc &t)
   { return dynamic_cast<bv_type2t &> (*t.get()); }
 
-template <class T> static inline std::string type_to_string(const T &theval);
+template <class T>
+static inline std::string type_to_string(const T &theval, int indent);
 
 /** Base class for all expressions */
 class expr2t
@@ -494,8 +495,9 @@ public:
   public: \
     name_class_##name(fieldtype &someval) : name(someval) {} \
     name_class_##name(const name_class_##name &ref) : name(ref.name) {} \
-    inline void tostring(list_of_memberst &membs)const{ return membs.push_back(\
-        member_entryt("" #name, type_to_string<fieldtype>(name)));}\
+    inline void tostring(list_of_memberst &membs, int indent) const \
+    { return membs.push_back(member_entryt("" #name, \
+                             type_to_string<fieldtype>(name, indent)));}\
     fieldtype name; \
   }; \
   template <class fieldtype> \
@@ -538,7 +540,8 @@ public:
                            __attribute__((unused))) {} \
     name_class_empty_##num(const name_empty_##num &ref \
                            __attribute__((unused))) {} \
-    inline void tostring(list_of_memberst &membs __attribute__((unused))) const\
+    inline void tostring(list_of_memberst &membs __attribute__((unused)),\
+                         int indent __attribute__((unused))) const\
     { return; } \
   }; \
   class name_empty_##num { \
