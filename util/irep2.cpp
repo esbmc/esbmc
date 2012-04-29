@@ -2932,6 +2932,26 @@ type_to_string<std::string>(const std::string &theval,
 }
 
 template <>
+inline std::string
+type_to_string<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
+                                     int indent)
+{
+  char buffer[64];
+  std::string astring = "";
+  int i;
+
+  i = 0;
+  forall_exprs(it, theval) {
+    snprintf(buffer, 63, "%d", i);
+    buffer[63] = '\0';
+    astring += std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
+    i++;
+  }
+
+  return astring;
+}
+
+template <>
 inline bool
 do_type_cmp<bool>(const bool &side1, const bool &side2)
 {
@@ -2958,6 +2978,14 @@ inline bool
 do_type_cmp<std::string>(const std::string &side1, const std::string &side2)
 {
   return (side1 == side2) ? true : false;
+}
+
+template <>
+inline bool
+do_type_cmp<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
+                                   const std::vector<expr2tc> &side2)
+{
+  return (side1 == side2);
 }
 
 template <>
@@ -2994,6 +3022,18 @@ do_type_lt<fixedbvt>(const fixedbvt &side1, const fixedbvt &side2)
 template <>
 inline int
 do_type_lt<std::string>(const std::string &side1, const std::string &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
+    return 1;
+  return 0;
+}
+
+template <>
+inline int
+do_type_lt<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
+                                  const std::vector<expr2tc> &side2)
 {
   if (side1 < side2)
     return -1;
@@ -3049,6 +3089,15 @@ inline void
 do_type_crc<std::string>(const std::string &theval, boost::crc_32_type &crc)
 {
   crc.process_bytes(theval.c_str(), theval.size());
+}
+
+template <>
+inline void
+do_type_crc<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
+                                   boost::crc_32_type &crc)
+{
+  forall_exprs(it, theval)
+    (*it)->do_crc(crc);
 }
 
 template <class derived, class field1, class field2, class field3, class field4>
