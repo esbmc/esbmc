@@ -1189,12 +1189,19 @@ public:
 template class expr_body2<bitnxor2t, expr2t::expr2tc_side_1,
                                      expr2t::expr2tc_side_2>;
 
-class lshr2t : public binops2t<lshr2t>
+class lshr2t : public expr_body2<lshr2t, expr2t::expr2tc_side_1,
+                                         expr2t::expr2tc_side_2>
 {
 public:
-  lshr2t(const type2tc type, const expr2tc val1, const expr2tc val2);
-  lshr2t(const lshr2t &ref);
+  lshr2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
+    : expr_body2<lshr2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (type, lshr_id, v1, v2) {}
+  lshr2t(const lshr2t &ref)
+    : expr_body2<lshr2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+      (ref) {}
 };
+template class expr_body2<lshr2t, expr2t::expr2tc_side_1,
+                                  expr2t::expr2tc_side_2>;
 
 /** Arithmatic base class. For all operations that are essentially integer
  *  arithmatic. */
