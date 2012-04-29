@@ -538,6 +538,8 @@ public:
                            __attribute__((unused))) {} \
     name_class_empty_##num(const name_empty_##num &ref \
                            __attribute__((unused))) {} \
+    void tostring(list_of_memberst &membs __attribute__((unused))) const \
+    { return; } \
   }; \
   class name_empty_##num { \
   public: \
