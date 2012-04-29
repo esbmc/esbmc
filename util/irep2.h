@@ -838,30 +838,6 @@ public:
 };
 template class expr_body2<constant_string2t, expr2t::string_value>;
 
-/** Const datatype - for holding structs and unions */
-template <class derived>
-class constant_datatype2t : public constant2t<derived>
-{
-public:
-  constant_datatype2t(const type2tc type, expr2t::expr_ids id,
-                      const std::vector<expr2tc> &members)
-    : constant2t<derived>(type, id), datatype_members(members)
-  {
-  }
-
-  constant_datatype2t(const constant_datatype2t &ref)
-    : constant2t<derived>(ref), datatype_members(ref.datatype_members)
-  {
-  }
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const std::vector<expr2tc> datatype_members;
-};
-
 class constant_struct2t : public expr_body2<constant_struct2t,
                                            expr2t::expr2tc_vec_datatype_members>
 {

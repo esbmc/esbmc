@@ -1165,64 +1165,6 @@ typecast2t::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-template <class derived>
-bool
-constant_datatype2t<derived>::cmp(const expr2t &ref) const
-{
-  const constant_datatype2t &ref2 = static_cast<const constant_datatype2t &>
-                                               (ref);
-  if (datatype_members == ref2.datatype_members)
-    return true;
-  return false;
-}
-
-template<class derived>
-int
-constant_datatype2t<derived>::lt(const expr2t &ref) const
-{
-  const constant_datatype2t &ref2 = static_cast<const constant_datatype2t &>
-                                               (ref);
-  if (datatype_members < ref2.datatype_members)
-    return -1;
-  else if (ref2.datatype_members < datatype_members)
-    return 1;
-  else
-    return 0;
-}
-
-template<class derived>
-list_of_memberst
-constant_datatype2t<derived>::tostring(unsigned int indent) const
-{
-  list_of_memberst membs;
-  char buffer[256];
-  const struct_union_type2t &type2 = static_cast<const struct_union_type2t&>
-                                                (*this->type.get());
-
-  unsigned int i;
-  for (i = 0; i < datatype_members.size(); i++) {
-    snprintf(buffer, 255, "field \"%s\" (%d)", type2.member_names[i].c_str(),i);
-    buffer[255] = '\0';
-    list_of_memberst tmp = tostring_func<expr2tc>(indent,
-                                                  (const char *)buffer,
-                                                  &datatype_members[i],
-                                                  (const char *)"");
-    membs.push_back(tmp[0]);
-  }
-
-  return membs;
-}
-
-template <class derived>
-void
-constant_datatype2t<derived>::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  forall_exprs(it, datatype_members)
-    (*it)->do_crc(crc);
-  return;
-}
-
 expr2tc
 constant_string2t::to_array(void) const
 {
