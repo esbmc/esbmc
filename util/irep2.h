@@ -419,6 +419,67 @@ inline const bv_type2t & to_bv_type(const type2tc &t)
 inline bv_type2t & to_bv_type(type2tc &t)
   { return dynamic_cast<bv_type2t &> (*t.get()); }
 
+
+// And now, some more utilities.
+class type_poolt {
+public:
+  type_poolt(void);
+
+  type2tc bool_type;
+  type2tc empty_type;
+  type2tc code_type;
+
+  const type2tc &get_bool() const { return bool_type; }
+  const type2tc &get_empty() const { return empty_type; }
+  const type2tc &get_code() const { return code_type; }
+
+  // For other types, have a pool of them for quick lookup.
+  std::map<const typet, type2tc> struct_map;
+  std::map<const typet, type2tc> union_map;
+  std::map<const typet, type2tc> array_map;
+  std::map<const typet, type2tc> pointer_map;
+  std::map<const typet, type2tc> unsignedbv_map;
+  std::map<const typet, type2tc> signedbv_map;
+  std::map<const typet, type2tc> fixedbv_map;
+  std::map<const typet, type2tc> string_map;
+  std::map<const typet, type2tc> symbol_map;
+
+  // And refs to some of those for /really/ quick lookup;
+  const type2tc *uint8;
+  const type2tc *uint16;
+  const type2tc *uint32;
+  const type2tc *uint64;
+  const type2tc *int8;
+  const type2tc *int16;
+  const type2tc *int32;
+  const type2tc *int64;
+
+  // Some accessors.
+  const type2tc &get_struct(const typet &val);
+  const type2tc &get_union(const typet &val);
+  const type2tc &get_array(const typet &val);
+  const type2tc &get_pointer(const typet &val);
+  const type2tc &get_unsignedbv(const typet &val);
+  const type2tc &get_signedbv(const typet &val);
+  const type2tc &get_fixedbv(const typet &val);
+  const type2tc &get_string(const typet &val);
+  const type2tc &get_symbol(const typet &val);
+
+  const type2tc &get_uint(unsigned int size);
+  const type2tc &get_int(unsigned int size);
+
+  const type2tc &get_uint8() const { return *uint8; }
+  const type2tc &get_uint16() const { return *uint16; }
+  const type2tc &get_uint32() const { return *uint32; }
+  const type2tc &get_uint64() const { return *uint64; }
+  const type2tc &get_int8() const { return *int8; }
+  const type2tc &get_int16() const { return *int16; }
+  const type2tc &get_int32() const { return *int32; }
+  const type2tc &get_int64() const { return *int64; }
+};
+
+extern type_poolt type_pool;
+
 template <class T>
 static inline std::string type_to_string(const T &theval, int indent);
 
@@ -1633,65 +1694,5 @@ inline bool is_constant_expr(const expr2tc &t)
          t->expr_id == expr2t::constant_array_id ||
          t->expr_id == expr2t::constant_array_of_id;
 }
-
-// And now, some more utilities.
-class type_poolt {
-public:
-  type_poolt(void);
-
-  type2tc bool_type;
-  type2tc empty_type;
-  type2tc code_type;
-
-  const type2tc &get_bool() const { return bool_type; }
-  const type2tc &get_empty() const { return empty_type; }
-  const type2tc &get_code() const { return code_type; }
-
-  // For other types, have a pool of them for quick lookup.
-  std::map<const typet, type2tc> struct_map;
-  std::map<const typet, type2tc> union_map;
-  std::map<const typet, type2tc> array_map;
-  std::map<const typet, type2tc> pointer_map;
-  std::map<const typet, type2tc> unsignedbv_map;
-  std::map<const typet, type2tc> signedbv_map;
-  std::map<const typet, type2tc> fixedbv_map;
-  std::map<const typet, type2tc> string_map;
-  std::map<const typet, type2tc> symbol_map;
-
-  // And refs to some of those for /really/ quick lookup;
-  const type2tc *uint8;
-  const type2tc *uint16;
-  const type2tc *uint32;
-  const type2tc *uint64;
-  const type2tc *int8;
-  const type2tc *int16;
-  const type2tc *int32;
-  const type2tc *int64;
-
-  // Some accessors.
-  const type2tc &get_struct(const typet &val);
-  const type2tc &get_union(const typet &val);
-  const type2tc &get_array(const typet &val);
-  const type2tc &get_pointer(const typet &val);
-  const type2tc &get_unsignedbv(const typet &val);
-  const type2tc &get_signedbv(const typet &val);
-  const type2tc &get_fixedbv(const typet &val);
-  const type2tc &get_string(const typet &val);
-  const type2tc &get_symbol(const typet &val);
-
-  const type2tc &get_uint(unsigned int size);
-  const type2tc &get_int(unsigned int size);
-
-  const type2tc &get_uint8() const { return *uint8; }
-  const type2tc &get_uint16() const { return *uint16; }
-  const type2tc &get_uint32() const { return *uint32; }
-  const type2tc &get_uint64() const { return *uint64; }
-  const type2tc &get_int8() const { return *int8; }
-  const type2tc &get_int16() const { return *int16; }
-  const type2tc &get_int32() const { return *int32; }
-  const type2tc &get_int64() const { return *int64; }
-};
-
-extern type_poolt type_pool;
 
 #endif /* _UTIL_IREP2_H_ */
