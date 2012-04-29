@@ -2752,6 +2752,14 @@ type_to_string<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
 }
 
 template <>
+inline std::string
+type_to_string<expr2tc>(const expr2tc &theval, int indent)
+{
+
+  return theval->pretty(indent + 2);
+}
+
+template <>
 inline bool
 do_type_cmp<bool>(const bool &side1, const bool &side2)
 {
@@ -2784,6 +2792,13 @@ template <>
 inline bool
 do_type_cmp<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
                                    const std::vector<expr2tc> &side2)
+{
+  return (side1 == side2);
+}
+
+template <>
+inline bool
+do_type_cmp<expr2tc>(const expr2tc &side1, const expr2tc &side2)
 {
   return (side1 == side2);
 }
@@ -2843,6 +2858,13 @@ do_type_lt<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
 }
 
 template <>
+inline int
+do_type_lt<expr2tc>(const expr2tc &side1, const expr2tc &side2)
+{
+  return side1->ltchecked(*side2.get());
+}
+
+template <>
 inline void
 do_type_crc<bool>(const bool &thebool, boost::crc_32_type &crc)
 {
@@ -2898,6 +2920,15 @@ do_type_crc<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
 {
   forall_exprs(it, theval)
     (*it)->do_crc(crc);
+}
+
+template <>
+inline void
+do_type_crc<expr2tc>(const expr2tc &theval, boost::crc_32_type &crc)
+{
+
+  theval->do_crc(crc);
+  return;
 }
 
 template <class derived, class field1, class field2, class field3, class field4>
