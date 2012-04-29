@@ -1043,55 +1043,6 @@ expr_body<derived>::clone(void) const
 
 /**************************** Expression constructors *************************/
 
-symbol2t::symbol2t(const type2tc type, irep_idt _name)
-  : expr_body<symbol2t>(type, symbol_id),
-    name(_name)
-{
-}
-
-symbol2t::symbol2t(const symbol2t &ref)
-  : expr_body<symbol2t>(ref),
-    name(ref.name)
-{
-}
-
-bool
-symbol2t::cmp(const expr2t &ref) const
-{
-  const symbol2t &ref2 = static_cast<const symbol2t &>(ref);
-  if (name == ref2.name)
-    return true;
-  return false;
-}
-
-int
-symbol2t::lt(const expr2t &ref) const
-{
-  const symbol2t &ref2 = static_cast<const symbol2t &>(ref);
-  if (name < ref2.name)
-    return -1;
-  else if (ref2.name < name)
-    return 1;
-  else
-    return 0;
-}
-
-list_of_memberst
-symbol2t::tostring(unsigned int indent) const
-{
-  list_of_memberst memb;
-  memb.push_back(member_entryt("symbol name", name.as_string()));
-  return memb;
-}
-
-void
-symbol2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  crc.process_bytes(name.as_string().c_str(), name.as_string().size());
-  return;
-}
-
 unsigned long
 constant_int2t::as_ulong(void) const
 {

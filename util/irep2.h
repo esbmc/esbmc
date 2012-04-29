@@ -652,6 +652,7 @@ public:
   field_type_macro(fixedbv_type_tag, fixedbvt);
   field_type_macro(string_type_tag, std::string);
   field_type_macro(expr2tc_vec_type_tag, std::vector<expr2tc>);
+  field_type_macro(irepidt_type_tag, irep_idt);
   #undef field_type_macro
 
   #define member_record_macro(thename, thetype, fieldname) \
@@ -671,6 +672,7 @@ public:
   member_record_macro(expr2tc_vec_datatype_members, expr2tc_vec_type_tag,
                       name_datatype_members);
   member_record_macro(expr2tc_initializer, expr2tc_type_tag, name_initializer);
+  member_record_macro(irepidt_name, irepidt_type_tag, name_name);
   #undef member_record_macro
 
   template <class thename>
@@ -878,21 +880,15 @@ public:
 };
 template class expr_body2<constant_array_of2t, expr2t::expr2tc_initializer>;
 
-class symbol2t : public expr_body<symbol2t>
+class symbol2t : public expr_body2<symbol2t, expr2t::irepidt_name>
 {
 public:
-  symbol2t(const type2tc type, irep_idt name);
-  symbol2t(const symbol2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  // Symbol name - only so long as a symbol is a string. In the future, this
-  // should really really change.
-  irep_idt name;
+  symbol2t(const type2tc type, const irep_idt &init)
+    : expr_body2<symbol2t, expr2t::irepidt_name> (type, symbol_id, init) { }
+  symbol2t(const symbol2t &ref)
+    : expr_body2<symbol2t, expr2t::irepidt_name>(ref){}
 };
+template class expr_body2<symbol2t, expr2t::irepidt_name>;
 
 class typecast2t : public expr_body<typecast2t>
 {
