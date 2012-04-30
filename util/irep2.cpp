@@ -961,6 +961,7 @@ const char *expr2t::expr_names[] = {
   "and",
   "or",
   "xor",
+  "implies",
   "bitand",
   "bitor",
   "bitxor",
