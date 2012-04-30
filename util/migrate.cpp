@@ -62,7 +62,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     new_type_ref = type2tc(s);
   } else if (type.id() == "struct") {
     std::vector<type2tc> members;
-    std::vector<std::string> names;
+    std::vector<irep_idt> names;
     struct_typet &strct = (struct_typet&)type;
     struct_union_typet::componentst comps = strct.components();
 
@@ -72,16 +72,16 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
       migrate_type((const typet&)it->type(), ref);
 
       members.push_back(ref);
-      names.push_back(it->get("name").as_string());
+      names.push_back(it->get("name"));
     }
 
-    std::string name = type.get_string("tag");
-    assert(name != "");
+    irep_idt name = type.get("tag");
+    assert(name.as_string() != "");
     struct_type2t *s = new struct_type2t(members, names, name);
     new_type_ref = type2tc(s);
   } else if (type.id() == "union") {
     std::vector<type2tc> members;
-    std::vector<std::string> names;
+    std::vector<irep_idt> names;
     union_typet &strct = (union_typet&)type;
     struct_union_typet::componentst comps = strct.components();
 
@@ -91,11 +91,11 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
       migrate_type((const typet&)it->type(), ref);
 
       members.push_back(ref);
-      names.push_back(it->get("name").as_string());
+      names.push_back(it->get("name"));
     }
 
-    std::string name = type.get_string("tag");
-    assert(name != "");
+    irep_idt name = type.get("tag");
+    assert(name.as_string() != "");
     union_type2t *u = new union_type2t(members, names, name);
     new_type_ref = type2tc(u);
   } else if (type.id() == "fixedbv") {

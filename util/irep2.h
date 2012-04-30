@@ -33,7 +33,7 @@
        it != (vect).end(); it++)
 
 #define forall_names(it, vect) \
-  for (std::vector<std::string>::const_iterator (it) = (vect).begin();\
+  for (std::vector<irep_idt>::const_iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
 #define Forall_names(it, vect) \
@@ -166,7 +166,7 @@ class struct_union_type2t : public type_body<struct_union_type2t>
 {
 protected:
   struct_union_type2t(type_ids id, const std::vector<type2tc> &members,
-                      std::vector<std::string> memb_names, std::string name);
+                      std::vector<irep_idt> memb_names, irep_idt name);
   struct_union_type2t(const struct_union_type2t &ref);
 
 public:
@@ -175,8 +175,8 @@ public:
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual void do_crc(boost::crc_32_type &crc) const;
   const std::vector<type2tc> members;
-  std::vector<std::string> member_names;
-  std::string name;
+  std::vector<irep_idt> member_names;
+  irep_idt name;
 };
 
 class bv_type2t : public type_body<bv_type2t>
@@ -204,7 +204,7 @@ class struct_union_type_body2t : public struct_union_type2t
 {
 protected:
   struct_union_type_body2t(type_ids id, const std::vector<type2tc> &members,
-                           std::vector<std::string> memb_names, std::string name)
+                           std::vector<irep_idt> memb_names, irep_idt name)
     : struct_union_type2t(id, members, memb_names, name) {};
   struct_union_type_body2t(const struct_union_type_body2t &ref)
     : struct_union_type2t(ref) {};
@@ -228,8 +228,8 @@ class struct_type2t : public struct_union_type_body2t<struct_type2t>
 {
 public:
   struct_type2t(std::vector<type2tc> &members,
-                std::vector<std::string> memb_names,
-                std::string name);
+                std::vector<irep_idt> memb_names,
+                irep_idt name);
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual unsigned int get_width(void) const;
@@ -241,8 +241,8 @@ class union_type2t : public struct_union_type_body2t<union_type2t>
 {
 public:
   union_type2t(std::vector<type2tc> &members,
-               std::vector<std::string> memb_names,
-               std::string name);
+               std::vector<irep_idt> memb_names,
+               irep_idt name);
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual unsigned int get_width(void) const;

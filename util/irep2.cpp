@@ -239,8 +239,8 @@ bv_type2t::do_crc(boost::crc_32_type &crc) const
 
 struct_union_type2t::struct_union_type2t(type_ids id,
                                          const std::vector<type2tc> &_members,
-                                         std::vector<std::string> memb_names,
-                                         std::string _name)
+                                         std::vector<irep_idt> memb_names,
+                                         irep_idt _name)
   : type_body<struct_union_type2t>(id), members(_members),
                                         member_names(memb_names),
                                         name(_name)
@@ -277,7 +277,7 @@ struct_union_type2t::lt(const type2t &ref) const
 
   if (name < ref2.name)
     return -1;
-  if (name > ref2.name)
+  if (ref2.name < name)
     return 1;
 
   if (members.size() < ref2.members.size())
@@ -304,7 +304,7 @@ struct_union_type2t::tostring(unsigned int indent) const
   char bees[256];
   list_of_memberst membs;
 
-  membs.push_back(member_entryt("struct name", name));
+  membs.push_back(member_entryt("struct name", name.as_string()));
 
   unsigned int i = 0;
   forall_types(it, members) {
@@ -325,9 +325,9 @@ struct_union_type2t::do_crc(boost::crc_32_type &crc) const
   forall_types(it, members)
     (*it)->do_crc(crc);
 
-  for (std::vector<std::string>::const_iterator it = member_names.begin();
+  for (std::vector<irep_idt>::const_iterator it = member_names.begin();
        it != member_names.end(); it++)
-    crc.process_bytes(it->c_str(), it->size());
+    crc.process_bytes(it->as_string().c_str(), it->size());
 
   return;
 }
@@ -620,8 +620,8 @@ symbol_type2t::do_crc(boost::crc_32_type &crc) const
 }
 
 struct_type2t::struct_type2t(std::vector<type2tc> &members,
-                             std::vector<std::string> memb_names,
-                             std::string name)
+                             std::vector<irep_idt> memb_names,
+                             irep_idt name)
   : struct_union_type_body2t<struct_type2t>(struct_id, members, memb_names, name)
 {
 }
@@ -652,8 +652,8 @@ struct_type2t::tostring(unsigned int indent) const
 }
 
 union_type2t::union_type2t(std::vector<type2tc> &members,
-                           std::vector<std::string> memb_names,
-                           std::string name)
+                           std::vector<irep_idt> memb_names,
+                           irep_idt name)
   : struct_union_type_body2t<union_type2t>(union_id, members, memb_names, name)
 {
 }

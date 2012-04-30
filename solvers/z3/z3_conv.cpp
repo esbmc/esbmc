@@ -669,7 +669,7 @@ z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv)
   proj_decls = new Z3_const_decl_ast[num_elems];
 
   name = ((uni) ? "union" : "struct" );
-  name += "_type_" + type.name;
+  name += "_type_" + type.name.as_string();
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
 
   if (!type.members.size()) {
@@ -678,11 +678,11 @@ z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv)
   }
 
   u_int i = 0;
-  std::vector<std::string>::const_iterator mname = type.member_names.begin();
+  std::vector<irep_idt>::const_iterator mname = type.member_names.begin();
   for (std::vector<type2tc>::const_iterator it = type.members.begin();
        it != type.members.end(); it++, mname++, i++)
   {
-    proj_names[i] = Z3_mk_string_symbol(z3_ctx, mname->c_str());
+    proj_names[i] = Z3_mk_string_symbol(z3_ctx, mname->as_string().c_str());
     convert_type(*it, proj_types[i]);
   }
 
@@ -1739,7 +1739,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
     const constant_string2t &str = to_constant_string2t(with.update_field);
 
     forall_names(it, struct_type.member_names) {
-      if (*it == str.value)
+      if (it->as_string() == str.value)
         break;
       idx++;
     }
@@ -2015,7 +2015,7 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
   u_int i = 0, i2 = 0;
 
   std::vector<type2tc> new_members;
-  std::vector<std::string> new_names;
+  std::vector<irep_idt> new_names;
   new_members.reserve(struct_type_to.members.size());
   new_names.reserve(struct_type_to.members.size());
 
@@ -2191,13 +2191,14 @@ z3_convt::convert_typecast_from_ptr(const typecast2t &cast, Z3_ast &bv)
 
   // Generate type of address space array
   std::vector<type2tc> members;
-  std::vector<std::string> names;
+  std::vector<irep_idt> names;
   type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
   members.push_back(inttype);
   members.push_back(inttype);
-  names.push_back("start");
-  names.push_back("end");
-  type2tc strct(new struct_type2t(members, names, "addr_space_tuple"));
+  names.push_back(irep_idt("start"));
+  names.push_back(irep_idt("end"));
+  type2tc strct(new struct_type2t(members, names,
+                irep_idt("addr_space_tuple")));
   type2tc addrspace_type(new array_type2t(strct, expr2tc((expr2t*)NULL), true));
 
   expr2tc obj_num(new pointer_object2t(inttype, cast.from));
