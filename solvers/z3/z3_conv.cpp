@@ -615,7 +615,7 @@ z3_convt::convert_smt_type(const array_type2t &type, void *&_bv) const
     idx_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
   }
 
-  type.subtype->convert_smt_type(*this, (void*&)elem_sort);
+  convert_type(type.subtype, elem_sort);
   bv = Z3_mk_array_type(z3_ctx, idx_sort, elem_sort);
 
   return;
@@ -683,7 +683,7 @@ z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv) const
        it != type.members.end(); it++, mname++, i++)
   {
     proj_names[i] = Z3_mk_string_symbol(z3_ctx, mname->c_str());
-    (*it)->convert_smt_type(*this, (void*&)proj_types[i]);
+    convert_type(*it, proj_types[i]);
   }
 
   if (uni) {
@@ -766,7 +766,7 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
     return;
   }
 
-  sym.type->convert_smt_type(*this, (void*&)sort);
+  convert_type(sym.type, sort);
   bv = z3_api.mk_var(sym.name.c_str(), sort);
 }
 
@@ -850,7 +850,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
   assert(!type.members.empty());
 
   Z3_sort sort;
-  type.convert_smt_type(*this, (void*&)sort);
+  convert_type(wrappedtype, sort);
 
   unsigned size = type.members.size();
   if (is_union)
@@ -867,7 +867,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
       // Turns out that unions don't necessarily initialize all members.
       // If no initialization give, use free (fresh) variable.
       Z3_sort s;
-      (*it)->type->convert_smt_type(*this, (void*&)s);
+      convert_type(*it, s);
       args[i] = Z3_mk_fresh_const(z3_ctx, NULL, s);
     }
 
@@ -909,7 +909,7 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
                               : Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
 
   const array_type2t &arr_type = to_array_type(array.type);
-  arr_type.subtype->convert_smt_type(*this, (void*&)elem_type);
+  convert_type(arr_type, elem_type);
   z3_array_type = Z3_mk_array_type(z3_ctx, native_int_sort, elem_type);
 
   bv = Z3_mk_fresh_const(z3_ctx, NULL, z3_array_type);
@@ -937,7 +937,7 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
 
   const array_type2t &arr = to_array_type(array.type);
 
-  array.type->convert_smt_type(*this, (void*&)array_type);
+  convert_type(array.type, array_type);
 
   if (arr.size_is_infinite) {
     // Don't attempt to do anything with this. The user is on their own.
@@ -1503,7 +1503,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
   Z3_type_ast pointer_type;
   std::string symbol_name, out;
 
-  obj.type->convert_smt_type(*this, (void*&)pointer_type);
+  convert_type(obj.type, pointer_type);
 
   if (is_index2t(obj.ptr_obj)) {
     const index2t &idx = to_index2t(obj.ptr_obj);
@@ -2045,6 +2045,7 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
 
   struct_type2t newstruct(new_members, new_names, struct_type_to.name);
   Z3_sort sort;
+  // Can't cache this type as it's constructed on the fly.
   newstruct.convert_smt_type(*this, (void*&)sort);
 
   freshval = Z3_mk_fresh_const(z3_ctx, NULL, sort);
@@ -2267,7 +2268,7 @@ z3_convt::convert_smt_expr(const zero_string2t &zstr, void *&_bv)
   // string?
   Z3_type_ast array_type;
 
-  zstr.type->convert_smt_type(*this, (void*&)array_type);
+  convert_type(zstr.type, array_type);
 
   bv = z3_api.mk_var("zero_string", array_type);
 }
@@ -2578,7 +2579,7 @@ z3_convt::convert_type(const type2tc &type, Z3_sort &outtype)
     return;
   }
 
-  type->convert_smt_type(*this, (void *&)outtype);
+  convert_type(type, outtype);
 
   // insert into cache
   sort_cache.insert(std::pair<const type2tc, Z3_sort>(type, outtype));
