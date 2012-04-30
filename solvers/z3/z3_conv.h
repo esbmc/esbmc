@@ -62,6 +62,11 @@ public:
     } else {
       dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
     }
+
+    // Pre-seed type cache with a few values that might not go in due to
+    // specialised code paths.
+    sort_cache.insert(std::pair<const type2tc, Z3_sort>(type_pool.get_bool(),
+                      Z3_mk_bool_sort(z3_ctx)));
   }
 
   virtual ~z3_convt();
