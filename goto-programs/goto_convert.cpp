@@ -2108,38 +2108,45 @@ void goto_convertt::replace_cond(
   exprt &tmp,
   goto_programt &dest)
 {
-  //declare variable i$ of type uint
-  std::string identifier;
-  identifier = "c::i$"+i2string(state_counter);
-  exprt indice = symbol_exprt(identifier, uint_type());
+  if (tmp.is_true())
+  {
+    //declare variable i$ of type uint
+    std::string identifier;
+    identifier = "c::i$"+i2string(state_counter);
+    exprt indice = symbol_exprt(identifier, uint_type());
 
-  get_struct_components(indice, state);
+    get_struct_components(indice, state);
 
-  //declare variables n$ of type uint
-  identifier = "c::n$"+i2string(state_counter);
-  exprt n_expr = symbol_exprt(identifier, uint_type());
+    //declare variables n$ of type uint
+    identifier = "c::n$"+i2string(state_counter);
+    exprt n_expr = symbol_exprt(identifier, uint_type());
 
-  get_struct_components(n_expr, state);
+    get_struct_components(n_expr, state);
 
-  exprt zero_expr = gen_zero(uint_type());
-  exprt nondet_expr=side_effect_expr_nondett(uint_type());
+    exprt zero_expr = gen_zero(uint_type());
+    exprt nondet_expr=side_effect_expr_nondett(uint_type());
 
-  //initialize i=nondet_uint()
-  code_assignt new_assign(indice,nondet_expr);
-  copy(new_assign, ASSIGN, dest);
+    //initialize i=nondet_uint()
+    code_assignt new_assign(indice,zero_expr);
+    copy(new_assign, ASSIGN, dest);
 
 
-  //initialize n=nondet_uint();
-  code_assignt new_assign_nondet(n_expr,nondet_expr);
-  copy(new_assign_nondet, ASSIGN, dest);
+    //initialize n=nondet_uint();
+    code_assignt new_assign_nondet(n_expr,nondet_expr);
+    copy(new_assign_nondet, ASSIGN, dest);
 
-  //replace the condition c by i<=n;
-  tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
+    //assume that n>0;
+    code_assignt new_assign_assume(n_expr,gen_binary(exprt::i_gt, bool_typet(), n_expr, zero_expr));
+    copy(new_assign_assume, ASSUME, dest);
+
+    //replace the condition c by i<=n;
+    tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
+  }
 }
 
 /*******************************************************************\
 
-Function: goto_convertt::replace_cond
+Function: goto_convertt::increment_var
 
   Inputs:
 
@@ -2149,17 +2156,23 @@ Function: goto_convertt::replace_cond
 
 \*******************************************************************/
 
-void goto_convertt::increment_i_var(
+void goto_convertt::increment_var(
+  const exprt &var,
   goto_programt &dest)
 {
-  //increment the variable i by 1
-  std::string identifier;
-  identifier = "c::i$"+i2string(state_counter);
-  exprt lhs_expr = symbol_exprt(identifier, uint_type());
-  exprt one_expr = gen_one(uint_type());
-  exprt rhs_expr = gen_binary(exprt::plus, uint_type(), lhs_expr, one_expr);
-  code_assignt new_assign_indice(lhs_expr,rhs_expr);
-  copy(new_assign_indice, ASSIGN, dest);
+  if (var.is_true())
+  {
+	std::string identifier;
+	identifier = "c::i$"+i2string(state_counter);
+	exprt lhs_expr = symbol_exprt(identifier, uint_type());
+
+    //increment var by 1
+    exprt one_expr = gen_one(uint_type());
+    exprt rhs_expr = gen_binary(exprt::plus, uint_type(), lhs_expr, one_expr);
+    code_assignt new_assign_indice(lhs_expr,rhs_expr);
+    copy(new_assign_indice, ASSIGN, dest);
+  }
+
 }
 
 /*******************************************************************\
@@ -2290,7 +2303,7 @@ void goto_convertt::convert_while(
   }
 
   if (inductive_step || base_case)
-    increment_i_var(dest);
+    increment_var(code.op0(), dest);
 
   dest.destructive_append(tmp_x);
 

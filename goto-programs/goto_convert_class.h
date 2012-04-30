@@ -208,7 +208,7 @@ protected:
   bool is_expr_in_state(const exprt &expr, const struct_typet &str);
   void get_struct_components(const exprt &exp, struct_typet &str);
   void replace_cond(exprt &tmp, goto_programt &dest);
-  void increment_i_var(goto_programt &dest);
+  void increment_var(const exprt &var, goto_programt &dest);
 
 
   //
