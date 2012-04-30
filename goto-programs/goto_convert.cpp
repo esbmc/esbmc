@@ -1088,6 +1088,8 @@ void goto_convertt::convert_assign(
   if (inductive_step)
 	if (lhs.is_symbol())
       get_struct_components(lhs, state);
+	//else
+	  //assert(0);
 
 }
 
@@ -2092,6 +2094,76 @@ void goto_convertt::assume_not_cond(
 
 /*******************************************************************\
 
+Function: goto_convertt::replace_cond
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::replace_cond(
+  exprt &tmp,
+  goto_programt &dest)
+{
+  //declare variable i$ of type uint
+  std::string identifier;
+  identifier = "c::i$"+i2string(state_counter);
+  exprt indice = symbol_exprt(identifier, uint_type());
+
+  get_struct_components(indice, state);
+
+  //declare variables n$ of type uint
+  identifier = "c::n$"+i2string(state_counter);
+  exprt n_expr = symbol_exprt(identifier, uint_type());
+
+  get_struct_components(n_expr, state);
+
+  exprt zero_expr = gen_zero(uint_type());
+  exprt nondet_expr=side_effect_expr_nondett(uint_type());
+
+  //initialize i=nondet_uint()
+  code_assignt new_assign(indice,nondet_expr);
+  copy(new_assign, ASSIGN, dest);
+
+
+  //initialize n=nondet_uint();
+  code_assignt new_assign_nondet(n_expr,nondet_expr);
+  copy(new_assign_nondet, ASSIGN, dest);
+
+  //replace the condition c by i<=n;
+  tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::replace_cond
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::increment_i_var(
+  goto_programt &dest)
+{
+  //increment the variable i by 1
+  std::string identifier;
+  identifier = "c::i$"+i2string(state_counter);
+  exprt lhs_expr = symbol_exprt(identifier, uint_type());
+  exprt one_expr = gen_one(uint_type());
+  exprt rhs_expr = gen_binary(exprt::plus, uint_type(), lhs_expr, one_expr);
+  code_assignt new_assign_indice(lhs_expr,rhs_expr);
+  copy(new_assign_indice, ASSIGN, dest);
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::convert_while
 
   Inputs:
@@ -2112,59 +2184,13 @@ void goto_convertt::convert_while(
     throw "while takes two operands";
   }
 
-#if 0
   exprt tmp=code.op0();
 
-  if(inductive_step)
-  {
-    std::string identifier;
-    identifier = "c::i$"+i2string(state_counter);
-    exprt indice = symbol_exprt(identifier, uint_type());
-
-    unsigned int size = state.components().size();
-    state.components().resize(size+1);
-    state.components()[size] = (struct_typet::componentt &) indice;
-    state.components()[size].set_name(indice.get_string("identifier"));
-    state.components()[size].pretty_name(indice.get_string("identifier"));
-
-
-    identifier = "c::n$"+i2string(state_counter);
-    exprt n_expr = symbol_exprt(identifier, uint_type());
-
-    size = state.components().size();
-    state.components().resize(size+1);
-    state.components()[size] = (struct_typet::componentt &) n_expr;
-    state.components()[size].set_name(n_expr.get_string("identifier"));
-    state.components()[size].pretty_name(n_expr.get_string("identifier"));
-
-
-    exprt nondet_expr=side_effect_expr_nondett(uint_type());
-    //rhs.location()=function.location();
-    //assignment.location()=function.location();
-
-    //exprt nondet_expr("nondet_symbol", uint_type());
-
-    //declare variable i$ of type int
-    exprt zero_expr = gen_zero(uint_type());
-
-    //initialize i=0
-    code_assignt new_assign(indice,zero_expr);
-    copy(new_assign, ASSIGN, dest);
-
-    //declare variables n$ of type int
-    //assign n=nondet_int();
-    code_assignt new_assign_nondet(n_expr,nondet_expr);
-    copy(new_assign_nondet, ASSIGN, dest);
-
-    exprt one_expr = gen_one(uint_type());
-    
-    //replace the condition c by i<n;
-    tmp = gen_binary(exprt::i_lt, bool_typet(), indice, n_expr);
-}
-#endif
+  if(inductive_step || base_case)
+    replace_cond(tmp, dest);
 
   array_typet state_vector;
-  const exprt &cond=code.op0();
+  const exprt &cond=tmp;
   const locationt &location=code.location();
 
   set_while_block(true);
@@ -2263,21 +2289,10 @@ void goto_convertt::convert_while(
     copy(new_assign, ASSIGN, dest);
   }
 
-  dest.destructive_append(tmp_x);
+  if (inductive_step || base_case)
+    increment_i_var(dest);
 
-#if 0
-  if (inductive_step)
-  {
-    //increment the variable i by 1
-    std::string identifier;
-    identifier = "c::i$"+i2string(state_counter);
-    exprt lhs_indice = symbol_exprt(identifier, uint_type());
-    exprt one_expr = gen_one(int_type());
-    exprt rhs_indice = gen_binary(exprt::plus, int_type(), lhs_indice, one_expr);
-    code_assignt new_assign_indice(lhs_indice,rhs_indice);
-    copy(new_assign_indice, ASSIGN, dest);
-  }
-#endif
+  dest.destructive_append(tmp_x);
 
   // do the d label
   if (inductive_step)
@@ -2330,7 +2345,7 @@ void goto_convertt::convert_while(
 
   //assume(!c)
   //do the g label
-  if (inductive_step)
+  if (inductive_step || base_case)
     assume_not_cond(cond, dest);
 
   // restore break/continue

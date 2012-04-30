@@ -44,6 +44,8 @@ public:
     state_counter=1;
     inductive_step=
     options.get_bool_option("inductive-step");
+    base_case=
+    options.get_bool_option("base-case");
   }
 
   virtual ~goto_convertt()
@@ -205,6 +207,9 @@ protected:
   bool nondet_initializer(exprt &value, const typet &type, exprt &rhs_expr) const;
   bool is_expr_in_state(const exprt &expr, const struct_typet &str);
   void get_struct_components(const exprt &exp, struct_typet &str);
+  void replace_cond(exprt &tmp, goto_programt &dest);
+  void increment_i_var(goto_programt &dest);
+
 
   //
   // gotos
@@ -366,6 +371,7 @@ protected:
     unsigned int state_counter;
     struct_typet state;
     bool inductive_step;
+    bool base_case;
 };
 
 #endif
