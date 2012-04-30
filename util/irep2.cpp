@@ -1098,60 +1098,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-overflow_cast2t::overflow_cast2t(const expr2tc val, unsigned int _bits)
-  : lops2t<overflow_cast2t>(overflow_cast_id), operand(val), bits(_bits)
-{
-}
-
-overflow_cast2t::overflow_cast2t(const overflow_cast2t &ref)
-  : lops2t<overflow_cast2t>(ref), operand(ref.operand), bits(ref.bits)
-{
-}
-
-bool
-overflow_cast2t::cmp(const expr2t &ref) const
-{
-  const overflow_cast2t &ref2 = static_cast<const overflow_cast2t &> (ref);
-  if (bits != ref2.bits)
-    return false;
-  return operand == ref2.operand;
-}
-
-int
-overflow_cast2t::lt(const expr2t &ref) const
-{
-  const overflow_cast2t &ref2 = static_cast<const overflow_cast2t &> (ref);
-  if (bits < ref2.bits)
-    return -1;
-  else if (bits > ref2.bits)
-    return 1;
-
-  return operand->ltchecked(*ref2.operand.get());
-}
-
-list_of_memberst
-overflow_cast2t::tostring(unsigned int indent) const
-{
-  list_of_memberst membs = tostring_func<expr2tc>(indent,
-                                (const char *)"operand", &operand,
-                                (const char *)"");
-  char buffer[64];
-  snprintf(buffer, 63, "%d", bits);
-  buffer[63] = '\0';
-  membs.push_back(member_entryt("width", std::string(buffer)));
-  return membs;
-}
-
-void
-overflow_cast2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  operand->do_crc(crc);
-  crc.process_bytes(&bits, sizeof(bits));
-  return;
-}
-
-
 overflow_neg2t::overflow_neg2t(const expr2tc val)
   : lops2t<overflow_neg2t>(overflow_neg_id), operand(val)
 {

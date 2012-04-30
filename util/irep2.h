@@ -648,6 +648,7 @@ public:
   };
 
   field_type_macro(int_type_tag, int);
+  field_type_macro(uint_type_tag, unsigned int);
   field_type_macro(bool_type_tag, bool);
   field_type_macro(bigint_type_tag, BigInt);
   field_type_macro(expr2tc_type_tag, expr2tc);
@@ -695,6 +696,7 @@ public:
   member_record_macro(expr2tc_index, expr2tc_type_tag, name_index);
   member_record_macro(expr2tc_string, expr2tc_type_tag, name_string);
   member_record_macro(expr2tc_operand, expr2tc_type_tag, name_operand);
+  member_record_macro(uint_bits, uint_type_tag, name_bits);
 
   #undef member_record_macro
 
@@ -1520,20 +1522,20 @@ public:
 };
 template class expr_body2<overflow2t, expr2t::expr2tc_operand>;
 
-class overflow_cast2t : public lops2t<overflow_cast2t>
+class overflow_cast2t : public expr_body2<overflow_cast2t,
+                                          expr2t::uint_bits,
+                                          expr2t::expr2tc_operand>
 {
 public:
-  overflow_cast2t(const expr2tc val1, unsigned int bits);
-  overflow_cast2t(const overflow_cast2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc operand;
-  unsigned int bits;
+  overflow_cast2t(const expr2tc &operand, unsigned int bits)
+    : expr_body2<overflow_cast2t, expr2t::uint_bits, expr2t::expr2tc_operand>
+      (type_pool.get_bool(), overflow_cast_id, bits, operand) {}
+  overflow_cast2t(const overflow_cast2t &ref)
+    : expr_body2<overflow_cast2t, expr2t::uint_bits, expr2t::expr2tc_operand>
+      (ref) {}
 };
+template class expr_body2<overflow_cast2t, expr2t::uint_bits,
+                                           expr2t::expr2tc_operand>;
 
 class overflow_neg2t : public lops2t<overflow_neg2t>
 {
