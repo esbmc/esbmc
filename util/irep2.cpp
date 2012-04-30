@@ -1016,32 +1016,6 @@ expr2t::dump(void) const
   return;
 }
 
-/***************************** Templated expr body ****************************/
-
-template <class derived>
-expr_body<derived>::expr_body(const expr_body<derived> &ref)
-  : expr2t(ref)
-{
-}
-
-template <class derived>
-void
-expr_body<derived>::convert_smt(prop_convt &obj, void *&arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived>
-expr2tc
-expr_body<derived>::clone(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
-}
-
 /**************************** Expression constructors *************************/
 
 unsigned long

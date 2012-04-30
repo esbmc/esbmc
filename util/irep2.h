@@ -739,18 +739,6 @@ public:
   static const char *expr_names[];
 };
 
-template <class derived>
-class expr_body : public expr2t
-{
-protected:
-  expr_body(const type2tc type, expr_ids id) : expr2t(type, id) {};
-  expr_body(const expr_body &ref);
-
-public:
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
-};
-
 template <class derived,
           class field1 = expr2t::blank_value<expr2t::name_empty_1>,
           class field2 = expr2t::blank_value<expr2t::name_empty_2>,
@@ -1023,18 +1011,6 @@ public:
       (ref) {}
 };
 template class expr_body2<greaterthanequal2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
-
-/** Logical operations base class. Base for any logical operator. No storage in
- *  this particular class. Result is always of boolean type. */
-template <class derived>
-class lops2t : public expr_body<derived>
-{
-public:
-  lops2t(expr2t::expr_ids id) :
-    expr_body<derived>(type2tc(new bool_type2t()), id) { }
-
-  lops2t(const lops2t &ref) : expr_body<derived> (ref) {}
-};
 
 class not2t : public expr_body2<not2t, expr2t::expr2tc_value>
 {
@@ -1409,17 +1385,6 @@ public:
 template class expr_body2<byte_update2t, expr2t::bool_big_endian,
                   expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset,
                   expr2t::expr2tc_update_value>;
-
-/** Base type of datatype operations. */
-template <class derived>
-class datatype_ops2t : public expr_body<derived>
-{
-public:
-  datatype_ops2t(const type2tc type, expr2t::expr_ids id)
-    : expr_body<derived>(type, id) {}
-  datatype_ops2t(const datatype_ops2t &ref)
-    : expr_body<derived>(ref) {}
-};
 
 class with2t : public expr_body2<with2t, expr2t::expr2tc_source_value,
                                          expr2t::expr2tc_update_field,
