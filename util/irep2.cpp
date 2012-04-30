@@ -69,14 +69,7 @@ bool
 type2t::operator==(const type2t &ref) const
 {
 
-  return cmp(ref);
-}
-
-bool
-type2t::operator!=(const type2t &ref) const
-{
-
-  return !(*this == ref);
+  return cmpchecked(ref);
 }
 
 bool
@@ -102,11 +95,12 @@ type2t::ltchecked(const type2t &ref) const
 }
 
 bool
-type2t::cmp(const type2t &ref) const
+type2t::cmpchecked(const type2t &ref) const
 {
 
   if (type_id == ref.type_id)
-    return true;
+    return cmp(ref);
+
   return false;
 }
 

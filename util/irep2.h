@@ -95,7 +95,8 @@ public:
   std::string pretty(unsigned int indent = 0) const;
   void dump(void) const;
   uint32_t crc(void) const;
-  virtual bool cmp(const type2t &ref) const;
+  bool cmpchecked(const type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const = 0;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
   virtual void do_crc(boost::crc_32_type &crc) const;
@@ -1518,7 +1519,7 @@ inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<ty
 
 inline bool operator!=(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
-  return (*a.get() != *b.get());
+  return !(a == b);
 }
 
 inline bool operator<(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
