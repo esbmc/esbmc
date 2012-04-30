@@ -882,13 +882,13 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   {
 	if (!is_expr_in_state(exp, str))
 	{
-    //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
-    //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
-    unsigned int size = str.components().size();
-    str.components().resize(size+1);
-    str.components()[size] = (struct_typet::componentt &) exp;
-    str.components()[size].set_name(exp.get_string("identifier"));
-    str.components()[size].pretty_name(exp.get_string("identifier"));
+      //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
+      //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
+      unsigned int size = str.components().size();
+      str.components().resize(size+1);
+      str.components()[size] = (struct_typet::componentt &) exp;
+      str.components()[size].set_name(exp.get_string("identifier"));
+      str.components()[size].pretty_name(exp.get_string("identifier"));
 	}
   }
   else if (exp.operands().size()==1)
@@ -3137,18 +3137,7 @@ void goto_convertt::get_cs_member(
        it++, i++)
   {
     if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
-    {
-#if 0
-      if (!expr.operands().size())
-      {
-        exprt tmp = expr;
-        tmp.make_typecast(bool_typet());
-        new_expr.type() = bool_typet();
-        it->swap(tmp);
-      }
-#endif
       found=true;
-    }
   }
 
   if (!found)
