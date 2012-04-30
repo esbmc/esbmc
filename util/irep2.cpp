@@ -1253,6 +1253,16 @@ type_to_string<bool>(const bool &thebool, int indent __attribute__((unused)))
 
 template <>
 inline std::string
+type_to_string<unsigned int>(const unsigned int &theval,
+                             int indent __attribute__((unused)))
+{
+  char buffer[64];
+  snprintf(buffer, 63, "%d", theval);
+  return std::string(buffer);
+}
+
+template <>
+inline std::string
 type_to_string<BigInt>(const BigInt &theint, int indent __attribute__((unused)))
 {
   char buffer[256], *buf;
@@ -1322,6 +1332,13 @@ do_type_cmp<bool>(const bool &side1, const bool &side2)
 
 template <>
 inline bool
+do_type_cmp<unsigned int>(const unsigned int &side1, const unsigned int &side2)
+{
+  return (side1 == side2) ? true : false;
+}
+
+template <>
+inline bool
 do_type_cmp<BigInt>(const BigInt &side1, const BigInt &side2)
 {
   // BigInt has its own equality operator.
@@ -1367,6 +1384,18 @@ do_type_cmp<irep_idt>(const irep_idt &side1, const irep_idt &side2)
 template <>
 inline int
 do_type_lt<bool>(const bool &side1, const bool &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
+    return 1;
+  else
+    return 0;
+}
+
+template <>
+inline int
+do_type_lt<unsigned int>(const unsigned int &side1, const unsigned int &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1445,6 +1474,15 @@ do_type_crc<bool>(const bool &thebool, boost::crc_32_type &crc)
     crc.process_byte(0);
   else
     crc.process_byte(1);
+  return;
+}
+
+template <>
+inline void
+do_type_crc<unsigned int>(const unsigned int &theval, boost::crc_32_type &crc)
+{
+
+  crc.process_bytes(&theval, sizeof(theval));
   return;
 }
 
