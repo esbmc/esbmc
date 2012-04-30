@@ -1098,47 +1098,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-zero_string2t::zero_string2t(const expr2tc _string)
-  : datatype_ops2t<zero_string2t>(type_pool.get_bool(), zero_string_id),
-                                string(_string)
-{
-}
-
-zero_string2t::zero_string2t(const zero_string2t &ref)
-  : datatype_ops2t<zero_string2t>(ref), string(ref.string)
-{
-}
-
-bool
-zero_string2t::cmp(const expr2t &ref) const
-{
-  const zero_string2t &ref2 = static_cast<const zero_string2t &>(ref);
-  return string == ref2.string;
-}
-
-int
-zero_string2t::lt(const expr2t &ref) const
-{
-  const zero_string2t &ref2 = static_cast<const zero_string2t &>(ref);
-  return string->ltchecked(*ref2.string.get());
-}
-
-list_of_memberst
-zero_string2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"string", &string,
-                                (const char *)"");
-}
-
-void
-zero_string2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  string->do_crc(crc);
-  return;
-}
-
 zero_length_string2t::zero_length_string2t(const expr2tc _string)
   : datatype_ops2t<zero_length_string2t>(type_pool.get_bool(),
                                         zero_length_string_id),

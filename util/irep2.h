@@ -692,6 +692,7 @@ public:
                       name_update_field);
   member_record_macro(irepidt_member, irepidt_type_tag, name_member);
   member_record_macro(expr2tc_index, expr2tc_type_tag, name_index);
+  member_record_macro(expr2tc_string, expr2tc_type_tag, name_string);
 
   #undef member_record_macro
 
@@ -1464,21 +1465,17 @@ public:
 template class expr_body2<index2t, expr2t::expr2tc_source_value,
                                    expr2t::expr2tc_index>;
 
-/** Zero string operation. Don't quite understand it. Just operates on the
- *  string struct as far as I know. Result is boolean. */
-class zero_string2t : public datatype_ops2t<zero_string2t>
+class zero_string2t : public expr_body2<zero_string2t, expr2t::expr2tc_string>
 {
 public:
-  zero_string2t(const expr2tc string);
-  zero_string2t(const zero_string2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc string;
+  zero_string2t(const expr2tc &string)
+    : expr_body2<zero_string2t, expr2t::expr2tc_string>
+      (type_pool.get_bool(), zero_string_id, string) {}
+  zero_string2t(const zero_string2t &ref)
+    : expr_body2<zero_string2t, expr2t::expr2tc_string>
+      (ref) {}
 };
+template class expr_body2<zero_string2t, expr2t::expr2tc_string>;
 
 /** Zero length string. Unknown dirference from zero_string. */
 class zero_length_string2t : public datatype_ops2t<zero_length_string2t>
