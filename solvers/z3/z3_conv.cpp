@@ -2579,7 +2579,7 @@ z3_convt::convert_type(const type2tc &type, Z3_sort &outtype)
     return;
   }
 
-  convert_type(type, outtype);
+  type->convert_smt_type(*this, (void *&)outtype);
 
   // insert into cache
   sort_cache.insert(std::pair<const type2tc, Z3_sort>(type, outtype));
