@@ -1098,46 +1098,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-isnan2t::isnan2t(const expr2tc val)
-  : lops2t<isnan2t>(isnan_id), value(val)
-{
-}
-
-isnan2t::isnan2t(const isnan2t &ref)
-  : lops2t<isnan2t>(ref), value(ref.value)
-{
-}
-
-bool
-isnan2t::cmp(const expr2t &ref) const
-{
-  const isnan2t &ref2 = static_cast<const isnan2t &> (ref);
-  return value == ref2.value;
-}
-
-int
-isnan2t::lt(const expr2t &ref) const
-{
-  const isnan2t &ref2 = static_cast<const isnan2t &> (ref);
-  return value->ltchecked(*ref2.value.get());
-}
-
-list_of_memberst
-isnan2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"value", &value,
-                                (const char *)"");
-}
-
-void
-isnan2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  value->do_crc(crc);
-  return;
-}
-
 overflow2t::overflow2t(const expr2tc val)
   : lops2t<overflow2t>(overflow_id), operand(val)
 {

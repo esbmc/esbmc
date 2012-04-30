@@ -1489,20 +1489,17 @@ public:
 };
 template class expr_body2<zero_length_string2t, expr2t::expr2tc_string>;
 
-/** Isnan operation. Checks whether expression is a NaN or not. */
-class isnan2t : public lops2t<isnan2t>
+class isnan2t : public expr_body2<isnan2t, expr2t::expr2tc_value>
 {
 public:
-  isnan2t(const expr2tc val);
-  isnan2t(const isnan2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc value;
+  isnan2t(const expr2tc &value)
+    : expr_body2<isnan2t, expr2t::expr2tc_value>
+      (type_pool.get_bool(), isnan_id, value) {}
+  isnan2t(const isnan2t &ref)
+    : expr_body2<isnan2t, expr2t::expr2tc_value>
+      (ref) {}
 };
+template class expr_body2<isnan2t, expr2t::expr2tc_value>;
 
 /** Check whether operand overflows. Operand must be either add, subtract,
  *  or multiply. XXXjmorse - in the future we should ensure the type of the
