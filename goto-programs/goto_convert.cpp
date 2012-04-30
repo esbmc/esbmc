@@ -948,7 +948,8 @@ void goto_convertt::convert_decl(
     copy(tmp, OTHER, dest);
 
     //std::cout << "code.op0(): " << code.op0() << std::endl;
-    get_struct_components(code.op0(), state);
+    if (inductive_step)
+      get_struct_components(code.op0(), state);
     code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
     assign.location()=tmp.location();
 
