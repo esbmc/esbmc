@@ -317,6 +317,8 @@ void goto_convertt::convert(
 
   link_up_type_names((codet&)code, ns);
 
+  //std::cout << "### code.pretty(): " << code.pretty() << std::endl;
+
   if(statement=="block")
     convert_block(code, dest);
   else if(statement=="decl")
@@ -1045,6 +1047,12 @@ void goto_convertt::convert_assign(
 		if(atomic == -1)
 			dest.add_instruction(ATOMIC_END);
   }
+
+  //std::cout << "lhs.pretty(): " << lhs.pretty() << std::endl;
+  if (inductive_step)
+	if (lhs.is_symbol())
+      get_struct_components(lhs, state);
+
 }
 
 /*******************************************************************\
