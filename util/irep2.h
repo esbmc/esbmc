@@ -1436,7 +1436,7 @@ template class expr_body2<with2t, expr2t::expr2tc_source_value,
                                   expr2t::expr2tc_update_value>;
 
 class member2t : public expr_body2<member2t, expr2t::expr2tc_source_value,
-                                         expr2t::irepidt_member>
+                                             expr2t::irepidt_member>
 {
 public:
   member2t(const type2tc &type, const expr2tc &source, const irep_idt memb)
@@ -1447,7 +1447,7 @@ public:
       (ref) {}
 };
 template class expr_body2<member2t, expr2t::expr2tc_source_value,
-                                  expr2t::irepidt_member>;
+                                    expr2t::irepidt_member>;
 
 /** Index operation. Extracts an entry from an array. */
 class index2t : public datatype_ops2t<index2t>
