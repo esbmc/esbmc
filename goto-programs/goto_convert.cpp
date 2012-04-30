@@ -830,6 +830,39 @@ void goto_convertt::convert_expression(
 
 /*******************************************************************\
 
+Function: goto_convertt::is_expr_in_state
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool goto_convertt::is_expr_in_state(
+  const exprt &expr,
+  const struct_typet &str)
+{
+  const struct_typet &struct_type = to_struct_type(str);
+  const struct_typet::componentst &components = struct_type.components();
+
+  //std::cout << expr.pretty() << std::endl;
+  for (struct_typet::componentst::const_iterator
+     it = components.begin();
+     it != components.end();
+     it++)
+  {
+	//std::cout << "name:" << it->get("name") << std::endl;
+    if (it->get("name").compare(expr.get_string("identifier")) == 0)
+   	  return true;
+  }
+
+  return false;
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::get_struct_components
 
   Inputs:
@@ -840,13 +873,15 @@ Function: goto_convertt::get_struct_components
 
 \*******************************************************************/
 
-void get_struct_components(const exprt &exp, struct_typet &str)
+void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
 {
   DEBUGLOC;
   //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
   //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
   if (exp.is_symbol() && exp.type().id()!="code")
   {
+	if (!is_expr_in_state(exp, str))
+	{
     //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
     //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
     unsigned int size = str.components().size();
@@ -854,6 +889,7 @@ void get_struct_components(const exprt &exp, struct_typet &str)
     str.components()[size] = (struct_typet::componentt &) exp;
     str.components()[size].set_name(exp.get_string("identifier"));
     str.components()[size].pretty_name(exp.get_string("identifier"));
+	}
   }
   else if (exp.operands().size()==1)
   {

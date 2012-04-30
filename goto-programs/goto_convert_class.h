@@ -203,6 +203,8 @@ protected:
   void set_while_block(bool opt) {while_block=opt;}
   bool is_while_block() const {return while_block;}
   bool nondet_initializer(exprt &value, const typet &type, exprt &rhs_expr) const;
+  bool is_expr_in_state(const exprt &expr, const struct_typet &str);
+  void get_struct_components(const exprt &exp, struct_typet &str);
 
   //
   // gotos
