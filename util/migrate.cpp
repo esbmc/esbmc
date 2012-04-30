@@ -1280,7 +1280,7 @@ migrate_expr_back(const expr2tc &ref)
     const index2t &ref2 = to_index2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt index("index", thetype);
-    index.copy_to_operands(migrate_expr_back(ref2.source_data),
+    index.copy_to_operands(migrate_expr_back(ref2.source_value),
                                   migrate_expr_back(ref2.index));
     return index;
   }

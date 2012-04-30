@@ -1098,63 +1098,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-index2t::index2t(const type2tc type, const expr2tc source,
-                 const expr2tc _index)
-  : datatype_ops2t<index2t>(type, index_id), source_data(source),
-                           index(_index)
-{
-}
-
-index2t::index2t(const index2t &ref)
-  : datatype_ops2t<index2t>(ref), source_data(ref.source_data),
-                           index(ref.index)
-{
-}
-
-bool
-index2t::cmp(const expr2t &ref) const
-{
-  const index2t &ref2 = static_cast<const index2t &>(ref);
-
-  if (source_data != ref2.source_data)
-    return false;
-
-  if (index != ref2.index)
-    return false;
-
-  return true;
-}
-
-int
-index2t::lt(const expr2t &ref) const
-{
-  const index2t &ref2 = static_cast<const index2t &>(ref);
-
-  int tmp = source_data->ltchecked(*ref2.source_data.get());
-  if (tmp != 0)
-    return tmp;
-
-  return index->ltchecked(*ref2.index.get());
-}
-
-list_of_memberst
-index2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"source_data", &source_data,
-                                (const char *)"index", &index,
-                                (const char *)"");
-}
-
-void
-index2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  source_data->do_crc(crc);
-  index->do_crc(crc);
-  return;
-}
-
 zero_string2t::zero_string2t(const expr2tc _string)
   : datatype_ops2t<zero_string2t>(type_pool.get_bool(), zero_string_id),
                                 string(_string)

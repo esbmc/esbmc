@@ -36,7 +36,7 @@ unsigned pointer_logict::add_object(const expr2tc &expr)
   if (expr->expr_id == expr2t::index_id)
   {
     const index2t &index = static_cast<const index2t &>(*expr.get());
-    return add_object(index.source_data);
+    return add_object(index.source_value);
   }
   else if (expr->expr_id == expr2t::member_id)
   {

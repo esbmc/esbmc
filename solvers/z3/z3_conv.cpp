@@ -1508,17 +1508,17 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
   if (is_index2t(obj.ptr_obj)) {
     const index2t &idx = to_index2t(obj.ptr_obj);
 
-    if (!is_string_type(idx.source_data->type)) {
-      const array_type2t &arr = to_array_type(idx.source_data->type);
+    if (!is_string_type(idx.source_value->type)) {
+      const array_type2t &arr = to_array_type(idx.source_value->type);
 
       // Pick pointer-to array subtype; need to make pointer arith work.
-      expr2tc addrof(new address_of2t(arr.subtype, idx.source_data));
+      expr2tc addrof(new address_of2t(arr.subtype, idx.source_value));
       expr2tc plus(new add2t(addrof->type, addrof, idx.index));
       convert_bv(plus, bv);
     } else {
       // Strings; convert with slightly different types.
       type2tc stringtype(new unsignedbv_type2t(8));
-      expr2tc addrof(new address_of2t(stringtype, idx.source_data));
+      expr2tc addrof(new address_of2t(stringtype, idx.source_value));
       expr2tc plus(new add2t(addrof->type, addrof, idx.index));
       convert_bv(plus, bv);
     }
@@ -2249,7 +2249,7 @@ z3_convt::convert_smt_expr(const index2t &index, void *&_bv)
 
   Z3_ast source, idx;
 
-  convert_bv(index.source_data, source);
+  convert_bv(index.source_value, source);
   convert_bv(index.index, idx);
 
   // XXXjmorse - consider situation where a pointer is indexed. Should it
