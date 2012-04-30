@@ -1560,6 +1560,11 @@ struct irep2_hash
   size_t operator()(const expr2tc &ref) const { return ref->crc(); }
 };
 
+struct type2_hash
+{
+  size_t operator()(const type2tc &ref) const { return ref->crc(); }
+};
+
 // Same deal as for "type_macros".
 #ifdef NDEBUG
 #define dynamic_cast static_cast

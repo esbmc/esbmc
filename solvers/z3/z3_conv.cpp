@@ -2568,6 +2568,23 @@ z3_convt::convert_bv(const expr2tc &expr, Z3_ast &bv)
   return;
 }
 
+void
+z3_convt::convert_type(const type2tc &type, Z3_sort &outtype)
+{
+
+  sort_cachet::const_iterator cache_result = sort_cache.find(type);
+  if (cache_result != sort_cache.end()) {
+    outtype = cache_result->second;
+    return;
+  }
+
+  type->convert_smt_type(*this, (void *&)outtype);
+
+  // insert into cache
+  sort_cache.insert(std::pair<const type2tc, Z3_sort>(type, outtype));
+  return;
+}
+
 literalt
 z3_convt::convert_expr(const expr2tc &expr)
 {

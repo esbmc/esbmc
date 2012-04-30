@@ -83,6 +83,7 @@ private:
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
   void create_pointer_type(Z3_type_ast &bv) const;
+  void convert_type(const type2tc &type, Z3_sort &outtype);
 
   void convert_bv(const expr2tc &expr, Z3_ast &bv);
 
@@ -207,6 +208,8 @@ private:
 
   typedef hash_map_cont<const expr2tc, Z3_ast, irep2_hash> bv_cachet;
   bv_cachet bv_cache;
+  typedef hash_map_cont<const type2tc, Z3_sort, type2_hash> sort_cachet;
+  sort_cachet sort_cache;
 
   std::string itos(int i);
   std::string fixed_point(std::string v, unsigned width);
