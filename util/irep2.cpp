@@ -202,9 +202,10 @@ bv_type2t::get_width(void) const
 }
 
 bool
-bv_type2t::cmp(const bv_type2t &ref) const
+bv_type2t::cmp(const type2t &ref) const
 {
-  if (width == ref.width)
+  const bv_type2t &ref2 = static_cast<const bv_type2t&>(ref);
+  if (width == ref2.width)
     return true;
   return false;
 }
@@ -253,19 +254,22 @@ struct_union_type2t::struct_union_type2t(type_ids id,
 }
 
 bool
-struct_union_type2t::cmp(const struct_union_type2t &ref) const
+struct_union_type2t::cmp(const type2t &ref) const
 {
 
-  if (name != ref.name)
+  const struct_union_type2t &ref2 =
+    static_cast<const struct_union_type2t&>(ref);
+
+  if (name != ref2.name)
     return false;
 
-  if (members.size() != ref.members.size())
+  if (members.size() != ref2.members.size())
     return false;
 
-  if (members != ref.members)
+  if (members != ref2.members)
     return false;
 
-  if (member_names != ref.member_names)
+  if (member_names != ref2.member_names)
     return false;
 
   return true;
@@ -346,7 +350,7 @@ bool_type2t::get_width(void) const
 }
 
 bool
-bool_type2t::cmp(const bool_type2t &ref __attribute__((unused))) const
+bool_type2t::cmp(const type2t &ref __attribute__((unused))) const
 {
   return true; // No data stored in bool type
 }
@@ -368,12 +372,6 @@ signedbv_type2t::signedbv_type2t(unsigned int width)
 {
 }
 
-bool
-signedbv_type2t::cmp(const signedbv_type2t &ref) const
-{
-  return bv_type2t::cmp(ref);
-}
-
 int
 signedbv_type2t::lt(const type2t &ref) const
 {
@@ -389,12 +387,6 @@ signedbv_type2t::tostring(unsigned int indent) const
 unsignedbv_type2t::unsignedbv_type2t(unsigned int width)
   : bv_type_body<unsignedbv_type2t>(unsignedbv_id, width)
 {
-}
-
-bool
-unsignedbv_type2t::cmp(const unsignedbv_type2t &ref) const
-{
-  return bv_type2t::cmp(ref);
 }
 
 int
@@ -438,24 +430,26 @@ array_type2t::get_width(void) const
 }
 
 bool
-array_type2t::cmp(const array_type2t &ref) const
+array_type2t::cmp(const type2t &ref) const
 {
 
+  const array_type2t &ref2 = static_cast<const array_type2t&>(ref);
+
   // Check subtype type matches
-  if (subtype != ref.subtype)
+  if (subtype != ref2.subtype)
     return false;
 
   // If both sizes are infinite, we're the same type
-  if (size_is_infinite && ref.size_is_infinite)
+  if (size_is_infinite && ref2.size_is_infinite)
     return true;
 
   // If only one size is infinite, then we're not the same, and liable to step
   // on a null pointer if we access array_size.
-  if (size_is_infinite || ref.size_is_infinite)
+  if (size_is_infinite || ref2.size_is_infinite)
     return false;
 
   // Otherwise,
-  return (array_size == ref.array_size);
+  return (array_size == ref2.array_size);
 }
 
 int
@@ -523,10 +517,11 @@ pointer_type2t::get_width(void) const
 }
 
 bool
-pointer_type2t::cmp(const pointer_type2t &ref) const
+pointer_type2t::cmp(const type2t &ref) const
 {
 
-  return subtype == ref.subtype;
+  const pointer_type2t &ref2 = static_cast<const pointer_type2t&>(ref);
+  return subtype == ref2.subtype;
 }
 
 int
@@ -566,7 +561,7 @@ empty_type2t::get_width(void) const
 }
 
 bool
-empty_type2t::cmp(const empty_type2t &ref __attribute__((unused))) const
+empty_type2t::cmp(const type2t &ref __attribute__((unused))) const
 {
   return true; // Two empty types always compare true.
 }
@@ -595,9 +590,11 @@ symbol_type2t::get_width(void) const
 }
 
 bool
-symbol_type2t::cmp(const symbol_type2t &ref) const
+symbol_type2t::cmp(const type2t &ref) const
 {
-  return symbol_name == ref.symbol_name;
+
+  const symbol_type2t &ref2 = static_cast<const symbol_type2t&>(ref);
+  return symbol_name == ref2.symbol_name;
 }
 
 int
@@ -647,13 +644,6 @@ struct_type2t::get_width(void) const
   return width;
 }
 
-bool
-struct_type2t::cmp(const struct_type2t &ref) const
-{
-
-  return struct_union_type2t::cmp(ref);
-}
-
 int
 struct_type2t::lt(const type2t &ref) const
 {
@@ -686,13 +676,6 @@ union_type2t::get_width(void) const
   return width;
 }
 
-bool
-union_type2t::cmp(const union_type2t &ref) const
-{
-
-  return struct_union_type2t::cmp(ref);
-}
-
 int
 union_type2t::lt(const type2t &ref) const
 {
@@ -719,13 +702,15 @@ fixedbv_type2t::get_width(void) const
 }
 
 bool
-fixedbv_type2t::cmp(const fixedbv_type2t &ref) const
+fixedbv_type2t::cmp(const type2t &ref) const
 {
 
-  if (width != ref.width)
+  const fixedbv_type2t &ref2 = static_cast<const fixedbv_type2t&>(ref);
+
+  if (width != ref2.width)
     return false;
 
-  if (integer_bits != ref.integer_bits)
+  if (integer_bits != ref2.integer_bits)
     return false;
 
   return true;
@@ -787,7 +772,7 @@ code_type2t::get_width(void) const
 }
 
 bool
-code_type2t::cmp(const code_type2t &ref __attribute__((unused))) const
+code_type2t::cmp(const type2t &ref __attribute__((unused))) const
 {
   return true; // All code is the same. Ish.
 }
@@ -816,9 +801,11 @@ string_type2t::get_width(void) const
 }
 
 bool
-string_type2t::cmp(const string_type2t &ref) const
+string_type2t::cmp(const type2t &ref) const
 {
-  return (elements == ref.elements);
+
+  const string_type2t &ref2 = static_cast<const string_type2t&>(ref);
+  return (elements == ref2.elements);
 }
 
 int

@@ -122,7 +122,7 @@ class bool_type2t : public type_body<bool_type2t>
 {
 public:
   bool_type2t(void);
-  virtual bool cmp(const bool_type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual unsigned int get_width(void) const;
@@ -135,7 +135,7 @@ class empty_type2t : public type_body<empty_type2t>
 {
 public:
   empty_type2t(void);
-  virtual bool cmp(const empty_type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual unsigned int get_width(void) const;
@@ -149,7 +149,7 @@ class symbol_type2t : public type_body<symbol_type2t>
 {
 public:
   symbol_type2t(const dstring sym_name);
-  virtual bool cmp(const symbol_type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual void do_crc(boost::crc_32_type &crc) const;
@@ -169,7 +169,7 @@ protected:
   struct_union_type2t(const struct_union_type2t &ref);
 
 public:
-  virtual bool cmp(const struct_union_type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual void do_crc(boost::crc_32_type &crc) const;
@@ -185,7 +185,7 @@ protected:
   bv_type2t(const bv_type2t &ref);
 
 public:
-  virtual  bool cmp(const bv_type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual void do_crc(boost::crc_32_type &crc) const;
@@ -229,7 +229,6 @@ public:
   struct_type2t(std::vector<type2tc> &members,
                 std::vector<std::string> memb_names,
                 std::string name);
-  virtual bool cmp(const struct_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual unsigned int get_width(void) const;
@@ -243,7 +242,6 @@ public:
   union_type2t(std::vector<type2tc> &members,
                std::vector<std::string> memb_names,
                std::string name);
-  virtual bool cmp(const union_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual unsigned int get_width(void) const;
@@ -256,7 +254,7 @@ class code_type2t : public type_body<code_type2t>
 {
 public:
   code_type2t(void);
-  virtual bool cmp(const code_type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual unsigned int get_width(void) const;
@@ -270,7 +268,7 @@ class array_type2t : public type_body<array_type2t>
 {
 public:
   array_type2t(const type2tc subtype, const expr2tc size, bool inf);
-  virtual bool cmp(const array_type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual void do_crc(boost::crc_32_type &crc) const;
@@ -304,7 +302,7 @@ class pointer_type2t : public type_body<pointer_type2t>
 {
 public:
   pointer_type2t(const type2tc subtype);
-  virtual bool cmp(const pointer_type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual void do_crc(boost::crc_32_type &crc) const;
@@ -320,7 +318,6 @@ class unsignedbv_type2t : public bv_type_body<unsignedbv_type2t>
 {
 public:
   unsignedbv_type2t(unsigned int width);
-  virtual bool cmp(const unsignedbv_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
 protected:
@@ -331,7 +328,6 @@ class signedbv_type2t : public bv_type_body<signedbv_type2t>
 {
 public:
   signedbv_type2t(unsigned int width);
-  virtual bool cmp(const signedbv_type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
 protected:
@@ -342,7 +338,7 @@ class fixedbv_type2t : public type_body<fixedbv_type2t>
 {
 public:
   fixedbv_type2t(unsigned int width, unsigned int integer);
-  virtual bool cmp(const fixedbv_type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual void do_crc(boost::crc_32_type &crc) const;
@@ -359,7 +355,7 @@ class string_type2t : public type_body<string_type2t>
 {
 public:
   string_type2t(unsigned int elements);
-  virtual bool cmp(const string_type2t &ref) const;
+  virtual bool cmp(const type2t &ref) const;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const;
   virtual void do_crc(boost::crc_32_type &crc) const;
