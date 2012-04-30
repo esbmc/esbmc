@@ -76,7 +76,7 @@ exprt prop_convt::get(const exprt &expr) const
   return dest;
 }
 
-void prop_convt::convert_smt_type(const type2t &type, void *&arg) const
+void prop_convt::convert_smt_type(const type2t &type, void *&arg)
 {
   std::cerr << "Unhandled SMT conversion for type ID " << type.type_id <<
                std::endl;

@@ -580,7 +580,7 @@ z3_convt::link_syms_to_literals(void)
 
 void
 z3_convt::convert_smt_type(const bool_type2t &type __attribute__((unused)),
-                           void *&_bv) const
+                           void *&_bv)
 {
   Z3_type_ast &bv = (Z3_type_ast &)_bv;
 
@@ -589,7 +589,7 @@ z3_convt::convert_smt_type(const bool_type2t &type __attribute__((unused)),
 }
 
 void
-z3_convt::convert_smt_type(const bv_type2t &type, void *&_bv) const
+z3_convt::convert_smt_type(const bv_type2t &type, void *&_bv)
 {
   Z3_type_ast &bv = (Z3_type_ast &)_bv;
 
@@ -604,7 +604,7 @@ z3_convt::convert_smt_type(const bv_type2t &type, void *&_bv) const
 }
 
 void
-z3_convt::convert_smt_type(const array_type2t &type, void *&_bv) const
+z3_convt::convert_smt_type(const array_type2t &type, void *&_bv)
 {
   Z3_sort elem_sort, idx_sort;
   Z3_type_ast &bv = (Z3_type_ast &)_bv;
@@ -623,7 +623,7 @@ z3_convt::convert_smt_type(const array_type2t &type, void *&_bv) const
 
 void
 z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
-                           void *&_bv) const
+                           void *&_bv)
 {
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_type_ast proj_types[2];
@@ -649,7 +649,7 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
 }
 
 void
-z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv) const
+z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv)
 {
   Z3_symbol mk_tuple_name, *proj_names;
   std::string name;
@@ -709,7 +709,7 @@ z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv) const
 }
 
 void
-z3_convt::convert_smt_type(const fixedbv_type2t &type, void *&_bv) const
+z3_convt::convert_smt_type(const fixedbv_type2t &type, void *&_bv)
 {
   Z3_type_ast &bv = (Z3_type_ast &)_bv;
 
