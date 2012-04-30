@@ -1030,12 +1030,12 @@ expr2tc
 constant_string2t::to_array(void) const
 {
   std::vector<expr2tc> contents;
-  unsigned int length = value.size(), i;
+  unsigned int length = value.as_string().size(), i;
 
   type2tc type = type_pool.get_uint8();
 
   for (i = 0; i < length; i++) {
-    constant_int2t *v = new constant_int2t(type, BigInt(value[i]));
+    constant_int2t *v = new constant_int2t(type, BigInt(value.as_string()[i]));
     expr2tc ptr(v);
     contents.push_back(ptr);
   }

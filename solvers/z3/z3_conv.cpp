@@ -1551,7 +1551,8 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
     // XXXjmorse - we should avoid encoding invalid characters in the symbol,
     // but this works for now.
     const constant_string2t &str = to_constant_string2t(obj.ptr_obj);
-    std::string identifier = "address_of_str_const(" + str.value + ")";
+    std::string identifier =
+      "address_of_str_const(" + str.value.as_string() + ")";
     convert_identifier_pointer(obj.ptr_obj, identifier, bv);
   } else if (is_if2t(obj.ptr_obj)) {
     // We can't nondeterministically take the address of something; So instead
@@ -1739,7 +1740,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
     const constant_string2t &str = to_constant_string2t(with.update_field);
 
     forall_names(it, struct_type.member_names) {
-      if (it->as_string() == str.value)
+      if (*it == str.value)
         break;
       idx++;
     }
