@@ -75,7 +75,12 @@ z3_convt::get(const exprt &expr) const
 
     const symbol2t sym = to_symbol2t(new_expr);
     identifier = sym.name.as_string();
-    new_expr->type->convert_smt_type(*this, (void*&)sort);
+
+    sort_cachet::const_iterator cache_res = sort_cache.find(new_expr->type);
+    assert(cache_res != sort_cache.end() && "No cached copy of type when "
+           "fetching cex data");
+    sort = cache_res->second;
+
     bv = z3_api.mk_var(identifier.c_str(), sort);
     func = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, bv));
 
