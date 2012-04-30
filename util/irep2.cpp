@@ -1098,46 +1098,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-overflow_neg2t::overflow_neg2t(const expr2tc val)
-  : lops2t<overflow_neg2t>(overflow_neg_id), operand(val)
-{
-}
-
-overflow_neg2t::overflow_neg2t(const overflow_neg2t &ref)
-  : lops2t<overflow_neg2t>(ref), operand(ref.operand)
-{
-}
-
-bool
-overflow_neg2t::cmp(const expr2t &ref) const
-{
-  const overflow_neg2t &ref2 = static_cast<const overflow_neg2t &> (ref);
-  return operand == ref2.operand;
-}
-
-int
-overflow_neg2t::lt(const expr2t &ref) const
-{
-  const overflow_neg2t &ref2 = static_cast<const overflow_neg2t &> (ref);
-  return operand->ltchecked(*ref2.operand.get());
-}
-
-list_of_memberst
-overflow_neg2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"operand", &operand,
-                                (const char *)"");
-}
-
-void
-overflow_neg2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  operand->do_crc(crc);
-  return;
-}
-
 type_poolt::type_poolt(void)
 {
   bool_type = type2tc(new bool_type2t());
