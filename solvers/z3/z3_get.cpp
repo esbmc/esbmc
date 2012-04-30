@@ -77,9 +77,16 @@ z3_convt::get(const exprt &expr) const
     identifier = sym.name.as_string();
 
     sort_cachet::const_iterator cache_res = sort_cache.find(new_expr->type);
-    assert(cache_res != sort_cache.end() && "No cached copy of type when "
-           "fetching cex data");
-    sort = cache_res->second;
+    if (cache_res != sort_cache.end()) {
+      sort = cache_res->second;
+    } else if (int_encoding && is_bv_type(new_expr->type)) {
+      // Special case: in integer mode, all int types become Z3 int's, which
+      // doesn't necessarily get put in the type cache.
+      sort = Z3_mk_int_sort(z3_ctx);
+    } else {
+      assert(cache_res != sort_cache.end() && "No cached copy of type when "
+             "fetching cex data");
+    }
 
     bv = z3_api.mk_var(identifier.c_str(), sort);
     func = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, bv));
