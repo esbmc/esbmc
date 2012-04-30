@@ -1354,9 +1354,9 @@ class address_of2t : public expr_body2<address_of2t,
                                            expr2t::expr2tc_ptr_obj>
 {
 public:
-  address_of2t(const type2tc &type, const expr2tc &ptrobj)
+  address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
     : expr_body2<address_of2t, expr2t::expr2tc_ptr_obj>
-      (type, address_of_id, ptrobj) {}
+      (type2tc(new pointer_type2t(subtype)), address_of_id, ptrobj) {}
   address_of2t(const address_of2t &ref)
     : expr_body2<address_of2t, expr2t::expr2tc_ptr_obj> (ref) {}
 };
