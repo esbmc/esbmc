@@ -1098,49 +1098,6 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
-overflow2t::overflow2t(const expr2tc val)
-  : lops2t<overflow2t>(overflow_id), operand(val)
-{
-  assert((operand->expr_id == add_id || operand->expr_id == sub_id ||
-          operand->expr_id == mul_id) && "operand to overflow2t must be "
-          "add, sub or mul");
-}
-
-overflow2t::overflow2t(const overflow2t &ref)
-  : lops2t<overflow2t>(ref), operand(ref.operand)
-{
-}
-
-bool
-overflow2t::cmp(const expr2t &ref) const
-{
-  const overflow2t &ref2 = static_cast<const overflow2t &> (ref);
-  return operand == ref2.operand;
-}
-
-int
-overflow2t::lt(const expr2t &ref) const
-{
-  const overflow2t &ref2 = static_cast<const overflow2t &> (ref);
-  return operand->ltchecked(*ref2.operand.get());
-}
-
-list_of_memberst
-overflow2t::tostring(unsigned int indent) const
-{
-  return tostring_func<expr2tc>(indent,
-                                (const char *)"operand", &operand,
-                                (const char *)"");
-}
-
-void
-overflow2t::do_crc(boost::crc_32_type &crc) const
-{
-  expr2t::do_crc(crc);
-  operand->do_crc(crc);
-  return;
-}
-
 overflow_cast2t::overflow_cast2t(const expr2tc val, unsigned int _bits)
   : lops2t<overflow_cast2t>(overflow_cast_id), operand(val), bits(_bits)
 {

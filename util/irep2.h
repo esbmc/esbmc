@@ -605,6 +605,7 @@ public:
   field_name_macro(string);
   field_name_macro(bits);
   field_name_macro(initializer);
+  field_name_macro(operand);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -693,6 +694,7 @@ public:
   member_record_macro(irepidt_member, irepidt_type_tag, name_member);
   member_record_macro(expr2tc_index, expr2tc_type_tag, name_index);
   member_record_macro(expr2tc_string, expr2tc_type_tag, name_string);
+  member_record_macro(expr2tc_operand, expr2tc_type_tag, name_operand);
 
   #undef member_record_macro
 
@@ -1505,19 +1507,18 @@ template class expr_body2<isnan2t, expr2t::expr2tc_value>;
  *  or multiply. XXXjmorse - in the future we should ensure the type of the
  *  operand is the expected type result of the operation. That way we can tell
  *  whether to do a signed or unsigned over/underflow test. */
-class overflow2t : public lops2t<overflow2t>
+
+class overflow2t : public expr_body2<overflow2t, expr2t::expr2tc_operand>
 {
 public:
-  overflow2t(const expr2tc val1);
-  overflow2t(const overflow2t &ref);
-
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  const expr2tc operand;
+  overflow2t(const expr2tc &operand)
+    : expr_body2<overflow2t, expr2t::expr2tc_operand>
+      (type_pool.get_bool(), overflow_id, operand) {}
+  overflow2t(const overflow2t &ref)
+    : expr_body2<overflow2t, expr2t::expr2tc_operand>
+      (ref) {}
 };
+template class expr_body2<overflow2t, expr2t::expr2tc_operand>;
 
 class overflow_cast2t : public lops2t<overflow_cast2t>
 {
