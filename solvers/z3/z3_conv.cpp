@@ -867,7 +867,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
       // Turns out that unions don't necessarily initialize all members.
       // If no initialization give, use free (fresh) variable.
       Z3_sort s;
-      convert_type(*it, s);
+      convert_type((*it)->type, s);
       args[i] = Z3_mk_fresh_const(z3_ctx, NULL, s);
     }
 
@@ -909,7 +909,7 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
                               : Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
 
   const array_type2t &arr_type = to_array_type(array.type);
-  convert_type(arr_type, elem_type);
+  convert_type(arr_type.subtype, elem_type);
   z3_array_type = Z3_mk_array_type(z3_ctx, native_int_sort, elem_type);
 
   bv = Z3_mk_fresh_const(z3_ctx, NULL, z3_array_type);
