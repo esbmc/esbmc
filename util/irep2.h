@@ -784,7 +784,7 @@ class constant_int2t : public expr_body2<constant_int2t,
                                          expr2t::constant_bigint_value>
 {
 public:
-  constant_int2t(type2tc type, const BigInt &input)
+  constant_int2t(const type2tc &type, const BigInt &input)
     : expr_body2<constant_int2t, expr2t::constant_bigint_value>
                (type, constant_int_id, input) { }
   constant_int2t(const constant_int2t &ref)
@@ -803,7 +803,7 @@ class constant_fixedbv2t : public expr_body2<constant_fixedbv2t,
                                              expr2t::fixedbv_value>
 {
 public:
-  constant_fixedbv2t(type2tc type, const fixedbvt &value)
+  constant_fixedbv2t(const type2tc &type, const fixedbvt &value)
     : expr_body2<constant_fixedbv2t, expr2t::fixedbv_value>
                 (type, constant_fixedbv_id, value) { }
   constant_fixedbv2t(const constant_fixedbv2t &ref)
@@ -831,7 +831,7 @@ class constant_string2t : public expr_body2<constant_string2t,
                                             expr2t::string_value>
 {
 public:
-  constant_string2t(const type2tc type, const std::string &stringref)
+  constant_string2t(const type2tc &type, const std::string &stringref)
     : expr_body2<constant_string2t, expr2t::string_value>
       (type, constant_string_id, stringref) { }
   constant_string2t(const constant_string2t &ref)
@@ -846,7 +846,7 @@ class constant_struct2t : public expr_body2<constant_struct2t,
                                            expr2t::expr2tc_vec_datatype_members>
 {
 public:
-  constant_struct2t(const type2tc type, const std::vector<expr2tc> &members)
+  constant_struct2t(const type2tc &type, const std::vector<expr2tc> &members)
     : expr_body2<constant_struct2t, expr2t::expr2tc_vec_datatype_members>
       (type, constant_struct_id, members) { }
   constant_struct2t(const constant_struct2t &ref)
@@ -858,7 +858,7 @@ class constant_union2t : public expr_body2<constant_union2t,
                                            expr2t::expr2tc_vec_datatype_members>
 {
 public:
-  constant_union2t(const type2tc type, const std::vector<expr2tc> &members)
+  constant_union2t(const type2tc &type, const std::vector<expr2tc> &members)
     : expr_body2<constant_union2t, expr2t::expr2tc_vec_datatype_members>
       (type, constant_union_id, members) { }
   constant_union2t(const constant_union2t &ref)
@@ -870,7 +870,7 @@ class constant_array2t : public expr_body2<constant_array2t,
                                            expr2t::expr2tc_vec_datatype_members>
 {
 public:
-  constant_array2t(const type2tc type, const std::vector<expr2tc> &members)
+  constant_array2t(const type2tc &type, const std::vector<expr2tc> &members)
     : expr_body2<constant_array2t, expr2t::expr2tc_vec_datatype_members>
       (type, constant_array_id, members) { }
   constant_array2t(const constant_array2t &ref)
@@ -882,7 +882,7 @@ class constant_array_of2t : public expr_body2<constant_array_of2t,
                                               expr2t::expr2tc_initializer>
 {
 public:
-  constant_array_of2t(const type2tc type, const expr2tc init)
+  constant_array_of2t(const type2tc &type, const expr2tc &init)
     : expr_body2<constant_array_of2t, expr2t::expr2tc_initializer>
       (type, constant_array_of_id, init) { }
   constant_array_of2t(const constant_array_of2t &ref)
@@ -893,7 +893,7 @@ template class expr_body2<constant_array_of2t, expr2t::expr2tc_initializer>;
 class symbol2t : public expr_body2<symbol2t, expr2t::irepidt_name>
 {
 public:
-  symbol2t(const type2tc type, const irep_idt &init)
+  symbol2t(const type2tc &type, const irep_idt &init)
     : expr_body2<symbol2t, expr2t::irepidt_name> (type, symbol_id, init) { }
   symbol2t(const symbol2t &ref)
     : expr_body2<symbol2t, expr2t::irepidt_name>(ref){}
@@ -903,7 +903,7 @@ template class expr_body2<symbol2t, expr2t::irepidt_name>;
 class typecast2t : public expr_body2<typecast2t, expr2t::expr2tc_from>
 {
 public:
-  typecast2t(const type2tc type, const expr2tc &from)
+  typecast2t(const type2tc &type, const expr2tc &from)
     : expr_body2<typecast2t, expr2t::expr2tc_from> (type, typecast_id, from) { }
   typecast2t(const typecast2t &ref)
     : expr_body2<typecast2t, expr2t::expr2tc_from>(ref){}
@@ -916,7 +916,7 @@ class if2t : public expr_body2<if2t,
                                expr2t::expr2tc_false_value>
 {
 public:
-  if2t(const type2tc type, const expr2tc &cond, const expr2tc &trueval,
+  if2t(const type2tc &type, const expr2tc &cond, const expr2tc &trueval,
        const expr2tc &falseval)
     : expr_body2<if2t, expr2t::expr2tc_cond, expr2t::expr2tc_true_value,
                  expr2t::expr2tc_false_value>
@@ -1407,7 +1407,7 @@ class member2t : public expr_body2<member2t, expr2t::expr2tc_source_value,
                                              expr2t::irepidt_member>
 {
 public:
-  member2t(const type2tc &type, const expr2tc &source, const irep_idt memb)
+  member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : expr_body2<member2t, expr2t::expr2tc_source_value, expr2t::irepidt_member>
       (type, member_id, source, memb) {}
   member2t(const member2t &ref)
