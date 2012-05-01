@@ -332,33 +332,10 @@ struct_union_type2t::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-bool_type2t::bool_type2t(void)
-  : type_body<bool_type2t>(bool_id)
-{
-}
-
 unsigned int
 bool_type2t::get_width(void) const
 {
   return 1;
-}
-
-bool
-bool_type2t::cmp(const type2t &ref __attribute__((unused))) const
-{
-  return true; // No data stored in bool type
-}
-
-int
-bool_type2t::lt(const type2t &ref __attribute__((unused))) const
-{
-  return 0; // No data stored in bool type
-}
-
-list_of_memberst
-bool_type2t::tostring(unsigned int indent) const
-{
-  return list_of_memberst(); // No data here
 }
 
 signedbv_type2t::signedbv_type2t(unsigned int width)

@@ -466,16 +466,13 @@ public:
 };
 
 /** Boolean type. No additional data */
-class bool_type2t : public type_body<bool_type2t>
+class bool_type2t : public esbmct::type<bool_type2t>
 {
 public:
-  bool_type2t(void);
-  virtual bool cmp(const type2t &ref) const;
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
+  bool_type2t(void) : esbmct::type<bool_type2t>(bool_id) {}
+  bool_type2t(const bool_type2t &ref) : esbmct::type<bool_type2t>(ref) {}
+;
   virtual unsigned int get_width(void) const;
-protected:
-  bool_type2t(const bool_type2t &ref);
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
