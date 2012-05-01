@@ -178,6 +178,18 @@ bool_type2t::get_width(void) const
   return 1;
 }
 
+unsigned int
+unsignedbv_type2t::get_width(void) const
+{
+  return width;
+}
+
+unsigned int
+signedbv_type2t::get_width(void) const
+{
+  return width;
+}
+
 array_type2t::array_type2t(const type2tc t, const expr2tc s, bool inf)
   : type_body<array_type2t>(array_id), subtype(t), array_size(s),
     size_is_infinite(inf)
