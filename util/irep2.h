@@ -475,16 +475,12 @@ public:
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
-class empty_type2t : public type_body<empty_type2t>
+class empty_type2t : public esbmct::type<empty_type2t>
 {
 public:
-  empty_type2t(void);
-  virtual bool cmp(const type2t &ref) const;
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
+  empty_type2t(void) : esbmct::type<empty_type2t>(empty_id) {}
+  empty_type2t(const empty_type2t &ref) : esbmct::type<empty_type2t>(ref) {}
   virtual unsigned int get_width(void) const;
-protected:
-  empty_type2t(const empty_type2t &ref);
 };
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when

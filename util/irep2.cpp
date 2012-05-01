@@ -525,33 +525,10 @@ pointer_type2t::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-empty_type2t::empty_type2t(void)
-  : type_body<empty_type2t>(empty_id)
-{
-}
-
 unsigned int
 empty_type2t::get_width(void) const
 {
   throw new symbolic_type_excp();
-}
-
-bool
-empty_type2t::cmp(const type2t &ref __attribute__((unused))) const
-{
-  return true; // Two empty types always compare true.
-}
-
-int
-empty_type2t::lt(const type2t &ref __attribute__((unused))) const
-{
-  return 0; // Two empty types always same.
-}
-
-list_of_memberst
-empty_type2t::tostring(unsigned int indent) const
-{
-  return list_of_memberst(); // No data here
 }
 
 symbol_type2t::symbol_type2t(const dstring sym_name)
