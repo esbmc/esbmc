@@ -318,7 +318,6 @@ namespace esbmct {
   field_type_macro(bigint_type_tag, BigInt);
   field_type_macro(expr2tc_type_tag, expr2tc);
   field_type_macro(fixedbv_type_tag, fixedbvt);
-  field_type_macro(string_type_tag, std::string);
   field_type_macro(expr2tc_vec_type_tag, std::vector<expr2tc>);
   field_type_macro(irepidt_type_tag, irep_idt);
   field_type_macro(type2tc_vec_type_tag, std::vector<type2tc>);
