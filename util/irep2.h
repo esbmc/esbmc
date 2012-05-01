@@ -1681,7 +1681,8 @@ class irep_container : protected boost::shared_ptr<T>
   irep_container() : boost::shared_ptr<T>() {}
 
   template<class Y>
-  explicit irep_container(Y *p) : boost::shared_ptr<T>(p) {}
+  explicit irep_container(Y *p) : boost::shared_ptr<T>(p)
+    { assert(p->expr_id == expid); }
 
   irep_container(const irep_container &ref)
     : boost::shared_ptr<T>(ref) {}
