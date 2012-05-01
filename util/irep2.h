@@ -1695,6 +1695,7 @@ class irep_container : protected boost::shared_ptr<T>
   irep_container &operator=(irep_container const &ref)
   {
     boost::shared_ptr<T>::operator=(ref);
+    assert(this->get()->expr_id == expid);
     return *this;
   }
 
@@ -1702,6 +1703,7 @@ class irep_container : protected boost::shared_ptr<T>
   irep_container & operator=(boost::shared_ptr<Y> const & r)
   {
     boost::shared_ptr<T>::operator=(r);
+    assert(this->get()->expr_id == expid);
     return *this;
   }
 
