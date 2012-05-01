@@ -48,7 +48,7 @@ class expr2t;
 class constant_array2t;
 
 template <class T, int expid>
-class irep_container : protected boost::shared_ptr<T>
+class irep_container : public boost::shared_ptr<T>
 {
 public:
   irep_container() : boost::shared_ptr<T>() {}
@@ -63,6 +63,10 @@ public:
 
   irep_container(const irep_container &ref)
     : boost::shared_ptr<T>(ref) {}
+
+  template <class Y>
+  irep_container(const boost::shared_ptr<Y> &ref)
+    : boost::shared_ptr<T>(ref, boost::detail::polymorphic_cast_tag()) {}
 
   irep_container &operator=(irep_container const &ref)
   {
