@@ -254,75 +254,10 @@ union_type2t::get_width(void) const
   return width;
 }
 
-fixedbv_type2t::fixedbv_type2t(unsigned int _width, unsigned int integer)
-  : type_body<fixedbv_type2t>(fixedbv_id), width(_width),
-                                           integer_bits(integer)
-{
-}
-
 unsigned int
 fixedbv_type2t::get_width(void) const
 {
   return width;
-}
-
-bool
-fixedbv_type2t::cmp(const type2t &ref) const
-{
-
-  const fixedbv_type2t &ref2 = static_cast<const fixedbv_type2t&>(ref);
-
-  if (width != ref2.width)
-    return false;
-
-  if (integer_bits != ref2.integer_bits)
-    return false;
-
-  return true;
-}
-
-int
-fixedbv_type2t::lt(const type2t &ref) const
-{
-  const fixedbv_type2t &ref2 = static_cast<const fixedbv_type2t &>(ref);
-
-  if (width < ref2.width)
-    return -1;
-  if (width > ref2.width)
-    return 1;
-
-  if (integer_bits < ref2.integer_bits)
-    return -1;
-  if (integer_bits > ref2.integer_bits)
-    return 1;
-
-  return 0;
-}
-
-list_of_memberst
-fixedbv_type2t::tostring(unsigned int indent) const
-{
-  char buffer[256];
-  list_of_memberst membs;
-
-  snprintf(buffer, 255, "%d", width);
-  buffer[255] = '\0';
-  membs.push_back(member_entryt("width", buffer));
-
-  snprintf(buffer, 255, "%d", integer_bits);
-  buffer[255] = '\0';
-  membs.push_back(member_entryt("integer_bits", buffer));
-
-  return membs;
-}
-
-void
-fixedbv_type2t::do_crc(boost::crc_32_type &crc) const
-{
-  type2t::do_crc(crc);
-  crc.process_bytes(&width, sizeof(width));
-  crc.process_bytes(&integer_bits, sizeof(integer_bits));
-  return;
 }
 
 unsigned int

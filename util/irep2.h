@@ -271,6 +271,7 @@ namespace esbmct {
   field_name_macro(members);
   field_name_macro(member_names);
   field_name_macro(width);
+  field_name_macro(integer_bits);
   field_name_macro(subtype);
   field_name_macro(array_size);
   field_name_macro(size_is_infinite);
@@ -372,6 +373,7 @@ namespace esbmct {
   member_record_macro(irepidt_vec_member_names, irepidt_vec_type_tag,
                       name_member_names);
   member_record_macro(uint_width, uint_type_tag, name_width);
+  member_record_macro(uint_int_bits, uint_type_tag, name_integer_bits);
   member_record_macro(type2tc_subtype, type2tc_type_tag, name_subtype);
   member_record_macro(expr2tc_array_size, expr2tc_type_tag, name_array_size);
   member_record_macro(bool_size_is_inf, bool_type_tag, name_size_is_infinite);
@@ -646,22 +648,20 @@ public:
 };
 template class esbmct::type<pointer_type2t, esbmct::type2tc_subtype>;
 
-class fixedbv_type2t : public type_body<fixedbv_type2t>
+class fixedbv_type2t : public esbmct::type<fixedbv_type2t, esbmct::uint_width,
+                                           esbmct::uint_int_bits>
 {
 public:
-  fixedbv_type2t(unsigned int width, unsigned int integer);
-  virtual bool cmp(const type2t &ref) const;
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
+  fixedbv_type2t(unsigned int width, unsigned int integer)
+    : esbmct::type<fixedbv_type2t, esbmct::uint_width, esbmct::uint_int_bits>
+      (fixedbv_id, width, integer) { }
+  fixedbv_type2t(const fixedbv_type2t &ref)
+    : esbmct::type<fixedbv_type2t, esbmct::uint_width, esbmct::uint_int_bits>
+      (ref) { }
   virtual unsigned int get_width(void) const;
-protected:
-  fixedbv_type2t(const fixedbv_type2t &ref);
-
-public:
-  const unsigned int width;
-  const unsigned int integer_bits;
 };
+template class esbmct::type<fixedbv_type2t, esbmct::uint_width,
+                             esbmct::uint_int_bits>;
 
 class string_type2t : public type_body<string_type2t>
 {
