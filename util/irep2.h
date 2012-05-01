@@ -669,20 +669,19 @@ template class esbmct::type<code_type2t>;
 
 /** Array type. Comes with a subtype of the array and a size that might be
  *  constant, might be nondeterministic. */
-class array_type2t : public esbmct::type<array_type2t,
-                                         esbmct::type2tc_subtype,
-                                         esbmct::expr2tc_array_size,
-                                         esbmct::bool_size_is_inf>
+class array_type2t;
+typedef esbmct::type<array_type2t, esbmct::type2tc_subtype,
+                     esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>
+                     array_type_type;
+template class esbmct::type<array_type2t, esbmct::type2tc_subtype,
+                     esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>;
+class array_type2t : public array_type_type
 {
 public:
   array_type2t(const type2tc subtype, const expr2tc size, bool inf)
-    : esbmct::type<array_type2t, esbmct::type2tc_subtype,
-                   esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>
-      (array_id, subtype, size, inf) { }
+    : array_type_type (array_id, subtype, size, inf) { }
   array_type2t(const array_type2t &ref)
-    : esbmct::type<array_type2t, esbmct::type2tc_subtype,
-                   esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>
-      (ref) { }
+    : array_type_type (ref) { }
   virtual unsigned int get_width(void) const;
 
   // Exception for invalid manipulations of an infinitely sized array. No actual
@@ -698,38 +697,36 @@ public:
     expr2tc size;
   };
 };
-template class esbmct::type<array_type2t, esbmct::type2tc_subtype,
-                          esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>;
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
  *  attributes */
-class pointer_type2t : public esbmct::type<pointer_type2t,
-                                           esbmct::type2tc_subtype>
+class pointer_type2t;
+typedef esbmct::type<pointer_type2t, esbmct::type2tc_subtype> pointer_type_type;
+template class esbmct::type<pointer_type2t, esbmct::type2tc_subtype>;
+class pointer_type2t : public pointer_type_type
 {
 public:
   pointer_type2t(const type2tc subtype)
-    : esbmct::type<pointer_type2t, esbmct::type2tc_subtype>
-      (pointer_id, subtype) {}
+    : pointer_type_type (pointer_id, subtype) {}
   pointer_type2t(const pointer_type2t &ref)
-    : esbmct::type<pointer_type2t, esbmct::type2tc_subtype>(ref) {}
+    : pointer_type_type (ref) {}
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<pointer_type2t, esbmct::type2tc_subtype>;
 
-class fixedbv_type2t : public esbmct::type<fixedbv_type2t, esbmct::uint_width,
-                                           esbmct::uint_int_bits>
+class fixedbv_type2t;
+typedef esbmct::type<fixedbv_type2t, esbmct::uint_width, esbmct::uint_int_bits>
+        fixedbv_type_type;
+template class esbmct::type<fixedbv_type2t, esbmct::uint_width,
+        esbmct::uint_int_bits>;
+class fixedbv_type2t : public fixedbv_type_type
 {
 public:
   fixedbv_type2t(unsigned int width, unsigned int integer)
-    : esbmct::type<fixedbv_type2t, esbmct::uint_width, esbmct::uint_int_bits>
-      (fixedbv_id, width, integer) { }
+    : fixedbv_type_type (fixedbv_id, width, integer) { }
   fixedbv_type2t(const fixedbv_type2t &ref)
-    : esbmct::type<fixedbv_type2t, esbmct::uint_width, esbmct::uint_int_bits>
-      (ref) { }
+    : fixedbv_type_type (ref) { }
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<fixedbv_type2t, esbmct::uint_width,
-                             esbmct::uint_int_bits>;
 
 class string_type2t : public esbmct::type<string_type2t, esbmct::uint_width>
 {
