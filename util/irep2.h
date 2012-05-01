@@ -1627,6 +1627,12 @@ inline bool operator>(const expr2tc& a, const expr2tc& b)
   return (*b.get() < *a.get());
 }
 
+inline std::ostream& operator<<(std::ostream &out, const expr2tc& a)
+{
+  out << a->pretty(0);
+  return out;
+}
+
 struct irep2_hash
 {
   size_t operator()(const expr2tc &ref) const { return ref->crc(); }
