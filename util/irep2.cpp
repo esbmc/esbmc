@@ -10,31 +10,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/static_assert.hpp>
 
-template <class T>
-list_of_memberst
-tostring_func(unsigned int indent, const char *name, const T *val, ...)
-{
-  va_list list;
-
-  list_of_memberst thevector;
-
-  std::string stringval = (*val)->pretty(indent + 2);
-  thevector.push_back(std::pair<std::string,std::string>
-                               (std::string(name), stringval));
-
-  va_start(list, val);
-  do {
-    const char *listname = va_arg(list, const char *);
-    if (strlen(listname) == 0)
-      return thevector;
-
-    const T *v2 = va_arg(list, const T *);
-    stringval = (*v2)->pretty(indent + 2);
-    thevector.push_back(std::pair<std::string,std::string>
-                                 (std::string(name), stringval));
-  } while (1);
-}
-
 std::string
 indent_str(unsigned int indent)
 {
