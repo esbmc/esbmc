@@ -51,6 +51,18 @@ typedef boost::shared_ptr<expr2t> expr2tc;
 typedef std::pair<std::string,std::string> member_entryt;
 typedef std::vector<member_entryt> list_of_memberst;
 
+template <class T>
+static inline std::string type_to_string(const T &theval, int indent);
+
+template <class T>
+static inline bool do_type_cmp(const T &side1, const T &side2);
+
+template <class T>
+static inline int do_type_lt(const T &side1, const T &side2);
+
+template <class T>
+static inline void do_type_crc(const T &theval, boost::crc_32_type &crc);
+
 /** Base class for all types */
 class type2t
 {
@@ -106,6 +118,302 @@ public:
 
   static const char *type_names[];
 };
+
+/** Base class for all expressions */
+class expr2t
+{
+public:
+  /** Enumeration identifying each sort of expr.
+   *  The idea being to permit runtime identification of a type for debugging or
+   *  otherwise. See type2t::type_ids. */
+  enum expr_ids {
+    constant_int_id,
+    constant_fixedbv_id,
+    constant_bool_id,
+    constant_string_id,
+    constant_struct_id,
+    constant_union_id,
+    constant_array_id,
+    constant_array_of_id,
+    symbol_id,
+    typecast_id,
+    if_id,
+    equality_id,
+    notequal_id,
+    lessthan_id,
+    greaterthan_id,
+    lessthanequal_id,
+    greaterthanequal_id,
+    not_id,
+    and_id,
+    or_id,
+    xor_id,
+    implies_id,
+    bitand_id,
+    bitor_id,
+    bitxor_id,
+    bitnand_id,
+    bitnor_id,
+    bitnxor_id,
+    lshr_id,
+    neg_id,
+    abs_id,
+    add_id,
+    sub_id,
+    mul_id,
+    div_id,
+    modulus_id,
+    shl_id,
+    ashr_id,
+    dynamic_object_id, // Not converted in Z3, only in goto-symex
+    same_object_id,
+    pointer_offset_id,
+    pointer_object_id,
+    address_of_id,
+    byte_extract_id,
+    byte_update_id,
+    with_id,
+    member_id,
+    index_id,
+    zero_string_id,
+    zero_length_string_id,
+    isnan_id,
+    overflow_id,
+    overflow_cast_id,
+    overflow_neg_id,
+    end_expr_id
+  };
+
+protected:
+  expr2t(const type2tc type, expr_ids id);
+  expr2t(const expr2t &ref);
+
+public:
+  /** Clone method. Entirely self explanatory */
+  virtual expr2tc clone(void) const = 0;
+
+  virtual void convert_smt(prop_convt &obj, void *&arg) const = 0;
+
+  bool operator==(const expr2t &ref) const;
+  bool operator<(const expr2t &ref) const;
+  bool operator!=(const expr2t &ref) const;
+  int ltchecked(const expr2t &ref) const;
+  std::string pretty(unsigned int indent = 0) const;
+  void dump(void) const;
+  uint32_t crc(void) const;
+  virtual bool cmp(const expr2t &ref) const;
+  virtual int lt(const expr2t &ref) const;
+  virtual list_of_memberst tostring(unsigned int indent) const = 0;
+  virtual void do_crc(boost::crc_32_type &crc) const;
+
+  /** Instance of expr_ids recording tihs exprs type. */
+  expr_ids expr_id;
+
+  /** Type of this expr. All exprs have a type. */
+  const type2tc type;
+
+  static const char *expr_names[];
+};
+
+// for "ESBMC templates",
+namespace esbmct {
+
+  // Template metaprogramming (vomit) -- define tag classes to instanciate
+  // different class fields with different names and different types.
+
+  #define field_name_macro(name) \
+  template <class fieldtype> \
+  struct name_class_##name { \
+  public: \
+    name_class_##name(fieldtype &someval) : name(someval) {} \
+    name_class_##name(const name_class_##name &ref) : name(ref.name) {} \
+    inline void tostring(list_of_memberst &membs, int indent) const \
+    { return membs.push_back(member_entryt("" #name, \
+                             type_to_string<fieldtype>(name, indent)));}\
+    inline bool cmp(const name_class_##name &theother) const { \
+      return do_type_cmp<fieldtype>(name, theother.name); }\
+    inline int lt(const name_class_##name &theother) const { \
+      return do_type_lt<fieldtype>(name, theother.name); }\
+    inline void do_crc(boost::crc_32_type &crc) const { \
+      do_type_crc<fieldtype>(name, crc); return; }\
+    fieldtype name; \
+  }; \
+  template <class fieldtype> \
+  struct name_##name { \
+  public: \
+    typedef name_class_##name<fieldtype> type; \
+  };
+
+  field_name_macro(constant_value);
+  field_name_macro(value);
+  field_name_macro(datatype_members);
+  field_name_macro(name);
+  field_name_macro(from);
+  field_name_macro(cond);
+  field_name_macro(true_value);
+  field_name_macro(false_value);
+  field_name_macro(side_1);
+  field_name_macro(side_2);
+  field_name_macro(notvalue);
+  field_name_macro(ptr_obj);
+  field_name_macro(big_endian);
+  field_name_macro(source_value);
+  field_name_macro(source_offset);
+  field_name_macro(update_value);
+  field_name_macro(update_field);
+  field_name_macro(member);
+  field_name_macro(index);
+  field_name_macro(string);
+  field_name_macro(bits);
+  field_name_macro(initializer);
+  field_name_macro(operand);
+  #undef field_name_macro
+
+  // Multiple empty name tags are required to avoid inheretance of the same type
+
+  #define empty_names_macro(num) \
+  class name_empty_##num; \
+  struct name_class_empty_##num { \
+  public: \
+    name_class_empty_##num() { } \
+    name_class_empty_##num(const name_class_empty_##num &ref \
+                           __attribute__((unused))) {} \
+    name_class_empty_##num(const name_empty_##num &ref \
+                           __attribute__((unused))) {} \
+    inline void tostring(list_of_memberst &membs __attribute__((unused)),\
+                         int indent __attribute__((unused))) const\
+    { return; } \
+    inline bool cmp(const name_class_empty_##num &ref __attribute__((unused)))\
+    const { return true; }\
+    inline int lt(const name_class_empty_##num &ref __attribute__((unused)))\
+    const { return 0; }\
+    inline void do_crc(boost::crc_32_type &crc __attribute__((unused))) const \
+    { return; }\
+  }; \
+  class name_empty_##num { \
+  public: \
+    typedef name_class_empty_##num type; \
+  };
+
+  empty_names_macro(1);
+  empty_names_macro(2);
+  empty_names_macro(3);
+  empty_names_macro(4);
+  #undef empty_names_macro
+
+  // Type tags
+  #define field_type_macro(name, thetype) \
+  class name { \
+    public: \
+    typedef thetype type; \
+  };
+
+  field_type_macro(int_type_tag, int);
+  field_type_macro(uint_type_tag, unsigned int);
+  field_type_macro(bool_type_tag, bool);
+  field_type_macro(bigint_type_tag, BigInt);
+  field_type_macro(expr2tc_type_tag, expr2tc);
+  field_type_macro(fixedbv_type_tag, fixedbvt);
+  field_type_macro(string_type_tag, std::string);
+  field_type_macro(expr2tc_vec_type_tag, std::vector<expr2tc>);
+  field_type_macro(irepidt_type_tag, irep_idt);
+  #undef field_type_macro
+
+  #define member_record_macro(thename, thetype, fieldname) \
+  struct thename { \
+    typedef fieldname<thetype::type>::type fieldtype; \
+    typedef thetype::type type; \
+    const static int enabled = true; \
+  };
+
+  member_record_macro(constant_int_value, int_type_tag, name_constant_value);
+  member_record_macro(constant_bigint_value, bigint_type_tag,
+                      name_constant_value);
+  member_record_macro(fixedbv_value, fixedbv_type_tag, name_value);
+  member_record_macro(constant_bool_value, bool_type_tag, name_constant_value);
+  member_record_macro(irepidt_value, irepidt_type_tag, name_value);
+  member_record_macro(expr2tc_vec_datatype_members, expr2tc_vec_type_tag,
+                      name_datatype_members);
+  member_record_macro(expr2tc_initializer, expr2tc_type_tag, name_initializer);
+  member_record_macro(irepidt_name, irepidt_type_tag, name_name);
+  member_record_macro(expr2tc_from, expr2tc_type_tag, name_from);
+  member_record_macro(expr2tc_cond, expr2tc_type_tag, name_cond);
+  member_record_macro(expr2tc_true_value, expr2tc_type_tag, name_true_value);
+  member_record_macro(expr2tc_false_value, expr2tc_type_tag, name_false_value);
+  member_record_macro(expr2tc_side_1, expr2tc_type_tag, name_side_1);
+  member_record_macro(expr2tc_side_2, expr2tc_type_tag, name_side_2);
+  member_record_macro(expr2tc_value, expr2tc_type_tag, name_value);
+  member_record_macro(expr2tc_ptr_obj, expr2tc_type_tag, name_ptr_obj);
+  member_record_macro(bool_big_endian, bool_type_tag, name_big_endian);
+  member_record_macro(expr2tc_source_value, expr2tc_type_tag,
+                      name_source_value);
+  member_record_macro(expr2tc_source_offset, expr2tc_type_tag,
+                      name_source_offset);
+  member_record_macro(expr2tc_update_value, expr2tc_type_tag,
+                      name_update_value);
+  member_record_macro(expr2tc_update_field, expr2tc_type_tag,
+                      name_update_field);
+  member_record_macro(irepidt_member, irepidt_type_tag, name_member);
+  member_record_macro(expr2tc_index, expr2tc_type_tag, name_index);
+  member_record_macro(expr2tc_string, expr2tc_type_tag, name_string);
+  member_record_macro(expr2tc_operand, expr2tc_type_tag, name_operand);
+  member_record_macro(uint_bits, uint_type_tag, name_bits);
+
+  #undef member_record_macro
+
+  template <class thename>
+  struct blank_value {
+    typedef typename thename::type fieldtype;
+    typedef thename type;
+    const static thename defaultval;
+    const static int enabled = false;
+  };
+
+  template <class derived,
+            class field1 = esbmct::blank_value<esbmct::name_empty_1>,
+            class field2 = esbmct::blank_value<esbmct::name_empty_2>,
+            class field3 = esbmct::blank_value<esbmct::name_empty_3>,
+            class field4 = esbmct::blank_value<esbmct::name_empty_4> >
+  class irep :
+    public expr2t,
+    public field1::fieldtype,
+    public field2::fieldtype,
+    public field3::fieldtype,
+    public field4::fieldtype
+  {
+  public:
+
+    irep(const type2tc type, expr_ids id,
+        typename field1::type arg1 = field1::defaultval,
+        typename field2::type arg2 = field2::defaultval,
+        typename field3::type arg3 = field3::defaultval,
+        typename field4::type arg4 = field4::defaultval)
+      : expr2t(type, id),
+        field1::fieldtype(arg1),
+        field2::fieldtype(arg2),
+        field3::fieldtype(arg3),
+        field4::fieldtype(arg4)
+    {};
+
+    irep(const irep &ref)
+      : expr2t(ref),
+        field1::fieldtype(ref),
+        field2::fieldtype(ref),
+        field3::fieldtype(ref),
+        field4::fieldtype(ref)
+    {}
+
+    virtual void convert_smt(prop_convt &obj, void *&arg) const;
+    virtual expr2tc clone(void) const;
+    virtual list_of_memberst tostring(unsigned int indent) const;
+    virtual bool cmp(const expr2t &ref) const;
+    virtual int lt(const expr2t &ref) const;
+    virtual void do_crc(boost::crc_32_type &crc) const;
+  };
+
+
+
+}; // esbmct
 
 template <class derived>
 class type_body : public type2t
@@ -477,1040 +785,739 @@ public:
 
 extern type_poolt type_pool;
 
-template <class T>
-static inline std::string type_to_string(const T &theval, int indent);
-
-template <class T>
-static inline bool do_type_cmp(const T &side1, const T &side2);
-
-template <class T>
-static inline int do_type_lt(const T &side1, const T &side2);
-
-template <class T>
-static inline void do_type_crc(const T &theval, boost::crc_32_type &crc);
-
-/** Base class for all expressions */
-class expr2t
-{
-public:
-  /** Enumeration identifying each sort of expr.
-   *  The idea being to permit runtime identification of a type for debugging or
-   *  otherwise. See type2t::type_ids. */
-  enum expr_ids {
-    constant_int_id,
-    constant_fixedbv_id,
-    constant_bool_id,
-    constant_string_id,
-    constant_struct_id,
-    constant_union_id,
-    constant_array_id,
-    constant_array_of_id,
-    symbol_id,
-    typecast_id,
-    if_id,
-    equality_id,
-    notequal_id,
-    lessthan_id,
-    greaterthan_id,
-    lessthanequal_id,
-    greaterthanequal_id,
-    not_id,
-    and_id,
-    or_id,
-    xor_id,
-    implies_id,
-    bitand_id,
-    bitor_id,
-    bitxor_id,
-    bitnand_id,
-    bitnor_id,
-    bitnxor_id,
-    lshr_id,
-    neg_id,
-    abs_id,
-    add_id,
-    sub_id,
-    mul_id,
-    div_id,
-    modulus_id,
-    shl_id,
-    ashr_id,
-    dynamic_object_id, // Not converted in Z3, only in goto-symex
-    same_object_id,
-    pointer_offset_id,
-    pointer_object_id,
-    address_of_id,
-    byte_extract_id,
-    byte_update_id,
-    with_id,
-    member_id,
-    index_id,
-    zero_string_id,
-    zero_length_string_id,
-    isnan_id,
-    overflow_id,
-    overflow_cast_id,
-    overflow_neg_id,
-    end_expr_id
-  };
-
-  // Template metaprogramming (vomit) -- define tag classes to instanciate
-  // different class fields with different names and different types.
-
-  #define field_name_macro(name) \
-  template <class fieldtype> \
-  struct name_class_##name { \
-  public: \
-    name_class_##name(fieldtype &someval) : name(someval) {} \
-    name_class_##name(const name_class_##name &ref) : name(ref.name) {} \
-    inline void tostring(list_of_memberst &membs, int indent) const \
-    { return membs.push_back(member_entryt("" #name, \
-                             type_to_string<fieldtype>(name, indent)));}\
-    inline bool cmp(const name_class_##name &theother) const { \
-      return do_type_cmp<fieldtype>(name, theother.name); }\
-    inline int lt(const name_class_##name &theother) const { \
-      return do_type_lt<fieldtype>(name, theother.name); }\
-    inline void do_crc(boost::crc_32_type &crc) const { \
-      do_type_crc<fieldtype>(name, crc); return; }\
-    fieldtype name; \
-  }; \
-  template <class fieldtype> \
-  struct name_##name { \
-  public: \
-    typedef name_class_##name<fieldtype> type; \
-  };
-
-  field_name_macro(constant_value);
-  field_name_macro(value);
-  field_name_macro(datatype_members);
-  field_name_macro(name);
-  field_name_macro(from);
-  field_name_macro(cond);
-  field_name_macro(true_value);
-  field_name_macro(false_value);
-  field_name_macro(side_1);
-  field_name_macro(side_2);
-  field_name_macro(notvalue);
-  field_name_macro(ptr_obj);
-  field_name_macro(big_endian);
-  field_name_macro(source_value);
-  field_name_macro(source_offset);
-  field_name_macro(update_value);
-  field_name_macro(update_field);
-  field_name_macro(member);
-  field_name_macro(index);
-  field_name_macro(string);
-  field_name_macro(bits);
-  field_name_macro(initializer);
-  field_name_macro(operand);
-  #undef field_name_macro
-
-  // Multiple empty name tags are required to avoid inheretance of the same type
-
-  #define empty_names_macro(num) \
-  class name_empty_##num; \
-  struct name_class_empty_##num { \
-  public: \
-    name_class_empty_##num() { } \
-    name_class_empty_##num(const name_class_empty_##num &ref \
-                           __attribute__((unused))) {} \
-    name_class_empty_##num(const name_empty_##num &ref \
-                           __attribute__((unused))) {} \
-    inline void tostring(list_of_memberst &membs __attribute__((unused)),\
-                         int indent __attribute__((unused))) const\
-    { return; } \
-    inline bool cmp(const name_class_empty_##num &ref __attribute__((unused)))\
-    const { return true; }\
-    inline int lt(const name_class_empty_##num &ref __attribute__((unused)))\
-    const { return 0; }\
-    inline void do_crc(boost::crc_32_type &crc __attribute__((unused))) const \
-    { return; }\
-  }; \
-  class name_empty_##num { \
-  public: \
-    typedef name_class_empty_##num type; \
-  };
-
-  empty_names_macro(1);
-  empty_names_macro(2);
-  empty_names_macro(3);
-  empty_names_macro(4);
-  #undef empty_names_macro
-
-  // Type tags
-  #define field_type_macro(name, thetype) \
-  class name { \
-    public: \
-    typedef thetype type; \
-  };
-
-  field_type_macro(int_type_tag, int);
-  field_type_macro(uint_type_tag, unsigned int);
-  field_type_macro(bool_type_tag, bool);
-  field_type_macro(bigint_type_tag, BigInt);
-  field_type_macro(expr2tc_type_tag, expr2tc);
-  field_type_macro(fixedbv_type_tag, fixedbvt);
-  field_type_macro(string_type_tag, std::string);
-  field_type_macro(expr2tc_vec_type_tag, std::vector<expr2tc>);
-  field_type_macro(irepidt_type_tag, irep_idt);
-  #undef field_type_macro
-
-  #define member_record_macro(thename, thetype, fieldname) \
-  struct thename { \
-    typedef fieldname<thetype::type>::type fieldtype; \
-    typedef thetype::type type; \
-    const static int enabled = true; \
-  };
-
-  member_record_macro(constant_int_value, int_type_tag, name_constant_value);
-  member_record_macro(constant_bigint_value, bigint_type_tag,
-                      name_constant_value);
-  member_record_macro(fixedbv_value, fixedbv_type_tag, name_value);
-  member_record_macro(constant_bool_value, bool_type_tag, name_constant_value);
-  member_record_macro(irepidt_value, irepidt_type_tag, name_value);
-  member_record_macro(expr2tc_vec_datatype_members, expr2tc_vec_type_tag,
-                      name_datatype_members);
-  member_record_macro(expr2tc_initializer, expr2tc_type_tag, name_initializer);
-  member_record_macro(irepidt_name, irepidt_type_tag, name_name);
-  member_record_macro(expr2tc_from, expr2tc_type_tag, name_from);
-  member_record_macro(expr2tc_cond, expr2tc_type_tag, name_cond);
-  member_record_macro(expr2tc_true_value, expr2tc_type_tag, name_true_value);
-  member_record_macro(expr2tc_false_value, expr2tc_type_tag, name_false_value);
-  member_record_macro(expr2tc_side_1, expr2tc_type_tag, name_side_1);
-  member_record_macro(expr2tc_side_2, expr2tc_type_tag, name_side_2);
-  member_record_macro(expr2tc_value, expr2tc_type_tag, name_value);
-  member_record_macro(expr2tc_ptr_obj, expr2tc_type_tag, name_ptr_obj);
-  member_record_macro(bool_big_endian, bool_type_tag, name_big_endian);
-  member_record_macro(expr2tc_source_value, expr2tc_type_tag,
-                      name_source_value);
-  member_record_macro(expr2tc_source_offset, expr2tc_type_tag,
-                      name_source_offset);
-  member_record_macro(expr2tc_update_value, expr2tc_type_tag,
-                      name_update_value);
-  member_record_macro(expr2tc_update_field, expr2tc_type_tag,
-                      name_update_field);
-  member_record_macro(irepidt_member, irepidt_type_tag, name_member);
-  member_record_macro(expr2tc_index, expr2tc_type_tag, name_index);
-  member_record_macro(expr2tc_string, expr2tc_type_tag, name_string);
-  member_record_macro(expr2tc_operand, expr2tc_type_tag, name_operand);
-  member_record_macro(uint_bits, uint_type_tag, name_bits);
-
-  #undef member_record_macro
-
-  template <class thename>
-  struct blank_value {
-    typedef typename thename::type fieldtype;
-    typedef thename type;
-    const static thename defaultval;
-    const static int enabled = false;
-  };
-
-protected:
-  expr2t(const type2tc type, expr_ids id);
-  expr2t(const expr2t &ref);
-
-public:
-  /** Clone method. Entirely self explanatory */
-  virtual expr2tc clone(void) const = 0;
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const = 0;
-
-  bool operator==(const expr2t &ref) const;
-  bool operator<(const expr2t &ref) const;
-  bool operator!=(const expr2t &ref) const;
-  int ltchecked(const expr2t &ref) const;
-  std::string pretty(unsigned int indent = 0) const;
-  void dump(void) const;
-  uint32_t crc(void) const;
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const = 0;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-
-  /** Instance of expr_ids recording tihs exprs type. */
-  expr_ids expr_id;
-
-  /** Type of this expr. All exprs have a type. */
-  const type2tc type;
-
-  static const char *expr_names[];
-};
-
-template <class derived,
-          class field1 = expr2t::blank_value<expr2t::name_empty_1>,
-          class field2 = expr2t::blank_value<expr2t::name_empty_2>,
-          class field3 = expr2t::blank_value<expr2t::name_empty_3>,
-          class field4 = expr2t::blank_value<expr2t::name_empty_4> >
-class expr_body2 :
-  public expr2t,
-  public field1::fieldtype,
-  public field2::fieldtype,
-  public field3::fieldtype,
-  public field4::fieldtype
-{
-public:
-
-  expr_body2(const type2tc type, expr_ids id,
-      typename field1::type arg1 = field1::defaultval,
-      typename field2::type arg2 = field2::defaultval,
-      typename field3::type arg3 = field3::defaultval,
-      typename field4::type arg4 = field4::defaultval)
-    : expr2t(type, id),
-      field1::fieldtype(arg1),
-      field2::fieldtype(arg2),
-      field3::fieldtype(arg3),
-      field4::fieldtype(arg4)
-  {};
-
-  expr_body2(const expr_body2 &ref)
-    : expr2t(ref),
-      field1::fieldtype(ref),
-      field2::fieldtype(ref),
-      field3::fieldtype(ref),
-      field4::fieldtype(ref)
-  {}
-
-  virtual void convert_smt(prop_convt &obj, void *&arg) const;
-  virtual expr2tc clone(void) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual bool cmp(const expr2t &ref) const;
-  virtual int lt(const expr2t &ref) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-};
-
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
-class constant_int2t : public expr_body2<constant_int2t,
-                                         expr2t::constant_bigint_value>
+class constant_int2t : public esbmct::irep<constant_int2t,
+                                         esbmct::constant_bigint_value>
 {
 public:
   constant_int2t(const type2tc &type, const BigInt &input)
-    : expr_body2<constant_int2t, expr2t::constant_bigint_value>
+    : esbmct::irep<constant_int2t, esbmct::constant_bigint_value>
                (type, constant_int_id, input) { }
   constant_int2t(const constant_int2t &ref)
-    : expr_body2<constant_int2t, expr2t::constant_bigint_value> (ref) { }
+    : esbmct::irep<constant_int2t, esbmct::constant_bigint_value> (ref) { }
 
   /** Accessor for fetching native int of this constant */
   unsigned long as_ulong(void) const;
   long as_long(void) const;
 };
-template class expr_body2<constant_int2t, expr2t::constant_bigint_value>;
+template class esbmct::irep<constant_int2t, esbmct::constant_bigint_value>;
 
 /** Constant fixedbv class. Records a floating point number in what I assume
  *  to be mantissa/exponent form, but which is described throughout CBMC code
  *  as fraction/integer parts. */
-class constant_fixedbv2t : public expr_body2<constant_fixedbv2t,
-                                             expr2t::fixedbv_value>
+class constant_fixedbv2t : public esbmct::irep<constant_fixedbv2t,
+                                             esbmct::fixedbv_value>
 {
 public:
   constant_fixedbv2t(const type2tc &type, const fixedbvt &value)
-    : expr_body2<constant_fixedbv2t, expr2t::fixedbv_value>
+    : esbmct::irep<constant_fixedbv2t, esbmct::fixedbv_value>
                 (type, constant_fixedbv_id, value) { }
   constant_fixedbv2t(const constant_fixedbv2t &ref)
-    : expr_body2<constant_fixedbv2t, expr2t::fixedbv_value> (ref) { }
+    : esbmct::irep<constant_fixedbv2t, esbmct::fixedbv_value> (ref) { }
 };
-template class expr_body2<constant_fixedbv2t, expr2t::fixedbv_value>;
+template class esbmct::irep<constant_fixedbv2t, esbmct::fixedbv_value>;
 
-class constant_bool2t : public expr_body2<constant_bool2t,
-                                          expr2t::constant_bool_value>
+class constant_bool2t : public esbmct::irep<constant_bool2t,
+                                          esbmct::constant_bool_value>
 {
 public:
   constant_bool2t(bool value)
-    : expr_body2<constant_bool2t, expr2t::constant_bool_value>
+    : esbmct::irep<constant_bool2t, esbmct::constant_bool_value>
                 (type_pool.get_bool(), constant_bool_id, value) { }
   constant_bool2t(const constant_bool2t &ref)
-    : expr_body2<constant_bool2t, expr2t::constant_bool_value>(ref) { }
+    : esbmct::irep<constant_bool2t, esbmct::constant_bool_value>(ref) { }
 
   bool is_true(void) const;
   bool is_false(void) const;
 };
-template class expr_body2<constant_bool2t, expr2t::constant_bool_value>;
+template class esbmct::irep<constant_bool2t, esbmct::constant_bool_value>;
 
 /** Constant class for string constants. */
-class constant_string2t : public expr_body2<constant_string2t,
-                                            expr2t::irepidt_value>
+class constant_string2t : public esbmct::irep<constant_string2t,
+                                            esbmct::irepidt_value>
 {
 public:
   constant_string2t(const type2tc &type, const irep_idt &stringref)
-    : expr_body2<constant_string2t, expr2t::irepidt_value>
+    : esbmct::irep<constant_string2t, esbmct::irepidt_value>
       (type, constant_string_id, stringref) { }
   constant_string2t(const constant_string2t &ref)
-    : expr_body2<constant_string2t, expr2t::irepidt_value>(ref) { }
+    : esbmct::irep<constant_string2t, esbmct::irepidt_value>(ref) { }
 
   /** Convert string to a constant length array */
   expr2tc to_array(void) const;
 };
-template class expr_body2<constant_string2t, expr2t::irepidt_value>;
+template class esbmct::irep<constant_string2t, esbmct::irepidt_value>;
 
-class constant_struct2t : public expr_body2<constant_struct2t,
-                                           expr2t::expr2tc_vec_datatype_members>
+class constant_struct2t : public esbmct::irep<constant_struct2t,
+                                           esbmct::expr2tc_vec_datatype_members>
 {
 public:
   constant_struct2t(const type2tc &type, const std::vector<expr2tc> &members)
-    : expr_body2<constant_struct2t, expr2t::expr2tc_vec_datatype_members>
+    : esbmct::irep<constant_struct2t, esbmct::expr2tc_vec_datatype_members>
       (type, constant_struct_id, members) { }
   constant_struct2t(const constant_struct2t &ref)
-    : expr_body2<constant_struct2t, expr2t::expr2tc_vec_datatype_members>(ref){}
+    : esbmct::irep<constant_struct2t, esbmct::expr2tc_vec_datatype_members>(ref){}
 };
-template class expr_body2<constant_struct2t, expr2t::expr2tc_vec_datatype_members>;
+template class esbmct::irep<constant_struct2t, esbmct::expr2tc_vec_datatype_members>;
 
-class constant_union2t : public expr_body2<constant_union2t,
-                                           expr2t::expr2tc_vec_datatype_members>
+class constant_union2t : public esbmct::irep<constant_union2t,
+                                           esbmct::expr2tc_vec_datatype_members>
 {
 public:
   constant_union2t(const type2tc &type, const std::vector<expr2tc> &members)
-    : expr_body2<constant_union2t, expr2t::expr2tc_vec_datatype_members>
+    : esbmct::irep<constant_union2t, esbmct::expr2tc_vec_datatype_members>
       (type, constant_union_id, members) { }
   constant_union2t(const constant_union2t &ref)
-    : expr_body2<constant_union2t, expr2t::expr2tc_vec_datatype_members>(ref){}
+    : esbmct::irep<constant_union2t, esbmct::expr2tc_vec_datatype_members>(ref){}
 };
-template class expr_body2<constant_union2t, expr2t::expr2tc_vec_datatype_members>;
+template class esbmct::irep<constant_union2t, esbmct::expr2tc_vec_datatype_members>;
 
-class constant_array2t : public expr_body2<constant_array2t,
-                                           expr2t::expr2tc_vec_datatype_members>
+class constant_array2t : public esbmct::irep<constant_array2t,
+                                           esbmct::expr2tc_vec_datatype_members>
 {
 public:
   constant_array2t(const type2tc &type, const std::vector<expr2tc> &members)
-    : expr_body2<constant_array2t, expr2t::expr2tc_vec_datatype_members>
+    : esbmct::irep<constant_array2t, esbmct::expr2tc_vec_datatype_members>
       (type, constant_array_id, members) { }
   constant_array2t(const constant_array2t &ref)
-    : expr_body2<constant_array2t, expr2t::expr2tc_vec_datatype_members>(ref){}
+    : esbmct::irep<constant_array2t, esbmct::expr2tc_vec_datatype_members>(ref){}
 };
-template class expr_body2<constant_array2t, expr2t::expr2tc_vec_datatype_members>;
+template class esbmct::irep<constant_array2t, esbmct::expr2tc_vec_datatype_members>;
 
-class constant_array_of2t : public expr_body2<constant_array_of2t,
-                                              expr2t::expr2tc_initializer>
+class constant_array_of2t : public esbmct::irep<constant_array_of2t,
+                                              esbmct::expr2tc_initializer>
 {
 public:
   constant_array_of2t(const type2tc &type, const expr2tc &init)
-    : expr_body2<constant_array_of2t, expr2t::expr2tc_initializer>
+    : esbmct::irep<constant_array_of2t, esbmct::expr2tc_initializer>
       (type, constant_array_of_id, init) { }
   constant_array_of2t(const constant_array_of2t &ref)
-    : expr_body2<constant_array_of2t, expr2t::expr2tc_initializer>(ref){}
+    : esbmct::irep<constant_array_of2t, esbmct::expr2tc_initializer>(ref){}
 };
-template class expr_body2<constant_array_of2t, expr2t::expr2tc_initializer>;
+template class esbmct::irep<constant_array_of2t, esbmct::expr2tc_initializer>;
 
-class symbol2t : public expr_body2<symbol2t, expr2t::irepidt_name>
+class symbol2t : public esbmct::irep<symbol2t, esbmct::irepidt_name>
 {
 public:
   symbol2t(const type2tc &type, const irep_idt &init)
-    : expr_body2<symbol2t, expr2t::irepidt_name> (type, symbol_id, init) { }
+    : esbmct::irep<symbol2t, esbmct::irepidt_name> (type, symbol_id, init) { }
   symbol2t(const symbol2t &ref)
-    : expr_body2<symbol2t, expr2t::irepidt_name>(ref){}
+    : esbmct::irep<symbol2t, esbmct::irepidt_name>(ref){}
 };
-template class expr_body2<symbol2t, expr2t::irepidt_name>;
+template class esbmct::irep<symbol2t, esbmct::irepidt_name>;
 
-class typecast2t : public expr_body2<typecast2t, expr2t::expr2tc_from>
+class typecast2t : public esbmct::irep<typecast2t, esbmct::expr2tc_from>
 {
 public:
   typecast2t(const type2tc &type, const expr2tc &from)
-    : expr_body2<typecast2t, expr2t::expr2tc_from> (type, typecast_id, from) { }
+    : esbmct::irep<typecast2t, esbmct::expr2tc_from> (type, typecast_id, from) { }
   typecast2t(const typecast2t &ref)
-    : expr_body2<typecast2t, expr2t::expr2tc_from>(ref){}
+    : esbmct::irep<typecast2t, esbmct::expr2tc_from>(ref){}
 };
-template class expr_body2<typecast2t, expr2t::expr2tc_from>;
+template class esbmct::irep<typecast2t, esbmct::expr2tc_from>;
 
-class if2t : public expr_body2<if2t,
-                               expr2t::expr2tc_cond,
-                               expr2t::expr2tc_true_value,
-                               expr2t::expr2tc_false_value>
+class if2t : public esbmct::irep<if2t,
+                               esbmct::expr2tc_cond,
+                               esbmct::expr2tc_true_value,
+                               esbmct::expr2tc_false_value>
 {
 public:
   if2t(const type2tc &type, const expr2tc &cond, const expr2tc &trueval,
        const expr2tc &falseval)
-    : expr_body2<if2t, expr2t::expr2tc_cond, expr2t::expr2tc_true_value,
-                 expr2t::expr2tc_false_value>
+    : esbmct::irep<if2t, esbmct::expr2tc_cond, esbmct::expr2tc_true_value,
+                 esbmct::expr2tc_false_value>
                  (type, if_id, cond, trueval, falseval) {}
   if2t(const if2t &ref)
-    : expr_body2<if2t, expr2t::expr2tc_cond, expr2t::expr2tc_true_value,
-                 expr2t::expr2tc_false_value>(ref) {}
+    : esbmct::irep<if2t, esbmct::expr2tc_cond, esbmct::expr2tc_true_value,
+                 esbmct::expr2tc_false_value>(ref) {}
 };
-template class expr_body2<if2t, expr2t::expr2tc_cond,
-                          expr2t::expr2tc_true_value,
-                          expr2t::expr2tc_false_value>;
+template class esbmct::irep<if2t, esbmct::expr2tc_cond,
+                          esbmct::expr2tc_true_value,
+                          esbmct::expr2tc_false_value>;
 
-class equality2t : public expr_body2<equality2t, expr2t::expr2tc_side_1,
-                                     expr2t::expr2tc_side_2>
+class equality2t : public esbmct::irep<equality2t, esbmct::expr2tc_side_1,
+                                     esbmct::expr2tc_side_2>
 {
 public:
   equality2t(const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<equality2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<equality2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type_pool.get_bool(), equality_id, v1, v2) {}
   equality2t(const equality2t &ref)
-    : expr_body2<equality2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<equality2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<equality2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
+template class esbmct::irep<equality2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
-class notequal2t : public expr_body2<notequal2t, expr2t::expr2tc_side_1,
-                                     expr2t::expr2tc_side_2>
+class notequal2t : public esbmct::irep<notequal2t, esbmct::expr2tc_side_1,
+                                     esbmct::expr2tc_side_2>
 {
 public:
   notequal2t(const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<notequal2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<notequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type_pool.get_bool(), notequal_id, v1, v2) {}
   notequal2t(const notequal2t &ref)
-    : expr_body2<notequal2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<notequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<notequal2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
+template class esbmct::irep<notequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
-class lessthan2t : public expr_body2<lessthan2t, expr2t::expr2tc_side_1,
-                                     expr2t::expr2tc_side_2>
+class lessthan2t : public esbmct::irep<lessthan2t, esbmct::expr2tc_side_1,
+                                     esbmct::expr2tc_side_2>
 {
 public:
   lessthan2t(const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<lessthan2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<lessthan2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type_pool.get_bool(), lessthan_id, v1, v2) {}
   lessthan2t(const lessthan2t &ref)
-    : expr_body2<lessthan2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<lessthan2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<lessthan2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
+template class esbmct::irep<lessthan2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
-class greaterthan2t : public expr_body2<greaterthan2t, expr2t::expr2tc_side_1,
-                                     expr2t::expr2tc_side_2>
+class greaterthan2t : public esbmct::irep<greaterthan2t, esbmct::expr2tc_side_1,
+                                     esbmct::expr2tc_side_2>
 {
 public:
   greaterthan2t(const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<greaterthan2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<greaterthan2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type_pool.get_bool(), greaterthan_id, v1, v2) {}
   greaterthan2t(const greaterthan2t &ref)
-    : expr_body2<greaterthan2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<greaterthan2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<greaterthan2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
+template class esbmct::irep<greaterthan2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
-class lessthanequal2t : public expr_body2<lessthanequal2t,
-                                          expr2t::expr2tc_side_1,
-                                          expr2t::expr2tc_side_2>
+class lessthanequal2t : public esbmct::irep<lessthanequal2t,
+                                          esbmct::expr2tc_side_1,
+                                          esbmct::expr2tc_side_2>
 {
 public:
   lessthanequal2t(const expr2tc &v1, const expr2tc &v2)
-   : expr_body2<lessthanequal2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+   : esbmct::irep<lessthanequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type_pool.get_bool(), lessthanequal_id, v1, v2) {}
   lessthanequal2t(const lessthanequal2t &ref)
-   : expr_body2<lessthanequal2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+   : esbmct::irep<lessthanequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<lessthanequal2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
+template class esbmct::irep<lessthanequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
-class greaterthanequal2t : public expr_body2<greaterthanequal2t,
-                                          expr2t::expr2tc_side_1,
-                                          expr2t::expr2tc_side_2>
+class greaterthanequal2t : public esbmct::irep<greaterthanequal2t,
+                                          esbmct::expr2tc_side_1,
+                                          esbmct::expr2tc_side_2>
 {
 public:
   greaterthanequal2t(const expr2tc &v1, const expr2tc &v2)
-  : expr_body2<greaterthanequal2t,expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>
+  : esbmct::irep<greaterthanequal2t,esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>
       (type_pool.get_bool(), greaterthanequal_id, v1, v2) {}
   greaterthanequal2t(const greaterthanequal2t &ref)
-  : expr_body2<greaterthanequal2t,expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>
+  : esbmct::irep<greaterthanequal2t,esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<greaterthanequal2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>;
+template class esbmct::irep<greaterthanequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
-class not2t : public expr_body2<not2t, expr2t::expr2tc_value>
+class not2t : public esbmct::irep<not2t, esbmct::expr2tc_value>
 {
 public:
   not2t(const expr2tc &val)
-  : expr_body2<not2t, expr2t::expr2tc_value>
+  : esbmct::irep<not2t, esbmct::expr2tc_value>
     (type_pool.get_bool(), not_id, val) {}
   not2t(const not2t &ref)
-  : expr_body2<not2t, expr2t::expr2tc_value>
+  : esbmct::irep<not2t, esbmct::expr2tc_value>
     (ref) {}
 };
-template class expr_body2<not2t, expr2t::expr2tc_value>;
+template class esbmct::irep<not2t, esbmct::expr2tc_value>;
 
-class and2t : public expr_body2<and2t, expr2t::expr2tc_side_1,
-                                       expr2t::expr2tc_side_2>
+class and2t : public esbmct::irep<and2t, esbmct::expr2tc_side_1,
+                                       esbmct::expr2tc_side_2>
 {
 public:
   and2t(const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<and2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<and2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type_pool.get_bool(), and_id, v1, v2) {}
   and2t(const and2t &ref)
-    : expr_body2<and2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<and2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<and2t, expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>;
+template class esbmct::irep<and2t, esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>;
 
-class or2t : public expr_body2<or2t, expr2t::expr2tc_side_1,
-                                     expr2t::expr2tc_side_2>
+class or2t : public esbmct::irep<or2t, esbmct::expr2tc_side_1,
+                                     esbmct::expr2tc_side_2>
 {
 public:
   or2t(const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<or2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<or2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type_pool.get_bool(), or_id, v1, v2) {}
   or2t(const or2t &ref)
-    : expr_body2<or2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<or2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<or2t, expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>;
+template class esbmct::irep<or2t, esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>;
 
-class xor2t : public expr_body2<xor2t, expr2t::expr2tc_side_1,
-                                       expr2t::expr2tc_side_2>
+class xor2t : public esbmct::irep<xor2t, esbmct::expr2tc_side_1,
+                                       esbmct::expr2tc_side_2>
 {
 public:
   xor2t(const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<xor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<xor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type_pool.get_bool(), xor_id, v1, v2) {}
   xor2t(const xor2t &ref)
-    : expr_body2<xor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<xor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<xor2t, expr2t::expr2tc_side_1,expr2t::expr2tc_side_2>;
+template class esbmct::irep<xor2t, esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>;
 
-class implies2t : public expr_body2<implies2t, expr2t::expr2tc_side_1,
-                                               expr2t::expr2tc_side_2>
+class implies2t : public esbmct::irep<implies2t, esbmct::expr2tc_side_1,
+                                               esbmct::expr2tc_side_2>
 {
 public:
   implies2t(const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<implies2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<implies2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type_pool.get_bool(), implies_id, v1, v2) {}
   implies2t(const implies2t &ref)
-    : expr_body2<implies2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<implies2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<implies2t, expr2t::expr2tc_side_1,
-                                     expr2t::expr2tc_side_2>;
+template class esbmct::irep<implies2t, esbmct::expr2tc_side_1,
+                                     esbmct::expr2tc_side_2>;
 
-class bitand2t : public expr_body2<bitand2t, expr2t::expr2tc_side_1,
-                                             expr2t::expr2tc_side_2>
+class bitand2t : public esbmct::irep<bitand2t, esbmct::expr2tc_side_1,
+                                             esbmct::expr2tc_side_2>
 {
 public:
   bitand2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<bitand2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitand2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, bitand_id, v1, v2) {}
   bitand2t(const bitand2t &ref)
-    : expr_body2<bitand2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitand2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<bitand2t, expr2t::expr2tc_side_1,
-                                    expr2t::expr2tc_side_2>;
+template class esbmct::irep<bitand2t, esbmct::expr2tc_side_1,
+                                    esbmct::expr2tc_side_2>;
 
-class bitor2t : public expr_body2<bitor2t, expr2t::expr2tc_side_1,
-                                           expr2t::expr2tc_side_2>
+class bitor2t : public esbmct::irep<bitor2t, esbmct::expr2tc_side_1,
+                                           esbmct::expr2tc_side_2>
 {
 public:
   bitor2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<bitor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, bitor_id, v1, v2) {}
   bitor2t(const bitor2t &ref)
-    : expr_body2<bitor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<bitor2t, expr2t::expr2tc_side_1,
-                                   expr2t::expr2tc_side_2>;
+template class esbmct::irep<bitor2t, esbmct::expr2tc_side_1,
+                                   esbmct::expr2tc_side_2>;
 
-class bitxor2t : public expr_body2<bitxor2t, expr2t::expr2tc_side_1,
-                                             expr2t::expr2tc_side_2>
+class bitxor2t : public esbmct::irep<bitxor2t, esbmct::expr2tc_side_1,
+                                             esbmct::expr2tc_side_2>
 {
 public:
   bitxor2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<bitxor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitxor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, bitxor_id, v1, v2) {}
   bitxor2t(const bitxor2t &ref)
-    : expr_body2<bitxor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitxor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<bitxor2t, expr2t::expr2tc_side_1,
-                                    expr2t::expr2tc_side_2>;
+template class esbmct::irep<bitxor2t, esbmct::expr2tc_side_1,
+                                    esbmct::expr2tc_side_2>;
 
-class bitnand2t : public expr_body2<bitnand2t, expr2t::expr2tc_side_1,
-                                               expr2t::expr2tc_side_2>
+class bitnand2t : public esbmct::irep<bitnand2t, esbmct::expr2tc_side_1,
+                                               esbmct::expr2tc_side_2>
 {
 public:
   bitnand2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<bitnand2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitnand2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, bitnand_id, v1, v2) {}
   bitnand2t(const bitnand2t &ref)
-    : expr_body2<bitnand2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitnand2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<bitnand2t, expr2t::expr2tc_side_1,
-                                     expr2t::expr2tc_side_2>;
+template class esbmct::irep<bitnand2t, esbmct::expr2tc_side_1,
+                                     esbmct::expr2tc_side_2>;
 
-class bitnor2t : public expr_body2<bitnor2t, expr2t::expr2tc_side_1,
-                                             expr2t::expr2tc_side_2>
+class bitnor2t : public esbmct::irep<bitnor2t, esbmct::expr2tc_side_1,
+                                             esbmct::expr2tc_side_2>
 {
 public:
   bitnor2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<bitnor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitnor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, bitnor_id, v1, v2) {}
   bitnor2t(const bitnor2t &ref)
-    : expr_body2<bitnor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitnor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<bitnor2t, expr2t::expr2tc_side_1,
-                                    expr2t::expr2tc_side_2>;
+template class esbmct::irep<bitnor2t, esbmct::expr2tc_side_1,
+                                    esbmct::expr2tc_side_2>;
 
-class bitnxor2t : public expr_body2<bitnxor2t, expr2t::expr2tc_side_1,
-                                               expr2t::expr2tc_side_2>
+class bitnxor2t : public esbmct::irep<bitnxor2t, esbmct::expr2tc_side_1,
+                                               esbmct::expr2tc_side_2>
 {
 public:
   bitnxor2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<bitnxor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitnxor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, bitnxor_id, v1, v2) {}
   bitnxor2t(const bitnxor2t &ref)
-    : expr_body2<bitnxor2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<bitnxor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<bitnxor2t, expr2t::expr2tc_side_1,
-                                     expr2t::expr2tc_side_2>;
+template class esbmct::irep<bitnxor2t, esbmct::expr2tc_side_1,
+                                     esbmct::expr2tc_side_2>;
 
-class lshr2t : public expr_body2<lshr2t, expr2t::expr2tc_side_1,
-                                         expr2t::expr2tc_side_2>
+class lshr2t : public esbmct::irep<lshr2t, esbmct::expr2tc_side_1,
+                                         esbmct::expr2tc_side_2>
 {
 public:
   lshr2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<lshr2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<lshr2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, lshr_id, v1, v2) {}
   lshr2t(const lshr2t &ref)
-    : expr_body2<lshr2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<lshr2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<lshr2t, expr2t::expr2tc_side_1,
-                                  expr2t::expr2tc_side_2>;
+template class esbmct::irep<lshr2t, esbmct::expr2tc_side_1,
+                                  esbmct::expr2tc_side_2>;
 
-class neg2t : public expr_body2<neg2t,expr2t::expr2tc_value>
+class neg2t : public esbmct::irep<neg2t,esbmct::expr2tc_value>
 {
 public:
   neg2t(const type2tc &type, const expr2tc &val)
-    : expr_body2<neg2t, expr2t::expr2tc_value> (type, neg_id, val) {}
+    : esbmct::irep<neg2t, esbmct::expr2tc_value> (type, neg_id, val) {}
   neg2t(const neg2t &ref)
-    : expr_body2<neg2t, expr2t::expr2tc_value> (ref) {}
+    : esbmct::irep<neg2t, esbmct::expr2tc_value> (ref) {}
 };
-template class expr_body2<neg2t, expr2t::expr2tc_value>;
+template class esbmct::irep<neg2t, esbmct::expr2tc_value>;
 
-class abs2t : public expr_body2<abs2t,expr2t::expr2tc_value>
+class abs2t : public esbmct::irep<abs2t,esbmct::expr2tc_value>
 {
 public:
   abs2t(const type2tc &type, const expr2tc &val)
-    : expr_body2<abs2t, expr2t::expr2tc_value> (type, abs_id, val) {}
+    : esbmct::irep<abs2t, esbmct::expr2tc_value> (type, abs_id, val) {}
   abs2t(const abs2t &ref)
-    : expr_body2<abs2t, expr2t::expr2tc_value> (ref) {}
+    : esbmct::irep<abs2t, esbmct::expr2tc_value> (ref) {}
 };
-template class expr_body2<abs2t, expr2t::expr2tc_value>;
+template class esbmct::irep<abs2t, esbmct::expr2tc_value>;
 
-class add2t : public expr_body2<add2t, expr2t::expr2tc_side_1,
-                                       expr2t::expr2tc_side_2>
+class add2t : public esbmct::irep<add2t, esbmct::expr2tc_side_1,
+                                       esbmct::expr2tc_side_2>
 {
 public:
   add2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<add2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<add2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, add_id, v1, v2) {}
   add2t(const add2t &ref)
-    : expr_body2<add2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<add2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<add2t, expr2t::expr2tc_side_1,
-                                 expr2t::expr2tc_side_2>;
+template class esbmct::irep<add2t, esbmct::expr2tc_side_1,
+                                 esbmct::expr2tc_side_2>;
 
-class sub2t : public expr_body2<sub2t, expr2t::expr2tc_side_1,
-                                       expr2t::expr2tc_side_2>
+class sub2t : public esbmct::irep<sub2t, esbmct::expr2tc_side_1,
+                                       esbmct::expr2tc_side_2>
 {
 public:
   sub2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<sub2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<sub2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, sub_id, v1, v2) {}
   sub2t(const sub2t &ref)
-    : expr_body2<sub2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<sub2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<sub2t, expr2t::expr2tc_side_1,
-                                 expr2t::expr2tc_side_2>;
+template class esbmct::irep<sub2t, esbmct::expr2tc_side_1,
+                                 esbmct::expr2tc_side_2>;
 
-class mul2t : public expr_body2<mul2t, expr2t::expr2tc_side_1,
-                                       expr2t::expr2tc_side_2>
+class mul2t : public esbmct::irep<mul2t, esbmct::expr2tc_side_1,
+                                       esbmct::expr2tc_side_2>
 {
 public:
   mul2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<mul2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<mul2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, mul_id, v1, v2) {}
   mul2t(const mul2t &ref)
-    : expr_body2<mul2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<mul2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<mul2t, expr2t::expr2tc_side_1,
-                                 expr2t::expr2tc_side_2>;
+template class esbmct::irep<mul2t, esbmct::expr2tc_side_1,
+                                 esbmct::expr2tc_side_2>;
 
-class div2t : public expr_body2<div2t, expr2t::expr2tc_side_1,
-                                       expr2t::expr2tc_side_2>
+class div2t : public esbmct::irep<div2t, esbmct::expr2tc_side_1,
+                                       esbmct::expr2tc_side_2>
 {
 public:
   div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<div2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<div2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, div_id, v1, v2) {}
   div2t(const div2t &ref)
-    : expr_body2<div2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<div2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<div2t, expr2t::expr2tc_side_1,
-                                 expr2t::expr2tc_side_2>;
+template class esbmct::irep<div2t, esbmct::expr2tc_side_1,
+                                 esbmct::expr2tc_side_2>;
 
-class modulus2t : public expr_body2<modulus2t, expr2t::expr2tc_side_1,
-                                               expr2t::expr2tc_side_2>
+class modulus2t : public esbmct::irep<modulus2t, esbmct::expr2tc_side_1,
+                                               esbmct::expr2tc_side_2>
 {
 public:
   modulus2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<modulus2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<modulus2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, modulus_id, v1, v2) {}
   modulus2t(const modulus2t &ref)
-    : expr_body2<modulus2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<modulus2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<modulus2t, expr2t::expr2tc_side_1,
-                                     expr2t::expr2tc_side_2>;
+template class esbmct::irep<modulus2t, esbmct::expr2tc_side_1,
+                                     esbmct::expr2tc_side_2>;
 
-class shl2t : public expr_body2<shl2t, expr2t::expr2tc_side_1,
-                                       expr2t::expr2tc_side_2>
+class shl2t : public esbmct::irep<shl2t, esbmct::expr2tc_side_1,
+                                       esbmct::expr2tc_side_2>
 {
 public:
   shl2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<shl2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<shl2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, shl_id, v1, v2) {}
   shl2t(const shl2t &ref)
-    : expr_body2<shl2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<shl2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<shl2t, expr2t::expr2tc_side_1,
-                                 expr2t::expr2tc_side_2>;
+template class esbmct::irep<shl2t, esbmct::expr2tc_side_1,
+                                 esbmct::expr2tc_side_2>;
 
-class ashr2t : public expr_body2<ashr2t, expr2t::expr2tc_side_1,
-                                         expr2t::expr2tc_side_2>
+class ashr2t : public esbmct::irep<ashr2t, esbmct::expr2tc_side_1,
+                                         esbmct::expr2tc_side_2>
 {
 public:
   ashr2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<ashr2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<ashr2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type, ashr_id, v1, v2) {}
   ashr2t(const ashr2t &ref)
-    : expr_body2<ashr2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<ashr2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<ashr2t, expr2t::expr2tc_side_1,
-                                  expr2t::expr2tc_side_2>;
+template class esbmct::irep<ashr2t, esbmct::expr2tc_side_1,
+                                  esbmct::expr2tc_side_2>;
 
-class same_object2t : public expr_body2<same_object2t, expr2t::expr2tc_side_1,
-                                                       expr2t::expr2tc_side_2>
+class same_object2t : public esbmct::irep<same_object2t, esbmct::expr2tc_side_1,
+                                                       esbmct::expr2tc_side_2>
 {
 public:
   same_object2t(const expr2tc &v1, const expr2tc &v2)
-    : expr_body2<same_object2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<same_object2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (type_pool.get_bool(), same_object_id, v1, v2) {}
   same_object2t(const same_object2t &ref)
-    : expr_body2<same_object2t, expr2t::expr2tc_side_1, expr2t::expr2tc_side_2>
+    : esbmct::irep<same_object2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
 };
-template class expr_body2<same_object2t, expr2t::expr2tc_side_1,
-                                         expr2t::expr2tc_side_2>;
+template class esbmct::irep<same_object2t, esbmct::expr2tc_side_1,
+                                         esbmct::expr2tc_side_2>;
 
 
-class pointer_offset2t : public expr_body2<pointer_offset2t,
-                                           expr2t::expr2tc_ptr_obj>
+class pointer_offset2t : public esbmct::irep<pointer_offset2t,
+                                           esbmct::expr2tc_ptr_obj>
 {
 public:
   pointer_offset2t(const type2tc &type, const expr2tc &ptrobj)
-    : expr_body2<pointer_offset2t, expr2t::expr2tc_ptr_obj>
+    : esbmct::irep<pointer_offset2t, esbmct::expr2tc_ptr_obj>
       (type, pointer_offset_id, ptrobj) {}
   pointer_offset2t(const pointer_offset2t &ref)
-    : expr_body2<pointer_offset2t, expr2t::expr2tc_ptr_obj> (ref) {}
+    : esbmct::irep<pointer_offset2t, esbmct::expr2tc_ptr_obj> (ref) {}
 };
-template class expr_body2<pointer_offset2t, expr2t::expr2tc_ptr_obj>;
+template class esbmct::irep<pointer_offset2t, esbmct::expr2tc_ptr_obj>;
 
-class pointer_object2t : public expr_body2<pointer_object2t,
-                                           expr2t::expr2tc_ptr_obj>
+class pointer_object2t : public esbmct::irep<pointer_object2t,
+                                           esbmct::expr2tc_ptr_obj>
 {
 public:
   pointer_object2t(const type2tc &type, const expr2tc &ptrobj)
-    : expr_body2<pointer_object2t, expr2t::expr2tc_ptr_obj>
+    : esbmct::irep<pointer_object2t, esbmct::expr2tc_ptr_obj>
       (type, pointer_object_id, ptrobj) {}
   pointer_object2t(const pointer_object2t &ref)
-    : expr_body2<pointer_object2t, expr2t::expr2tc_ptr_obj> (ref) {}
+    : esbmct::irep<pointer_object2t, esbmct::expr2tc_ptr_obj> (ref) {}
 };
-template class expr_body2<pointer_object2t, expr2t::expr2tc_ptr_obj>;
+template class esbmct::irep<pointer_object2t, esbmct::expr2tc_ptr_obj>;
 
-class address_of2t : public expr_body2<address_of2t,
-                                           expr2t::expr2tc_ptr_obj>
+class address_of2t : public esbmct::irep<address_of2t,
+                                           esbmct::expr2tc_ptr_obj>
 {
 public:
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
-    : expr_body2<address_of2t, expr2t::expr2tc_ptr_obj>
+    : esbmct::irep<address_of2t, esbmct::expr2tc_ptr_obj>
       (type2tc(new pointer_type2t(subtype)), address_of_id, ptrobj) {}
   address_of2t(const address_of2t &ref)
-    : expr_body2<address_of2t, expr2t::expr2tc_ptr_obj> (ref) {}
+    : esbmct::irep<address_of2t, esbmct::expr2tc_ptr_obj> (ref) {}
 };
-template class expr_body2<address_of2t, expr2t::expr2tc_ptr_obj>;
+template class esbmct::irep<address_of2t, esbmct::expr2tc_ptr_obj>;
 
-class byte_extract2t : public expr_body2<byte_extract2t,
-                                           expr2t::bool_big_endian,
-                                           expr2t::expr2tc_source_value,
-                                           expr2t::expr2tc_source_offset>
+class byte_extract2t : public esbmct::irep<byte_extract2t,
+                                           esbmct::bool_big_endian,
+                                           esbmct::expr2tc_source_value,
+                                           esbmct::expr2tc_source_offset>
 {
 public:
   byte_extract2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
                  const expr2tc &offset)
-    : expr_body2<byte_extract2t, expr2t::bool_big_endian,
-                 expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset>
+    : esbmct::irep<byte_extract2t, esbmct::bool_big_endian,
+                 esbmct::expr2tc_source_value, esbmct::expr2tc_source_offset>
       (type, byte_extract_id, is_big_endian, source, offset) {}
   byte_extract2t(const byte_extract2t &ref)
-    : expr_body2<byte_extract2t, expr2t::bool_big_endian,
-                 expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset>
+    : esbmct::irep<byte_extract2t, esbmct::bool_big_endian,
+                 esbmct::expr2tc_source_value, esbmct::expr2tc_source_offset>
       (ref) {}
 };
-template class expr_body2<byte_extract2t, expr2t::bool_big_endian,
-                  expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset>;
+template class esbmct::irep<byte_extract2t, esbmct::bool_big_endian,
+                  esbmct::expr2tc_source_value, esbmct::expr2tc_source_offset>;
 
-class byte_update2t : public expr_body2<byte_update2t,
-                                           expr2t::bool_big_endian,
-                                           expr2t::expr2tc_source_value,
-                                           expr2t::expr2tc_source_offset,
-                                           expr2t::expr2tc_update_value>
+class byte_update2t : public esbmct::irep<byte_update2t,
+                                           esbmct::bool_big_endian,
+                                           esbmct::expr2tc_source_value,
+                                           esbmct::expr2tc_source_offset,
+                                           esbmct::expr2tc_update_value>
 {
 public:
   byte_update2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
                  const expr2tc &offset, const expr2tc &updateval)
-    : expr_body2<byte_update2t, expr2t::bool_big_endian,
-                 expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset,
-                 expr2t::expr2tc_update_value>
+    : esbmct::irep<byte_update2t, esbmct::bool_big_endian,
+                 esbmct::expr2tc_source_value, esbmct::expr2tc_source_offset,
+                 esbmct::expr2tc_update_value>
       (type, byte_update_id, is_big_endian, source, offset, updateval) {}
   byte_update2t(const byte_update2t &ref)
-    : expr_body2<byte_update2t, expr2t::bool_big_endian,
-                 expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset,
-                 expr2t::expr2tc_update_value>
+    : esbmct::irep<byte_update2t, esbmct::bool_big_endian,
+                 esbmct::expr2tc_source_value, esbmct::expr2tc_source_offset,
+                 esbmct::expr2tc_update_value>
       (ref) {}
 };
-template class expr_body2<byte_update2t, expr2t::bool_big_endian,
-                  expr2t::expr2tc_source_value, expr2t::expr2tc_source_offset,
-                  expr2t::expr2tc_update_value>;
+template class esbmct::irep<byte_update2t, esbmct::bool_big_endian,
+                  esbmct::expr2tc_source_value, esbmct::expr2tc_source_offset,
+                  esbmct::expr2tc_update_value>;
 
-class with2t : public expr_body2<with2t, expr2t::expr2tc_source_value,
-                                         expr2t::expr2tc_update_field,
-                                         expr2t::expr2tc_update_value>
+class with2t : public esbmct::irep<with2t, esbmct::expr2tc_source_value,
+                                         esbmct::expr2tc_update_field,
+                                         esbmct::expr2tc_update_value>
 {
 public:
   with2t(const type2tc &type, const expr2tc &source, const expr2tc &field,
          const expr2tc &value)
-    : expr_body2<with2t, expr2t::expr2tc_source_value,
-                         expr2t::expr2tc_update_field,
-                         expr2t::expr2tc_update_value>
+    : esbmct::irep<with2t, esbmct::expr2tc_source_value,
+                         esbmct::expr2tc_update_field,
+                         esbmct::expr2tc_update_value>
       (type, with_id, source, field, value) {}
   with2t(const with2t &ref)
-    : expr_body2<with2t, expr2t::expr2tc_source_value,
-                         expr2t::expr2tc_update_field,
-                         expr2t::expr2tc_update_value> (ref) {}
+    : esbmct::irep<with2t, esbmct::expr2tc_source_value,
+                         esbmct::expr2tc_update_field,
+                         esbmct::expr2tc_update_value> (ref) {}
 };
-template class expr_body2<with2t, expr2t::expr2tc_source_value,
-                                  expr2t::expr2tc_update_field,
-                                  expr2t::expr2tc_update_value>;
+template class esbmct::irep<with2t, esbmct::expr2tc_source_value,
+                                  esbmct::expr2tc_update_field,
+                                  esbmct::expr2tc_update_value>;
 
-class member2t : public expr_body2<member2t, expr2t::expr2tc_source_value,
-                                             expr2t::irepidt_member>
+class member2t : public esbmct::irep<member2t, esbmct::expr2tc_source_value,
+                                             esbmct::irepidt_member>
 {
 public:
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
-    : expr_body2<member2t, expr2t::expr2tc_source_value, expr2t::irepidt_member>
+    : esbmct::irep<member2t, esbmct::expr2tc_source_value, esbmct::irepidt_member>
       (type, member_id, source, memb) {}
   member2t(const member2t &ref)
-    : expr_body2<member2t, expr2t::expr2tc_source_value, expr2t::irepidt_member>
+    : esbmct::irep<member2t, esbmct::expr2tc_source_value, esbmct::irepidt_member>
       (ref) {}
 };
-template class expr_body2<member2t, expr2t::expr2tc_source_value,
-                                    expr2t::irepidt_member>;
+template class esbmct::irep<member2t, esbmct::expr2tc_source_value,
+                                    esbmct::irepidt_member>;
 
-class index2t : public expr_body2<index2t, expr2t::expr2tc_source_value,
-                                           expr2t::expr2tc_index>
+class index2t : public esbmct::irep<index2t, esbmct::expr2tc_source_value,
+                                           esbmct::expr2tc_index>
 {
 public:
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &index)
-    : expr_body2<index2t, expr2t::expr2tc_source_value, expr2t::expr2tc_index>
+    : esbmct::irep<index2t, esbmct::expr2tc_source_value, esbmct::expr2tc_index>
       (type, index_id, source, index) {}
   index2t(const index2t &ref)
-    : expr_body2<index2t, expr2t::expr2tc_source_value, expr2t::expr2tc_index>
+    : esbmct::irep<index2t, esbmct::expr2tc_source_value, esbmct::expr2tc_index>
       (ref) {}
 };
-template class expr_body2<index2t, expr2t::expr2tc_source_value,
-                                   expr2t::expr2tc_index>;
+template class esbmct::irep<index2t, esbmct::expr2tc_source_value,
+                                   esbmct::expr2tc_index>;
 
-class zero_string2t : public expr_body2<zero_string2t, expr2t::expr2tc_string>
+class zero_string2t : public esbmct::irep<zero_string2t, esbmct::expr2tc_string>
 {
 public:
   zero_string2t(const expr2tc &string)
-    : expr_body2<zero_string2t, expr2t::expr2tc_string>
+    : esbmct::irep<zero_string2t, esbmct::expr2tc_string>
       (type_pool.get_bool(), zero_string_id, string) {}
   zero_string2t(const zero_string2t &ref)
-    : expr_body2<zero_string2t, expr2t::expr2tc_string>
+    : esbmct::irep<zero_string2t, esbmct::expr2tc_string>
       (ref) {}
 };
-template class expr_body2<zero_string2t, expr2t::expr2tc_string>;
+template class esbmct::irep<zero_string2t, esbmct::expr2tc_string>;
 
-class zero_length_string2t : public expr_body2<zero_length_string2t, expr2t::expr2tc_string>
+class zero_length_string2t : public esbmct::irep<zero_length_string2t, esbmct::expr2tc_string>
 {
 public:
   zero_length_string2t(const expr2tc &string)
-    : expr_body2<zero_length_string2t, expr2t::expr2tc_string>
+    : esbmct::irep<zero_length_string2t, esbmct::expr2tc_string>
       (type_pool.get_bool(), zero_length_string_id, string) {}
   zero_length_string2t(const zero_length_string2t &ref)
-    : expr_body2<zero_length_string2t, expr2t::expr2tc_string>
+    : esbmct::irep<zero_length_string2t, esbmct::expr2tc_string>
       (ref) {}
 };
-template class expr_body2<zero_length_string2t, expr2t::expr2tc_string>;
+template class esbmct::irep<zero_length_string2t, esbmct::expr2tc_string>;
 
-class isnan2t : public expr_body2<isnan2t, expr2t::expr2tc_value>
+class isnan2t : public esbmct::irep<isnan2t, esbmct::expr2tc_value>
 {
 public:
   isnan2t(const expr2tc &value)
-    : expr_body2<isnan2t, expr2t::expr2tc_value>
+    : esbmct::irep<isnan2t, esbmct::expr2tc_value>
       (type_pool.get_bool(), isnan_id, value) {}
   isnan2t(const isnan2t &ref)
-    : expr_body2<isnan2t, expr2t::expr2tc_value>
+    : esbmct::irep<isnan2t, esbmct::expr2tc_value>
       (ref) {}
 };
-template class expr_body2<isnan2t, expr2t::expr2tc_value>;
+template class esbmct::irep<isnan2t, esbmct::expr2tc_value>;
 
 /** Check whether operand overflows. Operand must be either add, subtract,
  *  or multiply. XXXjmorse - in the future we should ensure the type of the
  *  operand is the expected type result of the operation. That way we can tell
  *  whether to do a signed or unsigned over/underflow test. */
 
-class overflow2t : public expr_body2<overflow2t, expr2t::expr2tc_operand>
+class overflow2t : public esbmct::irep<overflow2t, esbmct::expr2tc_operand>
 {
 public:
   overflow2t(const expr2tc &operand)
-    : expr_body2<overflow2t, expr2t::expr2tc_operand>
+    : esbmct::irep<overflow2t, esbmct::expr2tc_operand>
       (type_pool.get_bool(), overflow_id, operand) {}
   overflow2t(const overflow2t &ref)
-    : expr_body2<overflow2t, expr2t::expr2tc_operand>
+    : esbmct::irep<overflow2t, esbmct::expr2tc_operand>
       (ref) {}
 };
-template class expr_body2<overflow2t, expr2t::expr2tc_operand>;
+template class esbmct::irep<overflow2t, esbmct::expr2tc_operand>;
 
-class overflow_cast2t : public expr_body2<overflow_cast2t,
-                                          expr2t::uint_bits,
-                                          expr2t::expr2tc_operand>
+class overflow_cast2t : public esbmct::irep<overflow_cast2t,
+                                          esbmct::uint_bits,
+                                          esbmct::expr2tc_operand>
 {
 public:
   overflow_cast2t(const expr2tc &operand, unsigned int bits)
-    : expr_body2<overflow_cast2t, expr2t::uint_bits, expr2t::expr2tc_operand>
+    : esbmct::irep<overflow_cast2t, esbmct::uint_bits, esbmct::expr2tc_operand>
       (type_pool.get_bool(), overflow_cast_id, bits, operand) {}
   overflow_cast2t(const overflow_cast2t &ref)
-    : expr_body2<overflow_cast2t, expr2t::uint_bits, expr2t::expr2tc_operand>
+    : esbmct::irep<overflow_cast2t, esbmct::uint_bits, esbmct::expr2tc_operand>
       (ref) {}
 };
-template class expr_body2<overflow_cast2t, expr2t::uint_bits,
-                                           expr2t::expr2tc_operand>;
+template class esbmct::irep<overflow_cast2t, esbmct::uint_bits,
+                                           esbmct::expr2tc_operand>;
 
-class overflow_neg2t : public expr_body2<overflow_neg2t,
-                                         expr2t::expr2tc_operand>
+class overflow_neg2t : public esbmct::irep<overflow_neg2t,
+                                         esbmct::expr2tc_operand>
 {
 public:
   overflow_neg2t(const expr2tc &operand)
-    : expr_body2<overflow_neg2t, expr2t::expr2tc_operand>
+    : esbmct::irep<overflow_neg2t, esbmct::expr2tc_operand>
       (type_pool.get_bool(), overflow_neg_id, operand) {}
   overflow_neg2t(const overflow_neg2t &ref)
-    : expr_body2<overflow_neg2t, expr2t::expr2tc_operand>
+    : esbmct::irep<overflow_neg2t, esbmct::expr2tc_operand>
       (ref) {}
 };
-template class expr_body2<overflow_neg2t, expr2t::expr2tc_operand>;
+template class esbmct::irep<overflow_neg2t, esbmct::expr2tc_operand>;
 
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {

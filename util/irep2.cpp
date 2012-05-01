@@ -1507,7 +1507,7 @@ do_type_crc<irep_idt>(const irep_idt &theval, boost::crc_32_type &crc)
 
 template <class derived, class field1, class field2, class field3, class field4>
 void
-expr_body2<derived, field1, field2, field3, field4>::convert_smt(prop_convt &obj, void *&arg) const
+esbmct::irep<derived, field1, field2, field3, field4>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
   obj.convert_smt_expr(*new_this, arg);
@@ -1516,7 +1516,7 @@ expr_body2<derived, field1, field2, field3, field4>::convert_smt(prop_convt &obj
 
 template <class derived, class field1, class field2, class field3, class field4>
 expr2tc
-expr_body2<derived, field1, field2, field3, field4>::clone(void) const
+esbmct::irep<derived, field1, field2, field3, field4>::clone(void) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
@@ -1525,7 +1525,7 @@ expr_body2<derived, field1, field2, field3, field4>::clone(void) const
 
 template <class derived, class field1, class field2, class field3, class field4>
 list_of_memberst
-expr_body2<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
+esbmct::irep<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
 {
   list_of_memberst thevector;
   field1::fieldtype::tostring(thevector, indent);
@@ -1537,7 +1537,7 @@ expr_body2<derived, field1, field2, field3, field4>::tostring(unsigned int inden
 
 template <class derived, class field1, class field2, class field3, class field4>
 bool
-expr_body2<derived, field1, field2, field3, field4>::cmp(const expr2t &ref)const
+esbmct::irep<derived, field1, field2, field3, field4>::cmp(const expr2t &ref)const
 {
   const derived &ref2 = static_cast<const derived &>(ref);
 
@@ -1562,7 +1562,7 @@ expr_body2<derived, field1, field2, field3, field4>::cmp(const expr2t &ref)const
 
 template <class derived, class field1, class field2, class field3, class field4>
 int
-expr_body2<derived, field1, field2, field3, field4>::lt(const expr2t &ref)const
+esbmct::irep<derived, field1, field2, field3, field4>::lt(const expr2t &ref)const
 {
   int tmp;
   const derived &ref2 = static_cast<const derived &>(ref);
@@ -1590,7 +1590,7 @@ expr_body2<derived, field1, field2, field3, field4>::lt(const expr2t &ref)const
 
 template <class derived, class field1, class field2, class field3, class field4>
 void
-expr_body2<derived, field1, field2, field3, field4>::do_crc
+esbmct::irep<derived, field1, field2, field3, field4>::do_crc
           (boost::crc_32_type &crc) const
 {
 
