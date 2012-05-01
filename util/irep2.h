@@ -631,31 +631,31 @@ public:
   virtual unsigned int get_width(void) const;
 };
 
-class unsignedbv_type2t : public esbmct::type<unsignedbv_type2t,
-                                          esbmct::uint_width>
+class unsignedbv_type2t;
+typedef esbmct::type<unsignedbv_type2t, esbmct::uint_width> unsigned_type_type;
+template class esbmct::type<unsignedbv_type2t, esbmct::uint_width>;
+class unsignedbv_type2t : public unsigned_type_type
 {
 public:
   unsignedbv_type2t(unsigned int width)
-    : esbmct::type<unsignedbv_type2t, esbmct::uint_width>
-      (unsignedbv_id, width) { }
+    : unsigned_type_type (unsignedbv_id, width) { }
   unsignedbv_type2t(const unsignedbv_type2t &ref)
-    : esbmct::type<unsignedbv_type2t, esbmct::uint_width>(ref) { }
+    : unsigned_type_type (ref) { }
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<unsignedbv_type2t, esbmct::uint_width>;
 
-class signedbv_type2t : public esbmct::type<signedbv_type2t,
-                                            esbmct::uint_width>
+class signedbv_type2t;
+typedef esbmct::type<signedbv_type2t, esbmct::uint_width> signed_type_type;
+template class esbmct::type<signedbv_type2t, esbmct::uint_width>;
+class signedbv_type2t : public signed_type_type
 {
 public:
   signedbv_type2t(signed int width)
-    : esbmct::type<signedbv_type2t, esbmct::uint_width>
-      (signedbv_id, width) { }
+    : signed_type_type (signedbv_id, width) { }
   signedbv_type2t(const signedbv_type2t &ref)
-    : esbmct::type<signedbv_type2t, esbmct::uint_width>(ref) { }
+    : signed_type_type (ref) { }
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<signedbv_type2t, esbmct::uint_width>;
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
 class code_type2t : public esbmct::type<code_type2t>
