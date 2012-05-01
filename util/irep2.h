@@ -568,6 +568,19 @@ public:
 };
 template class esbmct::type<unsignedbv_type2t, esbmct::uint_width>;
 
+class signedbv_type2t : public esbmct::type<signedbv_type2t,
+                                            esbmct::uint_width>
+{
+public:
+  signedbv_type2t(signed int width)
+    : esbmct::type<signedbv_type2t, esbmct::uint_width>
+      (signedbv_id, width) { }
+  signedbv_type2t(const signedbv_type2t &ref)
+    : esbmct::type<signedbv_type2t, esbmct::uint_width>(ref) { }
+  virtual unsigned int get_width(void) const;
+};
+template class esbmct::type<signedbv_type2t, esbmct::uint_width>;
+
 class bv_type2t : public type_body<bv_type2t>
 {
 protected:
@@ -657,16 +670,6 @@ protected:
 
 public:
   const type2tc subtype;
-};
-
-class signedbv_type2t : public bv_type_body<signedbv_type2t>
-{
-public:
-  signedbv_type2t(unsigned int width);
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-protected:
-  signedbv_type2t(const signedbv_type2t &ref);
 };
 
 class fixedbv_type2t : public type_body<fixedbv_type2t>
