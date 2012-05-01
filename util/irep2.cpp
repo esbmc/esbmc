@@ -883,10 +883,16 @@ inline int
 do_type_lt<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
                                   const std::vector<expr2tc> &side2)
 {
-  if (side1 < side2)
-    return -1;
-  else if (side2 < side1)
-    return 1;
+
+
+  int tmp = 0;
+  std::vector<expr2tc>::const_iterator it2 = side2.begin();
+  forall_exprs(it, side1) {
+    tmp = (*it)->ltchecked(**it2);
+    if (tmp != 0)
+      return tmp;
+    it2++;
+  }
   return 0;
 }
 
@@ -895,10 +901,15 @@ inline int
 do_type_lt<std::vector<type2tc> >(const std::vector<type2tc> &side1,
                                   const std::vector<type2tc> &side2)
 {
-  if (side1 < side2)
-    return -1;
-  else if (side2 < side1)
-    return 1;
+
+  int tmp = 0;
+  std::vector<type2tc>::const_iterator it2 = side2.begin();
+  forall_types(it, side1) {
+    tmp = (*it)->ltchecked(**it2);
+    if (tmp != 0)
+      return tmp;
+    it2++;
+  }
   return 0;
 }
 
