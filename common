@@ -13,9 +13,9 @@ LINKOBJS= $(OBJS:%.gch=)
 # Given the presence of OBJDIR, $(OBJS) can't now automatically infer
 # dependancies between .o's and .cpp's etc
 
-# list of includes, potentially modified by includer
-INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
-
+# list of includes, potentially modified by includer. Also include util objdir,
+# where some precompiled headers may be living.
+INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util/$(OBJDIR) -I$(ESBMCDIR)/util
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
 CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 
