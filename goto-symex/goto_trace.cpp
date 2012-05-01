@@ -96,13 +96,13 @@ void goto_trace_stept::output(
   {
     irep_idt identifier;
 
-    if(original_lhs.is_not_nil())
-      identifier=original_lhs.identifier();
+    if(!is_nil_expr(original_lhs))
+      identifier = to_symbol2t(original_lhs).name;
     else
-      identifier=lhs.identifier();
+      identifier = to_symbol2t(lhs).name;
 
     out << "  " << identifier
-        << " = " << from_expr(ns, identifier, value)
+        << " = " << from_expr(ns, identifier, migrate_expr_back(value))
         << std::endl;
   }
   else if(pc->is_assert())
@@ -138,25 +138,27 @@ Function: counterexample_value
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
-  const exprt &lhs,
-  const exprt &value,
+  const expr2tc &lhs,
+  const expr2tc &value,
   const pretty_namest &pretty_names)
 {
-  const irep_idt &identifier=lhs.identifier();
+  const irep_idt &identifier = to_symbol2t(lhs).name;
   std::string value_string;
 
-  if(value.is_nil())
+  exprt backvalue = migrate_expr_back(value);
+
+  if (is_nil_expr(value))
     value_string="(assignment removed)";
   else
   {
-    value_string=from_expr(ns, identifier, value);
-    if(value.is_constant())
+    value_string = from_expr(ns, identifier, backvalue);
+    if (backvalue.is_constant())
     {
-      if(value.type().id()==typet::t_signedbv ||
-	 value.type().id()==typet::t_unsignedbv ||
-    	 value.type().id()==typet::t_fixedbv ||
-    	 value.type().id()==typet::t_floatbv)
-        value_string+= " ("+value.value().as_string()+")";
+      if (backvalue.type().id()==typet::t_signedbv ||
+	  backvalue.type().id()==typet::t_unsignedbv ||
+    	  backvalue.type().id()==typet::t_fixedbv ||
+    	  backvalue.type().id()==typet::t_floatbv)
+        value_string+= " ("+backvalue.value().as_string()+")";
     }
   }
 
@@ -216,12 +218,13 @@ void show_goto_trace_gui(
     {
       irep_idt identifier;
 
-      if(it->original_lhs.is_not_nil())
-        identifier=it->original_lhs.identifier();
+      if (!is_nil_expr(it->original_lhs))
+        identifier = to_symbol2t(it->original_lhs).name;
       else
-        identifier=it->lhs.identifier();
+        identifier = to_symbol2t(it->lhs).name;
 
-      std::string value_string=from_expr(ns, identifier, it->value);
+      std::string value_string=from_expr(ns, identifier,
+                                         migrate_expr_back(it->value));
 
       const symbolt *symbol;
       irep_idt base_name;
@@ -232,7 +235,7 @@ void show_goto_trace_gui(
 
       out << identifier << ","
           << base_name << ","
-          << it->value.type().to_string() << ","
+          << get_type_id(it->value->type) << ","
           << value_string << std::endl
           << it->step_nr << std::endl
           << it->pc->location.file() << std::endl
@@ -401,10 +404,10 @@ void get_metada_from_llvm(
         if (k==3) {
         	  const_cast<goto_tracet*>(&goto_trace)->OrigVarName = pch;
         	  //std::cout<<"varname - "<<goto_trace.VarName<<"origvarname - "<<goto_trace.OrigVarName<<std::endl;
-        	  exprt* lhs = const_cast<exprt*>(&it->original_lhs);
+        	  const symbol2tc lhs(it->original_lhs);
         	  //********************change varname************************************/
-        	  char identstr[it->original_lhs.identifier().as_string().length()];
-        	  strcpy(identstr,it->original_lhs.identifier().c_str());
+        	  char identstr[lhs->name.as_string().length()];
+        	  strcpy(identstr ,lhs->name.as_string().c_str());
         	  //std::cout<<"Guard "<<it->pc->guard<<std::endl;
         	  int j=0;
         	  char * tok;
@@ -418,7 +421,8 @@ void get_metada_from_llvm(
                  j++;
               }
         	  //**********************************************************************/
-        	  lhs->identifier(newidentifier);
+        	  //lhs->identifier(newidentifier);
+                  //XXXjmorse, what on earth is this all about?
         }
         pch = strtok (NULL, "@#");
         k++;
@@ -499,7 +503,7 @@ void show_goto_trace(
 
     case goto_trace_stept::ASSIGNMENT:
       if(it->pc->is_assign() ||
-         (it->pc->is_other() && it->lhs.is_not_nil()))
+         (it->pc->is_other() && !is_nil_expr(it->lhs)))
       {
         if(prev_step_nr!=it->step_nr || first_step)
         {

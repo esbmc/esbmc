@@ -11,6 +11,9 @@ Date: July 2005
 #ifndef CPROVER_GOTO_SYMEX_GOTO_TRACE_H
 #define CPROVER_GOTO_SYMEX_GOTO_TRACE_H
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <iostream>
 #include <vector>
 
@@ -50,13 +53,13 @@ public:
   std::string comment;
 
   // in SSA
-  exprt lhs, rhs;
+  expr2tc lhs, rhs;
   
   // this is a constant
-  exprt value;
+  expr2tc value;
   
   // original expression
-  exprt original_lhs;
+  expr2tc original_lhs;
 
   // for OUTPUT
   std::string format_string;
@@ -71,10 +74,6 @@ public:
     thread_nr(0),
     guard(false)
   {
-    lhs.make_nil();
-    rhs.make_nil();
-    value.make_nil();
-    original_lhs.make_nil();
   }
 };
 
@@ -160,8 +159,8 @@ void show_goto_trace(
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
-  const irep_idt &identifier,
-  const exprt &value,
+  const expr2tc &identifier,
+  const expr2tc &value,
   const pretty_namest &pretty_names);
 
 #endif

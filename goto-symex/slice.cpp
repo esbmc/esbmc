@@ -28,8 +28,8 @@ protected:
   
   symbol_sett depends;
   
-  void get_symbols(const exprt &expr);
-  void get_symbols(const typet &type);
+  void get_symbols(const expr2tc &expr);
+  void get_symbols(const type2tc &type);
 
   void slice(symex_target_equationt::SSA_stept &SSA_step);
   void slice_assignment(symex_target_equationt::SSA_stept &SSA_step);
@@ -47,15 +47,18 @@ Function: symex_slicet::get_symbols
 
 \*******************************************************************/
 
-void symex_slicet::get_symbols(const exprt &expr)
+void symex_slicet::get_symbols(const expr2tc &expr)
 {
-  get_symbols(expr.type());
+  get_symbols(expr->type);
 
-  forall_operands(it, expr)
+  std::vector<expr2tc> operands;
+  expr->list_operands(operands);
+  
+  forall_exprs(it, operands)
     get_symbols(*it);
 
-  if(expr.id()==exprt::symbol)
-    depends.insert(expr.identifier());
+  if (is_symbol2t(expr))
+    depends.insert(symbol2tc(expr)->name);
 }
 
 /*******************************************************************\
@@ -70,7 +73,7 @@ Function: symex_slicet::get_symbols
 
 \*******************************************************************/
 
-void symex_slicet::get_symbols(const typet &type)
+void symex_slicet::get_symbols(const type2tc &type)
 {
 }
 
@@ -150,10 +153,9 @@ Function: symex_slicet::slice_assignment
 void symex_slicet::slice_assignment(
   symex_target_equationt::SSA_stept &SSA_step)
 {
-  assert(SSA_step.lhs.id()==exprt::symbol);
+  assert(is_symbol2t(SSA_step.lhs));
 
-  if(depends.find(SSA_step.lhs.identifier())==
-     depends.end())
+  if(depends.find(symbol2tc(SSA_step.lhs)->name) == depends.end())
   {
     // we don't really need it
     SSA_step.ignore=true;

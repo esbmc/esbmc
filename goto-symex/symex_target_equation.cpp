@@ -33,12 +33,18 @@ void symex_target_equationt::assignment(
   SSA_steps.push_back(SSA_stept());
   SSA_stept &SSA_step=SSA_steps.back();
 
-  SSA_step.guard=guard.as_expr();
-  SSA_step.lhs=lhs;
-  SSA_step.original_lhs=original_lhs;
-  SSA_step.rhs.swap(rhs);
+  expr2tc new_guard, new_lhs, new_original_lhs, new_rhs;
+  migrate_expr(guard.as_expr(), new_guard);
+  migrate_expr(lhs, new_lhs);
+  migrate_expr(original_lhs, new_original_lhs);
+  migrate_expr(rhs, new_rhs);
+
+  SSA_step.guard = new_guard;
+  SSA_step.lhs = new_lhs;
+  SSA_step.original_lhs = new_original_lhs;
+  SSA_step.rhs = new_rhs;
   SSA_step.assignment_type=assignment_type;
-  SSA_step.cond=equality_exprt(SSA_step.lhs, SSA_step.rhs);
+  SSA_step.cond = expr2tc(new equality2t(new_lhs, new_rhs));
   SSA_step.type=goto_trace_stept::ASSIGNMENT;
   SSA_step.source=source;
   SSA_step.stack_trace = stack_trace;
@@ -53,8 +59,10 @@ void symex_target_equationt::output(
   SSA_steps.push_back(SSA_stept());
   SSA_stept &SSA_step=SSA_steps.back();
 
-  SSA_step.guard=guard.as_expr();
-  SSA_step.lhs.make_nil();
+  expr2tc new_guard;
+  migrate_expr(guard.as_expr(), new_guard);
+
+  SSA_step.guard = new_guard;
   SSA_step.type=goto_trace_stept::OUTPUT;
   SSA_step.source=source;
   SSA_step.output_args=args;
@@ -69,9 +77,12 @@ void symex_target_equationt::assumption(
   SSA_steps.push_back(SSA_stept());
   SSA_stept &SSA_step=SSA_steps.back();
 
-  SSA_step.guard=guard.as_expr();
-  SSA_step.lhs.make_nil();
-  SSA_step.cond.swap(cond);
+  expr2tc new_guard, new_cond;
+  migrate_expr(guard.as_expr(), new_guard);
+  migrate_expr(cond, new_cond);
+
+  SSA_step.guard = new_guard;
+  SSA_step.cond = new_cond;
   SSA_step.type=goto_trace_stept::ASSUME;
   SSA_step.source=source;
 }
@@ -86,9 +97,12 @@ void symex_target_equationt::assertion(
   SSA_steps.push_back(SSA_stept());
   SSA_stept &SSA_step=SSA_steps.back();
 
-  SSA_step.guard=guard.as_expr();
-  SSA_step.lhs.make_nil();
-  SSA_step.cond.swap(cond);
+  expr2tc new_guard, new_cond;
+  migrate_expr(guard.as_expr(), new_guard);
+  migrate_expr(cond, new_cond);
+
+  SSA_step.guard = new_guard;
+  SSA_step.cond = new_cond;
   SSA_step.type=goto_trace_stept::ASSERT;
   SSA_step.source=source;
   SSA_step.comment=msg;
@@ -112,10 +126,7 @@ void symex_target_equationt::convert_assignments(prop_convt &prop_conv) const
   {
     if(it->is_assignment() && !it->ignore)
     {
-      exprt tmp(it->cond);
-      expr2tc new_expr;
-      migrate_expr(tmp, new_expr);
-      prop_conv.set_to(new_expr, true);
+      prop_conv.set_to(it->cond, true);
     }
   }
 }
@@ -130,10 +141,7 @@ void symex_target_equationt::convert_guards(
       it->guard_literal=const_literal(false);
     else
     {
-      exprt tmp(it->guard);
-      expr2tc new_expr;
-      migrate_expr(tmp, new_expr);
-      it->guard_literal=prop_conv.convert(new_expr);
+      it->guard_literal=prop_conv.convert(it->guard);
     }
   }
 }
@@ -150,10 +158,7 @@ void symex_target_equationt::convert_assumptions(
         it->cond_literal=const_literal(true);
       else
       {
-        exprt tmp(it->cond);
-        expr2tc new_expr;
-        migrate_expr(tmp, new_expr);
-        it->cond_literal=prop_conv.convert(new_expr);
+        it->cond_literal=prop_conv.convert(it->cond);
       }
     }
   }
@@ -184,12 +189,9 @@ void symex_target_equationt::convert_assertions(
       it!=SSA_steps.end(); it++)
     if(it->is_assert())
     {
-      exprt tmp(it->cond);
 
       // do the expression
-      expr2tc new_expr;
-      migrate_expr(tmp, new_expr);
-      literalt tmp_literal=prop_conv.convert(new_expr);
+      literalt tmp_literal=prop_conv.convert(it->cond);
 
       it->cond_literal=prop_conv.limplies(assumption_literal, tmp_literal);
 
@@ -318,12 +320,12 @@ void symex_target_equationt::SSA_stept::output(
   }
 
   if(is_assert() || is_assume() || is_assignment())
-    out << from_expr(ns, "", cond) << std::endl;
+    out << from_expr(ns, "", migrate_expr_back(cond)) << std::endl;
 
   if(is_assert())
     out << comment << std::endl;
 
-  out << "Guard: " << from_expr(ns, "", guard) << std::endl;
+  out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << std::endl;
 }
 
 /*******************************************************************\

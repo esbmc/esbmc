@@ -74,10 +74,10 @@ void convert(
       {
         irep_idt identifier;
 
-        if(it->original_lhs.is_not_nil())
-          identifier=it->original_lhs.identifier();
+        if (!is_nil_expr(it->original_lhs))
+          identifier = to_symbol2t(it->original_lhs).name;
         else
-          identifier=it->lhs.identifier();
+          identifier = to_symbol2t(it->lhs).name;
           
         xmlt &xml_assignment=xml.new_element("assignment");
 
@@ -86,11 +86,12 @@ void convert(
 
         std::string value_string, type_string;
         
-        if(it->value.is_not_nil())
-          value_string=from_expr(ns, identifier, it->value);
-
-        if(it->value.type().is_not_nil())
-          type_string=from_type(ns, identifier, it->value.type());
+        if (!is_nil_expr(it->value)) {
+          value_string = from_expr(ns, identifier,
+                                   migrate_expr_back(it->value));
+          type_string=from_type(ns, identifier,
+                                migrate_type_back(it->value->type));
+        }
 
         const symbolt *symbol;
         irep_idt base_name, display_name;

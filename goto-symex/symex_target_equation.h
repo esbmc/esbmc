@@ -93,14 +93,14 @@ public:
     bool is_assignment() const { return type==goto_trace_stept::ASSIGNMENT; }
     bool is_output() const     { return type==goto_trace_stept::OUTPUT; }
     
-    exprt guard;
+    expr2tc guard;
 
     // for ASSIGNMENT  
-    exprt lhs, rhs, original_lhs;
+    expr2tc lhs, rhs, original_lhs;
     assignment_typet assignment_type;
     
     // for ASSUME/ASSERT
-    exprt cond; 
+    expr2tc cond;
     std::string comment;
 
     // for OUTPUT
@@ -114,10 +114,7 @@ public:
     // for slicing
     bool ignore;
     
-    SSA_stept():
-      guard(static_cast<const exprt &>(get_nil_irep())),
-      cond(static_cast<const exprt &>(get_nil_irep())),
-      ignore(false)
+    SSA_stept() : ignore(false)
     {
     }
     
