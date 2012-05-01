@@ -912,7 +912,7 @@ migrate_expr_back(const expr2tc &ref)
     thestring.set("value", irep_idt(ref2.value));
     const string_type2t &typeref = to_string_type(ref->type);
     constant_exprt sizeexpr(unsignedbv_typet(32));
-    sizeexpr.set("value", typeref.elements);
+    sizeexpr.set("value", typeref.width);
     thestring.size(sizeexpr);
     return thestring;
   }

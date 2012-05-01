@@ -663,18 +663,14 @@ public:
 template class esbmct::type<fixedbv_type2t, esbmct::uint_width,
                              esbmct::uint_int_bits>;
 
-class string_type2t : public type_body<string_type2t>
+class string_type2t : public esbmct::type<string_type2t, esbmct::uint_width>
 {
 public:
-  string_type2t(unsigned int elements);
-  virtual bool cmp(const type2t &ref) const;
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
+  string_type2t(unsigned int elements)
+    : esbmct::type<string_type2t, esbmct::uint_width>(string_id, elements) { }
+  string_type2t(const string_type2t &ref)
+    : esbmct::type<string_type2t, esbmct::uint_width>(ref) { }
   virtual unsigned int get_width(void) const;
-  string_type2t(const string_type2t &ref);
-
-  unsigned int elements;
 };
 
 // Generate some "is-this-a-blah" macros, and type conversion macros. This is

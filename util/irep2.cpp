@@ -241,48 +241,10 @@ code_type2t::get_width(void) const
   throw new symbolic_type_excp();
 }
 
-string_type2t::string_type2t(unsigned int _elements)
-  : type_body<string_type2t>(string_id), elements(_elements)
-{
-}
-
 unsigned int
 string_type2t::get_width(void) const
 {
-  return elements * 8;
-}
-
-bool
-string_type2t::cmp(const type2t &ref) const
-{
-
-  const string_type2t &ref2 = static_cast<const string_type2t&>(ref);
-  return (elements == ref2.elements);
-}
-
-int
-string_type2t::lt(const type2t &ref) const
-{
-  const string_type2t &ref2 = static_cast<const string_type2t &>(ref);
-  if (elements < ref2.elements)
-    return -1;
-  else if (elements > ref2.elements)
-    return 1;
-  return 0;
-}
-
-list_of_memberst
-string_type2t::tostring(unsigned int indent) const
-{
-  return list_of_memberst();
-}
-
-void
-string_type2t::do_crc(boost::crc_32_type &crc) const
-{
-  type2t::do_crc(crc);
-  crc.process_bytes(&elements, sizeof(elements));
-  return;
+  return width * 8;
 }
 
 /*************************** Base expr2t definitions **************************/
