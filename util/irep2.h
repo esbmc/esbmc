@@ -1727,7 +1727,7 @@ public:
     // Assign-operate ourself into containing a fresh copy of the data. This
     // creates a new reference counted object, and assigns it to ourself,
     // which causes the existing reference to be decremented.
-    *this = irep_container(get()->clone());
+    *this = irep_container(boost::shared_ptr<T>::get()->clone());
     return;
   }
 };
