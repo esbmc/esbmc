@@ -1675,4 +1675,40 @@ inline const irep_idt &get_structure_name(const type2tc &someval)
   }
 }
 
+class constant_int2tc : protected boost::shared_ptr<constant_int2t>
+{
+  constant_int2tc() : boost::shared_ptr<constant_int2t>() {}
+
+  constant_int2tc(const constant_int2tc &ref)
+    : boost::shared_ptr<constant_int2t>(ref) {}
+
+  constant_int2tc(const expr2tc &ref)
+    : boost::shared_ptr<constant_int2t>
+      (boost::shared_polymorphic_cast<constant_int2t, expr2t>(ref))
+      { assert(get()->expr_id == expr2t::constant_int_id); }
+
+  constant_int2tc &operator=(constant_int2tc const &ref)
+  {
+    boost::shared_ptr<constant_int2t>::operator=(ref);
+    return *this;
+  }
+
+  template<class Y>
+  constant_int2t & operator=(boost::shared_ptr<Y> const & r)
+  {
+    boost::shared_ptr<constant_int2t>::operator=(r);
+    return *this;
+  }
+
+  const constant_int2t * operator-> () const // never throws
+  {
+    return boost::shared_ptr<constant_int2t>::operator->();
+  }
+
+  const constant_int2t * get() const // never throws
+  {
+    return boost::shared_ptr<constant_int2t>::get();
+  }
+};
+
 #endif /* _UTIL_IREP2_H_ */
