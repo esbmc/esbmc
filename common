@@ -6,7 +6,9 @@
 SHELL := /bin/bash
 
 OBJS1 = $(SRCS:%.c=$(OBJDIR)/%.o)
-OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
+OBJS2 = $(SRCS:%.h=$(OBJDIR)/%.h.gch)
+OBJS+= $(OBJS2:%.cpp=$(OBJDIR)/%.o)
+LINKOBJS= $(OBJS:%.gch=)
 
 # Given the presence of OBJDIR, $(OBJS) can't now automatically infer
 # dependancies between .o's and .cpp's etc
@@ -23,6 +25,10 @@ $(OBJDIR)/%.o : %.cpp
 
 $(OBJDIR)/%.o : %.c
 	$(CC) -c $(CFLAGS) -o $@ $<
+
+$(OBJDIR)/%.h.gch : %.h
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
 else
 $(OBJDIR)/%.o : %.cpp
 	$(VCBINS)/cl.exe /TP /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" $(VCINCLUDES) /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
@@ -34,7 +40,7 @@ endif
 # A generic target; potentially not defined by the includer
 
 $(MAINOBJ): $(OBJS)
-	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
+	$(PARTLINKLD) $(PARTLINKOUT)$@ $(LINKOBJS) $(PARTLINKOPTS)
 
 # Special purpose features,
 ifndef LINUX

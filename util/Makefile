@@ -3,7 +3,8 @@ include $(ESBMCDIR)/config.inc
 MAINOBJ = $(OBJDIR)/util.o
 all: $(OBJDIR)/.deps $(MAINOBJ)
 
-SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
+SRCS= irep2.h \
+      arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr.cpp expr_util.cpp i2string.cpp irep.cpp language.cpp \
       location.cpp message.cpp language_file.cpp \
       mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp \
