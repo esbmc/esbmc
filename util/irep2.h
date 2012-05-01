@@ -71,7 +71,7 @@ public:
   irep_container &operator=(irep_container const &ref)
   {
     boost::shared_ptr<T>::operator=(ref);
-    T *p = boost::shared_ptr<T>::operator->();
+    T *p = boost::shared_ptr<T>::get();
     assert(expid == -1 || p->expr_id == expid);
     return *this;
   }
