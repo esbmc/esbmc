@@ -728,7 +728,9 @@ inline std::string
 type_to_string<expr2tc>(const expr2tc &theval, int indent)
 {
 
-  return theval->pretty(indent + 2);
+  if (theval.get() != NULL)
+   return theval->pretty(indent + 2);
+  return "";
 }
 
 template <>
@@ -807,7 +809,12 @@ template <>
 inline bool
 do_type_cmp<expr2tc>(const expr2tc &side1, const expr2tc &side2)
 {
-  return (side1 == side2);
+  if (side1.get() == side2.get())
+    return true; // Catch null
+  else if (side1.get() == NULL || side2.get() == NULL)
+    return false;
+  else
+    return (side1 == side2);
 }
 
 template <>
@@ -911,7 +918,14 @@ template <>
 inline int
 do_type_lt<expr2tc>(const expr2tc &side1, const expr2tc &side2)
 {
-  return side1->ltchecked(*side2.get());
+  if (side1.get() == side2.get())
+    return 0; // Catch nulls
+  else if (side1.get() == NULL)
+    return -1;
+  else if (side2.get() == NULL)
+    return 1;
+  else
+    return side1->ltchecked(*side2.get());
 }
 
 template <>
@@ -1022,7 +1036,8 @@ inline void
 do_type_crc<expr2tc>(const expr2tc &theval, boost::crc_32_type &crc)
 {
 
-  theval->do_crc(crc);
+  if (theval.get() != NULL)
+    theval->do_crc(crc);
   return;
 }
 
