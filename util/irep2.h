@@ -471,7 +471,6 @@ class bool_type2t : public esbmct::type<bool_type2t>
 public:
   bool_type2t(void) : esbmct::type<bool_type2t>(bool_id) {}
   bool_type2t(const bool_type2t &ref) : esbmct::type<bool_type2t>(ref) {}
-;
   virtual unsigned int get_width(void) const;
 };
 
