@@ -132,6 +132,7 @@ private:
                              const type2tc &type, Z3_ast &bv);
 
   void convert_struct_union(const std::vector<expr2tc> &members,
+                            const std::vector<type2tc> &member_types,
                             const type2tc &type, bool is_union, void *&_bv);
 
   virtual void convert_smt_expr(const symbol2t &sym, void *&bv);
@@ -192,8 +193,13 @@ private:
   virtual void convert_smt_type(const bv_type2t &type, void *&bv);
   virtual void convert_smt_type(const array_type2t &type, void *&bv);
   virtual void convert_smt_type(const pointer_type2t &type, void *&bv);
-  virtual void convert_smt_type(const struct_union_type2t &type, void *&bv);
+  virtual void convert_smt_type(const struct_type2t &type, void *&bv);
+  virtual void convert_smt_type(const union_type2t &type, void *&bv);
   virtual void convert_smt_type(const fixedbv_type2t &type, void *&bv);
+
+  void convert_struct_union_type(const std::vector<type2tc> &members,
+                                 const std::vector<irep_idt> &member_names,
+                                 const irep_idt &name, bool uni, void *&_bv);
 
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions

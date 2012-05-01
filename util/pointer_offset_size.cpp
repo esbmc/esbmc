@@ -158,12 +158,19 @@ mp_integer pointer_offset_size(const type2t &type)
   else if(type.type_id == type2t::struct_id ||
           type.type_id == type2t::union_id)
   {
-    const struct_union_type2t &ref = static_cast<const struct_union_type2t&>
-                                                (type);
+    const std::vector<type2tc> *members;
+    if (type.type_id == type2t::struct_id) {
+      const struct_type2t &ref = static_cast<const struct_type2t&>(type);
+      members = &ref.members;
+    } else {
+      assert(type.type_id == type2t::union_id);
+      const union_type2t &ref = static_cast<const union_type2t&>(type);
+      members = &ref.members;
+    }
 
     mp_integer result=1; // for the struct itself
 
-    forall_types(it, ref.members) {
+    forall_types(it, (*members)) {
       result += pointer_offset_size(**it);
     }
 

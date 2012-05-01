@@ -180,14 +180,6 @@ bv_type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
   obj.convert_smt_type(*derived_this, arg);
 }
 
-template<class derived>
-void
-struct_union_type_body2t<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
-{
-  const derived *derived_this = static_cast<const derived *>(this);
-  obj.convert_smt_type(*derived_this, arg);
-}
-
 bv_type2t::bv_type2t(type2t::type_ids id, unsigned int _width)
   : type_body<bv_type2t>(id),
     width(_width)
@@ -239,101 +231,6 @@ bv_type2t::do_crc(boost::crc_32_type &crc) const
 {
   type2t::do_crc(crc);
   crc.process_bytes(&width, sizeof(width));
-  return;
-}
-
-struct_union_type2t::struct_union_type2t(type_ids id,
-                                         const std::vector<type2tc> &_members,
-                                         std::vector<irep_idt> memb_names,
-                                         irep_idt _name)
-  : type_body<struct_union_type2t>(id), members(_members),
-                                        member_names(memb_names),
-                                        name(_name)
-{
-}
-
-bool
-struct_union_type2t::cmp(const type2t &ref) const
-{
-
-  const struct_union_type2t &ref2 =
-    static_cast<const struct_union_type2t&>(ref);
-
-  if (name != ref2.name)
-    return false;
-
-  if (members.size() != ref2.members.size())
-    return false;
-
-  if (members != ref2.members)
-    return false;
-
-  if (member_names != ref2.member_names)
-    return false;
-
-  return true;
-}
-
-int
-struct_union_type2t::lt(const type2t &ref) const
-{
-  const struct_union_type2t &ref2 =
-                            static_cast<const struct_union_type2t &>(ref);
-
-  if (name < ref2.name)
-    return -1;
-  if (ref2.name < name)
-    return 1;
-
-  if (members.size() < ref2.members.size())
-    return -1;
-  if (members.size() > ref2.members.size())
-    return 1;
-
-  if (members < ref2.members)
-    return -1;
-  if (members > ref2.members)
-    return 1;
-
-  if (member_names < ref2.member_names)
-    return -1;
-  if (member_names > ref2.member_names)
-    return 1;
-
-  return 0;
-}
-
-list_of_memberst
-struct_union_type2t::tostring(unsigned int indent) const
-{
-  char bees[256];
-  list_of_memberst membs;
-
-  membs.push_back(member_entryt("struct name", name.as_string()));
-
-  unsigned int i = 0;
-  forall_types(it, members) {
-    snprintf(bees, 255, "member \"%s\" (%d)", member_names[i].c_str(), i);
-    bees[255] = '\0';
-    membs.push_back(member_entryt(std::string(bees), (*it)->pretty(indent +2)));
-  }
-
-  return membs;
-}
-
-void
-struct_union_type2t::do_crc(boost::crc_32_type &crc) const
-{
-  type2t::do_crc(crc);
-  crc.process_bytes(name.c_str(), name.size());
-
-  forall_types(it, members)
-    (*it)->do_crc(crc);
-
-  for (std::vector<irep_idt>::const_iterator it = member_names.begin();
-       it != member_names.end(); it++)
-    crc.process_bytes(it->as_string().c_str(), it->size());
-
   return;
 }
 

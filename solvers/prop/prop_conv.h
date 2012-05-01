@@ -97,7 +97,8 @@ public:
   virtual void convert_smt_type(const bv_type2t &type, void *&arg) = 0;
   virtual void convert_smt_type(const array_type2t &type, void *&arg) = 0;
   virtual void convert_smt_type(const pointer_type2t &type, void *&arg) = 0;
-  virtual void convert_smt_type(const struct_union_type2t &type, void *&arg) =0;
+  virtual void convert_smt_type(const struct_type2t &type, void *&arg) =0;
+  virtual void convert_smt_type(const union_type2t &type, void *&arg) =0;
   virtual void convert_smt_type(const fixedbv_type2t &type, void *&arg) =0;
 
   virtual void convert_smt_expr(const expr2t &expr, void *&arg);

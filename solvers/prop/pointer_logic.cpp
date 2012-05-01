@@ -156,11 +156,12 @@ expr2tc pointer_logict::object_rec(
     
     return object_rec(rest, pointer_type, newindex);
   }
-  else if(src->type->type_id == type2t::struct_id ||
-          src->type->type_id == type2t::union_id)
+  else if (is_structure_type(src->type))
   {
-    const struct_union_type2t &type2 = static_cast<const struct_union_type2t&>
-                                                  (*pointer_type.get());
+    const std::vector<type2tc> &members = get_structure_members(src->type);
+    const std::vector<irep_idt> &member_names =
+                                     get_structure_member_names(src->type);
+
     assert(offset>=0);
   
     if(offset==0) // the struct itself
@@ -171,7 +172,7 @@ expr2tc pointer_logict::object_rec(
     assert(offset>=current_offset);
 
     unsigned int idx = 0;
-    forall_types(it, type2.members) {
+    forall_types(it, members) {
       assert(offset>=current_offset);
 
       mp_integer sub_size=pointer_offset_size(**it);
@@ -184,7 +185,7 @@ expr2tc pointer_logict::object_rec(
       if(new_offset>offset)
       {
         // found it
-        expr2tc tmp(new member2t(*it, src, type2.member_names[idx]));
+        expr2tc tmp(new member2t(*it, src, member_names[idx]));
         
         return object_rec(offset-current_offset, pointer_type, tmp);
       }

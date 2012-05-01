@@ -553,23 +553,6 @@ public:
 template class esbmct::type<union_type2t, esbmct::type2tc_vec_members,
                         esbmct::irepidt_vec_member_names, esbmct::irepidt_name>;
 
-class struct_union_type2t : public type_body<struct_union_type2t>
-{
-protected:
-  struct_union_type2t(type_ids id, const std::vector<type2tc> &members,
-                      std::vector<irep_idt> memb_names, irep_idt name);
-  struct_union_type2t(const struct_union_type2t &ref);
-
-public:
-  virtual bool cmp(const type2t &ref) const;
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-  const std::vector<type2tc> members;
-  std::vector<irep_idt> member_names;
-  irep_idt name;
-};
-
 class bv_type2t : public type_body<bv_type2t>
 {
 protected:
@@ -583,25 +566,6 @@ public:
   virtual void do_crc(boost::crc_32_type &crc) const;
   virtual unsigned int get_width(void) const;
   const unsigned int width;
-};
-
-// A short interlude for classes that inherit not directly from type2t - we
-// need to inherit from type_body again. Except that that requires fiddling
-// with the template. So, behold the below, which specializes templates that
-// inherit in peculiar ways.
-
-template <class derived>
-class struct_union_type_body2t : public struct_union_type2t
-{
-protected:
-  struct_union_type_body2t(type_ids id, const std::vector<type2tc> &members,
-                           std::vector<irep_idt> memb_names, irep_idt name)
-    : struct_union_type2t(id, members, memb_names, name) {};
-  struct_union_type_body2t(const struct_union_type_body2t &ref)
-    : struct_union_type2t(ref) {};
-
-public:
-  virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
 };
 
 template <class derived>
@@ -766,15 +730,6 @@ type_macros(string);
 inline bool is_bv_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id); }
-
-inline bool is_structure_type(const type2tc &t) \
-{ return (t->type_id == type2t::union_id ||
-          t->type_id == type2t::struct_id); }
-
-inline const struct_union_type2t & to_structure_type(const type2tc &t)
-  { return dynamic_cast<const struct_union_type2t &> (*t.get()); }
-inline struct_union_type2t & to_structure_type(type2tc &t)
-  { return dynamic_cast<struct_union_type2t &> (*t.get()); }
 
 inline const bv_type2t & to_bv_type(const type2tc &t)
   { return dynamic_cast<const bv_type2t &> (*t.get()); }
@@ -1707,6 +1662,47 @@ inline bool is_constant_expr(const expr2tc &t)
          t->expr_id == expr2t::constant_union_id ||
          t->expr_id == expr2t::constant_array_id ||
          t->expr_id == expr2t::constant_array_of_id;
+}
+
+inline bool is_structure_type(const type2tc &t)
+{
+  return t->type_id == type2t::struct_id || t->type_id == type2t::union_id;
+}
+
+inline const std::vector<type2tc> &get_structure_members(const type2tc &someval)
+{
+  if (is_struct_type(someval)) {
+    const struct_type2t &v = static_cast<const struct_type2t &>(*someval.get());
+    return v.members;
+  } else {
+    assert(is_union_type(someval));
+    const union_type2t &v = static_cast<const union_type2t &>(*someval.get());
+    return v.members;
+  }
+}
+
+inline const std::vector<irep_idt> &get_structure_member_names(const type2tc &someval)
+{
+  if (is_struct_type(someval)) {
+    const struct_type2t &v = static_cast<const struct_type2t &>(*someval.get());
+    return v.member_names;
+  } else {
+    assert(is_union_type(someval));
+    const union_type2t &v = static_cast<const union_type2t &>(*someval.get());
+    return v.member_names;
+  }
+}
+
+inline const irep_idt &get_structure_name(const type2tc &someval)
+{
+  if (is_struct_type(someval)) {
+    const struct_type2t &v = static_cast<const struct_type2t &>(*someval.get());
+    return v.name;
+  } else {
+    assert(is_union_type(someval));
+    const union_type2t &v = static_cast<const union_type2t &>(*someval.get());
+    return v.name;
+  }
 }
 
 #endif /* _UTIL_IREP2_H_ */

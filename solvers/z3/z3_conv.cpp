@@ -649,7 +649,10 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
 }
 
 void
-z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv)
+z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
+                                    const std::vector<irep_idt> &member_names,
+                                    const irep_idt &struct_name, bool uni,
+                                    void *&_bv)
 {
   Z3_symbol mk_tuple_name, *proj_names;
   std::string name;
@@ -658,9 +661,7 @@ z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv)
   u_int num_elems;
   Z3_type_ast &bv = (Z3_type_ast &)_bv;
 
-  bool uni = (type.type_id != type2t::struct_id);
-
-  num_elems = type.members.size();
+  num_elems = members.size();
   if (uni)
     num_elems++;
 
@@ -669,18 +670,18 @@ z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv)
   proj_decls = new Z3_const_decl_ast[num_elems];
 
   name = ((uni) ? "union" : "struct" );
-  name += "_type_" + type.name.as_string();
+  name += "_type_" + struct_name.as_string();
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
 
-  if (!type.members.size()) {
+  if (!members.size()) {
     bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls);
     return;
   }
 
   u_int i = 0;
-  std::vector<irep_idt>::const_iterator mname = type.member_names.begin();
-  for (std::vector<type2tc>::const_iterator it = type.members.begin();
-       it != type.members.end(); it++, mname++, i++)
+  std::vector<irep_idt>::const_iterator mname = member_names.begin();
+  for (std::vector<type2tc>::const_iterator it = members.begin();
+       it != members.end(); it++, mname++, i++)
   {
     proj_names[i] = Z3_mk_string_symbol(z3_ctx, mname->as_string().c_str());
     convert_type(*it, proj_types[i]);
@@ -705,6 +706,24 @@ z3_convt::convert_smt_type(const struct_union_type2t &type, void *&_bv)
   delete[] proj_types;
   delete[] proj_decls;
 
+  return;
+}
+
+void
+z3_convt::convert_smt_type(const struct_type2t &type, void *&_bv)
+{
+
+  convert_struct_union_type(type.members, type.member_names, type.name,
+                            false, _bv);
+  return;
+}
+
+void
+z3_convt::convert_smt_type(const union_type2t &type, void *&_bv)
+{
+
+  convert_struct_union_type(type.members, type.member_names, type.name,
+                            true, _bv);
   return;
 }
 
@@ -835,24 +854,20 @@ z3_convt::convert_smt_expr(const constant_bool2t &b, void *&_bv)
 
 void
 z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
-                               const type2tc &wrappedtype, bool is_union,
-                               void *&_bv)
+                               const std::vector<type2tc> &member_types,
+                               const type2tc &type, bool is_union, void *&_bv)
 {
   Z3_ast &bv = cast_to_z3(_bv);
 
   // Converts a static struct/union - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
-  const struct_union_type2t &type = to_structure_type(wrappedtype);
   u_int i = 0;
 
-  assert(type.members.size() >= members.size());
-  assert(!type.members.empty());
-
   Z3_sort sort;
-  convert_type(wrappedtype, sort);
+  convert_type(type, sort);
 
-  unsigned size = type.members.size();
+  unsigned size = member_types.size();
   if (is_union)
     size++;
 
@@ -886,13 +901,17 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
 void
 z3_convt::convert_smt_expr(const constant_struct2t &data, void *&_bv)
 {
-  convert_struct_union(data.datatype_members, data.type, false, _bv);
+  const struct_type2t &ref =static_cast<const struct_type2t&>(*data.type.get());
+  convert_struct_union(data.datatype_members, ref.members, data.type,
+                       false, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const constant_union2t &data, void *&_bv)
 {
-  convert_struct_union(data.datatype_members, data.type, true, _bv);
+  const union_type2t &ref = static_cast<const union_type2t&>(*data.type.get());
+  convert_struct_union(data.datatype_members, ref.members, data.type,
+                       true, _bv);
 }
 
 void
@@ -1732,20 +1751,20 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 
   if (is_structure_type(with.type)) {
     unsigned int idx = 0;
-    const struct_union_type2t &struct_type = to_structure_type(with.type);
+    const std::vector<irep_idt> &names = get_structure_member_names(with.type);
 
     convert_bv(with.source_value, tuple);
     convert_bv(with.update_value, value);
 
     const constant_string2t &str = to_constant_string2t(with.update_field);
 
-    forall_names(it, struct_type.member_names) {
+    forall_names(it, names) {
       if (*it == str.value)
         break;
       idx++;
     }
 
-    assert(idx != struct_type.member_names.size() &&
+    assert(idx != names.size() &&
            "Member name of with expr not found in struct/union type");
 
     bv = z3_api.mk_tuple_update(tuple, idx, value);
@@ -1776,10 +1795,10 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
   u_int j = 0;
   Z3_ast struct_var;
 
-  const struct_union_type2t &struct_type =
-    to_structure_type(member.source_value->type);
+  const std::vector<irep_idt> &member_names =
+                          get_structure_member_names(member.source_value->type);
 
-  forall_names(it, struct_type.member_names) {
+  forall_names(it, member_names) {
     if (*it == member.member.as_string())
       break;
     j++;
@@ -1798,10 +1817,10 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
     }
 
     if (cache_result != union_vars.end()) {
-      const struct_union_type2t &type =
-        to_structure_type(member.source_value->type);
+      const std::vector<type2tc> &members =
+        get_structure_members(member.source_value->type);
 
-      const type2tc source_type = type.members[cache_result->second];
+      const type2tc source_type = members[cache_result->second];
       if (source_type == member.type) {
         // Type we're fetching from union matches expected type; just return it.
         bv = z3_api.mk_tuple_select(struct_var, cache_result->second);
