@@ -1691,7 +1691,7 @@ public:
   irep_container(const expr2tc &ref)
     : boost::shared_ptr<T>
       (boost::shared_polymorphic_cast<T, expr2t>(ref))
-      { assert(this->get()->expr_id == expid); }
+      { assert(ref->expr_id == expid); }
 
   irep_container &operator=(irep_container const &ref)
   {
@@ -1710,17 +1710,6 @@ public:
 
   const T * operator-> () const // never throws
   {
-    return boost::shared_ptr<T>::operator->();
-  }
-
-  const T * get() const // never throws
-  {
-    return boost::shared_ptr<T>::get();
-  }
-
-  T * operator-> () // never throws
-  {
-    detach();
     return boost::shared_ptr<T>::operator->();
   }
 
