@@ -270,6 +270,7 @@ namespace esbmct {
   field_name_macro(symbol_name);
   field_name_macro(members);
   field_name_macro(member_names);
+  field_name_macro(width);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -367,6 +368,7 @@ namespace esbmct {
   member_record_macro(type2tc_vec_members, type2tc_vec_type_tag, name_members);
   member_record_macro(irepidt_vec_member_names, irepidt_vec_type_tag,
                       name_member_names);
+  member_record_macro(uint_width, uint_type_tag, name_width);
   #undef member_record_macro
 
   template <class thename>
@@ -553,6 +555,19 @@ public:
 template class esbmct::type<union_type2t, esbmct::type2tc_vec_members,
                         esbmct::irepidt_vec_member_names, esbmct::irepidt_name>;
 
+class unsignedbv_type2t : public esbmct::type<unsignedbv_type2t,
+                                          esbmct::uint_width>
+{
+public:
+  unsignedbv_type2t(unsigned int width)
+    : esbmct::type<unsignedbv_type2t, esbmct::uint_width>
+      (unsignedbv_id, width) { }
+  unsignedbv_type2t(const unsignedbv_type2t &ref)
+    : esbmct::type<unsignedbv_type2t, esbmct::uint_width>(ref) { }
+  virtual unsigned int get_width(void) const;
+};
+template class esbmct::type<unsignedbv_type2t, esbmct::uint_width>;
+
 class bv_type2t : public type_body<bv_type2t>
 {
 protected:
@@ -642,16 +657,6 @@ protected:
 
 public:
   const type2tc subtype;
-};
-
-class unsignedbv_type2t : public bv_type_body<unsignedbv_type2t>
-{
-public:
-  unsignedbv_type2t(unsigned int width);
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-protected:
-  unsignedbv_type2t(const unsignedbv_type2t &ref);
 };
 
 class signedbv_type2t : public bv_type_body<signedbv_type2t>

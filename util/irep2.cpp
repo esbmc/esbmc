@@ -257,23 +257,6 @@ signedbv_type2t::tostring(unsigned int indent) const
   return bv_type2t::tostring(indent);
 }
 
-unsignedbv_type2t::unsignedbv_type2t(unsigned int width)
-  : bv_type_body<unsignedbv_type2t>(unsignedbv_id, width)
-{
-}
-
-int
-unsignedbv_type2t::lt(const type2t &ref) const
-{
-  return bv_type2t::lt(ref);
-}
-
-list_of_memberst
-unsignedbv_type2t::tostring(unsigned int indent) const
-{
-  return bv_type2t::tostring(indent);
-}
-
 array_type2t::array_type2t(const type2tc t, const expr2tc s, bool inf)
   : type_body<array_type2t>(array_id), subtype(t), array_size(s),
     size_is_infinite(inf)
