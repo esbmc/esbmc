@@ -184,8 +184,9 @@ array_type2t::get_width(void) const
   // Otherwise, we can multiply the size of the subtype by the number of elements.
   unsigned int sub_width = subtype->get_width();
 
-  expr2t *elem_size = array_size.get();
-  constant_int2t *const_elem_size = dynamic_cast<constant_int2t*>(elem_size);
+  const expr2t *elem_size = array_size.get();
+  const constant_int2t *const_elem_size = dynamic_cast<const constant_int2t*>
+                                                      (elem_size);
   assert(const_elem_size != NULL);
   unsigned long num_elems = const_elem_size->as_ulong();
 

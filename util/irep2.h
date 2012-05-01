@@ -43,12 +43,81 @@
        it != (vect).end(); it++)
 
 class prop_convt;
-
 class type2t;
 class expr2t;
 class constant_array2t;
+
+template <class T, int expid>
+class irep_container : protected boost::shared_ptr<T>
+{
+public:
+  irep_container() : boost::shared_ptr<T>() {}
+
+  template<class Y>
+  explicit irep_container(Y *p) : boost::shared_ptr<T>(p)
+    { assert(expid == -1 || p->expr_id == expid); }
+
+  template<class Y>
+  explicit irep_container(const Y *p) : boost::shared_ptr<T>(const_cast<Y *>(p))
+    { assert(expid == -1 || p->expr_id == expid); }
+
+  irep_container(const irep_container &ref)
+    : boost::shared_ptr<T>(ref) {}
+
+  irep_container &operator=(irep_container const &ref)
+  {
+    boost::shared_ptr<T>::operator=(ref);
+    T *p = boost::shared_ptr<T>::operator->();
+    assert(expid == -1 || p->expr_id == expid);
+    return *this;
+  }
+
+  template<class Y>
+  irep_container & operator=(boost::shared_ptr<Y> const & r)
+  {
+    boost::shared_ptr<T>::operator=(r);
+    T *p = boost::shared_ptr<T>::operator->();
+    assert(expid == -1 || p->expr_id == expid);
+    return *this;
+  }
+
+  const T &operator*() const
+  {
+    return *boost::shared_ptr<T>::get();
+  }
+
+  const T * operator-> () const // never throws
+  {
+    return boost::shared_ptr<T>::operator->();
+  }
+
+  const T * get() const // never throws
+  {
+    return boost::shared_ptr<T>::get();
+  }
+
+  T * get() // never throws
+  {
+    detach();
+    return boost::shared_ptr<T>::get();
+  }
+
+  void detach(void)
+  {
+    if (this->use_count() == 1)
+      return; // No point remunging oneself if we're the only user of the ptr.
+
+    // Assign-operate ourself into containing a fresh copy of the data. This
+    // creates a new reference counted object, and assigns it to ourself,
+    // which causes the existing reference to be decremented.
+    const T *foo = boost::shared_ptr<T>::get();
+    *this = foo->clone();
+    return;
+  }
+};
+
 typedef boost::shared_ptr<type2t> type2tc;
-typedef boost::shared_ptr<expr2t> expr2tc;
+typedef irep_container<expr2t, -1> expr2tc;
 
 typedef std::pair<std::string,std::string> member_entryt;
 typedef std::vector<member_entryt> list_of_memberst;
@@ -1538,17 +1607,17 @@ inline bool operator>(boost::shared_ptr<type2t> const & a, boost::shared_ptr<typ
   return (*b.get() < *a.get());
 }
 
-inline bool operator==(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<expr2t> const & b)
+inline bool operator==(const expr2tc& a, const expr2tc& b)
 {
   return (*a.get() == *b.get());
 }
 
-inline bool operator!=(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<expr2t> const & b)
+inline bool operator!=(const expr2tc& a, const expr2tc& b)
 {
   return (*a.get() != *b.get());
 }
 
-inline bool operator<(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<expr2t> const & b)
+inline bool operator<(const expr2tc& a, const expr2tc& b)
 {
   return (*a.get() < *b.get());
 }
@@ -1578,7 +1647,7 @@ struct type2_hash
   inline bool is_##name##2t(const expr2t &r) \
     { return r.expr_id == expr2t::name##_id; } \
   inline const name##2t & to_##name##2t(const expr2tc &t) \
-    { return dynamic_cast<const name##2t &> (*t.get()); } \
+    { return dynamic_cast<const name##2t &> (*t); } \
   inline name##2t & to_##name##2t(expr2tc &t) \
     { return dynamic_cast<name##2t &> (*t.get()); }
 
@@ -1691,66 +1760,6 @@ inline const irep_idt &get_structure_name(const type2tc &someval)
     return v.name;
   }
 }
-
-template <class T, expr2t::expr_ids expid>
-class irep_container : protected boost::shared_ptr<T>
-{
-public:
-  irep_container() : boost::shared_ptr<T>() {}
-
-  template<class Y>
-  explicit irep_container(Y *p) : boost::shared_ptr<T>(p)
-    { assert(p->expr_id == expid); }
-
-  irep_container(const irep_container &ref)
-    : boost::shared_ptr<T>(ref) {}
-
-  irep_container(const expr2tc &ref)
-    : boost::shared_ptr<T>
-      (boost::shared_polymorphic_cast<T, expr2t>(ref))
-      { assert(ref->expr_id == expid); }
-
-  irep_container &operator=(irep_container const &ref)
-  {
-    boost::shared_ptr<T>::operator=(ref);
-    T *p = boost::shared_ptr<T>::operator->();
-    assert(p->expr_id == expid);
-    return *this;
-  }
-
-  template<class Y>
-  irep_container & operator=(boost::shared_ptr<Y> const & r)
-  {
-    boost::shared_ptr<T>::operator=(r);
-    T *p = boost::shared_ptr<T>::operator->();
-    assert(p->expr_id == expid);
-    return *this;
-  }
-
-  const T * operator-> () const // never throws
-  {
-    return boost::shared_ptr<T>::operator->();
-  }
-
-  T * get() // never throws
-  {
-    detach();
-    return boost::shared_ptr<T>::get();
-  }
-
-  void detach(void)
-  {
-    if (this->use_count() == 1)
-      return; // No point remunging oneself if we're the only user of the ptr.
-
-    // Assign-operate ourself into containing a fresh copy of the data. This
-    // creates a new reference counted object, and assigns it to ourself,
-    // which causes the existing reference to be decremented.
-    const T *foo = boost::shared_ptr<T>::get();
-    *this = boost::shared_polymorphic_cast<T, expr2t>(foo->clone());
-    return;
-  }
-};
 
 typedef irep_container<constant_int2t, expr2t::constant_int_id> constant_int2tc;
 typedef irep_container<constant_fixedbv2t, expr2t::constant_fixedbv_id>
