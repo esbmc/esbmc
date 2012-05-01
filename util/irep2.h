@@ -1675,7 +1675,7 @@ inline const irep_idt &get_structure_name(const type2tc &someval)
   }
 }
 
-template <class T>
+template <class T, expr2t::expr_ids expid>
 class irep_container : protected boost::shared_ptr<T>
 {
   irep_container() : boost::shared_ptr<T>() {}
@@ -1689,7 +1689,7 @@ class irep_container : protected boost::shared_ptr<T>
   irep_container(const expr2tc &ref)
     : boost::shared_ptr<T>
       (boost::shared_polymorphic_cast<T, expr2t>(ref))
-      { assert(this->get()->expr_id == expr2t::constant_int_id); } //XXXjmorse
+      { assert(this->get()->expr_id == expid); }
 
   irep_container &operator=(irep_container const &ref)
   {
