@@ -475,6 +475,7 @@ public:
   bool_type2t(const bool_type2t &ref) : esbmct::type<bool_type2t>(ref) {}
   virtual unsigned int get_width(void) const;
 };
+template class esbmct::type<bool_type2t>;
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
 class empty_type2t : public esbmct::type<empty_type2t>
@@ -484,6 +485,7 @@ public:
   empty_type2t(const empty_type2t &ref) : esbmct::type<empty_type2t>(ref) {}
   virtual unsigned int get_width(void) const;
 };
+template class esbmct::type<empty_type2t>;
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when
  *  a struct/array contains a recursive pointer to its own type. */
@@ -499,6 +501,7 @@ public:
       (ref) { }
   virtual unsigned int get_width(void) const;
 };
+template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
 
 class struct_union_type2t : public type_body<struct_union_type2t>
 {
