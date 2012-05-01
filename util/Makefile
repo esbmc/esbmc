@@ -1,10 +1,12 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 MAINOBJ = $(OBJDIR)/util.o
-all: $(OBJDIR)/.deps $(MAINOBJ)
+all: irep2.h.gch $(OBJDIR)/.deps $(MAINOBJ)
 
-SRCS= irep2.h \
-      arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
+irep2.h.gch: irep2.h
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr.cpp expr_util.cpp i2string.cpp irep.cpp language.cpp \
       location.cpp message.cpp language_file.cpp \
       mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp \
@@ -28,7 +30,7 @@ ifdef MODULE_FLOATBV
 endif
 
 clean:
-	-rm -f $(OBJS) ieee_float_test $(MAINOBJ)
+	-rm -f $(OBJS) ieee_float_test $(MAINOBJ) irep2.h.gch
 	-rm -f $(OBJDIR)/.deps
 #
 #ieee_float_test: ieee_float_test.o ieee_float.o util.o

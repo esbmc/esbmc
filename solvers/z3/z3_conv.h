@@ -9,6 +9,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef CPROVER_PROP_Z3_CONV_H
 #define CPROVER_PROP_Z3_CONV_H
 
+#include <irep2.h>
+
 #include <stdint.h>
 
 #include <map>
@@ -18,7 +20,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/prop/pointer_logic.h>
 #include <vector>
 #include <string.h>
-#include <irep2.h>
 
 #include "z3_capi.h"
 

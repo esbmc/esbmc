@@ -1,7 +1,7 @@
-#include <stdint.h>
-
 #include "migrate.h"
 #include "prefix.h"
+
+#include <stdint.h>
 
 #include <config.h>
 #include <simplify_expr.h>

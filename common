@@ -6,16 +6,13 @@
 SHELL := /bin/bash
 
 OBJS1 = $(SRCS:%.c=$(OBJDIR)/%.o)
-OBJS2 = $(SRCS:%.h=$(OBJDIR)/%.h.gch)
-OBJS+= $(OBJS2:%.cpp=$(OBJDIR)/%.o)
-LINKOBJS= $(OBJS:%.gch=)
+OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 
 # Given the presence of OBJDIR, $(OBJS) can't now automatically infer
 # dependancies between .o's and .cpp's etc
 
-# list of includes, potentially modified by includer. Also include util objdir,
-# where some precompiled headers may be living.
-INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util/$(OBJDIR) -I$(ESBMCDIR)/util
+# list of includes, potentially modified by includer.
+INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
 CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 
@@ -25,10 +22,6 @@ $(OBJDIR)/%.o : %.cpp
 
 $(OBJDIR)/%.o : %.c
 	$(CC) -c $(CFLAGS) -o $@ $<
-
-$(OBJDIR)/%.h.gch : %.h
-	$(CXX) $(CXXFLAGS) -o $@ $<
-
 else
 $(OBJDIR)/%.o : %.cpp
 	$(VCBINS)/cl.exe /TP /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" $(VCINCLUDES) /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
@@ -40,7 +33,7 @@ endif
 # A generic target; potentially not defined by the includer
 
 $(MAINOBJ): $(OBJS)
-	$(PARTLINKLD) $(PARTLINKOUT)$@ $(LINKOBJS) $(PARTLINKOPTS)
+	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
 # Special purpose features,
 ifndef LINUX
