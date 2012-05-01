@@ -1742,4 +1742,6 @@ class irep_container : protected boost::shared_ptr<T>
   }
 };
 
+typedef irep_container<constant_int2t, expr2t::constant_int_id> constant_int2tc;
+
 #endif /* _UTIL_IREP2_H_ */
