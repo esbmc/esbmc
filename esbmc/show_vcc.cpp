@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <migrate.h>
+
 #include <iostream>
 #include <fstream>
 
@@ -67,7 +69,7 @@ void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
         if(!p_it->ignore)
         {
           std::string string_value;
-          languages.from_expr(p_it->cond, string_value);
+          languages.from_expr(migrate_expr_back(p_it->cond), string_value);
           out << "{-" << count << "} " << string_value << std::endl;
           count++;
         }
@@ -75,7 +77,7 @@ void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
     out << "|--------------------------" << std::endl;
 
     std::string string_value;
-    languages.from_expr(it->cond, string_value);
+    languages.from_expr(migrate_expr_back(it->cond), string_value);
     out << "{" << 1 << "} " << string_value << std::endl;
     
     out << std::endl;

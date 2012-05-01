@@ -316,7 +316,7 @@ void bmct::show_program(symex_target_equationt &equation)
     if(it->is_assignment())
     {
       std::string string_value;
-      languages.from_expr(it->cond, string_value);
+      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(" << count << ") " << string_value << std::endl;
       count++;
     }
@@ -324,14 +324,14 @@ void bmct::show_program(symex_target_equationt &equation)
     else if(it->is_assert())
     {
       std::string string_value;
-      languages.from_expr(it->cond, string_value);
+      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(" << count << ") " << "(assert)" << string_value << std::endl;
       count++;
     }
     else if(it->is_assume())
     {
       std::string string_value;
-      languages.from_expr(it->cond, string_value);
+      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(" << count << ") " << "(assume)" << string_value << std::endl;
       count++;
     }
