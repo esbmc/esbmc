@@ -578,19 +578,19 @@ template class esbmct::type<empty_type2t>;
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when
  *  a struct/array contains a recursive pointer to its own type. */
-class symbol_type2t : public esbmct::type<symbol_type2t,
-                                           esbmct::irepidt_symbol_name>
+class symbol_type2t;
+template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
+typedef esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>
+        symbol_type_type;
+class symbol_type2t : public symbol_type_type
 {
 public:
   symbol_type2t(const dstring sym_name)
-    : esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>
-      (symbol_id, sym_name) { }
+    : symbol_type_type (symbol_id, sym_name) { }
   symbol_type2t(const symbol_type2t &ref)
-    : esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>
-      (ref) { }
+    : symbol_type_type (ref) { }
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
 
 class struct_type2t : public esbmct::type<struct_type2t,
                                           esbmct::type2tc_vec_members,
