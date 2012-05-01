@@ -1071,6 +1071,19 @@ do_type_crc<irep_idt>(const irep_idt &theval, boost::crc_32_type &crc)
   return;
 }
 
+inline void
+do_type_list_operands(const expr2tc &theval, std::vector<expr2tc> &inp)
+{
+  abort();
+}
+
+inline void
+do_type_list_operands(const std::vector<expr2tc> &theval,
+                      std::vector<expr2tc> &inp)
+{
+  abort();
+}
+
 template <class derived, class field1, class field2, class field3, class field4>
 void
 esbmct::expr<derived, field1, field2, field3, field4>::convert_smt(prop_convt &obj, void *&arg) const
@@ -1165,6 +1178,19 @@ esbmct::expr<derived, field1, field2, field3, field4>::do_crc
   field2::fieldtype::do_crc(crc);
   field3::fieldtype::do_crc(crc);
   field4::fieldtype::do_crc(crc);
+  return;
+}
+
+template <class derived, class field1, class field2, class field3, class field4>
+void
+esbmct::expr<derived, field1, field2, field3, field4>::list_operands
+          (std::vector<expr2tc> &inp) const
+{
+
+  field1::fieldtype::list_operands(inp);
+  field2::fieldtype::list_operands(inp);
+  field3::fieldtype::list_operands(inp);
+  field4::fieldtype::list_operands(inp);
   return;
 }
 
