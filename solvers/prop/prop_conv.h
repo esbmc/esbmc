@@ -42,7 +42,7 @@ public:
   virtual bool get_bool(const exprt &expr, tvt &value) const;
 
   // get a value from counterexample if not valid
-  virtual exprt get(const exprt &expr) const;
+  virtual expr2tc get(const expr2tc &expr) const = 0;
   
   virtual void clear_cache()
   {

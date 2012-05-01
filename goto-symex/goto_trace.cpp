@@ -522,7 +522,14 @@ void show_goto_trace(
     case goto_trace_stept::OUTPUT:
       {
         printf_formattert printf_formatter;
-        printf_formatter(it->format_string, it->output_args);
+        std::list<exprt> vec;
+
+        for (std::list<expr2tc>::const_iterator it2 = it->output_args.begin();
+             it2 != it->output_args.end(); it2++) {
+          vec.push_back(migrate_expr_back(*it2));
+        }
+
+        printf_formatter(it->format_string, vec);
         printf_formatter.print(out);
         out << std::endl;
       }

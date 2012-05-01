@@ -58,28 +58,25 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
   return value;
 }
 
-exprt
-z3_convt::get(const exprt &expr) const
+expr2tc
+z3_convt::get(const expr2tc &expr) const
 {
-
-  expr2tc new_expr;
-  migrate_expr(expr, new_expr);
 
   try {
 
-  if (is_symbol2t(new_expr)) {
+  if (is_symbol2t(expr)) {
     std::string identifier, tmp;
     Z3_sort sort;
     Z3_ast bv;
     Z3_func_decl func;
 
-    const symbol2t sym = to_symbol2t(new_expr);
+    const symbol2t sym = to_symbol2t(expr);
     identifier = sym.name.as_string();
 
-    sort_cachet::const_iterator cache_res = sort_cache.find(new_expr->type);
+    sort_cachet::const_iterator cache_res = sort_cache.find(expr->type);
     if (cache_res != sort_cache.end()) {
       sort = cache_res->second;
-    } else if (int_encoding && is_bv_type(new_expr->type)) {
+    } else if (int_encoding && is_bv_type(expr->type)) {
       // Special case: in integer mode, all int types become Z3 int's, which
       // doesn't necessarily get put in the type cache.
       sort = Z3_mk_int_sort(z3_ctx);
@@ -88,7 +85,7 @@ z3_convt::get(const exprt &expr) const
       //assert(cache_res != sort_cache.end() && "No cached copy of type when "
       //       "fetching cex data");
       z3_convt *ourselves = const_cast<z3_convt *>(this);
-      ourselves->convert_type(new_expr->type, sort);
+      ourselves->convert_type(expr->type, sort);
     }
 
     bv = z3_api.mk_var(identifier.c_str(), sort);
@@ -96,15 +93,14 @@ z3_convt::get(const exprt &expr) const
 
     if(Z3_eval_func_decl(z3_ctx, model, func, &bv) == Z3_L_FALSE) {
       // This symbol doesn't have an assignment in this model
-      return nil_exprt();
+      return expr2tc();
     }
 
-    expr2tc ret = bv_get_rec(bv, new_expr->type);
-    return migrate_expr_back(ret);
-  } else if (is_constant_expr(new_expr)) {
+    return bv_get_rec(bv, expr->type);
+  } else if (is_constant_expr(expr)) {
     return expr;
   } else {
-    std::cerr << "Unrecognized irep fetched from Z3: " << expr.id().as_string();
+    std::cerr << "Unrecognized irep fetched from Z3: " << get_expr_id(expr);
     std::cerr << std::endl;
     abort();
   }
@@ -112,7 +108,7 @@ z3_convt::get(const exprt &expr) const
   } catch (conv_error *e) {
     std::cerr << "Conversion error fetching counterexample:" << std::endl;
     std::cerr << e->to_string() << std::endl;
-    return nil_exprt();
+    return expr2tc();
   }
 }
 

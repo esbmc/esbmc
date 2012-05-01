@@ -119,7 +119,15 @@ void convert(
     case goto_trace_stept::OUTPUT:
       {
         printf_formattert printf_formatter;
-        printf_formatter(it->format_string, it->output_args);
+
+        std::list<exprt> vec;
+
+        for (std::list<expr2tc>::const_iterator it2 = it->output_args.begin();
+             it2 != it->output_args.end(); it2++) {
+          vec.push_back(migrate_expr_back(*it2));
+        }
+
+        printf_formatter(it->format_string, vec);
         std::string text=printf_formatter.as_string();
         xmlt &xml_output=xml.new_element("output");
         xml_output.new_element("step_nr").data=i2string(it->step_nr);

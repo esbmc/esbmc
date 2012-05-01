@@ -63,7 +63,7 @@ public:
 
   // for OUTPUT
   std::string format_string;
-  std::list<exprt> output_args;
+  std::list<expr2tc> output_args;
 
   void output(
     const class namespacet &ns,

@@ -3039,15 +3039,16 @@ z3_convt::l_get(literalt a) const
     return tvt(false);
   }
 
-  symbol_exprt sym("l" + i2string(a.var_no()), bool_typet());
-  exprt res = get(sym);
+  expr2tc sym(new symbol2t(type_pool.get_bool(),
+                           irep_idt("l" + i2string(a.var_no()))));
+  expr2tc res = get(sym);
 
-  if (res.is_true())
-    result = tvt(true);
-  else if (res.is_false())
-    result = tvt(false);
-  else
+  if (is_constant_bool2t(res)) {
+    result = (to_constant_bool2t(res).is_true())
+             ? tvt(tvt::TV_TRUE) : tvt(tvt::TV_FALSE);
+  } else {
     result = tvt(tvt::TV_UNKNOWN);
+  }
 
   if (a.sign())
     result = !result;

@@ -80,7 +80,7 @@ public:
   void set_z3_core_size(uint val);
 
   // overloading
-  virtual exprt get(const exprt &expr) const;
+  virtual expr2tc get(const expr2tc &expr) const;
 
 private:
   virtual literalt convert_expr(const expr2tc &expr);

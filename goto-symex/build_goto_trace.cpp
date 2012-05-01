@@ -64,8 +64,7 @@ void build_goto_trace(
     goto_trace_step.stack_trace = SSA_step.stack_trace;
 
     if(!is_nil_expr(SSA_step.lhs)) {
-      exprt tmp = prop_conv.get(migrate_expr_back(SSA_step.lhs));
-      migrate_expr(tmp, goto_trace_step.value);
+      goto_trace_step.value = prop_conv.get(SSA_step.lhs);
     }
 
     for(std::list<exprt>::const_iterator
@@ -74,14 +73,12 @@ void build_goto_trace(
         j++)
     {
       const exprt &arg=*j;
-      if(arg.is_constant() ||
-         arg.id()=="string-constant")
-        goto_trace_step.output_args.push_back(arg);
+      expr2tc arg2;
+      migrate_expr(arg, arg2);
+      if (is_constant_expr(arg2))
+        goto_trace_step.output_args.push_back(arg2);
       else
-      {
-        exprt tmp=prop_conv.get(arg);
-        goto_trace_step.output_args.push_back(tmp);
-      }
+        goto_trace_step.output_args.push_back(prop_conv.get(arg2));
     }
 
     if(SSA_step.is_assert() ||

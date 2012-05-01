@@ -54,28 +54,6 @@ void prop_convt::ignoring(const expr2tc &expr)
   print(2, msg);
 }
 
-exprt prop_convt::get(const exprt &expr) const
-{
-  exprt dest;
-
-  dest.make_nil();
-
-  tvt value;
-
-  if(expr.type().is_bool() &&
-     !get_bool(expr, value))
-  {
-    switch(value.get_value())
-    {
-     case tvt::TV_TRUE:  dest.make_true(); return dest;
-     case tvt::TV_FALSE: dest.make_false(); return dest;
-     case tvt::TV_UNKNOWN: dest.make_false(); return dest; // default
-    }
-  }
-
-  return dest;
-}
-
 void prop_convt::convert_smt_type(const type2t &type, void *&arg)
 {
   std::cerr << "Unhandled SMT conversion for type ID " << type.type_id <<
