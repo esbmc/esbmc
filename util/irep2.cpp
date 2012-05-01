@@ -890,6 +890,17 @@ type_to_string<expr2tc>(const expr2tc &theval, int indent)
 
 template <>
 inline std::string
+type_to_string<type2tc>(const type2tc &theval, int indent)
+{
+
+  if (theval.get() != NULL)
+    return theval->pretty(indent + 2);
+  else
+    return "";
+}
+
+template <>
+inline std::string
 type_to_string<irep_idt>(const irep_idt &theval,
                          int indent __attribute__((unused)))
 {
@@ -953,6 +964,17 @@ template <>
 inline bool
 do_type_cmp<expr2tc>(const expr2tc &side1, const expr2tc &side2)
 {
+  return (side1 == side2);
+}
+
+template <>
+inline bool
+do_type_cmp<type2tc>(const type2tc &side1, const type2tc &side2)
+{
+  if (side1.get() == side2.get())
+    return true; // both null ptr check
+  if (side1.get() == NULL || side2.get() == NULL)
+    return false; // One of them is null, the other isn't
   return (side1 == side2);
 }
 
@@ -1051,6 +1073,20 @@ do_type_lt<expr2tc>(const expr2tc &side1, const expr2tc &side2)
 
 template <>
 inline int
+do_type_lt<type2tc>(const type2tc &side1, const type2tc &side2)
+{
+  if (*side1.get() == *side2.get())
+    return 0; // Both may be null;
+  else if (side1.get() == NULL)
+    return -1;
+  else if (side2.get() == NULL)
+    return 1;
+  else
+    return side1->ltchecked(*side2.get());
+}
+
+template <>
+inline int
 do_type_lt<irep_idt>(const irep_idt &side1, const irep_idt &side2)
 {
   if (side1 < side2)
@@ -1138,13 +1174,22 @@ do_type_crc<std::vector<irep_idt> >(const std::vector<irep_idt> &theval,
     crc.process_bytes((*it).as_string().c_str(), (*it).as_string().size());
 }
 
-
 template <>
 inline void
 do_type_crc<expr2tc>(const expr2tc &theval, boost::crc_32_type &crc)
 {
 
   theval->do_crc(crc);
+  return;
+}
+
+template <>
+inline void
+do_type_crc<type2tc>(const type2tc &theval, boost::crc_32_type &crc)
+{
+
+  if (theval.get() != NULL)
+    theval->do_crc(crc);
   return;
 }
 
