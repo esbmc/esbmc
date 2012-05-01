@@ -181,7 +181,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   type2tc type;
 
-  if (expr.id() == "symbol") {
+  if (expr.id() == "nil") {
+    new_expr_ref = expr2tc();
+  } else if (expr.id() == "symbol") {
     migrate_type(expr.type(), type);
     expr2t *new_expr = new symbol2t(type, expr.identifier().as_string());
     new_expr_ref = expr2tc(new_expr);
