@@ -1074,14 +1074,15 @@ do_type_crc<irep_idt>(const irep_idt &theval, boost::crc_32_type &crc)
 inline void
 do_type_list_operands(const expr2tc &theval, std::vector<expr2tc> &inp)
 {
-  abort();
+  inp.push_back(theval);
 }
 
 inline void
 do_type_list_operands(const std::vector<expr2tc> &theval,
                       std::vector<expr2tc> &inp)
 {
-  abort();
+  forall_exprs(it, theval)
+    inp.push_back(*it);
 }
 
 template <class derived, class field1, class field2, class field3, class field4>
