@@ -14,19 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <migrate.h>
 #include "prop_conv.h"
 
-bool prop_convt::get_bool(const exprt &expr, tvt &value) const
-{
-
-  expr2tc new_expr;
-  migrate_expr(expr, new_expr);
-
-  cachet::const_iterator cache_result=cache.find(new_expr);
-  if(cache_result==cache.end()) return true;
-
-  value=l_get(cache_result->second);
-  return false;
-}
-
 literalt prop_convt::convert(const expr2tc &expr)
 {
 

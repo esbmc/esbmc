@@ -38,9 +38,6 @@ public:
 
   virtual literalt convert(const expr2tc &expr);
 
-  // get a boolean value from counterexample if not valid
-  virtual bool get_bool(const exprt &expr, tvt &value) const;
-
   // get a value from counterexample if not valid
   virtual expr2tc get(const expr2tc &expr) const = 0;
   
