@@ -151,14 +151,6 @@ type2t::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-template<class derived>
-void
-type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
-{
-  const derived *derived_this = static_cast<const derived *>(this);
-  obj.convert_smt_type(*derived_this, arg);
-}
-
 unsigned int
 bool_type2t::get_width(void) const
 {

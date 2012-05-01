@@ -556,17 +556,6 @@ namespace esbmct {
   };
 }; // esbmct
 
-template <class derived>
-class type_body : public type2t
-{
-protected:
-  type_body(type_ids id) : type2t(id) {};
-  type_body(const type_body &ref);
-
-public:
-  virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
-};
-
 /** Boolean type. No additional data */
 class bool_type2t : public esbmct::type<bool_type2t>
 {
