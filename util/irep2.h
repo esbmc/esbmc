@@ -139,14 +139,8 @@ template <class T>
 static inline void do_type_crc(const T &theval, boost::crc_32_type &crc);
 
 template <class T>
-static inline void do_type_list_operands(const T&theval __attribute__((unused)),
-                              std::vector<expr2tc> &inp __attribute__((unused)))
-                                         { return; }
-
-inline void do_type_list_operands(const expr2tc &theval,
-                                  std::vector<expr2tc> &inp);
-inline void do_type_list_operands(const std::vector<expr2tc> &theval,
-                                  std::vector<expr2tc> &inp);
+static inline void do_type_list_operands(const T&theval,
+                                         std::vector<expr2tc> &inp);
 
 /** Base class for all types */
 class type2t
@@ -320,7 +314,7 @@ namespace esbmct {
       return do_type_lt<fieldtype>(name, theother.name); }\
     inline void do_crc(boost::crc_32_type &crc) const { \
       do_type_crc<fieldtype>(name, crc); return; }\
-    inline void list_operands(std::vector<expr2tc>inp) const { \
+    inline void list_operands(std::vector<expr2tc> &inp) const { \
       do_type_list_operands<fieldtype>(name, inp); return; }\
     fieldtype name; \
   }; \
