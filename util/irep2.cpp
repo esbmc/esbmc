@@ -531,51 +531,10 @@ empty_type2t::get_width(void) const
   throw new symbolic_type_excp();
 }
 
-symbol_type2t::symbol_type2t(const dstring sym_name)
-  : type_body<symbol_type2t>(symbol_id), symbol_name(sym_name)
-{
-}
-
 unsigned int
 symbol_type2t::get_width(void) const
 {
   assert(0 && "Fetching width of symbol type - invalid operation");
-}
-
-bool
-symbol_type2t::cmp(const type2t &ref) const
-{
-
-  const symbol_type2t &ref2 = static_cast<const symbol_type2t&>(ref);
-  return symbol_name == ref2.symbol_name;
-}
-
-int
-symbol_type2t::lt(const type2t &ref) const
-{
-  const symbol_type2t &ref2 = static_cast<const symbol_type2t &>(ref);
-
-  if (symbol_name < ref2.symbol_name)
-    return -1;
-  if (ref2.symbol_name < symbol_name)
-    return 1;
-  return 0;
-}
-
-list_of_memberst
-symbol_type2t::tostring(unsigned int indent) const
-{
-  list_of_memberst membs;
-  membs.push_back(member_entryt("symbol", symbol_name.as_string()));
-  return membs;
-}
-
-void
-symbol_type2t::do_crc(boost::crc_32_type &crc) const
-{
-  type2t::do_crc(crc);
-  crc.process_bytes(symbol_name.c_str(), symbol_name.size());
-  return;
 }
 
 struct_type2t::struct_type2t(std::vector<type2tc> &members,

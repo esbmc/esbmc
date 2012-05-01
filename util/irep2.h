@@ -267,6 +267,7 @@ namespace esbmct {
   field_name_macro(bits);
   field_name_macro(initializer);
   field_name_macro(operand);
+  field_name_macro(symbol_name);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -358,6 +359,7 @@ namespace esbmct {
   member_record_macro(expr2tc_string, expr2tc_type_tag, name_string);
   member_record_macro(expr2tc_operand, expr2tc_type_tag, name_operand);
   member_record_macro(uint_bits, uint_type_tag, name_bits);
+  member_record_macro(irepidt_symbol_name, irepidt_type_tag, name_symbol_name);
 
   #undef member_record_macro
 
@@ -485,20 +487,17 @@ public:
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when
  *  a struct/array contains a recursive pointer to its own type. */
-class symbol_type2t : public type_body<symbol_type2t>
+class symbol_type2t : public esbmct::type<symbol_type2t,
+                                           esbmct::irepidt_symbol_name>
 {
 public:
-  symbol_type2t(const dstring sym_name);
-  virtual bool cmp(const type2t &ref) const;
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
+  symbol_type2t(const dstring sym_name)
+    : esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>
+      (symbol_id, sym_name) { }
+  symbol_type2t(const symbol_type2t &ref)
+    : esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>
+      (ref) { }
   virtual unsigned int get_width(void) const;
-protected:
-  symbol_type2t(const symbol_type2t &ref);
-
-public:
-  const dstring symbol_name;
 };
 
 class struct_union_type2t : public type_body<struct_union_type2t>
