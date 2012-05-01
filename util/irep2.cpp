@@ -190,12 +190,6 @@ signedbv_type2t::get_width(void) const
   return width;
 }
 
-array_type2t::array_type2t(const type2tc t, const expr2tc s, bool inf)
-  : type_body<array_type2t>(array_id), subtype(t), array_size(s),
-    size_is_infinite(inf)
-{
-}
-
 unsigned int
 array_type2t::get_width(void) const
 {
@@ -216,82 +210,6 @@ array_type2t::get_width(void) const
   unsigned long num_elems = const_elem_size->as_ulong();
 
   return num_elems * sub_width;
-}
-
-bool
-array_type2t::cmp(const type2t &ref) const
-{
-
-  const array_type2t &ref2 = static_cast<const array_type2t&>(ref);
-
-  // Check subtype type matches
-  if (subtype != ref2.subtype)
-    return false;
-
-  // If both sizes are infinite, we're the same type
-  if (size_is_infinite && ref2.size_is_infinite)
-    return true;
-
-  // If only one size is infinite, then we're not the same, and liable to step
-  // on a null pointer if we access array_size.
-  if (size_is_infinite || ref2.size_is_infinite)
-    return false;
-
-  // Otherwise,
-  return (array_size == ref2.array_size);
-}
-
-int
-array_type2t::lt(const type2t &ref) const
-{
-  const array_type2t &ref2 = static_cast<const array_type2t&>(ref);
-
-  int tmp = subtype->ltchecked(*ref2.subtype.get());
-  if (tmp != 0)
-    return tmp;
-
-  if (size_is_infinite < ref2.size_is_infinite)
-    return -1;
-  if (size_is_infinite > ref2.size_is_infinite)
-    return 1;
-
-  if (size_is_infinite)
-    return 0; // Both are infinite; and array_size is null.
-
-  return array_size->ltchecked(*ref2.array_size.get());
-}
-
-list_of_memberst
-array_type2t::tostring(unsigned int indent) const
-{
-  list_of_memberst membs = tostring_func<type2tc> (indent,
-                                                  (const char *)"subtype",
-                                                  &subtype, (const char *)"");
-
-  if (size_is_infinite) {
-    membs.push_back(member_entryt("size", "inifinite"));
-  } else {
-    list_of_memberst membs2 = tostring_func<expr2tc> (indent,
-                                                     (const char *)"size",
-                                                     &array_size,
-                                                     (const char *)"");
-    membs.push_back(membs2[0]);
-  }
-
-  return membs;
-}
-
-void
-array_type2t::do_crc(boost::crc_32_type &crc) const
-{
-  type2t::do_crc(crc);
-  subtype->do_crc(crc);
-  if (size_is_infinite) {
-    crc.process_byte(1);
-  } else {
-    crc.process_byte(0);
-    array_size->do_crc(crc);
-  }
 }
 
 pointer_type2t::pointer_type2t(type2tc _sub)

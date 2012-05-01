@@ -271,6 +271,9 @@ namespace esbmct {
   field_name_macro(members);
   field_name_macro(member_names);
   field_name_macro(width);
+  field_name_macro(subtype);
+  field_name_macro(array_size);
+  field_name_macro(size_is_infinite);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -322,6 +325,7 @@ namespace esbmct {
   field_type_macro(irepidt_type_tag, irep_idt);
   field_type_macro(type2tc_vec_type_tag, std::vector<type2tc>);
   field_type_macro(irepidt_vec_type_tag, std::vector<irep_idt>);
+  field_type_macro(type2tc_type_tag, type2tc);
   #undef field_type_macro
 
   #define member_record_macro(thename, thetype, fieldname) \
@@ -368,6 +372,9 @@ namespace esbmct {
   member_record_macro(irepidt_vec_member_names, irepidt_vec_type_tag,
                       name_member_names);
   member_record_macro(uint_width, uint_type_tag, name_width);
+  member_record_macro(type2tc_subtype, type2tc_type_tag, name_subtype);
+  member_record_macro(expr2tc_array_size, expr2tc_type_tag, name_array_size);
+  member_record_macro(bool_size_is_inf, bool_type_tag, name_size_is_infinite);
   #undef member_record_macro
 
   template <class thename>
@@ -592,19 +599,21 @@ template class esbmct::type<code_type2t>;
 
 /** Array type. Comes with a subtype of the array and a size that might be
  *  constant, might be nondeterministic. */
-class array_type2t : public type_body<array_type2t>
+class array_type2t : public esbmct::type<array_type2t,
+                                         esbmct::type2tc_subtype,
+                                         esbmct::expr2tc_array_size,
+                                         esbmct::bool_size_is_inf>
 {
 public:
-  array_type2t(const type2tc subtype, const expr2tc size, bool inf);
-  virtual bool cmp(const type2t &ref) const;
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
+  array_type2t(const type2tc subtype, const expr2tc size, bool inf)
+    : esbmct::type<array_type2t, esbmct::type2tc_subtype,
+                   esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>
+      (array_id, subtype, size, inf) { }
+  array_type2t(const array_type2t &ref)
+    : esbmct::type<array_type2t, esbmct::type2tc_subtype,
+                   esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>
+      (ref) { }
   virtual unsigned int get_width(void) const;
-protected:
-  array_type2t(const array_type2t &ref);
-
-public:
 
   // Exception for invalid manipulations of an infinitely sized array. No actual
   // data stored.
@@ -618,10 +627,6 @@ public:
     dyn_sized_array_excp(const expr2tc _size) : size(_size) {}
     expr2tc size;
   };
-
-  const type2tc subtype;
-  const expr2tc array_size;
-  bool size_is_infinite;
 };
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
