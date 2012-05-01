@@ -72,7 +72,7 @@ public:
   {
     boost::shared_ptr<T>::operator=(ref);
     T *p = boost::shared_ptr<T>::get();
-    assert(expid == -1 || p->expr_id == expid);
+    assert(expid == -1 || p == NULL || p->expr_id == expid);
     return *this;
   }
 
@@ -81,7 +81,7 @@ public:
   {
     boost::shared_ptr<T>::operator=(r);
     T *p = boost::shared_ptr<T>::operator->();
-    assert(expid == -1 || p->expr_id == expid);
+    assert(expid == -1 || p == NULL || p->expr_id == expid);
     return *this;
   }
 
