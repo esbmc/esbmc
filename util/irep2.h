@@ -5,6 +5,8 @@
 
 #include <vector>
 
+#define BOOST_SP_DISABLE_THREADS 1
+
 #include <boost/mpl/if.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/crc.hpp>
