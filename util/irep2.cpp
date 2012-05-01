@@ -50,6 +50,10 @@ static const char *type_names[] = {
   "fixedbv",
   "string"
 };
+// If this fires, you've added/removed a type id, and need to update the list
+// above (which is ordered according to the enum list)
+BOOST_STATIC_ASSERT(sizeof(type_names) ==
+                    (type2t::end_type_id * sizeof(char *)));
 
 type2t::type2t(type_ids id)
   : type_id(id)
@@ -397,6 +401,10 @@ static const char *expr_names[] = {
   "overflow_cast",
   "overflow_neg"
 };
+// If this fires, you've added/removed an expr id, and need to update the list
+// above (which is ordered according to the enum list)
+BOOST_STATIC_ASSERT(sizeof(expr_names) ==
+                    (expr2t::end_expr_id * sizeof(char *)));
 
 std::string
 expr2t::pretty(unsigned int indent) const
