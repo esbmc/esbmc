@@ -737,6 +737,7 @@ public:
     : esbmct::type<string_type2t, esbmct::uint_width>(ref) { }
   virtual unsigned int get_width(void) const;
 };
+template class esbmct::type<string_type2t, esbmct::uint_width>;
 
 // Generate some "is-this-a-blah" macros, and type conversion macros. This is
 // fine in terms of using/ keywords in syntax, because the preprocessor
