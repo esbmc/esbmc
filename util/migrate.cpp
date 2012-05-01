@@ -277,7 +277,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     type2tc t = type2tc(new string_type2t(val.to_long()));
 
     new_expr_ref = expr2tc(new constant_string2t(t, irep_idt(thestring)));
-  } else if (expr.id() == "constant" && expr.type().id() == "array") {
+  } else if ((expr.id() == "constant" && expr.type().id() == "array") ||
+             expr.id() == "array") {
     // Fixed size array.
     migrate_type(expr.type(), type);
 
