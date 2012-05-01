@@ -1679,6 +1679,9 @@ class constant_int2tc : protected boost::shared_ptr<constant_int2t>
 {
   constant_int2tc() : boost::shared_ptr<constant_int2t>() {}
 
+  template<class Y>
+  explicit constant_int2tc(Y *p) : boost::shared_ptr<constant_int2t>(p) {}
+
   constant_int2tc(const constant_int2tc &ref)
     : boost::shared_ptr<constant_int2t>(ref) {}
 
