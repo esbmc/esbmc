@@ -1622,7 +1622,7 @@ inline bool operator<(const expr2tc& a, const expr2tc& b)
   return (*a.get() < *b.get());
 }
 
-inline bool operator>(boost::shared_ptr<expr2t> const & a, boost::shared_ptr<expr2t> const & b)
+inline bool operator>(const expr2tc& a, const expr2tc& b)
 {
   return (*b.get() < *a.get());
 }
