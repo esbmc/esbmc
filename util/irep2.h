@@ -1750,5 +1750,56 @@ typedef irep_container<constant_array2t, expr2t::constant_array_id>
                        constant_array2tc;
 typedef irep_container<constant_array_of2t, expr2t::constant_array_of_id>
                        constant_array_of2tc;
+typedef irep_container<symbol2t, expr2t::symbol_id> symbol2tc;
+typedef irep_container<typecast2t, expr2t::typecast_id> typecast2tc;
+typedef irep_container<if2t, expr2t::if_id> if2tc;
+typedef irep_container<equality2t, expr2t::equality_id> equality2tc;
+typedef irep_container<notequal2t, expr2t::notequal_id> notequal2tc;
+typedef irep_container<lessthan2t, expr2t::lessthan_id> lessthan2tc;
+typedef irep_container<greaterthan2t, expr2t::greaterthan_id> greaterthan2tc;
+typedef irep_container<lessthanequal2t, expr2t::lessthanequal_id>
+                       lessthanequal2tc;
+typedef irep_container<greaterthanequal2t, expr2t::greaterthanequal_id>
+                       greaterthanequal2tc;
+typedef irep_container<not2t, expr2t::not_id> not2tc;
+typedef irep_container<and2t, expr2t::and_id> and2tc;
+typedef irep_container<or2t, expr2t::or_id> or2tc;
+typedef irep_container<xor2t, expr2t::xor_id> xor2tc;
+typedef irep_container<implies2t, expr2t::implies_id> implies2tc;
+typedef irep_container<bitand2t, expr2t::bitand_id> bitand2tc;
+typedef irep_container<bitor2t, expr2t::bitor_id> bitor2tc;
+typedef irep_container<bitxor2t, expr2t::bitxor_id> bitxor2tc;
+typedef irep_container<bitnand2t, expr2t::bitnand_id> bitnand2tc;
+typedef irep_container<bitnor2t, expr2t::bitnor_id> bitnor2tc;
+typedef irep_container<bitnxor2t, expr2t::bitnxor_id> bitnxor2tc;
+typedef irep_container<lshr2t, expr2t::lshr_id> lshr2tc;
+typedef irep_container<neg2t, expr2t::neg_id> neg2tc;
+typedef irep_container<abs2t, expr2t::abs_id> abs2tc;
+typedef irep_container<add2t, expr2t::add_id> add2tc;
+typedef irep_container<sub2t, expr2t::sub_id> sub2tc;
+typedef irep_container<mul2t, expr2t::mul_id> mul2tc;
+typedef irep_container<div2t, expr2t::div_id> div2tc;
+typedef irep_container<modulus2t, expr2t::modulus_id> modulus2tc;
+typedef irep_container<shl2t, expr2t::shl_id> shl2tc;
+typedef irep_container<ashr2t, expr2t::ashr_id> ashr2tc;
+typedef irep_container<same_object2t, expr2t::same_object_id> same_object2tc;
+typedef irep_container<pointer_offset2t, expr2t::pointer_offset_id>
+                       pointer_offset2tc;
+typedef irep_container<pointer_object2t, expr2t::pointer_object_id>
+                       pointer_object2tc;
+typedef irep_container<address_of2t, expr2t::address_of_id> address_of2tc;
+typedef irep_container<byte_extract2t, expr2t::byte_extract_id> byte_extract2tc;
+typedef irep_container<byte_update2t, expr2t::byte_update_id> byte_update2tc;
+typedef irep_container<with2t, expr2t::with_id> with2tc;
+typedef irep_container<member2t, expr2t::member_id> member2tc;
+typedef irep_container<index2t, expr2t::index_id> index2tc;
+typedef irep_container<zero_string2t, expr2t::zero_string_id> zero_string2tc;
+typedef irep_container<zero_length_string2t, expr2t::zero_length_string_id>
+                       zero_length_string2tc;
+typedef irep_container<isnan2t, expr2t::isnan_id> isnan2tc;
+typedef irep_container<overflow2t, expr2t::overflow_id> overflow2tc;
+typedef irep_container<overflow_cast2t, expr2t::overflow_cast_id>
+                       overflow_cast2tc;
+typedef irep_container<overflow_neg2t, expr2t::overflow_neg_id>overflow_neg2tc;
 
 #endif /* _UTIL_IREP2_H_ */
