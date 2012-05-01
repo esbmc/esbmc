@@ -592,49 +592,44 @@ public:
   virtual unsigned int get_width(void) const;
 };
 
-class struct_type2t : public esbmct::type<struct_type2t,
-                                          esbmct::type2tc_vec_members,
-                                          esbmct::irepidt_vec_member_names,
-                                          esbmct::irepidt_name>
+class struct_type2t;
+template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
+                            esbmct::irepidt_vec_member_names,
+                            esbmct::irepidt_name>;
+typedef esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
+                     esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
+                     struct_type_type;
+class struct_type2t : public struct_type_type
 {
 public:
   struct_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
                 irep_idt name)
-    : esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
-                   esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
-      (struct_id, members, memb_names, name) {}
+    : struct_type_type (struct_id, members, memb_names, name) {}
 
   struct_type2t(const struct_type2t &ref)
-    : esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
-                   esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
-      (ref) {}
+    : struct_type_type (ref) {}
 
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
-                        esbmct::irepidt_vec_member_names, esbmct::irepidt_name>;
 
-class union_type2t : public esbmct::type<union_type2t,
-                                          esbmct::type2tc_vec_members,
-                                          esbmct::irepidt_vec_member_names,
-                                          esbmct::irepidt_name>
+class union_type2t;
+typedef esbmct::type<union_type2t, esbmct::type2tc_vec_members,
+                     esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
+                     union_type_type;
+template class esbmct::type<union_type2t, esbmct::type2tc_vec_members,
+                     esbmct::irepidt_vec_member_names, esbmct::irepidt_name>;
+class union_type2t : public union_type_type
 {
 public:
   union_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
                 irep_idt name)
-    : esbmct::type<union_type2t, esbmct::type2tc_vec_members,
-                   esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
-      (union_id, members, memb_names, name) {}
+    : union_type_type (union_id, members, memb_names, name) {}
 
   union_type2t(const union_type2t &ref)
-    : esbmct::type<union_type2t, esbmct::type2tc_vec_members,
-                   esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
-      (ref) {}
+    : union_type_type (ref) {}
 
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<union_type2t, esbmct::type2tc_vec_members,
-                        esbmct::irepidt_vec_member_names, esbmct::irepidt_name>;
 
 class unsignedbv_type2t : public esbmct::type<unsignedbv_type2t,
                                           esbmct::uint_width>
