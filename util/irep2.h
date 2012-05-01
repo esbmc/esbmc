@@ -1684,6 +1684,7 @@ expr_macros(not);
 expr_macros(and);
 expr_macros(or);
 expr_macros(xor);
+expr_macros(implies);
 expr_macros(bitand);
 expr_macros(bitor);
 expr_macros(bitxor);

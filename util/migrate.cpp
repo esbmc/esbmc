@@ -1056,6 +1056,14 @@ migrate_expr_back(const expr2tc &ref)
                             migrate_expr_back(ref2.side_2));
     return xorval;
   }
+  case expr2t::implies_id:
+  {
+    const implies2t &ref2 = to_implies2t(ref);
+    exprt impliesval("implies", bool_typet());
+    impliesval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                                migrate_expr_back(ref2.side_2));
+    return impliesval;
+  }
   case expr2t::bitand_id:
   {
     const bitand2t &ref2 = to_bitand2t(ref);
