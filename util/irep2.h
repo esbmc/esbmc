@@ -1712,6 +1712,30 @@ class constant_int2tc : protected boost::shared_ptr<constant_int2t>
   {
     return boost::shared_ptr<constant_int2t>::get();
   }
+
+  constant_int2t * operator-> () // never throws
+  {
+    detach();
+    return boost::shared_ptr<constant_int2t>::operator->();
+  }
+
+  constant_int2t * get() // never throws
+  {
+    detach();
+    return boost::shared_ptr<constant_int2t>::get();
+  }
+
+  void detach(void)
+  {
+    if (use_count() == 1)
+      return; // No point remunging oneself if we're the only user of the ptr.
+
+    // Assign-operate ourself into containing a fresh copy of the data. This
+    // creates a new reference counted object, and assigns it to ourself,
+    // which causes the existing reference to be decremented.
+    *this = constant_int2tc(get()->clone());
+    return;
+  }
 };
 
 #endif /* _UTIL_IREP2_H_ */
