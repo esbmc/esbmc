@@ -628,6 +628,8 @@ public:
     expr2tc size;
   };
 };
+template class esbmct::type<code_type2t, esbmct::type2tc_subtype,
+                          esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>;
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
  *  attributes */
