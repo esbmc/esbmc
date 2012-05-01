@@ -341,7 +341,7 @@ expr2t::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-const char *expr2t::expr_names[] = {
+static const char *expr_names[] = {
   "constant_int",
   "constant_fixedbv",
   "constant_bool",
