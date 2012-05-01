@@ -537,13 +537,6 @@ symbol_type2t::get_width(void) const
   assert(0 && "Fetching width of symbol type - invalid operation");
 }
 
-struct_type2t::struct_type2t(std::vector<type2tc> &members,
-                             std::vector<irep_idt> memb_names,
-                             irep_idt name)
-  : struct_union_type_body2t<struct_type2t>(struct_id, members, memb_names, name)
-{
-}
-
 unsigned int
 struct_type2t::get_width(void) const
 {
@@ -554,19 +547,6 @@ struct_type2t::get_width(void) const
     width += (*it)->get_width();
 
   return width;
-}
-
-int
-struct_type2t::lt(const type2t &ref) const
-{
-
-  return struct_union_type2t::lt(ref);
-}
-
-list_of_memberst
-struct_type2t::tostring(unsigned int indent) const
-{
-  return struct_union_type2t::tostring(indent);
 }
 
 union_type2t::union_type2t(std::vector<type2tc> &members,

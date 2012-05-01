@@ -268,6 +268,8 @@ namespace esbmct {
   field_name_macro(initializer);
   field_name_macro(operand);
   field_name_macro(symbol_name);
+  field_name_macro(members);
+  field_name_macro(member_names);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -318,6 +320,8 @@ namespace esbmct {
   field_type_macro(string_type_tag, std::string);
   field_type_macro(expr2tc_vec_type_tag, std::vector<expr2tc>);
   field_type_macro(irepidt_type_tag, irep_idt);
+  field_type_macro(type2tc_vec_type_tag, std::vector<type2tc>);
+  field_type_macro(irepidt_vec_type_tag, std::vector<irep_idt>);
   #undef field_type_macro
 
   #define member_record_macro(thename, thetype, fieldname) \
@@ -360,7 +364,9 @@ namespace esbmct {
   member_record_macro(expr2tc_operand, expr2tc_type_tag, name_operand);
   member_record_macro(uint_bits, uint_type_tag, name_bits);
   member_record_macro(irepidt_symbol_name, irepidt_type_tag, name_symbol_name);
-
+  member_record_macro(type2tc_vec_members, type2tc_vec_type_tag, name_members);
+  member_record_macro(irepidt_vec_member_names, irepidt_vec_type_tag,
+                      name_member_names);
   #undef member_record_macro
 
   template <class thename>
@@ -503,6 +509,28 @@ public:
 };
 template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
 
+class struct_type2t : public esbmct::type<struct_type2t,
+                                          esbmct::type2tc_vec_members,
+                                          esbmct::irepidt_vec_member_names,
+                                          esbmct::irepidt_name>
+{
+public:
+  struct_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
+                irep_idt name)
+    : esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
+                   esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
+      (struct_id, members, memb_names, name) {}
+
+  struct_type2t(const struct_type2t &ref)
+    : esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
+                   esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
+      (ref) {}
+
+  virtual unsigned int get_width(void) const;
+};
+template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
+                        esbmct::irepidt_vec_member_names, esbmct::irepidt_name>;
+
 class struct_union_type2t : public type_body<struct_union_type2t>
 {
 protected:
@@ -563,19 +591,6 @@ protected:
 
 public:
   virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
-};
-
-class struct_type2t : public struct_union_type_body2t<struct_type2t>
-{
-public:
-  struct_type2t(std::vector<type2tc> &members,
-                std::vector<irep_idt> memb_names,
-                irep_idt name);
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual unsigned int get_width(void) const;
-protected:
-  struct_type2t(const struct_type2t &ref);
 };
 
 class union_type2t : public struct_union_type_body2t<union_type2t>
