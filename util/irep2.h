@@ -411,8 +411,47 @@ namespace esbmct {
     virtual void do_crc(boost::crc_32_type &crc) const;
   };
 
+  template <class derived,
+            class field1 = esbmct::blank_value<esbmct::name_empty_1>,
+            class field2 = esbmct::blank_value<esbmct::name_empty_2>,
+            class field3 = esbmct::blank_value<esbmct::name_empty_3>,
+            class field4 = esbmct::blank_value<esbmct::name_empty_4> >
+  class type :
+    public type2t,
+    public field1::fieldtype,
+    public field2::fieldtype,
+    public field3::fieldtype,
+    public field4::fieldtype
+  {
+  public:
 
+    type(type_ids id,
+        typename field1::type arg1 = field1::defaultval,
+        typename field2::type arg2 = field2::defaultval,
+        typename field3::type arg3 = field3::defaultval,
+        typename field4::type arg4 = field4::defaultval)
+      : type2t(id),
+        field1::fieldtype(arg1),
+        field2::fieldtype(arg2),
+        field3::fieldtype(arg3),
+        field4::fieldtype(arg4)
+    {};
 
+    type(const type &ref)
+      : type2t(ref),
+        field1::fieldtype(ref),
+        field2::fieldtype(ref),
+        field3::fieldtype(ref),
+        field4::fieldtype(ref)
+    {}
+
+    virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
+    virtual type2tc clone(void) const;
+    virtual list_of_memberst tostring(unsigned int indent) const;
+    virtual bool cmp(const type2t &ref) const;
+    virtual int lt(const type2t &ref) const;
+    virtual void do_crc(boost::crc_32_type &crc) const;
+  };
 }; // esbmct
 
 template <class derived>
