@@ -1675,65 +1675,66 @@ inline const irep_idt &get_structure_name(const type2tc &someval)
   }
 }
 
-class constant_int2tc : protected boost::shared_ptr<constant_int2t>
+template <class T>
+class irep_container : protected boost::shared_ptr<T>
 {
-  constant_int2tc() : boost::shared_ptr<constant_int2t>() {}
+  irep_container() : boost::shared_ptr<T>() {}
 
   template<class Y>
-  explicit constant_int2tc(Y *p) : boost::shared_ptr<constant_int2t>(p) {}
+  explicit irep_container(Y *p) : boost::shared_ptr<T>(p) {}
 
-  constant_int2tc(const constant_int2tc &ref)
-    : boost::shared_ptr<constant_int2t>(ref) {}
+  irep_container(const irep_container &ref)
+    : boost::shared_ptr<T>(ref) {}
 
-  constant_int2tc(const expr2tc &ref)
-    : boost::shared_ptr<constant_int2t>
-      (boost::shared_polymorphic_cast<constant_int2t, expr2t>(ref))
-      { assert(get()->expr_id == expr2t::constant_int_id); }
+  irep_container(const expr2tc &ref)
+    : boost::shared_ptr<T>
+      (boost::shared_polymorphic_cast<T, expr2t>(ref))
+      { assert(this->get()->expr_id == expr2t::constant_int_id); } //XXXjmorse
 
-  constant_int2tc &operator=(constant_int2tc const &ref)
+  irep_container &operator=(irep_container const &ref)
   {
-    boost::shared_ptr<constant_int2t>::operator=(ref);
+    boost::shared_ptr<T>::operator=(ref);
     return *this;
   }
 
   template<class Y>
-  constant_int2t & operator=(boost::shared_ptr<Y> const & r)
+  irep_container & operator=(boost::shared_ptr<Y> const & r)
   {
-    boost::shared_ptr<constant_int2t>::operator=(r);
+    boost::shared_ptr<T>::operator=(r);
     return *this;
   }
 
-  const constant_int2t * operator-> () const // never throws
+  const T * operator-> () const // never throws
   {
-    return boost::shared_ptr<constant_int2t>::operator->();
+    return boost::shared_ptr<T>::operator->();
   }
 
-  const constant_int2t * get() const // never throws
+  const T * get() const // never throws
   {
-    return boost::shared_ptr<constant_int2t>::get();
+    return boost::shared_ptr<T>::get();
   }
 
-  constant_int2t * operator-> () // never throws
+  T * operator-> () // never throws
   {
     detach();
-    return boost::shared_ptr<constant_int2t>::operator->();
+    return boost::shared_ptr<T>::operator->();
   }
 
-  constant_int2t * get() // never throws
+  T * get() // never throws
   {
     detach();
-    return boost::shared_ptr<constant_int2t>::get();
+    return boost::shared_ptr<T>::get();
   }
 
   void detach(void)
   {
-    if (use_count() == 1)
+    if (this->use_count() == 1)
       return; // No point remunging oneself if we're the only user of the ptr.
 
     // Assign-operate ourself into containing a fresh copy of the data. This
     // creates a new reference counted object, and assigns it to ourself,
     // which causes the existing reference to be decremented.
-    *this = constant_int2tc(get()->clone());
+    *this = irep_container(get()->clone());
     return;
   }
 };
