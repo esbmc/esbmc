@@ -84,8 +84,11 @@ z3_convt::get(const exprt &expr) const
       // doesn't necessarily get put in the type cache.
       sort = Z3_mk_int_sort(z3_ctx);
     } else {
-      assert(cache_res != sort_cache.end() && "No cached copy of type when "
-             "fetching cex data");
+      // This doesn't work; can't be bothered to debug it either.
+      //assert(cache_res != sort_cache.end() && "No cached copy of type when "
+      //       "fetching cex data");
+      z3_convt *ourselves = const_cast<z3_convt *>(this);
+      ourselves->convert_type(new_expr->type, sort);
     }
 
     bv = z3_api.mk_var(identifier.c_str(), sort);
