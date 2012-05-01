@@ -531,6 +531,28 @@ public:
 template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
                         esbmct::irepidt_vec_member_names, esbmct::irepidt_name>;
 
+class union_type2t : public esbmct::type<union_type2t,
+                                          esbmct::type2tc_vec_members,
+                                          esbmct::irepidt_vec_member_names,
+                                          esbmct::irepidt_name>
+{
+public:
+  union_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
+                irep_idt name)
+    : esbmct::type<union_type2t, esbmct::type2tc_vec_members,
+                   esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
+      (union_id, members, memb_names, name) {}
+
+  union_type2t(const union_type2t &ref)
+    : esbmct::type<union_type2t, esbmct::type2tc_vec_members,
+                   esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
+      (ref) {}
+
+  virtual unsigned int get_width(void) const;
+};
+template class esbmct::type<union_type2t, esbmct::type2tc_vec_members,
+                        esbmct::irepidt_vec_member_names, esbmct::irepidt_name>;
+
 class struct_union_type2t : public type_body<struct_union_type2t>
 {
 protected:
@@ -591,19 +613,6 @@ protected:
 
 public:
   virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
-};
-
-class union_type2t : public struct_union_type_body2t<union_type2t>
-{
-public:
-  union_type2t(std::vector<type2tc> &members,
-               std::vector<irep_idt> memb_names,
-               irep_idt name);
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual unsigned int get_width(void) const;
-protected:
-  union_type2t(const union_type2t &ref);
 };
 
 /** Code type. No additional data whatsoever. */

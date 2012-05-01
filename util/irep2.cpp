@@ -549,13 +549,6 @@ struct_type2t::get_width(void) const
   return width;
 }
 
-union_type2t::union_type2t(std::vector<type2tc> &members,
-                           std::vector<irep_idt> memb_names,
-                           irep_idt name)
-  : struct_union_type_body2t<union_type2t>(union_id, members, memb_names, name)
-{
-}
-
 unsigned int
 union_type2t::get_width(void) const
 {
@@ -566,19 +559,6 @@ union_type2t::get_width(void) const
     width = std::max(width, (*it)->get_width());
 
   return width;
-}
-
-int
-union_type2t::lt(const type2t &ref) const
-{
-
-  return struct_union_type2t::lt(ref);
-}
-
-list_of_memberst
-union_type2t::tostring(unsigned int indent) const
-{
-  return struct_union_type2t::tostring(indent);
 }
 
 fixedbv_type2t::fixedbv_type2t(unsigned int _width, unsigned int integer)
