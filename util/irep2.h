@@ -1678,6 +1678,7 @@ inline const irep_idt &get_structure_name(const type2tc &someval)
 template <class T, expr2t::expr_ids expid>
 class irep_container : protected boost::shared_ptr<T>
 {
+public:
   irep_container() : boost::shared_ptr<T>() {}
 
   template<class Y>
