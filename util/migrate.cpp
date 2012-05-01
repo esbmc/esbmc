@@ -885,11 +885,18 @@ migrate_expr_back(const expr2tc &ref)
   switch (ref->expr_id) {
   case expr2t::constant_int_id:
   {
+    constant_int2tc intref = ref;
+    typet thetype = migrate_type_back(ref->type);
+    constant_exprt theexpr(thetype);
+    unsigned int width = atoi(thetype.width().as_string().c_str());
+    theexpr.set_value(integer2binary(intref->constant_value, width));
+#if 0
     const constant_int2t &ref2 = to_constant_int2t(ref);
     typet thetype = migrate_type_back(ref->type);
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.constant_value, width));
+#endif
     return theexpr;
   }
   case expr2t::constant_fixedbv_id:
