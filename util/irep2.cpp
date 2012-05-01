@@ -35,6 +35,22 @@ pretty_print_func(unsigned int indent, std::string ident, T obj)
 
 /*************************** Base type2t definitions **************************/
 
+
+static const char *type_names[] = {
+  "bool",
+  "empty",
+  "symbol",
+  "struct",
+  "union",
+  "code",
+  "array",
+  "pointer",
+  "unsignedbv",
+  "signedbv",
+  "fixedbv",
+  "string"
+};
+
 type2t::type2t(type_ids id)
   : type_id(id)
 {
@@ -123,21 +139,6 @@ type2t::do_crc(boost::crc_32_type &crc) const
   crc.process_byte(type_id);
   return;
 }
-
-const char *type2t::type_names[] = {
-  "bool",
-  "empty",
-  "symbol",
-  "struct",
-  "union",
-  "code",
-  "array",
-  "pointer",
-  "unsignedbv",
-  "signedbv",
-  "fixedbv",
-  "string"
-};
 
 template<class derived>
 void

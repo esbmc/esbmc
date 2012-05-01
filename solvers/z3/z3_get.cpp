@@ -297,8 +297,8 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
     fbv.from_expr(value_expr);
     return expr2tc(new constant_fixedbv2t(type, fbv));
   } else {
-    std::cerr << "Unrecognized type \"" << type->type_names[type->type_id] <<
-                 "\" generating counterexample" << std::endl;
+    std::cerr << "Unrecognized type  generating counterexample" << std::endl;
+    type->dump();
     abort();
   }
 }

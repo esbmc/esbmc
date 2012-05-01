@@ -115,8 +115,6 @@ public:
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
-
-  static const char *type_names[];
 };
 
 /** Base class for all expressions */
