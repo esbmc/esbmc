@@ -293,6 +293,8 @@ public:
   const type2tc type;
 };
 
+std::string get_expr_id(const expr2tc &expr);
+
 // for "ESBMC templates",
 namespace esbmct {
 

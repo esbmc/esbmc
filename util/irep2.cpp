@@ -407,6 +407,12 @@ BOOST_STATIC_ASSERT(sizeof(expr_names) ==
                     (expr2t::end_expr_id * sizeof(char *)));
 
 std::string
+get_expr_id(const expr2tc &expr)
+{
+  return std::string(expr_names[expr->expr_id]);
+}
+
+std::string
 expr2t::pretty(unsigned int indent) const
 {
 
