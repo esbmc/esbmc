@@ -445,33 +445,10 @@ fixedbv_type2t::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-code_type2t::code_type2t(void)
-  : type_body<code_type2t>(code_id)
-{
-}
-
 unsigned int
 code_type2t::get_width(void) const
 {
   throw new symbolic_type_excp();
-}
-
-bool
-code_type2t::cmp(const type2t &ref __attribute__((unused))) const
-{
-  return true; // All code is the same. Ish.
-}
-
-int
-code_type2t::lt(const type2t &ref __attribute__((unused))) const
-{
-  return 0; // All code is the same. Ish.
-}
-
-list_of_memberst
-code_type2t::tostring(unsigned int indent) const
-{
-  return list_of_memberst();
 }
 
 string_type2t::string_type2t(unsigned int _elements)

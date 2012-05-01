@@ -581,18 +581,15 @@ public:
 };
 template class esbmct::type<signedbv_type2t, esbmct::uint_width>;
 
-/** Code type. No additional data whatsoever. */
-class code_type2t : public type_body<code_type2t>
+/** Empty type. For void pointers and the like, with no type. No extra data */
+class code_type2t : public esbmct::type<code_type2t>
 {
 public:
-  code_type2t(void);
-  virtual bool cmp(const type2t &ref) const;
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
+  code_type2t(void) : esbmct::type<code_type2t>(code_id) {}
+  code_type2t(const code_type2t &ref) : esbmct::type<code_type2t>(ref) {}
   virtual unsigned int get_width(void) const;
-protected:
-  code_type2t(const code_type2t &ref);
 };
+template class esbmct::type<code_type2t>;
 
 /** Array type. Comes with a subtype of the array and a size that might be
  *  constant, might be nondeterministic. */
