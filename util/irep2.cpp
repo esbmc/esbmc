@@ -172,68 +172,6 @@ type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
   obj.convert_smt_type(*derived_this, arg);
 }
 
-template<class derived>
-void
-bv_type_body<derived>::convert_smt_type(prop_convt &obj, void *&arg) const
-{
-  const derived *derived_this = static_cast<const derived *>(this);
-  obj.convert_smt_type(*derived_this, arg);
-}
-
-bv_type2t::bv_type2t(type2t::type_ids id, unsigned int _width)
-  : type_body<bv_type2t>(id),
-    width(_width)
-{
-}
-
-unsigned int
-bv_type2t::get_width(void) const
-{
-  return width;
-}
-
-bool
-bv_type2t::cmp(const type2t &ref) const
-{
-  const bv_type2t &ref2 = static_cast<const bv_type2t&>(ref);
-  if (width == ref2.width)
-    return true;
-  return false;
-}
-
-int
-bv_type2t::lt(const type2t &ref) const
-{
-  const bv_type2t &ref2 = static_cast<const bv_type2t &>(ref);
-
-  if (width < ref2.width)
-    return -1;
-  if (width > ref2.width)
-    return 1;
-
-  return 0;
-}
-
-list_of_memberst
-bv_type2t::tostring(unsigned int indent) const
-{
-  char bees[256];
-  list_of_memberst membs;
-
-  snprintf(bees, 255, "%d", width);
-  bees[255] = '\0';
-  membs.push_back(member_entryt("width", bees));
-  return membs;
-}
-
-void
-bv_type2t::do_crc(boost::crc_32_type &crc) const
-{
-  type2t::do_crc(crc);
-  crc.process_bytes(&width, sizeof(width));
-  return;
-}
-
 unsigned int
 bool_type2t::get_width(void) const
 {

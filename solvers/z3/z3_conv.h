@@ -190,7 +190,8 @@ private:
   virtual void convert_smt_expr(const overflow_neg2t &neg, void *&arg);
 
   virtual void convert_smt_type(const bool_type2t &type, void *&bv);
-  virtual void convert_smt_type(const bv_type2t &type, void *&bv);
+  virtual void convert_smt_type(const unsignedbv_type2t &type, void *&bv);
+  virtual void convert_smt_type(const signedbv_type2t &type, void *&bv);
   virtual void convert_smt_type(const array_type2t &type, void *&bv);
   virtual void convert_smt_type(const pointer_type2t &type, void *&bv);
   virtual void convert_smt_type(const struct_type2t &type, void *&bv);

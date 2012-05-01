@@ -589,7 +589,22 @@ z3_convt::convert_smt_type(const bool_type2t &type __attribute__((unused)),
 }
 
 void
-z3_convt::convert_smt_type(const bv_type2t &type, void *&_bv)
+z3_convt::convert_smt_type(const unsignedbv_type2t &type, void *&_bv)
+{
+  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+
+  if (int_encoding) {
+    bv = Z3_mk_int_type(z3_ctx);
+  } else {
+    unsigned int width = type.get_width();
+    bv = Z3_mk_bv_type(z3_ctx, width);
+  }
+
+  return;
+}
+
+void
+z3_convt::convert_smt_type(const signedbv_type2t &type, void *&_bv)
 {
   Z3_type_ast &bv = (Z3_type_ast &)_bv;
 

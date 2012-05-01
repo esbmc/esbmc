@@ -94,7 +94,8 @@ public:
 
   virtual void convert_smt_type(const type2t &type, void *&arg);
   virtual void convert_smt_type(const bool_type2t &type, void *&arg) = 0;
-  virtual void convert_smt_type(const bv_type2t &type, void *&arg) = 0;
+  virtual void convert_smt_type(const unsignedbv_type2t &type, void *&arg) = 0;
+  virtual void convert_smt_type(const signedbv_type2t &type, void *&arg) = 0;
   virtual void convert_smt_type(const array_type2t &type, void *&arg) = 0;
   virtual void convert_smt_type(const pointer_type2t &type, void *&arg) = 0;
   virtual void convert_smt_type(const struct_type2t &type, void *&arg) =0;

@@ -581,32 +581,6 @@ public:
 };
 template class esbmct::type<signedbv_type2t, esbmct::uint_width>;
 
-class bv_type2t : public type_body<bv_type2t>
-{
-protected:
-  bv_type2t(type2t::type_ids id, unsigned int width);
-  bv_type2t(const bv_type2t &ref);
-
-public:
-  virtual bool cmp(const type2t &ref) const;
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
-  virtual unsigned int get_width(void) const;
-  const unsigned int width;
-};
-
-template <class derived>
-class bv_type_body : public bv_type2t
-{
-protected:
-  bv_type_body(type_ids id, unsigned int width) : bv_type2t(id, width) {};
-  bv_type_body(const bv_type_body &ref) : bv_type2t(ref) {};
-
-public:
-  virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
-};
-
 /** Code type. No additional data whatsoever. */
 class code_type2t : public type_body<code_type2t>
 {
@@ -738,12 +712,6 @@ type_macros(string);
 inline bool is_bv_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id); }
-
-inline const bv_type2t & to_bv_type(const type2tc &t)
-  { return dynamic_cast<const bv_type2t &> (*t.get()); }
-inline bv_type2t & to_bv_type(type2tc &t)
-  { return dynamic_cast<bv_type2t &> (*t.get()); }
-
 
 // And now, some more utilities.
 class type_poolt {
