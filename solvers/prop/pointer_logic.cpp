@@ -112,8 +112,6 @@ expr2tc pointer_logict::pointer_expr(
 
   expr2tc deep_object = object_rec(pointer.offset, type, object_expr);
   
-  exprt result;
-  
   assert(type->type_id == type2t::pointer_id);
   return expr2tc(new address_of2t(type, deep_object));
 }

@@ -140,7 +140,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
     const array_type2t & type_ref = to_array_type(type);
     std::list<array_elem> elems_in_z3_order;
     std::map<mp_integer, expr2tc> mapped_elems;
-    exprt expr;
 
     // Array model is a series of store ASTs, with the operands:
     //   0) Array to store into
