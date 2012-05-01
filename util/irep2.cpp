@@ -55,6 +55,13 @@ static const char *type_names[] = {
 BOOST_STATIC_ASSERT(sizeof(type_names) ==
                     (type2t::end_type_id * sizeof(char *)));
 
+std::string
+get_type_id(const type2tc &type)
+{
+  return std::string(type_names[type->type_id]);
+}
+
+
 type2t::type2t(type_ids id)
   : type_id(id)
 {

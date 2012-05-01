@@ -202,6 +202,8 @@ public:
   type_ids type_id;
 };
 
+std::string get_type_id(const type2tc &type);
+
 /** Base class for all expressions */
 class expr2t
 {
