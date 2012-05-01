@@ -1162,6 +1162,46 @@ type_to_string<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
 
 template <>
 inline std::string
+type_to_string<std::vector<type2tc> >(const std::vector<type2tc> &theval,
+                                      int indent)
+{
+  char buffer[64];
+  std::string astring = "";
+  int i;
+
+  i = 0;
+  forall_types(it, theval) {
+    snprintf(buffer, 63, "%d", i);
+    buffer[63] = '\0';
+    astring += std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
+    i++;
+  }
+
+  return astring;
+}
+
+template <>
+inline std::string
+type_to_string<std::vector<irep_idt> >(const std::vector<irep_idt> &theval,
+                                       int indent __attribute__((unused)))
+{
+  char buffer[64];
+  std::string astring = "";
+  int i;
+
+  i = 0;
+  forall_names(it, theval) {
+    snprintf(buffer, 63, "%d", i);
+    buffer[63] = '\0';
+    astring += std::string(buffer) + ": " + (*it).as_string() + "\n";
+    i++;
+  }
+
+  return astring;
+}
+
+template <>
+inline std::string
 type_to_string<expr2tc>(const expr2tc &theval, int indent)
 {
 
@@ -1216,6 +1256,22 @@ template <>
 inline bool
 do_type_cmp<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
                                    const std::vector<expr2tc> &side2)
+{
+  return (side1 == side2);
+}
+
+template <>
+inline bool
+do_type_cmp<std::vector<type2tc> >(const std::vector<type2tc> &side1,
+                                   const std::vector<type2tc> &side2)
+{
+  return (side1 == side2);
+}
+
+template <>
+inline bool
+do_type_cmp<std::vector<irep_idt> >(const std::vector<irep_idt> &side1,
+                                    const std::vector<irep_idt> &side2)
 {
   return (side1 == side2);
 }
@@ -1292,6 +1348,30 @@ template <>
 inline int
 do_type_lt<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
                                   const std::vector<expr2tc> &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
+    return 1;
+  return 0;
+}
+
+template <>
+inline int
+do_type_lt<std::vector<type2tc> >(const std::vector<type2tc> &side1,
+                                  const std::vector<type2tc> &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
+    return 1;
+  return 0;
+}
+
+template <>
+inline int
+do_type_lt<std::vector<irep_idt> >(const std::vector<irep_idt> &side1,
+                                  const std::vector<irep_idt> &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1384,6 +1464,25 @@ do_type_crc<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
   forall_exprs(it, theval)
     (*it)->do_crc(crc);
 }
+
+template <>
+inline void
+do_type_crc<std::vector<type2tc> >(const std::vector<type2tc> &theval,
+                                   boost::crc_32_type &crc)
+{
+  forall_types(it, theval)
+    (*it)->do_crc(crc);
+}
+
+template <>
+inline void
+do_type_crc<std::vector<irep_idt> >(const std::vector<irep_idt> &theval,
+                                    boost::crc_32_type &crc)
+{
+  forall_names(it, theval)
+    crc.process_bytes((*it).as_string().c_str(), (*it).as_string().size());
+}
+
 
 template <>
 inline void
