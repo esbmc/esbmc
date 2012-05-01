@@ -212,48 +212,10 @@ array_type2t::get_width(void) const
   return num_elems * sub_width;
 }
 
-pointer_type2t::pointer_type2t(type2tc _sub)
-  : type_body<pointer_type2t>(pointer_id), subtype(_sub)
-{
-}
-
 unsigned int
 pointer_type2t::get_width(void) const
 {
   return config.ansi_c.pointer_width;
-}
-
-bool
-pointer_type2t::cmp(const type2t &ref) const
-{
-
-  const pointer_type2t &ref2 = static_cast<const pointer_type2t&>(ref);
-  return subtype == ref2.subtype;
-}
-
-int
-pointer_type2t::lt(const type2t &ref) const
-{
-  const pointer_type2t &ref2 = static_cast<const pointer_type2t&>(ref);
-
-  return subtype->ltchecked(*ref2.subtype.get());
-}
-
-list_of_memberst
-pointer_type2t::tostring(unsigned int indent) const
-{
-  list_of_memberst membs = tostring_func<type2tc> (indent,
-                                                  (const char *)"subtype",
-                                                  &subtype, (const char *)"");
-  return membs;
-}
-
-void
-pointer_type2t::do_crc(boost::crc_32_type &crc) const
-{
-  type2t::do_crc(crc);
-  subtype->do_crc(crc);
-  return;
 }
 
 unsigned int

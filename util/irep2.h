@@ -628,26 +628,23 @@ public:
     expr2tc size;
   };
 };
-template class esbmct::type<code_type2t, esbmct::type2tc_subtype,
+template class esbmct::type<array_type2t, esbmct::type2tc_subtype,
                           esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>;
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
  *  attributes */
-class pointer_type2t : public type_body<pointer_type2t>
+class pointer_type2t : public esbmct::type<pointer_type2t,
+                                           esbmct::type2tc_subtype>
 {
 public:
-  pointer_type2t(const type2tc subtype);
-  virtual bool cmp(const type2t &ref) const;
-  virtual int lt(const type2t &ref) const;
-  virtual list_of_memberst tostring(unsigned int indent) const;
-  virtual void do_crc(boost::crc_32_type &crc) const;
+  pointer_type2t(const type2tc subtype)
+    : esbmct::type<pointer_type2t, esbmct::type2tc_subtype>
+      (pointer_id, subtype) {}
+  pointer_type2t(const pointer_type2t &ref)
+    : esbmct::type<pointer_type2t, esbmct::type2tc_subtype>(ref) {}
   virtual unsigned int get_width(void) const;
-protected:
-  pointer_type2t(const pointer_type2t &ref);
-
-public:
-  const type2tc subtype;
 };
+template class esbmct::type<pointer_type2t, esbmct::type2tc_subtype>;
 
 class fixedbv_type2t : public type_body<fixedbv_type2t>
 {
