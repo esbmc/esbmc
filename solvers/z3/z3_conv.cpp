@@ -321,44 +321,6 @@ z3_convt::fixed_point(std::string v, unsigned width)
 }
 
 void
-z3_convt::generate_assumptions(const exprt &expr, const Z3_ast &result)
-{
-  std::string literal;
-
-  literal = expr.op0().identifier().c_str();
-  int pos = 0;
-
-  for (u_int i = 0; i < literal.size(); i++)
-  {
-    if (literal.at(i) != '&')
-      ++pos;
-    else
-      break;
-  }
-
-  literal.erase(pos, literal.size() - pos);
-
-  if (unsat_core_size) {
-    unsigned int i;
-
-    for (i = 0; i < core_vector.size(); i++)
-    {
-      std::string id = Z3_ast_to_string(z3_ctx, core_vector.at(i));
-
-      if (id.find(literal.c_str()) != std::string::npos)
-	return;
-    }
-    assumpt.push_back(Z3_mk_not(z3_ctx, result));
-  } else
-    assumpt.push_back(Z3_mk_not(z3_ctx, result));
-
-  // Ensure addrspace array makes its way to the output
-  std::string sym = get_cur_addrspace_ident();
-  Z3_ast addr_sym = z3_api.mk_var(sym.c_str(), addr_space_arr_sort);
-  assumpt.push_back(addr_sym);
-}
-
-void
 z3_convt::finalize_pointer_chain(void)
 {
   bool fixed_model = false;
