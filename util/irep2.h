@@ -66,8 +66,8 @@ template <class T>
 static inline void do_type_crc(const T &theval, boost::crc_32_type &crc);
 
 template <class T>
-static inline void do_type_list_operands(const T &theval,
-                                         std::vector<expr2tc> &inp)
+static inline void do_type_list_operands(const T&theval __attribute__((unused)),
+                              std::vector<expr2tc> &inp __attribute__((unused)))
                                          { return; }
 
 inline void do_type_list_operands(const expr2tc &theval,
