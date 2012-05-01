@@ -1736,5 +1736,19 @@ public:
 };
 
 typedef irep_container<constant_int2t, expr2t::constant_int_id> constant_int2tc;
+typedef irep_container<constant_fixedbv2t, expr2t::constant_fixedbv_id>
+                       constant_fixedbv2tc;
+typedef irep_container<constant_bool2t, expr2t::constant_bool_id>
+                       constant_bool2tc;
+typedef irep_container<constant_string2t, expr2t::constant_string_id>
+                       constant_string2tc;
+typedef irep_container<constant_struct2t, expr2t::constant_struct_id>
+                       constant_struct2tc;
+typedef irep_container<constant_union2t, expr2t::constant_union_id>
+                       constant_union2tc;
+typedef irep_container<constant_array2t, expr2t::constant_array_id>
+                       constant_array2tc;
+typedef irep_container<constant_array_of2t, expr2t::constant_array_of_id>
+                       constant_array_of2tc;
 
 #endif /* _UTIL_IREP2_H_ */
