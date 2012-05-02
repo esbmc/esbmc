@@ -1552,7 +1552,12 @@ void goto_convertt::convert_for(
     convert(block, dest);
   }
 
-  exprt cond=code.op1();
+  exprt tmp=code.op1();
+
+  if(inductive_step || base_case)
+    replace_cond(tmp, dest);
+
+  exprt cond=tmp;
 
   array_typet state_vector;
 
@@ -1679,6 +1684,10 @@ void goto_convertt::convert_for(
   }
 
   dest.destructive_append(tmp_w);
+
+  if (inductive_step || base_case)
+    increment_var(code.op1(), dest);
+
   dest.destructive_append(tmp_x);
 
   // do the d label
@@ -1730,7 +1739,7 @@ void goto_convertt::convert_for(
 
   //assume(!c)
   //do the g label
-  if (inductive_step)
+  if (inductive_step || base_case)
     assume_not_cond(cond, dest);
 
   // restore break/continue
@@ -2108,6 +2117,8 @@ void goto_convertt::replace_cond(
   exprt &tmp,
   goto_programt &dest)
 {
+  irep_idt exprid = tmp.id();
+
   if (tmp.is_true())
   {
     //declare variable i$ of type uint
@@ -2141,6 +2152,28 @@ void goto_convertt::replace_cond(
 
     //replace the condition c by i<=n;
     tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
+  }
+  else if (exprid == "<=" || exprid == "<" || exprid == ">="
+           || exprid == ">")
+  {
+    assert(tmp.operands().size()==2);
+
+    if (tmp.op1().is_constant())
+      return ;
+
+    nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op1());
+
+    if (cache_result == nondet_vars.end()) {
+      //std::cout << tmp.pretty() << std::endl;
+      exprt nondet_expr=side_effect_expr_nondett(tmp.op1().type());
+
+      //initialize op1=nondet_uint();
+      code_assignt new_assign_nondet(tmp.op1(),nondet_expr);
+      copy(new_assign_nondet, ASSIGN, dest);
+      nondet_vars.insert(std::pair<exprt,exprt>(tmp.op1(),nondet_expr));
+    }
+      
+    //assert(0);
   }
 }
 

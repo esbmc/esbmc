@@ -14,7 +14,7 @@ int main() {
       }
       v[i+1] = key;	        
   }      
-  for (k=1;k<j;k++)
+  for (k=1;k<SIZE;k++)
     assert(v[k-1]<=v[k]);  
    return 0;
 }

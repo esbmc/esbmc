@@ -372,6 +372,9 @@ protected:
     struct_typet state;
     bool inductive_step;
     bool base_case;
+    typedef std::map<exprt, exprt> nondet_varst;
+    nondet_varst nondet_vars;
+
 };
 
 #endif
