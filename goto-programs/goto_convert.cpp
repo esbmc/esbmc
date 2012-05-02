@@ -1740,7 +1740,7 @@ void goto_convertt::convert_for(
   //assume(!c)
   //do the g label
   if (inductive_step || base_case)
-    assume_not_cond(cond, dest);
+    assume_cond(cond, true, dest);
 
   // restore break/continue
   targets.restore(old_targets);
@@ -2079,7 +2079,7 @@ void goto_convertt::assign_state_vector(
 
 /*******************************************************************\
 
-Function: goto_convertt::assume_not_cond
+Function: goto_convertt::assume_cond
 
   Inputs:
 
@@ -2089,14 +2089,16 @@ Function: goto_convertt::assume_not_cond
 
 \*******************************************************************/
 
-void goto_convertt::assume_not_cond(
+void goto_convertt::assume_cond(
   const exprt &cond, 
+  const bool &neg,
   goto_programt &dest)
 {
   goto_programt tmp_e;
   goto_programt::targett e=tmp_e.add_instruction(ASSUME);
   exprt result_expr = cond;
-  result_expr.make_not();
+  if (neg)
+    result_expr.make_not();
   e->guard.swap(result_expr);
   dest.destructive_append(tmp_e);
 }
@@ -2158,19 +2160,44 @@ void goto_convertt::replace_cond(
   {
     assert(tmp.operands().size()==2);
 
-    if (tmp.op1().is_constant())
-      return ;
-
     nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op1());
 
     if (cache_result == nondet_vars.end()) {
       //std::cout << tmp.pretty() << std::endl;
       exprt nondet_expr=side_effect_expr_nondett(tmp.op1().type());
 
-      //initialize op1=nondet_uint();
-      code_assignt new_assign_nondet(tmp.op1(),nondet_expr);
-      copy(new_assign_nondet, ASSIGN, dest);
-      nondet_vars.insert(std::pair<exprt,exprt>(tmp.op1(),nondet_expr));
+      if (tmp.op1().is_constant())
+      {
+        //std::cout << tmp.pretty() << std::endl;
+ 	//assert(0);
+        //declare variables n$ of type of op1
+        std::string identifier = "c::n$"+i2string(state_counter);
+        exprt n_expr = symbol_exprt(identifier, tmp.op1().type());
+
+        //initialize n=nondet_uint();
+        code_assignt new_assign_nondet(n_expr,nondet_expr);
+        copy(new_assign_nondet, ASSIGN, dest);
+
+        //assume that n==op1;
+        assume_cond(gen_binary(exprt::equality, bool_typet(), n_expr, tmp.op1()), false, dest);
+        //std::cout << "n_expr: " << n_expr.pretty() << std::endl;
+        //std::cout << "tmp.op1(): " << tmp.op1().pretty() << std::endl;
+        //code_assignt new_assume(nondet_expr,gen_binary(exprt::i_le, bool_typet(), nondet_expr, tmp.op1()));
+        //copy(new_assume, ASSUME, dest);
+
+	//assign n_expr to tmp.op1()
+        tmp.op1() = n_expr;
+
+	//now put it into the cache
+        nondet_vars.insert(std::pair<exprt,exprt>(tmp.op1(),n_expr));
+      }
+      else
+      {
+        //initialize op1=nondet_uint();
+        code_assignt new_assign_nondet(tmp.op1(),nondet_expr);
+        copy(new_assign_nondet, ASSIGN, dest);
+        nondet_vars.insert(std::pair<exprt,exprt>(tmp.op1(),nondet_expr));
+      }
     }
       
     //assert(0);
@@ -2392,7 +2419,7 @@ void goto_convertt::convert_while(
   //assume(!c)
   //do the g label
   if (inductive_step || base_case)
-    assume_not_cond(cond, dest);
+    assume_cond(cond, true, dest);
 
   // restore break/continue
   targets.restore(old_targets);

@@ -196,7 +196,7 @@ protected:
   void init_k_indice(goto_programt &dest);
   void assign_state_vector(const array_typet &state_vector, goto_programt &dest);
   void assign_current_state(/*const struct_typet &state,*/ goto_programt &dest);
-  void assume_not_cond(const exprt &cond, goto_programt &dest);
+  void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
   void replace_ifthenelse(exprt &expr);
   void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
   void get_new_expr(exprt &expr, exprt &new_expr1, bool &found);
