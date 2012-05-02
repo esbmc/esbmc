@@ -4,7 +4,7 @@ unsigned int nondet_uint();
 int main() { 
   int i, sn=0;
   for(i=1; i<=SIZE; i++) {
-    //if (i<4) //first case
+    if (i<4) //first case
     sn = sn + a; //second case OK
     //if (i==4) sn=-10; //third case OK
   }

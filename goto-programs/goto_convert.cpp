@@ -2163,33 +2163,17 @@ void goto_convertt::replace_cond(
     nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op1());
 
     if (cache_result == nondet_vars.end()) {
+
       //std::cout << tmp.pretty() << std::endl;
       exprt nondet_expr=side_effect_expr_nondett(tmp.op1().type());
 
       if (tmp.op1().is_constant())
       {
-        //std::cout << tmp.pretty() << std::endl;
- 	//assert(0);
-        //declare variables n$ of type of op1
-        std::string identifier = "c::n$"+i2string(state_counter);
-        exprt n_expr = symbol_exprt(identifier, tmp.op1().type());
-
-        //initialize n=nondet_uint();
-        code_assignt new_assign_nondet(n_expr,nondet_expr);
-        copy(new_assign_nondet, ASSIGN, dest);
-
-        //assume that n==op1;
-        assume_cond(gen_binary(exprt::equality, bool_typet(), n_expr, tmp.op1()), false, dest);
-        //std::cout << "n_expr: " << n_expr.pretty() << std::endl;
-        //std::cout << "tmp.op1(): " << tmp.op1().pretty() << std::endl;
-        //code_assignt new_assume(nondet_expr,gen_binary(exprt::i_le, bool_typet(), nondet_expr, tmp.op1()));
-        //copy(new_assume, ASSUME, dest);
-
-	//assign n_expr to tmp.op1()
-        tmp.op1() = n_expr;
-
-	//now put it into the cache
-        nondet_vars.insert(std::pair<exprt,exprt>(tmp.op1(),n_expr));
+   	    std::cerr << "warning: this program contains a bounded loop"
+   	  		      << " at line " << tmp.op1().location().get_line()
+   	  		      << ", so we are not applying the k-induction method!" << std::endl;
+   	    inductive_step=0;
+   	    base_case=0;
       }
       else
       {
@@ -2198,10 +2182,10 @@ void goto_convertt::replace_cond(
         copy(new_assign_nondet, ASSIGN, dest);
         nondet_vars.insert(std::pair<exprt,exprt>(tmp.op1(),nondet_expr));
       }
+
     }
-      
-    //assert(0);
   }
+
 }
 
 /*******************************************************************\
