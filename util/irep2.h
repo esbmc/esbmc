@@ -1776,7 +1776,7 @@ inline const irep_idt &get_structure_name(const type2tc &someval)
 
 inline bool is_nil_expr(const expr2tc &exp)
 {
-  if (exp.get() == NULL)
+  if (exp.operator->() == NULL)
     return true;
   return false;
 }
