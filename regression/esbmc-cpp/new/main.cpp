@@ -6,9 +6,10 @@ int main()
 {
  char first[10];
  strcpy(first, "test");
- //int tmp = strlen( first ) + 1;
- //char* firstName = new char[ tmp ];
- //strcpy( firstName, first );
+ 
+ char* firstName = new char[ strlen( first ) + 1 ];
+ strcpy( firstName, first );
+ 
  assert(strcmp(first,"test")==0);
  return 0;
 }
