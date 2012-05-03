@@ -289,7 +289,12 @@ public:
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
   virtual void do_crc(boost::crc_32_type &crc) const;
   virtual void list_operands(std::vector<const expr2tc*> &inp) const = 0;
+protected:
+  // Caution - updating sub operands of an expr2t *must* always preserve type
+  // correctness, as there's no way to check that an expr expecting a pointer
+  // type operand *always* has a pointer type operand.
   virtual void list_operands(std::vector<expr2tc*> &inp) = 0;
+public:
   bool simplify(void);
   virtual expr2t* do_simplify(void);
 
@@ -525,6 +530,7 @@ namespace esbmct {
     virtual int lt(const expr2t &ref) const;
     virtual void do_crc(boost::crc_32_type &crc) const;
     virtual void list_operands(std::vector<const expr2tc*> &inp) const;
+  protected:
     virtual void list_operands(std::vector<expr2tc*> &inp);
   };
 
