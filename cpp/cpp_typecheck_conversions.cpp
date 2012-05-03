@@ -1237,45 +1237,20 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
   }
   else if(to.id() == "bool")
   {
-    if(expr.id_string() != "string-constant")
+    std::string name = expr.type().identifier().as_string();
+    if(name == "cpp::std::struct.istream"
+      || name == "cpp::std::struct.ostream"
+      || name == "cpp::std::struct.iostream"
+      || name == "cpp::std::struct.ifstream")
     {
-      if(follow(expr.type()).name().as_string().find("struct.istream") != std::string::npos) {
-        struct_typet expr_struct = to_struct_type(follow(expr.type()));
-
-        int count = 0, i=0;
-        exprt or_expr, tmp_expr, tmp1_expr;
-        for(struct_typet::componentst::const_iterator
-            it = expr_struct.components().begin();
-            it != expr_struct.components().end(); it++, i++)
-        {
-          const irept& component = *it;
-          const typet comp_type = static_cast<const typet&>(component.type());
-
-          if(component.base_name() == "failbit"
-            || component.base_name() == "eofbit"
-            || component.base_name() == "badbit")
-          {
-              count++;
-              if(count == 2) {
-                tmp1_expr = expr_struct.components()[i];
-                tmp1_expr.id("symbol");
-                tmp1_expr.identifier(tmp1_expr.base_name());
-                or_expr = gen_binary(exprt::i_or, bool_typet(), tmp1_expr, tmp_expr);
-              } else if(count > 2) {
-                tmp_expr = expr_struct.components()[i];
-                tmp_expr.id("symbol");
-                tmp_expr.identifier(tmp_expr.base_name());
-                or_expr = gen_binary(exprt::i_or, bool_typet(), or_expr, tmp_expr);
-              }
-
-              tmp_expr = expr_struct.components()[i];
-              tmp_expr.id("symbol");
-              tmp_expr.identifier(tmp_expr.base_name());
-          }
-        }
-        new_expr.swap(or_expr);
-        new_expr.id("or");
-      }
+      exprt nondet_expr("nondet_symbol", bool_typet());
+      new_expr.swap(nondet_expr);
+    }
+    else if(expr.id() == "symbol")
+    {
+      exprt tmp_expr = expr;
+      tmp_expr.make_typecast(bool_typet());
+      new_expr.swap(tmp_expr);
     }
   }
 
