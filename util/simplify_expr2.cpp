@@ -12,6 +12,14 @@ expr2t::do_simplify(void)
   for (std::vector<expr2tc *>::iterator it = operands.begin();
        it != operands.end(); it++) {
     expr2t *tmp = (**it).get()->do_simplify();
+    if (tmp == NULL) {
+      ; // No modification
+    } else {
+      // We've been returned a new irep to use. Assign into this objects
+      // expr2tc field, which will also cause the previous value to be
+      // de-referenced.
+      **it = expr2tc(tmp);
+    }
   }
   return false;
 }
