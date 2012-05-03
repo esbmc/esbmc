@@ -1243,7 +1243,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
         struct_typet expr_struct = to_struct_type(follow(expr.type()));
 
         int count = 0, i=0;
-        exprt or_expr, tmp_expr;
+        exprt or_expr, tmp_expr, tmp1_expr;
         for(struct_typet::componentst::const_iterator
             it = expr_struct.components().begin();
             it != expr_struct.components().end(); it++, i++)
@@ -1257,17 +1257,24 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
           {
               count++;
               if(count == 2) {
-                or_expr = gen_binary(exprt::i_or, bool_typet(), expr_struct.components()[i], tmp_expr);
+                tmp1_expr = expr_struct.components()[i];
+                tmp1_expr.id("symbol");
+                tmp1_expr.identifier(tmp1_expr.base_name());
+                or_expr = gen_binary(exprt::i_or, bool_typet(), tmp1_expr, tmp_expr);
+              } else if(count > 2) {
+                tmp_expr = expr_struct.components()[i];
+                tmp_expr.id("symbol");
+                tmp_expr.identifier(tmp_expr.base_name());
+                or_expr = gen_binary(exprt::i_or, bool_typet(), or_expr, tmp_expr);
               }
-//              } else if(count > 2) {
-//                or_expr = gen_binary(exprt::i_or, bool_typet(), or_expr, expr_struct.components()[i]);
-//              }
 
               tmp_expr = expr_struct.components()[i];
+              tmp_expr.id("symbol");
+              tmp_expr.identifier(tmp_expr.base_name());
           }
         }
-
         new_expr.swap(or_expr);
+        new_expr.id("or");
       }
     }
   }
