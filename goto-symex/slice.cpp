@@ -51,11 +51,12 @@ void symex_slicet::get_symbols(const expr2tc &expr)
 {
   get_symbols(expr->type);
 
-  std::vector<expr2tc> operands;
+  std::vector<const expr2tc*> operands;
   expr->list_operands(operands);
   
-  forall_exprs(it, operands)
-    get_symbols(*it);
+  for (std::vector<const expr2tc*>::const_iterator it = operands.begin();
+       it != operands.end(); it++)
+    get_symbols(**it);
 
   if (is_symbol2t(expr))
     depends.insert(symbol2tc(expr)->name);

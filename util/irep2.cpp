@@ -1083,28 +1083,56 @@ do_type_crc<irep_idt>(const irep_idt &theval, boost::crc_32_type &crc)
   return;
 }
 
-template<> inline void do_type_list_operands<type2tc>(const type2tc &theval __attribute__((unused)), std::vector<expr2tc> &inp __attribute__((unused))) { return; }
-template<> inline void do_type_list_operands<std::vector<type2tc> >(const std::vector<type2tc> &theval __attribute__((unused)), std::vector<expr2tc> &inp __attribute__((unused))) { return; }
-template<> inline void do_type_list_operands<bool>(const bool &theval __attribute__((unused)), std::vector<expr2tc> &inp __attribute__((unused))) { return; }
-template<> inline void do_type_list_operands<unsigned int>(const unsigned int &theval __attribute__((unused)), std::vector<expr2tc> &inp __attribute__((unused))) { return; }
-template<> inline void do_type_list_operands<BigInt>(const BigInt &theval __attribute__((unused)), std::vector<expr2tc> &inp __attribute__((unused))) { return; }
-template<> inline void do_type_list_operands<fixedbvt>(const fixedbvt &theval __attribute__((unused)), std::vector<expr2tc> &inp __attribute__((unused))) { return; }
-template<> inline void do_type_list_operands<dstring>(const dstring &theval __attribute__((unused)), std::vector<expr2tc> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<type2tc>(const type2tc &theval __attribute__((unused)), std::vector<const expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<std::vector<type2tc> >(const std::vector<type2tc> &theval __attribute__((unused)), std::vector<const expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<bool>(const bool &theval __attribute__((unused)), std::vector<const expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<unsigned int>(const unsigned int &theval __attribute__((unused)), std::vector<const expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<BigInt>(const BigInt &theval __attribute__((unused)), std::vector<const expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<fixedbvt>(const fixedbvt &theval __attribute__((unused)), std::vector<const expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<dstring>(const dstring &theval __attribute__((unused)), std::vector<const expr2tc*> &inp __attribute__((unused))) { return; }
+
+template<> inline void do_type_list_operands<type2tc>(type2tc &theval __attribute__((unused)), std::vector<expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<std::vector<type2tc> >(std::vector<type2tc> &theval __attribute__((unused)), std::vector<expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<bool>(bool &theval __attribute__((unused)), std::vector<expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<unsigned int>(unsigned int &theval __attribute__((unused)), std::vector<expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<BigInt>(BigInt &theval __attribute__((unused)), std::vector<expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<fixedbvt>(fixedbvt &theval __attribute__((unused)), std::vector<expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<dstring>(dstring &theval __attribute__((unused)), std::vector<expr2tc*> &inp __attribute__((unused))) { return; }
+
+
 
 template<>
 inline void
-do_type_list_operands<expr2tc>(const expr2tc &theval, std::vector<expr2tc> &inp)
+do_type_list_operands<expr2tc>(expr2tc &theval,
+                               std::vector<expr2tc*> &inp)
 {
-  inp.push_back(theval);
+  inp.push_back(&theval);
+}
+
+template<>
+inline void
+do_type_list_operands<std::vector<expr2tc> >(std::vector<expr2tc> &theval,
+                      std::vector<expr2tc*> &inp)
+{
+  Forall_exprs(it, theval)
+    inp.push_back(&(*it));
+}
+
+template<>
+inline void
+do_type_list_operands<expr2tc>(const expr2tc &theval,
+                               std::vector<const expr2tc *> &inp)
+{
+  inp.push_back(&theval);
 }
 
 template<>
 inline void
 do_type_list_operands<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
-                      std::vector<expr2tc> &inp)
+                      std::vector<const expr2tc *> &inp)
 {
   forall_exprs(it, theval)
-    inp.push_back(*it);
+    inp.push_back(&(*it));
 }
 
 template <class derived, class field1, class field2, class field3, class field4>
@@ -1207,7 +1235,20 @@ esbmct::expr<derived, field1, field2, field3, field4>::do_crc
 template <class derived, class field1, class field2, class field3, class field4>
 void
 esbmct::expr<derived, field1, field2, field3, field4>::list_operands
-          (std::vector<expr2tc> &inp) const
+          (std::vector<const expr2tc *> &inp) const
+{
+
+  field1::fieldtype::list_operands(inp);
+  field2::fieldtype::list_operands(inp);
+  field3::fieldtype::list_operands(inp);
+  field4::fieldtype::list_operands(inp);
+  return;
+}
+
+template <class derived, class field1, class field2, class field3, class field4>
+void
+esbmct::expr<derived, field1, field2, field3, field4>::list_operands
+          (std::vector<expr2tc*> &inp)
 {
 
   field1::fieldtype::list_operands(inp);

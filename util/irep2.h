@@ -139,8 +139,12 @@ template <class T>
 static inline void do_type_crc(const T &theval, boost::crc_32_type &crc);
 
 template <class T>
-static inline void do_type_list_operands(const T&theval,
-                                         std::vector<expr2tc> &inp);
+static inline void do_type_list_operands(const T &theval,
+                                         std::vector<const expr2tc*> &inp);
+
+template <class T>
+static inline void do_type_list_operands(T& theval,
+                                         std::vector<expr2tc*> &inp);
 
 /** Base class for all types */
 class type2t
@@ -284,7 +288,8 @@ public:
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
   virtual void do_crc(boost::crc_32_type &crc) const;
-  virtual void list_operands(std::vector<expr2tc> &inp) const = 0;
+  virtual void list_operands(std::vector<const expr2tc*> &inp) const = 0;
+  virtual void list_operands(std::vector<expr2tc*> &inp) = 0;
   bool simplify(void);
   virtual expr2t* do_simplify(void);
 
@@ -318,7 +323,9 @@ namespace esbmct {
       return do_type_lt<fieldtype>(name, theother.name); }\
     inline void do_crc(boost::crc_32_type &crc) const { \
       do_type_crc<fieldtype>(name, crc); return; }\
-    inline void list_operands(std::vector<expr2tc> &inp) const { \
+    inline void list_operands(std::vector<const expr2tc*> &inp) const { \
+      do_type_list_operands<fieldtype>(name, inp); return; }\
+    inline void list_operands(std::vector<expr2tc*> &inp) { \
       do_type_list_operands<fieldtype>(name, inp); return; }\
     fieldtype name; \
   }; \
@@ -381,8 +388,11 @@ namespace esbmct {
     const { return 0; }\
     inline void do_crc(boost::crc_32_type &crc __attribute__((unused))) const \
     { return; }\
-    inline void list_operands(std::vector<expr2tc> &inp\
+    inline void list_operands(std::vector<const expr2tc*> &inp\
                               __attribute__((unused))) const \
+    { return; } \
+    inline void list_operands(std::vector<expr2tc*> &inp\
+                              __attribute__((unused))) \
     { return; } \
   }; \
   class name_empty_##num { \
@@ -514,7 +524,8 @@ namespace esbmct {
     virtual bool cmp(const expr2t &ref) const;
     virtual int lt(const expr2t &ref) const;
     virtual void do_crc(boost::crc_32_type &crc) const;
-    virtual void list_operands(std::vector<expr2tc> &inp) const;
+    virtual void list_operands(std::vector<const expr2tc*> &inp) const;
+    virtual void list_operands(std::vector<expr2tc*> &inp);
   };
 
   template <class derived,
