@@ -1,18 +1,18 @@
 #include "irep2.h"
 
 expr2t *
-expr2t::do_simplify(void)
+expr2t::do_simplify(void) const
 {
   // Base simplify - the obj being simplified has no function that simplifies
   // itself. So, fetch a vector of operands and apply simplification to anything
   // further down. If something gets changed, then we need to clone this expr
   // and return a new one, as we've been modified.
   bool changed = false;
-  std::vector<expr2tc*> operands;
+  std::vector<const expr2tc*> operands;
   std::vector<expr2t*> newoperands;
 
   list_operands(operands);
-  for (std::vector<expr2tc *>::iterator it = operands.begin();
+  for (std::vector<const expr2tc *>::iterator it = operands.begin();
        it != operands.end(); it++) {
     expr2t *tmp = (**it).get()->do_simplify();
     newoperands.push_back(tmp);

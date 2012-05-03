@@ -296,8 +296,8 @@ protected:
   virtual void list_operands(std::vector<expr2tc*> &inp) = 0;
   virtual expr2t * clone_raw(void) const = 0;
 public:
-  bool simplify(void);
-  virtual expr2t* do_simplify(void);
+  bool simplify(void) const;
+  virtual expr2t* do_simplify(void) const;
 
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;

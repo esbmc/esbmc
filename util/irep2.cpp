@@ -346,7 +346,7 @@ expr2t::do_crc(boost::crc_32_type &crc) const
 }
 
 bool
-expr2t::simplify(void)
+expr2t::simplify(void) const
 {
   return do_simplify();
 }
