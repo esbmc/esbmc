@@ -294,6 +294,7 @@ protected:
   // correctness, as there's no way to check that an expr expecting a pointer
   // type operand *always* has a pointer type operand.
   virtual void list_operands(std::vector<expr2tc*> &inp) = 0;
+  virtual expr2t * clone_raw(void) const = 0;
 public:
   bool simplify(void);
   virtual expr2t* do_simplify(void);
@@ -532,6 +533,7 @@ namespace esbmct {
     virtual void list_operands(std::vector<const expr2tc*> &inp) const;
   protected:
     virtual void list_operands(std::vector<expr2tc*> &inp);
+    virtual expr2t *clone_raw(void) const;
   };
 
   template <class derived,

@@ -1154,6 +1154,15 @@ esbmct::expr<derived, field1, field2, field3, field4>::clone(void) const
 }
 
 template <class derived, class field1, class field2, class field3, class field4>
+expr2t *
+esbmct::expr<derived, field1, field2, field3, field4>::clone_raw(void) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return new_obj;
+}
+
+template <class derived, class field1, class field2, class field3, class field4>
 list_of_memberst
 esbmct::expr<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
 {
