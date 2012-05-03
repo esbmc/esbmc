@@ -4,6 +4,7 @@
 
 #include "std_types.h"
 #include "migrate.h"
+#include "simplify_expr2.h"
 
 #include <solvers/prop/prop_conv.h>
 
@@ -1209,6 +1210,14 @@ esbmct::expr<derived, field1, field2, field3, field4>::list_operands
   field3::fieldtype::list_operands(inp);
   field4::fieldtype::list_operands(inp);
   return;
+}
+
+template <class derived, class field1, class field2, class field3, class field4>
+bool
+esbmct::expr<derived, field1, field2, field3, field4>::simplify(void)
+{
+  bool res = simplify_expr2(*this);
+  return res;
 }
 
 template <class derived, class field1, class field2, class field3, class field4>

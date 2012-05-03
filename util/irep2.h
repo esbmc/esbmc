@@ -24,7 +24,7 @@
 
 #define Forall_exprs(it, vect) \
   for (std::vector<expr2tc>::iterator (it) = (vect).begin();\
-       it != (vect).end(); it++
+       it != (vect).end(); it++)
 
 #define forall_types(it, vect) \
   for (std::vector<type2tc>::const_iterator (it) = (vect).begin();\
@@ -285,6 +285,7 @@ public:
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
   virtual void do_crc(boost::crc_32_type &crc) const;
   virtual void list_operands(std::vector<expr2tc> &inp) const = 0;
+  virtual bool simplify(void) = 0;
 
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;
@@ -513,6 +514,7 @@ namespace esbmct {
     virtual int lt(const expr2t &ref) const;
     virtual void do_crc(boost::crc_32_type &crc) const;
     virtual void list_operands(std::vector<expr2tc> &inp) const;
+    virtual bool simplify(void);
   };
 
   template <class derived,

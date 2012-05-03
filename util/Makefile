@@ -14,7 +14,7 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       type.cpp str_getline.cpp strstream2string.cpp \
       bitvector.cpp parser.cpp replace_symbol.cpp \
       string_hash.cpp string_container.cpp identifier.cpp \
-      options.cpp c_misc.cpp simplify_expr.cpp dstring.cpp \
+      options.cpp c_misc.cpp simplify_expr.cpp dstring.cpp simplify_expr2.cpp\
       find_symbols.cpp ui_message.cpp simplify_utils.cpp \
       string2array.cpp time_stopping.cpp symbol.cpp \
       type_eq.cpp guard.cpp array_name.cpp message_stream.cpp \
