@@ -644,7 +644,7 @@ bool bmc_baset::solver_base::run_solver()
    	  bmc.report_failure();
     }
     else
-      bmc.status("The inductive step has failed, so increase the bound");
+      bmc.status("The inductive step has failed, increasing the bound");
 
     return true;
 
