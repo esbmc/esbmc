@@ -40,3 +40,20 @@ expr2t::do_simplify(void) const
 
   return new_us;
 }
+
+expr2t *
+add2t::do_simplify(void)
+{
+  if (is_constant_expr(side_1) && is_constant_expr(side_2)) {
+    // Try simplification
+    // unimplemented.
+    return NULL;
+  } else {
+    expr2t *cloned = expr2t::do_simplify();
+
+    if (cloned == NULL)
+      return NULL; // Sub-operands were not simplified further.
+
+    return cloned->do_simplify(); // Attempt to simplify simplified copy.
+  }
+}

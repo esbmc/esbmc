@@ -1282,6 +1282,7 @@ public:
   add2t(const add2t &ref)
     : esbmct::expr<add2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2t* do_simplify(void);
 };
 template class esbmct::expr<add2t, esbmct::expr2tc_side_1,
                                  esbmct::expr2tc_side_2>;
