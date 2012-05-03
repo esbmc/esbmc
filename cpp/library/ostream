@@ -12,6 +12,7 @@ struct ostream
 	typedef int streampos;
 	typedef int streamoff;
 
+	ostream(){}
 	ostream(int id): id(id){}
 	int id;
 	streamsize width ( ) const;

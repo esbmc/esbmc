@@ -42,15 +42,14 @@ struct ifstream: istream{
 struct filebuf{};
 
 fstream::fstream ( const char * filename,
-  openmode mode = in | out )
+  ios_base::openmode mode = ios_base::in | ios_base::out )
   : istream(),
     ostream()
 {
-  if(!stcmp(filename,""))
+  if(!strcmp(filename,""))
     failbit = true; // TODO: correct this! This line is for test only!
 }
 
 }
-
 
 #endif
