@@ -226,6 +226,16 @@ fixedbvt &fixedbvt::operator/=(const fixedbvt &o)
   return *this;
 }
 
+fixedbvt &fixedbvt::operator+=(const fixedbvt &o)
+{
+  v+=o.v;
+
+  // No need to change the spec.
+  round(spec);
+
+  return *this;
+}
+
 /*******************************************************************\
 
 Function: fixedbvt::operator==
