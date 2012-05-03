@@ -1,6 +1,6 @@
 #include "irep2.h"
 
-bool
+expr2t *
 expr2t::do_simplify(void)
 {
   bool res = false;
@@ -9,7 +9,8 @@ expr2t::do_simplify(void)
   // further down.
   std::vector<expr2tc> operands;
   list_operands(operands);
-  Forall_exprs(it, operands)
-    res |= (*it).get()->simplify();
-  return res;
+  Forall_exprs(it, operands) {
+    expr2t *tmp = (*it).get()->do_simplify();
+  }
+  return false;
 }
