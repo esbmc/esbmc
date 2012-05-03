@@ -296,8 +296,8 @@ protected:
   virtual void list_operands(std::vector<expr2tc*> &inp) = 0;
   virtual expr2t * clone_raw(void) const = 0;
 public:
-  bool simplify(void) const;
-  virtual expr2t* do_simplify(bool shallow) const; // Shallow -> one level only
+  expr2tc simplify(void) const;
+  virtual expr2tc do_simplify(void) const; // Shallow -> one level only
 
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;
@@ -1282,7 +1282,7 @@ public:
   add2t(const add2t &ref)
     : esbmct::expr<add2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
-  virtual expr2t* do_simplify(bool shallow);
+  virtual expr2tc do_simplify(void);
 };
 template class esbmct::expr<add2t, esbmct::expr2tc_side_1,
                                  esbmct::expr2tc_side_2>;

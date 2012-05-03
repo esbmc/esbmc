@@ -345,10 +345,50 @@ expr2t::do_crc(boost::crc_32_type &crc) const
   return;
 }
 
-bool
+expr2tc
 expr2t::simplify(void) const
 {
-  return do_simplify(false);
+
+  // Try initial simplification
+  expr2tc res = do_simplify();
+  if (!is_nil_expr(res))
+    return res;
+
+  // Try simplifying all the sub-operands.
+  bool changed = false;
+  std::vector<const expr2tc*> operands;
+  std::vector<expr2tc> newoperands;
+
+  list_operands(operands);
+  for (std::vector<const expr2tc *>::iterator it = operands.begin();
+       it != operands.end(); it++) {
+    expr2tc tmp = (**it).get()->simplify();
+    newoperands.push_back(tmp);
+    if (!is_nil_expr(tmp))
+      changed = true;
+  }
+
+  if (changed == false)
+    return expr2tc();
+
+  // An operand has been changed; clone ourselves and update.
+  expr2tc new_us = clone();
+  std::vector<expr2tc*> clonedoperands;
+  new_us.get()->list_operands(clonedoperands);
+  assert(clonedoperands.size() == newoperands.size());
+
+  std::vector<expr2tc>::iterator it2 = newoperands.begin();
+  for (std::vector<expr2tc *>::iterator it = clonedoperands.begin();
+       it != clonedoperands.end(); it++, it2++) {
+    if ((*it2) == NULL)
+      continue; // No change in operand;
+    else
+      **it = *it2; // Operand changed; overwrite with new one.
+  }
+
+  // Finally, attempt simplification again.
+  new_us->do_simplify();
+  return new_us;
 }
 
 static const char *expr_names[] = {
