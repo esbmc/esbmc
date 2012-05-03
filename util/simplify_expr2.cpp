@@ -1,8 +1,12 @@
 #include "irep2.h"
 
 expr2t *
-expr2t::do_simplify(void) const
+expr2t::do_simplify(bool shallow) const
 {
+
+  if (shallow)
+    return NULL;
+
   // Base simplify - the obj being simplified has no function that simplifies
   // itself. So, fetch a vector of operands and apply simplification to anything
   // further down. If something gets changed, then we need to clone this expr
@@ -14,7 +18,7 @@ expr2t::do_simplify(void) const
   list_operands(operands);
   for (std::vector<const expr2tc *>::iterator it = operands.begin();
        it != operands.end(); it++) {
-    expr2t *tmp = (**it).get()->do_simplify();
+    expr2t *tmp = (**it).get()->do_simplify(false);
     newoperands.push_back(tmp);
     if (tmp != NULL)
       changed = true;
@@ -42,18 +46,21 @@ expr2t::do_simplify(void) const
 }
 
 expr2t *
-add2t::do_simplify(void)
+add2t::do_simplify(bool shallow)
 {
   if (is_constant_expr(side_1) && is_constant_expr(side_2)) {
     // Try simplification
     // unimplemented.
     return NULL;
+  } else if (shallow) {
+    return NULL;
   } else {
-    expr2t *cloned = expr2t::do_simplify();
+    // Attempt to simplify operands
+    expr2t *cloned = expr2t::do_simplify(false);
 
     if (cloned == NULL)
       return NULL; // Sub-operands were not simplified further.
 
-    return cloned->do_simplify(); // Attempt to simplify simplified copy.
+    return cloned->do_simplify(true); // Attempt to simplify simplified copy.
   }
 }

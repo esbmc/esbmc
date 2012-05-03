@@ -348,7 +348,7 @@ expr2t::do_crc(boost::crc_32_type &crc) const
 bool
 expr2t::simplify(void) const
 {
-  return do_simplify();
+  return do_simplify(false);
 }
 
 static const char *expr_names[] = {

@@ -297,7 +297,7 @@ protected:
   virtual expr2t * clone_raw(void) const = 0;
 public:
   bool simplify(void) const;
-  virtual expr2t* do_simplify(void) const;
+  virtual expr2t* do_simplify(bool shallow) const; // Shallow -> one level only
 
   /** Instance of expr_ids recording tihs exprs type. */
   expr_ids expr_id;
@@ -1282,7 +1282,7 @@ public:
   add2t(const add2t &ref)
     : esbmct::expr<add2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
-  virtual expr2t* do_simplify(void);
+  virtual expr2t* do_simplify(bool shallow);
 };
 template class esbmct::expr<add2t, esbmct::expr2tc_side_1,
                                  esbmct::expr2tc_side_2>;
