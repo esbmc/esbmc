@@ -596,6 +596,7 @@ int cbmc_parseoptionst::doit_k_induction()
   std::cout << std::endl;
   std::cout << "**************************************************" << std::endl;
   std::cout << "ESBMC was unable to prove the property, giving up." << std::endl;
+  std::cout << "VERIFICATION UNKNOWN" << std::endl;
   std::cout << "**************************************************" << std::endl;
   std::cout << std::endl;
 }
