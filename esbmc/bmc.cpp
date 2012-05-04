@@ -219,6 +219,13 @@ Function: bmc_baset::report_success
 
 void bmc_baset::report_success()
 {
+
+  if(options.get_bool_option("base-case"))
+  {
+    status("No bug has been found in the base case");
+    return ;
+  }
+
   status("VERIFICATION SUCCESSFUL");
 
   switch(ui)
@@ -630,21 +637,23 @@ void bmc_baset::setup_unwind()
 
 bool bmc_baset::solver_base::run_solver()
 {
-
   switch(bmc.run_decision_procedure(*conv))
   {
-  case decision_proceduret::D_UNSATISFIABLE:
-    bmc.report_success();
+    case decision_proceduret::D_UNSATISFIABLE:
+      if(!bmc.options.get_bool_option("base-case"))
+        bmc.report_success();
+      else
+        bmc.status("No bug has been found in the base case");
     return false;
 
-  case decision_proceduret::D_SATISFIABLE:
-    if(!bmc.options.get_bool_option("inductive-step"))
-    {
-      bmc.error_trace(*conv);
-   	  bmc.report_failure();
-    }
-    else
-      bmc.status("The inductive step has failed, increasing the bound");
+    case decision_proceduret::D_SATISFIABLE:
+      if(!bmc.options.get_bool_option("inductive-step"))
+      {
+        bmc.error_trace(*conv);
+   	    bmc.report_failure();
+      }
+      else
+        bmc.status("The inductive step is unable to prove the property");
 
     return true;
 

@@ -593,12 +593,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
   } while (k_step <= atol(cmdline.get_values("k-step").front().c_str()));
 
-  std::cout << std::endl;
-  std::cout << "**************************************************" << std::endl;
-  std::cout << "ESBMC was unable to prove the property, giving up." << std::endl;
-  std::cout << "VERIFICATION UNKNOWN" << std::endl;
-  std::cout << "**************************************************" << std::endl;
-  std::cout << std::endl;
+  status("Unable to prove or falsify the property, giving up.");
+  status("VERIFICATION UNKNOWN");
 }
 
 /*******************************************************************\
