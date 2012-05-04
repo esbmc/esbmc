@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 
+#include <irep2.h>
+
 #include <set>
 
 #include <mp_arith.h>
@@ -69,12 +71,12 @@ public:
     return insert(dest, it->first, it->second);
   }
 
-  bool insert(object_mapt &dest, const exprt &src) const
+  bool insert(object_mapt &dest, const expr2tc &src) const
   {
     return insert(dest, object_numbering.number(src), objectt());
   }
 
-  bool insert(object_mapt &dest, const exprt &src, const mp_integer &offset) const
+  bool insert(object_mapt &dest, const expr2tc &src, const mp_integer &offset) const
   {
     return insert(dest, object_numbering.number(src), objectt(offset));
   }
@@ -111,7 +113,7 @@ public:
     }
   }
 
-  bool insert(object_mapt &dest, const exprt &expr, const objectt &object) const
+  bool insert(object_mapt &dest, const expr2tc &expr, const objectt &object) const
   {
     return insert(dest, object_numbering.number(expr), object);
   }
@@ -138,7 +140,7 @@ public:
     }
   };
 
-  typedef std::set<exprt> expr_sett;
+  typedef std::set<expr2tc> expr_sett;
 
   static void add_objects(const entryt &src, expr_sett &dest);
 

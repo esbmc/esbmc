@@ -6,6 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <assert.h>
 
 #include <context.h>
@@ -86,7 +89,8 @@ void value_sett::output(
         o_it!=object_map.end();
         o_it++)
     {
-      const exprt &o=object_numbering[o_it->first];
+      const expr2tc &o2=object_numbering[o_it->first];
+      const exprt o = migrate_expr_back(o2);
     
       std::string result;
 
@@ -138,7 +142,8 @@ Function: value_sett::to_expr
 
 exprt value_sett::to_expr(object_map_dt::const_iterator it) const
 {
-  const exprt &object=object_numbering[it->first];
+  const expr2tc &object2=object_numbering[it->first];
+  const exprt object = migrate_expr_back(object2);
   
   if(object.id()=="invalid" ||
      object.id()=="unknown")
@@ -303,7 +308,10 @@ void value_sett::get_value_set_rec(
 
   if(expr.id()=="unknown" || expr.id()=="invalid")
   {
-    insert(dest, exprt("unknown", original_type));
+    const exprt tmp("unknown", original_type);
+    expr2tc tmp2;
+    migrate_expr(tmp, tmp2);
+    insert(dest, tmp2);
     return;
   }
   else if(expr.id()=="index")
@@ -383,7 +391,8 @@ void value_sett::get_value_set_rec(
           it1!=object_map.end();
           it1++)
       {
-        const exprt &object=object_numbering[it1->first];
+        const expr2tc &object2=object_numbering[it1->first];
+        const exprt object = migrate_expr_back(object2);
         get_value_set_rec(object, dest, suffix, original_type, ns);
       }
 
@@ -405,7 +414,8 @@ void value_sett::get_value_set_rec(
           it!=object_map.end();
           it++)
       {
-        const exprt &object=object_numbering[it->first];
+        const expr2tc &object2=object_numbering[it->first];
+        exprt object = migrate_expr_back(object2);
         get_value_set_rec(object, dest, suffix, original_type, ns);
       }
 
@@ -417,7 +427,10 @@ void value_sett::get_value_set_rec(
     // check if NULL
     if(expr.value()=="NULL" && expr.type().id()=="pointer")
     {
-      insert(dest, exprt("NULL-object", expr.type().subtype()), 0);
+      exprt tmp("NULL-object", expr.type().subtype());
+      expr2tc tmp2;
+      migrate_expr(tmp, tmp2);
+      insert(dest, tmp2, 0);
       return;
     }
   }
@@ -512,7 +525,9 @@ void value_sett::get_value_set_rec(
       dynamic_object.instance()=from_integer(location_number, typet("natural"));
       dynamic_object.valid()=true_exprt();
 
-      insert(dest, dynamic_object, 0);
+      expr2tc tmp;
+      migrate_expr(dynamic_object, tmp);
+      insert(dest, tmp, 0);
       return;          
     }
     else if(statement=="cpp_new" ||
@@ -525,14 +540,19 @@ void value_sett::get_value_set_rec(
       dynamic_object.instance()=from_integer(location_number, typet("natural"));
       dynamic_object.valid()=true_exprt();
 
-      insert(dest, dynamic_object, 0);
+      expr2tc tmp;
+      migrate_expr(dynamic_object, tmp);
+      insert(dest, tmp, 0);
       return;
     }
   }
   else if(expr.id()=="struct")
   {
     // this is like a static struct object
-    insert(dest, address_of_exprt(expr), 0);
+    address_of_exprt tmp(expr);
+    expr2tc tmp2;
+    migrate_expr(tmp, tmp2);
+    insert(dest, tmp2, 0);
     return;
   }
 
@@ -612,7 +632,10 @@ void value_sett::get_value_set_rec(
     }
   }
 
-  insert(dest, exprt("unknown", original_type));
+  exprt tmp("unknown", original_type);
+  expr2tc tmp2;
+  migrate_expr(tmp, tmp2);
+  insert(dest, tmp2);
 }
 
 /*******************************************************************\
@@ -690,15 +713,18 @@ void value_sett::get_reference_set_rec(
   const namespacet &ns) const
 {
 
+  expr2tc migrated;
+  migrate_expr(expr, migrated);
+
   if(expr.id()=="symbol" ||
      expr.id()=="dynamic_object" ||
      expr.id()=="string-constant")
   {
     if(expr.type().is_array() &&
        expr.type().subtype().is_array())
-      insert(dest, expr);
+      insert(dest, migrated);
     else    
-      insert(dest, expr, 0);
+      insert(dest, migrated, 0);
 
     return;
   }
@@ -734,12 +760,15 @@ void value_sett::get_reference_set_rec(
         a_it!=object_map.end();
         a_it++)
     {
-      const exprt &object=object_numbering[a_it->first];
+      const expr2tc &object2=object_numbering[a_it->first];
+      const exprt object = migrate_expr_back(object2);
 
-      if(object.id()=="unknown")
-        insert(dest, exprt("unknown", expr.type()));
-      else
-      {
+      if(object.id()=="unknown") {
+        exprt unknown("unknown", expr.type());
+        expr2tc tmp;
+        migrate_expr(unknown, tmp);
+        insert(dest, tmp);
+      } else {
         index_exprt index_expr(expr.type());
         index_expr.array()=object;
         index_expr.index()=gen_zero(index_type());
@@ -760,7 +789,9 @@ void value_sett::get_reference_set_rec(
         else
           o.offset_is_set=false;
           
-        insert(dest, index_expr, o);
+        expr2tc tmp;
+        migrate_expr(index_expr, tmp);
+        insert(dest, tmp, o);
       }
     }
     
@@ -785,12 +816,15 @@ void value_sett::get_reference_set_rec(
         it!=object_map.end();
         it++)
     {
-      const exprt &object=object_numbering[it->first];
+      const expr2tc &object2=object_numbering[it->first];
+      const exprt object = migrate_expr_back(object2);
       
-      if(object.id()=="unknown")
-        insert(dest, exprt("unknown", expr.type()));
-      else
-      {
+      if(object.id()=="unknown") {
+        exprt unknown("unknown", expr.type());
+        expr2tc tmp;
+        migrate_expr(unknown, tmp);
+        insert(dest, tmp);
+      } else {
         objectt o=it->second;
 
         member_exprt member_expr(expr.type());
@@ -801,7 +835,9 @@ void value_sett::get_reference_set_rec(
         if(ns.follow(struct_op.type())!=ns.follow(object.type()))
           member_expr.op0().make_typecast(struct_op.type());
         
-        insert(dest, member_expr, o);
+        expr2tc tmp;
+        migrate_expr(member_expr, tmp);
+        insert(dest, tmp, o);
       }
     }
 
@@ -817,7 +853,10 @@ void value_sett::get_reference_set_rec(
     return;
   }
 
-  insert(dest, exprt("unknown", expr.type()));
+  exprt unknown("unknown", expr.type());
+  expr2tc tmp;
+  migrate_expr(unknown, tmp);
+  insert(dest, tmp);
 }
 
 /*******************************************************************\
@@ -986,15 +1025,19 @@ void value_sett::do_free(
       it!=object_map.end();
       it++)
   {
-    const exprt &object=object_numbering[it->first];
+    const expr2tc &object2=object_numbering[it->first];
+    const exprt object = migrate_expr_back(object2);
 
     if(object.id()=="dynamic_object")
     {
       const dynamic_object_exprt &dynamic_object=
         to_dynamic_object_expr(object);
       
-      if(dynamic_object.valid().is_true())
-        to_mark.insert(dynamic_object.instance());
+      if(dynamic_object.valid().is_true()) {
+        expr2tc tmp;
+        migrate_expr(dynamic_object.instance(), tmp);
+        to_mark.insert(tmp);
+      }
     }
   }
   
@@ -1016,14 +1059,17 @@ void value_sett::do_free(
         o_it!=old_object_map.end();
         o_it++)
     {
-      const exprt &object=object_numbering[o_it->first];
+      const expr2tc &object2=object_numbering[o_it->first];
+      const exprt object = migrate_expr_back(object2);
 
       if(object.id()=="dynamic_object")
       {
         const exprt &instance=
           to_dynamic_object_expr(object).instance();
 
-        if(to_mark.count(instance)==0)
+        expr2tc inst;
+        migrate_expr(instance, inst);
+        if(to_mark.count(inst)==0)
           set(new_object_map, o_it);
         else
         {
@@ -1031,7 +1077,9 @@ void value_sett::do_free(
           objectt o=o_it->second;
           exprt tmp(object);
           to_dynamic_object_expr(tmp).valid()=exprt("unknown");
-          insert(new_object_map, tmp, o);
+          expr2tc tmp2;
+          migrate_expr(tmp, tmp2);
+          insert(new_object_map, tmp2, o);
           changed=true;
         }
       }
@@ -1101,7 +1149,8 @@ void value_sett::assign_rec(
         it!=reference_set.read().end();
         it++)
     {
-      const exprt &object=object_numbering[it->first];
+      const expr2tc &object2=object_numbering[it->first];
+      const exprt object = migrate_expr_back(object2);
 
       if(object.id()!="unknown")
         assign_rec(object, values_rhs, suffix, ns, add_to_sets);
