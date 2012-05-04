@@ -47,7 +47,10 @@ goto_symext::claim(const exprt &claim_expr, const std::string &msg) {
   cur_state->guard.guard_expr(expr);
 
   remaining_claims++;
-  target->assertion(cur_state->guard, expr, msg, cur_state->gen_stack_trace(),
+  expr2tc guard, newexpr;
+  migrate_expr(cur_state->guard.as_expr(), guard);
+  migrate_expr(expr, newexpr);
+  target->assertion(guard, newexpr, msg, cur_state->gen_stack_trace(),
                     cur_state->source);
 }
 

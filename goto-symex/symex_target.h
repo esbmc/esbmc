@@ -70,8 +70,8 @@ public:
   // record an assertion
   // cond is destroyed
   virtual void assertion(
-    const guardt &guard,
-    exprt &cond,
+    const expr2tc &guard,
+    const expr2tc &cond,
     const std::string &msg,
     std::vector<dstring> stack_trace,
     const sourcet &source)=0;
