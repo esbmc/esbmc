@@ -3,7 +3,7 @@ unsigned int nondet_uint();
 int main() { 
   int i, n=12, sn=0;
   for(i=1; i<=n; i++) {
-    if (i<10) //first case
+//    if (i<10) //first case
     sn = sn + a; //second case OK
     //if (i==4) sn=-10; //third case OK
   }
