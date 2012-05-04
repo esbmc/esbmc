@@ -267,6 +267,8 @@ void symex_slice_by_tracet::compute_ts_back(symex_target_equationt &equation)
 {
   size_t merge_count = 0;
 
+#warning XXXjmorse - disabled slice by trace on account of nothing using it.
+#if 0
   for(symex_target_equationt::SSA_stepst::reverse_iterator
       i=equation.SSA_steps.rbegin();
       i!=equation.SSA_steps.rend(); 
@@ -375,6 +377,7 @@ void symex_slice_by_tracet::compute_ts_back(symex_target_equationt &equation)
       }
     }
   }
+#endif
 }
 
 /*******************************************************************\
