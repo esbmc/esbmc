@@ -266,6 +266,7 @@ public:
     overflow_neg_id,
     unknown_id,
     invalid_id,
+    null_object_id,
     end_expr_id
   };
 
@@ -1615,6 +1616,16 @@ public:
     : esbmct::expr<invalid2t> (ref) {}
 };
 template class esbmct::expr<invalid2t>;
+
+class null_object2t : public esbmct::expr<null_object2t>
+{
+public:
+  null_object2t(const type2tc &wtype)
+    : esbmct::expr<null_object2t> (type, null_object_id) {}
+  null_object2t(const null_object2t &ref)
+    : esbmct::expr<null_object2t> (ref) {}
+};
+template class esbmct::expr<null_object2t>;
 
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {

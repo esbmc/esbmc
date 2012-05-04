@@ -786,6 +786,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == "invalid") {
     migrate_type(expr.type(), type);
     new_expr_ref = expr2tc(new invalid2t(type));
+  } else if (expr.id() == "NULL-object") {
+    migrate_type(expr.type(), type);
+    new_expr_ref = expr2tc(new null_object2t(type));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1398,6 +1401,12 @@ migrate_expr_back(const expr2tc &ref)
   {
     typet thetype = migrate_type_back(ref->type);
     const exprt theexpr("unknown", thetype);
+    return theexpr;
+  }
+  case expr2t::null_object_id:
+  {
+    typet thetype = migrate_type_back(ref->type);
+    const exprt theexpr("NULL-object", thetype);
     return theexpr;
   }
   default:
