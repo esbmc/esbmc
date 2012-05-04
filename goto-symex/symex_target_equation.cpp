@@ -54,7 +54,7 @@ void symex_target_equationt::output(
   const expr2tc &guard,
   const sourcet &source,
   const std::string &fmt,
-  const std::list<exprt> &args)
+  const std::list<expr2tc> &args)
 {
   SSA_steps.push_back(SSA_stept());
   SSA_stept &SSA_step=SSA_steps.back();
@@ -214,24 +214,21 @@ void symex_target_equationt::convert_output(prop_convt &prop_conv)
       it!=SSA_steps.end(); it++)
     if(it->is_output() && !it->ignore)
     {
-      for(std::list<exprt>::const_iterator
+      for(std::list<expr2tc>::const_iterator
           o_it=it->output_args.begin();
           o_it!=it->output_args.end();
           o_it++)
       {
-        exprt tmp=*o_it;
-        if(tmp.is_constant() ||
-           tmp.id()=="string-constant")
+        const expr2tc &tmp = *o_it;
+        if(is_constant_expr(tmp) || is_constant_string2t(tmp))
           it->converted_output_args.push_back(tmp);
         else
         {
-          symbol_exprt symbol;
-          symbol.type()=tmp.type();
-          symbol.set_identifier("symex::output::"+i2string(output_count++));
-          expr2tc new_expr;
-          migrate_expr(equality_exprt(tmp, symbol), new_expr);
-          prop_conv.set_to(new_expr, true);
-          it->converted_output_args.push_back(symbol);
+          expr2tc sym = expr2tc(new symbol2t(tmp->type, "symex::output::"+i2string(output_count++)));
+
+          expr2tc eq = expr2tc(new equality2t(tmp, sym));
+          prop_conv.set_to(eq, true);
+          it->converted_output_args.push_back(sym);
         }
       }
     }

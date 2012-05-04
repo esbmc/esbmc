@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_BASIC_SYMEX_EQUATION_H
 #define CPROVER_BASIC_SYMEX_EQUATION_H
 
+#include <irep2.h>
+
 extern "C" {
 #include <stdio.h>
 }
@@ -51,7 +53,7 @@ public:
     const expr2tc &guard,
     const sourcet &source,
     const std::string &fmt,
-    const std::list<exprt> &args);
+    const std::list<expr2tc> &args);
   
   // record an assumption
   // cond is destroyed
@@ -105,11 +107,11 @@ public:
 
     // for OUTPUT
     std::string format_string;
-    std::list<exprt> output_args;
+    std::list<expr2tc> output_args;
 
     // for conversion
     literalt guard_literal, cond_literal;
-    std::list<exprt> converted_output_args;
+    std::list<expr2tc> converted_output_args;
     
     // for slicing
     bool ignore;

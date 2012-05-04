@@ -58,7 +58,7 @@ public:
     const expr2tc &guard,
     const sourcet &source,
     const std::string &fmt,
-    const std::list<exprt> &args)=0;
+    const std::list<expr2tc> &args)=0;
 
   // record an assumption
   // cond is destroyed

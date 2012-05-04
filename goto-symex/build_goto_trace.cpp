@@ -67,18 +67,16 @@ void build_goto_trace(
       goto_trace_step.value = prop_conv.get(SSA_step.lhs);
     }
 
-    for(std::list<exprt>::const_iterator
+    for(std::list<expr2tc>::const_iterator
         j=SSA_step.converted_output_args.begin();
         j!=SSA_step.converted_output_args.end();
         j++)
     {
-      const exprt &arg=*j;
-      expr2tc arg2;
-      migrate_expr(arg, arg2);
-      if (is_constant_expr(arg2))
-        goto_trace_step.output_args.push_back(arg2);
+      const expr2tc &arg = *j;
+      if (is_constant_expr(arg))
+        goto_trace_step.output_args.push_back(arg);
       else
-        goto_trace_step.output_args.push_back(prop_conv.get(arg2));
+        goto_trace_step.output_args.push_back(prop_conv.get(arg));
     }
 
     if(SSA_step.is_assert() ||

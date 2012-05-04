@@ -125,10 +125,13 @@ void goto_symext::symex_printf(
   cur_state->rename(tmp_rhs);
 
   const exprt::operandst &operands=tmp_rhs.operands();
-  std::list<exprt> args;
+  std::list<expr2tc> args;
 
-  for(unsigned i=1; i<operands.size(); i++)
-    args.push_back(operands[i]);
+  for(unsigned i=1; i<operands.size(); i++) {
+    expr2tc tmpexpr;
+    migrate_expr(operands[i], tmpexpr);
+    args.push_back(tmpexpr);
+  }
 
   const exprt &format=operands[0];
   
