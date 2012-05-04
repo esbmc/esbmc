@@ -6,6 +6,8 @@
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
 #include "execution_state.h"
 #include "reachability_tree.h"
 #include <string>
@@ -464,8 +466,10 @@ execution_statet::execute_guard(void)
   do_simplify(parent_guard);
   assumpt.copy_to_operands(guard_expr, parent_guard);
 
-  guardt guard;
-  target->assumption(guard, assumpt, get_active_state().source);
+  expr2tc guard, assumpt2;
+  migrate_expr(guardt().as_expr(), guard);
+  migrate_expr(assumpt, assumpt2);
+  target->assumption(guard, assumpt2, get_active_state().source);
 
   guardt old_guard;
   old_guard.add(threads_state[last_active_thread].guard.as_expr());

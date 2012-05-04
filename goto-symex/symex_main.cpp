@@ -7,6 +7,8 @@
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
 #include <assert.h>
 #include <iostream>
 #include <vector>
@@ -54,8 +56,10 @@ goto_symext::assume(const exprt &assumption)
 {
 
   // Irritatingly, assumption destroys its expr argument
-  exprt assumpt_dup = assumption;
-  target->assumption(cur_state->guard, assumpt_dup, cur_state->source);
+  expr2tc guard, assumpt_dup;
+  migrate_expr(cur_state->guard.as_expr(), guard);
+  migrate_expr(assumption, assumpt_dup);
+  target->assumption(guard, assumpt_dup, cur_state->source);
   return;
 }
 

@@ -297,9 +297,11 @@ goto_symext::loop_bound_exceeded(const exprt &guard)
       claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
     } else   {
       // generate unwinding assumption, unless we permit partial loops
-      exprt guarded_expr = negated_cond;
-      cur_state->guard.guard_expr(guarded_expr);
-      target->assumption(cur_state->guard, guarded_expr, cur_state->source);
+      cur_state->guard.guard_expr(negated_cond);
+      expr2tc guard, guarded;
+      migrate_expr(cur_state->guard.as_expr(), guard);
+      migrate_expr(negated_cond, guarded);
+      target->assumption(guard, guarded, cur_state->source);
     }
 
     // add to state guard to prevent further assignments

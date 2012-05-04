@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
 #include "goto_symex.h"
 
 /*******************************************************************\
@@ -110,6 +112,8 @@ void goto_symext::symex_throw(statet &state)
   
   // An un-caught exception. Behaves like assume(0);
   state.guard.add(false_exprt());
-  exprt tmp=state.guard.as_expr();
-  target->assumption(state.guard, tmp, state.source);
+  expr2tc tmp, tmp2;
+  migrate_expr(state.guard.as_expr(), tmp);
+  migrate_expr(state.guard.as_expr(), tmp2);
+  target->assumption(tmp2, tmp, state.source);
 }

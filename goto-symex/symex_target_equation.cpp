@@ -67,19 +67,15 @@ void symex_target_equationt::output(
 }
 
 void symex_target_equationt::assumption(
-  const guardt &guard,
-  exprt &cond,
+  const expr2tc &guard,
+  const expr2tc &cond,
   const sourcet &source)
 {
   SSA_steps.push_back(SSA_stept());
   SSA_stept &SSA_step=SSA_steps.back();
 
-  expr2tc new_guard, new_cond;
-  migrate_expr(guard.as_expr(), new_guard);
-  migrate_expr(cond, new_cond);
-
-  SSA_step.guard = new_guard;
-  SSA_step.cond = new_cond;
+  SSA_step.guard = guard;
+  SSA_step.cond = cond;
   SSA_step.type=goto_trace_stept::ASSUME;
   SSA_step.source=source;
 }

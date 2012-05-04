@@ -63,8 +63,8 @@ public:
   // record an assumption
   // cond is destroyed
   virtual void assumption(
-    const guardt &guard,
-    exprt &cond,
+    const expr2tc &guard,
+    const expr2tc &cond,
     const sourcet &source)=0;
 
   // record an assertion
