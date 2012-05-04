@@ -746,11 +746,20 @@ void value_sett::get_reference_set_rec(
   
     const exprt &array=expr.op0();
     const exprt &offset=expr.op1();
-    const typet &array_type=ns.follow(array.type());
+    const typet &array_type_tmp=ns.follow(array.type());
     
-    assert(array_type.is_array() ||
-           array_type.id()=="incomplete_array");
+    assert(array_type_tmp.is_array() ||
+           array_type_tmp.id()=="incomplete_array");
     
+    // fix up array type during migration; it can have location fields and
+    // other useless gubbins in it, which get compared against a back-migrated
+    // type that drops such information, thus always failing. Work around this
+    // by migrating forwards and backwards the array type, thus stripping out
+    // any additional information we don't want in a comparison.
+    type2tc tmp_type;
+    migrate_type(array_type_tmp, tmp_type);
+    const typet array_type = migrate_type_back(tmp_type);
+
     object_mapt array_references;
     get_reference_set(array, array_references, ns);
         
