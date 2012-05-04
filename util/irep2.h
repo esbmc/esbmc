@@ -1750,6 +1750,8 @@ expr_macros(isnan);
 expr_macros(overflow);
 expr_macros(overflow_cast);
 expr_macros(overflow_neg);
+expr_macros(unknown);
+expr_macros(invalid);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -1881,5 +1883,7 @@ typedef irep_container<overflow2t, expr2t::overflow_id> overflow2tc;
 typedef irep_container<overflow_cast2t, expr2t::overflow_cast_id>
                        overflow_cast2tc;
 typedef irep_container<overflow_neg2t, expr2t::overflow_neg_id>overflow_neg2tc;
+typedef irep_container<unknown2t, expr2t::unknown_id> unknown2tc;
+typedef irep_container<invalid2t, expr2t::invalid_id> invalid2tc;
 
 #endif /* _UTIL_IREP2_H_ */
