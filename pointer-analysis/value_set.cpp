@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 
+#include <config.h>
 #include <context.h>
 #include <simplify_expr.h>
 #include <expr_util.h>
@@ -522,7 +523,7 @@ void value_sett::get_value_set_rec(
         static_cast<const typet &>(expr.cmt_type());
 
       dynamic_object_exprt dynamic_object(dynamic_type);
-      dynamic_object.instance()=from_integer(location_number, typet("natural"));
+      dynamic_object.instance()=from_integer(location_number, unsignedbv_typet(config.ansi_c.int_width));
       dynamic_object.valid()=true_exprt();
 
       expr2tc tmp;
@@ -537,7 +538,7 @@ void value_sett::get_value_set_rec(
       assert(expr.type().id()=="pointer");
 
       dynamic_object_exprt dynamic_object(expr.type().subtype());
-      dynamic_object.instance()=from_integer(location_number, typet("natural"));
+      dynamic_object.instance()=from_integer(location_number, unsignedbv_typet(config.ansi_c.int_width));
       dynamic_object.valid()=true_exprt();
 
       expr2tc tmp;
@@ -618,9 +619,9 @@ void value_sett::get_value_set_rec(
     const dynamic_object_exprt &dynamic_object=
       to_dynamic_object_expr(expr);
   
+    std::string idnum = integer2string(binary2integer(dynamic_object.instance().value().as_string(), false));
     const std::string name=
-      "value_set::dynamic_object"+
-      dynamic_object.instance().value().as_string()+suffix;
+      "value_set::dynamic_object"+idnum+suffix;
   
     // look it up
     valuest::const_iterator v_it=values.find(name);
@@ -1126,9 +1127,9 @@ void value_sett::assign_rec(
     const dynamic_object_exprt &dynamic_object=
       to_dynamic_object_expr(lhs);
   
+    std::string idnum = integer2string(binary2integer(dynamic_object.instance().value().as_string(), false));
     const std::string name=
-      "value_set::dynamic_object"+
-      dynamic_object.instance().value().as_string();
+      "value_set::dynamic_object"+idnum;
 
     make_union(get_entry(name, suffix).object_map, values_rhs);
   }
