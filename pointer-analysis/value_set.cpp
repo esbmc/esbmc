@@ -1077,7 +1077,7 @@ void value_sett::do_free(
           // adjust
           objectt o=o_it->second;
           exprt tmp(object);
-          to_dynamic_object_expr(tmp).valid()=exprt("unknown");
+          to_dynamic_object_expr(tmp).valid()=exprt("unknown", op.type());
           expr2tc tmp2;
           migrate_expr(tmp, tmp2);
           insert(new_object_map, tmp2, o);
