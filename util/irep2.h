@@ -378,6 +378,7 @@ namespace esbmct {
   field_name_macro(size_is_infinite);
   field_name_macro(instance);
   field_name_macro(invalid);
+  field_name_macro(unknown);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -487,6 +488,7 @@ namespace esbmct {
   member_record_macro(expr2tc_array_size, expr2tc_type_tag, name_array_size);
   member_record_macro(bool_size_is_inf, bool_type_tag, name_size_is_infinite);
   member_record_macro(bool_invalid, bool_type_tag, name_invalid);
+  member_record_macro(bool_unknown, bool_type_tag, name_unknown);
   member_record_macro(expr2tc_instance, expr2tc_type_tag, name_instance);
   #undef member_record_macro
 
@@ -1634,19 +1636,20 @@ template class esbmct::expr<null_object2t>;
 
 class dynamic_object2t : public esbmct::expr<dynamic_object2t,
                                              esbmct::expr2tc_instance,
-                                             esbmct::bool_invalid>
+                                             esbmct::bool_invalid,
+                                             esbmct::bool_unknown>
 {
 public:
-  dynamic_object2t(const type2tc &type, expr2tc inst, bool invalid)
+  dynamic_object2t(const type2tc &type, expr2tc inst, bool invalid, bool uknown)
     : esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
-                   esbmct::bool_invalid>
-      (type, dynamic_object_id, inst, invalid) {}
+                   esbmct::bool_invalid, esbmct::bool_unknown>
+      (type, dynamic_object_id, inst, invalid, uknown) {}
   dynamic_object2t(const dynamic_object2t &ref)
     : esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
-                   esbmct::bool_invalid> (ref) {}
+                   esbmct::bool_invalid, esbmct::bool_unknown> (ref) {}
 };
 template class esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
-                                               esbmct::bool_invalid>;
+                                   esbmct::bool_invalid, esbmct::bool_unknown>;
 
 class dereference2t : public esbmct::expr<dereference2t, esbmct::expr2tc_value>
 {

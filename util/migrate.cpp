@@ -793,9 +793,17 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_type(expr.type(), type);
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
-    assert(is_constant_bool2t(op1));
-    new_expr_ref = expr2tc(new dynamic_object2t(type, op0,
-                               to_constant_bool2t(op1).constant_value));
+
+    bool invalid = false;
+    bool unknown = false;
+    if (is_constant_bool2t(op1)) {
+      invalid = to_constant_bool2t(op1).constant_value;
+    } else {
+      assert(expr.op1().id() == "unknown");
+      unknown = true;
+    }
+
+    new_expr_ref = expr2tc(new dynamic_object2t(type, op0, invalid, unknown));
   } else if (expr.id() == irept::id_dereference) {
     migrate_type(expr.type(), type);
     expr2tc op0;
