@@ -1331,9 +1331,9 @@ migrate_expr_back(const expr2tc &ref)
     const member2t &ref2 = to_member2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt member("member", thetype);
+    member.set("component_name", ref2.member);
     exprt member_name("member_name");
-    member_name.set("component_name", ref2.member);
-    member.copy_to_operands(migrate_expr_back(ref2.source_value), member_name);
+    member.copy_to_operands(migrate_expr_back(ref2.source_value));
     return member;
   }
   case expr2t::index_id:
