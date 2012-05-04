@@ -780,6 +780,12 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc operand;
     migrate_expr(expr.op0(), operand);
     new_expr_ref = expr2tc(new overflow_neg2t(operand));
+  } else if (expr.id() == "unknown") {
+    migrate_type(expr.type(), type);
+    new_expr_ref = expr2tc(new unknown2t(type));
+  } else if (expr.id() == "invalid") {
+    migrate_type(expr.type(), type);
+    new_expr_ref = expr2tc(new invalid2t(type));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1380,6 +1386,18 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     theexpr.type() = thetype;
     theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    return theexpr;
+  }
+  case expr2t::invalid_id:
+  {
+    typet thetype = migrate_type_back(ref->type);
+    const exprt theexpr("unknown", thetype);
+    return theexpr;
+  }
+  case expr2t::unknown_id:
+  {
+    typet thetype = migrate_type_back(ref->type);
+    const exprt theexpr("unknown", thetype);
     return theexpr;
   }
   default:
