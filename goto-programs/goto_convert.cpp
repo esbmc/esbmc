@@ -3336,38 +3336,12 @@ DEBUGLOC;
     found=false;
     get_new_expr(expr.op1(), new_expr2, found);
 
-    //std::cout << "new_expr1.pretty(): " << new_expr1.pretty() << std::endl;
-    //std::cout << "new_expr2.pretty(): " << new_expr2.pretty() << std::endl;
-
-    //std::cout << "new_expr1.type().id(): " << new_expr1.type().id() << std::endl;
-    //std::cout << "new_expr2.type().id(): " << new_expr2.type().id() << std::endl;
-
     if (expr.op0().is_index())
       assert(new_expr1.type().id() == expr.op0().op0().type().id());
     else if (expr.op1().is_index())
       assert(new_expr2.type().id() == expr.op1().op0().type().id());
     else if (new_expr1.type().id() != new_expr2.type().id())
       new_expr2.make_typecast(new_expr1.type());
-
-      //assert(new_expr1.type().id() == new_expr2.type().id());
-
-#if 0
-    if (!expr.op0().is_index())
-    {
-      if (new_expr1.type().id() != new_expr2.type().id())
-    	  new_expr2.make_typecast(new_expr1.type());
-      std::cout << "new_expr1.type().id(): " << new_expr1.type().id() << std::endl;
-      std::cout << "expr.op0().type().id(): " << expr.op0().type().id() << std::endl;
-      assert(new_expr1.type().id() == new_expr2.type().id());
-    }
-    else
-      assert(new_expr1.type().id() == expr.op0().op0().type().id());
-
-    if (!expr.op1().is_index())
-    	assert(new_expr2.type().id() == expr.op1().type().id()); //assert(new_expr1.type().id() == new_expr2.type().id());
-    else
-      assert(new_expr2.type().id() == expr.op1().op0().type().id());
-#endif
 
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
   }
