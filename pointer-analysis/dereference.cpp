@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
 #include <assert.h>
 #include <sstream>
 #include <expr_util.h>
@@ -496,7 +498,11 @@ void dereferencet::build_reference_to(
       offset.move_to_operands(pointer_offset, base);
     }
 
-    if(!dereference_type_compare(value, type))
+    // Strip out un-needed type data so that back-migrated types compare
+    // correctly.
+    type2tc new_type;
+    migrate_type(type, new_type);
+    if(!dereference_type_compare(value, migrate_type_back(new_type)))
     {
       if(memory_model(value, type, tmp_guard, offset))
       {
