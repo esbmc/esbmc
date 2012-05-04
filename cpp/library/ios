@@ -7,20 +7,49 @@
 namespace std
 {
 struct ios_base {
-	typedef int iostate;
-	typedef int fmtflags;
-	typedef int openmode;
-	static const iostate badbit = 3;
-	static const iostate eofbit = 2;
-	static const iostate failbit = 1;
-	static const iostate goodbit = 0;
-        typedef int seekdir;
-	static const openmode app, ate, binary, in, out, trunc;
-        static const seekdir beg;
-        static const seekdir cur;
-        static const seekdir end;
+  typedef int iostate;
+  typedef int fmtflags;
+  typedef int openmode;
 
-	ios_base ();
+  enum event { erase_event, imbue_event, copyfmt_event };
+  typedef void (*event_callback) (event ev, ios_base& obj, int index);
+
+//  static const iostate badbit = 3;
+//  static const iostate eofbit = 2;
+//  static const iostate failbit = 1;
+
+  typedef int seekdir;
+  static const openmode app, ate, binary, in, out, trunc;
+  static const seekdir beg;
+  static const seekdir cur;
+  static const seekdir end;
+
+  static const iostate goodbit = 0;
+  bool failbit;
+  bool eofbit;
+  bool badbit;
+
+
+public:
+  ios_base ();
+
+  fmtflags flags ( ) const;
+  fmtflags flags ( fmtflags fmtfl );
+  fmtflags setf ( fmtflags fmtfl );
+  fmtflags setf ( fmtflags fmtfl, fmtflags mask );
+  void unsetf ( fmtflags mask );
+//  streamsize precision ( ) const;
+//  streamsize precision ( streamsize prec );
+  streamsize width ( ) const;
+  streamsize width ( streamsize wide );
+//  locale imbue ( const locale& loc );
+//  locale getloc ( ) const;
+  int xalloc ( );
+  long& iword (int idx);
+  void* & pword (int idx);
+  void register_callback ( event_callback fn, int index );
+  bool sync_with_stdio ( bool sync = true );
+
 
 private:
   ios_base (const ios_base&);
@@ -28,14 +57,71 @@ private:
 };
 
 struct ios: ios_base{
-	//	typedef fpos<mbstate_t> streampos;
-	//	typedef fpos<mbstate_t> streamoff;
-	typedef int streampos;
-	typedef int streamoff;
+  //	typedef fpos<mbstate_t> streampos;
+  //	typedef fpos<mbstate_t> streamoff;
+  typedef int streampos;
+  typedef int streamoff;
 
-	bool operator ! ( ) const;
-	void clear ( iostate state = goodbit );
+  ios() : ios_base() {}
+
+public:
+  bool operator ! ( ) const;
+  operator void * ( ) const;
+  void clear ( iostate state = goodbit );
+
+  bool fail() const;
+  bool bad() const;
+  bool eof() const;
+  bool good() const;
+
+  iostate rdstate() const;
+  void setstate(iostate state);
+
+  ios& copyfmt ( const ios& rhs );
+//  char fill ( ) const;
+//  char fill ( char fillch );
+
+//  locale imbue ( const locale& loc );
+//  ostream* tie ( ) const;
+//  ostream* tie ( ostream* tiestr );
+  streambuf* rdbuf ( ) const;
+  streambuf* rdbuf ( streambuf* sb );
+  char narrow ( char c, char dfault ) const;
+  char widen ( char c ) const;
+
 };
+
+ios_base::ios_base()
+{
+  failbit = false;
+  badbit = false;
+  eofbit = false;
+}
+
+bool ios::good() const
+{
+  return !(ios_base::failbit || ios_base::badbit || ios_base::eofbit);
+}
+
+bool ios::bad() const
+{
+  return ios_base::badbit;
+}
+
+bool ios::eof() const
+{
+  return ios_base::eofbit;
+}
+
+bool ios::fail() const
+{
+  return (ios_base::failbit || ios_base::badbit);
+}
+
+int ios::rdstate() const
+{
+  return nondet_uint();
+}
 }
 
 #endif

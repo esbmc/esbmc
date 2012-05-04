@@ -5,8 +5,6 @@
 #include "definitions.h"
 #include "iomanip"
 
-#include "vector"
-
 namespace std
 {
 struct ostream
@@ -14,6 +12,7 @@ struct ostream
 	typedef int streampos;
 	typedef int streamoff;
 
+	ostream(){}
 	ostream(int id): id(id){}
 	int id;
 	streamsize width ( ) const;

@@ -89,6 +89,7 @@ void cpp_typecheckt::convert_anonymous_union(
   // do scoping
   symbolt union_symbol=context.symbols[follow(symbol.type).name()];
   const irept::subt &components=union_symbol.type.add("components").get_sub();
+
   forall_irep(it, components)
   {
     if(it->type().id()=="code")
@@ -172,12 +173,15 @@ void cpp_typecheckt::convert_non_template_declaration(
 {
   assert(!declaration.is_template());
 
-  // do the first part, the type
+  // we first check if this is a typedef
   typet &type=declaration.type();
   bool is_typedef=convert_typedef(type);
 
+  // typedefs are expanded late!
+
   typecheck_type(type);
 
+  // special treatment for anonymous unions
   if(declaration.declarators().empty() &&
      follow(declaration.type()).get_bool("#is_anonymous"))
   {

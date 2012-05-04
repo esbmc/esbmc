@@ -21,12 +21,12 @@ public:
   {
     set("width", config.ansi_c.int_width);
   }
-  
+
   const irep_idt &get_name() const
   {
     return get("name");
   }
-  
+
   void set_name(const irep_idt &name)
   {
     set("name", name);
@@ -41,7 +41,7 @@ public:
   {
     return add("body");
   }
-  
+
   bool has_body() const
   {
     return find("body").is_not_nil();

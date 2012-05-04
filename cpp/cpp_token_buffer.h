@@ -17,9 +17,9 @@ public:
   cpp_token_buffert():current_pos(0)
   {
   }
- 
+
   typedef unsigned int post;
- 
+
   int LookAhead(unsigned offset);
   int GetToken(cpp_tokent &token);
   int GetToken();
@@ -31,7 +31,7 @@ public:
 
   //void GetComments(irept &p);
   //void GetComments2(irept &p);
-  
+
   void clear()
   {
     tokens.clear();
@@ -45,13 +45,13 @@ public:
     assert(!tokens.empty());
     return tokens.back();
   }
-  
+
 protected:
   typedef std::list<cpp_tokent> tokenst;
   tokenst tokens;
-  
+
   std::vector<tokenst::iterator> token_vector;
-  
+
   post current_pos;
 
   // get another token from lexer

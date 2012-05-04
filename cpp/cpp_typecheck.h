@@ -17,7 +17,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <std_code.h>
 #include <std_types.h>
-#include <std_expr.h>
 
 #include <ansi-c/c_typecheck_base.h>
 
@@ -104,8 +103,6 @@ public:
     const exprt::operandst &operands);
 
 protected:
-  //cpp_typecheck_resolvet cpp_typecheck_resolve;
-
   cpp_scopest cpp_scopes;
 
   cpp_parse_treet &cpp_parse_tree;
@@ -151,9 +148,6 @@ protected:
   void convert_template_class_specialization(
     cpp_declarationt &declaration);
 
-  const symbolt& convert_template_specialization(
-    cpp_declarationt &declaration);
-
   void typecheck_template_class(cpp_declarationt &declaration);
 
   void typecheck_function_template(cpp_declarationt &declaration);
@@ -176,7 +170,7 @@ protected:
     const locationt &location,
     const symbolt &template_symbol,
     const cpp_template_args_non_tct &template_args);
-    
+
   class instantiationt
   {
   public:
@@ -273,8 +267,9 @@ protected:
     const struct_typet::componentst &components,
     const irept &initializers);
 
-  bool check_component_access(const irept &component,
-         const struct_typet &struct_type);
+  bool check_component_access(
+    const irept &component,
+    const struct_typet &struct_type);
 
   void full_member_initialization(
     const struct_typet &struct_type,
@@ -387,11 +382,16 @@ protected:
     bool is_typedef,
     bool is_mutable);
 
+  void typecheck_friend_declaration(
+    symbolt &symbol,
+    cpp_declarationt &cpp_declaration);
+
   void put_compound_into_scope(const irept &compound);
   void typecheck_compound_body(symbolt &symbol);
   void typecheck_enum_body(symbolt &symbol);
   void typecheck_function_bodies();
   void typecheck_compound_bases(struct_typet &type);
+  void add_anonymous_members_to_scope(const symbolt &struct_union_symbol);
 
   void move_member_initializers(
     irept &initializers,
@@ -478,8 +478,6 @@ protected:
                      side_effect_expr_function_callt &expr);
 
   void typecheck_method_application(
-                    side_effect_expr_function_callt &expr);
-  void function_call_add_this(
                     side_effect_expr_function_callt &expr);
 
   void typecheck_assign(codet &code);

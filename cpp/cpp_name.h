@@ -47,6 +47,11 @@ public:
     return false;
   }
 
+  bool is_destructor() const
+  {
+    return get_sub().size()>=1 && get_sub().front().id()=="~";
+  }
+
   bool has_template_args() const
   {
     forall_irep(it, get_sub())

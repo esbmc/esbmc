@@ -25,7 +25,7 @@ public:
   inline cpp_declarationt():exprt("cpp-declaration")
   {
   }
-  
+
   inline bool is_constructor() const
   {
     return type().id()=="constructor";
@@ -40,7 +40,7 @@ public:
   {
     return get_bool("is_template");
   }
-  
+
   inline bool is_template_class() const
   {
     return is_template() &&
@@ -57,7 +57,7 @@ public:
   {
     return (declaratorst &)operands();
   }
-  
+
   inline const cpp_storage_spect &storage_spec() const
   {
     return static_cast<const cpp_storage_spect &>(

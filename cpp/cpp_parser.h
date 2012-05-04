@@ -35,27 +35,27 @@ public:
 
 public:
   // internal state
-  
+
   enum { LANGUAGE, EXPRESSION } grammar;
   enum { ANSI, GCC, MSC } mode;
 
   cpp_token_buffert token_buffer;
-  
+
   cpp_tokent &current_token()
   {
     return token_buffer.current_token();
   }
-   
+
   void set_location()
   {
     token_buffer.current_token().line_no=line_no-1;
     token_buffer.current_token().filename=filename;
   }
-  
+
   cpp_parsert():mode(ANSI)
   {
   }
-  
+
   // scanner
   unsigned parenthesis_counter;
 };

@@ -20,7 +20,7 @@ public:
   {
     add("alias").make_nil();
   }
-  
+
   typedef std::vector<class cpp_itemt> itemst;
 
   inline const itemst &items() const
@@ -32,7 +32,7 @@ public:
   {
     return (itemst &)operands();
   }
-  
+
   inline const irep_idt &get_namespace() const
   {
     return get("namespace");
@@ -42,7 +42,7 @@ public:
   {
     set("namespace", _namespace);
   }
-  
+
   inline cpp_namet &alias()
   {
     return static_cast<cpp_namet &>(add("alias"));

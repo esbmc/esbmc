@@ -15,18 +15,57 @@ Date: Feb 2012
 
 namespace std
 {
-template<class InIt, class Fn1>
-    Fn1 for_each(InIt first, InIt last, Fn1 func);
+//template<class InIt, class Fn1>
+//    Fn1 for_each(InIt first, InIt last, Fn1 func);
+template<class InputIterator, class Function>
+  Function for_each(InputIterator first, InputIterator last, Function f)
+  {
+    for ( ; first!=last; ++first ) f(*first);
+    return f;
+  }
 
 template<class InIt, class Ty>
     InIt find(InIt first, InIt last, const Ty& val);
+//template<class InputIterator, class T>
+//  InputIterator find ( InputIterator *first, InputIterator *last, T& value )
+//  {
+//    for ( ;first!=last; first++) if ( *first==value ) break;
+//    return value;
+//  }
 
-template<class InIt, class Pr>
-    InIt find_if(InIt first, InIt last, Pr pred);
+//template<class InIt, class Pr>
+//    InIt find_if(InIt first, InIt last, Pr pred);
+template<class InputIterator, class Predicate>
+  InputIterator find_if ( InputIterator first, InputIterator last, Predicate pred )
+  {
+    for ( ; first!=last ; first++ ) if ( pred(*first) ) break;
+    return first;
+  }
 
-template<class FwdIt1, class FwdIt2>
-    FwdIt1 find_end(FwdIt1 first1, FwdIt1 last1,
-        FwdIt2 first2, FwdIt2 last2);
+//template<class FwdIt1, class FwdIt2>
+//    FwdIt1 find_end(FwdIt1 first1, FwdIt1 last1,
+//        FwdIt2 first2, FwdIt2 last2);
+template<class ForwardIterator1, class ForwardIterator2>
+  ForwardIterator1 find_end ( ForwardIterator1 first1, ForwardIterator1 last1,
+                              ForwardIterator2 first2, ForwardIterator2 last2)
+{
+  if (first2==last2) return last1;  // specified in C++11
+
+  ForwardIterator1 ret = last1;
+
+  while (first1!=last1)
+  {
+    ForwardIterator1 it1 = first1;
+    ForwardIterator2 it2 = first2;
+    while (*it1==*it2) {    // or: while (pred(*it1,*it2)) for the pred version
+        ++it1; ++it2;
+        if (it2==last2) { ret=first1; break; }
+        if (it1==last1) return ret;
+    }
+    ++first1;
+  }
+  return ret;
+}
 
 template<class FwdIt1, class FwdIt2, class Pr>
     FwdIt1 find_end(FwdIt1 first1, FwdIt1 last1,
@@ -51,8 +90,16 @@ template<class InIt, class Ty, class Dist>
         count(InIt first, InIt last,
             const Ty& val);
 
+//template <class InputIterator, class T>
+//	T count ( InputIterator first, InputIterator last, const T& value );
+
 template <class InputIterator, class T>
-	T count ( InputIterator first, InputIterator last, const T& value );
+  ptrdiff_t count ( InputIterator first, InputIterator last, const T& value )
+{
+  ptrdiff_t ret=0;
+  while (first != last) if (*first++ == value) ++ret;
+  return ret;
+}
 
 template<class InIt, class Pr, class Dist>
     typename iterator_traits<InIt>::difference_type
@@ -91,6 +138,10 @@ template<class FwdIt, class Diff, class Ty, class Pr>
 
 template<class InIt, class OutIt>
     OutIt copy(InIt first, InIt last, OutIt dest);
+//{
+//  while (first!=last) *dest++ = *first++;
+//  return dest;
+//}
 
 template<class InIt, class OutIt>
     OutIt copy(InIt first[], InIt *last, OutIt dest);
@@ -100,7 +151,10 @@ template<class BidIt1, class BidIt2>
         BidIt2 dest);
 
 template<class Ty>
-    void swap(Ty& left, Ty& right);
+void swap ( Ty& a, Ty& b )
+{
+  Ty c(a); a=b; b=c;
+}
 
 template<class FwdIt1, class FwdIt2>
     FwdIt2 swap_ranges(FwdIt1 first1, FwdIt1 last1,
@@ -181,8 +235,18 @@ template<class BidIt>
 template<class BidIt, class OutIt>
     OutIt reverse_copy(BidIt first, BidIt last, OutIt dest);
 
-template<class FwdIt>
-    void rotate(FwdIt first, FwdIt mid, FwdIt last);
+template <class FwdIt>
+  void rotate ( FwdIt first, FwdIt middle,
+		  FwdIt last )
+{
+	FwdIt next = middle;
+  while (first!=next)
+  {
+    swap (*first++,*next++);
+    if (next==last) next=middle;
+    else if (first == middle) middle=next;
+  }
+}
 
 template<class FwdIt, class OutIt>
     OutIt rotate_copy(FwdIt first, FwdIt mid, FwdIt last, OutIt dest);
@@ -359,16 +423,16 @@ template<class RanIt>
 template<class RanIt, class Pr>
     void sort_heap(RanIt first, RanIt last, Pr pred);
 
-//template<class Ty>
-//    const Ty& max(const Ty& left, const Ty& right);
-
-const int& max(const int& left, const int& right)
+template <class T>
+  const T& max(const T& left, const T& right)
 {
-  return (left>right) ? left : right; 
+    if (left>right) return left;
+    else return right;
+	//return (left>right) ? left : right;    // or: return comp(a,b)?b:a; for the comp version
 }
 
-template<class Ty, class Pr>
-    const Ty& max(const Ty& left, const Ty& right, Pr pred);
+//template<class Ty, class Pr>
+//    const Ty& max(const Ty& left, const Ty& right, Pr pred);
 
 //template<class Ty>
 //    const Ty& min(const Ty& left, const Ty& right);
@@ -376,9 +440,12 @@ template<class Ty, class Pr>
 template<class Ty, class Pr>
     const Ty& min(const Ty& left, const Ty& right, Pr pred);
 
-const int& min(const int& left, const int& right)
+template <class T>
+const T& min(const T& left, const T& right)
 {
-  return (left<right) ? left : right;
+    if (left<right) return left;
+    else return right;
+//  return (left<right) ? left : right;
 }
 
 template<class FwdIt>

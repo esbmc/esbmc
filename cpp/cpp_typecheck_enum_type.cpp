@@ -29,52 +29,52 @@ Function: cpp_typecheckt::typecheck_enum_body
 void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
 {
   typet &type=enum_symbol.type;
-  
-  exprt &body=(exprt &)type.add("body");
+
+  exprt &body=static_cast<exprt &>(type.add("body"));
   irept::subt &components=body.get_sub();
-  
+
   typet enum_type("symbol");
   enum_type.identifier(enum_symbol.name);
-  
+
   mp_integer i=0;
-  
+
   Forall_irep(it, components)
   {
     const irep_idt &name=it->name();
-    
+
     if(it->find("value").is_not_nil())
     {
-      exprt &value=(exprt &)it->add("value");
+      exprt &value=static_cast<exprt &>(it->add("value"));
       typecheck_expr(value);
       make_constant_index(value);
-      bool res = to_integer(value, i);
-      assert(!res);
+      if(to_integer(value, i))
+        throw "failed to produce integer for enum";
     }
-    
+
     exprt final_value("constant", enum_type);
     final_value.value(integer2string(i));
-    
+
     symbolt symbol;
 
     symbol.name=id2string(enum_symbol.name)+"::"+id2string(name);
     symbol.base_name=name;
     symbol.value.swap(final_value);
-    symbol.location=(const locationt &)it->find("#location");
+    symbol.location=static_cast<const locationt &>(it->find("#location"));
     symbol.mode=current_mode;
     symbol.module=module;
     symbol.type=enum_type;
     symbol.is_type=false;
     symbol.is_macro=true;
-    
+
     symbolt *new_symbol;
     if(context.move(symbol, new_symbol))
       throw "cpp_typecheckt::typecheck_enum_body: context.move() failed";
 
     cpp_idt &scope_identifier=
       cpp_scopes.put_into_scope(*new_symbol);
-    
+
     scope_identifier.id_class=cpp_idt::SYMBOL;
-    
+
     ++i;
   }
 }
@@ -96,10 +96,10 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
   // first save qualifiers
   c_qualifierst qualifiers;
   qualifiers.read(type);
-  
+
   // these behave like special struct types
   // replace by type symbol
-  
+
   cpp_enum_typet &enum_type=to_cpp_enum_type(type);
 
   bool has_body=enum_type.has_body();
@@ -108,15 +108,15 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
 
   if(anonymous)
     base_name="#anon"+i2string(anon_counter++);
-  
+
   const irep_idt symbol_name=
     compound_identifier(base_name, base_name, has_body);
 
   // check if we have it
-  
-  symbolst::iterator previous_symbol=
+
+  contextt::symbolst::iterator previous_symbol=
     context.symbols.find(symbol_name);
-    
+
   if(previous_symbol!=context.symbols.end())
   {
     // we do!
@@ -150,16 +150,16 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
     symbol.is_type=true;
     symbol.is_macro=false;
     symbol.pretty_name=pretty_name;
-    
+
     // move early, must be visible before doing body
     symbolt *new_symbol;
     if(context.move(symbol, new_symbol))
-      throw "cpp_typecheckt::typecheck_enum_type: context.move() failed";    
+      throw "cpp_typecheckt::typecheck_enum_type: context.move() failed";
 
     // put into scope
     cpp_idt &scope_identifier=
       cpp_scopes.put_into_scope(*new_symbol);
-    
+
     scope_identifier.id_class=cpp_idt::CLASS;
 
     typecheck_enum_body(*new_symbol);

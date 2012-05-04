@@ -239,6 +239,12 @@ void cpp_typecheckt::typecheck_type(typet &type)
   {
   }
   #endif
+  else if(type.id()=="decltype")
+  {
+    exprt e=static_cast<const exprt &>(type.find("expr_arg"));
+    typecheck_expr(e);
+    type=e.type();
+  }
   else if(type.id()=="unassigned")
   {
     // ignore, for template argument guessing

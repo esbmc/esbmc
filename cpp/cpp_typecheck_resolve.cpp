@@ -13,6 +13,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <arith_tools.h>
 #include <prefix.h>
 
+#include <ansi-c/ansi_c_expr.h>
+
 #include "cpp_typecheck.h"
 #include "cpp_typecheck_resolve.h"
 #include "cpp_template_type.h"
@@ -33,8 +35,7 @@ Purpose:
 \*******************************************************************/
 
 cpp_typecheck_resolvet::cpp_typecheck_resolvet(cpp_typecheckt &_cpp_typecheck):
-  cpp_typecheck(_cpp_typecheck),
-  this_expr(_cpp_typecheck.cpp_scopes.current_scope().this_expr)
+  cpp_typecheck(_cpp_typecheck)
 {
 }
 
@@ -52,8 +53,7 @@ Purpose:
 
 void cpp_typecheck_resolvet::convert_identifiers(
   const cpp_scopest::id_sett &id_set,
-  const locationt &location,
-  const irept &template_args,
+  const wantt want,
   const cpp_typecheck_fargst &fargs,
   resolve_identifierst &identifiers)
 {
@@ -62,14 +62,15 @@ void cpp_typecheck_resolvet::convert_identifiers(
       it!=id_set.end();
       it++)
   {
-    exprt e;
     const cpp_idt &identifier=**it;
-
-    convert_identifier(identifier, location, template_args, fargs, e);
+    exprt e=convert_identifier(identifier, want, fargs);
 
     if(e.is_not_nil())
     {
-      identifiers.insert(e);
+      if(e.id()=="type")
+        assert(e.type().is_not_nil());
+
+      identifiers.push_back(e);
     }
   }
 }
@@ -107,7 +108,7 @@ void cpp_typecheck_resolvet::apply_template_args(
       if(e.id()=="type")
         assert(e.type().is_not_nil());
 
-      identifiers.insert(e);
+      identifiers.push_back(e);
     }
   }
 }
@@ -141,7 +142,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     if(e.is_not_nil())
     {
       assert(e.id()!="type");
-      identifiers.insert(e);
+      identifiers.push_back(e);
     }
   }
 
@@ -170,7 +171,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
         template_args);
 
     identifiers.clear();
-    identifiers.insert(
+    identifiers.push_back(
       symbol_exprt(new_symbol.name, new_symbol.type));
   }
 }
@@ -199,7 +200,7 @@ void cpp_typecheck_resolvet::remove_templates(
       it++)
   {
     if(!cpp_typecheck.follow(it->type()).get_bool("is_template"))
-      identifiers.insert(*it);
+      identifiers.push_back(*it);
   }
 }
 
@@ -239,12 +240,12 @@ void cpp_typecheck_resolvet::remove_duplicates(
     if(id=="")
     {
       if(other.insert(*it).second)
-        identifiers.insert(*it);
+        identifiers.push_back(*it);
     }
     else
     {
       if(ids.insert(id).second)
-        identifiers.insert(*it);
+        identifiers.push_back(*it);
     }
   }
 }
@@ -294,32 +295,36 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::convert_identifier(
+exprt cpp_typecheck_resolvet::convert_identifier(
   const cpp_idt &identifier,
-  const locationt &location,
-  const irept &template_args,
-  const cpp_typecheck_fargst &fargs,
-  exprt &e)
+  const wantt want,
+  const cpp_typecheck_fargst &fargs)
 {
-  e.make_nil();
-
   if(identifier.id_class==cpp_scopet::TEMPLATE_ARGUMENT)
-  {
-    e=convert_template_argument(identifier);
-    return;
-  }
+    return convert_template_argument(identifier);
+
+  exprt e;
 
   if(identifier.is_member &&
      !identifier.is_constructor &&
      !identifier.is_static_member)
   {
+    // a regular struct or union member
+
     const symbolt &class_symbol=
       cpp_typecheck.lookup(identifier.class_identifier);
 
-    const struct_typet &struct_type = to_struct_type(class_symbol.type);
+    assert(class_symbol.type.id()=="struct" ||
+           class_symbol.type.id()=="union");
 
-    const exprt component=struct_type.get_component(identifier.identifier);
+    const struct_typet &struct_type=
+      to_struct_type(class_symbol.type);
+
+    const exprt component=
+      struct_type.get_component(identifier.identifier);
+
     const typet &type=component.type();
+    assert(type.is_not_nil());
 
     if(identifier.id_class==cpp_scopet::TYPEDEF)
     {
@@ -327,68 +332,74 @@ void cpp_typecheck_resolvet::convert_identifier(
     }
     else if(identifier.id_class==cpp_scopet::SYMBOL)
     {
+      // A non-static, non-type member.
+      // There has to be an object.
       e=exprt("member");
       e.component_name(identifier.identifier);
-      e.location() = location;
+      e.location()=location;
 
       exprt object;
       object.make_nil();
 
       #if 0
       std::cout << "I: " << identifier.class_identifier
-      << " " << cpp_typecheck.cpp_scopes.current_scope().this_class_identifier << std::endl;
+                << " "
+                << cpp_typecheck.cpp_scopes.current_scope().this_class_identifier << std::endl;
       #endif
+
+      const exprt &this_expr=
+        original_scope->this_expr;
 
       // find the object of the member expression
       if(class_symbol.type.find("#unnamed_object").is_not_nil())
       {
         cpp_scopet::id_sett id_set;
         cpp_typecheck.cpp_scopes.current_scope().recursive_lookup(
-                                                                  class_symbol.type.get("#unnamed_object"),
-                                                                  id_set);
+          class_symbol.type.get("#unnamed_object"),
+          id_set);
 
         assert(id_set.size()==1);
 
-        irept nil;
-        nil.make_nil();
-        convert_identifier(**(id_set.begin()),
-                           location,nil, fargs, object);
+        object=convert_identifier(**(id_set.begin()),
+          want, fargs);
         assert(object.is_not_nil());
       }
       else if(fargs.has_object)
       {
+        // the object is given to us in fargs
+        assert(!fargs.operands.empty());
+        object=fargs.operands[0];
+      }
+      else if(component.get_bool("is_operator") &&
+        fargs.operands.size()==to_code_type(component.type()).arguments().size())
+      {
+        // turn  'OP(a, b)' into 'a.opratorOP(b)'
         object = fargs.operands.front();
       }
-      else
+      else if(this_expr.is_not_nil())
       {
-        if(component.get_bool("is_operator") &&
-           fargs.operands.size()==to_code_type(component.type()).arguments().size())
-        {
-          // turn  'OP(a, b)' into 'a.opratorOP(b)'
-          object = fargs.operands.front();
-        }
-        else if(this_expr.is_not_nil())
-        {
-          // use this->...
-          assert(this_expr.type().id()=="pointer");
-          object=exprt("dereference", this_expr.type().subtype());
-          object.copy_to_operands(this_expr);
-          object.type().set("#constant",
-                            this_expr.type().subtype().cmt_constant());
-          object.set("#lvalue",true);
-          object.location()=location;
-        }
+        // use this->...
+        assert(this_expr.type().id()=="pointer");
+        object=exprt("dereference", this_expr.type().subtype());
+        object.copy_to_operands(this_expr);
+        object.type().set("#constant",
+                          this_expr.type().subtype().cmt_constant());
+        object.set("#lvalue",true);
+        object.location()=location;
       }
 
-      // check if the object has the right member
-      typet object_type = cpp_typecheck.follow(object.type());
-      if(object_type.id() == "struct" || object_type.id() == "union" )
+      // check if the member can be applied to the object
+      typet object_type=cpp_typecheck.follow(object.type());
+
+      if(object_type.id()=="struct" ||
+         object_type.id()=="union")
       {
         const struct_typet& object_struct = to_struct_type(object_type);
         if(object_struct.get_component(identifier.identifier.c_str()).is_nil())
           object.make_nil();
       }
-      else object.make_nil();
+      else
+        object.make_nil();
 
       if(object.is_not_nil())
       {
@@ -406,9 +417,7 @@ void cpp_typecheck_resolvet::convert_identifier(
         if(identifier.is_method && !fargs.in_use)
           e = cpp_symbol_expr(cpp_typecheck.lookup(identifier.identifier));
         else
-        {
           e.make_nil();
-        }
       }
     }
   }
@@ -424,49 +433,45 @@ void cpp_typecheck_resolvet::convert_identifier(
       if(symbol.is_macro)
       {
         e.type()=symbol.type;
+        assert(symbol.type.is_not_nil());
       }
       else
-      {
-        e.type()=typet("symbol");
-        e.type().identifier(symbol.name);
-      }
+        e.type()=symbol_typet(symbol.name);
+    }
+    else if(symbol.is_macro)
+    {
+      e=symbol.value;
+      assert(e.is_not_nil());
     }
     else
     {
-      if(symbol.is_macro)
+      typet followed_type=symbol.type;
+      bool constant=followed_type.cmt_constant();
+
+      while(followed_type.id()=="symbol")
+      {
+        typet tmp=cpp_typecheck.lookup(followed_type).type;
+        followed_type=tmp;
+        constant |= followed_type.cmt_constant();
+      }
+
+      if(constant &&
+         symbol.value.is_not_nil() &&
+         is_number(followed_type) &&
+         symbol.value.id() == "constant")
       {
         e=symbol.value;
-        assert(e.is_not_nil());
       }
       else
       {
-
-        typet followed = symbol.type;
-        bool constant = followed.cmt_constant();
-
-        while(followed.id() == "symbol")
-        {
-          typet tmp = cpp_typecheck.lookup(followed).type;
-          followed = tmp;
-          constant |= followed.cmt_constant();
-        }
-
-        if(constant &&
-           symbol.value.is_not_nil() &&
-         is_number(followed) &&
-         symbol.value.id() == "constant")
-        {
-          e=symbol.value;
-        }
-        else
-        {
-          e=cpp_symbol_expr(symbol);
-        }
+        e=cpp_symbol_expr(symbol);
       }
     }
   }
 
   e.location()=location;
+
+  return e;
 }
 
 /*******************************************************************\
@@ -515,7 +520,7 @@ void cpp_typecheck_resolvet::filter(
     }
 
     if(match)
-      identifiers.insert(*it);
+      identifiers.push_back(*it);
   }
 }
 
@@ -568,7 +573,7 @@ void cpp_typecheck_resolvet::disambiguate(
 
   identifiers.clear();
 
-  // put in top ones
+  // put in the top ones
   if(!distance_map.empty())
   {
     unsigned distance=distance_map.begin()->first;
@@ -577,10 +582,10 @@ void cpp_typecheck_resolvet::disambiguate(
         it=distance_map.begin();
         it!=distance_map.end() && it->first==distance;
         it++)
-    identifiers.insert(it->second);
+      identifiers.push_back(it->second);
   }
 
-  if(identifiers.size() > 1 && fargs.in_use)
+  if(identifiers.size()>1 && fargs.in_use)
   {
     // try to further disambiguate functions
 
@@ -591,7 +596,7 @@ void cpp_typecheck_resolvet::disambiguate(
     {
       if(it1->type().id()!="code") continue;
 
-      const code_typet& f1 =
+      const code_typet &f1=
         to_code_type(it1->type());
 
       for(resolve_identifierst::iterator it2=
@@ -700,24 +705,24 @@ void cpp_typecheck_resolvet::make_constructors(
     if(it->id()!="type")
     {
       // already an expression
-      new_identifiers.insert(*it);
+      new_identifiers.push_back(*it);
       continue;
     }
 
-    const typet& symbol_type =
+    const typet &symbol_type=
       cpp_typecheck.follow(it->type());
 
     if(symbol_type.id() != "struct")
     {
       // it's ok
-      new_identifiers.insert(*it);
+      new_identifiers.push_back(*it);
       continue;
     }
 
     if(cpp_typecheck.cpp_is_pod(symbol_type))
     {
       // in that case, there is no constructor to call
-      new_identifiers.insert(*it);
+      new_identifiers.push_back(*it);
       continue;
     }
 
@@ -744,12 +749,12 @@ void cpp_typecheck_resolvet::make_constructors(
           cpp_typecheck.lookup(component.get_name());
         exprt e = cpp_symbol_expr(symb);
         e.type() = type;
-        new_identifiers.insert(e);
+        new_identifiers.push_back(e);
       }
     }
   }
 
-  identifiers = new_identifiers;
+  identifiers=new_identifiers;
 }
 
 /*******************************************************************\
@@ -766,12 +771,12 @@ Purpose:
 
 exprt cpp_typecheck_resolvet::do_builtin(
   const irep_idt &base_name,
-  irept &template_args)
+  const cpp_template_args_non_tct &template_args)
 {
   exprt dest;
 
-  irept::subt &arguments=
-    template_args.add("arguments").get_sub();
+  const cpp_template_args_non_tct::argumentst &arguments=
+    template_args.arguments();
 
   if(base_name=="unsignedbv" ||
      base_name=="signedbv")
@@ -783,7 +788,7 @@ exprt cpp_typecheck_resolvet::do_builtin(
         "but got "+i2string((unsigned long)arguments.size());
     }
 
-    exprt &argument=static_cast<exprt &>(arguments.front());
+    const exprt &argument=arguments[0];
 
     if(argument.id()=="type")
     {
@@ -791,8 +796,6 @@ exprt cpp_typecheck_resolvet::do_builtin(
       throw id2string(base_name)+" expects one integer template argument, "
       "but got type";
     }
-
-    cpp_typecheck.typecheck_expr(argument);
 
     mp_integer i;
     if(to_integer(argument, i))
@@ -819,8 +822,8 @@ exprt cpp_typecheck_resolvet::do_builtin(
         "but got "+i2string((unsigned long)arguments.size());
     }
 
-    exprt &argument0=static_cast<exprt &>(arguments.front());
-    exprt &argument1=static_cast<exprt &>(*(++arguments.begin()));
+    const exprt &argument0=arguments[0];
+    const exprt &argument1=arguments[1];
 
     if(argument0.id()=="type")
     {
@@ -835,9 +838,6 @@ exprt cpp_typecheck_resolvet::do_builtin(
       throw id2string(base_name)+" expects two integer template arguments, "
         "but got type";
     }
-
-    cpp_typecheck.typecheck_expr(argument0);
-    cpp_typecheck.typecheck_expr(argument1);
 
     mp_integer width, integer_bits;
 
@@ -925,22 +925,24 @@ Purpose:
 void cpp_typecheck_resolvet::resolve_scope(
   const cpp_namet &cpp_name,
   std::string &base_name,
-  irept &template_args)
+  cpp_template_args_non_tct &template_args)
 {
   assert(cpp_name.id()=="cpp-name");
   assert(!cpp_name.get_sub().empty());
 
-  cpp_scopet& original_scope =
-  cpp_typecheck.cpp_scopes.current_scope();
+  cpp_scopet &original_scope=cpp_typecheck.cpp_scopes.current_scope();
   location=cpp_name.location();
 
   irept::subt::const_iterator pos=cpp_name.get_sub().begin();
+
+  bool recursive=true;
 
   // check if we need to go to the root scope
   if(pos->id()=="::")
   {
     pos++;
     cpp_typecheck.cpp_scopes.go_to_root_scope();
+    recursive=false;
   }
 
   base_name="";
@@ -969,41 +971,42 @@ void cpp_typecheck_resolvet::resolve_scope(
       cpp_scopest::id_sett id_set;
 
       if(template_args.is_not_nil())
-        cpp_typecheck.cpp_scopes.get_ids(base_name,cpp_idt::TEMPLATE, id_set, false);
-      else
-        cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);
-
-      filter_for_named_scopes(id_set);
-
-      if(id_set.empty())
       {
-        cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
-        cpp_typecheck.err_location(location);
-        cpp_typecheck.str << "scope `" << base_name << "' not found";
-        throw 0;
-      }
-      else if(id_set.size()==1)
-      {
-        if(template_args.is_not_nil())
-        {
-          const symbolt& symb_tmpl =
+        cpp_typecheck.cpp_scopes.get_ids(base_name,cpp_idt::TEMPLATE, id_set, !recursive);
+
+        const symbolt& symb_tmpl=
           cpp_typecheck.instantiate_template(cpp_name.location(),
-                                             (*id_set.begin())->identifier, template_args);
+            (*id_set.begin())->identifier, template_args);
 
-          cpp_typecheck.cpp_scopes.go_to(
-                                         cpp_typecheck.cpp_scopes.get_scope(symb_tmpl.name));
-          template_args.make_nil();
+        cpp_typecheck.cpp_scopes.go_to(
+          cpp_typecheck.cpp_scopes.get_scope(symb_tmpl.name));
+        template_args.make_nil();
+      }
+      else
+      {
+        cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, !recursive);
+
+        filter_for_named_scopes(id_set);
+
+        if(id_set.empty())
+        {
+          cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
+          cpp_typecheck.err_location(location);
+          cpp_typecheck.str << "scope `" << base_name << "' not found";
+          throw 0;
+        }
+        else if(id_set.size()==1)
+        {
+          cpp_typecheck.cpp_scopes.go_to(**id_set.begin());
         }
         else
-          cpp_typecheck.cpp_scopes.go_to(**id_set.begin());
-      }
-      else
-      {
-        cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
-        cpp_typecheck.err_location(location);
-        cpp_typecheck.str << "scope `"
-                          << base_name << "' is ambiguous";
-        throw 0;
+        {
+          cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
+          cpp_typecheck.err_location(location);
+          cpp_typecheck.str << "scope `"
+                            << base_name << "' is ambiguous";
+          throw 0;
+        }
       }
 
       // we start from fresh
@@ -1016,7 +1019,12 @@ void cpp_typecheck_resolvet::resolve_scope(
       irept::subt::const_iterator next=pos+1;
       assert(next != cpp_name.get_sub().end());
 
-      if(next->id() == "cpp-name")
+      if(next->id() == "cpp-name" ||
+         next->id() == "pointer" ||
+         next->id() == "int" ||
+         next->id() == "char" ||
+         next->id() == "bool" ||
+         next->id() == "merged_type")
       {
         // it's a cast operator
         irept next_ir = *next;
@@ -1051,7 +1059,8 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_namespace(
   const cpp_namet &cpp_name)
 {
   std::string base_name;
-  irept template_args(get_nil_irep());
+  cpp_template_args_non_tct template_args;
+  template_args.make_nil();
 
   cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
   resolve_scope(cpp_name, base_name, template_args);
@@ -1215,9 +1224,6 @@ exprt cpp_typecheck_resolvet::resolve(
   cpp_template_args_non_tct template_args;
   template_args.make_nil();
 
-  // save 'this_expr' before resolving the scopes
-  this_expr=cpp_typecheck.cpp_scopes.current_scope().this_expr;
-
   original_scope=&cpp_typecheck.cpp_scopes.current_scope();
   cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
 
@@ -1291,6 +1297,26 @@ exprt cpp_typecheck_resolvet::resolve(
       result.location()=location;
       return result;
     }
+    else if(base_name=="__nullptr") // this is c++0x
+    {
+      constant_exprt result;
+      result.set_value("NULL");
+      result.type()=pointer_typet();
+      result.type().subtype()=empty_typet();
+      result.location()=location;
+      return result;
+    }
+    else if(base_name=="__func__" ||
+            base_name=="__FUNCTION__" ||
+            base_name=="__PRETTY_FUNCTION__")
+    {
+      // __func__ is an ANSI-C standard compliant hack to get the function name
+      // __FUNCTION__ and __PRETTY_FUNCTION__ are GCC-specific
+      string_constantt s;
+      s.set_value(location.get_function());
+      s.location()=location;
+      return s;
+    }
   }
 
   cpp_scopest::id_sett id_set;
@@ -1333,7 +1359,7 @@ exprt cpp_typecheck_resolvet::resolve(
   {
     // methods and functions
     convert_identifiers(
-      id_set, location, template_args, fargs, identifiers);
+      id_set, want, fargs, identifiers);
 
     apply_template_args(
       identifiers, template_args, fargs);
@@ -1341,10 +1367,10 @@ exprt cpp_typecheck_resolvet::resolve(
   else
   {
     convert_identifiers(
-      id_set, location, template_args, fargs, identifiers);
+      id_set, want, fargs, identifiers);
   }
 
-  // change type into constructors if we want a constructor
+  // change types into constructors if we want a constructor
   if(want==VAR)
     make_constructors(identifiers);
 
@@ -1646,7 +1672,6 @@ void cpp_typecheck_resolvet::guess_template_args(
 
     if(desired_type_followed.id()=="pointer" || desired_type_followed.id()=="array")
       guess_template_args(template_type.subtype(), desired_type_followed.subtype());
-
   }
   else if(template_type.id()=="array")
   {
@@ -1843,7 +1868,6 @@ void cpp_typecheck_resolvet::apply_template_args(
   }
   #endif
 
-  // TODO
   // We typecheck the template arguments in the context
   // of the original scope!
 //  cpp_template_args_tct template_args_tc;
@@ -1868,7 +1892,7 @@ void cpp_typecheck_resolvet::apply_template_args(
   // a template is always a declaration
   const cpp_declarationt &cpp_declaration=
     to_cpp_declaration(template_symbol.type);
-    
+
   // is it a template class or function?
   if(cpp_declaration.is_template_class())
   {
@@ -1876,10 +1900,8 @@ void cpp_typecheck_resolvet::apply_template_args(
       cpp_typecheck.instantiate_template(
         location, expr.identifier(), template_args_non_tc);
 
-    exprt expr_type("type");
-    expr_type.type().id("symbol");
-    expr_type.type().identifier(new_symbol.name);
-    expr.swap(expr_type);
+    expr=exprt("type", symbol_typet(new_symbol.name));
+    expr.location()=location;
   }
   else
   {
@@ -1889,15 +1911,15 @@ void cpp_typecheck_resolvet::apply_template_args(
         location, expr.identifier(), template_args_non_tc);
 
     // check if it is a method
-    const code_typet &code_type = to_code_type(new_symbol.type);
+    const code_typet &code_type=to_code_type(new_symbol.type);
 
-    if(!code_type.arguments().empty() && 
+    if(!code_type.arguments().empty() &&
         code_type.arguments()[0].cmt_base_name()=="this")
     {
       // do we have an object?
       if(fargs.has_object)
       {
-        const symbolt &type_symb = 
+        const symbolt &type_symb =
           cpp_typecheck.lookup(fargs.operands.begin()->type().identifier());
 
         assert(type_symb.type.id()=="struct");
@@ -2069,12 +2091,13 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
     else if(id.id_class==cpp_scopet::TEMPLATE)
     {
       const symbolt symbol = cpp_typecheck.lookup(id.identifier);
-      if(symbol.type.get("type") =="struct")
+      if(symbol.type.get("type")=="struct")
         new_set.insert(&id);
     }
     else if(id.id_class==cpp_scopet::TEMPLATE_ARGUMENT)
     {
-      // maybe it is a scope
+      // a template argument may be a scope: it could
+      // be instantiated with a class/struct
       exprt e=cpp_typecheck.template_map.lookup(id.identifier);
 
       if(e.id()!="type")
@@ -2082,24 +2105,27 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
 
       if(e.type().id() == "symbol")
       {
-        irep_idt identifier=e.type().identifier();
+        symbol_typet type=to_symbol_type(e.type());
 
         while(true)
         {
+          irep_idt identifier=type.identifier();
+
           const symbolt &symbol=cpp_typecheck.lookup(identifier);
           assert(symbol.is_type);
-
+          if(symbol.type.id()=="symbol")
+            type=to_symbol_type(symbol.type);
           if(symbol.type.id()=="struct")
           {
             // this is a scope, too!
             cpp_idt &class_id=
               cpp_typecheck.cpp_scopes.get_id(identifier);
+
+            assert(class_id.is_scope);
             new_set.insert(&class_id);
             break;
           }
-          else if(symbol.type.id()=="symbol")
-            identifier=symbol.type.identifier();
-          else
+          else // give up
             break;
         }
       }
@@ -2160,7 +2186,7 @@ void cpp_typecheck_resolvet::resolve_with_arguments(
 {
   cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
 
-  for(unsigned i = 0 ; i<fargs.operands.size();i++)
+  for(unsigned i=0; i<fargs.operands.size();i++)
   {
     const typet &final_type=
       cpp_typecheck.follow(fargs.operands[i].type());

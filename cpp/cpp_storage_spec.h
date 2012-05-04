@@ -17,7 +17,7 @@ public:
   cpp_storage_spect():irept("cpp-storage-spec")
   {
   }
-  
+
   locationt &location()
   {
     return static_cast<locationt &>(add("#location"));

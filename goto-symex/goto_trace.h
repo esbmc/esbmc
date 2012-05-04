@@ -88,6 +88,7 @@ public:
   mid llvm_varmap;
   std::string FileName;
   std::string LineNumber;
+  std::string FuncName;
   std::string VarName, OrigVarName;
 
   std::string mode, metadata_filename;

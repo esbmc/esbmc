@@ -1235,6 +1235,24 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
             return true;
       }
   }
+  else if(to.id() == "bool")
+  {
+    std::string name = expr.type().identifier().as_string();
+    if(name == "cpp::std::struct.istream"
+      || name == "cpp::std::struct.ostream"
+      || name == "cpp::std::struct.iostream"
+      || name == "cpp::std::struct.ifstream")
+    {
+      exprt nondet_expr("nondet_symbol", bool_typet());
+      new_expr.swap(nondet_expr);
+    }
+    else if(expr.id() == "symbol")
+    {
+      exprt tmp_expr = expr;
+      tmp_expr.make_typecast(bool_typet());
+      new_expr.swap(tmp_expr);
+    }
+  }
 
   // conversion operators
   if(from.id() == "struct")
