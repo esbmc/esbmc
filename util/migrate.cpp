@@ -954,12 +954,17 @@ migrate_expr_back(const expr2tc &ref)
   case expr2t::constant_string_id:
   {
     const constant_string2t &ref2 = to_constant_string2t(ref);
-    exprt thestring("string-constant", string_typet());
-    thestring.set("value", irep_idt(ref2.value));
     const string_type2t &typeref = to_string_type(ref->type);
+    exprt thestring("string-constant");
+
+    typet thetype("array");
+    thetype.subtype() = signedbv_typet(8);
     constant_exprt sizeexpr(unsignedbv_typet(32));
-    sizeexpr.set("value", typeref.width);
-    thestring.size(sizeexpr);
+    sizeexpr.set("value", integer2binary(BigInt(typeref.width), 32));
+    thetype.size(sizeexpr);
+
+    thestring.type() = thetype;
+    thestring.set("value", irep_idt(ref2.value));
     return thestring;
   }
   case expr2t::constant_struct_id:
