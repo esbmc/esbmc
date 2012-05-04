@@ -963,7 +963,7 @@ migrate_expr_back(const expr2tc &ref)
 
     typet thetype("array");
     thetype.subtype() = signedbv_typet(8);
-    constant_exprt sizeexpr(unsignedbv_typet(32));
+    constant_exprt sizeexpr(signedbv_typet(32));
     sizeexpr.set("value", integer2binary(BigInt(typeref.width), 32));
     thetype.size(sizeexpr);
 
