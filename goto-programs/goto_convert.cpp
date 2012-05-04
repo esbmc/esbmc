@@ -3308,19 +3308,18 @@ void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
 DEBUGLOC;
-  //std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
+//  std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
 
   bool found=false;
 
-  if (expr.operands().size()==1)
+  if (expr.operands().size()==0 || expr.operands().size() == 1)
   {
     exprt new_expr;
-    //std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-    //get_cs_member(expr.op0(), new_expr, bool_typet(), found);
-    get_new_expr(expr.op0(), new_expr, found);
+    if (expr.operands().size())
+      get_new_expr(expr.op0(), new_expr, found);
+    else
+      get_new_expr(expr, new_expr, found);
     assert(found);
-    //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
-    //assert(new_expr.type().is_bool());
     if (!new_expr.type().is_bool())
       new_expr.make_typecast(bool_typet());
     expr = new_expr;
