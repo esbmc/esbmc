@@ -1019,7 +1019,13 @@ migrate_expr_back(const expr2tc &ref)
   {
     const symbol2t &ref2 = to_symbol2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    return symbol_exprt(ref2.name, thetype);
+    if (has_prefix(ref2.name.as_string(), "nondet$")) {
+      exprt thesym("nondet_symbol", thetype);
+      thesym.identifier(irep_idt(std::string(ref2.name.c_str() + 7)));
+      return thesym;
+    } else {
+      return symbol_exprt(ref2.name, thetype);
+    }
   }
   case expr2t::typecast_id:
   {
