@@ -7,6 +7,8 @@
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
 #include <assert.h>
 
 #include <expr_util.h>
@@ -117,10 +119,15 @@ goto_symext::symex_goto(const exprt &old_guard)
 
       guardt guard;
 
+      expr2tc guard2, new_lhs2, guard_expr2, new_rhs2;
+      migrate_expr(guard.as_expr(), guard2);
+      migrate_expr(new_lhs, new_lhs2);
+      migrate_expr(new_rhs, new_rhs2);
+      migrate_expr(guard_expr, guard_expr2);
       target->assignment(
-        guard,
-        new_lhs, guard_expr,
-        new_rhs,
+        guard2,
+        new_lhs2, guard_expr2,
+        new_rhs2,
         cur_state->source,
         cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);
@@ -246,10 +253,15 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
       guardt true_guard;
 
+      expr2tc true_guard2, new_lhs2, lhs2, rhs2;
+      migrate_expr(true_guard.as_expr(), true_guard2);
+      migrate_expr(new_lhs, new_lhs2);
+      migrate_expr(lhs, lhs2);
+      migrate_expr(rhs, rhs2);
       target->assignment(
-        true_guard,
-        new_lhs, lhs,
-        rhs,
+        true_guard2,
+        new_lhs2, lhs2,
+        rhs2,
         cur_state->source,
         cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);

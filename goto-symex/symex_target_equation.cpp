@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
 #include <assert.h>
 
 #include <i2string.h>
@@ -20,31 +22,29 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "symex_target_equation.h"
 
 void symex_target_equationt::assignment(
-  const guardt &guard,
-  const exprt &lhs,
-  const exprt &original_lhs,
-  exprt &rhs,
+  const expr2tc &guard,
+  const expr2tc &lhs,
+  const expr2tc &original_lhs,
+  const expr2tc &rhs,
   const sourcet &source,
   std::vector<dstring> stack_trace,
   assignment_typet assignment_type)
 {
-  assert(lhs.is_not_nil());
+  assert(!is_nil_expr(lhs));
 
   SSA_steps.push_back(SSA_stept());
   SSA_stept &SSA_step=SSA_steps.back();
 
-  expr2tc new_guard, new_lhs, new_original_lhs, new_rhs;
-  migrate_expr(guard.as_expr(), new_guard);
-  migrate_expr(lhs, new_lhs);
-  migrate_expr(original_lhs, new_original_lhs);
-  migrate_expr(rhs, new_rhs);
-
-  SSA_step.guard = new_guard;
-  SSA_step.lhs = new_lhs;
-  SSA_step.original_lhs = new_original_lhs;
-  SSA_step.rhs = new_rhs;
+  SSA_step.guard = guard;
+  SSA_step.lhs = lhs;
+  SSA_step.original_lhs = original_lhs;
+  SSA_step.rhs = rhs;
+  SSA_step.guard = guard;
+  SSA_step.lhs = lhs;
+  SSA_step.original_lhs = original_lhs;
+  SSA_step.rhs = rhs;
   SSA_step.assignment_type=assignment_type;
-  SSA_step.cond = expr2tc(new equality2t(new_lhs, new_rhs));
+  SSA_step.cond = expr2tc(new equality2t(lhs, rhs));
   SSA_step.type=goto_trace_stept::ASSIGNMENT;
   SSA_step.source=source;
   SSA_step.stack_trace = stack_trace;

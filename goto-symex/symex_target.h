@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_SYMEX_TARGET_H
 #define CPROVER_GOTO_SYMEX_SYMEX_TARGET_H
 
+#include <irep2.h>
 #include <vector>
 #include <expr.h>
 #include <symbol.h>
@@ -44,10 +45,10 @@ public:
   // write to a variable - must be symbol
   // the value is destroyed
   virtual void assignment(
-    const guardt &guard,
-    const exprt &lhs,
-    const exprt &original_lhs,
-    exprt &rhs,
+    const expr2tc &guard,
+    const expr2tc &lhs,
+    const expr2tc &original_lhs,
+    const expr2tc &rhs,
     const sourcet &source,
     std::vector<dstring> stack_trace,
     assignment_typet assignment_type)=0;

@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
 #include <assert.h>
 
 #include <simplify_expr.h>
@@ -207,11 +209,17 @@ void goto_symext::symex_assign_symbol(
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 
+  expr2tc new_lhs2, original_lhs2, rhs2, guard2;
+  migrate_expr(tmp_guard.as_expr(), guard2);
+  migrate_expr(rhs, rhs2);
+  migrate_expr(new_lhs, new_lhs2);
+  migrate_expr(original_lhs, original_lhs2);
+
   // do the assignment
   target->assignment(
-    tmp_guard,
-    new_lhs, original_lhs,
-    rhs,
+    guard2,
+    new_lhs2, original_lhs2,
+    rhs2,
     cur_state->source,
     cur_state->gen_stack_trace(),
     symex_targett::STATE);
