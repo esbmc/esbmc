@@ -796,6 +796,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(is_constant_bool2t(op1));
     new_expr_ref = expr2tc(new dynamic_object2t(type, op0,
                                to_constant_bool2t(op1).constant_value));
+  } else if (expr.id() == irept::id_dereference) {
+    migrate_type(expr.type(), type);
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = expr2tc(new dereference2t(type, op0));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1426,6 +1431,15 @@ migrate_expr_back(const expr2tc &ref)
       op1 = false_exprt();
     exprt theexpr("dynamic_object", thetype);
     theexpr.copy_to_operands(op0, op1);
+    return theexpr;
+  }
+  case expr2t::dereference_id:
+  {
+    const dereference2t &ref2 = to_dereference2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt op0 = migrate_expr_back(ref2.value);
+    exprt theexpr("dereference", thetype);
+    theexpr.copy_to_operands(op0);
     return theexpr;
   }
   default:

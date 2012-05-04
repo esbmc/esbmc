@@ -448,6 +448,7 @@ static const char *expr_names[] = {
   "overflow_neg",
   "unknown",
   "NULL-object",
+  "dereference",
   "invalid"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
