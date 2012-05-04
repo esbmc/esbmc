@@ -142,7 +142,9 @@ void goto_symext::symex_printf(
     const exprt &fmt_str=format.op0().op0();
     const std::string &fmt=fmt_str.value().as_string();
 
-    target->output(cur_state->guard, cur_state->source, fmt, args);
+    expr2tc guard;
+    migrate_expr(cur_state->guard.as_expr(), guard);
+    target->output(guard, cur_state->source, fmt, args);
   }
 }
 

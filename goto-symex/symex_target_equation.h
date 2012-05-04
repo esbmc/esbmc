@@ -48,7 +48,7 @@ public:
     
   // output
   virtual void output(
-    const guardt &guard,
+    const expr2tc &guard,
     const sourcet &source,
     const std::string &fmt,
     const std::list<exprt> &args);

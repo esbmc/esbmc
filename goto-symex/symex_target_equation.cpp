@@ -51,7 +51,7 @@ void symex_target_equationt::assignment(
 }
 
 void symex_target_equationt::output(
-  const guardt &guard,
+  const expr2tc &guard,
   const sourcet &source,
   const std::string &fmt,
   const std::list<exprt> &args)
@@ -59,10 +59,7 @@ void symex_target_equationt::output(
   SSA_steps.push_back(SSA_stept());
   SSA_stept &SSA_step=SSA_steps.back();
 
-  expr2tc new_guard;
-  migrate_expr(guard.as_expr(), new_guard);
-
-  SSA_step.guard = new_guard;
+  SSA_step.guard = guard;
   SSA_step.type=goto_trace_stept::OUTPUT;
   SSA_step.source=source;
   SSA_step.output_args=args;
