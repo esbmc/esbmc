@@ -1600,7 +1600,7 @@ template class esbmct::expr<overflow_neg2t, esbmct::expr2tc_operand>;
 class unknown2t : public esbmct::expr<unknown2t>
 {
 public:
-  unknown2t(const type2tc &wtype)
+  unknown2t(const type2tc &type)
     : esbmct::expr<unknown2t> (type, unknown_id) {}
   unknown2t(const unknown2t &ref)
     : esbmct::expr<unknown2t> (ref) {}
@@ -1610,7 +1610,7 @@ template class esbmct::expr<unknown2t>;
 class invalid2t : public esbmct::expr<invalid2t>
 {
 public:
-  invalid2t(const type2tc &wtype)
+  invalid2t(const type2tc &type)
     : esbmct::expr<invalid2t> (type, invalid_id) {}
   invalid2t(const invalid2t &ref)
     : esbmct::expr<invalid2t> (ref) {}
@@ -1620,7 +1620,7 @@ template class esbmct::expr<invalid2t>;
 class null_object2t : public esbmct::expr<null_object2t>
 {
 public:
-  null_object2t(const type2tc &wtype)
+  null_object2t(const type2tc &type)
     : esbmct::expr<null_object2t> (type, null_object_id) {}
   null_object2t(const null_object2t &ref)
     : esbmct::expr<null_object2t> (ref) {}
