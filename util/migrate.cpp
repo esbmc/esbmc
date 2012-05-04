@@ -789,6 +789,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == "NULL-object") {
     migrate_type(expr.type(), type);
     new_expr_ref = expr2tc(new null_object2t(type));
+  } else if (expr.id() == "dynamic_object") {
+    migrate_type(expr.type(), type);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    assert(is_constant_bool2t(op1));
+    new_expr_ref = expr2tc(new dynamic_object2t(type, op0,
+                               to_constant_bool2t(op1).constant_value));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1231,8 +1238,6 @@ migrate_expr_back(const expr2tc &ref)
                             migrate_expr_back(ref2.side_1));
     return ashrval;
   }
-  case expr2t::dynamic_object_id:
-    assert(0 && "dynamic_object EUNIMPLEMENTED");
   case expr2t::same_object_id:
   {
     const same_object2t &ref2 = to_same_object2t(ref);
@@ -1407,6 +1412,20 @@ migrate_expr_back(const expr2tc &ref)
   {
     typet thetype = migrate_type_back(ref->type);
     const exprt theexpr("NULL-object", thetype);
+    return theexpr;
+  }
+  case expr2t::dynamic_object_id:
+  {
+    const dynamic_object2t &ref2 = to_dynamic_object2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt op0 = migrate_expr_back(ref2.instance);
+    exprt op1;
+    if (ref2.invalid)
+      op1 = true_exprt();
+    else
+      op1 = false_exprt();
+    exprt theexpr("dynamic_object", thetype);
+    theexpr.copy_to_operands(op0, op1);
     return theexpr;
   }
   default:

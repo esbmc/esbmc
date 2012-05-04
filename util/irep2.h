@@ -375,6 +375,8 @@ namespace esbmct {
   field_name_macro(subtype);
   field_name_macro(array_size);
   field_name_macro(size_is_infinite);
+  field_name_macro(instance);
+  field_name_macro(invalid);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -483,6 +485,8 @@ namespace esbmct {
   member_record_macro(type2tc_subtype, type2tc_type_tag, name_subtype);
   member_record_macro(expr2tc_array_size, expr2tc_type_tag, name_array_size);
   member_record_macro(bool_size_is_inf, bool_type_tag, name_size_is_infinite);
+  member_record_macro(bool_invalid, bool_type_tag, name_invalid);
+  member_record_macro(expr2tc_instance, expr2tc_type_tag, name_instance);
   #undef member_record_macro
 
   template <class thename>
@@ -1627,6 +1631,23 @@ public:
 };
 template class esbmct::expr<null_object2t>;
 
+class dynamic_object2t : public esbmct::expr<dynamic_object2t,
+                                             esbmct::expr2tc_instance,
+                                             esbmct::bool_invalid>
+{
+public:
+  dynamic_object2t(const type2tc &type, expr2tc inst, bool invalid)
+    : esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
+                   esbmct::bool_invalid>
+      (type, dynamic_object_id, inst, invalid) {}
+  dynamic_object2t(const dynamic_object2t &ref)
+    : esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
+                   esbmct::bool_invalid> (ref) {}
+};
+template class esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
+                                               esbmct::bool_invalid>;
+
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -1752,6 +1773,7 @@ expr_macros(overflow_cast);
 expr_macros(overflow_neg);
 expr_macros(unknown);
 expr_macros(invalid);
+expr_macros(dynamic_object);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -1885,5 +1907,7 @@ typedef irep_container<overflow_cast2t, expr2t::overflow_cast_id>
 typedef irep_container<overflow_neg2t, expr2t::overflow_neg_id>overflow_neg2tc;
 typedef irep_container<unknown2t, expr2t::unknown_id> unknown2tc;
 typedef irep_container<invalid2t, expr2t::invalid_id> invalid2tc;
+typedef irep_container<dynamic_object2t, expr2t::dynamic_object_id>
+                       dynamic_object2tc;
 
 #endif /* _UTIL_IREP2_H_ */
