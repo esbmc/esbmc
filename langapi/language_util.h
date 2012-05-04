@@ -37,6 +37,17 @@ std::string from_type(
   const irep_idt &identifier,
   const typet &type);
 
+inline std::string from_type(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const type2tc &type) {
+  return from_type(ns, identifier, migrate_type_back(type));
+}
+
 std::string from_type(const typet &type);
+
+inline std::string from_type(const type2tc &type) {
+  return from_type(migrate_type_back(type));
+}
 
 #endif
