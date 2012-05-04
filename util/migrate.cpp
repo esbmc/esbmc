@@ -8,6 +8,21 @@
 
 // File for old irep -> new irep conversions.
 
+static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
+
+const BigInt &
+binary2bigint(irep_idt binary, bool is_signed)
+{
+  std::map<irep_idt, BigInt> &ref = (is_signed) ? bin2int_map_signed : bin2int_map_unsigned;
+
+  std::map<irep_idt, BigInt>::iterator it = ref.find(binary);
+  if (it != ref.end())
+    return it->second;
+  BigInt val = binary2integer(binary.as_string(), is_signed);
+
+  std::pair<std::map<irep_idt, BigInt>::const_iterator, bool> res = ref.insert(std::pair<irep_idt,BigInt>(binary, val));
+  return res.first->second;
+}
 
 void
 real_migrate_type(const typet &type, type2tc &new_type_ref)
@@ -201,7 +216,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (type->type_id == type2t::signedbv_id)
       is_signed = true;
 
-    mp_integer val = binary2integer(expr.value().as_string(), is_signed);
+    mp_integer val = binary2bigint(expr.value(), is_signed);
 
     expr2t *new_expr = new constant_int2t(type, val);
     new_expr_ref = expr2tc(new_expr);
@@ -273,8 +288,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     typet thetype = expr.type();
     assert(thetype.add("size").id() == "constant");
     exprt &face = (exprt&)thetype.add("size");
-    std::string thelen = face.value().as_string();
-    mp_integer val = binary2integer(thelen, false);
+    mp_integer val = binary2bigint(face.value(), false);
 
     type2tc t = type2tc(new string_type2t(val.to_long()));
 
