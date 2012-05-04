@@ -445,7 +445,9 @@ static const char *expr_names[] = {
   "isnan",
   "overflow",
   "overflow_cast",
-  "overflow_neg"
+  "overflow_neg",
+  "unknown",
+  "invalid"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
