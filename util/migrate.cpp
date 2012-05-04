@@ -1211,7 +1211,7 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt addval("+", thetype);
     addval.copy_to_operands(migrate_expr_back(ref2.side_1),
-                            migrate_expr_back(ref2.side_1));
+                            migrate_expr_back(ref2.side_2));
     return addval;
   }
   case expr2t::sub_id:
@@ -1220,7 +1220,7 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt subval("-", thetype);
     subval.copy_to_operands(migrate_expr_back(ref2.side_1),
-                            migrate_expr_back(ref2.side_1));
+                            migrate_expr_back(ref2.side_2));
     return subval;
   }
   case expr2t::mul_id:
@@ -1229,7 +1229,7 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt mulval("*", thetype);
     mulval.copy_to_operands(migrate_expr_back(ref2.side_1),
-                            migrate_expr_back(ref2.side_1));
+                            migrate_expr_back(ref2.side_2));
     return mulval;
   }
   case expr2t::div_id:
@@ -1238,7 +1238,7 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt divval("+", thetype);
     divval.copy_to_operands(migrate_expr_back(ref2.side_1),
-                            migrate_expr_back(ref2.side_1));
+                            migrate_expr_back(ref2.side_2));
     return divval;
   }
   case expr2t::modulus_id:
@@ -1247,7 +1247,7 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt modval("mod", thetype);
     modval.copy_to_operands(migrate_expr_back(ref2.side_1),
-                            migrate_expr_back(ref2.side_1));
+                            migrate_expr_back(ref2.side_2));
     return modval;
   }
   case expr2t::shl_id:
@@ -1256,7 +1256,7 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt shlval("shl", thetype);
     shlval.copy_to_operands(migrate_expr_back(ref2.side_1),
-                            migrate_expr_back(ref2.side_1));
+                            migrate_expr_back(ref2.side_2));
     return shlval;
   }
   case expr2t::ashr_id:
@@ -1265,7 +1265,7 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt ashrval("ashr", thetype);
     ashrval.copy_to_operands(migrate_expr_back(ref2.side_1),
-                            migrate_expr_back(ref2.side_1));
+                            migrate_expr_back(ref2.side_2));
     return ashrval;
   }
   case expr2t::same_object_id:
@@ -1274,7 +1274,7 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt same_objectval("same-object", thetype);
     same_objectval.copy_to_operands(migrate_expr_back(ref2.side_1),
-                                    migrate_expr_back(ref2.side_1));
+                                    migrate_expr_back(ref2.side_2));
     return same_objectval;
   }
   case expr2t::pointer_offset_id:
