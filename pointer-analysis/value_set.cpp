@@ -90,12 +90,11 @@ void value_sett::output(
         o_it!=object_map.end();
         o_it++)
     {
-      const expr2tc &o2=object_numbering[o_it->first];
-      const exprt o = migrate_expr_back(o2);
+      const expr2tc &o = object_numbering[o_it->first];
     
       std::string result;
 
-      if(o.id()=="invalid" || o.id()=="unknown")
+      if (is_invalid2t(o) || is_unknown2t(o))
         result=from_expr(ns, identifier, o);
       else
       {
@@ -106,7 +105,7 @@ void value_sett::output(
         else
           result+="*";
         
-        result+=", "+from_type(ns, identifier, o.type());
+        result += ", "+from_type(ns, identifier, o->type);
       
         result+=">";
       }
