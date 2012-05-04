@@ -843,6 +843,7 @@ migrate_type_back(const type2tc &ref)
     idx = 0;
     forall_types(it, ref2.members) {
       struct_union_typet::componentt component;
+      component.id("component");
       component.type() = migrate_type_back(*it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       comps.push_back(component);
@@ -863,6 +864,7 @@ migrate_type_back(const type2tc &ref)
     idx = 0;
     forall_types(it, ref2.members) {
       struct_union_typet::componentt component;
+      component.id("component");
       component.type() = migrate_type_back(*it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       comps.push_back(component);
