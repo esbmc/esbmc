@@ -1394,7 +1394,7 @@ migrate_expr_back(const expr2tc &ref)
   case expr2t::invalid_id:
   {
     typet thetype = migrate_type_back(ref->type);
-    const exprt theexpr("unknown", thetype);
+    const exprt theexpr("invalid", thetype);
     return theexpr;
   }
   case expr2t::unknown_id:
