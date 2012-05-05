@@ -3263,33 +3263,21 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
   }
   else if (expr.is_index())
   {
-    exprt array, index, matrix;
+    exprt array, index;
     assert(expr.operands().size()==2);
 
+    //do we have an index of index?
     if (expr.op0().operands().size() == 2) 
-    {
-      //we have an index of index
-      get_new_expr(expr.op0(), matrix, found); // this should return another index    
-      get_cs_member(expr.op1(), index, expr.op1().type(), found);
-
-      exprt tmp(exprt::index, matrix.op0().type());
-      tmp.reserve_operands(2);
-      tmp.copy_to_operands(matrix);
-      tmp.copy_to_operands(index);
-      new_expr1 = tmp;
-    }
+      get_new_expr(expr.op0(), array, found); // this should return another index
     else
-    {
-      //we have one index only
-      get_cs_member(expr.op0(), array, expr.op0().type(), found);
-      get_cs_member(expr.op1(), index, expr.op1().type(), found);
+      get_cs_member(expr.op0(), array, expr.op0().type(), found); //we have one index only
 
-      exprt tmp(exprt::index, expr.op0().type());
-      tmp.reserve_operands(2);
-      tmp.copy_to_operands(array);
-      tmp.copy_to_operands(index);
-      new_expr1 = tmp;
-    }      
+    get_cs_member(expr.op1(), index, expr.op1().type(), found);
+    exprt tmp(exprt::index, expr.op0().type());
+    tmp.reserve_operands(2);
+    tmp.copy_to_operands(array);
+    tmp.copy_to_operands(index);
+    new_expr1 = tmp;
   }
   else if (exprid=="+" || exprid=="-" || exprid=="=" || exprid=="notequal" ||
 	   exprid == "<=" || exprid == "<" || exprid == ">=" || exprid == ">" ||
