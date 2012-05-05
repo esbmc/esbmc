@@ -2175,9 +2175,10 @@ void goto_convertt::replace_cond(
 
       if (tmp.op1().is_constant())
       {
-   	    std::cerr << "warning: this program contains a bounded loop"
-   	  		      << " at line " << tmp.op1().location().get_line()
-   	  		      << ", so we are not applying the k-induction method!" << std::endl;
+   	    std::cerr << "warning: this program " << tmp.location().get_file() 
+                      << " contains a bounded loop at line " << tmp.location().get_line()
+   	  	      << ", so we are not applying the k-induction method to this loop!" 
+                      << std::endl;
    	    inductive_step=0;
    	    base_case=0;
       }
