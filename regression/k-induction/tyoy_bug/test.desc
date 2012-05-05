@@ -1,3 +1,0 @@
-main.c
---k-induction   --error-label ERROR --k-step 3
-^VERIFICATION FAILED$
