@@ -3189,6 +3189,9 @@ void goto_convertt::get_cs_member(
   const typet &type,
   bool &found)
 {
+  DEBUGLOC;
+  //std::cout << "get_cs_member: " << expr.pretty() << std::endl;
+
   found=false;
   std::string identifier;
 
@@ -3200,9 +3203,11 @@ void goto_convertt::get_cs_member(
   exprt new_expr(exprt::member, type);
   new_expr.reserve_operands(1);
   new_expr.copy_to_operands(lhs_struct);
+  new_expr.identifier(expr.get_string("identifier"));
   new_expr.component_name(expr.get_string("identifier"));
+  //std::cout << "expr.get_string(identifier): " << expr.get_string("identifier") << std::endl;
 
-  //std::cout << "get_cs_member: " << expr.pretty() << std::endl;
+  //std::cout << "new_expr: " << new_expr.pretty() << std::endl;  
   assert(!new_expr.get_string("component_name").empty());
 
   const struct_typet &struct_type = to_struct_type(lhs_struct.type());
@@ -3244,6 +3249,9 @@ Function: goto_convertt::get_new_expr
 
 void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
 {
+  DEBUGLOC;
+  //std::cout << "get_new_expr: " << expr.pretty() << std::endl;
+
   irep_idt exprid = expr.id();
 
   if (expr.is_symbol())
@@ -3255,16 +3263,33 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
   }
   else if (expr.is_index())
   {
-    exprt array, index;
-    get_cs_member(expr.op0(), array, expr.op0().type(), found);
-    get_cs_member(expr.op1(), index, expr.op1().type(), found);
+    exprt array, index, matrix;
+    assert(expr.operands().size()==2);
 
-    exprt tmp(exprt::index, expr.op0().type());
-    tmp.reserve_operands(2);
-    tmp.copy_to_operands(array);
-    tmp.copy_to_operands(index);
+    if (expr.op0().operands().size() == 2) 
+    {
+      //we have an index of index
+      get_new_expr(expr.op0(), matrix, found); // this should return another index    
+      get_cs_member(expr.op1(), index, expr.op1().type(), found);
 
-    new_expr1 = tmp;
+      exprt tmp(exprt::index, matrix.op0().type());
+      tmp.reserve_operands(2);
+      tmp.copy_to_operands(matrix);
+      tmp.copy_to_operands(index);
+      new_expr1 = tmp;
+    }
+    else
+    {
+      //we have one index only
+      get_cs_member(expr.op0(), array, expr.op0().type(), found);
+      get_cs_member(expr.op1(), index, expr.op1().type(), found);
+
+      exprt tmp(exprt::index, expr.op0().type());
+      tmp.reserve_operands(2);
+      tmp.copy_to_operands(array);
+      tmp.copy_to_operands(index);
+      new_expr1 = tmp;
+    }      
   }
   else if (exprid=="+" || exprid=="-" || exprid=="=" || exprid=="notequal" ||
 	   exprid == "<=" || exprid == "<" || exprid == ">=" || exprid == ">" ||
@@ -3272,22 +3297,21 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
 	   exprid == "bitnand" || exprid == "bitnor" || exprid == "bitnxor" ||
 	   exprid == "*")
   {
-	assert(expr.operands().size()==2);
+    assert(expr.operands().size()==2);
     exprt operand0, operand1;
-	get_new_expr(expr.op0(), operand0, found);
-	get_new_expr(expr.op1(), operand1, found);
-
-	new_expr1 = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
+    get_new_expr(expr.op0(), operand0, found);
+    get_new_expr(expr.op1(), operand1, found);
+    new_expr1 = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
   }
   else if (exprid == "unary-" || exprid == "typecast" || exprid == "dereference")
   {
-	get_new_expr(expr.op0(), new_expr1, found);
+    get_new_expr(expr.op0(), new_expr1, found);
   }
   else
   {
     std::cerr << "warning: the expression '" << expr.pretty()
   		  << "' is not supported yet" << std::endl;
-	assert(0);
+    assert(0);
   }
 
 }
