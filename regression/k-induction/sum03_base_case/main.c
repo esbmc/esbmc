@@ -15,7 +15,8 @@ int main() {
     sn = sn + a; //second case OK
     //if (i==4) sn=-10; //third case OK
     x++;
+    assert(sn==x*a || sn == 0);
   }
   //__ESBMC_assume(i>n);
-  assert(sn==a || sn == 0);
+  
 }
