@@ -4,7 +4,7 @@
 #include<stdlib.h>
 #include<string.h>
 
-#define MAX 20
+#define MAX 5
 
 char nondet_char();
 
@@ -25,7 +25,7 @@ main(void)
   //conta as vogais
   cont = 0;
   for(i=0;i<n_caracter;i++)
-     for(j=0;j<10;j++)
+     for(j=0;j<MAX/2;j++)
         if(string_entrada[i] == vetor_vogais[j])
            cont++;
            
@@ -33,7 +33,7 @@ main(void)
   int cont_aux = 0;
   while(string_entrada[i]!='\0')
   {
-    for(j=0;j<10;j++)
+    for(j=0;j<MAX/2;j++)
     {
         if(string_entrada[i] == vetor_vogais[j])
            cont_aux++;
