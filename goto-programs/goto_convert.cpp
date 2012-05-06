@@ -1560,7 +1560,7 @@ void goto_convertt::convert_for(
 
   exprt tmp=code.op1();
 
-  if(inductive_step || base_case)
+  if(inductive_step /*|| base_case*/)
     replace_cond(tmp, dest);
 
   exprt cond=tmp;
@@ -1743,10 +1743,12 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 
-  //assume(!c)
+  
   //do the g label
   if (inductive_step || base_case)
-    assume_cond(cond, true, dest);
+    assume_cond(cond, true, dest); //assume(!c)
+  else if (k_induction)
+    assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue
   targets.restore(old_targets);
@@ -2111,6 +2113,63 @@ void goto_convertt::assume_cond(
 
 /*******************************************************************\
 
+Function: goto_convertt::assert_cond
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::assert_cond(
+  const exprt &cond, 
+  const bool &neg,
+  goto_programt &dest)
+{
+  goto_programt tmp_e;
+  goto_programt::targett e=tmp_e.add_instruction(ASSERT);
+  exprt result_expr = cond;
+  if (neg)
+    result_expr.make_not();
+  e->guard.swap(result_expr);
+  dest.destructive_append(tmp_e);
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::check_op_const
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool goto_convertt::check_op_const(
+  const exprt &tmp,
+  const locationt &loc)
+{
+  if (tmp.is_constant())
+  {
+    std::cerr << "warning: this program " << loc.get_file() 
+              << " contains a bounded loop at line " << loc.get_line()
+   	      << ", so we are not applying the k-induction method to this program!" 
+              << std::endl;
+    k_induction=1;
+    inductive_step=0;
+    base_case=0;
+    return true;
+  }
+
+  return false;
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::replace_cond
 
   Inputs:
@@ -2145,7 +2204,7 @@ void goto_convertt::replace_cond(
     exprt zero_expr = gen_zero(uint_type());
     exprt nondet_expr=side_effect_expr_nondett(uint_type());
 
-    //initialize i=nondet_uint()
+    //initialize i=0
     code_assignt new_assign(indice,zero_expr);
     copy(new_assign, ASSIGN, dest);
 
@@ -2165,34 +2224,35 @@ void goto_convertt::replace_cond(
            || exprid == ">")
   {
     assert(tmp.operands().size()==2);
+    if (check_op_const(tmp.op0(), tmp.location())) return ;
+    else if (check_op_const(tmp.op1(), tmp.location())) return ;
 
-    nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op1());
-
-    if (cache_result == nondet_vars.end()) {
-
-      //std::cout << tmp.pretty() << std::endl;
-      exprt nondet_expr=side_effect_expr_nondett(tmp.op1().type());
-
-      if (tmp.op1().is_constant())
+    if (tmp.id() == ">" || tmp.id()== ">=")
+    {
+      nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op0());
+      if (cache_result == nondet_vars.end()) 
       {
-   	    std::cerr << "warning: this program " << tmp.location().get_file() 
-                      << " contains a bounded loop at line " << tmp.location().get_line()
-   	  	      << ", so we are not applying the k-induction method to this loop!" 
-                      << std::endl;
-   	    inductive_step=0;
-   	    base_case=0;
+        //initialize op1=nondet_type() where type=op0.type()
+        exprt nondet_expr=side_effect_expr_nondett(tmp.op0().type());
+        code_assignt new_assign_nondet(tmp.op0(),nondet_expr);
+        copy(new_assign_nondet, ASSIGN, dest);
+        nondet_vars.insert(std::pair<exprt,exprt>(tmp.op0(),nondet_expr));
       }
-      else
+    } 
+    else if (tmp.id() == "<" || tmp.id()== "<=")
+    {
+      if (check_op_const(tmp.op1(), tmp.location())) return ;
+      nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op1());
+      if (cache_result == nondet_vars.end()) 
       {
-        //initialize op1=nondet_uint();
+        //initialize op1=nondet_type() where type=op0.type()
+        exprt nondet_expr=side_effect_expr_nondett(tmp.op1().type());
         code_assignt new_assign_nondet(tmp.op1(),nondet_expr);
         copy(new_assign_nondet, ASSIGN, dest);
         nondet_vars.insert(std::pair<exprt,exprt>(tmp.op1(),nondet_expr));
-      }
-
+      } 
     }
   }
-
 }
 
 /*******************************************************************\
@@ -2250,7 +2310,7 @@ void goto_convertt::convert_while(
 
   exprt tmp=code.op0();
 
-  if(inductive_step || base_case)
+  if(inductive_step /*|| base_case*/)
     replace_cond(tmp, dest);
 
   array_typet state_vector;
@@ -2407,10 +2467,11 @@ void goto_convertt::convert_while(
 
   dest.destructive_append(tmp_z);
 
-  //assume(!c)
   //do the g label
   if (inductive_step || base_case)
-    assume_cond(cond, true, dest);
+    assume_cond(cond, true, dest); //assume(!c)
+  else if (k_induction)
+    assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue
   targets.restore(old_targets);

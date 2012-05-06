@@ -42,6 +42,8 @@ public:
     for_block=false;
     while_block=false;
     state_counter=1;
+    k_induction=
+    options.get_bool_option("k-induction");
     inductive_step=
     options.get_bool_option("inductive-step");
     base_case=
@@ -209,7 +211,8 @@ protected:
   void get_struct_components(const exprt &exp, struct_typet &str);
   void replace_cond(exprt &tmp, goto_programt &dest);
   void increment_var(const exprt &var, goto_programt &dest);
-
+  void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
+  bool check_op_const(const exprt &tmp, const locationt &loc);
 
   //
   // gotos
@@ -370,8 +373,7 @@ protected:
     bool for_block, while_block;
     unsigned int state_counter;
     struct_typet state;
-    bool inductive_step;
-    bool base_case;
+    bool k_induction, inductive_step, base_case;
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;
 
