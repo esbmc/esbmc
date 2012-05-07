@@ -3231,6 +3231,9 @@ void goto_convertt::get_cs_member(
        it != components.end();
        it++, i++)
   {
+    //std::cout << "name: " << it->get("name") << std::endl;
+    //std::cout << "component_name: " << new_expr.get_string("component_name") << std::endl;
+    //std::cout << "it->pretty(): " << it->pretty() << std::endl; 
     if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
       found=true;
   }
@@ -3291,21 +3294,16 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
     tmp.copy_to_operands(index);
     new_expr1 = tmp;
   }
-  else if (exprid=="+" || exprid=="-" || exprid=="=" || exprid=="notequal" ||
-	   exprid == "<=" || exprid == "<" || exprid == ">=" || exprid == ">" ||
-	   exprid == "bitand" || exprid == "bitor" || exprid == "bitxor" ||
-	   exprid == "bitnand" || exprid == "bitnor" || exprid == "bitnxor" ||
-	   exprid == "*")
+  else if (expr.operands().size() == 1)
   {
-    assert(expr.operands().size()==2);
+    get_new_expr(expr.op0(), new_expr1, found);
+  }
+  else if (expr.operands().size() == 2)
+  {
     exprt operand0, operand1;
     get_new_expr(expr.op0(), operand0, found);
     get_new_expr(expr.op1(), operand1, found);
     new_expr1 = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
-  }
-  else if (exprid == "unary-" || exprid == "typecast" || exprid == "dereference")
-  {
-    get_new_expr(expr.op0(), new_expr1, found);
   }
   else
   {
