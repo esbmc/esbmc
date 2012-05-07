@@ -52,8 +52,10 @@ protected:
 
   int k_step;
   bool base_case;
+  bool forward_condition;
 
   contextt context_base_case;
+  contextt context_forward_condition;
   contextt context_inductive_step;
 };
 

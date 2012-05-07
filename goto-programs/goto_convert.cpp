@@ -1747,8 +1747,8 @@ void goto_convertt::convert_for(
   //do the g label
   if (inductive_step || base_case)
     assume_cond(cond, true, dest); //assume(!c)
-  else if (k_induction)
-    assert_cond(cond, true, dest); //assert(!c)
+  //else if (k_induction)
+    //assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue
   targets.restore(old_targets);

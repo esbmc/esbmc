@@ -639,23 +639,27 @@ bool bmc_baset::solver_base::run_solver()
 {
   switch(bmc.run_decision_procedure(*conv))
   {
+
     case decision_proceduret::D_UNSATISFIABLE:
       if(!bmc.options.get_bool_option("base-case"))
         bmc.report_success();
       else
         bmc.status("No bug has been found in the base case");
-    return false;
+      return false;
 
     case decision_proceduret::D_SATISFIABLE:
-      if(!bmc.options.get_bool_option("inductive-step"))
+      if(!bmc.options.get_bool_option("inductive-step")
+    		  && !bmc.options.get_bool_option("forward-condition"))
       {
         bmc.error_trace(*conv);
    	    bmc.report_failure();
       }
+      else if (bmc.options.get_bool_option("forward-condition"))
+        bmc.status("The forward condition is unable to prove the property");
       else
         bmc.status("The inductive step is unable to prove the property");
 
-    return true;
+      return true;
 
   // Return failure if we didn't actually check anything, we just emitted the
   // test information to an SMTLIB formatted file. Causes esbmc to quit

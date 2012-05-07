@@ -374,20 +374,34 @@ void goto_symext::loop_bound_exceeded(
   bool base_case=
     options.get_bool_option("base-case");
 
+  bool forward_condition=
+    options.get_bool_option("forward-condition");
+
   bool inductive_step=
     options.get_bool_option("inductive-step");
 
-
   //std::cout << "base_case: " << base_case << std::endl;
+  //std::cout << "forward_condition: " << forward_condition << std::endl;
   //std::cout << "inductive_step: " << inductive_step << std::endl;
+  //std::cout << "partial_loops: " << partial_loops << std::endl;
+  //std::cout << "unwinding_assertions: " << unwinding_assertions << std::endl;
 
-  if (base_case /*|| inductive_step*/)
+  if (base_case)
   {
     // generate unwinding assumption
     exprt guarded_expr=negated_cond;
-    //std::cout << "guarded_expr: " << guarded_expr.pretty() << std::endl;
     state.guard.guard_expr(guarded_expr);
     target->assumption(state.guard, guarded_expr, state.source);
+
+    // add to state guard to prevent further assignments
+    state.guard.add(negated_cond);
+  }
+  else if (forward_condition)
+  {
+    // generate unwinding assertion
+    claim(negated_cond,
+          "unwinding assertion loop "+id2string(loop_id),
+          state, node_id);
 
     // add to state guard to prevent further assignments
     state.guard.add(negated_cond);

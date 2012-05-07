@@ -233,7 +233,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("inlining"))
     options.set_option("inlining", true);
 
-  if(cmdline.isset("base-case"))
+  if(cmdline.isset("base-case") ||
+     options.get_bool_option("base-case"))
   {
     options.set_option("base-case", true);
     options.set_option("no-bounds-check", true);
@@ -243,7 +244,20 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", true);
   }
 
-  if(cmdline.isset("inductive-step")) {
+  if(cmdline.isset("forward-condition") ||
+     options.get_bool_option("forward-condition"))
+  {
+    options.set_option("forward-condition", true);
+    options.set_option("no-bounds-check", true);
+    options.set_option("no-div-by-zero-check", true);
+    options.set_option("no-pointer-check", true);
+    options.set_option("no-unwinding-assertions", false);
+    options.set_option("partial-loops", false);
+  }
+
+  if(cmdline.isset("inductive-step")  || 
+     options.get_bool_option("inductive-step")) 
+  {
     options.set_option("inductive-step", true);
     options.set_option("no-bounds-check", true);
     options.set_option("no-div-by-zero-check", true);
@@ -470,19 +484,24 @@ int cbmc_parseoptionst::doit_k_induction()
     return 1;
   }
 
-  // Do all the stuff to the base case goto program
-  bmct bmc_base_case(context, ui_message_handler);
-
   //
   // command line options
   //
 
-  get_command_line_options(bmc_base_case.options);
+  // Do all the stuff to the base case goto program
+  bmct bmc_base_case(context, ui_message_handler);
+
   bmc_base_case.options.set_option("base-case", true);
+  bmc_base_case.options.set_option("forward-condition", false);
   bmc_base_case.options.set_option("inductive-step", false);
+  get_command_line_options(bmc_base_case.options);
 
   set_verbosity(bmc_base_case);
   set_verbosity(*this);
+
+  //
+  // do the base case
+  //
 
   if(cmdline.isset("preprocess"))
   {
@@ -507,18 +526,50 @@ int cbmc_parseoptionst::doit_k_induction()
 
   context_base_case = context;
 
-  // Do all the stuff to the inductive step goto program
   context.clear(); // We need to clear the previous context
 
+  //
+  // do the forward condition
+  //
+
+  // Do all the stuff to the forward condition goto program
+  bmct bmc_forward_condition(context, ui_message_handler);
+
+  bmc_forward_condition.options.set_option("base-case", false);
+  bmc_forward_condition.options.set_option("forward-condition", true);
+  bmc_forward_condition.options.set_option("inductive-step", false);
+  get_command_line_options(bmc_forward_condition.options);
+
+  goto_functionst goto_functions_forward_condition;
+
+  if(get_goto_program(bmc_forward_condition, goto_functions_forward_condition))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions_forward_condition);
+    return 0;
+  }
+
+  if(set_claims(goto_functions_forward_condition))
+    return 7;
+
+  context_forward_condition = context;
+
+  context.clear(); // We need to clear the previous context
+
+  //
+  // do the inductive step
+  //
+
+  // Do all the stuff to the inductive step goto program
   bmct bmc_inductive_step(context, ui_message_handler);
 
-  //
-  // command line options
-  //
-
-  get_command_line_options(bmc_inductive_step.options);
   bmc_inductive_step.options.set_option("base-case", false);
+  bmc_inductive_step.options.set_option("forward-condition", false);
   bmc_inductive_step.options.set_option("inductive-step", true);
+  get_command_line_options(bmc_inductive_step.options);
 
   set_verbosity(bmc_inductive_step);
   set_verbosity(*this);
@@ -571,6 +622,24 @@ int cbmc_parseoptionst::doit_k_induction()
         return 0;
 
       ++k_step;
+
+      base_case = false; //disable base case
+      forward_condition = true; //enable forward condition
+    }
+    else if (forward_condition)
+    {
+      std::cout << "forward condition " << std::endl;
+
+      // We need to set the right context
+      context.clear();
+      context = context_forward_condition;
+
+      res = do_bmc(bmc_forward_condition, goto_functions_forward_condition);
+
+      if (!res)
+        return 0;
+
+      forward_condition = false; //disable forward condition
     }
     else
     {
@@ -584,10 +653,12 @@ int cbmc_parseoptionst::doit_k_induction()
 
       if (!res)
         return 0;
+
+      base_case = true; //enable base case
     }
 
-    base_case = !base_case;
     bmc_base_case.options.set_option("unwind", i2string(k_step));
+    bmc_forward_condition.options.set_option("unwind", i2string(k_step));
     bmc_inductive_step.options.set_option("unwind", i2string(k_step));
 
 
@@ -1288,6 +1359,7 @@ void cbmc_parseoptionst::help()
     " --atomicity-check            enable atomicity check at visible assignments\n\n"
     " --- k-induction----------------------------------------------------------------\n\n"
     " --base-case                  check the base case\n"
+    " --forward-condition          check the forward condition\n"
     " --inductive-step             check the inductive step\n"
     " --k-induction                prove by k-induction \n"
     " --k-step nr                  set the k time step (default is 50) \n\n"

@@ -110,6 +110,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"interactive-ileaves",	switc,		""	},
 { 0,	"round-robin",	switc,		""	},
 { 0,	"base-case",	switc,		""	},
+{ 0,	"forward-condition",	switc,		""	},
 { 0,	"inductive-step",	switc,		""	},
 { 0,	"k-induction", switc, "" },
 { 0,	"break-at",		string,		""	},
