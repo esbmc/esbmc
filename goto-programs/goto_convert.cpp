@@ -1508,6 +1508,50 @@ void goto_convertt::convert_assume(
 
 /*******************************************************************\
 
+Function: goto_convertt::update_vector
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::update_vector(
+  array_typet state_vector,
+  goto_programt &dest)
+{
+  //set the type of the state vector
+  state_vector.subtype() = state;
+
+  std::string identifier;
+  identifier = "kindice$"+i2string(state_counter);
+
+  exprt lhs_index = symbol_exprt(identifier, int_type());
+  exprt new_expr(exprt::with, state_vector);
+  exprt lhs_array("symbol", state_vector);
+  exprt rhs("symbol", state);
+
+  std::string identifier_lhs, identifier_rhs;
+  identifier_lhs = "s$"+i2string(state_counter);
+  identifier_rhs = "cs$"+i2string(state_counter);
+
+  lhs_array.identifier(identifier_lhs);
+  rhs.identifier(identifier_rhs);
+
+  //s[k]=cs
+  new_expr.reserve_operands(3);
+  new_expr.copy_to_operands(lhs_array);
+  new_expr.copy_to_operands(lhs_index);
+  new_expr.move_to_operands(rhs);
+
+  code_assignt new_assign(lhs_array,new_expr);
+  copy(new_assign, ASSIGN, dest);
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::update_state_vector
 
   Inputs:
@@ -1700,35 +1744,7 @@ void goto_convertt::convert_for(
 
   // do the f label
   if (inductive_step)
-  {
-    //assign_state_vector(state_vector, dest);
-    //set the type of the state vector
-    state_vector.subtype() = state;
-
-    std::string identifier;
-    identifier = "kindice$"+i2string(state_counter);
-
-    exprt lhs_index = symbol_exprt(identifier, int_type());
-    exprt new_expr(exprt::with, state_vector);
-    exprt lhs_array("symbol", state_vector);
-    exprt rhs("symbol", state);
-
-    std::string identifier_lhs, identifier_rhs;
-    identifier_lhs = "s$"+i2string(state_counter);
-    identifier_rhs = "cs$"+i2string(state_counter);
-
-    lhs_array.identifier(identifier_lhs);
-    rhs.identifier(identifier_rhs);
-
-    //s[k]=cs
-    new_expr.reserve_operands(3);
-    new_expr.copy_to_operands(lhs_array);
-    new_expr.copy_to_operands(lhs_index);
-    new_expr.move_to_operands(rhs);
-
-    code_assignt new_assign(lhs_array,new_expr);
-    copy(new_assign, ASSIGN, dest);
-  }
+    update_vector(state_vector, dest);
 
   dest.destructive_append(tmp_w);
 
@@ -2385,37 +2401,7 @@ void goto_convertt::convert_while(
 
   // do the f label
   if (inductive_step)
-  {
-    //assign_state_vector(state_vector, dest);
-    //set the type of the state vector
-    state_vector.subtype() = state;
-
-    std::string identifier;
-
-    identifier = "kindice$"+i2string(state_counter);
-
-    exprt lhs_index = symbol_exprt(identifier, int_type());
-    exprt new_expr(exprt::with, state_vector);
-    exprt lhs_array("symbol", state_vector);
-    exprt rhs("symbol", state);
-
-    std::string identifier_lhs, identifier_rhs;
-
-    identifier_lhs = "s$"+i2string(state_counter);
-    identifier_rhs = "cs$"+i2string(state_counter);
-
-    lhs_array.identifier(identifier_lhs);
-    rhs.identifier(identifier_rhs);
-
-    // s[k]=cs
-    new_expr.reserve_operands(3);
-    new_expr.copy_to_operands(lhs_array);
-    new_expr.copy_to_operands(lhs_index);
-    new_expr.move_to_operands(rhs);
-
-    code_assignt new_assign(lhs_array,new_expr);
-    copy(new_assign, ASSIGN, dest);
-  }
+    update_vector(state_vector, dest);
 
   if (inductive_step || base_case)
     increment_var(code.op0(), dest);

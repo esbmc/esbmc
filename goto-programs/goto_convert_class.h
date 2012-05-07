@@ -213,6 +213,8 @@ protected:
   void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
   bool check_op_const(const exprt &tmp, const locationt &loc);
   void update_state_vector(array_typet state_vector, goto_programt &dest);
+  void update_vector(array_typet state_vector, goto_programt &dest);
+
   //
   // gotos
   //
