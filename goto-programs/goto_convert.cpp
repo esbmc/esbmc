@@ -1506,6 +1506,58 @@ void goto_convertt::convert_assume(
   t->location=code.location();
 }
 
+/*******************************************************************\
+
+Function: goto_convertt::update_state_vector
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::update_state_vector(
+  array_typet state_vector,
+  goto_programt &dest)
+{
+  //set the type of the state vector
+  state_vector.subtype() = state;
+
+  std::string identifier;
+  identifier = "kindice$"+i2string(state_counter);
+
+  exprt lhs_index = symbol_exprt(identifier, int_type());
+  exprt new_expr(exprt::index, state);
+  exprt lhs_array("symbol", state_vector);
+  exprt rhs("symbol", state);
+
+  std::string identifier_lhs, identifier_rhs;
+
+  identifier_lhs = "s$"+i2string(state_counter);
+  identifier_rhs = "cs$"+i2string(state_counter);
+
+  lhs_array.identifier(identifier_lhs);
+  rhs.identifier(identifier_rhs);
+
+  //s[k]=cs
+  new_expr.reserve_operands(2);
+  new_expr.copy_to_operands(lhs_array);
+  new_expr.copy_to_operands(lhs_index);
+
+  exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
+
+  goto_programt tmp_e;
+  goto_programt::targett e=tmp_e.add_instruction(ASSUME);
+  e->guard.swap(result_expr);
+  dest.destructive_append(tmp_e);
+
+  exprt one_expr = gen_one(int_type());
+  exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
+  code_assignt new_assign_plus(lhs_index,rhs_expr);
+  copy(new_assign_plus, ASSIGN, dest);
+}
 
 /*******************************************************************\
 
@@ -1590,22 +1642,21 @@ void goto_convertt::convert_for(
 
   // do the u label
   goto_programt::targett u=sideeffects.instructions.begin();
-  DEBUGLOC;
+
   // do the c label
   if (inductive_step)
     init_k_indice(dest);
-  DEBUGLOC;
+
   // do the v label
   goto_programt tmp_v;
   goto_programt::targett v=tmp_v.add_instruction();
-  DEBUGLOC;
+
   // do the z label
   goto_programt tmp_z;
   goto_programt::targett z=tmp_z.add_instruction(SKIP);
-  DEBUGLOC;
+
   // do the x label
   goto_programt tmp_x;
-  DEBUGLOC;
   if(code.op2().is_nil())
     tmp_x.add_instruction(SKIP);
   else
@@ -1692,43 +1743,7 @@ void goto_convertt::convert_for(
 
   // do the e label
   if (inductive_step)
-  {
-    //set the type of the state vector
-    state_vector.subtype() = state;
-
-    std::string identifier;
-    identifier = "kindice$"+i2string(state_counter);
-
-    exprt lhs_index = symbol_exprt(identifier, int_type());
-    exprt new_expr(exprt::index, state);
-    exprt lhs_array("symbol", state_vector);
-    exprt rhs("symbol", state);
-
-    std::string identifier_lhs, identifier_rhs;
-
-    identifier_lhs = "s$"+i2string(state_counter);
-    identifier_rhs = "cs$"+i2string(state_counter);
-
-    lhs_array.identifier(identifier_lhs);
-    rhs.identifier(identifier_rhs);
-
-    //s[k]=cs
-    new_expr.reserve_operands(2);
-    new_expr.copy_to_operands(lhs_array);
-    new_expr.copy_to_operands(lhs_index);
-
-    exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
-
-    goto_programt tmp_e;
-    goto_programt::targett e=tmp_e.add_instruction(ASSUME);
-    e->guard.swap(result_expr);
-    dest.destructive_append(tmp_e);
-
-    exprt one_expr = gen_one(int_type());
-    exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
-    code_assignt new_assign_plus(lhs_index,rhs_expr);
-    copy(new_assign_plus, ASSIGN, dest);
-  }
+    update_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
@@ -2414,44 +2429,7 @@ void goto_convertt::convert_while(
 
   // do the e label
   if (inductive_step)
-  {
-    //set the type of the state vector
-    state_vector.subtype() = state;
-
-    std::string identifier;
-
-    identifier = "kindice$"+i2string(state_counter);
-
-    exprt lhs_index = symbol_exprt(identifier, int_type());
-    exprt new_expr(exprt::index, state);
-    exprt lhs_array("symbol", state_vector);
-    exprt rhs("symbol", state);
-
-    std::string identifier_lhs, identifier_rhs;
-
-    identifier_lhs = "s$"+i2string(state_counter);
-    identifier_rhs = "cs$"+i2string(state_counter);
-
-    lhs_array.identifier(identifier_lhs);
-    rhs.identifier(identifier_rhs);
-
-    //s[k]=cs
-    new_expr.reserve_operands(2);
-    new_expr.copy_to_operands(lhs_array);
-    new_expr.copy_to_operands(lhs_index);
-
-    exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
-
-    goto_programt tmp_e;
-    goto_programt::targett e=tmp_e.add_instruction(ASSUME);
-    e->guard.swap(result_expr);
-    dest.destructive_append(tmp_e);
-
-    exprt one_expr = gen_one(int_type());
-    exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
-    code_assignt new_assign_plus(lhs_index,rhs_expr);
-    copy(new_assign_plus, ASSIGN, dest);
-  }
+    update_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_y);
 
