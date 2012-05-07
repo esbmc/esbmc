@@ -1545,7 +1545,6 @@ void goto_convertt::update_state_vector(
   new_expr.copy_to_operands(lhs_array);
   new_expr.copy_to_operands(lhs_index);
   new_expr.move_to_operands(rhs);
-
   code_assignt new_assign(lhs_array,new_expr);
   copy(new_assign, ASSIGN, dest);
 }
@@ -1594,11 +1593,7 @@ void goto_convertt::assume_state_vector(
   exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
   assume_cond(result_expr, false, dest);
 
-//  goto_programt tmp_e;
-//  goto_programt::targett e=tmp_e.add_instruction(ASSUME);
-//  e->guard.swap(result_expr);
-//  dest.destructive_append(tmp_e);
-
+  //kindice=kindice+1
   exprt one_expr = gen_one(int_type());
   exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
   code_assignt new_assign_plus(lhs_index,rhs_expr);
@@ -1658,7 +1653,7 @@ void goto_convertt::convert_for(
 
   exprt tmp=code.op1();
 
-  if(inductive_step /*|| base_case*/)
+  if (inductive_step)
     replace_cond(tmp, dest);
 
   exprt cond=tmp;
