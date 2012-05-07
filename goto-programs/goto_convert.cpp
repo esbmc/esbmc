@@ -2219,8 +2219,7 @@ void goto_convertt::replace_cond(
     copy(new_assign_nondet, ASSIGN, dest);
 
     //assume that n>0;
-    code_assignt new_assign_assume(n_expr,gen_binary(exprt::i_gt, bool_typet(), n_expr, zero_expr));
-    copy(new_assign_assume, ASSUME, dest);
+    assume_cond(gen_binary(exprt::i_gt, bool_typet(), n_expr, zero_expr), false, dest);
 
     //replace the condition c by i<=n;
     tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
