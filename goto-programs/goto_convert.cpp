@@ -1627,16 +1627,6 @@ void goto_convertt::convert_for(
   targets.set_break(z);
   targets.set_continue(tmp_x.instructions.begin());
 
-#if 0
-  if(inductive_step)
-  {
-    std::cout << "antes cond: " << cond.pretty() << std::endl;
-    replace_ifthenelse(cond);
-    std::cout << "depois cond: " << cond.pretty() << std::endl;
-//    assert(0);
-  }
-#endif
-
   // v: if(!c) goto z;
   v->make_goto(z);
   v->guard=cond;
@@ -1747,8 +1737,8 @@ void goto_convertt::convert_for(
   //do the g label
   if (inductive_step || base_case)
     assume_cond(cond, true, dest); //assume(!c)
-  //else if (k_induction)
-    //assert_cond(cond, true, dest); //assert(!c)
+  else if (k_induction)
+    assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue
   targets.restore(old_targets);
@@ -2310,7 +2300,7 @@ void goto_convertt::convert_while(
 
   exprt tmp=code.op0();
 
-  if(inductive_step /*|| base_case*/)
+  if(inductive_step)
     replace_cond(tmp, dest);
 
   array_typet state_vector;

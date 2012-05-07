@@ -42,8 +42,7 @@ public:
     for_block=false;
     while_block=false;
     state_counter=1;
-    k_induction=
-    options.get_bool_option("k-induction");
+    k_induction=false;
     inductive_step=
     options.get_bool_option("inductive-step");
     base_case=
