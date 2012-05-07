@@ -952,6 +952,11 @@ void goto_convertt::convert_decl(
     throw "decl statement expects symbol as first operand";
   }
 
+  //std::cout << "code.pretty(): " << code.pretty() << std::endl;
+  //std::cout << "op0.pretty(): " << op0.pretty() << std::endl;
+  if (inductive_step)
+    get_struct_components(op0, state);
+
   const irep_idt &identifier=op0.identifier();
 
   const symbolt &symbol=lookup(identifier);
@@ -984,10 +989,6 @@ void goto_convertt::convert_decl(
 
     // break up into decl and assignment
     copy(tmp, OTHER, dest);
-
-    //std::cout << "code.op0(): " << code.op0() << std::endl;
-    if (inductive_step)
-      get_struct_components(code.op0(), state);
     code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
     assign.location()=tmp.location();
 
