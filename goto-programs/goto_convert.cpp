@@ -1508,7 +1508,7 @@ void goto_convertt::convert_assume(
 
 /*******************************************************************\
 
-Function: goto_convertt::update_vector
+Function: goto_convertt::update_state_vector
 
   Inputs:
 
@@ -1518,7 +1518,7 @@ Function: goto_convertt::update_vector
 
 \*******************************************************************/
 
-void goto_convertt::update_vector(
+void goto_convertt::update_state_vector(
   array_typet state_vector,
   goto_programt &dest)
 {
@@ -1552,7 +1552,7 @@ void goto_convertt::update_vector(
 
 /*******************************************************************\
 
-Function: goto_convertt::update_state_vector
+Function: goto_convertt::assume_state_vector
 
   Inputs:
 
@@ -1562,7 +1562,7 @@ Function: goto_convertt::update_state_vector
 
 \*******************************************************************/
 
-void goto_convertt::update_state_vector(
+void goto_convertt::assume_state_vector(
   array_typet state_vector,
   goto_programt &dest)
 {
@@ -1585,17 +1585,19 @@ void goto_convertt::update_state_vector(
   lhs_array.identifier(identifier_lhs);
   rhs.identifier(identifier_rhs);
 
-  //s[k]=cs
+  //s[k]
   new_expr.reserve_operands(2);
   new_expr.copy_to_operands(lhs_array);
   new_expr.copy_to_operands(lhs_index);
 
+  //assume(s[k]!=cs)
   exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
+  assume_cond(result_expr, false, dest);
 
-  goto_programt tmp_e;
-  goto_programt::targett e=tmp_e.add_instruction(ASSUME);
-  e->guard.swap(result_expr);
-  dest.destructive_append(tmp_e);
+//  goto_programt tmp_e;
+//  goto_programt::targett e=tmp_e.add_instruction(ASSUME);
+//  e->guard.swap(result_expr);
+//  dest.destructive_append(tmp_e);
 
   exprt one_expr = gen_one(int_type());
   exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
@@ -1744,7 +1746,7 @@ void goto_convertt::convert_for(
 
   // do the f label
   if (inductive_step)
-    update_vector(state_vector, dest);
+    update_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_w);
 
@@ -1759,7 +1761,7 @@ void goto_convertt::convert_for(
 
   // do the e label
   if (inductive_step)
-    update_state_vector(state_vector, dest);
+    assume_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
@@ -2401,7 +2403,7 @@ void goto_convertt::convert_while(
 
   // do the f label
   if (inductive_step)
-    update_vector(state_vector, dest);
+    update_state_vector(state_vector, dest);
 
   if (inductive_step || base_case)
     increment_var(code.op0(), dest);
@@ -2414,7 +2416,7 @@ void goto_convertt::convert_while(
 
   // do the e label
   if (inductive_step)
-    update_state_vector(state_vector, dest);
+    assume_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_y);
 
