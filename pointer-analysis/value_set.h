@@ -277,7 +277,7 @@ protected:
     exprt &dest) const;
 
   void assign_rec(
-    const exprt &lhs,
+    const expr2tc &lhs,
     const object_mapt &values_rhs,
     const std::string &suffix,
     const namespacet &ns,

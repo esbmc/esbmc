@@ -996,7 +996,9 @@ void value_sett::assign(
     
     get_value_set(rhs, values_rhs, ns);
     
-    assign_rec(lhs, values_rhs, "", ns, add_to_sets);
+    expr2tc tmp_expr;
+    migrate_expr(lhs, tmp_expr);
+    assign_rec(tmp_expr, values_rhs, "", ns, add_to_sets);
   }
 }
 
@@ -1114,42 +1116,39 @@ Function: value_sett::assign_rec
 \*******************************************************************/
 
 void value_sett::assign_rec(
-  const exprt &lhs,
+  const expr2tc &lhs,
   const object_mapt &values_rhs,
   const std::string &suffix,
   const namespacet &ns,
   bool add_to_sets)
 {
 
-  if(lhs.id()=="symbol")
+  if (is_symbol2t(lhs))
   {
-    const irep_idt &identifier=lhs.identifier();
+    const irep_idt &identifier = to_symbol2t(lhs).name;
     
     if(add_to_sets)
       make_union(get_entry(identifier, suffix).object_map, values_rhs);
     else
       get_entry(identifier, suffix).object_map=values_rhs;
   }
-  else if(lhs.id()=="dynamic_object")
+  else if (is_dynamic_object2t(lhs))
   {
-    const dynamic_object_exprt &dynamic_object=
-      to_dynamic_object_expr(lhs);
+    const dynamic_object2t &dynamic_object = to_dynamic_object2t(lhs);
   
-    std::string idnum = integer2string(binary2integer(dynamic_object.instance().value().as_string(), false));
-    const std::string name=
-      "value_set::dynamic_object"+idnum;
+    assert(is_constant_int2t(dynamic_object.instance));
+    unsigned int idnum =
+      to_constant_int2t(dynamic_object.instance).constant_value.to_long();
+    const std::string name = "value_set::dynamic_object" + i2string(idnum);
 
     make_union(get_entry(name, suffix).object_map, values_rhs);
   }
-  else if(lhs.id()=="dereference" ||
-          lhs.id()=="implicit_dereference")
+  else if (is_dereference2t(lhs))
   {
-    if(lhs.operands().size()!=1)
-      throw lhs.id_string()+" expected to have one operand";
-      
     object_mapt reference_set;
-    get_reference_set(lhs, reference_set, ns);
-    
+    exprt tmp_expr = migrate_expr_back(lhs);
+    get_reference_set(tmp_expr, reference_set, ns);
+
     if(reference_set.read().size()!=1)
       add_to_sets=true;
       
@@ -1158,73 +1157,44 @@ void value_sett::assign_rec(
         it!=reference_set.read().end();
         it++)
     {
-      const expr2tc &object2=object_numbering[it->first];
-      const exprt object = migrate_expr_back(object2);
+      // XXXjmorse - some horrible type safety is about to fail
+      const dynamic_object2tc object_c = object_numbering[it->first];
 
-      if(object.id()!="unknown")
-        assign_rec(object, values_rhs, suffix, ns, add_to_sets);
+      if (!object_c->unknown)
+        assign_rec(object_c, values_rhs, suffix, ns, add_to_sets);
     }
   }
-  else if(lhs.id()=="index")
+  else if (is_index2t(lhs))
   {
-    if(lhs.operands().size()!=2)
-      throw "index expected to have two operands";
-      
-    const typet &type=ns.follow(lhs.op0().type());
-      
-    assert(type.is_array() || type.id()=="incomplete_array");
+    assert(is_array_type(to_index2t(lhs).source_value->type));
 
-    assign_rec(lhs.op0(), values_rhs, "[]"+suffix, ns, true);
+    assign_rec(to_index2t(lhs).source_value, values_rhs, "[]"+suffix, ns, true);
   }
-  else if(lhs.id()=="member")
+  else if (is_member2t(lhs))
   {
-    if(lhs.operands().size()!=1)
-      throw "member expected to have one operand";
-  
-    const std::string &component_name=lhs.component_name().as_string();
+    const std::string &component_name = to_member2t(lhs).member.as_string();
 
-    const typet &type=ns.follow(lhs.op0().type());
-
-    assert(type.id()=="struct" ||
-           type.id()=="union" ||
-           type.id()=="incomplete_struct" ||
-           type.id()=="incomplete_union");
+    assert(is_struct_type(lhs->type) || is_union_type(lhs->type));
            
-    assign_rec(lhs.op0(), values_rhs, "."+component_name+suffix, ns, add_to_sets);
+    assign_rec(to_member2t(lhs).source_value, values_rhs,
+               "."+component_name+suffix, ns, add_to_sets);
   }
-  else if(lhs.id()=="valid_object" ||
-		  lhs.id()=="deallocated_object" ||
-          lhs.id()=="dynamic_size" ||
-          lhs.id()=="dynamic_type" ||
-          lhs.id()=="is_zero_string" ||
-          lhs.id()=="zero_string" ||
-          lhs.id()=="zero_string_length")
+  else if (is_zero_string2t(lhs) || is_zero_length_string2t(lhs) ||
+           is_constant_string2t(lhs) || is_null_object2t(lhs))
   {
-    // we ignore this here
+    // Ignored
   }
-  else if(lhs.id()=="string-constant")
+  else if (is_typecast2t(lhs))
   {
-    // someone writes into a string-constant
-    // evil guy
+    assign_rec(to_typecast2t(lhs).from, values_rhs, suffix, ns, add_to_sets);
   }
-  else if(lhs.id()=="NULL-object")
+  else if (is_byte_extract2t(lhs))
   {
-    // evil as well
-  }
-  else if(lhs.id()=="typecast")
-  {
-    const typecast_exprt &typecast_expr=to_typecast_expr(lhs);
-  
-    assign_rec(typecast_expr.op(), values_rhs, suffix, ns, add_to_sets);
-  }
-  else if(lhs.id()=="byte_extract_little_endian" ||
-          lhs.id()=="byte_extract_big_endian")
-  {
-    assert(lhs.operands().size()==2);
-    assign_rec(lhs.op0(), values_rhs, suffix, ns, true);
+    assign_rec(to_byte_extract2t(lhs).source_value, values_rhs, suffix,
+               ns, true);
   }
   else
-    throw "assign NYI: `"+lhs.id_string()+"'";
+    throw "assign NYI: `" + get_expr_id(lhs)+ "'";
 }
 
 /*******************************************************************\

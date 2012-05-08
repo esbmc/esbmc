@@ -1787,6 +1787,7 @@ expr_macros(overflow_cast);
 expr_macros(overflow_neg);
 expr_macros(unknown);
 expr_macros(invalid);
+expr_macros(null_object);
 expr_macros(dynamic_object);
 expr_macros(dereference);
 #undef expr_macros
