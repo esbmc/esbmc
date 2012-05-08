@@ -1716,14 +1716,14 @@ class sideeffect2t : public esbmct::expr<sideeffect2t,
                                          esbmct::uint_kind>
 {
 public:
-  enum alloctype {
+  enum allockind {
     malloc,
     cpp_new,
     cpp_new_arr
   };
 
   sideeffect2t(const type2tc &t, const expr2tc &oper, const expr2tc &sz,
-               const type2tc &alloct, alloctype k)
+               const type2tc &alloct, allockind k)
     : esbmct::expr<sideeffect2t, esbmct::expr2tc_operand,
                    esbmct::expr2tc_size, esbmct::type2tc_alloctype,
                    esbmct::uint_kind>
