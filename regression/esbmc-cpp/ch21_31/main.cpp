@@ -1,6 +1,7 @@
 // queue::front
 #include <iostream>
 #include <queue>
+#include <cassert>
 using namespace std;
 
 int main ()

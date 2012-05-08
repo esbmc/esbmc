@@ -91,6 +91,24 @@ void c_typecheck_baset::typecheck_code(codet &code)
   else if(statement=="cpp-try") {
 	typecheck_cpptry(code);
   }
+  else if(statement=="msc_try_finally")
+  {
+    assert(code.operands().size()==2);
+    typecheck_code(to_code(code.op0()));
+    typecheck_code(to_code(code.op1()));
+  }
+  else if(statement=="msc_try_except")
+  {
+    assert(code.operands().size()==3);
+    typecheck_code(to_code(code.op0()));
+    typecheck_expr(code.op1());
+    typecheck_code(to_code(code.op2()));
+  }
+  else if(statement=="msc_leave")
+  {
+    // fine as is, but should check that we
+    // are in a 'try' block
+  }
   else
   {
     err_location(code);
@@ -203,7 +221,7 @@ void c_typecheck_baset::typecheck_block(codet &code)
     if(it1->is_nil()) continue;
 
     codet &code_op=to_code(*it1);
-  
+
     if(code_op.get_statement()=="decl-block")
     {
       Forall_operands(it2, code_op)
@@ -214,13 +232,13 @@ void c_typecheck_baset::typecheck_block(codet &code)
     {
       // these may be nested
       codet *code_ptr=&code_op;
-      
+
       while(code_ptr->get_statement()=="label")
       {
         assert(code_ptr->operands().size()==1);
         code_ptr=&to_code(code_ptr->op0());
       }
-      
+
       codet &label_op=*code_ptr;
 
       // move declaration out of label
@@ -229,7 +247,7 @@ void c_typecheck_baset::typecheck_block(codet &code)
         codet tmp;
         tmp.swap(label_op);
         label_op=codet("skip");
-        
+
         new_ops.move_to_operands(code_op);
 
         Forall_operands(it2, tmp)
@@ -346,14 +364,14 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   }
 
   code.location()=symbol.location;
-  
+
   // check the initializer, if any
   if(code.operands().size()==2)
   {
     typecheck_expr(code.op1());
     do_initializer(code.op1(), symbol.type, false);
   }
-  
+
   // set type now (might be changed by initializer)
   code.op0().type()=symbol.type;
 
@@ -391,22 +409,22 @@ void c_typecheck_baset::typecheck_expression(codet &code)
   if(op.id()=="sideeffect")
   {
     const irep_idt &statement=op.statement();
-    
+
     if(statement=="assign")
     {
       assert(op.operands().size()==2);
-      
+
       // pull assignment statements up
       exprt::operandst operands;
       operands.swap(op.operands());
       code.statement("assign");
       code.operands().swap(operands);
-      
+
       if(code.op1().id()=="sideeffect" &&
          code.op1().statement()=="function_call")
       {
         assert(code.op1().operands().size()==2);
-  
+
         code_function_callt function_call;
         function_call.location().swap(code.op1().location());
         function_call.lhs()=code.op0();
@@ -418,7 +436,7 @@ void c_typecheck_baset::typecheck_expression(codet &code)
     else if(statement=="function_call")
     {
       assert(op.operands().size()==2);
-      
+
       // pull function calls up
       code_function_callt function_call;
       function_call.location()=code.location();

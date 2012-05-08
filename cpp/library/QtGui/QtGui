@@ -7,7 +7,6 @@ Author: Felipe Rodrigues
 \*******************************************************************/
 
 #include "QString"
-//#include "QApplication/QApplication"
 #include "QApplication"
 
 # define SIGNAL(a)   qFlagLocation("2"#a)

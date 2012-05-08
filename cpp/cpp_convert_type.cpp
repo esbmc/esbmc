@@ -628,7 +628,7 @@ void cpp_convert_plain_type(typet &type)
      type.id()=="destructor")
   {
   }
-  else if(type.id()=="enum")
+  else if(type.id()=="c_enum")
   {
     // add width -- we use int, but the standard
     // doesn't guarantee that

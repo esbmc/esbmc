@@ -925,11 +925,11 @@ void cpp_typecheckt::full_member_initialization(
       cpp_namet cppname;
       cppname.move_to_sub(name);
 
-      const symbolt& virtual_table_symbol_type = 
+      const symbolt& virtual_table_symbol_type =
         lookup(mem_it->type().subtype().identifier());
 
       const symbolt& virtual_table_symbol_var  =
-        lookup(virtual_table_symbol_type.name.as_string() + "@" + 
+        lookup(virtual_table_symbol_type.name.as_string() + "@" +
             struct_type.name().as_string());
 
       exprt var =symbol_expr(virtual_table_symbol_var);

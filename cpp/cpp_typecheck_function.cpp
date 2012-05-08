@@ -170,7 +170,7 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
   typecheck_code(to_code(symbol.value));
 
   symbol.value.type()=symbol.type;
-  
+
   return_type = old_return_type;
 }
 

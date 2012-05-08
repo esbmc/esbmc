@@ -230,10 +230,12 @@ std::string expr2cppt::convert_rec(
 
       if(symbol.type.get_bool("#class"))
         dest+="class";
+      else if(symbol.type.get_bool("#interface"))
+        dest+="__interface"; // MS-specific
       else
         dest+="struct";
 
-      if(symbol.pretty_name!="")
+      if(symbol.pretty_name!=irep_idt())
         dest+=" "+id2string(symbol.pretty_name);
 
       return dest;
@@ -244,7 +246,7 @@ std::string expr2cppt::convert_rec(
 
       dest+="enum";
 
-      if(symbol.pretty_name!="")
+      if(symbol.pretty_name!=irep_idt())
         dest+=" "+id2string(symbol.pretty_name);
 
       return dest;
@@ -259,6 +261,8 @@ std::string expr2cppt::convert_rec(
 
     if(src.get_bool("#class"))
       dest+="class";
+    else if(src.get_bool("#interface"))
+      dest+="__interface"; // MS-specific
     else
       dest+="struct";
 

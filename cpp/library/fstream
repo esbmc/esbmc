@@ -11,31 +11,45 @@
 namespace std
 {
 
-struct fstream: istream, ostream{
-	fstream ( );
-	explicit fstream ( const char * filename,
-	                   openmode mode = in | out );
-	istream& read ( char* s, streamsize n );
-	ostream& write ( const char* s , streamsize n );
+struct fstream: istream, ostream {
+  fstream ();
+  explicit fstream ( const char * filename,
+                     openmode mode = in | out );
+  istream& read ( char* s, streamsize n );
+  ostream& write ( const char* s , streamsize n );
 };
 
-struct ofstream:  ostream, ios{
-	ofstream();
-	void open ( const char * filename, ios_base::openmode mode = ios_base::out );
-	explicit ofstream ( const char * filename, ios_base::openmode mode = ios_base::out );
-	void close ( );
-	ostream& write ( const char* s , streamsize n );
+struct ofstream:  ostream, ios {
+  ofstream();
+  void open ( const char * filename, ios_base::openmode mode = ios_base::out );
+  explicit ofstream ( const char * filename, ios_base::openmode mode = ios_base::out );
+  void close ( );
+  ostream& write ( const char* s , streamsize n );
 };
 
 struct ifstream: istream{
-	ifstream ( );
-	explicit ifstream ( const char * filename, ios_base::openmode mode = ios_base::in );
-	void close ( );
-	bool is_open ( );
-	istream& read ( char* s, streamsize n );
+  ifstream ( );
+  explicit ifstream ( const char * filename, ios_base::openmode mode = ios_base::in );
+  void close ( );
+  bool is_open ( );
+  istream& read ( char* s, streamsize n );
+  istream& getline(char str[], int size, char delim = '\n');
+
+
+  inline bool operator&& (bool other);
 };
 
 struct filebuf{};
+
+fstream::fstream ( const char * filename,
+  ios_base::openmode mode = ios_base::in | ios_base::out )
+  : istream(),
+    ostream()
+{
+  if(!strcmp(filename,""))
+    failbit = true; // TODO: correct this! This line is for test only!
+}
+
 }
 
 #endif

@@ -11,8 +11,11 @@ OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 # Given the presence of OBJDIR, $(OBJS) can't now automatically infer
 # dependancies between .o's and .cpp's etc
 
-# list of includes, potentially modified by includer.
+# list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
+
+EXTRACXXFLAGS+=-fpermissive
+
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
 CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 

@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include "cpp_typecheck_fargs.h"
 #include "cpp_name.h"
+#include "cpp_template_args.h"
 
 class cpp_typecheck_resolvet
 {
@@ -31,34 +32,30 @@ public:
   void resolve_scope(
     const cpp_namet &cpp_name,
     std::string &base_name,
-    irept &template_args);
+    cpp_template_args_non_tct &template_args);
 
   cpp_scopet &resolve_namespace(const cpp_namet &cpp_name);
 
 protected:
   cpp_typecheckt &cpp_typecheck;
-  exprt this_expr;
   locationt location;
   cpp_scopet *original_scope;
 
-  typedef std::set<exprt> resolve_identifierst;
+  typedef std::vector<exprt> resolve_identifierst;
 
   void convert_identifiers(
     const cpp_scopest::id_sett &id_set,
-    const locationt &location,
-    const irept &template_args,
+    const wantt want,
     const cpp_typecheck_fargst &fargs,
     resolve_identifierst &identifiers);
 
   exprt convert_template_argument(
     const cpp_idt &id);
 
-  void convert_identifier(
+  exprt convert_identifier(
     const cpp_idt &id,
-    const locationt &location,
-    const irept &template_args,
-    const cpp_typecheck_fargst &fargs,
-    exprt &e);
+    const wantt want,
+    const cpp_typecheck_fargst &fargs);
 
   void disambiguate(
     resolve_identifierst &identifiers,
@@ -110,7 +107,7 @@ protected:
 
   exprt do_builtin(
     const irep_idt &base_name,
-    irept &template_args);
+    const cpp_template_args_non_tct &template_args);
 
   void show_identifiers(
     const std::string &base_name,

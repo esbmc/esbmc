@@ -240,7 +240,17 @@ namespace std {
 		if( empty() )
 			tail = head;
 	}
-    void pop_front();
+
+    void pop_front()
+    {
+	__ESBMC_assert ( !empty() , "list is empty");
+		head = head->next ;
+		if( head )
+			head->prev = NULL;
+		else
+			tail = NULL ;
+    }
+
     void push_back(const T& t)
 	{
 		tail = new node(t, tail, NULL);		

@@ -77,7 +77,7 @@ int cpp_token_buffert::GetToken()
   assert(current_pos<=token_vector.size());
 
   if(token_vector.size()==current_pos) read_token();
-  
+
   int kind=token_vector[current_pos]->kind;
 
   current_pos++;

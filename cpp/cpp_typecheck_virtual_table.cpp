@@ -19,7 +19,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
 {
 
   // builds virtual-table value maps: (class x virtual_name x value)
-  std::map<irep_idt, std::map<irep_idt,exprt> > vt_value_maps; 
+  std::map<irep_idt, std::map<irep_idt,exprt> > vt_value_maps;
 
   const struct_typet& struct_type = to_struct_type(symbol.type);
   for(unsigned i = 0; i < struct_type.components().size(); i++)
@@ -62,7 +62,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
   {
     const std::map<irep_idt,exprt>& value_map = cit->second;
 
-    const symbolt& late_cast_symb = namespacet(context).lookup(cit->first); 
+    const symbolt& late_cast_symb = namespacet(context).lookup(cit->first);
     const symbolt& vt_symb_type = namespacet(context).lookup("virtual_table::"+late_cast_symb.name.as_string());
 
     symbolt vt_symb_var;

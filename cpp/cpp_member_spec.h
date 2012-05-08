@@ -27,7 +27,7 @@ public:
   void set_inline(bool value)   { set("inline", value); }
   void set_friend(bool value)   { set("friend", value); }
   void set_explicit(bool value) { set("explicit", value); }
-  
+
   bool is_empty() const
   {
     return !is_virtual() &&

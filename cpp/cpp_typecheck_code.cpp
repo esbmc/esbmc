@@ -14,8 +14,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_convert_type.h"
 #include "cpp_declarator_converter.h"
 #include "cpp_template_type.h"
-#include "cpp_exception_id.h"
 #include "cpp_util.h"
+#include "cpp_exception_id.h"
 
 /*******************************************************************\
 
@@ -43,13 +43,17 @@ void cpp_typecheckt::typecheck_code(codet &code)
     code.type()=typet("code");
     typecheck_member_initializer(code);
   }
+  else if(statement=="msc_if_exists" ||
+          statement=="msc_if_not_exists")
+  {
+  }
   else
     c_typecheck_baset::typecheck_code(code);
 }
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::typecheck_throw
+Function: cpp_typecheckt::typecheck_catch
 
   Inputs:
 
@@ -107,41 +111,33 @@ Function: cpp_typecheckt::typecheck_member_initializer
 void cpp_typecheckt::typecheck_member_initializer(codet &code)
 {
   std::string identifier, base_name;
-  const cpp_namet &member=static_cast<cpp_namet &>(code.add("member"));
+  const cpp_namet &member=
+    to_cpp_name(code.find("member"));
 
-#if 0
-  member.convert(identifier, base_name);
-
-  if(identifier!=base_name)
-  {
-    err_location(code);
-    str << "only simple member identifiers allowed here" << std::endl;
-    throw 0;
-  }
-
-  if(cpp_scopes.current_scope().this_expr.is_nil())
-  {
-    err_location(code);
-    str << "no member initializer expected here" << std::endl;
-    throw 0;
-  }
-#endif
-
-  // The initializer may be a data member
-  // or a parent class
+  // The initializer may be a data member (non-type)
+  // or a parent class (type).
+  // We ask for VAR only, as we get the parent classes via their
+  // constructor!
   cpp_typecheck_fargst fargs;
+  fargs.in_use=true;
+  fargs.operands=code.operands();
+
+  // We should only really resolve in qualified mode,
+  // no need to look into the parent.
+  // Plus, this should happen in class scope, not the scope of
+  // the constructor because of the constructor arguments.
   exprt symbol_expr=
     resolve(member, cpp_typecheck_resolvet::BOTH, fargs);
 
-  if(symbol_expr.id() == "type" &&
-     follow(symbol_expr.type()).id() == "struct")
+  if(symbol_expr.id()=="type" &&
+     follow(symbol_expr.type()).id()=="struct")
   {
-    // it's a constructor
+    // It's a parent. Call the constructor that we got.
     side_effect_expr_function_callt function_call;
-    function_call.location() = code.location();
     cpp_namet func_name = member;
     function_call.function().swap(func_name);
 
+    function_call.location()=code.location();
     function_call.arguments().reserve(code.operands().size()+1);
     function_call.arguments().insert(function_call.arguments().begin(),code.operands().begin(),code.operands().end());
 
@@ -156,14 +152,16 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
     if(function_call.get_bool("#not_accessible"))
     {
       irep_idt access = function_call.get("#access");
+
       assert( access == "private"
              || access == "protected"
              || access == "noaccess" );
 
-      if(access == "private" || access == "noaccess")
+      if(access=="private" || access=="noaccess")
       {
         err_location(code.location());
-        str << "error: constructor of `" << symbol_expr.type().identifier().as_string()
+        str << "error: constructor of `"
+            << to_string(symbol_expr)
             << "' is not accessible";
         throw 0;
       }
@@ -185,9 +183,10 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
   }
   else
   {
-    if(symbol_expr.id() == "dereference" &&
-       symbol_expr.op0().id() == "member" &&
-       symbol_expr.implicit() == true)
+    // a reference member
+    if(symbol_expr.id()=="dereference" &&
+       symbol_expr.op0().id()=="member" &&
+       symbol_expr.implicit()==true)
     {
       // treat references as normal pointers
       exprt tmp = symbol_expr.op0();
@@ -210,9 +209,9 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
         symbol_expr=resolve(member, cpp_typecheck_resolvet::VAR, fargs);
       }
 
-      if(symbol_expr.id() == "dereference" &&
-         symbol_expr.op0().id() == "member" &&
-         symbol_expr.implicit() == true)
+      if(symbol_expr.id()=="dereference" &&
+         symbol_expr.op0().id()=="member" &&
+         symbol_expr.implicit()==true)
       {
         // treat references as normal pointers
         exprt tmp = symbol_expr.op0();
@@ -230,15 +229,15 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
         if(code.operands().size()!=1)
         {
           err_location(code);
-          str << " reference `" + base_name + "' expects one initializer";
+          str << " reference `"+to_string(symbol_expr)+"' expects one initializer";
           throw 0;
         }
         typecheck_expr(code.op0());
-        reference_initializer(code.op0(),symbol_expr.type());
+        reference_initializer(code.op0(), symbol_expr.type());
 
         // assign the pointers
         symbol_expr.type().remove("#reference");
-        symbol_expr.set("#lvalue",true);
+        symbol_expr.set("#lvalue", true);
         code.op0().type().remove("#reference");
 
         side_effect_exprt assign("assign");
@@ -268,7 +267,7 @@ void cpp_typecheckt::typecheck_member_initializer(codet &code)
     else
     {
       err_location(code);
-      str << "invalid member initializer `" << base_name << "'";
+      str << "invalid member initializer `" << to_string(symbol_expr) << "'";
       throw 0;
     }
   }
@@ -299,16 +298,17 @@ void cpp_typecheckt::typecheck_decl(codet &code)
   cpp_declarationt &declaration=
     to_cpp_declaration(code.op0());
 
-  bool is_typedef=
-    convert_typedef(declaration.type());
+  typet &type=declaration.type();
 
-  typecheck_type(declaration.type());
-  assert(declaration.type().is_not_nil());
+  bool is_typedef=convert_typedef(type);
+
+  typecheck_type(type);
+  assert(type.is_not_nil());
 
   if(declaration.declarators().empty() &&
-     follow(declaration.type()).get_bool("#is_anonymous"))
+     follow(type).get_bool("#is_anonymous"))
   {
-    if(follow(declaration.type()).id()!="union")
+    if(follow(type).id()!="union")
     {
       err_location(code);
       throw "declaration statement does not declare anything";
@@ -326,7 +326,6 @@ void cpp_typecheckt::typecheck_decl(codet &code)
   {
     cpp_declaratort &declarator=*it;
     cpp_declarator_convertert cpp_declarator_converter(*this);
-
     cpp_declarator_converter.is_typedef=is_typedef;
 
     const symbolt &symbol=

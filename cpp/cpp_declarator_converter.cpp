@@ -73,8 +73,9 @@ symbolt &cpp_declarator_convertert::convert(
   final_type=declarator.merge_type(type);
   assert(final_type.is_not_nil());
 
-  irept template_args;
+  cpp_template_args_non_tct template_args;
 
+  // run resolver on scope
   {
     cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
 
@@ -86,9 +87,12 @@ symbolt &cpp_declarator_convertert::convert(
     scope=&cpp_typecheck.cpp_scopes.current_scope();
   }
 
+  // check the type
   cpp_typecheck.typecheck_type(final_type);
+
   is_code=is_code_type(final_type);
 
+  // global-scope arrays must have fixed size
   if(scope->is_global_scope())
     cpp_typecheck.check_array_types(final_type);
 
@@ -125,7 +129,7 @@ symbolt &cpp_declarator_convertert::convert(
       get_final_identifier();
 
       // try again
-      c_it = cpp_typecheck.context.symbols.find(final_identifier);
+      c_it=cpp_typecheck.context.symbols.find(final_identifier);
 
       if(c_it==cpp_typecheck.context.symbols.end())
       {
@@ -193,7 +197,7 @@ symbolt &cpp_declarator_convertert::convert(
   else
   {
     // no, it's no way a method
-    
+
     // we won't allow the constructor/destructor type
     if(final_type.id()=="code" &&
        to_code_type(final_type).return_type().id()=="constructor")
@@ -266,7 +270,7 @@ void cpp_declarator_convertert::combine_types(
     // to argument names, default values, and inlined-ness
     const code_typet &decl_code_type=to_code_type(decl_type);
     code_typet &symbol_code_type=to_code_type(symbol.type);
-    
+
     if(decl_code_type.get_inlined())
       symbol_code_type.set_inlined(true);
 
@@ -471,15 +475,20 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
 
   symbol.name=final_identifier;
   symbol.base_name=base_name;
-  symbol.value = declarator.value();
+  symbol.value=declarator.value();
   symbol.location=declarator.name().location();
   symbol.mode=mode;
   symbol.module=cpp_typecheck.module;
-  symbol.type = final_type;
+  symbol.type=final_type;
   symbol.is_type=is_typedef;
   symbol.is_macro=is_typedef && !is_template_argument;
   symbol.pretty_name=pretty_name;
   symbol.mode=cpp_typecheck.current_mode;
+
+  // Constant? These are propagated.
+  if(symbol.type.cmt_constant() &&
+     symbol.value.is_not_nil())
+    symbol.is_macro=true;
 
   if(member_spec.is_inline())
     symbol.type.set("#inlined", true);

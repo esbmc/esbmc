@@ -60,7 +60,7 @@ std::string cpp_typecheckt::template_suffix(
     {
       exprt e=expr;
       make_constant(e);
-      
+
       // this must be a constant, which includes true/false
       mp_integer i;
 
