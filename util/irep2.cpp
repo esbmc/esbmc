@@ -451,7 +451,8 @@ static const char *expr_names[] = {
   "NULL-object",
   "dereference",
   "valid_object",
-  "deallocated_obj"
+  "deallocated_obj",
+  "dynamic_size"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)

@@ -821,6 +821,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op0;
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new deallocated_obj2t(op0));
+  } else if (expr.id() == "dynamic_size") {
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = expr2tc(new dynamic_size2t(op0));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1490,6 +1494,15 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt op0 = migrate_expr_back(ref2.value);
     exprt theexpr("deallocated_object", thetype);
+    theexpr.copy_to_operands(op0);
+    return theexpr;
+  }
+  case expr2t::dynamic_size_id:
+  {
+    const dynamic_size2t &ref2 = to_dynamic_size2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt op0 = migrate_expr_back(ref2.value);
+    exprt theexpr("dynamic_size", thetype);
     theexpr.copy_to_operands(op0);
     return theexpr;
   }
