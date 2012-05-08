@@ -138,25 +138,28 @@ Function: counterexample_value
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
-  const exprt &lhs,
-  const exprt &value,
+  const expr2tc &lhs,
+  const expr2tc &value,
   const pretty_namest &pretty_names)
 {
-  const irep_idt &identifier=lhs.identifier();
+  const irep_idt &identifier = to_symbol2t(lhs).name;
   std::string value_string;
-  if(value.is_nil())
+
+  if (is_nil_expr(value))
     value_string="(assignment removed)";
   else
   {
     value_string=from_expr(ns, identifier, value);
 
-    if(value.is_constant())
+    if (is_constant_expr(value))
     {
-      if(value.type().id()==typet::t_signedbv ||
-	 value.type().id()==typet::t_unsignedbv ||
-    	 value.type().id()==typet::t_fixedbv ||
-    	 value.type().id()==typet::t_floatbv)
-        value_string+= " ("+value.value().as_string()+")";
+      if(is_bv_type(value->type)) {
+        value_string+= " (" +
+          integer2string(to_constant_int2t(value).constant_value) + ")";
+      } else if (is_fixedbv_type(value->type)) {
+        value_string+= " (" +
+          to_constant_fixedbv2t(value).value.to_ansi_c_string() + ")";
+      }
     }
   }
 
