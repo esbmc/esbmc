@@ -457,7 +457,6 @@ void
 goto_convert_functionst::rename_exprs(irept &expr, const symbolt &cur_name_sym,
                                       const irep_idt &sname)
 {
-  std::string origstr = expr.pretty(0);
 
   if (expr.id() == "pointer")
     return;
