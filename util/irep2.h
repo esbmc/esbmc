@@ -268,6 +268,7 @@ public:
     invalid_id,
     null_object_id,
     dereference_id,
+    valid_object_id,
     end_expr_id
   };
 
@@ -1662,6 +1663,18 @@ public:
 };
 template class esbmct::expr<dereference2t, esbmct::expr2tc_value>;
 
+class valid_object2t : public esbmct::expr<valid_object2t,
+                                           esbmct::expr2tc_value>
+{
+public:
+  valid_object2t(expr2tc &operand)
+    : esbmct::expr<valid_object2t, esbmct::expr2tc_value>
+      (type_pool.get_bool(), valid_object_id, operand) {}
+  valid_object2t(const valid_object2t &ref)
+    : esbmct::expr<valid_object2t, esbmct::expr2tc_value> (ref) {}
+};
+template class esbmct::expr<valid_object2t, esbmct::expr2tc_value>;
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -1790,6 +1803,7 @@ expr_macros(invalid);
 expr_macros(null_object);
 expr_macros(dynamic_object);
 expr_macros(dereference);
+expr_macros(valid_object);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -1926,5 +1940,6 @@ typedef irep_container<invalid2t, expr2t::invalid_id> invalid2tc;
 typedef irep_container<dynamic_object2t, expr2t::dynamic_object_id>
                        dynamic_object2tc;
 typedef irep_container<dereference2t, expr2t::dereference_id> dereference2tc;
+typedef irep_container<valid_object2t, expr2t::valid_object_id> vaild_object2tc;
 
 #endif /* _UTIL_IREP2_H_ */
