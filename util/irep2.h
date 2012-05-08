@@ -1643,7 +1643,8 @@ class dynamic_object2t : public esbmct::expr<dynamic_object2t,
                                              esbmct::bool_unknown>
 {
 public:
-  dynamic_object2t(const type2tc &type, expr2tc inst, bool invalid, bool uknown)
+  dynamic_object2t(const type2tc &type, const expr2tc inst,
+                   bool invalid, bool uknown)
     : esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
                    esbmct::bool_invalid, esbmct::bool_unknown>
       (type, dynamic_object_id, inst, invalid, uknown) {}
@@ -1657,7 +1658,7 @@ template class esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
 class dereference2t : public esbmct::expr<dereference2t, esbmct::expr2tc_value>
 {
 public:
-  dereference2t(const type2tc &type, expr2tc &operand)
+  dereference2t(const type2tc &type, const expr2tc &operand)
     : esbmct::expr<dereference2t, esbmct::expr2tc_value>
       (type, dereference_id, operand) {}
   dereference2t(const dereference2t &ref)
@@ -1669,7 +1670,7 @@ class valid_object2t : public esbmct::expr<valid_object2t,
                                            esbmct::expr2tc_value>
 {
 public:
-  valid_object2t(expr2tc &operand)
+  valid_object2t(const expr2tc &operand)
     : esbmct::expr<valid_object2t, esbmct::expr2tc_value>
       (type_pool.get_bool(), valid_object_id, operand) {}
   valid_object2t(const valid_object2t &ref)
@@ -1681,7 +1682,7 @@ class deallocated_obj2t : public esbmct::expr<deallocated_obj2t,
                                               esbmct::expr2tc_value>
 {
 public:
-  deallocated_obj2t(expr2tc &operand)
+  deallocated_obj2t(const expr2tc &operand)
     : esbmct::expr<deallocated_obj2t, esbmct::expr2tc_value>
       (type_pool.get_bool(), deallocated_obj_id, operand) {}
   deallocated_obj2t(const deallocated_obj2t &ref)
@@ -1693,7 +1694,7 @@ class dynamic_size2t : public esbmct::expr<dynamic_size2t,
                                               esbmct::expr2tc_value>
 {
 public:
-  dynamic_size2t(expr2tc &operand)
+  dynamic_size2t(const expr2tc &operand)
     : esbmct::expr<dynamic_size2t, esbmct::expr2tc_value>
       (type_pool.get_bool(), dynamic_size_id, operand) {}
   dynamic_size2t(const dynamic_size2t &ref)
