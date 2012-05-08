@@ -166,7 +166,10 @@ void goto_convert_functionst::add_return(
   t->code=code_returnt();
   t->location=location;
 
-  exprt rhs=exprt("sideeffect", f.type.return_type());
+  const typet &thetype = (f.type.return_type().id() == "symbol")
+                         ? ns.follow(f.type.return_type())
+                         : f.type.return_type();
+  exprt rhs=exprt("sideeffect", thetype);
   rhs.statement("nondet");
   t->code.move_to_operands(rhs);
 }
