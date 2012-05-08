@@ -1180,7 +1180,8 @@ void value_sett::assign_rec(
                "."+component_name+suffix, ns, add_to_sets);
   }
   else if (is_zero_string2t(lhs) || is_zero_length_string2t(lhs) ||
-           is_constant_string2t(lhs) || is_null_object2t(lhs))
+           is_constant_string2t(lhs) || is_null_object2t(lhs) ||
+           is_valid_object2t(lhs))
   {
     // Ignored
   }
