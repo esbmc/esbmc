@@ -1086,18 +1086,6 @@ void goto_convertt::convert_assign(
 		if(atomic == -1)
 			dest.add_instruction(ATOMIC_END);
   }
-
-  //std::cout << "lhs.pretty(): " << lhs.pretty() << std::endl;
-  //std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
-  if (inductive_step)
-  {
-	if (lhs.is_symbol())
-      get_struct_components(lhs, state);
-	//else
-	  //assert(0);
-	if (rhs.is_symbol())
-      get_struct_components(rhs, state);
-  }
 }
 
 /*******************************************************************\
