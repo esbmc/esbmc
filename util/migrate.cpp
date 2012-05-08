@@ -813,6 +813,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op0;
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new dereference2t(type, op0));
+  } else if (expr.id() == "valid_object") {
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = expr2tc(new valid_object2t(op0));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1464,6 +1468,15 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt op0 = migrate_expr_back(ref2.value);
     exprt theexpr("dereference", thetype);
+    theexpr.copy_to_operands(op0);
+    return theexpr;
+  }
+  case expr2t::valid_object_id:
+  {
+    const valid_object2t &ref2 = to_valid_object2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt op0 = migrate_expr_back(ref2.value);
+    exprt theexpr("valid_object", thetype);
     theexpr.copy_to_operands(op0);
     return theexpr;
   }
