@@ -508,13 +508,7 @@ void value_sett::get_value_set_rec(
   {
     const irep_idt &statement=expr.statement();
     
-    if(statement=="function_call")
-    {
-      std::cout << "value_sett: expr.pretty(): " << expr.pretty() << std::endl;
-      // these should be gone
-      throw "value_sett: unexpected function_call sideeffect";
-    }
-    else if(statement=="malloc")
+    if(statement=="malloc")
     {
       assert(suffix=="");
       
@@ -544,6 +538,11 @@ void value_sett::get_value_set_rec(
       migrate_expr(dynamic_object, tmp);
       insert(dest, tmp, 0);
       return;
+    } else if (statement == "nondet") {
+      // Ignore?
+    } else {
+      std::cerr << "Unexpected side-effect: " << expr.pretty(0) << std::endl;
+      abort();
     }
   }
   else if(expr.id()=="struct")
