@@ -1181,7 +1181,7 @@ void value_sett::assign_rec(
   }
   else if (is_zero_string2t(lhs) || is_zero_length_string2t(lhs) ||
            is_constant_string2t(lhs) || is_null_object2t(lhs) ||
-           is_valid_object2t(lhs))
+           is_valid_object2t(lhs) || is_deallocated_obj2t(lhs))
   {
     // Ignored
   }
