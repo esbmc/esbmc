@@ -1172,9 +1172,11 @@ void value_sett::assign_rec(
   }
   else if (is_member2t(lhs))
   {
-    const std::string &component_name = to_member2t(lhs).member.as_string();
+    const member2t &member = to_member2t(lhs);
+    const std::string &component_name = member.member.as_string();
 
-    assert(is_struct_type(lhs->type) || is_union_type(lhs->type));
+    assert(is_struct_type(member.source_value->type) ||
+           is_union_type(member.source_value->type));
            
     assign_rec(to_member2t(lhs).source_value, values_rhs,
                "."+component_name+suffix, ns, add_to_sets);
