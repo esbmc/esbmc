@@ -825,6 +825,25 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op0;
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new dynamic_size2t(op0));
+  } else if (expr.id() == "sideeffect") {
+    sideeffect2t::allockind t;
+    expr2tc operand, thesize;
+    type2tc cmt_type, plaintype;
+    migrate_expr(expr.op0(), operand);
+    migrate_expr((const exprt&)expr.cmt_size(), thesize);
+    migrate_type((const typet&)expr.cmt_type(), cmt_type);
+    migrate_type(expr.type(), plaintype);
+    if (expr.statement() == "malloc")
+      t = sideeffect2t::malloc;
+    else if (expr.statement() == "cpp_new")
+      t = sideeffect2t::cpp_new;
+    else if (expr.statement() == "cpp_new[]")
+      t = sideeffect2t::cpp_new_arr;
+    else
+      assert(0 && "Unexpected side-effect statement");
+
+    new_expr_ref = expr2tc(new sideeffect2t(plaintype, operand, thesize,
+                                            cmt_type, t));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1504,6 +1523,35 @@ migrate_expr_back(const expr2tc &ref)
     exprt op0 = migrate_expr_back(ref2.value);
     exprt theexpr("dynamic_size", thetype);
     theexpr.copy_to_operands(op0);
+    return theexpr;
+  }
+  case expr2t::sideeffect_id:
+  {
+    const sideeffect2t &ref2 = to_sideeffect2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt theexpr("sideeffect", thetype);
+    typet cmttype = migrate_type_back(ref2.alloctype);
+    exprt size = migrate_expr_back(ref2.size);
+    exprt operand = migrate_expr_back(ref2.operand);
+
+    theexpr.copy_to_operands(operand);
+    theexpr.cmt_type(cmttype);
+    theexpr.cmt_size(size);
+
+    switch (ref2.kind) {
+    case sideeffect2t::malloc:
+      theexpr.statement("malloc");
+      break;
+    case sideeffect2t::cpp_new:
+      theexpr.statement("cpp_new");
+      break;
+    case sideeffect2t::cpp_new_arr:
+      theexpr.statement("cpp_new[]");
+      break;
+    default:
+      assert(0 && "Unexpected side effect type when back-converting");
+    }
+
     return theexpr;
   }
   default:
