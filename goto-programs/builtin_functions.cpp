@@ -258,6 +258,9 @@ void goto_convertt::do_malloc(
   if(alloc_type.is_nil())
     alloc_type=char_type();
 
+  if (alloc_type.id() == "symbol")
+    alloc_type = ns.follow(alloc_type);
+
   if(alloc_size.type()!=uint_type())
   {
     alloc_size.make_typecast(uint_type());
