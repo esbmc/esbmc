@@ -1884,39 +1884,21 @@ void goto_convertt::make_nondet_assign(
   goto_programt &dest)
 {
   u_int j=0;
+  //std::cout << "state.components().size(): " << state.components().size() << std::endl;
   for (j=0; j < state.components().size(); j++)
   {
     exprt rhs_expr=side_effect_expr_nondett(state.components()[j].type());
-    //exprt rhs_expr("nondet_symbol", state.components()[j].type());
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
 
-#if 1
+    //std::cout << "state.components()[j].type().is_array(): " << state.components()[j].type().is_array() << std::endl;
     if (state.components()[j].type().is_array())
     {
- 	    const array_typet &array_type=to_array_type(state.components()[j].type());
- 	    const exprt &size_expr=array_type.size();
-
- 	    if(size_expr.id()=="infinity")
- 	    {
- 	    }
- 	    else
- 	    {
- 	      mp_integer size;
-
- 	      if(to_integer(size_expr, size))
- 	        return true;
-
- 	      if(size<=0) return true;
- 	    }
-
- 	    rhs_expr=exprt("array_of", state.components()[j].type());
-            exprt value=side_effect_expr_nondett(state.components()[j].type().subtype());
- 	    //exprt value("nondet_symbol", state.components()[j].type().subtype());
- 	    rhs_expr.move_to_operands(value);
- 	    //std::cout << "rhs_expr.pretty(): " << rhs_expr.pretty() << std::endl;
+      rhs_expr=exprt("array_of", state.components()[j].type());
+      exprt value=side_effect_expr_nondett(state.components()[j].type().subtype());
+      rhs_expr.move_to_operands(value);
+      //std::cout << "rhs_expr.pretty(): " << rhs_expr.pretty() << std::endl;
     }
-#endif
 
     std::string identifier;
     identifier = "cs$"+i2string(state_counter);
@@ -2232,10 +2214,11 @@ void goto_convertt::replace_cond(
     assert(tmp.operands().size()==2);
     //if (check_op_const(tmp.op0(), tmp.location())) return ;
     //else if (check_op_const(tmp.op1(), tmp.location())) return ;
-
+    //std::cout << "tmp.pretty(): " << tmp.pretty() << std::endl;
     if (tmp.id() == ">" || tmp.id()== ">=")
     {
       if (check_op_const(tmp.op0(), tmp.location())) return ;
+      //std::cout << "entrou 1 " << std::endl;
       nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op0());
       if (cache_result == nondet_vars.end()) 
       {
@@ -2249,6 +2232,7 @@ void goto_convertt::replace_cond(
     else if (tmp.id() == "<" || tmp.id()== "<=")
     {
       if (check_op_const(tmp.op1(), tmp.location())) return ;
+      //std::cout << "entrou 2 " << std::endl;
       nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op1());
       if (cache_result == nondet_vars.end()) 
       {
