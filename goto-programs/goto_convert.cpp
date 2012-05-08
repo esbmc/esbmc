@@ -2230,11 +2230,12 @@ void goto_convertt::replace_cond(
            || exprid == ">")
   {
     assert(tmp.operands().size()==2);
-    if (check_op_const(tmp.op0(), tmp.location())) return ;
-    else if (check_op_const(tmp.op1(), tmp.location())) return ;
+    //if (check_op_const(tmp.op0(), tmp.location())) return ;
+    //else if (check_op_const(tmp.op1(), tmp.location())) return ;
 
     if (tmp.id() == ">" || tmp.id()== ">=")
     {
+      if (check_op_const(tmp.op0(), tmp.location())) return ;
       nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op0());
       if (cache_result == nondet_vars.end()) 
       {
