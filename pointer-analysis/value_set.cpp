@@ -1166,7 +1166,8 @@ void value_sett::assign_rec(
   }
   else if (is_index2t(lhs))
   {
-    assert(is_array_type(to_index2t(lhs).source_value->type));
+    assert(is_array_type(to_index2t(lhs).source_value->type) ||
+           is_string_type(to_index2t(lhs).source_value->type));
 
     assign_rec(to_index2t(lhs).source_value, values_rhs, "[]"+suffix, ns, true);
   }
