@@ -829,7 +829,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     sideeffect2t::allockind t;
     expr2tc operand, thesize;
     type2tc cmt_type, plaintype;
-    migrate_expr(expr.op0(), operand);
+    if (expr.statement() != "nondet")
+      migrate_expr(expr.op0(), operand);
+
     migrate_expr((const exprt&)expr.cmt_size(), thesize);
     migrate_type((const typet&)expr.cmt_type(), cmt_type);
     migrate_type(expr.type(), plaintype);
@@ -839,6 +841,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = sideeffect2t::cpp_new;
     else if (expr.statement() == "cpp_new[]")
       t = sideeffect2t::cpp_new_arr;
+    else if (expr.statement() == "nondet")
+      t = sideeffect2t::nondet;
     else
       assert(0 && "Unexpected side-effect statement");
 

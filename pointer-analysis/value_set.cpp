@@ -496,6 +496,10 @@ void value_sett::get_value_set_rec(
       insert(dest, dynobj, 0);
       }
       return;
+    case sideeffect2t::nondet:
+      // XXXjmorse - don't know what to do here, previously wasn't handled,
+      // so I won't try to handle it now.
+      return;
     default:
       std::cerr << "Unexpected side-effect: " << expr->pretty(0) << std::endl;
       abort();

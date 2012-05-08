@@ -1719,7 +1719,8 @@ public:
   enum allockind {
     malloc,
     cpp_new,
-    cpp_new_arr
+    cpp_new_arr,
+    nondet
   };
 
   sideeffect2t(const type2tc &t, const expr2tc &oper, const expr2tc &sz,
