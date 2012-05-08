@@ -271,6 +271,7 @@ public:
     valid_object_id,
     deallocated_obj_id,
     dynamic_size_id,
+    sideeffect_id,
     end_expr_id
   };
 
@@ -382,6 +383,9 @@ namespace esbmct {
   field_name_macro(instance);
   field_name_macro(invalid);
   field_name_macro(unknown);
+  field_name_macro(size);
+  field_name_macro(alloctype);
+  field_name_macro(kind);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -493,6 +497,9 @@ namespace esbmct {
   member_record_macro(bool_invalid, bool_type_tag, name_invalid);
   member_record_macro(bool_unknown, bool_type_tag, name_unknown);
   member_record_macro(expr2tc_instance, expr2tc_type_tag, name_instance);
+  member_record_macro(expr2tc_size, expr2tc_type_tag, name_size);
+  member_record_macro(type2tc_alloctype, type2tc_type_tag, name_alloctype);
+  member_record_macro(uint_kind, uint_type_tag, name_kind);
   #undef member_record_macro
 
   template <class thename>
@@ -1702,6 +1709,34 @@ public:
 };
 template class esbmct::expr<dynamic_size2t, esbmct::expr2tc_value>;
 
+class sideeffect2t : public esbmct::expr<sideeffect2t,
+                                         esbmct::expr2tc_operand,
+                                         esbmct::expr2tc_size,
+                                         esbmct::type2tc_alloctype,
+                                         esbmct::uint_kind>
+{
+public:
+  enum alloctype {
+    malloc,
+    cpp_new,
+    cpp_new_arr
+  };
+
+  sideeffect2t(const type2tc &t, const expr2tc &oper, const expr2tc &sz,
+               const type2tc &alloct, alloctype k)
+    : esbmct::expr<sideeffect2t, esbmct::expr2tc_operand,
+                   esbmct::expr2tc_size, esbmct::type2tc_alloctype,
+                   esbmct::uint_kind>
+      (t, sideeffect_id, oper, sz, alloct, k) {}
+  sideeffect2t(const sideeffect2t &ref)
+    : esbmct::expr<sideeffect2t, esbmct::expr2tc_operand,
+                   esbmct::expr2tc_size, esbmct::type2tc_alloctype,
+                   esbmct::uint_kind> (ref) {}
+
+};
+template class esbmct::expr<sideeffect2t, esbmct::expr2tc_operand,
+                            esbmct::expr2tc_size, esbmct::type2tc_alloctype,
+                            esbmct::uint_kind>;
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -1833,6 +1868,7 @@ expr_macros(dereference);
 expr_macros(valid_object);
 expr_macros(deallocated_obj);
 expr_macros(dynamic_size);
+expr_macros(sideeffect);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -1973,5 +2009,6 @@ typedef irep_container<valid_object2t, expr2t::valid_object_id> vaild_object2tc;
 typedef irep_container<deallocated_obj2t, expr2t::deallocated_obj_id>
                        deallocated_obj2tc;
 typedef irep_container<dynamic_size2t, expr2t::dynamic_size_id> dynamic_size2tc;
+typedef irep_container<sideeffect2t, expr2t::sideeffect_id> sideeffect2tc;
 
 #endif /* _UTIL_IREP2_H_ */
