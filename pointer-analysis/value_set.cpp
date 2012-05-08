@@ -427,7 +427,14 @@ void value_sett::get_value_set_rec(
     // check if NULL
     if(expr.value()=="NULL" && expr.type().id()=="pointer")
     {
-      exprt tmp("NULL-object", expr.type().subtype());
+      // XXXjmorse - looks like there's no easy way to avoid this ns.follow
+      // for getting the null objects type, without an internal pointer
+      // repr reshuffle.
+      typet subtype = expr.type().subtype();
+      if (subtype.id() == "symbol")
+        subtype = ns.follow(subtype);
+
+      exprt tmp("NULL-object", subtype);
       expr2tc tmp2;
       migrate_expr(tmp, tmp2);
       insert(dest, tmp2, 0);
