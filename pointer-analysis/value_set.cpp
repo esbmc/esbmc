@@ -1158,10 +1158,10 @@ void value_sett::assign_rec(
         it++)
     {
       // XXXjmorse - some horrible type safety is about to fail
-      const dynamic_object2tc object_c = object_numbering[it->first];
+      const expr2tc obj = object_numbering[it->first];
 
-      if (!object_c->unknown)
-        assign_rec(object_c, values_rhs, suffix, ns, add_to_sets);
+      if (!is_unknown2t(obj))
+        assign_rec(obj, values_rhs, suffix, ns, add_to_sets);
     }
   }
   else if (is_index2t(lhs))
