@@ -248,10 +248,10 @@ public:
 
 protected:
   void get_value_set_rec(
-    const exprt &expr,
+    const expr2tc &expr,
     object_mapt &dest,
     const std::string &suffix,
-    const typet &original_type,
+    const type2tc &original_type,
     const namespacet &ns) const;
 
   void get_value_set(
