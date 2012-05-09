@@ -172,19 +172,111 @@ migrate_type(const typet &type, type2tc &new_type_ref)
   }
 }
 
-static void
-splice_expr(const exprt &expr, expr2tc &new_expr_ref)
+static const typet &
+decide_on_expr_type(const exprt &side1, const exprt &side2)
 {
-  exprt expr_twopart = expr;
+
+  // For some arithmetic expr, decide on the result of operating on them.
+
+  // First, if either are pointers, use that.
+  if (side1.type().id() == typet::t_pointer)
+    return side1.type();
+  else if (side2.type().id() == typet::t_pointer)
+    return side2.type();
+
+  // Then, fixedbv's take precedence.
+  if (side1.type().id() == typet::t_fixedbv)
+    return side1.type();
+  if (side2.type().id() == typet::t_fixedbv)
+    return side2.type();
+
+  // If one operand is bool, return the other, as that's either bool or will
+  // have a higher rank.
+  if (side1.type().id() == typet::t_bool)
+    return side2.type();
+  else if (side2.type().id() == typet::t_bool)
+    return side1.type();
+
+  assert(side1.type().id() == typet::t_unsignedbv ||
+         side1.type().id() == typet::t_signedbv);
+  assert(side2.type().id() == typet::t_unsignedbv ||
+         side2.type().id() == typet::t_signedbv);
+
+  unsigned int side1_width = atoi(side1.type().width().as_string().c_str());
+  unsigned int side2_width = atoi(side2.type().width().as_string().c_str());
+
+  if (side1.type().id() == side2.type().id()) {
+    if (side1_width > side2_width)
+      return side1.type();
+    else
+      return side2.type();
+  }
+
+  // Differing between signed/unsigned bv type. Take unsigned if greatest.
+  if (side1.type().id() == typet::t_unsignedbv && side1_width >= side2_width)
+    return side1.type();
+
+  if (side2.type().id() == typet::t_unsignedbv && side2_width >= side1_width)
+    return side2.type();
+
+  // Otherwise return the signed one;
+  if (side1.type().id() == typet::t_signedbv)
+    return side1.type();
+  else
+    return side2.type();
+}
+
+static exprt
+splice_expr(const exprt &expr)
+{
+
+  // Duplicate
   exprt expr_recurse = expr;
 
+  // Have we reached the bottom?
+  if (expr.operands().size() == 2) {
+    // Finish; optionally deduce type.
+    if (expr.type().id() == "nil") {
+      const typet &subexpr_type = decide_on_expr_type(expr.op0(), expr.op1());
+      expr_recurse.type() = subexpr_type;
+    }
+    return expr_recurse;
+  }
+
+  // Remove back operand from recursive expr.
   exprt popped = expr_recurse.operands()[expr_recurse.operands().size()-1];
   expr_recurse.operands().pop_back();
 
-  expr_twopart.operands().clear();
-  expr_twopart.copy_to_operands(expr_recurse, popped);
+  // Set type to nil, so that subsequent calls to slice_expr deduce the
+  // type themselves.
+  expr_recurse.type().id("nil");
+  exprt base = splice_expr(expr_recurse);
 
-  migrate_expr(expr_twopart, new_expr_ref);
+  // We now have an expr covering the rest of the expr, and an additional
+  // operand; combine them into a new binary operation.
+  exprt expr_twopart(expr.id());
+  expr_twopart.copy_to_operands(base, popped);
+
+  // Pick a type; if the incoming expr has no type, deduce it; if it does have
+  // a type, use that one.
+  if (expr.type().id() == "nil") {
+    const typet &subexpr_type = decide_on_expr_type(base, popped);
+    expr_twopart.type() = subexpr_type;
+  } else {
+    expr_twopart.type() = expr.type();
+  }
+
+  assert(expr_twopart.type().id() != "nil");
+  return expr_twopart;
+}
+
+static void
+splice_expr(const exprt &expr, expr2tc &new_expr_ref)
+{
+
+  exprt newexpr = splice_expr(expr);
+  migrate_expr(newexpr, new_expr_ref);
+  return;
 }
 
 static void
