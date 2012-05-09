@@ -12,6 +12,23 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "base_type.h"
 #include "union_find.h"
 
+
+bool base_type_eq(
+  const type2tc &type1,
+  const type2tc &type2,
+  const namespacet &ns)
+{
+  return base_type_eq(migrate_type_back(type1), migrate_type_back(type2), ns);
+}
+
+bool base_type_eq(
+  const expr2tc &expr1,
+  const expr2tc &expr2,
+  const namespacet &ns)
+{
+  return base_type_eq(migrate_expr_back(expr1), migrate_expr_back(expr2), ns);
+}
+
 /*******************************************************************\
 
 Function: base_type

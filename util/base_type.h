@@ -9,6 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_BASE_TYPE_H
 #define CPROVER_BASE_TYPE_H
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <type.h>
 #include <namespace.h>
 #include <union_find.h>
@@ -24,6 +27,16 @@ bool base_type_eq(
 bool base_type_eq(
   const exprt &expr1,
   const exprt &expr2,
+  const namespacet &ns);
+
+bool base_type_eq(
+  const type2tc &type1,
+  const type2tc &type2,
+  const namespacet &ns);
+
+bool base_type_eq(
+  const expr2tc &expr1,
+  const expr2tc &expr2,
   const namespacet &ns);
 
 /*******************************************************************\
