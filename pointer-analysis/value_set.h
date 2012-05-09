@@ -242,7 +242,7 @@ public:
     const namespacet &ns);
 
   void get_reference_set(
-    const exprt &expr,
+    const expr2tc &expr,
     value_setst::valuest &dest,
     const namespacet &ns) const;
 
@@ -260,7 +260,7 @@ protected:
     const namespacet &ns) const;
 
   void get_reference_set(
-    const exprt &expr,
+    const expr2tc &expr,
     object_mapt &dest,
     const namespacet &ns) const
   {
@@ -268,7 +268,7 @@ protected:
   }
 
   void get_reference_set_rec(
-    const exprt &expr,
+    const expr2tc &expr,
     object_mapt &dest,
     const namespacet &ns) const;
 

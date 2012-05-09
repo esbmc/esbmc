@@ -391,15 +391,13 @@ void value_sett::get_value_set_rec(
   else if (is_address_of2t(expr))
   {
     const address_of2t &addrof = to_address_of2t(expr);
-    exprt tmp = migrate_expr_back(addrof.ptr_obj);
-    get_reference_set(/*addrof.ptr_obj*/tmp, dest, ns);
+    get_reference_set(addrof.ptr_obj, dest, ns);
     return;
   }
   else if (is_dereference2t(expr))
   {
     object_mapt reference_set;
-    //get_reference_set(expr, reference_set, ns);
-    get_reference_set(migrate_expr_back(expr), reference_set, ns);
+    get_reference_set(expr, reference_set, ns);
     const object_map_dt &object_map=reference_set.read();
     
     if(object_map.begin()!=object_map.end())
@@ -610,7 +608,7 @@ Function: value_sett::get_reference_set
 \*******************************************************************/
 
 void value_sett::get_reference_set(
-  const exprt &expr,
+  const expr2tc &expr,
   value_setst::valuest &dest,
   const namespacet &ns) const
 {
@@ -637,61 +635,43 @@ Function: value_sett::get_reference_set_rec
 \*******************************************************************/
 
 void value_sett::get_reference_set_rec(
-  const exprt &expr,
+  const expr2tc &expr,
   object_mapt &dest,
   const namespacet &ns) const
 {
 
-  expr2tc migrated;
-  migrate_expr(expr, migrated);
-
-  if(expr.id()=="symbol" ||
-     expr.id()=="dynamic_object" ||
-     expr.id()=="string-constant")
+  if (is_symbol2t(expr) || is_dynamic_object2t(expr) ||
+      is_constant_string2t(expr))
   {
-    if(expr.type().is_array() &&
-       expr.type().subtype().is_array())
-      insert(dest, migrated);
+    if (is_array_type(expr->type) &&
+        is_array_type(to_array_type(expr->type).subtype))
+      insert(dest, expr);
     else    
-      insert(dest, migrated, 0);
+      insert(dest, expr, 0);
 
     return;
   }
-  else if(expr.id()=="dereference" ||
-          expr.id()=="implicit_dereference")
+  else if (is_dereference2t(expr))
   {
-    if(expr.operands().size()!=1)
-      throw expr.id_string()+" expected to have one operand";
-
-    expr2tc tmp_expr;
-    migrate_expr(expr.op0(), tmp_expr);
-    get_value_set_rec(tmp_expr, dest, "", tmp_expr->type, ns);
-
+    const dereference2t &deref = to_dereference2t(expr);
+    get_value_set_rec(deref.value, dest, "", deref.type, ns);
     return;
   }
-  else if(expr.id()=="index")
+  else if (is_index2t(expr))
   {
-    if(expr.operands().size()!=2)
-      throw "index expected to have two operands";
-  
-    const exprt &array=expr.op0();
-    const exprt &offset=expr.op1();
-    const typet &array_type_tmp=ns.follow(array.type());
+    const index2t &index = to_index2t(expr);
     
-    assert(array_type_tmp.is_array() ||
-           array_type_tmp.id()=="incomplete_array");
+    assert(is_array_type(index.source_value->type) ||
+           is_string_type(index.source_value->type));
     
     // fix up array type during migration; it can have location fields and
     // other useless gubbins in it, which get compared against a back-migrated
     // type that drops such information, thus always failing. Work around this
     // by migrating forwards and backwards the array type, thus stripping out
     // any additional information we don't want in a comparison.
-    type2tc tmp_type;
-    migrate_type(array_type_tmp, tmp_type);
-    const typet array_type = migrate_type_back(tmp_type);
 
     object_mapt array_references;
-    get_reference_set(array, array_references, ns);
+    get_reference_set(index.source_value, array_references, ns);
         
     const object_map_dt &object_map=array_references.read();
     
@@ -700,54 +680,42 @@ void value_sett::get_reference_set_rec(
         a_it!=object_map.end();
         a_it++)
     {
-      const expr2tc &object2=object_numbering[a_it->first];
-      const exprt object = migrate_expr_back(object2);
+      const expr2tc &object = object_numbering[a_it->first];
 
-      if(object.id()=="unknown") {
-        exprt unknown("unknown", expr.type());
-        expr2tc tmp;
-        migrate_expr(unknown, tmp);
-        insert(dest, tmp);
+      if (is_unknown2t(object)) {
+        expr2tc unknown = expr2tc(new unknown2t(expr->type));
+        insert(dest, unknown);
       } else {
-        index_exprt index_expr(expr.type());
-        index_expr.array()=object;
-        index_expr.index()=gen_zero(index_type());
+        type2tc zero_type = type_pool.get_uint(config.ansi_c.int_width);
+        expr2tc const_zero = expr2tc(new constant_int2t(zero_type, BigInt(0)));
+        expr2tc new_index = expr2tc(new index2t(index.type, object,const_zero));
         
         // adjust type?
-        if(ns.follow(object.type())!=array_type)
-          index_expr.make_typecast(array.type());
-        
-        objectt o=a_it->second;
-        mp_integer i;
+        if (object->type != index.source_value->type)
+          new_index = expr2tc(new typecast2t(index.source_value->type,
+                                             new_index));
+        objectt o = a_it->second;
 
-        if(offset.is_zero())
-        {
-        }
-        else if(!to_integer(offset, i) &&
-                o.offset_is_zero())
-          o.offset=i;
+        if (is_constant_int2t(index.index) &&
+            to_constant_int2t(index.index).constant_value.is_zero())
+          ;
+        else if (is_constant_int2t(index.index) && o.offset_is_zero())
+          o.offset = to_constant_int2t(index.index).constant_value;
         else
-          o.offset_is_set=false;
+          o.offset_is_set = false;
           
-        expr2tc tmp;
-        migrate_expr(index_expr, tmp);
-        insert(dest, tmp, o);
+        insert(dest, new_index, o);
       }
     }
     
     return;
   }
-  else if(expr.id()=="member")
+  else if (is_member2t(expr))
   {
-    const irep_idt &component_name=expr.component_name();
+    const member2t &memb = to_member2t(expr);
 
-    if(expr.operands().size()!=1)
-      throw "member expected to have one operand";
-  
-    const exprt &struct_op=expr.op0();
-    
     object_mapt struct_references;
-    get_reference_set(struct_op, struct_references, ns);
+    get_reference_set(memb.source_value, struct_references, ns);
     
     const object_map_dt &object_map=struct_references.read();
 
@@ -756,47 +724,36 @@ void value_sett::get_reference_set_rec(
         it!=object_map.end();
         it++)
     {
-      const expr2tc &object2=object_numbering[it->first];
-      const exprt object = migrate_expr_back(object2);
+      const expr2tc &object = object_numbering[it->first];
       
-      if(object.id()=="unknown") {
-        exprt unknown("unknown", expr.type());
-        expr2tc tmp;
-        migrate_expr(unknown, tmp);
-        insert(dest, tmp);
+      if (is_unknown2t(object)) {
+        expr2tc unknown = expr2tc(new unknown2t(memb.type));
+        insert(dest, unknown);
       } else {
         objectt o=it->second;
 
-        member_exprt member_expr(expr.type());
-        member_expr.op0()=object;
-        member_expr.set_component_name(component_name);
+        expr2tc new_memb = expr2tc(new member2t(memb.type, object,memb.member));
         
         // adjust type?
-        if(ns.follow(struct_op.type())!=ns.follow(object.type()))
-          member_expr.op0().make_typecast(struct_op.type());
+        if (memb.source_value->type != object->type)
+          new_memb = expr2tc(new typecast2t(memb.source_value->type, new_memb));
         
-        expr2tc tmp;
-        migrate_expr(member_expr, tmp);
-        insert(dest, tmp, o);
+        insert(dest, new_memb, o);
       }
     }
 
     return;
   }
-  else if(expr.id()=="if")
+  else if (is_if2t(expr))
   {
-    if(expr.operands().size()!=3)
-      throw "if takes three operands";
-
-    get_reference_set_rec(expr.op1(), dest, ns);
-    get_reference_set_rec(expr.op2(), dest, ns);
+    const if2t &anif = to_if2t(expr);
+    get_reference_set_rec(anif.true_value, dest, ns);
+    get_reference_set_rec(anif.false_value, dest, ns);
     return;
   }
 
-  exprt unknown("unknown", expr.type());
-  expr2tc tmp;
-  migrate_expr(unknown, tmp);
-  insert(dest, tmp);
+  expr2tc unknown = expr2tc(new unknown2t(expr->type));
+  insert(dest, unknown);
 }
 
 /*******************************************************************\
@@ -1077,8 +1034,7 @@ void value_sett::assign_rec(
   else if (is_dereference2t(lhs))
   {
     object_mapt reference_set;
-    exprt tmp_expr = migrate_expr_back(lhs);
-    get_reference_set(tmp_expr, reference_set, ns);
+    get_reference_set(lhs, reference_set, ns);
 
     if(reference_set.read().size()!=1)
       add_to_sets=true;

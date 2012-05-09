@@ -9,6 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_SET_DOMAIN_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_DOMAIN_H
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <goto-programs/static_analysis.h>
 
 #include "value_set.h"
@@ -50,7 +53,9 @@ public:
     const exprt &expr,
     value_setst::valuest &dest)
   {
-    value_set.get_reference_set(expr, dest, ns);
+    expr2tc tmp_expr;
+    migrate_expr(expr, tmp_expr);
+    value_set.get_reference_set(tmp_expr, dest, ns);
   }
   
 };
