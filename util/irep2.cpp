@@ -1160,6 +1160,9 @@ inline void
 do_type_list_operands<expr2tc>(expr2tc &theval,
                                std::vector<expr2tc*> &inp)
 {
+  if (is_nil_expr(theval))
+    return;
+
   inp.push_back(&theval);
 }
 
@@ -1168,8 +1171,10 @@ inline void
 do_type_list_operands<std::vector<expr2tc> >(std::vector<expr2tc> &theval,
                       std::vector<expr2tc*> &inp)
 {
-  Forall_exprs(it, theval)
-    inp.push_back(&(*it));
+  Forall_exprs(it, theval) {
+    if (!is_nil_expr(*it))
+      inp.push_back(&(*it));
+  }
 }
 
 template<>
@@ -1177,6 +1182,9 @@ inline void
 do_type_list_operands<expr2tc>(const expr2tc &theval,
                                std::vector<const expr2tc *> &inp)
 {
+  if (is_nil_expr(theval))
+    return;
+
   inp.push_back(&theval);
 }
 
@@ -1185,8 +1193,10 @@ inline void
 do_type_list_operands<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
                       std::vector<const expr2tc *> &inp)
 {
-  forall_exprs(it, theval)
-    inp.push_back(&(*it));
+  forall_exprs(it, theval) {
+    if (!is_nil_expr(*it))
+      inp.push_back(&(*it));
+  }
 }
 
 template <class derived, class field1, class field2, class field3, class field4>
