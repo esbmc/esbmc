@@ -472,24 +472,6 @@ void value_sett::get_value_set_rec(
   insert(dest, tmp);
 }
 
-void value_sett::dereference_rec(
-  const exprt &src,
-  exprt &dest) const
-{
-  // remove pointer typecasts
-  if(src.id()=="typecast")
-  {
-    assert(src.type().id()=="pointer");
-
-    if(src.operands().size()!=1)
-      throw "typecast expects one operand";
-    
-    dereference_rec(src.op0(), dest);
-  }
-  else
-    dest=src;
-}
-
 void value_sett::get_reference_set(
   const expr2tc &expr,
   value_setst::valuest &dest,

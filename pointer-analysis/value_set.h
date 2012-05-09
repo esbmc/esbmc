@@ -272,10 +272,6 @@ protected:
     object_mapt &dest,
     const namespacet &ns) const;
 
-  void dereference_rec(
-    const exprt &src,
-    exprt &dest) const;
-
   void assign_rec(
     const expr2tc &lhs,
     const object_mapt &values_rhs,
