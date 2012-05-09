@@ -660,14 +660,18 @@ void value_sett::assign(
   
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
-    const struct_type2t &struct_type = to_struct_type(lhs_type);
+    const std::vector<type2tc> &members = (is_struct_type(lhs_type))
+      ? to_struct_type(lhs_type).members : to_union_type(lhs_type).members;
+    const std::vector<irep_idt> &member_names = (is_struct_type(lhs_type))
+      ? to_struct_type(lhs_type).member_names
+      : to_union_type(lhs_type).member_names;
     
     unsigned int i = 0;
-    for(std::vector<type2tc>::const_iterator c_it = struct_type.members.begin();
-        c_it != struct_type.members.end(); c_it++, i++)
+    for (std::vector<type2tc>::const_iterator c_it = members.begin();
+        c_it != members.end(); c_it++, i++)
     {
       const type2tc &subtype = *c_it;
-      const irep_idt &name = struct_type.member_names[i];
+      const irep_idt &name = member_names[i];
 
       // ignore methods
       if (is_code_type(subtype))
