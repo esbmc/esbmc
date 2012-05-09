@@ -1734,7 +1734,7 @@ void goto_convertt::convert_for(
 
   dest.destructive_append(tmp_w);
 
-  if (inductive_step || base_case)
+  if (inductive_step)
     increment_var(code.op1(), dest);
 
   dest.destructive_append(tmp_x);
@@ -1752,7 +1752,7 @@ void goto_convertt::convert_for(
 
   
   //do the g label
-  if (inductive_step || base_case)
+  if (base_case || inductive_step)
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
@@ -2346,7 +2346,6 @@ void goto_convertt::convert_while(
     make_nondet_assign(dest);
   }
 
-
   // save break/continue targets
   break_continue_targetst old_targets(targets);
 
@@ -2389,7 +2388,7 @@ void goto_convertt::convert_while(
   if (inductive_step)
     update_state_vector(state_vector, dest);
 
-  if (inductive_step || base_case)
+  if (inductive_step)
     increment_var(code.op0(), dest);
 
   dest.destructive_append(tmp_x);
@@ -2407,7 +2406,7 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (inductive_step || base_case)
+  if (base_case || inductive_step)
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
