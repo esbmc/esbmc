@@ -395,6 +395,9 @@ namespace esbmct {
   field_name_macro(size);
   field_name_macro(alloctype);
   field_name_macro(kind);
+  field_name_macro(arguments);
+  field_name_macro(ret_type);
+  field_name_macro(ellipsis);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -509,6 +512,9 @@ namespace esbmct {
   member_record_macro(expr2tc_size, expr2tc_type_tag, name_size);
   member_record_macro(type2tc_alloctype, type2tc_type_tag, name_alloctype);
   member_record_macro(uint_kind, uint_type_tag, name_kind);
+  member_record_macro(type2tc_vec_args, type2tc_vec_type_tag, name_arguments);
+  member_record_macro(type2tc_ret_type, type2tc_type_tag, name_ret_type);
+  member_record_macro(bool_ellipsis, bool_type_tag, name_ellipsis);
   #undef member_record_macro
 
   template <class thename>
@@ -710,14 +716,24 @@ public:
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
-class code_type2t : public esbmct::type<code_type2t>
+class code_type2t : public esbmct::type<code_type2t,
+                                        esbmct::type2tc_vec_args,
+                                        esbmct::type2tc_ret_type,
+                                        esbmct::bool_ellipsis>
 {
 public:
-  code_type2t(void) : esbmct::type<code_type2t>(code_id) {}
-  code_type2t(const code_type2t &ref) : esbmct::type<code_type2t>(ref) {}
+  code_type2t(const std::vector<type2tc> &args, const type2tc &ret_type, bool e)
+    : esbmct::type<code_type2t, esbmct::type2tc_vec_args,
+                   esbmct::type2tc_ret_type, esbmct::bool_ellipsis>
+      (code_id, args, ret_type, e) {}
+  code_type2t(const code_type2t &ref)
+    : esbmct::type<code_type2t, esbmct::type2tc_vec_args,
+                   esbmct::type2tc_ret_type, esbmct::bool_ellipsis>
+      (ref) {}
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<code_type2t>;
+template class esbmct::type<code_type2t, esbmct::type2tc_vec_args,
+                            esbmct::type2tc_ret_type, esbmct::bool_ellipsis>;
 
 /** Array type. Comes with a subtype of the array and a size that might be
  *  constant, might be nondeterministic. */
@@ -834,11 +850,9 @@ public:
 
   type2tc bool_type;
   type2tc empty_type;
-  type2tc code_type;
 
   const type2tc &get_bool() const { return bool_type; }
   const type2tc &get_empty() const { return empty_type; }
-  const type2tc &get_code() const { return code_type; }
 
   // For other types, have a pool of them for quick lookup.
   std::map<const typet, type2tc> struct_map;
@@ -850,6 +864,7 @@ public:
   std::map<const typet, type2tc> fixedbv_map;
   std::map<const typet, type2tc> string_map;
   std::map<const typet, type2tc> symbol_map;
+  std::map<const typet, type2tc> code_map;
 
   // And refs to some of those for /really/ quick lookup;
   const type2tc *uint8;
@@ -871,6 +886,7 @@ public:
   const type2tc &get_fixedbv(const typet &val);
   const type2tc &get_string(const typet &val);
   const type2tc &get_symbol(const typet &val);
+  const type2tc &get_code(const typet &val);
 
   const type2tc &get_uint(unsigned int size);
   const type2tc &get_int(unsigned int size);

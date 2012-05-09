@@ -125,7 +125,26 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     fixedbv_type2t *f = new fixedbv_type2t(frac_bits, int_bits);
     new_type_ref = type2tc(f);
   } else if (type.id() == typet::t_code) {
-    code_type2t *c = new code_type2t();
+    const code_typet &ref = static_cast<const code_typet &>(type);
+
+    std::vector<type2tc> args;
+    type2tc ret_type;
+    bool ellipsis = false;
+
+    if (ref.has_ellipsis())
+      ellipsis = true;
+
+    const code_typet::argumentst &old_args = ref.arguments();
+    for (code_typet::argumentst::const_iterator it = old_args.begin();
+         it != old_args.end(); it++) {
+      type2tc tmp;
+      migrate_type(it->type(), tmp);
+      args.push_back(tmp);
+    }
+
+    migrate_type(static_cast<const typet &>(type.return_type()), ret_type);
+
+    code_type2t *c = new code_type2t(args, ret_type, ellipsis);
     new_type_ref = type2tc(c);
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
     new_type_ref = type2tc(type_pool.get_empty());
@@ -163,7 +182,7 @@ migrate_type(const typet &type, type2tc &new_type_ref)
   } else if (type.id() == typet::t_fixedbv) {
     new_type_ref = type_pool.get_fixedbv(type);
   } else if (type.id() == typet::t_code) {
-    new_type_ref = type_pool.get_code();
+    new_type_ref = type_pool.get_code(type);
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
     new_type_ref = type2tc(type_pool.get_empty());
   } else {
@@ -1012,7 +1031,23 @@ migrate_type_back(const type2tc &ref)
     return thetype;
     }
   case type2t::code_id:
-    return code_typet();
+    {
+    const code_type2t &ref2 = static_cast<const code_type2t &>(*ref.get());
+    code_typet code;
+    typet ret_type = migrate_type_back(ref2.ret_type);
+
+    code_typet::argumentst args;
+    forall_types(it, ref2.arguments) {
+      args.push_back(code_typet::argumentt(migrate_type_back(*it)));
+    }
+
+    code.arguments() = args;
+
+    if (ref2.ellipsis)
+      code.make_ellipsis();
+
+    return code;
+    }
   case type2t::array_id:
     {
     const array_type2t &ref2 = to_array_type(ref);
