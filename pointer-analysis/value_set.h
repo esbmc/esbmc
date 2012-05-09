@@ -280,7 +280,7 @@ protected:
     bool add_to_sets);
 
   void do_free(
-    const exprt &op,
+    const expr2tc &op,
     const namespacet &ns);
 
   exprt make_member(

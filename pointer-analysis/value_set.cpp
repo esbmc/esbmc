@@ -746,18 +746,15 @@ void value_sett::assign(
 }
 
 void value_sett::do_free(
-  const exprt &op,
+  const expr2tc &op,
   const namespacet &ns)
 {
   // op must be a pointer
-  if(op.type().id()!="pointer")
-    throw "free expected to have pointer-type operand";
+  assert(is_pointer_type(op->type));
 
   // find out what it points to    
   object_mapt value_set;
-  expr2tc new_op;
-  migrate_expr(op, new_op);
-  get_value_set(new_op, value_set, ns);
+  get_value_set(op, value_set, ns);
   
   const object_map_dt &object_map=value_set.read();
   
@@ -769,18 +766,14 @@ void value_sett::do_free(
       it!=object_map.end();
       it++)
   {
-    const expr2tc &object2=object_numbering[it->first];
-    const exprt object = migrate_expr_back(object2);
+    const expr2tc &object = object_numbering[it->first];
 
-    if(object.id()=="dynamic_object")
+    if (is_dynamic_object2t(object))
     {
-      const dynamic_object_exprt &dynamic_object=
-        to_dynamic_object_expr(object);
+      const dynamic_object2t &dynamic_object = to_dynamic_object2t(object);
       
-      if(dynamic_object.valid().is_true()) {
-        expr2tc tmp;
-        migrate_expr(dynamic_object.instance(), tmp);
-        to_mark.insert(tmp);
+      if (!dynamic_object.invalid) {
+        to_mark.insert(dynamic_object.instance);
       }
     }
   }
@@ -803,27 +796,22 @@ void value_sett::do_free(
         o_it!=old_object_map.end();
         o_it++)
     {
-      const expr2tc &object2=object_numbering[o_it->first];
-      const exprt object = migrate_expr_back(object2);
+      const expr2tc &object = object_numbering[o_it->first];
 
-      if(object.id()=="dynamic_object")
+      if (is_dynamic_object2t(object))
       {
-        const exprt &instance=
-          to_dynamic_object_expr(object).instance();
+        const expr2tc &instance = to_dynamic_object2t(object).instance;
 
-        expr2tc inst;
-        migrate_expr(instance, inst);
-        if(to_mark.count(inst)==0)
+        if (to_mark.count(instance) == 0)
           set(new_object_map, o_it);
         else
         {
           // adjust
           objectt o=o_it->second;
-          exprt tmp(object);
-          to_dynamic_object_expr(tmp).valid()=exprt("unknown", op.type());
-          expr2tc tmp2;
-          migrate_expr(tmp, tmp2);
-          insert(new_object_map, tmp2, o);
+          dynamic_object2tc new_dyn(object);
+          expr2tc unknown = expr2tc(new unknown2t(op->type));
+          new_dyn.get()->instance = unknown;
+          insert(new_object_map, new_dyn, o);
           changed=true;
         }
       }
@@ -888,7 +876,7 @@ void value_sett::assign_rec(
   {
     assert(is_array_type(to_index2t(lhs).source_value->type) ||
            is_string_type(to_index2t(lhs).source_value->type) ||
-           is_dynamic_object2t(to_index2t(lhs).source_value->type));
+           is_dynamic_object2t(to_index2t(lhs).source_value));
 
     assign_rec(to_index2t(lhs).source_value, values_rhs, "[]"+suffix, ns, true);
   }
@@ -1065,7 +1053,9 @@ void value_sett::apply_code(
     if(code.operands().size()!=1)
       throw "free expected to have one operand";
 
-    do_free(code.op0(), ns);
+    expr2tc op0;
+    migrate_expr(code.op0(), op0);
+    do_free(op0, ns);
   }
   else if(statement=="lock" || statement=="unlock")
   {
