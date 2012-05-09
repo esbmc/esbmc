@@ -1647,7 +1647,8 @@ migrate_expr_back(const expr2tc &ref)
     exprt size = migrate_expr_back(ref2.size);
     exprt operand = migrate_expr_back(ref2.operand);
 
-    theexpr.copy_to_operands(operand);
+    if (ref2.kind != sideeffect2t::nondet)
+      theexpr.copy_to_operands(operand);
     theexpr.cmt_type(cmttype);
     theexpr.cmt_size(size);
 
@@ -1660,6 +1661,9 @@ migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::cpp_new_arr:
       theexpr.statement("cpp_new[]");
+      break;
+    case sideeffect2t::nondet:
+      theexpr.statement("nondet");
       break;
     default:
       assert(0 && "Unexpected side effect type when back-converting");
