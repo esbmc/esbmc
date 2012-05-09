@@ -1,8 +1,9 @@
 char nondet_char();
 unsigned int nondet_uint();
-unsigned int max = nondet_uint();
+
 
 int main() {
+    unsigned int max = nondet_uint();
     __ESBMC_assume(max>0 && max<6);
     char str1[max], str2[max];
     //unsigned int i, j;

@@ -11,6 +11,7 @@ mlist* search_list(mlist *l, int k){
   while(l!=NULL && l->key!=k) {
     l = l->next;
   }
+  //__ESBMC_assume((l != NULL && l->key != k));
   return l;
 }
 
