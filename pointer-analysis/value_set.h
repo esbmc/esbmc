@@ -226,8 +226,8 @@ public:
     const namespacet &ns);
 
   void assign(
-    const exprt &lhs,
-    const exprt &rhs,
+    const expr2tc &lhs,
+    const expr2tc &rhs,
     const namespacet &ns,
     bool add_to_sets=false);
 

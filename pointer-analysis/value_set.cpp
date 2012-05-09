@@ -641,111 +641,123 @@ void value_sett::get_reference_set_rec(
 }
 
 void value_sett::assign(
-  const exprt &lhs,
-  const exprt &rhs,
+  const expr2tc &lhs,
+  const expr2tc &rhs,
   const namespacet &ns,
   bool add_to_sets)
 {
 
-  if(rhs.id()=="if")
+  if (is_if2t(rhs))
   {
-    if(rhs.operands().size()!=3)
-      throw "if takes three operands";
-
-    assign(lhs, rhs.op1(), ns, add_to_sets);
-    assign(lhs, rhs.op2(), ns, true);
+    const if2t &ifref = to_if2t(rhs);
+    assign(lhs, ifref.true_value, ns, add_to_sets);
+    assign(lhs, ifref.false_value, ns, true);
     return;
   }
 
-  const typet &type=ns.follow(lhs.type());
+  assert(!is_symbol_type(lhs->type));
+  const type2tc &lhs_type = lhs->type;
   
-  if(type.id()=="struct" ||
-     type.id()=="union")
+  if (is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
-    const struct_typet &struct_type=to_struct_type(type);
+    const struct_type2t &struct_type = to_struct_type(lhs_type);
     
-    for(struct_typet::componentst::const_iterator
-        c_it=struct_type.components().begin();
-        c_it!=struct_type.components().end();
-        c_it++)
+    unsigned int i = 0;
+    for(std::vector<type2tc>::const_iterator c_it = struct_type.members.begin();
+        c_it != struct_type.members.end(); c_it++, i++)
     {
-      const typet &subtype=c_it->type();
-      const irep_idt &name=c_it->name();
+      const type2tc &subtype = *c_it;
+      const irep_idt &name = struct_type.member_names[i];
 
       // ignore methods
-      if(subtype.is_code()) continue;
+      if (is_code_type(subtype))
+        continue;
     
-      member_exprt lhs_member(subtype);
-      lhs_member.set_component_name(name);
-      lhs_member.op0()=lhs;
+      expr2tc lhs_member = expr2tc(new member2t(subtype, lhs, name));
 
-      exprt rhs_member;
-
-      if(rhs.id()=="unknown" ||
-         rhs.id()=="invalid" )
+      expr2tc rhs_member;
+      if (is_unknown2t(rhs))
       {
-        rhs_member=exprt(rhs.id(), subtype);
+        rhs_member = expr2tc(new unknown2t(subtype));
+      }
+      else if (is_invalid2t(rhs))
+      {
+        rhs_member = expr2tc(new invalid2t(subtype));
       }
       else
       {
-    	if (rhs.id() == "index") {
-          if (lhs.id() == "symbol") {
-            assign(lhs_member, rhs.op0(), ns, add_to_sets);
+        if (is_index2t(rhs)) {
+          if (is_symbol2t(lhs)) {
+            assign(lhs_member, to_index2t(rhs).source_value, ns, add_to_sets);
             return;
     	  }
     	}
 
-        assert(base_type_eq(rhs.type(), type, ns));
+        assert(base_type_eq(rhs->type, lhs_type, ns));
 
-        rhs_member=make_member(rhs, name, ns);
+        expr2tc rhs_member;
+        exprt rhs_member_tmp = make_member(migrate_expr_back(rhs), name, ns);
+        migrate_expr(rhs_member_tmp, rhs_member);
       
         assign(lhs_member, rhs_member, ns, add_to_sets);
       }
     }
   }
-  else if(type.is_array())
+  else if (is_array_type(lhs_type))
   {
-    exprt lhs_index("index", type.subtype());
-    lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
+    const array_type2t &arr_type = to_array_type(lhs_type);
+    expr2tc unknown = expr2tc(new unknown2t(index_type2()));
+    expr2tc lhs_index = expr2tc(new index2t(arr_type.subtype, lhs, unknown));
 
-    if(rhs.id()=="unknown" ||
-       rhs.id()=="invalid")
+    if (is_unknown2t(rhs) || is_invalid2t(rhs))
     {
-      assign(lhs_index, exprt(rhs.id(), type.subtype()), ns, add_to_sets);
+      // XXXjmorse - was passing rhs as exprt(rhs.id(), type.subtype()),
+      // Which discards much data and is probably invalid.
+      assign(lhs_index, rhs, ns, add_to_sets);
     }
     else
     {
-      assert(base_type_eq(rhs.type(), type, ns));
+      assert(base_type_eq(rhs->type, lhs_type, ns));
         
-      if(rhs.id()=="array_of")
+      if (is_constant_array_of2t(rhs))
       {
-        assert(rhs.operands().size()==1);
-        assign(lhs_index, rhs.op0(), ns, add_to_sets);
+        assign(lhs_index, to_constant_array_of2t(rhs).initializer,
+               ns, add_to_sets);
       }
-      else if(rhs.is_array() ||
-              rhs.id()=="constant")
+      else if (is_constant_array2t(rhs) || is_constant_expr(rhs))
       {
+        // ...whattt
+#if 0
         forall_operands(o_it, rhs)
         {
           assign(lhs_index, *o_it, ns, add_to_sets);
           add_to_sets=true;
         }
+#endif
+        std::vector<const expr2tc *> operands;
+        rhs->list_operands(operands);
+        for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
+             it != operands.end(); it++) {
+          assign(lhs_index, **it, ns, add_to_sets);
+          add_to_sets = true;
+        }
       }
-      else if(rhs.id()=="with")
+      else if (is_with2t(rhs))
       {
-        assert(rhs.operands().size()==3);
+        const with2t &with = to_with2t(rhs);
 
-        exprt op0_index("index", type.subtype());
-        op0_index.copy_to_operands(rhs.op0(), exprt("unknown", index_type()));
+        expr2tc unknown = expr2tc(new unknown2t(index_type2()));
+        expr2tc idx = expr2tc(new index2t(arr_type.subtype, with.source_value,
+                                          unknown));
 
-        assign(lhs_index, op0_index, ns, add_to_sets);
-        assign(lhs_index, rhs.op2(), ns, true);
+        assign(lhs_index, idx, ns, add_to_sets);
+        assign(lhs_index, with.update_value, ns, true);
       }
       else
       {
-        exprt rhs_index("index", type.subtype());
-        rhs_index.copy_to_operands(rhs, exprt("unknown", index_type()));
-        assign(lhs_index, rhs_index, ns, true);
+        expr2tc unknown = expr2tc(new unknown2t(index_type2()));
+        expr2tc rhs_idx = expr2tc(new index2t(arr_type.subtype, rhs, unknown));
+        assign(lhs_index, rhs_idx, ns, true);
       }
     }
   }
@@ -754,11 +766,9 @@ void value_sett::assign(
     // basic type
     object_mapt values_rhs;
     
-    get_value_set(rhs, values_rhs, ns);
+    get_value_set(migrate_expr_back(rhs), values_rhs, ns);
     
-    expr2tc tmp_expr;
-    migrate_expr(lhs, tmp_expr);
-    assign_rec(tmp_expr, values_rhs, "", ns, add_to_sets);
+    assign_rec(lhs, values_rhs, "", ns, add_to_sets);
   }
 }
 
@@ -968,7 +978,10 @@ void value_sett::do_function_call(
       tmp_arg.type() = argument_types[i].type();
     }
 
-    assign(dummy_lhs, tmp_arg, ns, true);
+    expr2tc migrate_lhs, tmp_arg_2;
+    migrate_expr(dummy_lhs, migrate_lhs);
+    migrate_expr(tmp_arg, tmp_arg_2);
+    assign(migrate_lhs, tmp_arg_2, ns, true);
   }
 
   // now assign to 'actual actuals'
@@ -989,7 +1002,10 @@ void value_sett::do_function_call(
       symbol_exprt("value_set::dummy_arg_"+i2string(i), it->type());
     
     exprt actual_lhs=symbol_exprt(identifier, it->type());
-    assign(actual_lhs, v_expr, ns, true);
+    expr2tc migrated_lhs, v_expr_2;
+    migrate_expr(actual_lhs, migrated_lhs);
+    migrate_expr(v_expr, v_expr_2);
+    assign(migrated_lhs, v_expr_2, ns, true);
     i++;
   }
 }
@@ -1002,7 +1018,10 @@ void value_sett::do_end_function(
 
   symbol_exprt rhs("value_set::return_value", lhs.type());
 
-  assign(lhs, rhs, ns);
+  expr2tc lhs2, rhs2;
+  migrate_expr(lhs, lhs2);
+  migrate_expr(rhs, rhs2);
+  assign(lhs2, rhs2, ns);
 }
 
 void value_sett::apply_code(
@@ -1027,7 +1046,10 @@ void value_sett::apply_code(
     if(code.operands().size()!=2)
       throw "assignment expected to have two operands";
 
-    assign(code.op0(), code.op1(), ns);
+    expr2tc op0, op1;
+    migrate_expr(code.op0(), op0);
+    migrate_expr(code.op1(), op1);
+    assign(op0, op1, ns);
   }
   else if(statement=="decl")
   {
@@ -1039,7 +1061,12 @@ void value_sett::apply_code(
     if(lhs.id()!="symbol")
       throw "decl expected to have symbol on lhs";
 
-    assign(lhs, exprt("invalid", lhs.type()), ns);
+    expr2tc lhs2;
+    type2tc thetype;
+    migrate_expr(lhs, lhs2);
+    migrate_type(lhs.type(), thetype);
+    expr2tc invalid = expr2tc(new invalid2t(thetype));
+    assign(lhs2, invalid, ns);
   }
   else if(statement=="specc_notify" ||
           statement=="specc_wait")
@@ -1086,7 +1113,10 @@ void value_sett::apply_code(
     if(code.operands().size()==1)
     {
       symbol_exprt lhs("value_set::return_value", code.op0().type());
-      assign(lhs, code.op0(), ns);
+      expr2tc lhs2, op0;
+      migrate_expr(lhs, lhs2);
+      migrate_expr(code.op0(), op0);
+      assign(lhs2, op0, ns);
     }
   }
   else if(statement=="cpp-try")

@@ -7,6 +7,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <assert.h>
 #include <global.h>
 #include <malloc.h>
@@ -216,7 +219,10 @@ void goto_symex_statet::assignment(
     exprt l1_lhs(exprt::symbol, lhs.type());
     l1_lhs.identifier(l1_identifier);
 
-    value_set.assign(l1_lhs, l1_rhs, ns);
+    expr2tc tmp_lhs, tmp_rhs;
+    migrate_expr(l1_lhs, tmp_lhs);
+    migrate_expr(l1_rhs, tmp_rhs);
+    value_set.assign(tmp_lhs, tmp_rhs, ns);
   }
 }
 

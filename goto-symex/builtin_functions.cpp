@@ -6,6 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <assert.h>
 
 #include <expr_util.h>
@@ -276,7 +279,10 @@ goto_symext::intrinsic_get_thread_id(code_function_callt &call,
 
   code_assignt assign(call.lhs(), tid);
   assert(call.lhs().type() == tid.type());
-  state.value_set.assign(call.lhs(), tid, ns);
+  expr2tc tmp_expr, tmp_tid;
+  migrate_expr(call.lhs(), tmp_expr);
+  migrate_expr(tid, tmp_tid);
+  state.value_set.assign(tmp_expr, tmp_tid, ns);
   symex_assign(assign);
   return;
 }
@@ -322,7 +328,10 @@ goto_symext::intrinsic_get_thread_data(code_function_callt &call,
 
   code_assignt assign(call.lhs(), startdata);
   assert(call.lhs().type() == startdata.type());
-  state.value_set.assign(call.lhs(), startdata, ns);
+  expr2tc tmp_expr, tmp_startdata;
+  migrate_expr(call.lhs(), tmp_expr);
+  migrate_expr(startdata, tmp_startdata);
+  state.value_set.assign(tmp_expr, tmp_startdata, ns);
   symex_assign(assign);
   return;
 }
@@ -362,7 +371,10 @@ goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_tree
   constant_exprt thread_id_expr(unsignedbv_typet(config.ansi_c.int_width));
   thread_id_expr.set_value(integer2binary(thread_id, config.ansi_c.int_width));
   code_assignt assign(call.lhs(), thread_id_expr);
-  state.value_set.assign(call.lhs(), thread_id_expr, ns);
+  expr2tc tmp_expr, tmp_thread_id;
+  migrate_expr(call.lhs(), tmp_expr);
+  migrate_expr(thread_id_expr, tmp_thread_id);
+  state.value_set.assign(tmp_expr, tmp_thread_id, ns);
   symex_assign(assign);
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
