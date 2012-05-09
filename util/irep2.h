@@ -90,6 +90,7 @@ public:
   {
     *this = boost::shared_polymorphic_cast<T, Y>
             (static_cast<const boost::shared_ptr<Y> &>(ref));
+    return *this;
   }
 
   const T &operator*() const
