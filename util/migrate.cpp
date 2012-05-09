@@ -1473,8 +1473,18 @@ migrate_expr_back(const expr2tc &ref)
     const with2t &ref2 = to_with2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt with("with", thetype);
-    with.copy_to_operands(migrate_expr_back(ref2.source_value),
-                                  migrate_expr_back(ref2.update_field),
+
+    exprt memb_name;
+    if (is_constant_string2t(ref2.update_field)) {
+      const constant_string2t &string_ref =
+        to_constant_string2t(ref2.update_field);
+      memb_name = exprt("member_name");
+      memb_name.component_name(string_ref.value);
+    } else {
+      memb_name = migrate_expr_back(ref2.update_field);
+    }
+
+    with.copy_to_operands(migrate_expr_back(ref2.source_value), memb_name,
                                   migrate_expr_back(ref2.update_value));
     return with;
   }
