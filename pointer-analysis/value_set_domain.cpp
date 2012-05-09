@@ -6,6 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <std_code.h>
 
 #include "value_set_domain.h"
@@ -34,7 +37,11 @@ void value_set_domaint::transform(
     break;
 
   case END_FUNCTION:    
-    value_set.do_end_function(get_return_lhs(to_l), ns);
+    {
+    expr2tc ret;
+    migrate_expr(get_return_lhs(to_l), ret);
+    value_set.do_end_function(ret, ns);
+    }
     break;
   
   case RETURN:

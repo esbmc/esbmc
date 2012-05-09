@@ -978,17 +978,16 @@ void value_sett::do_function_call(
 }
 
 void value_sett::do_end_function(
-  const exprt &lhs,
+  const expr2tc &lhs,
   const namespacet &ns)
 {
-  if(lhs.is_nil()) return;
+  if (is_nil_expr(lhs))
+    return;
 
-  symbol_exprt rhs("value_set::return_value", lhs.type());
+  expr2tc rhs = expr2tc(new symbol2t(lhs->type,
+                                     irep_idt("value_set::return_value")));
 
-  expr2tc lhs2, rhs2;
-  migrate_expr(lhs, lhs2);
-  migrate_expr(rhs, rhs2);
-  assign(lhs2, rhs2, ns);
+  assign(lhs, rhs, ns);
 }
 
 void value_sett::apply_code(

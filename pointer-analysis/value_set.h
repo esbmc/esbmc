@@ -238,7 +238,7 @@ public:
 
   // edge back to call site
   void do_end_function(
-    const exprt &lhs,
+    const expr2tc &lhs,
     const namespacet &ns);
 
   void get_reference_set(
