@@ -33,18 +33,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 const value_sett::object_map_dt value_sett::object_map_dt::empty;
 object_numberingt value_sett::object_numbering;
-   
-/*******************************************************************\
-
-Function: value_sett::output
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_sett::output(
   const namespacet &ns,
@@ -132,18 +120,6 @@ void value_sett::output(
   }
 }
 
-/*******************************************************************\
-
-Function: value_sett::to_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt value_sett::to_expr(object_map_dt::const_iterator it) const
 {
   const expr2tc &object2=object_numbering[it->first];
@@ -164,18 +140,6 @@ exprt value_sett::to_expr(object_map_dt::const_iterator it) const
 
   return od;
 }
-
-/*******************************************************************\
-
-Function: value_sett::make_union
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool value_sett::make_union(const value_sett::valuest &new_values)
 {
@@ -212,18 +176,6 @@ bool value_sett::make_union(const value_sett::valuest &new_values)
   return result;
 }
 
-/*******************************************************************\
-
-Function: value_sett::make_union
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
 {
   bool result=false;
@@ -239,18 +191,6 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
   return result;
 }
 
-/*******************************************************************\
-
-Function: value_sett::get_value_set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::get_value_set(
   const exprt &expr,
   value_setst::valuest &dest,
@@ -265,18 +205,6 @@ void value_sett::get_value_set(
       it++)
     dest.push_back(to_expr(it));
 }
-
-/*******************************************************************\
-
-Function: value_sett::get_value_set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_sett::get_value_set(
   const exprt &expr,
@@ -303,18 +231,6 @@ void value_sett::get_value_set(
   migrate_type(tmp.type(), tmp_type);
   get_value_set_rec(tmp_expr, dest, "", tmp_type, ns);
 }
-
-/*******************************************************************\
-
-Function: value_sett::get_value_set_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_sett::get_value_set_rec(
   const expr2tc &expr,
@@ -569,18 +485,6 @@ void value_sett::get_value_set_rec(
   insert(dest, tmp);
 }
 
-/*******************************************************************\
-
-Function: value_sett::dereference_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::dereference_rec(
   const exprt &src,
   exprt &dest) const
@@ -599,18 +503,6 @@ void value_sett::dereference_rec(
     dest=src;
 }
 
-/*******************************************************************\
-
-Function: value_sett::get_reference_set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::get_reference_set(
   const expr2tc &expr,
   value_setst::valuest &dest,
@@ -625,18 +517,6 @@ void value_sett::get_reference_set(
       it++)
     dest.push_back(to_expr(it));
 }
-
-/*******************************************************************\
-
-Function: value_sett::get_reference_set_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_sett::get_reference_set_rec(
   const expr2tc &expr,
@@ -760,18 +640,6 @@ void value_sett::get_reference_set_rec(
   insert(dest, unknown);
 }
 
-/*******************************************************************\
-
-Function: value_sett::assign
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::assign(
   const exprt &lhs,
   const exprt &rhs,
@@ -894,18 +762,6 @@ void value_sett::assign(
   }
 }
 
-/*******************************************************************\
-
-Function: value_sett::do_free
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::do_free(
   const exprt &op,
   const namespacet &ns)
@@ -995,18 +851,6 @@ void value_sett::do_free(
   }
 }
 
-/*******************************************************************\
-
-Function: value_sett::assign_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::assign_rec(
   const expr2tc &lhs,
   const object_mapt &values_rhs,
@@ -1095,18 +939,6 @@ void value_sett::assign_rec(
     throw "assign NYI: `" + get_expr_id(lhs)+ "'";
 }
 
-/*******************************************************************\
-
-Function: value_sett::do_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::do_function_call(
   const irep_idt &function,
   const exprt::operandst &arguments,
@@ -1162,18 +994,6 @@ void value_sett::do_function_call(
   }
 }
 
-/*******************************************************************\
-
-Function: value_sett::do_end_function
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::do_end_function(
   const exprt &lhs,
   const namespacet &ns)
@@ -1184,18 +1004,6 @@ void value_sett::do_end_function(
 
   assign(lhs, rhs, ns);
 }
-
-/*******************************************************************\
-
-Function: value_sett::apply_code
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_sett::apply_code(
   const exprt &code,
@@ -1291,18 +1099,6 @@ void value_sett::apply_code(
     throw "value_sett: unexpected statement: "+id2string(statement);
   }
 }
-
-/*******************************************************************\
-
-Function: value_sett::make_member
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt value_sett::make_member(
   const exprt &src,
