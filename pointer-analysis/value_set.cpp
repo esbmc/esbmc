@@ -845,6 +845,9 @@ void value_sett::assign_rec(
   {
     const dynamic_object2t &dynamic_object = to_dynamic_object2t(lhs);
   
+    if (is_unknown2t(dynamic_object.instance))
+      return; // XXXjmorse - we're assigning to something unknown.
+              // Not much we can do about it.
     assert(is_constant_int2t(dynamic_object.instance));
     unsigned int idnum =
       to_constant_int2t(dynamic_object.instance).constant_value.to_long();
