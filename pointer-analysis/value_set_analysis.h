@@ -70,7 +70,9 @@ public:
     const exprt &expr,
     value_setst::valuest &dest)
   {
-    (*this)[l].value_set.get_value_set(expr, dest, ns);
+    expr2tc new_expr;
+    migrate_expr(expr, new_expr);
+    (*this)[l].value_set.get_value_set(new_expr, dest, ns);
   }  
 };
 

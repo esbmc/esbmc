@@ -6,6 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <pointer-analysis/dereference.h>
 #include <langapi/language_util.h>
 
@@ -86,7 +89,9 @@ void symex_dereference_statet::get_value_set(
 {
   renaming_nst renaming_ns(goto_symex.ns, state);
 
-  state.value_set.get_value_set(expr, value_set, renaming_ns);
+  expr2tc new_expr;
+  migrate_expr(expr, new_expr);
+  state.value_set.get_value_set(new_expr, value_set, renaming_ns);
 }
 
 void goto_symext::dereference_rec(

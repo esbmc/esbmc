@@ -192,7 +192,7 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
 }
 
 void value_sett::get_value_set(
-  const exprt &expr,
+  const expr2tc &expr,
   value_setst::valuest &dest,
   const namespacet &ns) const
 {
@@ -207,29 +207,16 @@ void value_sett::get_value_set(
 }
 
 void value_sett::get_value_set(
-  const exprt &expr,
+  const expr2tc &expr,
   object_mapt &dest,
   const namespacet &ns) const
 {
-  exprt tmp(expr);
-  simplify(tmp);
-
-  if (tmp.is_nil()) {
-    // Hacks, for the --function option, which spews "nil" exprs here, but with
-    // a type configured. Create an unknown obj record with that type.
-    type2tc cvt_type;
-    migrate_type(expr.type(), cvt_type);
-    expr2tc tmp = expr2tc(new unknown2t(cvt_type));
-    insert(dest, tmp);
-    return;
-  }
+  expr2tc new_expr = expr->simplify();
+  if (is_nil_expr(new_expr))
+    new_expr = expr;
 
   // Otherwise, continue on as normal.
-  expr2tc tmp_expr;
-  migrate_expr(tmp, tmp_expr);
-  type2tc tmp_type;
-  migrate_type(tmp.type(), tmp_type);
-  get_value_set_rec(tmp_expr, dest, "", tmp_type, ns);
+  get_value_set_rec(new_expr, dest, "", new_expr->type, ns);
 }
 
 void value_sett::get_value_set_rec(
@@ -770,7 +757,7 @@ void value_sett::assign(
     // basic type
     object_mapt values_rhs;
     
-    get_value_set(migrate_expr_back(rhs), values_rhs, ns);
+    get_value_set(rhs, values_rhs, ns);
     
     assign_rec(lhs, values_rhs, "", ns, add_to_sets);
   }
@@ -786,7 +773,9 @@ void value_sett::do_free(
 
   // find out what it points to    
   object_mapt value_set;
-  get_value_set(op, value_set, ns);
+  expr2tc new_op;
+  migrate_expr(op, new_op);
+  get_value_set(new_op, value_set, ns);
   
   const object_map_dt &object_map=value_set.read();
   
