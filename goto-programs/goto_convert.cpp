@@ -1086,6 +1086,11 @@ void goto_convertt::convert_assign(
 		if(atomic == -1)
 			dest.add_instruction(ATOMIC_END);
   }
+
+  //std::cout << "lhs: " << lhs.pretty() << std::endl;
+  if (inductive_step)
+    get_struct_components(lhs, state);
+
 }
 
 /*******************************************************************\
@@ -2391,7 +2396,7 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (base_case || inductive_step)
+  if (base_case /*|| inductive_step*/)
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
