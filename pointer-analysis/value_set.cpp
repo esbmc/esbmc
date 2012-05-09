@@ -979,6 +979,7 @@ void value_sett::do_function_call(
       // As a workaround for the "--function" option, which feeds "nil"
       // arguments in here, take the expected function argument type rather
       // than the type from the argument.
+      tmp_arg.id("unknown");
       tmp_arg.type() = argument_types[i].type();
     }
 
