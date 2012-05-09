@@ -128,6 +128,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     const code_typet &ref = static_cast<const code_typet &>(type);
 
     std::vector<type2tc> args;
+    std::vector<irep_idt> arg_names;
     type2tc ret_type;
     bool ellipsis = false;
 
@@ -140,11 +141,12 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
       type2tc tmp;
       migrate_type(it->type(), tmp);
       args.push_back(tmp);
+      arg_names.push_back(it->get_identifier());
     }
 
     migrate_type(static_cast<const typet &>(type.return_type()), ret_type);
 
-    code_type2t *c = new code_type2t(args, ret_type, ellipsis);
+    code_type2t *c = new code_type2t(args, ret_type, arg_names, ellipsis);
     new_type_ref = type2tc(c);
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
     new_type_ref = type2tc(type_pool.get_empty());
@@ -1037,8 +1039,11 @@ migrate_type_back(const type2tc &ref)
     typet ret_type = migrate_type_back(ref2.ret_type);
 
     code_typet::argumentst args;
+    unsigned int i = 0;
     forall_types(it, ref2.arguments) {
       args.push_back(code_typet::argumentt(migrate_type_back(*it)));
+      args.back().set_identifier(ref2.argument_names[i]);
+      i++;
     }
 
     code.arguments() = args;
