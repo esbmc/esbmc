@@ -309,7 +309,7 @@ public:
   virtual expr2tc do_simplify(void) const; // Shallow -> one level only
 
   /** Instance of expr_ids recording tihs exprs type. */
-  expr_ids expr_id;
+  const expr_ids expr_id;
 
   /** Type of this expr. All exprs have a type. */
   const type2tc type;
