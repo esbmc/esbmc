@@ -282,6 +282,17 @@ void value_sett::get_value_set(
   exprt tmp(expr);
   simplify(tmp);
 
+  if (tmp.is_nil()) {
+    // Hacks, for the --function option, which spews "nil" exprs here, but with
+    // a type configured. Create an unknown obj record with that type.
+    type2tc cvt_type;
+    migrate_type(expr.type(), cvt_type);
+    expr2tc tmp = expr2tc(new unknown2t(cvt_type));
+    insert(dest, tmp);
+    return;
+  }
+
+  // Otherwise, continue on as normal.
   expr2tc tmp_expr;
   migrate_expr(tmp, tmp_expr);
   type2tc tmp_type;
@@ -1154,7 +1165,16 @@ void value_sett::do_function_call(
     const std::string identifier="value_set::dummy_arg_"+i2string(i);
     add_var(identifier, "");
     exprt dummy_lhs=symbol_exprt(identifier, arguments[i].type());
-    assign(dummy_lhs, arguments[i], ns, true);
+
+    exprt tmp_arg = arguments[i];
+    if (tmp_arg.id() == "nil") {
+      // As a workaround for the "--function" option, which feeds "nil"
+      // arguments in here, take the expected function argument type rather
+      // than the type from the argument.
+      tmp_arg.type() = argument_types[i].type();
+    }
+
+    assign(dummy_lhs, tmp_arg, ns, true);
   }
 
   // now assign to 'actual actuals'
