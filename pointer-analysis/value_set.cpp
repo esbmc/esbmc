@@ -6,6 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+// XXXjmorse - consider whether or not many more of the type assertions below
+// need to take consideration of the data they're working on being an dynamic
+// object type, which should match all types.
+
 #include <irep2.h>
 #include <migrate.h>
 
@@ -1054,7 +1058,8 @@ void value_sett::assign_rec(
   else if (is_index2t(lhs))
   {
     assert(is_array_type(to_index2t(lhs).source_value->type) ||
-           is_string_type(to_index2t(lhs).source_value->type));
+           is_string_type(to_index2t(lhs).source_value->type) ||
+           is_dynamic_object2t(to_index2t(lhs).source_value->type));
 
     assign_rec(to_index2t(lhs).source_value, values_rhs, "[]"+suffix, ns, true);
   }
@@ -1064,7 +1069,8 @@ void value_sett::assign_rec(
     const std::string &component_name = member.member.as_string();
 
     assert(is_struct_type(member.source_value->type) ||
-           is_union_type(member.source_value->type));
+           is_union_type(member.source_value->type) ||
+           is_dynamic_object2t(member.source_value));
            
     assign_rec(to_member2t(lhs).source_value, values_rhs,
                "."+component_name+suffix, ns, add_to_sets);
