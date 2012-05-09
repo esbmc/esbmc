@@ -593,6 +593,15 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     bitnxor2t *x = new bitnxor2t(type, side1, side2);
     new_expr_ref = expr2tc(x);
+  } else if (expr.id() == exprt::i_bitnot) {
+    migrate_type(expr.type(), type);
+
+    assert(expr.operands().size() == 1);
+    expr2tc value;
+    migrate_expr(expr.op0(), value);
+
+    bitnot2t *n = new bitnot2t(type, value);
+    new_expr_ref = expr2tc(n);
   } else if (expr.id() == exprt::i_lshr) {
     migrate_type(expr.type(), type);
 
@@ -1306,6 +1315,14 @@ migrate_expr_back(const expr2tc &ref)
     bitnxorval.copy_to_operands(migrate_expr_back(ref2.side_1),
                                 migrate_expr_back(ref2.side_2));
     return bitnxorval;
+  }
+  case expr2t::bitnot_id:
+  {
+    const bitnot2t &ref2 = to_bitnot2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt bitnotval("bitnot", thetype);
+    bitnotval.copy_to_operands(migrate_expr_back(ref2.value));
+    return bitnotval;
   }
   case expr2t::lshr_id:
   {

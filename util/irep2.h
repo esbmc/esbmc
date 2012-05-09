@@ -238,6 +238,7 @@ public:
     bitnand_id,
     bitnor_id,
     bitnxor_id,
+    bitnot_id,
     lshr_id,
     neg_id,
     abs_id,
@@ -1258,6 +1259,18 @@ public:
 template class esbmct::expr<bitnxor2t, esbmct::expr2tc_side_1,
                                      esbmct::expr2tc_side_2>;
 
+class bitnot2t : public esbmct::expr<bitnot2t, esbmct::expr2tc_value>
+{
+public:
+  bitnot2t(const type2tc &type, const expr2tc &v)
+    : esbmct::expr<bitnot2t, esbmct::expr2tc_value>
+      (type, bitnot_id, v) {}
+  bitnot2t(const bitnot2t &ref)
+    : esbmct::expr<bitnot2t, esbmct::expr2tc_value>
+      (ref) {}
+};
+template class esbmct::expr<bitnot2t, esbmct::expr2tc_value>;
+
 class lshr2t : public esbmct::expr<lshr2t, esbmct::expr2tc_side_1,
                                          esbmct::expr2tc_side_2>
 {
@@ -1836,6 +1849,7 @@ expr_macros(bitxor);
 expr_macros(bitnand);
 expr_macros(bitnor);
 expr_macros(bitnxor);
+expr_macros(bitnot);
 expr_macros(lshr);
 expr_macros(neg);
 expr_macros(abs);
@@ -1972,6 +1986,7 @@ typedef irep_container<bitxor2t, expr2t::bitxor_id> bitxor2tc;
 typedef irep_container<bitnand2t, expr2t::bitnand_id> bitnand2tc;
 typedef irep_container<bitnor2t, expr2t::bitnor_id> bitnor2tc;
 typedef irep_container<bitnxor2t, expr2t::bitnxor_id> bitnxor2tc;
+typedef irep_container<bitnot2t, expr2t::bitnot_id> bitnot2tc;
 typedef irep_container<lshr2t, expr2t::lshr_id> lshr2tc;
 typedef irep_container<neg2t, expr2t::neg_id> neg2tc;
 typedef irep_container<abs2t, expr2t::abs_id> abs2tc;
