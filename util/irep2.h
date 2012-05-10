@@ -1982,6 +1982,10 @@ expr_macros(valid_object);
 expr_macros(deallocated_obj);
 expr_macros(dynamic_size);
 expr_macros(sideeffect);
+expr_macros(code_block);
+expr_macros(code_assign);
+expr_macros(code_init);
+expr_macros(code_decl);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -2124,5 +2128,9 @@ typedef irep_container<deallocated_obj2t, expr2t::deallocated_obj_id>
                        deallocated_obj2tc;
 typedef irep_container<dynamic_size2t, expr2t::dynamic_size_id> dynamic_size2tc;
 typedef irep_container<sideeffect2t, expr2t::sideeffect_id> sideeffect2tc;
+typedef irep_container<code_block2t, expr2t::code_block_id> code_block2tc;
+typedef irep_container<code_assign2t, expr2t::code_assign_id> code_assign2tc;
+typedef irep_container<code_init2t, expr2t::code_init_id> code_init2tc;
+typedef irep_container<code_decl2t, expr2t::code_decl_id> code_decl2tc;
 
 #endif /* _UTIL_IREP2_H_ */
