@@ -142,7 +142,7 @@ void dereferencet::dereference(
     exprt new_value, pointer_guard;
 
     build_reference_to(
-      *it, mode, dest, type,
+      migrate_expr_back(*it), mode, dest, type,
       new_value, pointer_guard, guard);
 
     if(new_value.is_not_nil())
@@ -245,7 +245,7 @@ void dereferencet::add_checks(
       exprt new_value, pointer_guard;
 
       build_reference_to(
-        *it, mode, dest, type,
+        migrate_expr_back(*it), mode, dest, type,
         new_value, pointer_guard, guard);
     }
   }

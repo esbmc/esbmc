@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
 #include <simplify_expr.h>
 #include <base_type.h>
 #include <std_code.h>
@@ -281,7 +283,9 @@ void goto_program_dereferencet::get_value_set(
   const exprt &expr,
   value_setst::valuest &dest)
 {
-  value_sets.get_values(current_target, expr, dest);
+  expr2tc new_expr;
+  migrate_expr(expr, new_expr);
+  value_sets.get_values(current_target, new_expr, dest);
 }
 
 /*******************************************************************\

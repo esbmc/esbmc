@@ -67,12 +67,10 @@ public:
   // interface value_sets
   virtual void get_values(
     locationt l,
-    const exprt &expr,
+    const expr2tc &expr,
     value_setst::valuest &dest)
   {
-    expr2tc new_expr;
-    migrate_expr(expr, new_expr);
-    (*this)[l].value_set.get_value_set(new_expr, dest, ns);
+    (*this)[l].value_set.get_value_set(expr, dest, ns);
   }  
 };
 

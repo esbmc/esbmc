@@ -557,19 +557,21 @@ void static_analysis_baset::do_function_call_rec(
   else if(function.id()=="dereference")
   {
     // get value set
-    std::list<exprt> values;
-    get_reference_set(l_call, function, values);
+    std::list<expr2tc> values;
+    expr2tc tmp_function;
+    migrate_expr(function, tmp_function);
+    get_reference_set(l_call, tmp_function, values);
 
     std::auto_ptr<statet> state_from(make_temporary_state(new_state));
 
     // now call all of these
-    for(std::list<exprt>::const_iterator it=values.begin();
-        it!=values.end();
-        it++)
+    for(std::list<expr2tc>::const_iterator it=values.begin();
+        it!=values.end(); it++)
     {
-      if(it->id()=="object_descriptor")
+      if (is_object_descriptor2t(*it))
       {
-        const object_descriptor_exprt &o=to_object_descriptor_expr(*it);
+        exprt tmp = migrate_expr_back(*it);
+        const object_descriptor_exprt &o = static_cast<object_descriptor_exprt&>(tmp);
         std::auto_ptr<statet> n2(make_temporary_state(new_state));    
         do_function_call_rec(l_call, o.object(), arguments, *n2, goto_functions);
         merge(new_state, *n2);

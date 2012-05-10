@@ -200,7 +200,7 @@ void value_sett::get_value_set(
       it=object_map.read().begin();
       it!=object_map.read().end();
       it++)
-    dest.push_back(migrate_expr_back(to_expr(it)));
+    dest.push_back(to_expr(it));
 }
 
 void value_sett::get_value_set(
@@ -481,7 +481,7 @@ void value_sett::get_reference_set(
       it=object_map.read().begin();
       it!=object_map.read().end();
       it++)
-    dest.push_back(migrate_expr_back(to_expr(it)));
+    dest.push_back(to_expr(it));
 }
 
 void value_sett::get_reference_set_rec(

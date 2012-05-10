@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAMS_STATIC_ANALYSIS_H
 #define CPROVER_GOTO_PROGRAMS_STATIC_ANALYSIS_H
 
+#include <irep2.h>
 #include <map>
 #include <iostream>
 
@@ -55,13 +56,9 @@ public:
   typedef hash_set_cont<exprt, irep_hash> expr_sett;
   
   virtual void get_reference_set(
-    const namespacet &ns __attribute__((unused)),
-    const exprt &expr __attribute__((unused)),
-    std::list<exprt> &dest)
-  {
-    // dummy, overload me!
-    dest.clear();
-  }
+    const namespacet &ns,
+    const expr2tc &expr,
+    std::list<expr2tc> &dest) { assert(0); };
   
   // also add
   //
@@ -241,8 +238,8 @@ protected:
 
   virtual void get_reference_set(
     locationt l,
-    const exprt &expr,
-    std::list<exprt> &dest)=0;
+    const expr2tc &expr,
+    std::list<expr2tc> &dest)=0;
 };
 
 // T is expected to be derived from abstract_domain_baset
@@ -318,8 +315,8 @@ protected:
 
   virtual void get_reference_set(
     locationt l,
-    const exprt &expr,
-    std::list<exprt> &dest)
+    const expr2tc &expr,
+    std::list<expr2tc> &dest)
   {
     state_map[l].get_reference_set(ns, expr, dest);
   }

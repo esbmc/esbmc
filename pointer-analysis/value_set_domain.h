@@ -50,12 +50,10 @@ public:
 
   virtual void get_reference_set(
     const namespacet &ns,
-    const exprt &expr,
+    const expr2tc &expr,
     value_setst::valuest &dest)
   {
-    expr2tc tmp_expr;
-    migrate_expr(expr, tmp_expr);
-    value_set.get_reference_set(tmp_expr, dest, ns);
+    value_set.get_reference_set(expr, dest, ns);
   }
   
 };
