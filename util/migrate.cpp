@@ -833,7 +833,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     index2t *i = new index2t(type, source, index);
     new_expr_ref = expr2tc(i);
-  } else if (expr.id() == "zero_string") {
+  } else if (expr.id() == "is_zero_string") {
     assert(expr.operands().size() == 1);
 
     expr2tc string;
@@ -1587,7 +1587,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const zero_string2t &ref2 = to_zero_string2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    exprt zerostring("zero_string", thetype);
+    exprt zerostring("is_zero_string", thetype);
     zerostring.copy_to_operands(migrate_expr_back(ref2.string));
     return zerostring;
   }
