@@ -454,7 +454,7 @@ static const char *expr_names[] = {
   "valid_object",
   "deallocated_obj",
   "dynamic_size",
-  "sideeffect"
+  "sideeffect",
   "code_block",
   "code_assign",
   "code_init",
@@ -463,8 +463,7 @@ static const char *expr_names[] = {
   "code_expression",
   "code_return",
   "code_free",
-  "object_descriptor",
-  "end_of_valid_exprs"
+  "object_descriptor"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
