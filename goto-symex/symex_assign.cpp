@@ -86,6 +86,11 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   remaining_claims = sym.remaining_claims;
   guard_identifier_s = sym.guard_identifier_s;
 
+  valid_ptr_arr_name = sym.valid_ptr_arr_name;
+  alloc_size_arr_name = sym.alloc_size_arr_name;
+  deallocd_arr_name = sym.deallocd_arr_name;
+  dyn_info_arr_name = sym.dyn_info_arr_name;
+
   // Art ptr is shared
   art1 = sym.art1;
 
