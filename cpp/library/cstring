@@ -67,7 +67,7 @@ char *strcat(char *dst, const char *src)
 }
 #endif
 
-char *strcat(char d[], const char s[]) {
+char *strcat(char *d, const char *s) {
   int i, e;
 
   for (e = 0; d[e] != '\0'; e++);
@@ -120,7 +120,7 @@ int strcmp(const char *s1, const char *s2)
 }
 #endif
 
-int strcmp(const char *s1, const char *s2) {
+int strcmp( char *s1, char *s2) {
 	int i;
 
 	for (i = 0;; i++) {
@@ -218,6 +218,7 @@ size_t strlen(const char *s) {
 size_t i;
 
 for (i = 0; s[i]; i++);
+
 
 return i;
 }
