@@ -993,87 +993,63 @@ void value_sett::do_end_function(
 }
 
 void value_sett::apply_code(
-  const exprt &code,
+  const expr2tc &code,
   const namespacet &ns)
 {
-  expr2tc migrated_code;
-  migrate_expr(code, migrated_code);
 
-  const irep_idt &statement=code.statement();
-
-  if(statement=="block")
+  if (is_code_block2t(code))
   {
-    forall_operands(it, code)
+    const code_block2t &ref = to_code_block2t(code);
+    forall_exprs(it, ref.operands)
       apply_code(*it, ns);
   }
-  else if(statement=="function_call")
+  else if (is_code_assign2t(code))
   {
-    // shouldn't be here
-    assert(false);
+    const code_assign2t &ref = to_code_assign2t(code);
+    assign(ref.target, ref.source, ns);
   }
-  else if(statement=="assign" ||
-          statement=="init")
+  else if (is_code_init2t(code))
   {
-    if(code.operands().size()!=2)
-      throw "assignment expected to have two operands";
-
-    expr2tc op0, op1;
-    migrate_expr(code.op0(), op0);
-    migrate_expr(code.op1(), op1);
-    assign(op0, op1, ns);
+    const code_init2t &ref = to_code_init2t(code);
+    assign(ref.target, ref.source, ns);
   }
-  else if(statement=="decl")
+  else if (is_code_decl2t(code))
   {
-    if(code.operands().size()!=1)
-      throw "decl expected to have one operand";
-
-    const exprt &lhs=code.op0();
-
-    if(lhs.id()!="symbol")
-      throw "decl expected to have symbol on lhs";
-
-    expr2tc lhs2;
-    type2tc thetype;
-    migrate_expr(lhs, lhs2);
-    migrate_type(lhs.type(), thetype);
-    expr2tc invalid = expr2tc(new invalid2t(thetype));
-    assign(lhs2, invalid, ns);
+    const code_decl2t &ref = to_code_decl2t(code);
+    expr2tc sym = expr2tc(new symbol2t(ref.type, ref.value));
+    expr2tc invalid = expr2tc(new invalid2t(ref.type));
+    assign(sym, invalid, ns);
   }
-  else if(statement=="expression")
+  else if (is_code_expression2t(code))
   {
     // can be ignored, we don't expect sideeffects here
   }
-  else if(statement=="free")
+  else if (is_code_free2t(code))
   {
     // this may kill a valid bit
-
-    if(code.operands().size()!=1)
-      throw "free expected to have one operand";
-
-    expr2tc op0;
-    migrate_expr(code.op0(), op0);
-    do_free(op0, ns);
+    const code_free2t &ref = to_code_free2t(code);
+    do_free(ref.operand, ns);
   }
-  else if(statement=="printf")
+  else if (is_code_printf2t(code))
   {
     // doesn't do anything
   }
-  else if(statement=="return")
+  else if (is_code_return2t(code))
   {
     // this is turned into an assignment
-    if(code.operands().size()==1)
+    const code_return2t &ref = to_code_return2t(code);
+    if (!is_nil_expr(ref.operand))
     {
-      symbol_exprt lhs("value_set::return_value", code.op0().type());
-      expr2tc lhs2, op0;
-      migrate_expr(lhs, lhs2);
-      migrate_expr(code.op0(), op0);
-      assign(lhs2, op0, ns);
+      expr2tc sym = expr2tc(new symbol2t(ref.operand->type,
+                                         "value_set::return_value"));
+      assign(sym, ref.operand, ns);
     }
   }
   else
   {
-    std::cerr << code.pretty() << std::endl;
-    throw "value_sett: unexpected statement: "+id2string(statement);
+    std::cerr << code->pretty() << std::endl;
+    std::cerr << "value_sett: unexpected statement" << std::endl;
+    abort();
   }
 }
 

@@ -47,7 +47,11 @@ void value_set_domaint::transform(
   case RETURN:
   case OTHER:
   case ASSIGN:
-    value_set.apply_code(from_l->code, ns);
+    {
+      expr2tc code;
+      migrate_expr(from_l->code, code);
+      value_set.apply_code(code, ns);
+    }
     break;
 
   case FUNCTION_CALL:

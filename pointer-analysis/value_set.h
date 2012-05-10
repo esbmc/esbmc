@@ -222,7 +222,7 @@ public:
   }
 
   void apply_code(
-    const exprt &code,
+    const expr2tc &code,
     const namespacet &ns);
 
   void assign(
