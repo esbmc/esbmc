@@ -6,5 +6,5 @@ using namespace std;
 int main(){
 	string str1 = string();
 	str1 = 'R';
-	assert(str1 == "T");
+	assert(str1 != "R");
 }

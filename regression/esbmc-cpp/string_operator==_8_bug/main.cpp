@@ -12,7 +12,7 @@ int main(){
 	
 	str3 = string(str1 + str2 + strN);
 		
-	assert(str3 == "TestTestTestTest");
+	assert(str3 != "TestTestTestTest ");
 
 
 }

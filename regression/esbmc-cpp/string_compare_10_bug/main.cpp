@@ -14,6 +14,6 @@ int main(){
 	j = str3.compare(0, 3, str1);
 	k = str2.compare(1, 3, str3, 0, 3);
 	
-	assert( ( i != 0 ) || ( j != 0 ) || ( k != 0 ) );
+	assert( ( i != 0 ) && ( j != 0 ) && ( k != 0 ) );
 
 }

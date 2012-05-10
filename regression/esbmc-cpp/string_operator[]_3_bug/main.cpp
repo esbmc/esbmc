@@ -11,7 +11,7 @@ int main ()
   char str2;
   str1 = "Test string"; 
   str2 = 's';
-  assert(str1[3] == str2); 		//added
+  assert(str1[2] != str2); 		//added
   cout << str2  << endl;
   return 0;
 }

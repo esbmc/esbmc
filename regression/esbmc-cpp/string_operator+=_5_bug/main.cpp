@@ -14,10 +14,10 @@ int main ()
   str1 = "Test string: ";   // c-string
   str2 = 'x';               // single character
   str1 += str2;
-  str3 = ", y, " + 'Z';
+  str3 = ", y, " + 'z';
   str1 += str3;
   
-  assert(str1 == "Test string: x, y, z"); //added
+  assert(str1 != "Test string: x, y, z"); //added
   cout << str1  << endl;
   return 0;
 }

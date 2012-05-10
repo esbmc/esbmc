@@ -17,7 +17,7 @@ int main ()
   	str3[i] = str1[i];
   	str4[i] = str2[i];
   }
-  assert( (str3 == str1 + 't') || (str4 == " String") );
+  assert( (str3 == str1 + 't') && (str4 == " String") );
   cout << str3  << endl;
   return 0;
 }

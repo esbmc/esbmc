@@ -15,6 +15,6 @@ int main(){
 	j = str2.compare(str1);
 	str1 = "Testing";
 	k = str2.compare(str1);
-	assert( ( i != 0 ) || ( j <= 0 ) || ( k >= 0 ) );
+	assert( ( i != 0 ) && ( j <= 0 ) && ( k >= 0 ) );
 
 }

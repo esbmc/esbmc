@@ -1,4 +1,5 @@
 // comparing apples with apples
+//TEST FAILS
 //Example from C++ reference, avaliable at http://www.cplusplus.com/reference/string/string/compare/
 
 #include <iostream>

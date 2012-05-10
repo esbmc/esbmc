@@ -9,6 +9,6 @@ int main(){
 	string str1, str2;
 	str1 = string("Test");
 	str2 = string(str1, 2);
-	assert((aux > str2)||(aux > str1));
+	assert((aux > str2)&&(aux > str1));
 }
 

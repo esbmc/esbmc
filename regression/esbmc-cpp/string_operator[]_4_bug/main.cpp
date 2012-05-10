@@ -14,7 +14,7 @@ int main ()
   string str1;
   str1 = string("Test string");
   str1[2] = 'X';
-  assert(str1 == "Text string");
+  assert(str1 != "TeXt string");
   
   return 0;
 }

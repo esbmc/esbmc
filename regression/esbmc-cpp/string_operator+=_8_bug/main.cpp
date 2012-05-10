@@ -1,4 +1,5 @@
 // string assigning
+//TEST FAILS
 //Example from C++ Reference, avaliable at http://www.cplusplus.com/reference/string/string/operator=/
 #include <iostream>
 #include <string>
@@ -9,12 +10,12 @@ int main ()
 {
   string str1, str2, str3, str4, str5;
   str1 = "Test string: ";   // c-string
-  str2 = 'X';               // single character
+  str2 = 'x';               // single character
   str1 += str2;       // string
   
-  str1 += "(n) in f(" + 'N' + ')';
+  str1 += "(n) in f(" + 'n' + ')';
   
-  assert(str1 == "Test string: x(n) in f(n)"); 		//added
+  assert(str1 != "Test string: x(n) in f(n)"); 		//added
   cout << str3  << endl;
   return 0;
 }

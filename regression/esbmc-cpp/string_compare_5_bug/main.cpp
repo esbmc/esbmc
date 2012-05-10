@@ -13,5 +13,5 @@ int main(){
 	j = str1.compare("Test");
 	k = str1.compare("Testing this");
 	
-	assert( ( i != 0 ) || ( j <= 0 ) || ( k >= 0 ) );
+	assert( ( i != 0 ) && ( j <= 0 ) && ( k >= 0 ) );
 }

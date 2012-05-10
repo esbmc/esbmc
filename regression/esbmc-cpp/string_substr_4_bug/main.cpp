@@ -20,6 +20,6 @@ int main ()
   str3 = str.substr (pos);   // get from "live" to the end
 
   cout << str2 << ' ' << str3 << endl;
-  assert((str2 != "generalities")||(str3 != "live in details"));
+  assert((str2 != "generalities")&&(str3 != "live in details"));
   return 0;
 }

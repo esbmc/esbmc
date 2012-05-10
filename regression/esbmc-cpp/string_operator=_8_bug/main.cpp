@@ -15,7 +15,7 @@ int main ()
   
   str4 = str3 + "(n) in f(" + 'n' + ')';
   
-  assert(str3 != "Test string: x(n) in f(n )"); 		//added
+  assert(str3 != "Test string: x(n) in f(n)"); 		//added
   cout << str3  << endl;
   return 0;
 }
