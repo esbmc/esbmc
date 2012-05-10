@@ -1039,19 +1039,9 @@ void value_sett::apply_code(
     expr2tc invalid = expr2tc(new invalid2t(thetype));
     assign(lhs2, invalid, ns);
   }
-  else if(statement=="specc_notify" ||
-          statement=="specc_wait")
-  {
-    // ignore, does not change variables
-  }
   else if(statement=="expression")
   {
     // can be ignored, we don't expect sideeffects here
-  }
-  else if(statement=="cpp_delete" ||
-          statement=="cpp_delete[]")
-  {
-    // does nothing
   }
   else if(statement=="free")
   {
@@ -1063,18 +1053,6 @@ void value_sett::apply_code(
     expr2tc op0;
     migrate_expr(code.op0(), op0);
     do_free(op0, ns);
-  }
-  else if(statement=="lock" || statement=="unlock")
-  {
-    // ignore for now
-  }
-  else if(statement=="asm")
-  {
-    // ignore for now, probably not safe
-  }
-  else if(statement=="nondet")
-  {
-    // doesn't do anything
   }
   else if(statement=="printf")
   {
@@ -1091,10 +1069,6 @@ void value_sett::apply_code(
       migrate_expr(code.op0(), op0);
       assign(lhs2, op0, ns);
     }
-  }
-  else if(statement=="cpp-try")
-  {
-    // doesn't do anything
   }
   else
   {
