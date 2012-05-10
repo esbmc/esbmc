@@ -289,6 +289,7 @@ public:
     code_expression_id,
     code_return_id,
     code_free_id,
+    object_descriptor_id,
     end_expr_id
   };
 
@@ -410,6 +411,8 @@ namespace esbmct {
   field_name_macro(argument_names);
   field_name_macro(target);
   field_name_macro(source);
+  field_name_macro(object);
+  field_name_macro(offset);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -533,6 +536,8 @@ namespace esbmct {
                       name_operands);
   member_record_macro(expr2tc_target, expr2tc_type_tag, name_target);
   member_record_macro(expr2tc_source, expr2tc_type_tag, name_source);
+  member_record_macro(expr2tc_object, expr2tc_type_tag, name_object);
+  member_record_macro(expr2tc_offset, expr2tc_type_tag, name_offset);
   #undef member_record_macro
 
   template <class thename>
@@ -1902,6 +1907,22 @@ public:
 };
 template class esbmct::expr<code_free2t, esbmct::expr2tc_operand>;
 
+class object_descriptor2t : public esbmct::expr<object_descriptor2t,
+                                                esbmct::expr2tc_object,
+                                                esbmct::expr2tc_offset>
+{
+public:
+  object_descriptor2t(const expr2tc &root, const expr2tc &offs)
+    : esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
+                   esbmct::expr2tc_offset>
+      (type_pool.get_empty(), object_descriptor_id, root, offs) {}
+  object_descriptor2t(const object_descriptor2t &ref)
+    : esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
+                   esbmct::expr2tc_offset> (ref) {}
+};
+template class esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
+                                                 esbmct::expr2tc_offset>;
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -2043,6 +2064,7 @@ expr_macros(code_printf);
 expr_macros(code_expression);
 expr_macros(code_return);
 expr_macros(code_free);
+expr_macros(object_descriptor);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -2194,6 +2216,8 @@ typedef irep_container<code_expression2t, expr2t::code_expression_id>
                        code_expression2tc;
 typedef irep_container<code_return2t, expr2t::code_return_id> code_return2tc;
 typedef irep_container<code_free2t, expr2t::code_free_id> code_free2tc;
+typedef irep_container<object_descriptor2t, expr2t::object_descriptor_id>
+                       object_descriptor2tc;
 
 // XXXjmorse - to be moved into struct union superclass when it exists.
 static unsigned int
