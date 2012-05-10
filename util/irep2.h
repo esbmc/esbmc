@@ -287,6 +287,7 @@ public:
     code_decl_id,
     code_printf_id,
     code_expression_id,
+    code_return_id,
     end_expr_id
   };
 
@@ -1876,6 +1877,18 @@ public:
 };
 template class esbmct::expr<code_expression2t, esbmct::expr2tc_operand>;
 
+class code_return2t : public esbmct::expr<code_return2t,
+                                          esbmct::expr2tc_operand>
+{
+public:
+  code_return2t(const expr2tc &oper)
+    : esbmct::expr<code_return2t, esbmct::expr2tc_operand>
+      (type_pool.get_empty(), code_return_id, oper) {}
+  code_return2t(const code_return2t &ref)
+    : esbmct::expr<code_return2t, esbmct::expr2tc_operand> (ref) {}
+};
+template class esbmct::expr<code_return2t, esbmct::expr2tc_operand>;
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -2015,6 +2028,7 @@ expr_macros(code_init);
 expr_macros(code_decl);
 expr_macros(code_printf);
 expr_macros(code_expression);
+expr_macros(code_return);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -2164,5 +2178,6 @@ typedef irep_container<code_decl2t, expr2t::code_decl_id> code_decl2tc;
 typedef irep_container<code_printf2t, expr2t::code_printf_id> code_printf2tc;
 typedef irep_container<code_expression2t, expr2t::code_expression_id>
                        code_expression2tc;
+typedef irep_container<code_return2t, expr2t::code_return_id> code_return2tc;
 
 #endif /* _UTIL_IREP2_H_ */
