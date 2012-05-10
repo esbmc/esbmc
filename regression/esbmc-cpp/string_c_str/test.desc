@@ -1,3 +1,0 @@
-main.cpp 
---unwind 25 --no-unwinding-assertions -I ~/libraries/
-^VERIFICATION SUCCESSFUL$
