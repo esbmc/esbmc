@@ -267,10 +267,8 @@ void value_sett::get_value_set_rec(
       if (subtype.id() == "symbol")
         subtype = ns.follow(subtype);
 
-      exprt tmp("NULL-object", subtype);
-      expr2tc tmp2;
-      migrate_expr(tmp, tmp2);
-      insert(dest, tmp2, 0);
+      expr2tc tmp = expr2tc(new null_object2t(ptr_ref.subtype));
+      insert(dest, tmp, 0);
       return;
     }
 
