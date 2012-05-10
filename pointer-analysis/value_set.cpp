@@ -996,6 +996,9 @@ void value_sett::apply_code(
   const exprt &code,
   const namespacet &ns)
 {
+  expr2tc migrated_code;
+  migrate_expr(code, migrated_code);
+
   const irep_idt &statement=code.statement();
 
   if(statement=="block")
