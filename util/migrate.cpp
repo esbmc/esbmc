@@ -970,6 +970,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = expr2tc(new sideeffect2t(plaintype, operand, thesize,
                                             cmt_type, t));
+  } else if (expr.id() == irept::id_code && expr.statement() == "assign") {
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    new_expr_ref = expr2tc(new code_assign2t(op0, op1));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1720,6 +1724,16 @@ migrate_expr_back(const expr2tc &ref)
     }
 
     return theexpr;
+  }
+  case expr2t::code_assign_id:
+  {
+    const code_assign2t &ref2 = to_code_assign2t(ref);
+    exprt codeexpr("code", code_typet());
+    codeexpr.statement(irep_idt("assign"));
+    exprt op0 = migrate_expr_back(ref2.target);
+    exprt op1 = migrate_expr_back(ref2.source);
+    codeexpr.copy_to_operands(op0, op1);
+    return codeexpr;
   }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
