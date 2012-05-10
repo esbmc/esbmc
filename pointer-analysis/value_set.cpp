@@ -120,25 +120,22 @@ void value_sett::output(
   }
 }
 
-exprt value_sett::to_expr(object_map_dt::const_iterator it) const
+expr2tc
+value_sett::to_expr(object_map_dt::const_iterator it) const
 {
-  const expr2tc &object2=object_numbering[it->first];
-  const exprt object = migrate_expr_back(object2);
+  const expr2tc &object = object_numbering[it->first];
   
-  if(object.id()=="invalid" ||
-     object.id()=="unknown")
+  if (is_invalid2t(object) || is_unknown2t(object))
     return object;
 
-  object_descriptor_exprt od;
+  expr2tc offs;
+  if (it->second.offset_is_set)
+    offs = expr2tc(new constant_int2t(index_type2(), it->second.offset));
+  else
+    offs = expr2tc(new unknown2t(index_type2()));
 
-  od.object()=object;
-  
-  if(it->second.offset_is_set)
-    od.offset()=from_integer(it->second.offset, index_type());
-
-  od.type()=od.object().type();
-
-  return od;
+  expr2tc obj = expr2tc(new object_descriptor2t(object->type, object, offs));
+  return obj;
 }
 
 bool value_sett::make_union(const value_sett::valuest &new_values)
@@ -203,7 +200,7 @@ void value_sett::get_value_set(
       it=object_map.read().begin();
       it!=object_map.read().end();
       it++)
-    dest.push_back(to_expr(it));
+    dest.push_back(migrate_expr_back(to_expr(it)));
 }
 
 void value_sett::get_value_set(
@@ -484,7 +481,7 @@ void value_sett::get_reference_set(
       it=object_map.read().begin();
       it!=object_map.read().end();
       it++)
-    dest.push_back(to_expr(it));
+    dest.push_back(migrate_expr_back(to_expr(it)));
 }
 
 void value_sett::get_reference_set_rec(

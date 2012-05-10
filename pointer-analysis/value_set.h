@@ -57,7 +57,7 @@ public:
     const static object_map_dt empty;
   };
 
-  exprt to_expr(object_map_dt::const_iterator it) const;
+  expr2tc to_expr(object_map_dt::const_iterator it) const;
 
   typedef reference_counting<object_map_dt> object_mapt;
 
