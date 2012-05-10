@@ -974,6 +974,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
     new_expr_ref = expr2tc(new code_assign2t(op0, op1));
+  } else if (expr.id() == irept::id_code && expr.statement() == "decl") {
+    assert(expr.op0().id() == "symbol");
+    type2tc thetype;
+    irep_idt sym_name;
+    migrate_type(expr.op0().type(), thetype);
+    sym_name = expr.op0().identifier();
+    new_expr_ref = expr2tc(new code_decl2t(thetype, sym_name));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1733,6 +1740,16 @@ migrate_expr_back(const expr2tc &ref)
     exprt op0 = migrate_expr_back(ref2.target);
     exprt op1 = migrate_expr_back(ref2.source);
     codeexpr.copy_to_operands(op0, op1);
+    return codeexpr;
+  }
+  case expr2t::code_decl_id:
+  {
+    const code_decl2t &ref2 = to_code_decl2t(ref);
+    exprt codeexpr("code", code_typet());
+    codeexpr.statement(irep_idt("decl"));
+    typet thetype = migrate_type_back(ref2.type);
+    exprt symbol = symbol_exprt(ref2.value, thetype);
+    codeexpr.copy_to_operands(symbol);
     return codeexpr;
   }
   default:
