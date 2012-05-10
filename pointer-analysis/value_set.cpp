@@ -514,12 +514,6 @@ void value_sett::get_reference_set_rec(
     assert(is_array_type(index.source_value->type) ||
            is_string_type(index.source_value->type));
     
-    // fix up array type during migration; it can have location fields and
-    // other useless gubbins in it, which get compared against a back-migrated
-    // type that drops such information, thus always failing. Work around this
-    // by migrating forwards and backwards the array type, thus stripping out
-    // any additional information we don't want in a comparison.
-
     object_mapt array_references;
     get_reference_set(index.source_value, array_references, ns);
         
