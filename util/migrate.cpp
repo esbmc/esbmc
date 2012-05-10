@@ -981,6 +981,14 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_type(expr.op0().type(), thetype);
     sym_name = expr.op0().identifier();
     new_expr_ref = expr2tc(new code_decl2t(thetype, sym_name));
+  } else if (expr.id() == irept::id_code && expr.statement() == "printf") {
+    std::vector<expr2tc> ops;
+    forall_expr(it, expr.operands()) {
+      expr2tc tmp_op;
+      migrate_expr(*it, tmp_op);
+      ops.push_back(tmp_op);
+    }
+    new_expr_ref = expr2tc(new code_printf2t(ops));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1750,6 +1758,16 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref2.type);
     exprt symbol = symbol_exprt(ref2.value, thetype);
     codeexpr.copy_to_operands(symbol);
+    return codeexpr;
+  }
+  case expr2t::code_printf_id:
+  {
+    const code_printf2t &ref2 = to_code_printf2t(ref);
+    exprt codeexpr("code", code_typet());
+    codeexpr.statement(irep_idt("printf"));
+    forall_exprs(it, ref2.operands) {
+      codeexpr.operands().push_back(migrate_expr_back(*it));
+    }
     return codeexpr;
   }
   default:
