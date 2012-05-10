@@ -1007,9 +1007,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), theop);
     new_expr_ref = expr2tc(new code_free2t(theop));
   } else if (expr.id() == "object_descriptor") {
+    migrate_type(expr.op0().type(), type);
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
-    new_expr_ref = expr2tc(new object_descriptor2t(op0, op1));
+    new_expr_ref = expr2tc(new object_descriptor2t(type, op0, op1));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1821,7 +1822,8 @@ migrate_expr_back(const expr2tc &ref)
   case expr2t::object_descriptor_id:
   {
     const object_descriptor2t &ref2 = to_object_descriptor2t(ref);
-    exprt obj("object_descriptor");
+    typet thetype = migrate_type_back(ref2.type);
+    exprt obj("object_descriptor", thetype);
     exprt op0 = migrate_expr_back(ref2.object);
     exprt op1 = migrate_expr_back(ref2.offset);
     obj.copy_to_operands(op0, op1);

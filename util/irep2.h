@@ -1912,10 +1912,10 @@ class object_descriptor2t : public esbmct::expr<object_descriptor2t,
                                                 esbmct::expr2tc_offset>
 {
 public:
-  object_descriptor2t(const expr2tc &root, const expr2tc &offs)
+  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs)
     : esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
                    esbmct::expr2tc_offset>
-      (type_pool.get_empty(), object_descriptor_id, root, offs) {}
+      (t, object_descriptor_id, root, offs) {}
   object_descriptor2t(const object_descriptor2t &ref)
     : esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
                    esbmct::expr2tc_offset> (ref) {}
