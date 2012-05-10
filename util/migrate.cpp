@@ -994,6 +994,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
     new_expr_ref = expr2tc(new code_expression2t(theop));
+  } else if (expr.id() == irept::id_code && expr.statement() == "return") {
+    assert(expr.operands().size() == 1);
+    expr2tc theop;
+    migrate_expr(expr.op0(), theop);
+    new_expr_ref = expr2tc(new code_return2t(theop));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1780,6 +1785,15 @@ migrate_expr_back(const expr2tc &ref)
     const code_expression2t &ref2 = to_code_expression2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("expression"));
+    exprt op0 = migrate_expr_back(ref2.operand);
+    codeexpr.copy_to_operands(op0);
+    return codeexpr;
+  }
+  case expr2t::code_return_id:
+  {
+    const code_return2t &ref2 = to_code_return2t(ref);
+    exprt codeexpr("code", code_typet());
+    codeexpr.statement(irep_idt("return"));
     exprt op0 = migrate_expr_back(ref2.operand);
     codeexpr.copy_to_operands(op0);
     return codeexpr;
