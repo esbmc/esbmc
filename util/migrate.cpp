@@ -1827,6 +1827,7 @@ migrate_expr_back(const expr2tc &ref)
     exprt op0 = migrate_expr_back(ref2.object);
     exprt op1 = migrate_expr_back(ref2.offset);
     obj.copy_to_operands(op0, op1);
+    return obj;
   }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
