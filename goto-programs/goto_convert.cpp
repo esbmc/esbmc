@@ -835,12 +835,12 @@ void goto_convertt::convert_decl(
     remove_sideeffects(initializer, sideeffects);
     dest.destructive_append(sideeffects);
 
-	if(options.get_bool_option("atomicity-check"))
-	{
+    if(options.get_bool_option("atomicity-check"))
+    {
       unsigned int globals = get_expr_number_globals(initializer);
       if(globals > 0)
-  	    break_globals2assignments(initializer, dest,code.location());
-	}
+        break_globals2assignments(initializer, dest,code.location());
+    }
 
     // break up into decl and assignment
     copy(tmp, OTHER, dest);

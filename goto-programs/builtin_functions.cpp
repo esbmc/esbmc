@@ -363,6 +363,20 @@ void goto_convertt::do_cpp_new(
   goto_programt tmp_initializer;
   cpp_new_initializer(lhs, rhs, tmp_initializer);
 
+  exprt alloc_size;
+
+  if(rhs.statement()=="cpp_new[]")
+  {
+    alloc_size=static_cast<const exprt &>(rhs.size_irep());
+    if(alloc_size.type()!=uint_type())
+      alloc_size.make_typecast(uint_type());
+
+    remove_sideeffects(alloc_size, dest);
+    rhs.size_irep() = alloc_size;
+  }
+  else
+    alloc_size=from_integer(1, uint_type());
+
   // produce new object
   goto_programt::targett t_n=dest.add_instruction(ASSIGN);
   t_n->code=code_assignt(lhs, rhs);
@@ -377,17 +391,6 @@ void goto_convertt::do_cpp_new(
 
   t_a->guard=valid_expr;
   t_a->guard.make_not();
-
-  exprt alloc_size;
-
-  if(rhs.statement()=="cpp_new[]")
-  {
-    alloc_size=static_cast<const exprt &>(rhs.size_irep());
-    if(alloc_size.type()!=uint_type())
-      alloc_size.make_typecast(uint_type());
-  }
-  else
-    alloc_size=from_integer(1, uint_type());
 
   // set size
   //nec: ex37.c
