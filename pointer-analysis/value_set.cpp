@@ -917,13 +917,20 @@ void value_sett::assign_rec(
 
 void value_sett::do_function_call(
   const irep_idt &function,
-  const exprt::operandst &arguments,
+  const std::vector<expr2tc> &arguments,
   const namespacet &ns)
 {
   const symbolt &symbol=ns.lookup(function);
 
   const code_typet &type=to_code_type(symbol.type);
-  const code_typet::argumentst &argument_types=type.arguments();
+
+  type2tc tmp_migrated_type;
+  migrate_type(type, tmp_migrated_type);
+  const code_type2t &migrated_type =
+    static_cast<const code_type2t &>(*tmp_migrated_type.get());
+
+  const std::vector<type2tc> &argument_types = migrated_type.arguments;
+  const std::vector<irep_idt> &argument_names = migrated_type.argument_names;
 
   // these first need to be assigned to dummy, temporary arguments
   // and only thereafter to the actuals, in order
@@ -934,45 +941,40 @@ void value_sett::do_function_call(
   {
     const std::string identifier="value_set::dummy_arg_"+i2string(i);
     add_var(identifier, "");
-    exprt dummy_lhs=symbol_exprt(identifier, arguments[i].type());
 
-    exprt tmp_arg = arguments[i];
-    if (tmp_arg.id() == "nil") {
+    expr2tc dummy_lhs;
+    expr2tc tmp_arg = arguments[i];
+    if (is_nil_expr(tmp_arg)) {
       // As a workaround for the "--function" option, which feeds "nil"
       // arguments in here, take the expected function argument type rather
       // than the type from the argument.
-      tmp_arg.id("unknown");
-      tmp_arg.type() = argument_types[i].type();
+      tmp_arg = expr2tc(new unknown2t(argument_types[i]));
+      dummy_lhs = expr2tc(new symbol2t(argument_types[i], identifier));
+    } else {
+      dummy_lhs = expr2tc(new symbol2t(arguments[i]->type, identifier));
     }
 
-    expr2tc migrate_lhs, tmp_arg_2;
-    migrate_expr(dummy_lhs, migrate_lhs);
-    migrate_expr(tmp_arg, tmp_arg_2);
-    assign(migrate_lhs, tmp_arg_2, ns, true);
+    assign(dummy_lhs, tmp_arg, ns, true);
   }
 
   // now assign to 'actual actuals'
 
   unsigned i=0;
 
-  for(code_typet::argumentst::const_iterator
-      it=argument_types.begin();
-      it!=argument_types.end();
-      it++)
+  std::vector<type2tc>::const_iterator it2 = argument_types.begin();
+  for (std::vector<irep_idt>::const_iterator it = argument_names.begin();
+      it != argument_names.end(); it++, it2++)
   {
-    const irep_idt &identifier=it->get_identifier();
+    const irep_idt &identifier = *it;
     if(identifier=="") continue;
 
     add_var(identifier, "");
   
-    const exprt v_expr=
-      symbol_exprt("value_set::dummy_arg_"+i2string(i), it->type());
-    
-    exprt actual_lhs=symbol_exprt(identifier, it->type());
-    expr2tc migrated_lhs, v_expr_2;
-    migrate_expr(actual_lhs, migrated_lhs);
-    migrate_expr(v_expr, v_expr_2);
-    assign(migrated_lhs, v_expr_2, ns, true);
+    expr2tc v_expr = expr2tc(new symbol2t(*it2,
+                                          "value_set::dummy_arg_"+i2string(i)));
+
+    expr2tc actual_lhs = expr2tc(new symbol2t(*it2, identifier));
+    assign(actual_lhs, v_expr, ns, true);
     i++;
   }
 }

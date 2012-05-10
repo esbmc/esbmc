@@ -55,7 +55,16 @@ void value_set_domaint::transform(
       const code_function_callt &code=
         to_code_function_call(from_l->code);
 
-      value_set.do_function_call(to_l->function, code.arguments(), ns);
+      const exprt::operandst &arguments = code.arguments();
+      std::vector<expr2tc> args;
+      for (exprt::operandst::const_iterator it = arguments.begin();
+           it != arguments.end(); it++) {
+        expr2tc tmp_arg;
+        migrate_expr(*it, tmp_arg);
+        args.push_back(tmp_arg);
+      }
+
+      value_set.do_function_call(to_l->function, args, ns);
     }
     break;
   

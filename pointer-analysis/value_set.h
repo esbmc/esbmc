@@ -233,7 +233,7 @@ public:
 
   void do_function_call(
     const irep_idt &function,
-    const exprt::operandst &arguments,
+    const std::vector<expr2tc> &arguments,
     const namespacet &ns);
 
   // edge back to call site
