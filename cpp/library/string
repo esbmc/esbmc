@@ -17,20 +17,17 @@ Date: Feb 2012
 #include "istream"
 #include "cassert"
 #include "iostream"
-#include <iostream>
 
-static const size_t npos;
+size_t npos;
 
 namespace std
 {
 
 	struct string
 	{
-		//Objetos
-
-		const char *str;
-		char *str2;
-
+		//const char *str;
+		char *str;
+		int _size;
 	public:
 
 		struct const_iterator{
@@ -72,8 +69,8 @@ namespace std
 		string (char*);
 		string (const char * s, size_t n);
 		string (size_t n, char c);
-		const char* c_str ( ) const;
-		char* c_str2 ();
+		string::string(int len);
+		char* c_str ( ) const;
 	    const_iterator begin() const;
 	    const_iterator end() const;
 		bool operator== (string& b);
@@ -97,12 +94,14 @@ namespace std
 		bool operator>= ( const char* lhs );
 		bool operator<= (string& a);
 		bool operator<= ( const char* lhs );
-		string& operator= ( const string& str );
+		string& operator= ( string& str );
 		string& operator= ( const char* s );
-		string& operator+= (const string& s);
+		string& operator= ( char* s );
+		string& operator= ( char c );
+		string& operator+= ( string& s);
 		string& operator += (const char* s);
 		string& operator+= (char s);
-		string operator+ (const string& s);
+		string& operator+ ( string& s);
 		char& operator[] ( size_t pos );
 		char& at ( size_t pos ) const;
 		bool empty ( ) const;
@@ -120,14 +119,14 @@ namespace std
 		size_t find ( const string& s, size_t pos = 0 ) const;
 		size_t find ( const char* s, size_t pos = 0 ) const;
 		size_t find ( char c, size_t pos = 0 ) const;
-		string& assign ( const string& s );
+		string& assign ( string& s );
 		string& assign ( const char* s, size_t n );
-		string& assign ( const string& s, size_t pos, size_t n );
+		string& assign ( string& s, size_t pos = 0, size_t n );
 		string& assign ( const char* s );
 		string& assign ( size_t n, char c );
-		string& append ( const string& s );
+		string& append ( string& s );
 		string& append ( const char* s, size_t n );
-		string& append ( const string& s, size_t pos, size_t n );
+		string& append ( string& s, size_t pos, size_t n );
 		string& append ( const char* s );
 		string& append ( size_t n, char c );
 		void swap ( string& s );
@@ -168,31 +167,41 @@ namespace std
 
 	string::string ()
 	{
+		str=new char[1];
+		_size = 0;
+		npos = 0;
+		//str2=NULL;
 	}
-
 	string::string (char *s)
 	{
 		__ESBMC_HIDE:
-		str=s;
-		str2=s;
+		_size=strlen(s); //length of string
+		str=new char[_size+1]; //increments length of string
+		npos = _size-1;
+		strcpy(str,s);
 	}
-	string::string (const char * s, size_t n)
+	 string::string (const char * s, size_t n)
 	{
-		__ESBMC_HIDE:
-		str=s;
+		__ESBMC_HIDE: //length of string
+		str=new char[n]; //increments length of string
+		_size = n;
+		npos = _size-1;
+		strcpy(str,s);
+		//str2=(char*)s;
 	}
-
-	const char* string::c_str () const
+	 string::string(int len)
+	 {
+	     str = new char [len+1];
+	     for(int i = 0; i <= len; i++)
+	         str[i] = '\0';
+	     _size = len;
+	     npos = _size-1;
+	 }
+	char* string::c_str () const
 	{
 		__ESBMC_HIDE:
 		return str;
 	}
-	char* string::c_str2 ()
-	{
-		__ESBMC_HIDE:
-		return str2;
-	}
-
 	inline string::ostream& operator << (ostream& o, string)
 	{
 		return o;
@@ -201,36 +210,18 @@ namespace std
 	{
 		return o;
 	}
-
 	inline string::istream& operator >> (istream& is, string)
 	{
 		return is;
 	}
-#if 0
+#if 1
 	bool string::operator== (string& b)
-	{/*
+	{
 		__ESBMC_HIDE:
-		int aux;
-		char s1[] = b.c_str2();
-		char s2[] = this->c_str2();
-		size_t i;
-		for (i = 0;; i++) {
-			if (s1[i] == s2[i]) {
-				if (s1[i] == '\0'){ return true;}
-					continue;
-			}
-			if (s1[i] == '\0') aux= -1;
-			if (s2[i] == '\0') aux= 1;
-			if (s1[i] < s2[i]) aux= -1;
-			else return 1;
-		}
-
-		if (aux == 0){
-			return true;
-		}else{
-			return false;
-		}
-*/
+               if (strcmp(this->str, b.str) == 0)
+                    return true;
+               else
+                    return false;
 	}
 	bool string::operator== ( const char* lhs)
 	{
@@ -269,7 +260,7 @@ namespace std
 	{
 		__ESBMC_HIDE:
 		int aux;
-		aux = strcmp(lhs.c_str2(), (char*)rhs);
+		aux = strcmp(lhs.c_str(), (char*)rhs);
 		if (aux == 0){
 			return true;
 		}else{
@@ -291,7 +282,7 @@ namespace std
 	{
 		__ESBMC_HIDE:
 		int aux;
-		aux = strcmp(lhs, this->c_str());
+		aux = strcmp((char*)lhs, this->c_str());
 		if (aux == 0){
 			return false;
 		}else{
@@ -302,7 +293,7 @@ namespace std
 	{
 		__ESBMC_HIDE:
 		int aux;
-		aux = strcmp(lhs, rhs.c_str());
+		aux = strcmp((char*)lhs, rhs.c_str());
 		if (aux == 0){
 			return false;
 		}else{
@@ -313,7 +304,7 @@ namespace std
 	{
 		__ESBMC_HIDE:
 		int aux;
-		aux = strcmp(lhs.c_str2(), rhs);
+		aux = strcmp(lhs.c_str(), (char*)rhs);
 		if (aux == 0){
 			return false;
 		}else{
@@ -404,69 +395,302 @@ namespace std
 			return true;
 		return false;
 	}
-	string& string::operator= ( const string& str )
+	size_t  string::length() const
 	{
-		__ESBMC_HIDE:
-		string aux;
-		aux = (string)str;
-		return string(strcpy(this->c_str2(), aux.c_str()));
+		return this->_size;
 	}
-	string& string::operator= ( const char* s )
+	char& string::operator[](size_t pos)
 	{
-		return string(strcpy(this->c_str2(), s));
-	}
-
-	string& string::operator+= (const string& s)
-	{
-		__ESBMC_HIDE:
-		string aux;
-		aux = (string)s;
-		return string(strcat(this->c_str2(), aux.c_str()));
-	}
-
-	string& string::operator+= (const char* s)
-	{
-		return string(strcat(this->c_str2(), s));
-	}
-	string& string::operator+= (char s)
-	{
-		return string(strcat(this->c_str2(), (const char*)s));
-	}
-
-	string string::operator+ (const string& s)
-	{
-		__ESBMC_HIDE:
-		string aux;
-		aux = (string)s;
-		return string(strcat(this->c_str2(), aux.c_str()));
-	}
-
-	char& string::operator[] ( size_t pos )
-	{
-		__ESBMC_assert( (pos>=0) && (pos<strlen(this->c_str())) , "Error! Invalid access memory area.");
-		char* aux = this->str2;
-		return (char&)aux[pos];
+		__ESBMC_assert( (pos>=0) && (pos<this->_size) , "Error! Invalid access memory area");
+	    if (pos > this->_size)
+	        return this->str[this->_size-1];
+	    else
+	        return this->str[pos];
 	}
 	char& string::at ( size_t pos ) const
 	{
+		__ESBMC_assert( (pos>=0) && (pos<this->_size) , "Error! Invalid access memory area");
 		int i;
 		if (pos>this->length()) {
 			throw("out_of_range");
 		}
 		else {
-			return (char&) str2[pos];
+			return (char&) this->str[pos];
 		}
 	}
 	bool string::empty ( ) const
 	{
-		if (this->length() == 0)
+		if (this->_size == 0)
 			return true;
 		return false;
 	}
-	size_t  string::length() const
+	string& string::operator= ( string& str )
 	{
-		return strlen(this->c_str());
+		__ESBMC_HIDE:
+		this->_size=strlen(str.str);
+		this->str=new char[this->_size+1];
+		strcpy(this->str, str.str);
+		return *this;
 	}
+	string& string::operator= ( const char* s )
+	{
+		this->_size=strlen(s);
+		this->str=new char[this->_size+1];
+		return string(strcpy(this->c_str(), s));
+	}
+	string& string::operator= ( char* s )
+	{
+		this->_size=strlen(s);
+		this->str=new char[this->_size+1];
+		return string(strcpy(this->c_str(), s));
+	}
+	string& string::operator= ( char s )
+	{
+		this->_size=1;
+		this->str=new char[this->_size+1];
+		this->str[0] = s;
+		return *this;
+	}
+	string& string::operator+=( string& s)
+	{
+	    int rhsLen = s._size;
+	    int totalLen = this->_size + rhsLen;
+	    string temp(totalLen);
+	    int i, j, k;
+	    for (i=0; i<this->_size; i++)
+	        temp[i] = this->str[i];
+	    for(j=i, k=0; j<temp._size; j++, k++)
+	    	temp.str[j] = s.str[k];
+	    *this = temp;
+	    return *this;
+	}
+	string& string::operator+= (const char* s)
+	{
+	    int rhsLen = strlen(s);
+	    int totalLen = this->_size + rhsLen;
+	    string temp(totalLen);
+	    int i, j, k;
+	    for (i=0; i<this->_size; i++)
+	        temp[i] = this->str[i];
+	    for(j=i, k=0; j<temp._size; j++, k++)
+	    	temp.str[j] = s[k];
+	    *this = temp;
+	    return *this;
+	}
+	string& string::operator+= (char s)
+	{
+	    int totalLen = this->_size +1;
+	    string temp(totalLen);
+	    int i, j, k;
+	    for (i=0; i<this->_size; i++)
+	        temp[i] = this->str[i];
+	    temp.str[i] = s;
+	    *this = temp;
+	    return *this;
+	}
+	string& string::operator+ ( string& s)
+	{
+		__ESBMC_HIDE:
+	    int rhsLen = s._size;
+	    int totalLen = this->_size + rhsLen;
+	    string temp(totalLen);
+	    int i, j, k;
+	    for (i=0; i<this->_size; i++)
+	        temp[i] = this->str[i];
+	    for(j=i, k=0; j<temp._size; j++, k++)
+	    	temp.str[j] = s.str[k];
+	    *this = temp;
+	    return *this;
+	}
+	void string::swap ( string& s )
+	{
+		string aux(s.str);
+		s.str = this->str;
+		s._size = this->_size;
+		this->str = aux.str;
+		this->_size = aux._size;
+	}
+	size_t string::capacity ( ) const
+	{
+		return this->_size;
+	}
+	size_t string::max_size ( ) const;
+	int string::size() const
+	{
+		return this->_size;
+	}
+	void string::resize ( size_t n )
+	{
+		int num = this->_size,i;
+		string tmp(this->str);
+		this->_size= n;
+		this->str=new char[n];
+		for(i=0;i<num;i++)
+			this->str[i] = tmp.str[i];
+		assert(this->size()==10);
+	}
+	void string::resize ( size_t n, char c )
+	{
+		int num = this->_size,i;
+		string tmp(this->str);
+		this->_size= n;
+		this->str=new char[n];
+		for(i=0;i<num;i++)
+			this->str[i] = tmp.str[i];
+		for(i=num;i<(this->_size-2);i++)
+			this->str[i] = c;
+	}
+	string& string::assign ( string& s )
+	{
+		*this=s;
+		return *this;
+	}
+	string& string::assign ( string& s, size_t pos = 0, size_t n )
+	{
+		this->_size=(n);
+		this->str=new char[this->_size+1];
+		strncpy(this->str, s.str+pos, n);
+		return *this;
+	}
+	string& string::assign ( const char* s, size_t n )
+	{
+		this->_size=(n);
+		this->str=new char[this->_size];
+		strncpy(this->str, s, n);
+		return *this;
+	}
+	string& string::assign ( const char* s )
+	{
+		*this=s;
+		return *this;
+	}
+	string& string::assign ( size_t n, char c )
+	{
+		int i;
+		this->_size = n;
+		this->str = new char[n];
+		for (i = 1;i<n;i++){
+			this->str[i] = c;
+		}
+		return *this;
+	}
+	size_t string::copy ( char* s, size_t n, size_t pos = 0) const
+	{
+		size_t aux = n + pos;
+		if (pos>this->size()){
+			throw("out_of_range");
+		}
+		strncpy(s, this->c_str()+pos, aux);
+		return n;
+	}
+	const char* string::data() const
+	{
+		return this->str;
+	}
+	string& string::append (  string& s )
+	{
+		*this += s;
+		return *this;
+	}
+	string& string::append ( const char* s, size_t n )
+	{
+		if( n > strlen(s) )
+			throw("out_of_range");
+	    int rhsLen = n;
+	    int totalLen = this->_size + rhsLen;
+	    string temp(totalLen);
+	    int i, j, k;
+	    for (i=0; i<this->_size; i++)
+	        temp[i] = this->str[i];
+	    for(j=i, k=0; j<temp._size; j++, k++)
+	    	temp.str[j] = s[k];
+	    *this = temp;
+	    return *this;
+	}
+	string& string::append ( string& s, size_t pos, size_t n )
+	{
+		if( (pos > s._size) || (n > (s._size-pos)) )
+			throw("out_of_range");
+
+	    int rhsLen = n;
+	    int totalLen = this->_size + rhsLen;
+	    string temp(totalLen);
+	    int i, j, k;
+	    for (i=0; i<this->_size; i++)
+	        temp[i] = this->str[i];
+	    for(j=i, k=pos; j<temp._size; j++, k++)
+	    	temp.str[j] = s.str[k];
+	    *this = temp;
+	    return *this;
+	}
+	string& string::append ( const char* s )
+	{
+	    int rhsLen = strlen(s);
+	    int totalLen = this->_size + rhsLen;
+	    string temp(totalLen);
+	    int i, j, k;
+	    for (i=0; i<this->_size; i++)
+	        temp[i] = this->str[i];
+	    for(j=i, k=0; j<temp._size; j++, k++)
+	    	temp.str[j] = s[k];
+	    *this = temp;
+	    return *this;
+	}
+	size_t string::find ( char c, size_t pos = 0 ) const
+	{
+	    size_t ret=0;
+	    const char* s1 = this->str+pos;
+	    char*s2;
+	    s2 = new char[1];
+	    s2[0] = c;
+	    while(*s1 && strchr(s2,*s1++))
+	        ret++;
+	    return ret;
+		//return strspn(str+pos,(const char*)c);
+	}
+
+#if 0
+
+	size_t string::find ( const string& s, size_t pos = 0 ) const
+	{
+		return strspn(str+pos,s.c_str());
+	}
+	size_t string::find ( const char* s, size_t pos = 0 ) const
+	{
+		return strspn(str+pos,s);
+	}
+
+
+	string& string::append ( size_t n, char c )
+	{
+		int i;
+		char* tmp;
+		tmp=new char[n];
+
+		for (i = 0;i<n;i++){
+			tmp[i] = c;
+		}
+
+		//assert(strlen(tmp)==10);
+	    int rhsLen = strlen(tmp);
+	    int totalLen = this->_size + rhsLen;
+	    string temp(totalLen);
+	    int i, j, k;
+	    for (i=0; i<this->_size; i++)
+	        temp[i] = this->str[i];
+	    for(j=i, k=0; j<temp._size; j++, k++)
+	    	temp.str[j] = tmp[k];
+	    *this = temp;
+	    return *this;
+	}
+
+
+
+
+
+
+
+
 
 	int string::compare ( const string& s ) const
 	{
@@ -557,105 +781,8 @@ namespace std
 			return 1;
 		return 0;
 	}
-	size_t string::find ( const string& s, size_t pos = 0 ) const
-	{
-		return strspn(str+pos,s.c_str());
-	}
-	size_t string::find ( const char* s, size_t pos = 0 ) const
-	{
-		return strspn(str+pos,s);
-	}
-	size_t string::find ( char c, size_t pos = 0 ) const
-	{
-		return strspn(str+pos,(const char*)c);
-	}
-	string& string::assign ( const string& s )
-	{
-		return string(strcpy(this->c_str2(), s.c_str()));
-	}
-	string& string::assign ( const string& s, size_t pos, size_t n )
-	{
-		return string(strncpy(this->c_str2(), s.c_str()+pos, n));
-	}
-	string& string::assign ( const char* s, size_t n )
-	{
-		return string(strncpy(this->c_str2(), s, n));
-	}
-	string& string::assign ( const char* s )
-	{
-		return string(strcpy(this->c_str2(), s));
-	}
-	string& string::assign ( size_t n, char c )
-	{
-		int i;
-		string aux = "";
-		for (i = 1;i<10;i++){
-			aux +=c;
-		}
-		return aux;
-	}
-	string& string::append ( const string& s )
-	{
-		return string(strcat(this->c_str2(), s.c_str()));
-	}
-	string& string::append ( const char* s, size_t n )
-	{
-		if( n > strlen(s) )
-			throw("out_of_range");
-		return string(strncat(this->c_str2(), s, n));
-	}
-	string& string::append ( const string& s, size_t pos, size_t n )
-	{
-		if( (pos > s.length()) || (n > (s.length()-pos)) )
-			throw("out_of_range");
-		return string(strncat(this->c_str2(), s.c_str()+pos, n));
-	}
-	string& string::append ( const char* s )
-	{
-		return string(strcat(this->c_str2(), s));
-	}
-	string& string::append ( size_t n, char c )
-	{
-		int i;
-		char *aux = "";
-		for (i = 1;i<n;i++){
-			aux +=c;
-		}
-		return string(strcat(this->c_str2(), (const char *)aux));
-	}
-	void string::swap ( string& s )
-	{
 
-		string aux = s;
-		s = *this;
-		*this = aux;
-	}
-	void string::resize ( size_t n, char c )
-	{
-		int i;
-		char *aux = "";
-		int tmp = n - this->length();
-		if (tmp >0){
-			for (i = 1;i<tmp;i++){
-				aux +=c;
-			}
-		}
-		*this = string(strncpy(str2, this->c_str(), n));
-		*this = string(strcat(this->c_str2(), aux));
-	}
-	void string::resize ( size_t n )
-	{
-		*this = string(strncpy(str2, this->c_str(), n));
-	}
-	size_t string::capacity ( ) const
-	{
-		return strlen(str);
-	}
-	size_t string::max_size ( ) const;
-	int string::size() const
-	{
-		return strlen(str);
-	}
+
 	size_t string::rfind ( const string& s, size_t pos = npos ) const
 	{
 		return strspn_reverse(s.c_str(), str+pos);
@@ -839,20 +966,9 @@ namespace std
 		}
 		return string(strcpy(this->c_str2()+pos1, aux));
 	}
-	size_t string::copy ( char* s, size_t n, size_t pos = 0) const
-	{
-		size_t aux = n + pos;
-		if (pos>this->size()){
-			throw("out_of_range");
-		}
-		string tmp = string(strncpy(s, this->c_str()+pos, aux));
-		return tmp.capacity();
-	}
-	const char* string::data() const
-	{
-		char* s;
-		return (const char *)strcpy(s,this->c_str());
-	}
+
+
+#endif
 #endif
 }
 #endif
