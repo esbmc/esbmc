@@ -454,6 +454,10 @@ static const char *expr_names[] = {
   "valid_object",
   "deallocated_obj",
   "dynamic_size",
+  "code_block",
+  "code_assign",
+  "code_init",
+  "code_decl",
   "sideeffect"
 };
 // If this fires, you've added/removed an expr id, and need to update the list

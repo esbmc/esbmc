@@ -281,6 +281,10 @@ public:
     deallocated_obj_id,
     dynamic_size_id,
     sideeffect_id,
+    code_block_id,
+    code_assign_id,
+    code_init_id,
+    code_decl_id,
     end_expr_id
   };
 
@@ -381,6 +385,7 @@ namespace esbmct {
   field_name_macro(bits);
   field_name_macro(initializer);
   field_name_macro(operand);
+  field_name_macro(operands);
   field_name_macro(symbol_name);
   field_name_macro(members);
   field_name_macro(member_names);
@@ -399,6 +404,8 @@ namespace esbmct {
   field_name_macro(ret_type);
   field_name_macro(ellipsis);
   field_name_macro(argument_names);
+  field_name_macro(target);
+  field_name_macro(source);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -518,6 +525,10 @@ namespace esbmct {
   member_record_macro(bool_ellipsis, bool_type_tag, name_ellipsis);
   member_record_macro(irepidt_vec_arg_names, irepidt_vec_type_tag,
                       name_argument_names);
+  member_record_macro(expr2tc_vec_operands, expr2tc_vec_type_tag,
+                      name_operands);
+  member_record_macro(expr2tc_target, expr2tc_type_tag, name_target);
+  member_record_macro(expr2tc_source, expr2tc_type_tag, name_source);
   #undef member_record_macro
 
   template <class thename>
@@ -1784,6 +1795,60 @@ public:
 template class esbmct::expr<sideeffect2t, esbmct::expr2tc_operand,
                             esbmct::expr2tc_size, esbmct::type2tc_alloctype,
                             esbmct::uint_kind>;
+
+class code_block2t : public esbmct::expr<code_block2t,
+                                         esbmct::expr2tc_vec_operands>
+{
+public:
+  code_block2t(const std::vector<expr2tc> &operands)
+    : esbmct::expr<code_block2t, esbmct::expr2tc_vec_operands>
+      (type_pool.get_empty(), code_block_id, operands) {}
+  code_block2t(const code_block2t &ref)
+    : esbmct::expr<code_block2t, esbmct::expr2tc_vec_operands> (ref) {}
+};
+template class esbmct::expr<code_block2t, esbmct::expr2tc_vec_operands>;
+
+class code_assign2t : public esbmct::expr<code_assign2t,
+                                          esbmct::expr2tc_target,
+                                          esbmct::expr2tc_source>
+{
+public:
+  code_assign2t(const expr2tc &target, const expr2tc &source)
+    : esbmct::expr<code_assign2t, esbmct::expr2tc_target,esbmct::expr2tc_source>
+      (type_pool.get_empty(), code_assign_id, target, source) {}
+  code_assign2t(const code_assign2t &ref)
+    : esbmct::expr<code_assign2t, esbmct::expr2tc_target,esbmct::expr2tc_source>
+      (ref) {}
+};
+template class esbmct::expr<code_assign2t, esbmct::expr2tc_target,
+                            esbmct::expr2tc_source>;
+
+class code_init2t : public esbmct::expr<code_init2t,
+                                          esbmct::expr2tc_target,
+                                          esbmct::expr2tc_source>
+{
+public:
+  code_init2t(const expr2tc &target, const expr2tc &source)
+    : esbmct::expr<code_init2t, esbmct::expr2tc_target,esbmct::expr2tc_source>
+      (type_pool.get_empty(), code_init_id, target, source) {}
+  code_init2t(const code_init2t &ref)
+    : esbmct::expr<code_init2t, esbmct::expr2tc_target,esbmct::expr2tc_source>
+      (ref) {}
+};
+template class esbmct::expr<code_init2t, esbmct::expr2tc_target,
+                            esbmct::expr2tc_source>;
+
+class code_decl2t : public esbmct::expr<code_decl2t, esbmct::irepidt_value>
+{
+public:
+  code_decl2t(const type2tc &t, const irep_idt &name)
+    : esbmct::expr<code_decl2t, esbmct::irepidt_value> (t, code_decl_id, name){}
+  code_decl2t(const code_decl2t &ref)
+    : esbmct::expr<code_decl2t, esbmct::irepidt_value>
+      (ref) {}
+};
+template class esbmct::expr<code_decl2t, esbmct::irepidt_value>;
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
