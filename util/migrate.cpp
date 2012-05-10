@@ -995,9 +995,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), theop);
     new_expr_ref = expr2tc(new code_expression2t(theop));
   } else if (expr.id() == irept::id_code && expr.statement() == "return") {
-    assert(expr.operands().size() == 1);
     expr2tc theop;
-    migrate_expr(expr.op0(), theop);
+    if (expr.operands().size() == 1)
+      migrate_expr(expr.op0(), theop);
+    else
+      assert(expr.operands().size() == 0);
     new_expr_ref = expr2tc(new code_return2t(theop));
   } else if (expr.id() == irept::id_code && expr.statement() == "free") {
     assert(expr.operands().size() == 1);
