@@ -460,6 +460,7 @@ static const char *expr_names[] = {
   "code_init",
   "code_decl",
   "code_printf",
+  "code_expression",
   "end_of_valid_exprs"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
