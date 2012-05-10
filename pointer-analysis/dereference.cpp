@@ -28,7 +28,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <langapi/language_util.h>
 
 #include "dereference.h"
-#include "pointer_offset_sum.h"
 
 // global data, horrible
 unsigned int dereferencet::invalid_counter=0;
