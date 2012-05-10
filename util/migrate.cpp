@@ -1006,6 +1006,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
     new_expr_ref = expr2tc(new code_free2t(theop));
+  } else if (expr.id() == "object_descriptor") {
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    new_expr_ref = expr2tc(new object_descriptor2t(op0, op1));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1813,6 +1817,14 @@ migrate_expr_back(const expr2tc &ref)
     exprt op0 = migrate_expr_back(ref2.operand);
     codeexpr.copy_to_operands(op0);
     return codeexpr;
+  }
+  case expr2t::object_descriptor_id:
+  {
+    const object_descriptor2t &ref2 = to_object_descriptor2t(ref);
+    exprt obj("object_descriptor");
+    exprt op0 = migrate_expr_back(ref2.object);
+    exprt op1 = migrate_expr_back(ref2.offset);
+    obj.copy_to_operands(op0, op1);
   }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
