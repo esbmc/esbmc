@@ -2195,4 +2195,21 @@ typedef irep_container<code_expression2t, expr2t::code_expression_id>
 typedef irep_container<code_return2t, expr2t::code_return_id> code_return2tc;
 typedef irep_container<code_free2t, expr2t::code_free_id> code_free2tc;
 
+// XXXjmorse - to be moved into struct union superclass when it exists.
+static unsigned int
+get_component_number(const type2tc &type, const irep_idt &name)
+{
+  const std::vector<irep_idt> &member_names = (is_struct_type(type))
+    ? to_struct_type(type).member_names : to_union_type(type).member_names;
+
+  unsigned int i = 0;
+  forall_names(it, member_names) {
+    if (*it == name)
+      return i;
+    i++;
+  }
+
+  assert(0);
+}
+
 #endif /* _UTIL_IREP2_H_ */

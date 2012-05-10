@@ -667,11 +667,7 @@ void value_sett::assign(
     	}
 
         assert(base_type_eq(rhs->type, lhs_type, ns));
-
-        expr2tc rhs_member;
-        exprt rhs_member_tmp = make_member(migrate_expr_back(rhs), name, ns);
-        migrate_expr(rhs_member_tmp, rhs_member);
-      
+        expr2tc rhs_member = make_member(rhs, name, ns);
         assign(lhs_member, rhs_member, ns, add_to_sets);
       }
     }
@@ -1053,52 +1049,45 @@ void value_sett::apply_code(
   }
 }
 
-exprt value_sett::make_member(
-  const exprt &src,
+expr2tc value_sett::make_member(
+  const expr2tc &src,
   const irep_idt &component_name,
   const namespacet &ns)
 {
-  const struct_union_typet &struct_type=
-    to_struct_type(ns.follow(src.type()));
+  const type2tc &type = src->type;
+  assert(is_struct_type(type) || is_union_type(type));
 
-  if(src.id()=="struct" ||
-     src.id()=="constant")
+  // Work around for the current lack of type inheretance
+  const std::vector<type2tc> &members = (is_struct_type(type))
+    ? to_struct_type(type).members : to_union_type(type).members;
+
+  if (is_constant_struct2t(src))
   {
-    unsigned no=struct_type.component_number(component_name);
-    if (no>=src.operands().size()		//component number does not exist,
-    	&& src.operands().size()==1)    //we have only one component
-      return src.op0();
-    else {
-      assert(no<src.operands().size());
-      return src.operands()[no];
-    }
+    unsigned no = get_component_number(type, component_name);
+    return to_constant_struct2t(src).datatype_members[no];
   }
-  else if(src.id()=="with")
+  else if (is_with2t(src))
   {
-    assert(src.operands().size()==3);
+    const with2t &with = to_with2t(src);
+    assert(is_constant_string2t(with.update_field));
+    const constant_string2t &memb_name =to_constant_string2t(with.update_field);
 
-    // see if op1 is the member we want
-    const exprt &member_operand=src.op1();
-
-    if(component_name==member_operand.component_name())
+    if (component_name == memb_name.value)
       // yes! just take op2
-      return src.op2();
+      return with.update_value;
     else
       // no! do this recursively
-      return make_member(src.op0(), component_name, ns);
+      return make_member(with.source_value, component_name, ns);
   }
-  else if(src.id()=="typecast")
+  else if (is_typecast2t(src))
   {
     // push through typecast
-    assert(src.operands().size()==1);
-    return make_member(src.op0(), component_name, ns);
+    return make_member(to_typecast2t(src).from, component_name, ns);
   }
 
   // give up
-  typet subtype=struct_type.component_type(component_name);
-  member_exprt member_expr(subtype);
-  member_expr.op0()=src;
-  member_expr.set_component_name(component_name);
-
-  return member_expr;
+  unsigned no = get_component_number(type, component_name);
+  const type2tc &subtype = members[no];
+  expr2tc memb = expr2tc(new member2t(subtype, src, component_name));
+  return memb;
 }

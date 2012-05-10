@@ -283,8 +283,8 @@ protected:
     const expr2tc &op,
     const namespacet &ns);
 
-  exprt make_member(
-    const exprt &src,
+  expr2tc make_member(
+    const expr2tc &src,
     const irep_idt &component_name,
     const namespacet &ns);
 };
