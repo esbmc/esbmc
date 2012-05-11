@@ -82,10 +82,10 @@ void goto_symext::symex_malloc(
   
   expr2tc rhs = expr2tc(new address_of2t(type_pool.get_empty(), expr2tc()));
   address_of2t &rhs_ref = to_address_of2t(rhs);
-  
+
   if(size_is_one)
   {
-    rhs_ref.type = type_pool.get_pointer(symbol.type);
+    rhs_ref.type = type_pool.get_pointer(pointer_typet(symbol.type));
     rhs_ref.ptr_obj = expr2tc(new symbol2t(new_type, symbol.name));
   }
   else
@@ -95,7 +95,7 @@ void goto_symext::symex_malloc(
     expr2tc sym = expr2tc(new symbol2t(new_type, symbol.name));
     expr2tc idx_val = expr2tc(new constant_int2t(int_type2(), BigInt(0)));
     expr2tc idx = expr2tc(new index2t(subtype, sym, idx_val));
-    rhs_ref.type = new_type;
+    rhs_ref.type = type_pool.get_pointer(pointer_typet(symbol.type.subtype()));
     rhs_ref.ptr_obj = idx;
   }
   
