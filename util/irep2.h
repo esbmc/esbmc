@@ -2133,6 +2133,13 @@ inline bool is_nil_expr(const expr2tc &exp)
   return false;
 }
 
+inline bool is_nil_type(const type2tc &t)
+{
+  if (t.get() == NULL)
+    return true;
+  return false;
+}
+
 typedef irep_container<constant_int2t, expr2t::constant_int_id> constant_int2tc;
 typedef irep_container<constant_fixedbv2t, expr2t::constant_fixedbv_id>
                        constant_fixedbv2tc;
