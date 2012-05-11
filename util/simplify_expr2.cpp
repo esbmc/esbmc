@@ -1,5 +1,7 @@
 #include "irep2.h"
 
+#include <ansi-c/c_types.h>
+
 expr2tc
 expr2t::do_simplify(void) const
 {
@@ -213,6 +215,39 @@ member2t::do_simplify(void) const
 
     assert(type == s->type);
     return s;
+  } else {
+    return expr2tc();
+  }
+}
+
+expr2tc
+pointer_offs_simplify_2(const expr2tc &offs)
+{
+
+  if (is_symbol2t(offs) || is_constant_string2t(offs)) {
+    return expr2tc(new constant_int2t(int_type2(), BigInt(0)));
+  } else {
+    // XXX - index simplification exists in old irep, however it looks quite
+    // broken.
+    return expr2tc();
+  }
+}
+
+expr2tc
+pointer_offset2t::do_simplify(void) const
+{
+
+  if (is_address_of2t(ptr_obj)) {
+    const address_of2t &addrof = to_address_of2t(ptr_obj);
+    return pointer_offs_simplify_2(addrof.ptr_obj);
+  } else if (is_typecast2t(ptr_obj)) {
+    const typecast2t &cast = to_typecast2t(ptr_obj);
+    expr2tc new_ptr_offs = expr2tc(new pointer_offset2t(type, cast.from));
+    expr2tc reduced = new_ptr_offs->simplify();
+
+    if (is_constant_int2t(reduced) &&
+        to_constant_int2t(reduced).constant_value.is_zero())
+      return reduced;
   } else {
     return expr2tc();
   }

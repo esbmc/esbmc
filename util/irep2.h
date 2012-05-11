@@ -1493,6 +1493,7 @@ public:
       (type, pointer_offset_id, ptrobj) {}
   pointer_offset2t(const pointer_offset2t &ref)
     : esbmct::expr<pointer_offset2t, esbmct::expr2tc_ptr_obj> (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<pointer_offset2t, esbmct::expr2tc_ptr_obj>;
 
