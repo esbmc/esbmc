@@ -1011,6 +1011,21 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
     new_expr_ref = expr2tc(new object_descriptor2t(type, op0, op1));
+  } else if (expr.id() == irept::id_code &&
+             expr.statement() == "function_call") {
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+
+    std::vector<expr2tc> args;
+    const exprt &irep_args = expr.op2();
+    assert(irep_args.is_not_nil());
+    forall_operands(it, irep_args) {
+      expr2tc tmp;
+      migrate_expr(*it, tmp);
+      args.push_back(tmp);
+    }
+
+    new_expr_ref = expr2tc(new code_function_call2t(op0, op1, args));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1836,6 +1851,19 @@ migrate_expr_back(const expr2tc &ref)
     exprt op1 = migrate_expr_back(ref2.offset);
     obj.copy_to_operands(op0, op1);
     return obj;
+  }
+  case expr2t::code_function_call_id:
+  {
+    const code_function_call2t &ref2 = to_code_function_call2t(ref);
+    exprt codeexpr("code", code_typet());
+    codeexpr.statement(irep_idt("function_call"));
+    exprt op0 = migrate_expr_back(ref2.ret);
+    exprt op1 = migrate_expr_back(ref2.function);
+    exprt &args = (exprt&)codeexpr.add("arguments");
+    forall_exprs(it, ref2.operands) {
+      args.operands().push_back(migrate_expr_back(*it));
+    }
+    return codeexpr;
   }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
