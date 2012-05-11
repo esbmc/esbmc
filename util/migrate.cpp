@@ -1466,7 +1466,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const div2t &ref2 = to_div2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    exprt divval("+", thetype);
+    exprt divval("/", thetype);
     divval.copy_to_operands(migrate_expr_back(ref2.side_1),
                             migrate_expr_back(ref2.side_2));
     return divval;
