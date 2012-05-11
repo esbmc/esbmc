@@ -295,3 +295,53 @@ pointer_offset2t::do_simplify(void) const
     return expr2tc();
   }
 }
+
+expr2tc
+index2t::do_simplify(void) const
+{
+
+  if (is_with2t(source_value)) {
+    if (index == to_with2t(source_value).update_field) {
+      // Index is the same as an update to the thing we're indexing; we can
+      // just take the update value from the "with" below.
+      return to_with2t(source_value).update_value;
+    }
+
+    // XXX jmorse old irep has an additional simplification of indexes with
+    // a with below it; I haven't implemented it here out of partial lazyness,
+    // but so that it can be studied in the future to see if it makes a
+    // difference.
+    return expr2tc();
+  } else if (is_constant_array2t(source_value) && is_constant_int2t(index)) {
+    const constant_array2t &arr = to_constant_array2t(source_value);
+    const constant_int2t &idx = to_constant_int2t(index);
+
+    // Index might be greater than the constant array size. This means we can't
+    // simplify it, and the user might be eaten by an assertion failure in the
+    // model. We don't have to think about this now though.
+    unsigned long the_idx = idx.as_ulong();
+    if (the_idx >= arr.datatype_members.size())
+      return expr2tc();
+
+    return arr.datatype_members[the_idx];
+  } else if (is_constant_string2t(source_value) && is_constant_int2t(index)) {
+    const constant_string2t &str = to_constant_string2t(source_value);
+    const constant_int2t &idx = to_constant_int2t(index);
+
+    // Same index situation
+    unsigned long the_idx = idx.as_ulong();
+    if (the_idx > str.value.as_string().size()) // allow reading null term.
+      return expr2tc();
+
+    // String constants had better be some kind of integer type
+    assert(is_bv_type(type));
+    unsigned long val = str.value.as_string().c_str()[the_idx];
+    return expr2tc(new constant_int2t(type, BigInt(val)));
+  } else if (is_constant_array_of2t(source_value)) {
+    // XXX jmorse - here's hoping that something else is doing the bounds
+    // checking on arrays here.
+    return to_constant_array_of2t(source_value).initializer;
+  } else {
+    return expr2tc();
+  }
+}

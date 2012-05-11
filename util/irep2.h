@@ -1609,6 +1609,7 @@ public:
   index2t(const index2t &ref)
     : esbmct::expr<index2t, esbmct::expr2tc_source_value, esbmct::expr2tc_index>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<index2t, esbmct::expr2tc_source_value,
                                    esbmct::expr2tc_index>;
