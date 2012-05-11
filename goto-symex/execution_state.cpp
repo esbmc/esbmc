@@ -73,7 +73,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   }
 
   exprs_read_write.push_back(read_write_set());
-  thread_start_data.push_back(exprt());
+  thread_start_data.push_back(expr2tc());
 
   active_thread = 0;
   last_active_thread = 0;
@@ -513,7 +513,7 @@ execution_statet::add_thread(const goto_programt *prog)
   }
 
   exprs_read_write.push_back(read_write_set());
-  thread_start_data.push_back(exprt());
+  thread_start_data.push_back(expr2tc());
 
   // We invalidated all threads_state refs, so reset cur_state ptr.
   cur_state = &threads_state[active_thread];

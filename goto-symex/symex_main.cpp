@@ -268,9 +268,9 @@ goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
   } else if (symname == "c::__ESBMC_get_thread_id") {
     intrinsic_get_thread_id(func_call, art);
   } else if (symname == "c::__ESBMC_set_thread_internal_data") {
-    intrinsic_set_thread_data(call, art);
+    intrinsic_set_thread_data(func_call, art);
   } else if (symname == "c::__ESBMC_get_thread_internal_data") {
-    intrinsic_get_thread_data(call, art);
+    intrinsic_get_thread_data(func_call, art);
   } else if (symname == "c::__ESBMC_spawn_thread") {
     intrinsic_spawn_thread(call, art);
   } else if (symname == "c::__ESBMC_terminate_thread") {

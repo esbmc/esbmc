@@ -192,7 +192,7 @@ class execution_statet : public goto_symext
   }
 
   /** Set internal thread startup data */
-  void set_thread_start_data(unsigned int tid, const exprt &argdata)
+  void set_thread_start_data(unsigned int tid, const expr2tc &argdata)
   {
     if (tid >= thread_start_data.size()) {
       std::cerr << "Setting thread data for nonexistant thread " << tid;
@@ -204,7 +204,7 @@ class execution_statet : public goto_symext
   }
 
   /** Fetch internal thread startup data */
-  const exprt &get_thread_start_data(unsigned int tid) const
+  const expr2tc &get_thread_start_data(unsigned int tid) const
   {
     if (tid >= thread_start_data.size()) {
       std::cerr << "Getting thread data for nonexistant thread " << tid;
@@ -459,7 +459,7 @@ class execution_statet : public goto_symext
    *  of when this was introduced to fully understand why; essentially this
    *  is a workaround to prevent too much nondeterminism entering into the
    *  thread starting process. */
-  std::vector<exprt> thread_start_data;
+  std::vector<expr2tc> thread_start_data;
   /** Unknown, Something POR related. */
   read_write_set last_global_read_write;
   /** Last active thread's ID. */

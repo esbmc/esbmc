@@ -300,59 +300,50 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
 }
 
 void
-goto_symext::intrinsic_set_thread_data(code_function_callt &call,
+goto_symext::intrinsic_set_thread_data(const code_function_call2t &call,
                                        reachability_treet &art)
 {
   statet &state = art.get_cur_state().get_active_state();
-  exprt threadid = call.arguments()[0];
-  exprt startdata = call.arguments()[1];
+  expr2tc threadid = call.operands[0];
+  expr2tc startdata = call.operands[1];
 
-  expr2tc new_threadid, new_startdata;
-  migrate_expr(threadid, new_threadid);
-  migrate_expr(startdata, new_startdata);
-  state.rename(new_threadid);
-  state.rename(new_startdata);
-  threadid = migrate_expr_back(new_threadid);
-  startdata = migrate_expr_back(new_startdata);
+  state.rename(threadid);
+  state.rename(startdata);
 
-  if (threadid.id() != "constant") {
+  if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
     std::cerr << std::endl;
     abort();
   }
 
-  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
   art.get_cur_state().set_thread_start_data(tid, startdata);
 }
 
 void
-goto_symext::intrinsic_get_thread_data(code_function_callt &call,
+goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
                                        reachability_treet &art)
 {
   statet &state = art.get_cur_state().get_active_state();
-  exprt &threadid = call.arguments()[0];
+  expr2tc threadid = call.operands[0];
 
-  expr2tc new_threadid;
-  migrate_expr(threadid, new_threadid);
-  state.level2.rename(new_threadid);
-  threadid = migrate_expr_back(new_threadid);
+  state.level2.rename(threadid);
 
-  if (threadid.id() != "constant") {
+  if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
     std::cerr << std::endl;
     abort();
   }
 
-  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
-  const exprt &startdata = art.get_cur_state().get_thread_start_data(tid);
+  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
+  const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
-  code_assignt assign(call.lhs(), startdata);
-  assert(call.lhs().type() == startdata.type());
-  expr2tc tmp_expr, tmp_startdata;
-  migrate_expr(call.lhs(), tmp_expr);
-  migrate_expr(startdata, tmp_startdata);
-  state.value_set.assign(tmp_expr, tmp_startdata, ns);
-  symex_assign(assign);
+  expr2tc assign = expr2tc(new code_assign2t(call.ret, startdata));
+  assert(call.ret->type == startdata->type);
+
+  state.value_set.assign(call.ret, startdata, ns);
+  exprt tmp_assign = migrate_expr_back(assign);
+  symex_assign(static_cast<codet&>(static_cast<irept&>(tmp_assign)));
   return;
 }
 

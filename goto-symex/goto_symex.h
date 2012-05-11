@@ -356,10 +356,10 @@ protected:
   void intrinsic_get_thread_id(const code_function_call2t &call,
                                 reachability_treet &art);
   /** Perform set_thread_state; store thread startup information. */
-  void intrinsic_set_thread_data(code_function_callt &call,
+  void intrinsic_set_thread_data(const code_function_call2t &call,
                                 reachability_treet &art);
   /** Perform get_thread_data; get thread startup information. */
-  void intrinsic_get_thread_data(code_function_callt &call,
+  void intrinsic_get_thread_data(const code_function_call2t &call,
                                 reachability_treet &art);
   /** Perform spawn_thread; Generates a new thread at a named function. */
   void intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art);
