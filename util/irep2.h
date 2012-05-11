@@ -332,7 +332,7 @@ public:
   const expr_ids expr_id;
 
   /** Type of this expr. All exprs have a type. */
-  const type2tc type;
+  type2tc type;
 };
 
 std::string get_expr_id(const expr2tc &expr);
