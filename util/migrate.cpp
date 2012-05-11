@@ -1240,6 +1240,11 @@ migrate_expr_back(const expr2tc &ref)
       exprt thesym("nondet_symbol", thetype);
       thesym.identifier(irep_idt(std::string(ref2.name.c_str() + 7)));
       return thesym;
+    } else if (ref2.name == "NULL") {
+      // Special case.
+      constant_exprt const_expr(migrate_type_back(ref2.type));
+      const_expr.set_value(ref2.name);
+      return const_expr;
     } else {
       return symbol_exprt(ref2.name, thetype);
     }
