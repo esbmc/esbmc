@@ -329,7 +329,7 @@ public:
    *  @param rhs Value being assigned to symbol.
    *  @param record_value Whether to enable constant propagation.
    */
-  void assignment(exprt &lhs, const exprt &rhs, bool record_value);
+  void assignment(expr2tc &lhs, const expr2tc &rhs, bool record_value);
 
   /**
    *  Determine whether to constant propagate the value of an expression.

@@ -215,7 +215,10 @@ void goto_symext::symex_assign_symbol(
 
   exprt new_lhs=lhs;
 
-  cur_state->assignment(new_lhs, rhs, constant_propagation);
+  expr2tc new_new_lhs;
+  migrate_expr(new_lhs, new_new_lhs);
+  migrate_expr(rhs, new_rhs);
+  cur_state->assignment(new_new_lhs, new_rhs, constant_propagation);
 
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);

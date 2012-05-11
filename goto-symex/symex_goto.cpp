@@ -118,7 +118,10 @@ goto_symext::symex_goto(const exprt &old_guard)
 
       exprt new_lhs = guard_expr;
 
-      cur_state->assignment(new_lhs, new_rhs, false);
+      expr2tc new_new_lhs, new_new_rhs;
+      migrate_expr(new_lhs, new_new_lhs);
+      migrate_expr(new_rhs, new_new_rhs);
+      cur_state->assignment(new_new_lhs, new_new_rhs, false);
 
       guardt guard;
 
@@ -255,7 +258,10 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       exprt lhs(symbol_expr(symbol));
       exprt new_lhs(lhs);
 
-      cur_state->assignment(new_lhs, rhs, false);
+      expr2tc new_new_lhs, new_rhs;
+      migrate_expr(new_lhs, new_new_lhs);
+      migrate_expr(rhs, new_rhs);
+      cur_state->assignment(new_new_lhs, new_rhs, false);
 
       guardt true_guard;
 

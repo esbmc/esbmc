@@ -186,43 +186,36 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
 }
 
 void goto_symex_statet::assignment(
-  exprt &lhs,
-  const exprt &rhs,
+  expr2tc &lhs,
+  const expr2tc &rhs,
   bool record_value)
 {
   crypto_hash hash;
-  assert(lhs.id()=="symbol");
-  assert(lhs.id()==exprt::symbol);
+  assert(is_symbol2t(lhs));
+  symbol2t &lhs_sym = to_symbol2t(lhs);
 
-  const irep_idt &identifier= lhs.identifier();
+  const irep_idt &identifier = lhs_sym.name;
 
   // identifier should be l0 or l1, make sure it's l1
 
   const std::string l1_identifier=top().level1.get_ident_name(identifier);
 
-  exprt const_value;
-  if(record_value && constant_propagation(rhs))
+  expr2tc const_value;
+  if(record_value && constant_propagation(migrate_expr_back(rhs)))
     const_value = rhs;
   else
-    const_value.make_nil();
+    const_value = expr2tc();
 
-  expr2tc new_const_value, tmp_rhs;
-  migrate_expr(const_value, new_const_value);
-  migrate_expr(rhs, tmp_rhs);
-  irep_idt new_name = level2.make_assignment(l1_identifier, new_const_value, tmp_rhs);
-  lhs.identifier(new_name);
+  irep_idt new_name = level2.make_assignment(l1_identifier, const_value, rhs);
+  lhs_sym.name = new_name;
 
   if(use_value_set)
   {
     // update value sets
-    expr2tc l1_rhs;
-    migrate_expr(rhs, l1_rhs);
+    expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
     level2.get_original_name(l1_rhs);
 
-    type2tc lhs_type;
-    migrate_type(lhs.type(), lhs_type);
-
-    expr2tc l1_lhs = expr2tc(new symbol2t(lhs_type, l1_identifier));
+    expr2tc l1_lhs = expr2tc(new symbol2t(lhs_sym.type, l1_identifier));
 
     value_set.assign(l1_lhs, l1_rhs, ns);
   }
