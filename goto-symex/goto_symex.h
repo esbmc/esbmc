@@ -476,7 +476,7 @@ protected:
   /** Symbolic implementation of c++'s new. */
   void symex_cpp_new(const exprt &lhs, const side_effect_exprt &code);
   /** Symbolic implementation of printf */
-  void symex_printf(const exprt &lhs, const exprt &code);
+  void symex_printf(const expr2tc &lhs, const expr2tc &code);
 
   /**
    *  Replace nondet func calls with nondeterminism.

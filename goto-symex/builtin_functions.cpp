@@ -128,42 +128,39 @@ void goto_symext::symex_malloc(
 }
 
 void goto_symext::symex_printf(
-  const exprt &lhs __attribute__((unused)),
-  const exprt &rhs)
+  const expr2tc &lhs __attribute__((unused)),
+  const expr2tc &rhs)
 {
-  if(rhs.operands().empty())
-    throw "printf expected to have at least one operand";
 
-  exprt tmp_rhs=rhs;
-  expr2tc new_tmp_rhs;
-  migrate_expr(tmp_rhs, new_tmp_rhs);
-  cur_state->rename(new_tmp_rhs);
-  tmp_rhs = migrate_expr_back(new_tmp_rhs);
+  assert(is_code_printf2t(rhs));
+  expr2tc new_rhs = rhs;
+  cur_state->rename(new_rhs);
 
-  const exprt::operandst &operands=tmp_rhs.operands();
-  std::list<expr2tc> args;
+  std::vector<const expr2tc *> operands;
+  new_rhs->list_operands(operands);
 
-  for(unsigned i=1; i<operands.size(); i++) {
-    expr2tc tmpexpr;
-    migrate_expr(operands[i], tmpexpr);
-    args.push_back(tmpexpr);
-  }
-
-  const exprt &format=operands[0];
+  const expr2tc &format = *operands[0];
   
-  if(format.id()==exprt::addrof &&
-     format.operands().size()==1 &&
-     format.op0().id()==exprt::index &&
-     format.op0().operands().size()==2 &&
-     format.op0().op0().id()=="string-constant" &&
-     format.op0().op1().is_zero())
-  {
-    const exprt &fmt_str=format.op0().op0();
-    const std::string &fmt=fmt_str.value().as_string();
+  if (is_address_of2t(format)) {
+    const address_of2t &addrof = to_address_of2t(format);
+    if (is_index2t(addrof.ptr_obj)) {
+      const index2t &idx = to_index2t(addrof.ptr_obj);
+      if (is_constant_string2t(idx.source_value) &&
+          is_constant_int2t(idx.index) &&
+          to_constant_int2t(idx.index).as_ulong() == 0) {
+        const std::string &fmt =
+          to_constant_string2t(idx.source_value).value.as_string();
 
-    expr2tc guard;
-    migrate_expr(cur_state->guard.as_expr(), guard);
-    target->output(guard, cur_state->source, fmt, args);
+        std::list<expr2tc> args; 
+        for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
+             it != operands.end(); it++)
+          args.push_back(**it);
+
+        expr2tc guard;
+        migrate_expr(cur_state->guard.as_expr(), guard);
+        target->output(guard, cur_state->source, fmt, args);
+      }
+    }
   }
 }
 

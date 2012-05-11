@@ -149,8 +149,12 @@ void goto_symext::symex_assign(const codet &code)
       migrate_expr(side_effect_expr, tmp_side_effect);
       const sideeffect2t &sideeffect = to_sideeffect2t(tmp_side_effect);
       symex_malloc(new_lhs, sideeffect);
-    } else if(statement=="printf")
-      symex_printf(lhs, side_effect_expr);
+    } else if(statement=="printf") {
+      expr2tc new_lhs, new_rhs;
+      migrate_expr(lhs, new_lhs);
+      migrate_expr(side_effect_expr, new_rhs);
+      symex_printf(new_lhs, new_rhs);
+    }
     else
     {
       throw "symex_assign: unexpected sideeffect: "+id2string(statement);

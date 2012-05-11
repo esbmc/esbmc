@@ -47,7 +47,9 @@ void goto_symext::symex_other(void)
     replace_nondet(deref_code);
     dereference(deref_code, false);
 
-    symex_printf(static_cast<const exprt &>(get_nil_irep()), deref_code);
+    expr2tc new_deref_code;
+    migrate_expr(deref_code, new_deref_code);
+    symex_printf(expr2tc(), new_deref_code);
   }
   else if(statement=="decl")
   {
