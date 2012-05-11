@@ -212,8 +212,8 @@ void goto_symex_statet::assignment(
   if(use_value_set)
   {
     // update value sets
-    value_sett::expr_sett rhs_value_set;
     exprt l1_rhs(rhs);
+
     expr2tc new_l1_rhs;
     migrate_expr(l1_rhs, new_l1_rhs);
     level2.get_original_name(new_l1_rhs);
