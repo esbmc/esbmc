@@ -145,15 +145,6 @@ void renaming::level2t::coveredinbees(const irep_idt &identifier, unsigned count
   entry.node_id = node_id;
 }
 
-void renaming::renaming_levelt::get_original_name(exprt &expr) const
-{
-  expr2tc new_expr;
-  migrate_expr(expr, new_expr);
-  get_original_name(new_expr);
-  expr = migrate_expr_back(new_expr);
-  return;
-}
-
 void renaming::renaming_levelt::get_original_name(expr2tc &expr) const
 {
 

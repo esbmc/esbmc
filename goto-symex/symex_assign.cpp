@@ -203,7 +203,10 @@ void goto_symext::symex_assign_symbol(
     new_rhs.swap(rhs);
   }
   exprt original_lhs=lhs;
-  cur_state->get_original_name(original_lhs);
+  expr2tc new_original_lhs;
+  migrate_expr(original_lhs, new_original_lhs);
+  cur_state->get_original_name(new_original_lhs);
+  original_lhs = migrate_expr_back(new_original_lhs);
   expr2tc new_rhs;
   migrate_expr(rhs, new_rhs);
   cur_state->rename(new_rhs);

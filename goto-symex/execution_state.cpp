@@ -657,7 +657,10 @@ execution_statet::serialise_expr(const exprt &rhs)
     // If this is something we've already encountered, use the hash of its
     // value.
     exprt tmp = rhs;
-    get_active_state().get_original_name(tmp);
+    expr2tc new_tmp;
+    migrate_expr(tmp, new_tmp);
+    get_active_state().get_original_name(new_tmp);
+    tmp = migrate_expr_back(new_tmp);
     if (state_level2->current_hashes.find(tmp.identifier().as_string()) !=
         state_level2->current_hashes.end()) {
       crypto_hash h = state_level2->current_hashes.find(
@@ -714,7 +717,10 @@ execution_statet::serialise_expr(const exprt &rhs)
     /* Just return the identifier: it'll be unique to this particular piece of
        entropy */
     exprt tmp = rhs;
-    get_active_state().get_original_name(tmp);
+    expr2tc new_tmp;
+    migrate_expr(tmp, new_tmp);
+    get_active_state().get_original_name(new_tmp);
+    tmp = migrate_expr_back(new_tmp);
     str = "nondet_symbol(" + tmp.identifier().as_string() + ")";
   } else if (rhs.id() == exprt::i_if) {
     str = "cond(if(" + serialise_expr(rhs.op0()) + "),";

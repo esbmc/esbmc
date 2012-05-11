@@ -26,7 +26,6 @@ namespace renaming {
     virtual const irep_idt get_original_name(const irep_idt &identifier,
                                              std::string idxname) const;
     virtual const irep_idt get_original_name(const irep_idt &identifier)const=0;
-    virtual void get_original_name(exprt &expr) const;
     virtual void get_original_name(expr2tc &expr) const;
     virtual void rename(expr2tc &expr)=0;
     virtual void remove(const irep_idt &identifier)=0;
@@ -62,7 +61,7 @@ namespace renaming {
       return renaming_levelt::get_original_name(identifier, "@");
     }
 
-    virtual void get_original_name(exprt &expr) const
+    virtual void get_original_name(expr2tc &expr) const
     {
       renaming_levelt::get_original_name(expr);
     }
@@ -100,7 +99,7 @@ namespace renaming {
       return renaming_levelt::get_original_name(identifier, std::string("&"));
     }
 
-    virtual void get_original_name(exprt &expr) const
+    virtual void get_original_name(expr2tc &expr) const
     {
       renaming_levelt::get_original_name(expr);
     }

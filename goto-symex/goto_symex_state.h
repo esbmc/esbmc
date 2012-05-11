@@ -365,7 +365,7 @@ public:
    *  all contents of an expression.
    *  @param expr The expression to un-rename in place.
    */  
-  void get_original_name(exprt &expr) const;
+  void get_original_name(expr2tc &expr) const;
 
   /**
    *  Print stack trace of state to stdout.

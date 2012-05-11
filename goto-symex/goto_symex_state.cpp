@@ -214,7 +214,10 @@ void goto_symex_statet::assignment(
     // update value sets
     value_sett::expr_sett rhs_value_set;
     exprt l1_rhs(rhs);
-    level2.get_original_name(l1_rhs);
+    expr2tc new_l1_rhs;
+    migrate_expr(l1_rhs, new_l1_rhs);
+    level2.get_original_name(new_l1_rhs);
+    l1_rhs = migrate_expr_back(new_l1_rhs);
 
     exprt l1_lhs(exprt::symbol, lhs.type());
     l1_lhs.identifier(l1_identifier);
@@ -280,12 +283,15 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   }
 }
 
-void goto_symex_statet::get_original_name(exprt &expr) const
+void goto_symex_statet::get_original_name(expr2tc &expr) const
 {
-  Forall_operands(it, expr)
-    get_original_name(*it);
+  std::vector<expr2tc*> operands;
+  expr.get()->list_operands(operands);
+  for (std::vector<expr2tc*>::iterator it = operands.begin();
+       it != operands.end(); it++)
+    get_original_name(**it);
 
-  if(expr.id()==exprt::symbol)
+  if (is_symbol2t(expr))
   {
     level2.get_original_name(expr);
     top().level1.get_original_name(expr);
