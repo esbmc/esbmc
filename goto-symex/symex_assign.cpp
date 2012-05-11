@@ -231,22 +231,19 @@ void goto_symext::symex_assign_symbol(
   migrate_expr(new_lhs, new_new_lhs);
   migrate_expr(rhs, new_rhs);
   cur_state->assignment(new_new_lhs, new_rhs, constant_propagation);
-  new_lhs = migrate_expr_back(new_new_lhs);
 
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 
-  expr2tc new_lhs2, original_lhs2, rhs2, guard2;
+  expr2tc original_lhs2, guard2;
   migrate_expr(tmp_guard.as_expr(), guard2);
-  migrate_expr(rhs, rhs2);
-  migrate_expr(new_lhs, new_lhs2);
   migrate_expr(original_lhs, original_lhs2);
 
   // do the assignment
   target->assignment(
     guard2,
-    new_lhs2, original_lhs2,
-    rhs2,
+    new_new_lhs, original_lhs2,
+    new_rhs,
     cur_state->source,
     cur_state->gen_stack_trace(),
     symex_targett::STATE);
