@@ -1406,6 +1406,7 @@ public:
   mul2t(const mul2t &ref)
     : esbmct::expr<mul2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<mul2t, esbmct::expr2tc_side_1,
                                  esbmct::expr2tc_side_2>;
