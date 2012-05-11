@@ -356,3 +356,42 @@ not2t::do_simplify(void) const
   const constant_bool2t &val = to_constant_bool2t(value);
   return expr2tc(new constant_bool2t(!val.constant_value));
 }
+
+expr2tc
+and2t::do_simplify(void) const
+{
+
+  if (!is_constant_bool2t(side_1) || !is_constant_bool2t(side_2))
+    return expr2tc();
+
+  const constant_bool2t &val1 = to_constant_bool2t(side_1);
+  const constant_bool2t &val2 = to_constant_bool2t(side_2);
+  return expr2tc(new constant_bool2t(val1.constant_value &&
+                                     val2.constant_value));
+}
+
+expr2tc
+or2t::do_simplify(void) const
+{
+
+  if (!is_constant_bool2t(side_1) || !is_constant_bool2t(side_2))
+    return expr2tc();
+
+  const constant_bool2t &val1 = to_constant_bool2t(side_1);
+  const constant_bool2t &val2 = to_constant_bool2t(side_2);
+  return expr2tc(new constant_bool2t(val1.constant_value ||
+                                     val2.constant_value));
+}
+
+expr2tc
+xor2t::do_simplify(void) const
+{
+
+  if (!is_constant_bool2t(side_1) || !is_constant_bool2t(side_2))
+    return expr2tc();
+
+  const constant_bool2t &val1 = to_constant_bool2t(side_1);
+  const constant_bool2t &val2 = to_constant_bool2t(side_2);
+  return expr2tc(new constant_bool2t(val1.constant_value ^
+                                     val2.constant_value));
+}

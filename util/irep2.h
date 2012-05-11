@@ -1194,6 +1194,7 @@ public:
   and2t(const and2t &ref)
     : esbmct::expr<and2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<and2t, esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>;
 
@@ -1207,6 +1208,7 @@ public:
   or2t(const or2t &ref)
     : esbmct::expr<or2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<or2t, esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>;
 
@@ -1220,6 +1222,7 @@ public:
   xor2t(const xor2t &ref)
     : esbmct::expr<xor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<xor2t, esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>;
 
