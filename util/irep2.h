@@ -1236,6 +1236,7 @@ public:
   implies2t(const implies2t &ref)
     : esbmct::expr<implies2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<implies2t, esbmct::expr2tc_side_1,
                                      esbmct::expr2tc_side_2>;

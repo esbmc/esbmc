@@ -395,3 +395,19 @@ xor2t::do_simplify(void) const
   return expr2tc(new constant_bool2t(val1.constant_value ^
                                      val2.constant_value));
 }
+
+expr2tc
+implies2t::do_simplify(void) const
+{
+
+  // False => * evaluate to true, always
+  if (is_constant_bool2t(side_1) && !to_constant_bool2t(side_1).constant_value)
+    return expr2tc(new constant_bool2t(true));
+
+  // Otherwise, the only other thing that will make this expr always true is
+  // if side 2 is true.
+  if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).constant_value)
+    return expr2tc(new constant_bool2t(true));
+
+  return expr2tc();
+}
