@@ -232,8 +232,11 @@ void goto_symex_statet::rename(exprt &expr)
 
   if(expr.id()==exprt::symbol)
   {
-    top().level1.rename(expr);
-    level2.rename(expr);
+    expr2tc new_expr;
+    migrate_expr(expr, new_expr);
+    top().level1.rename(new_expr);
+    level2.rename(new_expr);
+    expr = migrate_expr_back(new_expr);
   }
   else if(expr.id()==exprt::addrof ||
           expr.id()=="implicit_address_of" ||
@@ -257,7 +260,10 @@ void goto_symex_statet::rename_address(exprt &expr)
   if(expr.id()==exprt::symbol)
   {
     // only do L1
-    top().level1.rename(expr);
+    expr2tc new_expr;
+    migrate_expr(expr, new_expr);
+    top().level1.rename(new_expr);
+    expr = migrate_expr_back(new_expr);
   }
   else if(expr.id()==exprt::index)
   {

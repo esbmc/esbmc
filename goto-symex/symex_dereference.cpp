@@ -148,7 +148,10 @@ void goto_symext::dereference(exprt &expr, const bool write)
 
   // needs to be renamed to level 1
   assert(!cur_state->call_stack.empty());
-  cur_state->top().level1.rename(expr);
+  expr2tc new_expr;
+  migrate_expr(expr, new_expr);
+  cur_state->top().level1.rename(new_expr);
+  expr = migrate_expr_back(new_expr);
 
   guardt guard;
   dereference_rec(expr, guard, dereference, write);

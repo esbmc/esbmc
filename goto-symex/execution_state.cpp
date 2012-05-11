@@ -462,7 +462,12 @@ execution_statet::execute_guard(void)
 
   // Truth of this guard implies the parent is true.
   exprt assumpt("=>", bool_typet());
-  state_level2->rename(parent_guard);
+
+  expr2tc tmp_p_guard;
+  migrate_expr(parent_guard, tmp_p_guard);
+  state_level2->rename(tmp_p_guard);
+  parent_guard = migrate_expr_back(tmp_p_guard);
+
   do_simplify(parent_guard);
   assumpt.copy_to_operands(guard_expr, parent_guard);
 
@@ -886,7 +891,7 @@ execution_statet::ex_state_level2t::rename(const irep_idt &identifier, unsigned 
 }
 
 void
-execution_statet::ex_state_level2t::rename(exprt &identifier)
+execution_statet::ex_state_level2t::rename(expr2tc &identifier)
 {
   renaming::level2t::rename(identifier);
 }

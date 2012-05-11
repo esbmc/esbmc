@@ -53,22 +53,12 @@ renaming::level2t::name(const irep_idt &identifier, unsigned count) const
   return id2string(identifier)+"&"+i2string(n_id)+"#"+i2string(count);
 }
 
-void renaming::level1t::rename(exprt &expr)
-{
-
-  if (expr.is_nil())
-    return;
-
-  expr2tc newexpr;
-  migrate_expr(expr, newexpr);
-  renaming::level1t::rename(newexpr);
-  expr = migrate_expr_back(newexpr);
-  return;
-}
-
 void renaming::level1t::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
+
+  if (is_nil_expr(expr))
+    return;
 
   if (is_symbol2t(expr))
   {
@@ -97,19 +87,6 @@ void renaming::level1t::rename(expr2tc &expr)
          it != operands.end(); it++)
       rename(**it);
   }
-}
-
-void renaming::level2t::rename(exprt &expr)
-{
-
-  if (expr.is_nil())
-    return;
-
-  expr2tc theexpr;
-  migrate_expr(expr, theexpr);
-  renaming::level2t::rename(theexpr);
-  expr = migrate_expr_back(theexpr);
-  return;
 }
 
 void renaming::level2t::rename(expr2tc &expr)

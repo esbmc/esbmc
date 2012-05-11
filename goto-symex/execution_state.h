@@ -11,6 +11,8 @@
 #ifndef EXECUTION_STATE_H_
 #define EXECUTION_STATE_H_
 
+#include <irep2.h>
+
 #include <iostream>
 #include <deque>
 #include <set>
@@ -114,7 +116,7 @@ class execution_statet : public goto_symext
     virtual ~ex_state_level2t();
     virtual ex_state_level2t *clone(void) const;
     virtual void rename(const irep_idt &identifier, unsigned count);
-    virtual void rename(exprt &identifier);
+    virtual void rename(expr2tc &identifier);
 
     execution_statet *owner;
   };

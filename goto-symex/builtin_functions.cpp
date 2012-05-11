@@ -315,7 +315,10 @@ goto_symext::intrinsic_get_thread_data(code_function_callt &call,
   statet &state = art.get_cur_state().get_active_state();
   exprt &threadid = call.arguments()[0];
 
-  state.level2.rename(threadid);
+  expr2tc new_threadid;
+  migrate_expr(threadid, new_threadid);
+  state.level2.rename(new_threadid);
+  threadid = migrate_expr_back(new_threadid);
 
   if (threadid.id() != "constant") {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
@@ -400,7 +403,11 @@ goto_symext::intrinsic_get_thread_state(code_function_callt &call, reachability_
 {
   statet &state = art.get_cur_state().get_active_state();
   exprt threadid = call.arguments()[0];
-  state.level2.rename(threadid);
+
+  expr2tc new_threadid;
+  migrate_expr(threadid, new_threadid);
+  state.level2.rename(new_threadid);
+  threadid = migrate_expr_back(new_threadid);
 
   if (threadid.id() != "constant") {
     std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
