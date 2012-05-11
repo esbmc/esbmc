@@ -70,43 +70,39 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
   top().calling_location=symex_targett::sourcet(top().end_of_function, prog);
 }
 
-bool goto_symex_statet::constant_propagation(const exprt &expr) const
+bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   static unsigned int with_counter=0;
-  if(expr.is_constant()) return true;
 
-  if(expr.id()==exprt::addrof)
+  if (is_constant_expr(expr))
+    return true;
+
+  if (is_address_of2t(expr))
   {
-    if(expr.operands().size()!=1)
-      throw "address_of expects one operand";
-
-    return constant_propagation_reference(expr.op0());
+    return constant_propagation_reference(to_address_of2t(expr).ptr_obj);
   }
-  else if(expr.id()==exprt::typecast)
+  else if (is_typecast2t(expr))
   {
-    if(expr.operands().size()!=1)
-      throw "typecast expects one operand";
-
-    return constant_propagation(expr.op0());
+    return constant_propagation(to_typecast2t(expr).from);
   }
-  else if(expr.id()==exprt::plus)
+  else if (is_add2t(expr))
   {
-    forall_operands(it, expr)
-      if(!constant_propagation(*it))
+    std::vector<const expr2tc*> operands;
+    expr->list_operands(operands);
+    for (std::vector<const expr2tc*>::iterator it = operands.begin();
+         it != operands.end(); it++)
+      if(!constant_propagation(**it))
         return false;
 
     return true;
   }
-#if 1
-  else if(expr.id()==exprt::arrayof)
+  else if (is_constant_array_of2t(expr))
   {
-    if(expr.operands().size()==1)
-      if (expr.op0().id()==exprt::constant && expr.op0().type().id()!=typet::t_bool)
-        return true;
+    const expr2tc &init = to_constant_array_of2t(expr).initializer;
+    if (is_constant_expr(init) && !is_bool_type(init->type))
+      return true;
   }
-#endif
-#if 1
-  else if(expr.id()==exprt::with)
+  else if (is_with2t(expr))
   {
 	with_counter++;
 
@@ -116,31 +112,34 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
 		return false;
 	}
 
-    //forall_operands(it, expr)
-    //{
-      if(!constant_propagation(expr.op0()))
+      const with2t &with = to_with2t(expr);
+      if (!constant_propagation(with.source_value))
       {
     	with_counter=0;
         return false;
       }
-    //}
     with_counter=0;
     return true;
   }
-#endif
-  else if(expr.id()=="struct")
+  else if (is_constant_struct2t(expr))
   {
-    forall_operands(it, expr)
-      if(!constant_propagation(*it))
+    std::vector<const expr2tc*> operands;
+    expr->list_operands(operands);
+    for (std::vector<const expr2tc*>::const_iterator it = operands.begin();
+         it != operands.end(); it++)
+      if(!constant_propagation(**it))
         return false;
 
     return true;
   }
 
-  else if(expr.id()=="union")
+  else if (is_constant_union2t(expr))
   {
-    if(expr.operands().size()==1)
-      return constant_propagation(expr.op0());
+    std::vector<const expr2tc*> operands;
+    expr->list_operands(operands);
+    if (operands.size() != 1)
+      return false;
+    return constant_propagation(*operands[0]);
   }
 
   /* No difference
@@ -158,27 +157,23 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
   return false;
 }
 
-bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
+bool goto_symex_statet::constant_propagation_reference(const expr2tc &expr)const
 {
-  if(expr.id()==exprt::symbol)
+
+  if (is_symbol2t(expr))
     return true;
-  else if(expr.id()==exprt::index)
+  else if (is_index2t(expr))
   {
-    if(expr.operands().size()!=2)
-      throw "index expects two operands";
-
-    return constant_propagation_reference(expr.op0()) &&
-           constant_propagation(expr.op1());
+    const index2t &index = to_index2t(expr);
+    return constant_propagation_reference(index.source_value) &&
+           constant_propagation(index.index);
   }
-  else if(expr.id()==exprt::member)
+  else if (is_member2t(expr))
   {
-    if(expr.operands().size()!=1)
-      throw "member expects one operand";
-
-    return constant_propagation_reference(expr.op0());
+    return constant_propagation_reference(to_member2t(expr).source_value);
   }
 #if 1
-  else if(expr.id()=="string-constant")
+  else if (is_constant_string2t(expr))
     return true;
 #endif
 
@@ -201,7 +196,7 @@ void goto_symex_statet::assignment(
   const std::string l1_identifier=top().level1.get_ident_name(identifier);
 
   expr2tc const_value;
-  if(record_value && constant_propagation(migrate_expr_back(rhs)))
+  if(record_value && constant_propagation(rhs))
     const_value = rhs;
   else
     const_value = expr2tc();

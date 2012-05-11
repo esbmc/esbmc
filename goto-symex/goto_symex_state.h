@@ -339,7 +339,7 @@ public:
    *  @param expr Expression to decide whether to const propagate.
    *  @return True if constant propagation should be enabled.
    */
-  bool constant_propagation(const exprt &expr) const;
+  bool constant_propagation(const expr2tc &expr) const;
 
   /**
    *  Decide whether to constant_propagate an address_of
@@ -347,7 +347,7 @@ public:
    *  @param expr Expression to decide whether to const propagate.
    *  @return True if constant propagation should be enabled.
    */
-  bool constant_propagation_reference(const exprt &expr) const;
+  bool constant_propagation_reference(const expr2tc &expr) const;
 
   /**
    *  Fetch an original l0 identifer.
