@@ -230,6 +230,9 @@ void goto_symex_statet::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
+  if (is_nil_expr(expr))
+    return;
+
   if (is_symbol2t(expr))
   {
     top().level1.rename(expr);
