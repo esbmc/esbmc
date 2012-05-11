@@ -353,7 +353,7 @@ protected:
   /** Yield, always switching away from this thread */
   void intrinsic_switch_from(reachability_treet &arg);
   /** Perform get_thread_id; return the current thread identifier. */
-  void intrinsic_get_thread_id(code_function_callt &call,
+  void intrinsic_get_thread_id(const code_function_call2t &call,
                                 reachability_treet &art);
   /** Perform set_thread_state; store thread startup information. */
   void intrinsic_set_thread_data(code_function_callt &call,

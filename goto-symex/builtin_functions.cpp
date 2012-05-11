@@ -281,23 +281,21 @@ goto_symext::intrinsic_switch_from(reachability_treet &art)
 
 
 void
-goto_symext::intrinsic_get_thread_id(code_function_callt &call,
+goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
                                      reachability_treet &art)
 {
   statet &state = art.get_cur_state().get_active_state();
   unsigned int thread_id;
 
   thread_id = art.get_cur_state().get_active_state_number();
-  constant_exprt tid(unsignedbv_typet(config.ansi_c.int_width));
-  tid.set_value(integer2binary(thread_id, config.ansi_c.int_width));
+  expr2tc tid = expr2tc(new constant_int2t(uint_type2(), BigInt(thread_id)));
 
-  code_assignt assign(call.lhs(), tid);
-  assert(call.lhs().type() == tid.type());
-  expr2tc tmp_expr, tmp_tid;
-  migrate_expr(call.lhs(), tmp_expr);
-  migrate_expr(tid, tmp_tid);
-  state.value_set.assign(tmp_expr, tmp_tid, ns);
-  symex_assign(assign);
+  state.value_set.assign(call.ret, tid, ns);
+
+  expr2tc assign = expr2tc(new code_assign2t(call.ret, tid));
+  assert(call.ret->type == tid->type);
+  exprt tmp = migrate_expr_back(assign);
+  symex_assign(static_cast<codet&>(static_cast<irept&>(tmp)));
   return;
 }
 
