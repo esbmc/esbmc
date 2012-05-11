@@ -34,7 +34,10 @@ goto_symext::claim(const exprt &claim_expr, const std::string &msg) {
   total_claims++;
 
   exprt expr = claim_expr;
-  cur_state->rename(expr);
+  expr2tc new_expr;
+  migrate_expr(expr, new_expr);
+  cur_state->rename(new_expr);
+  expr = migrate_expr_back(new_expr);
 
   // first try simplifier on it
   if (!expr.is_false())
@@ -127,7 +130,10 @@ goto_symext::symex_step(reachability_treet & art)
       dereference(tmp, false);
 
       exprt tmp1 = tmp;
-      cur_state->rename(tmp);
+      expr2tc new_tmp;
+      migrate_expr(tmp, new_tmp);
+      cur_state->rename(new_tmp);
+      tmp = migrate_expr_back(new_tmp);
 
       do_simplify(tmp);
       if (!tmp.is_true()) {

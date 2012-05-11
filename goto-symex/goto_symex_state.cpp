@@ -226,56 +226,54 @@ void goto_symex_statet::assignment(
   }
 }
 
-void goto_symex_statet::rename(exprt &expr)
+void goto_symex_statet::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
-  if(expr.id()==exprt::symbol)
+  if (is_symbol2t(expr))
   {
-    expr2tc new_expr;
-    migrate_expr(expr, new_expr);
-    top().level1.rename(new_expr);
-    level2.rename(new_expr);
-    expr = migrate_expr_back(new_expr);
+    top().level1.rename(expr);
+    level2.rename(expr);
   }
-  else if(expr.id()==exprt::addrof ||
-          expr.id()=="implicit_address_of" ||
-          expr.id()=="reference_to")
+  else if (is_address_of2t(expr))
   {
-    assert(expr.operands().size()==1);
-    rename_address(expr.op0());
+    address_of2t &addrof = to_address_of2t(expr);
+    rename_address(addrof.ptr_obj);
   }
   else
   {
     // do this recursively
-    Forall_operands(it, expr)
-      rename(*it);
+    std::vector<expr2tc*> operands;
+    expr.get()->list_operands(operands);
+    for (std::vector<expr2tc*>::iterator it = operands.begin();
+         it != operands.end(); it++)
+      rename(**it);
   }
 }
 
-void goto_symex_statet::rename_address(exprt &expr)
+void goto_symex_statet::rename_address(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
-  if(expr.id()==exprt::symbol)
+  if (is_symbol2t(expr))
   {
     // only do L1
-    expr2tc new_expr;
-    migrate_expr(expr, new_expr);
-    top().level1.rename(new_expr);
-    expr = migrate_expr_back(new_expr);
+    top().level1.rename(expr);
   }
-  else if(expr.id()==exprt::index)
+  else if (is_index2t(expr))
   {
-    assert(expr.operands().size()==2);
-    rename_address(expr.op0());
-    rename(expr.op1());
+    index2t &index = to_index2t(expr);
+    rename_address(index.source_value);
+    rename(index.index);
   }
   else
   {
     // do this recursively
-    Forall_operands(it, expr)
-      rename_address(*it);
+    std::vector<expr2tc*> operands;
+    expr.get()->list_operands(operands);
+    for (std::vector<expr2tc*>::iterator it = operands.begin();
+         it != operands.end(); it++)
+      rename_address(**it);
   }
 }
 

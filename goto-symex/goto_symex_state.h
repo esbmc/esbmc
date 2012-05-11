@@ -10,6 +10,8 @@
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
+#include <irep2.h>
+
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -307,7 +309,7 @@ public:
    *  Perform both levels of renaming on an expression.
    *  @param expr Expression to rename contents of.
    */
-  void rename(exprt &expr);
+  void rename(expr2tc &expr);
 
   /**
    *  Perform renaming of contents of an address_of operation.
@@ -316,7 +318,7 @@ public:
    *  object. So, don't perform second level of renaming in this function.
    *  @param expr Expression to rename contents of.
    */
-  void rename_address(exprt &expr);
+  void rename_address(expr2tc &expr);
 
   /**
    *  Make an L2 and value set assignment.

@@ -204,7 +204,10 @@ void goto_symext::symex_assign_symbol(
   }
   exprt original_lhs=lhs;
   cur_state->get_original_name(original_lhs);
-  cur_state->rename(rhs);
+  expr2tc new_rhs;
+  migrate_expr(rhs, new_rhs);
+  cur_state->rename(new_rhs);
+  rhs = migrate_expr_back(new_rhs);
   do_simplify(rhs);
 
   exprt new_lhs=lhs;

@@ -22,7 +22,10 @@ goto_symext::symex_goto(const exprt &old_guard)
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
   exprt new_guard = old_guard;
-  cur_state->rename(new_guard);
+  expr2tc new_new_guard;
+  migrate_expr(new_guard, new_new_guard);
+  cur_state->rename(new_new_guard);
+  new_guard = migrate_expr_back(new_new_guard);
   do_simplify(new_guard);
 
   if (new_guard.is_false() ||
@@ -133,7 +136,10 @@ goto_symext::symex_goto(const exprt &old_guard)
         symex_targett::HIDDEN);
 
       guard_expr.make_not();
-      cur_state->rename(guard_expr);
+      expr2tc new_guard_expr;
+      migrate_expr(guard_expr, new_guard_expr);
+      cur_state->rename(new_guard_expr);
+      guard_expr = migrate_expr_back(new_guard_expr);
     }
 
     if (forward) {
