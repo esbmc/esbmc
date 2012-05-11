@@ -147,13 +147,27 @@ void renaming::level2t::coveredinbees(const irep_idt &identifier, unsigned count
 
 void renaming::renaming_levelt::get_original_name(exprt &expr) const
 {
-  Forall_operands(it, expr)
-    get_original_name(*it);
+  expr2tc new_expr;
+  migrate_expr(expr, new_expr);
+  get_original_name(new_expr);
+  expr = migrate_expr_back(new_expr);
+  return;
+}
 
-  if(expr.id()==exprt::symbol)
+void renaming::renaming_levelt::get_original_name(expr2tc &expr) const
+{
+
+  std::vector<expr2tc*> operands;
+  expr->list_operands(operands);
+  for (std::vector<expr2tc*>::iterator it = operands.begin();
+       it != operands.end(); it++)
+    get_original_name(**it);
+
+  if (is_symbol2t(expr))
   {
-    irep_idt ident = get_original_name(expr.identifier());
-    expr.identifier(ident);
+    symbol2t &sym = to_symbol2t(expr);
+    irep_idt ident = get_original_name(sym.name);
+    sym.name = irep_idt(ident);
   }
 }
 
