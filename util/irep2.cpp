@@ -397,8 +397,11 @@ expr2t::simplify(void) const
   }
 
   // Finally, attempt simplification again.
-  new_us->do_simplify();
-  return new_us;
+  expr2tc tmp = new_us->do_simplify();
+  if (is_nil_expr(tmp))
+    return new_us;
+  else
+    return tmp;
 }
 
 static const char *expr_names[] = {
