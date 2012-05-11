@@ -55,6 +55,10 @@ renaming::level2t::name(const irep_idt &identifier, unsigned count) const
 
 void renaming::level1t::rename(exprt &expr)
 {
+
+  if (expr.is_nil())
+    return;
+
   expr2tc newexpr;
   migrate_expr(expr, newexpr);
   renaming::level1t::rename(newexpr);
@@ -97,6 +101,9 @@ void renaming::level1t::rename(expr2tc &expr)
 
 void renaming::level2t::rename(exprt &expr)
 {
+
+  if (expr.is_nil())
+    return;
 
   expr2tc theexpr;
   migrate_expr(expr, theexpr);
