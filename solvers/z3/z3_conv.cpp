@@ -1193,6 +1193,15 @@ z3_convt::convert_smt_expr(const bitnxor2t &bitval, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const bitnot2t &bitval, void *&_bv)
+{
+  Z3_ast arg;
+  Z3_ast &bv = cast_to_z3(_bv);
+  convert_bv(bitval.value, arg);
+  bv = Z3_mk_bvnot(z3_ctx, arg);
+}
+
+void
 z3_convt::convert_smt_expr(const lshr2t &bitval, void *&_bv)
 {
   convert_shift(bitval, bitval.side_1, bitval.side_2, Z3_mk_bvlshr, _bv);
