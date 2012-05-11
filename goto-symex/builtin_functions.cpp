@@ -24,34 +24,30 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "reachability_tree.h"
 
 void goto_symext::symex_malloc(
-  const exprt &lhs,
-  const side_effect_exprt &code)
+  const expr2tc &lhs,
+  const sideeffect2t &code)
 {
-  if(code.operands().size()!=1)
-    throw "malloc expected to have one operand";
     
-  if(lhs.is_nil())
+  if (is_nil_expr(lhs))
     return; // ignore
 
   // size
-  typet type=static_cast<const typet &>(code.cmt_type());
-  exprt size=static_cast<const exprt &>(code.cmt_size());
-  bool size_is_one;
+  type2tc type = code.alloctype;
+  expr2tc size = code.size;
+  bool size_is_one = false;
 
-  if(size.is_nil())
+  if (is_nil_expr(size))
     size_is_one=true;
   else
   {
-    expr2tc new_size;
-    migrate_expr(size, new_size);
-    cur_state->rename(new_size);
-    size = migrate_expr_back(new_size);
+    cur_state->rename(size);
     mp_integer i;
-    size_is_one=(!to_integer(size, i) && i==1);
+    if (is_constant_int2t(size) && to_constant_int2t(size).as_ulong() == 1)
+      size_is_one = true;
   }
   
-  if(type.is_nil())
-    type=char_type();
+  if (is_nil_type(type))
+    type = char_type2();
 
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
@@ -59,21 +55,20 @@ void goto_symext::symex_malloc(
   // value
   symbolt symbol;
 
-  symbol.base_name="dynamic_"+
-    i2string(dynamic_counter)+
-    (size_is_one?"_value":"_array");
+  symbol.base_name = "dynamic_" + i2string(dynamic_counter) +
+                     (size_is_one ? "_value" : "_array");
 
-  symbol.name="symex_dynamic::"+id2string(symbol.base_name);
-  symbol.lvalue=true;
+  symbol.name = "symex_dynamic::" + id2string(symbol.base_name);
+  symbol.lvalue = true;
   
-  typet renamedtype = ns.follow(type);
+  typet renamedtype = ns.follow(migrate_type_back(type));
   if(size_is_one)
     symbol.type=renamedtype;
   else
   {
     symbol.type=typet(typet::t_array);
     symbol.type.subtype()=renamedtype;
-    symbol.type.size(size);
+    symbol.type.size(migrate_expr_back(size));
   }
 
   symbol.type.dynamic(true);
@@ -81,46 +76,55 @@ void goto_symext::symex_malloc(
   symbol.mode="C";
 
   new_context.add(symbol);
+
+  type2tc new_type;
+  migrate_type(symbol.type, new_type);
   
-  exprt rhs(exprt::addrof, typet(typet::t_pointer));
+  expr2tc rhs = expr2tc(new address_of2t(type_pool.get_empty(), expr2tc()));
+  address_of2t &rhs_ref = to_address_of2t(rhs);
   
   if(size_is_one)
   {
-    rhs.type().subtype()=symbol.type;
-    rhs.copy_to_operands(symbol_expr(symbol));
+    rhs_ref.type = type_pool.get_pointer(symbol.type);
+    rhs_ref.ptr_obj = expr2tc(new symbol2t(new_type, symbol.name));
   }
   else
   {
-    exprt index_expr(exprt::index, symbol.type.subtype());
-    index_expr.copy_to_operands(symbol_expr(symbol), gen_zero(int_type()));
-    rhs.type().subtype()=symbol.type.subtype();
-    rhs.move_to_operands(index_expr);
+    type2tc subtype;
+    migrate_type(symbol.type.subtype(), subtype);
+    expr2tc sym = expr2tc(new symbol2t(new_type, symbol.name));
+    expr2tc idx_val = expr2tc(new constant_int2t(int_type2(), BigInt(0)));
+    expr2tc idx = expr2tc(new index2t(subtype, sym, idx_val));
+    rhs_ref.type = new_type;
+    rhs_ref.ptr_obj = idx;
   }
   
-  if(rhs.type()!=lhs.type())
-    rhs.make_typecast(lhs.type());
+  if (rhs_ref.type != lhs->type)
+    rhs = expr2tc(new typecast2t(lhs->type, rhs));
 
-  expr2tc new_rhs;
-  migrate_expr(rhs, new_rhs);
-  cur_state->rename(new_rhs);
-  rhs = migrate_expr_back(new_rhs);
+  // Pas this point, rhs_ref may be an invalid reference.
+
+  cur_state->rename(rhs);
   
   guardt guard;
-  symex_assign_rec(lhs, rhs, guard);
+  exprt blah_rhs = migrate_expr_back(rhs);
+  symex_assign_rec(migrate_expr_back(lhs), blah_rhs, guard);
+  migrate_expr(blah_rhs, rhs); // fetch symex_assign_rec's modifications
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  exprt sym("symbol", array_typet());
-  sym.type().subtype() = bool_typet();
-  sym.type().set("size", "infinity");
-  sym.set("identifier", "c::__ESBMC_is_dynamic");
-  exprt pointerobj("pointer_object", signedbv_typet());
-  exprt ptrsrc = lhs;
-  pointerobj.move_to_operands(ptrsrc);
-  exprt index("index", bool_typet());
-  index.move_to_operands(sym, pointerobj);
-  exprt truth("constant", bool_typet());
-  truth.set("value", "true");
-  symex_assign_rec(index, truth, guard);
+  type2tc sym_type = type2tc(new array_type2t(type_pool.get_bool(),
+                                              expr2tc(), true));
+  expr2tc sym = expr2tc(new symbol2t(sym_type, "c::__ESBMC_is_dynamic"));
+
+  expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), lhs));
+
+  expr2tc idx = expr2tc(new index2t(type_pool.get_bool(), sym, ptr_obj));
+
+  expr2tc truth = expr2tc(new constant_bool2t(true));
+
+  exprt idx_back = migrate_expr_back(idx);
+  exprt truth_back = migrate_expr_back(truth);
+  symex_assign_rec(idx_back, truth_back, guard);
 }
 
 void goto_symext::symex_printf(

@@ -143,9 +143,13 @@ void goto_symext::symex_assign(const codet &code)
     else if(statement=="cpp_new" ||
             statement=="cpp_new[]")
       symex_cpp_new(lhs, side_effect_expr);
-    else if(statement=="malloc")
-      symex_malloc(lhs, side_effect_expr);
-    else if(statement=="printf")
+    else if(statement=="malloc") {
+      expr2tc new_lhs, tmp_side_effect;
+      migrate_expr(lhs, new_lhs);
+      migrate_expr(side_effect_expr, tmp_side_effect);
+      const sideeffect2t &sideeffect = to_sideeffect2t(tmp_side_effect);
+      symex_malloc(new_lhs, sideeffect);
+    } else if(statement=="printf")
       symex_printf(lhs, side_effect_expr);
     else
     {

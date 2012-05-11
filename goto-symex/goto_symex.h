@@ -470,7 +470,7 @@ protected:
   void symex_assign_byte_extract(const exprt &lhs, exprt &rhs, guardt &guard);
 
   /** Symbolic implementation of malloc. */
-  void symex_malloc(const exprt &lhs, const side_effect_exprt &code);
+  void symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const codet &code);
   /** Symbolic implementation of c++'s new. */
