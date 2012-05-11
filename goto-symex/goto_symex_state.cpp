@@ -219,13 +219,14 @@ void goto_symex_statet::assignment(
     level2.get_original_name(new_l1_rhs);
     l1_rhs = migrate_expr_back(new_l1_rhs);
 
-    exprt l1_lhs(exprt::symbol, lhs.type());
-    l1_lhs.identifier(l1_identifier);
+    type2tc lhs_type;
+    migrate_type(lhs.type(), lhs_type);
 
-    expr2tc tmp_lhs, tmp_rhs;
-    migrate_expr(l1_lhs, tmp_lhs);
+    expr2tc l1_lhs = expr2tc(new symbol2t(lhs_type, l1_identifier));
+
+    expr2tc tmp_rhs;
     migrate_expr(l1_rhs, tmp_rhs);
-    value_set.assign(tmp_lhs, tmp_rhs, ns);
+    value_set.assign(l1_lhs, tmp_rhs, ns);
   }
 }
 
