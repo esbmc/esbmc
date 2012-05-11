@@ -149,7 +149,7 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr) const
 {
 
   std::vector<expr2tc*> operands;
-  expr->list_operands(operands);
+  expr.get()->list_operands(operands);
   for (std::vector<expr2tc*>::iterator it = operands.begin();
        it != operands.end(); it++)
     get_original_name(**it);
