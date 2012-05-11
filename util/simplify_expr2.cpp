@@ -137,3 +137,28 @@ div2t::do_simplify(void) const
 
   return from_fixedbv(operand1, type);
 }
+
+expr2tc
+modulus2t::do_simplify(void) const
+{
+
+  if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
+    return expr2tc();
+
+  assert((is_constant_int2t(side_1) || is_constant_bool2t(side_1) ||
+          is_constant_fixedbv2t(side_1)) &&
+         (is_constant_int2t(side_2) || is_constant_bool2t(side_2) ||
+          is_constant_fixedbv2t(side_2)) &&
+          "Operands to simplified div must be int, bool or fixedbv");
+
+  fixedbvt operand1, operand2;
+  to_fixedbv(side_1, operand1);
+  to_fixedbv(side_2, operand2);
+
+  fixedbvt quotient = operand1;
+  quotient /= operand2; // calculate quotient.
+  quotient *= operand2; // to subtract.
+  operand1 -= quotient; // And finally, the remainder.
+
+  return from_fixedbv(operand1, type);
+}

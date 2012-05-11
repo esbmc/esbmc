@@ -1436,6 +1436,7 @@ public:
   modulus2t(const modulus2t &ref)
     : esbmct::expr<modulus2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<modulus2t, esbmct::expr2tc_side_1,
                                      esbmct::expr2tc_side_2>;
