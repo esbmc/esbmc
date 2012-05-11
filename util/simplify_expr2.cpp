@@ -345,3 +345,14 @@ index2t::do_simplify(void) const
     return expr2tc();
   }
 }
+
+expr2tc
+not2t::do_simplify(void) const
+{
+
+  if (!is_constant_bool2t(value))
+    return expr2tc();
+
+  const constant_bool2t &val = to_constant_bool2t(value);
+  return expr2tc(new constant_bool2t(!val.constant_value));
+}

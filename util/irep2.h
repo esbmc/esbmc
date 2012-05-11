@@ -1180,6 +1180,7 @@ public:
   not2t(const not2t &ref)
   : esbmct::expr<not2t, esbmct::expr2tc_value>
     (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<not2t, esbmct::expr2tc_value>;
 
