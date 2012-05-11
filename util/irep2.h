@@ -1593,6 +1593,7 @@ public:
   member2t(const member2t &ref)
     : esbmct::expr<member2t, esbmct::expr2tc_source_value, esbmct::irepidt_member>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<member2t, esbmct::expr2tc_source_value,
                                     esbmct::irepidt_member>;

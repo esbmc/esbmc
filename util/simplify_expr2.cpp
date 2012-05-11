@@ -194,3 +194,25 @@ with2t::do_simplify(void) const
     return expr2tc();
   }
 }
+
+expr2tc
+member2t::do_simplify(void) const
+{
+
+  if (is_constant_struct2t(source_value) || is_constant_union2t(source_value)) {
+    unsigned no = get_component_number(source_value->type, member);
+
+    // Clone constant struct, update its field according to this "with".
+    expr2tc s;
+    if (is_constant_struct2t(source_value)) {
+      s = to_constant_struct2t(source_value).datatype_members[no];
+    } else {
+      s = to_constant_union2t(source_value).datatype_members[no];
+    }
+
+    assert(type == s->type);
+    return s;
+  } else {
+    return expr2tc();
+  }
+}
