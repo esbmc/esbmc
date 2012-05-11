@@ -474,7 +474,7 @@ protected:
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const codet &code);
   /** Symbolic implementation of c++'s new. */
-  void symex_cpp_new(const exprt &lhs, const side_effect_exprt &code);
+  void symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, const expr2tc &code);
 

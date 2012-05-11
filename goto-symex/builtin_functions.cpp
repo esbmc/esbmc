@@ -165,15 +165,12 @@ void goto_symext::symex_printf(
 }
 
 void goto_symext::symex_cpp_new(
-  const exprt &lhs,
-  const side_effect_exprt &code)
+  const expr2tc &lhs,
+  const sideeffect2t &code)
 {
   bool do_array;
 
-  if(code.type().id()!=typet::t_pointer)
-    throw "new expected to return pointer";
-
-  do_array=(code.statement()=="cpp_new[]");
+  do_array = (code.kind == sideeffect2t::cpp_new_arr);
       
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
@@ -189,45 +186,49 @@ void goto_symext::symex_cpp_new(
   symbol.lvalue=true;
   symbol.mode="C++";
   
-  typet newtype;
-  typet renamedtype = ns.follow(code.type().subtype());
+  const pointer_type2t &ptr_ref = to_pointer_type(code.type);
+  typet renamedtype = ns.follow(migrate_type_back(ptr_ref.subtype));
+  type2tc newtype, renamedtype2;
+  migrate_type(renamedtype, renamedtype2);
+
   if(do_array)
   {
-    newtype=array_typet();
-    newtype.subtype()=renamedtype;
-    newtype.size(code.size_irep());
+    newtype = type2tc(new array_type2t(renamedtype2, code.size, false));
   }
   else
-    newtype=renamedtype;
+    newtype = renamedtype2;
 
-  symbol.type = newtype;
+  symbol.type = migrate_type_back(newtype);
 
-  //symbol.type.active(symbol_expr(active_symbol));
   symbol.type.dynamic(true);
   
   new_context.add(symbol);
 
   // make symbol expression
 
-  exprt rhs(exprt::addrof, typet(typet::t_pointer));
-  rhs.type().subtype()=renamedtype;
-  
+  expr2tc rhs = expr2tc(new address_of2t(
+                                     type2tc(new pointer_type2t(renamedtype2)),
+                                     expr2tc()));
+  address_of2t &addrof = to_address_of2t(rhs);
+
   if(do_array)
   {
-    exprt index_expr(exprt::index, renamedtype);
-    index_expr.copy_to_operands(symbol_expr(symbol), gen_zero(int_type()));
-    rhs.move_to_operands(index_expr);
+    expr2tc sym = expr2tc(new symbol2t(type2tc(new pointer_type2t(newtype)),
+                                       symbol.name));
+    expr2tc zero = expr2tc(new constant_int2t(int_type2(), BigInt(0)));
+    expr2tc idx = expr2tc(new index2t(renamedtype2, sym, zero));
+    addrof.ptr_obj = idx;
   }
   else
-    rhs.copy_to_operands(symbol_expr(symbol));
+    addrof.ptr_obj = expr2tc(new symbol2t(type2tc(new pointer_type2t(newtype)),
+                                          symbol.name));
   
-  expr2tc new_rhs;
-  migrate_expr(rhs, new_rhs);
-  cur_state->rename(new_rhs);
-  rhs = migrate_expr_back(new_rhs);
+  cur_state->rename(rhs);
 
   guardt guard;
-  symex_assign_rec(lhs, rhs, guard);
+  exprt lhs_back = migrate_expr_back(lhs);
+  exprt rhs_back = migrate_expr_back(rhs);
+  symex_assign_rec(lhs_back, rhs_back, guard);
 }
 
 // XXX - implement as a call to free?

@@ -141,9 +141,13 @@ void goto_symext::symex_assign(const codet &code)
       throw "symex_assign: unexpected function call: "+id2string(identifier);
     }
     else if(statement=="cpp_new" ||
-            statement=="cpp_new[]")
-      symex_cpp_new(lhs, side_effect_expr);
-    else if(statement=="malloc") {
+            statement=="cpp_new[]") {
+      expr2tc new_lhs, tmp_side_effect;
+      migrate_expr(lhs, new_lhs);
+      migrate_expr(side_effect_expr, tmp_side_effect);
+      const sideeffect2t &sideeffect = to_sideeffect2t(tmp_side_effect);
+      symex_cpp_new(new_lhs, sideeffect);
+    } else if(statement=="malloc") {
       expr2tc new_lhs, tmp_side_effect;
       migrate_expr(lhs, new_lhs);
       migrate_expr(side_effect_expr, tmp_side_effect);
