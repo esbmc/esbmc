@@ -351,8 +351,18 @@ expr2t::simplify(void) const
 
   // Try initial simplification
   expr2tc res = do_simplify();
-  if (!is_nil_expr(res))
-    return res;
+  if (!is_nil_expr(res)) {
+    // Woot, we simplified some of this. It may have _additional_ fields that
+    // need to get simplified (member2ts in arrays for example), so invoke the
+    // simplifier again, to hit those potential subfields.
+    expr2tc res2 = res->simplify();
+
+    // If we simplified even further, return res2; otherwise res.
+    if (is_nil_expr(res2))
+      return res;
+    else
+      return res2;
+  }
 
   // Try simplifying all the sub-operands.
   bool changed = false;
