@@ -315,13 +315,16 @@ public:
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
   virtual void do_crc(boost::crc_32_type &crc) const;
   virtual void list_operands(std::vector<const expr2tc*> &inp) const = 0;
-protected:
+
   // Caution - updating sub operands of an expr2t *must* always preserve type
   // correctness, as there's no way to check that an expr expecting a pointer
   // type operand *always* has a pointer type operand.
+  // This list operands method should be protected; however it's required on
+  // account of all those places where exprs are rewritten in place. Ideally,
+  // "all those places" shouldn't exist in the future.
   virtual void list_operands(std::vector<expr2tc*> &inp) = 0;
   virtual expr2t * clone_raw(void) const = 0;
-public:
+
   expr2tc simplify(void) const;
   virtual expr2tc do_simplify(void) const; // Shallow -> one level only
 
