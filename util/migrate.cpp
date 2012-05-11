@@ -1216,7 +1216,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const constant_array2t &ref2 = to_constant_array2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    exprt thearray("array", thetype);
+    exprt thearray("constant", thetype);
     forall_exprs(it, ref2.datatype_members) {
       exprt tmp = migrate_expr_back(*it);
       thearray.operands().push_back(tmp);
