@@ -492,3 +492,61 @@ bitxor2t::do_simplify(void) const
 {
   return do_bit_munge_operation(do_bitxor_op, type, side_1, side_2);
 }
+
+static void
+do_bitnand_op(uint8_t *op1, uint8_t *op2, size_t n)
+{
+  for (size_t i = 0; i < n; i++) {
+    op1[i] &= op2[i];
+    op1[i] = ~op1[i];
+  }
+}
+
+expr2tc
+bitnand2t::do_simplify(void) const
+{
+  return do_bit_munge_operation(do_bitnand_op, type, side_1, side_2);
+}
+
+static void
+do_bitnor_op(uint8_t *op1, uint8_t *op2, size_t n)
+{
+  for (size_t i = 0; i < n; i++) {
+    op1[i] |= op2[i];
+    op1[i] = ~op1[i];
+  }
+}
+
+expr2tc
+bitnor2t::do_simplify(void) const
+{
+  return do_bit_munge_operation(do_bitnor_op, type, side_1, side_2);
+}
+
+static void
+do_bitnxor_op(uint8_t *op1, uint8_t *op2, size_t n)
+{
+  for (size_t i = 0; i < n; i++) {
+    op1[i] ^= op2[i];
+    op1[i] = ~op1[i];
+  }
+}
+
+expr2tc
+bitnxor2t::do_simplify(void) const
+{
+  return do_bit_munge_operation(do_bitnxor_op, type, side_1, side_2);
+}
+
+static void
+do_bitnot_op(uint8_t *op1, uint8_t *op2 __attribute__((unused)), size_t n)
+{
+  for (size_t i = 0; i < n; i++)
+    op1[i] = ~op1[i];
+}
+
+expr2tc
+bitnot2t::do_simplify(void) const
+{
+  return do_bit_munge_operation(do_bitnot_op, type, value, value);
+}

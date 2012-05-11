@@ -1296,6 +1296,7 @@ public:
   bitnand2t(const bitnand2t &ref)
     : esbmct::expr<bitnand2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<bitnand2t, esbmct::expr2tc_side_1,
                                      esbmct::expr2tc_side_2>;
@@ -1310,6 +1311,7 @@ public:
   bitnor2t(const bitnor2t &ref)
     : esbmct::expr<bitnor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<bitnor2t, esbmct::expr2tc_side_1,
                                     esbmct::expr2tc_side_2>;
@@ -1324,6 +1326,7 @@ public:
   bitnxor2t(const bitnxor2t &ref)
     : esbmct::expr<bitnxor2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<bitnxor2t, esbmct::expr2tc_side_1,
                                      esbmct::expr2tc_side_2>;
@@ -1337,6 +1340,7 @@ public:
   bitnot2t(const bitnot2t &ref)
     : esbmct::expr<bitnot2t, esbmct::expr2tc_value>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<bitnot2t, esbmct::expr2tc_value>;
 
