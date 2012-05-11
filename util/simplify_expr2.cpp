@@ -1,5 +1,9 @@
 #include "irep2.h"
 
+#include <string.h>
+
+#include <boost/static_assert.hpp>
+
 #include <ansi-c/c_types.h>
 
 expr2tc
@@ -410,4 +414,41 @@ implies2t::do_simplify(void) const
     return expr2tc(new constant_bool2t(true));
 
   return expr2tc();
+}
+
+expr2tc
+bitand2t::do_simplify(void) const
+{
+  uint8_t buffer1[256], buffer2[256];
+  BOOST_STATIC_ASSERT(sizeof(buffer1) == sizeof(buffer2));
+
+  // Only support integer and's. If you're a float, pointer, or whatever, you're
+  // on your own.
+  if (!is_constant_int2t(side_1) || !is_constant_int2t(side_2))
+    return expr2tc();
+
+  // So - we can't make BigInt by itself do an and operation. But we can dump
+  // it to a binary representation, and then and that.
+  const constant_int2t &int1 = to_constant_int2t(side_1);
+  const constant_int2t &int2 = to_constant_int2t(side_2);
+
+  assert(int1.constant_value.get_len() < sizeof(buffer1) &&
+         int2.constant_value.get_len() < sizeof(buffer2) &&
+         "You've successfully generated an integer that's bigger than a massive"
+         " stack buffer -- well done, this abort is for you!");
+
+  unsigned int maxsize = std::max(int1.constant_value.get_len(),
+                                  int2.constant_value.get_len());
+
+  // Dump will zero-prefix and right align the output number.
+  int1.constant_value.dump(buffer1, maxsize);
+  int2.constant_value.dump(buffer2, maxsize);
+
+  for (unsigned int i = 0; i < maxsize; i++)
+    buffer1[i] &= buffer2[i];
+
+  // And now, restore.
+  constant_int2t *theint = new constant_int2t(type, BigInt(0));
+  theint->constant_value.load(buffer1, maxsize);
+  return expr2tc(theint);
 }

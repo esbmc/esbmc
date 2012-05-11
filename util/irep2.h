@@ -1251,6 +1251,7 @@ public:
   bitand2t(const bitand2t &ref)
     : esbmct::expr<bitand2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<bitand2t, esbmct::expr2tc_side_1,
                                     esbmct::expr2tc_side_2>;
