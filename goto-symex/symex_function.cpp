@@ -237,7 +237,8 @@ goto_symext::symex_function_call_code(const code_function_callt &call)
   argument_assignments(goto_function.type, arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
-  frame.return_value = call.lhs();
+  expr2tc ret_val;
+  migrate_expr(call.lhs(), frame.return_value);
   frame.function_identifier = identifier;
 
   cur_state->source.is_set = true;
@@ -480,8 +481,8 @@ goto_symext::make_return_assignment(code_assignt &assign,
 
     dereference(value, false);
 
-    if (frame.return_value.is_not_nil()) {
-      assign = code_assignt(frame.return_value, value);
+    if (!is_nil_expr(frame.return_value)) {
+      assign = code_assignt(migrate_expr_back(frame.return_value), value);
 
       if (assign.lhs().type() != assign.rhs().type())
 	assign.rhs().make_typecast(assign.lhs().type());
@@ -491,7 +492,7 @@ goto_symext::make_return_assignment(code_assignt &assign,
       return true;
     }
   } else   {
-    if (frame.return_value.is_not_nil())
+    if (!is_nil_expr(frame.return_value))
       throw "return with unexpected value";
   }
 

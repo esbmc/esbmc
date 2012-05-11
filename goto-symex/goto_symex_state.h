@@ -164,7 +164,7 @@ public:
     goto_programt::const_targett end_of_function;
     /** Expression to assign return values to. The lvalue that the calller
      *  assigns the result of this function call to at a higher level. */
-    exprt return_value;
+    expr2tc return_value;
 
     typedef std::set<irep_idt> local_variablest;
     /** Set of local variable l1 names. */
@@ -195,8 +195,7 @@ public:
      *  already seen names in a function for making that decision. */
     declaration_historyt declaration_history;
 
-    framet(unsigned int thread_id) :
-      return_value(static_cast<const exprt &>(get_nil_irep()))
+    framet(unsigned int thread_id)
     {
       level1._thread_id = thread_id;
     }
