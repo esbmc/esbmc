@@ -332,10 +332,11 @@ goto_symext::symex_function_call_deref(const code_function_callt &call)
     statet::goto_state_listt &goto_state_list =
       cur_state->top().goto_state_map[fit->second.body.instructions.begin()];
 
+    expr2tc tmp_target;
+    migrate_expr(it->second, tmp_target);
     cur_state->top().cur_function_ptr_targets.push_back(
-      std::pair<goto_programt::const_targett, exprt>(
-        fit->second.body.instructions.begin(),
-        it->second)
+      std::pair<goto_programt::const_targett, expr2tc>(
+        fit->second.body.instructions.begin(), tmp_target)
       );
 
     goto_state_list.push_back(statet::goto_statet(*cur_state));
@@ -378,12 +379,12 @@ goto_symext::run_next_function_ptr_target(bool first)
 
   // Take one function ptr target out of the list and jump to it. A previously
   // recorded merge will ensure it gets the right state.
-  std::pair<goto_programt::const_targett, exprt> p =
+  std::pair<goto_programt::const_targett, expr2tc> p =
     cur_state->top().cur_function_ptr_targets.front();
   cur_state->top().cur_function_ptr_targets.pop_front();
 
   goto_programt::const_targett target = p.first;
-  exprt target_symbol = p.second;
+  exprt target_symbol = migrate_expr_back(p.second);
 
   cur_state->guard.make_false();
   cur_state->source.pc = target;
