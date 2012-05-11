@@ -290,6 +290,7 @@ public:
     code_return_id,
     code_free_id,
     object_descriptor_id,
+    code_function_call_id,
     end_expr_id
   };
 
@@ -416,6 +417,8 @@ namespace esbmct {
   field_name_macro(source);
   field_name_macro(object);
   field_name_macro(offset);
+  field_name_macro(ret);
+  field_name_macro(function);
   #undef field_name_macro
 
   // Multiple empty name tags are required to avoid inheretance of the same type
@@ -541,6 +544,8 @@ namespace esbmct {
   member_record_macro(expr2tc_source, expr2tc_type_tag, name_source);
   member_record_macro(expr2tc_object, expr2tc_type_tag, name_object);
   member_record_macro(expr2tc_offset, expr2tc_type_tag, name_offset);
+  member_record_macro(expr2tc_function, expr2tc_type_tag, name_function);
+  member_record_macro(expr2tc_ret, expr2tc_type_tag, name_ret);
   #undef member_record_macro
 
   template <class thename>
@@ -1926,6 +1931,26 @@ public:
 template class esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
                                                  esbmct::expr2tc_offset>;
 
+class code_function_call2t : public esbmct::expr<code_function_call2t,
+                                                 esbmct::expr2tc_ret,
+                                                 esbmct::expr2tc_function,
+                                                 esbmct::expr2tc_vec_operands>
+{
+public:
+  code_function_call2t(const expr2tc &r, const expr2tc &func,
+                       const std::vector<expr2tc> args)
+    : esbmct::expr<code_function_call2t, esbmct::expr2tc_ret,
+                   esbmct::expr2tc_function, esbmct::expr2tc_vec_operands>
+      (type_pool.get_empty(), code_function_call_id, r, func, args) {}
+  code_function_call2t(const code_function_call2t &ref)
+    : esbmct::expr<code_function_call2t, esbmct::expr2tc_ret,
+                   esbmct::expr2tc_function, esbmct::expr2tc_vec_operands>
+      (ref) { }
+};
+template class esbmct::expr<code_function_call2t, esbmct::expr2tc_ret,
+                                                  esbmct::expr2tc_function,
+                                                  esbmct::expr2tc_vec_operands>;
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -2068,6 +2093,7 @@ expr_macros(code_expression);
 expr_macros(code_return);
 expr_macros(code_free);
 expr_macros(object_descriptor);
+expr_macros(code_function_call);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -2228,6 +2254,8 @@ typedef irep_container<code_return2t, expr2t::code_return_id> code_return2tc;
 typedef irep_container<code_free2t, expr2t::code_free_id> code_free2tc;
 typedef irep_container<object_descriptor2t, expr2t::object_descriptor_id>
                        object_descriptor2tc;
+typedef irep_container<code_function_call2t, expr2t::code_function_call_id>
+                       code_function_call2tc;
 
 // XXXjmorse - to be moved into struct union superclass when it exists.
 static unsigned int

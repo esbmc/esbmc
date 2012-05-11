@@ -463,7 +463,8 @@ static const char *expr_names[] = {
   "code_expression",
   "code_return",
   "code_free",
-  "object_descriptor"
+  "object_descriptor",
+  "code_function_call"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
