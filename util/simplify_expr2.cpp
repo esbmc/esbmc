@@ -479,3 +479,16 @@ bitor2t::do_simplify(void) const
 {
   return do_bit_munge_operation(do_bitor_op, type, side_1, side_2);
 }
+
+static void
+do_bitxor_op(uint8_t *op1, uint8_t *op2, size_t n)
+{
+  for (size_t i = 0; i < n; i++)
+    op1[i] ^= op2[i];
+}
+
+expr2tc
+bitxor2t::do_simplify(void) const
+{
+  return do_bit_munge_operation(do_bitxor_op, type, side_1, side_2);
+}
