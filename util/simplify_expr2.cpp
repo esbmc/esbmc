@@ -416,8 +416,10 @@ implies2t::do_simplify(void) const
   return expr2tc();
 }
 
-expr2tc
-bitand2t::do_simplify(void) const
+static expr2tc
+do_bit_munge_operation(void (*opfunc)(uint8_t *, uint8_t *, size_t),
+                       const type2tc &type, const expr2tc &side_1,
+                       const expr2tc &side_2)
 {
   uint8_t buffer1[256], buffer2[256];
   BOOST_STATIC_ASSERT(sizeof(buffer1) == sizeof(buffer2));
@@ -444,11 +446,23 @@ bitand2t::do_simplify(void) const
   int1.constant_value.dump(buffer1, maxsize);
   int2.constant_value.dump(buffer2, maxsize);
 
-  for (unsigned int i = 0; i < maxsize; i++)
-    buffer1[i] &= buffer2[i];
+  opfunc(buffer1, buffer2, maxsize);
 
   // And now, restore.
   constant_int2t *theint = new constant_int2t(type, BigInt(0));
   theint->constant_value.load(buffer1, maxsize);
   return expr2tc(theint);
+}
+
+static void
+do_bitand_op(uint8_t *op1, uint8_t *op2, size_t n)
+{
+  for (size_t i = 0; i < n; i++)
+    op1[i] &= op2[i];
+}
+
+expr2tc
+bitand2t::do_simplify(void) const
+{
+  return do_bit_munge_operation(do_bitand_op, type, side_1, side_2);
 }
