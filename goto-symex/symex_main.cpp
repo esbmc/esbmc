@@ -255,11 +255,14 @@ void
 goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
   const std::string symname)
 {
+  expr2tc call2;
+  migrate_expr(call, call2);
+  const code_function_call2t &func_call = to_code_function_call2t(call2);
 
   if (symname == "c::__ESBMC_yield") {
     intrinsic_yield(art);
   } else if (symname == "c::__ESBMC_switch_to") {
-    intrinsic_switch_to(call, art);
+    intrinsic_switch_to(func_call, art);
   } else if (symname == "c::__ESBMC_switch_away_from") {
     intrinsic_switch_from(art);
   } else if (symname == "c::__ESBMC_get_thread_id") {

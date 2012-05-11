@@ -247,20 +247,20 @@ goto_symext::intrinsic_yield(reachability_treet &art)
 
 
 void
-goto_symext::intrinsic_switch_to(code_function_callt &call,
+goto_symext::intrinsic_switch_to(const code_function_call2t &call,
                                  reachability_treet &art)
 {
 
-  assert(call.arguments().size() == 1);
-
   // Switch to other thread.
-  exprt &num = call.arguments()[0];
-  if (num.id() != "constant") {
+  const expr2tc &num = call.operands[0];
+  if (!is_constant_int2t(num)) {
     std::cerr << "Can't switch to non-constant thread id no";
     abort();
   }
 
-  unsigned int tid = binary2integer(num.value().as_string(), false).to_long();
+  const constant_int2t &thread_num = to_constant_int2t(num);
+
+  unsigned int tid = thread_num.constant_value.to_long();
   if (tid != art.get_cur_state().get_active_state_number())
     art.get_cur_state().switch_to_thread(tid);
 
