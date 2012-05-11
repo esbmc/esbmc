@@ -104,6 +104,11 @@ typet int_type()
   return signedbv_typet(config.ansi_c.int_width);  
 }
 
+type2tc int_type2()
+{
+  return type_pool.get_int(config.ansi_c.int_width);
+}
+
 /*******************************************************************\
 
 Function: uint_type
@@ -207,6 +212,14 @@ typet char_type()
     return unsignedbv_typet(config.ansi_c.char_width);
   else
     return signedbv_typet(config.ansi_c.char_width);
+}
+
+type2tc char_type2()
+{
+  if (config.ansi_c.char_is_unsigned)
+    return type_pool.get_uint(config.ansi_c.char_width);
+  else
+    return type_pool.get_int(config.ansi_c.char_width);
 }
 
 /*******************************************************************\
