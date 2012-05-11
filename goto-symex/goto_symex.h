@@ -362,7 +362,8 @@ protected:
   void intrinsic_get_thread_data(const code_function_call2t &call,
                                 reachability_treet &art);
   /** Perform spawn_thread; Generates a new thread at a named function. */
-  void intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art);
+  void intrinsic_spawn_thread(const code_function_call2t &call,
+                              reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
   /** Perform get_thead_state... defunct. */

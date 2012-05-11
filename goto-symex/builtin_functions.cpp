@@ -348,17 +348,16 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
 }
 
 void
-goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art)
+goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
+                                    reachability_treet &art)
 {
 
   // As an argument, we expect the address of a symbol.
-  const exprt &args = call.operands()[2];
-  assert(args.id() == "arguments");
-  const exprt &addrof = args.operands()[0];
-  assert(addrof.id() == "address_of");
-  const exprt &symexpr = addrof.operands()[0];
-  assert(symexpr.id() == "symbol");
-  irep_idt symname = symexpr.get("identifier");
+  const expr2tc &addr = call.operands[0];
+  assert(is_address_of2t(addr));
+  const address_of2t &addrof = to_address_of2t(addr);
+  assert(is_symbol2t(addrof.ptr_obj));
+  const irep_idt &symname = to_symbol2t(addrof.ptr_obj).name;
 
   goto_functionst::function_mapt::const_iterator it =
     art.goto_functions.function_map.find(symname);
@@ -379,14 +378,14 @@ goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_tree
 
   statet &state = art.get_cur_state().get_active_state();
 
-  constant_exprt thread_id_expr(unsignedbv_typet(config.ansi_c.int_width));
-  thread_id_expr.set_value(integer2binary(thread_id, config.ansi_c.int_width));
-  code_assignt assign(call.lhs(), thread_id_expr);
-  expr2tc tmp_expr, tmp_thread_id;
-  migrate_expr(call.lhs(), tmp_expr);
-  migrate_expr(thread_id_expr, tmp_thread_id);
-  state.value_set.assign(tmp_expr, tmp_thread_id, ns);
-  symex_assign(assign);
+  expr2tc thread_id_exp = expr2tc(new constant_int2t(int_type2(),
+                                                     BigInt(thread_id)));
+
+  expr2tc assign = expr2tc(new code_assign2t(call.ret, thread_id_exp));
+  state.value_set.assign(call.ret, thread_id_exp, ns);
+
+  exprt tmp_assign = migrate_expr_back(assign);
+  symex_assign(static_cast<codet&>(static_cast<irept&>(tmp_assign)));
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.
