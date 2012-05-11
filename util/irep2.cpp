@@ -750,14 +750,14 @@ type_to_string<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
                                      int indent)
 {
   char buffer[64];
-  std::string astring = "";
+  std::string astring = "\n";
   int i;
 
   i = 0;
   forall_exprs(it, theval) {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
+    astring += indent_str(indent) + std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
     i++;
   }
 
@@ -770,14 +770,14 @@ type_to_string<std::vector<type2tc> >(const std::vector<type2tc> &theval,
                                       int indent)
 {
   char buffer[64];
-  std::string astring = "";
+  std::string astring = "\n";
   int i;
 
   i = 0;
   forall_types(it, theval) {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
+    astring += indent_str(indent) + std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
     i++;
   }
 
@@ -790,14 +790,14 @@ type_to_string<std::vector<irep_idt> >(const std::vector<irep_idt> &theval,
                                        int indent __attribute__((unused)))
 {
   char buffer[64];
-  std::string astring = "";
+  std::string astring = "\n";
   int i;
 
   i = 0;
   forall_names(it, theval) {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += std::string(buffer) + ": " + (*it).as_string() + "\n";
+    astring += indent_str(indent) + std::string(buffer) + ": " + (*it).as_string() + "\n";
     i++;
   }
 
