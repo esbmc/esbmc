@@ -1624,17 +1624,17 @@ migrate_expr_back(const expr2tc &ref)
     exprt theexpr;
     theexpr.type() = thetype;
     if (is_add2t(ref2.operand)) {
-      theexpr.id() == "overflow-+";
+      theexpr.id("overflow-+");
       const add2t &addref = to_add2t(ref2.operand);
       theexpr.copy_to_operands(migrate_expr_back(addref.side_1),
                                migrate_expr_back(addref.side_2));
     } else if (is_sub2t(ref2.operand)) {
-      theexpr.id() == "overflow--";
+      theexpr.id("overflow--");
       const sub2t &subref = to_sub2t(ref2.operand);
       theexpr.copy_to_operands(migrate_expr_back(subref.side_1),
                                migrate_expr_back(subref.side_2));
     } else if (is_mul2t(ref2.operand)) {
-      theexpr.id() == "overflow-*";
+      theexpr.id("overflow-*");
       const mul2t &mulref = to_mul2t(ref2.operand);
       theexpr.copy_to_operands(migrate_expr_back(mulref.side_1),
                                migrate_expr_back(mulref.side_2));
