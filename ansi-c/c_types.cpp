@@ -126,6 +126,11 @@ typet uint_type()
   return unsignedbv_typet(config.ansi_c.int_width);  
 }
 
+type2tc uint_type2()
+{
+  return type_pool.get_uint(config.ansi_c.int_width);
+}
+
 /*******************************************************************\
 
 Function: long_int_type

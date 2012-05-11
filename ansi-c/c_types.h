@@ -18,6 +18,7 @@ typet enum_type();
 typet int_type();
 type2tc int_type2();
 typet uint_type();
+type2tc uint_type2();
 typet long_int_type();
 typet long_long_int_type();
 typet long_uint_type();
