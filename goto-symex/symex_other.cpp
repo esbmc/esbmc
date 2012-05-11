@@ -94,7 +94,7 @@ void goto_symext::symex_other(void)
     if(it!=cur_state->level2.current_names.end())
     {
       cur_state->level2.rename(l1_identifier, it->second.count+1);
-      it->second.constant.make_nil();
+      it->second.constant = expr2tc();
     }
   }
   else if(statement=="nondet")

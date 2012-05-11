@@ -1,3 +1,6 @@
+#include <irep2.h>
+#include <migrate.h>
+
 #include "renaming.h"
 
 std::string renaming::level1t::name(const irep_idt &identifier,
@@ -106,8 +109,8 @@ void renaming::level2t::rename(exprt &expr)
 
     if(it!=current_names.end())
     {
-      if(it->second.constant.is_not_nil())
-        expr=it->second.constant;
+      if (!is_nil_expr(it->second.constant))
+        expr = migrate_expr_back(it->second.constant);
       else
         expr.identifier(name(identifier, it->second.count));
     }
@@ -230,7 +233,7 @@ renaming::level2t::make_assignment(irep_idt l1_ident, const exprt &const_value,
 
   new_name = name(l1_ident, entry.count);
 
-  entry.constant = const_value;
+  migrate_expr(const_value, entry.constant);
 
   return new_name;
 }

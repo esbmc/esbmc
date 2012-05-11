@@ -1,6 +1,8 @@
 #ifndef _GOTO_SYMEX_RENAMING_H_
 #define _GOTO_SYMEX_RENAMING_H_
 
+#include <irep2.h>
+
 #include <stdint.h>
 #include <string.h>
 
@@ -108,11 +110,11 @@ namespace renaming {
     struct valuet
     {
       unsigned count;
-      exprt constant;
+      expr2tc constant;
       unsigned node_id;
       valuet():
         count(0),
-        constant(static_cast<const exprt &>(get_nil_irep())),
+        constant(),
         node_id(0)
       {
       }
