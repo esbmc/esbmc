@@ -1421,6 +1421,7 @@ public:
   div2t(const div2t &ref)
     : esbmct::expr<div2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<div2t, esbmct::expr2tc_side_1,
                                  esbmct::expr2tc_side_2>;
