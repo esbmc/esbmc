@@ -1245,6 +1245,9 @@ migrate_expr_back(const expr2tc &ref)
       constant_exprt const_expr(migrate_type_back(ref2.type));
       const_expr.set_value(ref2.name);
       return const_expr;
+    } else if (ref2.name == "INVALID") {
+      exprt invalid("invalid-object", pointer_typet(empty_typet()));
+      return invalid;
     } else {
       return symbol_exprt(ref2.name, thetype);
     }
