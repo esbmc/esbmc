@@ -162,3 +162,35 @@ modulus2t::do_simplify(void) const
 
   return from_fixedbv(operand1, type);
 }
+
+expr2tc
+with2t::do_simplify(void) const
+{
+
+  if (is_constant_struct2t(source_value)) {
+    const constant_struct2t &c_struct = to_constant_struct2t(source_value);
+    const constant_string2t &memb = to_constant_string2t(update_field);
+    unsigned no = get_component_number(type, memb.value);
+    assert(no < c_struct.datatype_members.size());
+
+    // Clone constant struct, update its field according to this "with".
+    constant_struct2tc s = expr2tc(c_struct.clone());
+    s.get()->datatype_members[no] = update_value;
+    return expr2tc(s);
+  } else if (is_constant_array2t(source_value) &&
+             is_constant_int2t(update_field)) {
+    const constant_array2t &array = to_constant_array2t(source_value);
+    const constant_int2t &index = to_constant_int2t(update_field);
+
+    // Index may be out of bounds. That's an error in the program, but not in
+    // the model we're generating, so permit it. Can't simplify it though.
+    if (index.as_ulong() >= array.datatype_members.size())
+      return expr2tc();
+
+    constant_array2tc arr = expr2tc(array.clone());
+    arr.get()->datatype_members[index.as_ulong()] = update_value;
+    return expr2tc(arr);
+  } else {
+    return expr2tc();
+  }
+}

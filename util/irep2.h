@@ -1577,6 +1577,7 @@ public:
     : esbmct::expr<with2t, esbmct::expr2tc_source_value,
                          esbmct::expr2tc_update_field,
                          esbmct::expr2tc_update_value> (ref) {}
+  virtual expr2tc do_simplify(void) const;
 };
 template class esbmct::expr<with2t, esbmct::expr2tc_source_value,
                                   esbmct::expr2tc_update_field,
