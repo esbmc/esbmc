@@ -245,9 +245,18 @@ pointer_offset2t::do_simplify(void) const
     expr2tc new_ptr_offs = expr2tc(new pointer_offset2t(type, cast.from));
     expr2tc reduced = new_ptr_offs->simplify();
 
+    // No good simplification -> return nothing
+    if (is_nil_expr(reduced))
+      return reduced;
+
+    // If it simplified to zero, that's fine, return that.
     if (is_constant_int2t(reduced) &&
         to_constant_int2t(reduced).constant_value.is_zero())
       return reduced;
+
+    // If it didn't reduce to zero, give up. Not sure why this is the case,
+    // but it's what the old irep code does.
+    return expr2tc();
   } else if (is_add2t(ptr_obj)) {
     const add2t &add = to_add2t(ptr_obj);
 
