@@ -374,13 +374,13 @@ expr2tc
 or2t::do_simplify(void) const
 {
 
-  if (!is_constant_bool2t(side_1) || !is_constant_bool2t(side_2))
-    return expr2tc();
+  if (is_constant_bool2t(side_1) && to_constant_bool2t(side_1).constant_value)
+    return expr2tc(new constant_bool2t(true));
 
-  const constant_bool2t &val1 = to_constant_bool2t(side_1);
-  const constant_bool2t &val2 = to_constant_bool2t(side_2);
-  return expr2tc(new constant_bool2t(val1.constant_value ||
-                                     val2.constant_value));
+  if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).constant_value)
+    return expr2tc(new constant_bool2t(true));
+
+  return expr2tc();
 }
 
 expr2tc
