@@ -48,6 +48,7 @@ namespace renaming {
     unsigned int _thread_id;
 
     virtual void rename(exprt &expr);
+    virtual void rename(expr2tc &expr);
     virtual std::string get_ident_name(const irep_idt &identifier) const;
     virtual void remove(const irep_idt &identifier) { current_names.erase(identifier); }
 

@@ -55,35 +55,43 @@ renaming::level2t::name(const irep_idt &identifier, unsigned count) const
 
 void renaming::level1t::rename(exprt &expr)
 {
+  expr2tc newexpr;
+  migrate_expr(expr, newexpr);
+  renaming::level1t::rename(newexpr);
+  expr = migrate_expr_back(newexpr);
+  return;
+}
+
+void renaming::level1t::rename(expr2tc &expr)
+{
   // rename all the symbols with their last known value
 
-  if(expr.id()==exprt::symbol)
+  if (is_symbol2t(expr))
   {
-    const irep_idt &identifier=expr.identifier();
+    symbol2t &sym = to_symbol2t(expr);
 
     // first see if it's already an l1 name
 
-    if(identifier.as_string().find("@") != std::string::npos)
+    if (sym.name.as_string().find("@") != std::string::npos)
       return;
 
-    const current_namest::const_iterator it=
-      current_names.find(identifier);
+    const current_namest::const_iterator it = current_names.find(sym.name);
 
     if(it!=current_names.end())
-      expr.identifier(name(identifier, it->second));
+      sym.name = name(sym.name, it->second);
   }
-  else if(expr.id()==exprt::addrof ||
-          expr.id()=="implicit_address_of" ||
-          expr.id()=="reference_to")
+  else if (is_address_of2t(expr))
   {
-    assert(expr.operands().size()==1);
-    rename(expr.op0());
+    rename(to_address_of2t(expr).ptr_obj);
   }
   else
   {
     // do this recursively
-    Forall_operands(it, expr)
-      rename(*it);
+    std::vector<expr2tc*> operands;
+    expr.get()->list_operands(operands);
+    for (std::vector<expr2tc*>::iterator it = operands.begin();
+         it != operands.end(); it++)
+      rename(**it);
   }
 }
 
