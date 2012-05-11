@@ -207,8 +207,9 @@ void renaming::level2t::dump() const
 }
 
 irep_idt
-renaming::level2t::make_assignment(irep_idt l1_ident, const exprt &const_value,
-                           const exprt &assigned_value __attribute__((unused)))
+renaming::level2t::make_assignment(irep_idt l1_ident,
+                                   const expr2tc &const_value,
+                          const expr2tc &assigned_value __attribute__((unused)))
 {
   irep_idt new_name;
 
@@ -219,7 +220,7 @@ renaming::level2t::make_assignment(irep_idt l1_ident, const exprt &const_value,
 
   new_name = name(l1_ident, entry.count);
 
-  migrate_expr(const_value, entry.constant);
+  entry.constant = const_value;
 
   return new_name;
 }

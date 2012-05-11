@@ -133,8 +133,8 @@ class execution_statet : public goto_symext
     virtual ~state_hashing_level2t(void);
     virtual state_hashing_level2t *clone(void) const;
     virtual irep_idt make_assignment(irep_idt l1_ident,
-                                     const exprt &const_value,
-                                     const exprt &assigned_value);
+                                     const expr2tc &const_value,
+                                     const expr2tc &assigned_value);
     crypto_hash generate_l2_state_hash() const;
     typedef std::map<irep_idt, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;

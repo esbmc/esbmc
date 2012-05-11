@@ -456,8 +456,7 @@ execution_statet::execute_guard(void)
 
   // Rename value, allows its use in other renamed exprs
   irep_idt new_name = state_level2->make_assignment(guard_expr.identifier(),
-                                    (exprt&)get_nil_irep(),
-                                    (exprt&)get_nil_irep());
+                                                    expr2tc(), expr2tc());
   guard_expr.identifier(new_name);
 
   // Truth of this guard implies the parent is true.
@@ -988,8 +987,8 @@ execution_statet::state_hashing_level2t::clone(void) const
 
 irep_idt
 execution_statet::state_hashing_level2t::make_assignment(irep_idt l1_ident,
-                                       const exprt &const_value,
-                                       const exprt &assigned_value)
+                                       const expr2tc &const_value,
+                                       const expr2tc &assigned_value)
 {
   crypto_hash hash;
   irep_idt new_name;
@@ -998,10 +997,13 @@ execution_statet::state_hashing_level2t::make_assignment(irep_idt l1_ident,
                                                 assigned_value);
 
   // XXX - consider whether to use l1 names instead. Recursion, reentrancy.
+#warning XXXjmorse - state hashing is a casualty of irep2
+#if 0
   hash = owner->update_hash_for_assignment(assigned_value);
   std::string orig_name =
     owner->get_active_state().get_original_name(l1_ident).as_string();
   current_hashes[orig_name] = hash;
+#endif
 
   return new_name;
 }

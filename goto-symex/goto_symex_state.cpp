@@ -206,7 +206,10 @@ void goto_symex_statet::assignment(
   else
     const_value.make_nil();
 
-  irep_idt new_name = level2.make_assignment(l1_identifier, const_value, rhs);
+  expr2tc new_const_value, tmp_rhs;
+  migrate_expr(const_value, new_const_value);
+  migrate_expr(rhs, tmp_rhs);
+  irep_idt new_name = level2.make_assignment(l1_identifier, new_const_value, tmp_rhs);
   lhs.identifier(new_name);
 
   if(use_value_set)
