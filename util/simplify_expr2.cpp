@@ -83,7 +83,7 @@ sub2t::do_simplify(void) const
           is_constant_fixedbv2t(side_1)) &&
          (is_constant_int2t(side_2) || is_constant_bool2t(side_2) ||
           is_constant_fixedbv2t(side_2)) &&
-          "Operands to simplified add must be int, bool or fixedbv");
+          "Operands to simplified sub must be int, bool or fixedbv");
 
   fixedbvt operand1, operand2;
   to_fixedbv(side_1, operand1);
