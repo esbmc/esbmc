@@ -57,8 +57,6 @@ void renaming::level1t::rename(exprt &expr)
 {
   // rename all the symbols with their last known value
 
-  rename(expr.type());
-
   if(expr.id()==exprt::symbol)
   {
     const irep_idt &identifier=expr.identifier();
@@ -91,46 +89,54 @@ void renaming::level1t::rename(exprt &expr)
 
 void renaming::level2t::rename(exprt &expr)
 {
+
+  expr2tc theexpr;
+  migrate_expr(expr, theexpr);
+  renaming::level2t::rename(theexpr);
+  expr = migrate_expr_back(theexpr);
+  return;
+}
+
+void renaming::level2t::rename(expr2tc &expr)
+{
   // rename all the symbols with their last known value
 
-  rename(expr.type());
-
-  if(expr.id()==exprt::symbol)
+  if (is_symbol2t(expr))
   {
-    const irep_idt &identifier=expr.identifier();
+    symbol2t &sym = to_symbol2t(expr);
 
     // first see if it's already an l2 name
 
-    if(identifier.as_string().find("#") != std::string::npos)
+    if (sym.name.as_string().find("#") != std::string::npos)
       return;
 
-    const current_namest::const_iterator it=
-      current_names.find(identifier);
+    const current_namest::const_iterator it = current_names.find(sym.name);
 
     if(it!=current_names.end())
     {
       if (!is_nil_expr(it->second.constant))
-        expr = migrate_expr_back(it->second.constant);
+        expr = it->second.constant; // sym is now invalid reference
       else
-        expr.identifier(name(identifier, it->second.count));
+        sym.name = name(sym.name, it->second.count);
     }
     else
     {
-      std::string new_identifier=name(identifier, 0);
-      expr.identifier(new_identifier);
+      std::string new_identifier = name(sym.name, 0);
+      sym.name = irep_idt(new_identifier);
     }
   }
-  else if(expr.id()==exprt::addrof ||
-          expr.id()=="implicit_address_of" ||
-          expr.id()=="reference_to")
+  else if (is_address_of2t(expr))
   {
     // do nothing
   }
   else
   {
     // do this recursively
-    Forall_operands(it, expr)
-      rename(*it);
+    std::vector<expr2tc*> operands;
+    expr.get()->list_operands(operands);
+    for (std::vector<expr2tc*>::iterator it = operands.begin();
+         it != operands.end(); it++)
+      rename(**it);
   }
 }
 
@@ -139,29 +145,6 @@ void renaming::level2t::coveredinbees(const irep_idt &identifier, unsigned count
   valuet &entry=current_names[identifier];
   entry.count=count;
   entry.node_id = node_id;
-}
-
-void renaming::renaming_levelt::rename(typet &type)
-{
-  // rename all the symbols with their last known value
-
-  if(type.id()==typet::t_array)
-  {
-    rename(type.subtype());
-    exprt tmp = static_cast<const exprt &>(type.size_irep());
-    rename(tmp);
-    type.size(tmp);
-  }
-  else if(type.id()==typet::t_struct ||
-          type.id()==typet::t_union ||
-          type.id()==typet::t_class)
-  {
-    // TODO
-  }
-  else if(type.id()==typet::t_pointer)
-  {
-    rename(type.subtype());
-  }
 }
 
 void renaming::renaming_levelt::get_original_name(exprt &expr) const

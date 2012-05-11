@@ -28,7 +28,6 @@ namespace renaming {
     virtual const irep_idt get_original_name(const irep_idt &identifier)const=0;
     virtual void get_original_name(exprt &expr) const;
     virtual void rename(exprt &expr)=0;
-    virtual void rename(typet &type);
     virtual void remove(const irep_idt &identifier)=0;
 
     virtual std::string get_ident_name(const irep_idt &identifier) const=0;
@@ -49,7 +48,6 @@ namespace renaming {
     unsigned int _thread_id;
 
     virtual void rename(exprt &expr);
-    virtual void rename(typet &type) { renaming_levelt::rename(type); }
     virtual std::string get_ident_name(const irep_idt &identifier) const;
     virtual void remove(const irep_idt &identifier) { current_names.erase(identifier); }
 
@@ -86,9 +84,9 @@ namespace renaming {
                                      const exprt &assigned_value);
 
     virtual void rename(exprt &expr);
+    virtual void rename(expr2tc &expr);
     virtual void rename(const irep_idt &identifier, unsigned count)=0;
 
-   virtual void rename(typet &type) { renaming_levelt::rename(type); }
     virtual std::string get_ident_name(const irep_idt &identifier) const;
     virtual std::string name( const irep_idt &identifier, unsigned count) const;
 
