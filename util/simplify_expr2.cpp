@@ -23,6 +23,7 @@ to_fixedbv(const expr2tc &op, fixedbvt &bv)
     break;
   case expr2t::constant_fixedbv_id:
     bv = to_constant_fixedbv2t(op).value;
+    break;
   default:
     assert(0 && "Unexpectedly typed argument to to_fixedbv");
   }
