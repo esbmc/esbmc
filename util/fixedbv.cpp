@@ -157,6 +157,9 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
     }
 
     result=div;
+  } else {
+    // No change
+    return;
   }
 
   v=result;
