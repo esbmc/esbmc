@@ -231,14 +231,13 @@ void goto_symext::symex_assign_symbol(
   expr2tc new_rhs;
   migrate_expr(rhs, new_rhs);
   cur_state->rename(new_rhs);
-  rhs = migrate_expr_back(new_rhs);
-  do_simplify(rhs);
+
+  do_simplify(new_rhs);
 
   exprt new_lhs=lhs;
 
   expr2tc new_new_lhs;
   migrate_expr(new_lhs, new_new_lhs);
-  migrate_expr(rhs, new_rhs);
   cur_state->assignment(new_new_lhs, new_rhs, constant_propagation);
 
   guardt tmp_guard(cur_state->guard);
