@@ -248,6 +248,40 @@ pointer_offset2t::do_simplify(void) const
     if (is_constant_int2t(reduced) &&
         to_constant_int2t(reduced).constant_value.is_zero())
       return reduced;
+  } else if (is_add2t(ptr_obj)) {
+    const add2t &add = to_add2t(ptr_obj);
+
+    // So, one of these should be a ptr type, or there isn't any point in this
+    // being a pointer_offset irep.
+    if (!is_pointer_type(add.side_1->type) &&
+        !is_pointer_type(add.side_2->type))
+      return expr2tc();
+
+    // Can't have pointer-on-pointer arith.
+    assert(!(is_pointer_type(add.side_1->type) &&
+             is_pointer_type(add.side_2->type)));
+
+    const expr2tc ptr_op = (is_pointer_type(add.side_1->type))
+                           ? add.side_1 : add.side_2;
+    const expr2tc non_ptr_op = (is_pointer_type(add.side_1->type))
+                               ? add.side_2 : add.side_1;
+
+    // Turn the pointer one into pointer_offset.
+    expr2tc new_ptr_op = expr2tc(new pointer_offset2t(type, ptr_op));
+    expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, non_ptr_op));
+
+    // XXX XXX XXX
+    // XXX XXX XXX  This may be the source of pointer arith fail. Or lack of
+    // XXX XXX XXX  consideration of pointer arithmetic.
+    // XXX XXX XXX
+
+    // So, this add is a valid simplification. We may be able to simplify
+    // further though.
+    expr2tc tmp = new_add->simplify();
+    if (is_nil_expr(tmp))
+      return new_add;
+    else
+      return tmp;
   } else {
     return expr2tc();
   }
