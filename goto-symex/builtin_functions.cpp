@@ -404,36 +404,3 @@ goto_symext::intrinsic_terminate_thread(reachability_treet &art)
   // end and the switcher to be invoked.
   return;
 }
-
-void
-goto_symext::intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art)
-{
-  statet &state = art.get_cur_state().get_active_state();
-  exprt threadid = call.arguments()[0];
-
-  expr2tc new_threadid;
-  migrate_expr(threadid, new_threadid);
-  state.level2.rename(new_threadid);
-  threadid = migrate_expr_back(new_threadid);
-
-  if (threadid.id() != "constant") {
-    std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
-    std::cerr << std::endl;
-    abort();
-  }
-
-  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
-  // Possibly we should handle this error; but meh.
-  assert(art.get_cur_state().threads_state.size() >= tid);
-
-  // Thread state is simply whether the thread is ended or not.
-  unsigned int flags = (art.get_cur_state().threads_state[tid].thread_ended)
-                       ? 1 : 0;
-
-  // Reuse threadid
-  constant_exprt flag_expr(unsignedbv_typet(config.ansi_c.int_width));
-  flag_expr.set_value(integer2binary(flags, config.ansi_c.int_width));
-  code_assignt assign(call.lhs(), flag_expr);
-  symex_assign(assign);
-  return;
-}

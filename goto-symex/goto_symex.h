@@ -366,8 +366,6 @@ protected:
                               reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
-  /** Perform get_thead_state... defunct. */
-  void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
   void symex_throw(statet &state);

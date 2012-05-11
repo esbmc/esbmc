@@ -275,8 +275,6 @@ goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
     intrinsic_spawn_thread(func_call, art);
   } else if (symname == "c::__ESBMC_terminate_thread") {
     intrinsic_terminate_thread(art);
-  } else if (symname == "c::__ESBMC_get_thread_state") {
-    intrinsic_get_thread_state(call, art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
     std::cerr << std::endl << "The name in question: " << symname << std::endl;
