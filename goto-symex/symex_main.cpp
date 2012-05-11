@@ -216,8 +216,10 @@ goto_symext::symex_step(reachability_treet & art)
       if (has_prefix(deref_code.function().identifier().as_string(),
                      "c::__ESBMC")) {
 	cur_state->source.pc++;
-	run_intrinsic(deref_code, art,
-	              deref_code.function().identifier().as_string());
+        expr2tc deref_code2;
+        migrate_expr(deref_code, deref_code2);
+        const code_function_call2t &call = to_code_function_call2t(deref_code2);
+	run_intrinsic(call, art, to_symbol2t(call.function).name.as_string());
 	return;
       }
 
@@ -252,12 +254,9 @@ goto_symext::symex_step(reachability_treet & art)
 }
 
 void
-goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
-  const std::string symname)
+goto_symext::run_intrinsic(const code_function_call2t &func_call,
+                           reachability_treet &art, const std::string symname)
 {
-  expr2tc call2;
-  migrate_expr(call, call2);
-  const code_function_call2t &func_call = to_code_function_call2t(call2);
 
   if (symname == "c::__ESBMC_yield") {
     intrinsic_yield(art);

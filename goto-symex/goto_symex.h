@@ -342,7 +342,7 @@ protected:
    *  @param art Reachability tree we're operating on.
    *  @param symname Name of intrinsic we're calling.
    */
-  void run_intrinsic(code_function_callt &call, reachability_treet &art,
+  void run_intrinsic(const code_function_call2t &call, reachability_treet &art,
                      const std::string symname);
 
   /** Perform yield; forces a context switch point. */
