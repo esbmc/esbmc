@@ -212,21 +212,16 @@ void goto_symex_statet::assignment(
   if(use_value_set)
   {
     // update value sets
-    exprt l1_rhs(rhs);
-
-    expr2tc new_l1_rhs;
-    migrate_expr(l1_rhs, new_l1_rhs);
-    level2.get_original_name(new_l1_rhs);
-    l1_rhs = migrate_expr_back(new_l1_rhs);
+    expr2tc l1_rhs;
+    migrate_expr(rhs, l1_rhs);
+    level2.get_original_name(l1_rhs);
 
     type2tc lhs_type;
     migrate_type(lhs.type(), lhs_type);
 
     expr2tc l1_lhs = expr2tc(new symbol2t(lhs_type, l1_identifier));
 
-    expr2tc tmp_rhs;
-    migrate_expr(l1_rhs, tmp_rhs);
-    value_set.assign(l1_lhs, tmp_rhs, ns);
+    value_set.assign(l1_lhs, l1_rhs, ns);
   }
 }
 
