@@ -100,8 +100,25 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
   }
 }
 
+static void
+fetch_ops_from_this_type(std::list<expr2tc> &ops, expr2t::expr_ids id,
+                         const expr2tc &expr)
+{
+
+  if (expr->expr_id == id) {
+    std::vector<const expr2tc*> operands;
+    expr->list_operands(operands);
+    for (std::vector<const expr2tc*>::const_iterator it = operands.begin();
+         it != operands.end(); it++)
+      fetch_ops_from_this_type(ops, id, **it);
+  } else {
+    ops.push_back(expr);
+  }
+}
+
 static bool
-rebalance_associative_tree(const expr2tc &expr, std::list<expr2tc> &ops)
+rebalance_associative_tree(const expr2tc &expr, std::list<expr2tc> &ops,
+        expr2tc (*create_obj_wrapper)(const expr2tc &arg1, const expr2tc &arg2))
 {
 
   // So the purpose of this is to take a tree of all-the-same-operation and
@@ -118,7 +135,73 @@ rebalance_associative_tree(const expr2tc &expr, std::list<expr2tc> &ops)
   // and vectors downwards, but lets not prematurely optimise. All this is
   // faster than stringly stuff.
 
-  return false;
+  std::list<expr2tc> operands;
+  fetch_ops_from_this_type(operands, expr->expr_id, expr);
+
+  // Are there enough constant values in there?
+  unsigned int const_values = 0;
+  unsigned int orig_size = operands.size();
+  for (std::list<expr2tc>::const_iterator it = operands.begin();
+       it != operands.end(); it++)
+    if (is_constant_expr(*it))
+      const_values++;
+
+  // Nothing for us to simplify.
+  if (const_values <= 1)
+    return false;
+
+  // Otherwise, we can go through simplifying operands.
+  expr2tc accuml;
+  for (std::list<expr2tc>::iterator it = operands.begin();
+       it != operands.end(); it++) {
+    if (!is_constant_expr(*it))
+      continue;
+
+    // We have a constant; do we have another constant to simplify with?
+    if (is_nil_expr(accuml)) {
+      // Juggle iterators, our iterator becomes invalid when we erase it.
+      std::list<expr2tc>::iterator back = it;
+      back--;
+      accuml = *it;
+      operands.erase(it);
+      it = back;
+      continue;
+    }
+
+    // Now attempt to simplify that. Create a new associative object and
+    // give it a shot.
+    expr2tc tmp = create_obj_wrapper(accuml, *it);
+    if (is_nil_expr(tmp))
+      continue; // Creating wrapper rejected it.
+
+    tmp = tmp->simplify();
+    if (is_nil_expr(tmp))
+      // For whatever reason we're unable to simplify these two constants.
+      continue;
+
+    // It's good; remove that object from the list.
+    accuml = tmp;
+    std::list<expr2tc>::iterator back = it;
+    back--;
+    operands.erase(it);
+    it = back;
+  }
+
+  // So, we've attempted to remove some things. There are three cases.
+  // First, nothing was pulled out of the list. Shouldn't happen, but just
+  // in case...
+  if (operands.size() == orig_size)
+    return false;
+
+  // If only one constant value was removed from the list, then we attempted to
+  // simplify two constants and it failed. No simplification.
+  if (operands.size() == orig_size - 1)
+    return false;
+
+  // Finally; we've succeeded and simplified something. Push the simplified
+  // constant back at the end of the list.
+  operands.push_back(accuml);
+  return true;
 }
 
 expr2tc
