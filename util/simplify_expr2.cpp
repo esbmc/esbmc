@@ -684,8 +684,7 @@ do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
   // And now, restore. It's debatable as to whether we should treat this as
   // being negative or not; something that can be worried about and tested in
   // the future.
-  constant_int2t *theint = new constant_int2t(type, BigInt(0));
-  theint->constant_value.load((uint8_t*)&val1, sizeof(int64_t));
+  constant_int2t *theint = new constant_int2t(type, BigInt(val1));
   return expr2tc(theint);
 }
 
