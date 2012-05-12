@@ -652,9 +652,9 @@ do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
   // In fact, negative numbers are stored as positive integers, but marked as
   // being negative. To get around this, perform operations in an {u,}int64,
   if (int1.constant_value.get_len() * sizeof(BigInt::onedig_t)
-                                         >= sizeof(int64_t) ||
+                                         > sizeof(int64_t) ||
       int2.constant_value.get_len() * sizeof(BigInt::onedig_t)
-                                           >= sizeof(int64_t))
+                                           > sizeof(int64_t))
     return expr2tc();
 
   // Dump will zero-prefix and right align the output number.
