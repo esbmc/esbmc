@@ -807,3 +807,38 @@ ashr2t::do_simplify(bool second __attribute__((unused))) const
 {
   return do_bit_munge_operation(do_ashr_op, type, side_1, side_2);
 }
+
+expr2tc
+typecast2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  // Follow approach of old irep, i.e., copy it
+  if (type == from->type) {
+    // Typecast to same type means this can be eliminated entirely
+    return from;
+  } else if (is_bool_type(type)) {
+    // Bool type -> turn into equality with zero
+    fixedbvt bv;
+    bv.from_integer(BigInt(0));
+    expr2tc zero = from_fixedbv(bv, from->type);
+    expr2tc eq = expr2tc(new equality2t(from, zero));
+    expr2tc noteq = expr2tc(new not2t(eq));
+    return eq;
+  } else if (is_symbol2t(from) && to_symbol2t(from).name.as_string() == "NULL"){
+    // Casts of null can operate on null directly. Use of strings here is
+    // inefficient XXX jmorse
+    return from;
+  } else if (is_pointer_type(type) && is_pointer_type(from->type)) {
+    // Casting from one pointer to another is meaningless
+    return from;
+  } else if (is_constant_expr(from)) {
+    // Casts from constant operands can be done here.
+    abort();
+  } else if (is_typecast2t(from)) {
+    // Typecast from a typecast can be eliminated. We'll be simplified even
+    // further by the caller.
+    return expr2tc(new typecast2t(type, to_typecast2t(from).from));
+  } else {
+    return expr2tc();
+  }
+}

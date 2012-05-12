@@ -1072,6 +1072,7 @@ public:
     : esbmct::expr<typecast2t, esbmct::expr2tc_from> (type, typecast_id, from) { }
   typecast2t(const typecast2t &ref)
     : esbmct::expr<typecast2t, esbmct::expr2tc_from>(ref){}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<typecast2t, esbmct::expr2tc_from>;
 
