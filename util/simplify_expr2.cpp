@@ -117,7 +117,7 @@ fetch_ops_from_this_type(std::list<expr2tc> &ops, expr2t::expr_ids id,
 }
 
 static bool
-rebalance_associative_tree(const expr2tc &expr, std::list<expr2tc> &ops,
+rebalance_associative_tree(const expr2t &expr, std::list<expr2tc> &ops,
         expr2tc (*create_obj_wrapper)(const expr2tc &arg1, const expr2tc &arg2))
 {
 
@@ -136,7 +136,13 @@ rebalance_associative_tree(const expr2tc &expr, std::list<expr2tc> &ops,
   // faster than stringly stuff.
 
   std::list<expr2tc> operands;
-  fetch_ops_from_this_type(operands, expr->expr_id, expr);
+
+  // Extract immediate operands
+  std::vector<const expr2tc*> immediate_operands;
+  expr.list_operands(immediate_operands);
+  for (std::vector<const expr2tc*>::const_iterator
+       it = immediate_operands.begin(); it != immediate_operands.end(); it++)
+      fetch_ops_from_this_type(ops, expr.expr_id, **it);
 
   // Are there enough constant values in there?
   unsigned int const_values = 0;
@@ -205,7 +211,7 @@ rebalance_associative_tree(const expr2tc &expr, std::list<expr2tc> &ops,
 }
 
 expr2tc
-attempt_associative_simplify(const expr2tc &expr,
+attempt_associative_simplify(const expr2t &expr,
         expr2tc (*create_obj_wrapper)(const expr2tc &arg1, const expr2tc &arg2))
 {
 
@@ -229,12 +235,26 @@ attempt_associative_simplify(const expr2tc &expr,
   }
 }
 
-expr2tc
-add2t::do_simplify(bool second __attribute__((unused))) const
+static expr2tc
+create_add_wrapper(const expr2tc &arg1, const expr2tc &arg2)
 {
 
-  if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
-    return expr2tc();
+  const type2tc &type = decide_on_expr_type(arg1, arg2);
+  return expr2tc(new add2t(type, arg1, arg2));
+}
+
+expr2tc
+add2t::do_simplify(bool second) const
+{
+
+  if (!is_constant_expr(side_1) || !is_constant_expr(side_2)) {
+    if (!second)
+      // Wait until operands are simplified
+      return expr2tc();
+    else
+      // Attempt to simplify associative tree.
+      return attempt_associative_simplify(*this, create_add_wrapper);
+  }
 
   assert((is_constant_int2t(side_1) || is_constant_bool2t(side_1) ||
           is_constant_fixedbv2t(side_1)) &&
