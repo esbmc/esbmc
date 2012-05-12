@@ -55,6 +55,27 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
   }
 }
 
+static bool
+rebalance_associative_tree(const expr2tc &expr, std::list<expr2tc> &ops)
+{
+
+  // So the purpose of this is to take a tree of all-the-same-operation and
+  // re-arrange it so that there are some operations that we can simplify.
+  // In old irep things like addition or subtraction or whatever could take
+  // a whole set of operands (however many you shoved in the vector) and those
+  // could all be simplified with each other. However, now that we've moved to
+  // binary-only ireps, this isn't possible (and it's causing high
+  // inefficiencies).
+  // So instead, reconstruct a tree of all-the-same ireps into a vector and
+  // try to simplify all of their contents, then try to reconfigure into another
+  // set of operations.
+  // There's great scope for making this /much/ more efficient via passing modes
+  // and vectors downwards, but lets not prematurely optimise. All this is
+  // faster than stringly stuff.
+
+  return false;
+}
+
 expr2tc
 add2t::do_simplify(void) const
 {
