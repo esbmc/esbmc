@@ -205,6 +205,31 @@ rebalance_associative_tree(const expr2tc &expr, std::list<expr2tc> &ops,
 }
 
 expr2tc
+attempt_associative_simplify(const expr2tc &expr,
+        expr2tc (*create_obj_wrapper)(const expr2tc &arg1, const expr2tc &arg2))
+{
+
+  std::list<expr2tc> operands;
+  if (rebalance_associative_tree(expr, operands, create_obj_wrapper)) {
+    // Horray, we simplified. Recreate.
+    assert(operands.size() >= 2);
+    std::list<expr2tc>::const_iterator it = operands.begin();
+    expr2tc accuml = *it;
+    it++;
+    for ( ; it != operands.end(); it++) {
+      expr2tc tmp;
+      accuml = create_obj_wrapper(accuml, *it);
+      if (is_nil_expr(accuml))
+        return expr2tc(); // wrapper rejected new obj :O
+    }
+
+    return accuml;
+  } else {
+    return expr2tc();
+  }
+}
+
+expr2tc
 add2t::do_simplify(void) const
 {
 
