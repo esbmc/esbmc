@@ -636,7 +636,8 @@ do_bit_munge_operation(void (*opfunc)(uint8_t *, uint8_t *, size_t),
                        const type2tc &type, const expr2tc &side_1,
                        const expr2tc &side_2)
 {
-  uint8_t buffer1[256], buffer2[256];
+  uint8_t buffer1[256 / sizeof(BigInt::onedig_t)];
+  uint8_t buffer2[256 / sizeof(BigInt::onedig_t)];
   BOOST_STATIC_ASSERT(sizeof(buffer1) == sizeof(buffer2));
 
   // Only support integer and's. If you're a float, pointer, or whatever, you're
@@ -646,13 +647,19 @@ do_bit_munge_operation(void (*opfunc)(uint8_t *, uint8_t *, size_t),
 
   // So - we can't make BigInt by itself do an and operation. But we can dump
   // it to a binary representation, and then and that.
+  // Drama: BigInt does *not* do any kind of twos compliment representation.
+  // So, we need to emulate it.
   const constant_int2t &int1 = to_constant_int2t(side_1);
   const constant_int2t &int2 = to_constant_int2t(side_2);
 
-  assert(int1.constant_value.get_len() < sizeof(buffer1) &&
-         int2.constant_value.get_len() < sizeof(buffer2) &&
-         "You've successfully generated an integer that's bigger than a massive"
-         " stack buffer -- well done, this abort is for you!");
+  if (int1.constant_value.get_len() * sizeof(BigInt::onedig_t)
+                                         >= sizeof(buffer1) ||
+      int2.constant_value.get_len() * sizeof(BigInt::onedig_t)
+                                           >= sizeof(buffer2)) {
+    std::cerr << "You've successfully generated an integer that's bigger than "
+                 "a massive stack buffer -- aborting, but well done";
+    abort();
+  }
 
   unsigned int maxsize = std::max(int1.constant_value.get_len(),
                                   int2.constant_value.get_len());
