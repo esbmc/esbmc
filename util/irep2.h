@@ -1368,6 +1368,7 @@ public:
     : esbmct::expr<neg2t, esbmct::expr2tc_value> (type, neg_id, val) {}
   neg2t(const neg2t &ref)
     : esbmct::expr<neg2t, esbmct::expr2tc_value> (ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<neg2t, esbmct::expr2tc_value>;
 

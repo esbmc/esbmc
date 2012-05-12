@@ -365,6 +365,27 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 expr2tc
+neg2t::do_simplify(bool second) const
+{
+
+  if (!is_constant_expr(value))
+    return expr2tc();
+
+  assert((is_constant_int2t(value) || is_constant_bool2t(value) ||
+          is_constant_fixedbv2t(value)) &&
+          "Operands to simplified neg2t must be int, bool or fixedbv");
+
+  // The plan: convert everything to a fixedbv, operate, and convert back to
+  // whatever form we need. Fixedbv appears to be a wrapper around BigInt.
+  fixedbvt operand;
+  to_fixedbv(value, operand);
+
+  operand.negate();
+
+  return from_fixedbv(operand, type);
+}
+
+expr2tc
 with2t::do_simplify(bool second __attribute__((unused))) const
 {
 
