@@ -838,6 +838,37 @@ typecast2t::do_simplify(bool second __attribute__((unused))) const
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
     return expr2tc(new typecast2t(type, to_typecast2t(from).from));
+  } else if (is_bv_type(type) && is_bv_type(from->type) && (is_add2t(from) ||
+             is_sub2t(from) || is_mul2t(from) || is_neg2t(from)) &&
+             from->type->get_width() <= type->get_width()) {
+    // So, if this is an integer type, performing an integer arith operation,
+    // and the type we're casting to isn't _supposed_ to result in a loss of
+    // information, push the cast downwards.
+    // XXXjmorse - I'm not convinced that potentially increasing int width is
+    // a good plan, but this is what CBMC was doing, so don't change
+    // behaviour.
+    std::vector<const expr2tc *> operands;
+    std::vector<expr2tc> set2;
+    from->list_operands(operands);
+    for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
+         it != operands.end(); it++) {
+      expr2tc cast = expr2tc(new typecast2t(type, **it));
+      set2.push_back(cast);
+    }
+
+    // Now clone the expression and update its operands.
+    expr2tc newobj = expr2tc(from->clone());
+    newobj.get()->type = type;
+    std::vector<expr2tc *> ops_to_mod;
+    newobj.get()->list_operands(ops_to_mod);
+    assert(ops_to_mod.size() == set2.size());
+
+    std::vector<expr2tc *>::iterator it2 = ops_to_mod.begin();
+    for (std::vector<expr2tc>::const_iterator it = set2.begin();
+         it != set2.end(); it++)
+      **it2 = *it;
+
+    return newobj;
   } else {
     return expr2tc();
   }
