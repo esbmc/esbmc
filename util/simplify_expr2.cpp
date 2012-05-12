@@ -772,3 +772,39 @@ bitnot2t::do_simplify(bool second __attribute__((unused))) const
 {
   return do_bit_munge_operation(do_bitnot_op, type, value, value);
 }
+
+static int64_t
+do_shl_op(int64_t op1, int64_t op2)
+{
+  return op1 << op2;
+}
+
+expr2tc
+shl2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return do_bit_munge_operation(do_shl_op, type, side_1, side_2);
+}
+
+static int64_t
+do_lshr_op(int64_t op1, int64_t op2)
+{
+  return ((uint64_t)op1) >> ((uint64_t)op2);
+}
+
+expr2tc
+lshr2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return do_bit_munge_operation(do_lshr_op, type, side_1, side_2);
+}
+
+static int64_t
+do_ashr_op(int64_t op1, int64_t op2)
+{
+  return op1 >> op2;
+}
+
+expr2tc
+ashr2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return do_bit_munge_operation(do_ashr_op, type, side_1, side_2);
+}
