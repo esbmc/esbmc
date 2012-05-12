@@ -632,7 +632,7 @@ implies2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 static expr2tc
-do_bit_munge_operation(void (*opfunc)(uint8_t *, uint8_t *, size_t),
+do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
                        const type2tc &type, const expr2tc &side_1,
                        const expr2tc &side_2)
 {
@@ -679,7 +679,7 @@ do_bit_munge_operation(void (*opfunc)(uint8_t *, uint8_t *, size_t),
     }
   }
 
-  opfunc((uint8_t*)&val1, (uint8_t*)&val2, sizeof(int64_t));
+  opfunc(val1, val2);
 
   // And now, restore. It's debatable as to whether we should treat this as
   // being negative or not; something that can be worried about and tested in
@@ -689,11 +689,10 @@ do_bit_munge_operation(void (*opfunc)(uint8_t *, uint8_t *, size_t),
   return expr2tc(theint);
 }
 
-static void
-do_bitand_op(uint8_t *op1, uint8_t *op2, size_t n)
+static int64_t
+do_bitand_op(int64_t op1, int64_t op2)
 {
-  for (size_t i = 0; i < n; i++)
-    op1[i] &= op2[i];
+  return op1 & op2;
 }
 
 expr2tc
@@ -702,11 +701,10 @@ bitand2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation(do_bitand_op, type, side_1, side_2);
 }
 
-static void
-do_bitor_op(uint8_t *op1, uint8_t *op2, size_t n)
+static int64_t
+do_bitor_op(int64_t op1, int64_t op2)
 {
-  for (size_t i = 0; i < n; i++)
-    op1[i] |= op2[i];
+  return op1 | op2;
 }
 
 expr2tc
@@ -715,11 +713,10 @@ bitor2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation(do_bitor_op, type, side_1, side_2);
 }
 
-static void
-do_bitxor_op(uint8_t *op1, uint8_t *op2, size_t n)
+static int64_t
+do_bitxor_op(int64_t op1, int64_t op2)
 {
-  for (size_t i = 0; i < n; i++)
-    op1[i] ^= op2[i];
+  return op1 ^ op2;
 }
 
 expr2tc
@@ -728,13 +725,10 @@ bitxor2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation(do_bitxor_op, type, side_1, side_2);
 }
 
-static void
-do_bitnand_op(uint8_t *op1, uint8_t *op2, size_t n)
+static int64_t
+do_bitnand_op(int64_t op1, int64_t op2)
 {
-  for (size_t i = 0; i < n; i++) {
-    op1[i] &= op2[i];
-    op1[i] = ~op1[i];
-  }
+  return ~(op1 & op2);
 }
 
 expr2tc
@@ -743,13 +737,10 @@ bitnand2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation(do_bitnand_op, type, side_1, side_2);
 }
 
-static void
-do_bitnor_op(uint8_t *op1, uint8_t *op2, size_t n)
+static int64_t
+do_bitnor_op(int64_t op1, int64_t op2)
 {
-  for (size_t i = 0; i < n; i++) {
-    op1[i] |= op2[i];
-    op1[i] = ~op1[i];
-  }
+  return ~(op1 | op2);
 }
 
 expr2tc
@@ -758,13 +749,10 @@ bitnor2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation(do_bitnor_op, type, side_1, side_2);
 }
 
-static void
-do_bitnxor_op(uint8_t *op1, uint8_t *op2, size_t n)
+static int64_t
+do_bitnxor_op(int64_t op1, int64_t op2)
 {
-  for (size_t i = 0; i < n; i++) {
-    op1[i] ^= op2[i];
-    op1[i] = ~op1[i];
-  }
+  return ~(op1 ^ op2);
 }
 
 expr2tc
@@ -773,11 +761,10 @@ bitnxor2t::do_simplify(bool second __attribute__((unused))) const
   return do_bit_munge_operation(do_bitnxor_op, type, side_1, side_2);
 }
 
-static void
-do_bitnot_op(uint8_t *op1, uint8_t *op2 __attribute__((unused)), size_t n)
+static int64_t
+do_bitnot_op(int64_t op1, int64_t op2)
 {
-  for (size_t i = 0; i < n; i++)
-    op1[i] = ~op1[i];
+  return ~op1;
 }
 
 expr2tc
