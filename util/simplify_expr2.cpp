@@ -13,6 +13,51 @@ expr2t::do_simplify(void) const
   return expr2tc();
 }
 
+static const type2tc &
+decide_on_expr_type(const expr2tc &side1, const expr2tc &side2)
+{
+
+  // For some arithmetic expr, decide on the result of operating on them.
+
+  // Fixedbv's take precedence.
+  if (is_fixedbv_type(side1->type))
+    return side1->type;
+  if (is_fixedbv_type(side2->type))
+    return side2->type;
+
+  // If one operand is bool, return the other, as that's either bool or will
+  // have a higher rank.
+  if (is_bool_type(side1->type))
+    return side2->type;
+  else if (is_bool_type(side2->type))
+    return side1->type;
+
+  assert(is_bv_type(side1->type) && is_bv_type(side2->type));
+
+  unsigned int side1_width = side1->type->get_width();
+  unsigned int side2_width = side2->type->get_width();
+
+  if (side1->type == side2->type) {
+    if (side1_width > side2_width)
+      return side1->type;
+    else
+      return side2->type;
+  }
+
+  // Differing between signed/unsigned bv type. Take unsigned if greatest.
+  if (is_unsignedbv_type(side1->type) && side1_width >= side2_width)
+    return side1->type;
+
+  if (is_unsignedbv_type(side2->type) && side2_width >= side1_width)
+    return side2->type;
+
+  // Otherwise return the signed one;
+  if (is_signedbv_type(side1->type))
+    return side1->type;
+  else
+    return side2->type;
+}
+
 static void
 to_fixedbv(const expr2tc &op, fixedbvt &bv)
 {
