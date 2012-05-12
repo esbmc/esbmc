@@ -636,9 +636,7 @@ do_bit_munge_operation(void (*opfunc)(uint8_t *, uint8_t *, size_t),
                        const type2tc &type, const expr2tc &side_1,
                        const expr2tc &side_2)
 {
-  uint8_t buffer1[256 / sizeof(BigInt::onedig_t)];
-  uint8_t buffer2[256 / sizeof(BigInt::onedig_t)];
-  BOOST_STATIC_ASSERT(sizeof(buffer1) == sizeof(buffer2));
+  int64_t val1, val2;
 
   // Only support integer and's. If you're a float, pointer, or whatever, you're
   // on your own.
@@ -647,32 +645,47 @@ do_bit_munge_operation(void (*opfunc)(uint8_t *, uint8_t *, size_t),
 
   // So - we can't make BigInt by itself do an and operation. But we can dump
   // it to a binary representation, and then and that.
-  // Drama: BigInt does *not* do any kind of twos compliment representation.
-  // So, we need to emulate it.
   const constant_int2t &int1 = to_constant_int2t(side_1);
   const constant_int2t &int2 = to_constant_int2t(side_2);
 
+  // Drama: BigInt does *not* do any kind of twos compliment representation.
+  // In fact, negative numbers are stored as positive integers, but marked as
+  // being negative. To get around this, perform operations in an {u,}int64,
   if (int1.constant_value.get_len() * sizeof(BigInt::onedig_t)
-                                         >= sizeof(buffer1) ||
+                                         >= sizeof(int64_t) ||
       int2.constant_value.get_len() * sizeof(BigInt::onedig_t)
-                                           >= sizeof(buffer2)) {
-    std::cerr << "You've successfully generated an integer that's bigger than "
-                 "a massive stack buffer -- aborting, but well done";
-    abort();
-  }
-
-  unsigned int maxsize = std::max(int1.constant_value.get_len(),
-                                  int2.constant_value.get_len());
+                                           >= sizeof(int64_t))
+    return expr2tc();
 
   // Dump will zero-prefix and right align the output number.
-  int1.constant_value.dump(buffer1, maxsize);
-  int2.constant_value.dump(buffer2, maxsize);
+  val1 = int1.constant_value.to_int64();
+  val2 = int2.constant_value.to_int64();
 
-  opfunc(buffer1, buffer2, maxsize);
+  if (int1.constant_value.is_negative()) {
+    if (val1 & 0x8000000000000000ULL) {
+      // Too large to fit, negative, in an int64_t.
+      return expr2tc();
+    } else {
+      val1 = -val1;
+    }
+  }
 
-  // And now, restore.
+  if (int2.constant_value.is_negative()) {
+    if (val2 & 0x8000000000000000ULL) {
+      // Too large to fit, negative, in an int64_t.
+      return expr2tc();
+    } else {
+      val2 = -val2;
+    }
+  }
+
+  opfunc((uint8_t*)&val1, (uint8_t*)&val2, sizeof(int64_t));
+
+  // And now, restore. It's debatable as to whether we should treat this as
+  // being negative or not; something that can be worried about and tested in
+  // the future.
   constant_int2t *theint = new constant_int2t(type, BigInt(0));
-  theint->constant_value.load(buffer1, maxsize);
+  theint->constant_value.load((uint8_t*)&val1, sizeof(int64_t));
   return expr2tc(theint);
 }
 

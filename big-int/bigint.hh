@@ -5,6 +5,8 @@
 #ifndef BIGINT_HH
 #define BIGINT_HH
 
+#include <stdint.h>
+
 // This one is pretty simple but has a fair divide implementation.
 // Though I'm not ambitious enough to do that FFT-like stuff.
 //
@@ -208,6 +210,8 @@ public:
   //operator ullong_t() const _fast;
   llong_t to_long() const _fast;
   ullong_t to_ulong() const _fast;
+  uint64_t to_uint64() const _fast;
+  int64_t to_int64() const _fast;
 
 #ifndef bool
   // Like int: non-zero is true. Equivalent to !is_zero().
