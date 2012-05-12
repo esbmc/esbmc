@@ -7,7 +7,7 @@
 #include <ansi-c/c_types.h>
 
 expr2tc
-expr2t::do_simplify(void) const
+expr2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   return expr2tc();
@@ -230,7 +230,7 @@ attempt_associative_simplify(const expr2tc &expr,
 }
 
 expr2tc
-add2t::do_simplify(void) const
+add2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
@@ -254,7 +254,7 @@ add2t::do_simplify(void) const
 }
 
 expr2tc
-sub2t::do_simplify(void) const
+sub2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
@@ -276,7 +276,7 @@ sub2t::do_simplify(void) const
 }
 
 expr2tc
-mul2t::do_simplify(void) const
+mul2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
@@ -298,7 +298,7 @@ mul2t::do_simplify(void) const
 }
 
 expr2tc
-div2t::do_simplify(void) const
+div2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
@@ -320,7 +320,7 @@ div2t::do_simplify(void) const
 }
 
 expr2tc
-modulus2t::do_simplify(void) const
+modulus2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
@@ -345,7 +345,7 @@ modulus2t::do_simplify(void) const
 }
 
 expr2tc
-with2t::do_simplify(void) const
+with2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (is_constant_struct2t(source_value)) {
@@ -377,7 +377,7 @@ with2t::do_simplify(void) const
 }
 
 expr2tc
-member2t::do_simplify(void) const
+member2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (is_constant_struct2t(source_value) || is_constant_union2t(source_value)) {
@@ -412,7 +412,7 @@ pointer_offs_simplify_2(const expr2tc &offs)
 }
 
 expr2tc
-pointer_offset2t::do_simplify(void) const
+pointer_offset2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (is_address_of2t(ptr_obj)) {
@@ -475,7 +475,7 @@ pointer_offset2t::do_simplify(void) const
 }
 
 expr2tc
-index2t::do_simplify(void) const
+index2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (is_with2t(source_value)) {
@@ -525,7 +525,7 @@ index2t::do_simplify(void) const
 }
 
 expr2tc
-not2t::do_simplify(void) const
+not2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (!is_constant_bool2t(value))
@@ -536,7 +536,7 @@ not2t::do_simplify(void) const
 }
 
 expr2tc
-and2t::do_simplify(void) const
+and2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (!is_constant_bool2t(side_1) || !is_constant_bool2t(side_2))
@@ -549,7 +549,7 @@ and2t::do_simplify(void) const
 }
 
 expr2tc
-or2t::do_simplify(void) const
+or2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (is_constant_bool2t(side_1) && to_constant_bool2t(side_1).constant_value)
@@ -562,7 +562,7 @@ or2t::do_simplify(void) const
 }
 
 expr2tc
-xor2t::do_simplify(void) const
+xor2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (!is_constant_bool2t(side_1) || !is_constant_bool2t(side_2))
@@ -575,7 +575,7 @@ xor2t::do_simplify(void) const
 }
 
 expr2tc
-implies2t::do_simplify(void) const
+implies2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   // False => * evaluate to true, always
@@ -636,7 +636,7 @@ do_bitand_op(uint8_t *op1, uint8_t *op2, size_t n)
 }
 
 expr2tc
-bitand2t::do_simplify(void) const
+bitand2t::do_simplify(bool second __attribute__((unused))) const
 {
   return do_bit_munge_operation(do_bitand_op, type, side_1, side_2);
 }
@@ -649,7 +649,7 @@ do_bitor_op(uint8_t *op1, uint8_t *op2, size_t n)
 }
 
 expr2tc
-bitor2t::do_simplify(void) const
+bitor2t::do_simplify(bool second __attribute__((unused))) const
 {
   return do_bit_munge_operation(do_bitor_op, type, side_1, side_2);
 }
@@ -662,7 +662,7 @@ do_bitxor_op(uint8_t *op1, uint8_t *op2, size_t n)
 }
 
 expr2tc
-bitxor2t::do_simplify(void) const
+bitxor2t::do_simplify(bool second __attribute__((unused))) const
 {
   return do_bit_munge_operation(do_bitxor_op, type, side_1, side_2);
 }
@@ -677,7 +677,7 @@ do_bitnand_op(uint8_t *op1, uint8_t *op2, size_t n)
 }
 
 expr2tc
-bitnand2t::do_simplify(void) const
+bitnand2t::do_simplify(bool second __attribute__((unused))) const
 {
   return do_bit_munge_operation(do_bitnand_op, type, side_1, side_2);
 }
@@ -692,7 +692,7 @@ do_bitnor_op(uint8_t *op1, uint8_t *op2, size_t n)
 }
 
 expr2tc
-bitnor2t::do_simplify(void) const
+bitnor2t::do_simplify(bool second __attribute__((unused))) const
 {
   return do_bit_munge_operation(do_bitnor_op, type, side_1, side_2);
 }
@@ -707,7 +707,7 @@ do_bitnxor_op(uint8_t *op1, uint8_t *op2, size_t n)
 }
 
 expr2tc
-bitnxor2t::do_simplify(void) const
+bitnxor2t::do_simplify(bool second __attribute__((unused))) const
 {
   return do_bit_munge_operation(do_bitnxor_op, type, side_1, side_2);
 }
@@ -720,7 +720,7 @@ do_bitnot_op(uint8_t *op1, uint8_t *op2 __attribute__((unused)), size_t n)
 }
 
 expr2tc
-bitnot2t::do_simplify(void) const
+bitnot2t::do_simplify(bool second __attribute__((unused))) const
 {
   return do_bit_munge_operation(do_bitnot_op, type, value, value);
 }
