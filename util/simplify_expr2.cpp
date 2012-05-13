@@ -333,6 +333,12 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
   to_fixedbv(side_1, operand1);
   to_fixedbv(side_2, operand2);
 
+  // Multiplication by any zero operand -> zero
+  if (operand1.is_zero())
+    return from_fixedbv(operand1, type);
+  if (operand2.is_zero())
+    return from_fixedbv(operand2, type);
+
   operand1 *= operand2;
 
   return from_fixedbv(operand1, type);
