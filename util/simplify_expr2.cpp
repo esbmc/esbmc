@@ -18,6 +18,10 @@ decide_on_expr_type(const expr2tc &side1, const expr2tc &side2)
 {
 
   // For some arithmetic expr, decide on the result of operating on them.
+  if (is_pointer_type(side1->type))
+    return side1->type;
+  if (is_pointer_type(side2->type))
+    return side2->type;
 
   // Fixedbv's take precedence.
   if (is_fixedbv_type(side1->type))
