@@ -92,8 +92,28 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     }
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
+    {
     // To integer truncates non-integer bits, it turns out.
-    return expr2tc(new constant_int2t(type, bv.to_integer()));
+    BigInt tmp = bv.to_integer();
+
+    // If unsigned, and negative, invert, and stick the bv representation into
+    // BigInt object.
+    // All these things should be hacked into the BigInt object :|
+    if (is_unsignedbv_type(type) && tmp.is_negative()) {
+      int64_t i = tmp.to_int64();
+      i = -i;
+      tmp = BigInt((uint64_t)i);
+    }
+
+    // Round away upper bits, just in case we're decreasing accuracy here.
+    unsigned int bits = type->get_width();
+    fixedbvt tmp_bv;
+    tmp_bv.from_integer(tmp);
+    tmp_bv.round(fixedbv_spect(bits, bits));
+
+    // And done.
+    return expr2tc(new constant_int2t(type, tmp_bv.to_integer()));
+    }
   case type2t::fixedbv_id:
     return expr2tc(new constant_fixedbv2t(type, bv));
   default:
