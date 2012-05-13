@@ -349,12 +349,6 @@ expr2tc
 expr2t::simplify(void) const
 {
 
-  // Corner case! Don't even try to simplify address of's, might end up
-  // simplifying its operand and taking the address of some /completely
-  // arbitary pice of data/
-  if (__builtin_expect((expr_id == address_of_id), 0)) // unlikely
-    return expr2tc();
-
   // Try initial simplification
   expr2tc res = do_simplify();
   if (!is_nil_expr(res)) {
@@ -369,6 +363,12 @@ expr2t::simplify(void) const
     else
       return res2;
   }
+
+  // Corner case! Don't even try to simplify address of's operands, might end up
+  // taking the address of some /completely/ arbitary pice of data, by
+  // simplifiying an index to its data, discarding the symbol.
+  if (__builtin_expect((expr_id == address_of_id), 0)) // unlikely
+    return expr2tc();
 
   // Try simplifying all the sub-operands.
   bool changed = false;
