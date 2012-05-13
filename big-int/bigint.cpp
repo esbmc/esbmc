@@ -8,12 +8,14 @@
 #include "bigint.hh"
 #include "allocainc.h"
 
+#include <iostream>
 #include <ctype.h>
 #include <limits.h>
 #include <string.h>
 
 // How to report errors.
 #include <stdio.h>
+#include <stdlib.h>
 #define error(x) fprintf (stderr, "%s\n", x)
 
 
@@ -1073,8 +1075,8 @@ BigInt::div (BigInt const &x, BigInt const &y, BigInt &q, BigInt &r)
   if (y.length == 0)
     {
     zero:
-      error ("Division by zero.");
-      return;
+      std::cerr << "Division by zero in bigint routine.";
+      abort();
     }
   if (x.is_ulong())
     {
@@ -1161,8 +1163,8 @@ BigInt::operator/= (BigInt const &y)
   if (y.length == 0)
     {
     zero:
-      error ("Division by zero.");
-      return *this;
+      std::cerr << "Division by zero in bigint routine.";
+      abort();
     }
   if (is_ulong())
     {
@@ -1227,8 +1229,8 @@ BigInt::operator%= (BigInt const &y)
   if (y.length == 0)
     {
     zero:
-      error ("Division by zero.");
-      return *this;
+      std::cerr << "Division by zero in bigint routine.";
+      abort();
     }
   if (is_ulong())
     {
