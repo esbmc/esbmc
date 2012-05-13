@@ -128,12 +128,8 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
   expr2tc lhs = code.target;
   expr2tc rhs = code.source;
 
-  exprt old_lhs = migrate_expr_back(lhs);
-  replace_nondet(old_lhs);
-  migrate_expr(old_lhs, lhs);
-  exprt old_rhs = migrate_expr_back(rhs);
-  replace_nondet(old_rhs);
-  migrate_expr(old_rhs, rhs);
+  replace_nondet(lhs);
+  replace_nondet(rhs);
 
   if (is_sideeffect2t(rhs))
   {
@@ -366,17 +362,21 @@ void goto_symext::symex_assign_byte_extract(
   symex_assign_rec(extract.source_value, new_rhs, guard);
 }
 
-void goto_symext::replace_nondet(exprt &expr)
+void goto_symext::replace_nondet(expr2tc &expr)
 {
-  if(expr.id()=="sideeffect" && expr.statement()=="nondet")
+  if (is_sideeffect2t(expr) &&
+      to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
     unsigned int &nondet_count = get_dynamic_counter();
-    exprt new_expr("nondet_symbol", expr.type());
-    new_expr.identifier("symex::nondet"+i2string(nondet_count++));
-    new_expr.location()=expr.location();
-    expr.swap(new_expr);
+    expr = expr2tc(new symbol2t(expr->type,
+                              "nondet$symex::nondet"+i2string(nondet_count++)));
   }
   else
-    Forall_operands(it, expr)
-      replace_nondet(*it);
+  {
+    std::vector<expr2tc*> operands;
+    expr.get()->list_operands(operands);
+    for (std::vector<expr2tc*>::const_iterator it = operands.begin();
+         it != operands.end(); it++)
+      replace_nondet(**it);
+  }
 }

@@ -495,7 +495,7 @@ protected:
    *  encoded into its name. Is left as a free variable.
    *  @param expr Expr to search for nondet symbols.
    */
-  void replace_nondet(exprt &expr);
+  void replace_nondet(expr2tc &expr);
 
   /**
    *  Fetch reference to global dynamic object counter.

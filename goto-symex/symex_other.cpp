@@ -46,7 +46,12 @@ void goto_symext::symex_other(void)
   {
     exprt deref_code = migrate_expr_back(code2);
     replace_dynamic_allocation(deref_code);
-    replace_nondet(deref_code);
+
+    expr2tc even_tmper;
+    migrate_expr(deref_code, even_tmper);
+    replace_nondet(even_tmper);
+    deref_code = migrate_expr_back(even_tmper);
+
     dereference(deref_code, false);
 
     expr2tc new_deref_code;
@@ -57,7 +62,12 @@ void goto_symext::symex_other(void)
   {
     exprt tmp1 = migrate_expr_back(code2);
     replace_dynamic_allocation(tmp1);
-    replace_nondet(tmp1);
+
+    expr2tc even_tmper;
+    migrate_expr(tmp1, even_tmper);
+    replace_nondet(even_tmper);
+    tmp1 = migrate_expr_back(even_tmper);
+
     dereference(tmp1, false);
     migrate_expr(tmp1, code2);
 

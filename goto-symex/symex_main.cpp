@@ -115,7 +115,12 @@ goto_symext::symex_step(reachability_treet & art)
   {
     exprt tmp(instruction.guard);
     replace_dynamic_allocation(tmp);
-    replace_nondet(tmp);
+
+    expr2tc tmp_expr;
+    migrate_expr(tmp, tmp_expr);
+    replace_nondet(tmp_expr);
+    tmp = migrate_expr_back(tmp_expr);
+
     dereference(tmp, false);
 
     symex_goto(tmp);
@@ -126,7 +131,12 @@ goto_symext::symex_step(reachability_treet & art)
     if (!cur_state->guard.is_false()) {
       exprt tmp(instruction.guard);
       replace_dynamic_allocation(tmp);
-      replace_nondet(tmp);
+
+      expr2tc tmp_expr;
+      migrate_expr(tmp, tmp_expr);
+      replace_nondet(tmp_expr);
+      tmp = migrate_expr_back(tmp_expr);
+
       dereference(tmp, false);
 
       exprt tmp1 = tmp;
@@ -160,7 +170,12 @@ goto_symext::symex_step(reachability_treet & art)
 	exprt tmp(instruction.guard);
 
 	replace_dynamic_allocation(tmp);
-	replace_nondet(tmp);
+
+        expr2tc tmp_expr;
+        migrate_expr(tmp, tmp_expr);
+	replace_nondet(tmp_expr);
+        tmp = migrate_expr_back(tmp_expr);
+
 	dereference(tmp, false);
 
 	claim(tmp, msg);
@@ -187,9 +202,14 @@ goto_symext::symex_step(reachability_treet & art)
 
   case ASSIGN:
     if (!cur_state->guard.is_false()) {
-      codet deref_code = instruction.code;
+      exprt deref_code = instruction.code;
       replace_dynamic_allocation(deref_code);
-      replace_nondet(deref_code);
+
+      expr2tc tmp_expr;
+      migrate_expr(deref_code, tmp_expr);
+      replace_nondet(tmp_expr);
+      deref_code = migrate_expr_back(tmp_expr);
+
       assert(deref_code.operands().size() == 2);
 
       dereference(deref_code.op0(), true);
@@ -204,31 +224,36 @@ goto_symext::symex_step(reachability_treet & art)
 
   case FUNCTION_CALL:
     if (!cur_state->guard.is_false()) {
-      code_function_callt deref_code =
-        to_code_function_call(instruction.code);
+      exprt deref_code = to_code_function_call(instruction.code);
 
       replace_dynamic_allocation(deref_code);
-      replace_nondet(deref_code);
 
-      if (deref_code.lhs().is_not_nil()) {
-	dereference(deref_code.lhs(), true);
+      expr2tc tmp_expr;
+      migrate_expr(deref_code, tmp_expr);
+      replace_nondet(tmp_expr);
+      exprt tmp = migrate_expr_back(tmp_expr);
+      codet &tmp1 = static_cast<codet&>(tmp);
+      code_function_callt new_deref_code = to_code_function_call(tmp1);
+
+      if (new_deref_code.lhs().is_not_nil()) {
+	dereference(new_deref_code.lhs(), true);
       }
 
-      Forall_expr(it, deref_code.arguments()) {
+      Forall_expr(it, new_deref_code.arguments()) {
 	dereference(*it, false);
       }
 
-      if (has_prefix(deref_code.function().identifier().as_string(),
+      if (has_prefix(new_deref_code.function().identifier().as_string(),
                      "c::__ESBMC")) {
 	cur_state->source.pc++;
         expr2tc deref_code2;
-        migrate_expr(deref_code, deref_code2);
+        migrate_expr(new_deref_code, deref_code2);
         const code_function_call2t &call = to_code_function_call2t(deref_code2);
 	run_intrinsic(call, art, to_symbol2t(call.function).name.as_string());
 	return;
       }
 
-      symex_function_call(deref_code);
+      symex_function_call(new_deref_code);
     } else   {
       cur_state->source.pc++;
     }
