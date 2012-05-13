@@ -64,11 +64,11 @@ to_fixedbv(const expr2tc &op, fixedbvt &bv)
 
   switch (op->expr_id) {
   case expr2t::constant_int_id:
-    bv.spec = fixedbv_spect(64, 64); // XXX
+    bv.spec = fixedbv_spect(128, 64); // XXX
     bv.from_integer(to_constant_int2t(op).constant_value);
     break;
   case expr2t::constant_bool_id:
-    bv.spec = fixedbv_spect(1, 1); // XXX
+    bv.spec = fixedbv_spect(32, 16); // XXX
     bv.from_integer((to_constant_bool2t(op).constant_value)
                      ? BigInt(1) : BigInt(0));
     break;
