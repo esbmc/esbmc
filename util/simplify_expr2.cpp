@@ -355,6 +355,9 @@ div2t::do_simplify(bool second __attribute__((unused))) const
   to_fixedbv(side_1, operand1);
   to_fixedbv(side_2, operand2);
 
+  if (operand1.is_zero())
+    return from_fixedbv(operand1, type);
+
   operand1 /= operand2;
 
   return from_fixedbv(operand1, type);
