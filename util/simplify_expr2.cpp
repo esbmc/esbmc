@@ -893,8 +893,10 @@ typecast2t::do_simplify(bool second __attribute__((unused))) const
 
     std::vector<expr2tc *>::iterator it2 = ops_to_mod.begin();
     for (std::vector<expr2tc>::const_iterator it = set2.begin();
-         it != set2.end(); it++)
+         it != set2.end(); it++) {
       **it2 = *it;
+      it2++;
+    }
 
     return newobj;
   } else {
