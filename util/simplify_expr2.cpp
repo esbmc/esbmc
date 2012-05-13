@@ -810,7 +810,7 @@ ashr2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 expr2tc
-typecast2t::do_simplify(bool second __attribute__((unused))) const
+typecast2t::do_simplify(bool second) const
 {
 
   // Follow approach of old irep, i.e., copy it
