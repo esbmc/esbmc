@@ -20,6 +20,9 @@ void goto_symext::symex_other(void)
 
   const irep_idt &statement=code.get_statement();
 
+  expr2tc code2;
+  migrate_expr(code, code2);
+
   if(statement=="expression")
   {
     // ignore
@@ -51,29 +54,23 @@ void goto_symext::symex_other(void)
     migrate_expr(deref_code, new_deref_code);
     symex_printf(expr2tc(), new_deref_code);
   }
-  else if(statement=="decl")
+  else if (is_code_decl2t(code2))
   {
-    codet deref_code(code);
+    exprt tmp1 = migrate_expr_back(code2);
+    replace_dynamic_allocation(tmp1);
+    replace_nondet(tmp1);
+    dereference(tmp1, false);
+    migrate_expr(tmp1, code2);
 
-    replace_dynamic_allocation(deref_code);
-    replace_nondet(deref_code);
-    dereference(deref_code, false);
-
-    if(deref_code.operands().size()==2)
-      throw "two-operand decl not supported here";
-
-    if(deref_code.operands().size()!=1)
-      throw "decl expects one operand";
-
-    if(deref_code.op0().id()!=exprt::symbol)
-      throw "decl expects symbol as first operand";
+    const code_decl2t &decl_code = to_code_decl2t(code2);
 
     // just do the L2 renaming to preseve locality
-    const irep_idt &identifier=deref_code.op0().identifier();
+    const irep_idt &identifier = decl_code.value;
 
-    std::string l1_identifier=cur_state->top().level1.get_ident_name(identifier);
+    std::string l1_identifier =
+      cur_state->top().level1.get_ident_name(identifier);
 
-    const irep_idt &original_id=
+    const irep_idt &original_id =
       cur_state->top().level1.get_original_name(l1_identifier);
 
     // increase the frame if we have seen this declaration before
