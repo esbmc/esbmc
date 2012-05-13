@@ -1105,6 +1105,7 @@ public:
   equality2t(const equality2t &ref)
     : esbmct::expr<equality2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<equality2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 

@@ -964,3 +964,33 @@ address_of2t::do_simplify(bool second __attribute__((unused))) const
     return expr2tc();
   }
 }
+
+static expr2tc
+do_rel_simplify(const expr2tc &side1, const expr2tc &side2,
+                bool (*do_rel)(const fixedbvt &bv1, const fixedbvt &bv2))
+{
+  fixedbvt bv1, bv2;
+
+  to_fixedbv(side1, bv1);
+  to_fixedbv(side2, bv2);
+
+  bool res = do_rel(bv1, bv2);
+
+  return expr2tc(new constant_bool2t(res));
+}
+
+bool
+do_fixedbv_eq(const fixedbvt &bv1, const fixedbvt &bv2)
+{
+  return bv1 == bv2;
+}
+
+expr2tc
+equality2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  if (is_constant_expr(side_1) && is_constant_expr(side_2))
+    return do_rel_simplify(side_1, side_2, do_fixedbv_eq);
+  else
+    return expr2tc();
+}
