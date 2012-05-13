@@ -214,27 +214,26 @@ void goto_symext::symex_assign_symbol(
   guardt &guard)
 {
   // put assignment guard in rhs
-  if(!guard.empty())
-  {
-    exprt new_rhs(exprt::i_if, rhs.type());
-    new_rhs.operands().resize(3);
-    new_rhs.op0()=guard.as_expr();
-    new_rhs.op1().swap(rhs);
-    new_rhs.op2()=lhs;
-    new_rhs.swap(rhs);
-  }
-  expr2tc original_lhs;
+  expr2tc migrated_rhs, original_lhs;
+  migrate_expr(rhs, migrated_rhs);
   migrate_expr(lhs, original_lhs);
+
+  if (!guard.empty())
+  {
+    expr2tc guardexpr;
+    migrate_expr(guard.as_expr(), guardexpr);
+    migrated_rhs = expr2tc(new if2t(migrated_rhs->type, guardexpr, migrated_rhs,
+                                    original_lhs));
+  }
+
   expr2tc orig_name_lhs = original_lhs;
   cur_state->get_original_name(orig_name_lhs);
-  expr2tc new_rhs;
-  migrate_expr(rhs, new_rhs);
-  cur_state->rename(new_rhs);
+  cur_state->rename(migrated_rhs);
 
-  do_simplify(new_rhs);
+  do_simplify(migrated_rhs);
 
   expr2tc renamed_lhs = original_lhs;
-  cur_state->assignment(renamed_lhs, new_rhs, constant_propagation);
+  cur_state->assignment(renamed_lhs, migrated_rhs, constant_propagation);
 
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
@@ -246,7 +245,7 @@ void goto_symext::symex_assign_symbol(
   target->assignment(
     guard2,
     renamed_lhs, orig_name_lhs,
-    new_rhs,
+    migrated_rhs,
     cur_state->source,
     cur_state->gen_stack_trace(),
     symex_targett::STATE);
