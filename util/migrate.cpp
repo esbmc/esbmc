@@ -1179,7 +1179,16 @@ migrate_expr_back(const expr2tc &ref)
   case expr2t::constant_fixedbv_id:
   {
     const constant_fixedbv2t &ref2 = to_constant_fixedbv2t(ref);
-    return ref2.value.to_expr();
+    const fixedbv_type2t &fbv_type = to_fixedbv_type(ref2.type);
+    fixedbvt tmp = ref2.value;
+
+    if (fbv_type.width == 64) {
+      tmp.round(fixedbv_spect(64, 32));
+    } else {
+      tmp.round(fixedbv_spect(32, 16));
+    }
+
+    return tmp.to_expr();
   }
   case expr2t::constant_bool_id:
   {
