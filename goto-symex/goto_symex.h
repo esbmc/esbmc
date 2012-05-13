@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
+#include <irep2.h>
+
 #include <map>
 #include <std_types.h>
 #include <i2string.h>
@@ -422,7 +424,7 @@ protected:
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_symbol(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_symbol(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a typecast irep.

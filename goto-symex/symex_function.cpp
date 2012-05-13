@@ -114,7 +114,10 @@ goto_symext::argument_assignments(
       }
 
       guardt guard;
-      symex_assign_symbol(lhs, rhs, guard);
+      expr2tc new_lhs, new_rhs;
+      migrate_expr(lhs, new_lhs);
+      migrate_expr(rhs, new_rhs);
+      symex_assign_symbol(new_lhs, new_rhs, guard);
     }
 
     it1++;

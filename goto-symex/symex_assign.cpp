@@ -185,9 +185,12 @@ void goto_symext::symex_assign_rec(
   exprt &rhs,
   guardt &guard)
 {
-  if(lhs.id()==exprt::symbol)
-    symex_assign_symbol(lhs, rhs, guard);
-  else if(lhs.id()==exprt::index || lhs.id()=="memory-leak")
+  if(lhs.id()==exprt::symbol) {
+    expr2tc new_lhs, new_rhs;
+    migrate_expr(rhs, new_rhs);
+    migrate_expr(lhs, new_lhs);
+    symex_assign_symbol(new_lhs, new_rhs, guard);
+  } else if(lhs.id()==exprt::index || lhs.id()=="memory-leak")
     symex_assign_array(lhs, rhs, guard);
   else if(lhs.id()==exprt::member)
     symex_assign_member(lhs, rhs, guard);
@@ -209,31 +212,27 @@ void goto_symext::symex_assign_rec(
 }
 
 void goto_symext::symex_assign_symbol(
-  const exprt &lhs,
-  exprt &rhs,
+  const expr2tc &lhs,
+  expr2tc &rhs,
   guardt &guard)
 {
   // put assignment guard in rhs
-  expr2tc migrated_rhs, original_lhs;
-  migrate_expr(rhs, migrated_rhs);
-  migrate_expr(lhs, original_lhs);
 
   if (!guard.empty())
   {
     expr2tc guardexpr;
     migrate_expr(guard.as_expr(), guardexpr);
-    migrated_rhs = expr2tc(new if2t(migrated_rhs->type, guardexpr, migrated_rhs,
-                                    original_lhs));
+    rhs = expr2tc(new if2t(rhs->type, guardexpr, rhs, lhs));
   }
 
-  expr2tc orig_name_lhs = original_lhs;
+  expr2tc orig_name_lhs = lhs;
   cur_state->get_original_name(orig_name_lhs);
-  cur_state->rename(migrated_rhs);
+  cur_state->rename(rhs);
 
-  do_simplify(migrated_rhs);
+  do_simplify(rhs);
 
-  expr2tc renamed_lhs = original_lhs;
-  cur_state->assignment(renamed_lhs, migrated_rhs, constant_propagation);
+  expr2tc renamed_lhs = lhs;
+  cur_state->assignment(renamed_lhs, rhs, constant_propagation);
 
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
@@ -245,7 +244,7 @@ void goto_symext::symex_assign_symbol(
   target->assignment(
     guard2,
     renamed_lhs, orig_name_lhs,
-    migrated_rhs,
+    rhs,
     cur_state->source,
     cur_state->gen_stack_trace(),
     symex_targett::STATE);
