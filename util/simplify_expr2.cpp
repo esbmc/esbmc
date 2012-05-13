@@ -451,7 +451,8 @@ pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
 
     if (is_symbol2t(index.source_value) && is_constant_int2t(index.index)) {
       // We can reduce to that index offset.
-      unsigned int widthbits = index.source_value->type->get_width();
+      const array_type2t &arr = to_array_type(index.source_value->type);
+      unsigned int widthbits = arr.subtype->get_width();
       unsigned int widthbytes = widthbits / 8;
       BigInt val = to_constant_int2t(index.index).constant_value;
       val *= widthbytes;
