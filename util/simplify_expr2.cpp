@@ -866,9 +866,9 @@ typecast2t::do_simplify(bool second __attribute__((unused))) const
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
     return expr2tc(new typecast2t(type, to_typecast2t(from).from));
-  } else if (is_bv_type(type) && is_bv_type(from->type) && (is_add2t(from) ||
-             is_sub2t(from) || is_mul2t(from) || is_neg2t(from)) &&
-             from->type->get_width() <= type->get_width()) {
+  } else if (second && is_bv_type(type) && is_bv_type(from->type) &&
+             (is_add2t(from) || is_sub2t(from) || is_mul2t(from) ||
+              is_neg2t(from)) && from->type->get_width() <= type->get_width()) {
     // So, if this is an integer type, performing an integer arith operation,
     // and the type we're casting to isn't _supposed_ to result in a loss of
     // information, push the cast downwards.
