@@ -121,6 +121,25 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
   }
 }
 
+void
+make_fixedbv_types_match(fixedbvt &bv1, fixedbvt &bv2)
+{
+
+  // First, simple case,
+  if (bv1.spec.width == bv2.spec.width &&
+      bv1.spec.integer_bits == bv2.spec.integer_bits)
+    return;
+
+  // Otherwise, pick the large one, assuming we're always keeping the int/frac
+  // division at the middle,
+  if (bv1.spec.width > bv2.spec.width)
+    bv2.round(bv1.spec);
+  else
+    bv1.round(bv2.spec);
+
+  return;
+}
+
 static void
 fetch_ops_from_this_type(std::list<expr2tc> &ops, expr2t::expr_ids id,
                          const expr2tc &expr)
@@ -289,6 +308,7 @@ add2t::do_simplify(bool second) const
   to_fixedbv(side_1, operand1);
   to_fixedbv(side_2, operand2);
 
+  make_fixedbv_types_match(operand1, operand2);
   operand1 += operand2;
 
   return from_fixedbv(operand1, type);
@@ -311,6 +331,7 @@ sub2t::do_simplify(bool second __attribute__((unused))) const
   to_fixedbv(side_1, operand1);
   to_fixedbv(side_2, operand2);
 
+  make_fixedbv_types_match(operand1, operand2);
   operand1 -= operand2;
 
   return from_fixedbv(operand1, type);
@@ -339,6 +360,7 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
   if (operand2.is_zero())
     return from_fixedbv(operand2, type);
 
+  make_fixedbv_types_match(operand1, operand2);
   operand1 *= operand2;
 
   return from_fixedbv(operand1, type);
@@ -364,6 +386,7 @@ div2t::do_simplify(bool second __attribute__((unused))) const
   if (operand1.is_zero())
     return from_fixedbv(operand1, type);
 
+  make_fixedbv_types_match(operand1, operand2);
   operand1 /= operand2;
 
   return from_fixedbv(operand1, type);
@@ -386,6 +409,7 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
   to_fixedbv(side_1, operand1);
   to_fixedbv(side_2, operand2);
 
+  make_fixedbv_types_match(operand1, operand2);
   fixedbvt quotient = operand1;
   quotient /= operand2; // calculate quotient.
   quotient *= operand2; // to subtract.
@@ -983,6 +1007,7 @@ do_rel_simplify(const expr2tc &side1, const expr2tc &side2,
   to_fixedbv(side1, bv1);
   to_fixedbv(side2, bv2);
 
+  make_fixedbv_types_match(bv1, bv2);
   bool res = do_rel(bv1, bv2);
 
   return expr2tc(new constant_bool2t(res));
