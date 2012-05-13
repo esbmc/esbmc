@@ -938,7 +938,7 @@ typecast2t::do_simplify(bool second) const
     } else {
       return expr2tc();
     }
-  } else if (is_typecast2t(from)) {
+  } else if (is_typecast2t(from) && type == from->type) {
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
     return expr2tc(new typecast2t(type, to_typecast2t(from).from));
