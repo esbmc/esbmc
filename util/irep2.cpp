@@ -403,7 +403,7 @@ expr2t::simplify(void) const
   }
 
   // Finally, attempt simplification again.
-  expr2tc tmp = new_us->do_simplify();
+  expr2tc tmp = new_us->do_simplify(true);
   if (is_nil_expr(tmp))
     return new_us;
   else
