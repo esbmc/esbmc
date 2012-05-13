@@ -1868,7 +1868,9 @@ migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("function_call"));
     exprt op0 = migrate_expr_back(ref2.ret);
     exprt op1 = migrate_expr_back(ref2.function);
-    exprt &args = (exprt&)codeexpr.add("arguments");
+    exprt op2("arguments");
+    codeexpr.copy_to_operands(op0, op1, op2);
+    exprt &args = codeexpr.op2();
     forall_exprs(it, ref2.operands) {
       args.operands().push_back(migrate_expr_back(*it));
     }
