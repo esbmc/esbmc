@@ -385,7 +385,11 @@ expr2t::simplify(void) const
   }
 
   if (changed == false)
-    return expr2tc();
+    // Second shot at simplification. For efficiency, a simplifier may be
+    // holding something back until it's certain all its operands are
+    // simplified. It's responsible for simplifying further if it's made that
+    // call though.
+    return do_simplify(true);
 
   // An operand has been changed; clone ourselves and update.
   expr2tc new_us = clone();
