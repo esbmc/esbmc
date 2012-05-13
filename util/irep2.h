@@ -1090,6 +1090,7 @@ public:
   if2t(const if2t &ref)
     : esbmct::expr<if2t, esbmct::expr2tc_cond, esbmct::expr2tc_true_value,
                  esbmct::expr2tc_false_value>(ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<if2t, esbmct::expr2tc_cond,
                           esbmct::expr2tc_true_value,

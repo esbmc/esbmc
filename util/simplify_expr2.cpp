@@ -1114,3 +1114,32 @@ greaterthanequal2t::do_simplify(bool second __attribute__((unused))) const
   else
     return expr2tc();
 }
+
+expr2tc
+if2t::do_simplify(bool second __attribute__((unused))) const
+{
+  if (is_constant_expr(cond)) {
+    // We can simplify this.
+    if (is_constant_bool2t(cond)) {
+      if (to_constant_bool2t(cond).constant_value) {
+        return true_value;
+      } else {
+        return false_value;
+      }
+    } else {
+      // Cast towards a bool type.
+      expr2tc cast = expr2tc(new typecast2t(type_pool.get_bool(), cond));
+      cast = cast->simplify();
+      assert(!is_nil_expr(cast) && "We should always be able to cast a "
+             "constant value to a constant bool");
+
+      if (to_constant_bool2t(cast).constant_value) {
+        return true_value;
+      } else {
+        return false_value;
+      }
+    }
+  } else {
+    return expr2tc();
+  }
+}
