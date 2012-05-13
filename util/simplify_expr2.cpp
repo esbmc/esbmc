@@ -441,25 +441,36 @@ member2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 expr2tc
-pointer_offs_simplify_2(const expr2tc &offs)
+pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
 {
 
   if (is_symbol2t(offs) || is_constant_string2t(offs)) {
     return expr2tc(new constant_int2t(int_type2(), BigInt(0)));
+  } else if (is_index2t(offs)) {
+    const index2t &index = to_index2t(offs);
+
+    if (is_symbol2t(index.source_value) && is_constant_int2t(index.index)) {
+      // We can reduce to that index offset.
+      unsigned int widthbits = index.source_value->type->get_width();
+      unsigned int widthbytes = widthbits / 8;
+      BigInt val = to_constant_int2t(index.index).constant_value;
+      val *= widthbytes;
+      return expr2tc(new constant_int2t(type, val));
+    } else {
+      return expr2tc();
+    }
   } else {
-    // XXX - index simplification exists in old irep, however it looks quite
-    // broken.
     return expr2tc();
   }
 }
 
 expr2tc
-pointer_offset2t::do_simplify(bool second __attribute__((unused))) const
+pointer_offset2t::do_simplify(bool second) const
 {
 
-  if (is_address_of2t(ptr_obj)) {
+  if (second && is_address_of2t(ptr_obj)) {
     const address_of2t &addrof = to_address_of2t(ptr_obj);
-    return pointer_offs_simplify_2(addrof.ptr_obj);
+    return pointer_offs_simplify_2(addrof.ptr_obj, type);
   } else if (is_typecast2t(ptr_obj)) {
     const typecast2t &cast = to_typecast2t(ptr_obj);
     expr2tc new_ptr_offs = expr2tc(new pointer_offset2t(type, cast.from));
