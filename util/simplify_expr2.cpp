@@ -910,7 +910,13 @@ typecast2t::do_simplify(bool second) const
       it2++;
     }
 
-    return newobj;
+    // Caller won't simplify us further if it's called us with second=true, so
+    // give simplification another shot ourselves.
+    expr2tc tmp = newobj->simplify();
+    if (is_nil_expr(tmp))
+      return newobj;
+    else
+      return tmp;
   } else {
     return expr2tc();
   }
