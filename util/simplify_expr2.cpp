@@ -819,9 +819,14 @@ typecast2t::do_simplify(bool second __attribute__((unused))) const
     return from;
   } else if (is_bool_type(type)) {
     // Bool type -> turn into equality with zero
-    fixedbvt bv;
-    bv.from_integer(BigInt(0));
-    expr2tc zero = from_fixedbv(bv, from->type);
+    expr2tc zero;
+    if (is_pointer_type(from->type)) {
+      zero = expr2tc(new symbol2t(from->type, irep_idt("NULL")));
+    } else {
+      fixedbvt bv;
+      bv.from_integer(BigInt(0));
+      zero = from_fixedbv(bv, from->type);
+    }
     expr2tc eq = expr2tc(new equality2t(from, zero));
     expr2tc noteq = expr2tc(new not2t(eq));
     return noteq;
