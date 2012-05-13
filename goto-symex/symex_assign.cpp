@@ -276,7 +276,8 @@ void goto_symext::symex_assign_array(
 
   const index2t &index = to_index2t(lhs);
 
-  assert(is_array_type(index.source_value->type));
+  assert(is_array_type(index.source_value->type) ||
+         is_string_type(index.source_value->type));
 
   // turn
   //   a[i]=e
