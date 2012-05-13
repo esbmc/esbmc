@@ -92,13 +92,8 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     }
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
-    {
-    // Round off integer bits if required.
-    fixedbvt dup = bv;
-    unsigned int width = type->get_width();
-    dup.round(fixedbv_spect(width, width));
-    return expr2tc(new constant_int2t(type, dup.to_integer()));
-    }
+    // To integer truncates non-integer bits, it turns out.
+    return expr2tc(new constant_int2t(type, bv.to_integer()));
   case type2t::fixedbv_id:
     return expr2tc(new constant_fixedbv2t(type, bv));
   default:
