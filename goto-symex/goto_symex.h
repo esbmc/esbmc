@@ -411,7 +411,7 @@ protected:
    *  a single new value to be bound to a new symbol.
    *  @param code Code to assign; with lhs and rhs.
    */
-  virtual void symex_assign(const codet &code);
+  virtual void symex_assign(const expr2tc &code);
 
   /** Recursively perform symex assign. @see symex_assign */
   void symex_assign_rec(const expr2tc &lhs, expr2tc &rhs, guardt &guard);

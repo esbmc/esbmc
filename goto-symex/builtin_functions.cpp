@@ -288,8 +288,7 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
 
   expr2tc assign = expr2tc(new code_assign2t(call.ret, tid));
   assert(call.ret->type == tid->type);
-  exprt tmp = migrate_expr_back(assign);
-  symex_assign(static_cast<codet&>(static_cast<irept&>(tmp)));
+  symex_assign(assign);
   return;
 }
 
@@ -336,8 +335,7 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   assert(call.ret->type == startdata->type);
 
   state.value_set.assign(call.ret, startdata, ns);
-  exprt tmp_assign = migrate_expr_back(assign);
-  symex_assign(static_cast<codet&>(static_cast<irept&>(tmp_assign)));
+  symex_assign(assign);
   return;
 }
 
@@ -378,8 +376,7 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
   expr2tc assign = expr2tc(new code_assign2t(call.ret, thread_id_exp));
   state.value_set.assign(call.ret, thread_id_exp, ns);
 
-  exprt tmp_assign = migrate_expr_back(assign);
-  symex_assign(static_cast<codet&>(static_cast<irept&>(tmp_assign)));
+  symex_assign(assign);
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.

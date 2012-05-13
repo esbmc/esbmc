@@ -243,7 +243,7 @@ class execution_statet : public goto_symext
    *  see whether the assignment should be generating a context switch.
    *  @param code Code representing assignment we're making.
    */
-  virtual void symex_assign(const codet &code);
+  virtual void symex_assign(const expr2tc &code);
 
   /**
    *  Symbolically assert something.

@@ -118,68 +118,50 @@ void goto_symext::do_simplify(expr2tc &expr)
   }
 }
 
-void goto_symext::symex_assign(const codet &code)
+void goto_symext::symex_assign(const expr2tc &code_assign)
 {
-  if(code.operands().size()!=2)
-    throw "assignment expects two operands";
-
-  exprt lhs=code.op0();
-  exprt rhs=code.op1();
-
   //replace_dynamic_allocation(state, lhs);
   //replace_dynamic_allocation(state, rhs);
 
-  replace_nondet(lhs);
-  replace_nondet(rhs);
+  const code_assign2t &code = to_code_assign2t(code_assign);
 
-  if(rhs.id()=="sideeffect")
+  expr2tc lhs = code.target;
+  expr2tc rhs = code.source;
+
+  exprt old_lhs = migrate_expr_back(lhs);
+  replace_nondet(old_lhs);
+  migrate_expr(old_lhs, lhs);
+  exprt old_rhs = migrate_expr_back(rhs);
+  replace_nondet(old_rhs);
+  migrate_expr(old_rhs, rhs);
+
+  if (is_sideeffect2t(rhs))
   {
-    const side_effect_exprt &side_effect_expr=to_side_effect_expr(rhs);
-    const irep_idt &statement=side_effect_expr.get_statement();
-
-    if(statement=="function_call")
-    {
-      assert(side_effect_expr.operands().size()!=0);
-
-      if(side_effect_expr.op0().id()!=exprt::symbol)
-        throw "symex_assign: expected symbol as function";
-
-      const irep_idt &identifier=
-        to_symbol_expr(side_effect_expr.op0()).get_identifier();
-
-      throw "symex_assign: unexpected function call: "+id2string(identifier);
-    }
-    else if(statement=="cpp_new" ||
-            statement=="cpp_new[]") {
-      expr2tc new_lhs, tmp_side_effect;
-      migrate_expr(lhs, new_lhs);
-      migrate_expr(side_effect_expr, tmp_side_effect);
-      const sideeffect2t &sideeffect = to_sideeffect2t(tmp_side_effect);
-      symex_cpp_new(new_lhs, sideeffect);
-    } else if(statement=="malloc") {
-      expr2tc new_lhs, tmp_side_effect;
-      migrate_expr(lhs, new_lhs);
-      migrate_expr(side_effect_expr, tmp_side_effect);
-      const sideeffect2t &sideeffect = to_sideeffect2t(tmp_side_effect);
-      symex_malloc(new_lhs, sideeffect);
-    } else if(statement=="printf") {
+    const sideeffect2t &effect = to_sideeffect2t(rhs);
+    switch (effect.kind) {
+    case sideeffect2t::cpp_new:
+    case sideeffect2t::cpp_new_arr:
+      symex_cpp_new(lhs, effect);
+      break;
+    case sideeffect2t::malloc:
+      symex_malloc(lhs, effect);
+      break;
+#if 0
+      // printf doesn't appear to be a sideeffect.
       expr2tc new_lhs, new_rhs;
       migrate_expr(lhs, new_lhs);
       migrate_expr(side_effect_expr, new_rhs);
       symex_printf(new_lhs, new_rhs);
-    }
-    else
-    {
-      throw "symex_assign: unexpected sideeffect: "+id2string(statement);
+#endif
+    // No nondet side effect?
+    default:
+      assert(0 && "unexpected side effect");
     }
   }
   else
   {
     guardt guard; // NOT the state guard!
-    expr2tc new_lhs, new_rhs;
-    migrate_expr(lhs, new_lhs);
-    migrate_expr(rhs, new_rhs);
-    symex_assign_rec(new_lhs, new_rhs, guard);
+    symex_assign_rec(lhs, rhs, guard);
   }
 }
 

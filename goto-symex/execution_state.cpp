@@ -221,8 +221,11 @@ execution_statet::symex_step(reachability_treet &art)
       if(!state.guard.is_false()) {
         const code_returnt &code = to_code_return(instruction.code);
         code_assignt assign;
-        if (make_return_assignment(assign, code))
-          goto_symext::symex_assign(assign);
+        if (make_return_assignment(assign, code)) {
+          expr2tc newassign;
+          migrate_expr(assign, newassign);
+          goto_symext::symex_assign(newassign);
+        }
 
         symex_return();
 
@@ -237,13 +240,13 @@ execution_statet::symex_step(reachability_treet &art)
 }
 
 void
-execution_statet::symex_assign(const codet &code)
+execution_statet::symex_assign(const expr2tc &code)
 {
 
   goto_symext::symex_assign(code);
 
   if (threads_state.size() > 1)
-    owning_rt->analyse_for_cswitch_after_assign(code);
+    owning_rt->analyse_for_cswitch_after_assign(migrate_expr_back(code));
 
   return;
 }

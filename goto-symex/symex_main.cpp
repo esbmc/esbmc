@@ -174,8 +174,11 @@ goto_symext::symex_step(reachability_treet & art)
       const code_returnt &code =
         to_code_return(instruction.code);
       code_assignt assign;
-      if (make_return_assignment(assign, code))
-	goto_symext::symex_assign(assign);
+      if (make_return_assignment(assign, code)) {
+        expr2tc newassign;
+        migrate_expr(assign, newassign);
+	goto_symext::symex_assign(newassign);
+      }
       symex_return();
     }
 
@@ -192,7 +195,9 @@ goto_symext::symex_step(reachability_treet & art)
       dereference(deref_code.op0(), true);
       dereference(deref_code.op1(), false);
 
-      symex_assign(deref_code);
+      expr2tc newassign;
+      migrate_expr(deref_code, newassign);
+      symex_assign(newassign);
     }
     cur_state->source.pc++;
     break;
