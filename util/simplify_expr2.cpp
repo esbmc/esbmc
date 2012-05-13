@@ -903,3 +903,26 @@ typecast2t::do_simplify(bool second) const
     return expr2tc();
   }
 }
+
+expr2tc
+address_of2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  // NB: address of never has its operands simplified below its feet for sanitys
+  // sake.
+  // Only attempt to simplify indexes. Whatever we're taking the address of,
+  // we can't simplify away the symbol.
+  if (is_index2t(ptr_obj)) {
+    const index2t &idx = to_index2t(ptr_obj);
+    expr2tc new_index = idx.index->simplify();
+    if (is_nil_expr(new_index))
+      return new_index;
+
+    expr2tc new_index_obj = expr2tc(new index2t(idx.type, idx.source_value,
+                                                new_index));
+    const type2tc &subtype = to_pointer_type(type).subtype;
+    return expr2tc(new address_of2t(subtype, new_index_obj));
+  } else {
+    return expr2tc();
+  }
+}

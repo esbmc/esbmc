@@ -1538,6 +1538,7 @@ public:
       (type2tc(new pointer_type2t(subtype)), address_of_id, ptrobj) {}
   address_of2t(const address_of2t &ref)
     : esbmct::expr<address_of2t, esbmct::expr2tc_ptr_obj> (ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<address_of2t, esbmct::expr2tc_ptr_obj>;
 
