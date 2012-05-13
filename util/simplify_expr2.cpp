@@ -391,8 +391,19 @@ expr2tc
 div2t::do_simplify(bool second __attribute__((unused))) const
 {
 
-  if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
-    return expr2tc();
+  if (!is_constant_expr(side_1) || !is_constant_expr(side_2)) {
+    // If side_1 is zero, result is zero.
+    if (is_constant_expr(side_1)) {
+      fixedbvt operand1;
+      to_fixedbv(side_1, operand1);
+      if (operand1.is_zero())
+        return from_fixedbv(operand1, type);
+      else
+        return expr2tc();
+    } else {
+      return expr2tc();
+    }
+  }
 
   assert((is_constant_int2t(side_1) || is_constant_bool2t(side_1) ||
           is_constant_fixedbv2t(side_1)) &&
