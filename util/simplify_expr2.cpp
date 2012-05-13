@@ -109,7 +109,7 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     unsigned int bits = type->get_width();
     fixedbvt tmp_bv;
     tmp_bv.from_integer(tmp);
-    tmp_bv.round(fixedbv_spect(bits, bits));
+    tmp_bv.round(fixedbv_spect(bits*2, bits));
 
     // And done.
     return expr2tc(new constant_int2t(type, tmp_bv.to_integer()));
