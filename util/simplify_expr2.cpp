@@ -506,6 +506,15 @@ with2t::do_simplify(bool second __attribute__((unused))) const
     constant_array2tc arr = expr2tc(array.clone());
     arr.get()->datatype_members[index.as_ulong()] = update_value;
     return expr2tc(arr);
+  } else if (is_constant_array_of2t(source_value)) {
+    const constant_array_of2t &array = to_constant_array_of2t(source_value);
+
+    // We can eliminate this operation if the operand to this with is the same
+    // as the initializer.
+    if (update_value == array.initializer)
+      return source_value;
+    else
+      return expr2tc();
   } else {
     return expr2tc();
   }
