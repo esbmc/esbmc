@@ -107,9 +107,7 @@ void goto_symext::symex_malloc(
   cur_state->rename(rhs);
   
   guardt guard;
-  exprt blah_rhs = migrate_expr_back(rhs);
-  symex_assign_rec(migrate_expr_back(lhs), blah_rhs, guard);
-  migrate_expr(blah_rhs, rhs); // fetch symex_assign_rec's modifications
+  symex_assign_rec(lhs, rhs, guard);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type = type2tc(new array_type2t(type_pool.get_bool(),
@@ -122,9 +120,7 @@ void goto_symext::symex_malloc(
 
   expr2tc truth = expr2tc(new constant_bool2t(true));
 
-  exprt idx_back = migrate_expr_back(idx);
-  exprt truth_back = migrate_expr_back(truth);
-  symex_assign_rec(idx_back, truth_back, guard);
+  symex_assign_rec(idx, truth, guard);
 }
 
 void goto_symext::symex_printf(
@@ -226,9 +222,7 @@ void goto_symext::symex_cpp_new(
   cur_state->rename(rhs);
 
   guardt guard;
-  exprt lhs_back = migrate_expr_back(lhs);
-  exprt rhs_back = migrate_expr_back(rhs);
-  symex_assign_rec(lhs_back, rhs_back, guard);
+  symex_assign_rec(lhs, rhs, guard);
 }
 
 // XXX - implement as a call to free?

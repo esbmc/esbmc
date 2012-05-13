@@ -176,39 +176,39 @@ void goto_symext::symex_assign(const codet &code)
   else
   {
     guardt guard; // NOT the state guard!
-    symex_assign_rec(lhs, rhs, guard);
+    expr2tc new_lhs, new_rhs;
+    migrate_expr(lhs, new_lhs);
+    migrate_expr(rhs, new_rhs);
+    symex_assign_rec(new_lhs, new_rhs, guard);
   }
 }
 
 void goto_symext::symex_assign_rec(
-  const exprt &lhs,
-  exprt &rhs,
+  const expr2tc &lhs,
+  expr2tc &rhs,
   guardt &guard)
 {
-  expr2tc new_lhs, new_rhs;
-  migrate_expr(rhs, new_rhs);
-  migrate_expr(lhs, new_lhs);
 
-  if (is_symbol2t(new_lhs)) {
-    symex_assign_symbol(new_lhs, new_rhs, guard);
-  } else if (is_index2t(new_lhs))
+  if (is_symbol2t(lhs)) {
+    symex_assign_symbol(lhs, rhs, guard);
+  } else if (is_index2t(lhs))
     symex_assign_array(lhs, rhs, guard);
-  else if (is_member2t(new_lhs))
+  else if (is_member2t(lhs))
     symex_assign_member(lhs, rhs, guard);
-  else if (is_if2t(new_lhs))
+  else if (is_if2t(lhs))
     symex_assign_if(lhs, rhs, guard);
-  else if (is_typecast2t(new_lhs))
+  else if (is_typecast2t(lhs))
     symex_assign_typecast(lhs, rhs, guard);
-  else if (is_constant_string2t(new_lhs) ||
-           is_null_object2t(new_lhs) ||
-           is_zero_string2t(new_lhs))
+  else if (is_constant_string2t(lhs) ||
+           is_null_object2t(lhs) ||
+           is_zero_string2t(lhs))
   {
     // ignore
   }
-  else if (is_byte_extract2t(new_lhs))
+  else if (is_byte_extract2t(lhs))
     symex_assign_byte_extract(lhs, rhs, guard);
   else
-    throw "assignment to "+lhs.id_string()+" not handled";
+    throw "assignment to " + get_expr_id(lhs) + " not handled";
 }
 
 void goto_symext::symex_assign_symbol(
@@ -252,58 +252,48 @@ void goto_symext::symex_assign_symbol(
 }
 
 void goto_symext::symex_assign_typecast(
-  const exprt &lhs,
-  exprt &rhs,
+  const expr2tc &lhs,
+  expr2tc &rhs,
   guardt &guard)
 {
   // these may come from dereferencing on the lhs
 
-  assert(lhs.operands().size()==1);
+  const typecast2t &cast = to_typecast2t(lhs);
+  expr2tc rhs_typecasted = rhs;
+  rhs_typecasted = expr2tc(new typecast2t(cast.from->type, rhs));
 
-  exprt rhs_typecasted(rhs);
-
-  rhs_typecasted.make_typecast(lhs.op0().type());
-
-  symex_assign_rec(lhs.op0(), rhs_typecasted, guard);
+  symex_assign_rec(cast.from, rhs_typecasted, guard);
 }
 
 void goto_symext::symex_assign_array(
-  const exprt &lhs,
-  exprt &rhs,
+  const expr2tc &lhs,
+  expr2tc &rhs,
   guardt &guard)
 {
   // lhs must be index operand
   // that takes two operands: the first must be an array
   // the second is the index
 
-  if(lhs.operands().size()!=2)
-    throw "index must have two operands";
+  const index2t &index = to_index2t(lhs);
 
-  const exprt &lhs_array=lhs.op0();
-  const exprt &lhs_index=lhs.op1();
-  const typet &lhs_type=lhs_array.type();
-
-  if(lhs_type.id()!=typet::t_array)
-    throw "index must take array type operand";
+  assert(is_array_type(index.source_value->type));
 
   // turn
   //   a[i]=e
   // into
   //   a'==a WITH [i:=e]
 
-  exprt new_rhs(exprt::with, lhs_type);
+  expr2tc new_rhs = expr2tc(new with2t(index.source_value->type,
+                                       index.source_value,
+                                       index.index,
+                                       rhs));
 
-  new_rhs.reserve_operands(3);
-  new_rhs.copy_to_operands(lhs_array);
-  new_rhs.copy_to_operands(lhs_index);
-  new_rhs.move_to_operands(rhs);
-
-  symex_assign_rec(lhs_array, new_rhs, guard);
+  symex_assign_rec(index.source_value, new_rhs, guard);
 }
 
 void goto_symext::symex_assign_member(
-  const exprt &lhs,
-  exprt &rhs,
+  const expr2tc &lhs,
+  expr2tc &rhs,
   guardt &guard)
 {
   // symbolic execution of a struct member assignment
@@ -311,35 +301,27 @@ void goto_symext::symex_assign_member(
   // lhs must be member operand
   // that takes one operands, which must be a structure
 
-  if(lhs.operands().size()!=1)
-    throw "member must have one operand";
+  const member2t &member = to_member2t(lhs);
 
-  exprt lhs_struct=lhs.op0();
-  typet struct_type=lhs_struct.type();
+  assert(is_struct_type(member.source_value->type) ||
+         is_union_type(member.source_value->type));
 
-  if(struct_type.id()!=typet::t_struct &&
-     struct_type.id()!=typet::t_union)
-    throw "member must take struct/union type operand but got "
-          +struct_type.pretty();
-
-  const irep_idt &component_name=lhs.component_name();
+  const irep_idt &component_name = member.member;
+  expr2tc real_lhs = member.source_value;
 
   // typecasts involved? C++ does that for inheritance.
-  if(lhs_struct.id()==exprt::typecast)
+  if (is_typecast2t(member.source_value))
   {
-    assert(lhs_struct.operands().size()==1);
-
-    if(lhs_struct.op0().id()=="NULL-object")
+    const typecast2t &cast = to_typecast2t(member.source_value);
+    if (is_null_object2t(cast.from))
     {
       // ignore
     }
     else
     {
       // remove the type cast, we assume that the member is there
-      exprt tmp(lhs_struct.op0());
-      struct_type=tmp.type();
-      assert(struct_type.id()==typet::t_struct || struct_type.id()==typet::t_union);
-      lhs_struct=tmp;
+      real_lhs = cast.from;
+      assert(is_struct_type(real_lhs->type) || is_union_type(real_lhs->type));
     }
   }
 
@@ -348,70 +330,57 @@ void goto_symext::symex_assign_member(
   // into
   //   a'==a WITH [c:=e]
 
-  exprt new_rhs(exprt::with, struct_type);
+  type2tc str_type =
+    type2tc(new string_type2t(component_name.as_string().size()));
+  expr2tc new_rhs = expr2tc(new with2t(real_lhs->type, real_lhs,
+                       expr2tc(new constant_string2t(str_type, component_name)),
+                       rhs));
 
-  new_rhs.reserve_operands(3);
-  new_rhs.copy_to_operands(lhs_struct);
-  new_rhs.copy_to_operands(exprt("member_name"));
-  new_rhs.move_to_operands(rhs);
-
-  new_rhs.op1().component_name(component_name);
-
-  symex_assign_rec(lhs_struct, new_rhs, guard);
+  symex_assign_rec(member.source_value, new_rhs, guard);
 }
 
 void goto_symext::symex_assign_if(
-  const exprt &lhs,
-  exprt &rhs,
+  const expr2tc &lhs,
+  expr2tc &rhs,
   guardt &guard)
 {
   // we have (c?a:b)=e;
 
-  if(lhs.operands().size()!=3)
-    throw "if must have three operands";
-
   unsigned old_guard_size=guard.size();
 
   // need to copy rhs -- it gets destroyed
-  exprt rhs_copy(rhs);
+  expr2tc rhs_copy = rhs;
+  const if2t &ifval = to_if2t(lhs);
 
-  exprt condition(lhs.op0());
+  expr2tc cond = ifval.cond;
 
-  guard.add(condition);
-  symex_assign_rec(lhs.op1(), rhs, guard);
+  guard.add(migrate_expr_back(cond));
+  symex_assign_rec(ifval.true_value, rhs, guard);
   guard.resize(old_guard_size);
 
-  condition.make_not();
+  expr2tc not_cond = expr2tc(new not2t(cond));
 
-  guard.add(condition);
-  symex_assign_rec(lhs.op2(), rhs_copy, guard);
+  guard.add(migrate_expr_back(not_cond));
+  symex_assign_rec(ifval.false_value, rhs_copy, guard);
   guard.resize(old_guard_size);
 }
 
 void goto_symext::symex_assign_byte_extract(
-  const exprt &lhs,
-  exprt &rhs,
+  const expr2tc &lhs,
+  expr2tc &rhs,
   guardt &guard)
 {
   // we have byte_extract_X(l, b)=r
   // turn into l=byte_update_X(l, b, r)
 
-  if(lhs.operands().size()!=2)
-    throw "byte_extract must have two operands";
+  const byte_extract2t &extract = to_byte_extract2t(lhs);
+  expr2tc new_rhs = expr2tc(new byte_update2t(extract.source_value->type,
+                                              extract.big_endian,
+                                              extract.source_value,
+                                              extract.source_offset,
+                                              rhs));
 
-  exprt new_rhs;
-
-  if(lhs.id()=="byte_extract_little_endian")
-    new_rhs.id("byte_update_little_endian");
-  else if(lhs.id()=="byte_extract_big_endian")
-    new_rhs.id("byte_update_big_endian");
-  else
-    assert(false);
-
-  new_rhs.copy_to_operands(lhs.op0(), lhs.op1(), rhs);
-  new_rhs.type()=lhs.op0().type();
-
-  symex_assign_rec(lhs.op0(), new_rhs, guard);
+  symex_assign_rec(extract.source_value, new_rhs, guard);
 }
 
 void goto_symext::replace_nondet(exprt &expr)

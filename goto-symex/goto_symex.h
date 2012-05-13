@@ -414,7 +414,7 @@ protected:
   virtual void symex_assign(const codet &code);
 
   /** Recursively perform symex assign. @see symex_assign */
-  void symex_assign_rec(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_rec(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a symbol.
@@ -433,7 +433,7 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_typecast(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_typecast(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to an array.
@@ -444,7 +444,7 @@ protected:
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_array(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_array(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a struct.
@@ -454,7 +454,7 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_member(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_member(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to an "if".
@@ -466,7 +466,7 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_if(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_if(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a byte extract.
@@ -477,7 +477,8 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_byte_extract(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_byte_extract(const expr2tc &lhs, expr2tc &rhs,
+                                 guardt &guard);
 
   /** Symbolic implementation of malloc. */
   void symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
