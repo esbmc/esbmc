@@ -994,3 +994,51 @@ equality2t::do_simplify(bool second __attribute__((unused))) const
   else
     return expr2tc();
 }
+
+bool
+do_fixedbv_ineq(const fixedbvt &bv1, const fixedbvt &bv2)
+{
+  return bv1 != bv2;
+}
+
+expr2tc
+notequal2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  if (is_constant_expr(side_1) && is_constant_expr(side_2))
+    return do_rel_simplify(side_1, side_2, do_fixedbv_ineq);
+  else
+    return expr2tc();
+}
+
+bool
+do_fixedbv_lt(const fixedbvt &bv1, const fixedbvt &bv2)
+{
+  return bv1 < bv2;
+}
+
+expr2tc
+lessthan2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  if (is_constant_expr(side_1) && is_constant_expr(side_2))
+    return do_rel_simplify(side_1, side_2, do_fixedbv_lt);
+  else
+    return expr2tc();
+}
+
+bool
+do_fixedbv_gt(const fixedbvt &bv1, const fixedbvt &bv2)
+{
+  return bv1 > bv2;
+}
+
+expr2tc
+greaterthan2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  if (is_constant_expr(side_1) && is_constant_expr(side_2))
+    return do_rel_simplify(side_1, side_2, do_fixedbv_gt);
+  else
+    return expr2tc();
+}

@@ -1119,6 +1119,7 @@ public:
   notequal2t(const notequal2t &ref)
     : esbmct::expr<notequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<notequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
@@ -1132,6 +1133,7 @@ public:
   lessthan2t(const lessthan2t &ref)
     : esbmct::expr<lessthan2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<lessthan2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
@@ -1145,6 +1147,7 @@ public:
   greaterthan2t(const greaterthan2t &ref)
     : esbmct::expr<greaterthan2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<greaterthan2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
