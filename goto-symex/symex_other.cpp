@@ -27,6 +27,7 @@ void goto_symext::symex_other(void)
   {
     // ignore
   }
+#if 0
   else if(statement=="cpp_delete" ||
           statement=="cpp_delete[]")
   {
@@ -38,6 +39,7 @@ void goto_symext::symex_other(void)
 
     symex_cpp_delete(deref_code);
   }
+#endif
   else if(statement=="free")
   {
     // ignore
