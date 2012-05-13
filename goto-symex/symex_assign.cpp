@@ -233,7 +233,8 @@ void goto_symext::symex_assign_symbol(
 
   do_simplify(new_rhs);
 
-  cur_state->assignment(original_lhs, new_rhs, constant_propagation);
+  expr2tc renamed_lhs = original_lhs;
+  cur_state->assignment(renamed_lhs, new_rhs, constant_propagation);
 
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
@@ -244,7 +245,7 @@ void goto_symext::symex_assign_symbol(
   // do the assignment
   target->assignment(
     guard2,
-    original_lhs, orig_name_lhs,
+    renamed_lhs, orig_name_lhs,
     new_rhs,
     cur_state->source,
     cur_state->gen_stack_trace(),
