@@ -42,10 +42,9 @@ void goto_symext::symex_other(void)
   {
     // ignore
   }
-  else if(statement=="printf")
+  else if (is_code_printf2t(code2))
   {
-    codet deref_code(code);
-
+    exprt deref_code = migrate_expr_back(code2);
     replace_dynamic_allocation(deref_code);
     replace_nondet(deref_code);
     dereference(deref_code, false);
