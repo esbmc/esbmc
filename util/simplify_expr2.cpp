@@ -839,7 +839,29 @@ typecast2t::do_simplify(bool second __attribute__((unused))) const
     return from;
   } else if (is_constant_expr(from)) {
     // Casts from constant operands can be done here.
-    abort();
+    if (is_constant_bool2t(from) && is_bv_type(type)) {
+      if (to_constant_bool2t(from).constant_value) {
+        return expr2tc(new constant_int2t(type, BigInt(1)));
+      } else {
+        return expr2tc(new constant_int2t(type, BigInt(0)));
+      }
+    } else if (is_bool_type(type) && (is_constant_int2t(from) ||
+                                      is_constant_fixedbv2t(from))) {
+      fixedbvt bv;
+      to_fixedbv(from, bv);
+      if (bv.get_value().is_zero()) {
+        return expr2tc(new constant_bool2t(false));
+      } else {
+        return expr2tc(new constant_bool2t(true));
+      }
+    } else if ((is_bv_type(type) || is_fixedbv_type(type)) &&
+                (is_bv_type(from->type) || is_fixedbv_type(from->type))) {
+      fixedbvt bv;
+      to_fixedbv(from, bv);
+      return from_fixedbv(bv, type);
+    } else {
+      return expr2tc();
+    }
   } else if (is_typecast2t(from)) {
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
