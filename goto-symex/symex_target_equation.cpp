@@ -39,10 +39,6 @@ void symex_target_equationt::assignment(
   SSA_step.lhs = lhs;
   SSA_step.original_lhs = original_lhs;
   SSA_step.rhs = rhs;
-  SSA_step.guard = guard;
-  SSA_step.lhs = lhs;
-  SSA_step.original_lhs = original_lhs;
-  SSA_step.rhs = rhs;
   SSA_step.assignment_type=assignment_type;
   SSA_step.cond = expr2tc(new equality2t(lhs, rhs));
   SSA_step.type=goto_trace_stept::ASSIGNMENT;
