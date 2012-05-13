@@ -112,6 +112,7 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     // Round away upper bits, just in case we're decreasing accuracy here.
     unsigned int bits = type->get_width();
     fixedbvt tmp_bv;
+    tmp_bv.spec = bv.spec;
     tmp_bv.from_integer(tmp);
     tmp_bv.round(fixedbv_spect(bits*2, bits));
 

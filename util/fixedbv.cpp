@@ -165,12 +165,12 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
   if (old_integer_bits > new_integer_bits) {
     // Need to cut off some higher bits.
     fixedbvt tmp;
-    tmp.spec = spec;
+    tmp.spec = dest_spec;
 
     // Make a number that's 2^integer_bits
     BigInt aval(2);
     aval = pow(aval, new_integer_bits);
-    tmp.from_integer(BigInt(1));
+    tmp.from_integer(aval);
 
     // Now modulus that up.
     result = result % tmp.v;
