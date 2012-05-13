@@ -418,6 +418,8 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
   make_fixedbv_types_match(operand1, operand2);
   fixedbvt quotient = operand1;
   quotient /= operand2; // calculate quotient.
+  // Truncate fraction bits.
+  quotient.from_integer(quotient.to_integer());
   quotient *= operand2; // to subtract.
   operand1 -= quotient; // And finally, the remainder.
 
