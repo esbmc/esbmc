@@ -185,27 +185,27 @@ void goto_symext::symex_assign_rec(
   exprt &rhs,
   guardt &guard)
 {
-  if(lhs.id()==exprt::symbol) {
-    expr2tc new_lhs, new_rhs;
-    migrate_expr(rhs, new_rhs);
-    migrate_expr(lhs, new_lhs);
+  expr2tc new_lhs, new_rhs;
+  migrate_expr(rhs, new_rhs);
+  migrate_expr(lhs, new_lhs);
+
+  if (is_symbol2t(new_lhs)) {
     symex_assign_symbol(new_lhs, new_rhs, guard);
-  } else if(lhs.id()==exprt::index || lhs.id()=="memory-leak")
+  } else if (is_index2t(new_lhs))
     symex_assign_array(lhs, rhs, guard);
-  else if(lhs.id()==exprt::member)
+  else if (is_member2t(new_lhs))
     symex_assign_member(lhs, rhs, guard);
-  else if(lhs.id()==exprt::i_if)
+  else if (is_if2t(new_lhs))
     symex_assign_if(lhs, rhs, guard);
-  else if(lhs.id()==exprt::typecast)
+  else if (is_typecast2t(new_lhs))
     symex_assign_typecast(lhs, rhs, guard);
-  else if(lhs.id()=="string-constant" ||
-          lhs.id()=="NULL-object" ||
-          lhs.id()=="zero_string")
+  else if (is_constant_string2t(new_lhs) ||
+           is_null_object2t(new_lhs) ||
+           is_zero_string2t(new_lhs))
   {
     // ignore
   }
-  else if(lhs.id()=="byte_extract_little_endian" ||
-          lhs.id()=="byte_extract_big_endian")
+  else if (is_byte_extract2t(new_lhs))
     symex_assign_byte_extract(lhs, rhs, guard);
   else
     throw "assignment to "+lhs.id_string()+" not handled";
