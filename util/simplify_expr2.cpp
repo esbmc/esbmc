@@ -175,8 +175,6 @@ rebalance_associative_tree(const expr2t &expr, std::list<expr2tc> &ops,
   // and vectors downwards, but lets not prematurely optimise. All this is
   // faster than stringly stuff.
 
-  std::list<expr2tc> operands;
-
   // Extract immediate operands
   std::vector<const expr2tc*> immediate_operands;
   expr.list_operands(immediate_operands);
@@ -186,9 +184,9 @@ rebalance_associative_tree(const expr2t &expr, std::list<expr2tc> &ops,
 
   // Are there enough constant values in there?
   unsigned int const_values = 0;
-  unsigned int orig_size = operands.size();
-  for (std::list<expr2tc>::const_iterator it = operands.begin();
-       it != operands.end(); it++)
+  unsigned int orig_size = ops.size();
+  for (std::list<expr2tc>::const_iterator it = ops.begin();
+       it != ops.end(); it++)
     if (is_constant_expr(*it))
       const_values++;
 
@@ -198,8 +196,8 @@ rebalance_associative_tree(const expr2t &expr, std::list<expr2tc> &ops,
 
   // Otherwise, we can go through simplifying operands.
   expr2tc accuml;
-  for (std::list<expr2tc>::iterator it = operands.begin();
-       it != operands.end(); it++) {
+  for (std::list<expr2tc>::iterator it = ops.begin();
+       it != ops.end(); it++) {
     if (!is_constant_expr(*it))
       continue;
 
@@ -209,7 +207,7 @@ rebalance_associative_tree(const expr2t &expr, std::list<expr2tc> &ops,
       std::list<expr2tc>::iterator back = it;
       back--;
       accuml = *it;
-      operands.erase(it);
+      ops.erase(it);
       it = back;
       continue;
     }
@@ -229,24 +227,24 @@ rebalance_associative_tree(const expr2t &expr, std::list<expr2tc> &ops,
     accuml = tmp;
     std::list<expr2tc>::iterator back = it;
     back--;
-    operands.erase(it);
+    ops.erase(it);
     it = back;
   }
 
   // So, we've attempted to remove some things. There are three cases.
   // First, nothing was pulled out of the list. Shouldn't happen, but just
   // in case...
-  if (operands.size() == orig_size)
+  if (ops.size() == orig_size)
     return false;
 
   // If only one constant value was removed from the list, then we attempted to
   // simplify two constants and it failed. No simplification.
-  if (operands.size() == orig_size - 1)
+  if (ops.size() == orig_size - 1)
     return false;
 
   // Finally; we've succeeded and simplified something. Push the simplified
   // constant back at the end of the list.
-  operands.push_back(accuml);
+  ops.push_back(accuml);
   return true;
 }
 
