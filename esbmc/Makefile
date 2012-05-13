@@ -7,6 +7,7 @@ SRCS = main.cpp parseoptions.cpp bmc.cpp  \
 # additional objects for esbmc binary
 OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
       ../big-int/$(OBJDIR)/bigint.o \
+      ../big-int/$(OBJDIR)/bigint-func.o \
       ../goto-programs/$(OBJDIR)/goto-programs.o \
       ../goto-symex/$(OBJDIR)/goto-symex.o \
       ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \

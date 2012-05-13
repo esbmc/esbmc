@@ -43,6 +43,7 @@ $(OBJDIR)/lex.yy.o: lex.yy.cpp  $(OBJDIR)/y.tab.o
 
 C2GOTO_DEPS= $(OBJS) ../util/$(OBJDIR)/util.o ../langapi/$(OBJDIR)/langapi.o \
 	     ../big-int/$(OBJDIR)/bigint.o \
+	     ../big-int/$(OBJDIR)/bigint-func.o \
 	     ../goto-programs/$(OBJDIR)/goto-programs.o \
 	     ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \
 	     cpp/$(OBJDIR)/preproc.o headers/$(OBJDIR)/headers.o
