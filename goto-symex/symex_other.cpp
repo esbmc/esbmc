@@ -16,14 +16,10 @@ void goto_symext::symex_other(void)
 {
   const goto_programt::instructiont &instruction=*cur_state->source.pc;
 
-  const codet &code=to_code(instruction.code);
-
-  const irep_idt &statement=code.get_statement();
-
   expr2tc code2;
-  migrate_expr(code, code2);
+  migrate_expr(instruction.code, code2);
 
-  if(statement=="expression")
+  if (is_code_expression2t(code2))
   {
     // ignore
   }
@@ -40,7 +36,7 @@ void goto_symext::symex_other(void)
     symex_cpp_delete(deref_code);
   }
 #endif
-  else if(statement=="free")
+  else if (is_code_free2t(code2))
   {
     // ignore
   }
@@ -97,11 +93,7 @@ void goto_symext::symex_other(void)
       it->second.constant = expr2tc();
     }
   }
-  else if(statement=="nondet")
-  {
-    // like skip
-  }
   else
-    throw "goto_symext: unexpected statement: "+id2string(statement);
+    throw "goto_symext: unexpected statement: " + get_expr_id(code2);
 }
 
