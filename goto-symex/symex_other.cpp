@@ -103,13 +103,6 @@ void goto_symext::symex_other(void)
   {
     // like skip
   }
-  else if(statement=="asm")
-  {
-    // we ignore this for now
-  }
-  else if (statement=="assign"){
-	  assert(0);
-  }
   else
     throw "goto_symext: unexpected statement: "+id2string(statement);
 }
