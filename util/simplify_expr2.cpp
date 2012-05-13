@@ -829,7 +829,7 @@ typecast2t::do_simplify(bool second __attribute__((unused))) const
     expr2tc zero = from_fixedbv(bv, from->type);
     expr2tc eq = expr2tc(new equality2t(from, zero));
     expr2tc noteq = expr2tc(new not2t(eq));
-    return eq;
+    return noteq;
   } else if (is_symbol2t(from) && to_symbol2t(from).name.as_string() == "NULL"){
     // Casts of null can operate on null directly. Use of strings here is
     // inefficient XXX jmorse
