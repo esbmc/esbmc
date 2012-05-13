@@ -1162,6 +1162,7 @@ public:
   lessthanequal2t(const lessthanequal2t &ref)
    : esbmct::expr<lessthanequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<lessthanequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
@@ -1176,6 +1177,7 @@ public:
   greaterthanequal2t(const greaterthanequal2t &ref)
   : esbmct::expr<greaterthanequal2t,esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<greaterthanequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
