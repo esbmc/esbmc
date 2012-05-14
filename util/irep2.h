@@ -1761,10 +1761,10 @@ class dynamic_object2t : public esbmct::expr<dynamic_object2t,
 {
 public:
   dynamic_object2t(const type2tc &type, const expr2tc inst,
-                   bool invalid, bool uknown)
+                   bool inv, bool uknown)
     : esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
                    esbmct::bool_invalid, esbmct::bool_unknown>
-      (type, dynamic_object_id, inst, invalid, uknown) {}
+      (type, dynamic_object_id, inst, inv, uknown) {}
   dynamic_object2t(const dynamic_object2t &ref)
     : esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
                    esbmct::bool_invalid, esbmct::bool_unknown> (ref) {}
