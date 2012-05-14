@@ -577,6 +577,21 @@ constant_string2t::to_array(void) const
   return final_val;
 }
 
+const expr2tc &
+object_descriptor2t::get_root_object(void) const
+{
+  const expr2tc *tmp = &object;
+
+  do {
+    if (is_member2t(*tmp))
+      tmp = &to_member2t(*tmp).source_value;
+    else if (is_index2t(*tmp))
+      tmp = &to_index2t(*tmp).source_value;
+    else
+      return *tmp;
+  } while (1);
+}
+
 type_poolt::type_poolt(void)
 {
   bool_type = type2tc(new bool_type2t());

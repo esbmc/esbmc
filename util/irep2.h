@@ -1963,6 +1963,7 @@ public:
   object_descriptor2t(const object_descriptor2t &ref)
     : esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
                    esbmct::expr2tc_offset> (ref) {}
+  const expr2tc &get_root_object(void) const;
 };
 template class esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
                                                  esbmct::expr2tc_offset>;
