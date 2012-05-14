@@ -514,10 +514,11 @@ void dereferencet::build_reference_to(
         if(!options.get_bool_option("no-pointer-check"))
         {
           //nec: ex29
-          const pointer_type2t &val_ptr_type = to_pointer_type(value->type);
-          const pointer_type2t &ptr_type = to_pointer_type(type);
-          if (is_empty_type(ptr_type.subtype) ||
-              is_empty_type(val_ptr_type.subtype))
+          if (    (is_pointer_type(type) &&
+                   is_empty_type(to_pointer_type(type).subtype))
+              ||
+                  (is_pointer_type(value->type) &&
+                   is_empty_type(to_pointer_type(value->type).subtype)))
             return;
 
           std::string msg="memory model not applicable (got `";
