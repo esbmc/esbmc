@@ -102,6 +102,7 @@ namespace std
 		string& operator += (const char* s);
 		string& operator+= (char s);
 		string& operator+ ( string& s);
+		string& operator+ ( string& s1, string& s2);
 		char& operator[] ( size_t pos );
 		char& at ( size_t pos ) const;
 		bool empty ( ) const;
@@ -183,19 +184,20 @@ namespace std
 	 string::string (const char * s, size_t n)
 	{
 		__ESBMC_HIDE: //length of string
-		str=new char[n]; //increments length of string
+		int i;
+		str=new char[n+1]; //increments length of string
 		_size = n;
-		npos = _size-1;
-		strcpy(str,s);
-		//str2=(char*)s;
+		for(i=0;i<_size;i++)
+			str[i]=s[i];
+		str[i]='\0';
 	}
 	 string::string(int len)
 	 {
 	     str = new char [len+1];
-	     for(int i = 0; i <= len; i++)
-	         str[i] = '\0';
+	     //for(int i = 0; i <= len; i++)
+	         //str[i] = '\0';
 	     _size = len;
-	     npos = _size-1;
+	     //npos = _size-1;
 	 }
 	char* string::c_str () const
 	{
@@ -227,7 +229,7 @@ namespace std
 	{
 		__ESBMC_HIDE:
 		int aux;
-		aux = strcmp((char*)lhs, this->c_str());
+		aux = strcmp((char*)lhs, this->str);
 		if (aux == 0){
 			return true;
 		}else{
@@ -420,6 +422,7 @@ namespace std
 	}
 	bool string::empty ( ) const
 	{
+		//assert(this->_size == );
 		if (this->_size == 0)
 			return true;
 		return false;
@@ -427,7 +430,7 @@ namespace std
 	string& string::operator= ( string& str )
 	{
 		__ESBMC_HIDE:
-		this->_size=strlen(str.str);
+		this->_size=str.length();
 		this->str=new char[this->_size+1];
 		strcpy(this->str, str.str);
 		return *this;
@@ -499,9 +502,25 @@ namespace std
 	        temp[i] = this->str[i];
 	    for(j=i, k=0; j<temp._size; j++, k++)
 	    	temp.str[j] = s.str[k];
-	    *this = temp;
-	    return *this;
+	    //*this = temp;
+	    //assert(temp==s);
+	    return temp;
 	}
+//	string& string::operator+ ( string& s1, string &s2)
+//	{
+//
+//		__ESBMC_HIDE:
+//	    int rhsLen = s._size;
+//	    int totalLen = this->_size + rhsLen;
+//	    string temp(totalLen);
+//	    int i, j, k;
+//	    for (i=0; i<this->_size; i++)
+//	        temp[i] = this->str[i];
+//	    for(j=i, k=0; j<temp._size; j++, k++)
+//	    	temp.str[j] = s.str[k];
+//	    *this = temp;
+//	    return *this;
+//	}
 	void string::swap ( string& s )
 	{
 		string aux(s.str);
