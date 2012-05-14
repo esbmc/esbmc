@@ -138,7 +138,7 @@ goto_symext::symex_step(reachability_treet & art)
       cur_state->rename(tmp);
       do_simplify(tmp);
 
-      if (is_constant_bool2t(tmp) && !to_constant_bool2t(tmp).constant_value) {
+      if (!is_constant_bool2t(tmp) || !to_constant_bool2t(tmp).constant_value) {
 	exprt tmp2 = migrate_expr_back(tmp);
         exprt tmp3 = tmp2;
 	cur_state->guard.guard_expr(tmp2);
