@@ -136,17 +136,17 @@ goto_symext::symex_step(reachability_treet & art)
       dereference(tmp, false);
 
       cur_state->rename(tmp);
-      exprt even_tmper = migrate_expr_back(tmp);
+      do_simplify(tmp);
 
-      do_simplify(even_tmper);
-      if (!even_tmper.is_true()) {
-	exprt tmp2 = even_tmper;
+      if (is_constant_bool2t(tmp) && !to_constant_bool2t(tmp).constant_value) {
+	exprt tmp2 = migrate_expr_back(tmp);
+        exprt tmp3 = tmp2;
 	cur_state->guard.guard_expr(tmp2);
 
-	assume(tmp2);
+	assume(tmp3);
 
 	// we also add it to the state guard
-	cur_state->guard.add(even_tmper);
+	cur_state->guard.add(tmp3);
       }
     }
     cur_state->source.pc++;
