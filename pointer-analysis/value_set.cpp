@@ -794,8 +794,8 @@ void value_sett::do_free(
           // adjust
           objectt o=o_it->second;
           dynamic_object2tc new_dyn(object);
-          expr2tc unknown = expr2tc(new unknown2t(op->type));
-          new_dyn.get()->instance = unknown;
+          new_dyn.get()->invalid = false;
+          new_dyn.get()->unknown = true;
           insert(new_object_map, new_dyn, o);
           changed=true;
         }
