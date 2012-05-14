@@ -54,24 +54,19 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
                                               alloc_arr_2, obj_expr));
     expr = index_expr;
   }
-#if 0
-  if (is_expr.id()=="invalid-pointer")
+  else if (is_invalid_pointer2t(expr))
   {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()=="pointer");
+    const invalid_pointer2t &ptr = to_invalid_pointer2t(expr);
 
-    exprt theptr = expr.op0();
-
-    exprt object_expr("pointer_object", uint_type());
-    object_expr.move_to_operands(expr.op0());
+    expr2tc obj_expr(new pointer_object2t(uint_type2(), ptr.ptr_obj));
 
     exprt alloc_array=symbol_expr(ns.lookup(valid_ptr_arr_name));
+    expr2tc alloc_arr_2;
+    migrate_expr(alloc_array, alloc_arr_2);
 
-    exprt index_expr("index", typet("bool"));
-    index_expr.move_to_operands(alloc_array, object_expr);
-
-    exprt notindex("not", bool_typet());
-    notindex.move_to_operands(index_expr);
+    expr2tc index_expr = expr2tc(new index2t(type_pool.get_bool(),
+                                             alloc_arr_2, obj_expr));
+    expr2tc notindex = expr2tc(new not2t(index_expr));
 
     // XXXjmorse - currently we don't correctly track the fact that stack
     // objects change validity as the program progresses, and the solver is
@@ -81,29 +76,24 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     // objects.
 
     exprt sym = symbol_expr(ns.lookup(dyn_info_arr_name));
-    exprt pointerobj("pointer_object", signedbv_typet());
-    pointerobj.copy_to_operands(theptr);
-    exprt is_dyn("index", bool_typet());
-    is_dyn.copy_to_operands(sym, pointerobj);
+    expr2tc sym_2;
+    migrate_expr(sym, sym_2);
+
+    expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), ptr.ptr_obj));
+    expr2tc is_dyn = expr2tc(new index2t(type_pool.get_bool(), sym_2, ptr_obj));
 
     // Catch free pointers: don't allow anything to be pointer object 1, the
     // invalid pointer.
-    exprt invalid_object("invalid-object");
-    invalid_object.type() = theptr.type();
-    exprt isinvalid("=", bool_typet());
-    isinvalid.copy_to_operands(theptr, invalid_object);
-    exprt notinvalid("not", bool_typet());
-    notinvalid.copy_to_operands(isinvalid);
+    type2tc ptr_type = type2tc(new pointer_type2t(type2tc(new empty_type2t())));
+    expr2tc invalid_object = expr2tc(new symbol2t(ptr_type, "INVALID"));
+    expr2tc isinvalid = expr2tc(new equality2t(ptr.ptr_obj, invalid_object));
+    expr2tc notinvalid = expr2tc(new not2t(isinvalid));
 
-    exprt is_not_bad_ptr("and", bool_typet());
-    is_not_bad_ptr.move_to_operands(notindex, is_dyn);
+    expr2tc is_not_bad_ptr = expr2tc(new and2t(notindex, is_dyn));
+    expr2tc is_valid_ptr = expr2tc(new or2t(is_not_bad_ptr, isinvalid));
 
-    exprt is_valid_ptr("or", bool_typet());
-    is_valid_ptr.move_to_operands(is_not_bad_ptr, isinvalid);
-
-    expr.swap(is_valid_ptr);
+    expr = is_valid_ptr;
   }
-#endif
   if (is_deallocated_obj2t(expr))
   {
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
