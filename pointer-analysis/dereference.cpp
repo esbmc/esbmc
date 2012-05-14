@@ -403,7 +403,7 @@ void dereferencet::build_reference_to(
       expr2tc is_dyn_obj = expr2tc(new index2t(type_pool.get_bool(), sym,
                                                ptr_obj));
 
-      if (dyn_obj.invalid)
+      if (dyn_obj.invalid || dyn_obj.unknown)
       {
         // check if it is still alive
         expr2tc valid_expr = expr2tc(new valid_object2t(deref_expr));
