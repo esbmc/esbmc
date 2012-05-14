@@ -291,6 +291,7 @@ public:
     code_free_id,
     object_descriptor_id,
     code_function_call_id,
+    invalid_pointer_id,
     end_expr_id
   };
 
@@ -1986,6 +1987,19 @@ template class esbmct::expr<code_function_call2t, esbmct::expr2tc_ret,
                                                   esbmct::expr2tc_function,
                                                   esbmct::expr2tc_vec_operands>;
 
+class invalid_pointer2t : public esbmct::expr<invalid_pointer2t,
+                                                 esbmct::expr2tc_ptr_obj>
+{
+public:
+  invalid_pointer2t(const expr2tc &obj)
+    : esbmct::expr<invalid_pointer2t, esbmct::expr2tc_ptr_obj>
+      (type_pool.get_bool(), invalid_pointer_id, obj) {}
+  invalid_pointer2t(const invalid_pointer2t &ref)
+    : esbmct::expr<invalid_pointer2t, esbmct::expr2tc_ptr_obj>
+      (ref) { }
+};
+template class esbmct::expr<invalid_pointer2t, esbmct::expr2tc_ptr_obj>;
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -2129,6 +2143,7 @@ expr_macros(code_return);
 expr_macros(code_free);
 expr_macros(object_descriptor);
 expr_macros(code_function_call);
+expr_macros(invalid_pointer);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -2291,6 +2306,8 @@ typedef irep_container<object_descriptor2t, expr2t::object_descriptor_id>
                        object_descriptor2tc;
 typedef irep_container<code_function_call2t, expr2t::code_function_call_id>
                        code_function_call2tc;
+typedef irep_container<invalid_pointer2t, expr2t::invalid_pointer_id>
+                       code_invalid_pointer2tc;
 
 // XXXjmorse - to be moved into struct union superclass when it exists.
 static unsigned int
