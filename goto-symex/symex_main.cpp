@@ -113,49 +113,40 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
-    exprt tmp(instruction.guard);
+    expr2tc tmp;
+    migrate_expr(instruction.guard, tmp);
+    replace_dynamic_allocation(tmp);
+    replace_nondet(tmp);
 
-    expr2tc tmp_expr;
-    migrate_expr(tmp, tmp_expr);
-    replace_dynamic_allocation(tmp_expr);
-    replace_nondet(tmp_expr);
+    dereference(tmp, false);
 
-    dereference(tmp_expr, false);
+    exprt even_tmper = migrate_expr_back(tmp);
 
-    tmp = migrate_expr_back(tmp_expr);
-
-    symex_goto(tmp);
+    symex_goto(even_tmper);
   }
   break;
 
   case ASSUME:
     if (!cur_state->guard.is_false()) {
-      exprt tmp(instruction.guard);
+      expr2tc tmp;
+      migrate_expr(instruction.guard, tmp);
+      replace_dynamic_allocation(tmp);
+      replace_nondet(tmp);
 
-      expr2tc tmp_expr;
-      migrate_expr(tmp, tmp_expr);
-      replace_dynamic_allocation(tmp_expr);
-      replace_nondet(tmp_expr);
+      dereference(tmp, false);
 
-      dereference(tmp_expr, false);
+      cur_state->rename(tmp);
+      exprt even_tmper = migrate_expr_back(tmp);
 
-      tmp = migrate_expr_back(tmp_expr);
-
-      exprt tmp1 = tmp;
-      expr2tc new_tmp;
-      migrate_expr(tmp, new_tmp);
-      cur_state->rename(new_tmp);
-      tmp = migrate_expr_back(new_tmp);
-
-      do_simplify(tmp);
-      if (!tmp.is_true()) {
-	exprt tmp2 = tmp;
+      do_simplify(even_tmper);
+      if (!even_tmper.is_true()) {
+	exprt tmp2 = even_tmper;
 	cur_state->guard.guard_expr(tmp2);
 
 	assume(tmp2);
 
 	// we also add it to the state guard
-	cur_state->guard.add(tmp);
+	cur_state->guard.add(even_tmper);
       }
     }
     cur_state->source.pc++;
@@ -169,17 +160,16 @@ goto_symext::symex_step(reachability_treet & art)
 
 	std::string msg = cur_state->source.pc->location.comment().as_string();
 	if (msg == "") msg = "assertion";
-	exprt tmp(instruction.guard);
 
-        expr2tc tmp_expr;
-        migrate_expr(tmp, tmp_expr);
-	replace_dynamic_allocation(tmp_expr);
-	replace_nondet(tmp_expr);
+        expr2tc tmp;
+        migrate_expr(instruction.guard, tmp);
+	replace_dynamic_allocation(tmp);
+	replace_nondet(tmp);
 
-	dereference(tmp_expr, false);
+	dereference(tmp, false);
 
-        tmp = migrate_expr_back(tmp_expr);
-	claim(tmp, msg);
+        exprt even_tmper = migrate_expr_back(tmp);
+	claim(even_tmper, msg);
       }
     }
     cur_state->source.pc++;
@@ -203,33 +193,29 @@ goto_symext::symex_step(reachability_treet & art)
 
   case ASSIGN:
     if (!cur_state->guard.is_false()) {
-      exprt deref_code = instruction.code;
+      expr2tc deref_code;
+      migrate_expr(instruction.code, deref_code);
+      replace_dynamic_allocation(deref_code);
+      replace_nondet(deref_code);
 
-      expr2tc tmp_expr;
-      migrate_expr(deref_code, tmp_expr);
-      replace_dynamic_allocation(tmp_expr);
-      replace_nondet(tmp_expr);
-
-      code_assign2t &assign = to_code_assign2t(tmp_expr); 
+      code_assign2t &assign = to_code_assign2t(deref_code); 
 
       dereference(assign.target, true);
       dereference(assign.source, false);
 
-      symex_assign(tmp_expr);
+      symex_assign(deref_code);
     }
     cur_state->source.pc++;
     break;
 
   case FUNCTION_CALL:
     if (!cur_state->guard.is_false()) {
-      exprt deref_code = to_code_function_call(instruction.code);
+      expr2tc deref_code;
+      migrate_expr(instruction.code, deref_code);
+      replace_dynamic_allocation(deref_code);
+      replace_nondet(deref_code);
 
-      expr2tc tmp_expr;
-      migrate_expr(deref_code, tmp_expr);
-      replace_dynamic_allocation(tmp_expr);
-      replace_nondet(tmp_expr);
-
-      code_function_call2t &call = to_code_function_call2t(tmp_expr);
+      code_function_call2t &call = to_code_function_call2t(deref_code);
 
       if (!is_nil_expr(call.ret)) {
 	dereference(call.ret, true);
@@ -239,7 +225,7 @@ goto_symext::symex_step(reachability_treet & art)
            it != call.operands.end(); it++)
 	dereference(*it, false);
 
-      exprt tmp = migrate_expr_back(tmp_expr);
+      exprt tmp = migrate_expr_back(deref_code);
       codet &tmp1 = static_cast<codet&>(tmp);
       code_function_callt new_deref_code = to_code_function_call(tmp1);
 
