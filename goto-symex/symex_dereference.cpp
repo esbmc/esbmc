@@ -100,6 +100,7 @@ void goto_symext::dereference_rec(
   dereferencet &dereference,
   const bool write)
 {
+
   if(expr.id()==exprt::deref ||
      expr.id()=="implicit_dereference")
   {
@@ -135,7 +136,7 @@ void goto_symext::dereference_rec(
   }
 }
 
-void goto_symext::dereference(exprt &expr, const bool write)
+void goto_symext::dereference(expr2tc &expr, const bool write)
 {
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
   renaming_nst renaming_ns(ns, *cur_state);
@@ -148,11 +149,10 @@ void goto_symext::dereference(exprt &expr, const bool write)
 
   // needs to be renamed to level 1
   assert(!cur_state->call_stack.empty());
-  expr2tc new_expr;
-  migrate_expr(expr, new_expr);
-  cur_state->top().level1.rename(new_expr);
-  expr = migrate_expr_back(new_expr);
+  cur_state->top().level1.rename(expr);
 
   guardt guard;
-  dereference_rec(expr, guard, dereference, write);
+  exprt tmp = migrate_expr_back(expr);
+  dereference_rec(tmp, guard, dereference, write);
+  migrate_expr(tmp, expr);
 }

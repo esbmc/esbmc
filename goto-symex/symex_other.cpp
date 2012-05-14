@@ -46,22 +46,14 @@ void goto_symext::symex_other(void)
   {
     replace_dynamic_allocation(code2);
     replace_nondet(code2);
-    exprt deref_code = migrate_expr_back(code2);
-
-    dereference(deref_code, false);
-
-    expr2tc new_deref_code;
-    migrate_expr(deref_code, new_deref_code);
-    symex_printf(expr2tc(), new_deref_code);
+    dereference(code2, false);
+    symex_printf(expr2tc(), code2);
   }
   else if (is_code_decl2t(code2))
   {
     replace_dynamic_allocation(code2);
     replace_nondet(code2);
-    exprt tmp1 = migrate_expr_back(code2);
-
-    dereference(tmp1, false);
-    migrate_expr(tmp1, code2);
+    dereference(code2, false);
 
     const code_decl2t &decl_code = to_code_decl2t(code2);
 

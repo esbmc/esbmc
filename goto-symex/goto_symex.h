@@ -134,7 +134,7 @@ protected:
    *  @param expr Expression to eliminate dereferences from.
    *  @param write Whether or not we're writing into this object.
    */
-  void dereference(exprt &expr, const bool write);
+  void dereference(expr2tc &expr, const bool write);
 
   /**
    *  Recursive implementation of dereference method.
