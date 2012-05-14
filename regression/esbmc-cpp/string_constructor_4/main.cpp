@@ -7,5 +7,5 @@ int main(){
 	string S = string("Testing", 3);
 	string T = string();
 	T = "TestingTestingTesting";
-	assert(T == S);
+	assert(T != S);
 }
