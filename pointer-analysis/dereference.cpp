@@ -141,9 +141,15 @@ void dereferencet::dereference(
   {
     exprt new_value, pointer_guard;
 
+    expr2tc tmp_new_val, tmp_ptr_guard, tmp_dest;
+    type2tc tmp_type;
+    migrate_type(type, tmp_type);
+    migrate_expr(dest, tmp_dest);
     build_reference_to(
-      migrate_expr_back(*it), mode, dest, type,
-      new_value, pointer_guard, guard);
+      *it, mode, tmp_dest, tmp_type,
+      tmp_new_val, tmp_ptr_guard, guard);
+    new_value = migrate_expr_back(tmp_new_val);
+    pointer_guard = migrate_expr_back(tmp_ptr_guard);
 
     if(new_value.is_not_nil())
     {
@@ -242,10 +248,12 @@ void dereferencet::add_checks(
         it!=points_to_set.end();
         it++)
     {
-      exprt new_value, pointer_guard;
-
+      expr2tc new_value, pointer_guard, tmp_dest;
+      type2tc tmp_type;
+      migrate_type(type, tmp_type);
+      migrate_expr(dest, tmp_dest);
       build_reference_to(
-        migrate_expr_back(*it), mode, dest, type,
+        *it, mode, tmp_dest, tmp_type,
         new_value, pointer_guard, guard);
     }
   }
@@ -317,31 +325,30 @@ Function: dereferencet::build_reference_to
 \*******************************************************************/
 
 void dereferencet::build_reference_to(
-  const exprt &what,
+  const expr2tc &what,
   const modet mode,
-  const exprt &deref_expr,
-  const typet &type,
-  exprt &value,
-  exprt &pointer_guard,
+  const expr2tc &deref_expr,
+  const type2tc &type,
+  expr2tc &value,
+  expr2tc &pointer_guard,
   const guardt &guard)
 {
-  value.make_nil();
-  pointer_guard.make_false();
+  value = expr2tc();
+  pointer_guard = expr2tc(new constant_bool2t(false));
 
-  if(what.id()=="unknown" ||
-     what.id()=="invalid")
+  if (is_unknown2t(what) || is_invalid2t(what))
   {
     if(!options.get_bool_option("no-pointer-check"))
     {
       // constraint that it actually is an invalid pointer
 
-      exprt invalid_pointer_expr("invalid-pointer", typet("bool"));
-      invalid_pointer_expr.copy_to_operands(deref_expr);
+      expr2tc invalid_pointer_expr = expr2tc(new invalid_pointer2t(deref_expr));
 
       // produce new guard
 
       guardt tmp_guard(guard);
-      tmp_guard.move(invalid_pointer_expr);
+      exprt tmp_guard_expr = migrate_expr_back(invalid_pointer_expr);
+      tmp_guard.move(tmp_guard_expr);
       dereference_callback.dereference_failure(
         "pointer dereference",
         "invalid pointer",
@@ -351,64 +358,62 @@ void dereferencet::build_reference_to(
     return;
   }
 
-  if(what.id()!="object_descriptor")
-    throw "unknown points-to: "+what.id_string();
+  if (!is_object_descriptor2t(what)) {
+    std::cerr << "unknown points-to: " << get_expr_id(what);
+    abort();
+  }
 
-  const object_descriptor_exprt &o=to_object_descriptor_expr(what);
+  const object_descriptor2t &o = to_object_descriptor2t(what);
 
-  const exprt &root_object=o.root_object();
-  const exprt &object=o.object();
+  const expr2tc &root_object = o.get_root_object();
+  const expr2tc &object = o.object;
 
-  if(root_object.id()=="NULL-object")
+  if (is_null_object2t(root_object))
   {
     if(!options.get_bool_option("no-pointer-check"))
     {
-      constant_exprt pointer(typet("pointer"));
-      pointer.type().subtype()=type;
-      pointer.set_value("NULL");
+      type2tc nullptrtype = type2tc(new pointer_type2t(type));
+      expr2tc null_ptr = expr2tc(new symbol2t(nullptrtype, "NULL"));
 
-      exprt pointer_guard("same-object", typet("bool"));
-      pointer_guard.copy_to_operands(deref_expr, pointer);
+      expr2tc pointer_guard = expr2tc(new same_object2t(deref_expr, null_ptr));
 
       guardt tmp_guard(guard);
-      tmp_guard.add(pointer_guard);
+      exprt tmpback = migrate_expr_back(pointer_guard);
+      tmp_guard.add(tmpback);
 
       dereference_callback.dereference_failure(
         "pointer dereference",
         "NULL pointer", tmp_guard);
     }
   }
-  else if(root_object.id()=="dynamic_object")
+  else if (is_dynamic_object2t(root_object))
   {
-    const dynamic_object_exprt &dynamic_object=
-      to_dynamic_object_expr(root_object);
+    const dynamic_object2t &dyn_obj = to_dynamic_object2t(root_object);
 
-    value=exprt("dereference", type);
-    value.copy_to_operands(deref_expr);
+    value = expr2tc(new dereference2t(type, deref_expr));
 
     if(!options.get_bool_option("no-pointer-check"))
     {
       // constraint that it actually is a dynamic object
 
-      exprt sym("symbol", array_typet());
-      sym.type().subtype() = bool_typet();
-      sym.type().set("size", "infinity");
-      sym.set("identifier", "c::__ESBMC_is_dynamic");
-      exprt pointerobj("pointer_object", signedbv_typet());
-      pointerobj.copy_to_operands(deref_expr);
-      exprt is_dynamic_object_expr("index", bool_typet());
-      is_dynamic_object_expr.copy_to_operands(sym, pointerobj);
+      type2tc arr_type = type2tc(new array_type2t(type_pool.get_bool(),
+                                                  expr2tc(), true));
+      expr2tc sym = expr2tc(new symbol2t(arr_type, "c::__ESBMC_is_dynamic"));
+      expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), deref_expr));
+      expr2tc is_dyn_obj = expr2tc(new index2t(type_pool.get_bool(), sym,
+                                               ptr_obj));
 
-      if(!dynamic_object.valid().is_true())
+      if (dyn_obj.invalid)
       {
         // check if it is still alive
-        exprt valid_expr("valid_object", typet("bool"));
-        valid_expr.copy_to_operands(deref_expr);
-        valid_expr.make_not();
+        expr2tc valid_expr = expr2tc(new valid_object2t(deref_expr));
+        expr2tc not_valid_expr = expr2tc(new not2t(valid_expr));
 
         guardt tmp_guard(guard);
-        tmp_guard.add(is_dynamic_object_expr);
-        tmp_guard.move(valid_expr);
+        exprt tmp_is_dyn = migrate_expr_back(is_dyn_obj);
+        exprt tmp_not_valid = migrate_expr_back(not_valid_expr);
+        tmp_guard.add(tmp_is_dyn);
+        tmp_guard.move(tmp_not_valid);
         dereference_callback.dereference_failure(
           "pointer dereference",
           "invalidated dynamic object",
@@ -416,23 +421,23 @@ void dereferencet::build_reference_to(
       }
 
 #if 1
-      if(!options.get_bool_option("no-bounds-check") &&
-         !o.offset().is_zero())
+      if (!options.get_bool_option("no-bounds-check") &&
+              (!is_constant_int2t(o.offset) ||
+               !to_constant_int2t(o.offset).constant_value.is_zero()))
       {
         {
           // check lower bound
-          exprt zero=gen_zero(index_type());
-          assert(zero.is_not_nil());
+          expr2tc zero = expr2tc(new constant_int2t(index_type2(), 0));
+          expr2tc obj_offset = expr2tc(new pointer_offset2t(index_type2(),
+                                                            deref_expr));
 
-          exprt object_offset=exprt("pointer_offset", index_type());
-          object_offset.copy_to_operands(deref_expr);
-
-          binary_relation_exprt
-            inequality(object_offset, "<", zero);
+          expr2tc lt = expr2tc(new lessthan2t(obj_offset, zero));
 
           guardt tmp_guard(guard);
-          tmp_guard.add(is_dynamic_object_expr);
-          tmp_guard.move(inequality);
+          exprt tmp_is_dyn_obj = migrate_expr_back(is_dyn_obj);
+          exprt tmp_lt = migrate_expr_back(lt);
+          tmp_guard.add(tmp_is_dyn_obj);
+          tmp_guard.move(tmp_lt);
           dereference_callback.dereference_failure(
             "pointer dereference",
             "dynamic object lower bound", tmp_guard);
@@ -441,21 +446,19 @@ void dereferencet::build_reference_to(
         {
           // check upper bound
           //nec: ex37.c
-          exprt size_expr=exprt("dynamic_size", int_type()/*uint_type()*/);
-          size_expr.copy_to_operands(deref_expr);
+          expr2tc size_expr = expr2tc(new dynamic_size2t(deref_expr));
 
-          exprt object_offset=exprt("pointer_offset", index_type());
-          object_offset.copy_to_operands(deref_expr);
-          object_offset.make_typecast(int_type()/*uint_type()*/);
+          expr2tc obj_offs = expr2tc(new pointer_offset2t(index_type2(),
+                                                          deref_expr));
+          obj_offs = expr2tc(new typecast2t(int_type2(), obj_offs));
 
-          binary_relation_exprt
-            inequality(size_expr, "<=", object_offset);
+          expr2tc lte = expr2tc(new lessthanequal2t(size_expr, obj_offs));
 
           guardt tmp_guard(guard);
-          tmp_guard.add(is_dynamic_object_expr);
-          tmp_guard.move(inequality);
-
-          //std::cout << "tmp_guard: " << tmp_guard.as_expr().pretty() << std::endl;
+          exprt tmp_is_dyn_obj = migrate_expr_back(is_dyn_obj);
+          exprt tmp_lte = migrate_expr_back(lte);
+          tmp_guard.add(tmp_is_dyn_obj);
+          tmp_guard.move(tmp_lte);
 
           dereference_callback.dereference_failure(
             "pointer dereference",
@@ -467,44 +470,43 @@ void dereferencet::build_reference_to(
   }
   else
   {
-    value=object;
+    value = object;
 
-    exprt object_pointer("address_of", pointer_typet());
-    object_pointer.type().subtype()=object.type();
-    object_pointer.copy_to_operands(object);
-    pointer_guard=exprt("same-object", typet("bool"));
-    pointer_guard.copy_to_operands(deref_expr, object_pointer);
+    type2tc ptr_type = type2tc(new pointer_type2t(object->type));
+    expr2tc obj_ptr = expr2tc(new address_of2t(ptr_type, object));
+
+    pointer_guard = expr2tc(new same_object2t(deref_expr, obj_ptr));
 
     guardt tmp_guard(guard);
-    tmp_guard.add(pointer_guard);
+    exprt tmp_ptr_guard = migrate_expr_back(pointer_guard);
+    tmp_guard.add(tmp_ptr_guard);
 
-    valid_check(object, tmp_guard, mode);
+    exprt tmp_obj = migrate_expr_back(object);
+    valid_check(tmp_obj, tmp_guard, mode);
 
-    exprt offset;
+    expr2tc offset;
 
-    if(o.offset().is_constant())
-      offset=o.offset();
+    if (is_constant_expr(o.offset))
+      offset = o.offset;
     else
     {
-      exprt pointer_offset=exprt("pointer_offset", index_type());
-      pointer_offset.copy_to_operands(deref_expr);
-
-      exprt base=exprt("pointer_offset", index_type());
-      base.copy_to_operands(object_pointer);
+      expr2tc ptr_offs = expr2tc(new pointer_offset2t(index_type2(),
+                                                      deref_expr));
+      expr2tc base = expr2tc(new pointer_offset2t(index_type2(), obj_ptr));
 
       // need to subtract base address
-      offset=exprt("-", index_type());
-      offset.move_to_operands(pointer_offset, base);
+      offset = expr2tc(new sub2t(index_type2(), ptr_offs, base));
     }
 
-    // Strip out un-needed type data so that back-migrated types compare
-    // correctly.
-    type2tc new_type;
-    migrate_type(type, new_type);
-    if(!dereference_type_compare(value, migrate_type_back(new_type)))
+    exprt tmp_value = migrate_expr_back(value);
+    typet tmp_type = migrate_type_back(type);
+    if (!dereference_type_compare(tmp_value, tmp_type))
     {
-      if(memory_model(value, type, tmp_guard, offset))
+      exprt tmp_offset = migrate_expr_back(offset);
+      if (memory_model(tmp_value, tmp_type, tmp_guard, tmp_offset))
       {
+        migrate_expr(tmp_value, value);
+        migrate_expr(tmp_offset, offset);
         // ok
       }
       else
@@ -512,11 +514,14 @@ void dereferencet::build_reference_to(
         if(!options.get_bool_option("no-pointer-check"))
         {
           //nec: ex29
-          if (value.type().subtype().id()=="empty" ||
-        		  type.subtype().id()=="empty")
+          const pointer_type2t &val_ptr_type = to_pointer_type(value->type);
+          const pointer_type2t &ptr_type = to_pointer_type(type);
+          if (is_empty_type(ptr_type.subtype) ||
+              is_empty_type(val_ptr_type.subtype))
             return;
+
           std::string msg="memory model not applicable (got `";
-          msg+=from_type(ns, "", value.type());
+          msg+=from_type(ns, "", value->type);
           msg+="', expected `";
           msg+=from_type(ns, "", type);
           msg+="')";
@@ -526,28 +531,31 @@ void dereferencet::build_reference_to(
             msg, tmp_guard);
         }
 
-        value.make_nil();
+        value = expr2tc();
         return; // give up, no way that this is ok
       }
     }
     else
     {
-      if(value.id()=="index")
+      if (is_index2t(value))
       {
-        index_exprt &index_expr=to_index_expr(value);
-        index_expr.index()=offset;
-        bounds_check(index_expr, tmp_guard);
+        index2t &idx = to_index2t(value);
+        idx.index = offset;
+        exprt tmp_idx = migrate_expr_back(value);
+        bounds_check(to_index_expr(tmp_idx), tmp_guard);
       }
-      else if(!offset.is_zero())
+      else if (!is_constant_int2t(offset) ||
+               !to_constant_int2t(offset).constant_value.is_zero())
       {
         if(!options.get_bool_option("no-pointer-check"))
         {
-          equality_exprt
-            offset_not_zero(offset, gen_zero(offset.type()));
-          offset_not_zero.make_not();
+          expr2tc zero = expr2tc(new constant_int2t(offset->type, BigInt(0)));
+          expr2tc offs_is_zero = expr2tc(new notequal2t(offset, zero));
+          expr2tc not_zero = expr2tc(new not2t(offs_is_zero));
 
           guardt tmp_guard2(guard);
-          tmp_guard2.move(offset_not_zero);
+          exprt tmp_not_zero = migrate_expr_back(not_zero);
+          tmp_guard2.move(tmp_not_zero);
 
           dereference_callback.dereference_failure(
             "pointer dereference",

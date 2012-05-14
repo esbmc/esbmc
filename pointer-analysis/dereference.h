@@ -92,12 +92,12 @@ private:
     const exprt &offset) const;
   
   void build_reference_to(
-    const exprt &what, 
+    const expr2tc &what,
     const modet mode,
-    const exprt &deref_expr,
-    const typet &type,
-    exprt &value,
-    exprt &pointer_guard,
+    const expr2tc &deref_expr,
+    const type2tc &type,
+    expr2tc &value,
+    expr2tc &pointer_guard,
     const guardt &guard);
 
   bool get_value_guard(
