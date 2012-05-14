@@ -6,6 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
 #include <assert.h>
 
 #include <cprover_prefix.h>
@@ -29,29 +30,32 @@ Function: default_replace_dynamic_allocation
 
 \*******************************************************************/
 
-void goto_symext::default_replace_dynamic_allocation(exprt &expr)
+void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
-  Forall_operands(it, expr)
-    default_replace_dynamic_allocation(*it);
 
-  if(expr.id()=="valid_object")
+  std::vector<expr2tc *> operands;
+  expr.get()->list_operands(operands);
+  for (std::vector<expr2tc *>::const_iterator it = operands.begin();
+       it != operands.end(); it++)
+    default_replace_dynamic_allocation(**it);
+
+  if (is_valid_object2t(expr))
   {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()==typet::t_pointer);
-
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
+    const valid_object2t &obj = to_valid_object2t(expr);
 
-    exprt object_expr("pointer_object", uint_type());
-    object_expr.move_to_operands(expr.op0());
+    expr2tc obj_expr(new pointer_object2t(uint_type2(), obj.value));
 
     exprt alloc_array=symbol_expr(ns.lookup(valid_ptr_arr_name));
+    expr2tc alloc_arr_2;
+    migrate_expr(alloc_array, alloc_arr_2);
 
-    exprt index_expr(exprt::index, typet(typet::t_bool));
-    index_expr.move_to_operands(alloc_array, object_expr);
-
-    expr.swap(index_expr);
+    expr2tc index_expr = expr2tc(new index2t(type_pool.get_bool(),
+                                              alloc_arr_2, obj_expr));
+    expr = index_expr;
   }
-  if (expr.id()=="invalid-pointer")
+#if 0
+  if (is_expr.id()=="invalid-pointer")
   {
     assert(expr.operands().size()==1);
     assert(expr.op0().type().id()=="pointer");
@@ -99,44 +103,36 @@ void goto_symext::default_replace_dynamic_allocation(exprt &expr)
 
     expr.swap(is_valid_ptr);
   }
-  if(expr.id()=="deallocated_object")
+#endif
+  if (is_deallocated_obj2t(expr))
   {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()==typet::t_pointer);
-
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
+    const deallocated_obj2t &obj = to_deallocated_obj2t(expr);
 
-    exprt object_expr("pointer_object", uint_type());
-    object_expr.move_to_operands(expr.op0());
+    expr2tc obj_expr = expr2tc(new pointer_object2t(uint_type2(), obj.value));
 
     exprt alloc_array=symbol_expr(ns.lookup(deallocd_arr_name));
+    expr2tc alloc_arr_2;
+    migrate_expr(alloc_array, alloc_arr_2);
 
-    exprt index_expr("memory-leak", typet(typet::t_bool));
-    index_expr.move_to_operands(alloc_array, object_expr);
-
-    expr.swap(index_expr);
+    expr2tc index_expr = expr2tc(new index2t(type_pool.get_bool(),
+                                             alloc_arr_2, obj_expr));
+    expr = index_expr;
   }
-  else if(expr.id()=="dynamic_size")
+  else if (is_dynamic_size2t(expr))
   {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()==typet::t_pointer);
-
     // replace with CPROVER_alloc_size[POINTER_OBJECT(...)]
     //nec: ex37.c
-    exprt object_expr("pointer_object", int_type()/*uint_type()*/);
-    object_expr.move_to_operands(expr.op0());
+    const dynamic_size2t &size = to_dynamic_size2t(expr);
+
+    expr2tc obj_expr = expr2tc(new pointer_object2t(int_type2(), size.value));
 
     exprt alloc_array=symbol_expr(ns.lookup(alloc_size_arr_name));
+    expr2tc alloc_arr_2;
+    migrate_expr(alloc_array, alloc_arr_2);
 
-    exprt index_expr(exprt::index, ns.follow(alloc_array.type()).subtype());
-    index_expr.move_to_operands(alloc_array, object_expr);
-
-    expr.swap(index_expr);
-  }
-  else if(expr.id()=="pointer_object_has_type")
-  {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()==typet::t_pointer);
-
+    expr2tc index_expr = expr2tc(new index2t(uint_type2(), alloc_arr_2,
+                                             obj_expr));
+    expr = index_expr;
   }
 }

@@ -114,10 +114,10 @@ goto_symext::symex_step(reachability_treet & art)
   case GOTO:
   {
     exprt tmp(instruction.guard);
-    replace_dynamic_allocation(tmp);
 
     expr2tc tmp_expr;
     migrate_expr(tmp, tmp_expr);
+    replace_dynamic_allocation(tmp_expr);
     replace_nondet(tmp_expr);
     tmp = migrate_expr_back(tmp_expr);
 
@@ -130,10 +130,10 @@ goto_symext::symex_step(reachability_treet & art)
   case ASSUME:
     if (!cur_state->guard.is_false()) {
       exprt tmp(instruction.guard);
-      replace_dynamic_allocation(tmp);
 
       expr2tc tmp_expr;
       migrate_expr(tmp, tmp_expr);
+      replace_dynamic_allocation(tmp_expr);
       replace_nondet(tmp_expr);
       tmp = migrate_expr_back(tmp_expr);
 
@@ -169,10 +169,9 @@ goto_symext::symex_step(reachability_treet & art)
 	if (msg == "") msg = "assertion";
 	exprt tmp(instruction.guard);
 
-	replace_dynamic_allocation(tmp);
-
         expr2tc tmp_expr;
         migrate_expr(tmp, tmp_expr);
+	replace_dynamic_allocation(tmp_expr);
 	replace_nondet(tmp_expr);
         tmp = migrate_expr_back(tmp_expr);
 
@@ -203,10 +202,10 @@ goto_symext::symex_step(reachability_treet & art)
   case ASSIGN:
     if (!cur_state->guard.is_false()) {
       exprt deref_code = instruction.code;
-      replace_dynamic_allocation(deref_code);
 
       expr2tc tmp_expr;
       migrate_expr(deref_code, tmp_expr);
+      replace_dynamic_allocation(tmp_expr);
       replace_nondet(tmp_expr);
       deref_code = migrate_expr_back(tmp_expr);
 
@@ -226,10 +225,9 @@ goto_symext::symex_step(reachability_treet & art)
     if (!cur_state->guard.is_false()) {
       exprt deref_code = to_code_function_call(instruction.code);
 
-      replace_dynamic_allocation(deref_code);
-
       expr2tc tmp_expr;
       migrate_expr(deref_code, tmp_expr);
+      replace_dynamic_allocation(tmp_expr);
       replace_nondet(tmp_expr);
       exprt tmp = migrate_expr_back(tmp_expr);
       codet &tmp1 = static_cast<codet&>(tmp);

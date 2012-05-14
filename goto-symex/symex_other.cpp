@@ -44,13 +44,9 @@ void goto_symext::symex_other(void)
   }
   else if (is_code_printf2t(code2))
   {
+    replace_dynamic_allocation(code2);
+    replace_nondet(code2);
     exprt deref_code = migrate_expr_back(code2);
-    replace_dynamic_allocation(deref_code);
-
-    expr2tc even_tmper;
-    migrate_expr(deref_code, even_tmper);
-    replace_nondet(even_tmper);
-    deref_code = migrate_expr_back(even_tmper);
 
     dereference(deref_code, false);
 
@@ -60,13 +56,9 @@ void goto_symext::symex_other(void)
   }
   else if (is_code_decl2t(code2))
   {
+    replace_dynamic_allocation(code2);
+    replace_nondet(code2);
     exprt tmp1 = migrate_expr_back(code2);
-    replace_dynamic_allocation(tmp1);
-
-    expr2tc even_tmper;
-    migrate_expr(tmp1, even_tmper);
-    replace_nondet(even_tmper);
-    tmp1 = migrate_expr_back(even_tmper);
 
     dereference(tmp1, false);
     migrate_expr(tmp1, code2);

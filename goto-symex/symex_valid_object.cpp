@@ -11,45 +11,46 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "dynamic_allocation.h"
 
-static irep_idt get_object(const exprt &expr)
+static irep_idt get_object(const expr2tc &expr)
 {
-  if(expr.id()==exprt::symbol)
+  if (is_symbol2t(expr))
   {
-    return to_symbol_expr(expr).get_identifier();
+    return to_symbol2t(expr).name;
   }
-  else if(expr.id()==exprt::member)
+  else if (is_member2t(expr))
   {
-    assert(expr.operands().size()==1);
-    return get_object(expr.op0());
+    return get_object(to_member2t(expr).source_value);
   }
-  else if(expr.id()==exprt::index)
+  else if (is_index2t(expr))
   {
-    assert(expr.operands().size()==2);
-    return get_object(expr.op0());
+    return get_object(to_index2t(expr).source_value);
   }
 
   return "";
 }
 
-void goto_symext::replace_dynamic_allocation(exprt &expr)
+void goto_symext::replace_dynamic_allocation(expr2tc &expr)
 {
-  Forall_operands(it, expr)
-    replace_dynamic_allocation(*it);
 
-  if(expr.id()=="valid_object" || expr.id()=="deallocated_object")
+  std::vector<expr2tc *> operands;
+  expr.get()->list_operands(operands);
+  for (std::vector<expr2tc *>::const_iterator it = operands.begin();
+       it != operands.end(); it++)
+    replace_dynamic_allocation(**it);
+
+  if (is_valid_object2t(expr) || is_deallocated_obj2t(expr))
   {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()==typet::t_pointer);
-    
+    expr2tc &obj_ref = (is_valid_object2t(expr))
+                        ? to_valid_object2t(expr).value
+                        : to_deallocated_obj2t(expr).value;
+
     // check what we have
-    if(expr.op0().id()==exprt::addrof ||
-       expr.op0().id()=="implicit_address_of")
+    if (is_address_of2t(obj_ref))
     {
-      assert(expr.op0().operands().size()==1);
-      exprt &object=expr.op0().op0();
+      expr2tc &obj_operand = to_address_of2t(obj_ref).ptr_obj;
       
       // see if that is a good one!
-      const irep_idt identifier=get_object(object);
+      const irep_idt identifier = get_object(obj_operand);
       
       if(identifier!="")
       {        
@@ -65,7 +66,7 @@ void goto_symext::replace_dynamic_allocation(exprt &expr)
         }
         else
         {
-          expr.make_bool(is_valid_object(symbol));
+          expr = expr2tc(new constant_bool2t(is_valid_object(symbol)));
           return; // done
         }
       }
@@ -74,24 +75,15 @@ void goto_symext::replace_dynamic_allocation(exprt &expr)
     // default behavior
     default_replace_dynamic_allocation(expr);
   }
-  else if(expr.id()=="dynamic_size")
+  else if (is_dynamic_size2t(expr))
   {
     // default behavior
     default_replace_dynamic_allocation(expr);
-  }
-   else if(expr.id()=="invalid-pointer")
-  {
-    // default behavior
-    default_replace_dynamic_allocation(expr);
-  }
-  else if(expr.id()=="object_value")
-  {
-    assert(expr.operands().size()==1);
-    expr.id(exprt::deref);
   }
 }
 
-bool goto_symext::is_valid_object(const symbolt &symbol)
+bool
+goto_symext::is_valid_object(const symbolt &symbol)
 {
   if(symbol.static_lifetime) return true; // global
   
