@@ -80,6 +80,11 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
     // default behavior
     default_replace_dynamic_allocation(expr);
   }
+  else if (is_invalid_pointer2t(expr))
+  {
+    // default behavior
+    default_replace_dynamic_allocation(expr);
+  }
 }
 
 bool
