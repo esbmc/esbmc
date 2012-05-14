@@ -1026,6 +1026,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     new_expr_ref = expr2tc(new code_function_call2t(op0, op1, args));
+  } else if (expr.id() == "invalid-pointer") {
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = expr2tc(new invalid_pointer2t(op0));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1875,6 +1879,13 @@ migrate_expr_back(const expr2tc &ref)
       args.operands().push_back(migrate_expr_back(*it));
     }
     return codeexpr;
+  }
+  case expr2t::invalid_pointer_id:
+  {
+    const invalid_pointer2t &ref2 = to_invalid_pointer2t(ref);
+    exprt theexpr("invalid-pointer", bool_typet());
+    theexpr.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    return theexpr;
   }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
