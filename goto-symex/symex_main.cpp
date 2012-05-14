@@ -143,7 +143,7 @@ goto_symext::symex_step(reachability_treet & art)
         exprt tmp3 = tmp2;
 	cur_state->guard.guard_expr(tmp2);
 
-	assume(tmp3);
+	assume(tmp2);
 
 	// we also add it to the state guard
 	cur_state->guard.add(tmp3);
