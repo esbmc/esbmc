@@ -550,11 +550,10 @@ void dereferencet::build_reference_to(
         if(!options.get_bool_option("no-pointer-check"))
         {
           expr2tc zero = expr2tc(new constant_int2t(offset->type, BigInt(0)));
-          expr2tc offs_is_zero = expr2tc(new notequal2t(offset, zero));
-          expr2tc not_zero = expr2tc(new not2t(offs_is_zero));
+          expr2tc offs_is_not_zero = expr2tc(new notequal2t(offset, zero));
 
           guardt tmp_guard2(guard);
-          exprt tmp_not_zero = migrate_expr_back(not_zero);
+          exprt tmp_not_zero = migrate_expr_back(offs_is_not_zero);
           tmp_guard2.move(tmp_not_zero);
 
           dereference_callback.dereference_failure(
