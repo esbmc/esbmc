@@ -1755,7 +1755,10 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 
-  
+  //std::cout << "base_case" << base_case << std::endl;
+  //std::cout << "inductive_step" << inductive_step << std::endl;
+  //std::cout << "k_induction" << k_induction << std::endl;
+
   //do the g label
   if (base_case || inductive_step)
     assume_cond(cond, true, dest); //assume(!c)
@@ -2008,10 +2011,11 @@ Function: goto_convertt::print_msg
 \*******************************************************************/
 
 void goto_convertt::print_msg(
-  const locationt &loc)
+  const exprt &tmp)
 {
-    std::cerr << "warning: this program " << loc.get_file() 
-              << " contains an && operation at line " << loc.get_line()
+    std::cerr << "warning: this program " << tmp.location().get_file() 
+              << " contains a '" << tmp.id() << "' operator at line " 
+              << tmp.location().get_line()
    	      << ", so we are not applying the k-induction method to this program!" 
               << std::endl;
     k_induction=1;
@@ -2035,7 +2039,7 @@ bool goto_convertt::check_op_const(
   const exprt &tmp,
   const locationt &loc)
 {
-  if (tmp.is_constant())
+  if (tmp.is_constant() || tmp.type().id() == "pointer")
   {
     std::cerr << "warning: this program " << loc.get_file() 
               << " contains a bounded loop at line " << loc.get_line()
@@ -2168,6 +2172,7 @@ void goto_convertt::replace_cond(
   } 
   else if ( exprid == "<" ||  exprid == "<=")
   {
+    //std::cout << tmp.pretty() << std::endl;
     if (is_for_block())
       if (check_op_const(tmp.op1(), tmp.location())) 
         return ;
@@ -2192,12 +2197,13 @@ void goto_convertt::replace_cond(
     assert(tmp.op0().operands().size()==2);
     assert(tmp.op1().operands().size()==2);
 
+    //check whether we have the same variable
     if (!tmp.op0().op0().is_constant())
     {    
       if ((tmp.op0().op0() == tmp.op1().op0()) || 
           (tmp.op0().op0() == tmp.op1().op1()))
       {
-        print_msg(tmp.location());
+        print_msg(tmp);
       }
     }
     else if (!tmp.op0().op1().is_constant())
@@ -2205,14 +2211,21 @@ void goto_convertt::replace_cond(
       if ((tmp.op0().op1() == tmp.op1().op0()) || 
           (tmp.op0().op1() == tmp.op1().op1()))
       {
-        print_msg(tmp.location());
+        print_msg(tmp);
       }
     }
   }
+  else if (exprid == "notequal")
+  {
+    print_msg(tmp);
+  }
   else
   {
-    std::cerr << "warning: the expression '" << tmp.pretty()
-  		  << "' is not supported yet" << std::endl;
+    std::cerr << "warning: the expression '" << tmp.id()
+	      << "' located at line " << tmp.location().get_line()
+	      << " of " << tmp.location().get_file()
+  	      << " is not supported yet" << std::endl;
+    //std::cout << tmp.pretty() << std::endl;
     //assert(0);
   }
 }

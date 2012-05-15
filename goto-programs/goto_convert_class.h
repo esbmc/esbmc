@@ -215,7 +215,7 @@ protected:
   void assume_state_vector(array_typet state_vector, goto_programt &dest);
   void update_state_vector(array_typet state_vector, goto_programt &dest);
   void init_nondet_expr(exprt &tmp, goto_programt &dest);
-  void print_msg(const locationt &loc);
+  void print_msg(const exprt &tmp);
   void replace_infinite_loop(exprt &tmp, goto_programt &dest);
 
   //
