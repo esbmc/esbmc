@@ -668,13 +668,23 @@ void dereferencet::bounds_check(
   }
 
   const array_type2t &arr_type = to_array_type(expr.source_value->type);
-  unsigned long size1 = arr_type.get_width() / 8;
+  unsigned long size1 = arr_type.get_width() / 8; // Size in bytes
+
+  // Now make a size in elements. This call to get_width should never throw
+  // an exception, because you can't have a dynamically sized array with
+  // dynamically sized elements.
+  size1 /= (arr_type.subtype->get_width() / 8);
 
   if (is_index2t(expr.source_value))
   {
     const index2t &index = to_index2t(expr.source_value);
     const array_type2t &arr_type_2 = to_array_type(index.source_value->type);
-    size1 *= (arr_type_2.get_width() / 8);
+
+    // Size of array in elements.
+    unsigned long size2 = (arr_type_2.get_width() / 8);
+    size2 /= (arr_type_2.get_width() / 8);
+
+    size1 *= size2;
   }
 
   expr2tc const_size = expr2tc(new constant_int2t(index_type2(), size1));
