@@ -541,8 +541,8 @@ void dereferencet::build_reference_to(
       {
         index2t &idx = to_index2t(value);
         idx.index = offset;
+        bounds_check(idx, tmp_guard);
         tmp_value = migrate_expr_back(value);
-        bounds_check(to_index_expr(tmp_value), tmp_guard);
       }
       else if (!is_constant_int2t(offset) ||
                !to_constant_int2t(offset).constant_value.is_zero())
@@ -637,88 +637,68 @@ Function: dereferencet::bounds_check
 \*******************************************************************/
 
 void dereferencet::bounds_check(
-  const index_exprt &expr,
+  const index2t &expr,
   const guardt &guard)
 {
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  const typet &array_type=ns.follow(expr.op0().type());
+  assert(is_array_type(expr.source_value->type));
 
-  if(!array_type.is_array())
-    throw "bounds check expected array type";
-
-  std::string name=array_name(ns, expr.array());
+  std::string name = array_name(ns, expr.source_value);
 
   {
-    mp_integer i;
-    if(!to_integer(expr.index(), i) &&
-       i>=0)
+    if (!is_constant_int2t(expr.index) ||
+        !to_constant_int2t(expr.index).constant_value.is_negative())
     {
+      ;
     }
     else
     {
-      exprt zero=gen_zero(expr.index().type());
-
-      if(zero.is_nil())
-        throw "no zero constant of index type "+
-          expr.index().type().to_string();
-
-      binary_relation_exprt
-        inequality(expr.index(), "<", zero);
+      expr2tc zero = expr2tc(new constant_int2t(index_type2(), BigInt(0)));
+      expr2tc lt = expr2tc(new lessthan2t(expr.index, zero));
 
       guardt tmp_guard(guard);
-      tmp_guard.move(inequality);
+      exprt tmp_lt = migrate_expr_back(lt);
+      tmp_guard.move(tmp_lt);
       dereference_callback.dereference_failure(
         "array bounds",
         "`"+name+"' lower bound", tmp_guard);
     }
   }
 
-  exprt size_expr=
-    to_array_type(array_type).size();
+  const array_type2t &arr_type = to_array_type(expr.source_value->type);
+  unsigned long size1 = arr_type.get_width() / 8;
 
-  if (expr.op0().id() == "index")
+  if (is_index2t(expr.source_value))
   {
-	std::string val1, val2, tot;
-	int total;
-    std::stringstream s;
-
-	const typet array_type2=ns.follow(expr.op0().operands()[0].type());
-	const exprt &size_expr2=to_array_type(array_type2).size();
-
-	val1 = integer2string(binary2integer(size_expr.value().as_string(), true),10);
-	val2 = integer2string(binary2integer(size_expr2.value().as_string(), true),10);
-    total = atoi(val1.c_str())*atoi(val2.c_str());
-
-    s << total;
-    unsigned width;
-    width = atoi(size_expr.type().width().as_string().c_str());
-    constant_exprt value_expr(size_expr.type());
-    value_expr.set_value(integer2binary(string2integer(s.str()),width));
-    size_expr.swap(value_expr);
+    const index2t &index = to_index2t(expr.source_value);
+    const array_type2t &arr_type_2 = to_array_type(index.source_value->type);
+    size1 *= (arr_type_2.get_width() / 8);
   }
 
-  if(size_expr.id()!="infinity")
-  {
-    if(size_expr.is_nil())
-      throw "index array operand of wrong type";
+  expr2tc const_size = expr2tc(new constant_int2t(index_type2(), size1));
 
-    binary_relation_exprt inequality(expr.index(), ">=", size_expr);
-
-    if(c_implicit_typecast(
-      inequality.op0(),
-      inequality.op1().type(),
-      ns))
-      throw "index address of wrong type";
-
-    guardt tmp_guard(guard);
-    tmp_guard.move(inequality);
-
-    dereference_callback.dereference_failure(
-      "array bounds",
-      "`"+name+"' upper bound", tmp_guard);
+  // Irritating - I don't know what c_implicit_typecast does, and it modifies
+  // tmp_op0 it appears.
+  exprt tmp_op0 = migrate_expr_back(expr.index);
+  exprt tmp_op1 = migrate_expr_back(const_size);
+  if (c_implicit_typecast(tmp_op0, tmp_op1.type(), ns)) {
+    std::cerr << "index address of wrong type in bounds_check" << std::endl;
+    abort();
   }
+
+  expr2tc new_index;
+  migrate_expr(tmp_op0, new_index);
+  expr2tc gte = expr2tc(new greaterthanequal2t(new_index, const_size));
+
+  guardt tmp_guard(guard);
+  exprt tmp_gte = migrate_expr_back(gte);
+  tmp_guard.move(tmp_gte);
+
+  dereference_callback.dereference_failure(
+    "array bounds",
+    "`"+name+"' upper bound", tmp_guard);
 }
 
 /*******************************************************************\

@@ -107,7 +107,7 @@ private:
              
   static const exprt &get_symbol(const exprt &object);
   
-  void bounds_check(const class index_exprt &expr, const guardt &guard);
+  void bounds_check(const class index2t &expr, const guardt &guard);
   void valid_check(const exprt &expr, const guardt &guard, const modet mode);
 
   bool memory_model(
