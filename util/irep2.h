@@ -2316,7 +2316,7 @@ typedef irep_container<invalid_pointer2t, expr2t::invalid_pointer_id>
                        code_invalid_pointer2tc;
 
 // XXXjmorse - to be moved into struct union superclass when it exists.
-static unsigned int
+inline unsigned int
 get_component_number(const type2tc &type, const irep_idt &name)
 {
   const std::vector<irep_idt> &member_names = (is_struct_type(type))
