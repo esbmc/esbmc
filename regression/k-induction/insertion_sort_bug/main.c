@@ -8,7 +8,7 @@ int main() {
       key = v[j];
       i = j - 1;
       while((i>=0) && (v[i]>key)) {
-         if (i<4)
+         if (i<2)
          v[i+1] = v[i];
          i = i - 1;
       }
