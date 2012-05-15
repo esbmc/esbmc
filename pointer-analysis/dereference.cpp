@@ -391,7 +391,14 @@ void dereferencet::build_reference_to(
 
       exprt sym("symbol", array_typet());
       sym.type().subtype() = bool_typet();
-      sym.set("identifier", "c::__ESBMC_is_dynamic");
+
+      const symbolt *sp;
+      if(!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp)) {
+        sym.set("identifier", "c::__ESBMC_is_dynamic");
+      } else {
+        sym.set("identifier", "cpp::__ESBMC_is_dynamic");
+      }
+
       exprt pointerobj("pointer_object", signedbv_typet());
       pointerobj.copy_to_operands(deref_expr);
       exprt is_dynamic_object_expr("index", bool_typet());

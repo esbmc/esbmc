@@ -377,6 +377,15 @@ void goto_convertt::do_cpp_new(
   else
     alloc_size=from_integer(1, uint_type());
 
+  if(alloc_size.is_nil())
+    alloc_size=from_integer(1, uint_type());
+
+  if(alloc_size.type()!=uint_type())
+  {
+    alloc_size.make_typecast(uint_type());
+    simplify(alloc_size);
+  }
+
   // produce new object
   goto_programt::targett t_n=dest.add_instruction(ASSIGN);
   t_n->code=code_assignt(lhs, rhs);
@@ -385,9 +394,25 @@ void goto_convertt::do_cpp_new(
   // set up some expressions
   exprt valid_expr("valid_object", typet("bool"));
   valid_expr.copy_to_operands(lhs);
+  exprt neg_valid_expr=gen_not(valid_expr);
 
-  // first assume that it's available
+  //tse paper
+#if TSE_PAPER
+  exprt deallocated_expr("deallocated_object", typet("bool"));
+  deallocated_expr.copy_to_operands(lhs);
+  exprt neg_deallocated_expr=gen_not(deallocated_expr);
+#endif
+
+  exprt pointer_offset_expr("pointer_offset", int_type());
+  pointer_offset_expr.copy_to_operands(lhs);
+
+  equality_exprt offset_is_zero_expr(
+    pointer_offset_expr, gen_zero(int_type()));
+
+  // first assume that it's available and that it's a dynamic object
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
+  t_a->location=rhs.find_location();
+  t_a->guard=(neg_valid_expr, offset_is_zero_expr);
 
   t_a->guard=valid_expr;
   t_a->guard.make_not();
@@ -405,6 +430,14 @@ void goto_convertt::do_cpp_new(
   goto_programt::targett t_s_a=dest.add_instruction(ASSIGN);
   t_s_a->code=code_assignt(valid_expr, true_exprt());
   t_s_a->location=rhs.find_location();
+
+  //tse paper
+#if TSE_PAPER
+  //now set deallocated bit
+  goto_programt::targett t_d_i=dest.add_instruction(ASSIGN);
+  t_d_i->code=code_assignt(deallocated_expr, false_exprt());
+  t_d_i->location=rhs.find_location();
+#endif
 
   // run initializer
   dest.destructive_append(tmp_initializer);
