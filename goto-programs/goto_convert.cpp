@@ -2028,6 +2028,28 @@ bool goto_convertt::check_op_const(
 
 /*******************************************************************\
 
+Function: goto_convertt::init_nondet_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::init_nondet_expr(
+  exprt &tmp,
+  goto_programt &dest)
+{
+  exprt nondet_expr=side_effect_expr_nondett(tmp.type());
+  code_assignt new_assign_nondet(tmp,nondet_expr);
+  copy(new_assign_nondet, ASSIGN, dest);
+  nondet_vars.insert(std::pair<exprt,exprt>(tmp,nondet_expr));
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::replace_cond
 
   Inputs:
@@ -2077,40 +2099,45 @@ void goto_convertt::replace_cond(
     //replace the condition c by i<=n;
     tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
   }
-  else if (exprid == "<=" || exprid == "<" || exprid == ">="
-           || exprid == ">")
+  else if (tmp.id() == ">" || tmp.id()== ">=")
   {
     assert(tmp.operands().size()==2);
-    //if (check_op_const(tmp.op0(), tmp.location())) return ;
-    //else if (check_op_const(tmp.op1(), tmp.location())) return ;
-    //std::cout << "tmp.pretty(): " << tmp.pretty() << std::endl;
-    if (tmp.id() == ">" || tmp.id()== ">=")
+    if (is_for_block())
+      if (check_op_const(tmp.op0(), tmp.location())) 
+        return ;
+
+    nondet_varst::const_iterator cache_result;
+    if (tmp.op0().is_constant())
     {
-      if (check_op_const(tmp.op0(), tmp.location())) return ;
-      //std::cout << "entrou 1 " << std::endl;
-      nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op0());
-      if (cache_result == nondet_vars.end()) 
-      {
-        //initialize op1=nondet_type() where type=op0.type()
-        exprt nondet_expr=side_effect_expr_nondett(tmp.op0().type());
-        code_assignt new_assign_nondet(tmp.op0(),nondet_expr);
-        copy(new_assign_nondet, ASSIGN, dest);
-        nondet_vars.insert(std::pair<exprt,exprt>(tmp.op0(),nondet_expr));
-      }
-    } 
-    else if (tmp.id() == "<" || tmp.id()== "<=")
+      cache_result = nondet_vars.find(tmp.op1());
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(tmp.op1(), dest);
+    }
+    else
     {
-      if (check_op_const(tmp.op1(), tmp.location())) return ;
-      //std::cout << "entrou 2 " << std::endl;
-      nondet_varst::const_iterator cache_result = nondet_vars.find(tmp.op1());
-      if (cache_result == nondet_vars.end()) 
-      {
-        //initialize op1=nondet_type() where type=op0.type()
-        exprt nondet_expr=side_effect_expr_nondett(tmp.op1().type());
-        code_assignt new_assign_nondet(tmp.op1(),nondet_expr);
-        copy(new_assign_nondet, ASSIGN, dest);
-        nondet_vars.insert(std::pair<exprt,exprt>(tmp.op1(),nondet_expr));
-      } 
+      cache_result = nondet_vars.find(tmp.op0());
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(tmp.op0(), dest);
+    }
+  } 
+  else if (tmp.id() == "<" || tmp.id()== "<=")
+  {
+    if (is_for_block())
+      if (check_op_const(tmp.op1(), tmp.location())) 
+        return ;
+
+    nondet_varst::const_iterator cache_result;
+    if (tmp.op1().is_constant())
+    {
+      cache_result = nondet_vars.find(tmp.op0());
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(tmp.op0(), dest);
+    }
+    else
+    {
+      cache_result = nondet_vars.find(tmp.op1());
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(tmp.op1(), dest);
     }
   }
 }

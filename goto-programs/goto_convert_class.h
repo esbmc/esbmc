@@ -214,6 +214,8 @@ protected:
   bool check_op_const(const exprt &tmp, const locationt &loc);
   void assume_state_vector(array_typet state_vector, goto_programt &dest);
   void update_state_vector(array_typet state_vector, goto_programt &dest);
+  void init_nondet_expr(exprt &tmp, goto_programt &dest);
+
 
   //
   // gotos
