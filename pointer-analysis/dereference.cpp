@@ -505,7 +505,6 @@ void dereferencet::build_reference_to(
       exprt tmp_offset = migrate_expr_back(offset);
       if (memory_model(tmp_value, tmp_type, tmp_guard, tmp_offset))
       {
-        migrate_expr(tmp_value, value);
         migrate_expr(tmp_offset, offset);
         // ok
       }
@@ -563,6 +562,7 @@ void dereferencet::build_reference_to(
         }
       }
     }
+    migrate_expr(tmp_value, value);
   }
 }
 
