@@ -216,8 +216,7 @@ protected:
   void update_state_vector(array_typet state_vector, goto_programt &dest);
   void init_nondet_expr(exprt &tmp, goto_programt &dest);
   void print_msg(const locationt &loc);
-
-
+  void replace_infinite_loop(exprt &tmp, goto_programt &dest);
 
   //
   // gotos

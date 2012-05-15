@@ -2073,6 +2073,55 @@ void goto_convertt::init_nondet_expr(
   nondet_vars.insert(std::pair<exprt,exprt>(tmp,nondet_expr));
 }
 
+
+/*******************************************************************\
+
+Function: goto_convertt::replace_infinite_loop
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::replace_infinite_loop(
+  exprt &tmp,
+  goto_programt &dest)
+{
+  //declare variable i$ of type uint
+  std::string identifier;
+  identifier = "c::i$"+i2string(state_counter);
+  exprt indice = symbol_exprt(identifier, uint_type());
+
+  get_struct_components(indice, state);
+
+  //declare variables n$ of type uint
+  identifier = "c::n$"+i2string(state_counter);
+  exprt n_expr = symbol_exprt(identifier, uint_type());
+
+  get_struct_components(n_expr, state);
+
+  exprt zero_expr = gen_zero(uint_type());
+  exprt nondet_expr=side_effect_expr_nondett(uint_type());
+
+  //initialize i=0
+  code_assignt new_assign(indice,zero_expr);
+  copy(new_assign, ASSIGN, dest);
+
+
+  //initialize n=nondet_uint();
+  code_assignt new_assign_nondet(n_expr,nondet_expr);
+  copy(new_assign_nondet, ASSIGN, dest);
+
+  //assume that n>0;
+  assume_cond(gen_binary(exprt::i_gt, bool_typet(), n_expr, zero_expr), false, dest);
+
+  //replace the condition c by i<=n;
+  tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::replace_cond
@@ -2093,36 +2142,7 @@ void goto_convertt::replace_cond(
 
   if (tmp.is_true())
   {
-    //declare variable i$ of type uint
-    std::string identifier;
-    identifier = "c::i$"+i2string(state_counter);
-    exprt indice = symbol_exprt(identifier, uint_type());
-
-    get_struct_components(indice, state);
-
-    //declare variables n$ of type uint
-    identifier = "c::n$"+i2string(state_counter);
-    exprt n_expr = symbol_exprt(identifier, uint_type());
-
-    get_struct_components(n_expr, state);
-
-    exprt zero_expr = gen_zero(uint_type());
-    exprt nondet_expr=side_effect_expr_nondett(uint_type());
-
-    //initialize i=0
-    code_assignt new_assign(indice,zero_expr);
-    copy(new_assign, ASSIGN, dest);
-
-
-    //initialize n=nondet_uint();
-    code_assignt new_assign_nondet(n_expr,nondet_expr);
-    copy(new_assign_nondet, ASSIGN, dest);
-
-    //assume that n>0;
-    assume_cond(gen_binary(exprt::i_gt, bool_typet(), n_expr, zero_expr), false, dest);
-
-    //replace the condition c by i<=n;
-    tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
+    replace_infinite_loop(tmp, dest);
   }
   else if (exprid == ">" ||  exprid == ">=")
   {
