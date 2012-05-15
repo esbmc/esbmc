@@ -1997,6 +1997,30 @@ void goto_convertt::assert_cond(
 
 /*******************************************************************\
 
+Function: goto_convertt::print_msg
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::print_msg(
+  const locationt &loc)
+{
+    std::cerr << "warning: this program " << loc.get_file() 
+              << " contains an && operation at line " << loc.get_line()
+   	      << ", so we are not applying the k-induction method to this program!" 
+              << std::endl;
+    k_induction=1;
+    inductive_step=0;
+    base_case=0;
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::check_op_const
 
   Inputs:
@@ -2042,6 +2066,7 @@ void goto_convertt::init_nondet_expr(
   exprt &tmp,
   goto_programt &dest)
 {
+  //std::cout << tmp.pretty() << std::endl;
   exprt nondet_expr=side_effect_expr_nondett(tmp.type());
   code_assignt new_assign_nondet(tmp,nondet_expr);
   copy(new_assign_nondet, ASSIGN, dest);
@@ -2099,7 +2124,7 @@ void goto_convertt::replace_cond(
     //replace the condition c by i<=n;
     tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
   }
-  else if (tmp.id() == ">" || tmp.id()== ">=")
+  else if (exprid == ">" ||  exprid == ">=")
   {
     assert(tmp.operands().size()==2);
     if (is_for_block())
@@ -2120,7 +2145,7 @@ void goto_convertt::replace_cond(
         init_nondet_expr(tmp.op0(), dest);
     }
   } 
-  else if (tmp.id() == "<" || tmp.id()== "<=")
+  else if ( exprid == "<" ||  exprid == "<=")
   {
     if (is_for_block())
       if (check_op_const(tmp.op1(), tmp.location())) 
@@ -2139,6 +2164,17 @@ void goto_convertt::replace_cond(
       if (cache_result == nondet_vars.end())
         init_nondet_expr(tmp.op1(), dest);
     }
+  }
+  else if ( exprid == "and")
+  {
+    assert(tmp.operands().size()==2);
+    print_msg(tmp.location());
+  }
+  else
+  {
+    std::cerr << "warning: the expression '" << tmp.pretty()
+  		  << "' is not supported yet" << std::endl;
+    //assert(0);
   }
 }
 
