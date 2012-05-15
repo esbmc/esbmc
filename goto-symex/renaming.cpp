@@ -1,5 +1,6 @@
 #include <irep2.h>
 #include <migrate.h>
+#include <prefix.h>
 
 #include "renaming.h"
 
@@ -106,6 +107,8 @@ void renaming::level2t::rename(expr2tc &expr)
     if (sym.name.as_string() == "NULL")
       return;
     if (sym.name.as_string() == "INVALID")
+      return;
+    if (has_prefix(sym.name.as_string(), "nondet$"))
       return;
 
     const current_namest::const_iterator it = current_names.find(sym.name);
