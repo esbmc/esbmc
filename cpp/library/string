@@ -68,6 +68,7 @@ namespace std
 		string ();
 		string (char*);
 		string (const char * s, size_t n);
+		string (string& s, size_t n);
 		string (size_t n, char c);
 		string::string(int len);
 		char* c_str ( ) const;
@@ -181,7 +182,7 @@ namespace std
 		npos = _size-1;
 		strcpy(str,s);
 	}
-	 string::string (const char * s, size_t n)
+	string::string (const char * s, size_t n)
 	{
 		__ESBMC_HIDE: //length of string
 		int i;
@@ -189,6 +190,17 @@ namespace std
 		_size = n;
 		for(i=0;i<_size;i++)
 			str[i]=s[i];
+		str[i]='\0';
+	}
+	string::string (string& s, size_t n)
+	{
+		__ESBMC_HIDE: //length of string
+		__ESBMC_assert(n > s.length(),"string overflow");
+		int i;
+		str=new char[n+1]; //increments length of string
+		_size = n;
+		for(i=0;i<_size;i++)
+			str[i]=s.str[i];
 		str[i]='\0';
 	}
 	 string::string(int len)
@@ -344,9 +356,14 @@ namespace std
 	bool string::operator< (string& a)
 	{
 		__ESBMC_HIDE:
-		if ( strlen(this->c_str()) < strlen(a.c_str()) )
+		assert(this->length() == 4);
+		assert(a.length() == 2);
+		if ( this->length() < a.length() ){
 			return true;
-		return false;
+		}else{
+			return false;
+		}
+
 	}
 	bool string::operator< (const char* a)
 	{
