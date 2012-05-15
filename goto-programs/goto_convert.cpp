@@ -2066,7 +2066,6 @@ void goto_convertt::init_nondet_expr(
   exprt &tmp,
   goto_programt &dest)
 {
-  //std::cout << tmp.pretty() << std::endl;
   exprt nondet_expr=side_effect_expr_nondett(tmp.type());
   code_assignt new_assign_nondet(tmp,nondet_expr);
   copy(new_assign_nondet, ASSIGN, dest);
@@ -2138,8 +2137,9 @@ void goto_convertt::replace_cond(
   exprt &tmp,
   goto_programt &dest)
 {
+  //std::cout << tmp.pretty() << std::endl;
   irep_idt exprid = tmp.id();
-
+  
   if (tmp.is_true())
   {
     replace_infinite_loop(tmp, dest);
@@ -2150,6 +2150,7 @@ void goto_convertt::replace_cond(
     if (is_for_block())
       if (check_op_const(tmp.op0(), tmp.location())) 
         return ;
+    else if (tmp.op0().is_typecast() || tmp.op1().is_typecast()) return ;
 
     nondet_varst::const_iterator cache_result;
     if (tmp.op0().is_constant())
@@ -2170,7 +2171,7 @@ void goto_convertt::replace_cond(
     if (is_for_block())
       if (check_op_const(tmp.op1(), tmp.location())) 
         return ;
-
+    
     nondet_varst::const_iterator cache_result;
     if (tmp.op1().is_constant())
     {
@@ -2188,7 +2189,25 @@ void goto_convertt::replace_cond(
   else if ( exprid == "and")
   {
     assert(tmp.operands().size()==2);
-    print_msg(tmp.location());
+    assert(tmp.op0().operands().size()==2);
+    assert(tmp.op1().operands().size()==2);
+
+    if (!tmp.op0().op0().is_constant())
+    {    
+      if ((tmp.op0().op0() == tmp.op1().op0()) || 
+          (tmp.op0().op0() == tmp.op1().op1()))
+      {
+        print_msg(tmp.location());
+      }
+    }
+    else if (!tmp.op0().op1().is_constant())
+    {    
+      if ((tmp.op0().op1() == tmp.op1().op0()) || 
+          (tmp.op0().op1() == tmp.op1().op1()))
+      {
+        print_msg(tmp.location());
+      }
+    }
   }
   else
   {
@@ -2253,6 +2272,8 @@ void goto_convertt::convert_while(
 
   exprt tmp=code.op0();
 
+  set_while_block(true);
+
   if(inductive_step)
     replace_cond(tmp, dest);
 
@@ -2260,7 +2281,6 @@ void goto_convertt::convert_while(
   const exprt &cond=tmp;
   const locationt &location=code.location();
 
-  set_while_block(true);
 
   //    while(c) P;
   //--------------------
