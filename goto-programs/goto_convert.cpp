@@ -1768,111 +1768,6 @@ void goto_convertt::convert_for(
   state_counter++;
 }
 
-
-bool goto_convertt::nondet_initializer(
-  exprt &value,
-  const typet &type,
-  exprt &rhs_expr) const
-{
-  const std::string &type_id=type.id_string();
-
-  if(type_id=="bool")
-  {
-    value=rhs_expr;
-    return false;
-  }
-  else if(type_id=="unsignedbv" ||
-          type_id=="signedbv" ||
-          type_id=="floatbv" ||
-          type_id=="fixedbv" ||
-          type_id=="pointer")
-  {
-    value=rhs_expr;
-    return false;
-  }
-#if 0
-  else if(type_id=="code")
-    return false;
-  else if(type_id=="c_enum" ||
-          type_id=="incomplete_c_enum")
-  {
-    value=exprt("constant", type);
-    value.value(i2string(0));
-    return false;
-  }
-  else if(type_id=="array")
-  {
-    const array_typet &array_type=to_array_type(type);
-
-    exprt tmpval;
-    if(zero_initializer(tmpval, array_type.subtype())) return true;
-
-    const exprt &size_expr=array_type.size();
-
-    if(size_expr.id()=="infinity")
-    {
-    }
-    else
-    {
-      mp_integer size;
-
-      if(to_integer(size_expr, size))
-        return true;
-
-      if(size<=0) return true;
-    }
-
-    value=exprt("array_of", type);
-    value.move_to_operands(tmpval);
-
-    return false;
-  }
-  else if(type_id=="struct")
-  {
-    const irept::subt &components=
-      type.components().get_sub();
-
-    value=exprt("struct", type);
-
-    forall_irep(it, components)
-    {
-      exprt tmp;
-
-      if(zero_initializer(tmp, (const typet &)it->type()))
-        return true;
-
-      value.move_to_operands(tmp);
-    }
-
-    return false;
-  }
-  else if(type_id=="union")
-  {
-    const irept::subt &components=
-      type.components().get_sub();
-
-    value=exprt("union", type);
-
-    if(components.empty())
-      return true;
-
-    value.component_name(components.front().name());
-
-    exprt tmp;
-
-    if(zero_initializer(tmp, (const typet &)components.front().type()))
-      return true;
-
-    value.move_to_operands(tmp);
-
-    return false;
-  }
-  else if(type_id=="symbol")
-    return zero_initializer(value, follow(type));
-#endif
-  return true;
-}
-
 /*******************************************************************\
 
 Function: goto_convertt::make_nondet_assign
@@ -1889,20 +1784,16 @@ void goto_convertt::make_nondet_assign(
   goto_programt &dest)
 {
   u_int j=0;
-  //std::cout << "state.components().size(): " << state.components().size() << std::endl;
   for (j=0; j < state.components().size(); j++)
   {
     exprt rhs_expr=side_effect_expr_nondett(state.components()[j].type());
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
-
-    //std::cout << "state.components()[j].type().is_array(): " << state.components()[j].type().is_array() << std::endl;
     if (state.components()[j].type().is_array())
     {
       rhs_expr=exprt("array_of", state.components()[j].type());
       exprt value=side_effect_expr_nondett(state.components()[j].type().subtype());
       rhs_expr.move_to_operands(value);
-      //std::cout << "rhs_expr.pretty(): " << rhs_expr.pretty() << std::endl;
     }
 
     std::string identifier;
@@ -1927,36 +1818,9 @@ void goto_convertt::make_nondet_assign(
         assert(!new_expr.op1().get_string("component_name").empty());
       }
     }
-
-    //std::cout << "lhs_expr.pretty(): " << lhs_expr.pretty() << std::endl;
-    //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
-
     code_assignt new_assign(lhs_expr,new_expr);
     copy(new_assign, ASSIGN, dest);
   }
-
-#if 0   
-   std::string identifier;
-   identifier = "cs$"+i2string(state_counter);
-   exprt new_expr(exprt::with, state);
-   exprt lhs_expr("symbol", state);
-   lhs_expr.identifier(identifier);
-
-   exprt nondet_expr("nondet_symbol", int_type());
-   identifier = "n$"+i2string(state_counter);
-
-   new_expr.reserve_operands(3);
-   new_expr.copy_to_operands(lhs_expr);
-   new_expr.copy_to_operands(exprt("member_name"));
-   new_expr.move_to_operands(nondet_expr);
-
-   new_expr.op1().component_name(identifier);
-   assert(!new_expr.op1().get_string("component_name").empty());
- 
-    code_assignt new_assign(lhs_expr,nondet_expr);
-    copy(new_assign, ASSIGN, dest);
-#endif
-
 }
 
 /*******************************************************************\
@@ -2001,8 +1865,8 @@ void goto_convertt::assign_current_state(
     {
       forall_operands(it, state.components()[j])
       {
-      new_expr.op1().component_name(it->get_string("identifier"));
-      assert(!new_expr.op1().get_string("component_name").empty());
+        new_expr.op1().component_name(it->get_string("identifier"));
+        assert(!new_expr.op1().get_string("component_name").empty());
       }
     }
 
