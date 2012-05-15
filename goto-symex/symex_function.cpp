@@ -109,7 +109,8 @@ goto_symext::argument_assignments(
 	                      "\" type mismatch: got " +
 	                      it1->type().to_string() + ", expected " +
 	                      arg_type.to_string();
-	  throw error;
+          std::cerr << error;
+          abort();
 	}
       }
 
