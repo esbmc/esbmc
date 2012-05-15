@@ -643,7 +643,8 @@ void dereferencet::bounds_check(
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  assert(is_array_type(expr.source_value->type));
+  assert(is_array_type(expr.source_value->type) ||
+         is_string_type(expr.source_value->type));
 
   std::string name = array_name(ns, expr.source_value);
 
@@ -667,32 +668,32 @@ void dereferencet::bounds_check(
     }
   }
 
-  const array_type2t &arr_type = to_array_type(expr.source_value->type);
-  unsigned long size1 = arr_type.get_width() / 8; // Size in bytes
+  expr2tc arr_size;
+  if (is_array_type(expr.source_value->type)) {
+    if (to_array_type(expr.source_value->type).size_is_infinite)
+      // Can't overflow an infinitely sized array
+      return;
 
-  // Now make a size in elements. This call to get_width should never throw
-  // an exception, because you can't have a dynamically sized array with
-  // dynamically sized elements.
-  size1 /= (arr_type.subtype->get_width() / 8);
+    arr_size = to_array_type(expr.source_value->type).array_size;
+  } else {
+    expr2tc tmp_str_arr = to_constant_string2t(expr.source_value).to_array();
+    arr_size = to_array_type(tmp_str_arr->type).array_size;
+  }
 
   if (is_index2t(expr.source_value))
   {
     const index2t &index = to_index2t(expr.source_value);
     const array_type2t &arr_type_2 = to_array_type(index.source_value->type);
 
-    // Size of array in elements.
-    unsigned long size2 = (arr_type_2.get_width() / 8);
-    size2 /= (arr_type_2.get_width() / 8);
-
-    size1 *= size2;
+    assert(!arr_type_2.size_is_infinite);
+    arr_size = expr2tc(new mul2t(index_type2(), arr_size,
+                                 arr_type_2.array_size));
   }
-
-  expr2tc const_size = expr2tc(new constant_int2t(index_type2(), size1));
 
   // Irritating - I don't know what c_implicit_typecast does, and it modifies
   // tmp_op0 it appears.
   exprt tmp_op0 = migrate_expr_back(expr.index);
-  exprt tmp_op1 = migrate_expr_back(const_size);
+  exprt tmp_op1 = migrate_expr_back(arr_size);
   if (c_implicit_typecast(tmp_op0, tmp_op1.type(), ns)) {
     std::cerr << "index address of wrong type in bounds_check" << std::endl;
     abort();
@@ -700,7 +701,7 @@ void dereferencet::bounds_check(
 
   expr2tc new_index;
   migrate_expr(tmp_op0, new_index);
-  expr2tc gte = expr2tc(new greaterthanequal2t(new_index, const_size));
+  expr2tc gte = expr2tc(new greaterthanequal2t(new_index, arr_size));
 
   guardt tmp_guard(guard);
   exprt tmp_gte = migrate_expr_back(gte);
