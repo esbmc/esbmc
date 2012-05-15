@@ -884,6 +884,11 @@ inline bool is_bv_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id); }
 
+inline bool is_integer_type(const type2tc &t) \
+{ return (t->type_id == type2t::unsignedbv_id ||
+          t->type_id == type2t::signedbv_id ||
+          t->type_id == type2t::fixedbv_id); }
+
 // And now, some more utilities.
 class type_poolt {
 public:
