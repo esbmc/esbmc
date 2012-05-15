@@ -340,6 +340,30 @@ sub2t::do_simplify(bool second __attribute__((unused))) const
   return from_fixedbv(operand1, type);
 }
 
+static expr2tc
+mul_check_for_zero_or_one(const expr2tc &checking, const expr2tc &other_op,
+                          const type2tc &ourtype)
+{
+
+  fixedbvt operand;
+  to_fixedbv(checking, operand);
+
+  if (operand.is_zero())
+    return from_fixedbv(operand, ourtype); // Mul by zero -> return zero
+
+  fixedbvt one = operand;
+  one.from_integer(BigInt(1));
+  if (operand == one) { // Mul by one -> return other operand.
+    if (other_op->type == ourtype)
+      return other_op;
+    else
+      return expr2tc(new typecast2t(ourtype, other_op));
+  }
+
+  // Return nothing, nothing to simplify.
+  return expr2tc();
+}
+
 expr2tc
 mul2t::do_simplify(bool second __attribute__((unused))) const
 {
@@ -347,22 +371,18 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
   // If we don't have two constant operands, check for one being zero.
   if (!is_constant_expr(side_1) || !is_constant_expr(side_2)) {
     if (is_constant_expr(side_1)) {
-      fixedbvt operand1;
-      to_fixedbv(side_1, operand1);
-      if (operand1.is_zero())
-        return from_fixedbv(operand1, type);
-      else
-        return expr2tc();
-    } else if (is_constant_expr(side_2)) {
-      fixedbvt operand2;
-      to_fixedbv(side_2, operand2);
-      if (operand2.is_zero())
-        return from_fixedbv(operand2, type);
-      else
-        return expr2tc();
-    } else {
-      return expr2tc();
+      expr2tc tmp = mul_check_for_zero_or_one(side_1, side_2, type);
+      if (!is_nil_expr(tmp))
+        return tmp;
     }
+
+    if (is_constant_expr(side_2)) {
+      expr2tc tmp = mul_check_for_zero_or_one(side_2, side_1, type);
+      if (!is_nil_expr(tmp))
+        return tmp;
+    }
+
+    return expr2tc();
   }
 
   assert((is_constant_int2t(side_1) || is_constant_bool2t(side_1) ||
