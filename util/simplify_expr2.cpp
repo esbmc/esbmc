@@ -294,9 +294,24 @@ add2t::do_simplify(bool second) const
     if (!second)
       // Wait until operands are simplified
       return expr2tc();
-    else
-      // Attempt to simplify associative tree.
-      return attempt_associative_simplify(*this, create_add_wrapper);
+
+    // If one is zero, return the other.
+    if (is_constant_expr(side_1)) {
+      fixedbvt op;
+      to_fixedbv(side_1, op);
+      if (op.is_zero())
+        return side_2;
+    }
+
+    if (is_constant_expr(side_2)) {
+      fixedbvt op;
+      to_fixedbv(side_2, op);
+      if (op.is_zero())
+        return side_1;
+    }
+
+    // Attempt to simplify associative tree.
+    return attempt_associative_simplify(*this, create_add_wrapper);
   }
 
   assert((is_constant_int2t(side_1) || is_constant_bool2t(side_1) ||
