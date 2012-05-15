@@ -541,8 +541,8 @@ void dereferencet::build_reference_to(
       {
         index2t &idx = to_index2t(value);
         idx.index = offset;
-        exprt tmp_idx = migrate_expr_back(value);
-        bounds_check(to_index_expr(tmp_idx), tmp_guard);
+        tmp_value = migrate_expr_back(value);
+        bounds_check(to_index_expr(tmp_value), tmp_guard);
       }
       else if (!is_constant_int2t(offset) ||
                !to_constant_int2t(offset).constant_value.is_zero())
