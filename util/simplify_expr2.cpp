@@ -847,7 +847,7 @@ do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
   val1 = opfunc(val1, val2);
 
   // This has potentially become negative. Check the top bit.
-  if (val1 & (1 << (type->get_width() - 1))) {
+  if (val1 & (1 << (type->get_width() - 1)) && is_signedbv_type(type)) {
     // Sign extend.
     val1 |= -1LL << (type->get_width());
   }
