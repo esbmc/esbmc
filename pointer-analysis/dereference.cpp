@@ -502,10 +502,8 @@ void dereferencet::build_reference_to(
     typet tmp_type = migrate_type_back(type);
     if (!dereference_type_compare(tmp_value, tmp_type))
     {
-      exprt tmp_offset = migrate_expr_back(offset);
-      if (memory_model(tmp_value, tmp_type, tmp_guard, tmp_offset))
+      if (memory_model(value, type, tmp_guard, offset))
       {
-        migrate_expr(tmp_offset, offset);
         // ok
       }
       else
@@ -537,6 +535,8 @@ void dereferencet::build_reference_to(
     }
     else
     {
+      migrate_expr(tmp_value, value);
+
       if (is_index2t(value))
       {
         index2t &idx = to_index2t(value);
@@ -562,7 +562,6 @@ void dereferencet::build_reference_to(
         }
       }
     }
-    migrate_expr(tmp_value, value);
   }
 }
 
@@ -729,35 +728,31 @@ static unsigned bv_width(const typet &type)
   return atoi(type.width().c_str());
 }
 
-static bool is_a_bv_type(const typet &type)
-{
-  return type.id()=="unsignedbv" ||
-         type.id()=="signedbv" ||
-         type.id()=="bv" ||
-         type.id()=="fixedbv" ||
-         type.id()=="floatbv";
-}
-
 bool dereferencet::memory_model(
-  exprt &value,
-  const typet &to_type,
+  expr2tc &value,
+  const type2tc &to_type,
   const guardt &guard,
-  exprt &new_offset)
+  expr2tc &new_offset)
 {
   // we will allow more or less arbitrary pointer type cast
 
-  const typet from_type=value.type();
+  const type2tc &from_type = value->type;
 
   // first, check if it's really just a conversion
 
-  if(is_a_bv_type(from_type) &&
-     is_a_bv_type(to_type) &&
-     bv_width(from_type)==bv_width(to_type))
+  if (is_number_type(from_type) && is_number_type(to_type) &&
+      from_type->get_width() == to_type->get_width())
     return memory_model_conversion(value, to_type, guard, new_offset);
 
   // otherwise, we will stich it together from bytes
 
-  return memory_model_bytes(value, to_type, guard, new_offset);
+  exprt tmp_value = migrate_expr_back(value);
+  typet tmp_type = migrate_type_back(to_type);
+  exprt tmp_new_offset = migrate_expr_back(new_offset);
+  bool ret = memory_model_bytes(tmp_value, tmp_type, guard, tmp_new_offset);
+  migrate_expr(tmp_value, value);
+  migrate_expr(tmp_new_offset, new_offset);
+  return ret;
 }
 
 /*******************************************************************\
@@ -773,37 +768,36 @@ Function: dereferencet::memory_model_conversion
 \*******************************************************************/
 
 bool dereferencet::memory_model_conversion(
-  exprt &value,
-  const typet &to_type,
+  expr2tc &value,
+  const type2tc &to_type,
   const guardt &guard,
-  exprt &new_offset)
+  expr2tc &new_offset)
 {
-  const typet from_type=value.type();
+  const type2tc from_type = value->type;
 
   // avoid semantic conversion in case of
   // cast to float
-  if(from_type.id()!="bv" &&
-     (to_type.id()=="fixedbv" || to_type.id()=="floatbv"))
+  if (is_fixedbv_type(to_type))
   {
-    value.make_typecast(bv_typet(bv_width(from_type)));
-    value.make_typecast(to_type);
+    value = expr2tc(new to_bv_typecast2t(to_type, value));
   }
   else
   {
     // only doing type conversion
     // just do the typecast
-    value.make_typecast(to_type);
+    value = expr2tc(new typecast2t(to_type, value));
   }
 
   // also assert that offset is zero
 
   if(!options.get_bool_option("no-pointer-check"))
   {
-    equality_exprt offset_not_zero(new_offset, gen_zero(new_offset.type()));
-    offset_not_zero.make_not();
+    expr2tc zero = expr2tc(new constant_int2t(new_offset->type, BigInt(0)));
+    expr2tc offs_not_zero = expr2tc(new notequal2t(new_offset, zero));
 
     guardt tmp_guard(guard);
-    tmp_guard.move(offset_not_zero);
+    exprt tmp_offs_not_zero = migrate_expr_back(offs_not_zero);
+    tmp_guard.move(tmp_offs_not_zero);
     dereference_callback.dereference_failure(
       "word bounds",
       "offset not zero", tmp_guard);

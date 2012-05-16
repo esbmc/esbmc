@@ -111,16 +111,16 @@ private:
   void valid_check(const exprt &expr, const guardt &guard, const modet mode);
 
   bool memory_model(
-    exprt &value,
-    const typet &type,
+    expr2tc &value,
+    const type2tc &type,
     const guardt &guard,
-    exprt &new_offset);
+    expr2tc &new_offset);
 
   bool memory_model_conversion(
-    exprt &value,
-    const typet &type,
+    expr2tc &value,
+    const type2tc &type,
     const guardt &guard,
-    exprt &new_offset);
+    expr2tc &new_offset);
     
   bool memory_model_bytes(
     exprt &value,
