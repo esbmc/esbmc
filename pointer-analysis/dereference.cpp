@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <migrate.h>
 #include <assert.h>
 #include <sstream>
+#include <prefix.h>
 #include <expr_util.h>
 #include <c_misc.h>
 #include <base_type.h>
@@ -482,13 +483,19 @@ void dereferencet::valid_check(
         guard);
     }
   }
-  else if (is_nil_expr(symbol)) // XXX jmorse symbol.invalid_object())
+  else if (is_nil_expr(symbol))
   {
     // always "valid", shut up
     return;
   }
   else if (is_symbol2t(symbol))
   {
+    // Hacks, but as dereferencet object isn't persistent, necessary. Fix by
+    // making dereferencet persistent.
+    if (has_prefix(to_symbol2t(symbol).name.as_string(),
+                   "symex::invalid_object"))
+      return;
+
     if (dereference_callback.is_valid_object(to_symbol2t(symbol).name))
       return; // always ok
   }
