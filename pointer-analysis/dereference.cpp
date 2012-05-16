@@ -660,11 +660,6 @@ Function: dereferencet::memory_model
 
 \*******************************************************************/
 
-static unsigned bv_width(const typet &type)
-{
-  return atoi(type.width().c_str());
-}
-
 bool dereferencet::memory_model(
   expr2tc &value,
   const type2tc &to_type,
