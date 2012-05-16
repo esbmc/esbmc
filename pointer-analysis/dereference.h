@@ -67,11 +67,6 @@ public:
     const guardt &guard,
     const modet mode);
     
-  virtual void add_checks(
-    const exprt &dest,
-    const guardt &guard,
-    const modet mode);
-
   bool has_dereference(const exprt &expr) const;
 
   typedef hash_set_cont<exprt, irep_hash> expr_sett;

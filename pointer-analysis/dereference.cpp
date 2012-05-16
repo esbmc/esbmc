@@ -205,62 +205,6 @@ void dereferencet::dereference(
 
 /*******************************************************************\
 
-Function: dereferencet::add_checks
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void dereferencet::add_checks(
-  const exprt &dest,
-  const guardt &guard,
-  const modet mode)
-{
-  if(dest.type().id()!="pointer")
-    throw "dereference expected pointer type, but got "+
-          dest.type().pretty();
-
-  const typet &type=dest.type().subtype();
-
-  // collect objects dest may point to
-  value_setst::valuest points_to_set;
-
-  dereference_callback.get_value_set(dest, points_to_set);
-
-  // if it's empty, we have a problem
-  if(points_to_set.empty())
-  {
-    if(!options.get_bool_option("no-pointer-check"))
-    {
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "invalid pointer", guard);
-    }
-  }
-  else
-  {
-    for(value_setst::valuest::const_iterator
-        it=points_to_set.begin();
-        it!=points_to_set.end();
-        it++)
-    {
-      expr2tc new_value, pointer_guard, tmp_dest;
-      type2tc tmp_type;
-      migrate_type(type, tmp_type);
-      migrate_expr(dest, tmp_dest);
-      build_reference_to(
-        *it, mode, tmp_dest, tmp_type,
-        new_value, pointer_guard, guard);
-    }
-  }
-}
-
-/*******************************************************************\
-
 Function: dereferencet::dereference_type_compare
 
   Inputs:
