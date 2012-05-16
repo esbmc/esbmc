@@ -1225,32 +1225,14 @@ if2t::do_simplify(bool second __attribute__((unused))) const
 expr2tc
 overflow2t::do_simplify(bool second __attribute__((unused))) const
 {
-
-  if (is_constant_expr(operand)) {
-    // To find out whether or not this overflows, cast the operand back to its
-    // own type. If it doesn't fit in the given type, it'll be truncated or
-    // otherwise wrapped.
-
-    fixedbvt tmp;
-    to_fixedbv(operand, tmp);
-    expr2tc tmp_expr = from_fixedbv(tmp, operand->type);
-
-    if (tmp_expr != operand)
-      return expr2tc(new constant_bool2t(true));
-    else
-      return expr2tc(new constant_bool2t(false));
-  }
-
-  if (second)
-    // Don't try to simplify again if our operands have already been simpl'd.
-    return expr2tc();
+  unsigned int num_const = 0;
+  bool changed = false;
 
   // Non constant expression. We can't just simplify the operand, because it has
   // to remain the operation we expect (i.e., add2t shouldn't distribute itself)
   // so simplify its operands instead.
   expr2tc new_operand = operand->clone();
   std::vector<expr2tc*> operands;
-  bool changed = false;
   new_operand.get()->list_operands(operands);
   for (std::vector<expr2tc *>::iterator it = operands.begin();
        it != operands.end(); it++) {
@@ -1258,6 +1240,8 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
     if (!is_nil_expr(tmp)) {
       **it= tmp;
       changed = true;
+      if (is_constant_expr(tmp))
+        num_const++;
     }
   }
 
@@ -1265,18 +1249,36 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   if (!changed)
     return expr2tc();
 
-  // Otherwise, see if the immediate operand can be simplified further. Only
-  // consider success if it simplifies to a constant, we need to preserve the
-  // operation itself at all costs.
-  expr2tc new_op = new_operand->do_simplify(true);
-  if (!is_nil_expr(new_op) && is_constant_expr(new_op)) {
-    // Woo, it simplifies.
-    expr2tc all_simplified = expr2tc(new overflow2t(new_op));
-    expr2tc simpl_2 = all_simplified->simplify();
-    assert(!is_nil_expr(simpl_2 ));
-    return simpl_2;
-  }
+  // If we have two constant operands to the operand, we can simplify
+  // completely; otherwise just return the current operand with simplified
+  // operands.
+  if (num_const != 2)
+    return expr2tc(new overflow2t(new_operand));
 
-  // Can't simplify that; return the operand with its own operands simplified.
-  return expr2tc(new overflow2t(new_operand));
+  // Can only simplify ints
+  if (!is_bv_type(new_operand->type))
+    return expr2tc(new overflow2t(new_operand));
+
+  // We can simplify that expression, so do it. And how do we detect overflows?
+  // Perform the operation twice, once with a small type, one with huge, and
+  // see if they differ.
+
+  expr2tc simpl_op = new_operand->simplify();
+  assert(is_constant_expr(simpl_op));
+  expr2tc op_with_big_type = new_operand->clone();
+  op_with_big_type.get()->type = (is_signedbv_type(new_operand->type))
+                                 ? type_pool.get_int(128)
+                                 : type_pool.get_uint(128);
+  op_with_big_type = op_with_big_type->simplify();
+
+  // Now ensure they're the same.
+  equality2t eq(simpl_op, op_with_big_type);
+  expr2tc tmp = eq.simplify();
+
+  // And the inversion of that is the result of this overflow operation (i.e.
+  // if not equal, then overflow).
+  tmp = expr2tc(new not2t(tmp));
+  tmp = tmp->simplify();
+  assert(!is_nil_expr(tmp) && is_constant_bool2t(tmp));
+  return tmp;
 }
