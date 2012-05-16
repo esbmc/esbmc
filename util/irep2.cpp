@@ -370,6 +370,11 @@ expr2t::simplify(void) const
   if (__builtin_expect((expr_id == address_of_id), 0)) // unlikely
     return expr2tc();
 
+  // And overflows too. We don't wish an add to distribute itself, for example,
+  // when we're trying to work out whether or not it's going to overflow.
+  if (__builtin_expect((expr_id == overflow_id), 0))
+    return expr2tc();
+
   // Try simplifying all the sub-operands.
   bool changed = false;
   std::vector<const expr2tc*> operands;

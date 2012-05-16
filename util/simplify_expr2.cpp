@@ -1221,3 +1221,62 @@ if2t::do_simplify(bool second __attribute__((unused))) const
     return expr2tc();
   }
 }
+
+expr2tc
+overflow2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  if (is_constant_expr(operand)) {
+    // To find out whether or not this overflows, cast the operand back to its
+    // own type. If it doesn't fit in the given type, it'll be truncated or
+    // otherwise wrapped.
+
+    fixedbvt tmp;
+    to_fixedbv(operand, tmp);
+    expr2tc tmp_expr = from_fixedbv(tmp, operand->type);
+
+    if (tmp_expr != operand)
+      return expr2tc(new constant_bool2t(true));
+    else
+      return expr2tc(new constant_bool2t(false));
+  }
+
+  if (second)
+    // Don't try to simplify again if our operands have already been simpl'd.
+    return expr2tc();
+
+  // Non constant expression. We can't just simplify the operand, because it has
+  // to remain the operation we expect (i.e., add2t shouldn't distribute itself)
+  // so simplify its operands instead.
+  expr2tc new_operand = operand->clone();
+  std::vector<expr2tc*> operands;
+  bool changed = false;
+  new_operand.get()->list_operands(operands);
+  for (std::vector<expr2tc *>::iterator it = operands.begin();
+       it != operands.end(); it++) {
+    expr2tc tmp = (***it).simplify(); // Yep, three stars. Whatchagonnado?
+    if (!is_nil_expr(tmp)) {
+      **it= tmp;
+      changed = true;
+    }
+  }
+
+  // If we changed nothing, no further simplification.
+  if (!changed)
+    return expr2tc();
+
+  // Otherwise, see if the immediate operand can be simplified further. Only
+  // consider success if it simplifies to a constant, we need to preserve the
+  // operation itself at all costs.
+  expr2tc new_op = new_operand->do_simplify(true);
+  if (!is_nil_expr(new_op) && is_constant_expr(new_op)) {
+    // Woo, it simplifies.
+    expr2tc all_simplified = expr2tc(new overflow2t(new_op));
+    expr2tc simpl_2 = all_simplified->simplify();
+    assert(!is_nil_expr(simpl_2 ));
+    return simpl_2;
+  }
+
+  // Can't simplify that; return the operand with its own operands simplified.
+  return expr2tc(new overflow2t(new_operand));
+}

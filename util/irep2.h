@@ -1736,6 +1736,7 @@ public:
   overflow2t(const overflow2t &ref)
     : esbmct::expr<overflow2t, esbmct::expr2tc_operand>
       (ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<overflow2t, esbmct::expr2tc_operand>;
 
