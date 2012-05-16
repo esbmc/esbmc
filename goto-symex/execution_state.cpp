@@ -252,13 +252,15 @@ execution_statet::symex_assign(const expr2tc &code)
 }
 
 void
-execution_statet::claim(const exprt &expr, const std::string &msg)
+execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
 
   goto_symext::claim(expr, msg);
 
-  if (threads_state.size() > 1)
-    owning_rt->analyse_for_cswitch_after_read(expr);
+  if (threads_state.size() > 1) {
+    exprt tmp = migrate_expr_back(expr);
+    owning_rt->analyse_for_cswitch_after_read(tmp);
+  }
 
   return;
 }
@@ -954,7 +956,7 @@ schedule_execution_statet::schedule_execution_statet(const schedule_execution_st
 }
 
 void
-schedule_execution_statet::claim(const exprt &expr, const std::string &msg)
+schedule_execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
   unsigned int tmp_total, tmp_remaining;
 

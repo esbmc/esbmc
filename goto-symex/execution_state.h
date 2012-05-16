@@ -254,7 +254,7 @@ class execution_statet : public goto_symext
    *  @param expr Expression that we're asserting is true.
    *  @param msg Textual message explaining this assertion.
    */
-  virtual void claim(const exprt &expr, const std::string &msg);
+  virtual void claim(const expr2tc &expr, const std::string &msg);
 
   /**
    *  Perform a jump across GOTO code.
@@ -562,7 +562,7 @@ class schedule_execution_statet : public execution_statet
   schedule_execution_statet(const schedule_execution_statet &ref);
   schedule_execution_statet *clone(void) const;
   virtual ~schedule_execution_statet(void);
-  virtual void claim(const exprt &expr, const std::string &msg);
+  virtual void claim(const expr2tc &expr, const std::string &msg);
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;

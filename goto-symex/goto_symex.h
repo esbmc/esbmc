@@ -182,9 +182,7 @@ protected:
    *  @param expr Expression that must always be true.
    *  @param msg Textual message explaining assertion.
    */
-  virtual void claim(
-    const exprt &expr,
-    const std::string &msg);
+  virtual void claim(const expr2tc &expr, const std::string &msg);
 
   /**
    *  Perform an assumption.

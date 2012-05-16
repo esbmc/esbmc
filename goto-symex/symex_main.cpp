@@ -29,31 +29,29 @@
 #include "config.h"
 
 void
-goto_symext::claim(const exprt &claim_expr, const std::string &msg) {
+goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
 
   total_claims++;
 
-  exprt expr = claim_expr;
-  expr2tc new_expr;
-  migrate_expr(expr, new_expr);
+  expr2tc new_expr = claim_expr;
   cur_state->rename(new_expr);
-  expr = migrate_expr_back(new_expr);
 
   // first try simplifier on it
-  if (!expr.is_false())
-    do_simplify(expr);
+  do_simplify(new_expr);
 
-  if (expr.is_true() &&
+  if (is_constant_bool2t(new_expr) &&
+      to_constant_bool2t(new_expr).constant_value &&
       !options.get_bool_option("all-assertions"))
     return;
 
+  exprt expr = migrate_expr_back(new_expr);
   cur_state->guard.guard_expr(expr);
+  migrate_expr(expr, new_expr);
 
   remaining_claims++;
-  expr2tc guard, newexpr;
+  expr2tc guard;
   migrate_expr(cur_state->guard.as_expr(), guard);
-  migrate_expr(expr, newexpr);
-  target->assertion(guard, newexpr, msg, cur_state->gen_stack_trace(),
+  target->assertion(guard, new_expr, msg, cur_state->gen_stack_trace(),
                     cur_state->source);
 }
 
@@ -168,8 +166,7 @@ goto_symext::symex_step(reachability_treet & art)
 
 	dereference(tmp, false);
 
-        exprt even_tmper = migrate_expr_back(tmp);
-	claim(even_tmper, msg);
+	claim(tmp, msg);
       }
     }
     cur_state->source.pc++;
