@@ -3288,7 +3288,7 @@ void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
 DEBUGLOC;
-//  std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
+  //std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
 
   bool found=false;
 
@@ -3389,10 +3389,11 @@ void goto_convertt::convert_ifthenelse(
 	  else
 	    tmp_guard=code.op0();
 
+          remove_sideeffects(tmp_guard, dest);
 	  if (inductive_step && (is_for_block() ||is_while_block()))
 	    replace_ifthenelse(tmp_guard);
 
-	  remove_sideeffects(tmp_guard, dest);
+	  //remove_sideeffects(tmp_guard, dest);
 	  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 #else
 	  exprt tmp_guard=code.op0();
