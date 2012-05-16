@@ -223,7 +223,8 @@ goto_symext::symex_step(reachability_treet & art)
 
       for (std::vector<expr2tc>::iterator it = call.operands.begin();
            it != call.operands.end(); it++)
-	dereference(*it, false);
+        if (!is_nil_expr(*it))
+          dereference(*it, false);
 
       exprt tmp = migrate_expr_back(deref_code);
       codet &tmp1 = static_cast<codet&>(tmp);
