@@ -1069,14 +1069,21 @@ address_of2t::do_simplify(bool second __attribute__((unused))) const
   // we can't simplify away the symbol.
   if (is_index2t(ptr_obj)) {
     const index2t &idx = to_index2t(ptr_obj);
+
+    // Don't simplify &a[0]
+    if (is_constant_int2t(idx.index) &&
+        to_constant_int2t(idx.index).constant_value.is_zero())
+      return expr2tc();
+
     expr2tc new_index = idx.index->simplify();
     if (is_nil_expr(new_index))
-      return new_index;
+      new_index = idx.index;
 
-    expr2tc new_index_obj = expr2tc(new index2t(idx.type, idx.source_value,
-                                                new_index));
-    const type2tc &subtype = to_pointer_type(type).subtype;
-    return expr2tc(new address_of2t(subtype, new_index_obj));
+    expr2tc zero = expr2tc(new constant_int2t(index_type2(), BigInt(0)));
+    expr2tc new_idx = expr2tc(new index2t(idx.type, idx.source_value, zero));
+    expr2tc sub_addr_of = expr2tc(new address_of2t(type, new_idx));
+
+    return expr2tc(new add2t(type, sub_addr_of, new_index));
   } else {
     return expr2tc();
   }
