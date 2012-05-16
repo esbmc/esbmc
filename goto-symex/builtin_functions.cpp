@@ -16,6 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <arith_tools.h>
 #include <cprover_prefix.h>
 #include <std_types.h>
+#include <base_type.h>
 
 #include <ansi-c/c_types.h>
 
@@ -332,7 +333,7 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
   expr2tc assign = expr2tc(new code_assign2t(call.ret, startdata));
-  assert(call.ret->type == startdata->type);
+  assert(base_type_eq(call.ret->type, startdata->type, ns));
 
   state.value_set.assign(call.ret, startdata, ns);
   symex_assign(assign);
