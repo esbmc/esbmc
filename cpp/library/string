@@ -339,28 +339,28 @@ namespace std
 	bool string::operator> (string& a)
 	{
 		__ESBMC_HIDE:
-		if ( strlen(this->c_str()) > a.length() )
+		if ( this->length() > a.length() )
 			return true;
 		return false;
 	}
 	bool string::operator> (const char* a)
 	{
 		__ESBMC_HIDE:
-		if ( strlen(this->c_str()) > strlen(a) )
+		if ( this->length() > strlen(a) )
 			return true;
 		return false;
 	}
 	bool string::operator> ( const char* lhs, string& rhs )
 	{
 		__ESBMC_HIDE:
-		if ( strlen(lhs) > strlen(rhs.c_str()) )
+		if ( strlen(lhs) > rhs.length() )
 			return true;
 		return false;
 	}
 	bool string::operator> ( string& lhs, const char* rhs )
 	{
 		__ESBMC_HIDE:
-		if ( strlen(lhs.c_str()) > strlen(rhs) )
+		if ( lhs.length() > strlen(rhs) )
 			return true;
 		return false;
 	}
@@ -374,40 +374,39 @@ namespace std
 		}else{
 			return false;
 		}
-
 	}
 	bool string::operator< (const char* a)
 	{
 		__ESBMC_HIDE:
-		if ( strlen(this->c_str()) < strlen(a) )
+		if ( this->length() < strlen(a) )
 			return true;
 		return false;
 	}
 	bool string::operator< ( const char* lhs, string& rhs )
 	{
 		__ESBMC_HIDE:
-		if ( strlen(lhs) < strlen(rhs.c_str()) )
+		if ( strlen(lhs) < rhs.length() )
 			return true;
 		return false;
 	}
 	bool string::operator< ( string& lhs, const char* rhs )
 	{
 		__ESBMC_HIDE:
-		if ( strlen(lhs.c_str()) < strlen(rhs) )
+		if ( lhs.length() < strlen(rhs) )
 			return true;
 		return false;
 	}
 	bool string::operator >=(string& a)
 	{
 		__ESBMC_HIDE:
-		if ( (strlen(this->c_str())) >= (strlen(a.c_str())) )
+		if ( this->length() >= a.length() )
 			return true;
 		return false;
 	}
 	bool string::operator>= ( const char* lhs )
 	{
 		__ESBMC_HIDE:
-		if ( (strlen(this->c_str())) >= (strlen(lhs)) )
+		if ( this->length() >= (strlen(lhs)) )
 			return true;
 		return false;
 	}
@@ -421,7 +420,7 @@ namespace std
 	bool string::operator <=(const char* lhs)
 	{
 		__ESBMC_HIDE:
-		if ( strlen(this->c_str()) <= strlen(lhs) )
+		if ( this->length() <= strlen(lhs) )
 			return true;
 		return false;
 	}
