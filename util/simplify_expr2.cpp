@@ -747,11 +747,23 @@ expr2tc
 and2t::do_simplify(bool second __attribute__((unused))) const
 {
 
-  if (is_constant_bool2t(side_1) && to_constant_bool2t(side_1).constant_value)
-    return side_2;
+  if (is_constant_bool2t(side_1)) {
+   if (to_constant_bool2t(side_1).constant_value)
+     // constant true; other operand determines truth
+     return side_2;
+   else
+     // constant false; never true.
+     return side_1;
+  }
 
-  if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).constant_value)
-    return side_1;
+  if (is_constant_bool2t(side_2)) {
+   if (to_constant_bool2t(side_2).constant_value)
+     // constant true; other operand determines truth
+     return side_1;
+   else
+     // constant false; never true.
+     return side_2;
+  }
 
   if (!is_constant_bool2t(side_1) || !is_constant_bool2t(side_2))
     return expr2tc();
