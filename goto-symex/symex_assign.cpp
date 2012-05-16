@@ -142,13 +142,6 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
     case sideeffect2t::malloc:
       symex_malloc(lhs, effect);
       break;
-#if 0
-      // printf doesn't appear to be a sideeffect.
-      expr2tc new_lhs, new_rhs;
-      migrate_expr(lhs, new_lhs);
-      migrate_expr(side_effect_expr, new_rhs);
-      symex_printf(new_lhs, new_rhs);
-#endif
     // No nondet side effect?
     default:
       assert(0 && "unexpected side effect");
