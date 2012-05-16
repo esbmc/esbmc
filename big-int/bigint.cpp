@@ -717,13 +717,9 @@ uint64_t BigInt::to_uint64() const
 
 int64_t BigInt::to_int64() const
 {
-  int64_t ul = 0;
-  for (int i = length; --i >= 0; )
-    {
-      ul <<= single_bits;
-      ul |= digit[i];
-    }
-  return ul;
+  uint64_t ul = to_uint64();
+  int64_t ret = positive ? ul : -ul;
+  return ret;
 }
 
 ullong_t BigInt::to_ulong() const
