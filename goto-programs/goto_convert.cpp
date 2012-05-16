@@ -2412,17 +2412,39 @@ void goto_convertt::convert_dowhile(
   // save location
   locationt condition_location=code.op0().find_location();
 
-  exprt cond=code.op0();
+  exprt tmp=code.op0();
 
   goto_programt sideeffects;
-  remove_sideeffects(cond, sideeffects);
+  remove_sideeffects(tmp, sideeffects);
+
+  set_while_block(true);
+
+  if(inductive_step)
+    replace_cond(tmp, dest);
+
+  array_typet state_vector;
+  const exprt &cond=tmp;
+  const locationt &location=code.location();
 
   //    do P while(c);
   //--------------------
+  // t: cs=nondet
   // w: P;
   // x: sideeffects in c   <-- continue target
+  // c: k=0
   // y: if(c) goto w;
+  // f: s[k]=cs
+  // d: cs assign
+  // e: assume
   // z: ;                  <-- break target
+  // g: assume(!c)
+
+  // do the t label
+  if(inductive_step)
+  {
+    get_struct_components(code.op1(), state);
+    make_nondet_assign(dest);
+  }
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -2443,6 +2465,10 @@ void goto_convertt::convert_dowhile(
   else
     x=sideeffects.instructions.begin();
 
+  //do the c label
+  if (inductive_step)
+    init_k_indice(dest);
+
   // set the targets
   targets.set_break(z);
   targets.set_continue(x);
@@ -2455,12 +2481,14 @@ void goto_convertt::convert_dowhile(
   dest.destructive_append(tmp_w);
   dest.destructive_append(sideeffects);
 
+#if 0
   if(options.get_bool_option("atomicity-check"))
   {
     unsigned int globals = get_expr_number_globals(cond);
     if(globals > 0)
 	  break_globals2assignments(cond, dest,code.location());
   }
+#endif
 
   // y: if(c) goto w;
   y->make_goto(w);
@@ -2468,7 +2496,26 @@ void goto_convertt::convert_dowhile(
   y->location=condition_location;
 
   dest.destructive_append(tmp_y);
+
+  // do the f label
+  if (inductive_step)
+    update_state_vector(state_vector, dest);
+
+  // do the d label
+  if (inductive_step)
+    assign_current_state(dest);
+
+  // do the e label
+  if (inductive_step)
+    assume_state_vector(state_vector, dest);
+
   dest.destructive_append(tmp_z);
+
+  //do the g label
+  if (base_case /*|| inductive_step*/)
+    assume_cond(cond, true, dest); //assume(!c)
+  else if (k_induction)
+    assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue targets
   targets.restore(old_targets);
