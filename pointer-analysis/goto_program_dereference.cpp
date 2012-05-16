@@ -136,7 +136,9 @@ void goto_program_dereferencet::dereference_rec(
   guardt &guard,
   const dereferencet::modet mode)
 {
-  if(!dereference.has_dereference(expr))
+  expr2tc tmp_expr;
+  migrate_expr(expr, tmp_expr);
+  if(!dereference.has_dereference(tmp_expr))
     return;
 
   if(expr.is_and() || expr.id()=="or")
@@ -155,7 +157,9 @@ void goto_program_dereferencet::dereference_rec(
         throw expr.id_string()+" takes Boolean operands only, but got "+
               op.pretty();
 
-      if(dereference.has_dereference(op))
+      expr2tc tmp_op;
+      migrate_expr(op, tmp_op);
+      if (dereference.has_dereference(tmp_op))
         dereference_rec(op, guard, dereferencet::READ);
 
       if(expr.id()=="or")
@@ -187,8 +191,11 @@ void goto_program_dereferencet::dereference_rec(
 
     dereference_rec(expr.op0(), guard, dereferencet::READ);
 
-    bool o1=dereference.has_dereference(expr.op1());
-    bool o2=dereference.has_dereference(expr.op2());
+    expr2tc tmp_op1, tmp_op2;
+    migrate_expr(expr.op1(), tmp_op1);
+    migrate_expr(expr.op2(), tmp_op2);
+    bool o1 = dereference.has_dereference(tmp_op1);
+    bool o2 = dereference.has_dereference(tmp_op2);
 
     if(o1)
     {

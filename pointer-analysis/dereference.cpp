@@ -33,16 +33,17 @@ Author: Daniel Kroening, kroening@kroening.com
 // global data, horrible
 unsigned int dereferencet::invalid_counter=0;
 
-bool dereferencet::has_dereference(const exprt &expr) const
+bool dereferencet::has_dereference(const expr2tc &expr) const
 {
-  forall_operands(it, expr)
-    if(has_dereference(*it))
+  std::vector<const expr2tc *> operands;
+  expr->list_operands(operands);
+  for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
+       it != operands.end(); it++)
+    if(has_dereference(**it))
       return true;
 
-  if(expr.id()=="dereference" ||
-     expr.id()=="implicit_dereference" ||
-     (expr.id()=="index" && expr.operands().size()==2 &&
-      expr.op0().type().id()=="pointer"))
+  if (is_dereference2t(expr) ||
+     (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value->type)))
     return true;
 
   return false;
