@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <irep2.h>
 #include <migrate.h>
+#include <prefix.h>
 #include <simplify_expr.h>
 #include <base_type.h>
 #include <std_code.h>
@@ -32,7 +33,7 @@ bool goto_program_dereferencet::has_failed_symbol(
 {
   if(expr.id()=="symbol")
   {
-    if(expr.invalid_object())
+    if (has_prefix(expr.identifier().as_string(), "symex::invalid_object"))
       return false;
 
     const symbolt &ptr_symbol=ns.lookup(expr);
