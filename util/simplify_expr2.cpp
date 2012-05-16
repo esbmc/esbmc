@@ -845,6 +845,12 @@ do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
 
   val1 = opfunc(val1, val2);
 
+  // This has potentially become negative. Check the top bit.
+  if (val1 & (1 << (type->get_width() - 1))) {
+    // Sign extend.
+    val1 |= -1LL << (type->get_width());
+  }
+
   // And now, restore. It's debatable as to whether we should treat this as
   // being negative or not; something that can be worried about and tested in
   // the future.
