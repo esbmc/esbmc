@@ -483,32 +483,31 @@ goto_symext::locality(unsigned frame_nr,
 }
 
 bool
-goto_symext::make_return_assignment(code_assignt &assign,
-                                    const code_returnt &code)
+goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 {
   statet::framet &frame = cur_state->top();
+  const code_return2t &ret = to_code_return2t(code);
 
-  if (code.operands().size() == 1) {
-    exprt value(code.op0());
+  if (!is_nil_expr(ret.operand)) {
+    expr2tc value = ret.operand;
 
-    expr2tc tmp_value;
-    migrate_expr(value, tmp_value);
-    dereference(tmp_value, false);
-    value = migrate_expr_back(tmp_value);
+    dereference(value, false);
 
     if (!is_nil_expr(frame.return_value)) {
-      assign = code_assignt(migrate_expr_back(frame.return_value), value);
+      assign = expr2tc(new code_assign2t(frame.return_value, value));
 
-      if (assign.lhs().type() != assign.rhs().type())
-	assign.rhs().make_typecast(assign.lhs().type());
+      if (frame.return_value->type != value->type) {
+        expr2tc cast = expr2tc(new typecast2t(frame.return_value->type, value));
+        assign = expr2tc(new code_assign2t(frame.return_value, cast));
+      }
 
-      //make sure that we assign two expressions of the same type
-      assert(assign.lhs().type() == assign.rhs().type());
       return true;
     }
-  } else   {
-    if (!is_nil_expr(frame.return_value))
-      throw "return with unexpected value";
+  } else {
+    if (!is_nil_expr(frame.return_value)) {
+      std::cerr << "return with unexpected value" << std::endl;
+      abort();
+    }
   }
 
   return false;

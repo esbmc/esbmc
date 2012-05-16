@@ -257,7 +257,7 @@ protected:
    *  @param code The return statement we're interpreting.
    *  @return True if a return assignment was generated.
    */
-  bool make_return_assignment(code_assignt &assign, const code_returnt &code);
+  bool make_return_assignment(expr2tc &assign, const expr2tc &code_return);
 
   /** 
    *  Perform function call.

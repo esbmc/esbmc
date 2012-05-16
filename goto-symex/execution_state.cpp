@@ -219,17 +219,18 @@ execution_statet::symex_step(reachability_treet &art)
     case RETURN:
       state.source.pc++;
       if(!state.guard.is_false()) {
-        const code_returnt &code = to_code_return(instruction.code);
-        code_assignt assign;
-        if (make_return_assignment(assign, code)) {
-          expr2tc newassign;
-          migrate_expr(assign, newassign);
-          goto_symext::symex_assign(newassign);
+        expr2tc thecode, assign;
+        migrate_expr(instruction.code, thecode);
+        if (make_return_assignment(assign, thecode)) {
+          goto_symext::symex_assign(assign);
         }
 
         symex_return();
 
-        owning_rt->analyse_for_cswitch_after_assign(assign);
+        if (!is_nil_expr(assign)) {
+          exprt tmpassign = migrate_expr_back(assign);
+          owning_rt->analyse_for_cswitch_after_assign(tmpassign);
+        }
       }
       break;
     default:
