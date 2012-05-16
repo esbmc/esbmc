@@ -17,7 +17,7 @@ char *strcpy(char *dest, const char* src)
 char *strcpy(char *d, const char *s) {
 int i;
 
-for (i = 0; s[i] != '\0'; i++) {
+for (i = 0; s[i] != 0; i++) {
 d[i] = s[i];
 }
 
@@ -217,7 +217,7 @@ int strlen(const char *s)
 size_t strlen(const char *s) {
 size_t i;
 
-for (i = 0; s[i]; i++);
+for (i = 0; s[i] != 0; i++);
 
 return i;
 }

@@ -103,6 +103,7 @@ namespace std
 		string& operator += (const char* s);
 		string& operator+= (char s);
 		string& operator+ ( string& s);
+		string& operator+ ( const char* s);
 		string& operator+ ( char s);
 		string& operator+ ( string& s1, string& s2);
 		char& operator[] ( size_t pos );
@@ -171,8 +172,9 @@ namespace std
 	string::string ()
 	{
 		str=new char[1];
+		str="";
 		_size = 0;
-		npos = 0;
+		//npos = 0;
 		//str2=NULL;
 	}
 	string::string (char *s)
@@ -367,8 +369,6 @@ namespace std
 	bool string::operator< (string& a)
 	{
 		__ESBMC_HIDE:
-		assert(this->length() == 4);
-		assert(a.length() == 2);
 		if ( this->length() < a.length() ){
 			return true;
 		}else{
@@ -479,6 +479,7 @@ namespace std
 		this->_size=1;
 		this->str=new char[this->_size+1];
 		this->str[0] = s;
+		this->str[1] = '\0';
 		return *this;
 	}
 	string& string::operator+=( string& s)
@@ -531,6 +532,23 @@ namespace std
 	    	temp.str[j] = s.str[k];
 	    //*this = temp;
 	    //assert(temp==s);
+	    //assert(temp == "TeTestTest");
+	    return temp;
+	}
+	string& string::operator+ ( const char* s)
+	{
+		__ESBMC_HIDE:
+	    int rhsLen = strlen(s);
+	    int totalLen = this->_size + rhsLen;
+	    string temp(totalLen);
+	    int i, j, k;
+	    for (i=0; i<this->_size; i++)
+	        temp[i] = this->str[i];
+	    for(j=i, k=0; j<temp._size; j++, k++)
+	    	temp.str[j] = s[k];
+	    //*this = temp;
+	    //assert(temp==s);
+	    //assert(temp == "TeTestTest");
 	    return temp;
 	}
 	string& string::operator+ ( char s)
