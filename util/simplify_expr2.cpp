@@ -120,13 +120,13 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     // If we're converting to a signedbv, the top bit being set means negative.
     if (is_signedbv_type(type)) {
       assert(type->get_width() <= 64);
-      BigInt top_bit(1ULL << (type->get_width()-1));
-      BigInt cur_val = tmp_bv.to_integer();
+      int64_t top_bit = 1ULL << (type->get_width()-1);
+      int64_t cur_val = tmp_bv.to_integer().to_int64();
       if (cur_val >= top_bit) {
         // Construct some bit mask gumpf as a sign extension
         int64_t large_int = -1;
         large_int <<= (type->get_width() - 1);
-        large_int |= cur_val.to_int64();
+        large_int |= cur_val;
         tmp_bv.from_integer(large_int);
       }
     }
