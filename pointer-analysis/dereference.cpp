@@ -32,18 +32,6 @@ Author: Daniel Kroening, kroening@kroening.com
 // global data, horrible
 unsigned int dereferencet::invalid_counter=0;
 
-/*******************************************************************\
-
-Function: dereferencet::has_dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool dereferencet::has_dereference(const exprt &expr) const
 {
   forall_operands(it, expr)
@@ -59,18 +47,6 @@ bool dereferencet::has_dereference(const exprt &expr) const
   return false;
 }
 
-/*******************************************************************\
-
-Function: dereferencet::get_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const exprt& dereferencet::get_symbol(const exprt &expr)
 {
   if(expr.id()=="member" || expr.id()=="index")
@@ -78,18 +54,6 @@ const exprt& dereferencet::get_symbol(const exprt &expr)
 
   return expr;
 }
-
-/*******************************************************************\
-
-Function: dereferencet::dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void dereferencet::dereference(
   exprt &dest,
@@ -203,18 +167,6 @@ void dereferencet::dereference(
   dest.swap(value);
 }
 
-/*******************************************************************\
-
-Function: dereferencet::dereference_type_compare
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool dereferencet::dereference_type_compare(
   expr2tc &object, const type2tc &dereference_type) const
 {
@@ -253,18 +205,6 @@ bool dereferencet::dereference_type_compare(
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: dereferencet::build_reference_to
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void dereferencet::build_reference_to(
   const expr2tc &what,
@@ -502,18 +442,6 @@ void dereferencet::build_reference_to(
   }
 }
 
-/*******************************************************************\
-
-Function: dereferencet::valid_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void dereferencet::valid_check(
   const exprt &object,
   const guardt &guard,
@@ -559,18 +487,6 @@ void dereferencet::valid_check(
       return; // always ok
   }
 }
-
-/*******************************************************************\
-
-Function: dereferencet::bounds_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void dereferencet::bounds_check(
   const index2t &expr,
@@ -648,18 +564,6 @@ void dereferencet::bounds_check(
     "`"+name+"' upper bound", tmp_guard);
 }
 
-/*******************************************************************\
-
-Function: dereferencet::memory_model
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool dereferencet::memory_model(
   expr2tc &value,
   const type2tc &to_type,
@@ -681,18 +585,6 @@ bool dereferencet::memory_model(
   bool ret = memory_model_bytes(value, to_type, guard, new_offset);
   return ret;
 }
-
-/*******************************************************************\
-
-Function: dereferencet::memory_model_conversion
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool dereferencet::memory_model_conversion(
   expr2tc &value,
@@ -732,18 +624,6 @@ bool dereferencet::memory_model_conversion(
 
   return true;
 }
-
-/*******************************************************************\
-
-Function: dereferencet::memory_model_bytes
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool dereferencet::memory_model_bytes(
   expr2tc &value,
