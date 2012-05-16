@@ -292,6 +292,8 @@ public:
     object_descriptor_id,
     code_function_call_id,
     invalid_pointer_id,
+    to_bv_typecast_id,
+    from_bv_typecast_id,
     end_expr_id
   };
 
@@ -1081,6 +1083,34 @@ public:
   virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<typecast2t, esbmct::expr2tc_from>;
+
+// Typecast, but explicitly either to or from a bit vector. This prevents any
+// semantic conversion of floats to/from bits.
+class to_bv_typecast2t : public esbmct::expr<to_bv_typecast2t,
+                                             esbmct::expr2tc_from>
+{
+public:
+  to_bv_typecast2t(const type2tc &type, const expr2tc &from)
+    : esbmct::expr<to_bv_typecast2t, esbmct::expr2tc_from>
+    (type, to_bv_typecast_id, from) { }
+  to_bv_typecast2t(const to_bv_typecast2t &ref)
+    : esbmct::expr<to_bv_typecast2t, esbmct::expr2tc_from>(ref){}
+  virtual expr2tc do_simplify(bool second) const;
+};
+template class esbmct::expr<to_bv_typecast2t, esbmct::expr2tc_from>;
+
+class from_bv_typecast2t : public esbmct::expr<from_bv_typecast2t,
+                                             esbmct::expr2tc_from>
+{
+public:
+  from_bv_typecast2t(const type2tc &type, const expr2tc &from)
+    : esbmct::expr<from_bv_typecast2t, esbmct::expr2tc_from>
+    (type, from_bv_typecast_id, from) { }
+  from_bv_typecast2t(const from_bv_typecast2t &ref)
+    : esbmct::expr<from_bv_typecast2t, esbmct::expr2tc_from>(ref){}
+  virtual expr2tc do_simplify(bool second) const;
+};
+template class esbmct::expr<from_bv_typecast2t, esbmct::expr2tc_from>;
 
 class if2t : public esbmct::expr<if2t,
                                esbmct::expr2tc_cond,
