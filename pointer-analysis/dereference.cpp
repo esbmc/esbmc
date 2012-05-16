@@ -497,7 +497,7 @@ void dereferencet::bounds_check(
   std::string name = array_name(ns, expr.source_value);
 
   {
-    if (!is_constant_int2t(expr.index) ||
+    if (is_constant_int2t(expr.index) &&
         !to_constant_int2t(expr.index).constant_value.is_negative())
     {
       ;
