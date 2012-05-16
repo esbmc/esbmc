@@ -101,15 +101,6 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     // To integer truncates non-integer bits, it turns out.
     BigInt tmp = bv.to_integer();
 
-    // If unsigned, and negative, invert, and stick the bv representation into
-    // BigInt object.
-    // All these things should be hacked into the BigInt object :|
-    if (is_unsignedbv_type(type) && tmp.is_negative()) {
-      int64_t i = tmp.to_int64();
-      i = -i;
-      tmp = BigInt((uint64_t)i);
-    }
-
     // Round away upper bits, just in case we're decreasing accuracy here.
     unsigned int bits = type->get_width();
     fixedbvt tmp_bv;
