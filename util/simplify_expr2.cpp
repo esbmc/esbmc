@@ -116,6 +116,20 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     tmp_bv.from_integer(tmp);
     tmp_bv.round(fixedbv_spect(bits*2, bits));
 
+    // If we're converting to a signedbv, the top bit being set means negative.
+    if (is_signedbv_type(type)) {
+      assert(type->get_width() <= 64);
+      BigInt top_bit(1ULL << (type->get_width()-1));
+      BigInt cur_val = tmp_bv.to_integer();
+      if (cur_val >= top_bit) {
+        // Construct some bit mask gumpf as a sign extension
+        int64_t large_int = -1;
+        large_int <<= (type->get_width() - 1);
+        large_int |= cur_val.to_int64();
+        tmp_bv.from_integer(large_int);
+      }
+    }
+
     // And done.
     return expr2tc(new constant_int2t(type, tmp_bv.to_integer()));
     }
