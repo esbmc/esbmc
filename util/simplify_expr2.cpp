@@ -732,6 +732,10 @@ expr2tc
 not2t::do_simplify(bool second __attribute__((unused))) const
 {
 
+  if (is_not2t(value))
+    // Bam. These negate.
+    return to_not2t(value).value;
+
   if (!is_constant_bool2t(value))
     return expr2tc();
 
