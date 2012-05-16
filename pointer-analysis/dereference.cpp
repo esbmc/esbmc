@@ -272,12 +272,11 @@ Function: dereferencet::dereference_type_compare
 \*******************************************************************/
 
 bool dereferencet::dereference_type_compare(
-  exprt &object,
-  const typet &dereference_type) const
+  expr2tc &object, const type2tc &dereference_type) const
 {
-  const typet &object_type=object.type();
+  const type2tc object_type = object->type;
 
-  if(dereference_type.id()=="empty")
+  if (is_empty_type(dereference_type))
     return true; // always ok
 
   if(base_type_eq(object_type, dereference_type, ns))
@@ -285,26 +284,25 @@ bool dereferencet::dereference_type_compare(
 
   // check for struct prefixes
 
-  typet ot_base(object_type),
-        dt_base(dereference_type);
+  type2tc ot_base(object_type), dt_base(dereference_type);
 
   base_type(ot_base, ns);
   base_type(dt_base, ns);
 
-  if(ot_base.id()=="struct" &&
-     dt_base.id()=="struct")
+  if (is_struct_type(ot_base) && is_struct_type(dt_base))
   {
-    if(to_struct_type(dt_base).is_prefix_of(
-         to_struct_type(ot_base)))
+    typet tmp_ot_base = migrate_type_back(ot_base);
+    typet tmp_dt_base = migrate_type_back(dt_base);
+    if (to_struct_type(tmp_dt_base).is_prefix_of(
+         to_struct_type(tmp_ot_base)))
     {
-      object.make_typecast(dereference_type);
+      object = expr2tc(new typecast2t(dereference_type, object));
       return true; // ok, dt is a prefix of ot
     }
   }
 
   // we are generous about code pointers
-  if(dereference_type.is_code() &&
-     object_type.is_code())
+  if (is_code_type(dereference_type) && is_code_type(object_type))
     return true;
 
   // really different
@@ -498,9 +496,7 @@ void dereferencet::build_reference_to(
       offset = expr2tc(new sub2t(index_type2(), ptr_offs, base));
     }
 
-    exprt tmp_value = migrate_expr_back(value);
-    typet tmp_type = migrate_type_back(type);
-    if (!dereference_type_compare(tmp_value, tmp_type))
+    if (!dereference_type_compare(value, type))
     {
       if (memory_model(value, type, tmp_guard, offset))
       {
@@ -535,14 +531,11 @@ void dereferencet::build_reference_to(
     }
     else
     {
-      migrate_expr(tmp_value, value);
-
       if (is_index2t(value))
       {
         index2t &idx = to_index2t(value);
         idx.index = offset;
         bounds_check(idx, tmp_guard);
-        tmp_value = migrate_expr_back(value);
       }
       else if (!is_constant_int2t(offset) ||
                !to_constant_int2t(offset).constant_value.is_zero())

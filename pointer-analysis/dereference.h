@@ -84,8 +84,8 @@ private:
   static unsigned invalid_counter;
 
   bool dereference_type_compare(
-    exprt &object,
-    const typet &dereference_type) const;
+    expr2tc &object,
+    const type2tc &dereference_type) const;
 
   void offset_sum(
     exprt &dest,
