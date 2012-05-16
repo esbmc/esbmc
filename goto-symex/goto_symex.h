@@ -239,7 +239,7 @@ protected:
    *  not exceeded. Otherwise, just continue execution.
    *  @param guard Current state guard.
    */
-  void loop_bound_exceeded(const exprt &guard);
+  void loop_bound_exceeded(const expr2tc &guard);
 
   // function calls
 

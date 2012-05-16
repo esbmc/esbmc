@@ -59,8 +59,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     cur_state->unwind_map[cur_state->source] = unwind;
 
     if (get_unwind(cur_state->source, unwind)) {
-      exprt tmp_new_guard = migrate_expr_back(new_guard);
-      loop_bound_exceeded(tmp_new_guard);
+      loop_bound_exceeded(new_guard);
 
       // reset unwinding
       cur_state->unwind_map[cur_state->source] = 0;
@@ -278,16 +277,17 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 }
 
 void
-goto_symext::loop_bound_exceeded(const exprt &guard)
+goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
   const irep_idt &loop_id = cur_state->source.pc->location.loopid();
 
-  exprt negated_cond;
+  expr2tc negated_cond;
 
-  if (guard.is_true())
-    negated_cond = false_exprt();
-  else
-    negated_cond = gen_not(guard);
+  if (is_constant_bool2t(guard) && to_constant_bool2t(guard).constant_value) {
+    negated_cond = expr2tc(new constant_bool2t(false));
+  } else {
+    negated_cond = expr2tc(new not2t(guard));
+  }
 
   bool unwinding_assertions =
     !options.get_bool_option("no-unwinding-assertions");
@@ -298,21 +298,22 @@ goto_symext::loop_bound_exceeded(const exprt &guard)
   if (!partial_loops) {
     if (unwinding_assertions) {
       // generate unwinding assertion
-      expr2tc tmp_negated;
-      migrate_expr(negated_cond, tmp_negated);
-      claim(tmp_negated, "unwinding assertion loop " + id2string(loop_id));
-      negated_cond = migrate_expr_back(tmp_negated);
+      claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
     } else   {
       // generate unwinding assumption, unless we permit partial loops
-      cur_state->guard.guard_expr(negated_cond);
+      exprt tmp_negated_cond = migrate_expr_back(negated_cond);
+      cur_state->guard.guard_expr(tmp_negated_cond);
+      migrate_expr(tmp_negated_cond, negated_cond);
+
       expr2tc guard, guarded;
       migrate_expr(cur_state->guard.as_expr(), guard);
-      migrate_expr(negated_cond, guarded);
+      guarded = negated_cond;
       target->assumption(guard, guarded, cur_state->source);
     }
 
     // add to state guard to prevent further assignments
-    cur_state->guard.add(negated_cond);
+    exprt tmp_negated_cond = migrate_expr_back(negated_cond);
+    cur_state->guard.add(tmp_negated_cond);
   }
 }
 
