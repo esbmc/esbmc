@@ -217,6 +217,7 @@ protected:
   void init_nondet_expr(exprt &tmp, goto_programt &dest);
   void print_msg(const exprt &tmp);
   void replace_infinite_loop(exprt &tmp, goto_programt &dest);
+  void disable_k_induction(void);
 
   //
   // gotos

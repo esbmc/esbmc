@@ -1998,6 +1998,26 @@ void goto_convertt::assert_cond(
   dest.destructive_append(tmp_e);
 }
 
+
+/*******************************************************************\
+
+Function: goto_convertt::disable_k_induction
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::disable_k_induction()
+{
+  k_induction=1;
+  inductive_step=0;
+  base_case=0;
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::print_msg
@@ -2013,14 +2033,12 @@ Function: goto_convertt::print_msg
 void goto_convertt::print_msg(
   const exprt &tmp)
 {
-    std::cerr << "warning: this program " << tmp.location().get_file() 
-              << " contains a '" << tmp.id() << "' operator at line " 
-              << tmp.location().get_line()
-   	      << ", so we are not applying the k-induction method to this program!" 
-              << std::endl;
-    k_induction=1;
-    inductive_step=0;
-    base_case=0;
+  std::cerr << "warning: this program " << tmp.location().get_file() 
+            << " contains a '" << tmp.id() << "' operator at line " 
+            << tmp.location().get_line()
+            << ", so we are not applying the k-induction method to this program!" 
+            << std::endl;
+  disable_k_induction();
 }
 
 /*******************************************************************\
@@ -2045,9 +2063,7 @@ bool goto_convertt::check_op_const(
               << " contains a bounded loop at line " << loc.get_line()
    	      << ", so we are not applying the k-induction method to this program!" 
               << std::endl;
-    k_induction=1;
-    inductive_step=0;
-    base_case=0;
+    disable_k_induction();
     return true;
   }
 
