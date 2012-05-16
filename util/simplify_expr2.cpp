@@ -129,6 +129,13 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
         large_int |= cur_val;
         tmp_bv.from_integer(large_int);
       }
+    } else if (is_unsignedbv_type(type) && tmp_bv.to_integer().is_negative()) {
+      // Need to switch this number to being an unsigned representation of the
+      // same bit vector.
+      int64_t the_num = tmp_bv.to_integer().to_int64();
+      uint64_t mask = (1 << (type->get_width())) - 1;
+      uint64_t output = the_num & mask;
+      tmp_bv.from_integer(BigInt(output));
     }
 
     // And done.
