@@ -36,11 +36,11 @@ public:
   typedef hash_set_cont<exprt, irep_hash> expr_sett;
 
   virtual void get_value_set(
-    const exprt &expr,
+    const expr2tc &expr,
     value_setst::valuest &value_set)=0;
   
   virtual bool has_failed_symbol(
-    const exprt &expr,
+    const expr2tc &expr,
     const symbolt *&symbol)=0;
 };
 

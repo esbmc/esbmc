@@ -56,7 +56,7 @@ protected:
   virtual bool is_valid_object(const irep_idt &identifier);
 
   virtual bool has_failed_symbol(
-    const exprt &expr,
+    const expr2tc &expr,
     const symbolt *&symbol);
 
   virtual void dereference_failure(
@@ -64,7 +64,7 @@ protected:
     const std::string &msg,
     const guardt &guard);
 
-  virtual void get_value_set(const exprt &expr, value_setst::valuest &dest);
+  virtual void get_value_set(const expr2tc &expr, value_setst::valuest &dest);
 
   void dereference_instruction(
     goto_programt::targett target,

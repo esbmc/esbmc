@@ -85,9 +85,7 @@ void dereferencet::dereference(
   // collect objects dest may point to
   value_setst::valuest points_to_set;
 
-  exprt tmp_dest = migrate_expr_back(dest);
-  dereference_callback.get_value_set(tmp_dest, points_to_set);
-  migrate_expr(tmp_dest, dest);
+  dereference_callback.get_value_set(dest, points_to_set);
 
   // now build big case split
   // only "good" objects
@@ -133,8 +131,7 @@ void dereferencet::dereference(
 
     const symbolt *failed_symbol;
 
-    exprt tmp_deref_expr = migrate_expr_back(deref_expr);
-    if (dereference_callback.has_failed_symbol(tmp_deref_expr, failed_symbol))
+    if (dereference_callback.has_failed_symbol(deref_expr, failed_symbol))
     {
       // yes!
       exprt tmp_val = symbol_expr(*failed_symbol);

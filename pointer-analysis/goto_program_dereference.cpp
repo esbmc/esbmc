@@ -28,20 +28,21 @@ Function: goto_program_dereferencet::has_failed_symbol
 \*******************************************************************/
 
 bool goto_program_dereferencet::has_failed_symbol(
-  const exprt &expr,
+  const expr2tc &expr,
   const symbolt *&symbol)
 {
-  if(expr.id()=="symbol")
+  if (is_symbol2t(expr))
   {
-    if (has_prefix(expr.identifier().as_string(), "symex::invalid_object"))
+    if (has_prefix(to_symbol2t(expr).name.as_string(), "symex::invalid_object"))
       return false;
 
-    const symbolt &ptr_symbol=ns.lookup(expr);
+    exprt tmp_sym = migrate_expr_back(expr);
+    const symbolt &ptr_symbol = ns.lookup(tmp_sym);
 
-    const irep_idt &failed_symbol=
-      ptr_symbol.type.failed_symbol();
+    const irep_idt &failed_symbol = ptr_symbol.type.failed_symbol();
 
-    if(failed_symbol=="") return false;
+    if (failed_symbol == "")
+      return false;
 
     return !ns.lookup(failed_symbol, symbol);
   }
@@ -293,12 +294,10 @@ Function: goto_program_dereferencet::get_value_set
 \*******************************************************************/
 
 void goto_program_dereferencet::get_value_set(
-  const exprt &expr,
+  const expr2tc &expr,
   value_setst::valuest &dest)
 {
-  expr2tc new_expr;
-  migrate_expr(expr, new_expr);
-  value_sets.get_values(current_target, new_expr, dest);
+  value_sets.get_values(current_target, expr, dest);
 }
 
 /*******************************************************************\

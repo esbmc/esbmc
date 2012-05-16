@@ -44,11 +44,11 @@ protected:
     const guardt &guard);
 #endif
   virtual void get_value_set(
-    const exprt &expr,
+    const expr2tc &expr,
     value_setst::valuest &value_set);
 
   virtual bool has_failed_symbol(
-    const exprt &expr,
+    const expr2tc &expr,
     const symbolt *&symbol);
 };
 
@@ -62,15 +62,14 @@ void symex_dereference_statet::dereference_failure(
 }
 
 bool symex_dereference_statet::has_failed_symbol(
-  const exprt &expr,
+  const expr2tc &expr,
   const symbolt *&symbol)
 {
   renaming_nst renaming_ns(goto_symex.ns, state);
 
-  if(expr.id()==exprt::symbol)
+  if (is_symbol2t(expr))
   {
-    const symbolt &ptr_symbol=
-      renaming_ns.lookup(expr.identifier());
+    const symbolt &ptr_symbol = renaming_ns.lookup(to_symbol2t(expr).name);
 
     const irep_idt &failed_symbol=
       ptr_symbol.type.failed_symbol();
@@ -84,14 +83,12 @@ bool symex_dereference_statet::has_failed_symbol(
 }
 
 void symex_dereference_statet::get_value_set(
-  const exprt &expr,
+  const expr2tc &expr,
   value_setst::valuest &value_set)
 {
   renaming_nst renaming_ns(goto_symex.ns, state);
 
-  expr2tc new_expr;
-  migrate_expr(expr, new_expr);
-  state.value_set.get_value_set(new_expr, value_set, renaming_ns);
+  state.value_set.get_value_set(expr, value_set, renaming_ns);
 }
 
 void goto_symext::dereference_rec(
