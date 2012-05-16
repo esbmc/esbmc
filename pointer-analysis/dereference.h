@@ -123,10 +123,10 @@ private:
     expr2tc &new_offset);
     
   bool memory_model_bytes(
-    exprt &value,
-    const typet &type,
+    expr2tc &value,
+    const type2tc &type,
     const guardt &guard,
-    exprt &new_offset);
+    expr2tc &new_offset);
 };
 
 #endif

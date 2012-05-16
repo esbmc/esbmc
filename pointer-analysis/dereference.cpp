@@ -746,12 +746,7 @@ bool dereferencet::memory_model(
 
   // otherwise, we will stich it together from bytes
 
-  exprt tmp_value = migrate_expr_back(value);
-  typet tmp_type = migrate_type_back(to_type);
-  exprt tmp_new_offset = migrate_expr_back(new_offset);
-  bool ret = memory_model_bytes(tmp_value, tmp_type, guard, tmp_new_offset);
-  migrate_expr(tmp_value, value);
-  migrate_expr(tmp_new_offset, new_offset);
+  bool ret = memory_model_bytes(value, to_type, guard, new_offset);
   return ret;
 }
 
@@ -819,15 +814,16 @@ Function: dereferencet::memory_model_bytes
 \*******************************************************************/
 
 bool dereferencet::memory_model_bytes(
-  exprt &value,
-  const typet &to_type,
+  expr2tc &value,
+  const type2tc &to_type,
   const guardt &guard,
-  exprt &new_offset)
+  expr2tc &new_offset)
 {
-  const typet from_type=value.type();
+  const expr2tc orig_value = value;
+  const type2tc from_type = value->type;
 
   // we won't try to convert to/from code
-  if(from_type.is_code() || to_type.is_code())
+  if (is_code_type(from_type) || is_code_type(to_type))
     return false;
 
   // won't do this without a committment to an endianess
@@ -837,42 +833,28 @@ bool dereferencet::memory_model_bytes(
   // But anything else we will try!
 
   // We allow reading more or less anything as bit-vector.
-  if(to_type.id()=="bv" ||
-     to_type.id()=="unsignedbv" ||
-     to_type.id()=="signedbv")
+  if (is_bv_type(to_type))
   {
-    const char *byte_extract_id=NULL;
+    bool is_big_endian =
+      (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
 
-    switch(config.ansi_c.endianess)
-    {
-    case configt::ansi_ct::IS_LITTLE_ENDIAN:
-      byte_extract_id="byte_extract_little_endian";
-      break;
+    value = expr2tc(new byte_extract2t(to_type, is_big_endian, value,
+                                       new_offset));
 
-    case configt::ansi_ct::IS_BIG_ENDIAN:
-      byte_extract_id="byte_extract_big_endian";
-      break;
-
-    default:
-      assert(false);
-    }
-
-    exprt byte_extract(byte_extract_id, to_type);
-    byte_extract.copy_to_operands(value, new_offset);
-    value=byte_extract;
-
-    if(!new_offset.is_zero())
+    if (!is_constant_int2t(new_offset) ||
+        !to_constant_int2t(new_offset).constant_value.is_zero())
     {
       if(!options.get_bool_option("no-pointer-check"))
       {
-        exprt bound=exprt("width", new_offset.type());
-        bound.copy_to_operands(value.op0());
-
-        binary_relation_exprt
-          offset_upper_bound(new_offset, ">=", bound);
+        unsigned long width = orig_value->type->get_width();
+        expr2tc const_val =
+          expr2tc(new constant_int2t(new_offset->type, BigInt(width)));
+        expr2tc offs_upper_bound =
+          expr2tc(new greaterthanequal2t(new_offset, const_val));
 
         guardt tmp_guard(guard);
-        tmp_guard.move(offset_upper_bound);
+        exprt tmp_offs_upper_bound = migrate_expr_back(offs_upper_bound);
+        tmp_guard.move(tmp_offs_upper_bound);
         dereference_callback.dereference_failure(
           "word bounds",
           "word offset upper bound", tmp_guard);
@@ -880,12 +862,12 @@ bool dereferencet::memory_model_bytes(
 
       if(!options.get_bool_option("no-pointer-check"))
       {
-        binary_relation_exprt
-          offset_lower_bound(new_offset, "<",
-                             gen_zero(new_offset.type()));
+        expr2tc zero = expr2tc(new constant_int2t(new_offset->type, BigInt(0)));
+        expr2tc offs_lower_bound = expr2tc(new lessthan2t(new_offset, zero));
 
         guardt tmp_guard(guard);
-        tmp_guard.move(offset_lower_bound);
+        exprt tmp_offs_lower_bound = migrate_expr_back(offs_lower_bound);
+        tmp_guard.move(tmp_offs_lower_bound);
         dereference_callback.dereference_failure(
           "word bounds",
           "word offset lower bound", tmp_guard);
