@@ -8,6 +8,6 @@ int main(){
 	str2 = string(str1, 3);
 	str3 = string("AA", 6);
 	str4 = string('A',12);
-	assert( (str1 <= str2)&&(str1 < str3)&&(str1 <= str4) );
+	assert( !((str1 <= str2)&&(str1 < str3)&&(str1 <= str4)));
 
 }

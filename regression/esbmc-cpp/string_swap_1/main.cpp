@@ -4,7 +4,7 @@
 #include <cassert>
 using namespace std;
 
-main ()
+int main ()
 {
   string buyer ("money");
   string seller ("goods");
