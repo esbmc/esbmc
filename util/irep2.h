@@ -1105,7 +1105,6 @@ public:
     (type, to_bv_typecast_id, from) { }
   to_bv_typecast2t(const to_bv_typecast2t &ref)
     : esbmct::expr<to_bv_typecast2t, esbmct::expr2tc_from>(ref){}
-  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<to_bv_typecast2t, esbmct::expr2tc_from>;
 
@@ -1118,7 +1117,6 @@ public:
     (type, from_bv_typecast_id, from) { }
   from_bv_typecast2t(const from_bv_typecast2t &ref)
     : esbmct::expr<from_bv_typecast2t, esbmct::expr2tc_from>(ref){}
-  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<from_bv_typecast2t, esbmct::expr2tc_from>;
 
