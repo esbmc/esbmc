@@ -69,7 +69,7 @@ namespace std
 		string (char*);
 		string (const char * s, size_t n);
 		string (string& s, size_t n);
-		string (size_t n, char c);
+		string (char c, size_t n);
 		string::string(int len);
 		char* c_str ( ) const;
 	    const_iterator begin() const;
@@ -103,6 +103,7 @@ namespace std
 		string& operator += (const char* s);
 		string& operator+= (char s);
 		string& operator+ ( string& s);
+		string& operator+ ( char s);
 		string& operator+ ( string& s1, string& s2);
 		char& operator[] ( size_t pos );
 		char& at ( size_t pos ) const;
@@ -185,20 +186,22 @@ namespace std
 	string::string (const char * s, size_t n)
 	{
 		__ESBMC_HIDE: //length of string
+		//__ESBMC_assert(n < strlen(s),"string overflow");
 		int i;
 		str=new char[n+1]; //increments length of string
 		_size = n;
-		for(i=0;i<_size;i++)
+		for(i=0;(i<_size)&&(s[i]!='\0');i++)
 			str[i]=s[i];
 		str[i]='\0';
 	}
 	string::string (string& s, size_t n)
 	{
 		__ESBMC_HIDE: //length of string
-		__ESBMC_assert(n > s.length(),"string overflow");
 		int i;
 		str=new char[n+1]; //increments length of string
 		_size = n;
+		if(n>s.length())
+			n=s.length();
 		for(i=0;i<_size;i++)
 			str[i]=s.str[i];
 		str[i]='\0';
@@ -209,7 +212,15 @@ namespace std
 	     //for(int i = 0; i <= len; i++)
 	         //str[i] = '\0';
 	     _size = len;
-	     //npos = _size-1;
+	     //npos = _size-1;string_operator[]_5/test.desc
+	 }
+	 string::string(char c, size_t n)
+	 {
+	     str = new char [n+1];
+	     for(int i = 0; i <= n; i++)
+	         str[i] = c;
+	     _size = n;
+	     //npos = _size-1;string_operator[]_5/test.desc
 	 }
 	char* string::c_str () const
 	{
@@ -328,7 +339,7 @@ namespace std
 	bool string::operator> (string& a)
 	{
 		__ESBMC_HIDE:
-		if ( strlen(this->c_str()) > strlen(a.c_str()) )
+		if ( strlen(this->c_str()) > a.length() )
 			return true;
 		return false;
 	}
@@ -403,7 +414,7 @@ namespace std
 	bool string::operator <=(string& a)
 	{
 		__ESBMC_HIDE:
-		if ( strlen(this->c_str()) <= strlen(a.c_str()) )
+		if ( this->length() <= a.length() )
 			return true;
 		return false;
 	}
@@ -519,6 +530,15 @@ namespace std
 	        temp[i] = this->str[i];
 	    for(j=i, k=0; j<temp._size; j++, k++)
 	    	temp.str[j] = s.str[k];
+	    //*this = temp;
+	    //assert(temp==s);
+	    return temp;
+	}
+	string& string::operator+ ( char s)
+	{
+		__ESBMC_HIDE:
+	    string temp(this->_size+1);
+	    temp.str[temp._size-1] = s;
 	    //*this = temp;
 	    //assert(temp==s);
 	    return temp;
