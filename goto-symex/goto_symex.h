@@ -144,7 +144,7 @@ protected:
    *  @param write Whether or not we're writing to this object.
    */
   void dereference_rec(
-    exprt &expr,
+    expr2tc &expr,
     guardt &guard,
     class dereferencet &dereference,
     const bool write);

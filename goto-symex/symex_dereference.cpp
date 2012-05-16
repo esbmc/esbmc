@@ -92,48 +92,44 @@ void symex_dereference_statet::get_value_set(
 }
 
 void goto_symext::dereference_rec(
-  exprt &expr,
+  expr2tc &expr,
   guardt &guard,
   dereferencet &dereference,
   const bool write)
 {
 
-  if(expr.id()==exprt::deref ||
-     expr.id()=="implicit_dereference")
+  if (is_dereference2t(expr))
   {
-    if(expr.operands().size()!=1)
-      throw "dereference takes one operand";
-
-    exprt tmp;
-    tmp.swap(expr.op0());
+    dereference2t &deref = to_dereference2t(expr);
 
     // first make sure there are no dereferences in there
-    dereference_rec(tmp, guard, dereference, false);
-    expr2tc tmp_expr;
-    migrate_expr(tmp, tmp_expr);
+    dereference_rec(deref.value, guard, dereference, false);
 
-    dereference.dereference(tmp_expr, guard, write?dereferencet::WRITE:dereferencet::READ);
-    expr = migrate_expr_back(tmp_expr);
+    dereference.dereference(deref.value, guard,
+                            write ? dereferencet::WRITE : dereferencet::READ);
+    expr = deref.value;
   }
-  else if(expr.id()==exprt::index &&
-          expr.operands().size()==2 &&
-          expr.op0().type().id()==typet::t_pointer)
+  else if (is_index2t(expr) &&
+           is_pointer_type(to_index2t(expr).source_value->type))
   {
-    exprt tmp(exprt::plus, expr.op0().type());
-    tmp.operands().swap(expr.operands());
+    index2t &index = to_index2t(expr);
+    expr2tc tmp = expr2tc(new add2t(index.source_value->type,
+                                    index.source_value, index.index));
 
     // first make sure there are no dereferences in there
     dereference_rec(tmp, guard, dereference, false);
-    expr2tc tmp_expr;
-    migrate_expr(tmp, tmp_expr);
 
-    dereference.dereference(tmp_expr, guard, write?dereferencet::WRITE:dereferencet::READ);
-    expr = migrate_expr_back(tmp_expr);
+    dereference.dereference(tmp, guard,
+                            write ? dereferencet::WRITE : dereferencet::READ);
+    expr = tmp;
   }
   else
   {
-    Forall_operands(it, expr)
-      dereference_rec(*it, guard, dereference, write);
+    std::vector<expr2tc *> operands;
+    expr.get()->list_operands(operands);
+    for (std::vector<expr2tc *>::const_iterator it = operands.begin();
+         it != operands.end(); it++)
+      dereference_rec(**it, guard, dereference, write);
   }
 }
 
@@ -153,7 +149,5 @@ void goto_symext::dereference(expr2tc &expr, const bool write)
   cur_state->top().level1.rename(expr);
 
   guardt guard;
-  exprt tmp = migrate_expr_back(expr);
-  dereference_rec(tmp, guard, dereference, write);
-  migrate_expr(tmp, expr);
+  dereference_rec(expr, guard, dereference, write);
 }
