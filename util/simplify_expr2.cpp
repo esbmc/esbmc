@@ -5,6 +5,7 @@
 #include <boost/static_assert.hpp>
 
 #include <ansi-c/c_types.h>
+#include <base_type.h>
 
 expr2tc
 expr2t::do_simplify(bool second __attribute__((unused))) const
@@ -584,7 +585,7 @@ member2t::do_simplify(bool second __attribute__((unused))) const
       s = to_constant_union2t(source_value).datatype_members[no];
     }
 
-    assert(type == s->type);
+    assert(base_type_eq(type, s->type, namespacet(contextt())));
     return s;
   } else {
     return expr2tc();
