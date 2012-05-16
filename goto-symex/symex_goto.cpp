@@ -115,6 +115,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
       expr2tc new_rhs = new_guard;
       new_rhs = expr2tc(new not2t(new_rhs));
+      do_simplify(new_rhs);
 
       expr2tc new_lhs = guard_expr;
 
