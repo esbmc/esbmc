@@ -56,9 +56,9 @@ BOOST_STATIC_ASSERT(sizeof(type_names) ==
                     (type2t::end_type_id * sizeof(char *)));
 
 std::string
-get_type_id(const type2tc &type)
+get_type_id(const type2t &type)
 {
-  return std::string(type_names[type->type_id]);
+  return std::string(type_names[type.type_id]);
 }
 
 
@@ -498,9 +498,9 @@ BOOST_STATIC_ASSERT(sizeof(expr_names) ==
                     (expr2t::end_expr_id * sizeof(char *)));
 
 std::string
-get_expr_id(const expr2tc &expr)
+get_expr_id(const expr2t &expr)
 {
-  return std::string(expr_names[expr->expr_id]);
+  return std::string(expr_names[expr.expr_id]);
 }
 
 std::string

@@ -208,7 +208,13 @@ public:
   type_ids type_id;
 };
 
-std::string get_type_id(const type2tc &type);
+
+std::string get_type_id(const type2t &type);
+
+static inline std::string get_type_id(const type2tc &type)
+{
+  return get_type_id(*type);
+}
 
 /** Base class for all expressions */
 class expr2t
@@ -342,7 +348,11 @@ public:
   type2tc type;
 };
 
-std::string get_expr_id(const expr2tc &expr);
+std::string get_expr_id(const expr2t &expr);
+static inline std::string get_expr_id(const expr2tc &expr)
+{
+  return get_expr_id(*expr);
+}
 
 // for "ESBMC templates",
 namespace esbmct {
