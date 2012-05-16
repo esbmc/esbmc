@@ -19,6 +19,20 @@ Author: Daniel Kroening, kroening@kroening.com
 void base_type(typet &type, const namespacet &ns);
 void base_type(exprt &expr, const namespacet &ns);
 
+static inline void base_type(type2tc &type, const namespacet &ns)
+{
+  typet tmp = migrate_type_back(type);
+  base_type(tmp, ns);
+  migrate_type(tmp, type);
+}
+
+static inline void base_type(expr2tc &expr, const namespacet &ns)
+{
+  exprt tmp = migrate_expr_back(expr);
+  base_type(tmp, ns);
+  migrate_expr(tmp, expr);
+}
+
 bool base_type_eq(
   const typet &type1,
   const typet &type2,
