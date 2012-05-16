@@ -48,14 +48,6 @@ bool dereferencet::has_dereference(const exprt &expr) const
   return false;
 }
 
-const exprt& dereferencet::get_symbol(const exprt &expr)
-{
-  if(expr.id()=="member" || expr.id()=="index")
-    return get_symbol(expr.op0());
-
-  return expr;
-}
-
 const expr2tc& dereferencet::get_symbol(const expr2tc &expr)
 {
   if (is_member2t(expr))
