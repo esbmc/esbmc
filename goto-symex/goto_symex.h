@@ -160,7 +160,7 @@ protected:
    *  description of how this is implemented... can go somewhere else.
    *  @param old_guard Renamed guard on this jump occuring.
    */
-  virtual void symex_goto(const exprt &old_guard);
+  virtual void symex_goto(const expr2tc &old_guard);
 
   /**
    *  Perform interpretation of RETURN instruction.

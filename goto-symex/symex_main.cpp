@@ -118,9 +118,7 @@ goto_symext::symex_step(reachability_treet & art)
 
     dereference(tmp, false);
 
-    exprt even_tmper = migrate_expr_back(tmp);
-
-    symex_goto(even_tmper);
+    symex_goto(tmp);
   }
   break;
 

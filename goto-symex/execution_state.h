@@ -265,7 +265,7 @@ class execution_statet : public goto_symext
    *  too.
    *  @param old_guard Guard of the goto jump being performed.
    */
-  virtual void symex_goto(const exprt &old_guard);
+  virtual void symex_goto(const expr2tc &old_guard);
 
   /**
    *  Assume some expression is true.

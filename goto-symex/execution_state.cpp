@@ -267,14 +267,17 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 }
 
 void
-execution_statet::symex_goto(const exprt &old_guard)
+execution_statet::symex_goto(const expr2tc &old_guard)
 {
 
   goto_symext::symex_goto(old_guard);
 
-  if (!old_guard.is_nil())
-    if (threads_state.size() > 1)
-      owning_rt->analyse_for_cswitch_after_read(old_guard);
+  if (!is_nil_expr(old_guard)) {
+    if (threads_state.size() > 1) {
+      exprt tmp_guard = migrate_expr_back(old_guard);
+      owning_rt->analyse_for_cswitch_after_read(tmp_guard);
+    }
+  }
 
   return;
 }

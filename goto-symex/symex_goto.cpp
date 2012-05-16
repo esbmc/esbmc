@@ -17,19 +17,18 @@
 #include "goto_symex.h"
 
 void
-goto_symext::symex_goto(const exprt &old_guard)
+goto_symext::symex_goto(const expr2tc &old_guard)
 {
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
-  exprt new_guard = old_guard;
-  expr2tc new_new_guard;
-  migrate_expr(new_guard, new_new_guard);
-  cur_state->rename(new_new_guard);
-  new_guard = migrate_expr_back(new_new_guard);
+  expr2tc new_guard = old_guard;
+  cur_state->rename(new_guard);
   do_simplify(new_guard);
 
-  if (new_guard.is_false() ||
-      cur_state->guard.is_false()) {
+  if ((is_constant_bool2t(new_guard) &&
+        !to_constant_bool2t(new_guard).constant_value)
+      || cur_state->guard.is_false()) {
+
     // reset unwinding counter
     cur_state->unwind_map[cur_state->source] = 0;
 
@@ -60,7 +59,8 @@ goto_symext::symex_goto(const exprt &old_guard)
     cur_state->unwind_map[cur_state->source] = unwind;
 
     if (get_unwind(cur_state->source, unwind)) {
-      loop_bound_exceeded(new_guard);
+      exprt tmp_new_guard = migrate_expr_back(new_guard);
+      loop_bound_exceeded(tmp_new_guard);
 
       // reset unwinding
       cur_state->unwind_map[cur_state->source] = 0;
@@ -70,7 +70,8 @@ goto_symext::symex_goto(const exprt &old_guard)
       return;
     }
 
-    if (new_guard.is_true()) {
+    if (is_constant_bool2t(new_guard) &&
+        to_constant_bool2t(new_guard).constant_value) {
       cur_state->source.pc = goto_target;
       return; // nothing else to do
     }
@@ -98,60 +99,53 @@ goto_symext::symex_goto(const exprt &old_guard)
   statet::goto_statet &new_state = goto_state_list.back();
 
   // adjust guards
-  if (new_guard.is_true()) {
+  if (is_constant_bool2t(new_guard) &&
+      to_constant_bool2t(new_guard).constant_value) {
     cur_state->guard.make_false();
   } else   {
     // produce new guard symbol
-    exprt guard_expr;
+    expr2tc guard_expr;
 
-    if (new_guard.id() == exprt::symbol ||
-        (new_guard.id() == exprt::i_not &&
-         new_guard.operands().size() == 1 &&
-         new_guard.op0().id() == exprt::symbol))
+    if (is_symbol2t(new_guard) ||
+        (is_not2t(new_guard) && is_symbol2t(to_not2t(new_guard).value))) {
       guard_expr = new_guard;
-    else {
-      guard_expr = symbol_exprt(guard_identifier(), bool_typet());
-      exprt new_rhs = new_guard,
-            rhs = old_guard;
-      new_rhs.make_not();
-      rhs.make_not();
+    } else {
+      guard_expr =
+        expr2tc(new symbol2t(type_pool.get_bool(), guard_identifier()));
 
-      exprt new_lhs = guard_expr;
+      expr2tc new_rhs = new_guard, rhs = old_guard;
+      new_rhs = expr2tc(new not2t(new_rhs));
+      rhs = expr2tc(new not2t(rhs));
 
-      expr2tc new_new_lhs, new_new_rhs;
-      migrate_expr(new_lhs, new_new_lhs);
-      migrate_expr(new_rhs, new_new_rhs);
-      cur_state->assignment(new_new_lhs, new_new_rhs, false);
+      expr2tc new_lhs = guard_expr;
+
+      cur_state->assignment(new_lhs, new_rhs, false);
 
       guardt guard;
 
-      expr2tc guard2, guard_expr2, new_rhs2;
+      expr2tc guard2;
       migrate_expr(guard.as_expr(), guard2);
-      migrate_expr(new_rhs, new_rhs2);
-      migrate_expr(guard_expr, guard_expr2);
       target->assignment(
         guard2,
-        new_new_lhs, guard_expr2,
-        new_rhs2,
+        new_lhs, guard_expr,
+        new_rhs,
         cur_state->source,
         cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);
 
-      guard_expr.make_not();
-      expr2tc new_guard_expr;
-      migrate_expr(guard_expr, new_guard_expr);
-      cur_state->rename(new_guard_expr);
-      guard_expr = migrate_expr_back(new_guard_expr);
+      guard_expr = expr2tc(new not2t(guard_expr));
+      cur_state->rename(guard_expr);
     }
 
+    exprt tmp_guard_expr = migrate_expr_back(guard_expr);
     if (forward) {
-      new_state.guard.add(guard_expr);
-      guard_expr.make_not();
-      cur_state->guard.add(guard_expr);
+      new_state.guard.add(tmp_guard_expr);
+      tmp_guard_expr.make_not();
+      cur_state->guard.add(tmp_guard_expr);
     } else   {
-      cur_state->guard.add(guard_expr);
-      guard_expr.make_not();
-      new_state.guard.add(guard_expr);
+      cur_state->guard.add(tmp_guard_expr);
+      tmp_guard_expr.make_not();
+      new_state.guard.add(tmp_guard_expr);
     }
   }
 }
