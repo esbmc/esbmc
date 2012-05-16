@@ -254,7 +254,10 @@ void goto_program_dereferencet::dereference_rec(
 
     exprt tmp;
     tmp.swap(expr.op0());
-    dereference.dereference(tmp, guard, mode);
+    expr2tc tmp_expr;
+    migrate_expr(tmp, tmp_expr);
+    dereference.dereference(tmp_expr, guard, mode);
+    tmp = migrate_expr_back(tmp_expr);
     expr.swap(tmp);
   }
   else if(expr.id()=="index")
@@ -268,8 +271,10 @@ void goto_program_dereferencet::dereference_rec(
 
       exprt tmp("+", expr.op0().type());
       tmp.operands().swap(expr.operands());
-      dereference.dereference(tmp, guard, mode);
-      tmp.swap(expr);
+      expr2tc tmp_expr;
+      migrate_expr(tmp, tmp_expr);
+      dereference.dereference(tmp_expr, guard, mode);
+      tmp = migrate_expr_back(tmp_expr);
     }
   }
 }
@@ -425,7 +430,8 @@ void goto_program_dereferencet::dereference_instruction(
     if(function_call.lhs().is_not_nil())
       dereference_expr(function_call.lhs(), checks_only, dereferencet::WRITE);
 
-    dereference_expr(function_call.op2(), checks_only, dereferencet::READ);
+    Forall_operands(it, function_call.op2())
+      dereference_expr(*it, checks_only, dereferencet::READ);
 
     if (function_call.function().id() == "dereference") {
       // Rather than derefing function ptr, which we're moving to not collect
@@ -480,7 +486,10 @@ void goto_program_dereferencet::dereference_instruction(
       dereference_location=tmp.find_location();
 
       guardt guard;
-      dereference.dereference(tmp, guard, dereferencet::FREE);
+      expr2tc tmp_expr;
+      migrate_expr(tmp, tmp_expr);
+      dereference.dereference(tmp_expr, guard, dereferencet::FREE);
+      tmp = migrate_expr_back(tmp_expr);
     }
   }
 }

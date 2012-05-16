@@ -112,9 +112,11 @@ void goto_symext::dereference_rec(
 
     // first make sure there are no dereferences in there
     dereference_rec(tmp, guard, dereference, false);
+    expr2tc tmp_expr;
+    migrate_expr(tmp, tmp_expr);
 
-    dereference.dereference(tmp, guard, write?dereferencet::WRITE:dereferencet::READ);
-    expr.swap(tmp);
+    dereference.dereference(tmp_expr, guard, write?dereferencet::WRITE:dereferencet::READ);
+    expr = migrate_expr_back(tmp_expr);
   }
   else if(expr.id()==exprt::index &&
           expr.operands().size()==2 &&
@@ -125,9 +127,11 @@ void goto_symext::dereference_rec(
 
     // first make sure there are no dereferences in there
     dereference_rec(tmp, guard, dereference, false);
+    expr2tc tmp_expr;
+    migrate_expr(tmp, tmp_expr);
 
-    dereference.dereference(tmp, guard, write?dereferencet::WRITE:dereferencet::READ);
-    tmp.swap(expr);
+    dereference.dereference(tmp_expr, guard, write?dereferencet::WRITE:dereferencet::READ);
+    expr = migrate_expr_back(tmp_expr);
   }
   else
   {

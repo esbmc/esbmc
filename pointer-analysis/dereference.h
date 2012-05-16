@@ -63,7 +63,7 @@ public:
   typedef enum { READ, WRITE, FREE } modet;
 
   virtual void dereference(
-    exprt &dest,
+    expr2tc &dest,
     const guardt &guard,
     const modet mode);
     

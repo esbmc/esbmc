@@ -60,34 +60,36 @@ const expr2tc& dereferencet::get_symbol(const expr2tc &expr)
 }
 
 void dereferencet::dereference(
-  exprt &dest,
+  expr2tc &dest,
   const guardt &guard,
   const modet mode)
 {
-  if(dest.type().id()!="pointer")
-    throw "dereference expected pointer type, but got "+
-          dest.type().pretty();
+  assert(is_pointer_type(dest->type));
 
   // Pointers type won't have been resolved; do that now.
-  const typet dereftype = ns.follow(dest.type().subtype());
-  dest.type().subtype() = dereftype;
+  pointer_type2t &dest_type = to_pointer_type(dest.get()->type);
+  typet tmp_ptr_subtype = migrate_type_back(dest_type.subtype);
+  const typet dereftype = ns.follow(tmp_ptr_subtype);
+
+  migrate_type(dereftype, dest_type.subtype);
 
   // save the dest for later, dest might be destroyed
-  const exprt deref_expr(dest);
+  const expr2tc deref_expr(dest);
 
   // type of the object
-  const typet &type=deref_expr.type().subtype();
+  const type2tc &type = dest_type.subtype;
 
   // collect objects dest may point to
   value_setst::valuest points_to_set;
 
-  dereference_callback.get_value_set(dest, points_to_set);
+  exprt tmp_dest = migrate_expr_back(dest);
+  dereference_callback.get_value_set(tmp_dest, points_to_set);
+  migrate_expr(tmp_dest, dest);
 
   // now build big case split
   // only "good" objects
 
-  exprt value;
-  value.make_nil();
+  expr2tc value;
 
   // if it's empty, we have a problem
   //lucas: nec: ex33.c
@@ -107,44 +109,33 @@ void dereferencet::dereference(
       it!=points_to_set.end();
       it++)
   {
-    exprt new_value, pointer_guard;
+    expr2tc new_value, pointer_guard;
 
-    expr2tc tmp_new_val, tmp_ptr_guard, tmp_dest;
-    type2tc tmp_type;
-    migrate_type(type, tmp_type);
-    migrate_expr(dest, tmp_dest);
-    build_reference_to(
-      *it, mode, tmp_dest, tmp_type,
-      tmp_new_val, tmp_ptr_guard, guard);
-    new_value = migrate_expr_back(tmp_new_val);
-    pointer_guard = migrate_expr_back(tmp_ptr_guard);
+    build_reference_to(*it, mode, dest, type, new_value, pointer_guard, guard);
 
-    if(new_value.is_not_nil())
+    if (!is_nil_expr(new_value))
     {
-      if(value.is_nil())
-        value.swap(new_value);
-      else
-      {
-        if_exprt tmp;
-        tmp.type()=type;
-        tmp.cond()=pointer_guard;
-        tmp.true_case()=new_value;
-        tmp.false_case().swap(value);
-        value.swap(tmp);
+      if (is_nil_expr(value)) {
+        value = new_value;
+      } else {
+        // Chain a big if-then-else case.
+        value = expr2tc(new if2t(type, pointer_guard, new_value, value));
       }
     }
   }
 
-  if(value.is_nil())
+  if (is_nil_expr(value))
   {
     // first see if we have a "failed object" for this pointer
 
     const symbolt *failed_symbol;
 
-    if(dereference_callback.has_failed_symbol(deref_expr, failed_symbol))
+    exprt tmp_deref_expr = migrate_expr_back(deref_expr);
+    if (dereference_callback.has_failed_symbol(tmp_deref_expr, failed_symbol))
     {
       // yes!
-      value=symbol_expr(*failed_symbol);
+      exprt tmp_val = symbol_expr(*failed_symbol);
+      migrate_expr(tmp_val, value);
     }
     else
     {
@@ -153,22 +144,21 @@ void dereferencet::dereference(
       symbolt symbol;
       symbol.name="symex::invalid_object"+i2string(invalid_counter++);
       symbol.base_name="invalid_object";
-      symbol.type=type;
+      symbol.type=migrate_type_back(type);
 
       // make it a lvalue, so we can assign to it
       symbol.lvalue=true;
 
       get_new_name(symbol, ns);
 
-      value=symbol_expr(symbol);
+      exprt tmp_sym_expr = symbol_expr(symbol);
+      migrate_expr(tmp_sym_expr, value);
 
       new_context.move(symbol);
     }
-
-    value.invalid_object(true);
   }
 
-  dest.swap(value);
+  dest = value;
 }
 
 bool dereferencet::dereference_type_compare(
