@@ -101,9 +101,10 @@ private:
     exprt &value);
              
   static const exprt &get_symbol(const exprt &object);
+  static const expr2tc &get_symbol(const expr2tc &object);
   
   void bounds_check(const class index2t &expr, const guardt &guard);
-  void valid_check(const exprt &expr, const guardt &guard, const modet mode);
+  void valid_check(const expr2tc &expr, const guardt &guard, const modet mode);
 
   bool memory_model(
     expr2tc &value,

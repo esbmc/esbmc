@@ -55,6 +55,16 @@ const exprt& dereferencet::get_symbol(const exprt &expr)
   return expr;
 }
 
+const expr2tc& dereferencet::get_symbol(const expr2tc &expr)
+{
+  if (is_member2t(expr))
+    return get_symbol(to_member2t(expr).source_value);
+  else if (is_index2t(expr))
+    return get_symbol(to_index2t(expr).source_value);
+
+  return expr;
+}
+
 void dereferencet::dereference(
   exprt &dest,
   const guardt &guard,
@@ -363,8 +373,7 @@ void dereferencet::build_reference_to(
     exprt tmp_ptr_guard = migrate_expr_back(pointer_guard);
     tmp_guard.add(tmp_ptr_guard);
 
-    exprt tmp_obj = migrate_expr_back(object);
-    valid_check(tmp_obj, tmp_guard, mode);
+    valid_check(object, tmp_guard, mode);
 
     expr2tc offset;
 
@@ -443,7 +452,7 @@ void dereferencet::build_reference_to(
 }
 
 void dereferencet::valid_check(
-  const exprt &object,
+  const expr2tc &object,
   const guardt &guard,
   const modet mode)
 {
@@ -459,9 +468,9 @@ void dereferencet::valid_check(
     return;
   }
 
-  const exprt &symbol=get_symbol(object);
+  const expr2tc &symbol = get_symbol(object);
 
-  if(symbol.id()=="string-constant")
+  if (is_constant_string2t(symbol))
   {
     // always valid, but can't write
 
@@ -473,17 +482,14 @@ void dereferencet::valid_check(
         guard);
     }
   }
-  else if(symbol.is_nil() ||
-          symbol.invalid_object())
+  else if (is_nil_expr(symbol)) // XXX jmorse symbol.invalid_object())
   {
     // always "valid", shut up
     return;
   }
-  else if(symbol.id()=="symbol")
+  else if (is_symbol2t(symbol))
   {
-    const irep_idt identifier=symbol.identifier();
-
-    if(dereference_callback.is_valid_object(identifier))
+    if (dereference_callback.is_valid_object(to_symbol2t(symbol).name))
       return; // always ok
   }
 }
