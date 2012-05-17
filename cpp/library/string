@@ -253,8 +253,14 @@ namespace std
 	bool string::operator== ( const char* lhs)
 	{
 		__ESBMC_HIDE:
-		int aux;
-		aux = strcmp((char*)lhs, this->str);
+		int aux,i;
+		for(i=0;(i<this->length())||(i<strlen(lhs));i++){
+			if(this->str[i]!=lhs[i]){
+				aux=1;break;
+			}
+		}
+
+		//aux = strcmp((char*)lhs, this->str);
 		if (aux == 0){
 			return true;
 		}else{
@@ -604,7 +610,8 @@ namespace std
 	}
 	void string::resize ( size_t n, char c )
 	{
-		int num = this->_size,i;
+		int num, i;
+		num = this->length();
 		string tmp(this->str);
 		this->_size= n;
 		this->str=new char[n];
