@@ -134,149 +134,110 @@ Function: goto_program_dereferencet::dereference_rec
 \*******************************************************************/
 
 void goto_program_dereferencet::dereference_rec(
-  exprt &expr,
+  expr2tc &expr,
   guardt &guard,
   const dereferencet::modet mode)
 {
-  expr2tc tmp_expr;
-  migrate_expr(expr, tmp_expr);
-  if(!dereference.has_dereference(tmp_expr))
+
+  if (!dereference.has_dereference(expr))
     return;
 
-  if(expr.is_and() || expr.id()=="or")
+  if (is_and2t(expr) || is_or2t(expr))
   {
-    if(!expr.is_boolean())
-      throw expr.id_string()+" must be Boolean, but got "+
-            expr.pretty();
-
     unsigned old_guards=guard.size();
 
-    for(unsigned i=0; i<expr.operands().size(); i++)
+    assert(is_bool_type(expr->type));
+
+    std::vector<expr2tc *> operands;
+    expr.get()->list_operands(operands);
+    for (unsigned i = 0; i < operands.size(); i++)
     {
-      exprt &op=expr.operands()[i];
+      expr2tc &op = *operands[i];
 
-      if(!op.is_boolean())
-        throw expr.id_string()+" takes Boolean operands only, but got "+
-              op.pretty();
+      assert(is_bool_type(op->type));
 
-      expr2tc tmp_op;
-      migrate_expr(op, tmp_op);
-      if (dereference.has_dereference(tmp_op))
+      if (dereference.has_dereference(op))
         dereference_rec(op, guard, dereferencet::READ);
 
-      if(expr.id()=="or")
-      {
-        exprt tmp(op);
-        tmp.make_not();
-        guard.move(tmp);
+      if (is_or2t(expr)) {
+        expr2tc tmp = expr2tc(new not2t(op));
+        exprt tmp_expr = migrate_expr_back(tmp);
+        guard.move(tmp_expr);
+      } else {
+        exprt tmp_expr = migrate_expr_back(op);
+        guard.add(tmp_expr);
       }
-      else
-        guard.add(op);
     }
 
     guard.resize(old_guards);
 
     return;
   }
-  else if(expr.id()=="if")
+  else if (is_if2t(expr))
   {
-    if(expr.operands().size()!=3)
-      throw "if takes three arguments";
+    if2t &ifref = to_if2t(expr);
+    assert(is_bool_type(ifref.cond->type));
+    dereference_rec(ifref.cond, guard, dereferencet::READ);
 
-    if(!expr.op0().is_boolean())
-    {
-      std::string msg=
-        "first argument of if must be boolean, but got "
-        +expr.op0().to_string();
-      throw msg;
-    }
+    bool o1 = dereference.has_dereference(ifref.true_value);
+    bool o2 = dereference.has_dereference(ifref.false_value);
 
-    dereference_rec(expr.op0(), guard, dereferencet::READ);
-
-    expr2tc tmp_op1, tmp_op2;
-    migrate_expr(expr.op1(), tmp_op1);
-    migrate_expr(expr.op2(), tmp_op2);
-    bool o1 = dereference.has_dereference(tmp_op1);
-    bool o2 = dereference.has_dereference(tmp_op2);
-
-    if(o1)
-    {
+    if (o1) {
       unsigned old_guard=guard.size();
-      guard.add(expr.op0());
-      dereference_rec(expr.op1(), guard, mode);
+      guard.add(migrate_expr_back(ifref.cond));
+      dereference_rec(ifref.true_value, guard, mode);
       guard.resize(old_guard);
     }
 
-    if(o2)
-    {
+    if (o2) {
       unsigned old_guard=guard.size();
-      exprt tmp(expr.op0());
-      tmp.make_not();
-      guard.move(tmp);
-      dereference_rec(expr.op2(), guard, mode);
+      expr2tc tmp = expr2tc(new not2t(ifref.cond));
+      exprt tmp_expr = migrate_expr_back(tmp);
+      guard.move(tmp_expr);
+      dereference_rec(ifref.false_value, guard, mode);
       guard.resize(old_guard);
     }
 
     return;
   }
 
-  if(expr.is_address_of() ||
-     expr.id()=="reference_to")
+  if (is_address_of2t(expr))
   {
     // turn &*p to p
     // this has *no* side effect!
 
-    assert(expr.operands().size()==1);
+    address_of2t &addrof = to_address_of2t(expr);
 
-    if(expr.op0().id()=="dereference" ||
-       expr.op0().id()=="implicit_dereference")
-    {
-      assert(expr.op0().operands().size()==1);
+    if (is_dereference2t(addrof.ptr_obj)) {
+      dereference2t &deref = to_dereference2t(addrof.ptr_obj);
+      expr2tc result = deref.value;
 
-      exprt tmp;
-      tmp.swap(expr.op0().op0());
+      if (result->type != expr->type)
+        result = expr2tc(new typecast2t(expr->type, result));
 
-      if(tmp.type()!=expr.type())
-        tmp.make_typecast(expr.type());
-
-      expr.swap(tmp);
+      expr = result;
     }
   }
 
-  Forall_operands(it, expr)
-    dereference_rec(*it, guard, mode);
+  std::vector<expr2tc*> operands;
+  expr.get()->list_operands(operands);
+  for (std::vector<expr2tc*>::const_iterator it = operands.begin();
+       it != operands.end(); it++)
+    dereference_rec(**it, guard, mode);
 
-  if(expr.id()=="dereference" ||
-     expr.id()=="implicit_dereference")
-  {
-    if(expr.operands().size()!=1)
-      throw "dereference expects one operand";
+  if (is_dereference2t(expr)) {
+    dereference2t &deref = to_dereference2t(expr);
 
-    dereference_location=expr.find_location();
+    expr2tc tmp_obj = deref.value;
+    dereference.dereference(tmp_obj, guard, mode);
+    expr = tmp_obj;
+  } else if (is_index2t(expr)) {
+    index2t &idx = to_index2t(expr);
 
-    exprt tmp;
-    tmp.swap(expr.op0());
-    expr2tc tmp_expr;
-    migrate_expr(tmp, tmp_expr);
-    dereference.dereference(tmp_expr, guard, mode);
-    tmp = migrate_expr_back(tmp_expr);
-    expr.swap(tmp);
-  }
-  else if(expr.id()=="index")
-  {
-    if(expr.operands().size()!=2)
-      throw "index expects two operands";
-
-    if(expr.op0().type().id()=="pointer")
-    {
-      dereference_location=expr.find_location();
-
-      exprt tmp("+", expr.op0().type());
-      tmp.operands().swap(expr.operands());
-      expr2tc tmp_expr;
-      migrate_expr(tmp, tmp_expr);
-      dereference.dereference(tmp_expr, guard, mode);
-      tmp = migrate_expr_back(tmp_expr);
+    if (is_pointer_type(idx.source_value->type)) {
+      expr2tc tmp = expr2tc(new add2t(idx.source_value->type, idx.source_value,
+                                      idx.index));
+      dereference.dereference(tmp, guard, mode);
     }
   }
 }
@@ -322,10 +283,17 @@ void goto_program_dereferencet::dereference_expr(
   if(checks_only)
   {
     exprt tmp(expr);
-    dereference_rec(tmp, guard, mode);
+    expr2tc tmp_expr;
+    migrate_expr(tmp, tmp_expr);
+    dereference_rec(tmp_expr, guard, mode);
   }
   else
-    dereference_rec(expr, guard, mode);
+  {
+    expr2tc tmp_expr;
+    migrate_expr(expr, tmp_expr);
+    dereference_rec(tmp_expr, guard, mode);
+    expr = migrate_expr_back(tmp_expr);
+  }
 }
 
 /*******************************************************************\

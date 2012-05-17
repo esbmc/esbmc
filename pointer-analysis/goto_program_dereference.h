@@ -71,7 +71,8 @@ protected:
     bool checks_only=false);
 
 protected:
-  void dereference_rec(exprt &expr, guardt &guard, const dereferencet::modet mode);
+  void dereference_rec(expr2tc &expr, guardt &guard,
+                       const dereferencet::modet mode);
   void dereference_expr(exprt &expr, const bool checks_only, const dereferencet::modet mode);
   
   const std::set<irep_idt> *valid_local_variables;
