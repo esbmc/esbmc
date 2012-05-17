@@ -50,81 +50,76 @@ goto_symext::get_unwind_recursion(
 
 void
 goto_symext::argument_assignments(
-  const code_typet &function_type,
-  const exprt::operandst &arguments)
+  const code_type2t &function_type,
+  const std::vector<expr2tc> &arguments)
 {
   // iterates over the operands
-  exprt::operandst::const_iterator it1 = arguments.begin();
+  std::vector<expr2tc>::const_iterator it1 = arguments.begin();
 
   // these are the types of the arguments
-  const code_typet::argumentst &argument_types = function_type.arguments();
+  const std::vector<type2tc> &argument_types = function_type.arguments;
 
   // iterates over the types of the arguments
-  for (code_typet::argumentst::const_iterator
-       it2 = argument_types.begin();
-       it2 != argument_types.end();
-       it2++)
+  unsigned int name_idx = 0;
+  for (std::vector<type2tc>::const_iterator it2 = argument_types.begin();
+       it2 != argument_types.end(); it2++, name_idx++)
   {
     // if you run out of actual arguments there was a mismatch
-    if (it1 == arguments.end())
-      throw "function call: not enough arguments";
+    if (it1 == arguments.end()) {
+      std::cerr << "function call: not enough arguments" << std::endl;
+      abort();
+    }
 
-    const code_typet::argumentt &argument = *it2;
+    const type2tc &arg_type = *it2;
+    const irep_idt &identifier = function_type.argument_names[name_idx];
 
-    // this is the type the n-th argument should be
-    const typet &arg_type = argument.type();
-
-    const irep_idt &identifier = argument.get_identifier();
-
-    if (identifier == "")
-      throw "no identifier for function argument";
+    if (identifier == "") {
+      std::cerr << "no identifier for function argument" << std::endl;
+      abort();
+    }
 
     const symbolt &symbol = ns.lookup(identifier);
-    exprt lhs = symbol_expr(symbol);
+    exprt tmp_lhs = symbol_expr(symbol);
+    expr2tc lhs;
+    migrate_expr(tmp_lhs, lhs);
 
-    if (it1->is_nil()) {
-    } else   {
-      exprt rhs = *it1;
+    if (is_nil_expr(*it1)) {
+      ; // XXX jmorse, is this valid?
+    } else {
+      expr2tc rhs = *it1;
 
       // it should be the same exact type
-      if (!base_type_eq(arg_type, rhs.type(), ns)) {
-	const typet &f_arg_type = arg_type;
-	const typet &f_rhs_type = rhs.type();
+      if (!base_type_eq(arg_type, rhs->type, ns)) {
+	const type2tc &f_arg_type = arg_type;
+	const type2tc &f_rhs_type = rhs->type;
 
 	// we are willing to do some limited conversion
-	if ((f_arg_type.id() == typet::t_signedbv ||
-	     f_arg_type.id() == typet::t_unsignedbv ||
-	     f_arg_type.id() == typet::t_bool ||
-	     f_arg_type.id() == typet::t_pointer ||
-	     f_arg_type.id() == typet::t_fixedbv) &&
-	    (f_rhs_type.id() == typet::t_signedbv ||
-	     f_rhs_type.id() == typet::t_unsignedbv ||
-	     f_rhs_type.id() == typet::t_bool ||
-	     f_rhs_type.id() == typet::t_pointer ||
-	     f_rhs_type.id() == typet::t_fixedbv)) {
-	  rhs.make_typecast(arg_type);
+	if ((is_number_type(f_arg_type) ||
+             is_bool_type(f_arg_type) ||
+             is_pointer_type(f_arg_type)) &&
+	    (is_number_type(f_rhs_type) ||
+             is_bool_type(f_rhs_type) ||
+             is_pointer_type(f_rhs_type))) {
+          rhs = expr2tc(new typecast2t(arg_type, rhs));
 	} else   {
 	  std::string error = "function call: argument \"" +
 	                      id2string(identifier) +
 	                      "\" type mismatch: got " +
-	                      it1->type().to_string() + ", expected " +
-	                      arg_type.to_string();
+	                      get_type_id((*it1)->type)+ ", expected " +
+	                      get_type_id(arg_type);
           std::cerr << error;
           abort();
 	}
       }
 
       guardt guard;
-      expr2tc new_lhs, new_rhs;
-      migrate_expr(lhs, new_lhs);
-      migrate_expr(rhs, new_rhs);
-      symex_assign_symbol(new_lhs, new_rhs, guard);
+      symex_assign_symbol(lhs, rhs, guard);
     }
 
     it1++;
   }
 
-  if (function_type.has_ellipsis()) {
+  if (function_type.ellipsis) {
     for (; it1 != arguments.end(); it1++)
     {
     }
@@ -213,13 +208,14 @@ goto_symext::symex_function_call_code(const code_function_callt &call)
   }
 
   // read the arguments -- before the locality renaming
-  exprt::operandst arguments = call.arguments();
-  for (unsigned i = 0; i < arguments.size(); i++)
+  exprt::operandst tmp_arguments = call.arguments();
+  std::vector<expr2tc> arguments;
+  for (unsigned i = 0; i < tmp_arguments.size(); i++)
   {
     expr2tc arg;
-    migrate_expr(arguments[i], arg);
+    migrate_expr(tmp_arguments[i], arg);
     cur_state->rename(arg);
-    arguments[i] = migrate_expr_back(arg);
+    arguments.push_back(arg);
   }
 
   // increase unwinding counter
@@ -242,7 +238,9 @@ goto_symext::symex_function_call_code(const code_function_callt &call)
   locality(frame_nr, goto_function);
 
   // assign arguments
-  argument_assignments(goto_function.type, arguments);
+  type2tc tmp_type;
+  migrate_type(goto_function.type, tmp_type);
+  argument_assignments(to_code_type(tmp_type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
   expr2tc ret_val;

@@ -319,8 +319,8 @@ protected:
    *  @param arguments The arguments to assign to function arg variables.
    */
   void argument_assignments(
-    const code_typet &function_type,
-    const exprt::operandst &arguments);
+    const code_type2t &function_type,
+    const std::vector<expr2tc> &arguments);
 
   /**
    *  Fill goto_symex_statet::framet with renamed local variable names.
