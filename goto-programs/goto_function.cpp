@@ -166,8 +166,8 @@ void goto_convertt::do_function_call_if(
 
   // v: if(!c) goto y;
   v->make_goto(y);
-  v->guard=function.op0();
-  v->guard.make_not();
+  migrate_expr(function.op0(), v->guard);
+  v->guard = expr2tc(new not2t(v->guard));
   v->location=function.op0().location();
 
   unsigned int globals = get_expr_number_globals(v->guard);
@@ -219,5 +219,5 @@ void goto_convertt::do_function_call_dereference(
   function_call.arguments()=arguments;
 
   t->location=function.location();
-  t->code.swap(function_call);
+  migrate_expr(function_call, t->code);
 }

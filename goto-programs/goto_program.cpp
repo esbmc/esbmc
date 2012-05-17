@@ -81,7 +81,8 @@ std::ostream& goto_programt::output_instruction(
     break;
   
   case GOTO:
-    if(!it->guard.is_true())
+    if (!is_constant_bool2t(it->guard) ||
+        !to_constant_bool2t(it->guard).constant_value)
     {
       out << "IF "
           << from_expr(ns, identifier, it->guard)
