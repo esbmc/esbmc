@@ -277,7 +277,11 @@ void goto_convertt::do_malloc(
   new_expr.location()=location;
 
   goto_programt::targett t_n=dest.add_instruction(ASSIGN);
-  t_n->code=code_assignt(lhs, new_expr);
+
+  exprt new_assign = code_assignt(lhs, new_expr);
+  expr2tc new_assign_expr;
+  migrate_expr(new_assign, new_assign_expr);
+  t_n->code = new_assign_expr;
   t_n->location=location;
 
   exprt lhs_pointer=lhs;
@@ -307,7 +311,10 @@ void goto_convertt::do_malloc(
 
   // first assume that it's available and that it's a dynamic object
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
-  t_a->guard=(neg_valid_expr, offset_is_zero_expr);
+
+  expr2tc new_offs_is_zero;
+  migrate_expr(offset_is_zero_expr, new_offs_is_zero);
+  t_a->guard = new_offs_is_zero;
 
   // set size
   //nec: ex37.c
@@ -315,19 +322,23 @@ void goto_convertt::do_malloc(
   dynamic_size.copy_to_operands(lhs_pointer);
   dynamic_size.location()=location;
   goto_programt::targett t_s_s=dest.add_instruction(ASSIGN);
-  t_s_s->code=code_assignt(dynamic_size, alloc_size);
+
+  exprt assign_expr = code_assignt(dynamic_size, alloc_size);
+  migrate_expr(assign_expr, t_s_s->code);
   t_s_s->location=location;
 
   // now set alloc bit
   goto_programt::targett t_s_a=dest.add_instruction(ASSIGN);
-  t_s_a->code=code_assignt(valid_expr, true_exprt());
+  assign_expr = code_assignt(valid_expr, true_exprt());
+  migrate_expr(assign_expr, t_s_a->code);
   t_s_a->location=location;
 
   //tse paper
 #if TSE_PAPER
   //now set deallocated bit
   goto_programt::targett t_d_i=dest.add_instruction(ASSIGN);
-  t_d_i->code=code_assignt(deallocated_expr, false_exprt());
+  assign_expr = code_assignt(deallocated_expr, false_exprt());
+  migrate_expr(assign_expr, t_d_i->code);
   t_d_i->location=location;
 #endif
 
@@ -368,7 +379,8 @@ void goto_convertt::do_cpp_new(
 
   // produce new object
   goto_programt::targett t_n=dest.add_instruction(ASSIGN);
-  t_n->code=code_assignt(lhs, rhs);
+  exprt assign_expr = code_assignt(lhs, rhs);
+  migrate_expr(assign_expr, t_n->code);
   t_n->location=rhs.find_location();
 
   // set up some expressions
@@ -378,8 +390,8 @@ void goto_convertt::do_cpp_new(
   // first assume that it's available
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
 
-  t_a->guard=valid_expr;
-  t_a->guard.make_not();
+  migrate_expr(valid_expr, t_a->guard);
+  t_a->guard = expr2tc(new not2t(t_a->guard));
 
   exprt alloc_size;
 
@@ -398,12 +410,14 @@ void goto_convertt::do_cpp_new(
   dynamic_size.copy_to_operands(lhs);
   dynamic_size.location()=rhs.find_location();
   goto_programt::targett t_s_s=dest.add_instruction(ASSIGN);
-  t_s_s->code=code_assignt(dynamic_size, alloc_size);
+  exprt assign = code_assignt(dynamic_size, alloc_size);
+  migrate_expr(assign, t_s_s->code);
   t_s_s->location=rhs.find_location();
 
   // now set alloc bit
   goto_programt::targett t_s_a=dest.add_instruction(ASSIGN);
-  t_s_a->code=code_assignt(valid_expr, true_exprt());
+  assign = code_assignt(valid_expr, true_exprt());
+  migrate_expr(assign, t_s_a->code);
   t_s_a->location=rhs.find_location();
 
   // run initializer
@@ -481,7 +495,7 @@ void goto_convertt::do_exit(
   // same as assume(false)
 
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
-  t_a->guard=false_exprt();
+  t_a->guard = expr2tc(new constant_bool2t(false));
   t_a->location=function.location();
 }
 
@@ -512,7 +526,7 @@ void goto_convertt::do_abort(
   // same as assume(false)
 
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
-  t_a->guard=false_exprt();
+  t_a->guard = expr2tc(new constant_bool2t(false));
   t_a->location=function.location();
 }
 
@@ -596,7 +610,7 @@ void goto_convertt::do_free(
   free_statement.copy_to_operands(arguments[0]);
 
   goto_programt::targett t_f=dest.add_instruction(OTHER);
-  t_f->code=free_statement;
+  migrate_expr(free_statement, t_f->code);
   t_f->location=function.location();
 
   exprt valid_expr("valid_object", bool_typet());
@@ -611,7 +625,8 @@ void goto_convertt::do_free(
   // clear alloc bit
 
   goto_programt::targett t_c=dest.add_instruction(ASSIGN);
-  t_c->code=code_assignt(valid_expr, false_exprt());
+  exprt assign = code_assignt(valid_expr, false_exprt());
+  migrate_expr(assign, t_c->code);
   t_c->location=function.location();
 
   //tse paper
@@ -619,7 +634,8 @@ void goto_convertt::do_free(
   //indicate that memory has been deallocated
 
   goto_programt::targett t_d=dest.add_instruction(ASSIGN);
-  t_d->code=code_assignt(deallocated_expr, true_exprt());
+  assign = code_assignt(deallocated_expr, true_exprt());
+  migrate_expr(assign, t_d->code);
   t_d->location=function.location();
 #endif
 }
@@ -721,7 +737,7 @@ void goto_convertt::do_function_call_symbol(
 
     goto_programt::targett t=dest.add_instruction(
       is_assume?ASSUME:ASSERT);
-    t->guard=arguments.front();
+    migrate_expr(arguments.front(), t->guard);
     t->location=function.location();
     t->location.user_provided(true);
 
@@ -750,7 +766,7 @@ void goto_convertt::do_function_call_symbol(
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard=arguments[0];
+    migrate_expr(arguments[0], t->guard);
     t->location=function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -839,7 +855,7 @@ void goto_convertt::do_function_call_symbol(
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard=false_exprt();
+    t->guard = expr2tc(new constant_bool2t(false));
     t->location=function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -863,7 +879,7 @@ void goto_convertt::do_function_call_symbol(
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard=false_exprt();
+    t->guard = expr2tc(new constant_bool2t(false));
     t->location=function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -887,7 +903,7 @@ void goto_convertt::do_function_call_symbol(
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard=false_exprt();
+    t->guard = expr2tc(new constant_bool2t(false));
     t->location=function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
