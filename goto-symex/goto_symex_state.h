@@ -175,7 +175,7 @@ public:
      *  can point at, and that need to have calls set up to and executed. This
      *  member contains an iterator to the first goto instruction in the target
      *  and the target symbol name. */
-    std::list<std::pair<goto_programt::const_targett,expr2tc> >
+    std::list<std::pair<goto_programt::const_targett, symbol2tc> >
       cur_function_ptr_targets;
     /** Instruction where function pointer calls should seem to originate
      *  from. */
@@ -186,7 +186,7 @@ public:
     goto_programt::const_targett function_ptr_combine_target;
     /** Original function pointer call code. Contains arguments to setup
      *  resulting function invocations with. */
-    const code_function_callt *orig_func_ptr_call;
+    expr2tc orig_func_ptr_call;
 
     typedef std::set<std::string> declaration_historyt;
     /** List of variables names that have been declared. Used to detect when we

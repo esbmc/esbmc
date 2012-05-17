@@ -290,7 +290,7 @@ protected:
    *  run, all func ptr call states are merged in.
    *  @param call Function call to interpret.
    */
-  virtual void symex_function_call_deref(const code_function_callt &call);
+  virtual void symex_function_call_deref(const expr2tc &call);
 
   /**
    *  Handle function call to fixed function

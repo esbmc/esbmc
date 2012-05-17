@@ -135,8 +135,11 @@ goto_symext::symex_function_call(const code_function_callt &code)
 
   if (function.id() == exprt::symbol)
     symex_function_call_symbol(code);
-  else
-    symex_function_call_deref(code);
+  else {
+    expr2tc tmp_expr;
+    migrate_expr(code, tmp_expr);
+    symex_function_call_deref(tmp_expr);
+  }
 }
 
 void
@@ -246,53 +249,54 @@ goto_symext::symex_function_call_code(const code_function_call2t &call)
   cur_state->source.prog = &goto_function.body;
 }
 
-static std::list<std::pair<guardt, exprt> >
-get_function_list(const exprt &expr)
+static std::list<std::pair<guardt, symbol2tc> >
+get_function_list(const expr2tc &expr)
 {
-  std::list<std::pair<guardt, exprt> > l;
+  std::list<std::pair<guardt, symbol2tc> > l;
 
-  if (expr.id() == "if") {
-    std::list<std::pair<guardt, exprt> > l1, l2;
-    exprt guardexpr = expr.op0();
+  if (is_if2t(expr)) {
+    std::list<std::pair<guardt, symbol2tc> > l1, l2;
+    const if2t &ifexpr = to_if2t(expr);
+    exprt guardexpr = migrate_expr_back(ifexpr.cond);
     exprt notguardexpr = not_exprt(guardexpr);
 
     // Get sub items, them iterate over adding the relevant guard
-    l1 = get_function_list(expr.op1());
-    for (std::list<std::pair<guardt, exprt> >::iterator it = l1.begin();
+    l1 = get_function_list(ifexpr.true_value);
+    for (std::list<std::pair<guardt, symbol2tc> >::iterator it = l1.begin();
          it != l1.end(); it++)
       it->first.add(guardexpr);
 
-    l2 = get_function_list(expr.op2());
-    for (std::list<std::pair<guardt, exprt> >::iterator it = l2.begin();
+    l2 = get_function_list(ifexpr.false_value);
+    for (std::list<std::pair<guardt, symbol2tc> >::iterator it = l2.begin();
          it != l2.end(); it++)
       it->first.add(notguardexpr);
 
     l1.splice(l1.begin(), l2);
     return l1;
-  } else if (expr.id() == "symbol") {
+  } else if (is_symbol2t(expr)) {
     guardt guard;
     guard.make_true();
-    std::pair<guardt, exprt> p(guard, expr);
+    std::pair<guardt, symbol2tc> p(guard, symbol2tc(expr));
     l.push_back(p);
     return l;
   } else {
-    std::cerr << "Unexpected irep id " << expr.id() <<
+    std::cerr << "Unexpected irep id " << get_expr_id(expr) <<
     " in function ptr dereference" << std::endl;
     abort();
   }
 }
 
 void
-goto_symext::symex_function_call_deref(const code_function_callt &call)
+goto_symext::symex_function_call_deref(const expr2tc &expr)
 {
-
+  const code_function_call2t &call = to_code_function_call2t(expr);
   assert(cur_state->top().cur_function_ptr_targets.size() == 0);
 
   // Indirect function call. The value is dereferenced, so we'll get either an
   // address_of a symbol, or a set of if ireps. For symbols we'll invoke
   // symex_function_call_symbol, when dealing with if's we need to fork and
   // merge.
-  if (call.op1().is_nil()) {
+  if (is_nil_expr(call.function)) {
     std::cerr << "Function pointer call with no targets; irep: ";
     std::cerr << call.pretty(0) << std::endl;
     abort();
@@ -300,32 +304,31 @@ goto_symext::symex_function_call_deref(const code_function_callt &call)
 
   // Generate a list of functions to call. We'll then proceed to call them,
   // and will later on merge them.
-  exprt funcptr = call.op1();
-  expr2tc tmp_func_ptr;
-  migrate_expr(funcptr, tmp_func_ptr);
-  dereference(tmp_func_ptr, false);
-  funcptr = migrate_expr_back(tmp_func_ptr);
+  expr2tc func_ptr = call.function;
+  dereference(func_ptr, false);
 
-  if (funcptr.invalid_object()) {
+  if (is_symbol2t(func_ptr) &&
+   has_prefix(to_symbol2t(func_ptr).name.as_string(), "symex::invalid_object")){
+
     // Emit warning; perform no function call behaviour. Increment PC
-    std::cout << call.op1().location().as_string() << std::endl;
+    // XXX jmorse - no location information any more.
     std::cout << "No target candidate for function call " <<
-    from_expr(ns, "", call.op1()) << std::endl;
+    from_expr(ns, "", call.function) << std::endl;
     cur_state->source.pc++;
     return;
   }
 
-  std::list<std::pair<guardt, exprt> > l = get_function_list(funcptr);
+  std::list<std::pair<guardt, symbol2tc> > l = get_function_list(func_ptr);
 
   // Store.
-  for (std::list<std::pair<guardt, exprt> >::iterator it = l.begin();
+  for (std::list<std::pair<guardt, symbol2tc> >::iterator it = l.begin();
        it != l.end(); it++) {
 
     goto_functionst::function_mapt::const_iterator fit =
-      goto_functions.function_map.find(it->second.identifier());
+      goto_functions.function_map.find(it->second->name);
     if (fit == goto_functions.function_map.end() ||
         !fit->second.body_available) {
-      std::cerr << "Couldn't find symbol " << it->second.identifier();
+      std::cerr << "Couldn't find symbol " << it->second->name;
       std::cerr << " or body not available, during function ptr dereference";
       std::cerr << std::endl;
       abort();
@@ -335,11 +338,9 @@ goto_symext::symex_function_call_deref(const code_function_callt &call)
     statet::goto_state_listt &goto_state_list =
       cur_state->top().goto_state_map[fit->second.body.instructions.begin()];
 
-    expr2tc tmp_target;
-    migrate_expr(it->second, tmp_target);
     cur_state->top().cur_function_ptr_targets.push_back(
-      std::pair<goto_programt::const_targett, expr2tc>(
-        fit->second.body.instructions.begin(), tmp_target)
+      std::pair<goto_programt::const_targett, symbol2tc>(
+        fit->second.body.instructions.begin(), it->second)
       );
 
     goto_state_list.push_back(statet::goto_statet(*cur_state));
@@ -355,7 +356,7 @@ goto_symext::symex_function_call_deref(const code_function_callt &call)
   cur_state->top().function_ptr_call_loc = cur_state->source.pc;
   cur_state->top().function_ptr_combine_target = cur_state->source.pc;
   cur_state->top().function_ptr_combine_target++;
-  cur_state->top().orig_func_ptr_call = new code_function_callt(call);
+  cur_state->top().orig_func_ptr_call = expr;
 
   run_next_function_ptr_target(true);
 }
@@ -387,7 +388,7 @@ goto_symext::run_next_function_ptr_target(bool first)
   cur_state->top().cur_function_ptr_targets.pop_front();
 
   goto_programt::const_targett target = p.first;
-  exprt target_symbol = migrate_expr_back(p.second);
+  expr2tc target_symbol = p.second;
 
   cur_state->guard.make_false();
   cur_state->source.pc = target;
@@ -400,16 +401,14 @@ goto_symext::run_next_function_ptr_target(bool first)
   cur_state->source.pc = cur_state->top().function_ptr_call_loc;
 
   // And setup the function call.
-  code_function_callt call = *cur_state->top().orig_func_ptr_call;
-  call.function() = target_symbol;
+  code_function_call2tc call = cur_state->top().orig_func_ptr_call;
+  call.get()->function = target_symbol;
   goto_symex_statet::framet &cur_frame = cur_state->top();
 
   if (cur_state->top().cur_function_ptr_targets.size() == 0)
-    delete cur_frame.orig_func_ptr_call;
+    cur_frame.orig_func_ptr_call = expr2tc();
 
-  expr2tc tmp_expr;
-  migrate_expr(call, tmp_expr);
-  symex_function_call_code(to_code_function_call2t(tmp_expr));
+  symex_function_call_code(to_code_function_call2t(expr2tc(call)));
 
   return true;
 }
