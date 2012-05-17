@@ -97,23 +97,28 @@ void goto_program_dereferencet::dereference_failure(
   const std::string &msg,
   const guardt &guard)
 {
-  exprt guard_expr=guard.as_expr();
+  exprt tmp_guard_expr = guard.as_expr();
+  expr2tc guard_expr;
+  migrate_expr(tmp_guard_expr, guard_expr);
 
-  if(assertions.insert(guard_expr).second)
+  if (assertions.insert(guard_expr).second)
   {
-    guard_expr.make_not();
+    guard_expr = expr2tc(new not2t(guard_expr));
 
     // first try simplifier on it
-    if(!options.get_bool_option("no-simplify"))
+    if (!options.get_bool_option("no-simplify"))
     {
       base_type(guard_expr, ns);
-      simplify(guard_expr);
+      expr2tc tmp_expr = guard_expr->simplify();
+      if (!is_nil_expr(tmp_expr))
+        guard_expr = tmp_expr;
     }
 
-    if(!guard_expr.is_true())
+    if (!is_constant_bool2t(guard_expr) ||
+        !to_constant_bool2t(guard_expr).constant_value)
     {
       goto_programt::targett t=new_code.add_instruction(ASSERT);
-      t->guard.swap(guard_expr);
+      t->guard = migrate_expr_back(guard_expr);
       t->location=dereference_location;
       t->location.property(property);
       t->location.comment("dereference failure: "+msg);

@@ -79,7 +79,7 @@ protected:
   locationt dereference_location;
   goto_programt::const_targett current_target;
   
-  std::set<exprt> assertions;
+  std::set<expr2tc> assertions;
   goto_programt new_code;
 };
 
