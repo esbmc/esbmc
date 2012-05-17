@@ -148,7 +148,7 @@ void goto_convertt::copy(
   goto_programt &dest)
 {
   goto_programt::targett t=dest.add_instruction(type);
-  t->code=code;
+  migrate_expr(code, t->code);
   t->location=code.location();
 }
 
@@ -190,7 +190,7 @@ void goto_convertt::convert_label(
   if(error_label!="" && label==error_label)
   {
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard.make_false();
+    t->guard = expr2tc(new constant_bool2t(false));
     t->location=code.location();
     t->location.property("error label");
     t->location.comment("error label");
@@ -316,7 +316,7 @@ void goto_convertt::convert(
   if(dest.instructions.empty())
   {
     dest.add_instruction(SKIP);
-    dest.instructions.back().code.make_nil();
+    dest.instructions.back().code = expr2tc();
   }
 }
 
@@ -341,6 +341,8 @@ void goto_convertt::convert_catch(
   // add the CATCH-push instruction to 'dest'
   goto_programt::targett catch_push_instruction=dest.add_instruction();
   catch_push_instruction->make_catch();
+  std::cerr << "XXX jmorse, converting cpp catch's" << std::endl;
+#if 0
   catch_push_instruction->code.set_statement("cpp-catch");
   catch_push_instruction->location=code.location();
 
@@ -383,6 +385,7 @@ void goto_convertt::convert_catch(
 
   // add end-target
   dest.destructive_append(end);
+#endif
 }
 
 /*******************************************************************\
@@ -490,7 +493,9 @@ void goto_convertt::convert_block(
 	  exprt deallocated_assert  = equality_exprt(deallocated_expr, true_exprt());
       //exprt deallocated_assert  = equality_exprt(deallocated_expr, true_exprt());
 
-	  t_d_a->guard.swap(deallocated_assert);
+          expr2tc tmp_expr;
+          migrate_expr(deallocated_assert, tmp_expr);
+	  t_d_a->guard = tmp_expr;
 	  t_d_a->location = lhs_pointer.location();
 	  t_d_a->location.comment("dereference failure: forgotten memory");
     }
@@ -963,7 +968,9 @@ void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rh
 	  atomic = -1;
 	}
 	goto_programt::targett t=dest.add_instruction(ASSERT);
-	t->guard.swap(atomic_dest);
+        expr2tc tmp_guard;
+        migrate_expr(atomic_dest, tmp_guard);
+        t->guard = tmp_guard;
 	t->location=location;
 	  t->location.comment("atomicity violation on assignment to " + lhs.identifier().as_string());
   }
@@ -1008,8 +1015,10 @@ void goto_convertt::break_globals2assignments(exprt & rhs, goto_programt & dest,
   if(atomic_dest.operands().size() != 0)
   {
     goto_programt::targett t=dest.add_instruction(ASSERT);
-	t->guard.swap(atomic_dest);
-	t->location=location;
+    expr2tc tmp_dest;
+    migrate_expr(atomic_dest, tmp_dest);
+    t->guard.swap(tmp_dest);
+    t->location=location;
     t->location.comment("atomicity violation");
   }
 }
@@ -1259,7 +1268,9 @@ void goto_convertt::convert_assert(
   }
 
   goto_programt::targett t=dest.add_instruction(ASSERT);
-  t->guard.swap(cond);
+  expr2tc tmp_cond;
+  migrate_expr(cond, tmp_cond);
+  t->guard = tmp_cond;
   t->location=code.location();
   t->location.property("assertion");
   t->location.user_provided(true);
@@ -1283,7 +1294,9 @@ void goto_convertt::convert_skip(
 {
   goto_programt::targett t=dest.add_instruction(SKIP);
   t->location=code.location();
-  t->code=code;
+  expr2tc tmp_code;
+  migrate_expr(code, tmp_code);
+  t->code = tmp_code;;
 }
 
 /*******************************************************************\
@@ -1320,7 +1333,9 @@ void goto_convertt::convert_assume(
   }
 
   goto_programt::targett t=dest.add_instruction(ASSUME);
-  t->guard.swap(op);
+  expr2tc tmp_op;
+  migrate_expr(op, tmp_op);
+  t->guard.swap(tmp_op);
   t->location=code.location();
 }
 
@@ -1419,8 +1434,10 @@ void goto_convertt::convert_for(
 
   // v: if(!c) goto z;
   v->make_goto(z);
-  v->guard=cond;
-  v->guard.make_not();
+  expr2tc tmp_cond;
+  migrate_expr(cond, tmp_cond);
+  tmp_cond = expr2tc(new not2t(tmp_cond));
+  v->guard = tmp_cond;
   v->location=cond.location();
 
   // do the w label
@@ -1431,7 +1448,7 @@ void goto_convertt::convert_for(
    goto_programt tmp_y;
    goto_programt::targett y=tmp_y.add_instruction();
    y->make_goto(u);
-   y->guard.make_true();
+   y->guard = expr2tc(new constant_bool2t(true));
    y->location=code.location();
 
   dest.destructive_append(sideeffects);
@@ -1506,7 +1523,7 @@ void goto_convertt::convert_while(
 
   // y: if(c) goto v;
   y->make_goto(v);
-  y->guard.make_true();
+  y->guard = expr2tc(new constant_bool2t(true));
   y->location=code.location();
 
   dest.destructive_append(tmp_branch);
@@ -1595,7 +1612,9 @@ void goto_convertt::convert_dowhile(
 
   // y: if(c) goto w;
   y->make_goto(w);
-  y->guard=cond;
+  expr2tc tmp_cond;
+  migrate_expr(cond, tmp_cond);
+  y->guard = tmp_cond;
   y->location=condition_location;
 
   dest.destructive_append(tmp_y);
@@ -1730,7 +1749,7 @@ void goto_convertt::convert_switch(
 
     goto_programt::targett x=tmp_cases.add_instruction();
     x->make_goto(it->first);
-    x->guard.swap(guard_expr);
+    migrate_expr(guard_expr, x->guard);
     x->location=case_ops.front().find_location();
   }
 
@@ -1841,7 +1860,7 @@ void goto_convertt::convert_return(
 
   goto_programt::targett t=dest.add_instruction();
   t->make_return();
-  t->code=new_code;
+  migrate_expr(new_code, t->code);
   t->location=new_code.location();
 }
 
@@ -1891,7 +1910,7 @@ void goto_convertt::convert_goto(
   goto_programt::targett t=dest.add_instruction();
   t->make_goto();
   t->location=code.location();
-  t->code=code;
+  migrate_expr(code, t->code);
 
   // remember it to do target later
   targets.gotos.insert(t);
@@ -1969,111 +1988,6 @@ void goto_convertt::convert_atomic_end(
 
 /*******************************************************************\
 
-Function: goto_convertt::convert_bp_enforce
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::convert_bp_enforce(
-  const codet &code,
-  goto_programt &dest)
-{
-  if(code.operands().size()!=2)
-  {
-    err_location(code);
-    error("bp_enfroce expects two arguments");
-    throw 0;
-  }
-
-  // do an assume
-  exprt op=code.op0();
-
-  remove_sideeffects(op, dest);
-
-  goto_programt::targett t=dest.add_instruction(ASSUME);
-  t->guard=op;
-  t->location=code.location();
-
-  // change the assignments
-
-  goto_programt tmp;
-  convert(to_code(code.op1()), tmp);
-
-  if(!op.is_true())
-  {
-    exprt constraint(op);
-    make_next_state(constraint);
-
-    Forall_goto_program_instructions(it, tmp)
-    {
-      if(it->is_assign())
-      {
-        assert(it->code.statement()=="assign");
-
-        // add constrain
-        codet constrain("bp_constrain");
-        constrain.reserve_operands(2);
-        constrain.move_to_operands(it->code);
-        constrain.copy_to_operands(constraint);
-        it->code.swap(constrain);
-
-        it->type=OTHER;
-      }
-      else if(it->is_other() &&
-              it->code.statement()=="bp_constrain")
-      {
-        // add to constraint
-        assert(it->code.operands().size()==2);
-        it->code.op1()=
-          gen_and(it->code.op1(), constraint);
-      }
-    }
-  }
-
-  dest.destructive_append(tmp);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_bp_abortif
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::convert_bp_abortif(
-  const codet &code,
-  goto_programt &dest)
-{
-  if(code.operands().size()!=1)
-  {
-    err_location(code);
-    throw "bp_abortif expects one argument";
-  }
-
-  // do an assert
-  exprt op=code.op0();
-
-  remove_sideeffects(op, dest);
-
-  op.make_not();
-
-  goto_programt::targett t=dest.add_instruction(ASSERT);
-  t->guard.swap(op);
-  t->location=code.location();
-}
-
-/*******************************************************************\
-
 Function: goto_convertt::generate_ifthenelse
 
   Inputs:
@@ -2099,9 +2013,10 @@ void goto_convertt::generate_ifthenelse(
   if(false_case.instructions.empty() &&
      true_case.instructions.size()==1 &&
      true_case.instructions.back().is_goto() &&
-     true_case.instructions.back().guard.is_true())
+     is_constant_bool2t(true_case.instructions.back().guard) &&
+     to_constant_bool2t(true_case.instructions.back().guard).constant_value)
   {
-    true_case.instructions.back().guard=guard;
+    migrate_expr(guard, true_case.instructions.back().guard);
     dest.destructive_append(true_case);
     return;
   }
@@ -2301,7 +2216,7 @@ void goto_convertt::generate_conditional_branch(
     // this is trivial
     goto_programt::targett t=dest.add_instruction();
     t->make_goto(target_true);
-    t->guard=g;
+    migrate_expr(g, t->guard);
     t->location=location;
     return;
   }
@@ -2361,12 +2276,12 @@ void goto_convertt::generate_conditional_branch(
     // this is trivial
     goto_programt::targett t_true=dest.add_instruction();
     t_true->make_goto(target_true);
-    t_true->guard=guard;
+    migrate_expr(guard, t_true->guard);
     t_true->location=location;
 
     goto_programt::targett t_false=dest.add_instruction();
     t_false->make_goto(target_false);
-    t_false->guard=true_exprt();
+    t_false->guard = expr2tc(new constant_bool2t(true));
     t_false->location=location;
     return;
   }
@@ -2389,7 +2304,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_true=dest.add_instruction();
     t_true->make_goto(target_true);
-    t_true->guard=true_exprt();
+    t_true->guard = expr2tc(new constant_bool2t(true));
     t_true->location=location;
 
     return;
@@ -2412,7 +2327,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_false=dest.add_instruction();
     t_false->make_goto(target_false);
-    t_false->guard=true_exprt();
+    t_false->guard = expr2tc(new constant_bool2t(true));
     t_false->location=guard.location();
 
     return;
@@ -2430,12 +2345,12 @@ void goto_convertt::generate_conditional_branch(
 
   goto_programt::targett t_true=dest.add_instruction();
   t_true->make_goto(target_true);
-  t_true->guard=cond;
+  migrate_expr(cond, t_true->guard);
   t_true->location=guard.location();
 
   goto_programt::targett t_false=dest.add_instruction();
   t_false->make_goto(target_false);
-  t_false->guard=true_exprt();
+  t_false->guard = expr2tc(new constant_bool2t(true));
   t_false->location=guard.location();
 }
 
@@ -2555,7 +2470,9 @@ void goto_convertt::guard_program(
   goto_programt tmp;
   tmp.add_instruction(GOTO);
   tmp.instructions.front().targets.push_back(t);
-  tmp.instructions.front().guard=gen_not(guard.as_expr());
+  exprt guardexpr = guard.as_expr();
+  guardexpr.make_not();
+  migrate_expr(guardexpr, tmp.instructions.front().guard);
   tmp.destructive_append(dest);
 
   tmp.swap(dest);

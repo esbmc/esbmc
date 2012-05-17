@@ -83,27 +83,27 @@ public:
     {
       type=GOTO;
       targets.clear();
-      guard.make_true();
+      guard = expr2tc(new constant_bool2t(true));
       event="";
-      code.make_nil();
+      code = expr2tc();
     }
      
     void make_return()
     {
       type=RETURN;
       targets.clear();
-      guard.make_true();
+      guard = expr2tc(new constant_bool2t(true));
       event="";
-      code.make_nil();
+      code = expr2tc();
     }
      
     void make_skip()
     {
       type=SKIP;
       targets.clear();
-      guard.make_true();
+      guard = expr2tc(new constant_bool2t(true));
       event="";
-      code.make_nil();
+      code = expr2tc();
     }
      
     void make_assertion(const guardT &g)
@@ -112,7 +112,7 @@ public:
       targets.clear();
       guard=g;
       event="";
-      code.make_nil();
+      code = expr2tc();
     }
      
     void make_assumption(const guardT &g)
@@ -143,9 +143,9 @@ public:
     {
       type=CATCH;
       targets.clear();
-      guard.make_true();
+      guard = expr2tc(new constant_bool2t(true));
       event="";
-      code.make_nil();
+      code = expr2tc();
     }
 
     // valid local variables at this point
