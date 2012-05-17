@@ -219,8 +219,7 @@ execution_statet::symex_step(reachability_treet &art)
     case RETURN:
       state.source.pc++;
       if(!state.guard.is_false()) {
-        expr2tc thecode, assign;
-        migrate_expr(instruction.code, thecode);
+        expr2tc thecode = instruction.code, assign;
         if (make_return_assignment(assign, thecode)) {
           goto_symext::symex_assign(assign);
         }

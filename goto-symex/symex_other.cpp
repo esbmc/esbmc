@@ -18,8 +18,7 @@ void goto_symext::symex_other(void)
 {
   const goto_programt::instructiont &instruction=*cur_state->source.pc;
 
-  expr2tc code2;
-  migrate_expr(instruction.code, code2);
+  expr2tc code2 = instruction.code;
 
   if (is_code_expression2t(code2))
   {

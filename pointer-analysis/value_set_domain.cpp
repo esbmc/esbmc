@@ -48,27 +48,17 @@ void value_set_domaint::transform(
   case OTHER:
   case ASSIGN:
     {
-      expr2tc code;
-      migrate_expr(from_l->code, code);
+      expr2tc code = from_l->code;
       value_set.apply_code(code, ns);
     }
     break;
 
   case FUNCTION_CALL:
     {
-      const code_function_callt &code=
-        to_code_function_call(from_l->code);
+      const code_function_call2t &code = to_code_function_call2t(from_l->code);
 
-      const exprt::operandst &arguments = code.arguments();
-      std::vector<expr2tc> args;
-      for (exprt::operandst::const_iterator it = arguments.begin();
-           it != arguments.end(); it++) {
-        expr2tc tmp_arg;
-        migrate_expr(*it, tmp_arg);
-        args.push_back(tmp_arg);
-      }
-
-      value_set.do_function_call(to_l->function, args, ns);
+      const std::vector<expr2tc> &arguments = code.operands;
+      value_set.do_function_call(to_l->function, arguments, ns);
     }
     break;
   

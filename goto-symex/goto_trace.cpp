@@ -347,8 +347,11 @@ Function: get_varname_from_guard
 
 std::string get_varname_from_guard (
 	goto_tracet::stepst::const_iterator &it,
-	const goto_tracet &goto_trace) {
-
+	const goto_tracet &goto_trace)
+{
+  std::cerr << "XXXjmorse - get_varname_from_guard victim of migration" << std::endl;
+  abort();
+#if 0
   std::string varname;
   exprt guard_operand = it->pc->guard.op0();
   if (!guard_operand.operands().empty()) {
@@ -368,6 +371,7 @@ std::string get_varname_from_guard (
     }
   }
   return varname;
+#endif
 }
 /*******************************************************************\
 
@@ -499,6 +503,8 @@ void show_goto_trace(
         out << "  " << it->comment << std::endl;
 
         if(it->pc->is_assert())
+#warning XXXjmorse - llvm tracing goo a victim of migration.
+#if 0
         	if (!goto_trace.metadata_filename.empty() && !it->pc->guard.operands().empty()) {
 				std::string assertsrt, varname;
 				assertsrt = from_expr(ns, "", it->pc->guard);
@@ -509,6 +515,7 @@ void show_goto_trace(
 				}
         	}
         	else
+#endif
         		out << "  " << from_expr(ns, "", it->pc->guard)<< std::endl;
         //std::cout<<"VarName "<<goto_trace.VarName<<" OrigVarName "<<goto_trace.OrigVarName<<std::endl;
         out << std::endl;

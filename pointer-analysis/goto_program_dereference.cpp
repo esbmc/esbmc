@@ -118,7 +118,7 @@ void goto_program_dereferencet::dereference_failure(
         !to_constant_bool2t(guard_expr).constant_value)
     {
       goto_programt::targett t=new_code.add_instruction(ASSERT);
-      t->guard = migrate_expr_back(guard_expr);
+      t->guard = guard_expr;
       t->location=dereference_location;
       t->location.property(property);
       t->location.comment("dereference failure: "+msg);
@@ -378,117 +378,65 @@ void goto_program_dereferencet::dereference_instruction(
   valid_local_variables=&target->local_variables;
   goto_programt::instructiont &i=*target;
 
-  expr2tc tmp_guard;
-  migrate_expr(i.guard, tmp_guard);
-  dereference_expr(tmp_guard, checks_only, dereferencet::READ);
-  if (!checks_only)
-    i.guard = migrate_expr_back(tmp_guard);
+  dereference_expr(i.guard, checks_only, dereferencet::READ);
 
   if (i.is_assign())
   {
-    if(i.code.operands().size()!=2)
-      throw "assignment expects two operands";
-
-    expr2tc op0, op1;
-    migrate_expr(i.code.op0(), op0);
-    migrate_expr(i.code.op1(), op1);
-    dereference_expr(op0, checks_only, dereferencet::WRITE);
-    dereference_expr(op1, checks_only, dereferencet::READ);
-    if (!checks_only) {
-      i.code.op0() = migrate_expr_back(op0);
-      i.code.op1() = migrate_expr_back(op1);
-    }
+    code_assign2t &assign = to_code_assign2t(i.code);
+    dereference_expr(assign.target, checks_only, dereferencet::WRITE);
+    dereference_expr(assign.source, checks_only, dereferencet::READ);
   }
   else if (i.is_function_call())
   {
-    code_function_callt &function_call=to_code_function_call(to_code(i.code));
+    code_function_call2t &func_call = to_code_function_call2t(i.code);
 
-    if (function_call.lhs().is_not_nil()) {
-      expr2tc tmp_lhs;
-      migrate_expr(function_call.lhs(), tmp_lhs);
-      dereference_expr(tmp_lhs, checks_only, dereferencet::WRITE);
-      if (!checks_only)
-        function_call.lhs() = migrate_expr_back(tmp_lhs);
+    if (!is_nil_expr(func_call.ret)) {
+      dereference_expr(func_call.ret, checks_only, dereferencet::WRITE);
     }
 
-    Forall_operands(it, function_call.op2()) {
-      expr2tc tmp_op;
-      migrate_expr(*it, tmp_op);
-      dereference_expr(tmp_op, checks_only, dereferencet::READ);
-      if (!checks_only)
-        *it = migrate_expr_back(tmp_op);
-    }
+    for (std::vector<expr2tc>::iterator it = func_call.operands.begin();
+         it != func_call.operands.end(); it++)
+      dereference_expr(*it, checks_only, dereferencet::READ);
 
-    if (function_call.function().id() == "dereference") {
+    if (is_dereference2t(func_call.function)) {
       // Rather than derefing function ptr, which we're moving to not collect
       // via pointer analysis, instead just assert that it's a valid pointer.
-      exprt invalid_ptr("invalid-pointer", typet("bool"));
-      invalid_ptr.copy_to_operands(function_call.function().op0());
+      const dereference2t &deref = to_dereference2t(func_call.function);
+      expr2tc invalid_ptr = expr2tc(new invalid_pointer2t(deref.value));
       guardt guard;
-      guard.move(invalid_ptr);
+      exprt tmp = migrate_expr_back(invalid_ptr);
+      guard.move(tmp);
       dereference_failure("function pointer dereference",
                           "invalid pointer", guard);
     }
   }
   else if (i.is_return())
   {
-    assert(i.code.statement() == "return");
-    if (i.code.operands().size() == 0)
+    code_return2t &ret = to_code_return2t(i.code);
+    if (is_nil_expr(ret.operand))
       return;
 
-    assert(i.code.operands().size() == 1);
-
-    exprt &ret = i.code.op0();
-    expr2tc tmp_ret;
-    migrate_expr(ret, tmp_ret);
-    dereference_expr(tmp_ret, checks_only, dereferencet::READ);
-    if (!checks_only)
-      ret = migrate_expr_back(tmp_ret);
+    dereference_expr(ret.operand, checks_only, dereferencet::READ);
   }
   else if(i.is_other())
   {
-    const irep_idt &statement=i.code.statement();
-
-    if(statement=="decl")
-    {
-      if(i.code.operands().size()!=1)
-        throw "decl expects one operand";
-    }
-    else if(statement=="expression")
-    {
-      if(i.code.operands().size()!=1)
-        throw "expression expects one operand";
-
-      expr2tc tmp_expr;
-      migrate_expr(i.code.op0(), tmp_expr);
-      dereference_expr(tmp_expr, checks_only, dereferencet::READ);
-      if (!checks_only)
-        i.code.op0() = migrate_expr_back(tmp_expr);
-    }
-    else if(statement=="printf")
-    {
-      Forall_operands(it, i.code) {
-        expr2tc tmp_op;
-        migrate_expr(*it, tmp_op);
-        dereference_expr(tmp_op, checks_only, dereferencet::READ);
-        if (!checks_only)
-          *it = migrate_expr_back(tmp_op);
-      }
-    }
-    else if(statement=="free")
-    {
-      if(i.code.operands().size()!=1)
-        throw "free expects one operand";
-
-      exprt tmp(i.code.op0());
-
-      dereference_location=tmp.find_location();
+    if (is_code_decl2t(i.code)) {
+      ;
+    } else if (is_code_expression2t(i.code)) {
+      code_expression2t &theexp = to_code_expression2t(i.code);
+      dereference_expr(theexp.operand, checks_only, dereferencet::READ);
+    } else if (is_code_printf2t(i.code)) {
+      std::vector<expr2tc *> operands;
+      i.code.get()->list_operands(operands);
+      for (std::vector<expr2tc*>::const_iterator it = operands.begin();
+           it != operands.end(); it++)
+        dereference_expr(**it, checks_only, dereferencet::READ);
+    } else if (is_code_free2t(i.code)) {
+      code_free2t &free = to_code_free2t(i.code);
+      expr2tc operand = free.operand;
 
       guardt guard;
-      expr2tc tmp_expr;
-      migrate_expr(tmp, tmp_expr);
-      dereference.dereference(tmp_expr, guard, dereferencet::FREE);
-      tmp = migrate_expr_back(tmp_expr);
+      dereference.dereference(operand, guard, dereferencet::FREE);
     }
   }
 }

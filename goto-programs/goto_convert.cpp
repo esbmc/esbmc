@@ -60,35 +60,7 @@ void goto_convertt::finish_gotos()
   {
     goto_programt::instructiont &i=**it;
 
-    if(i.code.statement()=="non-deterministic-goto")
-    {
-      assert(0 && "can't handle non-deterministic gotos");
-      // jmorse - looks like this portion of code is related to the non-existant
-      // nondeterministic goto. Nothing else in {es,c}bmc fiddles with
-      // "destinations", and I'm busy fixing the type situation, so gets
-      // disabled as it serves no purpose and is only getting in the way.
-#if 0
-      const irept &destinations=i.code.find("destinations");
-
-      i.make_goto();
-
-      forall_irep(it, destinations.get_sub())
-      {
-        labelst::const_iterator l_it=
-          targets.labels.find(it->id_string());
-
-        if(l_it==targets.labels.end())
-        {
-          err_location(i.code);
-          str << "goto label " << it->id_string() << " not found";
-          throw 0;
-        }
-
-        i.targets.push_back(l_it->second);
-      }
-#endif
-    }
-    else if(i.code.statement()=="goto")
+    if (i.code.statement()=="goto")
     {
       const irep_idt &goto_label=i.code.destination();
 

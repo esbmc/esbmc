@@ -191,7 +191,7 @@ public:
       type(NO_INSTRUCTION_TYPE),
       location_number(0)
     {
-      guard.make_true();
+      guard = expr2tc(new constant_bool2t(true));
     }
 
     instructiont(goto_program_instruction_typet _type):
@@ -199,7 +199,7 @@ public:
       type(_type),
       location_number(0)
     {
-      guard.make_true();
+      guard = expr2tc(new constant_bool2t(true));
     }
     
     void swap(instructiont &instruction)

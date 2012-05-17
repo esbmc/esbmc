@@ -9,11 +9,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAM_H
 #define CPROVER_GOTO_PROGRAM_H
 
+#include <irep2.h>
 #include <std_code.h>
 
 #include "goto_program_template.h"
 
-class goto_programt:public goto_program_templatet<codet, exprt>
+class goto_programt:public goto_program_templatet<expr2tc, expr2tc>
 {
 public:
   std::ostream& output_instruction(

@@ -111,8 +111,7 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
-    expr2tc tmp;
-    migrate_expr(instruction.guard, tmp);
+    expr2tc tmp = instruction.guard;
     replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
 
@@ -124,8 +123,7 @@ goto_symext::symex_step(reachability_treet & art)
 
   case ASSUME:
     if (!cur_state->guard.is_false()) {
-      expr2tc tmp;
-      migrate_expr(instruction.guard, tmp);
+      expr2tc tmp = instruction.guard;
       replace_dynamic_allocation(tmp);
       replace_nondet(tmp);
 
@@ -157,8 +155,7 @@ goto_symext::symex_step(reachability_treet & art)
 	std::string msg = cur_state->source.pc->location.comment().as_string();
 	if (msg == "") msg = "assertion";
 
-        expr2tc tmp;
-        migrate_expr(instruction.guard, tmp);
+        expr2tc tmp = instruction.guard;
 	replace_dynamic_allocation(tmp);
 	replace_nondet(tmp);
 
@@ -172,8 +169,7 @@ goto_symext::symex_step(reachability_treet & art)
 
   case RETURN:
     if (!cur_state->guard.is_false()) {
-      expr2tc thecode, assign;
-      migrate_expr(instruction.code, thecode);
+      expr2tc thecode = instruction.code, assign;
       if (make_return_assignment(assign, thecode)) {
         goto_symext::symex_assign(assign);
       }
@@ -186,8 +182,7 @@ goto_symext::symex_step(reachability_treet & art)
 
   case ASSIGN:
     if (!cur_state->guard.is_false()) {
-      expr2tc deref_code;
-      migrate_expr(instruction.code, deref_code);
+      expr2tc deref_code = instruction.code;
       replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
 
@@ -203,8 +198,7 @@ goto_symext::symex_step(reachability_treet & art)
 
   case FUNCTION_CALL:
     if (!cur_state->guard.is_false()) {
-      expr2tc deref_code;
-      migrate_expr(instruction.code, deref_code);
+      expr2tc deref_code = instruction.code;
       replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
 
