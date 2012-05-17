@@ -74,11 +74,11 @@ protected:
   // utilities  
   
   // get guard of a conditional edge
-  exprt get_guard(locationt from, locationt to) const;
+  expr2tc get_guard(locationt from, locationt to) const;
   
   // get lhs that return value is assigned to
   // for an edge that returns from a function
-  exprt get_return_lhs(locationt to) const;
+  expr2tc get_return_lhs(locationt to) const;
 };
 
 // don't use me -- I am just a base class
@@ -215,8 +215,8 @@ protected:
   // function calls
   void do_function_call_rec(
     locationt l_call,
-    const exprt &function,
-    const exprt::operandst &arguments,
+    const expr2tc &function,
+    const std::vector<expr2tc> &arguments,
     statet &new_state,
     const goto_functionst &goto_functions);
 
@@ -224,7 +224,7 @@ protected:
     locationt l_call,
     const goto_functionst &goto_functions,
     const goto_functionst::function_mapt::const_iterator f_it,
-    const exprt::operandst &arguments,
+    const std::vector<expr2tc> &arguments,
     statet &new_state);
 
   // abstract methods

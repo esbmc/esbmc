@@ -316,7 +316,8 @@ public:
           t_it++)
         successors.push_back(*t_it);
   
-      if(!i.guard.is_true())
+      if (!is_constant_bool2t(i.guard) ||
+          !to_constant_bool2t(i.guard).constant_value)
         successors.push_back(next);
     }
     else if(i.is_return())

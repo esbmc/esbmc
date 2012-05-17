@@ -28,20 +28,19 @@ Function: abstract_domain_baset::get_guard
 
 \*******************************************************************/
 
-exprt abstract_domain_baset::get_guard(
+expr2tc abstract_domain_baset::get_guard(
   locationt from,
   locationt to) const
 {
   if(!from->is_goto())
-    return true_exprt();
+    return expr2tc(new constant_bool2t(true));
 
   locationt next=from;
   next++;
 
   if(next==to)
   {
-    exprt tmp(from->guard);
-    tmp.make_not();
+    expr2tc tmp = expr2tc(new not2t(from->guard));
     return tmp;
   }
   
@@ -60,22 +59,21 @@ Function: abstract_domain_baset::get_return_lhs
 
 \*******************************************************************/
 
-exprt abstract_domain_baset::get_return_lhs(locationt to) const
+expr2tc abstract_domain_baset::get_return_lhs(locationt to) const
 {
   // get predecessor of "to"
 
   to--;
 
   if(to->is_end_function())
-    return static_cast<const exprt &>(get_nil_irep());
+    return expr2tc();
   
   // must be the function call
   assert(to->is_function_call());
 
-  const code_function_callt &code=
-    to_code_function_call(to->code);
+  const code_function_call2t &code = to_code_function_call2t(to->code);
   
-  return code.lhs();
+  return code.ret;
 }
 
 /*******************************************************************\
@@ -380,13 +378,12 @@ bool static_analysis_baset::visit(
     if(l->is_function_call())
     {
       // this is a big special case
-      const code_function_callt &code=
-        to_code_function_call(l->code);
+      const code_function_call2t &code = to_code_function_call2t(l->code);
 
       do_function_call_rec(
         l,
-        code.function(),
-        code.arguments(),
+        code.function,
+        code.operands,
         new_values,
         goto_functions);
     }
@@ -424,7 +421,7 @@ void static_analysis_baset::do_function_call(
   locationt l_call,
   const goto_functionst &goto_functions,
   const goto_functionst::function_mapt::const_iterator f_it,
-  const exprt::operandst &arguments,
+  const std::vector<expr2tc> &arguments,
   statet &new_state)
 {
   const goto_functionst::goto_functiont &goto_function=f_it->second;
@@ -499,14 +496,14 @@ Function: static_analysis_baset::do_function_call_rec
 
 void static_analysis_baset::do_function_call_rec(
   locationt l_call,
-  const exprt &function,
-  const exprt::operandst &arguments,
+  const expr2tc &function,
+  const std::vector<expr2tc> &arguments,
   statet &new_state,
   const goto_functionst &goto_functions)
 {
-  if(function.id()=="symbol")
+  if (is_symbol2t(function))
   {
-    const irep_idt &identifier=function.identifier();
+    const irep_idt &identifier = to_symbol2t(function).name;
     
     if(recursion_set.find(identifier)!=recursion_set.end())
     {
@@ -531,36 +528,32 @@ void static_analysis_baset::do_function_call_rec(
     
     recursion_set.erase(identifier);
   }
-  else if(function.id()=="if")
+  else if (is_if2t(function))
   {
-    if(function.operands().size()!=3)
-      throw "if takes three arguments";
-    
+    const if2t ifval = to_if2t(function);
     std::auto_ptr<statet> n2(make_temporary_state(new_state));
     
     do_function_call_rec(
       l_call,
-      function.op1(),
+      ifval.true_value,
       arguments,
       new_state,
       goto_functions);
 
     do_function_call_rec(
       l_call,
-      function.op2(),
+      ifval.false_value,
       arguments,
       *n2,
       goto_functions);
       
     merge(new_state, *n2);
   }
-  else if(function.id()=="dereference")
+  else if (is_dereference2t(function))
   {
     // get value set
     std::list<expr2tc> values;
-    expr2tc tmp_function;
-    migrate_expr(function, tmp_function);
-    get_reference_set(l_call, tmp_function, values);
+    get_reference_set(l_call, function, values);
 
     std::auto_ptr<statet> state_from(make_temporary_state(new_state));
 
@@ -570,30 +563,26 @@ void static_analysis_baset::do_function_call_rec(
     {
       if (is_object_descriptor2t(*it))
       {
-        exprt tmp = migrate_expr_back(*it);
-        const object_descriptor_exprt &o = static_cast<object_descriptor_exprt&>(tmp);
+        const object_descriptor2t &obj = to_object_descriptor2t(*it);
         std::auto_ptr<statet> n2(make_temporary_state(new_state));    
-        do_function_call_rec(l_call, o.object(), arguments, *n2, goto_functions);
+        do_function_call_rec(l_call, obj.object, arguments, *n2, goto_functions);
         merge(new_state, *n2);
       }
     }
   }
-  else if(function.id()=="NULL-object")
+  else if (is_null_object2t(function))
   {
     // ignore, can't be a function
   }
-  else if(function.id()=="member" || function.id()=="index")
+  else if (is_member2t(function) || is_index2t(function))
   {
     // ignore, can't be a function
-  }
-  else if(function.id()=="builtin-function")
-  {
-    // ignore, someone else needs to worry about this
   }
   else
   {
-    throw "unexpected function_call argument: "+
-      function.id_string();
+    std::cerr << "unexpected function_call argument: "
+              << get_expr_id(function) << std::endl;
+    abort();
   }
 }
 
