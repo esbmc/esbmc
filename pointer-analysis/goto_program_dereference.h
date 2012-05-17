@@ -86,7 +86,7 @@ protected:
 
 void dereference(
   goto_programt::const_targett target,
-  exprt &expr,
+  expr2tc &expr,
   const namespacet &ns,
   value_setst &value_sets);
 

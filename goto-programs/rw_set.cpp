@@ -130,7 +130,10 @@ void rw_sett::read_write_rec(
     read(expr.op0(), guard);
 
     exprt tmp(expr.op0());
-    dereference(target, tmp, ns, value_sets);
+    expr2tc tmp_expr;
+    migrate_expr(tmp, tmp_expr);
+    dereference(target, tmp_expr, ns, value_sets);
+    tmp = migrate_expr_back(tmp_expr);
 
     read_write_rec(tmp, r, w, suffix, guard);
   }

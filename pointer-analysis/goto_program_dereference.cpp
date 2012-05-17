@@ -666,7 +666,7 @@ Function: dereference
 
 void dereference(
   goto_programt::const_targett target,
-  exprt &expr,
+  expr2tc &expr,
   const namespacet &ns,
   value_setst &value_sets)
 {
@@ -675,8 +675,5 @@ void dereference(
   goto_program_dereferencet
     goto_program_dereference(ns, new_context, options, value_sets);
 
-  expr2tc tmp_expr;
-  migrate_expr(expr, tmp_expr);
-  goto_program_dereference.dereference_expression(target, tmp_expr);
-  expr = migrate_expr_back(tmp_expr);
+  goto_program_dereference.dereference_expression(target, expr);
 }
