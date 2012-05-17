@@ -134,9 +134,9 @@ public:
     {
       type=OTHER;
       targets.clear();
-      guard.make_true();
+      guard = expr2tc(new constant_bool2t(true));
       event="";
-      code.make_nil();
+      code = expr2tc();
     }
     
     void make_catch()

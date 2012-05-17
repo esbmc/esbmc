@@ -75,8 +75,8 @@ void goto_inlinet::parameter_assignments(
 
       goto_programt::targett decl=dest.add_instruction();
       decl->make_other();
-      decl->code=code_declt(symbol_expr(symbol));
-      decl->code.location()=location;
+      exprt tmp = code_declt(symbol_expr(symbol));
+      migrate_expr(tmp, decl->code);
       decl->location=location;
       decl->function=location.get_function(); 
       decl->local_variables=local_variables;
@@ -136,7 +136,7 @@ void goto_inlinet::parameter_assignments(
 
       dest.add_instruction(ASSIGN);
       dest.instructions.back().location=location;
-      dest.instructions.back().code.swap(assignment);
+      migrate_expr(assignment, dest.instructions.back().code);
       dest.instructions.back().local_variables=local_variables;
       dest.instructions.back().function=location.get_function();      
     }
@@ -176,18 +176,11 @@ void goto_inlinet::replace_return(
     {
       if(lhs.is_not_nil())
       {
-        if(it->code.operands().size()!=1)
-        {
-          err_location(it->code);
-          str << "return expects one operand!" << std::endl;
-          warning();
-	  continue;
-        }
-      
         goto_programt tmp;
         goto_programt::targett assignment=tmp.add_instruction(ASSIGN);
         
-        code_assignt code_assign(lhs, it->code.op0());
+        const code_return2t &ret = to_code_return2t(it->code);
+        code_assignt code_assign(lhs, migrate_expr_back(ret.operand));
 
         // this may happen if the declared return type at the call site
         // differs from the defined return type
@@ -195,23 +188,19 @@ void goto_inlinet::replace_return(
            code_assign.rhs().type())
           code_assign.rhs().make_typecast(code_assign.lhs().type());
 
-        assignment->code=code_assign;
+        migrate_expr(code_assign, assignment->code);
         assignment->location=it->location;
         assignment->local_variables=it->local_variables;
         assignment->function=it->location.get_function();
 
         
-        if(constrain.is_not_nil() && !constrain.is_true())
-        {
-          codet constrain("bp_constrain");
-          constrain.reserve_operands(2);
-          constrain.move_to_operands(assignment->code);
-          constrain.copy_to_operands(constrain);
-        }
+        assert(constrain.is_nil()); // bp_constrain gumpf reomved
         
         dest.insert_swap(it, *assignment);
         it++;
       }
+#warning XXX jmorse, dunno what this does.
+#if 0
       else if(!it->code.operands().empty())
       {
         goto_programt tmp;
@@ -226,6 +215,7 @@ void goto_inlinet::replace_return(
         dest.insert_swap(it, *expression);
         it++;
       }
+#endif
 
       it->make_goto(--dest.instructions.end());
     }
@@ -350,7 +340,7 @@ void goto_inlinet::expand_function_call(
 
     // set up location instruction for function call  
     target->type=LOCATION;
-    target->code.clear();
+    target->code = expr2tc();
     
     goto_programt::targett next_target(target);
     next_target++;
@@ -381,8 +371,9 @@ void goto_inlinet::expand_function_call(
       t->location=target->location;
       t->function=target->location.get_function();
       t->local_variables=target->local_variables;
-      t->code=codet("expression");
-      t->code.copy_to_operands(*it);
+      expr2tc tmp_expr;
+      migrate_expr(*it, tmp_expr);
+      t->code = expr2tc(new code_expression2t(tmp_expr));
     }
     
     // return value
@@ -399,12 +390,12 @@ void goto_inlinet::expand_function_call(
       t->location=target->location;
       t->function=target->location.get_function();
       t->local_variables=target->local_variables;
-      t->code.swap(code);
+      migrate_expr(code, t->code);
     }
 
     // now just kill call
     target->type=LOCATION;
-    target->code.clear();
+    target->code = expr2tc();
     target++;
 
     // insert tmp
@@ -489,12 +480,19 @@ bool goto_inlinet::inline_instruction(
 
   if(it->is_function_call())
   {
-    const code_function_callt &call=to_code_function_call(it->code);
+    const code_function_call2t &call = to_code_function_call2t(it->code);
 
-    if(call.function().id()=="symbol")
+    if (is_symbol2t(call.function))
     {
+      exprt tmp_lhs = migrate_expr_back(call.ret);
+      exprt tmp_func = migrate_expr_back(call.function);
+      exprt::operandst args;
+      for (std::vector<expr2tc>::const_iterator it2 = call.operands.begin();
+           it2 != call.operands.end(); it2++)
+        args.push_back(migrate_expr_back(*it2));
+
       expand_function_call(
-        dest, it, call.lhs(), call.function(), call.arguments(),
+        dest, it, tmp_lhs, tmp_func, args,
         static_cast<const exprt &>(get_nil_irep()), full);
         
       expanded=true;
@@ -502,21 +500,7 @@ bool goto_inlinet::inline_instruction(
   }
   else if(it->is_other())
   {
-    if(it->code.statement()=="bp_constrain" &&
-       it->code.operands().size()==2 &&
-       it->code.op0().operands().size()==2 &&
-       it->code.op0().op1().statement()=="function_call")
-    {
-      expand_function_call(
-        dest, it,
-        it->code.op0().op0(), // lhs
-        it->code.op0().op1().op0(), // function
-        it->code.op0().op1().op1().operands(), // arguments
-        it->code.op1(), // constraint
-        full);
-        
-      expanded=true;
-    }
+    // jmorse, removed bp constrain situation.
   }
 
   return expanded;  
