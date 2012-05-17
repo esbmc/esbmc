@@ -121,7 +121,7 @@ public:
       targets.clear();
       guard=g;
       event="";
-      code.make_nil();
+      code = expr2tc();
     }
      
     void make_goto(typename std::list<class instructiont>::iterator _target)
