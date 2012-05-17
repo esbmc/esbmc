@@ -349,24 +349,25 @@ std::string get_varname_from_guard (
 	goto_tracet::stepst::const_iterator &it,
 	const goto_tracet &goto_trace) {
 
-    std::string varname;
-    if (!it->pc->guard.op0().operands().empty()) {
-		if(!it->pc->guard.op0().op0().identifier().as_string().empty()) {
-		  char identstr[it->pc->guard.op0().op0().identifier().as_string().length()];
-		  strcpy(identstr,it->pc->guard.op0().op0().identifier().c_str());
-		  //std::cout<<"Guard "<<it->pc->guard<<std::endl;
-		  int j=0;
-		  char * tok;
-			tok = strtok (identstr,"::");
-			while (tok != NULL) {
-			  if (j==4) varname = tok;
-			   tok = strtok (NULL, "::");
-			   j++;
-			}
-		}
+  std::string varname;
+  exprt guard_operand = it->pc->guard.op0();
+  if (!guard_operand.operands().empty()) {
+    if(!guard_operand.op0().identifier().as_string().empty()) {
+      char identstr[guard_operand.op0().identifier().as_string().length()];
+      strcpy(identstr, guard_operand.op0().identifier().c_str());
+      //std::cout<<"Guard "<<it->pc->guard<<std::endl;
+      int j=0;
+      char * tok;
+      tok = strtok (identstr,"::");
+      while (tok != NULL) {
+        if (j==4)
+          varname = tok;
+        tok = strtok (NULL, "::");
+        j++;
+      }
     }
-	return varname;
-
+  }
+  return varname;
 }
 /*******************************************************************\
 
