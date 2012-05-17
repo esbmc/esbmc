@@ -225,46 +225,51 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       // changed!
       const symbolt &symbol = ns.lookup(original_identifier);
 
-      typet type(symbol.type);
+      type2tc type;
+      typet old_type = symbol.type;
+      migrate_type(symbol.type, type);
 
-      exprt rhs;
+      exprt tmp_rhs;
+      expr2tc rhs;
 
       if (cur_state->guard.is_false()) {
-	rhs = symbol_exprt(cur_state->current_name(goto_state, symbol.name), type);
+	tmp_rhs = symbol_exprt(cur_state->current_name(goto_state, symbol.name),
+                               old_type);
+        migrate_expr(tmp_rhs, rhs);
       } else if (goto_state.guard.is_false())    {
-	rhs = symbol_exprt(cur_state->current_name(symbol.name), type);
+	tmp_rhs = symbol_exprt(cur_state->current_name(symbol.name), old_type);
+        migrate_expr(tmp_rhs, rhs);
       } else   {
 	guardt tmp_guard(goto_state.guard);
 
 	// this gets the diff between the guards
 	tmp_guard -= cur_state->guard;
 
-	rhs = if_exprt();
-	rhs.type() = type;
-	rhs.op0() = tmp_guard.as_expr();
-	rhs.op1() = symbol_exprt(cur_state->current_name(goto_state, symbol.name),
-                                 type);
-	rhs.op2() = symbol_exprt(cur_state->current_name(symbol.name), type);
+        expr2tc cond;
+        migrate_expr(tmp_guard.as_expr(), cond);
+	expr2tc true_val =
+          expr2tc(new symbol2t(type,
+                             cur_state->current_name(goto_state, symbol.name)));
+        expr2tc false_val = expr2tc(new symbol2t(type,
+                                         cur_state->current_name(symbol.name)));
+        rhs = expr2tc(new if2t(type, cond, true_val, false_val));
       }
 
-      exprt lhs(symbol_expr(symbol));
-      exprt new_lhs(lhs);
+      exprt tmp_lhs(symbol_expr(symbol));
+      expr2tc lhs;
+      migrate_expr(tmp_lhs, lhs);
+      expr2tc new_lhs = lhs;
 
-      expr2tc new_new_lhs, new_rhs;
-      migrate_expr(new_lhs, new_new_lhs);
-      migrate_expr(rhs, new_rhs);
-      cur_state->assignment(new_new_lhs, new_rhs, false);
+      cur_state->assignment(new_lhs, rhs, false);
 
       guardt true_guard;
 
-      expr2tc true_guard2, lhs2, rhs2;
+      expr2tc true_guard2;
       migrate_expr(true_guard.as_expr(), true_guard2);
-      migrate_expr(lhs, lhs2);
-      migrate_expr(rhs, rhs2);
       target->assignment(
         true_guard2,
-        new_new_lhs, lhs2,
-        rhs2,
+        new_lhs, lhs,
+        rhs,
         cur_state->source,
         cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);
