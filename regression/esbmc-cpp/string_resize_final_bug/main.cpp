@@ -15,11 +15,11 @@ int main ()
   assert(int(sz) != 19);
   
   str.resize (sz+2,'+');
-  assert(int(sz) != 21);
+  assert(str.length() != 21);
   cout << str << endl;
 
   str.resize (14);
-  assert(int(sz) != 14);
+  assert(str.length() != 14);
   cout << str << endl;
   return 0;
 }
