@@ -456,7 +456,7 @@ void goto_checkt::add_guarded_claim(
   {
     goto_programt::targett t=new_code.add_instruction(ASSERT);
 
-    t->guard.swap(new_expr);
+    migrate_expr(new_expr, t->guard);
     t->location=location;
     t->location.comment(comment);
     t->location.property(property);
@@ -715,40 +715,40 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     new_code.clear();
     assertions.clear();
 
-    check(i.guard);
+    check(migrate_expr_back(i.guard));
 
     if(i.is_other())
     {
-      const irep_idt &statement=i.code.statement();
-
-      if(statement=="expression")
-      {
-        check(i.code);
+      if (is_code_expression2t(i.code)) {
+        check(migrate_expr_back(i.code));
+      } else if (is_code_printf2t(i.code)) {
+#warning XXX jmorse cpp try potentially un-checked if you don't fix this
+//    		  || statement=="cpp-try")
+        std::vector<const expr2tc*> operands;
+        i.code->list_operands(operands);
+        for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
+             it != operands.end(); it++)
+          check(migrate_expr_back(**it));
       }
-      else if(statement=="printf"
-    		  || statement=="cpp-try")
-      {
-        forall_operands(it, i.code)
-          check(*it);
-      }
     }
-    else if(i.is_assign())
+    else if (i.is_assign())
     {
-      if(i.code.operands().size()!=2)
-        throw "assignment expects two operands";
-
-      check(i.code.op0());
-      check(i.code.op1());
+      const code_assign2t &assign = to_code_assign2t(i.code);
+      check(migrate_expr_back(assign.target));
+      check(migrate_expr_back(assign.source));
     }
-    else if(i.is_function_call())
+    else if (i.is_function_call())
     {
-      forall_operands(it, i.code)
-        check(*it);
+      std::vector<const expr2tc*> operands;
+      i.code->list_operands(operands);
+      for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
+           it != operands.end(); it++)
+        check(migrate_expr_back(**it));
     }
-    else if(i.is_return())
+    else if (i.is_return())
     {
-      if(i.code.operands().size()==1)
-        check(i.code.op0());
+      const code_return2t &ret = to_code_return2t(i.code);
+      check(migrate_expr_back(ret.operand));
     }
 
     for(goto_programt::instructionst::iterator
