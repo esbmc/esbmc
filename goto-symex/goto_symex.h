@@ -265,7 +265,7 @@ protected:
    *  pointers.
    *  @param call Function call we're working on.
    */
-  void symex_function_call(const code_function_callt &call);
+  void symex_function_call(const expr2tc &call);
 
   /**
    *  End a functions interpretation.
@@ -274,12 +274,6 @@ protected:
    *  switch to interpreting the next pointed to function.
    */
   void symex_end_of_function(void);
-
-  /**
-   *  Handle a call to a named function.
-   *  @param call Function call we're performing.
-   */
-  void symex_function_call_symbol(const code_function_callt &call);
 
   /**
    *  Handle an indirect function call, to a pointer.
@@ -298,7 +292,7 @@ protected:
    *  recording.
    *  @param code Function code to actually call
    */
-  virtual void symex_function_call_code(const code_function_call2t &call);
+  virtual void symex_function_call_code(const expr2tc &call);
 
   /**
    *  Discover whether recursion bound has been exceeded.

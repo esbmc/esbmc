@@ -129,33 +129,20 @@ goto_symext::argument_assignments(
 }
 
 void
-goto_symext::symex_function_call(const code_function_callt &code)
+goto_symext::symex_function_call(const expr2tc &code)
 {
-  const exprt &function = code.function();
+  const code_function_call2t &call = to_code_function_call2t(code);
 
-  if (function.id() == exprt::symbol)
-    symex_function_call_symbol(code);
-  else {
-    expr2tc tmp_expr;
-    migrate_expr(code, tmp_expr);
-    symex_function_call_deref(tmp_expr);
-  }
+  if (is_symbol2t(call.function))
+    symex_function_call_code(code);
+  else
+    symex_function_call_deref(code);
 }
 
 void
-goto_symext::symex_function_call_symbol(const code_function_callt &code)
+goto_symext::symex_function_call_code(const expr2tc &expr)
 {
-
-  assert(code.function().id() == exprt::symbol);
-
-  expr2tc tmp_expr;
-  migrate_expr(code, tmp_expr);
-  symex_function_call_code(to_code_function_call2t(tmp_expr));
-}
-
-void
-goto_symext::symex_function_call_code(const code_function_call2t &call)
-{
+  const code_function_call2t &call = to_code_function_call2t(expr);
   const irep_idt &identifier = to_symbol2t(call.function).name;
 
   // find code in function map
@@ -408,7 +395,7 @@ goto_symext::run_next_function_ptr_target(bool first)
   if (cur_state->top().cur_function_ptr_targets.size() == 0)
     cur_frame.orig_func_ptr_call = expr2tc();
 
-  symex_function_call_code(to_code_function_call2t(expr2tc(call)));
+  symex_function_call_code(call);
 
   return true;
 }
