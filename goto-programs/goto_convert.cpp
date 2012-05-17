@@ -1311,6 +1311,46 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   return globals;
 }
 
+unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
+{
+  if (!options.get_bool_option("atomicity-check"))
+	return 0;
+
+  if (is_address_of2t(expr))
+  	return 0;
+  else if (is_symbol2t(expr))
+  {
+    const irep_idt &identifier = to_symbol2t(expr).name;
+    const symbolt &symbol = lookup(identifier);
+
+    if (identifier == "c::__ESBMC_alloc"
+    	|| identifier == "c::__ESBMC_alloc_size")
+    {
+      return 0;
+    }
+    else if (symbol.static_lifetime || symbol.type.is_dynamic_set())
+    {
+      return 1;
+    }
+  	else
+  	{
+  	  return 0;
+  	}
+  }
+
+  unsigned int globals = 0;
+
+  std::vector<const expr2tc*> operands;
+  expr->list_operands(operands);
+  for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
+       it != operands.end(); it++)
+    globals += get_expr_number_globals(**it);
+
+  return globals;
+}
+
+
+
 /*******************************************************************\
 
 Function: goto_convertt::convert_init
