@@ -41,7 +41,7 @@ public:
 
   void dereference_expression(
     goto_programt::const_targett target,
-    exprt &expr);
+    expr2tc &expr);
     
   virtual ~goto_program_dereferencet()
   {
@@ -73,7 +73,8 @@ protected:
 protected:
   void dereference_rec(expr2tc &expr, guardt &guard,
                        const dereferencet::modet mode);
-  void dereference_expr(exprt &expr, const bool checks_only, const dereferencet::modet mode);
+  void dereference_expr(expr2tc &expr, const bool checks_only,
+                        const dereferencet::modet mode);
   
   const std::set<irep_idt> *valid_local_variables;
   locationt dereference_location;

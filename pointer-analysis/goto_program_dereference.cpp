@@ -279,25 +279,17 @@ Function: goto_program_dereferencet::dereference_expr
 \*******************************************************************/
 
 void goto_program_dereferencet::dereference_expr(
-  exprt &expr,
+  expr2tc &expr,
   const bool checks_only,
   const dereferencet::modet mode)
 {
   guardt guard;
 
-  if(checks_only)
-  {
-    exprt tmp(expr);
-    expr2tc tmp_expr;
-    migrate_expr(tmp, tmp_expr);
-    dereference_rec(tmp_expr, guard, mode);
-  }
-  else
-  {
-    expr2tc tmp_expr;
-    migrate_expr(expr, tmp_expr);
-    dereference_rec(tmp_expr, guard, mode);
-    expr = migrate_expr_back(tmp_expr);
+  if(checks_only) {
+    expr2tc tmp = expr;
+    dereference_rec(expr, guard, mode);
+  } else {
+    dereference_rec(expr, guard, mode);
   }
 }
 
@@ -386,25 +378,46 @@ void goto_program_dereferencet::dereference_instruction(
   valid_local_variables=&target->local_variables;
   goto_programt::instructiont &i=*target;
 
-  dereference_expr(i.guard, checks_only, dereferencet::READ);
+  expr2tc tmp_guard;
+  migrate_expr(i.guard, tmp_guard);
+  dereference_expr(tmp_guard, checks_only, dereferencet::READ);
+  if (!checks_only)
+    i.guard = migrate_expr_back(tmp_guard);
 
-  if(i.is_assign())
+  if (i.is_assign())
   {
     if(i.code.operands().size()!=2)
       throw "assignment expects two operands";
 
-    dereference_expr(i.code.op0(), checks_only, dereferencet::WRITE);
-    dereference_expr(i.code.op1(), checks_only, dereferencet::READ);
+    expr2tc op0, op1;
+    migrate_expr(i.code.op0(), op0);
+    migrate_expr(i.code.op1(), op1);
+    dereference_expr(op0, checks_only, dereferencet::WRITE);
+    dereference_expr(op1, checks_only, dereferencet::READ);
+    if (!checks_only) {
+      i.code.op0() = migrate_expr_back(op0);
+      i.code.op1() = migrate_expr_back(op1);
+    }
   }
-  else if(i.is_function_call())
+  else if (i.is_function_call())
   {
     code_function_callt &function_call=to_code_function_call(to_code(i.code));
 
-    if(function_call.lhs().is_not_nil())
-      dereference_expr(function_call.lhs(), checks_only, dereferencet::WRITE);
+    if (function_call.lhs().is_not_nil()) {
+      expr2tc tmp_lhs;
+      migrate_expr(function_call.lhs(), tmp_lhs);
+      dereference_expr(tmp_lhs, checks_only, dereferencet::WRITE);
+      if (!checks_only)
+        function_call.lhs() = migrate_expr_back(tmp_lhs);
+    }
 
-    Forall_operands(it, function_call.op2())
-      dereference_expr(*it, checks_only, dereferencet::READ);
+    Forall_operands(it, function_call.op2()) {
+      expr2tc tmp_op;
+      migrate_expr(*it, tmp_op);
+      dereference_expr(tmp_op, checks_only, dereferencet::READ);
+      if (!checks_only)
+        *it = migrate_expr_back(tmp_op);
+    }
 
     if (function_call.function().id() == "dereference") {
       // Rather than derefing function ptr, which we're moving to not collect
@@ -426,7 +439,11 @@ void goto_program_dereferencet::dereference_instruction(
     assert(i.code.operands().size() == 1);
 
     exprt &ret = i.code.op0();
-    dereference_expr(ret, checks_only, dereferencet::READ);
+    expr2tc tmp_ret;
+    migrate_expr(ret, tmp_ret);
+    dereference_expr(tmp_ret, checks_only, dereferencet::READ);
+    if (!checks_only)
+      ret = migrate_expr_back(tmp_ret);
   }
   else if(i.is_other())
   {
@@ -442,12 +459,21 @@ void goto_program_dereferencet::dereference_instruction(
       if(i.code.operands().size()!=1)
         throw "expression expects one operand";
 
-      dereference_expr(i.code.op0(), checks_only, dereferencet::READ);
+      expr2tc tmp_expr;
+      migrate_expr(i.code.op0(), tmp_expr);
+      dereference_expr(tmp_expr, checks_only, dereferencet::READ);
+      if (!checks_only)
+        i.code.op0() = migrate_expr_back(tmp_expr);
     }
     else if(statement=="printf")
     {
-      Forall_operands(it, i.code)
-        dereference_expr(*it, checks_only, dereferencet::READ);
+      Forall_operands(it, i.code) {
+        expr2tc tmp_op;
+        migrate_expr(*it, tmp_op);
+        dereference_expr(tmp_op, checks_only, dereferencet::READ);
+        if (!checks_only)
+          *it = migrate_expr_back(tmp_op);
+      }
     }
     else if(statement=="free")
     {
@@ -481,7 +507,7 @@ Function: goto_program_dereferencet::dereference
 
 void goto_program_dereferencet::dereference_expression(
   goto_programt::const_targett target,
-  exprt &expr)
+  expr2tc &expr)
 {
   current_target=target;
   valid_local_variables=&target->local_variables;
@@ -648,5 +674,9 @@ void dereference(
   contextt new_context;
   goto_program_dereferencet
     goto_program_dereference(ns, new_context, options, value_sets);
-  goto_program_dereference.dereference_expression(target, expr);
+
+  expr2tc tmp_expr;
+  migrate_expr(expr, tmp_expr);
+  goto_program_dereference.dereference_expression(target, tmp_expr);
+  expr = migrate_expr_back(tmp_expr);
 }
