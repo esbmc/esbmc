@@ -145,14 +145,15 @@ goto_symext::symex_function_call_symbol(const code_function_callt &code)
 
   assert(code.function().id() == exprt::symbol);
 
-  symex_function_call_code(code);
+  expr2tc tmp_expr;
+  migrate_expr(code, tmp_expr);
+  symex_function_call_code(to_code_function_call2t(tmp_expr));
 }
 
 void
-goto_symext::symex_function_call_code(const code_function_callt &call)
+goto_symext::symex_function_call_code(const code_function_call2t &call)
 {
-  const irep_idt &identifier =
-    to_symbol_expr(call.function()).get_identifier();
+  const irep_idt &identifier = to_symbol2t(call.function).name;
 
   // find code in function map
 
@@ -160,14 +161,15 @@ goto_symext::symex_function_call_code(const code_function_callt &call)
     goto_functions.function_map.find(identifier);
 
   if (it == goto_functions.function_map.end()) {
-    if (call.function().invalid_object()) {
+    if (has_prefix(identifier.as_string(), "symex::invalid_object")) {
       std::cout << "WARNING: function ptr call with no target, ";
-      std::cout << call.location() << std::endl;
       cur_state->source.pc++;
       return;
     }
 
-    throw "failed to find `" + id2string(identifier) + "' in function_map";
+    std::cerr << "failed to find `" + id2string(identifier) +
+                 "' in function_map";
+    abort();
   }
 
   const goto_functionst::goto_functiont &goto_function = it->second;
@@ -191,16 +193,13 @@ goto_symext::symex_function_call_code(const code_function_callt &call)
       std::cerr << msg << std::endl;
     }
 
-    if (call.lhs().is_not_nil()) {
+    if (!is_nil_expr(call.ret)) {
       unsigned int &nondet_count = get_nondet_counter();
-      exprt rhs = exprt("nondet_symbol", call.lhs().type());
-      rhs.identifier("symex::" + i2string(nondet_count++));
-      rhs.location() = call.location();
+      expr2tc rhs = expr2tc(new symbol2t(call.ret->type,
+                                  "nondet$symex::" + i2string(nondet_count++)));
+
       guardt guard;
-      expr2tc new_lhs, new_rhs;
-      migrate_expr(call.lhs(), new_lhs);
-      migrate_expr(rhs, new_rhs);
-      symex_assign_rec(new_lhs, new_rhs, guard);
+      symex_assign_rec(call.ret, rhs, guard);
     }
 
     cur_state->source.pc++;
@@ -208,14 +207,10 @@ goto_symext::symex_function_call_code(const code_function_callt &call)
   }
 
   // read the arguments -- before the locality renaming
-  exprt::operandst tmp_arguments = call.arguments();
-  std::vector<expr2tc> arguments;
-  for (unsigned i = 0; i < tmp_arguments.size(); i++)
+  std::vector<expr2tc> arguments = call.operands;
+  for (unsigned i = 0; i < arguments.size(); i++)
   {
-    expr2tc arg;
-    migrate_expr(tmp_arguments[i], arg);
-    cur_state->rename(arg);
-    arguments.push_back(arg);
+    cur_state->rename(arguments[i]);
   }
 
   // increase unwinding counter
@@ -243,8 +238,7 @@ goto_symext::symex_function_call_code(const code_function_callt &call)
   argument_assignments(to_code_type(tmp_type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
-  expr2tc ret_val;
-  migrate_expr(call.lhs(), frame.return_value);
+  frame.return_value = call.ret;
   frame.function_identifier = identifier;
 
   cur_state->source.is_set = true;
@@ -413,8 +407,9 @@ goto_symext::run_next_function_ptr_target(bool first)
   if (cur_state->top().cur_function_ptr_targets.size() == 0)
     delete cur_frame.orig_func_ptr_call;
 
-  symex_function_call_code(call);
-
+  expr2tc tmp_expr;
+  migrate_expr(call, tmp_expr);
+  symex_function_call_code(to_code_function_call2t(tmp_expr));
 
   return true;
 }

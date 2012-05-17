@@ -298,7 +298,7 @@ protected:
    *  recording.
    *  @param code Function code to actually call
    */
-  virtual void symex_function_call_code(const code_function_callt &call);
+  virtual void symex_function_call_code(const code_function_call2t &call);
 
   /**
    *  Discover whether recursion bound has been exceeded.
