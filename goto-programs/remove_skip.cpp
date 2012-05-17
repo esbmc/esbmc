@@ -22,14 +22,18 @@ Function: is_skip
 
 static bool is_skip(goto_programt::instructionst::iterator it)
 {
-  if(it->is_skip())
-    return !it->code.explict();
+  if (it->is_skip())
+    return true;
+#warning XXX jmorse, cpp explicit skips?
+//    return !it->code.explict();
  
-  if(it->is_goto())
+  if (it->is_goto())
   {
-    if(it->guard.is_false()) return true;
+    if (is_constant_bool2t(it->guard) &&
+        !to_constant_bool2t(it->guard).constant_value)
+      return true;
 
-    if(it->targets.size()!=1)
+    if (it->targets.size()!=1)
       return false;
 
     goto_programt::instructionst::iterator next_it=it;
@@ -40,8 +44,7 @@ static bool is_skip(goto_programt::instructionst::iterator it)
   
   if(it->is_other())
   {
-    return it->code.is_nil() ||
-           it->code.statement()=="skip";
+    return is_nil_expr(it->code);
   }
   
   return false;
