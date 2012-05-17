@@ -1,12 +1,14 @@
 #include <string>
 #include <cassert>
+#include <iostream>
 
 using namespace std;
 
 int main(){
 	
-	string S = string("Testing");
-	string S1 = string("Testing");
-	string T = string("Testing", 2);
-	assert(T != S + S1);
+	string S = string("Te");
+	string S1 = string("st");
+	string T = string("Testing", 4);
+	cout << S << endl << S1 << endl << T << endl;
+	assert(T == S + S1);
 }
