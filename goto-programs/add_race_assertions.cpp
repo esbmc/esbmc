@@ -71,8 +71,12 @@ public:
 
   const bool not_valid_assign(goto_programt::instructiont &instruction)
   {
-	std::string identifier=instruction.code.op0().identifier().as_string();
-	std::string type=instruction.code.op0().type().identifier().as_string();
+    const code_assign2t &assign = to_code_assign2t(instruction.code);
+    if (!is_symbol2t(assign.target))
+      return false;
+
+    const symbol2t &sym = to_symbol2t(assign.target);
+    std::string identifier = sym.name.as_string();
 
 	//these assignments come from the buil-in-libraries
     if (identifier.find("built-in-library")!= std::string::npos
@@ -84,8 +88,7 @@ public:
     	|| identifier.find("daylight") != std::string::npos
     	|| identifier.find("timezone") != std::string::npos
     	|| identifier.find("tzname") != std::string::npos
-    	|| identifier.find("ESBMC_rounding_mode") != std::string::npos
-    	|| type.find("__pthread_mutex_s") != std::string::npos)
+    	|| identifier.find("ESBMC_rounding_mode") != std::string::npos)
 
       return true;
     else
@@ -122,10 +125,13 @@ void w_guardst::add_initialization(goto_programt &goto_program) const
       it++)
   {
     exprt symbol=symbol_expr(ns.lookup(*it));
+    expr2tc new_sym;
+    migrate_expr(symbol, new_sym);
 
     t=goto_program.insert(t);
     t->type=ASSIGN;
-    t->code=code_assignt(symbol, false_exprt());
+    t->code = expr2tc(new code_assign2t(new_sym,
+                                        expr2tc(new constant_bool2t(false))));
 
     t++;
   }
@@ -157,7 +163,8 @@ void add_race_assertions(
 
     if(instruction.is_assign())
     {
-      rw_sett rw_set(ns, value_sets, i_it, instruction.code);
+      exprt tmp_expr = migrate_expr_back(instruction.code);
+      rw_sett rw_set(ns, value_sets, i_it, to_code(tmp_expr));
 
       if(rw_set.entries.empty()) continue;
 
@@ -174,9 +181,11 @@ void add_race_assertions(
           goto_programt::targett t=goto_program.insert(i_it);
 
           t->type=ASSIGN;
-          t->code=code_assignt(
+          code_assignt theassign(
             w_guards.get_w_guard_expr(e_it->second),
             e_it->second.get_guard());
+
+          migrate_expr(theassign, t->code);
 
           t->location=original_instruction.location;
           i_it=++t;
@@ -196,9 +205,10 @@ void add_race_assertions(
           goto_programt::targett t=goto_program.insert(i_it);
 
           t->type=ASSIGN;
-          t->code=code_assignt(
+          code_assignt theassign(
             w_guards.get_w_guard_expr(e_it->second),
             false_exprt());
+          migrate_expr(theassign, t->code);
 
           t->location=original_instruction.location;
           i_it=++t;
@@ -209,21 +219,10 @@ void add_race_assertions(
       {
         goto_programt::targett t=goto_program.insert(i_it);
 
-        t->make_assertion(w_guards.get_assertion(e_it->second));
+        expr2tc assert;
+        migrate_expr(w_guards.get_assertion(e_it->second), assert);
+        t->make_assertion(assert);
         t->location=original_instruction.location;
-
-        if (original_instruction.location.is_nil() && original_instruction.code.operands().size()==2)
-        {
-          if (original_instruction.code.op1().operands().size()>0)
-          {
-        	if (original_instruction.code.op1().id()=="or")
-        	  t->location=original_instruction.code.op1().operands()[0].op0().location();
-        	else
-        	  t->location=original_instruction.code.op1().op0().location();
-          }
-          else
-            t->location=original_instruction.code.op1().location();
-        }
         t->location.comment(e_it->second.get_comment());
         i_it=++t;
       }
