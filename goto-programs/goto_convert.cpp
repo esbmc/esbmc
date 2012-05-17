@@ -60,6 +60,8 @@ void goto_convertt::finish_gotos()
   {
     goto_programt::instructiont &i=**it;
 
+    std::cerr << "XXX jmorse, fetching goto target from irep." << std::endl;
+#if 0
     if (i.code.statement()=="goto")
     {
       const irep_idt &goto_label=i.code.destination();
@@ -81,6 +83,7 @@ void goto_convertt::finish_gotos()
       err_location(i.code);
       throw "finish_gotos: unexpected goto";
     }
+#endif
   }
 
   targets.gotos.clear();
