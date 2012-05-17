@@ -158,12 +158,12 @@ void goto_convert_functionst::add_return(
   // see if we have an unconditional goto at the end
   if(!f.body.instructions.empty() &&
      f.body.instructions.back().is_goto() &&
-     f.body.instructions.back().guard.is_true())
+     is_constant_bool2t(f.body.instructions.back().guard) &&
+     to_constant_bool2t(f.body.instructions.back().guard).constant_value)
     return;
 
   goto_programt::targett t=f.body.add_instruction();
   t->make_return();
-  t->code=code_returnt();
   t->location=location;
 
   const typet &thetype = (f.type.return_type().id() == "symbol")
@@ -171,7 +171,10 @@ void goto_convert_functionst::add_return(
                          : f.type.return_type();
   exprt rhs=exprt("sideeffect", thetype);
   rhs.statement("nondet");
-  t->code.move_to_operands(rhs);
+
+  expr2tc tmp_expr;
+  migrate_expr(rhs, tmp_expr);
+  t->code = expr2tc(new code_return2t(tmp_expr));
 }
 
 /*******************************************************************\
@@ -249,7 +252,8 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
     goto_programt::targett t=f.body.add_instruction();
     t->type=END_FUNCTION;
     t->location=end_location;
-    t->code.identifier(identifier);
+    //t->code.identifier(identifier);
+    //XXXjmorse, disabled in migration, don't think this does anything
 
     if(to_code(symbol.value).get_statement()=="block")
       t->location=static_cast<const locationt &>(
