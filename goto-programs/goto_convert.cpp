@@ -976,6 +976,53 @@ void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rh
   }
 }
 
+void goto_convertt::break_globals2assignments(int &atomic, expr2tc &lhs,
+                                              expr2tc &rhs, goto_programt &dest,
+                                              const locationt &location)
+{
+
+  if(!options.get_bool_option("atomicity-check"))
+    return;
+
+  std::cerr << "atomicity check is a victim of irep migration" << std::endl;
+  abort();
+
+#if 0
+  /* break statements such as a = b + c as follows:
+   * tmp1 = b;
+   * tmp2 = c;
+   * atomic_begin
+   * assert tmp1==b && tmp2==c
+   * a = b + c
+   * atomic_end
+  */
+  expr2tc atomic_dest;
+  break_globals2assignments_rec(rhs, atomic_dest, dest, atomic, location);
+
+  if (atomic_dest.operands().size()==1)
+  {
+    exprt tmp;
+    tmp.swap(atomic_dest.op0());
+    atomic_dest.swap(tmp);
+  }
+  if(atomic_dest.operands().size() != 0)
+  {
+	// do an assert
+	if(atomic > 0)
+	{
+	  dest.add_instruction(ATOMIC_BEGIN);
+	  atomic = -1;
+	}
+	goto_programt::targett t=dest.add_instruction(ASSERT);
+        expr2tc tmp_guard;
+        migrate_expr(atomic_dest, tmp_guard);
+        t->guard = tmp_guard;
+	t->location=location;
+	  t->location.comment("atomicity violation on assignment to " + lhs.identifier().as_string());
+  }
+#endif
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::break_globals2assignments
@@ -1123,6 +1170,97 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	  break_globals2assignments_rec(*it,atomic_dest,dest,atomic,location);
 	}
   }
+}
+
+void goto_convertt::break_globals2assignments_rec(expr2tc &rhs, expr2tc &atomic_dest, goto_programt &dest, int atomic, const locationt &location)
+{
+
+  return;
+#if 0
+  if (!options.get_bool_option("atomicity-check"))
+    return;
+
+  if (is_dereference2t(rhs) || is_index2t(rhs) || is_member2t(rhs))
+  {
+#error this is completely full of shit
+    irep_idt identifier = rhs.op0().identifier();
+    if (rhs.id() == "member")
+    {
+      const exprt &object=rhs.operands()[0];
+      identifier=object.identifier();
+    }
+    else if (rhs.id() == "index")
+    {
+      identifier=rhs.op1().identifier();
+    }
+
+    if (identifier.empty())
+	  return;
+
+	const symbolt &symbol=lookup(identifier);
+
+    if (!(identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
+          && (symbol.static_lifetime || symbol.type.is_dynamic_set()))
+    {
+	  // make new assignment to temp for each global symbol
+	  symbolt &new_symbol=new_tmp_symbol(rhs.type());
+	  equality_exprt eq_expr;
+	  irept irep;
+	  new_symbol.to_irep(irep);
+	  eq_expr.lhs()=symbol_expr(new_symbol);
+	  eq_expr.rhs()=rhs;
+	  atomic_dest.copy_to_operands(eq_expr);
+
+	  codet assignment("assign");
+	  assignment.reserve_operands(2);
+	  assignment.copy_to_operands(symbol_expr(new_symbol));
+	  assignment.copy_to_operands(rhs);
+	  assignment.location() = location;
+	  assignment.comment("atomicity violation");
+	  copy(assignment, ASSIGN, dest);
+
+	  if(atomic == 0)
+	    rhs=symbol_expr(new_symbol);
+
+    }
+  }
+  else if(rhs.id() == "symbol")
+  {
+	const irep_idt &identifier=rhs.identifier();
+	const symbolt &symbol=lookup(identifier);
+	if(symbol.static_lifetime || symbol.type.is_dynamic_set())
+	{
+	  // make new assignment to temp for each global symbol
+	  symbolt &new_symbol=new_tmp_symbol(rhs.type());
+	  new_symbol.static_lifetime=true;
+	  equality_exprt eq_expr;
+	  irept irep;
+	  new_symbol.to_irep(irep);
+	  eq_expr.lhs()=symbol_expr(new_symbol);
+	  eq_expr.rhs()=rhs;
+	  atomic_dest.copy_to_operands(eq_expr);
+
+	  codet assignment("assign");
+	  assignment.reserve_operands(2);
+	  assignment.copy_to_operands(symbol_expr(new_symbol));
+	  assignment.copy_to_operands(rhs);
+
+	  assignment.location() = rhs.find_location();
+	  assignment.comment("atomicity violation");
+	  copy(assignment, ASSIGN, dest);
+
+	  if(atomic == 0)
+	    rhs=symbol_expr(new_symbol);
+    }
+  }
+  else if(!rhs.is_address_of())// && rhs.id() != "dereference")
+  {
+    Forall_operands(it, rhs)
+	{
+	  break_globals2assignments_rec(*it,atomic_dest,dest,atomic,location);
+	}
+  }
+#endif
 }
 
 /*******************************************************************\

@@ -73,9 +73,11 @@ protected:
   void read(exprt &expr, goto_programt &dest);
   unsigned int get_expr_number_globals(const exprt & expr);
   void break_globals2assignments(exprt & rhs, goto_programt & dest,const locationt & location);
+  void break_globals2assignments(expr2tc & rhs, goto_programt & dest,const locationt & location);
   void break_globals2assignments(int & atomic, exprt & lhs, exprt & rhs, goto_programt & dest, const locationt & location);
   void break_globals2assignments(int & atomic, exprt & rhs, goto_programt & dest,const locationt & location);
   void break_globals2assignments_rec(exprt & rhs, exprt & atomic_dest, goto_programt & dest,int atomic, const locationt & location);
+  void break_globals2assignments_rec(expr2tc & rhs, expr2tc & atomic_dest, goto_programt & dest,int atomic, const locationt & location);
 
   // this produces if(guard) dest;
   void guard_program(
