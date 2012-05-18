@@ -294,6 +294,7 @@ public:
     code_printf_id,
     code_expression_id,
     code_return_id,
+    code_skip_id,
     code_free_id,
     object_descriptor_id,
     code_function_call_id,
@@ -1983,6 +1984,16 @@ public:
 };
 template class esbmct::expr<code_return2t, esbmct::expr2tc_operand>;
 
+class code_skip2t : public esbmct::expr<code_skip2t>
+{
+public:
+  code_skip2t()
+    : esbmct::expr<code_skip2t> (type_pool.get_empty(), code_skip_id) {}
+  code_skip2t(const code_skip2t &ref)
+    : esbmct::expr<code_skip2t> (ref) {}
+};
+template class esbmct::expr<code_skip2t>;
+
 class code_free2t : public esbmct::expr<code_free2t,
                                           esbmct::expr2tc_operand>
 {
@@ -2185,6 +2196,7 @@ expr_macros(code_decl);
 expr_macros(code_printf);
 expr_macros(code_expression);
 expr_macros(code_return);
+expr_macros(code_skip);
 expr_macros(code_free);
 expr_macros(object_descriptor);
 expr_macros(code_function_call);
@@ -2346,6 +2358,7 @@ typedef irep_container<code_printf2t, expr2t::code_printf_id> code_printf2tc;
 typedef irep_container<code_expression2t, expr2t::code_expression_id>
                        code_expression2tc;
 typedef irep_container<code_return2t, expr2t::code_return_id> code_return2tc;
+typedef irep_container<code_skip2t, expr2t::code_skip_id> code_skip2tc;
 typedef irep_container<code_free2t, expr2t::code_free_id> code_free2tc;
 typedef irep_container<object_descriptor2t, expr2t::object_descriptor_id>
                        object_descriptor2tc;

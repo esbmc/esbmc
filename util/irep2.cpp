@@ -490,6 +490,7 @@ static const char *expr_names[] = {
   "code_printf",
   "code_expression",
   "code_return",
+  "code_skip",
   "code_free",
   "object_descriptor",
   "code_function_call",

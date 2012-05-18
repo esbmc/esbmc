@@ -1030,6 +1030,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op0;
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new invalid_pointer2t(op0));
+  } else if (expr.id() == "code" && expr.statement() == "skip") {
+    new_expr_ref = expr2tc(new code_skip2t());
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1844,6 +1846,12 @@ migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("return"));
     exprt op0 = migrate_expr_back(ref2.operand);
     codeexpr.copy_to_operands(op0);
+    return codeexpr;
+  }
+  case expr2t::code_skip_id:
+  {
+    exprt codeexpr("code", code_typet());
+    codeexpr.statement("skip");
     return codeexpr;
   }
   case expr2t::code_free_id:
