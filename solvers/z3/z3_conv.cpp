@@ -2467,6 +2467,27 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *&_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const buffer_size2t &buf, void *&_bv)
+{
+  Z3_ast &bv = cast_to_z3(_bv);
+  Z3_ast operand;
+  unsigned width;
+
+  Z3_sort native_int_sort;
+  if (int_encoding) {
+    native_int_sort = Z3_mk_int_type(z3_ctx);
+  } else {
+    native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+  }
+
+  // XXX jmorse - we can't implement this irep until there's actually some
+  // comprehensive way of ensuring that all pointers have their sizes put into
+  // some global size array. In fact, it's probably better to handle it at the
+  // points_to level. Until I have time to implement that though:
+  bv = Z3_mk_int(z3_ctx, 1000000, native_int_sort);
+}
+
+void
 z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
                                 const expr2tc &side2,
                                 const type2tc &type, Z3_ast &bv)
