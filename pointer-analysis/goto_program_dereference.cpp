@@ -287,7 +287,7 @@ void goto_program_dereferencet::dereference_expr(
 
   if(checks_only) {
     expr2tc tmp = expr;
-    dereference_rec(expr, guard, mode);
+    dereference_rec(tmp, guard, mode);
   } else {
     dereference_rec(expr, guard, mode);
   }
