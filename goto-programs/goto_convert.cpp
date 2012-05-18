@@ -1066,6 +1066,46 @@ void goto_convertt::break_globals2assignments(exprt & rhs, goto_programt & dest,
   }
 }
 
+void goto_convertt::break_globals2assignments(expr2tc & rhs, goto_programt & dest, const locationt & location)
+{
+
+  if(!options.get_bool_option("atomicity-check"))
+    return;
+
+  std::cerr << "XXX jmorse - break_globals2assignments  is a victim of irep migration" << std::endl;
+  abort();
+
+#if 0
+  if (rhs.operands().size()>0)
+    if (rhs.op0().identifier().as_string().find("pthread") != std::string::npos)
+ 	  return ;
+
+  if (rhs.operands().size()>0)
+    if (rhs.op0().operands().size()>0)
+ 	  return ;
+
+  exprt atomic_dest = exprt("and", typet("bool"));
+  break_globals2assignments_rec(rhs,atomic_dest,dest,0,location);
+
+  if(atomic_dest.operands().size()==1)
+  {
+    exprt tmp;
+    tmp.swap(atomic_dest.op0());
+    atomic_dest.swap(tmp);
+  }
+
+  if(atomic_dest.operands().size() != 0)
+  {
+    goto_programt::targett t=dest.add_instruction(ASSERT);
+    expr2tc tmp_dest;
+    migrate_expr(atomic_dest, tmp_dest);
+    t->guard.swap(tmp_dest);
+    t->location=location;
+    t->location.comment("atomicity violation");
+  }
+#endif
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::break_globals2assignments_rec
