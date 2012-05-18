@@ -541,8 +541,8 @@ Function: string_abstractiont::has_string_macros
 
 bool string_abstractiont::has_string_macros(const expr2tc &expr)
 {
-  if (is_zero_string2t(expr) || is_zero_length_string2t(expr))
-#warning not checking for buffer size, see rev history
+  if (is_zero_string2t(expr) || is_zero_length_string2t(expr) ||
+      is_buffer_size2t(expr))
     return true;
 
   std::vector<const expr2tc*> operands;
@@ -584,15 +584,12 @@ void string_abstractiont::replace_string_macros(
     expr2tc tmp = zero_string_length(ref.string, lhs, location);
     expr = tmp;
   }
-#warning jmorse, not handling buffer_size irep.
-#if 0
-  else if(expr.id()=="buffer_size")
+  else if (is_buffer_size2t(expr))
   {
-    assert(expr.operands().size()==1);
-    exprt tmp=buffer_size(expr.op0(), location);
-    expr.swap(tmp);
+    const buffer_size2t &ref = to_buffer_size2t(expr);
+    expr2tc tmp = buffer_size(ref.value, location);
+    expr = tmp;
   }
-#endif
   else
   {
     std::vector<expr2tc *> operands;
