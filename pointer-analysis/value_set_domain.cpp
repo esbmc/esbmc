@@ -38,9 +38,7 @@ void value_set_domaint::transform(
 
   case END_FUNCTION:    
     {
-    expr2tc ret;
-    migrate_expr(get_return_lhs(to_l), ret);
-    value_set.do_end_function(ret, ns);
+    value_set.do_end_function(get_return_lhs(to_l), ns);
     }
     break;
   
