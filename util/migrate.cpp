@@ -1032,6 +1032,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(new invalid_pointer2t(op0));
   } else if (expr.id() == "code" && expr.statement() == "skip") {
     new_expr_ref = expr2tc(new code_skip2t());
+  } else if (expr.id() == "buffer_size") {
+    migrate_type(expr.type(), type);
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = expr2tc(new buffer_size2t(type, op0));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1894,6 +1899,14 @@ migrate_expr_back(const expr2tc &ref)
     exprt theexpr("invalid-pointer", bool_typet());
     theexpr.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
     return theexpr;
+  }
+  case expr2t::buffer_size_id:
+  {
+    const buffer_size2t &ref2 = to_buffer_size2t(ref);
+    exprt codeexpr("buffer_size");
+    codeexpr.type() = migrate_type_back(ref2.type);
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.value));
+    return codeexpr;
   }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");

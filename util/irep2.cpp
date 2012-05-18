@@ -495,6 +495,7 @@ static const char *expr_names[] = {
   "object_descriptor",
   "code_function_call",
   "invalid_pointer",
+  "buffer_size",
   "from_bv_typecast",
   "to_bv_typecast"
 };
