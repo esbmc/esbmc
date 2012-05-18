@@ -26,7 +26,7 @@ Function: convert
 
 void convert( const goto_programt::instructiont &instruction, irept &irep ) 
 {  
-  irep.code(instruction.code);
+  irep.code(migrate_expr_back(instruction.code));
     
   if (instruction.function!="")
     irep.function(instruction.function);
@@ -36,7 +36,7 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
     
   irep.type_id((long) instruction.type);
 
-  irep.guard(instruction.guard);
+  irep.guard(migrate_expr_back(instruction.guard));
     
   if (instruction.event!="")
     irep.event(instruction.event);
@@ -103,12 +103,12 @@ Function: convert
 
 void convert(const irept &irep, goto_programt::instructiont &instruction)
 {
-  instruction.code=static_cast<const codet &>(irep.code());
+  migrate_expr(static_cast<const exprt&>(irep.code()), instruction.code);
+  migrate_expr(static_cast<const exprt&>(irep.guard()), instruction.guard);
   instruction.function = irep.function_irep().id();
   instruction.location = static_cast<const locationt&>(irep.location());    
   instruction.type = static_cast<goto_program_instruction_typet>(
                   atoi(irep.type_id().c_str()));
-  instruction.guard = static_cast<const exprt&>(irep.guard());
   instruction.event = irep.event_irep().id();
   
   // don't touch the targets, the goto_programt conversion does that
