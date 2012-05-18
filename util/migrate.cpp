@@ -1105,6 +1105,8 @@ migrate_type_back(const type2tc &ref)
     code_typet code;
     typet ret_type = migrate_type_back(ref2.ret_type);
 
+    assert(ref2.arguments.size() == ref2.argument_names.size());
+
     code_typet::argumentst args;
     unsigned int i = 0;
     forall_types(it, ref2.arguments) {

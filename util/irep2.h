@@ -777,7 +777,10 @@ public:
     : esbmct::type<code_type2t, esbmct::type2tc_vec_args,
                    esbmct::type2tc_ret_type, esbmct::irepidt_vec_arg_names,
                    esbmct::bool_ellipsis>
-      (code_id, args, ret_type, names, e) {}
+      (code_id, args, ret_type, names, e)
+  {
+    assert(args.size() == names.size());
+  }
   code_type2t(const code_type2t &ref)
     : esbmct::type<code_type2t, esbmct::type2tc_vec_args,
                    esbmct::type2tc_ret_type, esbmct::irepidt_vec_arg_names,
