@@ -298,10 +298,6 @@ void goto_convertt::convert(
     convert_atomic_begin(code, dest);
   else if(statement=="atomic_end")
     convert_atomic_end(code, dest);
-  else if(statement=="bp_enforce")
-    convert_bp_enforce(code, dest);
-  else if(statement=="bp_abortif")
-    convert_bp_abortif(code, dest);
   else if(statement=="cpp_delete" ||
           statement=="cpp_delete[]")
     convert_cpp_delete(code, dest);
