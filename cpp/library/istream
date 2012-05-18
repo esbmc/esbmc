@@ -17,7 +17,7 @@ struct istream: ios
   istream& get(char str[], int n);
   istream& getline(char str[], int size, char delim = '\n');
   void read(char str[], int size);
-  int gcount();
+  streamsize  gcount ( ) const;
 //  int rdstate();
   istream& seekg ( streampos pos ); // model
   istream& seekg ( streamoff off, ios_base::seekdir dir ); // model
@@ -29,6 +29,8 @@ struct istream: ios
   istream& unget ( );
 
   int sync ( );
+protected:
+  streamsize        __gcount;
 
 
 private:
@@ -127,15 +129,11 @@ istream& ignore(int i = 1, int delim = EOF)
   return istream();
 }
 
-int istream::gcount()
+streamsize istream::gcount() const
 {
-  return nondet_uint();
+  return __gcount;
 }
 
-//int istream::rdstate()
-//{
-//  return nondet_uint();
-//}
 }
 
 #endif
