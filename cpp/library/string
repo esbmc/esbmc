@@ -122,6 +122,7 @@ namespace std
 		size_t find_first_of ( char c, size_t pos = 0 ) const;
 		size_t find ( const string& s, size_t pos = 0 ) const;
 		size_t find ( const char* s, size_t pos = 0 ) const;
+		size_t find ( const char* s, size_t pos = 0 , size_t n) const;
 		size_t find ( char c, size_t pos = 0 ) const;
 		string& assign ( string& s );
 		string& assign ( const char* s, size_t n );
@@ -254,13 +255,7 @@ namespace std
 	{
 		__ESBMC_HIDE:
 		int aux,i;
-		for(i=0;(i<this->length())||(i<strlen(lhs));i++){
-			if(this->str[i]!=lhs[i]){
-				aux=1;break;
-			}
-		}
-
-		//aux = strcmp((char*)lhs, this->str);
+		aux = strcmp((char*)lhs, this->str);
 		if (aux == 0){
 			return true;
 		}else{
@@ -718,19 +713,12 @@ namespace std
 	}
 	size_t string::find ( char c, size_t pos = 0 ) const
 	{
-	    size_t ret=0;
-	    const char* s1 = this->str+pos;
-	    char*s2;
-	    s2 = new char[1];
-	    s2[0] = c;
-	    while(*s1 && strchr(s2,*s1++))
-	        ret++;
-	    return ret;
-		//return strspn(str+pos,(const char*)c);
+		return strspn(str+pos,(const char*)c);
 	}
-
-#if 0
-
+	size_t string::find ( const string& s, size_t pos = 0 ) const
+	{
+		return strspn(str+pos,s.c_str());
+	}
 	size_t string::find ( const string& s, size_t pos = 0 ) const
 	{
 		return strspn(str+pos,s.c_str());
@@ -739,6 +727,13 @@ namespace std
 	{
 		return strspn(str+pos,s);
 	}
+	size_t string::find ( const char* s, size_t pos = 0 , size_t n) const
+	{
+		return strspn(str+pos,s);
+	}
+#if 0
+
+
 
 
 	string& string::append ( size_t n, char c )
