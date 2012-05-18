@@ -39,12 +39,12 @@ exprt flow_insensitive_abstract_domain_baset::get_guard(
 
   if(next==to)
   {
-    exprt tmp(from->guard);
+    exprt tmp(migrate_expr_back(from->guard));
     tmp.make_not();
     return tmp;
   }
   
-  return from->guard;
+  return migrate_expr_back(from->guard);
 }
 
 /*******************************************************************\
@@ -72,7 +72,7 @@ exprt flow_insensitive_abstract_domain_baset::get_return_lhs(locationt to) const
   assert(to->is_function_call());
 
   const code_function_callt &code=
-    to_code_function_call(to_code(to->code));
+    to_code_function_call(to_code(migrate_expr_back(to->code)));
   
   return code.lhs();
 }
@@ -279,7 +279,7 @@ bool flow_insensitive_analysis_baset::visit(
     {
       // this is a big special case
       const code_function_callt &code=
-        to_code_function_call(to_code(l->code));
+        to_code_function_call(to_code(migrate_expr_back(l->code)));
       
       changed=
         do_function_call_rec(
@@ -326,18 +326,20 @@ bool flow_insensitive_analysis_baset::do_function_call(
 	if(!goto_function.body_available)
 	{
 	  const code_function_callt &code = 
-      to_code_function_call(to_code(l_call->code));
+      to_code_function_call(to_code(migrate_expr_back(l_call->code)));
     
     goto_programt temp;
     
     goto_programt::targett r=temp.add_instruction();
     r->make_return();
-    r->code=code_returnt();
     r->function=f_it->first;
     r->location_number=0;
     
     exprt rhs=side_effect_expr_nondett(code.lhs().type());
-    r->code.move_to_operands(rhs);    
+
+    expr2tc new_rhs;
+    migrate_expr(rhs, new_rhs);
+    r->code = expr2tc(new code_return2t(new_rhs));
     
     goto_programt::targett t=temp.add_instruction(END_FUNCTION);    
     //t->code.set("identifier", code.function());
