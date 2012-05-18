@@ -1101,7 +1101,7 @@ migrate_type_back(const type2tc &ref)
     }
   case type2t::code_id:
     {
-    const code_type2t &ref2 = static_cast<const code_type2t &>(*ref.get());
+    const code_type2t &ref2 = to_code_type(ref);
     code_typet code;
     typet ret_type = migrate_type_back(ref2.ret_type);
 
