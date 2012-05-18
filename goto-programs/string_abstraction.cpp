@@ -266,6 +266,7 @@ void string_abstractiont::abstract(irep_idt name,
     const type2tc &type = *it;
 
     new_args.push_back(type);
+    new_arg_names.push_back(func_type.argument_names[name_idx]);
 
     if (is_pointer_type(type) && is_char_type(to_pointer_type(type).subtype))
     {
