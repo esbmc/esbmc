@@ -310,7 +310,9 @@ void string_abstractiont::abstract(irep_idt name,
     new_sym.location = locationt();
     new_sym.location.set_file("<added_by_string_abstraction>");
     new_sym.name = new_arg_names.back();
-    new_sym.base_name = new_sym.name;
+    size_t endpos = new_sym.name.as_string().rfind("::");
+    std::string basename = new_sym.name.as_string().substr(endpos+2);
+    new_sym.base_name = basename;
     context.add(new_sym);
 
     new_sym.name = name.as_string() + "::__strabs::returned_str";
@@ -1105,6 +1107,8 @@ expr2tc string_abstractiont::build_symbol_constant(const irep_idt &str)
     new_symbol.lvalue=true;
     new_symbol.static_lifetime=true;
     new_symbol.pretty_name=base;
+    size_t endpos = base.as_string().rfind("::");
+    std::string basename = base.as_string().substr(endpos+2);
     new_symbol.base_name=base;
 
     {
