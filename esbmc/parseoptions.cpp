@@ -595,15 +595,15 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
     }
   }
 
-  std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
+  std::map<std::string, std::pair<std::set<std::string>, expr2tc> > monitors;
   std::map<std::string, std::string>::const_iterator str_it;
   for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
     if (str_it->first.find("$type") == std::string::npos) {
       std::set<std::string> used_syms;
-      exprt main_expr;
+      expr2tc main_expr;
       std::string prop_name = str_it->first.substr(20, std::string::npos);
       main_expr = calculate_a_property_monitor(prop_name, strings, used_syms);
-      monitors[prop_name] = std::pair<std::set<std::string>, exprt>
+      monitors[prop_name] = std::pair<std::set<std::string>, expr2tc>
                                       (used_syms, main_expr);
     }
   }
@@ -622,11 +622,12 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
   return;
 }
 
-static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
 
-  if (e.id() ==  "symbol") {
-    std::string sym = e.identifier().as_string();
+  if (is_symbol2t(e)) {
+    symbol2t &thesym = to_symbol2t(e);
+    std::string sym = thesym.name.as_string();
 
 // Originally this piece of code renamed all the symbols in the property
 // expression to ones specified by the user. However, there's no easy way of
@@ -646,14 +647,17 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
 
     used_syms.insert(sym);
   } else {
-    Forall_operands(it, e)
-      replace_symbol_names(*it, prefix, strings, used_syms);
+    std::vector<expr2tc *> operands;
+    e.get()->list_operands(operands);
+    for (std::vector<expr2tc*>::iterator it = operands.begin();
+         it != operands.end(); it++)
+      replace_symbol_names(**it, prefix, strings, used_syms);
   }
 
   return;
 }
 
-exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+expr2tc cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
   exprt main_expr;
   std::map<std::string, std::string>::const_iterator it;
@@ -666,12 +670,14 @@ exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::ma
 
   languages.to_expr(expr_str, dummy_str, main_expr, ui_message_handler);
 
-  replace_symbol_names(main_expr, name, strings, used_syms);
+  expr2tc new_main_expr;
+  migrate_expr(main_expr, new_main_expr);
+  replace_symbol_names(new_main_expr, name, strings, used_syms);
 
-  return main_expr;
+  return new_main_expr;
 }
 
-void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, exprt> >monitors)
+void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, expr2tc> >monitors)
 {
 
   // So the plan: we've been handed an instruction, look for assignments to a
@@ -682,21 +688,24 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   if (!insn->is_assign())
     return;
 
-  exprt sym = insn->code.op0();
-  if (sym.id() != "symbol")
-    return;
+  code_assign2t &assign = to_code_assign2t(insn->code);
+
   // XXX - this means that we can't make propositions about things like
   // the contents of an array and suchlike.
+  if (!is_symbol2t(assign.target))
+    return;
+
+  symbol2t &sym = to_symbol2t(assign.target);
 
   // Is this actually an assignment that we're interested in?
-  std::map<std::string, std::pair<std::set<std::string>, exprt> >::const_iterator it;
-  std::string sym_name = sym.identifier().as_string();
-  std::set<std::pair<std::string, exprt> > triggered;
+  std::map<std::string, std::pair<std::set<std::string>, expr2tc> >::const_iterator it;
+  std::string sym_name = sym.name.as_string();
+  std::set<std::pair<std::string, expr2tc> > triggered;
   for (it = monitors.begin(); it != monitors.end(); it++) {
     if (it->second.first.find(sym_name) == it->second.first.end())
       continue;
 
-    triggered.insert(std::pair<std::string, exprt>(it->first, it->second.second));
+    triggered.insert(std::pair<std::string, expr2tc>(it->first, it->second.second));
   }
 
   if (triggered.empty())
@@ -711,26 +720,25 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   insn++;
 
   new_insn.type = ASSIGN;
-  std::set<std::pair<std::string, exprt> >::const_iterator trig_it;
+  std::set<std::pair<std::string, expr2tc> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
     std::string prop_name = "c::" + trig_it->first + "_status";
-    new_insn.code = code_assignt(symbol_exprt(prop_name, typet("bool")), trig_it->second);
+    expr2tc sym = expr2tc(new symbol2t(type_pool.get_bool(), prop_name));
+    new_insn.code = expr2tc(new code_assign2t(sym, trig_it->second));
     new_insn.function = insn->function;
 
     // new_insn location field not set - I believe it gets numbered later.
     insn_list.insert(insn, new_insn);
   }
 
-  typet uint32 = typet("unsignedbv");
-  uint32.width(32);
+  type2tc uint32 = type_pool.get_uint(32);
   new_insn.type = ASSIGN;
   new_insn.function = insn->function;
-  constant_exprt c_expr = constant_exprt(uint32);
-  c_expr.set_value("1");
-  exprt e = plus_exprt(symbol_exprt("c::_ltl2ba_transition_count", uint32), c_expr);
-  e.type() = uint32;
-  symbol_exprt sym_expr = symbol_exprt("c::_ltl2ba_transition_count", uint32);
-  new_insn.code = code_assignt(sym_expr, e);
+  expr2tc c_expr = expr2tc(new constant_int2t(uint32, BigInt(1)));
+  expr2tc ltlsym = expr2tc(new symbol2t(uint32, "c::_ltl2ba_transition_count"));
+  expr2tc e = expr2tc(new add2t(uint32, ltlsym, c_expr));
+
+  new_insn.code = expr2tc(new code_assign2t(ltlsym, e));
   insn_list.insert(insn, new_insn);
 
   new_insn.type = ATOMIC_END;
@@ -738,9 +746,13 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   insn_list.insert(insn, new_insn);
 
   new_insn.type = FUNCTION_CALL;
-  new_insn.code = code_function_callt();
   new_insn.function = insn->function;
-  new_insn.code.op1() = symbol_exprt("c::__ESBMC_yield");
+  type2tc blank_code_type = type2tc(new code_type2t(std::vector<type2tc>(),
+                                    type2tc(), std::vector<irep_idt>(), false));
+  new_insn.code =
+    expr2tc(new code_function_call2t(expr2tc(),
+                     expr2tc(new symbol2t(blank_code_type,"c::__ESBMC_yield")),
+                     std::vector<expr2tc>()));
   insn_list.insert(insn, new_insn);
 
   return;
@@ -748,19 +760,22 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
 #include <symbol.h>
 
-static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
+static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
 {
-  std::string identifier = expr.identifier().as_string();
 
-  if (expr.id() != "symbol") {
+  if (!is_symbol2t(expr)) {
     unsigned int globals = 0;
 
-    forall_operands(it, expr)
-      globals += calc_globals_used(ns, *it);
+    std::vector<const expr2tc *> operands;
+    expr->list_operands(operands);
+    for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
+         it != operands.end(); it++)
+      globals += calc_globals_used(ns, **it);
 
     return globals;
   }
 
+  std::string identifier = to_symbol2t(expr).name.as_string();
   const symbolt &sym = ns.lookup(identifier);
 
   if (identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
@@ -793,8 +808,11 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
           break;
         case FUNCTION_CALL:
           {
-            code_function_callt deref_code = to_code_function_call(pit->code);
-            if (deref_code.function().identifier() == "c::__ESBMC_yield")
+            code_function_call2t deref_code =
+              to_code_function_call2t(pit->code);
+
+            if (is_symbol2t(deref_code.function) &&
+                to_symbol2t(deref_code.function).name == "c::__ESBMC_yield")
               print_insn = true;
           }
           break;
@@ -855,26 +873,21 @@ Function: cbmc_parseoptionst::process_goto_program
 \*******************************************************************/
 
 static void
-relink_calls_from_to(irept &irep, irep_idt from_name, irep_idt to_name)
+relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
 {
 
-   if (irep.id() == "symbol") {
-    if (irep.identifier() == from_name)
-      irep.identifier(to_name);
+   if (is_symbol2t(irep)) {
+    if (to_symbol2t(irep).name == from_name)
+      to_symbol2t(irep).name = to_name;
 
     return;
   } else {
-    Forall_irep(it, irep.get_sub()) {
-      relink_calls_from_to(*it, from_name, to_name);
-    }
+    std::vector<expr2tc *> operands;
+    irep.get()->list_operands(operands);
 
-    Forall_named_irep(it, irep.get_named_sub()) {
-      relink_calls_from_to(it->second, from_name, to_name);
-    }
-
-    Forall_named_irep(it, irep.get_comments()) {
-      relink_calls_from_to(it->second, from_name, to_name);
-    }
+    for (std::vector<expr2tc *>::iterator it = operands.begin();
+         it != operands.end(); it++)
+      relink_calls_from_to(**it, from_name, to_name);
   }
 
   return;
