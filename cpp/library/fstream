@@ -47,7 +47,7 @@ fstream::fstream ( const char * filename,
     ostream()
 {
   if(!strcmp(filename,""))
-    failbit = true; // TODO: correct this! This line is for test only!
+	  setstate(failbit); // TODO: correct this! This line is for test only!
 }
 
 }
