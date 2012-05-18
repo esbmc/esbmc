@@ -761,7 +761,7 @@ expr2tc string_abstractiont::build_symbol_ptr(const expr2tc &object)
     obj = to_member2t(obj).source_value;
   }
 
-  if (!is_symbol2t(obj))
+  if (!is_symbol2t(obj) || to_symbol2t(obj).name == "NULL")
     return expr2tc();
 
   const symbol2t &expr_symbol = to_symbol2t(obj);
