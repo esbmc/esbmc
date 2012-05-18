@@ -1070,6 +1070,7 @@ migrate_type_back(const type2tc &ref)
       component.id("component");
       component.type() = migrate_type_back(*it);
       component.set_name(irep_idt(ref2.member_names[idx]));
+      component.pretty_name(irep_idt(ref2.member_names[idx]));
       comps.push_back(component);
       idx++;
     }
@@ -1091,6 +1092,7 @@ migrate_type_back(const type2tc &ref)
       component.id("component");
       component.type() = migrate_type_back(*it);
       component.set_name(irep_idt(ref2.member_names[idx]));
+      component.pretty_name(irep_idt(ref2.member_names[idx]));
       comps.push_back(component);
       idx++;
     }
