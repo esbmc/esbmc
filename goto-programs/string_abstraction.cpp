@@ -275,13 +275,17 @@ void string_abstractiont::abstract(irep_idt name,
                               "\\str");
 
       // We also need to put this new argument into the symbol table.
+
+      // Fabricate a base name.
+      size_t endpos = new_arg_names.back().as_string().rfind("::");
+      std::string basename = new_arg_names.back().as_string().substr(endpos+2);
       symbolt new_sym;
       new_sym.type = migrate_type_back(new_args.back());
       new_sym.value = exprt();
       new_sym.location = locationt();
       new_sym.location.set_file("<added_by_string_abstraction>");
       new_sym.name = new_arg_names.back();
-      new_sym.base_name = new_sym.name;
+      new_sym.base_name = basename;
       context.add(new_sym);
     }
   }
