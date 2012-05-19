@@ -225,6 +225,14 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   // assign arguments
   type2tc tmp_type;
   migrate_type(goto_function.type, tmp_type);
+
+  if (to_code_type(tmp_type).arguments.size() != arguments.size()) {
+    std::cerr << "Function call to \"" << identifier << "\": number of "
+              << "arguments doesn't match type definition; some inconsistent "
+              << "rewriting occured" << std::endl;
+    abort();
+  }
+
   argument_assignments(to_code_type(tmp_type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
