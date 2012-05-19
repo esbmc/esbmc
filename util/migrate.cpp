@@ -1118,6 +1118,7 @@ migrate_type_back(const type2tc &ref)
     }
 
     code.arguments() = args;
+    code.return_type() = ret_type;
 
     if (ref2.ellipsis)
       code.make_ellipsis();
