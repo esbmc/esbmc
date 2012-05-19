@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "guard.h"
 
-/*******************************************************************\
-
-Function: guardt::as_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 expr2tc guardt::as_expr(guard_listt::const_iterator it) const
 {
   if (it == guard_list.end())
@@ -39,18 +27,6 @@ expr2tc guardt::as_expr(guard_listt::const_iterator it) const
 
   return res;
 }
-
-/*******************************************************************\
-
-Function: guardt::add
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void guardt::add(const expr2tc &expr)
 {
@@ -71,18 +47,6 @@ void guardt::add(const expr2tc &expr)
   }
 }
 
-/*******************************************************************\
-
-Function: guardt::move
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void guardt::move(expr2tc &expr)
 {
   if (is_constant_bool2t(expr) && to_constant_bool2t(expr).constant_value)
@@ -93,18 +57,6 @@ void guardt::move(expr2tc &expr)
     guard_list.push_back(expr);
   }
 }
-
-/*******************************************************************\
-
-Function: operator -=
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 guardt &operator -= (guardt &g1, const guardt &g2)
 {
@@ -120,18 +72,6 @@ guardt &operator -= (guardt &g1, const guardt &g2)
 
   return g1;
 }
-
-/*******************************************************************\
-
-Function: operator |=
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 guardt &operator |= (guardt &g1, const guardt &g2)
 {
@@ -183,18 +123,6 @@ guardt &operator |= (guardt &g1, const guardt &g2)
   return g1;
 }
 
-/*******************************************************************\
-
-Function: operator <<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::ostream &operator << (std::ostream &out, const guardt &g)
 {
   for (std::list<expr2tc>::const_iterator it = g.guard_list.begin();
@@ -203,18 +131,6 @@ std::ostream &operator << (std::ostream &out, const guardt &g)
 
   return out;
 }
-
-/*******************************************************************\
-
-Function: guardt::is_false
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool guardt::is_false() const
 {
