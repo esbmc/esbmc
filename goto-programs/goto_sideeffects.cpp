@@ -216,10 +216,16 @@ void goto_convertt::remove_sideeffects(
       {
         exprt tmp(op);
         tmp.make_not();
-        guard.add(tmp);
+        expr2tc tmp_expr;
+        migrate_expr(tmp, tmp_expr);
+        guard.add(tmp_expr);
       }
       else
-        guard.add(op);
+      {
+        expr2tc tmp_expr;
+        migrate_expr(op, tmp_expr);
+        guard.add(tmp_expr);
+      }
     }
 
     guard.resize(old_guards);
@@ -250,7 +256,9 @@ void goto_convertt::remove_sideeffects(
     if(o1)
     {
       unsigned old_guard=guard.size();
-      guard.add(expr.op0());
+      expr2tc tmp;
+      migrate_expr(expr.op0(), tmp);
+      guard.add(tmp);
       remove_sideeffects(expr.op1(), guard, dest);
       guard.resize(old_guard);
     }
@@ -260,7 +268,9 @@ void goto_convertt::remove_sideeffects(
       unsigned old_guard=guard.size();
       exprt tmp(expr.op0());
       tmp.make_not();
-      guard.add(tmp);
+      expr2tc tmp_expr;
+      migrate_expr(tmp, tmp_expr);
+      guard.add(tmp_expr);
       remove_sideeffects(expr.op2(), guard, dest);
       guard.resize(old_guard);
     }

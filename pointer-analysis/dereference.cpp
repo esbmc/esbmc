@@ -254,8 +254,7 @@ void dereferencet::build_reference_to(
       expr2tc pointer_guard = expr2tc(new same_object2t(deref_expr, null_ptr));
 
       guardt tmp_guard(guard);
-      exprt tmpback = migrate_expr_back(pointer_guard);
-      tmp_guard.add(tmpback);
+      tmp_guard.add(pointer_guard);
 
       dereference_callback.dereference_failure(
         "pointer dereference",
@@ -286,9 +285,8 @@ void dereferencet::build_reference_to(
         expr2tc not_valid_expr = expr2tc(new not2t(valid_expr));
 
         guardt tmp_guard(guard);
-        exprt tmp_is_dyn = migrate_expr_back(is_dyn_obj);
         exprt tmp_not_valid = migrate_expr_back(not_valid_expr);
-        tmp_guard.add(tmp_is_dyn);
+        tmp_guard.add(is_dyn_obj);
         tmp_guard.move(tmp_not_valid);
         dereference_callback.dereference_failure(
           "pointer dereference",
@@ -310,9 +308,8 @@ void dereferencet::build_reference_to(
           expr2tc lt = expr2tc(new lessthan2t(obj_offset, zero));
 
           guardt tmp_guard(guard);
-          exprt tmp_is_dyn_obj = migrate_expr_back(is_dyn_obj);
           exprt tmp_lt = migrate_expr_back(lt);
-          tmp_guard.add(tmp_is_dyn_obj);
+          tmp_guard.add(is_dyn_obj);
           tmp_guard.move(tmp_lt);
           dereference_callback.dereference_failure(
             "pointer dereference",
@@ -331,9 +328,8 @@ void dereferencet::build_reference_to(
           expr2tc lte = expr2tc(new lessthanequal2t(size_expr, obj_offs));
 
           guardt tmp_guard(guard);
-          exprt tmp_is_dyn_obj = migrate_expr_back(is_dyn_obj);
           exprt tmp_lte = migrate_expr_back(lte);
-          tmp_guard.add(tmp_is_dyn_obj);
+          tmp_guard.add(is_dyn_obj);
           tmp_guard.move(tmp_lte);
 
           dereference_callback.dereference_failure(
@@ -354,8 +350,7 @@ void dereferencet::build_reference_to(
     pointer_guard = expr2tc(new same_object2t(deref_expr, obj_ptr));
 
     guardt tmp_guard(guard);
-    exprt tmp_ptr_guard = migrate_expr_back(pointer_guard);
-    tmp_guard.add(tmp_ptr_guard);
+    tmp_guard.add(pointer_guard);
 
     valid_check(object, tmp_guard, mode);
 

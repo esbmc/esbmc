@@ -57,27 +57,6 @@ Function: guardt::add
 
 \*******************************************************************/
 
-void guardt::add(const exprt &expr)
-{
-  if(expr.is_and() && expr.type().is_bool())
-  {
-    forall_operands(it, expr)
-      add(*it);
-
-    return;
-  }
-
-  if(expr.is_true())
-  {
-  }
-  else
-  {
-    expr2tc tmp;
-    migrate_expr(expr, tmp);
-    guard_list.push_back(tmp);
-  }
-}
-
 void guardt::add(const expr2tc &expr)
 {
   if (is_and2t(expr))

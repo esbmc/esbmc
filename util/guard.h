@@ -25,7 +25,6 @@ public:
 
   typedef std::list<expr2tc> guard_listt;
 
-  void add(const exprt &expr);
   void add(const expr2tc &expr);
   void move(exprt &expr);
   void move(expr2tc &expr);

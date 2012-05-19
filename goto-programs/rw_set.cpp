@@ -149,11 +149,14 @@ void rw_sett::read_write_rec(
     read(expr.op0(), guard);
 
     guardt true_guard(guard);
-    true_guard.add(expr.op0());
+    expr2tc tmp_expr;
+    migrate_expr(expr.op0(), tmp_expr);
+    true_guard.add(tmp_expr);
     read_write_rec(expr.op1(), r, w, suffix, true_guard);
 
     guardt false_guard(guard);
-    false_guard.add(gen_not(expr.op0()));
+    migrate_expr(gen_not(expr.op0()), tmp_expr);
+    false_guard.add(tmp_expr);
     read_write_rec(expr.op2(), r, w, suffix, false_guard);
   }
   else

@@ -85,7 +85,7 @@ goto_symext::symex_step(reachability_treet & art)
   {
     unsigned max_depth = atoi(options.get_option("depth").c_str());
     if (max_depth != 0 && cur_state->depth > max_depth)
-      cur_state->guard.add(false_exprt());
+      cur_state->guard.add(expr2tc(new constant_bool2t(false)));
     cur_state->depth++;
   }
 
@@ -130,11 +130,11 @@ goto_symext::symex_step(reachability_treet & art)
       do_simplify(tmp);
 
       if (!is_constant_bool2t(tmp) || !to_constant_bool2t(tmp).constant_value) {
-	exprt tmp2 = migrate_expr_back(tmp);
-        exprt tmp3 = tmp2;
+	expr2tc tmp2 = tmp;
+        expr2tc tmp3 = tmp2;
 	cur_state->guard.guard_expr(tmp2);
 
-	assume(tmp2);
+	assume(migrate_expr_back(tmp2));
 
 	// we also add it to the state guard
 	cur_state->guard.add(tmp3);

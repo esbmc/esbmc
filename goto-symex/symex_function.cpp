@@ -253,8 +253,8 @@ get_function_list(const expr2tc &expr)
   if (is_if2t(expr)) {
     std::list<std::pair<guardt, symbol2tc> > l1, l2;
     const if2t &ifexpr = to_if2t(expr);
-    exprt guardexpr = migrate_expr_back(ifexpr.cond);
-    exprt notguardexpr = not_exprt(guardexpr);
+    expr2tc guardexpr = ifexpr.cond;
+    expr2tc notguardexpr = expr2tc(new not2t(guardexpr));
 
     // Get sub items, them iterate over adding the relevant guard
     l1 = get_function_list(ifexpr.true_value);
@@ -345,8 +345,7 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
     expr2tc new_guardexpr;
     migrate_expr(guardexpr, new_guardexpr);
     cur_state->rename(new_guardexpr);
-    guardexpr = migrate_expr_back(new_guardexpr);
-    new_state.guard.add(guardexpr);
+    new_state.guard.add(new_guardexpr);
   }
 
   cur_state->top().function_ptr_call_loc = cur_state->source.pc;

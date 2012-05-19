@@ -136,15 +136,14 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       cur_state->rename(guard_expr);
     }
 
-    exprt tmp_guard_expr = migrate_expr_back(guard_expr);
     if (forward) {
-      new_state.guard.add(tmp_guard_expr);
-      tmp_guard_expr.make_not();
-      cur_state->guard.add(tmp_guard_expr);
+      new_state.guard.add(guard_expr);
+      expr2tc not_guard_expr = expr2tc(new not2t(guard_expr));
+      cur_state->guard.add(not_guard_expr);
     } else   {
-      cur_state->guard.add(tmp_guard_expr);
-      tmp_guard_expr.make_not();
-      new_state.guard.add(tmp_guard_expr);
+      cur_state->guard.add(guard_expr);
+      expr2tc not_guard_expr = expr2tc(new not2t(guard_expr));
+      new_state.guard.add(not_guard_expr);
     }
   }
 }
@@ -317,8 +316,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
     }
 
     // add to state guard to prevent further assignments
-    exprt tmp_negated_cond = migrate_expr_back(negated_cond);
-    cur_state->guard.add(tmp_negated_cond);
+    cur_state->guard.add(negated_cond);
   }
 }
 

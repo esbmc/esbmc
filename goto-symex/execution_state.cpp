@@ -484,7 +484,10 @@ execution_statet::execute_guard(void)
   target->assumption(guard, assumpt2, get_active_state().source);
 
   guardt old_guard;
-  old_guard.add(threads_state[last_active_thread].guard.as_expr());
+  exprt verytmp = threads_state[last_active_thread].guard.as_expr();
+  expr2tc alsotmp;
+  migrate_expr(verytmp, alsotmp);
+  old_guard.add(alsotmp);
 
   // If we simplified the global guard expr to false, write that to thread
   // guards, not the symbolic guard name. This is the only way to bail out of
@@ -497,7 +500,9 @@ execution_statet::execute_guard(void)
   {
     // remove the old guard first
     threads_state.at(i).guard -= old_guard;
-    threads_state.at(i).guard.add(guard_expr);
+    expr2tc tmp_expr;
+    migrate_expr(guard_expr, tmp_expr);
+    threads_state.at(i).guard.add(tmp_expr);
   }
 }
 

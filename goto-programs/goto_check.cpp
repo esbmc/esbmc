@@ -533,7 +533,11 @@ void goto_checkt::check_rec(
         guard.move(tmp);
       }
       else
-        guard.add(op);
+      {
+        expr2tc tmp;
+        migrate_expr(op, tmp);
+        guard.add(tmp);
+      }
     }
 
     guard.resize(old_guards);
@@ -557,7 +561,9 @@ void goto_checkt::check_rec(
 
     {
       unsigned old_guard=guard.size();
-      guard.add(expr.op0());
+      expr2tc tmp;
+      migrate_expr(expr.op0(), tmp);
+      guard.add(tmp);
       check_rec(expr.op1(), guard, false);
       guard.resize(old_guard);
     }

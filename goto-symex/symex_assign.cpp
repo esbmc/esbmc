@@ -326,13 +326,13 @@ void goto_symext::symex_assign_if(
 
   expr2tc cond = ifval.cond;
 
-  guard.add(migrate_expr_back(cond));
+  guard.add(cond);
   symex_assign_rec(ifval.true_value, rhs, guard);
   guard.resize(old_guard_size);
 
   expr2tc not_cond = expr2tc(new not2t(cond));
 
-  guard.add(migrate_expr_back(not_cond));
+  guard.add(not_cond);
   symex_assign_rec(ifval.false_value, rhs_copy, guard);
   guard.resize(old_guard_size);
 }

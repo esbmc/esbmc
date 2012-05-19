@@ -169,8 +169,7 @@ void goto_program_dereferencet::dereference_rec(
         exprt tmp_expr = migrate_expr_back(tmp);
         guard.move(tmp_expr);
       } else {
-        exprt tmp_expr = migrate_expr_back(op);
-        guard.add(tmp_expr);
+        guard.add(op);
       }
     }
 
@@ -189,7 +188,7 @@ void goto_program_dereferencet::dereference_rec(
 
     if (o1) {
       unsigned old_guard=guard.size();
-      guard.add(migrate_expr_back(ifref.cond));
+      guard.add(ifref.cond);
       dereference_rec(ifref.true_value, guard, mode);
       guard.resize(old_guard);
     }
