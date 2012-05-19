@@ -157,27 +157,26 @@ guardt &operator |= (guardt &g1, const guardt &g2)
   if(it2==g2.guard_list.end()) return g1;
 
   // end of common prefix
-  exprt and_expr1, and_expr2;
-  and_expr1 = migrate_expr_back(g1.as_expr(it1));
-  and_expr2 = migrate_expr_back(g2.as_expr(it2));
+  expr2tc and_expr1, and_expr2;
+  and_expr1 = g1.as_expr(it1);
+  and_expr2 = g2.as_expr(it2);
   
   g1.guard_list.erase(it1, g1.guard_list.end());
   
-  exprt tmp(and_expr2);
-  tmp.make_not();
+  expr2tc tmp(new not2t(and_expr2));
   
-  if(tmp!=and_expr1)
+  if (tmp != and_expr1)
   {
-    if(and_expr1.is_true() || and_expr2.is_true())
+    if ((is_constant_bool2t(and_expr1) &&
+         to_constant_bool2t(and_expr1).constant_value) ||
+        (is_constant_bool2t(and_expr2) &&
+         to_constant_bool2t(and_expr2).constant_value))
     {
     }
     else
     {
-      exprt or_expr("or", typet("bool"));
-      or_expr.move_to_operands(and_expr1, and_expr2);
-      expr2tc tmp_expr;
-      migrate_expr(or_expr, tmp_expr);
-      g1.move(tmp_expr);
+      expr2tc or_expr(new or2t(and_expr1, and_expr2));
+      g1.move(or_expr);
     }
   }
   
