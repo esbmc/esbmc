@@ -1784,8 +1784,15 @@ migrate_expr_back(const expr2tc &ref)
     const sideeffect2t &ref2 = to_sideeffect2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt theexpr("sideeffect", thetype);
-    typet cmttype = migrate_type_back(ref2.alloctype);
-    exprt size = migrate_expr_back(ref2.size);
+    typet cmttype;
+    exprt size;
+
+    if (!is_nil_type(ref2.alloctype))
+      cmttype = migrate_type_back(ref2.alloctype);
+
+    if (!is_nil_expr(ref2.size))
+      size = migrate_expr_back(ref2.size);
+
     exprt operand = migrate_expr_back(ref2.operand);
 
     if (ref2.kind != sideeffect2t::nondet)
