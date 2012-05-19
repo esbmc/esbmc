@@ -223,8 +223,7 @@ void dereferencet::build_reference_to(
       // produce new guard
 
       guardt tmp_guard(guard);
-      exprt tmp_guard_expr = migrate_expr_back(invalid_pointer_expr);
-      tmp_guard.move(tmp_guard_expr);
+      tmp_guard.move(invalid_pointer_expr);
       dereference_callback.dereference_failure(
         "pointer dereference",
         "invalid pointer",
@@ -285,9 +284,8 @@ void dereferencet::build_reference_to(
         expr2tc not_valid_expr = expr2tc(new not2t(valid_expr));
 
         guardt tmp_guard(guard);
-        exprt tmp_not_valid = migrate_expr_back(not_valid_expr);
         tmp_guard.add(is_dyn_obj);
-        tmp_guard.move(tmp_not_valid);
+        tmp_guard.move(not_valid_expr);
         dereference_callback.dereference_failure(
           "pointer dereference",
           "invalidated dynamic object",
@@ -308,9 +306,8 @@ void dereferencet::build_reference_to(
           expr2tc lt = expr2tc(new lessthan2t(obj_offset, zero));
 
           guardt tmp_guard(guard);
-          exprt tmp_lt = migrate_expr_back(lt);
           tmp_guard.add(is_dyn_obj);
-          tmp_guard.move(tmp_lt);
+          tmp_guard.move(lt);
           dereference_callback.dereference_failure(
             "pointer dereference",
             "dynamic object lower bound", tmp_guard);
@@ -328,9 +325,8 @@ void dereferencet::build_reference_to(
           expr2tc lte = expr2tc(new lessthanequal2t(size_expr, obj_offs));
 
           guardt tmp_guard(guard);
-          exprt tmp_lte = migrate_expr_back(lte);
           tmp_guard.add(is_dyn_obj);
-          tmp_guard.move(tmp_lte);
+          tmp_guard.move(lte);
 
           dereference_callback.dereference_failure(
             "pointer dereference",
@@ -418,8 +414,7 @@ void dereferencet::build_reference_to(
           expr2tc offs_is_not_zero = expr2tc(new notequal2t(offset, zero));
 
           guardt tmp_guard2(guard);
-          exprt tmp_not_zero = migrate_expr_back(offs_is_not_zero);
-          tmp_guard2.move(tmp_not_zero);
+          tmp_guard2.move(offs_is_not_zero);
 
           dereference_callback.dereference_failure(
             "pointer dereference",
@@ -503,8 +498,7 @@ void dereferencet::bounds_check(
       expr2tc lt = expr2tc(new lessthan2t(expr.index, zero));
 
       guardt tmp_guard(guard);
-      exprt tmp_lt = migrate_expr_back(lt);
-      tmp_guard.move(tmp_lt);
+      tmp_guard.move(lt);
       dereference_callback.dereference_failure(
         "array bounds",
         "`"+name+"' lower bound", tmp_guard);
@@ -547,8 +541,7 @@ void dereferencet::bounds_check(
   expr2tc gte = expr2tc(new greaterthanequal2t(new_index, arr_size));
 
   guardt tmp_guard(guard);
-  exprt tmp_gte = migrate_expr_back(gte);
-  tmp_guard.move(tmp_gte);
+  tmp_guard.move(gte);
 
   dereference_callback.dereference_failure(
     "array bounds",
@@ -606,8 +599,7 @@ bool dereferencet::memory_model_conversion(
     expr2tc offs_not_zero = expr2tc(new notequal2t(new_offset, zero));
 
     guardt tmp_guard(guard);
-    exprt tmp_offs_not_zero = migrate_expr_back(offs_not_zero);
-    tmp_guard.move(tmp_offs_not_zero);
+    tmp_guard.move(offs_not_zero);
     dereference_callback.dereference_failure(
       "word bounds",
       "offset not zero", tmp_guard);
@@ -656,8 +648,7 @@ bool dereferencet::memory_model_bytes(
           expr2tc(new greaterthanequal2t(new_offset, const_val));
 
         guardt tmp_guard(guard);
-        exprt tmp_offs_upper_bound = migrate_expr_back(offs_upper_bound);
-        tmp_guard.move(tmp_offs_upper_bound);
+        tmp_guard.move(offs_upper_bound);
         dereference_callback.dereference_failure(
           "word bounds",
           "word offset upper bound", tmp_guard);
@@ -669,8 +660,7 @@ bool dereferencet::memory_model_bytes(
         expr2tc offs_lower_bound = expr2tc(new lessthan2t(new_offset, zero));
 
         guardt tmp_guard(guard);
-        exprt tmp_offs_lower_bound = migrate_expr_back(offs_lower_bound);
-        tmp_guard.move(tmp_offs_lower_bound);
+        tmp_guard.move(offs_lower_bound);
         dereference_callback.dereference_failure(
           "word bounds",
           "word offset lower bound", tmp_guard);

@@ -166,8 +166,7 @@ void goto_program_dereferencet::dereference_rec(
 
       if (is_or2t(expr)) {
         expr2tc tmp = expr2tc(new not2t(op));
-        exprt tmp_expr = migrate_expr_back(tmp);
-        guard.move(tmp_expr);
+        guard.move(tmp);
       } else {
         guard.add(op);
       }
@@ -196,8 +195,7 @@ void goto_program_dereferencet::dereference_rec(
     if (o2) {
       unsigned old_guard=guard.size();
       expr2tc tmp = expr2tc(new not2t(ifref.cond));
-      exprt tmp_expr = migrate_expr_back(tmp);
-      guard.move(tmp_expr);
+      guard.move(tmp);
       dereference_rec(ifref.false_value, guard, mode);
       guard.resize(old_guard);
     }
@@ -403,8 +401,7 @@ void goto_program_dereferencet::dereference_instruction(
       const dereference2t &deref = to_dereference2t(func_call.function);
       expr2tc invalid_ptr = expr2tc(new invalid_pointer2t(deref.value));
       guardt guard;
-      exprt tmp = migrate_expr_back(invalid_ptr);
-      guard.move(tmp);
+      guard.move(invalid_ptr);
       dereference_failure("function pointer dereference",
                           "invalid pointer", guard);
     }

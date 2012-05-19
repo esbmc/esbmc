@@ -88,16 +88,14 @@ Function: guardt::move
 
 \*******************************************************************/
 
-void guardt::move(exprt &expr)
+void guardt::move(expr2tc &expr)
 {
-  if(expr.is_true())
+  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).constant_value)
   {
   }
   else
   {
-    expr2tc tmp;
-    migrate_expr(expr, tmp);
-    guard_list.push_back(tmp);
+    guard_list.push_back(expr);
   }
 }
 
@@ -182,7 +180,9 @@ guardt &operator |= (guardt &g1, const guardt &g2)
     {
       exprt or_expr("or", typet("bool"));
       or_expr.move_to_operands(and_expr1, and_expr2);
-      g1.move(or_expr);
+      expr2tc tmp_expr;
+      migrate_expr(or_expr, tmp_expr);
+      g1.move(tmp_expr);
     }
   }
   

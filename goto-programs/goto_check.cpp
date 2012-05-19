@@ -530,7 +530,9 @@ void goto_checkt::check_rec(
       {
         exprt tmp(op);
         tmp.make_not();
-        guard.move(tmp);
+        expr2tc tmp_expr;
+        migrate_expr(tmp, tmp_expr);
+        guard.move(tmp_expr);
       }
       else
       {
@@ -572,7 +574,9 @@ void goto_checkt::check_rec(
       unsigned old_guard=guard.size();
       exprt tmp(expr.op0());
       tmp.make_not();
-      guard.move(tmp);
+      expr2tc tmp_expr;
+      migrate_expr(tmp, tmp_expr);
+      guard.move(tmp_expr);
       check_rec(expr.op2(), guard, false);
       guard.resize(old_guard);
     }
