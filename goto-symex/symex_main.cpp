@@ -44,10 +44,7 @@ goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
       !options.get_bool_option("all-assertions"))
     return;
 
-  exprt expr = migrate_expr_back(new_expr);
-  cur_state->guard.guard_expr(expr);
-  migrate_expr(expr, new_expr);
-
+  cur_state->guard.guard_expr(new_expr);
   remaining_claims++;
   expr2tc guard;
   migrate_expr(cur_state->guard.as_expr(), guard);
