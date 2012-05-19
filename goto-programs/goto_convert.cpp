@@ -60,19 +60,19 @@ void goto_convertt::finish_gotos()
   {
     goto_programt::instructiont &i=**it;
 
-    std::cerr << "XXX jmorse, fetching goto target from irep." << std::endl;
-#if 0
-    if (i.code.statement()=="goto")
+    if (is_code_goto2t(i.code))
     {
-      const irep_idt &goto_label=i.code.destination();
+      exprt tmp = migrate_expr_back(i.code);
 
-      labelst::const_iterator l_it=targets.labels.find(goto_label);
+      const irep_idt &goto_label = tmp.destination();
+
+      labelst::const_iterator l_it = targets.labels.find(goto_label);
 
       if(l_it==targets.labels.end())
       {
-        err_location(i.code);
-        str << "goto label " << goto_label << " not found";
-        throw 0;
+        err_location(tmp);
+        std::cerr << "goto label " << goto_label << " not found";
+        abort();
       }
 
       i.targets.clear();
@@ -80,10 +80,9 @@ void goto_convertt::finish_gotos()
     }
     else
     {
-      err_location(i.code);
+      err_location(migrate_expr_back(i.code));
       throw "finish_gotos: unexpected goto";
     }
-#endif
   }
 
   targets.gotos.clear();
