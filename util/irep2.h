@@ -296,6 +296,7 @@ public:
     code_return_id,
     code_skip_id,
     code_free_id,
+    code_goto_id,
     object_descriptor_id,
     code_function_call_id,
     invalid_pointer_id,
@@ -564,6 +565,7 @@ namespace esbmct {
   member_record_macro(expr2tc_offset, expr2tc_type_tag, name_offset);
   member_record_macro(expr2tc_function, expr2tc_type_tag, name_function);
   member_record_macro(expr2tc_ret, expr2tc_type_tag, name_ret);
+  member_record_macro(irepidt_target, irepidt_type_tag, name_target);
   #undef member_record_macro
 
   template <class thename>
@@ -2010,6 +2012,17 @@ public:
 };
 template class esbmct::expr<code_free2t, esbmct::expr2tc_operand>;
 
+class code_goto2t : public esbmct::expr<code_goto2t, esbmct::irepidt_target>
+{
+public:
+  code_goto2t(const irep_idt &targ)
+    : esbmct::expr<code_goto2t, esbmct::irepidt_target>
+      (type_pool.get_empty(), code_goto_id, targ) {}
+  code_goto2t(const code_goto2t &ref)
+    : esbmct::expr<code_goto2t, esbmct::irepidt_target> (ref) {}
+};
+template class esbmct::expr<code_goto2t, esbmct::irepidt_target>;
+
 class object_descriptor2t : public esbmct::expr<object_descriptor2t,
                                                 esbmct::expr2tc_object,
                                                 esbmct::expr2tc_offset>
@@ -2214,6 +2227,7 @@ expr_macros(code_expression);
 expr_macros(code_return);
 expr_macros(code_skip);
 expr_macros(code_free);
+expr_macros(code_goto);
 expr_macros(object_descriptor);
 expr_macros(code_function_call);
 expr_macros(invalid_pointer);
@@ -2377,6 +2391,7 @@ typedef irep_container<code_expression2t, expr2t::code_expression_id>
 typedef irep_container<code_return2t, expr2t::code_return_id> code_return2tc;
 typedef irep_container<code_skip2t, expr2t::code_skip_id> code_skip2tc;
 typedef irep_container<code_free2t, expr2t::code_free_id> code_free2tc;
+typedef irep_container<code_goto2t, expr2t::code_goto_id> code_goto2tc;
 typedef irep_container<object_descriptor2t, expr2t::object_descriptor_id>
                        object_descriptor2tc;
 typedef irep_container<code_function_call2t, expr2t::code_function_call_id>

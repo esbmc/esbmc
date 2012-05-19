@@ -1037,6 +1037,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op0;
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new buffer_size2t(type, op0));
+  } else if (expr.id() == "code" && expr.statement() == "goto") {
+    new_expr_ref = expr2tc(new code_goto2t(expr.get("destination")));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1911,6 +1913,13 @@ migrate_expr_back(const expr2tc &ref)
     exprt codeexpr("buffer_size");
     codeexpr.type() = migrate_type_back(ref2.type);
     codeexpr.copy_to_operands(migrate_expr_back(ref2.value));
+    return codeexpr;
+  }
+  case expr2t::code_goto_id:
+  {
+    const code_goto2t &ref2 = to_code_goto2t(ref);
+    exprt codeexpr("code", code_typet());
+    codeexpr.set("destination", ref2.target);
     return codeexpr;
   }
   default:
