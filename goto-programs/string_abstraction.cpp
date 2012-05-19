@@ -1453,7 +1453,7 @@ void string_abstractiont::abstract_function_call(
   if (is_pointer_type(fnc_ret_type) &&
       is_char_type(to_pointer_type(fnc_ret_type).subtype)) {
     if (is_nil_expr(call.ret)) {
-      type2tc null_type = type2tc(new pointer_type2t(string_struct));
+      type2tc null_type = type2tc(new pointer_type2t(type2tc(new pointer_type2t(string_struct))));
       expr2tc null = expr2tc(new symbol2t(null_type, "NULL"));
       new_args.push_back(null);
     } else {
