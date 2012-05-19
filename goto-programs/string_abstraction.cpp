@@ -330,6 +330,10 @@ void string_abstractiont::abstract(irep_idt name,
   assert(it != context.symbols.end());
   it->second.type = migrate_type_back(func_type_c);
 
+  // Also need to update the type in the goto_function struct, not just the
+  // symbol table.
+  dest.type = to_code_type(it->second.type);
+
   Forall_goto_program_instructions(it, dest.body)
     abstract(name, dest.body, it);
 
