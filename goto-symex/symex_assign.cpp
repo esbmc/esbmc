@@ -191,9 +191,7 @@ void goto_symext::symex_assign_symbol(
 
   if (!guard.empty())
   {
-    expr2tc guardexpr;
-    migrate_expr(guard.as_expr(), guardexpr);
-    rhs = expr2tc(new if2t(rhs->type, guardexpr, rhs, lhs));
+    rhs = expr2tc(new if2t(rhs->type, guard.as_expr(), rhs, lhs));
   }
 
   expr2tc orig_name_lhs = lhs;
@@ -208,12 +206,9 @@ void goto_symext::symex_assign_symbol(
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 
-  expr2tc guard2;
-  migrate_expr(tmp_guard.as_expr(), guard2);
-
   // do the assignment
   target->assignment(
-    guard2,
+    tmp_guard.as_expr(),
     renamed_lhs, orig_name_lhs,
     rhs,
     cur_state->source,

@@ -122,10 +122,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
       guardt guard;
 
-      expr2tc guard2;
-      migrate_expr(guard.as_expr(), guard2);
       target->assignment(
-        guard2,
+        guard.as_expr(),
         new_lhs, guard_expr,
         new_rhs,
         cur_state->source,
@@ -244,14 +242,12 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 	// this gets the diff between the guards
 	tmp_guard -= cur_state->guard;
 
-        expr2tc cond;
-        migrate_expr(tmp_guard.as_expr(), cond);
 	expr2tc true_val =
           expr2tc(new symbol2t(type,
                              cur_state->current_name(goto_state, symbol.name)));
         expr2tc false_val = expr2tc(new symbol2t(type,
                                          cur_state->current_name(symbol.name)));
-        rhs = expr2tc(new if2t(type, cond, true_val, false_val));
+        rhs = expr2tc(new if2t(type, tmp_guard.as_expr(), true_val, false_val));
       }
 
       exprt tmp_lhs(symbol_expr(symbol));
@@ -263,10 +259,8 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
       guardt true_guard;
 
-      expr2tc true_guard2;
-      migrate_expr(true_guard.as_expr(), true_guard2);
       target->assignment(
-        true_guard2,
+        true_guard.as_expr(),
         new_lhs, lhs,
         rhs,
         cur_state->source,
@@ -309,10 +303,9 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
       cur_state->guard.guard_expr(tmp_negated_cond);
       migrate_expr(tmp_negated_cond, negated_cond);
 
-      expr2tc guard, guarded;
-      migrate_expr(cur_state->guard.as_expr(), guard);
+      expr2tc guarded;
       guarded = negated_cond;
-      target->assumption(guard, guarded, cur_state->source);
+      target->assumption(cur_state->guard.as_expr(), guarded,cur_state->source);
     }
 
     // add to state guard to prevent further assignments

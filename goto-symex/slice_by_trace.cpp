@@ -105,7 +105,7 @@ void symex_slice_by_tracet::slice_by_trace(std::string trace_files,
   equation.SSA_steps.push_front(symex_target_equationt::SSA_stept());
   symex_target_equationt::SSA_stept &SSA_step = equation.SSA_steps.front(); 
 
-  migrate_expr(t_guard.as_expr(), SSA_step.guard);
+  SSA_step.guard = t_guard.as_expr();
   migrate_expr(trace_condition, SSA_step.cond);
   SSA_step.type=goto_trace_stept::ASSUME;
   SSA_step.source=empty_source;
@@ -533,7 +533,7 @@ void symex_slice_by_tracet::assign_merges(
     equation.SSA_steps.push_front(symex_target_equationt::SSA_stept());
     symex_target_equationt::SSA_stept &SSA_step = equation.SSA_steps.front();  
     
-    migrate_expr(t_guard.as_expr(), SSA_step.guard);
+    SSA_step.guard = t_guard.as_expr();
     migrate_expr(merge_sym, SSA_step.lhs);
     migrate_expr(merge_symbol, SSA_step.original_lhs);
     migrate_expr(merge_copy, SSA_step.rhs);

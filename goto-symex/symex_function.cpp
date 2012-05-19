@@ -341,11 +341,9 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
 
     goto_state_list.push_back(statet::goto_statet(*cur_state));
     statet::goto_statet &new_state = goto_state_list.back();
-    exprt guardexpr = it->first.as_expr();
-    expr2tc new_guardexpr;
-    migrate_expr(guardexpr, new_guardexpr);
-    cur_state->rename(new_guardexpr);
-    new_state.guard.add(new_guardexpr);
+    expr2tc guardexpr = it->first.as_expr();
+    cur_state->rename(guardexpr);
+    new_state.guard.add(guardexpr);
   }
 
   cur_state->top().function_ptr_call_loc = cur_state->source.pc;

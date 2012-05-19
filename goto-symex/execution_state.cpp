@@ -460,7 +460,7 @@ execution_statet::execute_guard(void)
   exprt guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
   exprt parent_guard, new_rhs, const_prop_val;
 
-  parent_guard = threads_state[last_active_thread].guard.as_expr();
+  parent_guard = migrate_expr_back(threads_state[last_active_thread].guard.as_expr());
 
   // Rename value, allows its use in other renamed exprs
   irep_idt new_name = state_level2->make_assignment(guard_expr.identifier(),
@@ -478,16 +478,12 @@ execution_statet::execute_guard(void)
   do_simplify(parent_guard);
   assumpt.copy_to_operands(guard_expr, parent_guard);
 
-  expr2tc guard, assumpt2;
-  migrate_expr(guardt().as_expr(), guard);
+  expr2tc assumpt2;
   migrate_expr(assumpt, assumpt2);
-  target->assumption(guard, assumpt2, get_active_state().source);
+  target->assumption(guardt().as_expr(), assumpt2, get_active_state().source);
 
   guardt old_guard;
-  exprt verytmp = threads_state[last_active_thread].guard.as_expr();
-  expr2tc alsotmp;
-  migrate_expr(verytmp, alsotmp);
-  old_guard.add(alsotmp);
+  old_guard.add(threads_state[last_active_thread].guard.as_expr());
 
   // If we simplified the global guard expr to false, write that to thread
   // guards, not the symbolic guard name. This is the only way to bail out of

@@ -2683,7 +2683,7 @@ void goto_convertt::guard_program(
   goto_programt tmp;
   tmp.add_instruction(GOTO);
   tmp.instructions.front().targets.push_back(t);
-  exprt guardexpr = guard.as_expr();
+  exprt guardexpr = migrate_expr_back(guard.as_expr());
   guardexpr.make_not();
   migrate_expr(guardexpr, tmp.instructions.front().guard);
   tmp.destructive_append(dest);

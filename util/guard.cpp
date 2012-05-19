@@ -22,27 +22,22 @@ Function: guardt::as_expr
 
 \*******************************************************************/
 
-exprt guardt::as_expr(guard_listt::const_iterator it) const
+expr2tc guardt::as_expr(guard_listt::const_iterator it) const
 {
-  if(it==guard_list.end())
-    return true_exprt();
-  else if(it==--guard_list.end())
-    return migrate_expr_back(guard_list.back());
+  if (it == guard_list.end())
+    return expr2tc(new constant_bool2t(true));
+  else if (it == --guard_list.end())
+    return guard_list.back();
 
-  exprt dest;
-  dest=exprt("and", typet("bool"));
-  dest.reserve_operands(guard_list.size());
-  for(; it!=guard_list.end(); it++)
-  {
-    if (!is_bool_type((*it)->type)) {
-      std::cerr << "guard is expected to be Boolean" << std::endl;
-      abort();
-    }
+  // We can assume at least two operands;
+  expr2tc arg1, arg2;
+  arg1 = *it++;
+  arg2 = *it++;
+  expr2tc res = expr2tc(new and2t(arg1, arg2));
+  while (it != guard_list.end())
+    res = expr2tc(new and2t(res, *it++));
 
-    dest.copy_to_operands(migrate_expr_back(*it));
-  }
-
-  return dest;
+  return res;
 }
 
 /*******************************************************************\
@@ -163,8 +158,8 @@ guardt &operator |= (guardt &g1, const guardt &g2)
 
   // end of common prefix
   exprt and_expr1, and_expr2;
-  and_expr1=g1.as_expr(it1);
-  and_expr2=g2.as_expr(it2);
+  and_expr1 = migrate_expr_back(g1.as_expr(it1));
+  and_expr2 = migrate_expr_back(g2.as_expr(it2));
   
   g1.guard_list.erase(it1, g1.guard_list.end());
   

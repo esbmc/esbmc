@@ -153,9 +153,7 @@ void goto_symext::symex_printf(
              it != operands.end(); it++)
           args.push_back(**it);
 
-        expr2tc guard;
-        migrate_expr(cur_state->guard.as_expr(), guard);
-        target->output(guard, cur_state->source, fmt, args);
+        target->output(cur_state->guard.as_expr(), cur_state->source, fmt,args);
       }
     }
   }

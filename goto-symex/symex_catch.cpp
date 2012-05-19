@@ -112,8 +112,5 @@ void goto_symext::symex_throw(statet &state)
   
   // An un-caught exception. Behaves like assume(0);
   state.guard.add(expr2tc(new constant_bool2t(false)));
-  expr2tc tmp, tmp2;
-  migrate_expr(state.guard.as_expr(), tmp);
-  migrate_expr(state.guard.as_expr(), tmp2);
-  target->assumption(tmp2, tmp, state.source);
+  target->assumption(state.guard.as_expr(), state.guard.as_expr(),state.source);
 }

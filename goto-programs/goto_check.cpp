@@ -440,7 +440,7 @@ void goto_checkt::add_guarded_claim(
     return;
 
   // add the guard
-  exprt guard_expr=guard.as_expr();
+  exprt guard_expr = migrate_expr_back(guard.as_expr());
 
   exprt new_expr;
 

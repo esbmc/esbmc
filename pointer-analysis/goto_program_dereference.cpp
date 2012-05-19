@@ -97,9 +97,7 @@ void goto_program_dereferencet::dereference_failure(
   const std::string &msg,
   const guardt &guard)
 {
-  exprt tmp_guard_expr = guard.as_expr();
-  expr2tc guard_expr;
-  migrate_expr(tmp_guard_expr, guard_expr);
+  expr2tc guard_expr = guard.as_expr();
 
   if (assertions.insert(guard_expr).second)
   {

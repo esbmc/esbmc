@@ -46,9 +46,8 @@ goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
 
   cur_state->guard.guard_expr(new_expr);
   remaining_claims++;
-  expr2tc guard;
-  migrate_expr(cur_state->guard.as_expr(), guard);
-  target->assertion(guard, new_expr, msg, cur_state->gen_stack_trace(),
+  target->assertion(cur_state->guard.as_expr(), new_expr, msg,
+                    cur_state->gen_stack_trace(),
                     cur_state->source);
 }
 
@@ -57,10 +56,9 @@ goto_symext::assume(const exprt &assumption)
 {
 
   // Irritatingly, assumption destroys its expr argument
-  expr2tc guard, assumpt_dup;
-  migrate_expr(cur_state->guard.as_expr(), guard);
+  expr2tc assumpt_dup;
   migrate_expr(assumption, assumpt_dup);
-  target->assumption(guard, assumpt_dup, cur_state->source);
+  target->assumption(cur_state->guard.as_expr(), assumpt_dup,cur_state->source);
   return;
 }
 

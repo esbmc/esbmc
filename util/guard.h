@@ -36,9 +36,9 @@ public:
       add(*it);
   }
 
-  exprt as_expr(guard_listt::const_iterator it) const;
+  expr2tc as_expr(guard_listt::const_iterator it) const;
 
-  exprt as_expr() const
+  expr2tc as_expr() const
   {
     return as_expr(guard_list.begin());
   }
@@ -52,7 +52,7 @@ public:
     {
       exprt tmp("=>", typet("bool"));
       tmp.operands().resize(2);
-      tmp.op0()=as_expr();
+      tmp.op0()=migrate_expr_back(as_expr());
       tmp.op1().swap(dest);
       dest.swap(tmp);
     }
@@ -65,10 +65,7 @@ public:
     }
     else
     {
-      expr2tc theexpr;
-      migrate_expr(as_expr(), theexpr);
-      expr2tc tmp = expr2tc(new implies2t(theexpr, dest));
-      dest = tmp;
+      dest = expr2tc(new implies2t(as_expr(), dest));
     }
   }
 

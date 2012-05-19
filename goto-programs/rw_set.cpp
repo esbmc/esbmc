@@ -105,7 +105,7 @@ void rw_sett::read_write_rec(
     entry.object=object;
     entry.r=entry.r || r;
     entry.w=entry.w || w;
-    entry.guard=guard.as_expr();
+    entry.guard = migrate_expr_back(guard.as_expr());
   }
   else if(expr.id()=="member")
   {
