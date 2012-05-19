@@ -9,6 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GUARD_H
 #define CPROVER_GUARD_H
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <iostream>
 
 #include <expr.h>
@@ -20,10 +23,12 @@ public:
   guardt() : guard_list() { }
   guardt(const guardt &ref) { *this = ref; }
 
-  typedef expr_listt guard_listt;
+  typedef std::list<expr2tc> guard_listt;
 
   void add(const exprt &expr);
+  void add(const expr2tc &expr);
   void move(exprt &expr);
+  void move(expr2tc &expr);
 
   void append(const guardt &guard)
   {
@@ -55,6 +60,20 @@ public:
     }
   }
 
+  void guard_expr(expr2tc &dest) const
+  {
+    if(guard_list.empty())
+    {
+    }
+    else
+    {
+      expr2tc theexpr;
+      migrate_expr(as_expr(), theexpr);
+      expr2tc tmp = expr2tc(new implies2t(theexpr, dest));
+      dest = tmp;
+    }
+  }
+
   bool empty() const { return guard_list.empty(); }
   bool is_true() const { return empty(); } 
   bool is_false() const;
@@ -67,8 +86,8 @@ public:
   void make_false()
   {
     guard_list.clear();
-    guard_list.push_back(exprt());
-    guard_list.back().make_false();
+    expr2tc tmp = expr2tc(new constant_bool2t(false));
+    guard_list.push_back(tmp);
   }
   
   friend guardt &operator -= (guardt &g1, const guardt &g2);

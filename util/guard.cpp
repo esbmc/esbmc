@@ -27,16 +27,19 @@ exprt guardt::as_expr(guard_listt::const_iterator it) const
   if(it==guard_list.end())
     return true_exprt();
   else if(it==--guard_list.end())
-    return guard_list.back();
+    return migrate_expr_back(guard_list.back());
 
   exprt dest;
   dest=exprt("and", typet("bool"));
   dest.reserve_operands(guard_list.size());
   for(; it!=guard_list.end(); it++)
   {
-    if(!it->is_boolean())
-      throw "guard is expected to be Boolean";
-    dest.copy_to_operands(*it);
+    if (!is_bool_type((*it)->type)) {
+      std::cerr << "guard is expected to be Boolean" << std::endl;
+      abort();
+    }
+
+    dest.copy_to_operands(migrate_expr_back(*it));
   }
 
   return dest;
@@ -68,7 +71,30 @@ void guardt::add(const exprt &expr)
   {
   }
   else
+  {
+    expr2tc tmp;
+    migrate_expr(expr, tmp);
+    guard_list.push_back(tmp);
+  }
+}
+
+void guardt::add(const expr2tc &expr)
+{
+  if (is_and2t(expr))
+  {
+    const and2t &theand = to_and2t(expr);
+    add(theand.side_1);
+    add(theand.side_2);
+    return;
+  }
+
+  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).constant_value)
+  {
+  }
+  else
+  {
     guard_list.push_back(expr);
+  }
 }
 
 /*******************************************************************\
@@ -90,8 +116,9 @@ void guardt::move(exprt &expr)
   }
   else
   {
-    guard_list.push_back(exprt());
-    guard_list.back().swap(expr);
+    expr2tc tmp;
+    migrate_expr(expr, tmp);
+    guard_list.push_back(tmp);
   }
 }
 
@@ -197,8 +224,10 @@ Function: operator <<
 
 std::ostream &operator << (std::ostream &out, const guardt &g)
 {
-  forall_expr_list(it, g.guard_list)
-    out << "*** " << it->pretty() << std::endl;
+  for (std::list<expr2tc>::const_iterator it = g.guard_list.begin();
+       it != g.guard_list.end(); it++)
+    out << "*** " << (*it)->pretty() << std::endl;
+
   return out;
 }
 
@@ -217,7 +246,7 @@ Function: guardt::is_false
 bool guardt::is_false() const
 {
   forall_guard(it, guard_list)
-    if(it->is_false())
+    if (is_constant_bool2t(*it) && !to_constant_bool2t(*it).constant_value)
       return true;
       
   return false;
