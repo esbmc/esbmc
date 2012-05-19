@@ -43,21 +43,6 @@ public:
     return as_expr(guard_list.begin());
   }
   
-  void guard_expr(exprt &dest) const
-  {
-    if(guard_list.empty())
-    {
-    }
-    else
-    {
-      exprt tmp("=>", typet("bool"));
-      tmp.operands().resize(2);
-      tmp.op0()=migrate_expr_back(as_expr());
-      tmp.op1().swap(dest);
-      dest.swap(tmp);
-    }
-  }
-
   void guard_expr(expr2tc &dest) const
   {
     if(guard_list.empty())
