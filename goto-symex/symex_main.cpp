@@ -213,16 +213,9 @@ goto_symext::symex_step(reachability_treet & art)
         if (!is_nil_expr(*it))
           dereference(*it, false);
 
-      exprt tmp = migrate_expr_back(deref_code);
-      codet &tmp1 = static_cast<codet&>(tmp);
-      code_function_callt new_deref_code = to_code_function_call(tmp1);
-
-      if (has_prefix(new_deref_code.function().identifier().as_string(),
-                     "c::__ESBMC")) {
+      if (is_symbol2t(call.function) &&
+        has_prefix(to_symbol2t(call.function).name.as_string(), "c::__ESBMC")) {
 	cur_state->source.pc++;
-        expr2tc deref_code2;
-        migrate_expr(new_deref_code, deref_code2);
-        const code_function_call2t &call = to_code_function_call2t(deref_code2);
 	run_intrinsic(call, art, to_symbol2t(call.function).name.as_string());
 	return;
       }
