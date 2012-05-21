@@ -486,39 +486,51 @@ namespace std
 	string& string::operator+=( string& s)
 	{
 	    int rhsLen = s._size;
-	    int totalLen = this->_size + rhsLen;
-	    string temp(totalLen);
+      int lhsLen = this->_size;
+	    int totalLen = lhsLen + rhsLen;
+	    char temp[totalLen+1];
 	    int i, j, k;
-	    for (i=0; i<this->_size; i++)
+	    for (i=0; i<lhsLen; i++)
 	        temp[i] = this->str[i];
-	    for(j=i, k=0; j<temp._size; j++, k++)
-	    	temp.str[j] = s.str[k];
-	    *this = temp;
+      temp[i]='\0';
+	    for(j=i, k=0; j<totalLen; j++, k++)
+	    	temp[j] = s.str[k];
+      temp[j]='\0';
+      this->str = new char[totalLen];
+      this->_size = totalLen;
+      strcpy(this->str, temp);
 	    return *this;
 	}
 	string& string::operator+= (const char* s)
 	{
 	    int rhsLen = strlen(s);
-	    int totalLen = this->_size + rhsLen;
-	    string temp(totalLen);
+      int lhsLen = this->_size;
+	    int totalLen = lhsLen + rhsLen;
+	    char temp[totalLen+1];
 	    int i, j, k;
-	    for (i=0; i<this->_size; i++)
+	    for (i=0; i<lhsLen; i++)
 	        temp[i] = this->str[i];
-	    for(j=i, k=0; j<temp._size; j++, k++)
-	    	temp.str[j] = s[k];
-	    *this = temp;
+      temp[i]='\0';
+	    for(j=i, k=0; j<totalLen; j++, k++)
+	    	temp[j] = s[k];
+      temp[j]='\0';
+      this->str = new char[totalLen];
+      this->_size = totalLen;
+      strcpy(this->str, temp);
 	    return *this;
 	}
 	string& string::operator+= (char s)
 	{
 	    int totalLen = this->_size +1;
-	    string temp(totalLen);
+	    char temp[totalLen+1];
 	    int i, j, k;
 	    for (i=0; i<this->_size; i++)
 	        temp[i] = this->str[i];
-	    temp.str[i] = s;
-	    *this = temp;
-	    return *this;
+	    temp[i] = s;
+	      this->str = new char[totalLen];
+	      this->_size = totalLen;
+	      strcpy(this->str, temp);
+		    return *this;
 	}
 	string& string::operator+ ( string& s)
 	{
