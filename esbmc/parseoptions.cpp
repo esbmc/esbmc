@@ -647,10 +647,7 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
 
     used_syms.insert(sym);
   } else {
-    std::vector<expr2tc *> operands;
-    e.get()->list_operands(operands);
-    for (std::vector<expr2tc*>::iterator it = operands.begin();
-         it != operands.end(); it++)
+    Forall_operands2(it, oper_list, e)
       replace_symbol_names(**it, prefix, strings, used_syms);
   }
 
@@ -766,10 +763,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   if (!is_symbol2t(expr)) {
     unsigned int globals = 0;
 
-    std::vector<const expr2tc *> operands;
-    expr->list_operands(operands);
-    for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
-         it != operands.end(); it++)
+    forall_operands2(it, oper_list, expr)
       globals += calc_globals_used(ns, **it);
 
     return globals;
@@ -882,11 +876,7 @@ relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
 
     return;
   } else {
-    std::vector<expr2tc *> operands;
-    irep.get()->list_operands(operands);
-
-    for (std::vector<expr2tc *>::iterator it = operands.begin();
-         it != operands.end(); it++)
+    Forall_operands2(it, oper_list, irep)
       relink_calls_from_to(**it, from_name, to_name);
   }
 

@@ -1375,10 +1375,7 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
 
   unsigned int globals = 0;
 
-  std::vector<const expr2tc*> operands;
-  expr->list_operands(operands);
-  for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
-       it != operands.end(); it++)
+  forall_operands2(it, oper_list, expr)
     globals += get_expr_number_globals(**it);
 
   return globals;

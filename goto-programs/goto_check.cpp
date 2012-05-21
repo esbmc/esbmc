@@ -734,10 +734,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       } else if (is_code_printf2t(i.code)) {
 #warning XXX jmorse cpp try potentially un-checked if you don't fix this
 //    		  || statement=="cpp-try")
-        std::vector<const expr2tc*> operands;
-        i.code->list_operands(operands);
-        for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
-             it != operands.end(); it++)
+        forall_operands2(it, expr_list, i.code)
           check(migrate_expr_back(**it));
       }
     }
@@ -749,10 +746,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     }
     else if (i.is_function_call())
     {
-      std::vector<const expr2tc*> operands;
-      i.code->list_operands(operands);
-      for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
-           it != operands.end(); it++)
+      forall_operands2(it, expr_list, i.code)
         check(migrate_expr_back(**it));
     }
     else if (i.is_return())

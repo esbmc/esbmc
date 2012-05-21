@@ -38,10 +38,7 @@ bool dereferencet::has_dereference(const expr2tc &expr) const
   if (is_nil_expr(expr))
     return false;
 
-  std::vector<const expr2tc *> operands;
-  expr->list_operands(operands);
-  for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
-       it != operands.end(); it++)
+  forall_operands2(it, expr_list, expr)
     if(has_dereference(**it))
       return true;
 

@@ -164,10 +164,7 @@ fetch_ops_from_this_type(std::list<expr2tc> &ops, expr2t::expr_ids id,
 {
 
   if (expr->expr_id == id) {
-    std::vector<const expr2tc*> operands;
-    expr->list_operands(operands);
-    for (std::vector<const expr2tc*>::const_iterator it = operands.begin();
-         it != operands.end(); it++)
+    forall_operands2(it, expr_ops, expr)
       fetch_ops_from_this_type(ops, id, **it);
   } else {
     ops.push_back(expr);
@@ -194,9 +191,9 @@ rebalance_associative_tree(const expr2t &expr, std::list<expr2tc> &ops,
   // faster than stringly stuff.
 
   // Extract immediate operands
-  std::vector<const expr2tc*> immediate_operands;
+  std::list<const expr2tc*> immediate_operands;
   expr.list_operands(immediate_operands);
-  for (std::vector<const expr2tc*>::const_iterator
+  for (std::list<const expr2tc*>::const_iterator
        it = immediate_operands.begin(); it != immediate_operands.end(); it++)
       fetch_ops_from_this_type(ops, expr.expr_id, **it);
 
@@ -583,7 +580,8 @@ member2t::do_simplify(bool second __attribute__((unused))) const
       s = to_constant_union2t(source_value).datatype_members[no];
     }
 
-    assert(base_type_eq(type, s->type, namespacet(contextt())));
+    assert(is_pointer_type(type) ||
+           base_type_eq(type, s->type, namespacet(contextt())));
     return s;
   } else {
     return expr2tc();
@@ -1065,11 +1063,8 @@ typecast2t::do_simplify(bool second) const
     // XXXjmorse - I'm not convinced that potentially increasing int width is
     // a good plan, but this is what CBMC was doing, so don't change
     // behaviour.
-    std::vector<const expr2tc *> operands;
-    std::vector<expr2tc> set2;
-    from->list_operands(operands);
-    for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
-         it != operands.end(); it++) {
+    std::list<expr2tc> set2;
+    forall_operands2(it, expr_operands, from) {
       expr2tc cast = expr2tc(new typecast2t(type, **it));
       set2.push_back(cast);
     }
@@ -1077,14 +1072,10 @@ typecast2t::do_simplify(bool second) const
     // Now clone the expression and update its operands.
     expr2tc newobj = expr2tc(from->clone());
     newobj.get()->type = type;
-    std::vector<expr2tc *> ops_to_mod;
-    newobj.get()->list_operands(ops_to_mod);
-    assert(ops_to_mod.size() == set2.size());
 
-    std::vector<expr2tc *>::iterator it2 = ops_to_mod.begin();
-    for (std::vector<expr2tc>::const_iterator it = set2.begin();
-         it != set2.end(); it++) {
-      **it2 = *it;
+    std::list<expr2tc>::const_iterator it2 = set2.begin();
+    Forall_operands2(it, expr_ops, newobj) {
+      **it = *it2;
       it2++;
     }
 
@@ -1280,10 +1271,7 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   // to remain the operation we expect (i.e., add2t shouldn't distribute itself)
   // so simplify its operands instead.
   expr2tc new_operand = operand->clone();
-  std::vector<expr2tc*> operands;
-  new_operand.get()->list_operands(operands);
-  for (std::vector<expr2tc *>::iterator it = operands.begin();
-       it != operands.end(); it++) {
+  Forall_operands2(it, expr_ops, new_operand) {
     expr2tc tmp = (***it).simplify(); // Yep, three stars. Whatchagonnado?
     if (!is_nil_expr(tmp)) {
       **it= tmp;

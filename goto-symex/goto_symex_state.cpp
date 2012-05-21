@@ -87,10 +87,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_add2t(expr))
   {
-    std::vector<const expr2tc*> operands;
-    expr->list_operands(operands);
-    for (std::vector<const expr2tc*>::iterator it = operands.begin();
-         it != operands.end(); it++)
+    forall_operands2(it, oper_list, expr)
       if(!constant_propagation(**it))
         return false;
 
@@ -123,10 +120,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_constant_struct2t(expr))
   {
-    std::vector<const expr2tc*> operands;
-    expr->list_operands(operands);
-    for (std::vector<const expr2tc*>::const_iterator it = operands.begin();
-         it != operands.end(); it++)
+    forall_operands2(it, oper_list, expr)
       if(!constant_propagation(**it))
         return false;
 
@@ -135,11 +129,11 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   else if (is_constant_union2t(expr))
   {
-    std::vector<const expr2tc*> operands;
+    expr2t::expr_operands operands;
     expr->list_operands(operands);
     if (operands.size() != 1)
       return false;
-    return constant_propagation(*operands[0]);
+    return constant_propagation(**operands.begin());
   }
 
   /* No difference
@@ -236,10 +230,7 @@ void goto_symex_statet::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    std::vector<expr2tc*> operands;
-    expr.get()->list_operands(operands);
-    for (std::vector<expr2tc*>::iterator it = operands.begin();
-         it != operands.end(); it++)
+    Forall_operands2(it, oper_list, expr)
       rename(**it);
   }
 }
@@ -262,20 +253,14 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else
   {
     // do this recursively
-    std::vector<expr2tc*> operands;
-    expr.get()->list_operands(operands);
-    for (std::vector<expr2tc*>::iterator it = operands.begin();
-         it != operands.end(); it++)
+    Forall_operands2(it, oper_list, expr)
       rename_address(**it);
   }
 }
 
 void goto_symex_statet::get_original_name(expr2tc &expr) const
 {
-  std::vector<expr2tc*> operands;
-  expr.get()->list_operands(operands);
-  for (std::vector<expr2tc*>::iterator it = operands.begin();
-       it != operands.end(); it++)
+  Forall_operands2(it, oper_list, expr)
     get_original_name(**it);
 
   if (is_symbol2t(expr))

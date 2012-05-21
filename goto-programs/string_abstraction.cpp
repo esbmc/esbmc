@@ -553,10 +553,7 @@ bool string_abstractiont::has_string_macros(const expr2tc &expr)
       is_buffer_size2t(expr))
     return true;
 
-  std::vector<const expr2tc*> operands;
-  expr->list_operands(operands);
-  for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
-       it != operands.end(); it++)
+  forall_operands2(it, expr_list, expr)
     if (has_string_macros(**it))
       return true;
 
@@ -600,10 +597,7 @@ void string_abstractiont::replace_string_macros(
   }
   else
   {
-    std::vector<expr2tc *> operands;
-    expr.get()->list_operands(operands);
-    for (std::vector<expr2tc*>::iterator it = operands.begin();
-         it != operands.end(); it++)
+    Forall_operands2(it, expr_list, expr)
       replace_string_macros(**it, lhs, location);
   }
 }

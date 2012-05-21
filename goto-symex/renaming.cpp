@@ -82,10 +82,7 @@ void renaming::level1t::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    std::vector<expr2tc*> operands;
-    expr.get()->list_operands(operands);
-    for (std::vector<expr2tc*>::iterator it = operands.begin();
-         it != operands.end(); it++)
+    Forall_operands2(it, oper_list, expr)
       rename(**it);
   }
 }
@@ -133,10 +130,7 @@ void renaming::level2t::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    std::vector<expr2tc*> operands;
-    expr.get()->list_operands(operands);
-    for (std::vector<expr2tc*>::iterator it = operands.begin();
-         it != operands.end(); it++)
+    Forall_operands2(it, oper_list, expr)
       rename(**it);
   }
 }
@@ -151,10 +145,7 @@ void renaming::level2t::coveredinbees(const irep_idt &identifier, unsigned count
 void renaming::renaming_levelt::get_original_name(expr2tc &expr) const
 {
 
-  std::vector<expr2tc*> operands;
-  expr.get()->list_operands(operands);
-  for (std::vector<expr2tc*>::iterator it = operands.begin();
-       it != operands.end(); it++)
+  Forall_operands2(it, oper_list, expr)
     get_original_name(**it);
 
   if (is_symbol2t(expr))

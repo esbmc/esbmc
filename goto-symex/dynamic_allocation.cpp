@@ -33,10 +33,7 @@ Function: default_replace_dynamic_allocation
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
 
-  std::vector<expr2tc *> operands;
-  expr.get()->list_operands(operands);
-  for (std::vector<expr2tc *>::const_iterator it = operands.begin();
-       it != operands.end(); it++)
+  Forall_operands2(it, op_list, expr)
     default_replace_dynamic_allocation(**it);
 
   if (is_valid_object2t(expr))

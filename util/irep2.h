@@ -42,6 +42,18 @@
   for (std::vector<std::string>::iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+#define forall_operands2(it, ops, theexpr) \
+  expr2t::expr_operands ops; \
+  theexpr->list_operands(ops); \
+  for (expr2t::expr_operands::const_iterator it = ops.begin(); \
+       it != ops.end(); it++)
+
+#define Forall_operands2(it, ops, theexpr) \
+  expr2t::Expr_operands ops; \
+  theexpr.get()->list_operands(ops); \
+  for (expr2t::Expr_operands::iterator it = ops.begin(); \
+       it != ops.end(); it++)
+
 class prop_convt;
 class type2t;
 class expr2t;
@@ -132,7 +144,7 @@ typedef boost::shared_ptr<type2t> type2tc;
 typedef irep_container<expr2t, -1> expr2tc;
 
 typedef std::pair<std::string,std::string> member_entryt;
-typedef std::vector<member_entryt> list_of_memberst;
+typedef std::list<member_entryt> list_of_memberst;
 
 template <class T>
 static inline std::string type_to_string(const T &theval, int indent);
@@ -148,11 +160,11 @@ static inline void do_type_crc(const T &theval, boost::crc_32_type &crc);
 
 template <class T>
 static inline void do_type_list_operands(const T &theval,
-                                         std::vector<const expr2tc*> &inp);
+                                         std::list<const expr2tc*> &inp);
 
 template <class T>
 static inline void do_type_list_operands(T& theval,
-                                         std::vector<expr2tc*> &inp);
+                                         std::list<expr2tc*> &inp);
 
 /** Base class for all types */
 class type2t
@@ -306,6 +318,9 @@ public:
     end_expr_id
   };
 
+  typedef std::list<const expr2tc*> expr_operands;
+  typedef std::list<expr2tc*> Expr_operands;
+
 protected:
   expr2t(const type2tc type, expr_ids id);
   expr2t(const expr2t &ref);
@@ -327,7 +342,7 @@ public:
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
   virtual void do_crc(boost::crc_32_type &crc) const;
-  virtual void list_operands(std::vector<const expr2tc*> &inp) const = 0;
+  virtual void list_operands(std::list<const expr2tc*> &inp) const = 0;
 
   // Caution - updating sub operands of an expr2t *must* always preserve type
   // correctness, as there's no way to check that an expr expecting a pointer
@@ -335,7 +350,7 @@ public:
   // This list operands method should be protected; however it's required on
   // account of all those places where exprs are rewritten in place. Ideally,
   // "all those places" shouldn't exist in the future.
-  virtual void list_operands(std::vector<expr2tc*> &inp) = 0;
+  virtual void list_operands(std::list<expr2tc*> &inp) = 0;
   virtual expr2t * clone_raw(void) const = 0;
 
   expr2tc simplify(void) const;
@@ -378,9 +393,9 @@ namespace esbmct {
       return do_type_lt<fieldtype>(name, theother.name); }\
     inline void do_crc(boost::crc_32_type &crc) const { \
       do_type_crc<fieldtype>(name, crc); return; }\
-    inline void list_operands(std::vector<const expr2tc*> &inp) const { \
+    inline void list_operands(std::list<const expr2tc*> &inp) const { \
       do_type_list_operands<fieldtype>(name, inp); return; }\
-    inline void list_operands(std::vector<expr2tc*> &inp) { \
+    inline void list_operands(std::list<expr2tc*> &inp) { \
       do_type_list_operands<fieldtype>(name, inp); return; }\
     fieldtype name; \
   }; \
@@ -460,10 +475,10 @@ namespace esbmct {
     const { return 0; }\
     inline void do_crc(boost::crc_32_type &crc __attribute__((unused))) const \
     { return; }\
-    inline void list_operands(std::vector<const expr2tc*> &inp\
+    inline void list_operands(std::list<const expr2tc*> &inp\
                               __attribute__((unused))) const \
     { return; } \
-    inline void list_operands(std::vector<expr2tc*> &inp\
+    inline void list_operands(std::list<expr2tc*> &inp\
                               __attribute__((unused))) \
     { return; } \
   }; \
@@ -616,9 +631,9 @@ namespace esbmct {
     virtual bool cmp(const expr2t &ref) const;
     virtual int lt(const expr2t &ref) const;
     virtual void do_crc(boost::crc_32_type &crc) const;
-    virtual void list_operands(std::vector<const expr2tc*> &inp) const;
+    virtual void list_operands(std::list<const expr2tc*> &inp) const;
   protected:
-    virtual void list_operands(std::vector<expr2tc*> &inp);
+    virtual void list_operands(std::list<expr2tc*> &inp);
     virtual expr2t *clone_raw(void) const;
   };
 

@@ -151,11 +151,8 @@ void goto_program_dereferencet::dereference_rec(
 
     assert(is_bool_type(expr->type));
 
-    std::vector<expr2tc *> operands;
-    expr.get()->list_operands(operands);
-    for (unsigned i = 0; i < operands.size(); i++)
-    {
-      expr2tc &op = *operands[i];
+    Forall_operands2(it, oper_list, expr) {
+      expr2tc &op = **it;
 
       assert(is_bool_type(op->type));
 
@@ -219,10 +216,7 @@ void goto_program_dereferencet::dereference_rec(
     }
   }
 
-  std::vector<expr2tc*> operands;
-  expr.get()->list_operands(operands);
-  for (std::vector<expr2tc*>::const_iterator it = operands.begin();
-       it != operands.end(); it++)
+  Forall_operands2(it, expr_list, expr)
     dereference_rec(**it, guard, mode);
 
   if (is_dereference2t(expr)) {
@@ -420,10 +414,7 @@ void goto_program_dereferencet::dereference_instruction(
       code_expression2t &theexp = to_code_expression2t(i.code);
       dereference_expr(theexp.operand, checks_only, dereferencet::READ);
     } else if (is_code_printf2t(i.code)) {
-      std::vector<expr2tc *> operands;
-      i.code.get()->list_operands(operands);
-      for (std::vector<expr2tc*>::const_iterator it = operands.begin();
-           it != operands.end(); it++)
+      Forall_operands2(it, oper_list, i.code)
         dereference_expr(**it, checks_only, dereferencet::READ);
     } else if (is_code_free2t(i.code)) {
       code_free2t &free = to_code_free2t(i.code);

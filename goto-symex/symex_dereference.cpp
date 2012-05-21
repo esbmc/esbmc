@@ -125,10 +125,7 @@ void goto_symext::dereference_rec(
   }
   else
   {
-    std::vector<expr2tc *> operands;
-    expr.get()->list_operands(operands);
-    for (std::vector<expr2tc *>::const_iterator it = operands.begin();
-         it != operands.end(); it++)
+    Forall_operands2(it, expr_list, expr)
       dereference_rec(**it, guard, dereference, write);
   }
 }

@@ -133,10 +133,10 @@ void goto_symext::symex_printf(
   expr2tc new_rhs = rhs;
   cur_state->rename(new_rhs);
 
-  std::vector<const expr2tc *> operands;
+  expr2t::expr_operands operands;
   new_rhs->list_operands(operands);
 
-  const expr2tc &format = *operands[0];
+  const expr2tc &format = **operands.begin();
   
   if (is_address_of2t(format)) {
     const address_of2t &addrof = to_address_of2t(format);
@@ -149,8 +149,7 @@ void goto_symext::symex_printf(
           to_constant_string2t(idx.source_value).value.as_string();
 
         std::list<expr2tc> args; 
-        for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
-             it != operands.end(); it++)
+        forall_operands2(it, op_list, new_rhs)
           args.push_back(**it);
 
         target->output(cur_state->guard.as_expr(), cur_state->source, fmt,args);

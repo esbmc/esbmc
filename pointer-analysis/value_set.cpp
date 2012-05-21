@@ -692,10 +692,7 @@ void value_sett::assign(
           add_to_sets=true;
         }
 #endif
-        std::vector<const expr2tc *> operands;
-        rhs->list_operands(operands);
-        for (std::vector<const expr2tc *>::const_iterator it = operands.begin();
-             it != operands.end(); it++) {
+        forall_operands2(it, expr_list, rhs) {
           assign(lhs_index, **it, ns, add_to_sets);
           add_to_sets = true;
         }
