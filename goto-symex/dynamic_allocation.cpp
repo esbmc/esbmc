@@ -45,6 +45,7 @@ void default_replace_dynamic_allocation(
     exprt object_expr("pointer_object", uint_type());
     object_expr.move_to_operands(expr.op0());
 
+    //std::cout << "CPROVER_PREFIX: " << CPROVER_PREFIX << std::endl;
     exprt alloc_array=symbol_expr(ns.lookup(CPROVER_PREFIX "alloc"));
 
     exprt index_expr(exprt::index, typet(typet::t_bool));
