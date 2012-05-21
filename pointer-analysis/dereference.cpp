@@ -330,22 +330,22 @@ void dereferencet::build_reference_to(
   if(what.id()=="unknown" ||
      what.id()=="invalid")
   {
-    if(!options.get_bool_option("no-pointer-check"))
-    {
-      // constraint that it actually is an invalid pointer
-
-      exprt invalid_pointer_expr("invalid-pointer", typet("bool"));
-      invalid_pointer_expr.copy_to_operands(deref_expr);
-
-      // produce new guard
-
-      guardt tmp_guard(guard);
-      tmp_guard.move(invalid_pointer_expr);
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "invalid pointer",
-        tmp_guard);
-    }
+//    if(!options.get_bool_option("no-pointer-check"))
+//    {
+//      // constraint that it actually is an invalid pointer
+//
+//      exprt invalid_pointer_expr("invalid-pointer", typet("bool"));
+//      invalid_pointer_expr.copy_to_operands(deref_expr);
+//
+//      // produce new guard
+//
+//      guardt tmp_guard(guard);
+//      tmp_guard.move(invalid_pointer_expr);
+//      dereference_callback.dereference_failure(
+//        "pointer dereference",
+//        "invalid pointer",
+//        tmp_guard);
+//    }
 
     return;
   }
