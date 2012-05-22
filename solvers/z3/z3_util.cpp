@@ -19,7 +19,9 @@ Z3_ast z3_convt::convert_number(int64_t value, u_int width, bool type)
     return convert_number_bv(value, width, type);
 }
 
-Z3_ast z3_convt::convert_number_int(int64_t value, u_int width, bool type)
+Z3_ast z3_convt::convert_number_int(int64_t value,
+                                    u_int width __attribute__((unused)),
+                                    bool type)
 {
 
   if (type)
