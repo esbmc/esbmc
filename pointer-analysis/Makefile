@@ -10,4 +10,6 @@ SRCS= value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp \
 clean:
 	-rm -f $(OBJS) $(OBJDIR)/.deps $(MAINOBJ)
 
+STRICTCOMPILE=1
+
 include $(ESBMCDIR)/common
