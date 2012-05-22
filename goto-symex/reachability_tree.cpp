@@ -132,7 +132,6 @@ bool reachability_treet::analyse_for_cswitch_base(const exprt &expr)
 
   crypto_hash hash;
   if (state_hashing) {
-    goto_programt::const_targett pc = ex_state.get_active_state().source.pc;
     hash = ex_state.generate_hash();
     if (hit_hashes.find(hash) != hit_hashes.end())
       return false;
