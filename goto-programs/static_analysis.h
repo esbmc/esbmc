@@ -56,9 +56,9 @@ public:
   typedef hash_set_cont<exprt, irep_hash> expr_sett;
   
   virtual void get_reference_set(
-    const namespacet &ns,
-    const expr2tc &expr,
-    std::list<expr2tc> &dest) { assert(0); };
+    const namespacet &ns __attribute__((unused)),
+    const expr2tc &expr __attribute__((unused)),
+    std::list<expr2tc> &dest __attribute__((unused))) { assert(0); };
   
   // also add
   //
