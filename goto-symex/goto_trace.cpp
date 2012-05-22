@@ -238,8 +238,8 @@ void show_state_header(
 }
 
 std::string get_varname_from_guard (
-	goto_tracet::stepst::const_iterator &it,
-	const goto_tracet &goto_trace)
+	goto_tracet::stepst::const_iterator &it __attribute__((unused)),
+	const goto_tracet &goto_trace __attribute__((unused)))
 {
   std::cerr << "XXXjmorse - get_varname_from_guard victim of migration" << std::endl;
   abort();
