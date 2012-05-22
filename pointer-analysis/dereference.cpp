@@ -513,9 +513,6 @@ void dereferencet::build_reference_to(
         if(!options.get_bool_option("no-pointer-check"))
         {
           //nec: ex29
-          std::string name = value.type().get("name").as_string();
-          if(name == "cpp::std::struct.ofstream")
-            return ;
           if (value.type().subtype().id()=="empty"
         		  || type.subtype().id()=="empty")
             return;
