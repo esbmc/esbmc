@@ -38,4 +38,6 @@ clean:
 	done
 	-rm $(OBJDIR)/.depends
 
+STRICTCOMPILE=1
+
 include $(ESBMCDIR)/common
