@@ -513,8 +513,11 @@ void dereferencet::build_reference_to(
         if(!options.get_bool_option("no-pointer-check"))
         {
           //nec: ex29
-          if (value.type().subtype().id()=="empty" ||
-        		  type.subtype().id()=="empty")
+          std::string name = value.type().get("name").as_string();
+          if(name == "cpp::std::struct.ofstream")
+            return ;
+          if (value.type().subtype().id()=="empty"
+        		  || type.subtype().id()=="empty")
             return;
           std::string msg="memory model not applicable (got `";
           msg+=from_type(ns, "", value.type());
