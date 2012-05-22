@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <migrate.h>
 #include "goto_symex.h"
 
-void goto_symext::symex_catch(statet &state)
+void goto_symext::symex_catch(statet &state __attribute__((unused)))
 {
   // there are two variants: 'push' and 'pop'
  
