@@ -8,4 +8,6 @@ SRCS= z3_capi.cpp  z3_conv.cpp  z3_get.cpp z3_util.cpp
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
+STRICTCOMPILE=1
+
 include $(ESBMCDIR)/common
