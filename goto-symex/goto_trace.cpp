@@ -104,8 +104,7 @@ void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
   const expr2tc &lhs,
-  const expr2tc &value,
-  const pretty_namest &pretty_names)
+  const expr2tc &value)
 {
   const irep_idt &identifier = to_symbol2t(lhs).name;
   std::string value_string;
@@ -128,17 +127,12 @@ void counterexample_value(
     }
   }
 
-  #if 1
   std::string name=id2string(identifier);
 
   const symbolt *symbol;
   if(!ns.lookup(identifier, symbol))
     if(symbol->pretty_name!="")
       name=id2string(symbol->pretty_name);
-
-  #else
-  std::string name=pretty_names.pretty_name(identifier)
-  #endif
 
   out << "  " << name << "=" << value_string
       << std::endl;
@@ -241,25 +235,6 @@ void show_state_header(
     out << it->as_string() << std::endl;
 
   out << "----------------------------------------------------" << std::endl;
-}
-
-void show_goto_trace(
-  std::ostream &out,
-  const namespacet &ns,
-  const goto_tracet &goto_trace)
-{
-  pretty_namest pretty_names;
-
-  {
-    pretty_namest::symbolst pretty_symbols;
-
-    forall_symbols(it, ns.get_context().symbols)
-      pretty_symbols.insert(it->first);
-
-    pretty_names.get_pretty_names(pretty_symbols, ns);
-  }
-
-  show_goto_trace(out, ns, pretty_names, goto_trace);
 }
 
 std::string get_varname_from_guard (
@@ -366,7 +341,6 @@ void get_metada_from_llvm(
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
-  const pretty_namest &pretty_names,
   const goto_tracet &goto_trace)
 {
   unsigned prev_step_nr=0;
@@ -432,8 +406,7 @@ void show_goto_trace(
           }
           show_state_header(out, *it, it->pc->location, it->step_nr);
         }
-         counterexample_value(out, ns, it->original_lhs,
-                             it->value, pretty_names);
+         counterexample_value(out, ns, it->original_lhs, it->value);
       }
       break;
 

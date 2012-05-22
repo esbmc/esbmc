@@ -151,17 +151,10 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
-void show_goto_trace(
-  std::ostream &out,
-  const namespacet &ns,
-  const pretty_namest &pretty_names,
-  const goto_tracet &goto_trace);
-  
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
   const expr2tc &identifier,
-  const expr2tc &value,
-  const pretty_namest &pretty_names);
+  const expr2tc &value);
 
 #endif
