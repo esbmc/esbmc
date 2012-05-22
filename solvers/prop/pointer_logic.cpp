@@ -102,7 +102,7 @@ expr2tc pointer_logict::pointer_expr(
     return expr2tc(new symbol2t(type, irep_idt("INVALID")));
   }
   
-  if(pointer.object>=objects.size() || pointer.object<0)
+  if(pointer.object>=objects.size())
   {
     return expr2tc(new symbol2t(type,
                                 irep_idt("INVALID" + i2string(pointer.object))));
