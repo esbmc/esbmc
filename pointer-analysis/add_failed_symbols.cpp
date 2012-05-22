@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "add_failed_symbols.h"
 
-/*******************************************************************\
-
-Function: add_failed_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void add_failed_symbol(symbolt &symbol, contextt &context, namespacet &ns)
 {
   if(!symbol.lvalue) return;
@@ -52,18 +40,6 @@ void add_failed_symbol(symbolt &symbol, contextt &context, namespacet &ns)
     context.move(new_symbol);
   }
 }
-
-/*******************************************************************\
-
-Function: add_failed_symbols
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void add_failed_symbols(contextt &context, namespacet &ns)
 {

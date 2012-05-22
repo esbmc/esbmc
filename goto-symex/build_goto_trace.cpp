@@ -12,18 +12,6 @@ Author: Daniel Kroening
 
 #include "build_goto_trace.h"
 
-/*******************************************************************\
-
-Function: build_goto_trace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void build_goto_trace(
   const symex_target_equationt &target,
   const prop_convt &prop_conv,

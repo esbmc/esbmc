@@ -149,18 +149,6 @@ void symex_target_equationt::convert_assumptions(
   }
 }
 
-/*******************************************************************\
-
-Function: symex_target_equationt::convert_assertions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_target_equationt::convert_assertions(
   prop_convt &prop_conv)
 {
@@ -190,18 +178,6 @@ void symex_target_equationt::convert_assertions(
     prop_conv.lcnf(bv);
 }
 
-/*******************************************************************\
-
-Function: symex_target_equationt::convert_output
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_target_equationt::convert_output(prop_convt &prop_conv)
 {
   unsigned output_count=0;
@@ -230,18 +206,6 @@ void symex_target_equationt::convert_output(prop_convt &prop_conv)
     }
 }
 
-/*******************************************************************\
-
-Function: symex_target_equationt::output
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_target_equationt::output(std::ostream &out) const
 {
   for(SSA_stepst::const_iterator
@@ -253,18 +217,6 @@ void symex_target_equationt::output(std::ostream &out) const
     out << "--------------" << std::endl;
   }
 }
-
-/*******************************************************************\
-
-Function: symex_target_equationt::SSA_stept::output
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_target_equationt::SSA_stept::output(
   const namespacet &ns,
@@ -309,18 +261,6 @@ void symex_target_equationt::SSA_stept::output(
 
   out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << std::endl;
 }
-
-/*******************************************************************\
-
-Function: operator <<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::ostream &operator<<(
   std::ostream &out,

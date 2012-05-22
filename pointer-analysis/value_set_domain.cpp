@@ -13,18 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "value_set_domain.h"
 
-/*******************************************************************\
-
-Function: value_set_domaint::transform
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_set_domaint::transform(
   const namespacet &ns,
   locationt from_l,

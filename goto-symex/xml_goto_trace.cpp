@@ -18,18 +18,6 @@ Author: Daniel Kroening
 
 #include "xml_goto_trace.h"
 
-/*******************************************************************\
-
-Function: convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert(
   const namespacet &ns,
   const goto_tracet &goto_trace,

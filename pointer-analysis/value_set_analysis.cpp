@@ -16,18 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "value_set_analysis.h"
 
-/*******************************************************************\
-
-Function: value_set_analysist::initialize
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_set_analysist::initialize(
   const goto_programt &goto_program)
 {
@@ -35,36 +23,12 @@ void value_set_analysist::initialize(
   add_vars(goto_program);
 }
 
-/*******************************************************************\
-
-Function: value_set_analysist::initialize
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_set_analysist::initialize(
   const goto_functionst &goto_functions)
 {
   baset::initialize(goto_functions);
   add_vars(goto_functions);
 }
-
-/*******************************************************************\
-
-Function: value_set_analysist::add_vars
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_set_analysist::add_vars(
   const goto_programt &goto_program)
@@ -110,36 +74,12 @@ void value_set_analysist::add_vars(
   }
 }
 
-/*******************************************************************\
-
-Function: value_set_analysist::get_entries
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_set_analysist::get_entries(
   const symbolt &symbol,
   std::list<value_sett::entryt> &dest)
 {
   get_entries_rec(symbol.name, "", symbol.type, dest);
 }
-
-/*******************************************************************\
-
-Function: value_set_analysist::get_entries
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_set_analysist::get_entries_rec(
   const irep_idt &identifier,
@@ -178,18 +118,6 @@ void value_set_analysist::get_entries_rec(
   }
 }
 
-/*******************************************************************\
-
-Function: value_set_analysist::add_vars
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_set_analysist::add_vars(
   const goto_functionst &goto_functions)
 {
@@ -221,18 +149,6 @@ void value_set_analysist::add_vars(
     }
 }    
 
-/*******************************************************************\
-
-Function: value_set_analysist::get_globals
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_set_analysist::get_globals(
   std::list<value_sett::entryt> &dest)
 {
@@ -242,18 +158,6 @@ void value_set_analysist::get_globals(
        it->second.static_lifetime)
       get_entries(it->second, dest);
 }    
-
-/*******************************************************************\
-
-Function: value_set_analysist::check_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool value_set_analysist::check_type(const typet &type)
 {
@@ -282,18 +186,6 @@ bool value_set_analysist::check_type(const typet &type)
   
   return false;
 }    
-
-/*******************************************************************\
-
-Function: value_set_analysist::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_set_analysist::convert(
   const goto_programt &goto_program,
@@ -347,17 +239,6 @@ void value_set_analysist::convert(
     }
   }
 }
-/*******************************************************************\
-
-Function: convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void convert(
   const goto_functionst &goto_functions,
@@ -378,18 +259,6 @@ void convert(
     value_set_analysis.convert(f_it->second.body, f_it->first, f);
   }
 }
-
-/*******************************************************************\
-
-Function: convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void convert(
   const goto_programt &goto_program,

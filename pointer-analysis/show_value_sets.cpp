@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "show_value_sets.h"
 
-/*******************************************************************\
-
-Function: show_value_sets
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void show_value_sets(
   ui_message_handlert::uit ui,
   const goto_functionst &goto_functions,
@@ -42,18 +30,6 @@ void show_value_sets(
   default:;
   }
 }
-
-/*******************************************************************\
-
-Function: show_value_sets
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void show_value_sets(
   ui_message_handlert::uit ui,

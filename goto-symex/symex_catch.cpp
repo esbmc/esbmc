@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <migrate.h>
 #include "goto_symex.h"
 
-/*******************************************************************\
-
-Function: goto_symext::symex_catch
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_catch(statet &state)
 {
   // there are two variants: 'push' and 'pop'
@@ -61,18 +49,6 @@ void goto_symext::symex_catch(statet &state)
   }
   #endif
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_throw
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_throw(statet &state)
 {

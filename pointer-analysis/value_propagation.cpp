@@ -16,18 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "value_propagation.h"
 
-/*******************************************************************\
-
-Function: value_propagationt::initialize
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_propagationt::initialize(
   const goto_programt &goto_program)
 {
@@ -35,36 +23,12 @@ void value_propagationt::initialize(
   add_vars(goto_program);
 }
 
-/*******************************************************************\
-
-Function: value_propagationt::initialize
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_propagationt::initialize(
   const goto_functionst &goto_functions)
 {
   baset::initialize(goto_functions);
   add_vars(goto_functions);
 }
-
-/*******************************************************************\
-
-Function: value_propagationt::add_vars
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_propagationt::add_vars(
   const goto_programt &goto_program)
@@ -110,36 +74,12 @@ void value_propagationt::add_vars(
   }
 }
 
-/*******************************************************************\
-
-Function: value_propagationt::get_entries
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_propagationt::get_entries(
   const symbolt &symbol,
   std::list<value_sett::entryt> &dest)
 {
   get_entries_rec(symbol.name, "", symbol.type, dest);
 }
-
-/*******************************************************************\
-
-Function: value_propagationt::get_entries
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_propagationt::get_entries_rec(
   const irep_idt &identifier,
@@ -178,18 +118,6 @@ void value_propagationt::get_entries_rec(
   }
 }
 
-/*******************************************************************\
-
-Function: value_propagationt::add_vars
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_propagationt::add_vars(
   const goto_functionst &goto_functions)
 {
@@ -221,18 +149,6 @@ void value_propagationt::add_vars(
     }
 }    
 
-/*******************************************************************\
-
-Function: value_propagationt::get_globals
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_propagationt::get_globals(
   std::list<value_sett::entryt> &dest)
 {
@@ -242,18 +158,6 @@ void value_propagationt::get_globals(
        it->second.static_lifetime)
       get_entries(it->second, dest);
 }    
-
-/*******************************************************************\
-
-Function: value_propagationt::check_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool value_propagationt::check_type(const typet &type)
 {
@@ -283,18 +187,6 @@ bool value_propagationt::check_type(const typet &type)
   return false;
 }    
 
-/*******************************************************************\
-
-Function: convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert(
   const goto_functionst &goto_functions,
   const value_propagationt &value_propagation,
@@ -315,18 +207,6 @@ void convert(
   }
 }
 
-/*******************************************************************\
-
-Function: convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert(
   const goto_programt &goto_program,
   const value_propagationt &value_propagation,
@@ -339,18 +219,6 @@ void convert(
     "",
     dest.new_element("program"));
 }
-
-/*******************************************************************\
-
-Function: convert_goto_program
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_propagationt::convert(
   const goto_programt &goto_program,

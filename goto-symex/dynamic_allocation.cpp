@@ -18,18 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "dynamic_allocation.h"
 
-/*******************************************************************\
-
-Function: default_replace_dynamic_allocation
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
 

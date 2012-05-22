@@ -19,17 +19,6 @@ Author: Daniel Kroening
 #include "goto_trace.h"
 #include "VarMap.h"
 #include <std_types.h>
-/*******************************************************************\
-
-Function: goto_tracet::output
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_tracet::output(
   const class namespacet &ns,
@@ -40,18 +29,6 @@ void goto_tracet::output(
       it++)
     it->output(ns, out);
 }
-
-/*******************************************************************\
-
-Function: goto_tracet::output
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_trace_stept::output(
   const namespacet &ns,
@@ -123,18 +100,6 @@ void goto_trace_stept::output(
   out << std::endl;
 }
 
-/*******************************************************************\
-
-Function: counterexample_value
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
@@ -178,18 +143,6 @@ void counterexample_value(
   out << "  " << name << "=" << value_string
       << std::endl;
 }
-
-/*******************************************************************\
-
-Function: show_goto_trace_gui
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void show_goto_trace_gui(
   std::ostream &out,
@@ -265,18 +218,6 @@ void show_goto_trace_gui(
   }
 }
 
-/*******************************************************************\
-
-Function: show_state_header
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void show_state_header(
   std::ostream &out,
   const goto_trace_stept &state,
@@ -302,18 +243,6 @@ void show_state_header(
   out << "----------------------------------------------------" << std::endl;
 }
 
-/*******************************************************************\
-
-Function: show_goto_trace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
@@ -332,18 +261,6 @@ void show_goto_trace(
 
   show_goto_trace(out, ns, pretty_names, goto_trace);
 }
-
-/*******************************************************************\
-
-Function: get_varname_from_guard
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string get_varname_from_guard (
 	goto_tracet::stepst::const_iterator &it,
@@ -373,17 +290,6 @@ std::string get_varname_from_guard (
   return varname;
 #endif
 }
-/*******************************************************************\
-
-Function: get_metada_from_llvm
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void get_metada_from_llvm(
   goto_tracet::stepst::const_iterator &it,
@@ -456,18 +362,6 @@ void get_metada_from_llvm(
         const_cast<locationt*>(&it->pc->location)->set_function(goto_trace.FuncName);
   }
 }
-
-/*******************************************************************\
-
-Function: show_goto_trace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void show_goto_trace(
   std::ostream &out,

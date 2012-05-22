@@ -10,14 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "slice.h"
 
-/*******************************************************************\
-
-   Class: symex_slicet
-
- Purpose:
-
-\*******************************************************************/
-
 class symex_slicet
 {
 public:
@@ -35,18 +27,6 @@ protected:
   void slice_assignment(symex_target_equationt::SSA_stept &SSA_step);
 };
 
-/*******************************************************************\
-
-Function: symex_slicet::get_symbols
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_slicet::get_symbols(const expr2tc &expr)
 {
   get_symbols(expr->type);
@@ -58,33 +38,9 @@ void symex_slicet::get_symbols(const expr2tc &expr)
     depends.insert(symbol2tc(expr)->name);
 }
 
-/*******************************************************************\
-
-Function: symex_slicet::get_symbols
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_slicet::get_symbols(const type2tc &type)
 {
 }
-
-/*******************************************************************\
-
-Function: symex_slicet::slice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_slicet::slice(symex_target_equationt &equation)
 {
@@ -96,18 +52,6 @@ void symex_slicet::slice(symex_target_equationt &equation)
       it++)
     slice(*it);
 }
-
-/*******************************************************************\
-
-Function: symex_slicet::slice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
 {
@@ -135,18 +79,6 @@ void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
   }
 }
 
-/*******************************************************************\
-
-Function: symex_slicet::slice_assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_slicet::slice_assignment(
   symex_target_equationt::SSA_stept &SSA_step)
 {
@@ -161,35 +93,11 @@ void symex_slicet::slice_assignment(
     get_symbols(SSA_step.rhs);
 }
 
-/*******************************************************************\
-
-Function: slice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void slice(symex_target_equationt &equation)
 {
   symex_slicet symex_slice;
   symex_slice.slice(equation);
 }
-
-/*******************************************************************\
-
-Function: simple_slice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void simple_slice(symex_target_equationt &equation)
 {
@@ -215,4 +123,3 @@ void simple_slice(symex_target_equationt &equation)
         s_it++)
       s_it->ignore=true;
 }
-
