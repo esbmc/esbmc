@@ -15,4 +15,6 @@ SRCS= symex_target.cpp symex_target_equation.cpp symex_assign.cpp \
 clean:
 	-rm -f $(OBJS) $(OBJDIR)/.deps $(MAINOBJ)
 
+STRICTCOMPILE=1
+
 include $(ESBMCDIR)/common
