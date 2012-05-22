@@ -505,7 +505,6 @@ execution_statet::execute_guard(void)
 unsigned int
 execution_statet::add_thread(const goto_programt *prog)
 {
-  statet &state = get_active_state();
 
   goto_symex_statet new_state(*state_level2, global_value_set, ns);
   new_state.initialize(prog->instructions.begin(), prog->instructions.end(),
