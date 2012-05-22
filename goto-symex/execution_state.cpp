@@ -1006,8 +1006,8 @@ execution_statet::state_hashing_level2t::make_assignment(irep_idt l1_ident,
                                                 assigned_value);
 
   // XXX - consider whether to use l1 names instead. Recursion, reentrancy.
-#warning XXXjmorse - state hashing is a casualty of irep2
 #if 0
+#warning XXXjmorse - state hashing is a casualty of irep2
   hash = owner->update_hash_for_assignment(assigned_value);
   std::string orig_name =
     owner->get_active_state().get_original_name(l1_ident).as_string();
