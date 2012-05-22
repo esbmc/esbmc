@@ -100,7 +100,6 @@ void renaming::level2t::rename(expr2tc &expr)
     if (sym.name.as_string().find("#") != std::string::npos)
       return;
 
-#warning XXXjmorse - make null and invalid their own ireps?
     if (sym.name.as_string() == "NULL")
       return;
     if (sym.name.as_string() == "INVALID")
