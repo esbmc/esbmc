@@ -8,4 +8,6 @@ SRCS= prop_conv.cpp pointer_logic.cpp
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
+STRICTCOMPILE=1
+
 include $(ESBMCDIR)/common
