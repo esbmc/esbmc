@@ -371,7 +371,6 @@ void show_goto_trace(
         out << "  " << it->comment << std::endl;
 
         if(it->pc->is_assert())
-#warning XXXjmorse - llvm tracing goo a victim of migration.
 #if 0
         	if (!goto_trace.metadata_filename.empty() && !it->pc->guard.operands().empty()) {
 				std::string assertsrt, varname;
