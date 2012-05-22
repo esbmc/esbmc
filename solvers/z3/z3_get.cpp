@@ -210,7 +210,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
       return expr2tc();
 
     expr2tc expr;
-    unsigned int i = 0;
+    int i = 0;
     int comp_nr;
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;
