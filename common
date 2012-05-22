@@ -14,7 +14,18 @@ OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 
+# Strictness: Some code would appear to require -fpermissive to compile. This
+# is bad, but perhaps necessary in some circumstances. So by default, compile
+# with -fpermissive.
+# However for other pieces of code we might be able to compile with stricter
+# requirements; for directories where this is the case, define "STRICTCOMPILE",
+# which will result in additional strictness compile flags being used.
+
+ifndef STRICTCOMPILE
 EXTRACXXFLAGS+=-fpermissive
+else
+EXTRACXXFLAGS+= -W -Wall -Wextra -Werror
+endif
 
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
 CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
