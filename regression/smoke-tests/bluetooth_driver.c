@@ -37,7 +37,7 @@ void BCSP_IoDecrement(DEVICE_EXTENSION *e)
   pendingIo = e->pendingIo;
   __ESBMC_atomic_end();  
 
-  if (pendingIo)
+  if (pendingIo == 0)
     e->stoppingEvent = TRUE;
 }
 
