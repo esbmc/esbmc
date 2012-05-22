@@ -41,14 +41,16 @@ void prop_convt::ignoring(const expr2tc &expr)
   print(2, msg);
 }
 
-void prop_convt::convert_smt_type(const type2t &type, void *&arg)
+void prop_convt::convert_smt_type(const type2t &type,
+                                  void *&arg __attribute__((unused)))
 {
   std::cerr << "Unhandled SMT conversion for type \""
             << get_type_id(type) << std::endl;
   abort();
 }
 
-void prop_convt::convert_smt_expr(const expr2t &expr, void *&arg)
+void prop_convt::convert_smt_expr(const expr2t &expr,
+                                  void *&arg __attribute__((unused)))
 {
   std::cerr << "Unhandled SMT conversion for expr ID "
             << get_expr_id(expr) << std::endl;
