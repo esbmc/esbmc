@@ -133,8 +133,6 @@ expr2tc pointer_logict::object_rec(
   const type2tc &pointer_type,
   const expr2tc &src) const
 {
-#warning jmorse - I am covered in bees.
-//  assert(offset>=0);
 
   if(src->type->type_id == type2t::array_id)
   {
