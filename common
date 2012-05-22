@@ -22,7 +22,7 @@ INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 # which will result in additional strictness compile flags being used.
 
 ifndef STRICTCOMPILE
-EXTRACXXFLAGS+=-fpermissive
+EXTRACXXFLAGS+=-fpermissive -Wno-deprecated -Wall -Wextra
 else
 EXTRACXXFLAGS+= -W -Wall -Wextra -Werror
 endif
