@@ -21,7 +21,6 @@ protected:
   symbol_sett depends;
   
   void get_symbols(const expr2tc &expr);
-  void get_symbols(const type2tc &type);
 
   void slice(symex_target_equationt::SSA_stept &SSA_step);
   void slice_assignment(symex_target_equationt::SSA_stept &SSA_step);
@@ -29,17 +28,12 @@ protected:
 
 void symex_slicet::get_symbols(const expr2tc &expr)
 {
-  get_symbols(expr->type);
 
   forall_operands2(it, expr_list, expr)
     get_symbols(**it);
 
   if (is_symbol2t(expr))
     depends.insert(symbol2tc(expr)->name);
-}
-
-void symex_slicet::get_symbols(const type2tc &type)
-{
 }
 
 void symex_slicet::slice(symex_target_equationt &equation)
