@@ -317,7 +317,6 @@ goto_symex_statet::gen_stack_trace(void) const
   std::vector<dstring> trace;
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
-  int i = 0;
 
   // Format is a vector of strings, each recording a particular function
   // invocation.
