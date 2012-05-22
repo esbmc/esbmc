@@ -223,7 +223,6 @@ void value_sett::get_value_set_rec(
   const type2tc &original_type,
   const namespacet &ns) const
 {
-  const type2tc &expr_type = expr->type;
 
   if (is_unknown2t(expr) || is_invalid2t(expr))
   {
