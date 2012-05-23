@@ -47,7 +47,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 static volatile bool checkpoint_sig = false;
 
 void
-sigusr1_handler(int sig)
+sigusr1_handler(int sig __attribute__((unused)))
 {
 
   checkpoint_sig = true;
