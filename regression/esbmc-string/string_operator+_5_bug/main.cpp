@@ -17,7 +17,7 @@ int main ()
 
   str3 = str3 + ", y, " + 'z';
   
-  assert(str3 != "Test string: x, y, z"); //added
+  assert(str3 == "Test string: x, y, z"); //added
   cout << str3  << endl;
   return 0;
 }
