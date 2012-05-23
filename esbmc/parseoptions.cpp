@@ -398,7 +398,7 @@ int cbmc_parseoptionst::doit()
   bmct bmc(goto_functions, options, context, ui_message_handler);
   get_command_line_options(bmc.options);
   set_verbosity(bmc);
-  return do_bmc(bmc, goto_functions);
+  return do_bmc(bmc);
 }
 
 /*******************************************************************\
@@ -1044,9 +1044,7 @@ Function: cbmc_parseoptionst::do_bmc
 
 \*******************************************************************/
 
-int cbmc_parseoptionst::do_bmc(
-  bmct &bmc1,
-  const goto_functionst &goto_functions)
+int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 {
   bmc1.set_ui(get_ui());
 

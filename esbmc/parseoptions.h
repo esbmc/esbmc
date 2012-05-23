@@ -38,7 +38,7 @@ protected:
   optionst options;
 
   virtual void get_command_line_options(optionst &options);
-  virtual int do_bmc(bmct &bmc, const goto_functionst &goto_functions);
+  virtual int do_bmc(bmct &bmc);
 
   virtual bool get_goto_program(goto_functionst &goto_functions);
 
