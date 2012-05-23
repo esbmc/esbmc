@@ -6,7 +6,7 @@ using namespace std;
 
 int main () {
   filebuf fb;
-  fb.open ("test.txt",ios::in);
+  fb.open ("test",ios::in);
   assert(fb.is_open());
   istream is(&fb);
   cout << char(is.get());
