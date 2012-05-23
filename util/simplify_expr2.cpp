@@ -605,6 +605,11 @@ pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
       BigInt val = to_constant_int2t(index.index).constant_value;
       val *= widthbytes;
       return expr2tc(new constant_int2t(type, val));
+    } else if (is_constant_string2t(index.source_value) &&
+               is_constant_int2t(index.index)) {
+      // This can also be simplified to an array offset. Just return the index,
+      // as the string elements are all 8 bit bytes.
+      return index.index;
     } else {
       return expr2tc();
     }
