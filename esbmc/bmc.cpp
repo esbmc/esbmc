@@ -56,22 +56,6 @@ sigusr1_handler(int sig)
 
 /*******************************************************************\
 
-Function: bmct::do_unwind_module
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::do_unwind_module(prop_convt &prop_conv)
-{
-}
-
-/*******************************************************************\
-
 Function: bmct::do_cbmc
 
   Inputs:
@@ -179,7 +163,6 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   // stop the time
   fine_timet sat_start=current_time();
 
-  do_unwind_module(prop_conv);
   do_cbmc(prop_conv, equation);
 
   prop_convt::resultt dec_result=prop_conv.dec_solve();
@@ -652,7 +635,6 @@ bmct::output_solver::~output_solver()
 bool bmct::output_solver::run_solver(symex_target_equationt &equation)
 {
 
-  bmc.do_unwind_module(*conv);
   bmc.do_cbmc(*conv, equation);
   conv->dec_solve();
   return write_output();

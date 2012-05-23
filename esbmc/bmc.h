@@ -109,8 +109,6 @@ protected:
     run_decision_procedure(prop_convt &prop_conv,
                            symex_target_equationt &equation);
 
-  virtual void do_unwind_module(prop_convt &prop_conv);
-
   virtual void do_cbmc(prop_convt &solver, symex_target_equationt &eq);
   virtual void show_vcc(symex_target_equationt &equation);
   virtual void show_vcc(std::ostream &out, symex_target_equationt &equation);
