@@ -20,6 +20,8 @@ all: $(OBJDIR)/.deps esbmc
 
 ###############################################################################
 
+STRICTCOMPILE=1
+
 include $(ESBMCDIR)/common
 
 esbmc: $(OBJS)
