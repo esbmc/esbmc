@@ -12,9 +12,9 @@ int main ()
   str2 = 'x';               // single character
   str1 += str2;       // string
   
-  str1 += "(n) in f(" + 'n' + ')';
+  str1 += "(n) in f(";// + 'n' + ')';
   
-  assert(str1 == "Test string: x(n) in f(n)"); 		//added
+  assert(str1 == "Test string: x(n) in f("); 		//added
   cout << str3  << endl;
   return 0;
 }
