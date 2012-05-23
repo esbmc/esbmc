@@ -24,6 +24,10 @@ bool goto_program_dereferencet::has_failed_symbol(
     if (has_prefix(to_symbol2t(expr).name.as_string(), "symex::invalid_object"))
       return false;
 
+    // Null and invalid name lookups will fail.
+    if (to_symbol2t(expr).name == "NULL" || to_symbol2t(expr).name == "INVALID")
+      return false;
+
     exprt tmp_sym = migrate_expr_back(expr);
     const symbolt &ptr_symbol = ns.lookup(tmp_sym);
 
