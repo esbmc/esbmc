@@ -130,13 +130,16 @@ namespace std
 		string& assign ( string& s, size_t pos = 0, size_t n );
 		string& assign ( const char* s );
 		string& assign ( size_t n, char c );
-		//template <class InputIterator>
-		   //string& assign ( InputIterator first, InputIterator last );
+		template <class InputIterator>
+		   string& assign ( InputIterator first, InputIterator last );
 		string& append ( string& s );
 		string& append ( const char* s, size_t n );
 		string& append ( string& s, size_t pos, size_t n );
 		string& append ( const char* s );
 		string& append ( size_t n, char c );
+		string& append ( const_iterator one, const_iterator two );
+		template <class InputIterator>
+		   string& append ( InputIterator first, InputIterator last );
 		void swap ( string& s );
 		void resize ( size_t n, char c );
 		void resize ( size_t n );
@@ -717,6 +720,19 @@ namespace std
 	        temp[i] = this->str[i];
 	    for(j=i, k=0; j<temp._size; j++, k++)
 	    	temp.str[j] = s[k];
+	    *this = temp;
+	    return *this;
+	}
+	string& string::append ( size_t n, char c )
+	{
+	    int rhsLen = n;
+	    int totalLen = this->_size + rhsLen;
+	    string temp(totalLen);
+	    int i, j, k;
+	    for (i=0; i<this->_size; i++)
+	        temp[i] = this->str[i];
+	    for(j=i, k=0; j<temp._size; j++, k++)
+	    	temp.str[j] = c;
 	    *this = temp;
 	    return *this;
 	}
