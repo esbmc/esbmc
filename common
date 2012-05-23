@@ -22,9 +22,9 @@ INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 # which will result in additional strictness compile flags being used.
 
 ifndef STRICTCOMPILE
-EXTRACXXFLAGS+=-fpermissive -Wno-deprecated -Wall -Wextra -std=c++0x
+EXTRACXXFLAGS+=-fpermissive -Wno-deprecated -Wall -Wextra -std=c++0x -fno-strict-aliasing
 else
-EXTRACXXFLAGS+= -W -Wall -Wextra -Werror -std=c++0x
+EXTRACXXFLAGS+= -W -Wall -Wextra -Werror -std=c++0x -fno-strict-aliasing
 endif
 
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
