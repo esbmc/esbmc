@@ -1054,7 +1054,7 @@ int cbmc_parseoptionst::do_bmc(
 
   status("Starting Bounded Model Checking");
 
-  bmc1.run(goto_functions);
+  bmc1.run();
 
 #ifndef _WIN32
   if (bmc1.options.get_bool_option("memstats")) {

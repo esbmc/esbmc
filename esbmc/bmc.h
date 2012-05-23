@@ -56,7 +56,7 @@ public:
   unsigned int uw_loop;
   bool is_cpp;
 
-  virtual bool run(const goto_functionst &goto_functions);
+  virtual bool run(void);
   virtual ~bmct() { }
 
   // additional stuff

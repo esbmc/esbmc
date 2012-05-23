@@ -335,7 +335,7 @@ Function: bmct::run
 
 \*******************************************************************/
 
-bool bmct::run(const goto_functionst &goto_functions)
+bool bmct::run(void)
 {
 #ifndef _WIN32
   struct sigaction act;
