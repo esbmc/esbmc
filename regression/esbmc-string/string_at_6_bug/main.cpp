@@ -9,7 +9,7 @@ int main ()
 {
   string str1, str2, str3, str4, str5;
   int i;
-  str1 = string("Test string: x");
+  str1 = string("Test string");
   for( i = 0 ; i < 5 ; i++ )
   	str2 += str1.at(i);
 	cout << "Test ==" << str2 << endl;
