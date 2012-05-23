@@ -9,7 +9,7 @@ int main() {
   char * buffer;
 
   ifstream is;
-  is.open ("test.txt", ios::binary );
+  is.open ("test", ios::binary );
 
   // get length of file:
   is.seekg (0, ios::end);
