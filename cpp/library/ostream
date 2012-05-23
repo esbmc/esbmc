@@ -20,7 +20,8 @@ struct ostream
 	void fill(char c);
 	void precision(int p);
 	void put(char c);
-	void write(char str[], size_t n);
+//	void write(char str[], size_t n);
+	ostream& write ( const char* s , streamsize n );
 	ostream& seekp ( streampos pos ); //model
 	ostream& seekp ( streamoff off, ios_base::seekdir dir ); //model
 	ios_base::fmtflags flags ( ) const;
@@ -214,8 +215,10 @@ namespace std
 	{
 	}
 
-	void ostream::write(char str[], size_t n)
+	//	void ostream::write(char str[], size_t n)
+	ostream& ostream::write ( const char* s , streamsize n )
 	{
+		return ostream();
 	}
 }
 

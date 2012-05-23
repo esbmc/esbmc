@@ -15,10 +15,12 @@ struct istream: ios
   istream& ignore(int i = 1, int delim = EOF);
   int get();
   istream& get(char str[], int n);
-  istream& getline(char str[], int size, char delim = '\n');
-  void read(char str[], int size);
+//  istream& getline(char str[], int size, char delim = '\n');
+  static istream& getline(char str[], int size, char delim = '\n');
+//  void read(char str[], int size);
   streamsize  gcount ( ) const;
 //  int rdstate();
+  static istream& read ( char* s, streamsize n );
   istream& seekg ( streampos pos ); // model
   istream& seekg ( streamoff off, ios_base::seekdir dir ); // model
   streampos tellg ( ); //model
@@ -106,7 +108,7 @@ istream& get(char str[], int n)
   return istream();
 }
 
-istream& getline(char str[], int size, char delim = '\n')
+static istream& istream::getline(char str[], int size, char delim = '\n')
 {
 #if 0
   char *out[nondet_uint() % n];
@@ -115,7 +117,7 @@ istream& getline(char str[], int size, char delim = '\n')
   return istream();
 }
 
-istream& read(char str[], int size)
+istream& istream::read(char* s, streamsize n)
 {
 #if 0
   char *out[nondet_uint() % size];
