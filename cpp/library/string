@@ -130,6 +130,8 @@ namespace std
 		string& assign ( string& s, size_t pos = 0, size_t n );
 		string& assign ( const char* s );
 		string& assign ( size_t n, char c );
+		//template <class InputIterator>
+		   //string& assign ( InputIterator first, InputIterator last );
 		string& append ( string& s );
 		string& append ( const char* s, size_t n );
 		string& append ( string& s, size_t pos, size_t n );
@@ -176,8 +178,6 @@ namespace std
 		str=new char[1];
 		str="";
 		_size = 0;
-		//npos = 0;
-		//str2=NULL;
 	}
 	string::string (char *s)
 	{
@@ -213,10 +213,7 @@ namespace std
 	 string::string(int len)
 	 {
 	     str = new char [len+1];
-	     //for(int i = 0; i <= len; i++)
-	         //str[i] = '\0';
 	     _size = len;
-	     //npos = _size-1;string_operator[]_5/test.desc
 	 }
 	 string::string(char c, size_t n)
 	 {
@@ -224,7 +221,6 @@ namespace std
 	     for(int i = 0; i <= n; i++)
 	         str[i] = c;
 	     _size = n;
-	     //npos = _size-1;string_operator[]_5/test.desc
 	 }
 	char* string::c_str () const
 	{
@@ -255,7 +251,7 @@ namespace std
 	bool string::operator== ( const char* lhs)
 	{
 		__ESBMC_HIDE:
-		int aux,i;
+		int aux;
 		aux = strcmp((char*)lhs, this->str);
 		if (aux == 0){
 			return true;
@@ -458,11 +454,11 @@ namespace std
 	string& string::operator= ( string& str )
 	{
 		__ESBMC_HIDE:
-		//assert(0);
-		int i;
+		int i, len;
 		this->_size=str.length();
 		this->str=new char[this->_size+1];
-		for(i=0;i<str._size;i++){
+		len = str.length();
+		for(i=0;i<len;i++){
 			this->str[i] = str.str[i];
 		}
 		this->str[i] = '\0';
@@ -539,6 +535,7 @@ namespace std
 	    strcpy(this->str, temp);
 		return *this;
 	}
+#if 0
 	string& string::operator+ ( string& s)
 	{
 		int rhsLen = s._size;
@@ -588,6 +585,7 @@ namespace std
 	    strcpy(next.str, temp);
 	    return next;
 	}
+#endif
 	void string::swap ( string& s )
 	{
 		string aux(s.str);
