@@ -262,7 +262,6 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state,
 
 bool reachability_treet::is_at_end_of_run()
 {
-
   return at_end_of_run ||
          get_cur_state().get_active_state().thread_ended ||
          get_cur_state().get_active_state().call_stack.empty();
@@ -412,7 +411,7 @@ bool reachability_treet::dfs_position::write_to_file(
     entry.location_number = htonl(it->location_number);
     entry.num_threads = htons(it->num_threads);
     entry.cur_thread = htons(it->cur_thread);
-    
+
     if (fwrite(&entry, sizeof(entry), 1, f) != 1)
       goto fail;
 
