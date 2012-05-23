@@ -6,18 +6,24 @@
 
 namespace std
 {
+
 struct istream: ios
 {
 //  streamsize width ( ) const;
 //  streamsize width ( streamsize wide );
   istream(int id = 0): id(id), ios() {}
+  istream (streambuf * sb);
   int id;
   istream& ignore(int i = 1, int delim = EOF);
+
   int get();
-  istream& get(char str[], int n);
-//  istream& getline(char str[], int size, char delim = '\n');
+  istream& get ( char& c );
+  istream& get ( char* s, streamsize n );
+  istream& get ( char* s, streamsize n, char delim );
+  istream& get ( streambuf& sb);
+  istream& get ( streambuf& sb, char delim );
+
   static istream& getline(char str[], int size, char delim = '\n');
-//  void read(char str[], int size);
   streamsize  gcount ( ) const;
 //  int rdstate();
   static istream& read ( char* s, streamsize n );
@@ -99,7 +105,8 @@ int istream::get()
     return EOF;
 }
 
-istream& get(char str[], int n)
+//istream& get(char str[], int n)
+istream& get ( char* s, streamsize n )
 {
 #if 0
   char *out[nondet_uint() % n];
@@ -135,6 +142,12 @@ streamsize istream::gcount() const
 {
   return __gcount;
 }
+
+
+//======Global Manipulators=====
+istream& ws ( istream& is );
+//=======================
+
 
 }
 

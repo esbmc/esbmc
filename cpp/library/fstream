@@ -10,7 +10,25 @@
 
 namespace std
 {
-struct filebuf{};
+
+struct filebuf: streambuf{
+	  filebuf ();
+	  virtual ~filebuf ();
+	  bool is_open ( ) { return _fileopen; }
+	  filebuf * open ( const char * s, ios_base::openmode mode ) {
+			if (_fileopen == false) {
+				_fileopen = true;
+				return this;
+			}
+			else return NULL;
+	  }
+	  void close ( ) {
+		  _fileopen = false;
+	  }
+private:
+	  bool _fileopen = false;
+};
+
 struct fstream: istream, ostream {
   fstream ();
   explicit fstream ( const char * filename,
