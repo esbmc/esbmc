@@ -256,16 +256,26 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
   }
   else
   {
+
     exprt e1 = expr.op1();
     exprt e2 = expr.op2();
 
     if(implicit_conversion_sequence(expr.op1(), expr.op2().type(), e1))
     {
-      if(implicit_conversion_sequence(expr.op2(),expr.op1().type(),e2))
+      if (expr.id()=="if")
       {
-        err_location(expr);
+	if (e2.type().id()!=e1.type().id())
+        {
+          e2.make_typecast(e1.type());
+          expr.op2().swap(e2);
+	}
+	assert(e1.type().id() == e2.type().id());
+      }
+      else if(implicit_conversion_sequence(expr.op2(),expr.op1().type(),e2))
+      {
+        err_location(expr);        
         str << "error: type is ambigious";
-        throw 0;
+        throw 0;        
       }
       expr.type()=e1.type();
       expr.op1().swap(e1);
