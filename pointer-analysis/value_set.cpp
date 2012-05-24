@@ -569,7 +569,7 @@ void value_sett::get_reference_set_rec(
         it!=object_map.end();
         it++)
     {
-      const expr2tc &object = object_numbering[it->first];
+      expr2tc object = object_numbering[it->first];
       
       if (is_unknown2t(object)) {
         expr2tc unknown = expr2tc(new unknown2t(memb.type));
@@ -580,8 +580,10 @@ void value_sett::get_reference_set_rec(
         expr2tc new_memb = expr2tc(new member2t(memb.type, object,memb.member));
         
         // adjust type?
-        if (memb.source_value->type != object->type)
-          new_memb = expr2tc(new typecast2t(memb.source_value->type, new_memb));
+        if (memb.source_value->type != object->type) {
+          object = expr2tc(new typecast2t(memb.source_value->type, object));
+          new_memb = expr2tc(new member2t(memb.type, object, memb.member));
+        }
         
         insert(dest, new_memb, o);
       }
