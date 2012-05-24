@@ -189,7 +189,7 @@ protected:
    *  Adds to target an assumption that must always be true.
    *  @param assumption Assumption that must always be true.
    */
-  virtual void assume(const exprt &assumption);
+  virtual void assume(const expr2tc &assumption);
 
   // gotos
   /**

@@ -274,7 +274,7 @@ class execution_statet : public goto_symext
    *  function.
    *  @param assumption Expression of the thing we're assuming to be true.
    */
-  virtual void assume(const exprt &assumption);
+  virtual void assume(const expr2tc &assumption);
 
   /**
    *  Fetch reference to count of dynamic objects in this state.

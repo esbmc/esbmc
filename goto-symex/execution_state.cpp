@@ -282,13 +282,13 @@ execution_statet::symex_goto(const expr2tc &old_guard)
 }
 
 void
-execution_statet::assume(const exprt &assumption)
+execution_statet::assume(const expr2tc &assumption)
 {
 
   goto_symext::assume(assumption);
 
   if (threads_state.size() > 1)
-    owning_rt->analyse_for_cswitch_after_read(assumption);
+    owning_rt->analyse_for_cswitch_after_read(migrate_expr_back(assumption));
 
   return;
 }

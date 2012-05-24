@@ -52,13 +52,11 @@ goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
 }
 
 void
-goto_symext::assume(const exprt &assumption)
+goto_symext::assume(const expr2tc &assumption)
 {
 
   // Irritatingly, assumption destroys its expr argument
-  expr2tc assumpt_dup;
-  migrate_expr(assumption, assumpt_dup);
-  target->assumption(cur_state->guard.as_expr(), assumpt_dup,cur_state->source);
+  target->assumption(cur_state->guard.as_expr(), assumption, cur_state->source);
   return;
 }
 
@@ -132,7 +130,7 @@ goto_symext::symex_step(reachability_treet & art)
         expr2tc tmp3 = tmp2;
 	cur_state->guard.guard_expr(tmp2);
 
-	assume(migrate_expr_back(tmp2));
+	assume(tmp2);
 
 	// we also add it to the state guard
 	cur_state->guard.add(tmp3);
