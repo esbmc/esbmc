@@ -68,9 +68,11 @@ namespace std
 		string ();
 		string (char*);
 		string (const char * s, size_t n);
+		string ( const string& str, size_t pos, size_t n );
 		string (string& s, size_t n);
 		string (char c, size_t n);
-		string::string(int len);
+		string (int len);
+		string (const_iterator begin, const_iterator end);
 		char* c_str ( ) const;
 	    const_iterator begin() const;
 	    const_iterator end() const;
