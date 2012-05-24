@@ -10,6 +10,6 @@ public:
 int main()
 {
 
-   CreateAndDestroy second( 2, "(local automatic in main)" );
+   static CreateAndDestroy second( 2, "(local automatic in main)" );
    return 0;
 }
