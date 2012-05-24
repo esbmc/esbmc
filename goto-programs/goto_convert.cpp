@@ -509,7 +509,7 @@ void goto_convertt::convert_block(
   }
 
   // see if we need to check for forgotten memory
-#if 0
+#if 1
   if (!for_block)
   {
   if (options.get_bool_option("memory-leak-check"))
@@ -535,8 +535,8 @@ void goto_convertt::convert_block(
     }
   }
   }
-  else
-    for_block=false;
+  //else
+    //for_block=false;
 #endif
 }
 
