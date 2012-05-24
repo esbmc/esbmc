@@ -25,16 +25,20 @@ namespace std
 
 	struct string
 	{
-		//const char *str;
 		char *str;
 		int _size;
 	public:
 
-		struct const_iterator{
+		class const_iterator{
 		public:
+			char* i_str;
+
 		    const_iterator(const const_iterator&);
 		    const_iterator();
 		    const_iterator& operator=(const const_iterator&);
+		    const_iterator(char* s){
+		    	i_str = s;
+		    }
 
 		    template<typename T>
 		    const T* operator -> ();
@@ -74,8 +78,14 @@ namespace std
 		string (int len);
 		string (const_iterator begin, const_iterator end);
 		char* c_str ( ) const;
-	    const_iterator begin() const;
-	    const_iterator end() const;
+	    const_iterator begin() const{
+	    	const_iterator first(this->str);
+	    	return first;
+	    }
+	    const_iterator end() const{
+	    	const_iterator end(this->str);
+	    	return end;
+	    }
 		bool operator== (string& b);
 		bool operator== ( const char* lhs);
 		bool operator== (string& a, string& b);
@@ -107,10 +117,9 @@ namespace std
 		string& operator+ ( string& s);
 		string& operator+ ( const char* s);
 		string& operator+ ( char s);
-		//char* operator+ ( char s){assert(0);return "";}
 		string& operator+ ( string& s1, string& s2);
 		char& operator[] ( size_t pos );
-		char& at ( size_t pos ) const;
+		char at ( size_t pos ) const;
 		bool empty ( ) const;
 		size_t length() const;
 		int compare ( const string& s ) const;
@@ -132,16 +141,48 @@ namespace std
 		string& assign ( string& s, size_t pos = 0, size_t n );
 		string& assign ( const char* s );
 		string& assign ( size_t n, char c );
-		template <class InputIterator>
-		   string& assign ( InputIterator first, InputIterator last );
+		string& assign ( const_iterator one, const_iterator two );
+		template <class T>
+		string& assign ( T first, T last ){
+			int i;
+			this->_size = first;
+			this->str = new char[first];
+			for (i = 1;i<first;i++){
+				this->str[i] = last;
+			}
+			return *this;
+		}
 		string& append ( string& s );
 		string& append ( const char* s, size_t n );
 		string& append ( string& s, size_t pos, size_t n );
 		string& append ( const char* s );
 		string& append ( size_t n, char c );
 		string& append ( const_iterator one, const_iterator two );
+//			int i, twoLen, oneLen, totalLen;
+//			char * tmp;
+//			twoLen = strlen(two.i_str);
+//			oneLen = strlen(one.i_str);
+//			totalLen = twoLen + oneLen;
+//			tmp = new char[totalLen+1];
+//			for(i=0;i<totalLen;i++){
+//				tmp[i] = one.i_str[i];
+//			}
+//			//this->append(tmp);
+//			return *this;
 		template <class InputIterator>
-		   string& append ( InputIterator first, InputIterator last );
+		   string& append ( InputIterator first, InputIterator last )
+		{
+		    int rhsLen = first;
+		    int totalLen = this->_size + rhsLen;
+		    string temp(totalLen);
+		    int i, j, k;
+		    for (i=0; i<this->_size; i++)
+		        temp[i] = this->str[i];
+		    for(j=i, k=0; j<temp._size; j++, k++)
+		    	temp.str[j] = last;
+		    *this = temp;
+		    return *this;
+		}
 		void swap ( string& s );
 		void resize ( size_t n, char c );
 		void resize ( size_t n );
@@ -244,6 +285,7 @@ namespace std
 	{
 		return is;
 	}
+
 #if 1
 	bool string::operator== (string& b)
 	{
@@ -439,7 +481,7 @@ namespace std
 	    else
 	        return this->str[pos];
 	}
-	char& string::at ( size_t pos ) const
+	char string::at ( size_t pos ) const
 	{
 		__ESBMC_assert( (pos>=0) && (pos<this->_size) , "Error! Invalid access memory area");
 		int i;
@@ -447,7 +489,7 @@ namespace std
 			throw("out_of_range");
 		}
 		else {
-			return (char&) this->str[pos];
+			return this->str[pos];
 		}
 	}
 	bool string::empty ( ) const
@@ -529,12 +571,15 @@ namespace std
 	{
 	    int totalLen = this->_size +1;
 	    char temp[totalLen+1];
-	    int i=0, j, k;
-	    if(this->_size!=0)
-	    	for (i=0; i<this->_size; i++)
+	    int i=0;
+	    if(this->_size!=0){
+	    	for (i=0; i<this->_size; i++){
 	    		temp[i] = this->str[i];
+	    	}
+	    }
 	    temp[i] = s;
-	    temp[i++] = '\0';
+	    i++;
+	    temp[i] = '\0';
 	    this->str = new char[totalLen];
 	    this->_size = totalLen;
 	    strcpy(this->str, temp);
