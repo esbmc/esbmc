@@ -62,7 +62,7 @@ reachability_treet::setup_for_new_explore(void)
   if (options.get_bool_option("schedule")) {
     s = reinterpret_cast<execution_statet*>(
                          new schedule_execution_statet(goto_functions, ns,
-                                               this, target_template,
+                                               this, target_template->clone(),
                                                permanent_context,
                                                options, &schedule_total_claims,
                                                &schedule_remaining_claims));
@@ -70,7 +70,7 @@ reachability_treet::setup_for_new_explore(void)
   } else {
     s = reinterpret_cast<execution_statet*>(
                          new dfs_execution_statet(goto_functions, ns, this,
-                                               target_template,
+                                               target_template->clone(),
                                                permanent_context, options));
     schedule_target = NULL;
   }
