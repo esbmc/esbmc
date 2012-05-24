@@ -403,7 +403,7 @@ protected:
   /** Set of state hashes we've discovered */
   std::set<crypto_hash>hit_hashes;
   /** Options that are enabled */
-  optionst options;
+  const optionst &options;
 
   friend class execution_statet;
 };
