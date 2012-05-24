@@ -526,7 +526,7 @@ void value_sett::get_reference_set_rec(
       if (is_unknown2t(object)) {
         expr2tc unknown = expr2tc(new unknown2t(expr->type));
         insert(dest, unknown);
-      } else {
+      } else if (is_array_type(object->type) || is_string_type(object->type)) {
         type2tc zero_type = type_pool.get_uint(config.ansi_c.int_width);
         expr2tc const_zero = expr2tc(new constant_int2t(zero_type, BigInt(0)));
         expr2tc new_index = expr2tc(new index2t(index.type, object,const_zero));
@@ -546,6 +546,10 @@ void value_sett::get_reference_set_rec(
           o.offset_is_set = false;
           
         insert(dest, new_index, o);
+      } else {
+        std::cerr << "Unexpected type id " << get_type_id(object->type)
+                  << " in get_reference_set index handler" << std::endl;
+        abort();
       }
     }
     
