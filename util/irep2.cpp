@@ -296,6 +296,38 @@ expr2t::operator<(const expr2t &ref) const
     return (lt(ref) < 0);
 }
 
+unsigned long
+expr2t::depth(void) const
+{
+  unsigned long num_nodes = 0;
+  expr_operands ops;
+
+  list_operands(ops);
+
+  for (expr_operands::const_iterator it = ops.begin(); it != ops.end(); it++) {
+    unsigned long tmp = (***it).depth();
+    num_nodes = std::max(num_nodes, tmp);
+  }
+
+  num_nodes++; // Count ourselves.
+  return num_nodes;
+}
+
+unsigned long
+expr2t::num_nodes(void) const
+{
+  unsigned long count = 0;
+  expr_operands ops;
+
+  list_operands(ops);
+
+  for (expr_operands::const_iterator it = ops.begin(); it != ops.end(); it++)
+    count += (***it).num_nodes();
+
+  count++; // Count ourselves.
+  return count;
+}
+
 int
 expr2t::ltchecked(const expr2t &ref) const
 {

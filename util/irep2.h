@@ -336,6 +336,8 @@ public:
   bool operator!=(const expr2t &ref) const;
   int ltchecked(const expr2t &ref) const;
   std::string pretty(unsigned int indent = 0) const;
+  unsigned long num_nodes(void) const;
+  unsigned long depth(void) const;
   void dump(void) const;
   uint32_t crc(void) const;
   virtual bool cmp(const expr2t &ref) const;
