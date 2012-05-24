@@ -32,6 +32,7 @@ reachability_treet::reachability_treet(
     symex_targett *target,
     contextt &context) :
     goto_functions(goto_functions),
+    permanent_context(context),
     ns(ns),
     options(opts)
 {
@@ -45,6 +46,15 @@ reachability_treet::reachability_treet(
   else
     por = true;
 
+  target_template = target;
+}
+
+void
+reachability_treet::setup_for_new_explore(void)
+{
+
+  execution_states.clear();
+
   at_end_of_run = false;
   has_complete_formula = false;
 
@@ -52,14 +62,16 @@ reachability_treet::reachability_treet(
   if (options.get_bool_option("schedule")) {
     s = reinterpret_cast<execution_statet*>(
                          new schedule_execution_statet(goto_functions, ns,
-                                               this, target, context, opts,
-                                               &schedule_total_claims,
+                                               this, target_template,
+                                               permanent_context,
+                                               options, &schedule_total_claims,
                                                &schedule_remaining_claims));
-    schedule_target = target;
+    schedule_target = target_template;
   } else {
     s = reinterpret_cast<execution_statet*>(
                          new dfs_execution_statet(goto_functions, ns, this,
-                                               target, context, opts));
+                                               target_template,
+                                               permanent_context, options));
     schedule_target = NULL;
   }
 
@@ -651,6 +663,8 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
 goto_symext::symex_resultt *
 reachability_treet::get_next_formula()
 {
+
+  assert(execution_states.size() > 0 && "Must setup RT before exploring");
 
   while(!is_has_complete_formula())
   {

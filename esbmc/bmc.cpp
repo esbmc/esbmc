@@ -369,6 +369,8 @@ bool bmct::run(const goto_functionst &goto_functions)
   sigaction(SIGUSR1, &act, NULL);
 #endif
 
+  symex.setup_for_new_explore();
+
   if(options.get_bool_option("schedule"))
   {
     if(options.get_bool_option("uw-model"))
