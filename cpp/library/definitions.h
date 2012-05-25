@@ -23,7 +23,7 @@
 #ifdef _WIN64
     typedef __int64 streamsize;
 #else
-    typedef int streamsize;
+    typedef unsigned int streamsize;
 #endif
 
 unsigned int nondet_uint();

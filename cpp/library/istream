@@ -3,6 +3,8 @@
 
 #include "ios"
 #include "definitions.h"
+#include "cstring"
+
 
 namespace std
 {
@@ -11,8 +13,8 @@ struct istream: ios
 {
 //  streamsize width ( ) const;
 //  streamsize width ( streamsize wide );
-  istream(int id = 0): id(id), ios() {}
-  istream (streambuf * sb);
+  istream(int id = 0): id(id), ios(), _gcount(0) {}
+  istream (streambuf * sb): _gcount(0) {}
   int id;
   istream& ignore(int i = 1, int delim = EOF);
 
@@ -23,12 +25,15 @@ struct istream: ios
   istream& get ( streambuf& sb);
   istream& get ( streambuf& sb, char delim );
 
-  static istream& getline(char str[], int size, char delim = '\n');
+//  static istream& getline(char str[], int size, char delim = '\n');
+  istream& getline (char* s, streamsize n );
+  istream& getline (char* s, streamsize n, char delim );
+
   streamsize  gcount ( ) const;
 //  int rdstate();
-  static istream& read ( char* s, streamsize n );
-  istream& seekg ( streampos pos ); // model
-  istream& seekg ( streamoff off, ios_base::seekdir dir ); // model
+  istream& read ( char* s, streamsize n );
+  istream& seekg ( streampos pos );
+  istream& seekg ( streamoff off, ios_base::seekdir dir );
   streampos tellg ( ); //model
 
   int peek ( );
@@ -37,13 +42,13 @@ struct istream: ios
   istream& unget ( );
 
   int sync ( );
-protected:
-  streamsize        __gcount;
-
 
 private:
+  streamsize _gcount;
   istream(const istream&); // disabled
   istream& operator=(const istream&); // disabled
+  streamsize _filesize = nondet_uint();
+  streampos _filepos = 0;
 };
 }
 
@@ -99,30 +104,42 @@ inline istream& operator >> (istream& is, double& d)
 
 int istream::get()
 {
-  if (nondet_bool())
-    return (int) nondet_char();
+  _gcount = 1;
+  if (nondet_bool()) {
+	  return (int) nondet_char();
+  }
   else
     return EOF;
 }
 
 //istream& get(char str[], int n)
-istream& get ( char* s, streamsize n )
+istream& istream::get ( char* s, streamsize n )
 {
 #if 0
   char *out[nondet_uint() % n];
   str = out;
 #endif
+  _gcount = n;
   return istream();
 }
 
-static istream& istream::getline(char str[], int size, char delim = '\n')
-{
-#if 0
-  char *out[nondet_uint() % n];
-  str = out;
-#endif
-  return istream();
+//static istream& istream::getline(char str[], int size, char delim = '\n')
+//{
+//#if 0
+//  char *out[nondet_uint() % n];
+//  str = out;
+//#endif
+//
+//  return istream();
+//}
+istream& istream::getline (char* s, streamsize n ) {
+	_gcount = n;
+	return istream();
 }
+ istream& istream::getline (char* s, streamsize n, char delim ) {
+	_gcount = n;
+	return istream();
+ }
 
 istream& istream::read(char* s, streamsize n)
 {
@@ -130,7 +147,11 @@ istream& istream::read(char* s, streamsize n)
   char *out[nondet_uint() % size];
   str = out;
 #endif
-  return istream();
+//    	size_t slen = strlen(s);
+    _gcount = n;
+//	if(slen<=n) _gcount = slen;
+//	else _gcount = n;
+    return *this;
 }
 
 istream& ignore(int i = 1, int delim = EOF)
@@ -140,9 +161,43 @@ istream& ignore(int i = 1, int delim = EOF)
 
 streamsize istream::gcount() const
 {
-  return __gcount;
+  return _gcount;
 }
 
+int istream::peek ( ) {
+	_gcount = 1;
+	return nondet_uint();
+}
+streamsize istream::readsome ( char* s, streamsize n ) {
+#if 0
+	size_t len = strlen(s);
+	if(n<=len) _gcount = n;
+	else _gcount = len;
+#else
+	_gcount = n;
+#endif
+	return _gcount;
+}
+istream& istream::putback ( char c ) {
+	_gcount = 0;
+	return *this;
+}
+istream& istream::unget ( );
+
+istream& istream::seekg ( ios::streampos pos ) {
+	//__ESBMC_assert (pos<=_filesize, "Invalid stream position");
+	_filepos = pos;
+	return *this;
+}
+istream& istream::seekg ( ios::streamoff off, ios_base::seekdir dir ) {
+	if (dir==ios::beg) {_filepos=off;}
+	if (dir==ios::cur) {_filepos+=off;}
+	if (dir==ios::end) {_filepos=_filesize-off;}
+	return *this;
+}
+ios::streampos istream::tellg ( ) {
+	return _filepos;
+}
 
 //======Global Manipulators=====
 istream& ws ( istream& is );

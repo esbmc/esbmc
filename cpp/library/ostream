@@ -30,6 +30,8 @@ struct ostream
 private:
 	ostream(const ostream&); // disabled
 	ostream& operator=(const ostream&); // disabled
+	streamsize _filesize = nondet_uint();
+	ios::streampos _filepos = 0;
 };
 }
 
