@@ -388,7 +388,8 @@ void goto_symext::symex_assign_byte_extract(
 
 void goto_symext::replace_nondet(exprt &expr)
 {
-  if(expr.id()=="sideeffect" && expr.statement()=="nondet")
+  if ((expr.id()=="sideeffect" && expr.statement()=="nondet")
+	|| expr.id()=="nondet_symbol")
   {
     unsigned int &nondet_count = get_dynamic_counter();
     exprt new_expr("nondet_symbol", expr.type());

@@ -651,7 +651,8 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
   if (type.id() == "bool") {
     bv = Z3_mk_bool_type(z3_ctx);
   } else if (type.id() == "signedbv" || type.id() == "unsignedbv" ||
-             type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
+             type.id() == "c_enum" || type.id() == "incomplete_c_enum" /*||
+	     type.get("return_type") == "signedbv"*/) {
     get_type_width(type, width);
 
     if (int_encoding)
@@ -673,14 +674,18 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
     create_union_type(type, bv);
   } else if (type.id() == "pointer")     {
     create_pointer_type(bv);
-  } else if (type.id() == "empty" || type.id() == "c_enum")     {
+  } else if (type.id() == "symbol" || type.id() == "empty" ||
+             type.id() == "c_enum" /*|| type.get("return_type") == "empty"*/) {
     if (int_encoding)
       bv = Z3_mk_int_type(z3_ctx);
     else
       bv = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
-  } else
+  } else {
+    std::cout << "type.pretty(): " << type.pretty() << std::endl;
+    std::cout << "return_type: " << type.get("return_type") << std::endl;
+    assert(0);
     throw new conv_error("unexpected type in create_type", type);
-
+  }
   DEBUGLOC;
 
   return;
@@ -2111,7 +2116,9 @@ void
 z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
-
+  //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
+  //std::cout << "expr.op0().type(): " << expr.op0().type() << std::endl;
+  //std::cout << "expr.op1().type(): " << expr.op1().type() << std::endl;
   assert(expr.operands().size() == 2);
   assert((expr.op0().type().id() == "pointer" &&
           expr.op1().type().id() == "pointer") ||
@@ -2695,7 +2702,7 @@ void
 z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
-
+  //std::cout << "convert_with: " << expr.pretty() << std::endl;
   assert(expr.operands().size() == 3);
   Z3_ast array_var, array_val, operand0, operand1, operand2;
 
@@ -2706,8 +2713,10 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
     convert_bv(expr.op2(), array_val);
 
     idx = convert_member_name(expr.op0(), expr.op1());
-    bv = z3_api.mk_tuple_update(array_var, idx, array_val);
 
+    //DEBUGLOC;
+    bv = z3_api.mk_tuple_update(array_var, idx, array_val);
+    //DEBUGLOC;
     // Update last-updated-field field if it's a union
     if (expr.type().id() == "union") {
        unsigned int components_size =
@@ -2759,8 +2768,27 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
        it != components.end();
        it++, i++)
   {
+    //std::cout << "it->is_typecast(): " << it->is_typecast() << std::endl;
+    //std::cout << "name: " << it->get("name") << std::endl;
+    //std::cout << "component_name: " << rhs.get_string("component_name") << std::endl;
+    //std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
+    //std::cout << "rhs.type().id(): " << rhs.type().id() << std::endl;
+    //std::cout << "it->type().id(): " << it->type().id() << std::endl;
+
     if (it->get("name").compare(rhs.get_string("component_name")) == 0)
       return i;
+    else if (it->is_typecast())
+    {
+      //std::cout << "dentro do typecast it->pretty(): " << it->pretty() << std::endl;
+      //std::cout << "name: " << it->op0().get_string("identifier") << std::endl;
+      //std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
+      //std::cout << "rhs.type().id(): " << rhs.type().id() << std::endl;
+      //std::cout << "it->type().id(): " << it->type().id() << std::endl;
+      //std::cout << "component name do rhs: " << rhs.get_string("component_name") << std::endl;
+      if (it->op0().get_string("identifier").compare(rhs.get_string("component_name")) == 0)
+        return i;
+    }
+
   }
 
   throw new conv_error("component name not found in struct", lhs);
@@ -2791,6 +2819,11 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 
   j = convert_member_name(expr.op0(), expr);
 
+    //std::cout << "j: " << j << std::endl;
+    //std::cout << "expr.op0(): " << expr.op0().pretty() << std::endl;
+    //std::cout << "expr.op0(): " << expr.op0().components()[j] << std::endl;
+    //std::cout << "expr: " << expr.type().id() << std::endl;
+
   if (expr.op0().type().id() == "union") {
     union_varst::const_iterator cache_result = union_vars.find(
       expr.op0().get_string("identifier").c_str());
@@ -2818,6 +2851,29 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 
   bv = z3_api.mk_tuple_select(struct_var, j);
 
+
+  if (config.options.get_bool_option("k-induction"))
+  {
+    if (expr.type().is_bool() &&
+        expr.op0().type().is_struct())
+    {
+      Z3_ast cond;
+      unsigned width;
+      const struct_typet &struct_type = to_struct_type(expr.op0().type());
+      //std::cout << "struct_type.components[j].pretty(): " << struct_type.components()[j].pretty() << std::endl;
+
+      get_type_width(struct_type.components()[j].type(), width);
+
+      if (struct_type.components()[j].type().id() == "signedbv")
+        cond = Z3_mk_eq(z3_ctx, bv, convert_number(0, width, true));
+      else if (struct_type.components()[j].type().id() == "unsignedbv")
+        cond = Z3_mk_eq(z3_ctx, bv, convert_number(0, width, false));
+      else
+        assert(0);
+
+      bv = Z3_mk_ite(z3_ctx, cond, Z3_mk_false(z3_ctx), Z3_mk_true(z3_ctx));
+    }
+  }
   DEBUGLOC;
 }
 
@@ -3107,9 +3163,11 @@ z3_convt::convert_z3_expr(const exprt &expr, Z3_ast &bv)
 
   if (exprid == "symbol")
     convert_identifier(expr.get_string("identifier"), expr.type(), bv);
-  else if (exprid == "nondet_symbol")
+  else if (exprid == "nondet_symbol") {
+    //std::cout << expr.get_string("identifier") << std::endl;
     convert_identifier("nondet$" + expr.get_string("identifier"),
                        expr.type(), bv);
+  }
   else if (exprid == "typecast")
     convert_typecast(expr, bv);
   else if (exprid == "struct" || exprid == "union")
