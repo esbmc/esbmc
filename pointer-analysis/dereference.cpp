@@ -514,7 +514,9 @@ void dereferencet::build_reference_to(
         {
           //nec: ex29
 		  std::string name = value.type().get("name").as_string();
-		  if(name == "cpp::std::struct.ofstream")
+		  if(name == "cpp::std::struct.ofstream" ||
+				  name == "cpp::std::struct.fstream" ||
+				  name == "cpp::std::struct.ifstream")
 			 return ;
           if (value.type().subtype().id()=="empty"
         		  || type.subtype().id()=="empty")
