@@ -781,11 +781,19 @@ expr2tc
 or2t::do_simplify(bool second __attribute__((unused))) const
 {
 
+  // If either operand is true, the expr is true
   if (is_constant_bool2t(side_1) && to_constant_bool2t(side_1).constant_value)
     return expr2tc(new constant_bool2t(true));
 
   if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).constant_value)
     return expr2tc(new constant_bool2t(true));
+
+  // If both or operands are false, the expr is false.
+  if (is_constant_bool2t(side_1)
+      && !to_constant_bool2t(side_1).constant_value
+      && is_constant_bool2t(side_2)
+      && !to_constant_bool2t(side_2).constant_value)
+    return expr2tc(new constant_bool2t(false));
 
   return expr2tc();
 }
