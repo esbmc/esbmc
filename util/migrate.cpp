@@ -1039,6 +1039,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(new buffer_size2t(type, op0));
   } else if (expr.id() == "code" && expr.statement() == "goto") {
     new_expr_ref = expr2tc(new code_goto2t(expr.get("destination")));
+  } else if (expr.id() == "comma") {
+    migrate_type(expr.type(), type);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    new_expr_ref = expr2tc(new code_comma2t(type, op0, op1));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1905,6 +1910,14 @@ migrate_expr_back(const expr2tc &ref)
     forall_exprs(it, ref2.operands) {
       args.operands().push_back(migrate_expr_back(*it));
     }
+    return codeexpr;
+  }
+  case expr2t::code_comma_id:
+  {
+    const code_comma2t &ref2 = to_code_comma2t(ref);
+    exprt codeexpr("comma", migrate_type_back(ref2.type));
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.side_1),
+                              migrate_expr_back(ref2.side_2));
     return codeexpr;
   }
   case expr2t::invalid_pointer_id:

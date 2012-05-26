@@ -311,6 +311,7 @@ public:
     code_goto_id,
     object_descriptor_id,
     code_function_call_id,
+    code_comma_id,
     invalid_pointer_id,
     buffer_size_id,
     to_bv_typecast_id,
@@ -2078,6 +2079,20 @@ template class esbmct::expr<code_function_call2t, esbmct::expr2tc_ret,
                                                   esbmct::expr2tc_function,
                                                   esbmct::expr2tc_vec_operands>;
 
+class code_comma2t : public esbmct::expr<code_comma2t, esbmct::expr2tc_side_1,
+                                                       esbmct::expr2tc_side_2>
+{
+public:
+  code_comma2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
+    : esbmct::expr<code_comma2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
+      (t, code_comma_id, s1, s2) {}
+  code_comma2t(const code_comma2t &ref)
+    : esbmct::expr<code_comma2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
+      (ref) { }
+};
+template class esbmct::expr<code_comma2t, esbmct::expr2tc_side_1,
+                                          esbmct::expr2tc_side_2>;
+
 class invalid_pointer2t : public esbmct::expr<invalid_pointer2t,
                                                  esbmct::expr2tc_ptr_obj>
 {
@@ -2248,6 +2263,7 @@ expr_macros(code_free);
 expr_macros(code_goto);
 expr_macros(object_descriptor);
 expr_macros(code_function_call);
+expr_macros(code_comma);
 expr_macros(invalid_pointer);
 expr_macros(buffer_size);
 #undef expr_macros
@@ -2414,6 +2430,7 @@ typedef irep_container<object_descriptor2t, expr2t::object_descriptor_id>
                        object_descriptor2tc;
 typedef irep_container<code_function_call2t, expr2t::code_function_call_id>
                        code_function_call2tc;
+typedef irep_container<code_comma2t, expr2t::code_comma_id> code_comma2tc;
 typedef irep_container<invalid_pointer2t, expr2t::invalid_pointer_id>
                        code_invalid_pointer2tc;
 typedef irep_container<buffer_size2t, expr2t::buffer_size_id> buffer_size2tc;

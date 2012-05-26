@@ -523,6 +523,7 @@ static const char *expr_names[] = {
   "code_goto",
   "object_descriptor",
   "code_function_call",
+  "code_comma_id",
   "invalid_pointer",
   "buffer_size",
   "from_bv_typecast",
