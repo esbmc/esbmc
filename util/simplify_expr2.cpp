@@ -883,10 +883,14 @@ do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
     val1 |= -1LL << (type->get_width());
   }
 
-  // And now, restore. It's debatable as to whether we should treat this as
-  // being negative or not; something that can be worried about and tested in
-  // the future.
-  constant_int2t *theint = new constant_int2t(type, BigInt(val1));
+  // And now, restore, paying attention to whether this is supposed to be
+  // signed or not.
+  constant_int2t *theint;
+  if (is_signedbv_type(type))
+    theint = new constant_int2t(type, BigInt(val1));
+  else
+    theint = new constant_int2t(type, BigInt((uint64_t)val1));
+
   return expr2tc(theint);
 }
 
