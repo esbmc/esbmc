@@ -1353,3 +1353,38 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   return tmp;
 #endif
 }
+
+// Heavily inspired by cbmc's simplify_exprt::objects_equal_address_of
+static expr2tc
+obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
+{
+
+  if (is_symbol2t(a) && is_symbol2t(b)) {
+    if (to_symbol2t(a).name == to_symbol2t(b).name)
+      return expr2tc(new constant_bool2t(true));
+  } else if (is_index2t(a) && is_index2t(b)) {
+    return obj_equals_addr_of(to_index2t(a).source_value,
+                              to_index2t(b).source_value);
+  } else if (is_member2t(a) && is_member2t(b)) {
+    return obj_equals_addr_of(to_member2t(a).source_value,
+                              to_member2t(b).source_value);
+  }
+
+  return expr2tc();
+}
+
+expr2tc
+same_object2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  if (is_address_of2t(side_1) && is_address_of2t(side_2))
+    return obj_equals_addr_of(to_address_of2t(side_1).ptr_obj,
+                              to_address_of2t(side_2).ptr_obj);
+
+  if (is_symbol2t(side_1) && is_symbol2t(side_2) &&
+      to_symbol2t(side_1).name == "NULL" &&
+      to_symbol2t(side_1).name == "NULL")
+    return expr2tc(new constant_bool2t(true));
+
+  return expr2tc();
+}

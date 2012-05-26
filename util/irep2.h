@@ -1574,6 +1574,7 @@ public:
   same_object2t(const same_object2t &ref)
     : esbmct::expr<same_object2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
       (ref) {}
+  virtual expr2tc do_simplify(bool second) const;
 };
 template class esbmct::expr<same_object2t, esbmct::expr2tc_side_1,
                                          esbmct::expr2tc_side_2>;
