@@ -1035,9 +1035,12 @@ typecast2t::do_simplify(bool second) const
     expr2tc eq = expr2tc(new equality2t(from, zero));
     expr2tc noteq = expr2tc(new not2t(eq));
     return noteq;
-  } else if (is_symbol2t(from) && to_symbol2t(from).name.as_string() == "NULL"){
-    // Casts of null can operate on null directly. Use of strings here is
-    // inefficient XXX jmorse
+  } else if (is_symbol2t(from) && to_symbol2t(from).name.as_string() == "NULL"
+             && is_pointer_type(type)){
+    // Casts of null can operate on null directly. So long as we're casting it
+    // to a pointer. Code like 32_floppy casts it to an int though; were we to
+    // simplify that away, we end up with Z3 type errors.
+    // Use of strings here is inefficient XXX jmorse
     return from;
   } else if (is_pointer_type(type) && is_pointer_type(from->type)) {
     // Casting from one pointer to another is meaningless
