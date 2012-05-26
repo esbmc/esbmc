@@ -134,13 +134,14 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       cur_state->rename(guard_expr);
     }
 
+    expr2tc not_guard_expr = expr2tc(new not2t(guard_expr));
+    do_simplify(not_guard_expr);
+
     if (forward) {
       new_state.guard.add(guard_expr);
-      expr2tc not_guard_expr = expr2tc(new not2t(guard_expr));
       cur_state->guard.add(not_guard_expr);
     } else   {
       cur_state->guard.add(guard_expr);
-      expr2tc not_guard_expr = expr2tc(new not2t(guard_expr));
       new_state.guard.add(not_guard_expr);
     }
   }
