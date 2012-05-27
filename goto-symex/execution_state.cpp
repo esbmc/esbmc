@@ -525,44 +525,6 @@ execution_statet::add_thread(const goto_programt *prog)
 
 unsigned int
 execution_statet::get_expr_write_globals(const namespacet &ns,
-  const exprt & expr)
-{
-
-  std::string identifier = expr.identifier().as_string();
-
-  if (expr.id() == exprt::addrof ||
-      expr.id() == "valid_object" ||
-      expr.id() == "dynamic_size" ||
-      expr.id() == "dynamic_type" ||
-      expr.id() == "is_zero_string" ||
-      expr.id() == "zero_string" ||
-      expr.id() == "zero_string_length")
-    return 0;
-  else if (expr.id() == exprt::symbol) {
-    const irep_idt &id = expr.identifier();
-    const irep_idt &identifier = get_active_state().get_original_name(id);
-    const symbolt &symbol = ns.lookup(identifier);
-    if (identifier == "c::__ESBMC_alloc"
-        || identifier == "c::__ESBMC_alloc_size")
-      return 0;
-    else if ((symbol.static_lifetime || symbol.type.is_dynamic_set())) {
-      exprs_read_write.at(active_thread).write_set.insert(identifier);
-      return 1;
-    } else
-      return 0;
-  }
-
-  unsigned int globals = 0;
-
-  forall_operands(it, expr) {
-    globals += get_expr_write_globals(ns, *it);
-  }
-
-  return globals;
-}
-
-unsigned int
-execution_statet::get_expr_write_globals(const namespacet &ns,
                                          const expr2tc &expr)
 {
 
@@ -588,52 +550,6 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
 
   forall_operands2(it, op_list, expr) {
     globals += get_expr_write_globals(ns, **it);
-  }
-
-  return globals;
-}
-
-unsigned int
-execution_statet::get_expr_read_globals(const namespacet &ns,
-  const exprt & expr)
-{
-
-  std::string identifier = expr.identifier().as_string();
-
-  if (expr.id() == exprt::addrof ||
-      expr.type().id() == typet::t_pointer ||
-      expr.id() == "valid_object" ||
-      expr.id() == "dynamic_size" ||
-      expr.id() == "dynamic_type" ||
-      expr.id() == "is_zero_string" ||
-      expr.id() == "zero_string" ||
-      expr.id() == "zero_string_length")
-    return 0;
-  else if (expr.id() == exprt::symbol) {
-    const irep_idt &id = expr.identifier();
-    const irep_idt &identifier = get_active_state().get_original_name(id);
-
-    if (identifier == "goto_symex::\\guard!" +
-        i2string(get_active_state().top().level1._thread_id))
-      return 0;
-
-    const symbolt *symbol;
-    if (ns.lookup(identifier, symbol))
-      return 0;
-
-    if (identifier == "c::__ESBMC_alloc" || identifier ==
-        "c::__ESBMC_alloc_size")
-      return 0;
-    else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
-      exprs_read_write.at(active_thread).read_set.insert(identifier);
-      return 1;
-    } else
-      return 0;
-  }
-  unsigned int globals = 0;
-
-  forall_operands(it, expr) {
-    globals += get_expr_read_globals(ns, *it);
   }
 
   return globals;
