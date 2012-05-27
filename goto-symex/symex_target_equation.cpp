@@ -291,7 +291,9 @@ void
 runtime_encoded_equationt::push_ctx(void)
 {
 
-  scoped_end_points.push_back(SSA_steps.end()--);
+  SSA_stepst::iterator it = SSA_steps.end();
+  --it;
+  scoped_end_points.push_back(it);
   conv.push_ctx();
 }
 
@@ -300,7 +302,11 @@ runtime_encoded_equationt::pop_ctx(void)
 {
 
   conv.pop_ctx();
-  SSA_steps.erase(scoped_end_points.back()++, SSA_steps.end());
+
+  SSA_stepst::iterator it = scoped_end_points.back();
+  ++it;
+  SSA_steps.erase(it, SSA_steps.end());
+
   scoped_end_points.pop_back();
 }
 
