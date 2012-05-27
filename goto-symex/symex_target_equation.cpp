@@ -94,14 +94,28 @@ void symex_target_equationt::assertion(
   SSA_step.stack_trace = stack_trace;
 }
 
-void symex_target_equationt::convert(
-  prop_convt &prop_conv)
+
+void symex_target_equationt::convert(prop_convt &prop_conv)
+{
+  bvt assertions;
+  literalt assumpt_lit = const_literal(true);
+
+  convert_internal(prop_conv, assumpt_lit, assertions);
+
+  if (!assertions.empty())
+    prop_conv.lcnf(assertions);
+
+  return;
+}
+
+void symex_target_equationt::convert_internal(prop_convt &prop_conv,
+                                             literalt &assumpt_lit,
+                                             bvt &assertions_lits)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
   bvt assert_bv;
   literalt true_lit = const_literal(true);
   literalt false_lit = const_literal(false);
-  literalt assumpt_lit = true_lit;
 
   for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
   {
@@ -145,14 +159,11 @@ void symex_target_equationt::convert(
 
     if (it->is_assert()) {
       it->cond_literal = prop_conv.limplies(assumpt_lit, it->cond_literal);
-      assert_bv.push_back(prop_conv.lnot(it->cond_literal));
+      assertions_lits.push_back(prop_conv.lnot(it->cond_literal));
     } else if (it->is_assume()) {
       assumpt_lit = prop_conv.land(assumpt_lit, it->cond_literal);
     }
   }
-
-  if (!assert_bv.empty())
-    prop_conv.lcnf(assert_bv);
 
   return;
 }
