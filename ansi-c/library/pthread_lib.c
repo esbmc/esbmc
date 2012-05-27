@@ -91,6 +91,8 @@ __ESBMC_hide:
   num_total_threads++;
   num_threads_running++;
   pthread_thread_running[thread_id] = true;
+  pthread_thread_ended[thread_id] = false;
+  pthread_end_values[thread_id] = NULL;
   __ESBMC_set_thread_internal_data(thread_id, startdata);
 
   // pthread_t is actually an unsigned long int; identify a thread using just

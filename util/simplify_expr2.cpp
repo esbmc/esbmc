@@ -554,6 +554,16 @@ with2t::do_simplify(bool second __attribute__((unused))) const
   } else if (is_constant_array_of2t(source_value)) {
     const constant_array_of2t &array = to_constant_array_of2t(source_value);
 
+    // We don't simplify away these withs if // the array_of is infinitely
+    // sized. This is because infinitely sized arrays are no longer converted
+    // correctly in the solver backend (they're simply not supported by SMT).
+    // Thus it becomes important to be able to assign a value to a field in an
+    // aray_of and not have it const propagatated away.
+    const constant_array_of2t &thearray = to_constant_array_of2t(source_value);
+    const array_type2t &arr_type = to_array_type(thearray.type);
+    if (arr_type.size_is_infinite)
+      return expr2tc();
+
     // We can eliminate this operation if the operand to this with is the same
     // as the initializer.
     if (update_value == array.initializer)
