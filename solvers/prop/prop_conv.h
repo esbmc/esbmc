@@ -32,7 +32,10 @@ Author: Daniel Kroening, kroening@kroening.com
 class prop_convt : public messaget
 {
 public:
-  explicit prop_convt() { }
+  explicit prop_convt()
+  {
+    ctx_level = 0;
+  }
   virtual ~prop_convt() { }
 
   typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
@@ -85,6 +88,8 @@ public:
 protected:
   virtual literalt convert_expr(const expr2tc &expr) = 0;
   
+  unsigned int ctx_level;
+
   // cache
   struct lit_cachet {
     const expr2tc val;

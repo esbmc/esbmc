@@ -70,8 +70,10 @@ void prop_convt::set_equal(literalt a, literalt b)
 
 void prop_convt::push_ctx(void)
 {
+  ctx_level++;
 }
 
 void prop_convt::pop_ctx(void)
 {
+  ctx_level--;
 }
