@@ -1848,10 +1848,10 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
       const std::vector<type2tc> &members =
         get_structure_members(member.source_value->type);
 
-      const type2tc source_type = members[cache_result->second];
+      const type2tc source_type = members[cache_result->idx];
       if (source_type == member.type) {
         // Type we're fetching from union matches expected type; just return it.
-        bv = z3_api.mk_tuple_select(struct_var, cache_result->second);
+        bv = z3_api.mk_tuple_select(struct_var, cache_result->idx);
         return;
       }
 
@@ -2825,7 +2825,8 @@ z3_convt::set_to(const expr2tc &expr, bool value)
       assert(idx != type.member_names.size() &&
              "Member name of with expr not found in struct/union type");
 
-      union_vars.insert(std::pair<std::string, unsigned int>(ref, idx));
+      union_var_mapt mapentry = { ref, idx, 0 };
+      union_vars.insert(mapentry);
     }
   }
 

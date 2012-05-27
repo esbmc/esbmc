@@ -207,7 +207,28 @@ private:
     >
   > bv_cachet;
 
+  // Types for union map.
+  struct union_var_mapt {
+    std::string ident;
+    unsigned int idx;
+    unsigned int level;
+  };
+
+  typedef boost::multi_index_container<
+    union_var_mapt,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(union_var_mapt, std::string, ident)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(union_var_mapt, unsigned int, level),
+        std::greater<unsigned int>
+      >
+    >
+  > union_varst;
+
   bv_cachet bv_cache;
+  union_varst union_vars;
   typedef hash_map_cont<const type2tc, Z3_sort, type2_hash> sort_cachet;
   sort_cachet sort_cache;
 
@@ -257,9 +278,6 @@ private:
   bool int_encoding, smtlib, store_assumptions, uw;
   std::list<Z3_ast> assumptions;
   std::string filename;
-
-  typedef std::map<std::string, unsigned int> union_varst;
-  union_varst union_vars;
 
   unsigned int array_of_count;
   irep_idt dyn_info_arr_name;
