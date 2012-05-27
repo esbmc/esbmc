@@ -93,7 +93,7 @@ bool reachability_treet::analyse_for_cswitch_after_read(const expr2tc &code)
 {
 
   if (get_cur_state().get_expr_read_globals(ns, code) > 0)
-    return analyse_for_cswitch_base(migrate_expr_back(code));
+    return analyse_for_cswitch_base(code);
   else
     return false;
 }
@@ -108,10 +108,7 @@ bool reachability_treet::analyse_for_cswitch_after_assign(const expr2tc &code)
     get_cur_state().get_expr_read_globals(ns, assign.source);
 
   if(num_read_globals + num_write_globals > 0)
-  {
-    exprt thecode = migrate_expr_back(code);
-    return analyse_for_cswitch_base(thecode);
-  }
+    return analyse_for_cswitch_base(code);
 
   return false;
 }
@@ -120,10 +117,10 @@ bool reachability_treet::force_cswitch_point()
 {
 
   // do analysis here
-  return analyse_for_cswitch_base(exprt());
+  return analyse_for_cswitch_base(expr2tc());
 }
 
-bool reachability_treet::analyse_for_cswitch_base(const exprt &expr)
+bool reachability_treet::analyse_for_cswitch_base(const expr2tc &expr)
 {
 
   execution_statet &ex_state = get_cur_state();
@@ -138,14 +135,11 @@ bool reachability_treet::analyse_for_cswitch_base(const exprt &expr)
       return false;
   }
 
-  if(expr.is_not_nil())
-  {
-    ex_state.last_global_read_write = ex_state.exprs_read_write.at(ex_state.active_thread);
-  }
+  ex_state.last_global_read_write = ex_state.exprs_read_write.at(ex_state.active_thread);
 
   unsigned int tid = 0;
 
-  tid = decide_ileave_direction(ex_state, expr);
+  tid = decide_ileave_direction(ex_state, migrate_expr_back(expr));
 
   at_end_of_run = true;
   next_thread_id = tid;

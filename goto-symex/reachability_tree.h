@@ -151,7 +151,7 @@ public:
    *  @param expr Expression causing this context switch. For POR.
    *  @return True if context switch is to be taken.
    */
-  bool analyse_for_cswitch_base(const exprt & expr);
+  bool analyse_for_cswitch_base(const expr2tc & expr);
 
   /**
    *  Force context switch, regardless of state.
