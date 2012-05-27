@@ -100,7 +100,8 @@ void symex_target_equationt::convert(prop_convt &prop_conv)
   bvt assertions;
   literalt assumpt_lit = const_literal(true);
 
-  convert_internal(prop_conv, assumpt_lit, assertions);
+  for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
+    convert_internal_step(prop_conv, assumpt_lit, assertions, *it);
 
   if (!assertions.empty())
     prop_conv.lcnf(assertions);
@@ -108,61 +109,57 @@ void symex_target_equationt::convert(prop_convt &prop_conv)
   return;
 }
 
-void symex_target_equationt::convert_internal(prop_convt &prop_conv,
-                                             literalt &assumpt_lit,
-                                             bvt &assertions_lits)
+void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
+                   literalt &assumpt_lit, bvt &assertions_lits, SSA_stept &step)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
   bvt assert_bv;
   literalt true_lit = const_literal(true);
   literalt false_lit = const_literal(false);
 
-  for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
-  {
-    if (it->ignore) {
-      it->cond_literal = true_lit;
-      it->guard_literal = false_lit;
-      continue;
-    }
+  if (step.ignore) {
+    step.cond_literal = true_lit;
+    step.guard_literal = false_lit;
+    return;
+  }
 
-    expr2tc tmp(it->guard);
-    it->guard_literal = prop_conv.convert(tmp);
+  expr2tc tmp(step.guard);
+  step.guard_literal = prop_conv.convert(tmp);
 
-    if (it->is_assume() || it->is_assert()) {
-      expr2tc tmp(it->cond);
-      it->cond_literal = prop_conv.convert(tmp);
-    } else if (it->is_assignment()) {
-      expr2tc tmp2(it->cond);
-      prop_conv.set_to(tmp2, true);
-    } else if (it->is_output()) {
-      for(std::list<expr2tc>::const_iterator
-          o_it=it->output_args.begin();
-          o_it!=it->output_args.end();
-          o_it++)
+  if (step.is_assume() || step.is_assert()) {
+    expr2tc tmp(step.cond);
+    step.cond_literal = prop_conv.convert(tmp);
+  } else if (step.is_assignment()) {
+    expr2tc tmp2(step.cond);
+    prop_conv.set_to(tmp2, true);
+  } else if (step.is_output()) {
+    for(std::list<expr2tc>::const_iterator
+        o_it = step.output_args.begin();
+        o_it != step.output_args.end();
+        o_it++)
+    {
+      const expr2tc &tmp = *o_it;
+      if(is_constant_expr(tmp) || is_constant_string2t(tmp))
+        step.converted_output_args.push_back(tmp);
+      else
       {
-        const expr2tc &tmp = *o_it;
-        if(is_constant_expr(tmp) || is_constant_string2t(tmp))
-          it->converted_output_args.push_back(tmp);
-        else
-        {
-          expr2tc sym = expr2tc(new symbol2t(tmp->type,
-                                   "symex::output::"+i2string(output_count++)));
+        expr2tc sym = expr2tc(new symbol2t(tmp->type,
+                                 "symex::output::"+i2string(output_count++)));
 
-          expr2tc eq = expr2tc(new equality2t(tmp, sym));
-          prop_conv.set_to(eq, true);
-          it->converted_output_args.push_back(sym);
-        }
+        expr2tc eq = expr2tc(new equality2t(tmp, sym));
+        prop_conv.set_to(eq, true);
+        step.converted_output_args.push_back(sym);
       }
-    } else {
-      assert(0 && "Unexpected SSA step type in conversion");
     }
+  } else {
+    assert(0 && "Unexpected SSA step type in conversion");
+  }
 
-    if (it->is_assert()) {
-      it->cond_literal = prop_conv.limplies(assumpt_lit, it->cond_literal);
-      assertions_lits.push_back(prop_conv.lnot(it->cond_literal));
-    } else if (it->is_assume()) {
-      assumpt_lit = prop_conv.land(assumpt_lit, it->cond_literal);
-    }
+  if (step.is_assert()) {
+    step.cond_literal = prop_conv.limplies(assumpt_lit, step.cond_literal);
+    assertions_lits.push_back(prop_conv.lnot(step.cond_literal));
+  } else if (step.is_assume()) {
+    assumpt_lit = prop_conv.land(assumpt_lit, step.cond_literal);
   }
 
   return;

@@ -35,6 +35,8 @@ extern "C" {
 class symex_target_equationt:public symex_targett
 {
 public:
+  class SSA_stept;
+
   symex_target_equationt(const namespacet &_ns):ns(_ns) { }
 
   // assignment to a variable - must be symbol
@@ -72,8 +74,8 @@ public:
     const sourcet &source);
 
   void convert(prop_convt &prop_conv);
-  void convert_internal(prop_convt &prop_conv, literalt &assumpt_lit,
-                        bvt &assertions);
+  void convert_internal_step(prop_convt &prop_conv, literalt &assumpt_lit,
+                             bvt &assertions, SSA_stept &s);
 
   class SSA_stept
   {
