@@ -145,6 +145,12 @@ z3_convt::push_ctx(void)
 void
 z3_convt::pop_ctx(void)
 {
+  bv_cachet::nth_index<1>::type &cache_numindex = bv_cache.get<1>();
+  cache_numindex.erase(ctx_level);
+
+  union_varst::nth_index<1>::type &union_numindex = union_vars.get<1>();
+  union_numindex.erase(ctx_level);
+
   prop_convt::pop_ctx();;
 }
 
