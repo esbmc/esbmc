@@ -366,6 +366,11 @@ void dereferencet::build_reference_to(
       offset = expr2tc(new sub2t(index_type2(), ptr_offs, base));
     }
 
+    // See whether or not we need to munge the object into the desired type;
+    // this will return false if we need to juggle the type in a significant
+    // way, true if they're either the same type or extremely similar. value
+    // may be replaced with a typecast.
+    expr2tc orig_value = value;
     if (!dereference_type_compare(value, type))
     {
       if (memory_model(value, type, tmp_guard, offset))
@@ -401,11 +406,22 @@ void dereferencet::build_reference_to(
     }
     else
     {
-      if (is_index2t(value))
+      // The dereference types match closely enough; make some bounds checks
+      // on the base object, not the possibly typecasted object.
+      if (is_index2t(orig_value))
       {
-        index2t &idx = to_index2t(value);
-        idx.index = offset;
-        bounds_check(idx, tmp_guard);
+        // So; we're working on an index, which might be wrapped in a typecast.
+        // Update the offset; then encode a bounds check.
+        if (is_typecast2t(value)) {
+          typecast2t &cast = to_typecast2t(value);
+          index2t &idx = to_index2t(cast.from);
+          idx.index = offset;
+          bounds_check(idx, tmp_guard);
+        } else {
+          index2t &idx = to_index2t(value);
+          idx.index = offset;
+          bounds_check(idx, tmp_guard);
+        }
       }
       else if (!is_constant_int2t(offset) ||
                !to_constant_int2t(offset).constant_value.is_zero())
