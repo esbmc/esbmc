@@ -852,14 +852,14 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
 
   unsigned int numoperands = members.size();
   // Populate tuple with members of that struct/union
-  forall_exprs(it, members) {
+  forall_types(it, member_types) {
     if (i < numoperands) {
-      convert_bv(*it, args[i]);
+      convert_bv(members[i], args[i]);
     } else {
       // Turns out that unions don't necessarily initialize all members.
       // If no initialization give, use free (fresh) variable.
       Z3_sort s;
-      convert_type((*it)->type, s);
+      convert_type(*it, s);
       args[i] = Z3_mk_fresh_const(z3_ctx, NULL, s);
     }
 
