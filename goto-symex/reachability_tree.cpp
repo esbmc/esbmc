@@ -65,6 +65,7 @@ reachability_treet::reachability_treet(
 
   execution_states.push_back(s);
   cur_state_it = execution_states.begin();
+  target->push_ctx(); // Start with a depth of 1.
 }
 
 execution_statet & reachability_treet::get_cur_state()
