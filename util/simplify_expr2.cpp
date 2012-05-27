@@ -577,7 +577,15 @@ member2t::do_simplify(bool second __attribute__((unused))) const
     if (is_constant_struct2t(source_value)) {
       s = to_constant_struct2t(source_value).datatype_members[no];
     } else {
-      s = to_constant_union2t(source_value).datatype_members[no];
+      // XXX jmorse HHHNNGGGGGG, it would appear that the constant arrays spat
+      // out by the parser are somewhat undefined; to the extent that there are
+      // an undefined number of operands in the datatype_members vector. So
+      // bounds check first that we can actually perform this member operation.
+      const constant_union2t &uni = to_constant_union2t(source_value);
+      if (uni.datatype_members.size() <= no)
+        return expr2tc();
+
+      s = uni.datatype_members[no];
     }
 
     assert(is_pointer_type(type) ||
