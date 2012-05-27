@@ -892,7 +892,11 @@ execution_statet::ex_state_level2t::rename(expr2tc &identifier)
 dfs_execution_statet::~dfs_execution_statet(void)
 {
 
-  delete target;
+  // Delete target; or if we're encoding at runtime, pop a context.
+  if (options.get_bool_option("smt-during-symex"))
+    target->pop_ctx();
+  else
+    delete target;
 
   // Free all name strings and suchlike we generated on this run
   // and no longer require
@@ -905,8 +909,12 @@ dfs_execution_statet* dfs_execution_statet::clone(void) const
 
   d = new dfs_execution_statet(*this);
 
-  // Duplicate target equation.
-  d->target = target->clone();
+  // Duplicate target equation; or if we're encoding at runtime, push a context.
+  if (options.get_bool_option("smt-during-symex"))
+    d->target->push_ctx();
+  else
+    d->target = target->clone();
+
   return d;
 }
 
