@@ -2609,14 +2609,15 @@ z3_convt::convert_bv(const expr2tc &expr, Z3_ast &bv)
 
   bv_cachet::const_iterator cache_result = bv_cache.find(expr);
   if (cache_result != bv_cache.end()) {
-    bv = cache_result->second;
+    bv = cache_result->output;
     return;
   }
 
   expr->convert_smt(*this, (void *&)bv);
 
   // insert into cache
-  bv_cache.insert(std::pair<const expr2tc, Z3_ast>(expr, bv));
+  struct bv_cache_entryt cacheentry = { expr, bv, 0 };
+  bv_cache.insert(cacheentry);
   return;
 }
 

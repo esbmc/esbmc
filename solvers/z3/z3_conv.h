@@ -21,6 +21,11 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <vector>
 #include <string.h>
 
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+
 #include "z3_capi.h"
 
 #define Z3_UNSAT_CORE_LIMIT 10000
@@ -181,7 +186,27 @@ private:
 
   pointer_logict pointer_logic;
 
-  typedef hash_map_cont<const expr2tc, Z3_ast, irep2_hash> bv_cachet;
+  // Types for bv_cache.
+
+  struct bv_cache_entryt {
+    const expr2tc val;
+    Z3_ast output;
+    unsigned int level;
+  };
+
+  typedef boost::multi_index_container<
+    bv_cache_entryt,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(bv_cache_entryt, const expr2tc, val)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(bv_cache_entryt, unsigned int, level),
+        std::greater<unsigned int>
+      >
+    >
+  > bv_cachet;
+
   bv_cachet bv_cache;
   typedef hash_map_cont<const type2tc, Z3_sort, type2_hash> sort_cachet;
   sort_cachet sort_cache;
