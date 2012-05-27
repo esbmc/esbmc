@@ -275,6 +275,8 @@ get_function_list(const expr2tc &expr)
     std::pair<guardt, symbol2tc> p(guard, symbol2tc(expr));
     l.push_back(p);
     return l;
+  } else if (is_typecast2t(expr)) {
+    return get_function_list(to_typecast2t(expr).from);
   } else {
     std::cerr << "Unexpected irep id " << get_expr_id(expr) <<
     " in function ptr dereference" << std::endl;

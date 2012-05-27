@@ -600,6 +600,12 @@ void value_sett::get_reference_set_rec(
     get_reference_set_rec(anif.false_value, dest, ns);
     return;
   }
+  else if (is_typecast2t(expr))
+  {
+    const typecast2t &cast = to_typecast2t(expr);
+    get_reference_set_rec(cast.from, dest, ns);
+    return;
+  }
 
   expr2tc unknown = expr2tc(new unknown2t(expr->type));
   insert(dest, unknown);
