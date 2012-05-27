@@ -400,7 +400,7 @@ z3_convt::fixed_point(std::string v, unsigned width)
 }
 
 void
-z3_convt::finalize_pointer_chain(void)
+z3_convt::finalize_pointer_chain(unsigned int objnum)
 {
   unsigned int num_ptrs = addr_space_data.back().size();
   if (num_ptrs == 0)
@@ -420,44 +420,37 @@ z3_convt::finalize_pointer_chain(void)
   // object nums don't overlap the current one. So for every particular pair
   // of object numbers in the set there'll be a doesn't-overlap clause.
 
-  unsigned num_objs = addr_space_data.back().size();
-  for (unsigned i = 0; i < num_objs; i++) {
+   Z3_ast i_start = z3_api.mk_var(
+                       ("__ESBMC_ptr_obj_start_" + itos(objnum)).c_str(),
+                       native_int_sort);
+  Z3_ast i_end = z3_api.mk_var(
+                       ("__ESBMC_ptr_obj_end_" + itos(objnum)).c_str(),
+                       native_int_sort);
+
+  for (unsigned j = 0; j < objnum; j++) {
     // Obj 1 is designed to overlap
-    if (i == 1)
+    if (j == 1)
       continue;
 
-     Z3_ast i_start = z3_api.mk_var(
-                         ("__ESBMC_ptr_obj_start_" + itos(i)).c_str(),
-                         native_int_sort);
-    Z3_ast i_end = z3_api.mk_var(
-                         ("__ESBMC_ptr_obj_end_" + itos(i)).c_str(),
-                         native_int_sort);
+    Z3_ast j_start = z3_api.mk_var(
+                       ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
+                       native_int_sort);
+    Z3_ast j_end = z3_api.mk_var(
+                       ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
+                       native_int_sort);
 
-    for (unsigned j = 0; j < i; j++) {
-      // Obj 1 is designed to overlap
-      if (j == 1)
-        continue;
-
-      Z3_ast j_start = z3_api.mk_var(
-                         ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
-                         native_int_sort);
-      Z3_ast j_end = z3_api.mk_var(
-                         ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
-                         native_int_sort);
-
-      // Formula: (i_end < j_start) || (i_start > j_end)
-      // Previous assertions ensure start < end for all objs.
-      Z3_ast args[2], formula;
-      if (int_encoding) {
-        args[0] = Z3_mk_lt(z3_ctx, i_end, j_start);
-        args[1] = Z3_mk_gt(z3_ctx, i_start, j_end);
-      } else {
-        args[0] = Z3_mk_bvult(z3_ctx, i_end, j_start);
-        args[1] = Z3_mk_bvugt(z3_ctx, i_start, j_end);
-      }
-      formula = Z3_mk_or(z3_ctx, 2, args);
-      assert_formula(formula);
+    // Formula: (i_end < j_start) || (i_start > j_end)
+    // Previous assertions ensure start < end for all objs.
+    Z3_ast args[2], formula;
+    if (int_encoding) {
+      args[0] = Z3_mk_lt(z3_ctx, i_end, j_start);
+      args[1] = Z3_mk_gt(z3_ctx, i_start, j_end);
+    } else {
+      args[0] = Z3_mk_bvult(z3_ctx, i_end, j_start);
+      args[1] = Z3_mk_bvugt(z3_ctx, i_start, j_end);
     }
+    formula = Z3_mk_or(z3_ctx, 2, args);
+    assert_formula(formula);
   }
 
   return;
@@ -471,8 +464,6 @@ z3_convt::dec_solve(void)
   Z3_get_version(&major, &minor, &build, &revision);
 
   std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
-
-  finalize_pointer_chain();
 
   bv_cache.clear();
 
@@ -2739,7 +2730,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     convert_bv(wraparound, wraparound_eq);
     assert_formula(wraparound_eq);
 
-    // We'll place constraints on those addresses later, in finalize_pointer_chain
+    // Generate address space layout constraints.
+    finalize_pointer_chain(obj_num);
 
     addr_space_data.back()[obj_num] =
           pointer_offset_size(*expr->type.get()).to_long() + 1;

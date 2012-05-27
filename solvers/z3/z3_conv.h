@@ -244,7 +244,7 @@ private:
   Z3_ast convert_number_bv(int64_t value, u_int width, bool type);
   void bump_addrspace_array(unsigned int idx, Z3_ast val);
   std::string get_cur_addrspace_ident(void);
-  void finalize_pointer_chain(void);
+  void finalize_pointer_chain(unsigned int objnum);
   void init_addr_space_array(void);
 
   virtual literalt land(literalt a, literalt b);
