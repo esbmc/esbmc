@@ -35,6 +35,48 @@ static u_int assumptions_status = 0;
 
 extern void finalize_symbols(void);
 
+z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
+: prop_convt()
+{
+  if (z3_ctx == NULL) {
+    z3_ctx = z3_api.mk_proof_context(uw);
+  }
+
+  this->int_encoding = int_encoding;
+  smtlib = smt;
+  store_assumptions = (smt || uw);
+  s_is_uw = uw;
+  this->uw = uw;
+  total_mem_space = 0;
+  model = NULL;
+  array_of_count = 0;
+  _no_variables = 1;
+
+  Z3_push(z3_ctx);
+  max_core_size=Z3_UNSAT_CORE_LIMIT;
+
+  z3_api.set_z3_ctx(z3_ctx);
+
+  init_addr_space_array();
+
+  // Pick a modelling array to shoehorn initialization data into. Because
+  // we don't yet have complete data for whether pointers are dynamic or not,
+  // this is the one modelling array that absolutely _has_ to be initialized
+  // to false for each element, which is going to be shoved into
+  // convert_identifier_pointer.
+  if (is_cpp) {
+    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic&0#1";
+  } else {
+    dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
+  }
+
+  // Pre-seed type cache with a few values that might not go in due to
+  // specialised code paths.
+  sort_cache.insert(std::pair<const type2tc, Z3_sort>(type_pool.get_bool(),
+                    Z3_mk_bool_sort(z3_ctx)));
+}
+
+
 z3_convt::~z3_convt()
 {
 
