@@ -150,11 +150,15 @@ z3_convt::push_ctx(void)
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   addr_space_data.push_back(addr_space_data.back());
   total_mem_space.push_back(total_mem_space.back());
+
+  Z3_push(z3_ctx);
 }
 
 void
 z3_convt::pop_ctx(void)
 {
+  Z3_pop(z3_ctx, 1);
+
   bv_cachet::nth_index<1>::type &cache_numindex = bv_cache.get<1>();
   cache_numindex.erase(ctx_level);
 
