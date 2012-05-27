@@ -300,3 +300,13 @@ runtime_encoded_equationt::pop_ctx(void)
 
   conv.pop_ctx();
 }
+
+symex_targett *
+runtime_encoded_equationt::clone(void) const
+{
+  // A note on this - the solver references is shared between all objects of
+  // this class that are descended from whatever constructed the first one.
+  // This has a lot of scope for things failing, _but_, it's fine so long as
+  // we observe strict push/pop ordering. If we don't; boom.
+  return new runtime_encoded_equationt(*this);
+}

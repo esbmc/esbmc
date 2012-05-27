@@ -178,6 +178,8 @@ public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
 
+  virtual symex_targett *clone(void) const;
+
   prop_convt &conv;
 };
 
