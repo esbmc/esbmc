@@ -101,12 +101,15 @@ bool reachability_treet::analyse_for_cswitch_after_read(const exprt &code)
 bool reachability_treet::analyse_for_cswitch_after_assign(const expr2tc &code)
 {
 
-  exprt thecode = migrate_expr_back(code);
-  int num_write_globals = get_cur_state().get_expr_write_globals(ns,thecode.op0());
-  int num_read_globals = get_cur_state().get_expr_read_globals(ns,thecode.op1());
+  const code_assign2t &assign = to_code_assign2t(code);
+  int num_write_globals =
+    get_cur_state().get_expr_write_globals(ns, assign.target);
+  int num_read_globals =
+    get_cur_state().get_expr_read_globals(ns, assign.source);
 
   if(num_read_globals + num_write_globals > 0)
   {
+    exprt thecode = migrate_expr_back(code);
     return analyse_for_cswitch_base(thecode);
   }
 
