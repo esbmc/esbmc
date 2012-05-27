@@ -262,6 +262,16 @@ void symex_target_equationt::SSA_stept::output(
   out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << std::endl;
 }
 
+void
+symex_target_equationt::push_ctx(void)
+{
+}
+
+void
+symex_target_equationt::pop_ctx(void)
+{
+}
+
 std::ostream &operator<<(
   std::ostream &out,
   const symex_target_equationt &equation)

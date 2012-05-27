@@ -163,6 +163,8 @@ public:
     return new symex_target_equationt(*this);
   }
 
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
 
 protected:
   const namespacet &ns;
