@@ -175,6 +175,9 @@ class runtime_encoded_equationt : public symex_target_equationt
 public:
   runtime_encoded_equationt(const namespacet &_ns, prop_convt &conv);
 
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
+
   prop_convt &conv;
 };
 

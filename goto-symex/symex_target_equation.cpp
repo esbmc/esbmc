@@ -286,3 +286,17 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
     conv(_conv)
 {
 }
+
+void
+runtime_encoded_equationt::push_ctx(void)
+{
+
+  conv.push_ctx();
+}
+
+void
+runtime_encoded_equationt::pop_ctx(void)
+{
+
+  conv.pop_ctx();
+}
