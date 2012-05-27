@@ -398,11 +398,13 @@ class execution_statet : public goto_symext
    *  @return Number of global refs in this expression.
    */
   unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
+  unsigned int get_expr_write_globals(const namespacet &ns, const expr2tc& expr);
 
   /**
    *  See get_expr_write_globals.
    */
   unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
+  unsigned int get_expr_read_globals(const namespacet &ns, const expr2tc & expr);
 
   /**
    *  Generate hash of entire execution state.

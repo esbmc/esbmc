@@ -566,6 +566,38 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
 }
 
 unsigned int
+execution_statet::get_expr_write_globals(const namespacet &ns,
+                                         const expr2tc &expr)
+{
+
+  if (is_address_of2t(expr) || is_valid_object2t(expr) ||
+      is_dynamic_size2t(expr) || is_valid_object2t(expr) ||
+      is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
+    return 0;
+  } else if (is_symbol2t(expr)) {
+    const irep_idt &id = to_symbol2t(expr).name;
+    const irep_idt &identifier = get_active_state().get_original_name(id);
+    const symbolt &symbol = ns.lookup(identifier);
+    if (identifier == "c::__ESBMC_alloc"
+        || identifier == "c::__ESBMC_alloc_size")
+      return 0;
+    else if ((symbol.static_lifetime || symbol.type.is_dynamic_set())) {
+      exprs_read_write.at(active_thread).write_set.insert(identifier);
+      return 1;
+    } else
+      return 0;
+  }
+
+  unsigned int globals = 0;
+
+  forall_operands2(it, op_list, expr) {
+    globals += get_expr_write_globals(ns, **it);
+  }
+
+  return globals;
+}
+
+unsigned int
 execution_statet::get_expr_read_globals(const namespacet &ns,
   const exprt & expr)
 {
@@ -606,6 +638,45 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
 
   forall_operands(it, expr) {
     globals += get_expr_read_globals(ns, *it);
+  }
+
+  return globals;
+}
+
+unsigned int
+execution_statet::get_expr_read_globals(const namespacet &ns,
+  const expr2tc &expr)
+{
+
+  if (is_address_of2t(expr) || is_pointer_type(expr->type) ||
+      is_valid_object2t(expr) || is_dynamic_size2t(expr) ||
+      is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
+    return 0;
+  } else if (is_symbol2t(expr)) {
+    const irep_idt &id = to_symbol2t(expr).name;
+    const irep_idt &identifier = get_active_state().get_original_name(id);
+
+    if (identifier == "goto_symex::\\guard!" +
+        i2string(get_active_state().top().level1._thread_id))
+      return 0;
+
+    const symbolt *symbol;
+    if (ns.lookup(identifier, symbol))
+      return 0;
+
+    if (identifier == "c::__ESBMC_alloc" || identifier ==
+        "c::__ESBMC_alloc_size")
+      return 0;
+    else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
+      exprs_read_write.at(active_thread).read_set.insert(identifier);
+      return 1;
+    } else
+      return 0;
+  }
+  unsigned int globals = 0;
+
+  forall_operands2(it, op_list, expr) {
+    globals += get_expr_read_globals(ns, **it);
   }
 
   return globals;
