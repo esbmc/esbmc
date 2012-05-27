@@ -97,87 +97,49 @@ void symex_target_equationt::assertion(
 void symex_target_equationt::convert(
   prop_convt &prop_conv)
 {
-  convert_guards(prop_conv);
-  convert_assignments(prop_conv);
-  convert_assumptions(prop_conv);
-  convert_assertions(prop_conv);
-  convert_output(prop_conv);
-}
+  bvt assert_bv, assume_bv;
+  literalt true_lit = const_literal(true);
+  literalt false_lit = const_literal(false);
+  literalt assumpt_lit = true_lit;
 
-void symex_target_equationt::convert_assignments(prop_convt &prop_conv) const
-{
-  for(SSA_stepst::const_iterator it=SSA_steps.begin();
-      it!=SSA_steps.end(); it++)
+  assume_bv.push_back(true_lit);
+
+  for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
   {
-    if(it->is_assignment() && !it->ignore)
-    {
-      prop_conv.set_to(it->cond, true);
+    if (it->ignore) {
+      it->cond_literal = true_lit;
+      it->guard_literal = false_lit;
+      continue;
+    }
+
+    expr2tc tmp(it->guard);
+    it->guard_literal = prop_conv.convert(tmp);
+
+    if (it->is_assume() || it->is_assert()) {
+      expr2tc tmp(it->cond);
+      it->cond_literal = prop_conv.convert(tmp);
+    } else if (it->is_assignment()) {
+      expr2tc tmp2(it->cond);
+      prop_conv.set_to(tmp2, true);
+    }
+
+    if (it->is_assert()) {
+      it->cond_literal = prop_conv.limplies(assumpt_lit, it->cond_literal);
+      assert_bv.push_back(prop_conv.lnot(it->cond_literal));
+    } else if (it->is_assume()) {
+      assumpt_lit = prop_conv.land(assumpt_lit, it->cond_literal);
     }
   }
+
+  if (!assert_bv.empty())
+    prop_conv.lcnf(assert_bv);
+  if (!assume_bv.empty())
+    prop_conv.land(assume_bv);
+
+  return;
 }
 
-void symex_target_equationt::convert_guards(
-  prop_convt &prop_conv)
-{
-  for(SSA_stepst::iterator it=SSA_steps.begin();
-      it!=SSA_steps.end(); it++)
-  {
-    if(it->ignore)
-      it->guard_literal=const_literal(false);
-    else
-    {
-      it->guard_literal=prop_conv.convert(it->guard);
-    }
-  }
-}
-
-void symex_target_equationt::convert_assumptions(
-  prop_convt &prop_conv)
-{
-  for(SSA_stepst::iterator it=SSA_steps.begin();
-      it!=SSA_steps.end(); it++)
-  {
-    if(it->is_assume())
-    {
-      if(it->ignore)
-        it->cond_literal=const_literal(true);
-      else
-      {
-        it->cond_literal=prop_conv.convert(it->cond);
-      }
-    }
-  }
-}
-
-void symex_target_equationt::convert_assertions(
-  prop_convt &prop_conv)
-{
-  bvt bv;
-
-  bv.reserve(SSA_steps.size());
-
-  literalt assumption_literal=const_literal(true);
-
-  for(SSA_stepst::iterator it=SSA_steps.begin();
-      it!=SSA_steps.end(); it++)
-    if(it->is_assert())
-    {
-
-      // do the expression
-      literalt tmp_literal=prop_conv.convert(it->cond);
-
-      it->cond_literal=prop_conv.limplies(assumption_literal, tmp_literal);
-
-      bv.push_back(prop_conv.lnot(it->cond_literal));
-    }
-    else if(it->is_assume())
-      assumption_literal=
-        prop_conv.land(assumption_literal, it->cond_literal);
-
-  if(!bv.empty())
-    prop_conv.lcnf(bv);
-}
-
+#if 0
 void symex_target_equationt::convert_output(prop_convt &prop_conv)
 {
   unsigned output_count=0;
@@ -205,6 +167,7 @@ void symex_target_equationt::convert_output(prop_convt &prop_conv)
       }
     }
 }
+#endif
 
 void symex_target_equationt::output(std::ostream &out) const
 {
