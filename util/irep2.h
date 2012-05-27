@@ -369,6 +369,13 @@ public:
   type2tc type;
 };
 
+// For boost multi-index hashing,
+inline std::size_t
+hash_value(const expr2tc &expr)
+{
+  return expr->crc();
+}
+
 std::string get_expr_id(const expr2t &expr);
 static inline std::string get_expr_id(const expr2tc &expr)
 {
