@@ -98,12 +98,10 @@ void symex_target_equationt::convert(
   prop_convt &prop_conv)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
-  bvt assert_bv, assume_bv;
+  bvt assert_bv;
   literalt true_lit = const_literal(true);
   literalt false_lit = const_literal(false);
   literalt assumpt_lit = true_lit;
-
-  assume_bv.push_back(true_lit);
 
   for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
   {
@@ -155,8 +153,6 @@ void symex_target_equationt::convert(
 
   if (!assert_bv.empty())
     prop_conv.lcnf(assert_bv);
-  if (!assume_bv.empty())
-    prop_conv.land(assume_bv);
 
   return;
 }
