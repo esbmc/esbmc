@@ -75,5 +75,8 @@ void prop_convt::push_ctx(void)
 
 void prop_convt::pop_ctx(void)
 {
+  cachet::nth_index<1>::type &cache_numindex = cache.get<1>();
+  cache_numindex.erase(ctx_level);
+
   ctx_level--;
 }
