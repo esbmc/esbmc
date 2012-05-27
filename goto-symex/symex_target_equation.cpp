@@ -97,6 +97,7 @@ void symex_target_equationt::assertion(
 void symex_target_equationt::convert(
   prop_convt &prop_conv)
 {
+  static unsigned output_count = 0; // Temporary hack; should become scoped.
   bvt assert_bv, assume_bv;
   literalt true_lit = const_literal(true);
   literalt false_lit = const_literal(false);
@@ -121,6 +122,27 @@ void symex_target_equationt::convert(
     } else if (it->is_assignment()) {
       expr2tc tmp2(it->cond);
       prop_conv.set_to(tmp2, true);
+    } else if (it->is_output()) {
+      for(std::list<expr2tc>::const_iterator
+          o_it=it->output_args.begin();
+          o_it!=it->output_args.end();
+          o_it++)
+      {
+        const expr2tc &tmp = *o_it;
+        if(is_constant_expr(tmp) || is_constant_string2t(tmp))
+          it->converted_output_args.push_back(tmp);
+        else
+        {
+          expr2tc sym = expr2tc(new symbol2t(tmp->type,
+                                   "symex::output::"+i2string(output_count++)));
+
+          expr2tc eq = expr2tc(new equality2t(tmp, sym));
+          prop_conv.set_to(eq, true);
+          it->converted_output_args.push_back(sym);
+        }
+      }
+    } else {
+      assert(0 && "Unexpected SSA step type in conversion");
     }
 
     if (it->is_assert()) {
@@ -138,36 +160,6 @@ void symex_target_equationt::convert(
 
   return;
 }
-
-#if 0
-void symex_target_equationt::convert_output(prop_convt &prop_conv)
-{
-  unsigned output_count=0;
-
-  for(SSA_stepst::iterator it=SSA_steps.begin();
-      it!=SSA_steps.end(); it++)
-    if(it->is_output() && !it->ignore)
-    {
-      for(std::list<expr2tc>::const_iterator
-          o_it=it->output_args.begin();
-          o_it!=it->output_args.end();
-          o_it++)
-      {
-        const expr2tc &tmp = *o_it;
-        if(is_constant_expr(tmp) || is_constant_string2t(tmp))
-          it->converted_output_args.push_back(tmp);
-        else
-        {
-          expr2tc sym = expr2tc(new symbol2t(tmp->type, "symex::output::"+i2string(output_count++)));
-
-          expr2tc eq = expr2tc(new equality2t(tmp, sym));
-          prop_conv.set_to(eq, true);
-          it->converted_output_args.push_back(sym);
-        }
-      }
-    }
-}
-#endif
 
 void symex_target_equationt::output(std::ostream &out) const
 {
