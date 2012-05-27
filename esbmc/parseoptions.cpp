@@ -870,6 +870,9 @@ static void
 relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
 {
 
+  if (is_nil_expr(irep))
+    return;
+
    if (is_symbol2t(irep)) {
     if (to_symbol2t(irep).name == from_name)
       to_symbol2t(irep).name = to_name;
