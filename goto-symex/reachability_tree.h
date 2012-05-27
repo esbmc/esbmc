@@ -119,7 +119,7 @@ public:
    *  @param expr Expr causing context switch; Used for partial order analysis
    *  @return Thread ID user desires us to switch to
    */
-  int get_ileave_direction_from_user(const exprt &expr) const;
+  int get_ileave_direction_from_user(const expr2tc &expr) const;
 
   /**
    *  Decide context switch from --round-robin.
@@ -128,7 +128,7 @@ public:
    *  @param expr Expr causing context switch; Used for partial order analysis
    *  @return Thread ID to switch to according to scheduling
    */
-  int get_ileave_direction_from_scheduling(const exprt &expr) const;
+  int get_ileave_direction_from_scheduling(const expr2tc &expr) const;
 
   /**
    *  Determine if a thread can be run.
@@ -215,7 +215,7 @@ public:
    *  @return Thread ID of what thread to switch to next.
    */
   unsigned int decide_ileave_direction(execution_statet &ex_state,
-                                       const exprt &expr);
+                                       const expr2tc &expr);
 
   /**
    *  Prints state of execution_statet stack.

@@ -139,7 +139,7 @@ bool reachability_treet::analyse_for_cswitch_base(const expr2tc &expr)
 
   unsigned int tid = 0;
 
-  tid = decide_ileave_direction(ex_state, migrate_expr_back(expr));
+  tid = decide_ileave_direction(ex_state, expr);
 
   at_end_of_run = true;
   next_thread_id = tid;
@@ -204,7 +204,7 @@ reachability_treet::step_next_state(void)
 
 unsigned int
 reachability_treet::decide_ileave_direction(execution_statet &ex_state,
-                                            const exprt &expr)
+                                            const expr2tc &expr)
 {
   unsigned int tid = 0, user_tid = 0;
 
@@ -240,7 +240,7 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state,
       continue;
 
     //apply static partial-order reduction
-    if(por && !ex_state.apply_static_por(expr, tid))
+    if(por && !ex_state.apply_static_por(migrate_expr_back(expr), tid))
       continue;
 
     break;
@@ -516,7 +516,7 @@ reachability_treet::print_ileave_trace(void) const
 }
 
 int
-reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
+reachability_treet::get_ileave_direction_from_user(const expr2tc &expr) const
 {
   std::string input;
   unsigned int tid;
@@ -526,7 +526,7 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
 
   // First of all, are there actually any valid context switch targets?
   for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
-    if (check_thread_viable(tid, expr, true))
+    if (check_thread_viable(tid, migrate_expr_back(expr), true))
       break;
   }
 
@@ -555,7 +555,7 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
       } else if (tid >= get_cur_state().threads_state.size()) {
         std::cout << "Number out of range";
       } else {
-        if (check_thread_viable(tid, expr, false))
+        if (check_thread_viable(tid, migrate_expr_back(expr), false))
           break;
       }
     }
@@ -571,22 +571,22 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
 
 //begin - H.Savino
 int
-reachability_treet::get_ileave_direction_from_scheduling(const exprt &expr) const
+reachability_treet::get_ileave_direction_from_scheduling(const expr2tc &expr) const
 {
   unsigned int tid;
 
     // If the guard on this execution trace is false, no context switches are
     // going to be run over in the future and just general randomness is going to
     // occur. So there's absolutely no reason exploring further.
-    if ((expr.operands().size() > 0) &&
-      get_cur_state().get_active_state().guard.is_false()) {
+    if (!is_nil_expr(expr) &&
+       get_cur_state().get_active_state().guard.is_false()) {
           std::cout << "This trace's guard is false; it will not be evaulated." << std::endl;
           exit(1);
     }
 
     // First of all, are there actually any valid context switch targets?
     for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
-      if (check_thread_viable(tid, expr, true))
+      if (check_thread_viable(tid, migrate_expr_back(expr), true))
         break;
     }
 
@@ -597,12 +597,12 @@ reachability_treet::get_ileave_direction_from_scheduling(const exprt &expr) cons
   tid=get_cur_state().active_thread;
 
   if(get_cur_state().TS_number < this->TS_slice-1){
-      if (check_thread_viable(tid, expr, true))
+      if (check_thread_viable(tid, migrate_expr_back(expr), true))
           return tid;
   }
       while(1){
         tid=(tid + 1)%get_cur_state().threads_state.size();
-        if (check_thread_viable(tid, expr, true)){
+        if (check_thread_viable(tid, migrate_expr_back(expr), true)){
             break;
         }
       }
