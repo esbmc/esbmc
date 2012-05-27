@@ -181,6 +181,7 @@ public:
   virtual symex_targett *clone(void) const;
 
   prop_convt &conv;
+  std::list<SSA_stepst::iterator> scoped_end_points;
 };
 
 extern inline bool operator<(
