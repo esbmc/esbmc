@@ -166,8 +166,13 @@ bool dereferencet::dereference_type_compare(
   if (is_empty_type(dereference_type))
     return true; // always ok
 
-  if(base_type_eq(object_type, dereference_type, ns))
-    return true; // ok, they just match
+  if (base_type_eq(object_type, dereference_type, ns)) {
+    // Ok, they just match. However, the SMT solver that receives this formula
+    // in the end may object to taking an equivalent type and instead demand
+    // that the types are exactly the same. So, slip in a typecast.
+    object = expr2tc(new typecast2t(dereference_type, object));
+    return true;
+  }
 
   // check for struct prefixes
 
