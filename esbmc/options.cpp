@@ -111,6 +111,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"enable-core-dump",     switc,		""	},
 { 0,	"memstats",		switc,		""	},
 { 0,	"dump-z3-assigns",	switc,		""	},
+{ 0,	"smt-during-symex",	switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},

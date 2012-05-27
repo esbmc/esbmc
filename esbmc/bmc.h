@@ -32,7 +32,6 @@ public:
     options(opts),
     context(_context),
     ns(_context),
-    symex(funcs, ns, options, new symex_target_equationt(ns), _context),
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
@@ -45,6 +44,29 @@ public:
       is_cpp = true;
     else
       is_cpp = false;
+
+
+#ifdef Z3
+    runtime_z3_conv = new z3_convt(opts.get_bool_option("uw-model"),
+                                   opts.get_bool_option("int-encoding"),
+                                   opts.get_bool_option("smt"), is_cpp);
+
+    runtime_z3_conv->set_filename(opts.get_option("outfile"));
+    runtime_z3_conv->set_z3_core_size(
+                                    atol(opts.get_option("core-size").c_str()));
+
+    if (options.get_bool_option("smt-during-symex")) {
+      symex = new reachability_treet(funcs, ns, options,
+                          new runtime_encoded_equationt(ns, *runtime_z3_conv),
+                          _context);
+    } else {
+#endif
+      symex = new reachability_treet(funcs, ns, options,
+                                     new symex_target_equationt(ns),
+                                     _context);
+#ifdef Z3
+    }
+#endif
   }
 
   uint _unsat_core;
@@ -64,7 +86,10 @@ public:
 protected:
   const contextt &context;
   namespacet ns;
-  reachability_treet symex;
+#ifdef Z3
+  z3_convt *runtime_z3_conv;
+#endif
+  reachability_treet *symex;
 
   // use gui format
   language_uit::uit ui;
@@ -89,6 +114,14 @@ protected:
     virtual bool run_solver(symex_target_equationt &equation);
   protected:
     z3_convt z3_conv;
+  };
+
+  class z3_runtime_solver : public solver_base {
+  public:
+    z3_runtime_solver(bmct &bmc, bool is_cpp, z3_convt *conv);
+    virtual bool run_solver(symex_target_equationt &equation);
+  protected:
+    z3_convt *z3_conv;
   };
 #endif
 
