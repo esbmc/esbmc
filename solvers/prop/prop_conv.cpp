@@ -68,3 +68,11 @@ void prop_convt::set_equal(literalt a, literalt b)
   bv[1]=b;
   lcnf(bv);
 }
+
+void prop_convt::push_ctx(void)
+{
+}
+
+void prop_convt::pop_ctx(void)
+{
+}

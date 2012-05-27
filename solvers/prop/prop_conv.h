@@ -32,6 +32,10 @@ public:
 
   typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
 
+  // Methods to push and pop currently converted solver state
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
+
   // overloading
   virtual void set_to(const expr2tc &expr, bool value) = 0;
   virtual resultt dec_solve() = 0;
