@@ -2037,6 +2037,8 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, Z3_ast &bv)
           new_members.push_back(type2tc(new unsignedbv_type2t(width)));
 	} else if (is_bool_type(*it))     {
           new_members.push_back(type2tc(new bool_type2t()));
+        } else if (is_pointer_type(*it)) {
+          new_members.push_back(*it);
 	} else {
           throw new conv_error("Unexpected type when casting struct");
 	}
