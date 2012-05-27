@@ -61,6 +61,8 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   addr_space_data.push_back(std::map<unsigned, unsigned>());
   total_mem_space.push_back(0);
 
+  assumpt_ctx_stack.push_back(assumpt.begin());
+
   init_addr_space_array();
 
   // Pick a modelling array to shoehorn initialization data into. Because
@@ -151,6 +153,9 @@ z3_convt::push_ctx(void)
   addr_space_data.push_back(addr_space_data.back());
   total_mem_space.push_back(total_mem_space.back());
 
+  // Store where we are in the list of assumpts.
+  assumpt_ctx_stack.push_back(assumpt.end()--);
+
   Z3_push(z3_ctx);
 }
 
@@ -158,6 +163,12 @@ void
 z3_convt::pop_ctx(void)
 {
   Z3_pop(z3_ctx, 1);
+
+  // Erase everything on stack since last push_ctx
+  std::list<Z3_ast>::iterator it = assumpt_ctx_stack.back();
+  assumpt_ctx_stack.pop_back();
+  it++;
+  assumpt.erase(it, assumpt.end());
 
   bv_cachet::nth_index<1>::type &cache_numindex = bv_cache.get<1>();
   cache_numindex.erase(ctx_level);

@@ -284,6 +284,7 @@ private:
 
   unsigned _no_variables;
   std::list<Z3_ast> assumpt;
+  std::list<std::list<Z3_ast>::iterator> assumpt_ctx_stack;
 
   // Array of obj ID -> address range tuples
   std::list<unsigned int> addr_space_sym_num;
