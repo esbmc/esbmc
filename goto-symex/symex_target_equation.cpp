@@ -292,7 +292,10 @@ runtime_encoded_equationt::push_ctx(void)
 {
 
   SSA_stepst::iterator it = SSA_steps.end();
-  --it;
+
+  if (SSA_steps.size() != 0)
+    --it;
+
   scoped_end_points.push_back(it);
   conv.push_ctx();
 }
@@ -304,7 +307,10 @@ runtime_encoded_equationt::pop_ctx(void)
   conv.pop_ctx();
 
   SSA_stepst::iterator it = scoped_end_points.back();
-  ++it;
+
+  if (SSA_steps.size() != 0)
+    ++it;
+
   SSA_steps.erase(it, SSA_steps.end());
 
   scoped_end_points.pop_back();
