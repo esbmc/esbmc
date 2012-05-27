@@ -59,9 +59,6 @@ public:
   virtual bool run(void);
   virtual ~bmct() { }
 
-  // additional stuff
-  expr_listt bmc_constraints;
-
   void set_ui(language_uit::uit _ui) { ui=_ui; }
 
 protected:

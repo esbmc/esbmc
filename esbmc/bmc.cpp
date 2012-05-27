@@ -72,12 +72,6 @@ void bmct::do_cbmc(prop_convt &solver, symex_target_equationt &equation)
 
   equation.convert(solver);
 
-  forall_expr_list(it, bmc_constraints) {
-    expr2tc new_expr;
-    migrate_expr(*it, new_expr);
-    solver.set_to(new_expr, true);
-  }
-
   // After all conversions, clear cache, which tends to contain a large
   // amount of stuff.
   solver.clear_cache();
