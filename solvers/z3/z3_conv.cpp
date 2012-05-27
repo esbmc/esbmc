@@ -142,6 +142,9 @@ void
 z3_convt::push_ctx(void)
 {
   prop_convt::push_ctx();
+
+  // Also push/duplicate pointer logic state.
+  pointer_logic.push_back(pointer_logic.back());
 }
 
 void
@@ -152,6 +155,8 @@ z3_convt::pop_ctx(void)
 
   union_varst::nth_index<1>::type &union_numindex = union_vars.get<1>();
   union_numindex.erase(ctx_level);
+
+  pointer_logic.pop_back();
 
   prop_convt::pop_ctx();;
 }
