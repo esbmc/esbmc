@@ -173,7 +173,7 @@ public:
    *  @param code Expression being read that might touch global state.
    *  @return True if context switch is to be taken.
    */
-  bool analyse_for_cswitch_after_read(const exprt &code);
+  bool analyse_for_cswitch_after_read(const expr2tc &code);
 
   /**
    *  Analyse context switch point cause by an assign.

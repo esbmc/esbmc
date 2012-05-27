@@ -255,10 +255,8 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
   goto_symext::claim(expr, msg);
 
-  if (threads_state.size() > 1) {
-    exprt tmp = migrate_expr_back(expr);
-    owning_rt->analyse_for_cswitch_after_read(tmp);
-  }
+  if (threads_state.size() > 1)
+    owning_rt->analyse_for_cswitch_after_read(expr);
 
   return;
 }
@@ -270,10 +268,8 @@ execution_statet::symex_goto(const expr2tc &old_guard)
   goto_symext::symex_goto(old_guard);
 
   if (!is_nil_expr(old_guard)) {
-    if (threads_state.size() > 1) {
-      exprt tmp_guard = migrate_expr_back(old_guard);
-      owning_rt->analyse_for_cswitch_after_read(tmp_guard);
-    }
+    if (threads_state.size() > 1)
+      owning_rt->analyse_for_cswitch_after_read(old_guard);
   }
 
   return;
@@ -286,7 +282,7 @@ execution_statet::assume(const expr2tc &assumption)
   goto_symext::assume(assumption);
 
   if (threads_state.size() > 1)
-    owning_rt->analyse_for_cswitch_after_read(migrate_expr_back(assumption));
+    owning_rt->analyse_for_cswitch_after_read(assumption);
 
   return;
 }

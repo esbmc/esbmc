@@ -89,11 +89,11 @@ int reachability_treet::get_CS_bound() const
   return CS_bound;
 }
 
-bool reachability_treet::analyse_for_cswitch_after_read(const exprt &code)
+bool reachability_treet::analyse_for_cswitch_after_read(const expr2tc &code)
 {
 
-  if (get_cur_state().get_expr_read_globals(ns,code) > 0)
-    return analyse_for_cswitch_base(code);
+  if (get_cur_state().get_expr_read_globals(ns, code) > 0)
+    return analyse_for_cswitch_base(migrate_expr_back(code));
   else
     return false;
 }
