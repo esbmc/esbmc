@@ -137,6 +137,18 @@ z3_convt::~z3_convt()
 }
 
 void
+z3_convt::push_ctx(void)
+{
+  prop_convt::push_ctx();
+}
+
+void
+z3_convt::pop_ctx(void)
+{
+  prop_convt::pop_ctx();;
+}
+
+void
 z3_convt::init_addr_space_array(void)
 {
   Z3_symbol mk_tuple_name, proj_names[2];
