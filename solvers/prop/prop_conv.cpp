@@ -17,17 +17,16 @@ Author: Daniel Kroening, kroening@kroening.com
 literalt prop_convt::convert(const expr2tc &expr)
 {
 
-  std::pair<cachet::iterator, bool> result=
-    cache.insert(std::pair<expr2tc, literalt>(expr, literalt()));
-
-  if(!result.second)
-    return result.first->second;
+  cachet::iterator it = cache.find(expr);
+  if (it != cache.end())
+    return it->l;
 
   literalt literal = convert_expr(expr);
 
   // insert into cache
 
-  result.first->second=literal;
+  struct lit_cachet entry = { expr, literal, 0 };
+  cache.insert(entry);
 
   return literal;
 }

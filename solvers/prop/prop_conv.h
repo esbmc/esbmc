@@ -22,6 +22,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <message.h>
 #include <threeval.h>
 
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+
 #include "literal.h"
 
 class prop_convt : public messaget
@@ -81,7 +86,25 @@ protected:
   virtual literalt convert_expr(const expr2tc &expr) = 0;
   
   // cache
-  typedef hash_map_cont<expr2tc, literalt, irep2_hash> cachet;
+  struct lit_cachet {
+    const expr2tc val;
+    literalt l;
+    unsigned int level;
+  };
+
+  typedef boost::multi_index_container<
+    lit_cachet,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(lit_cachet, const expr2tc, val)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(lit_cachet, unsigned int, level),
+        std::greater<unsigned int>
+      >
+    >
+  > cachet;
+
   cachet cache;
   
   virtual void ignoring(const expr2tc &expr);
