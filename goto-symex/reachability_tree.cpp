@@ -526,7 +526,7 @@ reachability_treet::get_ileave_direction_from_user(const expr2tc &expr) const
 
   // First of all, are there actually any valid context switch targets?
   for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
-    if (check_thread_viable(tid, migrate_expr_back(expr), true))
+    if (check_thread_viable(tid, expr, true))
       break;
   }
 
@@ -555,7 +555,7 @@ reachability_treet::get_ileave_direction_from_user(const expr2tc &expr) const
       } else if (tid >= get_cur_state().threads_state.size()) {
         std::cout << "Number out of range";
       } else {
-        if (check_thread_viable(tid, migrate_expr_back(expr), false))
+        if (check_thread_viable(tid, expr, false))
           break;
       }
     }
@@ -586,7 +586,7 @@ reachability_treet::get_ileave_direction_from_scheduling(const expr2tc &expr) co
 
     // First of all, are there actually any valid context switch targets?
     for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
-      if (check_thread_viable(tid, migrate_expr_back(expr), true))
+      if (check_thread_viable(tid, expr, true))
         break;
     }
 
@@ -597,12 +597,12 @@ reachability_treet::get_ileave_direction_from_scheduling(const expr2tc &expr) co
   tid=get_cur_state().active_thread;
 
   if(get_cur_state().TS_number < this->TS_slice-1){
-      if (check_thread_viable(tid, migrate_expr_back(expr), true))
+      if (check_thread_viable(tid, expr, true))
           return tid;
   }
       while(1){
         tid=(tid + 1)%get_cur_state().threads_state.size();
-        if (check_thread_viable(tid, migrate_expr_back(expr), true)){
+        if (check_thread_viable(tid, expr, true)){
             break;
         }
       }
@@ -611,7 +611,7 @@ reachability_treet::get_ileave_direction_from_scheduling(const expr2tc &expr) co
 //end - H.Savino
 
 bool
-reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) const
+reachability_treet::check_thread_viable(int tid, const expr2tc &expr, bool quiet) const
 {
   const execution_statet &ex = get_cur_state();
 
@@ -633,7 +633,7 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
     return false;
   }
 
-  if (por && !ex.apply_static_por(expr, tid)) {
+  if (por && !ex.apply_static_por(migrate_expr_back(expr), tid)) {
     if (!quiet)
       std::cout << "Thread unschedulable due to POR" << std::endl;
     return false;
