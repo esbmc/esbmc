@@ -269,3 +269,10 @@ std::ostream &operator<<(
   equation.output(out);
   return out;
 }
+
+runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
+                                                     prop_convt &_conv)
+  : symex_target_equationt(_ns),
+    conv(_conv)
+{
+}

@@ -168,6 +168,14 @@ protected:
   const namespacet &ns;
 };
 
+class runtime_encoded_equationt : public symex_target_equationt
+{
+public:
+  runtime_encoded_equationt(const namespacet &_ns, prop_convt &conv);
+
+  prop_convt &conv;
+};
+
 extern inline bool operator<(
   const symex_target_equationt::SSA_stepst::const_iterator a,
   const symex_target_equationt::SSA_stepst::const_iterator b)
