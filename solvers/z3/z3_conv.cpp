@@ -476,10 +476,6 @@ z3_convt::dec_solve(void)
   Z3_lbool result;
   Z3_get_version(&major, &minor, &build, &revision);
 
-  // Add assumptions that link up literals to symbols - connections that are
-  // made at high level by prop_conv, rather than by the Z3 backend
-  link_syms_to_literals();
-
   std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
 
   finalize_pointer_chain();
@@ -566,20 +562,6 @@ z3_convt::check2_z3_properties(void)
   }
 
   return result;
-}
-
-void
-z3_convt::link_syms_to_literals(void)
-{
-
-  symbolst::const_iterator it;
-  for (it = symbols.begin(); it != symbols.end(); it++) {
-    // Generate an equivalence between the symbol and the literal
-    Z3_ast sym = z3_api.mk_var(it->first.as_string().c_str(),
-                                Z3_mk_bool_sort(z3_ctx));
-    Z3_ast formula = Z3_mk_iff(z3_ctx, z3_literal(it->second), sym);
-    assert_formula(formula);
- }
 }
 
 void

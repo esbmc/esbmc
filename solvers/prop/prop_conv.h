@@ -80,10 +80,6 @@ public:
 protected:
   virtual literalt convert_expr(const expr2tc &expr) = 0;
   
-  // symbols
-  typedef std::map<irep_idt, literalt> symbolst;
-  symbolst symbols;
-
   // cache
   typedef hash_map_cont<expr2tc, literalt, irep2_hash> cachet;
   cachet cache;
