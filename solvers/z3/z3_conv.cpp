@@ -57,6 +57,8 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
 
   z3_api.set_z3_ctx(z3_ctx);
 
+  pointer_logic.push_back(pointer_logict());
+
   init_addr_space_array();
 
   // Pick a modelling array to shoehorn initialization data into. Because
@@ -222,7 +224,7 @@ z3_convt::init_addr_space_array(void)
   eq = Z3_mk_eq(z3_ctx, initial_val, range_tuple);
   assert_formula(eq);
 
-  bump_addrspace_array(pointer_logic.get_null_object(), range_tuple);
+  bump_addrspace_array(pointer_logic.back().get_null_object(), range_tuple);
 
   // We also have to initialize the invalid object... however, I've no idea
   // what it /means/ yet, so go for some arbitary value.
@@ -233,7 +235,7 @@ z3_convt::init_addr_space_array(void)
   eq = Z3_mk_eq(z3_ctx, initial_val, range_tuple);
   assert_formula(eq);
 
-  bump_addrspace_array(pointer_logic.get_invalid_object(), range_tuple);
+  bump_addrspace_array(pointer_logic.back().get_invalid_object(), range_tuple);
 
   // Associate the symbol "0" with the null object; this is necessary because
   // of the situation where 0 is valid as a representation of null, but the
@@ -2190,7 +2192,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
   // eventually can be converted back via some mechanism to a valid pointer.
   Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, pointer_sort);
   Z3_ast args[2];
-  args[0] = convert_number(pointer_logic.get_invalid_object(),
+  args[0] = convert_number(pointer_logic.back().get_invalid_object(),
                            config.ansi_c.int_width, true);
 
   // Calculate ptr offset - target minus start of invalid range, ie 1
@@ -2688,14 +2690,14 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   if (is_symbol2t(expr)) {
     const symbol2t &sym = to_symbol2t(expr);
     if (sym.name.as_string() == "NULL" || sym.name.as_string() == "0") {
-      obj_num = pointer_logic.get_null_object();
+      obj_num = pointer_logic.back().get_null_object();
       got_obj_num = true;
     }
   }
 
   if (!got_obj_num)
     // add object won't duplicate objs for identical exprs (it's a map)
-    obj_num = pointer_logic.add_object(expr);
+    obj_num = pointer_logic.back().add_object(expr);
 
   bv = z3_api.mk_var(symbol.c_str(), tuple_type);
 

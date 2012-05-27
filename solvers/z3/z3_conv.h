@@ -186,7 +186,7 @@ private:
 
   expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type) const;
 
-  pointer_logict pointer_logic;
+  std::list<pointer_logict> pointer_logic;
 
   // Types for bv_cache.
 
