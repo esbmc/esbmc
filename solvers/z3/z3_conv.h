@@ -314,9 +314,8 @@ public:
   };
 
 public:
-  static Z3_context z3_ctx;
+  Z3_context z3_ctx;
   static bool s_is_uw;
-  static unsigned int num_ctx_ileaves; // Number of ileaves z3_ctx has handled
 };
 
 #endif
