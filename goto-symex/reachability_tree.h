@@ -182,7 +182,7 @@ public:
    *  @param code Assignment being made that might touch global state.
    *  @return True if context switch is to be taken.
    */
-  bool analyse_for_cswitch_after_assign(const exprt &code);
+  bool analyse_for_cswitch_after_assign(const expr2tc &code);
 
   /**
    *  Perform context switch operation triggered elsewhere.

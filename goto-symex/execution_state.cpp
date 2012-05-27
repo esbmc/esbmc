@@ -226,10 +226,8 @@ execution_statet::symex_step(reachability_treet &art)
 
         symex_return();
 
-        if (!is_nil_expr(assign)) {
-          exprt tmpassign = migrate_expr_back(assign);
-          owning_rt->analyse_for_cswitch_after_assign(tmpassign);
-        }
+        if (!is_nil_expr(assign))
+          owning_rt->analyse_for_cswitch_after_assign(assign);
       }
       break;
     default:
@@ -246,7 +244,7 @@ execution_statet::symex_assign(const expr2tc &code)
   goto_symext::symex_assign(code);
 
   if (threads_state.size() > 1)
-    owning_rt->analyse_for_cswitch_after_assign(migrate_expr_back(code));
+    owning_rt->analyse_for_cswitch_after_assign(code);
 
   return;
 }
