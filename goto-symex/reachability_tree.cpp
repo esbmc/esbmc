@@ -240,7 +240,7 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state,
       continue;
 
     //apply static partial-order reduction
-    if(por && !ex_state.apply_static_por(migrate_expr_back(expr), tid))
+    if(por && !ex_state.apply_static_por(expr, tid))
       continue;
 
     break;
@@ -633,7 +633,7 @@ reachability_treet::check_thread_viable(int tid, const expr2tc &expr, bool quiet
     return false;
   }
 
-  if (por && !ex.apply_static_por(migrate_expr_back(expr), tid)) {
+  if (por && !ex.apply_static_por(expr, tid)) {
     if (!quiet)
       std::cout << "Thread unschedulable due to POR" << std::endl;
     return false;

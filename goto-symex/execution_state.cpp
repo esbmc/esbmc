@@ -400,11 +400,11 @@ execution_statet::check_if_ileaves_blocked(void)
 }
 
 bool
-execution_statet::apply_static_por(const exprt &expr, unsigned int i) const
+execution_statet::apply_static_por(const expr2tc &expr, unsigned int i) const
 {
   bool consider = true;
 
-  if(!expr.id().empty())
+  if (!is_nil_expr(expr))
   {
     if(i < active_thread)
     {

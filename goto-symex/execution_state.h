@@ -369,7 +369,7 @@ class execution_statet : public goto_symext
    *  @param i Thread id of the currently executing thread.
    *  @return False if we should skip this interleaving.
    */
-  bool apply_static_por(const exprt &expr, unsigned int i) const;
+  bool apply_static_por(const expr2tc &expr, unsigned int i) const;
 
   /**
    *  Create a new thread.
