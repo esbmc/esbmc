@@ -47,7 +47,6 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   store_assumptions = (smt || uw);
   s_is_uw = uw;
   this->uw = uw;
-  total_mem_space = 0;
   model = NULL;
   array_of_count = 0;
   _no_variables = 1;
@@ -58,6 +57,9 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   z3_api.set_z3_ctx(z3_ctx);
 
   pointer_logic.push_back(pointer_logict());
+  addr_space_sym_num.push_back(0);
+  addr_space_data.push_back(std::map<unsigned, unsigned>());
+  total_mem_space.push_back(0);
 
   init_addr_space_array();
 
@@ -145,6 +147,9 @@ z3_convt::push_ctx(void)
 
   // Also push/duplicate pointer logic state.
   pointer_logic.push_back(pointer_logic.back());
+  addr_space_sym_num.push_back(addr_space_sym_num.back());
+  addr_space_data.push_back(addr_space_data.back());
+  total_mem_space.push_back(total_mem_space.back());
 }
 
 void
@@ -157,6 +162,9 @@ z3_convt::pop_ctx(void)
   union_numindex.erase(ctx_level);
 
   pointer_logic.pop_back();
+  addr_space_sym_num.pop_back();
+  addr_space_data.pop_back();
+  total_mem_space.pop_back();
 
   prop_convt::pop_ctx();;
 }
@@ -169,7 +177,7 @@ z3_convt::init_addr_space_array(void)
   Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
   Z3_sort native_int_sort;
 
-  addr_space_sym_num = 1;
+  addr_space_sym_num.back() = 1;
 
   if (int_encoding) {
     native_int_sort = Z3_mk_int_type(z3_ctx);
@@ -275,8 +283,8 @@ z3_convt::init_addr_space_array(void)
   assert_formula(constraint);
 
   // Record the fact that we've registered these objects
-  addr_space_data[0] = 0;
-  addr_space_data[1] = 0;
+  addr_space_data.back()[0] = 0;
+  addr_space_data.back()[1] = 0;
 
   return;
 }
@@ -286,13 +294,13 @@ z3_convt::bump_addrspace_array(unsigned int idx, Z3_ast val)
 {
   std::string str, new_str;
 
-  str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num++);
+  str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back()++);
   Z3_ast addr_sym = z3_api.mk_var(str.c_str(), addr_space_arr_sort);
   Z3_ast obj_idx = convert_number(idx, config.ansi_c.int_width, true);
 
   Z3_ast store = Z3_mk_store(z3_ctx, addr_sym, obj_idx, val);
 
-  new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num);
+  new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back());
   Z3_ast new_addr_sym = z3_api.mk_var(new_str.c_str(),
                                       addr_space_arr_sort);
 
@@ -306,7 +314,7 @@ std::string
 z3_convt::get_cur_addrspace_ident(void)
 {
 
-  std::string str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num);
+  std::string str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back());
   return str;
 }
 
@@ -391,7 +399,7 @@ void
 z3_convt::finalize_pointer_chain(void)
 {
   bool fixed_model = false;
-  unsigned int offs, num_ptrs = addr_space_data.size();
+  unsigned int offs, num_ptrs = addr_space_data.back().size();
   if (num_ptrs == 0)
     return;
 
@@ -415,7 +423,8 @@ z3_convt::finalize_pointer_chain(void)
     // the order that they reached the Z3 backend in).
     offs = 2;
     std::map<unsigned,unsigned>::const_iterator it;
-    for (it = addr_space_data.begin(); it != addr_space_data.end(); it++) {
+    for (it = addr_space_data.back().begin();
+         it != addr_space_data.back().end(); it++) {
 
       // The invalid object overlaps everything; it exists to catch anything
       // that slip through the cracks. Don't make the assumption that objects
@@ -450,7 +459,7 @@ z3_convt::finalize_pointer_chain(void)
     // object nums don't overlap the current one. So for every particular pair
     // of object numbers in the set there'll be a doesn't-overlap clause.
 
-    unsigned num_objs = addr_space_data.size();
+    unsigned num_objs = addr_space_data.back().size();
     for (unsigned i = 0; i < num_objs; i++) {
       // Obj 1 is designed to overlap
       if (i == 1)
@@ -2143,9 +2152,9 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
   convert_bv(cast_to_unsigned, target);
 
   // Construct array for all possible object outcomes
-  Z3_ast *is_in_range = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
-  Z3_ast *obj_ids = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
-  Z3_ast *obj_starts = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
+  Z3_ast *is_in_range = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.back().size());
+  Z3_ast *obj_ids = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.back().size());
+  Z3_ast *obj_starts = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.back().size());
 
   Z3_sort native_int_sort;
   if (int_encoding) {
@@ -2156,8 +2165,8 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
 
   std::map<unsigned,unsigned>::const_iterator it;
   unsigned int i;
-  for (it = addr_space_data.begin(), i = 0;
-       it != addr_space_data.end(); it++, i++)
+  for (it = addr_space_data.back().begin(), i = 0;
+       it != addr_space_data.back().end(); it++, i++)
   {
     Z3_ast args[2];
 
@@ -2214,7 +2223,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
   Z3_ast prev_in_chain = Z3_mk_app(z3_ctx, decl, 2, args);
 
   // Now that big ite chain,
-  for (i = 0; i < addr_space_data.size(); i++) {
+  for (i = 0; i < addr_space_data.back().size(); i++) {
     args[0] = obj_ids[i];
 
     // Calculate ptr offset were it this
@@ -2709,7 +2718,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
-  if (addr_space_data.find(obj_num) == addr_space_data.end()) {
+  if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
 
     Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, tuple_type);
 
@@ -2754,7 +2763,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     }
 
     // Also record the amount of memory space we're working with for later usage
-    total_mem_space += pointer_offset_size(*expr->type.get()).to_long() + 1;
+    total_mem_space.back() +=
+      pointer_offset_size(*expr->type.get()).to_long() + 1;
 
     // Assert that start + offs == end
     Z3_ast offs_eq;
@@ -2771,7 +2781,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     // We'll place constraints on those addresses later, in finalize_pointer_chain
 
-    addr_space_data[obj_num] =
+    addr_space_data.back()[obj_num] =
           pointer_offset_size(*expr->type.get()).to_long() + 1;
 
     Z3_ast start_ast, end_ast;

@@ -286,11 +286,11 @@ private:
   std::list<Z3_ast> assumpt;
 
   // Array of obj ID -> address range tuples
-  unsigned int addr_space_sym_num;
+  std::list<unsigned int> addr_space_sym_num;
   Z3_sort addr_space_tuple_sort;
   Z3_sort addr_space_arr_sort;
-  std::map<unsigned,unsigned> addr_space_data; // Obj id, size
-  unsigned long total_mem_space;
+  std::list<std::map<unsigned, unsigned>> addr_space_data; // Obj id, size
+  std::list<unsigned long> total_mem_space;
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;
