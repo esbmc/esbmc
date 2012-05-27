@@ -402,8 +402,7 @@ z3_convt::fixed_point(std::string v, unsigned width)
 void
 z3_convt::finalize_pointer_chain(void)
 {
-  bool fixed_model = false;
-  unsigned int offs, num_ptrs = addr_space_data.back().size();
+  unsigned int num_ptrs = addr_space_data.back().size();
   if (num_ptrs == 0)
     return;
 
@@ -413,94 +412,51 @@ z3_convt::finalize_pointer_chain(void)
   else
     native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
 
-  // Work out which pointer model to take
-  if (config.options.get_bool_option("fixed-pointer-model"))
-    fixed_model = true;
-  else if (config.options.get_bool_option("floating-pointer-model"))
-    fixed_model = false;
-  // Default - false, non-fixed model.
+  // Floating model - we assert that all objects don't overlap each other,
+  // but otherwise their locations are entirely defined by Z3. Inefficient,
+  // but necessary for accuracy. Unfortunately, has high complexity (O(n^2))
 
-  if (fixed_model) {
-    // Generate fixed model - take each pointer object and ensure that the end
-    // of one is immediatetly followed by the start of another. The ordering is
-    // in whatever order we originally created the pointer objects. (Or rather,
-    // the order that they reached the Z3 backend in).
-    offs = 2;
-    std::map<unsigned,unsigned>::const_iterator it;
-    for (it = addr_space_data.back().begin();
-         it != addr_space_data.back().end(); it++) {
+  // Implementation: iterate through all objects; assert that those with lower
+  // object nums don't overlap the current one. So for every particular pair
+  // of object numbers in the set there'll be a doesn't-overlap clause.
 
-      // The invalid object overlaps everything; it exists to catch anything
-      // that slip through the cracks. Don't make the assumption that objects
-      // don't overlap it.
-      if (it->first == 1)
-        continue;
+  unsigned num_objs = addr_space_data.back().size();
+  for (unsigned i = 0; i < num_objs; i++) {
+    // Obj 1 is designed to overlap
+    if (i == 1)
+      continue;
 
-      Z3_ast start = z3_api.mk_var(
-                           ("__ESBMC_ptr_obj_start_" + itos(it->first)).c_str(),
-                           native_int_sort);
-      Z3_ast start_num = convert_number(offs, config.ansi_c.int_width, true);
-      Z3_ast eq = Z3_mk_eq(z3_ctx, start, start_num);
-      assert_formula(eq);
+     Z3_ast i_start = z3_api.mk_var(
+                         ("__ESBMC_ptr_obj_start_" + itos(i)).c_str(),
+                         native_int_sort);
+    Z3_ast i_end = z3_api.mk_var(
+                         ("__ESBMC_ptr_obj_end_" + itos(i)).c_str(),
+                         native_int_sort);
 
-      offs += it->second - 1;
-
-      Z3_ast end = z3_api.mk_var(
-                             ("__ESBMC_ptr_obj_end_" + itos(it->first)).c_str(),
-                             native_int_sort);
-      Z3_ast end_num = convert_number(offs, config.ansi_c.int_width, true);
-      eq = Z3_mk_eq(z3_ctx, end, end_num);
-      assert_formula(eq);
-
-      offs++;
-    }
-  } else {
-    // Floating model - we assert that all objects don't overlap each other,
-    // but otherwise their locations are entirely defined by Z3. Inefficient,
-    // but necessary for accuracy. Unfortunately, has high complexity (O(n^2))
-
-    // Implementation: iterate through all objects; assert that those with lower
-    // object nums don't overlap the current one. So for every particular pair
-    // of object numbers in the set there'll be a doesn't-overlap clause.
-
-    unsigned num_objs = addr_space_data.back().size();
-    for (unsigned i = 0; i < num_objs; i++) {
+    for (unsigned j = 0; j < i; j++) {
       // Obj 1 is designed to overlap
-      if (i == 1)
+      if (j == 1)
         continue;
 
-       Z3_ast i_start = z3_api.mk_var(
-                           ("__ESBMC_ptr_obj_start_" + itos(i)).c_str(),
-                           native_int_sort);
-      Z3_ast i_end = z3_api.mk_var(
-                           ("__ESBMC_ptr_obj_end_" + itos(i)).c_str(),
-                           native_int_sort);
+      Z3_ast j_start = z3_api.mk_var(
+                         ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
+                         native_int_sort);
+      Z3_ast j_end = z3_api.mk_var(
+                         ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
+                         native_int_sort);
 
-      for (unsigned j = 0; j < i; j++) {
-        // Obj 1 is designed to overlap
-        if (j == 1)
-          continue;
-
-        Z3_ast j_start = z3_api.mk_var(
-                           ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
-                           native_int_sort);
-        Z3_ast j_end = z3_api.mk_var(
-                           ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
-                           native_int_sort);
-
-        // Formula: (i_end < j_start) || (i_start > j_end)
-        // Previous assertions ensure start < end for all objs.
-        Z3_ast args[2], formula;
-        if (int_encoding) {
-          args[0] = Z3_mk_lt(z3_ctx, i_end, j_start);
-          args[1] = Z3_mk_gt(z3_ctx, i_start, j_end);
-        } else {
-          args[0] = Z3_mk_bvult(z3_ctx, i_end, j_start);
-          args[1] = Z3_mk_bvugt(z3_ctx, i_start, j_end);
-        }
-        formula = Z3_mk_or(z3_ctx, 2, args);
-        assert_formula(formula);
+      // Formula: (i_end < j_start) || (i_start > j_end)
+      // Previous assertions ensure start < end for all objs.
+      Z3_ast args[2], formula;
+      if (int_encoding) {
+        args[0] = Z3_mk_lt(z3_ctx, i_end, j_start);
+        args[1] = Z3_mk_gt(z3_ctx, i_start, j_end);
+      } else {
+        args[0] = Z3_mk_bvult(z3_ctx, i_end, j_start);
+        args[1] = Z3_mk_bvugt(z3_ctx, i_start, j_end);
       }
+      formula = Z3_mk_or(z3_ctx, 2, args);
+      assert_formula(formula);
     }
   }
 
