@@ -276,7 +276,6 @@ private:
   z3_capi z3_api;
 
   bool int_encoding, smtlib, store_assumptions, uw;
-  std::list<Z3_ast> assumptions;
   std::string filename;
 
   unsigned int array_of_count;
