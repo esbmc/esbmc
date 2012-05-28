@@ -47,6 +47,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   TS_number = 0;
   node_id = 0;
   guard_execution = "execution_statet::\\guard_exec";
+  interleaving_unviable = false;
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("main");
@@ -131,6 +132,7 @@ execution_statet::operator=(const execution_statet &ex)
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
+  interleaving_unviable = ex.interleaving_unviable;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
@@ -446,6 +448,27 @@ execution_statet::end_thread(void)
   atomic_numbers[active_thread] = 0;
 }
 
+bool
+execution_statet::is_cur_state_guard_false(void)
+{
+
+  // So, can the assumption actually be true? If enabled, ask the solver.
+  if (options.get_bool_option("smt-thread-guard")) {
+    expr2tc parent_guard = threads_state[active_thread].guard.as_expr();
+
+    runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
+                                                 (target);
+    tvt res = rte->ask_solver_question(parent_guard);
+    if (res.is_false())
+      return true;
+  } else {
+    if (threads_state[active_thread].guard.is_false())
+      return true;
+  }
+
+  return false;
+}
+
 void
 execution_statet::execute_guard(void)
 {
@@ -476,8 +499,7 @@ execution_statet::execute_guard(void)
   old_guard.add(threads_state[last_active_thread].guard.as_expr());
 
   // If we simplified the global guard expr to false, write that to thread
-  // guards, not the symbolic guard name. This is the only way to bail out of
-  // evaulating a particular interleaving early right now.
+  // guards, not the symbolic guard name.
   if (is_constant_bool2t(parent_guard) &&
       !to_constant_bool2t(parent_guard).constant_value)
     guard_expr = parent_guard;
