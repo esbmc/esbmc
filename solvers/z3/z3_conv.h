@@ -254,8 +254,8 @@ private:
   virtual literalt lnot(literalt a);
   virtual literalt limplies(literalt a, literalt b);
   virtual literalt new_variable();
-  virtual unsigned get_no_variables() const { return no_variables; }
-  virtual void set_no_variables(unsigned no) { no_variables = no; }
+  virtual uint64_t get_no_variables() const { return no_variables; }
+  virtual void set_no_variables(uint64_t no) { no_variables = no; }
   virtual void lcnf(const bvt &bv);
 
   static void eliminate_duplicates(const bvt &bv, bvt &dest);
