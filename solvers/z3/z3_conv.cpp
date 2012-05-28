@@ -51,6 +51,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
 
   Z3_push(z3_ctx);
   max_core_size=Z3_UNSAT_CORE_LIMIT;
+  level_ctx = 0;
 
   z3_api.set_z3_ctx(z3_ctx);
 
@@ -123,6 +124,8 @@ z3_convt::push_ctx(void)
 {
   prop_convt::push_ctx();
 
+  level_ctx++;
+
   // Also push/duplicate pointer logic state.
   pointer_logic.push_back(pointer_logic.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
@@ -156,6 +159,8 @@ z3_convt::pop_ctx(void)
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
   total_mem_space.pop_back();
+
+  level_ctx--;
 
   prop_convt::pop_ctx();;
 }
@@ -2570,7 +2575,7 @@ z3_convt::convert_bv(const expr2tc &expr, Z3_ast &bv)
   expr->convert_smt(*this, (void *&)bv);
 
   // insert into cache
-  struct bv_cache_entryt cacheentry = { expr, bv, 0 };
+  struct bv_cache_entryt cacheentry = { expr, bv, level_ctx };
   bv_cache.insert(cacheentry);
   return;
 }

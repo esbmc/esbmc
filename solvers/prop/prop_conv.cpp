@@ -25,7 +25,7 @@ literalt prop_convt::convert(const expr2tc &expr)
 
   // insert into cache
 
-  struct lit_cachet entry = { expr, literal, 0 };
+  struct lit_cachet entry = { expr, literal, ctx_level };
   cache.insert(entry);
 
   return literal;

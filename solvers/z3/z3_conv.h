@@ -276,6 +276,7 @@ private:
 
   z3_capi z3_api;
 
+  unsigned int level_ctx;
   bool int_encoding, smtlib, store_assumptions, uw;
   std::string filename;
 
