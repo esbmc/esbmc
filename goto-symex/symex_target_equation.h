@@ -73,7 +73,7 @@ public:
     std::vector<dstring> stack_trace,
     const sourcet &source);
 
-  void convert(prop_convt &prop_conv);
+  virtual void convert(prop_convt &prop_conv);
   void convert_internal_step(prop_convt &prop_conv, literalt &assumpt_lit,
                              bvt &assertions, SSA_stept &s);
 
@@ -178,6 +178,8 @@ public:
   virtual void pop_ctx(void);
 
   virtual symex_targett *clone(void) const;
+
+  virtual void convert(prop_convt &prop_conv);
 
   prop_convt &conv;
   std::list<bvt> assert_vec_list;

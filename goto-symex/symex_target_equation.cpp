@@ -288,6 +288,22 @@ runtime_encoded_equationt::pop_ctx(void)
   assumpt_chain.pop_back();
 }
 
+void
+runtime_encoded_equationt::convert(prop_convt &prop_conv)
+{
+
+  // Don't actually convert. We've already done most of the conversion by now
+  // (probably), instead push the context one last time to flush anything
+  // additional through.
+  push_ctx();
+
+  // Finally, we also want to assert the final assertions.
+  if(!assert_vec_list.back().empty())
+    prop_conv.lcnf(assert_vec_list.back());
+
+  return;
+}
+
 symex_targett *
 runtime_encoded_equationt::clone(void) const
 {
