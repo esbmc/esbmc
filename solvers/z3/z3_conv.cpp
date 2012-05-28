@@ -147,9 +147,9 @@ z3_convt::pop_ctx(void)
 
   // Erase everything on stack since last push_ctx
   std::list<Z3_ast>::iterator it = assumpt_ctx_stack.back();
-  assumpt_ctx_stack.pop_back();
   ++it;
   assumpt.erase(it, assumpt.end());
+  assumpt_ctx_stack.pop_back();
 
   bv_cachet::nth_index<1>::type &cache_numindex = bv_cache.get<1>();
   cache_numindex.erase(ctx_level);
