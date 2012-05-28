@@ -180,6 +180,8 @@ public:
   virtual symex_targett *clone(void) const;
 
   prop_convt &conv;
+  std::list<bvt> assert_vec_list;
+  std::list<literalt> assumpt_chain;
   std::list<SSA_stepst::iterator> scoped_end_points;
 };
 

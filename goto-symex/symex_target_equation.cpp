@@ -244,6 +244,8 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
   : symex_target_equationt(_ns),
     conv(_conv)
 {
+  assert_vec_list.push_back(bvt());
+  assumpt_chain.push_back(const_literal(true));
 }
 
 void
@@ -251,10 +253,20 @@ runtime_encoded_equationt::push_ctx(void)
 {
 
   SSA_stepst::iterator it = SSA_steps.end();
+  SSA_stepst::iterator run_it = scoped_end_points.back();
 
   if (SSA_steps.size() != 0)
     --it;
 
+  // Convert this run.
+  if (SSA_steps.size() != 0)
+    for (; run_it != SSA_steps.end(); run_it++)
+      convert_internal_step(conv, assumpt_chain.back(), assert_vec_list.back(),
+                            *run_it);
+
+  // And push everything back.
+  assumpt_chain.push_back(assumpt_chain.back());
+  assert_vec_list.push_back(assert_vec_list.back());
   scoped_end_points.push_back(it);
   conv.push_ctx();
 }
@@ -263,8 +275,6 @@ void
 runtime_encoded_equationt::pop_ctx(void)
 {
 
-  conv.pop_ctx();
-
   SSA_stepst::iterator it = scoped_end_points.back();
 
   if (SSA_steps.size() != 0)
@@ -272,7 +282,10 @@ runtime_encoded_equationt::pop_ctx(void)
 
   SSA_steps.erase(it, SSA_steps.end());
 
+  conv.pop_ctx();
   scoped_end_points.pop_back();
+  assert_vec_list.pop_back();
+  assumpt_chain.pop_back();
 }
 
 symex_targett *
