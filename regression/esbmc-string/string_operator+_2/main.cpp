@@ -14,7 +14,7 @@ int main ()
   str2 = 'x';               // single character
   str3 = str1 + str2;       // string
 
-  str3 = str3 + ", y, " + 'z';
+  str3 = str3 + ", y, " + "z";
   
   assert(str3 == "Test string: x, y, z"); //added
   cout << str3  << endl;

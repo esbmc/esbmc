@@ -8,7 +8,7 @@ using namespace std;
 
 int main ()
 {
-  string str ("There are two needles in this haystack with needles.");
+  string str ("Ther wo needles this haw");
   string str2 ("needle");
   size_t found;
 
@@ -18,13 +18,13 @@ int main ()
   if (found!=string::npos)
     cout << "first 'needle' found at: " << int(found) << endl;
 
-  found=str.find("needles are small",found+1,6);
+  found=str.find("needles a",found+1,6);
   assert(int(found)!=44);
   if (found!=string::npos)
     cout << "second 'needle' found at: " << int(found) << endl;
 
-  found=str.find("haystack");
-  assert(int(found)!=30);
+  found=str.find("ha");
+  assert(int(found)==30);
   if (found!=string::npos)
     cout << "'haystack' also found at: " << int(found) << endl;
 
