@@ -249,14 +249,9 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
 }
 
 void
-runtime_encoded_equationt::push_ctx(void)
+runtime_encoded_equationt::flush_latest_instructions(void)
 {
-
-  SSA_stepst::iterator it = SSA_steps.end();
   SSA_stepst::iterator run_it = scoped_end_points.back();
-
-  if (SSA_steps.size() != 0)
-    --it;
 
   // Convert this run.
   if (SSA_steps.size() != 0) {
@@ -269,6 +264,18 @@ runtime_encoded_equationt::push_ctx(void)
       convert_internal_step(conv, assumpt_chain.back(), assert_vec_list.back(),
                             *run_it);
   }
+}
+
+void
+runtime_encoded_equationt::push_ctx(void)
+{
+
+  flush_latest_instructions();
+
+  SSA_stepst::iterator it = SSA_steps.end();
+
+  if (SSA_steps.size() != 0)
+    --it;
 
   // And push everything back.
   assumpt_chain.push_back(assumpt_chain.back());

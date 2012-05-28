@@ -180,6 +180,7 @@ public:
   virtual symex_targett *clone(void) const;
 
   virtual void convert(prop_convt &prop_conv);
+  void flush_latest_instructions(void);
 
   prop_convt &conv;
   std::list<bvt> assert_vec_list;
