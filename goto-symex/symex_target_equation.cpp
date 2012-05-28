@@ -306,11 +306,12 @@ runtime_encoded_equationt::convert(prop_convt &prop_conv)
 {
 
   // Don't actually convert. We've already done most of the conversion by now
-  // (probably), instead push the context one last time to flush anything
-  // additional through.
-  push_ctx();
+  // (probably), instead flush all unconverted instructions. We don't push
+  // a context, because a) where do we unpop it, but b) we're never going to
+  // build anything on top of this, so there's no gain by pushing it.
+  flush_latest_instructions();
 
-  // Finally, we also want to assert the final assertions.
+  // Finally, we also want to assert the set of assertions.
   if(!assert_vec_list.back().empty())
     prop_conv.lcnf(assert_vec_list.back());
 
