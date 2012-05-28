@@ -254,8 +254,8 @@ private:
   virtual literalt lnot(literalt a);
   virtual literalt limplies(literalt a, literalt b);
   virtual literalt new_variable();
-  virtual unsigned no_variables() const { return _no_variables; }
-  virtual void set_no_variables(unsigned no) { _no_variables=no; }
+  virtual unsigned get_no_variables() const { return no_variables; }
+  virtual void set_no_variables(unsigned no) { no_variables = no; }
   virtual void lcnf(const bvt &bv);
 
   static void eliminate_duplicates(const bvt &bv, bvt &dest);
@@ -283,7 +283,7 @@ private:
   unsigned int array_of_count;
   irep_idt dyn_info_arr_name;
 
-  unsigned _no_variables;
+  uint64_t no_variables;
   std::list<Z3_ast> assumpt;
   std::list<std::list<Z3_ast>::iterator> assumpt_ctx_stack;
 

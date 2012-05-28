@@ -77,7 +77,7 @@ public:
 
   // variables
   virtual literalt new_variable()=0;
-  virtual unsigned no_variables() const=0;
+  virtual unsigned get_no_variables() const=0;
 
   // solving
   virtual const std::string solver_text()=0;

@@ -47,7 +47,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   this->uw = uw;
   model = NULL;
   array_of_count = 0;
-  _no_variables = 1;
+  no_variables = 1;
 
   Z3_push(z3_ctx);
   max_core_size=Z3_UNSAT_CORE_LIMIT;
@@ -2897,9 +2897,9 @@ z3_convt::new_variable()
 {
   literalt l;
 
-  l.set(_no_variables, false);
+  l.set(no_variables, false);
 
-  set_no_variables(_no_variables + 1);
+  set_no_variables(no_variables + 1);
 
   return l;
 }
@@ -2946,7 +2946,7 @@ z3_convt::process_clause(const bvt &bv, bvt &dest)
     if (l.is_false())
       continue;
 
-    assert(l.var_no() < _no_variables);
+    assert(l.var_no() < no_variables);
 
     // prevent duplicate literals
     if (s.insert(l).second)
