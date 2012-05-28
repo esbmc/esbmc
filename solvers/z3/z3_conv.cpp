@@ -133,7 +133,9 @@ z3_convt::push_ctx(void)
   total_mem_space.push_back(total_mem_space.back());
 
   // Store where we are in the list of assumpts.
-  assumpt_ctx_stack.push_back(assumpt.end()--);
+  std::list<Z3_ast>::iterator it = assumpt.end();
+  it--;
+  assumpt_ctx_stack.push_back(it);
 
   Z3_push(z3_ctx);
 }
@@ -146,7 +148,7 @@ z3_convt::pop_ctx(void)
   // Erase everything on stack since last push_ctx
   std::list<Z3_ast>::iterator it = assumpt_ctx_stack.back();
   assumpt_ctx_stack.pop_back();
-  it++;
+  ++it;
   assumpt.erase(it, assumpt.end());
 
   bv_cachet::nth_index<1>::type &cache_numindex = bv_cache.get<1>();
