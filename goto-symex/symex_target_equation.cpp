@@ -259,10 +259,16 @@ runtime_encoded_equationt::push_ctx(void)
     --it;
 
   // Convert this run.
-  if (SSA_steps.size() != 0)
+  if (SSA_steps.size() != 0) {
+    // Horror: if the start-of-run iterator is end, then it actually refers to
+    // the start of the list. The start doesn't have a persistent iterator, so
+    // we can't keep a reference to it when there's nothing in the list :|
+    if (run_it == SSA_steps.end())
+      run_it = SSA_steps.begin();
     for (; run_it != SSA_steps.end(); run_it++)
       convert_internal_step(conv, assumpt_chain.back(), assert_vec_list.back(),
                             *run_it);
+  }
 
   // And push everything back.
   assumpt_chain.push_back(assumpt_chain.back());
