@@ -451,30 +451,26 @@ execution_statet::execute_guard(void)
 {
 
   node_id = node_count++;
-  exprt guard_expr = symbol_exprt(get_guard_identifier(), bool_typet());
-  exprt parent_guard, new_rhs, const_prop_val;
+  expr2tc guard_expr = expr2tc(new symbol2t(type_pool.get_bool(),
+                                            get_guard_identifier()));
+  symbol2t &guard_exp = to_symbol2t(guard_expr);
+  exprt new_rhs, const_prop_val;
+  expr2tc parent_guard;
 
-  parent_guard = migrate_expr_back(threads_state[last_active_thread].guard.as_expr());
+  parent_guard = threads_state[last_active_thread].guard.as_expr();
 
   // Rename value, allows its use in other renamed exprs
-  irep_idt new_name = state_level2->make_assignment(guard_expr.identifier(),
+  irep_idt new_name = state_level2->make_assignment(guard_exp.name,
                                                     expr2tc(), expr2tc());
-  guard_expr.identifier(new_name);
+
+  guard_exp.name = new_name;
 
   // Truth of this guard implies the parent is true.
-  exprt assumpt("=>", bool_typet());
-
-  expr2tc tmp_p_guard;
-  migrate_expr(parent_guard, tmp_p_guard);
-  state_level2->rename(tmp_p_guard);
-  parent_guard = migrate_expr_back(tmp_p_guard);
-
+  state_level2->rename(parent_guard);
   do_simplify(parent_guard);
-  assumpt.copy_to_operands(guard_expr, parent_guard);
+  expr2tc assumpt = expr2tc(new implies2t(guard_expr, parent_guard));
 
-  expr2tc assumpt2;
-  migrate_expr(assumpt, assumpt2);
-  target->assumption(guardt().as_expr(), assumpt2, get_active_state().source);
+  target->assumption(guardt().as_expr(), assumpt, get_active_state().source);
 
   guardt old_guard;
   old_guard.add(threads_state[last_active_thread].guard.as_expr());
@@ -482,7 +478,8 @@ execution_statet::execute_guard(void)
   // If we simplified the global guard expr to false, write that to thread
   // guards, not the symbolic guard name. This is the only way to bail out of
   // evaulating a particular interleaving early right now.
-  if (parent_guard.is_false())
+  if (is_constant_bool2t(parent_guard) &&
+      !to_constant_bool2t(parent_guard).constant_value)
     guard_expr = parent_guard;
 
   // copy the new guard exprt to every threads
@@ -490,9 +487,7 @@ execution_statet::execute_guard(void)
   {
     // remove the old guard first
     threads_state.at(i).guard -= old_guard;
-    expr2tc tmp_expr;
-    migrate_expr(guard_expr, tmp_expr);
-    threads_state.at(i).guard.add(tmp_expr);
+    threads_state.at(i).guard.add(guard_expr);
   }
 }
 
