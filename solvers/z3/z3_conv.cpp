@@ -3037,7 +3037,7 @@ z3_convt::l_get(literalt a) const
 }
 
 void
-z3_convt::assert_formula(Z3_ast ast, bool needs_literal)
+z3_convt::assert_formula(Z3_ast ast)
 {
 
   // If we're not going to be using the assumptions (ie, for unwidening and for
@@ -3047,19 +3047,14 @@ z3_convt::assert_formula(Z3_ast ast, bool needs_literal)
     return;
   }
 
-  if (!needs_literal) {
-    Z3_assert_cnstr(z3_ctx, ast);
-    assumpt.push_back(ast);
-  } else {
-    literalt l = new_variable();
-    Z3_ast formula = Z3_mk_iff(z3_ctx, z3_literal(l), ast);
-    Z3_assert_cnstr(z3_ctx, formula);
+  literalt l = new_variable();
+  Z3_ast formula = Z3_mk_iff(z3_ctx, z3_literal(l), ast);
+  Z3_assert_cnstr(z3_ctx, formula);
 
-    if (smtlib)
-      assumpt.push_back(ast);
-    else
-      assumpt.push_back(z3_literal(l));
-  }
+  if (smtlib)
+    assumpt.push_back(ast);
+  else
+    assumpt.push_back(z3_literal(l));
 
   return;
 }
