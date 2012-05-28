@@ -232,6 +232,15 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-slice", true);
   }
 
+  if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard")) {
+    if (!cmdline.isset("smt-during-symex")) {
+      std::cerr << "Please explicitly specify --smt-during-symex if you want "
+                   "to use features that involve encoding SMT during symex"
+                   << std::endl;
+      abort();
+    }
+  }
+
   // jmorse
   if(cmdline.isset("timeout")) {
 #ifdef _WIN32

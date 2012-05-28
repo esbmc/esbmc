@@ -112,6 +112,8 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"memstats",		switc,		""	},
 { 0,	"dump-z3-assigns",	switc,		""	},
 { 0,	"smt-during-symex",	switc,		""	},
+{ 0,	"smt-thread-guard",	switc,		""	},
+{ 0,	"smt-symex-guard",	switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},
