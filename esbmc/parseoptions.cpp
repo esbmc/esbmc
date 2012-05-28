@@ -226,6 +226,12 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("inlining"))
     options.set_option("inlining", true);
 
+  if (cmdline.isset("smt-during-symex")) {
+    std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
+    std::cout << std::endl;
+    options.set_option("no-slice", true);
+  }
+
   // jmorse
   if(cmdline.isset("timeout")) {
 #ifdef _WIN32
