@@ -182,6 +182,8 @@ public:
   virtual void convert(prop_convt &prop_conv);
   void flush_latest_instructions(void);
 
+  tvt ask_solver_question(const expr2tc &question);
+
   prop_convt &conv;
   std::list<bvt> assert_vec_list;
   std::list<literalt> assumpt_chain;

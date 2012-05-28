@@ -323,3 +323,57 @@ runtime_encoded_equationt::clone(void) const
 {
   assert(0 && "runtime_encoded_equationt should never be cloned");
 }
+
+tvt
+runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
+{
+  tvt final_res;
+
+  // So - we have a formula, we want to work out whether it's true, false, or
+  // unknown. Before doing anything, first push a context, as we'll need to
+  // wipe some state afterwards.
+  push_ctx();
+
+  // Convert the question (must be a bool).
+  assert(is_bool_type(question->type));
+  literalt q = conv.convert(question);
+
+  // Now, how to ask the question? Encode as (q | !q), which is always true,
+  // and see which one the solver picks to be true. Then assume that it's false,
+  // and see if the other one is satisfiable. If it is, the result can be either
+  // value, so unknown. If it's not satisfiable, we have a single result.
+  literalt not_q = conv.lnot(q);
+  literalt full_q = conv.lor(q, not_q);
+  conv.l_set_to(full_q, true);
+  prop_convt::resultt res = conv.dec_solve();
+  assert(res == prop_convt::P_SATISFIABLE && "Initial in ask_solver_question "
+         "should always be satisfiable");
+
+  // So; which result?
+  tvt res1 = conv.l_get(q);
+  if (res1.is_unknown() || res1.is_false()) {
+    // Then not_q is true. So assume that it's false.
+    conv.l_set_to(not_q, false);
+  } else {
+    // q is true. Assume it isn't.
+    assert(res1.is_true());
+    conv.l_set_to(q, false);
+  }
+
+  res = conv.dec_solve();
+  if (res == prop_convt::P_SATISFIABLE) {
+    // Both ways are satisfiable; result is unknown.
+    final_res = tvt(tvt::TV_UNKNOWN);
+  } else if (res1.is_true()) {
+    // Unsatisfiable; and originally q was true, so the question is true.
+    final_res = res1;
+  } else {
+    // Unsatisfiable; and originally q wasn't true, so it's overall false.
+    final_res = tvt(tvt::TV_FALSE);
+  }
+
+  // We have our result; pop off the questions / formula we've asked.
+  pop_ctx();
+
+  return final_res;
+}
