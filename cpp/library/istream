@@ -8,11 +8,11 @@
 
 namespace std
 {
-
 struct istream: ios
 {
 //  streamsize width ( ) const;
 //  streamsize width ( streamsize wide );
+  virtual ~istream ();
   istream(int id = 0): id(id), ios(), _gcount(0) {}
   istream (streambuf * sb): _gcount(0) {}
   int id;
@@ -43,6 +43,16 @@ struct istream: ios
 
   int sync ( );
 
+  struct sentry {
+	  public:
+		explicit sentry ( istream& is, bool noskipws = false );
+		~sentry();
+		operator bool() const;
+	  private:
+		sentry (const sentry&);             // not defined
+		sentry& operator= (const sentry& ); // not defined
+  };
+
 private:
   streamsize _gcount;
   istream(const istream&); // disabled
@@ -50,6 +60,7 @@ private:
   streamsize _filesize = nondet_uint();
   streampos _filepos = 0;
 };
+
 }
 
 namespace esbmc

@@ -14,6 +14,8 @@ struct ostream
 
 	ostream(){}
 	ostream(int id): id(id){}
+	virtual ~ostream();
+
 	int id;
 	streamsize width ( ) const;
 	streamsize width ( streamsize wide );
@@ -22,10 +24,22 @@ struct ostream
 	void put(char c);
 //	void write(char str[], size_t n);
 	ostream& write ( const char* s , streamsize n );
+	streampos tellg ( ); //model
 	ostream& seekp ( streampos pos ); //model
 	ostream& seekp ( streamoff off, ios_base::seekdir dir ); //model
+	ostream& flush ( );
 	ios_base::fmtflags flags ( ) const;
 	ios_base::fmtflags flags ( ios_base::fmtflags fmtfl );
+
+	struct sentry {
+		public:
+		  explicit sentry ( ostream& os );
+		  ~sentry();
+		  operator bool() const;
+		private:
+		  sentry (const sentry&);             // not defined
+		  sentry& operator= (const sentry& ); // not defined
+	};
 
 private:
 	ostream(const ostream&); // disabled
@@ -33,6 +47,7 @@ private:
 	streamsize _filesize = nondet_uint();
 	ios::streampos _filepos = 0;
 };
+
 }
 
 namespace esbmc
