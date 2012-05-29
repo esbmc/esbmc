@@ -914,6 +914,7 @@ namespace std
 		this->str[i] = '\0';
 		return *this;
 	}
+
 	string& string::insert ( size_t pos1, string& s, size_t pos2, size_t n )
 	{
 		__ESBMC_HIDE:
