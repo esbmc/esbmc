@@ -683,15 +683,30 @@ namespace esbmct {
   };
 }; // esbmct
 
+// So - make some type definitions for the different types we're going to be
+// working with. This is to avoid the repeated use of template names in later
+// definitions.
+
+// Start with forward class definitions
+
+class bool_type2t;
+
+// Then give them a typedef name
+
+typedef esbmct::type<bool_type2t> bool_type_base;
+
+// And finally an explicit type instanciation.
+
+template class esbmct::type<bool_type2t>;
+
 /** Boolean type. No additional data */
-class bool_type2t : public esbmct::type<bool_type2t>
+class bool_type2t : public bool_type_base
 {
 public:
-  bool_type2t(void) : esbmct::type<bool_type2t>(bool_id) {}
-  bool_type2t(const bool_type2t &ref) : esbmct::type<bool_type2t>(ref) {}
+  bool_type2t(void) : bool_type_base(bool_id) {}
+  bool_type2t(const bool_type2t &ref) : bool_type_base(ref) {}
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<bool_type2t>;
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
 class empty_type2t : public esbmct::type<empty_type2t>
