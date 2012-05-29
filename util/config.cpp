@@ -88,7 +88,7 @@ void configt::ansi_ct::set_64()
   long_int_width=8*8;
   char_width=1*8;
   short_int_width=2*8;
-  long_long_int_width=16*8;
+  long_long_int_width=8*8;
   pointer_width=8*8;
   pointer_diff_width=8*8;
   single_width=4*8;
