@@ -98,8 +98,11 @@ void renaming::level2t::rename(exprt &expr)
 
     // first see if it's already an l2 name
 
-    if(identifier.as_string().find("#") != std::string::npos)
+    if(identifier.as_string().find("#") != std::string::npos
+       && identifier.as_string().find("#constant") == std::string::npos)
+    {
       return;
+    }
 
     const current_namest::const_iterator it=
       current_names.find(identifier);
