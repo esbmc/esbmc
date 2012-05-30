@@ -33,7 +33,6 @@ esbmc: $(OBJS)
 iridis-esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
 	$(ESBMCDIR)/scripts/fetchlibc.sh .libc.a $(ESBMCDIR)/scripts/gpg-keyring
-	echo "I'm covered in bees"
-
+	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(CXX) -print-file-name=libstdc++.a` -lm -ldl `$(CXX) -print-file-name=libgcc.a` `$(CXX) -print-file-name=libgcc_eh.a` ./.libc.a
 clean:
 	-rm -f $(OBJDIR)/* esbmc $(OBJDIR)/.deps
