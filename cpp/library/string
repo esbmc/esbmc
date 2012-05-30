@@ -168,6 +168,10 @@ namespace std
 		string& insert ( size_t pos1, const char* s, size_t n);
 		string& insert ( size_t pos1, const char* s );
 		string& insert ( size_t pos1, size_t n, char c );
+		iterator insert ( const_iterator p, char c );
+		void insert ( const_iterator p, size_t n, char c );
+		template<class InputIterator>
+		    void insert ( iterator p, InputIterator first, InputIterator last );
 		size_t copy ( char* s, size_t n, size_t pos = 0) const;
 		const char* data() const;
 
@@ -948,35 +952,144 @@ namespace std
 		}
 		this->str[i] = '\0';
 		return *this;
-	}/*
+	}
 	string& string::insert ( size_t pos1, const char* s, size_t n)
 	{
 		__ESBMC_HIDE:
-		char* tmp;
-		__ESBMC_assert(pos1 > this->length(), "overflow");
-		__ESBMC_assert(n > strlen(s), "overflow");
-		string aux = string(strncpy(tmp,s,npos));
-		return string(strcpy(this->c_str()+pos1, aux.c_str()));
+		int len  = this->length(),i,k;
+		int lim = n;
+		int sLen = strlen(s);
+		__ESBMC_assert(pos1 < len, "overflow");
+		__ESBMC_assert(lim < sLen, "overflow");
+		int lenOne = pos1 +1;
+		char* one = new char[lenOne];
+		for(i=0;i<pos1;i++){
+			one[i] = this->str[i];
+		}
+		int lenTwo = (len-pos1)+1;
+		char* two = new char[lenTwo];
+		for(k=0,i=pos1;i<len;i++,k++){
+			two[k] = this->str[i];
+		}
+		int totalLen = n + len;
+		this->str = new char[totalLen+1];
+		this->_size = totalLen;
+
+		for(i=0;i<lenOne-1;i++){
+			this->str[i] = one[i];
+		}
+		for(k=0;k<lim;k++,i++){
+			this->str[i] = s[k];
+		}
+		for(k=0;k<lenTwo-1;k++,i++){
+			this->str[i] = two[k];
+		}
+		this->str[i] = '\0';
+		return *this;
 	}
 	string& string::insert ( size_t pos1, const char* s )
 	{
 		__ESBMC_HIDE:
-		__ESBMC_assert(pos1 > this->length(), "overflow");
-		return string(strcpy(this->c_str()+pos1, s));
+		int len  = this->length(),i,k;
+		int sLen = strlen(s);
+		__ESBMC_assert(pos1 < len, "overflow");
+		int lenOne = pos1 +1;
+		char* one = new char[lenOne];
+		for(i=0;i<pos1;i++){
+			one[i] = this->str[i];
+		}
+		int lenTwo = (len-pos1)+1;
+		char* two = new char[lenTwo];
+		for(k=0,i=pos1;i<len;i++,k++){
+			two[k] = this->str[i];
+		}
+		int totalLen = len + strlen(s);
+		this->str = new char[totalLen+1];
+		this->_size = totalLen;
+
+		for(i=0;i<lenOne-1;i++){
+			this->str[i] = one[i];
+		}
+		for(k=0;k<sLen;k++,i++){
+			this->str[i] = s[k];
+		}
+		for(k=0;k<lenTwo-1;k++,i++){
+			this->str[i] = two[k];
+		}
+		this->str[i] = '\0';
+		return *this;
 	}
 	string& string::insert ( size_t pos1, size_t n, char c )
 	{
 		int i;
-		char *aux = "";
-		int tmp = n - this->length();
-		if (tmp >0){
-			for (i = 1;i<10;i++){
-				aux +=c;
-			}
+		char *s = new char[n+1];
+		for (i = 0;i<n;i++){
+			s[i] = c;
 		}
-		return string(strcpy(this->c_str()+pos1, aux));
+		int len  = this->length(),i,k;
+		int sLen = n;
+		__ESBMC_assert(pos1 < len, "overflow");
+		int lenOne = pos1 +1;
+		char* one = new char[lenOne];
+		for(i=0;i<pos1;i++){
+			one[i] = this->str[i];
+		}
+		int lenTwo = (len-pos1)+1;
+		char* two = new char[lenTwo];
+		for(k=0,i=pos1;i<len;i++,k++){
+			two[k] = this->str[i];
+		}
+		int totalLen = len + n;
+		this->str = new char[totalLen+1];
+		this->_size = totalLen;
+
+		for(i=0;i<lenOne-1;i++){
+			this->str[i] = one[i];
+		}
+		for(k=0;k<sLen;k++,i++){
+			this->str[i] = s[k];
+		}
+		for(k=0;k<lenTwo-1;k++,i++){
+			this->str[i] = two[k];
+		}
+		this->str[i] = '\0';
+		return *this;
 	}
-*/
+
+//	string& string::erase ( size_t pos = 0, size_t n = npos )
+//	{
+//		__ESBMC_HIDE:
+//		__ESBMC_assert((pos > this->length()) && ((pos+n)>this->length()), "overflow");
+//		int i,j=pos;
+//		char* tmp = (char *)this->c_str();
+//		for(i=pos;i<(pos+n);i++)
+//		{
+//			while(j!=this->length())
+//			{
+//				tmp[j] = tmp[j+1];
+//				j++;
+//			}
+//			j=pos;
+//		}
+//		return string(tmp);
+//	}
+//
+//	string& string::erase ( size_t pos = 0, size_t n = npos, char* tmp )
+//	{
+//		__ESBMC_HIDE:
+//		__ESBMC_assert((pos > strlen(tmp)) && ((pos+n)>strlen(tmp)), "overflow");
+//		int i,j=pos;
+//		for(i=pos;i<(pos+n);i++)
+//		{
+//			while(j!=strlen(tmp))
+//			{
+//				tmp[j] = tmp[j+1];
+//				j++;
+//			}
+//			j=pos;
+//		}
+//		return string(tmp);
+//	}
 #if 0
 
 	size_t string::find ( const char* s, size_t pos = 0 , size_t n) const
@@ -1143,39 +1256,7 @@ namespace std
 		j--;
 		return j;
 	}
-	string& string::erase ( size_t pos = 0, size_t n = npos )
-	{
-		__ESBMC_HIDE:
-		__ESBMC_assert((pos > this->length()) && ((pos+n)>this->length()), "overflow");
-		int i,j=pos;
-		char* tmp = (char *)this->c_str();
-		for(i=pos;i<(pos+n);i++)
-		{
-			while(j!=this->length())
-			{
-				tmp[j] = tmp[j+1];
-				j++;
-			}
-			j=pos;
-		}
-		return string(tmp);
-	}
-	string& string::erase ( size_t pos = 0, size_t n = npos, char* tmp )
-	{
-		__ESBMC_HIDE:
-		__ESBMC_assert((pos > strlen(tmp)) && ((pos+n)>strlen(tmp)), "overflow");
-		int i,j=pos;
-		for(i=pos;i<(pos+n);i++)
-		{
-			while(j!=strlen(tmp))
-			{
-				tmp[j] = tmp[j+1];
-				j++;
-			}
-			j=pos;
-		}
-		return string(tmp);
-	}
+
 	string& string::replace ( size_t pos1, size_t n1,   const string& s )
 	{
 		__ESBMC_HIDE:
