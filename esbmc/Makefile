@@ -27,5 +27,13 @@ esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
 	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL)
 
+# This build rule fetches a libc.a from my website that I've compiled to work on
+# iridis, aka linux 2.6.18. The library is checked for my pgp signature; then
+# linked up into esbmc to produce a library that /should/ work everywhere.
+iridis-esbmc: $(OBJS)
+	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
+	$(ESBMCDIR)/scripts/fetchlibc.sh .libc.a $(ESBMCDIR)/scripts/gpg-keyring
+	echo "I'm covered in bees"
+
 clean:
 	-rm -f $(OBJDIR)/* esbmc $(OBJDIR)/.deps
