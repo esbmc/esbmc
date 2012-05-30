@@ -104,6 +104,7 @@ namespace std
 		bool operator<= (string& a);
 		bool operator<= ( const char* lhs );
 		string& operator= ( string& str );
+		string& operator= ( const string& str );
 		string& operator= ( const char* s );
 		string& operator= ( char* s );
 		string& operator= ( char c );
@@ -155,8 +156,8 @@ namespace std
 		size_t find_first_not_of ( const string& s, size_t pos = 0 ) const;
 		size_t find_first_not_of ( const char* s, size_t pos = 0 ) const;
 		size_t find_first_not_of ( char c, size_t pos = 0 ) const;
-		string& erase ( size_t pos = 0, size_t n = npos );
-		string& erase ( size_t pos = 0, size_t n = npos, char* tmp );
+		string& erase ( size_t pos = 0, size_t n );
+		string& erase ( size_t pos = 0, size_t n , char* tmp );
 		string& replace ( size_t pos1, size_t n1,   const string& s );
 		string& replace ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 );
 		string& replace ( size_t pos1, size_t n1, char* s, size_t pos2, size_t n2 );
@@ -283,7 +284,7 @@ namespace std
 		__ESBMC_HIDE:
 		_size=strlen(s);
 		str=new char[_size+1];
-		npos = _size-1;
+		//npos = _size-1;
 		strcpy(str,s);
 	}
 
@@ -953,6 +954,7 @@ namespace std
 		this->str[i] = '\0';
 		return *this;
 	}
+
 	string& string::insert ( size_t pos1, const char* s, size_t n)
 	{
 		__ESBMC_HIDE:
@@ -987,12 +989,13 @@ namespace std
 		this->str[i] = '\0';
 		return *this;
 	}
+
 	string& string::insert ( size_t pos1, const char* s )
 	{
 		__ESBMC_HIDE:
 		int len  = this->length(),i,k;
 		int sLen = strlen(s);
-		__ESBMC_assert(pos1 < len, "overflow");
+		//__ESBMC_assert(pos1 < len, "overflow");
 		int lenOne = pos1 +1;
 		char* one = new char[lenOne];
 		for(i=0;i<pos1;i++){
@@ -1019,6 +1022,7 @@ namespace std
 		this->str[i] = '\0';
 		return *this;
 	}
+
 	string& string::insert ( size_t pos1, size_t n, char c )
 	{
 		int i;
@@ -1056,41 +1060,118 @@ namespace std
 		return *this;
 	}
 
-//	string& string::erase ( size_t pos = 0, size_t n = npos )
-//	{
-//		__ESBMC_HIDE:
-//		__ESBMC_assert((pos > this->length()) && ((pos+n)>this->length()), "overflow");
-//		int i,j=pos;
-//		char* tmp = (char *)this->c_str();
-//		for(i=pos;i<(pos+n);i++)
-//		{
-//			while(j!=this->length())
-//			{
-//				tmp[j] = tmp[j+1];
-//				j++;
-//			}
-//			j=pos;
-//		}
-//		return string(tmp);
-//	}
-//
-//	string& string::erase ( size_t pos = 0, size_t n = npos, char* tmp )
-//	{
-//		__ESBMC_HIDE:
-//		__ESBMC_assert((pos > strlen(tmp)) && ((pos+n)>strlen(tmp)), "overflow");
-//		int i,j=pos;
-//		for(i=pos;i<(pos+n);i++)
-//		{
-//			while(j!=strlen(tmp))
-//			{
-//				tmp[j] = tmp[j+1];
-//				j++;
-//			}
-//			j=pos;
-//		}
-//		return string(tmp);
-//	}
+	string& string::erase ( size_t pos = 0, size_t n )
+	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
+		int i,k,len  = this->length();
+		int lenOne = pos +1;
+		char* one = new char[lenOne];
+		for(i=0;i<pos;i++){
+			one[i] = this->str[i];
+		}
+		int lenTwo = (len-(pos+n))+1;
+		char* two = new char[lenTwo];
+		for(k=0,i=pos+n;i<len;i++,k++){
+			two[k] = this->str[i];
+		}
+		int totalLen =len-n;
+		this->str = new char[totalLen+1];
+		this->_size = totalLen;
+		for(i=0;i<lenOne-1;i++){
+			this->str[i] = one[i];
+		}
+		for(k=0;k<lenTwo-1;k++,i++){
+			this->str[i] = two[k];
+		}
+		this->str[i] = '\0';
+		return *this;
+	}
+
+	string& string::replace ( size_t pos1, size_t n1, const string& s )
+	{
+		__ESBMC_HIDE:
+		this->erase(pos1,n1);
+		this->insert(pos1,s.str);
+		return *this;
+	}
+
+	string& string::replace ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 )
+	{
+		this->erase(pos1,n1);
+		int i,k;
+		char *tmp = new char[n2+1];
+		for(k=0,i=pos2;i<(n2+pos2);i++,k++)
+			tmp[k]=s.str[i];
+		tmp[k] = '\0';
+		this->insert(pos1,tmp);
+		return *this;
+	}
+
+	string& string::replace ( size_t pos1, size_t n1, const char* s, size_t n2 )
+	{
+		this->erase(pos1,n1);
+		int i,k;
+		char *tmp = new char[n2+1];
+		for(k=0,i=0;i<n2;i++,k++)
+			tmp[k]=s[i];
+		tmp[k] = '\0';
+		this->insert(pos1,tmp);
+		return *this;
+	}
+
+	string& string::replace ( size_t pos1, size_t n1, const char* s )
+	{
+		this->erase(pos1,n1);
+		int i,k,n2;
+		n2 = strlen(s);
+		char *tmp = new char[n2+1];
+		for(k=0,i=0;i<n2;i++,k++)
+			tmp[k]=s[i];
+		tmp[k] = '\0';
+		this->insert(pos1,tmp);
+		return *this;
+	}
+
+	string& string::replace ( size_t pos1, size_t n1, size_t n2, char c )
+	{
+		this->erase(pos1,n1);
+		int k;
+		char *tmp = new char[n2+1];
+		for(k=0;k<n2;k++)
+			tmp[k]=c;
+		tmp[k] = '\0';
+		this->insert(pos1,tmp);
+		return *this;
+	}
+	string& string::substr ( size_t pos, size_t npos ) const
+	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && ((pos+npos) <= this->length()), "overflow");
+		int i,k;
+		int lenOne = npos+1;
+		char* one = new char[lenOne];
+		for(k=0,i=pos;i<(pos+npos);k++,i++){
+			one[k] = this->str[i];
+		}
+		one[k]='\0';
+		string tmp(one);
+		assert(tmp.length() == 6);
+		return tmp;
+	}
 #if 0
+
+
+	string string::substr ( size_t pos) const
+	{
+		__ESBMC_HIDE:
+		char* s;
+		return string(strncpy(s,str,pos));
+	}
+
+
+	string& string::replace ( size_t pos1, size_t n1, char* s, size_t pos2, size_t n2 );
+
 
 	size_t string::find ( const char* s, size_t pos = 0 , size_t n) const
 	{
@@ -1160,19 +1241,7 @@ namespace std
 		   return -1;
 		return strcmp((const char*)aux,(const char*)aux2);
 	}
-	string string::substr ( size_t pos, size_t npos ) const
-	{
-		__ESBMC_HIDE:
-		char* s;
-		return string(strncpy(s,str+pos,npos));
-	}
 
-	string string::substr ( size_t pos) const
-	{
-		__ESBMC_HIDE:
-		char* s;
-		return string(strncpy(s,str,pos));
-	}
 	size_t string::find_first_of ( const string& s, size_t pos = 0 ) const
 	{
 		return strcspn(s.c_str(), str+pos);
@@ -1257,40 +1326,6 @@ namespace std
 		return j;
 	}
 
-	string& string::replace ( size_t pos1, size_t n1,   const string& s )
-	{
-		__ESBMC_HIDE:
-		string tmp = this->erase(pos1,n1);
-		tmp.insert(pos1,s.c_str());
-		return tmp;
-	}
-	string& string::replace ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 )
-	{
-		string tmp = this->erase(pos1,n1);
-		string tmptwo = s.erase(pos2,n2);
-		tmp.insert(pos1,tmptwo.c_str());
-		return tmp;
-	}
-	string& string::replace ( size_t pos1, size_t n1, char* s, size_t pos2, size_t n2 );
-	string& string::replace ( size_t pos1, size_t n1, const char* s, size_t n2 )
-	{
-		string tmp = this->erase(pos1,n1);
-		string tmptwo = erase(0,n2,(char*)s);
-		tmp.insert(pos1,tmptwo.c_str());
-		return tmp;
-	}
-	string& string::replace ( size_t pos1, size_t n1,   const char* s )
-	{
-		string tmp = this->erase(pos1,n1);
-		tmp.insert(pos1,s);
-		return tmp;
-	}
-	string& string::replace ( size_t pos1, size_t n1,   size_t n2, char c )
-	{
-		string tmp = this->erase(pos1,n1);
-		tmp.insert(pos1,n2,c);
-		return tmp;
-	}
 #endif
 }
 #endif
